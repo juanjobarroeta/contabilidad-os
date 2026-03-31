@@ -1,0 +1,529 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // hashed, null if OAuth only
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  memberships   CompanyMember[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Companies (Multi-tenant core) ───────────────────────────────────────────
+
+model Company {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // SAT / fiscal data
+  rfc               String   @unique
+  razonSocial       String
+  regimenFiscal     String   // e.g. "601" = General de Ley Personas Morales
+  codigoPostal      String
+  domicilioFiscal   String?
+
+  // Facturapi integration
+  facturapiOrgId    String?  // Facturapi organization ID for this company
+  facturapiApiKey   String?  // live API key stored encrypted
+
+  // Logo / branding
+  logoUrl           String?
+
+  isActive          Boolean  @default(true)
+
+  // Relations
+  members           CompanyMember[]
+  invoices          Invoice[]
+  customers         Customer[]
+  suppliers         Supplier[]
+  bankAccounts      BankAccount[]
+  bankTransactions  BankTransaction[]
+  employees         Employee[]
+  payrollRuns       PayrollRun[]
+  taxDeclarations   TaxDeclaration[]
+  accountingEntries AccountingEntry[]
+  accounts          ChartAccount[]
+}
+
+model CompanyMember {
+  id        String      @id @default(cuid())
+  userId    String
+  companyId String
+  role      MemberRole  @default(VIEWER)
+  createdAt DateTime    @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  ACCOUNTANT
+  VIEWER
+}
+
+// ─── Module 3: Invoicing / CFDI ───────────────────────────────────────────────
+
+model Customer {
+  id           String   @id @default(cuid())
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  rfc          String
+  razonSocial  String
+  regimenFiscal String
+  email        String?
+  phone        String?
+  domicilio    String?
+  codigoPostal String?
+
+  // Facturapi customer ID
+  facturapiId  String?
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
+
+  @@unique([companyId, rfc])
+}
+
+model Supplier {
+  id           String   @id @default(cuid())
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  rfc          String
+  razonSocial  String
+  regimenFiscal String?
+  email        String?
+
+  company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankTransactions     BankTransaction[]
+
+  @@unique([companyId, rfc])
+}
+
+model Invoice {
+  id           String        @id @default(cuid())
+  companyId    String
+  customerId   String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // CFDI data
+  tipo         InvoiceType   // INGRESO, EGRESO, TRASLADO, NOMINA, PAGO
+  serie        String?
+  folio        String?
+  fecha        DateTime
+  formaPago    String        // SAT catalog key e.g. "01" = Efectivo
+  metodoPago   String        // "PUE" or "PPD"
+  usoCfdi      String        // SAT catalog key e.g. "G01"
+  moneda       String        @default("MXN")
+  tipoCambio   Float         @default(1.0)
+  subtotal     Float
+  descuento    Float         @default(0)
+  totalImpuestos Float       @default(0)
+  total        Float
+  notas        String?
+
+  // SAT stamping data (from PAC/Facturapi)
+  status       InvoiceStatus @default(DRAFT)
+  uuid         String?       @unique // Folio fiscal
+  facturapiId  String?       // Facturapi invoice ID
+  xmlUrl       String?
+  pdfUrl       String?
+  cadenaOriginal String?     @db.Text
+  selloSAT     String?       @db.Text
+  selloCFD     String?       @db.Text
+
+  company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer  Customer?      @relation(fields: [customerId], references: [id])
+  items     InvoiceItem[]
+  taxes     InvoiceTax[]
+}
+
+model InvoiceItem {
+  id           String  @id @default(cuid())
+  invoiceId    String
+  cantidad     Float
+  claveUnidad  String  // SAT catalog key e.g. "E48"
+  unidad       String?
+  claveProdServ String // SAT product/service catalog key
+  descripcion  String
+  valorUnitario Float
+  importe      Float
+  descuento    Float   @default(0)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model InvoiceTax {
+  id        String   @id @default(cuid())
+  invoiceId String
+  tipo      TaxType  // IVA, ISR, IEPS
+  factor    TaxFactor // TASA, CUOTA, EXENTO
+  tasa      Float
+  importe   Float
+  retencion Boolean  @default(false)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+enum InvoiceType {
+  INGRESO
+  EGRESO
+  TRASLADO
+  NOMINA
+  PAGO
+}
+
+enum InvoiceStatus {
+  DRAFT
+  STAMPED    // timbrado
+  CANCELLED
+}
+
+enum TaxType {
+  IVA
+  ISR
+  IEPS
+}
+
+enum TaxFactor {
+  TASA
+  CUOTA
+  EXENTO
+}
+
+// ─── Module 4: Bank Reconciliation ───────────────────────────────────────────
+
+model BankAccount {
+  id           String   @id @default(cuid())
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  banco        String   // e.g. "BBVA", "Banamex", "Santander"
+  nombre       String   // friendly name
+  numeroCuenta String
+  clabe        String?
+  moneda       String   @default("MXN")
+
+  // Belvo / open banking
+  belvoAccountId String?
+  belvoLinkId    String?
+
+  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transactions BankTransaction[]
+
+  @@unique([companyId, numeroCuenta])
+}
+
+model BankTransaction {
+  id             String              @id @default(cuid())
+  companyId      String
+  bankAccountId  String
+  createdAt      DateTime            @default(now())
+
+  fecha          DateTime
+  descripcion    String
+  referencia     String?
+  monto          Float               // positive = credit, negative = debit
+  saldo          Float?
+  tipo           BankTransactionType
+
+  // Reconciliation
+  status         ReconciliationStatus @default(UNMATCHED)
+  invoiceId      String?
+  supplierId     String?
+  notes          String?
+
+  // Source
+  source         String              @default("UPLOAD") // UPLOAD or BELVO
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  supplier    Supplier?   @relation(fields: [supplierId], references: [id])
+}
+
+enum BankTransactionType {
+  CREDITO
+  DEBITO
+}
+
+enum ReconciliationStatus {
+  UNMATCHED
+  MATCHED
+  IGNORED
+}
+
+// ─── Module 2: Nómina & IMSS ──────────────────────────────────────────────────
+
+model Employee {
+  id               String          @id @default(cuid())
+  companyId        String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  nombre           String
+  apellidoPaterno  String
+  apellidoMaterno  String?
+  rfc              String
+  curp             String
+  nss              String          // Número de Seguridad Social
+  email            String?
+  fechaIngreso     DateTime
+  fechaBaja        DateTime?
+  isActive         Boolean         @default(true)
+
+  // Contract
+  tipoContrato     String          // e.g. "01" = Indefinido
+  tipoJornada      String          // e.g. "01" = Diurna
+  salarioDiario    Float           // SBC for IMSS
+  salarioDiarioIntegrado Float?    // SDI
+  periodicidadPago String          // "04" = Quincenal, "05" = Mensual
+
+  // INFONAVIT
+  creditoInfonavit String?
+  descuentoInfonavit Float?
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payrollItems PayrollItem[]
+
+  @@unique([companyId, rfc])
+}
+
+model PayrollRun {
+  id          String          @id @default(cuid())
+  companyId   String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  periodo     String          // e.g. "2024-01-01/2024-01-15"
+  fechaPago   DateTime
+  tipo        PayrollRunType  // ORDINARIA, EXTRAORDINARIA, FINIQUITO, AGUINALDO
+  status      PayrollStatus   @default(DRAFT)
+
+  totalPercepciones Float     @default(0)
+  totalDeducciones  Float     @default(0)
+  totalNeto         Float     @default(0)
+
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items    PayrollItem[]
+}
+
+model PayrollItem {
+  id           String  @id @default(cuid())
+  payrollRunId String
+  employeeId   String
+
+  // Percepciones
+  sueldoBase   Float
+  horasExtra   Float   @default(0)
+  bonosPagoFijo Float  @default(0)
+  bonosPagoVar Float   @default(0)
+  vales        Float   @default(0)
+  otrasPercepciones Float @default(0)
+
+  // Deducciones
+  isrRetenido  Float   @default(0)
+  imssObrero   Float   @default(0)
+  infonavit    Float   @default(0)
+  otrasDeducc  Float   @default(0)
+
+  totalPercepciones Float
+  totalDeducciones  Float
+  netoAPagar        Float
+
+  // CFDI nómina
+  cfdiUuid     String?
+  facturapiId  String?
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+}
+
+enum PayrollRunType {
+  ORDINARIA
+  EXTRAORDINARIA
+  FINIQUITO
+  AGUINALDO
+  PTU
+}
+
+enum PayrollStatus {
+  DRAFT
+  CALCULATED
+  STAMPED
+  PAID
+}
+
+// ─── Module 1: Tax Declarations ───────────────────────────────────────────────
+
+model TaxDeclaration {
+  id            String             @id @default(cuid())
+  companyId     String
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  tipo          TaxDeclarationType // IVA_MENSUAL, ISR_PROVISIONAL, DIOT, ANUAL
+  periodo       String             // e.g. "2024-01" or "2024"
+  status        DeclarationStatus  @default(DRAFT)
+
+  // IVA
+  ivaTrasladadoCobrado  Float?
+  ivaAcreditableGastado Float?
+  ivaSaldoFavor         Float?
+  ivaPagar              Float?
+
+  // ISR
+  isrIngresos           Float?
+  isrDeducciones        Float?
+  isrBaseGravable       Float?
+  isrTasa               Float?
+  isrPagar              Float?
+
+  // DIOT
+  diotXmlUrl            String?
+
+  // Presentación
+  acuseUrl              String?
+  lineaCaptura          String?
+  fechaPresentacion     DateTime?
+  fechaLimitePago       DateTime?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+enum TaxDeclarationType {
+  IVA_MENSUAL
+  ISR_PROVISIONAL
+  DIOT
+  DECLARACION_ANUAL
+  CERO
+}
+
+enum DeclarationStatus {
+  DRAFT
+  CALCULATED
+  FILED
+  PAID
+}
+
+// ─── Module 5: Chart of Accounts / COE ────────────────────────────────────────
+
+model ChartAccount {
+  id          String   @id @default(cuid())
+  companyId   String
+  createdAt   DateTime @default(now())
+
+  // SAT COE catalog
+  cuentaSAT   String   // e.g. "101"
+  subcuenta   String?  // e.g. "101.01"
+  nombre      String
+  tipo        AccountType // ACTIVO, PASIVO, CAPITAL, INGRESO, GASTO, COSTO
+  nivel       Int         @default(1)
+  isActive    Boolean     @default(true)
+
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries  AccountingEntry[]
+
+  @@unique([companyId, cuentaSAT, subcuenta])
+}
+
+model AccountingEntry {
+  id            String   @id @default(cuid())
+  companyId     String
+  chartAccountId String
+  createdAt     DateTime @default(now())
+
+  fecha         DateTime
+  descripcion   String
+  referencia    String?  // e.g. UUID del CFDI
+  monto         Float
+  tipo          EntryType // CARGO, ABONO
+  fuente        EntrySource // CFDI, NOMINA, BANCO, MANUAL
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chartAccount ChartAccount @relation(fields: [chartAccountId], references: [id])
+}
+
+enum AccountType {
+  ACTIVO
+  PASIVO
+  CAPITAL
+  INGRESO
+  GASTO
+  COSTO
+}
+
+enum EntryType {
+  CARGO
+  ABONO
+}
+
+enum EntrySource {
+  CFDI
+  NOMINA
+  BANCO
+  MANUAL
+}
