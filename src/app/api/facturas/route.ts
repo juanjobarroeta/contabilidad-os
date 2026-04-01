@@ -33,6 +33,11 @@ const createInvoiceSchema = z.object({
   usoCfdi: z.string(),
   items: z.array(invoiceItemSchema),
   notes: z.string().optional(),
+  global: z.object({
+    periodicity: z.enum(["day", "week", "fortnight", "month", "two_months"]),
+    months: z.string(),
+    year: z.number(),
+  }).optional(),
 });
 
 // GET /api/facturas?companyId=xxx
@@ -71,7 +76,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes } = parsed.data;
+  const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes, global: globalInfo } = parsed.data;
 
   // Verify membership with at least ACCOUNTANT role
   const membership = await prisma.companyMember.findUnique({
@@ -113,6 +118,7 @@ export async function POST(req: Request) {
       product: item.product,
     })),
     ...(notes && { pdf_custom_section: notes }),
+    ...(globalInfo && { global: globalInfo }),
   });
 
   // Compute totals

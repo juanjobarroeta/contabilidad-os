@@ -18,6 +18,12 @@ declare module "facturapi" {
     };
   }
 
+  interface FacturapiInvoiceGlobal {
+    periodicity: "day" | "week" | "fortnight" | "month" | "two_months";
+    months: string;  // "01"–"12" for monthly, "01"–"06" bimestral, etc.
+    year: number;
+  }
+
   interface FacturapiCreateInvoiceOptions {
     customer: string;
     payment_form: string;
@@ -25,6 +31,7 @@ declare module "facturapi" {
     use: string;
     items: FacturapiInvoiceItem[];
     pdf_custom_section?: string;
+    global?: FacturapiInvoiceGlobal;
   }
 
   interface FacturapiInvoice {

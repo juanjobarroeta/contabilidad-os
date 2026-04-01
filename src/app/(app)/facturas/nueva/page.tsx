@@ -126,6 +126,12 @@ export default function NuevaFacturaPage() {
   const [metodoPago, setMetodoPago] = useState("PUE");
   const [usoCfdi, setUsoCfdi] = useState("G03");
   const [notas, setNotas] = useState("");
+  // Información Global (required for XAXX010101000)
+  const [globalPeriodicity, setGlobalPeriodicity] = useState("month");
+  const [globalMonth, setGlobalMonth] = useState(String(new Date().getMonth() + 1).padStart(2, "0"));
+  const [globalYear] = useState(new Date().getFullYear());
+
+  const isPublicoGeneral = selectedCliente?.rfc === "XAXX010101000";
 
   // Step 2
   const [items, setItems] = useState<LineItem[]>([newItem()]);
@@ -165,6 +171,7 @@ export default function NuevaFacturaPage() {
     if (!selectedCliente) return "Selecciona un cliente receptor";
     if (!formaPago) return "Selecciona la forma de pago";
     if (!usoCfdi) return "Selecciona el uso del CFDI";
+    if (isPublicoGeneral && !globalMonth) return "Selecciona el mes para Información Global";
     return null;
   }
 
@@ -206,6 +213,13 @@ export default function NuevaFacturaPage() {
         metodoPago,
         usoCfdi,
         notes: notas || undefined,
+        ...(isPublicoGeneral && {
+          global: {
+            periodicity: globalPeriodicity as "day" | "week" | "fortnight" | "month" | "two_months",
+            months: globalMonth,
+            year: globalYear,
+          },
+        }),
         items: items.map((it) => ({
           quantity: it.quantity,
           product: {
@@ -398,6 +412,50 @@ export default function NuevaFacturaPage() {
                 {USOS_CFDI.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
             </div>
+
+            {/* Información Global — required for XAXX010101000 */}
+            {isPublicoGeneral && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-blue-800">Información Global</span>
+                  <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">Requerido por SAT para Público en General</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Periodicidad</label>
+                    <select value={globalPeriodicity} onChange={(e) => setGlobalPeriodicity(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      <option value="day">Diario</option>
+                      <option value="week">Semanal</option>
+                      <option value="fortnight">Quincenal</option>
+                      <option value="month">Mensual</option>
+                      <option value="two_months">Bimestral</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Mes / Período</label>
+                    <select value={globalMonth} onChange={(e) => setGlobalMonth(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      {globalPeriodicity === "two_months"
+                        ? ["01","02","03","04","05","06"].map(m => (
+                            <option key={m} value={m}>Bimestre {m}</option>
+                          ))
+                        : globalPeriodicity === "fortnight"
+                        ? ["01","02"].map(m => (
+                            <option key={m} value={m}>Quincena {m}</option>
+                          ))
+                        : [
+                            ["01","Enero"],["02","Febrero"],["03","Marzo"],["04","Abril"],
+                            ["05","Mayo"],["06","Junio"],["07","Julio"],["08","Agosto"],
+                            ["09","Septiembre"],["10","Octubre"],["11","Noviembre"],["12","Diciembre"]
+                          ].map(([v, l]) => <option key={v} value={v}>{l}</option>)
+                      }
+                    </select>
+                  </div>
+                </div>
+                <p className="text-xs text-blue-700">Año: <strong>{globalYear}</strong></p>
+              </div>
+            )}
 
             {/* Notas */}
             <div>
