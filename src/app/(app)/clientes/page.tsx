@@ -1,0 +1,452 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { useCompany } from "@/components/layout/CompanyProvider";
+import {
+  Users, Plus, Search, Pencil, Trash2, Loader2,
+  FileText, X, ChevronDown,
+} from "lucide-react";
+
+const REGIMENES_FISCALES = [
+  { value: "601", label: "601 – General de Ley Personas Morales" },
+  { value: "603", label: "603 – Personas Morales con Fines no Lucrativos" },
+  { value: "605", label: "605 – Sueldos y Salarios e Ingresos Asimilados" },
+  { value: "606", label: "606 – Arrendamiento" },
+  { value: "607", label: "607 – Enajenación o Adquisición de Bienes" },
+  { value: "608", label: "608 – Demás ingresos" },
+  { value: "612", label: "612 – Actividades Empresariales y Profesionales" },
+  { value: "616", label: "616 – Sin obligaciones fiscales" },
+  { value: "620", label: "620 – Sociedades Cooperativas de Producción" },
+  { value: "621", label: "621 – Incorporación Fiscal" },
+  { value: "622", label: "622 – Actividades Agrícolas, Ganaderas, Silvícolas" },
+  { value: "625", label: "625 – Plataformas Tecnológicas" },
+  { value: "626", label: "626 – RESICO" },
+];
+
+interface Cliente {
+  id: string;
+  rfc: string;
+  razonSocial: string;
+  regimenFiscal: string;
+  email?: string;
+  phone?: string;
+  domicilio?: string;
+  codigoPostal?: string;
+  facturapiId?: string;
+  _count: { invoices: number };
+}
+
+const EMPTY_FORM = {
+  rfc: "", razonSocial: "", regimenFiscal: "",
+  email: "", phone: "", domicilio: "", codigoPostal: "",
+};
+
+export default function ClientesPage() {
+  const { activeCompany } = useCompany();
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const fetchClientes = useCallback(async () => {
+    if (!activeCompany) return;
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/clientes?companyId=${activeCompany.id}&search=${encodeURIComponent(search)}`
+      );
+      const data = await res.json();
+      setClientes(data);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeCompany, search]);
+
+  useEffect(() => {
+    fetchClientes();
+  }, [fetchClientes]);
+
+  function openCreate() {
+    setEditingCliente(null);
+    setForm(EMPTY_FORM);
+    setError("");
+    setShowModal(true);
+  }
+
+  function openEdit(c: Cliente) {
+    setEditingCliente(c);
+    setForm({
+      rfc: c.rfc,
+      razonSocial: c.razonSocial,
+      regimenFiscal: c.regimenFiscal,
+      email: c.email ?? "",
+      phone: c.phone ?? "",
+      domicilio: c.domicilio ?? "",
+      codigoPostal: c.codigoPostal ?? "",
+    });
+    setError("");
+    setShowModal(true);
+  }
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+    const { name, value } = e.target;
+    setForm((p) => ({ ...p, [name]: name === "rfc" ? value.toUpperCase() : value }));
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!activeCompany) return;
+    setError("");
+    setSaving(true);
+    try {
+      const url = editingCliente ? `/api/clientes/${editingCliente.id}` : "/api/clientes";
+      const method = editingCliente ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, companyId: activeCompany.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Error al guardar");
+      }
+      setShowModal(false);
+      fetchClientes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteId) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/clientes/${deleteId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Error al eliminar");
+      }
+      setDeleteId(null);
+      fetchClientes();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const regimenLabel = (value: string) =>
+    REGIMENES_FISCALES.find((r) => r.value === value)?.label ?? value;
+
+  if (!activeCompany) {
+    return (
+      <div className="p-6 flex items-center justify-center h-full text-muted-foreground">
+        Selecciona una empresa para ver clientes.
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {activeCompany.razonSocial} · {clientes.length} cliente{clientes.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Nuevo cliente
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="relative mb-5 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por RFC o Razón Social..."
+          className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Cargando clientes...
+        </div>
+      ) : clientes.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+          <Users className="h-12 w-12 mb-3 opacity-30" />
+          <p className="font-medium">{search ? "Sin resultados" : "Sin clientes aún"}</p>
+          <p className="text-sm mt-1">
+            {search ? "Intenta otro RFC o Razón Social" : "Agrega tu primer cliente para comenzar"}
+          </p>
+          {!search && (
+            <button
+              onClick={openCreate}
+              className="mt-4 flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" /> Nuevo cliente
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-gray-50">
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">RFC</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Razón Social</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Régimen</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Correo</th>
+                <th className="text-center px-4 py-3 font-medium text-muted-foreground">Facturas</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Facturapi</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {clientes.map((c, i) => (
+                <tr
+                  key={c.id}
+                  className={`border-b border-border last:border-0 hover:bg-gray-50 transition-colors ${
+                    i % 2 === 0 ? "" : "bg-gray-50/50"
+                  }`}
+                >
+                  <td className="px-4 py-3 font-mono text-xs font-medium">{c.rfc}</td>
+                  <td className="px-4 py-3 font-medium">{c.razonSocial}</td>
+                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                    <span className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-0.5 rounded-full">
+                      {c.regimenFiscal}
+                      <ChevronDown className="h-3 w-3" />
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell text-xs">
+                    {c.email ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <FileText className="h-3.5 w-3.5" />
+                      {c._count.invoices}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {c.facturapiId ? (
+                      <span className="text-xs bg-green-100 text-green-700 font-medium px-2 py-0.5 rounded-full">
+                        Sincronizado
+                      </span>
+                    ) : (
+                      <span className="text-xs bg-gray-100 text-muted-foreground px-2 py-0.5 rounded-full">
+                        Pendiente
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1 justify-end">
+                      <button
+                        onClick={() => openEdit(c)}
+                        className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                        title="Editar"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => { setDeleteId(c.id); setDeleteError(""); }}
+                        className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Create / Edit Modal ── */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <h2 className="text-base font-semibold">
+                {editingCliente ? "Editar cliente" : "Nuevo cliente"}
+              </h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1.5 rounded-md hover:bg-accent text-muted-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="px-6 py-5 space-y-4">
+              {/* RFC */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  RFC <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text" name="rfc" value={form.rfc} onChange={handleChange}
+                  placeholder="XAXX010101000" maxLength={13} required
+                  disabled={!!editingCliente}
+                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase disabled:bg-gray-50 disabled:text-muted-foreground"
+                />
+                {editingCliente && (
+                  <p className="text-xs text-muted-foreground mt-1">El RFC no se puede modificar</p>
+                )}
+              </div>
+
+              {/* Razón Social */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  Razón Social <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text" name="razonSocial" value={form.razonSocial} onChange={handleChange}
+                  placeholder="Mi Empresa SA de CV" required
+                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+
+              {/* Régimen Fiscal */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  Régimen Fiscal <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="regimenFiscal" value={form.regimenFiscal} onChange={handleChange} required
+                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                >
+                  <option value="">Selecciona un régimen...</option>
+                  {REGIMENES_FISCALES.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Email + Phone */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Correo electrónico</label>
+                  <input
+                    type="email" name="email" value={form.email} onChange={handleChange}
+                    placeholder="cliente@empresa.com"
+                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Teléfono</label>
+                  <input
+                    type="tel" name="phone" value={form.phone} onChange={handleChange}
+                    placeholder="55 1234 5678"
+                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </div>
+
+              {/* CP + Domicilio */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Código Postal</label>
+                  <input
+                    type="text" name="codigoPostal" value={form.codigoPostal} onChange={handleChange}
+                    placeholder="06600" maxLength={5}
+                    className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium mb-1.5">Domicilio</label>
+                  <input
+                    type="text" name="domicilio" value={form.domicilio} onChange={handleChange}
+                    placeholder="Calle, Número, Colonia"
+                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-md px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit" disabled={saving}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {editingCliente ? "Guardar cambios" : "Crear cliente"}
+                </button>
+                <button
+                  type="button" onClick={() => setShowModal(false)}
+                  className="px-4 py-2.5 rounded-md text-sm border border-border hover:bg-accent"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Modal ── */}
+      {deleteId && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 className="h-5 w-5 text-red-600" />
+              </div>
+              <h2 className="text-base font-semibold">¿Eliminar cliente?</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Esta acción no se puede deshacer. El cliente será eliminado permanentemente.
+            </p>
+            {deleteError && (
+              <div className="bg-red-50 border border-red-200 rounded-md px-4 py-3 text-sm text-red-700 mb-4">
+                {deleteError}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={handleDelete} disabled={deleting}
+                className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+                Eliminar
+              </button>
+              <button
+                onClick={() => setDeleteId(null)}
+                className="flex-1 px-4 py-2 rounded-md text-sm border border-border hover:bg-accent"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
