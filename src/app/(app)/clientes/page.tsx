@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   Users, Plus, Search, Pencil, Trash2, Loader2,
-  FileText, X, ChevronDown,
+  FileText, X, ChevronDown, RefreshCw,
 } from "lucide-react";
 
 const REGIMENES_FISCALES = [
@@ -54,6 +54,7 @@ export default function ClientesPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [syncingId, setSyncingId] = useState<string | null>(null);
 
   const fetchClientes = useCallback(async () => {
     if (!activeCompany) return;
@@ -123,6 +124,20 @@ export default function ClientesPage() {
       setError(err instanceof Error ? err.message : "Error inesperado");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSync(id: string) {
+    setSyncingId(id);
+    try {
+      const res = await fetch(`/api/clientes/${id}`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error ?? "Error al sincronizar");
+      }
+      fetchClientes();
+    } finally {
+      setSyncingId(null);
     }
   }
 
@@ -261,6 +276,18 @@ export default function ClientesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
+                      {!c.facturapiId && (
+                        <button
+                          onClick={() => handleSync(c.id)}
+                          disabled={syncingId === c.id}
+                          className="p-1.5 rounded-md hover:bg-blue-50 text-muted-foreground hover:text-blue-600 transition-colors"
+                          title="Sincronizar con Facturapi"
+                        >
+                          {syncingId === c.id
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <RefreshCw className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
                       <button
                         onClick={() => openEdit(c)}
                         className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
