@@ -16,6 +16,7 @@ import {
   ChevronDown,
   LogOut,
   Building2,
+  Plus,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -58,7 +59,7 @@ export function Sidebar({ user }: SidebarProps) {
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </button>
 
-        {companyOpen && companies.length > 0 && (
+        {companyOpen && (
           <div className="mt-1 bg-white border border-border rounded-md shadow-sm overflow-hidden">
             {companies.map((c) => (
               <button
@@ -76,6 +77,14 @@ export function Sidebar({ user }: SidebarProps) {
                 <span className="block text-muted-foreground">{c.rfc}</span>
               </button>
             ))}
+            <Link
+              href="/onboarding"
+              onClick={() => setCompanyOpen(false)}
+              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-primary hover:bg-accent border-t border-border"
+            >
+              <Plus className="h-3 w-3" />
+              Agregar empresa
+            </Link>
           </div>
         )}
       </div>

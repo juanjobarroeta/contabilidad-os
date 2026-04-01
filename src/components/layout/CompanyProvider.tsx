@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useRouter, usePathname } from "next/navigation";
 
 interface Company {
   id: string;
@@ -33,18 +34,24 @@ export function CompanyProvider({
   const [companies, setCompanies] = useState<Company[]>([]);
   const [activeCompany, setActiveCompanyState] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     fetch("/api/companies")
       .then((r) => r.json())
       .then((data: Company[]) => {
         setCompanies(data);
+        if (data.length === 0) {
+          router.push("/onboarding");
+          return;
+        }
         const saved = localStorage.getItem("activeCompanyId");
         const found = data.find((c) => c.id === saved) ?? data[0] ?? null;
         setActiveCompanyState(found);
       })
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [userId, router, pathname]);
 
   function setActiveCompany(company: Company) {
     setActiveCompanyState(company);
