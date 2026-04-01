@@ -107,6 +107,21 @@ export async function POST(req: Request) {
 
   const facturapi = getFacturapiClient(company.facturapiApiKey);
 
+  // CFDI 4.0: Información Global is mandatory when RFC = XAXX010101000
+  const isPublicoGeneral = customer.rfc === "XAXX010101000";
+  let resolvedGlobal = globalInfo;
+  if (isPublicoGeneral && !resolvedGlobal) {
+    // Auto-build a sensible default: current month, monthly periodicity
+    const now = new Date();
+    resolvedGlobal = {
+      periodicity: "month",
+      months: String(now.getMonth() + 1).padStart(2, "0"),
+      year: now.getFullYear(),
+    };
+  }
+
+  console.log("[facturas] isPublicoGeneral:", isPublicoGeneral, "global:", resolvedGlobal);
+
   // Create invoice in Facturapi
   const facturapiInvoice = await facturapi.invoices.create({
     customer: customer.facturapiId,
@@ -118,7 +133,7 @@ export async function POST(req: Request) {
       product: item.product,
     })),
     ...(notes && { pdf_custom_section: notes }),
-    ...(globalInfo && { global: globalInfo }),
+    ...(resolvedGlobal && { global: resolvedGlobal }),
   });
 
   // Compute totals
