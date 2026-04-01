@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Building2, Plus, Loader2, Pencil } from "lucide-react";
+import {
+  Building2, Plus, Loader2, Pencil, CheckCircle2,
+  Zap, Key, AlertCircle, Trash2, ExternalLink, Eye, EyeOff, X,
+} from "lucide-react";
 
 const REGIMENES_FISCALES = [
   { value: "601", label: "601 – General de Ley Personas Morales" },
@@ -21,37 +24,81 @@ const REGIMENES_FISCALES = [
   { value: "626", label: "626 – Régimen Simplificado de Confianza (RESICO)" },
 ];
 
+interface CompanyDetail {
+  id: string;
+  rfc: string;
+  razonSocial: string;
+  regimenFiscal: string;
+  codigoPostal: string;
+  domicilioFiscal?: string;
+  nombreComercial?: string;
+  email?: string;
+  telefono?: string;
+  facturapiOrgId?: string;
+  facturapiApiKey?: string;
+  csdCer?: string;
+  csdKey?: string;
+}
+
 export default function EmpresaPage() {
   const { companies, activeCompany, setActiveCompany } = useCompany();
   const router = useRouter();
-  const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [form, setForm] = useState({
-    rfc: "",
-    razonSocial: "",
-    regimenFiscal: "",
-    codigoPostal: "",
-    domicilioFiscal: "",
+
+  // Add company form
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState("");
+  const [addForm, setAddForm] = useState({
+    rfc: "", razonSocial: "", regimenFiscal: "", codigoPostal: "", domicilioFiscal: "",
   });
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+  // Active company detail (from DB, includes sensitive fields not in provider)
+  const [companyDetail, setCompanyDetail] = useState<CompanyDetail | null>(null);
+
+  // Facturapi setup
+  const [fpLoading, setFpLoading] = useState(false);
+  const [fpError, setFpError] = useState("");
+  const [fpSuccess, setFpSuccess] = useState("");
+  const [showManualKey, setShowManualKey] = useState(false);
+  const [manualKey, setManualKey] = useState("");
+  const [manualOrgId, setManualOrgId] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [savingKey, setSavingKey] = useState(false);
+
+  // Delete company
+  const [disconnectLoading, setDisconnectLoading] = useState(false);
+
+  const fetchCompanyDetail = useCallback(async () => {
+    if (!activeCompany) return;
+    const res = await fetch(`/api/companies/${activeCompany.id}`);
+    if (res.ok) {
+      const data = await res.json();
+      setCompanyDetail(data);
+    }
+  }, [activeCompany]);
+
+  useEffect(() => {
+    fetchCompanyDetail();
+    setFpError("");
+    setFpSuccess("");
+    setShowManualKey(false);
+  }, [fetchCompanyDetail]);
+
+  // Add company
+  function handleAddChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: name === "rfc" ? value.toUpperCase() : value,
-    }));
+    setAddForm((p) => ({ ...p, [name]: name === "rfc" ? value.toUpperCase() : value }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleAddSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    setLoading(true);
+    setAddError("");
+    setAddLoading(true);
     try {
       const res = await fetch("/api/companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(addForm),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -59,27 +106,90 @@ export default function EmpresaPage() {
       }
       const newCompany = await res.json();
       setActiveCompany(newCompany);
-      setShowForm(false);
+      setShowAddForm(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error inesperado");
+      setAddError(err instanceof Error ? err.message : "Error inesperado");
     } finally {
-      setLoading(false);
+      setAddLoading(false);
     }
   }
 
+  // Auto-setup Facturapi
+  async function handleAutoSetup() {
+    if (!activeCompany) return;
+    setFpLoading(true);
+    setFpError("");
+    setFpSuccess("");
+    try {
+      const res = await fetch(`/api/companies/${activeCompany.id}/facturapi`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error en Facturapi");
+      setFpSuccess(data.message);
+      fetchCompanyDetail();
+    } catch (err) {
+      setFpError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setFpLoading(false);
+    }
+  }
+
+  // Manual key save
+  async function handleSaveManualKey() {
+    if (!activeCompany || !manualKey.trim()) return;
+    setSavingKey(true);
+    setFpError("");
+    try {
+      const res = await fetch(`/api/companies/${activeCompany.id}/facturapi`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: manualKey.trim(), orgId: manualOrgId.trim() || undefined }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Error al guardar");
+      }
+      setFpSuccess("Clave de API guardada correctamente.");
+      setShowManualKey(false);
+      setManualKey("");
+      setManualOrgId("");
+      fetchCompanyDetail();
+    } catch (err) {
+      setFpError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setSavingKey(false);
+    }
+  }
+
+  // Disconnect Facturapi
+  async function handleDisconnect() {
+    if (!activeCompany) return;
+    setDisconnectLoading(true);
+    try {
+      await fetch(`/api/companies/${activeCompany.id}/facturapi`, { method: "DELETE" });
+      setFpSuccess("");
+      fetchCompanyDetail();
+    } finally {
+      setDisconnectLoading(false);
+    }
+  }
+
+  const isConnected = !!(companyDetail?.facturapiApiKey);
+  const hasCsd = !!(companyDetail?.csdCer && companyDetail?.csdKey);
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Mi Empresa</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Gestiona tus empresas y datos fiscales
-          </p>
+          <h1 className="text-2xl font-bold">Mi Empresa</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Gestiona tus empresas y configuración fiscal</p>
         </div>
         <button
-          onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+          onClick={() => setShowAddForm((v) => !v)}
+          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
           Nueva empresa
@@ -87,123 +197,65 @@ export default function EmpresaPage() {
       </div>
 
       {/* Add Company Form */}
-      {showForm && (
+      {showAddForm && (
         <div className="bg-white border border-border rounded-xl p-6 mb-6 shadow-sm">
-          <h2 className="text-base font-semibold mb-4">Agregar nueva empresa</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold">Agregar nueva empresa</h2>
+            <button onClick={() => setShowAddForm(false)} className="p-1.5 rounded hover:bg-accent text-muted-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <form onSubmit={handleAddSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1.5">
-                  RFC <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="rfc"
-                  value={form.rfc}
-                  onChange={handleChange}
-                  placeholder="XAXX010101000"
-                  maxLength={13}
-                  required
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase"
-                />
+                <label className="block text-sm font-medium mb-1.5">RFC <span className="text-red-500">*</span></label>
+                <input type="text" name="rfc" value={addForm.rfc} onChange={handleAddChange}
+                  placeholder="XAXX010101000" maxLength={13} required
+                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">
-                  Código Postal <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="codigoPostal"
-                  value={form.codigoPostal}
-                  onChange={handleChange}
-                  placeholder="06600"
-                  maxLength={5}
-                  required
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
+                <label className="block text-sm font-medium mb-1.5">Código Postal <span className="text-red-500">*</span></label>
+                <input type="text" name="codigoPostal" value={addForm.codigoPostal} onChange={handleAddChange}
+                  placeholder="06600" maxLength={5} required
+                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5">
-                Razón Social <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="razonSocial"
-                value={form.razonSocial}
-                onChange={handleChange}
-                placeholder="Mi Empresa SA de CV"
-                required
-                className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
+              <label className="block text-sm font-medium mb-1.5">Razón Social <span className="text-red-500">*</span></label>
+              <input type="text" name="razonSocial" value={addForm.razonSocial} onChange={handleAddChange}
+                placeholder="Mi Empresa SA de CV" required
+                className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5">
-                Régimen Fiscal <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="regimenFiscal"
-                value={form.regimenFiscal}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-              >
-                <option value="">Selecciona un régimen...</option>
-                {REGIMENES_FISCALES.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
+              <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-red-500">*</span></label>
+              <select name="regimenFiscal" value={addForm.regimenFiscal} onChange={handleAddChange} required
+                className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                <option value="">Selecciona...</option>
+                {REGIMENES_FISCALES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5">
-                Domicilio Fiscal <span className="text-muted-foreground font-normal">(opcional)</span>
-              </label>
-              <input
-                type="text"
-                name="domicilioFiscal"
-                value={form.domicilioFiscal}
-                onChange={handleChange}
-                placeholder="Calle, Número, Colonia, Ciudad"
-                className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
+            {addError && (
+              <div className="bg-red-50 border border-red-200 rounded-md px-4 py-3 text-sm text-red-700">{addError}</div>
             )}
             <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              <button type="submit" disabled={addLoading}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+                {addLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                 Crear empresa
               </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 rounded-md text-sm font-medium border border-border hover:bg-accent"
-              >
-                Cancelar
-              </button>
+              <button type="button" onClick={() => setShowAddForm(false)}
+                className="px-4 py-2 rounded-md text-sm border border-border hover:bg-accent">Cancelar</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Company List */}
-      <div className="space-y-3">
+      {/* Company Cards */}
+      <div className="space-y-3 mb-8">
         {companies.map((company) => (
-          <div
-            key={company.id}
+          <div key={company.id}
             className={`bg-white border rounded-xl p-5 shadow-sm flex items-center justify-between transition-colors ${
-              activeCompany?.id === company.id
-                ? "border-primary ring-1 ring-primary/20"
-                : "border-border"
+              activeCompany?.id === company.id ? "border-primary ring-1 ring-primary/20" : "border-border"
             }`}
           >
             <div className="flex items-center gap-4">
@@ -211,33 +263,211 @@ export default function EmpresaPage() {
                 <Building2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="font-semibold text-foreground">{company.razonSocial}</p>
+                <p className="font-semibold">{company.razonSocial}</p>
                 <p className="text-sm text-muted-foreground font-mono">{company.rfc}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Régimen {company.regimenFiscal}
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Régimen {company.regimenFiscal}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {activeCompany?.id === company.id ? (
-                <span className="text-xs bg-primary/10 text-primary font-medium px-2.5 py-1 rounded-full">
-                  Activa
-                </span>
+                <span className="text-xs bg-primary/10 text-primary font-medium px-2.5 py-1 rounded-full">Activa</span>
               ) : (
-                <button
-                  onClick={() => setActiveCompany(company)}
-                  className="text-xs px-3 py-1.5 rounded-md border border-border hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                >
+                <button onClick={() => setActiveCompany(company)}
+                  className="text-xs px-3 py-1.5 rounded-md border border-border hover:bg-accent text-muted-foreground transition-colors">
                   Activar
                 </button>
               )}
-              <button className="p-1.5 rounded-md hover:bg-accent text-muted-foreground">
+              <button className="p-1.5 rounded-md hover:bg-accent text-muted-foreground" title="Editar">
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
         ))}
       </div>
+
+      {/* ── Facturapi Setup ── */}
+      {activeCompany && (
+        <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${isConnected ? "bg-green-100" : "bg-gray-100"}`}>
+                <Zap className={`h-4 w-4 ${isConnected ? "text-green-600" : "text-muted-foreground"}`} />
+              </div>
+              <div>
+                <h2 className="font-semibold text-sm">Facturapi — Timbrado CFDI</h2>
+                <p className="text-xs text-muted-foreground">{activeCompany.razonSocial}</p>
+              </div>
+            </div>
+            {isConnected && (
+              <span className="flex items-center gap-1.5 text-xs bg-green-100 text-green-700 font-medium px-2.5 py-1 rounded-full">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Conectado
+              </span>
+            )}
+          </div>
+
+          <div className="px-6 py-5 space-y-5">
+            {/* Status */}
+            {isConnected ? (
+              <div className="space-y-3">
+                {/* Org info */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1.5">
+                      {companyDetail?.facturapiOrgId && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Org ID</span>
+                          <p className="font-mono text-xs">{companyDetail.facturapiOrgId}</p>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-xs text-muted-foreground">API Key</span>
+                        <div className="flex items-center gap-2">
+                          <p className="font-mono text-xs">
+                            {showKey
+                              ? companyDetail?.facturapiApiKey
+                              : companyDetail?.facturapiApiKey?.substring(0, 12) + "••••••••••••"}
+                          </p>
+                          <button onClick={() => setShowKey((v) => !v)}
+                            className="text-muted-foreground hover:text-foreground">
+                            {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-xs text-muted-foreground">CSD</span>
+                        <p className="text-xs font-medium">
+                          {hasCsd ? (
+                            <span className="text-green-700">✓ Certificado guardado</span>
+                          ) : (
+                            <span className="text-amber-600">⚠ Sin CSD — configúralo en el onboarding</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <a href="https://app.facturapi.io" target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline shrink-0">
+                      Ver en Facturapi <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                </div>
+
+                {/* Re-sync button */}
+                <button onClick={handleAutoSetup} disabled={fpLoading}
+                  className="flex items-center gap-2 text-sm px-4 py-2 border border-border rounded-md hover:bg-accent disabled:opacity-50">
+                  {fpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                  Re-sincronizar datos legales y CSD
+                </button>
+
+                {/* Disconnect */}
+                <button onClick={handleDisconnect} disabled={disconnectLoading}
+                  className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 px-4 py-2 rounded-md hover:bg-red-50 disabled:opacity-50">
+                  {disconnectLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Desconectar Facturapi
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                  <p className="font-semibold mb-1">Para timbrar CFDIs necesitas Facturapi</p>
+                  <p>Facturapi actúa como PAC (Proveedor Autorizado de Certificación) ante el SAT. Crea una cuenta en <a href="https://facturapi.io" target="_blank" rel="noopener noreferrer" className="underline font-medium">facturapi.io</a> y agrega tu clave secreta en Railway → Variables → <code>FACTURAPI_SECRET_KEY</code>.</p>
+                </div>
+
+                {/* Option 1: Auto setup */}
+                <div className="border border-border rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold">Opción 1 — Configuración automática</h3>
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">Recomendada</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Crea la organización en Facturapi, sube tus datos fiscales y el CSD automáticamente usando tu clave de administrador.
+                  </p>
+                  {!hasCsd && (
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-700 mb-3">
+                      <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      No hay CSD guardado. La organización se creará pero no podrá timbrar hasta que subas el CSD desde el onboarding.
+                    </div>
+                  )}
+                  <button onClick={handleAutoSetup} disabled={fpLoading}
+                    className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+                    {fpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                    {fpLoading ? "Configurando..." : "Configurar automáticamente"}
+                  </button>
+                </div>
+
+                {/* Option 2: Manual */}
+                <div className="border border-border rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Key className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">Opción 2 — Pegar clave manualmente</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Si ya tienes una organización en Facturapi, pega directamente su clave de API.
+                  </p>
+                  {!showManualKey ? (
+                    <button onClick={() => setShowManualKey(true)}
+                      className="flex items-center gap-2 text-sm px-4 py-2 border border-border rounded-md hover:bg-accent">
+                      <Key className="h-4 w-4" />
+                      Ingresar clave manualmente
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">API Key de la organización <span className="text-red-500">*</span></label>
+                        <div className="relative">
+                          <input
+                            type={showKey ? "text" : "password"}
+                            value={manualKey}
+                            onChange={(e) => setManualKey(e.target.value)}
+                            placeholder="sk_live_... o sk_test_..."
+                            className="w-full px-3 py-2 pr-10 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                          <button type="button" onClick={() => setShowKey((v) => !v)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                            {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Org ID <span className="text-muted-foreground font-normal">(opcional)</span></label>
+                        <input type="text" value={manualOrgId} onChange={(e) => setManualOrgId(e.target.value)}
+                          placeholder="org_xxxxxxxxxxxxxxxxxx"
+                          className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={handleSaveManualKey} disabled={savingKey || !manualKey.trim()}
+                          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+                          {savingKey && <Loader2 className="h-4 w-4 animate-spin" />}
+                          Guardar
+                        </button>
+                        <button onClick={() => setShowManualKey(false)}
+                          className="px-4 py-2 rounded-md text-sm border border-border hover:bg-accent">Cancelar</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Feedback messages */}
+            {fpSuccess && (
+              <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800">
+                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                {fpSuccess}
+              </div>
+            )}
+            {fpError && (
+              <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                {fpError}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

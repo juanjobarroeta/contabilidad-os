@@ -1,4 +1,6 @@
 declare module "facturapi" {
+  // ── Invoice ────────────────────────────────────────────────────────────────
+
   interface FacturapiInvoiceItem {
     quantity: number;
     product: {
@@ -34,6 +36,8 @@ declare module "facturapi" {
     pdf_custom_section?: string;
   }
 
+  // ── Customer ───────────────────────────────────────────────────────────────
+
   interface FacturapiCustomerAddress {
     zip: string;
     street?: string;
@@ -55,15 +59,77 @@ declare module "facturapi" {
     tax_id: string;
   }
 
+  // ── Organization ───────────────────────────────────────────────────────────
+
+  interface FacturapiOrganizationLegal {
+    name: string;
+    legal_name?: string;
+    tax_id?: string;           // RFC
+    tax_system?: string;       // Régimen fiscal
+    website?: string;
+    phone?: string;
+    address?: {
+      zip: string;
+      street?: string;
+      exterior?: string;
+      interior?: string;
+      neighborhood?: string;
+      city?: string;
+      municipality?: string;
+      state?: string;
+      country?: string;
+    };
+  }
+
+  interface FacturapiOrganization {
+    id: string;
+    created_at: string;
+    name: string;
+    legal: FacturapiOrganizationLegal;
+    certificate_valid_at?: string;
+    is_production_ready?: boolean;
+  }
+
+  interface FacturapiApiKey {
+    api_key: string;
+  }
+
+  interface FacturapiCertificate {
+    expires_at: string;
+    updated_at: string;
+  }
+
+  // ── Main class ─────────────────────────────────────────────────────────────
+
   class Facturapi {
     constructor(apiKey: string);
+
     invoices: {
       create(options: FacturapiCreateInvoiceOptions): Promise<FacturapiInvoice>;
       cancel(id: string): Promise<FacturapiInvoice>;
     };
+
     customers: {
       create(options: FacturapiCreateCustomerOptions): Promise<FacturapiCustomer>;
       update(id: string, options: Partial<FacturapiCreateCustomerOptions>): Promise<FacturapiCustomer>;
+    };
+
+    organizations: {
+      create(data: { name: string }): Promise<FacturapiOrganization>;
+      list(params?: object): Promise<{ data: FacturapiOrganization[] }>;
+      retrieve(id: string): Promise<FacturapiOrganization>;
+      updateLegal(id: string, data: Partial<FacturapiOrganizationLegal>): Promise<FacturapiOrganization>;
+      uploadCertificate(
+        id: string,
+        cerFile: Buffer | NodeJS.ReadableStream,
+        keyFile: Buffer | NodeJS.ReadableStream,
+        password: string
+      ): Promise<FacturapiCertificate>;
+      deleteCertificate(id: string): Promise<void>;
+      getTestApiKey(id: string): Promise<FacturapiApiKey>;
+      renewTestApiKey(id: string): Promise<FacturapiApiKey>;
+      renewLiveApiKey(id: string): Promise<FacturapiApiKey>;
+      del(id: string): Promise<void>;
     };
   }
 
