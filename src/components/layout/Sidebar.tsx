@@ -17,6 +17,7 @@ import {
   LogOut,
   Building2,
   Plus,
+  Settings,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -28,6 +29,11 @@ const NAV_ITEMS = [
   { href: "/nomina", label: "Nómina", icon: Users2 },
   { href: "/impuestos", label: "Impuestos", icon: Calculator },
   { href: "/contabilidad", label: "Contabilidad", icon: BookOpen },
+];
+
+const BOTTOM_NAV_ITEMS = [
+  { href: "/empresa", label: "Mi Empresa", icon: Building2 },
+  { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -106,6 +112,25 @@ export function Sidebar({ user }: SidebarProps) {
             {label}
           </Link>
         ))}
+
+        {/* Divider */}
+        <div className="pt-3 mt-3 border-t border-border space-y-1">
+          {BOTTOM_NAV_ITEMS.map(({ href, label, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                pathname === href || pathname.startsWith(href + "/")
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
+            </Link>
+          ))}
+        </div>
       </nav>
 
       {/* User */}
