@@ -34,7 +34,12 @@ export async function POST(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { rfc, razonSocial, regimenFiscal, codigoPostal, domicilioFiscal } = body;
+  const {
+    rfc, razonSocial, regimenFiscal, codigoPostal, domicilioFiscal,
+    nombreComercial, email, telefono, actividadEconomica,
+    csdCer, csdKey, csdPassword,
+    fielCer, fielKey, fielPassword,
+  } = body;
 
   if (!rfc || !razonSocial || !regimenFiscal || !codigoPostal) {
     return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
@@ -47,6 +52,16 @@ export async function POST(req: Request) {
       regimenFiscal,
       codigoPostal,
       domicilioFiscal,
+      nombreComercial,
+      email,
+      telefono,
+      actividadEconomica,
+      csdCer,
+      csdKey,
+      csdPassword,
+      fielCer,
+      fielKey,
+      fielPassword,
       members: {
         create: {
           userId: session.user.id,

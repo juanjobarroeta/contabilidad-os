@@ -77,6 +77,24 @@ model Company {
   codigoPostal      String
   domicilioFiscal   String?
 
+  // Contact / additional info
+  nombreComercial   String?
+  email             String?
+  telefono          String?
+  actividadEconomica String? // SCIAN code description
+
+  // CSD — Certificado de Sello Digital (for CFDI stamping)
+  csdCer            String?  @db.Text  // base64 encoded .cer file
+  csdKey            String?  @db.Text  // base64 encoded .key file
+  csdPassword       String?            // encrypted password
+  csdVigencia       DateTime?          // expiry date
+
+  // e.firma / FIEL (for SAT declarations)
+  fielCer           String?  @db.Text  // base64 encoded .cer file
+  fielKey           String?  @db.Text  // base64 encoded .key file
+  fielPassword      String?            // encrypted password
+  fielVigencia      DateTime?          // expiry date
+
   // Facturapi integration
   facturapiOrgId    String?  // Facturapi organization ID for this company
   facturapiApiKey   String?  // live API key stored encrypted
