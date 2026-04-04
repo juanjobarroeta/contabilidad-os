@@ -6,7 +6,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   ChevronLeft, ChevronRight, Calculator, Save,
   CheckCircle2, AlertCircle, Loader2, FileText,
-  TrendingUp, TrendingDown, Info,
+  TrendingUp, TrendingDown, Info, RefreshCw,
 } from "lucide-react";
 
 const MONTHS = [
@@ -98,6 +98,11 @@ export default function ImpuestosPage() {
   const [error, setError] = useState("");
   const [savedStatus, setSavedStatus] = useState<string | null>(null);
 
+  // SAT sync state
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>("");
+  const [syncDone, setSyncDone] = useState(false);
+
   const calcular = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true);
@@ -151,6 +156,78 @@ export default function ImpuestosPage() {
       setError("No se pudo guardar la declaración");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSatSync(tipo: "emitidos" | "recibidos") {
+    if (!activeCompany) return;
+    setSyncing(true);
+    setSyncDone(false);
+    setSyncStatus("Autenticando con el SAT...");
+    setError("");
+
+    try {
+      // Step 1: Send request to SAT
+      const reqRes = await fetch("/api/sat/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, month, year, tipo }),
+      });
+      const reqData = await reqRes.json();
+      if (!reqRes.ok) throw new Error(reqData.error ?? "Error al solicitar CFDIs al SAT");
+
+      const { satRequestId } = reqData;
+      setSyncStatus("Solicitud enviada al SAT. Esperando paquetes...");
+
+      // Step 2: Poll verify until done
+      let attempts = 0;
+      const maxAttempts = 24; // ~2 minutes at 5s intervals
+
+      const poll = async (): Promise<void> => {
+        if (attempts >= maxAttempts) {
+          setSyncStatus("El SAT está tardando más de lo esperado. Intenta de nuevo en unos minutos.");
+          setSyncing(false);
+          return;
+        }
+        attempts++;
+
+        const verRes = await fetch("/api/sat/sync/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: activeCompany.id, satRequestId, tipo, month, year }),
+        });
+        const verData = await verRes.json();
+
+        if (verData.status === "pending") {
+          setSyncStatus(verData.message ?? "Preparando paquetes...");
+          await new Promise((r) => setTimeout(r, 5000));
+          return poll();
+        }
+
+        if (verData.status === "empty") {
+          setSyncStatus("No se encontraron CFDIs del SAT en este período.");
+          setSyncDone(true);
+          setSyncing(false);
+          return;
+        }
+
+        if (verData.status === "done") {
+          setSyncStatus(verData.message ?? "¡Sincronización completada!");
+          setSyncDone(true);
+          setSyncing(false);
+          // Refresh the declaration data
+          calcular();
+          return;
+        }
+
+        // error
+        throw new Error(verData.message ?? verData.error ?? "Error en sincronización");
+      };
+
+      await poll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al sincronizar con el SAT");
+      setSyncing(false);
     }
   }
 
@@ -345,6 +422,50 @@ export default function ImpuestosPage() {
               <p className="text-xs text-muted-foreground mt-1">No hay facturas timbradas en {MONTHS[month - 1]} {year}</p>
             </div>
           )}
+
+          {/* ── SAT Sync ── */}
+          <div className="bg-white rounded-xl border border-border shadow-sm p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="font-semibold text-sm">Sincronizar CFDIs del SAT</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Descarga tus CFDIs directamente del SAT usando tu e.firma (FIEL) para obtener datos exactos de IVA acreditable.
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => handleSatSync("recibidos")}
+                  disabled={syncing}
+                  className="flex items-center gap-2 border border-border px-3 py-2 rounded-md text-xs font-medium hover:bg-accent disabled:opacity-50 transition-colors"
+                >
+                  {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Recibidos
+                </button>
+                <button
+                  onClick={() => handleSatSync("emitidos")}
+                  disabled={syncing}
+                  className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-2 rounded-md text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Emitidos
+                </button>
+              </div>
+            </div>
+
+            {(syncing || syncStatus) && (
+              <div className={`mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-md ${
+                syncDone
+                  ? "bg-green-50 text-green-700 border border-green-200"
+                  : syncing
+                  ? "bg-blue-50 text-blue-700 border border-blue-200"
+                  : "bg-gray-50 text-muted-foreground border border-border"
+              }`}>
+                {syncing && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+                {syncDone && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
+                {syncStatus}
+              </div>
+            )}
+          </div>
 
           {/* ── Actions ── */}
           <div className="flex items-center gap-3 pb-2">
