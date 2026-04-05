@@ -6,6 +6,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   Building2, Plus, Loader2, Pencil, CheckCircle2,
   Zap, Key, AlertCircle, Trash2, ExternalLink, Eye, EyeOff, X,
+  Shield, Upload,
 } from "lucide-react";
 
 const REGIMENES_FISCALES = [
@@ -38,6 +39,17 @@ interface CompanyDetail {
   facturapiApiKey?: string;
   csdCer?: string;
   csdKey?: string;
+  fielCer?: string;
+  fielKey?: string;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function EmpresaPage() {
@@ -64,6 +76,15 @@ export default function EmpresaPage() {
   const [manualOrgId, setManualOrgId] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
+
+  // FIEL upload
+  const [fielCerFile, setFielCerFile] = useState<File | null>(null);
+  const [fielKeyFile, setFielKeyFile] = useState<File | null>(null);
+  const [fielPassword, setFielPassword] = useState("");
+  const [showFielPassword, setShowFielPassword] = useState(false);
+  const [fielSaving, setFielSaving] = useState(false);
+  const [fielSuccess, setFielSuccess] = useState("");
+  const [fielError, setFielError] = useState("");
 
   // Delete company
   const [disconnectLoading, setDisconnectLoading] = useState(false);
@@ -176,8 +197,42 @@ export default function EmpresaPage() {
     }
   }
 
+  async function handleFielUpload() {
+    if (!activeCompany) return;
+    if (!fielCerFile || !fielKeyFile || !fielPassword) {
+      setFielError("Sube el .cer, el .key y la contraseña de tu e.firma");
+      return;
+    }
+    setFielSaving(true);
+    setFielError("");
+    setFielSuccess("");
+    try {
+      const fielCer = await fileToBase64(fielCerFile);
+      const fielKey = await fileToBase64(fielKeyFile);
+      const res = await fetch(`/api/companies/${activeCompany.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fielCer, fielKey, fielPassword }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Error al guardar");
+      }
+      setFielSuccess("e.firma guardada correctamente. Ya puedes sincronizar CFDIs del SAT.");
+      setFielCerFile(null);
+      setFielKeyFile(null);
+      setFielPassword("");
+      fetchCompanyDetail();
+    } catch (err) {
+      setFielError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setFielSaving(false);
+    }
+  }
+
   const isConnected = !!(companyDetail?.facturapiApiKey);
   const hasCsd = !!(companyDetail?.csdCer && companyDetail?.csdKey);
+  const hasFiel = !!(companyDetail?.fielCer && companyDetail?.fielKey);
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -285,8 +340,9 @@ export default function EmpresaPage() {
         ))}
       </div>
 
-      {/* ── Facturapi Setup ── */}
+      {/* ── Facturapi Setup + FIEL ── */}
       {activeCompany && (
+        <>
         <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
           {/* Header */}
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">
@@ -467,6 +523,107 @@ export default function EmpresaPage() {
             )}
           </div>
         </div>
+
+        {/* ── e.firma / FIEL ── */}
+        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                <Shield className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-sm">e.firma / FIEL</h2>
+                <p className="text-xs text-muted-foreground">Requerida para sincronizar CFDIs del SAT</p>
+              </div>
+            </div>
+            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${hasFiel ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+              {hasFiel ? "✓ Configurada" : "Sin configurar"}
+            </span>
+          </div>
+
+          <div className="px-5 py-4 space-y-4">
+            {hasFiel ? (
+              <div className="space-y-3">
+                <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800">
+                  <p className="font-medium">e.firma almacenada de forma segura</p>
+                  <p className="text-xs mt-0.5 text-green-700">Usada para descargar CFDIs del SAT. Actualiza los archivos si tu e.firma expiró o cambió.</p>
+                </div>
+                <p className="text-xs text-muted-foreground">Para actualizar, sube los nuevos archivos:</p>
+              </div>
+            ) : (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+                <p className="font-medium mb-1">¿Qué es la e.firma?</p>
+                <p>La Firma Electrónica Avanzada (FIEL) te permite autenticarte ante el SAT para descargar todos tus CFDIs emitidos y recibidos — necesario para calcular IVA acreditable con precisión.</p>
+              </div>
+            )}
+
+            {/* Upload fields */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Certificado e.firma <code className="bg-gray-100 px-1 rounded">.cer</code></label>
+                <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-border border-dashed rounded-md text-xs cursor-pointer hover:bg-gray-50 transition-colors">
+                  <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground truncate">
+                    {fielCerFile ? fielCerFile.name : "Seleccionar .cer"}
+                  </span>
+                  <input type="file" accept=".cer" className="hidden"
+                    onChange={(e) => setFielCerFile(e.target.files?.[0] ?? null)} />
+                </label>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Llave privada <code className="bg-gray-100 px-1 rounded">.key</code></label>
+                <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-border border-dashed rounded-md text-xs cursor-pointer hover:bg-gray-50 transition-colors">
+                  <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground truncate">
+                    {fielKeyFile ? fielKeyFile.name : "Seleccionar .key"}
+                  </span>
+                  <input type="file" accept=".key" className="hidden"
+                    onChange={(e) => setFielKeyFile(e.target.files?.[0] ?? null)} />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium mb-1.5">Contraseña de la e.firma</label>
+              <div className="relative">
+                <input
+                  type={showFielPassword ? "text" : "password"}
+                  value={fielPassword}
+                  onChange={(e) => setFielPassword(e.target.value)}
+                  placeholder="Contraseña de la llave privada"
+                  className="w-full px-3 py-2 pr-10 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <button type="button" onClick={() => setShowFielPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showFielPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {fielSuccess && (
+              <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
+                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                {fielSuccess}
+              </div>
+            )}
+            {fielError && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                {fielError}
+              </div>
+            )}
+
+            <button
+              onClick={handleFielUpload}
+              disabled={fielSaving || !fielCerFile || !fielKeyFile || !fielPassword}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {fielSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+              {hasFiel ? "Actualizar e.firma" : "Guardar e.firma"}
+            </button>
+          </div>
+        </div>
+        </>
       )}
     </div>
   );

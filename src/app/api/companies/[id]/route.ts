@@ -53,3 +53,37 @@ export async function GET(_req: Request, { params }: Params) {
     fielKey: company.fielKey ? "[stored]" : null,
   });
 }
+
+// PATCH /api/companies/[id] — update FIEL or CSD credentials
+export async function PATCH(req: Request, { params }: Params) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: companyId } = await params;
+
+  const member = await prisma.companyMember.findUnique({
+    where: { userId_companyId: { userId: session.user.id, companyId } },
+  });
+  if (!member || member.role === "VIEWER") {
+    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
+  const body = await req.json();
+  const { fielCer, fielKey, fielPassword, csdCer, csdKey, csdPassword } = body;
+
+  const data: Record<string, string> = {};
+  if (fielCer) data.fielCer = fielCer;
+  if (fielKey) data.fielKey = fielKey;
+  if (fielPassword) data.fielPassword = fielPassword;
+  if (csdCer) data.csdCer = csdCer;
+  if (csdKey) data.csdKey = csdKey;
+  if (csdPassword) data.csdPassword = csdPassword;
+
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "No hay datos para actualizar" }, { status: 400 });
+  }
+
+  await prisma.company.update({ where: { id: companyId }, data });
+
+  return NextResponse.json({ ok: true });
+}
