@@ -57,7 +57,6 @@ export async function GET(req: Request) {
   });
 
   // IVA trasladado = sum of IVA taxes on INGRESO invoices
-  // If no tax records, fall back to totalImpuestos field
   const ivaTrasladadoTotal = facturasEmitidas.reduce((sum, inv) => {
     const ivaTaxes = inv.taxes.filter((t) => t.tipo === "IVA" && !t.retencion);
     if (ivaTaxes.length > 0) {
@@ -81,21 +80,9 @@ export async function GET(req: Request) {
     return sum + (inv.totalImpuestos ?? 0);
   }, 0);
 
-  // IVA a cargo = trasladado - retenido por clientes - acreditable
-  const ivaACargo = ivaTrasladadoTotal - ivaRetenidoPorClientes - ivaAcreditable;
-  const ivaSaldoFavor = ivaACargo < 0 ? Math.abs(ivaACargo) : 0;
-  const ivaPagar = ivaACargo > 0 ? ivaACargo : 0;
-
-  // ISR provisional — simplified estimate
+  // ISR raw figures — final calculation done on the frontend (coeficiente is user-supplied)
   const ingresosNetos = facturasEmitidas.reduce((s, inv) => s + inv.subtotal, 0);
   const gastos = facturasEgresos.reduce((s, inv) => s + inv.subtotal, 0);
-  const baseGravable = Math.max(0, ingresosNetos - gastos);
-
-  // Simplified ISR: 30% for personas morales (SAT tariff aplicable)
-  // For RESICO (simplified trust): ranges from 1% to 2.5% on ingresos
-  // We flag it as "estimate" — not a substitute for actual SAT filing
-  const isrTasa = 0.30;
-  const isrEstimado = baseGravable * isrTasa;
 
   // Fetch existing saved declaration if any
   const periodo = `${year}-${String(month).padStart(2, "0")}`;
@@ -103,36 +90,48 @@ export async function GET(req: Request) {
     where: { companyId, tipo: "IVA_MENSUAL", periodo },
   });
 
+  // Build unified facturas list (emitidas + egresos)
+  const toRow = (inv: typeof facturasEmitidas[number], tipo: "INGRESO" | "EGRESO") => ({
+    id: inv.id,
+    uuid: inv.uuid,
+    tipo,
+    fecha: inv.fecha,
+    contraparte: inv.customer?.razonSocial ?? "—",
+    rfc: inv.customer?.rfc ?? "—",
+    subtotal: inv.subtotal,
+    iva: inv.totalImpuestos ?? 0,
+    total: inv.total,
+  });
+
+  const facturas = [
+    ...facturasEmitidas.map((inv) => toRow(inv as typeof facturasEmitidas[number], "INGRESO")),
+    ...facturasEgresos.map((inv) => toRow(inv as typeof facturasEgresos[number], "EGRESO")),
+  ].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
   return NextResponse.json({
     periodo,
     month,
     year,
+    // Raw IVA sums — frontend computes net using user-supplied saldoFavorAnterior
     iva: {
       trasladado: ivaTrasladadoTotal,
       retenidoPorClientes: ivaRetenidoPorClientes,
       acreditable: ivaAcreditable,
-      pagar: ivaPagar,
-      saldoFavor: ivaSaldoFavor,
     },
+    // Raw ISR sums — frontend computes net using user-supplied coeficienteUtilidad
     isr: {
       ingresos: ingresosNetos,
       gastos,
-      baseGravable,
-      tasa: isrTasa,
-      estimado: isrEstimado,
     },
-    facturas: facturasEmitidas.map((inv) => ({
-      id: inv.id,
-      uuid: inv.uuid,
-      fecha: inv.fecha,
-      cliente: inv.customer?.razonSocial ?? "—",
-      rfc: inv.customer?.rfc ?? "—",
-      subtotal: inv.subtotal,
-      iva: inv.totalImpuestos,
-      total: inv.total,
-    })),
+    facturas,
     declaracionGuardada: declaracionGuardada
-      ? { id: declaracionGuardada.id, status: declaracionGuardada.status }
+      ? {
+          id: declaracionGuardada.id,
+          status: declaracionGuardada.status,
+          // Restore user-saved adjustment values
+          saldoFavorAnterior: declaracionGuardada.ivaSaldoFavorAnterior ?? 0,
+          coeficienteUtilidad: declaracionGuardada.isrCoeficienteUtilidad ?? 0,
+        }
       : null,
   });
 }
@@ -143,7 +142,16 @@ export async function POST(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { companyId, periodo, tipo, ivaData, isrData, status } = body;
+  const {
+    companyId,
+    periodo,
+    tipo,
+    ivaData,
+    isrData,
+    status,
+    saldoFavorAnterior,
+    coeficienteUtilidad,
+  } = body;
 
   if (!companyId || !periodo || !tipo) {
     return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
@@ -163,11 +171,13 @@ export async function POST(req: Request) {
     ivaAcreditableGastado: ivaData?.acreditable ?? null,
     ivaSaldoFavor: ivaData?.saldoFavor ?? null,
     ivaPagar: ivaData?.pagar ?? null,
+    ivaSaldoFavorAnterior: typeof saldoFavorAnterior === "number" ? saldoFavorAnterior : null,
     isrIngresos: isrData?.ingresos ?? null,
     isrDeducciones: isrData?.gastos ?? null,
     isrBaseGravable: isrData?.baseGravable ?? null,
     isrTasa: isrData?.tasa ?? null,
     isrPagar: isrData?.estimado ?? null,
+    isrCoeficienteUtilidad: typeof coeficienteUtilidad === "number" ? coeficienteUtilidad : null,
   };
 
   const existing = await prisma.taxDeclaration.findFirst({

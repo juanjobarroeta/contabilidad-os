@@ -452,6 +452,7 @@ model TaxDeclaration {
   ivaAcreditableGastado Float?
   ivaSaldoFavor         Float?
   ivaPagar              Float?
+  ivaSaldoFavorAnterior Float?   // Carryover from previous months
 
   // ISR
   isrIngresos           Float?
@@ -459,6 +460,7 @@ model TaxDeclaration {
   isrBaseGravable       Float?
   isrTasa               Float?
   isrPagar              Float?
+  isrCoeficienteUtilidad Float?  // Coeficiente asignado por el SAT del ejercicio anterior
 
   // DIOT
   diotXmlUrl            String?
