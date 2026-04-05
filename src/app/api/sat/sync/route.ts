@@ -55,11 +55,27 @@ export async function POST(req: Request) {
     ServiceEndpoints.cfdi()
   );
 
-  // Period: full month using the package's own DateTime (ISO string constructor)
+  // Period: full month — but clamp end date to right now if month is not yet complete
+  // SAT rejects requests with end dates in the future (code 301)
   const lastDay = new Date(year, month, 0).getDate();
   const pad = (n: number) => String(n).padStart(2, "0");
+
+  const requestedEnd = new Date(year, month - 1, lastDay, 23, 59, 59);
+  const now = new Date();
+  const effectiveEnd = requestedEnd > now ? now : requestedEnd;
+
   const startIso = `${year}-${pad(month)}-01T00:00:00`;
-  const endIso   = `${year}-${pad(month)}-${pad(lastDay)}T23:59:59`;
+  const endIso = [
+    effectiveEnd.getFullYear(),
+    pad(effectiveEnd.getMonth() + 1),
+    pad(effectiveEnd.getDate()),
+  ].join("-") + "T" + [
+    pad(effectiveEnd.getHours()),
+    pad(effectiveEnd.getMinutes()),
+    pad(effectiveEnd.getSeconds()),
+  ].join(":");
+
+  console.log("[sat/sync] period:", startIso, "→", endIso);
 
   const period = DateTimePeriod.create(
     new DateTime(startIso),
