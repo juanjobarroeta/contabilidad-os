@@ -113,9 +113,12 @@ export async function POST(req: Request) {
     const downloadResult = await service.download(packageId);
     if (!downloadResult.getStatus().isAccepted()) continue;
 
-    const reader = await CfdiPackageReader.createFromContents(
-      downloadResult.getPackageContent()
-    );
+    // getPackageContent() returns base64 — decode to binary string for createFromContents
+    // (the library writes with { encoding: "binary" } so expects latin1, not base64)
+    const base64Content = downloadResult.getPackageContent();
+    const binaryContent = Buffer.from(base64Content, "base64").toString("binary");
+
+    const reader = await CfdiPackageReader.createFromContents(binaryContent);
 
     for await (const cfdiMap of reader.cfdis()) {
       for (const [uuid, xmlContent] of cfdiMap) {
