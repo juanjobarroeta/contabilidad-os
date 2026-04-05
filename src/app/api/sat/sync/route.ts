@@ -66,44 +66,62 @@ export async function POST(req: Request) {
     new DateTime(endIso)
   );
 
-  // Request emitidos
-  const emitidosResult = await service.query(
-    QueryParameters.create()
-      .withPeriod(period)
-      .withDownloadType(new DownloadType("issued"))
-      .withRequestType(new RequestType("xml"))
-  );
+  // Request emitidos — wrap individually so one failure doesn't kill the other
+  let emitidosRequestId: string | null = null;
+  let recibidosRequestId: string | null = null;
+  const warnings: string[] = [];
 
-  // Request recibidos (requires DocumentStatus.active for xml+received)
-  const recibidosResult = await service.query(
-    QueryParameters.create()
-      .withPeriod(period)
-      .withDownloadType(new DownloadType("received"))
-      .withRequestType(new RequestType("xml"))
-      .withDocumentStatus(new DocumentStatus("active"))
-  );
-
-  const errors: string[] = [];
-  if (!emitidosResult.getStatus().isAccepted()) {
-    errors.push(`Emitidos: ${emitidosResult.getStatus().getMessage()}`);
-  }
-  if (!recibidosResult.getStatus().isAccepted()) {
-    errors.push(`Recibidos: ${recibidosResult.getStatus().getMessage()}`);
+  try {
+    const emitidosResult = await service.query(
+      QueryParameters.create()
+        .withPeriod(period)
+        .withDownloadType(new DownloadType("issued"))
+        .withRequestType(new RequestType("xml"))
+    );
+    console.log("[sat/sync] emitidos status:", emitidosResult.getStatus().getMessage(), "code:", emitidosResult.getStatus().getCode());
+    if (emitidosResult.getStatus().isAccepted()) {
+      emitidosRequestId = emitidosResult.getRequestId();
+    } else {
+      warnings.push(`Emitidos rechazado por SAT: ${emitidosResult.getStatus().getMessage()} (código ${emitidosResult.getStatus().getCode()})`);
+    }
+  } catch (e) {
+    console.error("[sat/sync] emitidos error:", e);
+    warnings.push(`Emitidos error: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  if (errors.length === 2) {
-    return NextResponse.json({ error: errors.join(" | ") }, { status: 422 });
+  try {
+    const recibidosResult = await service.query(
+      QueryParameters.create()
+        .withPeriod(period)
+        .withDownloadType(new DownloadType("received"))
+        .withRequestType(new RequestType("xml"))
+        .withDocumentStatus(new DocumentStatus("active"))
+    );
+    console.log("[sat/sync] recibidos status:", recibidosResult.getStatus().getMessage(), "code:", recibidosResult.getStatus().getCode());
+    if (recibidosResult.getStatus().isAccepted()) {
+      recibidosRequestId = recibidosResult.getRequestId();
+    } else {
+      warnings.push(`Recibidos rechazado por SAT: ${recibidosResult.getStatus().getMessage()} (código ${recibidosResult.getStatus().getCode()})`);
+    }
+  } catch (e) {
+    console.error("[sat/sync] recibidos error:", e);
+    warnings.push(`Recibidos error: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Both failed — surface the actual SAT error messages
+  if (!emitidosRequestId && !recibidosRequestId) {
+    return NextResponse.json({
+      error: warnings.length > 0
+        ? warnings.join(" | ")
+        : "SAT rechazó ambas solicitudes sin mensaje de error",
+    }, { status: 422 });
   }
 
   return NextResponse.json({
-    emitidosRequestId: emitidosResult.getStatus().isAccepted()
-      ? emitidosResult.getRequestId()
-      : null,
-    recibidosRequestId: recibidosResult.getStatus().isAccepted()
-      ? recibidosResult.getRequestId()
-      : null,
+    emitidosRequestId,
+    recibidosRequestId,
     month,
     year,
-    warnings: errors.length > 0 ? errors : undefined,
+    warnings: warnings.length > 0 ? warnings : undefined,
   });
 }

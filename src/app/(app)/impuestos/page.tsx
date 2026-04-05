@@ -174,7 +174,7 @@ export default function ImpuestosPage() {
         body: JSON.stringify({ companyId: activeCompany.id, month, year }),
       });
       const reqData = await reqRes.json();
-      if (!reqRes.ok) throw new Error(reqData.error ?? "Error al solicitar CFDIs al SAT");
+      if (!reqRes.ok) throw new Error(reqData.error ?? `Error ${reqRes.status} al solicitar CFDIs al SAT`);
 
       const { emitidosRequestId, recibidosRequestId } = reqData;
       setSyncStatus("Solicitud enviada al SAT. Esperando paquetes (emitidos + recibidos)...");
