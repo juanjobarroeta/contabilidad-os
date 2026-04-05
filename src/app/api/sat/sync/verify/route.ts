@@ -68,12 +68,21 @@ export async function POST(req: Request) {
     if (!verifyResult.getStatus().isAccepted()) continue;
 
     const codeRequest = verifyResult.getCodeRequest().getValue();
+    const statusRequest = verifyResult.getStatusRequest();
     const packageIds = verifyResult.getPackageIds();
     totalCfdis += verifyResult.getNumberCfdis();
 
-    if (codeRequest === 5004) continue; // no CFDIs for this type in period
+    console.log(`[sat/verify] ${tipo} codeRequest:${codeRequest} status:${statusRequest.getEntryId()} packages:${packageIds.length} cfdis:${verifyResult.getNumberCfdis()}`);
 
-    if (packageIds.length === 0) {
+    // 5004 = no CFDIs found for this period/type
+    if (codeRequest === 5004) continue;
+
+    // Only download when SAT says the request is Finished
+    // StatusRequest: Accepted | InProgress | Finished | Failure | Rejected | Expired
+    const isFinished = statusRequest.isTypeOf("Finished" as Parameters<typeof statusRequest.isTypeOf>[0]);
+
+    if (!isFinished) {
+      // Still processing — come back later
       pendingIds.push(id);
     } else {
       for (const pkgId of packageIds) {
