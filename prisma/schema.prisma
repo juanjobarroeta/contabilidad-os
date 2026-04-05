@@ -102,6 +102,10 @@ model Company {
   // Logo / branding
   logoUrl           String?
 
+  // ISR — Coeficiente de utilidad (Art. 14 LISR) set once per fiscal year
+  coeficienteUtilidad Float?  // Stored after user confirms/overrides auto-calculation
+  coeficienteAnio     Int?    // Which fiscal year this coeficiente applies to
+
   isActive          Boolean  @default(true)
 
   // Relations

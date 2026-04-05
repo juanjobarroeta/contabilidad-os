@@ -16,82 +16,149 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "companyId, month y year son requeridos" }, { status: 400 });
   }
 
-  // Verify membership
   const member = await prisma.companyMember.findUnique({
     where: { userId_companyId: { userId: session.user.id, companyId } },
   });
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  // Period boundaries
+  // ── Period boundaries ─────────────────────────────────────────────────────
   const from = new Date(year, month - 1, 1);
-  const to = new Date(year, month, 1); // exclusive
+  const to   = new Date(year, month, 1);       // exclusive upper bound
+  const yearFrom = new Date(year, 0, 1);       // Jan 1 of this year
+  const periodo  = `${year}-${String(month).padStart(2, "0")}`;
 
-  // Facturas emitidas (INGRESO) timbradas en el período
-  const facturasEmitidas = await prisma.invoice.findMany({
-    where: {
-      companyId,
-      tipo: "INGRESO",
-      status: "STAMPED",
-      fecha: { gte: from, lt: to },
-    },
-    include: {
-      customer: { select: { razonSocial: true, rfc: true } },
-      taxes: true,
-    },
-    orderBy: { fecha: "asc" },
-  });
+  // ── Parallel data fetch ───────────────────────────────────────────────────
+  const prevYear     = year - 1;
+  const prevYearFrom = new Date(prevYear, 0, 1);
+  const prevYearTo   = new Date(prevYear, 11, 31, 23, 59, 59);
 
-  // Facturas de egresos (EGRESO) timbradas en el período — base para IVA acreditable
-  const facturasEgresos = await prisma.invoice.findMany({
-    where: {
-      companyId,
-      tipo: "EGRESO",
-      status: "STAMPED",
-      fecha: { gte: from, lt: to },
-    },
-    include: {
-      customer: { select: { razonSocial: true, rfc: true } },
-      taxes: true,
-    },
-    orderBy: { fecha: "asc" },
-  });
+  const prevPeriodo = month === 1
+    ? `${year - 1}-12`
+    : `${year}-${String(month - 1).padStart(2, "0")}`;
 
-  // IVA trasladado = sum of IVA taxes on INGRESO invoices
+  const [
+    facturasEmitidas,
+    facturasEgresos,
+    prevYearIngresos,
+    prevYearEgresos,
+    ingresosAcumuladosAgg,
+    declaracionesPrevias,
+    prevDeclaracion,
+    declaracionGuardada,
+    company,
+  ] = await Promise.all([
+    // This month's invoices
+    prisma.invoice.findMany({
+      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
+      include: { customer: { select: { razonSocial: true, rfc: true } }, taxes: true },
+      orderBy: { fecha: "asc" },
+    }),
+    prisma.invoice.findMany({
+      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
+      include: { customer: { select: { razonSocial: true, rfc: true } }, taxes: true },
+      orderBy: { fecha: "asc" },
+    }),
+    // Previous year totals — for coeficiente calculation
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
+      _sum: { subtotal: true },
+      _count: { id: true },
+    }),
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
+      _sum: { subtotal: true },
+    }),
+    // Cumulative ingresos Jan → end of current month (for ISR acumulado)
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearFrom, lt: to } },
+      _sum: { subtotal: true },
+    }),
+    // Saved declarations Jan → month-1 of this year (for ISR ya pagado)
+    prisma.taxDeclaration.findMany({
+      where: {
+        companyId,
+        tipo: "IVA_MENSUAL",
+        periodo: { gte: `${year}-01`, lt: periodo },
+        status: { in: ["CALCULATED", "FILED", "PAID"] },
+      },
+    }),
+    // Previous month's declaration — for IVA saldo a favor carryover
+    prisma.taxDeclaration.findFirst({
+      where: {
+        companyId,
+        tipo: "IVA_MENSUAL",
+        periodo: prevPeriodo,
+        status: { in: ["CALCULATED", "FILED", "PAID"] },
+      },
+    }),
+    // This month's existing declaration (to restore overrides)
+    prisma.taxDeclaration.findFirst({
+      where: { companyId, tipo: "IVA_MENSUAL", periodo },
+    }),
+    // Company — coeficiente override
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { coeficienteUtilidad: true, coeficienteAnio: true },
+    }),
+  ]);
+
+  // ── IVA calculations ──────────────────────────────────────────────────────
   const ivaTrasladadoTotal = facturasEmitidas.reduce((sum, inv) => {
     const ivaTaxes = inv.taxes.filter((t) => t.tipo === "IVA" && !t.retencion);
-    if (ivaTaxes.length > 0) {
-      return sum + ivaTaxes.reduce((s, t) => s + t.importe, 0);
-    }
-    return sum + (inv.totalImpuestos ?? 0);
+    return sum + (ivaTaxes.length > 0
+      ? ivaTaxes.reduce((s, t) => s + t.importe, 0)
+      : (inv.totalImpuestos ?? 0));
   }, 0);
 
-  // IVA retenido (by clients on our invoices — reduces what we owe)
-  const ivaRetenidoPorClientes = facturasEmitidas.reduce((sum, inv) => {
-    const ret = inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion);
-    return sum + ret.reduce((s, t) => s + t.importe, 0);
-  }, 0);
+  const ivaRetenidoPorClientes = facturasEmitidas.reduce((sum, inv) =>
+    sum + inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion).reduce((s, t) => s + t.importe, 0), 0);
 
-  // IVA acreditable = IVA on EGRESO invoices (gastos deducibles)
   const ivaAcreditable = facturasEgresos.reduce((sum, inv) => {
     const ivaTaxes = inv.taxes.filter((t) => t.tipo === "IVA" && !t.retencion);
-    if (ivaTaxes.length > 0) {
-      return sum + ivaTaxes.reduce((s, t) => s + t.importe, 0);
-    }
-    return sum + (inv.totalImpuestos ?? 0);
+    return sum + (ivaTaxes.length > 0
+      ? ivaTaxes.reduce((s, t) => s + t.importe, 0)
+      : (inv.totalImpuestos ?? 0));
   }, 0);
 
-  // ISR raw figures — final calculation done on the frontend (coeficiente is user-supplied)
-  const ingresosNetos = facturasEmitidas.reduce((s, inv) => s + inv.subtotal, 0);
-  const gastos = facturasEgresos.reduce((s, inv) => s + inv.subtotal, 0);
+  // Auto saldo a favor from previous month's declaration
+  const saldoFavorAnteriorAuto = prevDeclaracion?.ivaSaldoFavor ?? 0;
 
-  // Fetch existing saved declaration if any
-  const periodo = `${year}-${String(month).padStart(2, "0")}`;
-  const declaracionGuardada = await prisma.taxDeclaration.findFirst({
-    where: { companyId, tipo: "IVA_MENSUAL", periodo },
-  });
+  // ── ISR — coeficiente de utilidad ─────────────────────────────────────────
+  const prevIngresosTotal  = prevYearIngresos._sum.subtotal ?? 0;
+  const prevGastosTotal    = prevYearEgresos._sum.subtotal ?? 0;
+  const prevUtilidad       = Math.max(0, prevIngresosTotal - prevGastosTotal);
+  const invoiceCountPrevYear = prevYearIngresos._count.id;
 
-  // Build unified facturas list (emitidas + egresos)
-  const toRow = (inv: typeof facturasEmitidas[number], tipo: "INGRESO" | "EGRESO") => ({
+  const coeficienteCalculado = prevIngresosTotal > 0
+    ? prevUtilidad / prevIngresosTotal
+    : null;
+
+  // Priority: (1) Company override for this year, (2) auto-calculated, (3) null
+  let coeficiente: number | null;
+  let coeficienteFuente: "manual" | "calculado" | "ninguno";
+
+  if (company?.coeficienteAnio === year && company?.coeficienteUtilidad != null) {
+    coeficiente      = company.coeficienteUtilidad;
+    coeficienteFuente = "manual";
+  } else if (coeficienteCalculado !== null) {
+    coeficiente      = coeficienteCalculado;
+    coeficienteFuente = "calculado";
+  } else {
+    coeficiente      = null;
+    coeficienteFuente = "ninguno";
+  }
+
+  // ── ISR cumulative figures ────────────────────────────────────────────────
+  const ingresosAcumulados = ingresosAcumuladosAgg._sum.subtotal ?? 0;
+  const isrPagadoAnterior  = declaracionesPrevias.reduce((s, d) => s + (d.isrPagar ?? 0), 0);
+
+  // Raw month figures (for the invoices table)
+  const ingresosDelMes = facturasEmitidas.reduce((s, inv) => s + inv.subtotal, 0);
+  const gastosDelMes   = facturasEgresos.reduce((s, inv) => s + inv.subtotal, 0);
+
+  // ── Build unified facturas list ───────────────────────────────────────────
+  type InvoiceWithRelations = typeof facturasEmitidas[number];
+  const toRow = (inv: InvoiceWithRelations, tipo: "INGRESO" | "EGRESO") => ({
     id: inv.id,
     uuid: inv.uuid,
     tipo,
@@ -104,35 +171,45 @@ export async function GET(req: Request) {
   });
 
   const facturas = [
-    ...facturasEmitidas.map((inv) => toRow(inv as typeof facturasEmitidas[number], "INGRESO")),
-    ...facturasEgresos.map((inv) => toRow(inv as typeof facturasEgresos[number], "EGRESO")),
+    ...facturasEmitidas.map((inv) => toRow(inv, "INGRESO")),
+    ...facturasEgresos.map((inv) => toRow(inv, "EGRESO")),
   ].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 
   return NextResponse.json({
     periodo,
     month,
     year,
-    // Raw IVA sums — frontend computes net using user-supplied saldoFavorAnterior
     iva: {
       trasladado: ivaTrasladadoTotal,
       retenidoPorClientes: ivaRetenidoPorClientes,
       acreditable: ivaAcreditable,
+      // Auto carryover from previous month — can be overridden on frontend
+      saldoFavorAnterior: saldoFavorAnteriorAuto,
+      saldoFavorAnteriorPeriodo: saldoFavorAnteriorAuto > 0 ? prevPeriodo : null,
     },
-    // Raw ISR sums — frontend computes net using user-supplied coeficienteUtilidad
     isr: {
-      ingresos: ingresosNetos,
-      gastos,
+      ingresosDelMes,
+      gastosDelMes,
+      ingresosAcumulados,        // Jan → this month (for Art. 14 formula)
+      isrPagadoAnterior,         // ISR already paid Jan → prev month
+      coeficiente,               // null if no data at all
+      coeficienteFuente,
+      // Details shown to user explaining how it was calculated
+      coeficienteBase: coeficienteFuente === "calculado" ? {
+        year: prevYear,
+        ingresos: prevIngresosTotal,
+        utilidad: prevUtilidad,
+        invoiceCount: invoiceCountPrevYear,
+      } : null,
     },
     facturas,
-    declaracionGuardada: declaracionGuardada
-      ? {
-          id: declaracionGuardada.id,
-          status: declaracionGuardada.status,
-          // Restore user-saved adjustment values
-          saldoFavorAnterior: declaracionGuardada.ivaSaldoFavorAnterior ?? 0,
-          coeficienteUtilidad: declaracionGuardada.isrCoeficienteUtilidad ?? 0,
-        }
-      : null,
+    declaracionGuardada: declaracionGuardada ? {
+      id: declaracionGuardada.id,
+      status: declaracionGuardada.status,
+      // Restore any manual overrides the user saved last time
+      saldoFavorAnteriorOverride: declaracionGuardada.ivaSaldoFavorAnterior,
+      coeficienteOverride: declaracionGuardada.isrCoeficienteUtilidad,
+    } : null,
   });
 }
 
@@ -143,21 +220,17 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const {
-    companyId,
-    periodo,
-    tipo,
-    ivaData,
-    isrData,
-    status,
+    companyId, periodo, tipo,
+    ivaData, isrData, status,
     saldoFavorAnterior,
     coeficienteUtilidad,
+    year,
   } = body;
 
   if (!companyId || !periodo || !tipo) {
     return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
   }
 
-  // Verify membership
   const member = await prisma.companyMember.findUnique({
     where: { userId_companyId: { userId: session.user.id, companyId } },
   });
@@ -167,16 +240,16 @@ export async function POST(req: Request) {
 
   const declarationData = {
     status: status ?? "CALCULATED",
-    ivaTrasladadoCobrado: ivaData?.trasladado ?? null,
+    ivaTrasladadoCobrado:  ivaData?.trasladado  ?? null,
     ivaAcreditableGastado: ivaData?.acreditable ?? null,
-    ivaSaldoFavor: ivaData?.saldoFavor ?? null,
-    ivaPagar: ivaData?.pagar ?? null,
+    ivaSaldoFavor:         ivaData?.saldoFavor  ?? null,
+    ivaPagar:              ivaData?.pagar        ?? null,
     ivaSaldoFavorAnterior: typeof saldoFavorAnterior === "number" ? saldoFavorAnterior : null,
-    isrIngresos: isrData?.ingresos ?? null,
-    isrDeducciones: isrData?.gastos ?? null,
-    isrBaseGravable: isrData?.baseGravable ?? null,
-    isrTasa: isrData?.tasa ?? null,
-    isrPagar: isrData?.estimado ?? null,
+    isrIngresos:           isrData?.ingresosAcumulados ?? null,
+    isrDeducciones:        isrData?.gastosDelMes       ?? null,
+    isrBaseGravable:       isrData?.utilidadFiscal     ?? null,
+    isrTasa:               0.30,
+    isrPagar:              isrData?.esteMes            ?? null,
     isrCoeficienteUtilidad: typeof coeficienteUtilidad === "number" ? coeficienteUtilidad : null,
   };
 
@@ -184,9 +257,20 @@ export async function POST(req: Request) {
     where: { companyId, tipo, periodo },
   });
 
-  const declaration = existing
-    ? await prisma.taxDeclaration.update({ where: { id: existing.id }, data: declarationData })
-    : await prisma.taxDeclaration.create({ data: { companyId, tipo, periodo, ...declarationData } });
+  const [declaration] = await Promise.all([
+    // Save/update declaration
+    existing
+      ? prisma.taxDeclaration.update({ where: { id: existing.id }, data: declarationData })
+      : prisma.taxDeclaration.create({ data: { companyId, tipo, periodo, ...declarationData } }),
+
+    // Persist coeficiente to Company so it applies to all months of this year
+    typeof coeficienteUtilidad === "number" && year
+      ? prisma.company.update({
+          where: { id: companyId },
+          data: { coeficienteUtilidad, coeficienteAnio: year },
+        })
+      : Promise.resolve(null),
+  ]);
 
   return NextResponse.json(declaration);
 }
