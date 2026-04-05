@@ -159,7 +159,7 @@ export default function ImpuestosPage() {
     }
   }
 
-  async function handleSatSync(tipo: "emitidos" | "recibidos") {
+  async function handleSatSync() {
     if (!activeCompany) return;
     setSyncing(true);
     setSyncDone(false);
@@ -167,17 +167,17 @@ export default function ImpuestosPage() {
     setError("");
 
     try {
-      // Step 1: Send request to SAT
+      // Step 1: Send both emitidos + recibidos requests in one call
       const reqRes = await fetch("/api/sat/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: activeCompany.id, month, year, tipo }),
+        body: JSON.stringify({ companyId: activeCompany.id, month, year }),
       });
       const reqData = await reqRes.json();
       if (!reqRes.ok) throw new Error(reqData.error ?? "Error al solicitar CFDIs al SAT");
 
-      const { satRequestId } = reqData;
-      setSyncStatus("Solicitud enviada al SAT. Esperando paquetes...");
+      const { emitidosRequestId, recibidosRequestId } = reqData;
+      setSyncStatus("Solicitud enviada al SAT. Esperando paquetes (emitidos + recibidos)...");
 
       // Step 2: Poll verify until done
       let attempts = 0;
@@ -194,7 +194,13 @@ export default function ImpuestosPage() {
         const verRes = await fetch("/api/sat/sync/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId: activeCompany.id, satRequestId, tipo, month, year }),
+          body: JSON.stringify({
+            companyId: activeCompany.id,
+            emitidosRequestId,
+            recibidosRequestId,
+            month,
+            year,
+          }),
         });
         const verData = await verRes.json();
 
@@ -211,16 +217,14 @@ export default function ImpuestosPage() {
           return;
         }
 
-        if (verData.status === "done") {
+        if (verData.status === "done" || verData.status === "partial") {
           setSyncStatus(verData.message ?? "¡Sincronización completada!");
           setSyncDone(true);
           setSyncing(false);
-          // Refresh the declaration data
           calcular();
           return;
         }
 
-        // error
         throw new Error(verData.message ?? verData.error ?? "Error en sincronización");
       };
 
@@ -432,24 +436,14 @@ export default function ImpuestosPage() {
                   Descarga tus CFDIs directamente del SAT usando tu e.firma (FIEL) para obtener datos exactos de IVA acreditable.
                 </p>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => handleSatSync("recibidos")}
-                  disabled={syncing}
-                  className="flex items-center gap-2 border border-border px-3 py-2 rounded-md text-xs font-medium hover:bg-accent disabled:opacity-50 transition-colors"
-                >
-                  {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Recibidos
-                </button>
-                <button
-                  onClick={() => handleSatSync("emitidos")}
-                  disabled={syncing}
-                  className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-2 rounded-md text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                >
-                  {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Emitidos
-                </button>
-              </div>
+              <button
+                onClick={handleSatSync}
+                disabled={syncing}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
+              >
+                {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {syncing ? "Sincronizando..." : "Sincronizar CFDIs"}
+              </button>
             </div>
 
             {(syncing || syncStatus) && (

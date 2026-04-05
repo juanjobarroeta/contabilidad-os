@@ -11,17 +11,17 @@ import {
 } from "@nodecfdi/sat-ws-descarga-masiva";
 
 // POST /api/sat/sync/verify
-// Body: { companyId, satRequestId, tipo, month, year }
+// Body: { companyId, emitidosRequestId?, recibidosRequestId?, month, year }
 // Returns: { status: "pending"|"done"|"empty"|"error", imported?, message? }
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { companyId, satRequestId, tipo, month, year } = body;
+  const { companyId, emitidosRequestId, recibidosRequestId } = body;
 
-  if (!companyId || !satRequestId) {
-    return NextResponse.json({ error: "companyId y satRequestId son requeridos" }, { status: 400 });
+  if (!companyId || (!emitidosRequestId && !recibidosRequestId)) {
+    return NextResponse.json({ error: "Faltan parámetros" }, { status: 400 });
   }
 
   // Verify membership
@@ -52,44 +52,57 @@ export async function POST(req: Request) {
     ServiceEndpoints.cfdi()
   );
 
-  // Verify request status with SAT
-  const verifyResult = await service.verify(satRequestId);
+  // Poll both request IDs and collect all pending/ready package IDs
+  const pendingIds: string[] = [];
+  const readyPackageIds: string[] = [];
+  const typeMap = new Map<string, "emitidos" | "recibidos">(); // packageId → tipo
 
-  if (!verifyResult.getStatus().isAccepted()) {
+  const requestPairs: Array<{ id: string; tipo: "emitidos" | "recibidos" }> = [];
+  if (emitidosRequestId) requestPairs.push({ id: emitidosRequestId, tipo: "emitidos" });
+  if (recibidosRequestId) requestPairs.push({ id: recibidosRequestId, tipo: "recibidos" });
+
+  let totalCfdis = 0;
+
+  for (const { id, tipo } of requestPairs) {
+    const verifyResult = await service.verify(id);
+    if (!verifyResult.getStatus().isAccepted()) continue;
+
+    const codeRequest = verifyResult.getCodeRequest().getValue();
+    const packageIds = verifyResult.getPackageIds();
+    totalCfdis += verifyResult.getNumberCfdis();
+
+    if (codeRequest === 5004) continue; // no CFDIs for this type in period
+
+    if (packageIds.length === 0) {
+      pendingIds.push(id);
+    } else {
+      for (const pkgId of packageIds) {
+        readyPackageIds.push(pkgId);
+        typeMap.set(pkgId, tipo);
+      }
+    }
+  }
+
+  // If any are still pending, return pending
+  if (pendingIds.length > 0 && readyPackageIds.length === 0) {
     return NextResponse.json({
-      status: "error",
-      message: verifyResult.getStatus().getMessage(),
+      status: "pending",
+      message: `SAT preparando paquetes... ${totalCfdis} CFDIs encontrados`,
     });
   }
 
-  const codeRequest = verifyResult.getCodeRequest().getValue();
-  const statusRequest = verifyResult.getStatusRequest().getEntryId();
-  const packageIds = verifyResult.getPackageIds();
-  const cfdiCount = verifyResult.getNumberCfdis();
-
-  // 5004 = no CFDIs found in period
-  if (codeRequest === 5004) {
+  if (readyPackageIds.length === 0) {
     return NextResponse.json({ status: "empty", message: "No se encontraron CFDIs en este período" });
   }
 
-  // Still processing
-  if (packageIds.length === 0) {
-    return NextResponse.json({
-      status: "pending",
-      message: `${statusRequest} — ${cfdiCount} CFDIs encontrados, preparando paquetes...`,
-    });
-  }
-
-  // Packages are ready — download and import
+  // Download and import all ready packages
   let imported = 0;
   let skipped = 0;
 
-  for (const packageId of packageIds) {
+  for (const packageId of readyPackageIds) {
+    const tipo = typeMap.get(packageId) ?? "recibidos";
     const downloadResult = await service.download(packageId);
-
-    if (!downloadResult.getStatus().isAccepted()) {
-      continue;
-    }
+    if (!downloadResult.getStatus().isAccepted()) continue;
 
     const reader = await CfdiPackageReader.createFromContents(
       downloadResult.getPackageContent()
@@ -98,28 +111,28 @@ export async function POST(req: Request) {
     for await (const cfdiMap of reader.cfdis()) {
       for (const [uuid, xmlContent] of cfdiMap) {
         // Skip if already in DB
-        const existing = await prisma.invoice.findFirst({
-          where: { uuid },
-        });
+        const existing = await prisma.invoice.findFirst({ where: { uuid } });
         if (existing) { skipped++; continue; }
 
-        // Parse CFDI XML
         const cfdi = parseCfdiXml(xmlContent);
         if (!cfdi.uuid || !cfdi.fecha) { skipped++; continue; }
 
-        // Determine direction relative to our company
-        const isEmisor = cfdi.rfcEmisor === company?.rfc;
-        // tipo: I=ingreso, E=egreso, T=traslado, N=nomina, P=pago
-        const invoiceType = isEmisor
-          ? (cfdi.tipo === "I" ? "INGRESO" : cfdi.tipo === "E" ? "EGRESO" : "INGRESO")
-          : "EGRESO"; // received from supplier → it's our expense
+        // From our company's perspective:
+        // emitidos → we are the emisor → tipo INGRESO
+        // recibidos → we are the receptor → it's our expense → tipo EGRESO
+        const isEmisor = tipo === "emitidos" || cfdi.rfcEmisor === company?.rfc;
+        const invoiceType = isEmisor ? "INGRESO" : "EGRESO";
 
-        // Find or create customer/supplier record
-        const counterpartyRfc = isEmisor ? cfdi.rfcReceptor : cfdi.rfcEmisor;
+        // Find or create counterparty customer record
+        const counterpartyRfc  = isEmisor ? cfdi.rfcReceptor  : cfdi.rfcEmisor;
         const counterpartyName = isEmisor ? cfdi.nombreReceptor : cfdi.nombreEmisor;
 
         let customerId: string | null = null;
-        if (counterpartyRfc && counterpartyRfc !== "XAXX010101000" && counterpartyRfc !== "XEXX010101000") {
+        if (
+          counterpartyRfc &&
+          counterpartyRfc !== "XAXX010101000" &&
+          counterpartyRfc !== "XEXX010101000"
+        ) {
           const existingCustomer = await prisma.customer.findFirst({
             where: { companyId, rfc: counterpartyRfc },
           });
@@ -136,13 +149,10 @@ export async function POST(req: Request) {
                 },
               });
               customerId = newCustomer.id;
-            } catch {
-              // Ignore duplicate RFC errors
-            }
+            } catch { /* ignore duplicate RFC */ }
           }
         }
 
-        // Save invoice
         await prisma.invoice.create({
           data: {
             companyId,
@@ -158,19 +168,28 @@ export async function POST(req: Request) {
             totalImpuestos: cfdi.ivaTotal,
             status: "STAMPED",
             uuid,
-            notas: `Importado del SAT — ${isEmisor ? "emitido" : "recibido"}`,
+            notas: `SAT — ${tipo}`,
           },
         });
-
         imported++;
       }
     }
+  }
+
+  // If some packages are still pending but we processed some, report partial
+  if (pendingIds.length > 0) {
+    return NextResponse.json({
+      status: "partial",
+      imported,
+      skipped,
+      message: `${imported} importados hasta ahora. Todavía hay paquetes pendientes, vuelve a verificar en un momento.`,
+    });
   }
 
   return NextResponse.json({
     status: "done",
     imported,
     skipped,
-    message: `${imported} CFDI(s) importados, ${skipped} omitidos (ya existían)`,
+    message: `✓ ${imported} CFDI(s) importados${skipped > 0 ? `, ${skipped} ya existían` : ""}`,
   });
 }

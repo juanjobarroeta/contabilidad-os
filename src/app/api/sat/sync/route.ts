@@ -9,21 +9,22 @@ import {
   ServiceEndpoints,
   QueryParameters,
   DateTimePeriod,
+  DateTime,
   DownloadType,
   RequestType,
   DocumentStatus,
 } from "@nodecfdi/sat-ws-descarga-masiva";
-import { DateTime } from "luxon";
 
 // POST /api/sat/sync
-// Body: { companyId, month, year, tipo: "emitidos" | "recibidos" }
-// Returns: { satRequestId } — client then polls /api/sat/sync/verify
+// Body: { companyId, month, year }
+// Submits TWO requests to SAT: emitidos + recibidos for the given month
+// Returns: { emitidosRequestId, recibidosRequestId }
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { companyId, month, year, tipo = "recibidos" } = body;
+  const { companyId, month, year } = body;
 
   if (!companyId || !month || !year) {
     return NextResponse.json({ error: "companyId, month y year son requeridos" }, { status: 400 });
@@ -54,36 +55,55 @@ export async function POST(req: Request) {
     ServiceEndpoints.cfdi()
   );
 
-  // Period: full month
-  const start = DateTime.utc(year, month, 1, 0, 0, 0);
+  // Period: full month using the package's own DateTime (ISO string constructor)
   const lastDay = new Date(year, month, 0).getDate();
-  const end = DateTime.utc(year, month, lastDay, 23, 59, 59);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const startIso = `${year}-${pad(month)}-01T00:00:00`;
+  const endIso   = `${year}-${pad(month)}-${pad(lastDay)}T23:59:59`;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const period = DateTimePeriod.create(start as any, end as any);
+  const period = DateTimePeriod.create(
+    new DateTime(startIso),
+    new DateTime(endIso)
+  );
 
-  const downloadType = new DownloadType(tipo === "emitidos" ? "issued" : "received");
+  // Request emitidos
+  const emitidosResult = await service.query(
+    QueryParameters.create()
+      .withPeriod(period)
+      .withDownloadType(new DownloadType("issued"))
+      .withRequestType(new RequestType("xml"))
+  );
 
-  // Build query params — DocumentStatus active required for received+xml
-  let queryParams = QueryParameters.create()
-    .withPeriod(period)
-    .withDownloadType(downloadType)
-    .withRequestType(new RequestType("xml"));
+  // Request recibidos (requires DocumentStatus.active for xml+received)
+  const recibidosResult = await service.query(
+    QueryParameters.create()
+      .withPeriod(period)
+      .withDownloadType(new DownloadType("received"))
+      .withRequestType(new RequestType("xml"))
+      .withDocumentStatus(new DocumentStatus("active"))
+  );
 
-  if (tipo === "recibidos") {
-    queryParams = queryParams.withDocumentStatus(new DocumentStatus("active"));
+  const errors: string[] = [];
+  if (!emitidosResult.getStatus().isAccepted()) {
+    errors.push(`Emitidos: ${emitidosResult.getStatus().getMessage()}`);
+  }
+  if (!recibidosResult.getStatus().isAccepted()) {
+    errors.push(`Recibidos: ${recibidosResult.getStatus().getMessage()}`);
   }
 
-  const queryResult = await service.query(queryParams);
-
-  if (!queryResult.getStatus().isAccepted()) {
-    return NextResponse.json(
-      { error: `SAT rechazó la solicitud: ${queryResult.getStatus().getMessage()}` },
-      { status: 422 }
-    );
+  if (errors.length === 2) {
+    return NextResponse.json({ error: errors.join(" | ") }, { status: 422 });
   }
 
-  const satRequestId = queryResult.getRequestId();
-
-  return NextResponse.json({ satRequestId, tipo, month, year });
+  return NextResponse.json({
+    emitidosRequestId: emitidosResult.getStatus().isAccepted()
+      ? emitidosResult.getRequestId()
+      : null,
+    recibidosRequestId: recibidosResult.getStatus().isAccepted()
+      ? recibidosResult.getRequestId()
+      : null,
+    month,
+    year,
+    warnings: errors.length > 0 ? errors : undefined,
+  });
 }
