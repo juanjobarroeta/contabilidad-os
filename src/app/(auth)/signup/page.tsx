@@ -5,8 +5,9 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -17,18 +18,33 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const res = await signIn("credentials", {
+    const res = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "No se pudo crear la cuenta");
+      setLoading(false);
+      return;
+    }
+
+    // Auto sign-in then go to onboarding
+    const signInRes = await signIn("credentials", {
       email,
       password,
       redirect: false,
     });
 
-    if (res?.error) {
-      setError("Correo o contraseña incorrectos");
+    if (signInRes?.error) {
+      setError("Cuenta creada, pero no pudimos iniciar sesión. Intenta entrar manualmente.");
       setLoading(false);
-    } else {
-      router.push("/dashboard");
+      return;
     }
+
+    router.push("/onboarding");
   }
 
   return (
@@ -36,13 +52,27 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="bg-white rounded-xl shadow-sm border border-border p-8">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-foreground">ContabilidadOS</h1>
+            <h1 className="text-2xl font-bold text-foreground">Crea tu cuenta</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Sistema contable y fiscal mexicano
+              15 días gratis. Sin tarjeta de crédito.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Tu nombre
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full px-3 py-2 border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Juan Pérez"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">
                 Correo electrónico
@@ -66,28 +96,27 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={8}
                 className="w-full px-3 py-2 border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="••••••••"
+                placeholder="Mínimo 8 caracteres"
               />
             </div>
 
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
+            {error && <p className="text-sm text-destructive">{error}</p>}
 
             <button
               type="submit"
               disabled={loading}
               className="w-full bg-primary text-primary-foreground py-2 px-4 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
-              {loading ? "Iniciando sesión..." : "Iniciar sesión"}
+              {loading ? "Creando cuenta..." : "Empezar prueba gratis"}
             </button>
           </form>
 
           <p className="text-sm text-muted-foreground mt-6 text-center">
-            ¿No tienes cuenta?{" "}
-            <Link href="/signup" className="text-primary hover:underline">
-              Empieza tu prueba gratis
+            ¿Ya tienes cuenta?{" "}
+            <Link href="/login" className="text-primary hover:underline">
+              Inicia sesión
             </Link>
           </p>
         </div>
