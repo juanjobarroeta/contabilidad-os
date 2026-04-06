@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
     "node-forge",
     "luxon",
     "jszip",
+    "pdf-parse",
   ],
 };
 

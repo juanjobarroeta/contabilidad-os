@@ -118,6 +118,7 @@ model Company {
   employees         Employee[]
   payrollRuns       PayrollRun[]
   taxDeclarations   TaxDeclaration[]
+  obligations       CompanyObligation[]
   accountingEntries AccountingEntry[]
   accounts          ChartAccount[]
 }
@@ -476,6 +477,27 @@ model TaxDeclaration {
   fechaLimitePago       DateTime?
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Tracks which fiscal obligations each company has (derived from régimen or parsed from CSF)
+model CompanyObligation {
+  id            String   @id @default(cuid())
+  companyId     String
+  tipo          String   // "IVA_MENSUAL" | "ISR_PROVISIONAL" | "DIOT" | "ISR_ANUAL" | etc.
+  descripcion   String
+  periodicidad  String   // "MENSUAL" | "BIMESTRAL" | "ANUAL"
+  diaVencimiento Int     // day of month due (17 for most, 31 for ISR anual PM, 30 for PF)
+  mesVencimiento Int?    // for ANUAL: 3 = March (PM), 4 = April (PF)
+  activa        Boolean  @default(true)
+  fuente        String   @default("REGIMEN") // "REGIMEN" | "CSF"
+  desdeAnio     Int?
+  desdeMes      Int?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, tipo])
 }
 
 enum TaxDeclarationType {

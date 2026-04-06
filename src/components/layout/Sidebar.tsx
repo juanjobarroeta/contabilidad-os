@@ -18,17 +18,19 @@ import {
   Building2,
   Plus,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 import { useState } from "react";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/facturas", label: "Facturas (CFDI)", icon: FileText },
-  { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/bancos", label: "Bancos", icon: Landmark },
-  { href: "/nomina", label: "Nómina", icon: Users2 },
-  { href: "/impuestos", label: "Impuestos", icon: Calculator },
-  { href: "/contabilidad", label: "Contabilidad", icon: BookOpen },
+  { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard },
+  { href: "/facturas",     label: "Facturas (CFDI)", icon: FileText },
+  { href: "/clientes",     label: "Clientes",        icon: Users },
+  { href: "/bancos",       label: "Bancos",          icon: Landmark },
+  { href: "/nomina",       label: "Nómina",          icon: Users2 },
+  { href: "/impuestos",    label: "Impuestos",       icon: Calculator },
+  { href: "/cumplimiento", label: "Cumplimiento",    icon: ShieldCheck },
+  { href: "/contabilidad", label: "Contabilidad",    icon: BookOpen },
 ];
 
 const BOTTOM_NAV_ITEMS = [
