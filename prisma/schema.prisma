@@ -218,10 +218,11 @@ model Invoice {
   selloSAT     String?       @db.Text
   selloCFD     String?       @db.Text
 
-  company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer  Customer?      @relation(fields: [customerId], references: [id])
-  items     InvoiceItem[]
-  taxes     InvoiceTax[]
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer         Customer?        @relation(fields: [customerId], references: [id])
+  items            InvoiceItem[]
+  taxes            InvoiceTax[]
+  bankTransactions BankTransaction[]
 }
 
 model InvoiceItem {
@@ -326,6 +327,7 @@ model BankTransaction {
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   supplier    Supplier?   @relation(fields: [supplierId], references: [id])
+  invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
 }
 
 enum BankTransactionType {
