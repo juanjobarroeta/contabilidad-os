@@ -82,7 +82,7 @@ export default async function EmpresaDetailPage({
           companyId={company.id}
           isOwner={isOwner}
           currentUserId={session.user.id}
-          initialMembers={members.map((m) => ({
+          initialMembers={members.map((m: (typeof members)[number]) => ({
             id: m.id,
             role: m.role,
             user: m.user,
