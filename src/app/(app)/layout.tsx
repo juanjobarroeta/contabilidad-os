@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { CompanyProvider } from "@/components/layout/CompanyProvider";
+import { ChatPanel } from "@/components/ai/ChatPanel";
 
 export default async function AppLayout({
   children,
@@ -18,6 +19,7 @@ export default async function AppLayout({
         <main className="flex-1 overflow-auto">
           {children}
         </main>
+        <ChatPanel />
       </div>
     </CompanyProvider>
   );

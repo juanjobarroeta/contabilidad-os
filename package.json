@@ -13,6 +13,7 @@
     "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
     "@auth/prisma-adapter": "^2.7.4",
     "@nodecfdi/credentials": "^3.2.0",
     "@nodecfdi/sat-ws-descarga-masiva": "^2.0.0",
