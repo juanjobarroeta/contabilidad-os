@@ -94,6 +94,13 @@ function parseCSV(content: string): ParseResult {
     return { transactions: [], format: "csv", warnings: ["El archivo no tiene suficientes filas"] };
   }
 
+  // 2.5 — Banco del Bajío has no header row. First row is "Saldo Inicial",
+  // subsequent rows are: cuenta, fecha, id1, referencia, descripcion, num,
+  // cargo, abono, saldo, id2. Detect by "Saldo Inicial" in row 0.
+  if (rows[0]?.some(c => c.toLowerCase().includes("saldo inicial"))) {
+    return parseBajio(rows, warnings);
+  }
+
   // 3. Find the header row (first row that contains recognisable column names)
   let headerIdx = 0;
   for (let i = 0; i < Math.min(5, rows.length); i++) {
@@ -157,6 +164,40 @@ function parseCSV(content: string): ParseResult {
   }
 
   return { transactions, format: "csv", detectedBank, warnings };
+}
+
+// ── Banco del Bajío (no header row, fixed columns) ───────────────────────────
+function parseBajio(rows: string[][], warnings: string[]): ParseResult {
+  const transactions: ParsedTransaction[] = [];
+  // Skip row 0 (Saldo Inicial). Layout per row:
+  //   0=cuenta 1=fecha 2=id1 3=referencia 4=descripcion 5=num 6=cargo 7=abono 8=saldo 9=id2
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.every(c => !c)) continue;
+
+    const fecha = parseDateMX(row[1] ?? "");
+    if (!fecha) continue;
+
+    const cargo = parseMXNumber(row[6] ?? "");
+    const abono = parseMXNumber(row[7] ?? "");
+    const monto = abono !== 0 ? Math.abs(abono) : -Math.abs(cargo);
+    if (monto === 0) continue;
+
+    transactions.push({
+      fecha,
+      descripcion: (row[4] ?? "").replace(/\s+/g, " ").trim(),
+      monto,
+      referencia: row[3]?.trim() || undefined,
+      saldo: parseMXNumber(row[8] ?? "") || undefined,
+    });
+  }
+
+  return {
+    transactions,
+    format: "csv",
+    detectedBank: "Banco del Bajío",
+    warnings,
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
