@@ -47,14 +47,13 @@ export async function POST(req: Request, { params }: Params) {
     const fechaEnd = new Date(tx.fecha);
     fechaEnd.setHours(23, 59, 59, 999);
 
-    const desc80 = tx.descripcion.substring(0, 80);
-
     const exists = await prisma.bankTransaction.findFirst({
       where: {
         bankAccountId,
         fecha: { gte: fechaStart, lte: fechaEnd },
         monto: tx.monto,
-        descripcion: { startsWith: desc80.substring(0, 40) },
+        descripcion: tx.descripcion,
+        referencia: tx.referencia ?? null,
       },
     });
 
