@@ -1,5 +1,6 @@
 import { auth } from "./auth";
 import { prisma } from "./prisma";
+import { extractBearer, verifyApiToken } from "./api-token";
 import type { MemberRole, ModuloApp } from "@prisma/client";
 
 export class AuthzError extends Error {
@@ -8,11 +9,45 @@ export class AuthzError extends Error {
   }
 }
 
+export type AuthUser = {
+  id: string;
+  email: string | null;
+  name: string | null;
+};
+
 /**
- * Returns the authenticated session user id or throws AuthzError(401).
- * Use at the top of every API route that requires auth.
+ * Returns the authenticated user for the incoming request, or throws
+ * AuthzError(401). Supports two auth paths in parallel:
+ *
+ *   1. `Authorization: Bearer <jwt>` — used by cross-origin API clients
+ *      (construccion-admin, fleet-maintenance, etc.). Validated via
+ *      src/lib/api-token.ts against the shared AUTH_SECRET.
+ *
+ *   2. NextAuth session cookie — used by the contabilidad-os web UI.
+ *
+ * Callers that can accept API-token auth MUST pass the Request in so the
+ * Authorization header is visible. Callers with no Request fall back to
+ * session-cookie only (that's the existing behaviour for server components).
  */
-export async function requireUser(): Promise<{ id: string; email: string | null; name: string | null }> {
+export async function requireUser(req?: Request): Promise<AuthUser> {
+  // 1. Try bearer token first when we have a Request
+  if (req) {
+    const token = extractBearer(req);
+    if (token) {
+      try {
+        const payload = await verifyApiToken(token);
+        return {
+          id: payload.sub,
+          email: payload.email || null,
+          name: payload.name,
+        };
+      } catch {
+        throw new AuthzError(401, "Token inválido o expirado");
+      }
+    }
+  }
+
+  // 2. Fall back to NextAuth session cookie
   const session = await auth();
   if (!session?.user?.id) throw new AuthzError(401, "Unauthorized");
   return {
@@ -26,15 +61,14 @@ export async function requireUser(): Promise<{ id: string; email: string | null;
  * Verifies the current user is a member of `companyId` and (optionally)
  * has one of the allowed roles. Returns the membership row.
  *
- * Roles are hierarchical for the default check:
- *   OWNER > ADMIN > ACCOUNTANT > VIEWER
- * If no `allowedRoles` is passed, any membership passes.
+ * Pass `req` to enable bearer-token auth for cross-origin clients.
  */
 export async function requireMembership(
   companyId: string,
-  allowedRoles?: MemberRole[]
+  allowedRoles?: MemberRole[],
+  req?: Request
 ) {
-  const user = await requireUser();
+  const user = await requireUser(req);
 
   const membership = await prisma.companyMember.findUnique({
     where: { userId_companyId: { userId: user.id, companyId } },
@@ -52,15 +86,15 @@ export async function requireMembership(
 /**
  * Convenience: requires a role that can write data (anything except VIEWER).
  */
-export async function requireWriter(companyId: string) {
-  return requireMembership(companyId, ["OWNER", "ADMIN", "ACCOUNTANT"]);
+export async function requireWriter(companyId: string, req?: Request) {
+  return requireMembership(companyId, ["OWNER", "ADMIN", "ACCOUNTANT"], req);
 }
 
 /**
  * Convenience: requires owner-only operations (delete company, manage members).
  */
-export async function requireOwner(companyId: string) {
-  return requireMembership(companyId, ["OWNER"]);
+export async function requireOwner(companyId: string, req?: Request) {
+  return requireMembership(companyId, ["OWNER"], req);
 }
 
 /**

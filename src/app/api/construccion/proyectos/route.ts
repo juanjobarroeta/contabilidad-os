@@ -31,7 +31,7 @@ export const GET = withAuthz(async (req: Request) => {
     return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
   }
 
-  await requireMembership(companyId);
+  await requireMembership(companyId, undefined, req);
   await requireModule(companyId, "CONSTRUCCION");
 
   const proyectos = await prisma.proyecto.findMany({
@@ -58,7 +58,7 @@ export const POST = withAuthz(async (req: Request) => {
   }
   const data = parsed.data;
 
-  await requireWriter(data.companyId);
+  await requireWriter(data.companyId, req);
   await requireModule(data.companyId, "CONSTRUCCION");
 
   // Validate optional customer belongs to the same company

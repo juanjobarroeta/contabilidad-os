@@ -4,7 +4,7 @@ import { requireModule, requireWriter, withAuthz, AuthzError } from "@/lib/authz
 
 // POST /api/construccion/solicitudes-compra/:id/aprobar
 export const POST = withAuthz(
-  async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
     const { id } = await ctx.params;
 
     const solicitud = await prisma.solicitudCompra.findUnique({
@@ -15,7 +15,7 @@ export const POST = withAuthz(
       throw new AuthzError(404, "Solicitud no encontrada");
     }
 
-    const { user } = await requireWriter(solicitud.companyId);
+    const { user } = await requireWriter(solicitud.companyId, req);
     await requireModule(solicitud.companyId, "CONSTRUCCION");
 
     if (solicitud.estado !== "PENDIENTE") {

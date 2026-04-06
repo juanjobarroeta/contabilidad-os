@@ -44,7 +44,7 @@ export const POST = withAuthz(
       throw new AuthzError(404, "Solicitud no encontrada");
     }
 
-    await requireWriter(solicitud.companyId);
+    await requireWriter(solicitud.companyId, req);
     await requireModule(solicitud.companyId, "CONSTRUCCION");
 
     if (solicitud.estado !== "APROBADA") {
