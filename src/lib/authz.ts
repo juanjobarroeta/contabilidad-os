@@ -1,6 +1,6 @@
 import { auth } from "./auth";
 import { prisma } from "./prisma";
-import type { MemberRole } from "@prisma/client";
+import type { MemberRole, ModuloApp } from "@prisma/client";
 
 export class AuthzError extends Error {
   constructor(public status: number, message: string) {
@@ -61,6 +61,23 @@ export async function requireWriter(companyId: string) {
  */
 export async function requireOwner(companyId: string) {
   return requireMembership(companyId, ["OWNER"]);
+}
+
+/**
+ * Verifies the company has contracted (and not disabled) the given product module.
+ * Use on routes that belong to an add-on module — e.g. construction routes call
+ * `await requireModule(companyId, "CONSTRUCCION")` after `requireMembership`.
+ *
+ * Throws AuthzError(403) if the module is missing or disabled.
+ */
+export async function requireModule(companyId: string, modulo: ModuloApp) {
+  const row = await prisma.companyModule.findUnique({
+    where: { companyId_modulo: { companyId, modulo } },
+  });
+  if (!row?.habilitado) {
+    throw new AuthzError(403, `Módulo ${modulo} no contratado para esta empresa`);
+  }
+  return row;
 }
 
 /**

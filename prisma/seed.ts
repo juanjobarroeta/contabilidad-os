@@ -29,6 +29,14 @@ async function main() {
       members: {
         create: { userId: user.id, role: "OWNER" },
       },
+      modules: {
+        create: [
+          { modulo: "CONTABILIDAD" },
+          // Local dev convenience: enable construction module on the seed company
+          // so the construccion-admin frontend has something to talk to.
+          { modulo: "CONSTRUCCION" },
+        ],
+      },
     },
   });
 

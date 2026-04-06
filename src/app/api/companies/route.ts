@@ -77,6 +77,12 @@ export async function POST(req: Request) {
           role: "OWNER",
         },
       },
+      // Every new company gets the base accounting module enabled.
+      // Add-on modules (CONSTRUCCION, FLOTA, …) are enabled separately
+      // by an admin or by the Stripe webhook on add-on purchase.
+      modules: {
+        create: { modulo: "CONTABILIDAD" },
+      },
     },
   });
 

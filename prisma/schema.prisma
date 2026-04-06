@@ -867,7 +867,13 @@ model Estimacion {
   @@unique([proyectoId, numero])
 }
 
-enum EstimacionEstado { BORRADOR APROBADA TIMBRADA PAGADA CANCELADA }
+enum EstimacionEstado {
+  BORRADOR
+  APROBADA
+  TIMBRADA
+  PAGADA
+  CANCELADA
+}
 
 model EstimacionPartida {
   id                   String @id @default(cuid())
@@ -928,7 +934,13 @@ model SolicitudCompra {
   @@index([companyId, estado])
 }
 
-enum SolicitudEstado { PENDIENTE APROBADA RECHAZADA PAGADA CANCELADA }
+enum SolicitudEstado {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+  PAGADA
+  CANCELADA
+}
 
 model SolicitudPartida {
   id             String @id @default(cuid())
