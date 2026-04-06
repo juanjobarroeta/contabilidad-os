@@ -7,6 +7,7 @@ import {
   ChevronLeft, ChevronRight, Calculator, Save, CheckCircle2,
   AlertCircle, Loader2, FileText, TrendingUp, TrendingDown,
   Info, RefreshCw, ArrowUpRight, ArrowDownLeft, Sparkles, Pencil, X,
+  Receipt, CreditCard, Calendar, ExternalLink,
 } from "lucide-react";
 
 const MONTHS = [
@@ -59,6 +60,10 @@ interface ApiResult {
     status: string;
     saldoFavorAnteriorOverride: number | null;
     coeficienteOverride: number | null;
+    acuseUrl: string | null;
+    lineaCaptura: string | null;
+    fechaPresentacion: string | null;
+    fechaLimitePago: string | null;
   } | null;
 }
 
@@ -125,6 +130,14 @@ export default function ImpuestosPage() {
   // Invoice filter
   const [facturaFilter, setFacturaFilter] = useState<"all" | "INGRESO" | "EGRESO">("all");
 
+  // Acuse de recibo
+  const [acuseUrl, setAcuseUrl]                     = useState("");
+  const [lineaCaptura, setLineaCaptura]             = useState("");
+  const [fechaPresentacion, setFechaPresentacion]   = useState("");
+  const [fechaLimitePago, setFechaLimitePago]       = useState("");
+  const [savingAcuse, setSavingAcuse]               = useState(false);
+  const [acuseEditMode, setAcuseEditMode]           = useState(false);
+
   // SAT sync
   const [syncing, setSyncing]     = useState(false);
   const [syncStatus, setSyncStatus] = useState("");
@@ -175,6 +188,14 @@ export default function ImpuestosPage() {
       setSaldoFavorEdited(savedSaldo != null && savedSaldo !== data.iva.saldoFavorAnterior);
       setCoeficiente(savedCoef != null ? savedCoef : data.isr.coeficiente);
       setCoeficienteEdited(savedCoef != null && savedCoef !== data.isr.coeficiente);
+
+      // Restore acuse fields
+      const saved = data.declaracionGuardada;
+      setAcuseUrl(saved?.acuseUrl ?? "");
+      setLineaCaptura(saved?.lineaCaptura ?? "");
+      setFechaPresentacion(saved?.fechaPresentacion ? saved.fechaPresentacion.substring(0,10) : "");
+      setFechaLimitePago(saved?.fechaLimitePago ? saved.fechaLimitePago.substring(0,10) : "");
+      setAcuseEditMode(!saved?.acuseUrl && !saved?.lineaCaptura);
     } catch {
       setError("No se pudo calcular la declaración");
     } finally {
@@ -230,6 +251,37 @@ export default function ImpuestosPage() {
       setError("No se pudo guardar la declaración");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // ── Save acuse ────────────────────────────────────────────────────────────────
+  async function handleGuardarAcuse() {
+    if (!activeCompany || !result) return;
+    setSavingAcuse(true);
+    try {
+      const res = await fetch("/api/impuestos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: activeCompany.id,
+          periodo: result.periodo,
+          tipo: "IVA_MENSUAL",
+          year: result.year,
+          status: savedStatus ?? "FILED",
+          acuseUrl:          acuseUrl     || null,
+          lineaCaptura:      lineaCaptura || null,
+          fechaPresentacion: fechaPresentacion || null,
+          fechaLimitePago:   fechaLimitePago   || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Error al guardar acuse");
+      const saved = await res.json();
+      setSavedStatus(saved.status);
+      setAcuseEditMode(false);
+    } catch {
+      setError("No se pudo guardar el acuse");
+    } finally {
+      setSavingAcuse(false);
     }
   }
 
@@ -639,6 +691,164 @@ export default function ImpuestosPage() {
               </div>
             )}
           </div>
+
+          {/* ── Acuse de recibo / Línea de captura ── */}
+          {(savedStatus === "FILED" || savedStatus === "PAID") && (
+            <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-green-100 flex items-center justify-center">
+                    <Receipt className="h-4 w-4 text-green-600" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-sm">Acuse de recibo &amp; Línea de captura</h2>
+                    <p className="text-xs text-muted-foreground">Información del pago al SAT</p>
+                  </div>
+                </div>
+                {!acuseEditMode && (acuseUrl || lineaCaptura) && (
+                  <button onClick={() => setAcuseEditMode(true)}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1 transition-colors">
+                    <Pencil className="h-3 w-3" />Editar
+                  </button>
+                )}
+              </div>
+
+              {acuseEditMode ? (
+                <div className="px-5 py-4 space-y-4">
+                  {/* Folio / número de operación */}
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      Número de operación / Folio SAT
+                    </label>
+                    <input
+                      type="text"
+                      value={acuseUrl}
+                      onChange={e => setAcuseUrl(e.target.value)}
+                      placeholder="Ej. 2024010123456789"
+                      className="w-full text-sm border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <p className="text-xs text-muted-foreground mt-0.5">Número de acuse que el SAT te asignó al presentar la declaración.</p>
+                  </div>
+
+                  {/* Línea de captura */}
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5" />Línea de captura
+                    </label>
+                    <input
+                      type="text"
+                      value={lineaCaptura}
+                      onChange={e => setLineaCaptura(e.target.value.replace(/\D/g, "").substring(0, 20))}
+                      placeholder="18 dígitos"
+                      className="w-full text-sm font-mono border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary tracking-widest"
+                    />
+                    <p className="text-xs text-muted-foreground mt-0.5">Código numérico para pagar en banco o portal bancario.</p>
+                  </div>
+
+                  {/* Dates */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />Fecha de presentación
+                      </label>
+                      <input
+                        type="date"
+                        value={fechaPresentacion}
+                        onChange={e => setFechaPresentacion(e.target.value)}
+                        className="w-full text-sm border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />Fecha límite de pago
+                      </label>
+                      <input
+                        type="date"
+                        value={fechaLimitePago}
+                        onChange={e => setFechaLimitePago(e.target.value)}
+                        className="w-full text-sm border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button onClick={handleGuardarAcuse} disabled={savingAcuse}
+                      className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-1.5 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                      {savingAcuse ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      Guardar acuse
+                    </button>
+                    {(acuseUrl || lineaCaptura) && (
+                      <button onClick={() => setAcuseEditMode(false)}
+                        className="text-sm text-muted-foreground hover:text-foreground px-3 py-1.5 transition-colors">
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (acuseUrl || lineaCaptura) ? (
+                <div className="px-5 py-4 space-y-3">
+                  {acuseUrl && (
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">Número de operación</span>
+                      <span className="text-sm font-mono font-medium">{acuseUrl}</span>
+                    </div>
+                  )}
+                  {lineaCaptura && (
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <CreditCard className="h-3 w-3" />Línea de captura
+                      </span>
+                      <div className="text-right">
+                        <span className="text-sm font-mono font-bold tracking-widest text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                          {lineaCaptura}
+                        </span>
+                        {fechaLimitePago && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Vigente hasta {new Date(fechaLimitePago + "T12:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {fechaPresentacion && (
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">Fecha de presentación</span>
+                      <span className="text-sm">
+                        {new Date(fechaPresentacion + "T12:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}
+                      </span>
+                    </div>
+                  )}
+                  {/* Link to SAT payment portal */}
+                  {lineaCaptura && (
+                    <div className="pt-1 border-t border-border">
+                      <a
+                        href="https://www.sat.gob.mx/tramites/liquidacion-de-impuestos-en-linea"
+                        target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 hover:underline">
+                        <ExternalLink className="h-3 w-3" />
+                        Pagar en el portal SAT
+                      </a>
+                      <span className="text-xs text-muted-foreground ml-3">o en cualquier banco con esta línea de captura</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="px-5 py-4">
+                  <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-3 text-xs text-blue-700">
+                    <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium mb-1">¿Ya presentaste tu declaración?</p>
+                      <p>Registra el número de operación y la línea de captura del acuse del SAT para llevar un control completo de tus pagos.</p>
+                      <button onClick={() => setAcuseEditMode(true)}
+                        className="mt-2 flex items-center gap-1 font-medium hover:underline">
+                        <Receipt className="h-3 w-3" />Registrar acuse
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Actions ── */}
           <div className="flex items-center gap-3 pb-2">

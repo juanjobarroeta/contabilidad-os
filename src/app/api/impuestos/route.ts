@@ -209,6 +209,11 @@ export async function GET(req: Request) {
       // Restore any manual overrides the user saved last time
       saldoFavorAnteriorOverride: declaracionGuardada.ivaSaldoFavorAnterior,
       coeficienteOverride: declaracionGuardada.isrCoeficienteUtilidad,
+      // Acuse fields
+      acuseUrl: declaracionGuardada.acuseUrl,
+      lineaCaptura: declaracionGuardada.lineaCaptura,
+      fechaPresentacion: declaracionGuardada.fechaPresentacion,
+      fechaLimitePago: declaracionGuardada.fechaLimitePago,
     } : null,
   });
 }
@@ -225,6 +230,8 @@ export async function POST(req: Request) {
     saldoFavorAnterior,
     coeficienteUtilidad,
     year,
+    // Acuse de recibo fields
+    acuseUrl, lineaCaptura, fechaPresentacion, fechaLimitePago,
   } = body;
 
   if (!companyId || !periodo || !tipo) {
@@ -251,6 +258,15 @@ export async function POST(req: Request) {
     isrTasa:               0.30,
     isrPagar:              isrData?.esteMes            ?? null,
     isrCoeficienteUtilidad: typeof coeficienteUtilidad === "number" ? coeficienteUtilidad : null,
+    // Acuse de recibo — only update if provided
+    ...(acuseUrl       !== undefined && { acuseUrl:       acuseUrl ?? null }),
+    ...(lineaCaptura   !== undefined && { lineaCaptura:   lineaCaptura ?? null }),
+    ...(fechaPresentacion !== undefined && {
+      fechaPresentacion: fechaPresentacion ? new Date(fechaPresentacion) : null,
+    }),
+    ...(fechaLimitePago !== undefined && {
+      fechaLimitePago: fechaLimitePago ? new Date(fechaLimitePago) : null,
+    }),
   };
 
   const existing = await prisma.taxDeclaration.findFirst({
