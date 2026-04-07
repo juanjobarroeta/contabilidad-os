@@ -427,7 +427,7 @@ export default function EmpresaPage() {
               <div className="space-y-4">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
                   <p className="font-semibold mb-1">Para timbrar CFDIs necesitas Facturapi</p>
-                  <p>Facturapi actúa como PAC (Proveedor Autorizado de Certificación) ante el SAT. Crea una cuenta en <a href="https://facturapi.io" target="_blank" rel="noopener noreferrer" className="underline font-medium">facturapi.io</a> y agrega tu clave secreta en Railway → Variables → <code>FACTURAPI_SECRET_KEY</code>.</p>
+                  <p>Facturapi actúa como PAC (Proveedor Autorizado de Certificación) ante el SAT. La organización se provisiona automáticamente al crear la empresa. Si tu empresa fue creada antes de configurar Facturapi, usa el botón &ldquo;Configurar Facturapi&rdquo; abajo para reintentarlo.</p>
                 </div>
 
                 {/* Option 1: Auto setup */}

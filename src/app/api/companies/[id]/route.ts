@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { provisionFacturapiOrg } from "@/lib/facturapi";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -85,5 +86,12 @@ export async function PATCH(req: Request, { params }: Params) {
 
   await prisma.company.update({ where: { id: companyId }, data });
 
-  return NextResponse.json({ ok: true });
+  // If the CSD just changed, re-run Facturapi provisioning so the org gets
+  // the certificate uploaded and a live key issued.
+  let facturapi = null;
+  if (data.csdCer || data.csdKey || data.csdPassword) {
+    facturapi = await provisionFacturapiOrg(companyId);
+  }
+
+  return NextResponse.json({ ok: true, facturapi });
 }

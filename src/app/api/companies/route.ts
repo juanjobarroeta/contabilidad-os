@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireActiveSubscription } from "@/lib/subscription";
 import { AuthzError } from "@/lib/authz";
+import { provisionFacturapiOrg } from "@/lib/facturapi";
 
 export async function GET() {
   const session = await auth();
@@ -86,5 +87,10 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json(company, { status: 201 });
+  // Auto-provision Facturapi org. Best-effort: company creation must not fail
+  // if Facturapi is down. The result is returned to the client so the UI can
+  // surface a warning ("CSD missing", "Facturapi down", etc.).
+  const facturapi = await provisionFacturapiOrg(company.id);
+
+  return NextResponse.json({ ...company, facturapi }, { status: 201 });
 }

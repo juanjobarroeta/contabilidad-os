@@ -1,18 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { facturapiAdmin } from "@/lib/facturapi";
-import { Readable } from "stream";
+import { provisionFacturapiOrg } from "@/lib/facturapi";
 
 type Params = { params: Promise<{ id: string }> };
-
-function base64ToStream(base64: string): NodeJS.ReadableStream {
-  const buffer = Buffer.from(base64, "base64");
-  const readable = new Readable();
-  readable.push(buffer);
-  readable.push(null);
-  return readable;
-}
 
 async function verifyOwner(userId: string, companyId: string) {
   const member = await prisma.companyMember.findUnique({
@@ -22,7 +13,8 @@ async function verifyOwner(userId: string, companyId: string) {
 }
 
 // POST /api/companies/[id]/facturapi
-// Auto-setup: create Facturapi org, upload CSD, get test API key
+// Manual retry for Facturapi provisioning. Idempotent — calls the same helper
+// that runs automatically on company create + CSD upload.
 export async function POST(_req: Request, { params }: Params) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -30,84 +22,27 @@ export async function POST(_req: Request, { params }: Params) {
   const { id: companyId } = await params;
 
   if (!(await verifyOwner(session.user.id, companyId))) {
-    return NextResponse.json({ error: "Solo el owner puede configurar Facturapi" }, { status: 403 });
+    return NextResponse.json({ error: "Solo el owner o admin puede configurar Facturapi" }, { status: 403 });
   }
 
-  const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+  const result = await provisionFacturapiOrg(companyId);
 
-  if (!process.env.FACTURAPI_SECRET_KEY || process.env.FACTURAPI_SECRET_KEY === "sk_test_") {
-    return NextResponse.json(
-      { error: "Configura FACTURAPI_SECRET_KEY en las variables de entorno de Railway" },
-      { status: 422 }
-    );
+  if (!result.ok && result.error) {
+    return NextResponse.json({ error: result.error }, { status: 422 });
   }
 
-  try {
-    let orgId = company.facturapiOrgId;
-
-    // 1. Create or reuse Facturapi organization
-    if (!orgId) {
-      const org = await facturapiAdmin.organizations.create({
-        name: company.razonSocial,
-      });
-      orgId = org.id;
-    }
-
-    // 2. Update legal information
-    await facturapiAdmin.organizations.updateLegal(orgId, {
-      legal_name: company.razonSocial,
-      tax_id: company.rfc,
-      tax_system: company.regimenFiscal,
-      address: {
-        zip: company.codigoPostal,
-        ...(company.domicilioFiscal ? { street: company.domicilioFiscal } : {}),
-      },
-    });
-
-    // 3. Upload CSD if stored
-    let csdUploaded = false;
-    if (company.csdCer && company.csdKey && company.csdPassword) {
-      await facturapiAdmin.organizations.uploadCertificate(
-        orgId,
-        base64ToStream(company.csdCer),
-        base64ToStream(company.csdKey),
-        company.csdPassword
-      );
-      csdUploaded = true;
-    }
-
-    // 4. Get test API key
-    const { api_key } = await facturapiAdmin.organizations.getTestApiKey(orgId);
-
-    // 5. Persist to DB
-    const updated = await prisma.company.update({
-      where: { id: companyId },
-      data: {
-        facturapiOrgId: orgId,
-        facturapiApiKey: api_key,
-      },
-      select: {
-        id: true,
-        facturapiOrgId: true,
-        rfc: true,
-        razonSocial: true,
-      },
-    });
-
-    return NextResponse.json({
-      ok: true,
-      orgId,
-      csdUploaded,
-      company: updated,
-      message: csdUploaded
-        ? "Organización creada y CSD subido. Usando clave de prueba."
-        : "Organización creada. Sube el CSD para poder timbrar.",
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Error de Facturapi";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json({
+    ok: result.ok,
+    orgId: result.orgId,
+    csdUploaded: result.csdUploaded,
+    hasLiveKey: result.hasLiveKey,
+    warning: result.warning,
+    message: result.hasLiveKey
+      ? "Organización lista con clave live. Ya puedes timbrar CFDIs."
+      : result.csdUploaded
+      ? "CSD subido. Generando clave live…"
+      : "Organización creada. Sube el CSD para emitir CFDIs en producción.",
+  });
 }
 
 // PATCH /api/companies/[id]/facturapi
