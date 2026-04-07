@@ -122,6 +122,9 @@ model Company {
   coeficienteUtilidad Float?  // Stored after user confirms/overrides auto-calculation
   coeficienteAnio     Int?    // Which fiscal year this coeficiente applies to
 
+  // Nómina — IMSS registro patronal (required for CFDI nómina emisor block)
+  registroPatronal String?  // e.g. "A7025105103"
+
   isActive          Boolean  @default(true)
 
   // Relations
@@ -423,9 +426,15 @@ model Employee {
   // Contract
   tipoContrato     String          // e.g. "01" = Indefinido
   tipoJornada      String          // e.g. "01" = Diurna
+  tipoRegimen      String          @default("02")  // "02" = Sueldos, "05" = Asimilados
   salarioDiario    Float           // SBC for IMSS
   salarioDiarioIntegrado Float?    // SDI
   periodicidadPago String          // "04" = Quincenal, "05" = Mensual
+  numEmpleado      String?         // Internal employee number; defaults to short id
+  departamento     String?
+  puesto           String?
+  riesgoPuesto     String          @default("1")  // 1=Class I, 2=II, 3=III, 4=IV, 5=V
+  claveEntFed      String          @default("PUE") // Estado SAT code (PUE, JAL, CMX, etc.)
 
   // INFONAVIT
   creditoInfonavit String?
