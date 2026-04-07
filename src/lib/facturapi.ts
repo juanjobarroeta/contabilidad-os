@@ -122,10 +122,13 @@ export async function provisionFacturapiOrg(companyId: string): Promise<Provisio
       orgId = org.id;
     }
 
-    // 2. Update legal info — idempotent
+    // 2. Update legal info — idempotent.
+    // Facturapi v2 note: `tax_id` (RFC) is NOT accepted here — it's inferred
+    // from the CSD certificate when uploaded. `name` is the display name,
+    // `legal_name` is the razón social used on CFDIs.
     await admin.organizations.updateLegal(orgId, {
+      name: company.nombreComercial || company.razonSocial,
       legal_name: company.razonSocial,
-      tax_id: company.rfc,
       tax_system: company.regimenFiscal,
       address: {
         zip: company.codigoPostal,
