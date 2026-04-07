@@ -153,11 +153,18 @@ export async function provisionFacturapiOrg(companyId: string): Promise<Provisio
         );
         csdUploaded = true;
 
-        // 4. Generate the live key. NOTE: this invalidates any prior live key.
+        // 4. Generate the live key. NOTE: this invalidates any prior live key,
+        // so we MUST persist whatever we get back.
+        // The Facturapi SDK returns the key in different shapes depending on
+        // version: sometimes a plain string ("sk_live_..."), sometimes an
+        // object { key: "sk_live_..." } or { api_key: "..." }. Handle all.
         const result = await admin.organizations.renewLiveApiKey(orgId);
-        // Facturapi SDK returns { ok, key } or similar — handle both shapes
-        const r = result as unknown as { key?: string; api_key?: string };
-        liveKey = r.key ?? r.api_key ?? null;
+        if (typeof result === "string") {
+          liveKey = result;
+        } else if (result && typeof result === "object") {
+          const r = result as { key?: string; api_key?: string };
+          liveKey = r.key ?? r.api_key ?? null;
+        }
         if (liveKey) hasLiveKey = true;
       } catch (e) {
         warning = `Org creada pero falló el CSD/llave live: ${
