@@ -29,11 +29,14 @@ export async function GET(req: Request, { params }: Params) {
   // Tag-based subcategories of IGNORED that we surface as their own tabs.
   // Anything else with status=IGNORED falls into the plain "Ignorados" tab.
   const TAG_TABS: Record<string, string> = {
-    PENDING:           "PENDING_MONTHLY_CFDI",
-    TAX_PAYMENT:       "TAX_PAYMENT",
-    PAYROLL_NO_CFDI:   "PAYROLL_NO_CFDI",
-    NON_DEDUCTIBLE:    "NON_DEDUCTIBLE",
-    INTERNAL_TRANSFER: "INTERNAL_TRANSFER",
+    PENDING:              "PENDING_MONTHLY_CFDI",
+    TAX_PAYMENT:          "TAX_PAYMENT",
+    PAYROLL_NO_CFDI:      "PAYROLL_NO_CFDI",
+    LOAN_RECEIVED:        "LOAN_RECEIVED",
+    LOAN_GIVEN:           "LOAN_GIVEN",
+    CAPITAL_CONTRIBUTION: "CAPITAL_CONTRIBUTION",
+    NON_DEDUCTIBLE:       "NON_DEDUCTIBLE",
+    INTERNAL_TRANSFER:    "INTERNAL_TRANSFER",
   };
   const knownTags = Object.values(TAG_TABS);
 
@@ -85,11 +88,14 @@ export async function GET(req: Request, { params }: Params) {
   );
 
   const subCounts = {
-    PENDING:           tagCountMap["PENDING_MONTHLY_CFDI"] ?? 0,
-    TAX_PAYMENT:       tagCountMap["TAX_PAYMENT"] ?? 0,
-    PAYROLL_NO_CFDI:   tagCountMap["PAYROLL_NO_CFDI"] ?? 0,
-    NON_DEDUCTIBLE:    tagCountMap["NON_DEDUCTIBLE"] ?? 0,
-    INTERNAL_TRANSFER: tagCountMap["INTERNAL_TRANSFER"] ?? 0,
+    PENDING:              tagCountMap["PENDING_MONTHLY_CFDI"] ?? 0,
+    TAX_PAYMENT:          tagCountMap["TAX_PAYMENT"] ?? 0,
+    PAYROLL_NO_CFDI:      tagCountMap["PAYROLL_NO_CFDI"] ?? 0,
+    LOAN_RECEIVED:        tagCountMap["LOAN_RECEIVED"] ?? 0,
+    LOAN_GIVEN:           tagCountMap["LOAN_GIVEN"] ?? 0,
+    CAPITAL_CONTRIBUTION: tagCountMap["CAPITAL_CONTRIBUTION"] ?? 0,
+    NON_DEDUCTIBLE:       tagCountMap["NON_DEDUCTIBLE"] ?? 0,
+    INTERNAL_TRANSFER:    tagCountMap["INTERNAL_TRANSFER"] ?? 0,
   };
   const taggedTotal = Object.values(subCounts).reduce((s, n) => s + n, 0);
 

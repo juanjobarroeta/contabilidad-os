@@ -14,9 +14,13 @@ export function formatCurrency(amount: number, currency = "MXN") {
 }
 
 export function formatDate(date: Date | string) {
+  // Format in UTC to avoid TZ rollover. Bank statements and CFDIs are
+  // calendar dates, not instants — a movement on March 2 should display
+  // as "2 mar" regardless of the viewer's timezone.
   return new Intl.DateTimeFormat("es-MX", {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   }).format(new Date(date));
 }

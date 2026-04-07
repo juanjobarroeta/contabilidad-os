@@ -33,6 +33,9 @@ export const COE_CODES = {
   // Passive
   PROVEEDORES:          "201.01",
   ACREEDORES_DIVERSOS:  "205.01",
+  PRESTAMOS_RECIBIDOS:  "205.02",   // Préstamos a corto plazo (de socios, terceros)
+  PRESTAMOS_OTORGADOS:  "107.06",   // Cuando le prestamos dinero a un tercero
+  CAPITAL_SOCIAL:       "301.01",
   IVA_TRASLADADO:       "208.01",   // IVA cobrado al vender
   IVA_TRASLADADO_PEND:  "209.01",   // IVA pendiente de cobrar al cliente
   IVA_POR_PAGAR:        "216.01",
@@ -69,6 +72,7 @@ export const SAT_STARTER_CATALOG: CatalogAccount[] = [
   { cuentaSAT: "107", subcuenta: null,         nombre: "Deudores diversos",                   tipo: "ACTIVO",  nivel: 2 },
   { cuentaSAT: "107", subcuenta: "107.01",     nombre: "Deudores diversos nacionales",        tipo: "ACTIVO",  nivel: 3 },
   { cuentaSAT: "107", subcuenta: "107.05",     nombre: "ISR pagado por terceros (retenido a favor)", tipo: "ACTIVO", nivel: 3 },
+  { cuentaSAT: "107", subcuenta: "107.06",     nombre: "Préstamos otorgados a terceros",      tipo: "ACTIVO",  nivel: 3 },
   { cuentaSAT: "118", subcuenta: null,         nombre: "IVA acreditable pagado",              tipo: "ACTIVO",  nivel: 2 },
   { cuentaSAT: "118", subcuenta: "118.01",     nombre: "IVA acreditable pagado",              tipo: "ACTIVO",  nivel: 3 },
   { cuentaSAT: "119", subcuenta: null,         nombre: "IVA pendiente de acreditar",          tipo: "ACTIVO",  nivel: 2 },
@@ -80,6 +84,7 @@ export const SAT_STARTER_CATALOG: CatalogAccount[] = [
   { cuentaSAT: "201", subcuenta: "201.01",     nombre: "Proveedores nacionales",              tipo: "PASIVO",  nivel: 3 },
   { cuentaSAT: "205", subcuenta: null,         nombre: "Acreedores diversos",                 tipo: "PASIVO",  nivel: 2 },
   { cuentaSAT: "205", subcuenta: "205.01",     nombre: "Acreedores diversos nacionales",      tipo: "PASIVO",  nivel: 3 },
+  { cuentaSAT: "205", subcuenta: "205.02",     nombre: "Préstamos por pagar",                 tipo: "PASIVO",  nivel: 3 },
   { cuentaSAT: "208", subcuenta: null,         nombre: "IVA trasladado cobrado",              tipo: "PASIVO",  nivel: 2 },
   { cuentaSAT: "208", subcuenta: "208.01",     nombre: "IVA trasladado cobrado",              tipo: "PASIVO",  nivel: 3 },
   { cuentaSAT: "209", subcuenta: null,         nombre: "IVA trasladado pendiente de cobro",   tipo: "PASIVO",  nivel: 2 },

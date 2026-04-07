@@ -41,6 +41,9 @@ type TxFilter =
   | "PENDING"
   | "TAX_PAYMENT"
   | "PAYROLL_NO_CFDI"
+  | "LOAN_RECEIVED"
+  | "LOAN_GIVEN"
+  | "CAPITAL_CONTRIBUTION"
   | "NON_DEDUCTIBLE"
   | "INTERNAL_TRANSFER"
   | "IGNORED";
@@ -51,6 +54,9 @@ type StatusCounts = {
   PENDING: number;
   TAX_PAYMENT: number;
   PAYROLL_NO_CFDI: number;
+  LOAN_RECEIVED: number;
+  LOAN_GIVEN: number;
+  CAPITAL_CONTRIBUTION: number;
   NON_DEDUCTIBLE: number;
   INTERNAL_TRANSFER: number;
   IGNORED: number;
@@ -59,7 +65,8 @@ type StatusCounts = {
 
 const EMPTY_COUNTS: StatusCounts = {
   UNMATCHED: 0, MATCHED: 0, PENDING: 0, TAX_PAYMENT: 0,
-  PAYROLL_NO_CFDI: 0, NON_DEDUCTIBLE: 0, INTERNAL_TRANSFER: 0, IGNORED: 0, total: 0,
+  PAYROLL_NO_CFDI: 0, LOAN_RECEIVED: 0, LOAN_GIVEN: 0, CAPITAL_CONTRIBUTION: 0,
+  NON_DEDUCTIBLE: 0, INTERNAL_TRANSFER: 0, IGNORED: 0, total: 0,
 };
 
 const BANKS = ["BBVA","Banamex","Santander","Banorte","HSBC","Scotiabank","Afirme","Inbursa","BanBajío","Otro"];
@@ -292,15 +299,18 @@ export default function BancosPage() {
               {/* Filter tabs */}
               <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
                 {([
-                  ["all",               "Todos",                  statusCounts.total],
-                  ["UNMATCHED",         "Sin conciliar",          statusCounts.UNMATCHED],
-                  ["MATCHED",           "Conciliados",            statusCounts.MATCHED],
-                  ["PENDING",           "Pendiente CFDI mensual", statusCounts.PENDING],
-                  ["TAX_PAYMENT",       "Impuestos",              statusCounts.TAX_PAYMENT],
-                  ["PAYROLL_NO_CFDI",   "Nómina",                 statusCounts.PAYROLL_NO_CFDI],
-                  ["INTERNAL_TRANSFER", "Transferencias",         statusCounts.INTERNAL_TRANSFER],
-                  ["NON_DEDUCTIBLE",    "No deducible",           statusCounts.NON_DEDUCTIBLE],
-                  ["IGNORED",           "Ignorados",              statusCounts.IGNORED],
+                  ["all",                  "Todos",                  statusCounts.total],
+                  ["UNMATCHED",            "Sin conciliar",          statusCounts.UNMATCHED],
+                  ["MATCHED",              "Conciliados",            statusCounts.MATCHED],
+                  ["PENDING",              "Pendiente CFDI",         statusCounts.PENDING],
+                  ["TAX_PAYMENT",          "Impuestos",              statusCounts.TAX_PAYMENT],
+                  ["PAYROLL_NO_CFDI",      "Nómina",                 statusCounts.PAYROLL_NO_CFDI],
+                  ["LOAN_RECEIVED",        "Préstamos",              statusCounts.LOAN_RECEIVED],
+                  ["LOAN_GIVEN",           "Préstamos otorgados",    statusCounts.LOAN_GIVEN],
+                  ["CAPITAL_CONTRIBUTION", "Capital",                statusCounts.CAPITAL_CONTRIBUTION],
+                  ["INTERNAL_TRANSFER",    "Transferencias",         statusCounts.INTERNAL_TRANSFER],
+                  ["NON_DEDUCTIBLE",       "No deducible",           statusCounts.NON_DEDUCTIBLE],
+                  ["IGNORED",              "Ignorados",              statusCounts.IGNORED],
                 ] as const).map(([f, label, count]) => (
                   <button key={f} onClick={() => setFilter(f)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -546,6 +556,9 @@ function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgn
             PENDING_MONTHLY_CFDI: { label: "Pendiente CFDI", cls: "text-blue-700 bg-blue-50" },
             TAX_PAYMENT:          { label: "Impuestos",      cls: "text-purple-700 bg-purple-50" },
             PAYROLL_NO_CFDI:      { label: "Nómina",         cls: "text-indigo-700 bg-indigo-50" },
+            LOAN_RECEIVED:        { label: "Préstamo",       cls: "text-pink-700 bg-pink-50" },
+            LOAN_GIVEN:           { label: "Préstamo otorg.",cls: "text-pink-700 bg-pink-50" },
+            CAPITAL_CONTRIBUTION: { label: "Capital",        cls: "text-emerald-700 bg-emerald-50" },
             INTERNAL_TRANSFER:    { label: "Transferencia",  cls: "text-cyan-700 bg-cyan-50" },
             NON_DEDUCTIBLE:       { label: "No deducible",   cls: "text-orange-700 bg-orange-50" },
           };
@@ -657,6 +670,9 @@ function MatchPanel({ tx, candidates, loading, onMatch, onIgnore, onCategorize, 
         <div className="flex items-center gap-1.5 flex-wrap">
           <CategoryChip label="🏛️ Pago de impuestos" onClick={() => onCategorize("TAX_PAYMENT")} />
           <CategoryChip label="👥 Nómina sin CFDI" onClick={() => onCategorize("PAYROLL_NO_CFDI")} />
+          <CategoryChip label="💸 Préstamo recibido" onClick={() => onCategorize("LOAN_RECEIVED")} />
+          <CategoryChip label="🤝 Préstamo otorgado" onClick={() => onCategorize("LOAN_GIVEN")} />
+          <CategoryChip label="🏦 Aportación de capital" onClick={() => onCategorize("CAPITAL_CONTRIBUTION")} />
           <CategoryChip label="🚫 No deducible" onClick={() => onCategorize("NON_DEDUCTIBLE")} />
           <CategoryChip label="↔️ Transferencia entre cuentas" onClick={() => onCategorize("INTERNAL_TRANSFER")} />
           <CategoryChip label="✕ Ignorar" onClick={onIgnore} />

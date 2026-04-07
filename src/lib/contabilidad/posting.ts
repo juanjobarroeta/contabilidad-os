@@ -92,6 +92,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accDiferencias,
     accIsrPagadoTerceros,
     accIsrRetenidoHonorarios,
+    accPrestamosPorPagar,
+    accPrestamosOtorgados,
+    accCapitalSocial,
   ] = await Promise.all([
     resolveAccount(companyId, COE_CODES.BANCOS),
     resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
@@ -106,6 +109,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.DIFERENCIAS_REDONDEO),
     resolveAccount(companyId, COE_CODES.ISR_PAGADO_TERCEROS),
     resolveAccount(companyId, COE_CODES.ISR_RETENIDO_HONORARIOS),
+    resolveAccount(companyId, COE_CODES.PRESTAMOS_RECIBIDOS),
+    resolveAccount(companyId, COE_CODES.PRESTAMOS_OTORGADOS),
+    resolveAccount(companyId, COE_CODES.CAPITAL_SOCIAL),
   ]);
 
   // ─── 1. CFDIs emitted (INGRESO) ────────────────────────────────────────
@@ -398,6 +404,48 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         // bank account from tx.notes JSON.
         drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "CARGO" });
         drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "ABONO" });
+        continue;
+      }
+
+      if (tag === "LOAN_RECEIVED") {
+        // Préstamo que NOS DIERON. Direction matters:
+        //   inflow → DR Bancos / CR Préstamos por pagar  (deuda nace)
+        //   outflow → DR Préstamos por pagar / CR Bancos  (estamos pagando deuda)
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: accBancos.id,           monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accPrestamosPorPagar.id, monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accPrestamosPorPagar.id, monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accBancos.id,           monto: absAmount, tipo: "ABONO" });
+        }
+        continue;
+      }
+
+      if (tag === "LOAN_GIVEN") {
+        // Préstamo que NOSOTROS DIMOS a un tercero:
+        //   outflow → DR Préstamos otorgados / CR Bancos  (nace el activo)
+        //   inflow → DR Bancos / CR Préstamos otorgados  (nos están pagando)
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: accBancos.id,            monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accPrestamosOtorgados.id, monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accPrestamosOtorgados.id, monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accBancos.id,            monto: absAmount, tipo: "ABONO" });
+        }
+        continue;
+      }
+
+      if (tag === "CAPITAL_CONTRIBUTION") {
+        // Aportación de socios:
+        //   inflow → DR Bancos / CR Capital social
+        //   outflow → DR Capital social / CR Bancos (retiro de capital, raro)
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: accBancos.id,        monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accCapitalSocial.id, monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accCapitalSocial.id, monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accBancos.id,        monto: absAmount, tipo: "ABONO" });
+        }
         continue;
       }
 

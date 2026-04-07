@@ -246,15 +246,21 @@ function detectBank(headers: string[], content: string): string | undefined {
   return undefined;
 }
 
-/** Parse Mexican date formats: DD/MM/YYYY, YYYY-MM-DD, DD-MMM-YYYY, etc. */
+/** Parse Mexican date formats: DD/MM/YYYY, YYYY-MM-DD, DD-MMM-YYYY, etc.
+ *  Stored at UTC noon so display in any TZ from UTC-11 to UTC+11 stays
+ *  on the same calendar day. */
+function utcNoon(year: number, monthIndex: number, day: number): Date {
+  return new Date(Date.UTC(year, monthIndex, day, 12, 0, 0, 0));
+}
+
 function parseDateMX(s: string): Date | null {
   const clean = s.trim();
   // DD/MM/YYYY or DD-MM-YYYY
   let m = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (m) return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+  if (m) return utcNoon(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
   // YYYY-MM-DD or YYYY/MM/DD
   m = clean.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
-  if (m) return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+  if (m) return utcNoon(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
   // DD-MMM-YYYY (e.g. 13-Mar-2026)
   const months: Record<string, number> = {
     ene:0,feb:1,mar:2,abr:3,may:4,jun:5,
@@ -264,7 +270,7 @@ function parseDateMX(s: string): Date | null {
   m = clean.match(/^(\d{1,2})[\/\-\s]([a-zA-Z]{3})[\/\-\s](\d{4})$/);
   if (m) {
     const mo = months[m[2].toLowerCase()];
-    if (mo !== undefined) return new Date(parseInt(m[3]), mo, parseInt(m[1]));
+    if (mo !== undefined) return utcNoon(parseInt(m[3]), mo, parseInt(m[1]));
   }
   return null;
 }
