@@ -58,6 +58,7 @@ export async function GET(req: Request) {
   const q = searchParams.get("q")?.trim();
   const tipo = searchParams.get("tipo");
   const take = Math.min(parseInt(searchParams.get("take") ?? "50"), 200);
+  const unmatchedOnly = searchParams.get("unmatchedOnly") === "true";
 
   const where: import("@prisma/client").Prisma.InvoiceWhereInput = { companyId };
   if (tipo && ["INGRESO", "EGRESO", "TRASLADO", "NOMINA", "PAGO"].includes(tipo)) {
@@ -73,14 +74,39 @@ export async function GET(req: Request) {
     ];
   }
 
+  // When unmatchedOnly, pull extra rows and filter in code since aggregating
+  // against bankTransactions requires either raw SQL or a two-step query.
+  const fetchTake = unmatchedOnly ? Math.min(take * 4, 400) : take;
+
   const invoices = await prisma.invoice.findMany({
     where,
-    include: { customer: true, items: true },
+    include: {
+      customer: true,
+      items: true,
+      bankTransactions: {
+        where: { status: "MATCHED" },
+        select: { id: true, monto: true },
+      },
+    },
     orderBy: { fecha: "desc" },
-    take,
+    take: fetchTake,
   });
 
-  return NextResponse.json(invoices);
+  const enriched = invoices.map((inv) => {
+    const matchedAmount = inv.bankTransactions.reduce(
+      (s, tx) => s + Math.abs(tx.monto),
+      0
+    );
+    const fullyMatched = matchedAmount >= inv.total - 0.01;
+    // bankTransactions was only loaded to compute this — strip from payload.
+    const { bankTransactions: _bts, ...rest } = inv;
+    void _bts;
+    return { ...rest, matchedAmount, fullyMatched };
+  });
+
+  const filtered = unmatchedOnly ? enriched.filter((i) => !i.fullyMatched) : enriched;
+
+  return NextResponse.json(filtered.slice(0, take));
 }
 
 // POST /api/facturas — emit CFDI via Facturapi

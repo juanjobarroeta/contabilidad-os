@@ -779,6 +779,8 @@ interface FacturaSearchResult {
   total: number;
   tipo: string;
   customer: { razonSocial: string; rfc: string } | null;
+  matchedAmount: number;
+  fullyMatched: boolean;
 }
 
 function BulkMatchModal({
@@ -796,6 +798,7 @@ function BulkMatchModal({
 }) {
   const [query, setQuery] = useState("");
   const [tipo, setTipo] = useState<"EGRESO" | "INGRESO">("EGRESO");
+  const [unmatchedOnly, setUnmatchedOnly] = useState(true);
   const [results, setResults] = useState<FacturaSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [picked, setPicked] = useState<FacturaSearchResult | null>(null);
@@ -809,6 +812,7 @@ function BulkMatchModal({
       try {
         const params = new URLSearchParams({ companyId, tipo, take: "30" });
         if (query.trim()) params.set("q", query.trim());
+        if (unmatchedOnly) params.set("unmatchedOnly", "true");
         const res = await fetch(`/api/facturas?${params}`);
         const data = await res.json();
         if (!cancelled) setResults(Array.isArray(data) ? data : []);
@@ -819,7 +823,7 @@ function BulkMatchModal({
       }
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [query, tipo, companyId]);
+  }, [query, tipo, companyId, unmatchedOnly]);
 
   async function confirm() {
     if (!picked) return;
@@ -831,8 +835,9 @@ function BulkMatchModal({
     }
   }
 
-  const coverage = picked ? Math.round((selectionSum / picked.total) * 100) : 0;
-  const exceeds = picked && selectionSum > picked.total * 1.001;
+  const totalAfter = picked ? picked.matchedAmount + selectionSum : 0;
+  const coverage = picked ? Math.round((totalAfter / picked.total) * 100) : 0;
+  const exceeds = picked && totalAfter > picked.total * 1.001;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 p-4 z-50">
@@ -851,7 +856,7 @@ function BulkMatchModal({
 
         {/* Filter + search */}
         <div className="px-5 py-3 border-b border-border space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setTipo("EGRESO")}
               className={`text-xs px-2.5 py-1 rounded-full ${tipo === "EGRESO" ? "bg-primary text-primary-foreground" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
@@ -864,6 +869,15 @@ function BulkMatchModal({
             >
               Ingresos
             </button>
+            <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={unmatchedOnly}
+                onChange={(e) => setUnmatchedOnly(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Solo facturas por conciliar
+            </label>
           </div>
           <div className="relative">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -915,9 +929,14 @@ function BulkMatchModal({
                           {f.uuid ? `· ${f.uuid.slice(0, 8)}…` : ""}
                         </p>
                       </div>
-                      <span className="text-sm font-semibold shrink-0">
-                        {formatCurrency(f.total)}
-                      </span>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-semibold">{formatCurrency(f.total)}</p>
+                        {f.matchedAmount > 0.01 && (
+                          <p className="text-xs text-amber-700">
+                            Ya conciliado: {formatCurrency(f.matchedAmount)}
+                          </p>
+                        )}
+                      </div>
                     </button>
                   </li>
                 );
@@ -934,12 +953,18 @@ function BulkMatchModal({
                 <span className="text-muted-foreground">Factura total</span>
                 <strong>{formatCurrency(picked.total)}</strong>
               </div>
+              {picked.matchedAmount > 0.01 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Ya conciliado</span>
+                  <strong>{formatCurrency(picked.matchedAmount)}</strong>
+                </div>
+              )}
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Suma de movimientos</span>
+                <span className="text-muted-foreground">+ Esta selección</span>
                 <strong>{formatCurrency(selectionSum)}</strong>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Cobertura</span>
+              <div className="flex items-center justify-between pt-1 border-t border-border">
+                <span className="text-muted-foreground">Cobertura total</span>
                 <strong className={exceeds ? "text-red-600" : coverage >= 99 ? "text-green-700" : "text-amber-700"}>
                   {coverage}% {exceeds ? "(excede)" : coverage < 99 ? "(parcial)" : "(completa)"}
                 </strong>
