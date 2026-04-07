@@ -1,0 +1,78 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import {
+  AuthzError,
+  requireMembership,
+  requireModule,
+  withAuthz,
+} from "@/lib/authz";
+
+/**
+ * GET /api/construccion/proyectos/:id
+ *
+ * Returns a single proyecto with the relations the detalle UI needs:
+ * customer, presupuestos (with partidas count), estimaciones, last 20
+ * solicitudes de compra. Module-gated behind CONSTRUCCION.
+ */
+export const GET = withAuthz(
+  async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+    const { id } = await ctx.params;
+
+    const proyecto = await prisma.proyecto.findUnique({
+      where: { id },
+      include: {
+        customer: {
+          select: { id: true, razonSocial: true, rfc: true, email: true },
+        },
+        presupuestos: {
+          select: {
+            id: true,
+            version: true,
+            estado: true,
+            montoTotal: true,
+            createdAt: true,
+            _count: { select: { partidas: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        },
+        estimaciones: {
+          select: {
+            id: true,
+            numero: true,
+            estado: true,
+            periodoInicio: true,
+            periodoFin: true,
+            subtotal: true,
+            iva: true,
+            total: true,
+            invoiceId: true,
+            createdAt: true,
+          },
+          orderBy: { numero: "desc" },
+        },
+        solicitudesCompra: {
+          select: {
+            id: true,
+            folio: true,
+            estado: true,
+            total: true,
+            createdAt: true,
+            supplier: { select: { id: true, razonSocial: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+        },
+      },
+    });
+
+    if (!proyecto) {
+      throw new AuthzError(404, "Proyecto no encontrado");
+    }
+
+    // Tenant + module check against the proyecto's own company
+    await requireMembership(proyecto.companyId, undefined, req);
+    await requireModule(proyecto.companyId, "CONSTRUCCION");
+
+    return NextResponse.json(proyecto);
+  }
+);
