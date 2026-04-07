@@ -116,12 +116,17 @@ export async function postBalancedEntry(
     getOrCreateAccount(tx, companyId, abono.cuentaSAT),
   ]);
 
+  const year = fecha.getUTCFullYear();
+  const month = fecha.getUTCMonth() + 1;
+
   await tx.accountingEntry.createMany({
     data: [
       {
         companyId,
         chartAccountId: cargoAccount.id,
         fecha,
+        year,
+        month,
         descripcion: cargo.descripcion ?? descripcion,
         referencia,
         referenciaTipo,
@@ -133,6 +138,8 @@ export async function postBalancedEntry(
         companyId,
         chartAccountId: abonoAccount.id,
         fecha,
+        year,
+        month,
         descripcion: abono.descripcion ?? descripcion,
         referencia,
         referenciaTipo,
@@ -209,6 +216,8 @@ export async function postEstimacionTimbrada(
 ): Promise<void> {
   const desc = `Estimación #${args.numero} — ${args.proyectoCodigo}`;
   const total = args.subtotal + args.iva;
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
 
   // Single transaction-friendly approach: emit 3 lines directly so totals are
   // exact. We bypass postBalancedEntry to avoid two reconciling calls.
@@ -224,6 +233,8 @@ export async function postEstimacionTimbrada(
         companyId: args.companyId,
         chartAccountId: cxc.id,
         fecha: args.fecha,
+        year,
+        month,
         descripcion: desc,
         referencia: args.estimacionId,
         referenciaTipo: "ESTIMACION",
@@ -235,6 +246,8 @@ export async function postEstimacionTimbrada(
         companyId: args.companyId,
         chartAccountId: ingresos.id,
         fecha: args.fecha,
+        year,
+        month,
         descripcion: desc,
         referencia: args.estimacionId,
         referenciaTipo: "ESTIMACION",
@@ -246,6 +259,8 @@ export async function postEstimacionTimbrada(
         companyId: args.companyId,
         chartAccountId: iva.id,
         fecha: args.fecha,
+        year,
+        month,
         descripcion: desc,
         referencia: args.estimacionId,
         referenciaTipo: "ESTIMACION",

@@ -137,6 +137,7 @@ model Company {
   obligations       CompanyObligation[]
   accountingEntries AccountingEntry[]
   accounts          ChartAccount[]
+  accountingPeriods AccountingPeriod[]
 
   // Module gating (SaaS): which features this company has contracted
   modules           CompanyModule[]
@@ -603,15 +604,54 @@ model AccountingEntry {
   createdAt     DateTime @default(now())
 
   fecha         DateTime
+  // Posting period (year + month) — denormalized so we can filter/delete
+  // entire periods efficiently without a range query over fecha.
+  year          Int
+  month         Int       // 1-12
+  periodId      String?   // FK to AccountingPeriod row
   descripcion   String
-  referencia    String?  // e.g. UUID del CFDI, ESTIMACION id, etc.
-  referenciaTipo String? // "CFDI" | "ESTIMACION" | "SOLICITUD_COMPRA" | "BANK_TX" | etc.
+  referencia    String?   // e.g. UUID del CFDI, ESTIMACION id, etc.
+  referenciaTipo String?  // "CFDI" | "ESTIMACION" | "SOLICITUD_COMPRA" | "BANK_TX" | etc.
   monto         Float
   tipo          EntryType // CARGO, ABONO
   fuente        EntrySource // CFDI, NOMINA, BANCO, MANUAL, CONSTRUCCION, FLOTA
 
-  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  chartAccount ChartAccount @relation(fields: [chartAccountId], references: [id])
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chartAccount ChartAccount       @relation(fields: [chartAccountId], references: [id])
+  period       AccountingPeriod?  @relation(fields: [periodId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, year, month])
+}
+
+// Tracks which fiscal months have been posted to the general ledger.
+// Monthly posting is a manual step: user clicks "Cerrar mes" → posting
+// engine scans all CFDIs and bank txs with fecha in [monthStart, monthEnd]
+// and writes the corresponding AccountingEntry rows.
+model AccountingPeriod {
+  id           String              @id @default(cuid())
+  companyId    String
+  year         Int
+  month        Int                 // 1-12
+  status       AccountingPeriodStatus @default(DRAFT)
+  postedAt     DateTime?
+  postedById   String?
+  // Summary counts so the UI can show period health at a glance
+  entriesCount Int                 @default(0)
+  totalCargos  Float               @default(0)
+  totalAbonos  Float               @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries AccountingEntry[]
+
+  @@unique([companyId, year, month])
+}
+
+enum AccountingPeriodStatus {
+  DRAFT   // No entries yet (month hasn't been closed)
+  POSTED  // Entries generated — can still be deleted and re-posted
+  CLOSED  // Officially closed — no more edits (for audit)
 }
 
 enum AccountType {

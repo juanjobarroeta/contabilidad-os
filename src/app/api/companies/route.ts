@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireActiveSubscription } from "@/lib/subscription";
 import { AuthzError } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
+import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 
 export async function GET() {
   const session = await auth();
@@ -86,6 +87,13 @@ export async function POST(req: Request) {
       },
     },
   });
+
+  // Seed the SAT chart of accounts. Best-effort — don't fail the request.
+  try {
+    await seedChartOfAccounts(company.id);
+  } catch (e) {
+    console.error("[companies] seedChartOfAccounts failed:", e);
+  }
 
   // Auto-provision Facturapi org. Best-effort: company creation must not fail
   // if Facturapi is down. The result is returned to the client so the UI can
