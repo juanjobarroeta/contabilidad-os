@@ -90,6 +90,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accSueldos,
     accNoDeducibles,
     accDiferencias,
+    accIsrPagadoTerceros,
+    accIsrRetenidoHonorarios,
   ] = await Promise.all([
     resolveAccount(companyId, COE_CODES.BANCOS),
     resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
@@ -102,6 +104,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.SUELDOS_SALARIOS),
     resolveAccount(companyId, COE_CODES.GASTOS_NO_DEDUCIBLES),
     resolveAccount(companyId, COE_CODES.DIFERENCIAS_REDONDEO),
+    resolveAccount(companyId, COE_CODES.ISR_PAGADO_TERCEROS),
+    resolveAccount(companyId, COE_CODES.ISR_RETENIDO_HONORARIOS),
   ]);
 
   // ─── 1. CFDIs emitted (INGRESO) ────────────────────────────────────────
@@ -127,6 +131,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       fuente: "CFDI" as EntrySource,
     };
 
+    // Compute the impuestos delta from the stored fields. Sign convention:
+    //   delta = total - subtotal
+    //   delta > 0  → IVA trasladado neto (cliente nos debe IVA)
+    //   delta < 0  → ISR retenido a favor (cliente nos retuvo más de lo que cobramos en IVA)
+    const delta = inv.total - inv.subtotal;
+
     drafts.push({
       ...base,
       chartAccountId: accClientes.id,
@@ -139,12 +149,20 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       monto: inv.subtotal,
       tipo: "ABONO",
     });
-    if (inv.totalImpuestos > 0) {
+    if (delta > 0.005) {
       drafts.push({
         ...base,
         chartAccountId: accIvaTrasladado.id,
-        monto: inv.totalImpuestos,
+        monto: delta,
         tipo: "ABONO",
+      });
+    } else if (delta < -0.005) {
+      // Cliente nos retuvo: nace un activo (crédito al SAT)
+      drafts.push({
+        ...base,
+        chartAccountId: accIsrPagadoTerceros.id,
+        monto: -delta,
+        tipo: "CARGO",
       });
     }
   }
@@ -175,18 +193,28 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       fuente: "CFDI" as EntrySource,
     };
 
+    const delta = inv.total - inv.subtotal;
+
     drafts.push({
       ...base,
       chartAccountId: accOtrosGastos.id,
       monto: inv.subtotal,
       tipo: "CARGO",
     });
-    if (inv.totalImpuestos > 0) {
+    if (delta > 0.005) {
       drafts.push({
         ...base,
         chartAccountId: accIvaAcreditable.id,
-        monto: inv.totalImpuestos,
+        monto: delta,
         tipo: "CARGO",
+      });
+    } else if (delta < -0.005) {
+      // Le retuvimos al proveedor (típico en honorarios/arrendamiento): pasivo a SAT
+      drafts.push({
+        ...base,
+        chartAccountId: accIsrRetenidoHonorarios.id,
+        monto: -delta,
+        tipo: "ABONO",
       });
     }
     drafts.push({

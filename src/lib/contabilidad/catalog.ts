@@ -29,6 +29,7 @@ export const COE_CODES = {
   DEUDORES_DIVERSOS:    "107.01",
   IVA_ACREDITABLE:      "118.01",   // IVA pagado al comprar (recuperable)
   IVA_ACREDITABLE_PEND: "119.01",   // IVA pendiente de pagar al proveedor
+  ISR_PAGADO_TERCEROS:  "107.05",   // Cuando un cliente nos retiene ISR (asset/credit at SAT)
   // Passive
   PROVEEDORES:          "201.01",
   ACREEDORES_DIVERSOS:  "205.01",
@@ -37,6 +38,7 @@ export const COE_CODES = {
   IVA_POR_PAGAR:        "216.01",
   ISR_POR_PAGAR:        "213.01",
   ISR_RETENIDO_NOMINA:  "214.01",
+  ISR_RETENIDO_HONORARIOS: "214.02",  // ISR/IVA retenido a proveedores (honorarios, arrendamiento)
   IMSS_POR_PAGAR:       "215.01",
   // Capital
   RESULTADO_EJERCICIO:  "305.01",
@@ -66,6 +68,7 @@ export const SAT_STARTER_CATALOG: CatalogAccount[] = [
   { cuentaSAT: "105", subcuenta: "105.01",     nombre: "Clientes nacionales",                 tipo: "ACTIVO",  nivel: 3 },
   { cuentaSAT: "107", subcuenta: null,         nombre: "Deudores diversos",                   tipo: "ACTIVO",  nivel: 2 },
   { cuentaSAT: "107", subcuenta: "107.01",     nombre: "Deudores diversos nacionales",        tipo: "ACTIVO",  nivel: 3 },
+  { cuentaSAT: "107", subcuenta: "107.05",     nombre: "ISR pagado por terceros (retenido a favor)", tipo: "ACTIVO", nivel: 3 },
   { cuentaSAT: "118", subcuenta: null,         nombre: "IVA acreditable pagado",              tipo: "ACTIVO",  nivel: 2 },
   { cuentaSAT: "118", subcuenta: "118.01",     nombre: "IVA acreditable pagado",              tipo: "ACTIVO",  nivel: 3 },
   { cuentaSAT: "119", subcuenta: null,         nombre: "IVA pendiente de acreditar",          tipo: "ACTIVO",  nivel: 2 },
@@ -85,6 +88,7 @@ export const SAT_STARTER_CATALOG: CatalogAccount[] = [
   { cuentaSAT: "213", subcuenta: "213.01",     nombre: "ISR por pagar",                       tipo: "PASIVO",  nivel: 3 },
   { cuentaSAT: "214", subcuenta: null,         nombre: "ISR retenido",                        tipo: "PASIVO",  nivel: 2 },
   { cuentaSAT: "214", subcuenta: "214.01",     nombre: "ISR retenido por sueldos",            tipo: "PASIVO",  nivel: 3 },
+  { cuentaSAT: "214", subcuenta: "214.02",     nombre: "ISR/IVA retenido a proveedores",      tipo: "PASIVO",  nivel: 3 },
   { cuentaSAT: "215", subcuenta: null,         nombre: "Aportaciones de seguridad social",    tipo: "PASIVO",  nivel: 2 },
   { cuentaSAT: "215", subcuenta: "215.01",     nombre: "IMSS e INFONAVIT por pagar",          tipo: "PASIVO",  nivel: 3 },
   { cuentaSAT: "216", subcuenta: null,         nombre: "IVA por pagar",                       tipo: "PASIVO",  nivel: 2 },
