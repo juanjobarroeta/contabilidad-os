@@ -180,10 +180,23 @@ export async function POST(req: Request) {
     ...(resolvedGlobal && { global: resolvedGlobal }),
   });
 
-  // Compute totals
-  const subtotal = facturapiInvoice.subtotal ?? 0;
-  const total = facturapiInvoice.total ?? 0;
-  const totalImpuestos = total - subtotal;
+  // Compute totals.
+  // The Facturapi SDK sometimes returns `subtotal: 0` when there are no taxes
+  // (e.g. water sales exempt from IVA), which would corrupt our DB row.
+  // Always trust the request items as the source of truth for subtotal,
+  // and compute totalImpuestos as the residual from Facturapi's authoritative
+  // total (which already accounts for retenciones, descuentos, etc.).
+  const computedSubtotal = items.reduce(
+    (s, it) => s + it.quantity * it.product.price,
+    0
+  );
+  const total = facturapiInvoice.total ?? computedSubtotal;
+  // Trust Facturapi's subtotal only if it's meaningfully > 0
+  const subtotal =
+    typeof facturapiInvoice.subtotal === "number" && facturapiInvoice.subtotal > 0.01
+      ? facturapiInvoice.subtotal
+      : computedSubtotal;
+  const totalImpuestos = +(total - subtotal).toFixed(2);
 
   // Persist to DB
   const invoice = await prisma.invoice.create({
