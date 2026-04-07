@@ -431,37 +431,56 @@ export default function EmpresaPage() {
 
           <div className="px-6 py-5 space-y-5">
             {/* Live Facturapi pending steps banner */}
-            {fpStatus && fpStatus.orgId && (fpStatus.pendingSteps?.length ?? 0) > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-amber-900 mb-1.5">
-                      Facturapi marca {fpStatus.pendingSteps?.length} paso(s) pendiente(s):
-                    </p>
-                    <ul className="list-disc list-inside space-y-1 text-amber-900 text-xs">
-                      {fpStatus.pendingSteps?.map((s, i) => (
-                        <li key={i}>
-                          <strong>{s.type}</strong> — {s.description}
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-xs text-amber-800 mt-2">
-                      Algunos pasos (como firmar la <em>Carta Manifiesto</em>) requieren tu e.firma y deben hacerse en el dashboard de Facturapi.
-                    </p>
-                    <a
-                      href={fpStatus.dashboardUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-amber-900 underline hover:no-underline"
-                    >
-                      Resolver en Facturapi
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+            {fpStatus && fpStatus.orgId && (fpStatus.pendingSteps?.length ?? 0) > 0 && (() => {
+              const needsManifiesto = fpStatus.pendingSteps?.some(s => s.type === "manifiesto");
+              const needsCert = fpStatus.pendingSteps?.some(s => s.type === "certificate");
+              return (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-amber-900 mb-1.5">
+                        Pasos pendientes para activar el timbrado en producción:
+                      </p>
+                      <ul className="list-disc list-inside space-y-1 text-amber-900 text-xs">
+                        {fpStatus.pendingSteps?.map((s, i) => (
+                          <li key={i}>
+                            <strong>{s.type}</strong> — {s.description}
+                          </li>
+                        ))}
+                      </ul>
+
+                      <div className="mt-3 space-y-2">
+                        {needsCert && (
+                          <p className="text-xs text-amber-800">
+                            📄 <strong>CSD:</strong> súbelo desde el formulario de abajo &ldquo;Sube tu CSD para activar el timbrado&rdquo;.
+                          </p>
+                        )}
+                        {needsManifiesto && (
+                          <div className="text-xs text-amber-800">
+                            <p className="mb-1">
+                              ✍️ <strong>Carta Manifiesto:</strong> Facturapi requiere firmarla con tu e.firma directamente en su portal seguro (no se pueden enviar las llaves desde nuestra app).
+                            </p>
+                            <a
+                              href="https://www.facturapi.io/manifiesto"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 mt-1 text-xs font-medium bg-amber-600 text-white px-2.5 py-1.5 rounded hover:bg-amber-700"
+                            >
+                              Firmar Carta Manifiesto en Facturapi
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                            <p className="text-[10px] text-amber-700 mt-1">
+                              Necesitarás tu .cer, .key y contraseña de la e.firma.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Live Facturapi success badge */}
             {fpStatus && fpStatus.isProductionReady && (fpStatus.pendingSteps?.length ?? 0) === 0 && (
