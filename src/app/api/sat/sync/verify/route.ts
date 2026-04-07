@@ -129,11 +129,19 @@ export async function POST(req: Request) {
         const cfdi = parseCfdiXml(xmlContent);
         if (!cfdi.uuid || !cfdi.fecha) { skipped++; continue; }
 
-        // From our company's perspective:
-        // emitidos → we are the emisor → tipo INGRESO
-        // recibidos → we are the receptor → it's our expense → tipo EGRESO
+        // Map SAT TipoDeComprobante (I/E/N/P/T) to our InvoiceType enum.
+        // If for some reason it's missing, fall back to direction-based guess.
         const isEmisor = tipo === "emitidos" || cfdi.rfcEmisor === company?.rfc;
-        const invoiceType = isEmisor ? "INGRESO" : "EGRESO";
+        const SAT_TIPO_MAP: Record<string, "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO"> = {
+          I: "INGRESO",
+          E: "EGRESO",
+          N: "NOMINA",
+          P: "PAGO",
+          T: "TRASLADO",
+        };
+        const mappedType = cfdi.tipo ? SAT_TIPO_MAP[cfdi.tipo] : undefined;
+        const invoiceType: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO" =
+          mappedType ?? (isEmisor ? "INGRESO" : "EGRESO");
 
         // Find or create counterparty customer record
         const counterpartyRfc  = isEmisor ? cfdi.rfcReceptor  : cfdi.rfcEmisor;
@@ -169,7 +177,7 @@ export async function POST(req: Request) {
           data: {
             companyId,
             customerId,
-            tipo: invoiceType as "INGRESO" | "EGRESO",
+            tipo: invoiceType,
             fecha: new Date(cfdi.fecha),
             formaPago: cfdi.formaPago ?? "99",
             metodoPago: cfdi.metodoPago ?? "PUE",

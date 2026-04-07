@@ -12,8 +12,11 @@ interface Invoice {
   id: string;
   uuid: string | null;
   fecha: string;
-  tipo: string;
+  tipo: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO";
   status: string;
+  serie: string | null;
+  folio: string | null;
+  moneda: string;
   total: number;
   subtotal: number;
   totalImpuestos: number;
@@ -33,6 +36,23 @@ interface Invoice {
     claveUnidad: string;
   }[];
 }
+
+const TIPO_LABEL: Record<string, string> = {
+  INGRESO:  "Ingreso",
+  EGRESO:   "Egreso",
+  NOMINA:   "Nómina",
+  PAGO:     "Pago (REP)",
+  TRASLADO: "Traslado",
+};
+const TIPO_COLOR: Record<string, string> = {
+  INGRESO:  "bg-green-100 text-green-700",
+  EGRESO:   "bg-red-100 text-red-700",
+  NOMINA:   "bg-indigo-100 text-indigo-700",
+  PAGO:     "bg-blue-100 text-blue-700",
+  TRASLADO: "bg-amber-100 text-amber-700",
+};
+
+type TipoFilter = "all" | "INGRESO" | "EGRESO" | "NOMINA" | "PAGO";
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Borrador",
@@ -97,6 +117,7 @@ export default function FacturasPage() {
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
+  const [tipoFilter, setTipoFilter] = useState<TipoFilter>("all");
 
   const fetchInvoices = useCallback(async () => {
     if (!activeCompany) return;
@@ -132,10 +153,21 @@ export default function FacturasPage() {
     }
   }
 
-  // Totals summary
-  const stamped = invoices.filter((i) => i.status === "STAMPED");
+  // Filter
+  const filtered = tipoFilter === "all"
+    ? invoices
+    : invoices.filter((i) => i.tipo === tipoFilter);
+
+  // Totals summary (across filtered)
+  const stamped = filtered.filter((i) => i.status === "STAMPED");
   const totalMes = stamped.reduce((s, i) => s + i.total, 0);
   const ivaTotal = stamped.reduce((s, i) => s + i.totalImpuestos, 0);
+
+  // Counts per tipo (always from full set)
+  const tipoCounts = invoices.reduce(
+    (acc, i) => { acc[i.tipo] = (acc[i.tipo] ?? 0) + 1; return acc; },
+    {} as Record<string, number>
+  );
 
   if (!activeCompany) {
     return (
@@ -180,6 +212,29 @@ export default function FacturasPage() {
         </div>
       )}
 
+      {/* Tipo filter pills */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        {([
+          ["all",     "Todos",        invoices.length],
+          ["INGRESO", "Ingresos",     tipoCounts.INGRESO ?? 0],
+          ["EGRESO",  "Egresos",      tipoCounts.EGRESO ?? 0],
+          ["NOMINA",  "Nómina",       tipoCounts.NOMINA ?? 0],
+          ["PAGO",    "Pagos (REP)",  tipoCounts.PAGO ?? 0],
+        ] as const).map(([f, label, count]) => (
+          <button
+            key={f}
+            onClick={() => setTipoFilter(f)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              tipoFilter === f
+                ? "bg-primary text-primary-foreground"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            {label}{count > 0 ? ` (${count})` : ""}
+          </button>
+        ))}
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-xl border border-border overflow-hidden shadow-sm">
         {loading ? (
@@ -187,7 +242,7 @@ export default function FacturasPage() {
             <Loader2 className="h-4 w-4 animate-spin" />
             Cargando facturas...
           </div>
-        ) : invoices.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="p-12 text-center">
             <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
             <p className="font-medium">No hay facturas aún</p>
@@ -203,36 +258,42 @@ export default function FacturasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">UUID</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Cliente</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Tipo</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden lg:table-cell">UUID / Folio</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Contraparte</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Fecha</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">Pago</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">Subtotal</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">Subtotal</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">Total</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Estado</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
-              {invoices.map((inv) => (
+              {filtered.map((inv) => (
                 <tr
                   key={inv.id}
                   className="border-b border-border last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
                   onClick={() => setDetailInvoice(inv)}
                 >
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                    {inv.uuid ? inv.uuid.substring(0, 8) + "…" : "—"}
+                  <td className="px-4 py-3">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${TIPO_COLOR[inv.tipo] ?? "bg-gray-100 text-gray-600"}`}>
+                      {TIPO_LABEL[inv.tipo] ?? inv.tipo}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden lg:table-cell">
+                    {inv.folio ? `${inv.serie ?? ""}${inv.folio}` : inv.uuid ? inv.uuid.substring(0, 8) + "…" : "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <p className="font-medium">{inv.customer?.razonSocial ?? "—"}</p>
+                    <p className="font-medium truncate max-w-[280px]">{inv.customer?.razonSocial ?? "—"}</p>
                     <p className="text-xs text-muted-foreground">{inv.customer?.rfc ?? ""}</p>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{formatDate(inv.fecha)}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDate(inv.fecha)}</td>
                   <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell">
                     <span>{inv.formaPago}</span>
                     <span className="ml-1 bg-gray-100 px-1.5 py-0.5 rounded text-xs">{inv.metodoPago}</span>
                   </td>
-                  <td className="px-4 py-3 text-right text-muted-foreground">{formatCurrency(inv.subtotal)}</td>
+                  <td className="px-4 py-3 text-right text-muted-foreground hidden md:table-cell">{formatCurrency(inv.subtotal)}</td>
                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(inv.total)}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[inv.status] ?? "bg-gray-100 text-gray-600"}`}>
@@ -261,31 +322,44 @@ export default function FacturasPage() {
           <div className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-y-auto">
             {/* Drawer header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div>
-                <h2 className="font-semibold text-base">Detalle de factura</h2>
-                <p className="text-xs text-muted-foreground font-mono mt-0.5">
+              <div className="min-w-0 flex-1">
+                <h2 className="font-semibold text-base">{TIPO_LABEL[detailInvoice.tipo] ?? "Factura"}</h2>
+                <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
                   {detailInvoice.uuid ?? "Sin UUID"}
                 </p>
               </div>
               <button
                 onClick={() => setDetailInvoice(null)}
-                className="p-1.5 rounded hover:bg-accent text-muted-foreground"
+                className="p-1.5 rounded hover:bg-accent text-muted-foreground shrink-0"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <div className="p-5 flex flex-col gap-5">
-              {/* Status */}
-              <span className={`self-start px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLOR[detailInvoice.status] ?? "bg-gray-100 text-gray-600"}`}>
-                {STATUS_LABEL[detailInvoice.status] ?? detailInvoice.status}
-              </span>
+              {/* Tipo + Status badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${TIPO_COLOR[detailInvoice.tipo] ?? "bg-gray-100 text-gray-600"}`}>
+                  {TIPO_LABEL[detailInvoice.tipo] ?? detailInvoice.tipo}
+                </span>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLOR[detailInvoice.status] ?? "bg-gray-100 text-gray-600"}`}>
+                  {STATUS_LABEL[detailInvoice.status] ?? detailInvoice.status}
+                </span>
+                {detailInvoice.usoCfdi === "CN01" && (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                    Recibo de nómina
+                  </span>
+                )}
+              </div>
 
-              {/* Receptor */}
+              {/* Counterparty */}
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Receptor</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                  {detailInvoice.tipo === "EGRESO" || detailInvoice.tipo === "PAGO" ? "Proveedor" :
+                   detailInvoice.tipo === "NOMINA" ? "Empleado" : "Cliente / Receptor"}
+                </p>
                 <p className="font-medium">{detailInvoice.customer?.razonSocial ?? "—"}</p>
-                <p className="text-sm text-muted-foreground">{detailInvoice.customer?.rfc ?? ""}</p>
+                <p className="text-sm text-muted-foreground font-mono">{detailInvoice.customer?.rfc ?? ""}</p>
               </div>
 
               {/* Fields grid */}
@@ -293,6 +367,12 @@ export default function FacturasPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Fecha</p>
                   <p className="font-medium">{formatDate(detailInvoice.fecha)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Folio / Serie</p>
+                  <p className="font-medium font-mono">
+                    {detailInvoice.folio ? `${detailInvoice.serie ?? ""}${detailInvoice.folio}` : "—"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Forma de pago</p>
@@ -306,6 +386,18 @@ export default function FacturasPage() {
                   <p className="text-xs text-muted-foreground">Uso CFDI</p>
                   <p className="font-medium">{detailInvoice.usoCfdi}</p>
                 </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Moneda</p>
+                  <p className="font-medium">{detailInvoice.moneda}</p>
+                </div>
+              </div>
+
+              {/* UUID full */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">UUID</p>
+                <p className="font-mono text-xs break-all bg-gray-50 border border-border rounded p-2">
+                  {detailInvoice.uuid ?? "—"}
+                </p>
               </div>
 
               {/* Conceptos */}

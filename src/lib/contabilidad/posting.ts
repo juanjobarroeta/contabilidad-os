@@ -167,6 +167,80 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     }
   }
 
+  // ─── 1.5 CFDIs nómina (NOMINA) ─────────────────────────────────────────
+  // CFDI nómina is OUR expense paid to an employee. The CFDI is "emitido"
+  // by us but it's not a sale — it's a payroll record.
+  //
+  // Sign convention in our schema for CFDI nómina:
+  //   subtotal       = total percepciones
+  //   totalImpuestos = -ISR retenido (negative because it reduces what we
+  //                    actually pay the employee)
+  //   total          = neto pagado al empleado = subtotal + totalImpuestos
+  //
+  // Journal:
+  //   DR Sueldos y salarios (subtotal = percepciones brutas)
+  //   CR ISR retenido por sueldos (|totalImpuestos|, only if negative)
+  //   CR Acreedores diversos / Bancos (total = neto)
+  //
+  // We post to "Acreedores diversos" (provision) instead of Bancos directly
+  // because the bank movement settles separately. The bank tx that pays the
+  // empleado is matched (or categorized as PAYROLL_NO_CFDI) and contributes
+  // its own pair of entries that close out the provision.
+  const nominaCfdis = await prisma.invoice.findMany({
+    where: {
+      companyId,
+      tipo: "NOMINA",
+      status: "STAMPED",
+      fecha: { gte: start, lt: end },
+    },
+  });
+
+  for (const inv of nominaCfdis) {
+    const ref = inv.uuid ?? inv.id;
+    const empName = inv.subtotal ? "" : ""; // placeholder if we ever load customer
+    void empName;
+    const base = {
+      fecha: inv.fecha,
+      descripcion: `Nómina CFDI ${inv.serie ?? ""}${inv.folio ?? ""}`.trim(),
+      referencia: ref,
+      referenciaTipo: "CFDI" as const,
+      fuente: "NOMINA" as EntrySource,
+    };
+
+    // delta < 0 → impuestos retenidos (typical case for nómina)
+    const delta = inv.total - inv.subtotal;
+
+    drafts.push({
+      ...base,
+      chartAccountId: accSueldos.id,
+      monto: inv.subtotal,
+      tipo: "CARGO",
+    });
+    if (delta < -0.005) {
+      drafts.push({
+        ...base,
+        chartAccountId: accIsrRetenidoHonorarios.id, // ISR/IVA retenido a proveedores (also used for nómina retenciones)
+        monto: -delta,
+        tipo: "ABONO",
+      });
+    } else if (delta > 0.005) {
+      // Edge case: net > subtotal (shouldn't happen on a nomina but post safely)
+      drafts.push({
+        ...base,
+        chartAccountId: accSueldos.id,
+        monto: delta,
+        tipo: "CARGO",
+      });
+    }
+    // Acreedor por el neto al empleado (lo cierra el bank tx cuando se pague)
+    drafts.push({
+      ...base,
+      chartAccountId: accProveedores.id,
+      monto: inv.total,
+      tipo: "ABONO",
+    });
+  }
+
   // ─── 2. CFDIs received (EGRESO) ────────────────────────────────────────
   // Debit: Gastos (we post everything to "otros gastos" for now — classification
   //        can be upgraded later by reading claveProdServ or custom rules)
