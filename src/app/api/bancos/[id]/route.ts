@@ -26,12 +26,27 @@ export async function GET(req: Request, { params }: Params) {
   });
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
+  // Tag-based subcategories of IGNORED that we surface as their own tabs.
+  // Anything else with status=IGNORED falls into the plain "Ignorados" tab.
+  const TAG_TABS: Record<string, string> = {
+    PENDING:           "PENDING_MONTHLY_CFDI",
+    TAX_PAYMENT:       "TAX_PAYMENT",
+    PAYROLL_NO_CFDI:   "PAYROLL_NO_CFDI",
+    NON_DEDUCTIBLE:    "NON_DEDUCTIBLE",
+    INTERNAL_TRANSFER: "INTERNAL_TRANSFER",
+  };
+  const knownTags = Object.values(TAG_TABS);
+
   let where: Prisma.BankTransactionWhereInput = { bankAccountId };
-  if (status === "PENDING") {
-    where = { bankAccountId, status: "IGNORED", notes: "PENDING_MONTHLY_CFDI" };
+  if (status && status in TAG_TABS) {
+    where = { bankAccountId, status: "IGNORED", notes: TAG_TABS[status] };
   } else if (status === "IGNORED") {
-    // Exclude pending-CFDI rows from the plain Ignorados tab so they don't clutter it
-    where = { bankAccountId, status: "IGNORED", NOT: { notes: "PENDING_MONTHLY_CFDI" } };
+    // Plain Ignorados = IGNORED rows whose notes is null or some other tag
+    where = {
+      bankAccountId,
+      status: "IGNORED",
+      OR: [{ notes: null }, { notes: { notIn: knownTags } }],
+    };
   } else if (status) {
     where = { bankAccountId, status: status as "UNMATCHED" | "MATCHED" | "IGNORED" };
   }
@@ -51,18 +66,32 @@ export async function GET(req: Request, { params }: Params) {
     prisma.bankTransaction.count({ where }),
   ]);
 
-  // Status counts — compute PENDING separately
-  const [counts, pendingCount] = await Promise.all([
+  // Status counts — group by status, then split IGNORED into its tagged subcategories
+  const [counts, tagCounts] = await Promise.all([
     prisma.bankTransaction.groupBy({
       by: ["status"],
       where: { bankAccountId },
       _count: true,
     }),
-    prisma.bankTransaction.count({
-      where: { bankAccountId, status: "IGNORED", notes: "PENDING_MONTHLY_CFDI" },
+    prisma.bankTransaction.groupBy({
+      by: ["notes"],
+      where: { bankAccountId, status: "IGNORED" },
+      _count: true,
     }),
   ]);
   const statusCounts = Object.fromEntries(counts.map(c => [c.status, c._count]));
+  const tagCountMap = Object.fromEntries(
+    tagCounts.map(c => [c.notes ?? "__null__", c._count])
+  );
+
+  const subCounts = {
+    PENDING:           tagCountMap["PENDING_MONTHLY_CFDI"] ?? 0,
+    TAX_PAYMENT:       tagCountMap["TAX_PAYMENT"] ?? 0,
+    PAYROLL_NO_CFDI:   tagCountMap["PAYROLL_NO_CFDI"] ?? 0,
+    NON_DEDUCTIBLE:    tagCountMap["NON_DEDUCTIBLE"] ?? 0,
+    INTERNAL_TRANSFER: tagCountMap["INTERNAL_TRANSFER"] ?? 0,
+  };
+  const taggedTotal = Object.values(subCounts).reduce((s, n) => s + n, 0);
 
   return NextResponse.json({
     account,
@@ -71,9 +100,9 @@ export async function GET(req: Request, { params }: Params) {
     statusCounts: {
       UNMATCHED: statusCounts.UNMATCHED ?? 0,
       MATCHED:   statusCounts.MATCHED   ?? 0,
-      // Show only non-pending ignored in the Ignorados tab counter
-      IGNORED:   Math.max(0, (statusCounts.IGNORED ?? 0) - pendingCount),
-      PENDING:   pendingCount,
+      // Plain Ignorados = total IGNORED minus tagged subcategories
+      IGNORED:   Math.max(0, (statusCounts.IGNORED ?? 0) - taggedTotal),
+      ...subCounts,
       total:     (statusCounts.UNMATCHED ?? 0) + (statusCounts.MATCHED ?? 0) + (statusCounts.IGNORED ?? 0),
     },
   });

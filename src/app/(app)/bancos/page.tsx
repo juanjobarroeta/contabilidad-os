@@ -7,7 +7,7 @@ import {
   Plus, Upload, Zap, ChevronDown,
   CheckCircle2, AlertCircle, Loader2, X,
   ArrowDownLeft, ArrowUpRight, Landmark,
-  Link as LinkIcon, Unlink, Search, Clock,
+  Link as LinkIcon, Unlink, Search,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -34,10 +34,32 @@ interface Candidate {
   confidence: "alta" | "media" | "baja";
 }
 
-type TxFilter = "all" | "UNMATCHED" | "MATCHED" | "IGNORED" | "PENDING";
+type TxFilter =
+  | "all"
+  | "UNMATCHED"
+  | "MATCHED"
+  | "PENDING"
+  | "TAX_PAYMENT"
+  | "PAYROLL_NO_CFDI"
+  | "NON_DEDUCTIBLE"
+  | "INTERNAL_TRANSFER"
+  | "IGNORED";
 
 type StatusCounts = {
-  UNMATCHED: number; MATCHED: number; IGNORED: number; PENDING: number; total: number;
+  UNMATCHED: number;
+  MATCHED: number;
+  PENDING: number;
+  TAX_PAYMENT: number;
+  PAYROLL_NO_CFDI: number;
+  NON_DEDUCTIBLE: number;
+  INTERNAL_TRANSFER: number;
+  IGNORED: number;
+  total: number;
+};
+
+const EMPTY_COUNTS: StatusCounts = {
+  UNMATCHED: 0, MATCHED: 0, PENDING: 0, TAX_PAYMENT: 0,
+  PAYROLL_NO_CFDI: 0, NON_DEDUCTIBLE: 0, INTERNAL_TRANSFER: 0, IGNORED: 0, total: 0,
 };
 
 const BANKS = ["BBVA","Banamex","Santander","Banorte","HSBC","Scotiabank","Afirme","Inbursa","BanBajío","Otro"];
@@ -54,7 +76,7 @@ export default function BancosPage() {
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [txs, setTxs]                   = useState<BankTx[]>([]);
   const [filter, setFilter]             = useState<TxFilter>("all");
-  const [statusCounts, setStatusCounts] = useState<StatusCounts>({ UNMATCHED: 0, MATCHED: 0, IGNORED: 0, PENDING: 0, total: 0 });
+  const [statusCounts, setStatusCounts] = useState<StatusCounts>(EMPTY_COUNTS);
   const [selectedTxIds, setSelectedTxIds] = useState<Set<string>>(new Set());
   const [showBulkMatch, setShowBulkMatch] = useState(false);
   const [page, setPage]                 = useState(1);
@@ -99,7 +121,7 @@ export default function BancosPage() {
       const res  = await fetch(`/api/bancos/${selectedId}?${params}`);
       const data = await res.json();
       setTxs(data.transactions ?? []);
-      setStatusCounts(data.statusCounts ?? { UNMATCHED: 0, MATCHED: 0, IGNORED: 0, PENDING: 0, total: 0 });
+      setStatusCounts({ ...EMPTY_COUNTS, ...(data.statusCounts ?? {}) });
       setTotalPages(data.pagination?.pages ?? 1);
     } catch { setError("Error al cargar movimientos"); }
     finally { setTxLoading(false); }
@@ -270,11 +292,15 @@ export default function BancosPage() {
               {/* Filter tabs */}
               <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
                 {([
-                  ["all",       "Todos",              statusCounts.total],
-                  ["UNMATCHED", "Sin conciliar",      statusCounts.UNMATCHED],
-                  ["PENDING",   "Pendiente CFDI mensual", statusCounts.PENDING],
-                  ["MATCHED",   "Conciliados",        statusCounts.MATCHED],
-                  ["IGNORED",   "Ignorados",          statusCounts.IGNORED],
+                  ["all",               "Todos",                  statusCounts.total],
+                  ["UNMATCHED",         "Sin conciliar",          statusCounts.UNMATCHED],
+                  ["MATCHED",           "Conciliados",            statusCounts.MATCHED],
+                  ["PENDING",           "Pendiente CFDI mensual", statusCounts.PENDING],
+                  ["TAX_PAYMENT",       "Impuestos",              statusCounts.TAX_PAYMENT],
+                  ["PAYROLL_NO_CFDI",   "Nómina",                 statusCounts.PAYROLL_NO_CFDI],
+                  ["INTERNAL_TRANSFER", "Transferencias",         statusCounts.INTERNAL_TRANSFER],
+                  ["NON_DEDUCTIBLE",    "No deducible",           statusCounts.NON_DEDUCTIBLE],
+                  ["IGNORED",           "Ignorados",              statusCounts.IGNORED],
                 ] as const).map(([f, label, count]) => (
                   <button key={f} onClick={() => setFilter(f)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -370,6 +396,7 @@ export default function BancosPage() {
                                   loading={candidatesLoading}
                                   onMatch={(id) => applyAction(tx.id, "match", id)}
                                   onIgnore={() => applyAction(tx.id, "ignore")}
+                                  onCategorize={(tag) => applyAction(tx.id, "ignore", undefined, tag)}
                                   onClose={() => setExpandedTxId(null)}
                                 />
                               </td>
@@ -491,9 +518,7 @@ function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgn
             ↳ {tx.invoice.customer?.razonSocial ?? "Factura"} · {formatCurrency(tx.invoice.total)}
           </p>
         )}
-        {tx.status === "IGNORED" && tx.notes && (
-          <p className="text-xs text-gray-400 mt-0.5">Ignorado: {tx.notes}</p>
-        )}
+        {/* Category badge now shown in Estado column; no inline note needed */}
       </td>
       <td className="px-4 py-3 text-right whitespace-nowrap">
         <span className={`text-sm font-semibold flex items-center justify-end gap-1 ${isCredit ? "text-green-700" : "text-red-600"}`}>
@@ -515,16 +540,26 @@ function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgn
             <CheckCircle2 className="h-3 w-3" />Conciliado
           </span>
         )}
-        {tx.status === "IGNORED" && tx.notes === "PENDING_MONTHLY_CFDI" && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
-            <Clock className="h-3 w-3" />Pendiente CFDI
-          </span>
-        )}
-        {tx.status === "IGNORED" && tx.notes !== "PENDING_MONTHLY_CFDI" && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-            <X className="h-3 w-3" />Ignorado
-          </span>
-        )}
+        {tx.status === "IGNORED" && (() => {
+          const tag = tx.notes ?? "";
+          const map: Record<string, { label: string; cls: string }> = {
+            PENDING_MONTHLY_CFDI: { label: "Pendiente CFDI", cls: "text-blue-700 bg-blue-50" },
+            TAX_PAYMENT:          { label: "Impuestos",      cls: "text-purple-700 bg-purple-50" },
+            PAYROLL_NO_CFDI:      { label: "Nómina",         cls: "text-indigo-700 bg-indigo-50" },
+            INTERNAL_TRANSFER:    { label: "Transferencia",  cls: "text-cyan-700 bg-cyan-50" },
+            NON_DEDUCTIBLE:       { label: "No deducible",   cls: "text-orange-700 bg-orange-50" },
+          };
+          const m = map[tag];
+          return m ? (
+            <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded ${m.cls}`}>
+              {m.label}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+              <X className="h-3 w-3" />Ignorado
+            </span>
+          );
+        })()}
       </td>
       <td className="px-4 py-3">
         {acting
@@ -550,10 +585,16 @@ function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgn
               </button>
             )}
             {tx.status === "IGNORED" && (
-              <button onClick={onUnignore} title="Reactivar"
-                className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
+              <>
+                <button onClick={onExpand} title="Re-categorizar / conciliar"
+                  className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
+                  <LinkIcon className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={onUnignore} title="Mover a sin conciliar"
+                  className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </>
             )}
           </div>
         )}
@@ -563,9 +604,12 @@ function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgn
 }
 
 // ── MatchPanel ────────────────────────────────────────────────────────────────
-function MatchPanel({ tx, candidates, loading, onMatch, onIgnore, onClose }: {
+function MatchPanel({ tx, candidates, loading, onMatch, onIgnore, onCategorize, onClose }: {
   tx: BankTx; candidates: Candidate[]; loading: boolean;
-  onMatch: (id: string) => void; onIgnore: () => void; onClose: () => void;
+  onMatch: (id: string) => void;
+  onIgnore: () => void;
+  onCategorize: (notesTag: string) => void;
+  onClose: () => void;
 }) {
   const isCredit = tx.monto > 0;
   return (
@@ -608,11 +652,28 @@ function MatchPanel({ tx, candidates, loading, onMatch, onIgnore, onClose }: {
         </div>
       )}
 
-      <button onClick={onIgnore}
-        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors mt-1">
-        Ignorar (nómina, impuestos, gastos sin factura)
-      </button>
+      <div className="mt-3 pt-3 border-t border-blue-200/60">
+        <p className="text-xs text-muted-foreground mb-1.5">O categoriza sin factura:</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <CategoryChip label="🏛️ Pago de impuestos" onClick={() => onCategorize("TAX_PAYMENT")} />
+          <CategoryChip label="👥 Nómina sin CFDI" onClick={() => onCategorize("PAYROLL_NO_CFDI")} />
+          <CategoryChip label="🚫 No deducible" onClick={() => onCategorize("NON_DEDUCTIBLE")} />
+          <CategoryChip label="↔️ Transferencia entre cuentas" onClick={() => onCategorize("INTERNAL_TRANSFER")} />
+          <CategoryChip label="✕ Ignorar" onClick={onIgnore} />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function CategoryChip({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="text-xs px-2.5 py-1 rounded-full bg-white border border-border hover:border-primary hover:bg-primary/5 hover:text-primary transition-colors"
+    >
+      {label}
+    </button>
   );
 }
 
@@ -797,7 +858,7 @@ function BulkMatchModal({
   onConfirm: (invoiceId: string) => Promise<void> | void;
 }) {
   const [query, setQuery] = useState("");
-  const [tipo, setTipo] = useState<"EGRESO" | "INGRESO">("EGRESO");
+  const [tipo, setTipo] = useState<"EGRESO" | "INGRESO" | "NOMINA">("EGRESO");
   const [unmatchedOnly, setUnmatchedOnly] = useState(true);
   const [results, setResults] = useState<FacturaSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -868,6 +929,12 @@ function BulkMatchModal({
               className={`text-xs px-2.5 py-1 rounded-full ${tipo === "INGRESO" ? "bg-primary text-primary-foreground" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
             >
               Ingresos
+            </button>
+            <button
+              onClick={() => setTipo("NOMINA")}
+              className={`text-xs px-2.5 py-1 rounded-full ${tipo === "NOMINA" ? "bg-primary text-primary-foreground" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            >
+              Nómina
             </button>
             <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
               <input

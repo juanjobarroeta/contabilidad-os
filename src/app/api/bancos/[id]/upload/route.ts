@@ -59,13 +59,29 @@ export async function POST(req: Request, { params }: Params) {
 
     if (exists) { skipped++; continue; }
 
-    // Auto-tag bank fees + their IVA: the bank issues a single monthly CFDI
-    // for all fees combined, so these can't be matched immediately. Park them
-    // in IGNORED with a note so they leave "Sin conciliar"; user can move them
-    // to MATCHED when the monthly CFDI arrives.
-    const isBankFee = /comisi[oó]n|iva\s+comisi/i.test(tx.descripcion);
-    const status = isBankFee ? "IGNORED" : "UNMATCHED";
-    const notes = isBankFee ? "PENDING_MONTHLY_CFDI" : null;
+    // Auto-categorize on import. We use IGNORED + a notes tag for items that
+    // can't or shouldn't be matched against a customer/supplier CFDI:
+    //   - PENDING_MONTHLY_CFDI: bank fees (consolidated CFDI arrives later)
+    //   - TAX_PAYMENT: payments to SAT (no CFDI ever exists)
+    //   - INTERNAL_TRANSFER: between own accounts (no P&L impact)
+    // Everything else stays UNMATCHED for the user to resolve manually.
+    const desc = tx.descripcion;
+    const isBankFee = /comisi[oó]n|iva\s+comisi/i.test(desc);
+    const isTaxPayment = /pago\s+de\s+impuestos|^impuesto|recaudaci[oó]n|sat\s|tesofe/i.test(desc);
+    const isInternalTransfer = /traspaso\s+(entre|a)\s+cuentas?\s+propias?|transferencia\s+propia/i.test(desc);
+
+    let status: "UNMATCHED" | "IGNORED" = "UNMATCHED";
+    let notes: string | null = null;
+    if (isBankFee) {
+      status = "IGNORED";
+      notes = "PENDING_MONTHLY_CFDI";
+    } else if (isTaxPayment) {
+      status = "IGNORED";
+      notes = "TAX_PAYMENT";
+    } else if (isInternalTransfer) {
+      status = "IGNORED";
+      notes = "INTERNAL_TRANSFER";
+    }
 
     await prisma.bankTransaction.create({
       data: {
