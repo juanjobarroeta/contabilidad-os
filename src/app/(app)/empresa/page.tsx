@@ -6,7 +6,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   Building2, Plus, Loader2, Pencil, CheckCircle2,
   Zap, Key, AlertCircle, Trash2, ExternalLink, Eye, EyeOff, X,
-  Shield, Upload,
+  Shield, Upload, FileKey2,
 } from "lucide-react";
 
 const REGIMENES_FISCALES = [
@@ -81,6 +81,14 @@ export default function EmpresaPage() {
   const [fielCerFile, setFielCerFile] = useState<File | null>(null);
   const [fielKeyFile, setFielKeyFile] = useState<File | null>(null);
   const [fielPassword, setFielPassword] = useState("");
+
+  // CSD upload state
+  const [csdCerFile, setCsdCerFile] = useState<File | null>(null);
+  const [csdKeyFile, setCsdKeyFile] = useState<File | null>(null);
+  const [csdPassword, setCsdPassword] = useState("");
+  const [csdSaving, setCsdSaving] = useState(false);
+  const [csdError, setCsdError] = useState("");
+  const [csdSuccess, setCsdSuccess] = useState("");
   const [showFielPassword, setShowFielPassword] = useState(false);
   const [fielSaving, setFielSaving] = useState(false);
   const [fielSuccess, setFielSuccess] = useState("");
@@ -194,6 +202,49 @@ export default function EmpresaPage() {
       fetchCompanyDetail();
     } finally {
       setDisconnectLoading(false);
+    }
+  }
+
+  async function handleCsdUpload() {
+    if (!activeCompany) return;
+    if (!csdCerFile || !csdKeyFile || !csdPassword) {
+      setCsdError("Sube el .cer, el .key y la contraseña del CSD");
+      return;
+    }
+    setCsdSaving(true);
+    setCsdError("");
+    setCsdSuccess("");
+    try {
+      const csdCer = await fileToBase64(csdCerFile);
+      const csdKey = await fileToBase64(csdKeyFile);
+      const res = await fetch(`/api/companies/${activeCompany.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csdCer, csdKey, csdPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al guardar el CSD");
+
+      // The PATCH route auto-runs Facturapi provisioning when CSD changes.
+      // The result is in data.facturapi — surface a meaningful message.
+      const fp = data.facturapi;
+      if (fp?.hasLiveKey) {
+        setCsdSuccess("CSD guardado y clave live de Facturapi generada. Ya puedes timbrar CFDIs.");
+      } else if (fp?.csdUploaded) {
+        setCsdSuccess("CSD guardado y subido a Facturapi. Procesando llave live…");
+      } else if (fp?.warning) {
+        setCsdSuccess(`CSD guardado. ${fp.warning}`);
+      } else {
+        setCsdSuccess("CSD guardado correctamente.");
+      }
+      setCsdCerFile(null);
+      setCsdKeyFile(null);
+      setCsdPassword("");
+      fetchCompanyDetail();
+    } catch (err) {
+      setCsdError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setCsdSaving(false);
     }
   }
 
@@ -430,27 +481,68 @@ export default function EmpresaPage() {
                   <p>Facturapi actúa como PAC (Proveedor Autorizado de Certificación) ante el SAT. La organización se provisiona automáticamente al crear la empresa. Si tu empresa fue creada antes de configurar Facturapi, usa el botón &ldquo;Configurar Facturapi&rdquo; abajo para reintentarlo.</p>
                 </div>
 
-                {/* Option 1: Auto setup */}
+                {/* Option 1: CSD upload (the only thing that actually unlocks timbrado) */}
                 <div className="border border-border rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Zap className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-semibold">Opción 1 — Configuración automática</h3>
+                    <FileKey2 className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold">Opción 1 — Sube tu CSD para activar el timbrado</h3>
                     <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">Recomendada</span>
                   </div>
                   <p className="text-xs text-muted-foreground mb-3">
-                    Crea la organización en Facturapi, sube tus datos fiscales y el CSD automáticamente usando tu clave de administrador.
+                    El Certificado de Sello Digital (CSD) lo emite el SAT. Una vez subido, generamos automáticamente tu clave live en Facturapi y podrás timbrar CFDIs.
+                    {companyDetail?.facturapiOrgId && (
+                      <span className="block mt-1 text-green-700">
+                        ✓ Organización en Facturapi ya creada · ID: <code className="font-mono">{companyDetail.facturapiOrgId}</code>
+                      </span>
+                    )}
                   </p>
-                  {!hasCsd && (
-                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-700 mb-3">
-                      <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                      No hay CSD guardado. La organización se creará pero no podrá timbrar hasta que subas el CSD desde el onboarding.
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Certificado <code className="text-xs">.cer</code></label>
+                      <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-md text-xs cursor-pointer hover:bg-gray-50">
+                        <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-muted-foreground truncate">{csdCerFile ? csdCerFile.name : "Seleccionar .cer"}</span>
+                        <input type="file" accept=".cer" className="hidden"
+                          onChange={(e) => setCsdCerFile(e.target.files?.[0] ?? null)} />
+                      </label>
                     </div>
-                  )}
-                  <button onClick={handleAutoSetup} disabled={fpLoading}
-                    className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
-                    {fpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                    {fpLoading ? "Configurando..." : "Configurar automáticamente"}
-                  </button>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Llave privada <code className="text-xs">.key</code></label>
+                      <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-md text-xs cursor-pointer hover:bg-gray-50">
+                        <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-muted-foreground truncate">{csdKeyFile ? csdKeyFile.name : "Seleccionar .key"}</span>
+                        <input type="file" accept=".key" className="hidden"
+                          onChange={(e) => setCsdKeyFile(e.target.files?.[0] ?? null)} />
+                      </label>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Contraseña del CSD</label>
+                      <input
+                        type="password"
+                        value={csdPassword}
+                        onChange={(e) => setCsdPassword(e.target.value)}
+                        placeholder="Contraseña de la llave privada"
+                        className="w-full px-3 py-2 border border-border rounded-md text-sm"
+                      />
+                    </div>
+
+                    {csdError && (
+                      <p className="text-xs text-destructive">{csdError}</p>
+                    )}
+                    {csdSuccess && (
+                      <p className="text-xs text-green-700">{csdSuccess}</p>
+                    )}
+
+                    <button
+                      onClick={handleCsdUpload}
+                      disabled={csdSaving || !csdCerFile || !csdKeyFile || !csdPassword}
+                      className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {csdSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileKey2 className="h-4 w-4" />}
+                      {csdSaving ? "Subiendo..." : "Subir CSD y activar timbrado"}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Option 2: Manual */}
