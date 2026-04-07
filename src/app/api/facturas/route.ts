@@ -40,7 +40,7 @@ const createInvoiceSchema = z.object({
   }).optional(),
 });
 
-// GET /api/facturas?companyId=xxx
+// GET /api/facturas?companyId=xxx&q=search&tipo=EGRESO&take=20
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
@@ -55,11 +55,29 @@ export async function GET(req: Request) {
   });
   if (!membership) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
+  const q = searchParams.get("q")?.trim();
+  const tipo = searchParams.get("tipo");
+  const take = Math.min(parseInt(searchParams.get("take") ?? "50"), 200);
+
+  const where: import("@prisma/client").Prisma.InvoiceWhereInput = { companyId };
+  if (tipo && ["INGRESO", "EGRESO", "TRASLADO", "NOMINA", "PAGO"].includes(tipo)) {
+    where.tipo = tipo as "INGRESO" | "EGRESO" | "TRASLADO" | "NOMINA" | "PAGO";
+  }
+  if (q) {
+    where.OR = [
+      { uuid: { contains: q, mode: "insensitive" } },
+      { folio: { contains: q, mode: "insensitive" } },
+      { notas: { contains: q, mode: "insensitive" } },
+      { customer: { razonSocial: { contains: q, mode: "insensitive" } } },
+      { customer: { rfc: { contains: q, mode: "insensitive" } } },
+    ];
+  }
+
   const invoices = await prisma.invoice.findMany({
-    where: { companyId },
+    where,
     include: { customer: true, items: true },
     orderBy: { fecha: "desc" },
-    take: 50,
+    take,
   });
 
   return NextResponse.json(invoices);

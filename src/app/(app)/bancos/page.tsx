@@ -7,7 +7,7 @@ import {
   Plus, Upload, Zap, ChevronDown,
   CheckCircle2, AlertCircle, Loader2, X,
   ArrowDownLeft, ArrowUpRight, Landmark,
-  Link as LinkIcon, Unlink,
+  Link as LinkIcon, Unlink, Search, Clock,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -34,7 +34,11 @@ interface Candidate {
   confidence: "alta" | "media" | "baja";
 }
 
-type TxFilter = "all" | "UNMATCHED" | "MATCHED" | "IGNORED";
+type TxFilter = "all" | "UNMATCHED" | "MATCHED" | "IGNORED" | "PENDING";
+
+type StatusCounts = {
+  UNMATCHED: number; MATCHED: number; IGNORED: number; PENDING: number; total: number;
+};
 
 const BANKS = ["BBVA","Banamex","Santander","Banorte","HSBC","Scotiabank","Afirme","Inbursa","BanBajío","Otro"];
 const CONFIDENCE_COLORS = {
@@ -50,7 +54,9 @@ export default function BancosPage() {
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [txs, setTxs]                   = useState<BankTx[]>([]);
   const [filter, setFilter]             = useState<TxFilter>("all");
-  const [statusCounts, setStatusCounts] = useState({ UNMATCHED: 0, MATCHED: 0, IGNORED: 0, total: 0 });
+  const [statusCounts, setStatusCounts] = useState<StatusCounts>({ UNMATCHED: 0, MATCHED: 0, IGNORED: 0, PENDING: 0, total: 0 });
+  const [selectedTxIds, setSelectedTxIds] = useState<Set<string>>(new Set());
+  const [showBulkMatch, setShowBulkMatch] = useState(false);
   const [page, setPage]                 = useState(1);
   const [totalPages, setTotalPages]     = useState(1);
   const [loading, setLoading]           = useState(false);
@@ -93,14 +99,64 @@ export default function BancosPage() {
       const res  = await fetch(`/api/bancos/${selectedId}?${params}`);
       const data = await res.json();
       setTxs(data.transactions ?? []);
-      setStatusCounts(data.statusCounts ?? { UNMATCHED: 0, MATCHED: 0, IGNORED: 0, total: 0 });
+      setStatusCounts(data.statusCounts ?? { UNMATCHED: 0, MATCHED: 0, IGNORED: 0, PENDING: 0, total: 0 });
       setTotalPages(data.pagination?.pages ?? 1);
     } catch { setError("Error al cargar movimientos"); }
     finally { setTxLoading(false); }
   }, [selectedId, filter, page]);
 
-  useEffect(() => { setPage(1); setExpandedTxId(null); }, [selectedId, filter]);
+  useEffect(() => {
+    setPage(1);
+    setExpandedTxId(null);
+    setSelectedTxIds(new Set());
+  }, [selectedId, filter]);
   useEffect(() => { loadTxs(); }, [loadTxs]);
+
+  const selectionCount = selectedTxIds.size;
+  const selectionSum = txs
+    .filter((t) => selectedTxIds.has(t.id))
+    .reduce((s, t) => s + Math.abs(t.monto), 0);
+
+  function toggleTxSelection(id: string) {
+    setSelectedTxIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    const ids = new Set(txs.map((t) => t.id));
+    setSelectedTxIds(ids);
+  }
+
+  function clearSelection() {
+    setSelectedTxIds(new Set());
+  }
+
+  async function handleBulkMatch(invoiceId: string) {
+    const res = await fetch(`/api/bancos/batch-match`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ txIds: Array.from(selectedTxIds), invoiceId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Error al conciliar en lote");
+      return;
+    }
+    const coverage = Math.round((data.coverage ?? 0) * 100);
+    setError(
+      `✓ ${data.matched} movimiento(s) conciliados. Total movimientos: ${formatCurrency(
+        data.sumMatched
+      )} · Factura: ${formatCurrency(data.invoiceTotal)} (${coverage}%)`
+    );
+    clearSelection();
+    setShowBulkMatch(false);
+    loadTxs();
+    loadAccounts();
+  }
 
   // ── Auto-match ─────────────────────────────────────────────────────────────
   async function handleAutoMatch() {
@@ -214,10 +270,11 @@ export default function BancosPage() {
               {/* Filter tabs */}
               <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
                 {([
-                  ["all",      "Todos",         statusCounts.total],
-                  ["UNMATCHED","Sin conciliar", statusCounts.UNMATCHED],
-                  ["MATCHED",  "Conciliados",   statusCounts.MATCHED],
-                  ["IGNORED",  "Ignorados",     statusCounts.IGNORED],
+                  ["all",       "Todos",              statusCounts.total],
+                  ["UNMATCHED", "Sin conciliar",      statusCounts.UNMATCHED],
+                  ["PENDING",   "Pendiente CFDI mensual", statusCounts.PENDING],
+                  ["MATCHED",   "Conciliados",        statusCounts.MATCHED],
+                  ["IGNORED",   "Ignorados",          statusCounts.IGNORED],
                 ] as const).map(([f, label, count]) => (
                   <button key={f} onClick={() => setFilter(f)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -229,6 +286,30 @@ export default function BancosPage() {
                   </button>
                 ))}
               </div>
+
+              {/* Bulk-match selection bar (only shown when user selected rows) */}
+              {selectionCount > 0 && (
+                <div className="px-5 py-3 bg-blue-50 border-b border-blue-200 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="text-sm text-blue-900">
+                    <strong>{selectionCount}</strong> movimiento{selectionCount === 1 ? "" : "s"} seleccionado{selectionCount === 1 ? "" : "s"} ·{" "}
+                    <strong>{formatCurrency(selectionSum)}</strong>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={clearSelection}
+                      className="text-xs text-blue-900 hover:underline"
+                    >
+                      Limpiar
+                    </button>
+                    <button
+                      onClick={() => setShowBulkMatch(true)}
+                      className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:bg-primary/90"
+                    >
+                      <LinkIcon className="h-3.5 w-3.5" /> Conciliar con factura…
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Transactions */}
               {txLoading ? (
@@ -250,6 +331,15 @@ export default function BancosPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-gray-50">
+                        <th className="px-3 py-2.5 w-8">
+                          <input
+                            type="checkbox"
+                            checked={txs.length > 0 && selectedTxIds.size === txs.length}
+                            onChange={(e) => (e.target.checked ? selectAllVisible() : clearSelection())}
+                            className="h-3.5 w-3.5 rounded border-border cursor-pointer"
+                            title="Seleccionar todos los visibles"
+                          />
+                        </th>
                         <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Fecha</th>
                         <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Descripción</th>
                         <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Monto</th>
@@ -264,6 +354,8 @@ export default function BancosPage() {
                           <TxRow key={tx.id} tx={tx}
                             expanded={expandedTxId === tx.id}
                             acting={matchingTxId === tx.id}
+                            selected={selectedTxIds.has(tx.id)}
+                            onToggleSelect={() => toggleTxSelection(tx.id)}
                             onExpand={() => toggleExpand(tx.id)}
                             onIgnore={() => applyAction(tx.id, "ignore")}
                             onUnmatch={() => applyAction(tx.id, "unmatch")}
@@ -271,7 +363,7 @@ export default function BancosPage() {
                           />
                           {expandedTxId === tx.id && (
                             <tr key={`${tx.id}-panel`}>
-                              <td colSpan={6} className="bg-blue-50/60 border-b border-border px-5 pb-4 pt-2">
+                              <td colSpan={7} className="bg-blue-50/60 border-b border-border px-5 pb-4 pt-2">
                                 <MatchPanel
                                   tx={tx}
                                   candidates={candidates}
@@ -331,6 +423,16 @@ export default function BancosPage() {
           onClose={() => setShowUpload(false)}
           onImported={() => { setShowUpload(false); loadAccounts(); loadTxs(); }} />
       )}
+
+      {showBulkMatch && activeCompany && (
+        <BulkMatchModal
+          companyId={activeCompany.id}
+          selectionCount={selectionCount}
+          selectionSum={selectionSum}
+          onClose={() => setShowBulkMatch(false)}
+          onConfirm={handleBulkMatch}
+        />
+      )}
     </div>
   );
 }
@@ -361,14 +463,23 @@ function AccountCard({ account, selected, onSelect }: {
 }
 
 // ── TxRow ─────────────────────────────────────────────────────────────────────
-function TxRow({ tx, expanded, acting, onExpand, onIgnore, onUnmatch, onUnignore }: {
-  tx: BankTx; expanded: boolean; acting: boolean;
+function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgnore, onUnmatch, onUnignore }: {
+  tx: BankTx; expanded: boolean; acting: boolean; selected: boolean;
+  onToggleSelect: () => void;
   onExpand: () => void; onIgnore: () => void;
   onUnmatch: () => void; onUnignore: () => void;
 }) {
   const isCredit = tx.monto > 0;
   return (
-    <tr className={`border-b border-border last:border-0 ${acting ? "opacity-50" : ""} ${expanded ? "bg-blue-50/40" : "hover:bg-gray-50/50"}`}>
+    <tr className={`border-b border-border last:border-0 ${acting ? "opacity-50" : ""} ${selected ? "bg-blue-50" : expanded ? "bg-blue-50/40" : "hover:bg-gray-50/50"}`}>
+      <td className="px-3 py-3 w-8">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          className="h-3.5 w-3.5 rounded border-border cursor-pointer"
+        />
+      </td>
       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
         {formatDate(tx.fecha)}
       </td>
@@ -404,7 +515,12 @@ function TxRow({ tx, expanded, acting, onExpand, onIgnore, onUnmatch, onUnignore
             <CheckCircle2 className="h-3 w-3" />Conciliado
           </span>
         )}
-        {tx.status === "IGNORED" && (
+        {tx.status === "IGNORED" && tx.notes === "PENDING_MONTHLY_CFDI" && (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+            <Clock className="h-3 w-3" />Pendiente CFDI
+          </span>
+        )}
+        {tx.status === "IGNORED" && tx.notes !== "PENDING_MONTHLY_CFDI" && (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
             <X className="h-3 w-3" />Ignorado
           </span>
@@ -647,6 +763,205 @@ function UploadModal({ accountId, accountName, onClose, onImported }: {
             {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
             {uploading ? "Importando..." : "Importar"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── BulkMatchModal — N-to-1 factura picker ───────────────────────────────────
+interface FacturaSearchResult {
+  id: string;
+  uuid: string | null;
+  folio: string | null;
+  serie: string | null;
+  fecha: string;
+  total: number;
+  tipo: string;
+  customer: { razonSocial: string; rfc: string } | null;
+}
+
+function BulkMatchModal({
+  companyId,
+  selectionCount,
+  selectionSum,
+  onClose,
+  onConfirm,
+}: {
+  companyId: string;
+  selectionCount: number;
+  selectionSum: number;
+  onClose: () => void;
+  onConfirm: (invoiceId: string) => Promise<void> | void;
+}) {
+  const [query, setQuery] = useState("");
+  const [tipo, setTipo] = useState<"EGRESO" | "INGRESO">("EGRESO");
+  const [results, setResults] = useState<FacturaSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [picked, setPicked] = useState<FacturaSearchResult | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  // Debounced search
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({ companyId, tipo, take: "30" });
+        if (query.trim()) params.set("q", query.trim());
+        const res = await fetch(`/api/facturas?${params}`);
+        const data = await res.json();
+        if (!cancelled) setResults(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query, tipo, companyId]);
+
+  async function confirm() {
+    if (!picked) return;
+    setConfirming(true);
+    try {
+      await onConfirm(picked.id);
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  const coverage = picked ? Math.round((selectionSum / picked.total) * 100) : 0;
+  const exceeds = picked && selectionSum > picked.total * 1.001;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 p-4 z-50">
+      <div className="bg-white rounded-xl shadow-lg w-full max-w-2xl max-h-[80vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">Conciliar {selectionCount} movimiento(s) con una factura</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Suma seleccionada: <strong>{formatCurrency(selectionSum)}</strong>
+            </p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Filter + search */}
+        <div className="px-5 py-3 border-b border-border space-y-2">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTipo("EGRESO")}
+              className={`text-xs px-2.5 py-1 rounded-full ${tipo === "EGRESO" ? "bg-primary text-primary-foreground" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            >
+              Gastos (Egreso)
+            </button>
+            <button
+              onClick={() => setTipo("INGRESO")}
+              className={`text-xs px-2.5 py-1 rounded-full ${tipo === "INGRESO" ? "bg-primary text-primary-foreground" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            >
+              Ingresos
+            </button>
+          </div>
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por proveedor, RFC, UUID, folio…"
+              className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+        </div>
+
+        {/* Results list */}
+        <div className="flex-1 overflow-auto">
+          {loading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-8 justify-center">
+              <Loader2 className="h-4 w-4 animate-spin" /> Buscando facturas…
+            </div>
+          ) : results.length === 0 ? (
+            <div className="py-10 text-center text-xs text-muted-foreground">
+              Sin resultados. Prueba otro término o tipo de factura.
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {results.map((f) => {
+                const isPicked = picked?.id === f.id;
+                return (
+                  <li key={f.id}>
+                    <button
+                      onClick={() => setPicked(f)}
+                      className={`w-full text-left px-5 py-3 flex items-start gap-3 hover:bg-gray-50 ${isPicked ? "bg-blue-50" : ""}`}
+                    >
+                      <input
+                        type="radio"
+                        checked={isPicked}
+                        readOnly
+                        className="mt-1 h-3.5 w-3.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {f.customer?.razonSocial ?? "Sin cliente"}{" "}
+                          <span className="text-xs text-muted-foreground font-normal">{f.customer?.rfc ?? ""}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {formatDate(f.fecha)}{" "}
+                          {f.folio ? `· Folio ${f.serie ?? ""}${f.folio}` : ""}{" "}
+                          {f.uuid ? `· ${f.uuid.slice(0, 8)}…` : ""}
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold shrink-0">
+                        {formatCurrency(f.total)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* Footer with preview + confirm */}
+        <div className="px-5 py-4 border-t border-border bg-gray-50 space-y-3">
+          {picked && (
+            <div className="text-xs bg-white border border-border rounded-md p-3 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Factura total</span>
+                <strong>{formatCurrency(picked.total)}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Suma de movimientos</span>
+                <strong>{formatCurrency(selectionSum)}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Cobertura</span>
+                <strong className={exceeds ? "text-red-600" : coverage >= 99 ? "text-green-700" : "text-amber-700"}>
+                  {coverage}% {exceeds ? "(excede)" : coverage < 99 ? "(parcial)" : "(completa)"}
+                </strong>
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="flex-1 border border-border rounded-md py-2 text-sm font-medium hover:bg-accent"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={confirm}
+              disabled={!picked || confirming}
+              className="flex-1 bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium disabled:opacity-50 hover:bg-primary/90 flex items-center justify-center gap-2"
+            >
+              {confirming && <Loader2 className="h-4 w-4 animate-spin" />}
+              Conciliar
+            </button>
+          </div>
         </div>
       </div>
     </div>

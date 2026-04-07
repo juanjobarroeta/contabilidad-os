@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 type Params = { params: Promise<{ id: string }> };
 
-// GET /api/bancos/[id]?status=UNMATCHED&page=1&pageSize=50
+// GET /api/bancos/[id]?status=UNMATCHED|MATCHED|IGNORED|PENDING&page=1&pageSize=50
+// PENDING = IGNORED rows with notes = "PENDING_MONTHLY_CFDI" (bank fees waiting
+// for the consolidated monthly CFDI from the bank).
 export async function GET(req: Request, { params }: Params) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,10 +26,15 @@ export async function GET(req: Request, { params }: Params) {
   });
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const where = {
-    bankAccountId,
-    ...(status ? { status: status as "UNMATCHED" | "MATCHED" | "IGNORED" } : {}),
-  };
+  let where: Prisma.BankTransactionWhereInput = { bankAccountId };
+  if (status === "PENDING") {
+    where = { bankAccountId, status: "IGNORED", notes: "PENDING_MONTHLY_CFDI" };
+  } else if (status === "IGNORED") {
+    // Exclude pending-CFDI rows from the plain Ignorados tab so they don't clutter it
+    where = { bankAccountId, status: "IGNORED", NOT: { notes: "PENDING_MONTHLY_CFDI" } };
+  } else if (status) {
+    where = { bankAccountId, status: status as "UNMATCHED" | "MATCHED" | "IGNORED" };
+  }
 
   const [transactions, total] = await Promise.all([
     prisma.bankTransaction.findMany({
@@ -43,12 +51,17 @@ export async function GET(req: Request, { params }: Params) {
     prisma.bankTransaction.count({ where }),
   ]);
 
-  // Status counts
-  const counts = await prisma.bankTransaction.groupBy({
-    by: ["status"],
-    where: { bankAccountId },
-    _count: true,
-  });
+  // Status counts — compute PENDING separately
+  const [counts, pendingCount] = await Promise.all([
+    prisma.bankTransaction.groupBy({
+      by: ["status"],
+      where: { bankAccountId },
+      _count: true,
+    }),
+    prisma.bankTransaction.count({
+      where: { bankAccountId, status: "IGNORED", notes: "PENDING_MONTHLY_CFDI" },
+    }),
+  ]);
   const statusCounts = Object.fromEntries(counts.map(c => [c.status, c._count]));
 
   return NextResponse.json({
@@ -58,7 +71,9 @@ export async function GET(req: Request, { params }: Params) {
     statusCounts: {
       UNMATCHED: statusCounts.UNMATCHED ?? 0,
       MATCHED:   statusCounts.MATCHED   ?? 0,
-      IGNORED:   statusCounts.IGNORED   ?? 0,
+      // Show only non-pending ignored in the Ignorados tab counter
+      IGNORED:   Math.max(0, (statusCounts.IGNORED ?? 0) - pendingCount),
+      PENDING:   pendingCount,
       total:     (statusCounts.UNMATCHED ?? 0) + (statusCounts.MATCHED ?? 0) + (statusCounts.IGNORED ?? 0),
     },
   });
