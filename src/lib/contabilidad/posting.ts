@@ -233,6 +233,25 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     },
   });
 
+  // Strict mode: refuse to close the month if any bank tx is still UNMATCHED.
+  // Every movement must be either matched to a CFDI or categorized (taxes,
+  // payroll, no deducible, etc.) before the books can close. This guarantees
+  // the Bancos account in the balanza reflects the true balance.
+  const unmatched = bankTxs.filter((t) => t.status === "UNMATCHED");
+  if (unmatched.length > 0) {
+    const sample = unmatched
+      .slice(0, 3)
+      .map(
+        (t) =>
+          `· ${t.fecha.toISOString().slice(0, 10)} ${t.descripcion.slice(0, 40)} $${Math.abs(t.monto).toFixed(2)}`
+      )
+      .join("\n");
+    const more = unmatched.length > 3 ? `\n…y ${unmatched.length - 3} más` : "";
+    throw new Error(
+      `No se puede cerrar el mes: ${unmatched.length} movimiento(s) sin conciliar.\nResuélvelos en Bancos antes de cerrar.\n\n${sample}${more}`
+    );
+  }
+
   for (const tx of bankTxs) {
     const absAmount = Math.abs(tx.monto);
     const isCredit = tx.monto > 0; // money in = bank debit
