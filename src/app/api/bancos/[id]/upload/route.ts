@@ -59,6 +59,14 @@ export async function POST(req: Request, { params }: Params) {
 
     if (exists) { skipped++; continue; }
 
+    // Auto-tag bank fees + their IVA: the bank issues a single monthly CFDI
+    // for all fees combined, so these can't be matched immediately. Park them
+    // in IGNORED with a note so they leave "Sin conciliar"; user can move them
+    // to MATCHED when the monthly CFDI arrives.
+    const isBankFee = /comisi[oó]n|iva\s+comisi/i.test(tx.descripcion);
+    const status = isBankFee ? "IGNORED" : "UNMATCHED";
+    const notes = isBankFee ? "PENDING_MONTHLY_CFDI" : null;
+
     await prisma.bankTransaction.create({
       data: {
         companyId:    account.companyId,
@@ -69,7 +77,8 @@ export async function POST(req: Request, { params }: Params) {
         saldo:        tx.saldo ?? null,
         referencia:   tx.referencia ?? null,
         tipo:         tx.monto >= 0 ? "CREDITO" : "DEBITO",
-        status:       "UNMATCHED",
+        status,
+        notes,
         source:       "UPLOAD",
       },
     });

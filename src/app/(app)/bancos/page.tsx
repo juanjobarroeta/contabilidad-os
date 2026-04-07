@@ -585,7 +585,13 @@ function UploadModal({ accountId, accountName, onClose, onImported }: {
     if (!file) return;
     setUploading(true); setErr(""); setResult(null);
     try {
-      const text = await file.text();
+      // Read raw bytes so we can fall back to windows-1252 if UTF-8 fails.
+      // Mexican bank exports (Bajío, Banamex) are often Latin-1.
+      const buf = await file.arrayBuffer();
+      let text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
+      if (text.includes("\uFFFD")) {
+        text = new TextDecoder("windows-1252").decode(buf);
+      }
       const res  = await fetch(`/api/bancos/${accountId}/upload`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileContent: text, filename: file.name }),
