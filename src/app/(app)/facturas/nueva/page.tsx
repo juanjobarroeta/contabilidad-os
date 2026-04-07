@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency } from "@/lib/utils";
+import { SatCodePicker } from "@/components/ui/SatCodePicker";
 import {
   ChevronRight, ChevronLeft, Plus, Trash2, Loader2,
   CheckCircle2, Search, FileText, AlertCircle,
@@ -42,31 +43,6 @@ const USOS_CFDI = [
   { value: "S01", label: "S01 – Sin efectos fiscales" },
   { value: "CP01", label: "CP01 – Pagos" },
   { value: "CN01", label: "CN01 – Nómina" },
-];
-
-const UNIDADES = [
-  { value: "E48", label: "E48 – Unidad de servicio" },
-  { value: "H87", label: "H87 – Pieza" },
-  { value: "KGM", label: "KGM – Kilogramo" },
-  { value: "MTR", label: "MTR – Metro" },
-  { value: "LTR", label: "LTR – Litro" },
-  { value: "XBX", label: "XBX – Caja" },
-  { value: "HUR", label: "HUR – Hora" },
-  { value: "DAY", label: "DAY – Día" },
-  { value: "MON", label: "MON – Mes" },
-  { value: "ACT", label: "ACT – Actividad" },
-];
-
-const COMMON_CLAVES = [
-  { value: "78101801", label: "78101801 – Desarrollo de software" },
-  { value: "80111501", label: "80111501 – Consultoría de negocios" },
-  { value: "80141600", label: "80141600 – Publicidad y marketing" },
-  { value: "81112100", label: "81112100 – Servicios de TI" },
-  { value: "80111503", label: "80111503 – Servicios de contabilidad" },
-  { value: "72154000", label: "72154000 – Servicios de diseño gráfico" },
-  { value: "78181500", label: "78181500 – Transporte de carga" },
-  { value: "50202300", label: "50202300 – Equipos de cómputo" },
-  { value: "01010101", label: "01010101 – No existe en el catálogo" },
 ];
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -498,29 +474,33 @@ export default function NuevaFacturaPage() {
                     />
                   </div>
 
-                  {/* Clave SAT + Unidad */}
+                  {/* Clave SAT + Unidad — searchable pickers backed by Facturapi catalog */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium mb-1">Clave SAT <span className="text-red-500">*</span></label>
-                      <select value={item.product_key}
-                        onChange={(e) => updateItem(item.id, "product_key", e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                        <option value="">Selecciona...</option>
-                        {COMMON_CLAVES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                      </select>
-                      <input type="text" placeholder="O escribe la clave manualmente"
-                        value={COMMON_CLAVES.find(c => c.value === item.product_key) ? "" : item.product_key}
-                        onChange={(e) => updateItem(item.id, "product_key", e.target.value)}
-                        className="w-full mt-1 px-3 py-1.5 border border-border rounded-md text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      />
+                      {activeCompany && (
+                        <SatCodePicker
+                          companyId={activeCompany.id}
+                          endpoint="products"
+                          value={item.product_key}
+                          onChange={(key) => updateItem(item.id, "product_key", key)}
+                          placeholder="Buscar producto/servicio…"
+                          recentKey={`sat-recent-products-${activeCompany.id}`}
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Unidad <span className="text-red-500">*</span></label>
-                      <select value={item.unit_key}
-                        onChange={(e) => updateItem(item.id, "unit_key", e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                        {UNIDADES.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
-                      </select>
+                      {activeCompany && (
+                        <SatCodePicker
+                          companyId={activeCompany.id}
+                          endpoint="units"
+                          value={item.unit_key}
+                          onChange={(key) => updateItem(item.id, "unit_key", key)}
+                          placeholder="Buscar unidad…"
+                          recentKey={`sat-recent-units-${activeCompany.id}`}
+                        />
+                      )}
                     </div>
                   </div>
 
