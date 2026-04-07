@@ -138,6 +138,7 @@ model Company {
   accountingEntries AccountingEntry[]
   accounts          ChartAccount[]
   accountingPeriods AccountingPeriod[]
+  satSyncRequests   SatSyncRequest[]
 
   // Module gating (SaaS): which features this company has contracted
   modules           CompanyModule[]
@@ -652,6 +653,50 @@ enum AccountingPeriodStatus {
   DRAFT   // No entries yet (month hasn't been closed)
   POSTED  // Entries generated — can still be deleted and re-posted
   CLOSED  // Officially closed — no more edits (for audit)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAT Descarga Masiva — request lifecycle tracking
+//
+// Each "Sincronizar con SAT" click creates two SatSyncRequest rows (emitidos
+// + recibidos). We persist them so we can:
+//   1. Reuse pending requests instead of creating new ones (SAT limits N
+//      concurrent requests per RFC — error code 5002 when exceeded)
+//   2. Resume polling across page reloads
+//   3. Show the user the request history per period
+// ─────────────────────────────────────────────────────────────────────────────
+model SatSyncRequest {
+  id             String              @id @default(cuid())
+  companyId      String
+  tipo           SatRequestType
+  year           Int
+  month          Int
+  requestId      String              @unique  // SAT's RequestID
+  status         SatRequestStatus    @default(PENDING)
+  cfdisFound     Int                 @default(0)
+  imported       Int                 @default(0)
+  lastVerifiedAt DateTime?
+  errorMessage   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, year, month, tipo])
+}
+
+enum SatRequestType {
+  EMITIDOS
+  RECIBIDOS
+}
+
+enum SatRequestStatus {
+  PENDING       // Just submitted, SAT hasn't acknowledged yet
+  ACCEPTED      // SAT accepted the request, queued for processing
+  IN_PROGRESS   // SAT is preparing the package
+  FINISHED      // Packages ready (or empty)
+  FAILED        // SAT rejected or our parsing failed
+  EXPIRED       // SAT removed the request (>72h typically)
 }
 
 enum AccountType {

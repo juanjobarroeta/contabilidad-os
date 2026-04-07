@@ -65,17 +65,37 @@ export async function POST(req: Request) {
 
   for (const { id, tipo } of requestPairs) {
     const verifyResult = await service.verify(id);
-    if (!verifyResult.getStatus().isAccepted()) continue;
+    const dbTipo = tipo === "emitidos" ? "EMITIDOS" : "RECIBIDOS";
+
+    if (!verifyResult.getStatus().isAccepted()) {
+      await prisma.satSyncRequest.updateMany({
+        where: { requestId: id },
+        data: {
+          status: "FAILED",
+          errorMessage: verifyResult.getStatus().getMessage(),
+          lastVerifiedAt: new Date(),
+        },
+      });
+      continue;
+    }
 
     const codeRequest = verifyResult.getCodeRequest().getValue();
     const statusRequest = verifyResult.getStatusRequest();
     const packageIds = verifyResult.getPackageIds();
-    totalCfdis += verifyResult.getNumberCfdis();
+    const numCfdis = verifyResult.getNumberCfdis();
+    totalCfdis += numCfdis;
 
-    console.log(`[sat/verify] ${tipo} codeRequest:${codeRequest} status:${statusRequest.getEntryId()} packages:${packageIds.length} cfdis:${verifyResult.getNumberCfdis()}`);
+    console.log(`[sat/verify] ${tipo} codeRequest:${codeRequest} status:${statusRequest.getEntryId()} packages:${packageIds.length} cfdis:${numCfdis}`);
 
     // 5004 = no CFDIs found for this period/type
-    if (codeRequest === 5004) continue;
+    if (codeRequest === 5004) {
+      await prisma.satSyncRequest.updateMany({
+        where: { requestId: id },
+        data: { status: "FINISHED", cfdisFound: 0, lastVerifiedAt: new Date() },
+      });
+      continue;
+    }
+    void dbTipo;
 
     // Only download when SAT says the request is Finished
     // StatusRequest: Accepted | InProgress | Finished | Failure | Rejected | Expired
@@ -84,11 +104,19 @@ export async function POST(req: Request) {
     if (!isFinished) {
       // Still processing — come back later
       pendingIds.push(id);
+      await prisma.satSyncRequest.updateMany({
+        where: { requestId: id },
+        data: { status: "IN_PROGRESS", cfdisFound: numCfdis, lastVerifiedAt: new Date() },
+      });
     } else {
       for (const pkgId of packageIds) {
         readyPackageIds.push(pkgId);
         typeMap.set(pkgId, tipo);
       }
+      await prisma.satSyncRequest.updateMany({
+        where: { requestId: id },
+        data: { status: "FINISHED", cfdisFound: numCfdis, lastVerifiedAt: new Date() },
+      });
     }
   }
 
@@ -194,6 +222,14 @@ export async function POST(req: Request) {
         imported++;
       }
     }
+  }
+
+  // Persist the imported counts back to the SatSyncRequest rows we updated
+  if (emitidosRequestId) {
+    await prisma.satSyncRequest.updateMany({
+      where: { requestId: emitidosRequestId },
+      data: { imported: { increment: imported } },
+    }).catch(() => {});
   }
 
   // If some packages are still pending but we processed some, report partial

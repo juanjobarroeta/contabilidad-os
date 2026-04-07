@@ -67,6 +67,39 @@ interface ApiResult {
   } | null;
 }
 
+// ── SAT request types ─────────────────────────────────────────────────────────
+interface SatRequestRow {
+  id: string;
+  tipo: "EMITIDOS" | "RECIBIDOS";
+  year: number;
+  month: number;
+  requestId: string;
+  status: "PENDING" | "ACCEPTED" | "IN_PROGRESS" | "FINISHED" | "FAILED" | "EXPIRED";
+  cfdisFound: number;
+  imported: number;
+  lastVerifiedAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+const SAT_STATUS_LABELS: Record<string, string> = {
+  PENDING:     "Pendiente",
+  ACCEPTED:    "Aceptada por SAT",
+  IN_PROGRESS: "Procesando en SAT",
+  FINISHED:    "Lista",
+  FAILED:      "Falló",
+  EXPIRED:     "Expiró",
+};
+
+const SAT_STATUS_COLORS: Record<string, string> = {
+  PENDING:     "bg-gray-100 text-gray-700",
+  ACCEPTED:    "bg-blue-50 text-blue-700",
+  IN_PROGRESS: "bg-amber-50 text-amber-700",
+  FINISHED:    "bg-green-50 text-green-700",
+  FAILED:      "bg-red-50 text-red-700",
+  EXPIRED:     "bg-gray-100 text-gray-500",
+};
+
 // ── Status helpers ─────────────────────────────────────────────────────────────
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Borrador", CALCULATED: "Calculada", FILED: "Presentada", PAID: "Pagada",
@@ -142,6 +175,7 @@ export default function ImpuestosPage() {
   const [syncing, setSyncing]     = useState(false);
   const [syncStatus, setSyncStatus] = useState("");
   const [syncDone, setSyncDone]   = useState(false);
+  const [satRequests, setSatRequests] = useState<SatRequestRow[]>([]);
 
   // ── Derived IVA ──────────────────────────────────────────────────────────────
   const ivaComputed = useMemo(() => {
@@ -204,6 +238,21 @@ export default function ImpuestosPage() {
   }, [activeCompany, month, year]);
 
   useEffect(() => { calcular(); }, [calcular]);
+
+  // ── Fetch SAT requests for the period ──────────────────────────────────────
+  const loadSatRequests = useCallback(async () => {
+    if (!activeCompany) return;
+    try {
+      const res = await fetch(
+        `/api/sat/sync/requests?companyId=${activeCompany.id}&year=${year}&month=${month}`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      setSatRequests(data.requests ?? []);
+    } catch { /* ignore */ }
+  }, [activeCompany, year, month]);
+
+  useEffect(() => { loadSatRequests(); }, [loadSatRequests]);
 
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear(y => y - 1); }
@@ -315,13 +364,15 @@ export default function ImpuestosPage() {
           setSyncStatus(verData.message ?? "Preparando paquetes...");
           await new Promise(r => setTimeout(r, 5000)); return poll();
         }
-        if (verData.status === "empty") { setSyncStatus("No se encontraron CFDIs en este período."); setSyncDone(true); setSyncing(false); return; }
-        if (verData.status === "done" || verData.status === "partial") { setSyncStatus(verData.message ?? "¡Listo!"); setSyncDone(true); setSyncing(false); calcular(); return; }
+        if (verData.status === "empty") { setSyncStatus("No se encontraron CFDIs en este período."); setSyncDone(true); setSyncing(false); loadSatRequests(); return; }
+        if (verData.status === "done" || verData.status === "partial") { setSyncStatus(verData.message ?? "¡Listo!"); setSyncDone(true); setSyncing(false); calcular(); loadSatRequests(); return; }
         throw new Error(verData.error ?? "Error en sincronización");
       };
       await poll();
+      loadSatRequests();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al sincronizar"); setSyncing(false);
+      loadSatRequests();
     }
   }
 
@@ -688,6 +739,42 @@ export default function ImpuestosPage() {
                 {syncing && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
                 {syncDone && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
                 {syncStatus}
+              </div>
+            )}
+
+            {/* SAT request history for the period */}
+            {satRequests.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Solicitudes con SAT (este período)
+                </p>
+                <div className="border border-border rounded-md divide-y divide-border overflow-hidden">
+                  {satRequests.map(r => {
+                    const lv = r.lastVerifiedAt ? new Date(r.lastVerifiedAt) : null;
+                    const lvStr = lv ? `${Math.max(0, Math.round((Date.now() - lv.getTime()) / 60000))} min` : null;
+                    return (
+                      <div key={r.id} className="px-3 py-2 flex items-center gap-3 text-xs">
+                        <span className="font-medium w-20 text-muted-foreground">
+                          {r.tipo === "EMITIDOS" ? "Emitidos" : "Recibidos"}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded font-medium ${SAT_STATUS_COLORS[r.status] ?? "bg-gray-100"}`}>
+                          {SAT_STATUS_LABELS[r.status] ?? r.status}
+                        </span>
+                        <span className="text-muted-foreground flex-1 truncate">
+                          {r.cfdisFound > 0 && `${r.cfdisFound} CFDIs`}
+                          {r.imported > 0 && ` · ${r.imported} importados`}
+                          {r.errorMessage && ` · ${r.errorMessage}`}
+                        </span>
+                        {lvStr && (
+                          <span className="text-muted-foreground text-[10px]">hace {lvStr}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5">
+                  Las solicitudes pendientes se reusan automáticamente. Si SAT te dio el código 5002, espera a que las solicitudes vencidas se procesen (1-3 hrs) — no necesitas hacer nada.
+                </p>
               </div>
             )}
           </div>
