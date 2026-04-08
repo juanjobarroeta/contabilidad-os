@@ -64,10 +64,47 @@ export function parseCfdiXml(xml: string) {
   const rfcReceptor = attrIn("Receptor", "Rfc");
   const nombreReceptor = attrIn("Receptor", "Nombre");
 
+  // Folio / Serie (optional, root attrs)
+  const serie = attr("Serie");
+  const folio = attr("Folio");
+
+  // Conceptos — extract each <cfdi:Concepto ... /> or <cfdi:Concepto>...</cfdi:Concepto>
+  const items: Array<{
+    claveProdServ: string;
+    claveUnidad: string;
+    unidad: string | null;
+    cantidad: number;
+    descripcion: string;
+    valorUnitario: number;
+    importe: number;
+    descuento: number;
+  }> = [];
+
+  const conceptoRe = /<(?:[a-zA-Z0-9]+:)?Concepto\b([^>]*)(?:\/>|>)/g;
+  let m: RegExpExecArray | null;
+  while ((m = conceptoRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const getAttr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
+    const cps = getAttr("ClaveProdServ");
+    if (!cps) continue;
+    items.push({
+      claveProdServ: cps,
+      claveUnidad: getAttr("ClaveUnidad") ?? "E48",
+      unidad: getAttr("Unidad"),
+      cantidad: parseFloat(getAttr("Cantidad") ?? "1"),
+      descripcion: getAttr("Descripcion") ?? "",
+      valorUnitario: parseFloat(getAttr("ValorUnitario") ?? "0"),
+      importe: parseFloat(getAttr("Importe") ?? "0"),
+      descuento: parseFloat(getAttr("Descuento") ?? "0"),
+    });
+  }
+
   return {
     uuid,
     fecha,
     tipo,
+    serie,
+    folio,
     subtotal,
     total,
     ivaTotal,
@@ -80,5 +117,6 @@ export function parseCfdiXml(xml: string) {
     regimenEmisor,
     rfcReceptor,
     nombreReceptor,
+    items,
   };
 }

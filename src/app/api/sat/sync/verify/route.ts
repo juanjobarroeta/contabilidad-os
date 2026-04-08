@@ -207,6 +207,8 @@ export async function POST(req: Request) {
             customerId,
             tipo: invoiceType,
             fecha: new Date(cfdi.fecha),
+            serie: cfdi.serie ?? null,
+            folio: cfdi.folio ?? null,
             formaPago: cfdi.formaPago ?? "99",
             metodoPago: cfdi.metodoPago ?? "PUE",
             usoCfdi: cfdi.usoCfdi ?? "G03",
@@ -217,6 +219,18 @@ export async function POST(req: Request) {
             status: "STAMPED",
             uuid,
             notas: `SAT — ${tipo}`,
+            items: cfdi.items && cfdi.items.length > 0 ? {
+              create: cfdi.items.map((it) => ({
+                cantidad: it.cantidad,
+                claveUnidad: it.claveUnidad,
+                unidad: it.unidad,
+                claveProdServ: it.claveProdServ,
+                descripcion: it.descripcion,
+                valorUnitario: it.valorUnitario,
+                importe: it.importe,
+                descuento: it.descuento,
+              })),
+            } : undefined,
           },
         });
         imported++;
