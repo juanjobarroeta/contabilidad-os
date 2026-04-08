@@ -896,6 +896,11 @@ model Presupuesto {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Human-readable label (e.g. "Mantenimiento Básico", "Rehabilitación Integral")
+  // so a single proyecto can carry multiple presupuestos side-by-side in the UI
+  // and the customer picks one in a meeting.
+  nombre      String?
+
   version     Int               @default(1)
   estado      PresupuestoEstado @default(BORRADOR)
   montoTotal  Float             @default(0)
@@ -912,6 +917,7 @@ enum PresupuestoEstado {
   APROBADO
   EN_EJECUCION
   CERRADO
+  RECHAZADO     // customer chose a different presupuesto in the same proyecto
 }
 
 model PresupuestoPartida {
@@ -923,6 +929,11 @@ model PresupuestoPartida {
   precioUnitario  Float                  // snapshot at presupuesto approval time
   importe         Float
   orden           Int      @default(0)
+
+  // Hierarchical grouping (flat + 2 string fields, not a nested tree).
+  // Matches the partner's PDF layout: HACIENDA → ZONA → PARTIDA → conceptos.
+  zona    String?    // "PLANTA BAJA" | "PLANTA ALTA" | "PASILLO" | "AZOTEA" | "FACHADA"
+  partida String?    // "A1 PRELIMINARES" | "A2 MURO" | "D2 IMPERMEABILIZANTE" | ...
 
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
   concepto    Concepto    @relation(fields: [conceptoId], references: [id])
