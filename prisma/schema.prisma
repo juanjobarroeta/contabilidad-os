@@ -33,6 +33,11 @@ model User {
   accounts      Account[]
   sessions      Session[]
   memberships   CompanyMember[]
+  // Despacho membership — each user belongs to at most ONE despacho.
+  // Companies owned by the despacho are automatically visible to all members.
+  // Per-company CompanyMember rows are still used for one-off access grants
+  // to users outside the owning despacho.
+  despachoMemberships DespachoMember[]
 }
 
 enum SubscriptionStatus {
@@ -85,6 +90,12 @@ model Company {
   id                String   @id @default(cuid())
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  // Despacho that owns this company. All despacho members have implicit ADMIN
+  // access. Nullable for backwards-compat with companies created before the
+  // despacho model was introduced; backfilled by the migration script.
+  despachoId        String?
+  despacho          Despacho? @relation(fields: [despachoId], references: [id], onDelete: SetNull)
 
   // SAT / fiscal data
   rfc               String   @unique
@@ -174,6 +185,54 @@ enum MemberRole {
   ADMIN
   ACCOUNTANT
   VIEWER
+}
+
+// ─── Despacho (multi-user organization) ─────────────────────────────────────
+//
+// A Despacho groups users under one "agency / firma contable" umbrella.
+// All companies owned by a despacho are automatically visible to every
+// despacho member; no per-company invitation needed.
+//
+// Roles inside the despacho:
+//   OWNER      — full control, incl. inviting users + deleting the despacho
+//   ADMIN      — full control except delete despacho
+//   ACCOUNTANT — can view/edit all despacho companies but can't manage users
+//
+// Despacho membership is IN ADDITION to per-company CompanyMember rows. A
+// user outside the owning despacho can still be given specific company access
+// via the existing CompanyMember flow — this covers edge cases like "external
+// contador gets read-only access to one company".
+model Despacho {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members   DespachoMember[]
+  companies Company[]
+}
+
+model DespachoMember {
+  id         String       @id @default(cuid())
+  despachoId String
+  userId     String
+  role       DespachoRole @default(ACCOUNTANT)
+  createdAt  DateTime     @default(now())
+
+  despacho Despacho @relation(fields: [despachoId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, despachoId])
+  // A user belongs to at most one despacho — enforced by unique(userId)
+  // so we can't accidentally double-enroll. Remove this if you ever need
+  // multi-despacho users.
+  @@unique([userId])
+}
+
+enum DespachoRole {
+  OWNER
+  ADMIN
+  ACCOUNTANT
 }
 
 // ─── Module gating (SaaS) ────────────────────────────────────────────────────

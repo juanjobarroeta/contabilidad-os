@@ -58,8 +58,32 @@ export async function requireUser(req?: Request): Promise<AuthUser> {
 }
 
 /**
+ * Maps a DespachoRole into an implicit MemberRole on every company the
+ * despacho owns. Despacho OWNER/ADMIN → company ADMIN; despacho ACCOUNTANT →
+ * company ACCOUNTANT. Despacho members never get implicit OWNER of a company
+ * (OWNER is reserved for actions like "delete the company" or "transfer to
+ * another despacho" which should still be explicit).
+ */
+function despachoRoleToCompanyRole(r: "OWNER" | "ADMIN" | "ACCOUNTANT"): MemberRole {
+  if (r === "OWNER" || r === "ADMIN") return "ADMIN";
+  return "ACCOUNTANT";
+}
+
+/**
  * Verifies the current user is a member of `companyId` and (optionally)
- * has one of the allowed roles. Returns the membership row.
+ * has one of the allowed roles. Returns the membership row (or a synthetic
+ * one derived from despacho membership).
+ *
+ * Access can come from TWO sources:
+ *   1. Direct CompanyMember row (explicit invitation to this specific company)
+ *   2. DespachoMember row on the despacho that OWNS this company (implicit access)
+ *
+ * If neither grants access, throws AuthzError(403).
+ *
+ * When both exist, the more permissive role wins (e.g. if you're a
+ * despacho OWNER but also an explicit VIEWER on this company, you get
+ * OWNER-equivalent access — being downgraded by an explicit record is
+ * confusing UX).
  *
  * Pass `req` to enable bearer-token auth for cross-origin clients.
  */
@@ -70,17 +94,59 @@ export async function requireMembership(
 ) {
   const user = await requireUser(req);
 
-  const membership = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: user.id, companyId } },
-  });
+  // Load both paths in parallel
+  const [direct, company] = await Promise.all([
+    prisma.companyMember.findUnique({
+      where: { userId_companyId: { userId: user.id, companyId } },
+    }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { despachoId: true },
+    }),
+  ]);
 
-  if (!membership) throw new AuthzError(403, "Sin acceso a esta empresa");
+  let despachoMember: { role: "OWNER" | "ADMIN" | "ACCOUNTANT" } | null = null;
+  if (company?.despachoId) {
+    despachoMember = await prisma.despachoMember.findFirst({
+      where: { userId: user.id, despachoId: company.despachoId },
+      select: { role: true },
+    });
+  }
 
-  if (allowedRoles && !allowedRoles.includes(membership.role)) {
+  if (!direct && !despachoMember) {
+    throw new AuthzError(403, "Sin acceso a esta empresa");
+  }
+
+  // Determine the effective role: more permissive wins
+  // Rank: OWNER(4) > ADMIN(3) > ACCOUNTANT(2) > VIEWER(1)
+  const rank: Record<MemberRole, number> = { OWNER: 4, ADMIN: 3, ACCOUNTANT: 2, VIEWER: 1 };
+  let effectiveRole: MemberRole = direct?.role ?? "VIEWER";
+  if (despachoMember) {
+    const impliedRole = despachoRoleToCompanyRole(despachoMember.role);
+    if (rank[impliedRole] > rank[effectiveRole]) {
+      effectiveRole = impliedRole;
+    }
+  }
+  // If no direct membership but despacho grants access, use only implied
+  if (!direct && despachoMember) {
+    effectiveRole = despachoRoleToCompanyRole(despachoMember.role);
+  }
+
+  if (allowedRoles && !allowedRoles.includes(effectiveRole)) {
     throw new AuthzError(403, "Sin permisos suficientes");
   }
 
-  return { user, membership };
+  // Return the direct row if it exists (some callers read its id for audit);
+  // otherwise synthesize one. This keeps the shape stable for existing callers.
+  const membership = direct ?? {
+    id: `despacho:${user.id}:${companyId}`,
+    userId: user.id,
+    companyId,
+    role: effectiveRole,
+    createdAt: new Date(),
+  };
+
+  return { user, membership: { ...membership, role: effectiveRole } };
 }
 
 /**

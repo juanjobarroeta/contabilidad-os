@@ -10,27 +10,56 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
 
-  const memberships = await prisma.companyMember.findMany({
-    where: { userId: session.user.id },
-    include: {
-      company: {
-        select: {
-          id: true,
-          rfc: true,
-          razonSocial: true,
-          regimenFiscal: true,
-          codigoPostal: true,
-          isActive: true,
+  // Two access paths, union'd and deduped:
+  //   1. Direct CompanyMember rows (explicit invitations)
+  //   2. Companies owned by a Despacho the user is a member of
+  const [direct, despachoMember] = await Promise.all([
+    prisma.companyMember.findMany({
+      where: { userId: session.user.id },
+      include: {
+        company: {
+          select: {
+            id: true,
+            rfc: true,
+            razonSocial: true,
+            regimenFiscal: true,
+            codigoPostal: true,
+            isActive: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.despachoMember.findFirst({
+      where: { userId: session.user.id },
+      select: { despachoId: true },
+    }),
+  ]);
 
-  const companies = memberships
-    .filter((m) => m.company.isActive)
-    .map((m) => m.company);
+  let despachoCompanies: typeof direct[number]["company"][] = [];
+  if (despachoMember) {
+    despachoCompanies = await prisma.company.findMany({
+      where: { despachoId: despachoMember.despachoId },
+      select: {
+        id: true,
+        rfc: true,
+        razonSocial: true,
+        regimenFiscal: true,
+        codigoPostal: true,
+        isActive: true,
+      },
+    });
+  }
 
-  return NextResponse.json(companies);
+  // Union by id
+  const byId = new Map<string, typeof direct[number]["company"]>();
+  for (const m of direct) {
+    if (m.company.isActive) byId.set(m.company.id, m.company);
+  }
+  for (const c of despachoCompanies) {
+    if (c.isActive) byId.set(c.id, c);
+  }
+
+  return NextResponse.json(Array.from(byId.values()));
 }
 
 export async function POST(req: Request) {
@@ -56,6 +85,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
   }
 
+  // Auto-link to the creator's despacho (if they belong to one). Every
+  // despacho member automatically gets access to companies the despacho
+  // owns, so this is the main path for teams/firms. The creator still gets
+  // an explicit CompanyMember(OWNER) row too for unambiguous ownership
+  // (e.g. only explicit OWNERs can delete or transfer the company).
+  const despachoMembership = await prisma.despachoMember.findFirst({
+    where: { userId: session.user.id },
+    select: { despachoId: true },
+  });
+
   const company = await prisma.company.create({
     data: {
       rfc: rfc.toUpperCase(),
@@ -73,6 +112,7 @@ export async function POST(req: Request) {
       fielCer,
       fielKey,
       fielPassword,
+      despachoId: despachoMembership?.despachoId ?? null,
       members: {
         create: {
           userId: session.user.id,

@@ -1,7 +1,13 @@
 import Link from "next/link";
-import { Building2, Users, CreditCard, UserCircle } from "lucide-react";
+import { Building2, Users, CreditCard, UserCircle, Briefcase } from "lucide-react";
 
 const SECTIONS = [
+  {
+    href: "/configuracion/despacho",
+    title: "Despacho",
+    description: "Tu organización, miembros del equipo y roles.",
+    icon: Briefcase,
+  },
   {
     href: "/configuracion/empresas",
     title: "Empresas",
@@ -11,7 +17,7 @@ const SECTIONS = [
   {
     href: "/configuracion/usuarios",
     title: "Usuarios",
-    description: "Invita colaboradores y asígnales empresas.",
+    description: "Lista completa de personas con acceso.",
     icon: Users,
   },
   {

@@ -27,13 +27,14 @@ export const GET = withAuthz(
         presupuestos: {
           select: {
             id: true,
+            nombre: true,
             version: true,
             estado: true,
             montoTotal: true,
             createdAt: true,
             _count: { select: { partidas: true } },
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: { version: "asc" },
         },
         estimaciones: {
           select: {
