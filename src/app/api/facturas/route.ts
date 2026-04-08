@@ -166,19 +166,48 @@ export async function POST(req: Request) {
 
   console.log("[facturas] isPublicoGeneral:", isPublicoGeneral, "global:", resolvedGlobal);
 
-  // Create invoice in Facturapi
-  const facturapiInvoice = await facturapi.invoices.create({
-    customer: customer.facturapiId,
-    payment_form: formaPago,
-    payment_method: metodoPago,
-    use: usoCfdi,
-    items: items.map((item) => ({
-      quantity: item.quantity,
-      product: item.product,
-    })),
-    ...(notes && { pdf_custom_section: notes }),
-    ...(resolvedGlobal && { global: resolvedGlobal }),
-  });
+  // Create invoice in Facturapi — wrap in try/catch so SDK errors become
+  // structured 422s instead of opaque 500s. Also detects a dead/unauthorized
+  // key so we can tell the user to re-provision Facturapi.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let facturapiInvoice: any;
+  try {
+    facturapiInvoice = await facturapi.invoices.create({
+      customer: customer.facturapiId,
+      payment_form: formaPago,
+      payment_method: metodoPago,
+      use: usoCfdi,
+      items: items.map((item) => ({
+        quantity: item.quantity,
+        product: item.product,
+      })),
+      ...(notes && { pdf_custom_section: notes }),
+      ...(resolvedGlobal && { global: resolvedGlobal }),
+    });
+  } catch (e) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const err = e as any;
+    const status = err?.response?.status ?? err?.status ?? 0;
+    const data = err?.response?.data;
+    const message =
+      (typeof data === "string" && data) ||
+      data?.message ||
+      err?.message ||
+      "Error desconocido al timbrar";
+
+    console.error("[facturas] Facturapi error:", { status, message, data });
+
+    if (status === 401) {
+      return NextResponse.json(
+        { error: "La clave de Facturapi ya no es válida. Re-configura Facturapi en /empresa." },
+        { status: 422 }
+      );
+    }
+    return NextResponse.json(
+      { error: `Facturapi: ${message}`, details: data ?? null },
+      { status: 422 }
+    );
+  }
 
   // Compute totals.
   // The Facturapi SDK sometimes returns `subtotal: 0` when there are no taxes
