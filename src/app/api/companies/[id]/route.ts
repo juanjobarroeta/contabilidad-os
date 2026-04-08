@@ -38,6 +38,7 @@ export async function GET(_req: Request, { params }: Params) {
       fielCer: true,
       fielKey: true,
       fielVigencia: true,
+      registroPatronal: true,
       isActive: true,
       createdAt: true,
     },
@@ -70,15 +71,19 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   const body = await req.json();
-  const { fielCer, fielKey, fielPassword, csdCer, csdKey, csdPassword } = body;
+  const { fielCer, fielKey, fielPassword, csdCer, csdKey, csdPassword, registroPatronal } = body;
 
-  const data: Record<string, string> = {};
+  const data: Record<string, string | null> = {};
   if (fielCer) data.fielCer = fielCer;
   if (fielKey) data.fielKey = fielKey;
   if (fielPassword) data.fielPassword = fielPassword;
   if (csdCer) data.csdCer = csdCer;
   if (csdKey) data.csdKey = csdKey;
   if (csdPassword) data.csdPassword = csdPassword;
+  if (registroPatronal !== undefined) {
+    // Accept empty string as "clear it"
+    data.registroPatronal = registroPatronal?.trim() || null;
+  }
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "No hay datos para actualizar" }, { status: 400 });

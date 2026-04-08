@@ -41,6 +41,7 @@ interface CompanyDetail {
   csdKey?: string;
   fielCer?: string;
   fielKey?: string;
+  registroPatronal?: string | null;
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -82,6 +83,11 @@ export default function EmpresaPage() {
   const [fielKeyFile, setFielKeyFile] = useState<File | null>(null);
   const [fielPassword, setFielPassword] = useState("");
 
+  // Nómina — Registro Patronal
+  const [rpValue, setRpValue] = useState("");
+  const [rpSaving, setRpSaving] = useState(false);
+  const [rpMessage, setRpMessage] = useState("");
+
   // CSD upload state
   const [csdCerFile, setCsdCerFile] = useState<File | null>(null);
   const [csdKeyFile, setCsdKeyFile] = useState<File | null>(null);
@@ -113,6 +119,7 @@ export default function EmpresaPage() {
     if (res.ok) {
       const data = await res.json();
       setCompanyDetail(data);
+      setRpValue(data.registroPatronal ?? "");
     }
     // Also fetch live Facturapi status (best-effort, don't block)
     try {
@@ -217,6 +224,29 @@ export default function EmpresaPage() {
       fetchCompanyDetail();
     } finally {
       setDisconnectLoading(false);
+    }
+  }
+
+  async function handleSaveRegistroPatronal() {
+    if (!activeCompany) return;
+    setRpSaving(true);
+    setRpMessage("");
+    try {
+      const res = await fetch(`/api/companies/${activeCompany.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registroPatronal: rpValue.trim() }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? "Error");
+      }
+      setRpMessage("✓ Guardado");
+      fetchCompanyDetail();
+    } catch (e) {
+      setRpMessage(e instanceof Error ? e.message : "Error");
+    } finally {
+      setRpSaving(false);
     }
   }
 
@@ -405,6 +435,48 @@ export default function EmpresaPage() {
           </div>
         ))}
       </div>
+
+      {/* ── Nómina — Registro Patronal IMSS ── */}
+      {activeCompany && (
+        <div className="bg-white border border-border rounded-xl shadow-sm p-5 mb-5">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="h-9 w-9 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+              <Building2 className="h-4 w-4 text-indigo-600" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-sm">Registro Patronal IMSS</h2>
+              <p className="text-xs text-muted-foreground">Requerido para emitir CFDI de nómina. Aparece en tu Tarjeta de Identificación Patronal.</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={rpValue}
+              onChange={(e) => setRpValue(e.target.value.toUpperCase())}
+              placeholder="E.g. E0818935102"
+              className="flex-1 px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <button
+              onClick={handleSaveRegistroPatronal}
+              disabled={rpSaving}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+            >
+              {rpSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Guardar
+            </button>
+          </div>
+          {rpMessage && (
+            <p className={`text-xs mt-2 ${rpMessage.startsWith("✓") ? "text-green-700" : "text-destructive"}`}>
+              {rpMessage}
+            </p>
+          )}
+          {companyDetail?.registroPatronal && !rpMessage && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Actual: <code className="font-mono text-foreground">{companyDetail.registroPatronal}</code>
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── Facturapi Setup + FIEL ── */}
       {activeCompany && (
