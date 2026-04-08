@@ -232,10 +232,17 @@ export async function POST(req: Request) {
 
   // Both failed — surface the actual SAT error messages
   if (!emitidosRequestId && !recibidosRequestId) {
+    console.error("[sat/sync] BOTH requests rejected:", {
+      companyId,
+      year,
+      month,
+      warnings,
+    });
     return NextResponse.json({
       error: warnings.length > 0
         ? warnings.join(" | ")
         : "SAT rechazó ambas solicitudes sin mensaje de error",
+      warnings,
     }, { status: 422 });
   }
 
