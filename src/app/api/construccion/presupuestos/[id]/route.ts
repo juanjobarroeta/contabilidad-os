@@ -32,6 +32,15 @@ const patchSchema = z.object({
     .enum(["BORRADOR", "APROBADO", "EN_EJECUCION", "CERRADO", "RECHAZADO"])
     .optional(),
   nombre: z.string().min(1).optional(),
+  /**
+   * When true AND estado is transitioning to APROBADO: in the same
+   * transaction, mark all OTHER BORRADOR presupuestos on the same
+   * proyecto as RECHAZADO, and set Proyecto.montoContratado to this
+   * presupuesto's montoTotal. This is the "one-click meeting approval"
+   * path — the customer picks this option, everything else flips
+   * automatically.
+   */
+  cascade: z.boolean().optional(),
 });
 
 export const GET = withAuthz(
@@ -85,7 +94,13 @@ export const PATCH = withAuthz(
 
     const presupuesto = await prisma.presupuesto.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true, proyectoId: true },
+      select: {
+        id: true,
+        companyId: true,
+        estado: true,
+        proyectoId: true,
+        montoTotal: true,
+      },
     });
     if (!presupuesto) {
       throw new AuthzError(404, "Presupuesto no encontrado");
@@ -114,6 +129,45 @@ export const PATCH = withAuthz(
       }
     }
 
+    // Cascade is only meaningful when transitioning to APROBADO. Ignored otherwise.
+    const shouldCascade =
+      parsed.data.cascade === true && parsed.data.estado === "APROBADO";
+
+    if (shouldCascade) {
+      // Atomic: update this presupuesto, mark siblings as RECHAZADO, set proyecto.montoContratado
+      const [updated, siblingResult, proyecto] = await prisma.$transaction([
+        prisma.presupuesto.update({
+          where: { id },
+          data: {
+            estado: "APROBADO",
+            ...(parsed.data.nombre !== undefined && {
+              nombre: parsed.data.nombre,
+            }),
+          },
+        }),
+        prisma.presupuesto.updateMany({
+          where: {
+            proyectoId: presupuesto.proyectoId,
+            id: { not: id },
+            estado: "BORRADOR",
+          },
+          data: { estado: "RECHAZADO" },
+        }),
+        prisma.proyecto.update({
+          where: { id: presupuesto.proyectoId },
+          data: { montoContratado: presupuesto.montoTotal },
+          select: { id: true, montoContratado: true, estado: true },
+        }),
+      ]);
+
+      return NextResponse.json({
+        presupuesto: updated,
+        siblingsRechazados: siblingResult.count,
+        proyecto,
+      });
+    }
+
+    // Non-cascade path: simple update
     const updated = await prisma.presupuesto.update({
       where: { id },
       data: {
