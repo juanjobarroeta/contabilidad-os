@@ -335,13 +335,13 @@ export default function ImpuestosPage() {
   }
 
   // ── SAT sync ─────────────────────────────────────────────────────────────────
-  async function handleSatSync() {
+  async function handleSatSync(force = false) {
     if (!activeCompany) return;
-    setSyncing(true); setSyncDone(false); setSyncStatus("Autenticando con el SAT..."); setError("");
+    setSyncing(true); setSyncDone(false); setSyncStatus(force ? "Forzando nueva solicitud al SAT..." : "Autenticando con el SAT..."); setError("");
     try {
       const reqRes = await fetch("/api/sat/sync", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: activeCompany.id, month, year }),
+        body: JSON.stringify({ companyId: activeCompany.id, month, year, force }),
       });
       const reqData = await reqRes.json();
       if (!reqRes.ok) throw new Error(reqData.error ?? "Error al solicitar CFDIs al SAT");
@@ -722,11 +722,21 @@ export default function ImpuestosPage() {
                   Descarga tus facturas emitidas y recibidas directamente del SAT usando tu e.firma.
                 </p>
               </div>
-              <button onClick={handleSatSync} disabled={syncing}
-                className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0">
-                {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                {syncing ? "Sincronizando..." : "Sincronizar CFDIs"}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => handleSatSync(false)} disabled={syncing}
+                  className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                  {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {syncing ? "Sincronizando..." : "Sincronizar CFDIs"}
+                </button>
+                <button
+                  onClick={() => handleSatSync(true)}
+                  disabled={syncing}
+                  title="Forzar nueva solicitud al SAT (ignora solicitudes pendientes)"
+                  className="text-xs px-2.5 py-2 rounded-md border border-border hover:bg-accent disabled:opacity-50 text-muted-foreground"
+                >
+                  Forzar
+                </button>
+              </div>
             </div>
             {(syncing || syncStatus) && (
               <div className={`mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-md ${
