@@ -15,6 +15,7 @@
 import { prisma } from "../prisma";
 import { resolveAccount } from "./seed-catalog";
 import { COE_CODES } from "./catalog";
+import { classifyInvoice } from "./classify-egreso";
 import type { Prisma, EntryType, EntrySource, AccountingPeriod } from "@prisma/client";
 
 type EntryDraft = {
@@ -248,11 +249,19 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   }
 
   // ─── 2. CFDIs received (EGRESO) ────────────────────────────────────────
-  // Debit: Gastos (we post everything to "otros gastos" for now — classification
-  //        can be upgraded later by reading claveProdServ or custom rules)
+  // Debit: Gasto específico (classified by claveProdServ from the dominant
+  //        line item — combustibles, rentas, honorarios, etc.)
   // Debit: IVA acreditable (tax portion)
   // Credit: Proveedores (full total)
-  const accOtrosGastos = await resolveAccount(companyId, COE_CODES.OTROS_GASTOS);
+  // Cache resolved accounts so we don't re-query within the loop
+  const accountCache = new Map<string, string>();
+  async function resolveCached(code: string): Promise<string> {
+    const cached = accountCache.get(code);
+    if (cached) return cached;
+    const acc = await resolveAccount(companyId, code);
+    accountCache.set(code, acc.id);
+    return acc.id;
+  }
 
   const egresos = await prisma.invoice.findMany({
     where: {
@@ -260,6 +269,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       tipo: "EGRESO",
       status: "STAMPED",
       fecha: { gte: start, lt: end },
+    },
+    include: {
+      items: {
+        select: { claveProdServ: true, importe: true },
+      },
     },
   });
 
@@ -275,9 +289,15 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
 
     const delta = inv.total - inv.subtotal;
 
+    // Classify based on the dominant line item's claveProdServ
+    const classification = classifyInvoice(
+      inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
+    );
+    const gastoAccountId = await resolveCached(classification.cuenta);
+
     drafts.push({
       ...base,
-      chartAccountId: accOtrosGastos.id,
+      chartAccountId: gastoAccountId,
       monto: inv.subtotal,
       tipo: "CARGO",
     });

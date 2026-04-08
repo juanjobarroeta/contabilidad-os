@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
+import { parseFacturapiError } from "@/lib/facturapi-errors";
 
 async function getMember(userId: string, customerId: string) {
   const customer = await prisma.customer.findUnique({
@@ -124,8 +125,17 @@ export async function POST(
 
     return NextResponse.json({ ok: true, facturapiId, customer: updated });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Error de Facturapi";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const info = parseFacturapiError(err);
+    console.error("[clientes/sync] Facturapi error:", info);
+    return NextResponse.json(
+      {
+        error: info.message,
+        kind: info.kind,
+        needsReconfigure: info.needsReconfigure,
+        details: info.details,
+      },
+      { status: info.status }
+    );
   }
 }
 

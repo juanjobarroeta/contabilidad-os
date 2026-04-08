@@ -5,7 +5,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency } from "@/lib/utils";
 import {
   Calendar, CheckCircle2, AlertCircle, Loader2, X,
-  RotateCcw, FileText, BookOpen,
+  RotateCcw, FileText, BookOpen, Download,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -174,8 +174,9 @@ export default function ContabilidadPage() {
         </div>
       </div>
 
-      {tab === "periods" && (
+      {tab === "periods" && activeCompany && (
         <PeriodsPanel
+          companyId={activeCompany.id}
           loading={loading}
           periods={periods}
           posting={posting}
@@ -208,8 +209,9 @@ export default function ContabilidadPage() {
 }
 
 function PeriodsPanel({
-  loading, periods, posting, currentYear, onPost, onUnpost, onSelect,
+  companyId, loading, periods, posting, currentYear, onPost, onUnpost, onSelect,
 }: {
+  companyId: string;
   loading: boolean;
   periods: Period[];
   posting: string | null;
@@ -291,7 +293,7 @@ function PeriodsPanel({
                       <span className="font-medium text-foreground">{formatCurrency(period.totalAbonos)}</span>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mb-2">
                     <button
                       onClick={() => onSelect(year, month)}
                       className="flex-1 text-xs border border-border rounded-md py-1.5 hover:bg-accent"
@@ -306,6 +308,22 @@ function PeriodsPanel({
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
                     </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <a
+                      href={`/api/contabilidad/coe/catalogo?companyId=${companyId}&year=${year}&month=${month}`}
+                      className="flex-1 flex items-center justify-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 rounded py-1"
+                      title="Descargar XML Catálogo de Cuentas"
+                    >
+                      <Download className="h-3 w-3" /> XML Catálogo
+                    </a>
+                    <a
+                      href={`/api/contabilidad/coe/balanza?companyId=${companyId}&year=${year}&month=${month}`}
+                      className="flex-1 flex items-center justify-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 rounded py-1"
+                      title="Descargar XML Balanza de Comprobación"
+                    >
+                      <Download className="h-3 w-3" /> XML Balanza
+                    </a>
                   </div>
                 </>
               ) : (

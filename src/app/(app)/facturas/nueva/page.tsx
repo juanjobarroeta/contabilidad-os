@@ -92,6 +92,7 @@ export default function NuevaFacturaPage() {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [needsReconfigure, setNeedsReconfigure] = useState(false);
   const [successId, setSuccessId] = useState<string | null>(null);
 
   // Step 1
@@ -219,6 +220,7 @@ export default function NuevaFacturaPage() {
 
       if (!res.ok) {
         const data = await res.json();
+        if (data.needsReconfigure) setNeedsReconfigure(true);
         throw new Error(
           typeof data.error === "string"
             ? data.error
@@ -643,9 +645,21 @@ export default function NuevaFacturaPage() {
 
         {/* ── Error ── */}
         {submitError && (
-          <div className="mx-6 mb-4 flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            {submitError}
+          <div className="mx-6 mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p>{submitError}</p>
+                {needsReconfigure && (
+                  <a
+                    href="/empresa"
+                    className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium bg-red-600 text-white px-3 py-1.5 rounded hover:bg-red-700"
+                  >
+                    Reconfigurar Facturapi
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

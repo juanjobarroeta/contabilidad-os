@@ -1,5 +1,6 @@
 import { prisma } from "../prisma";
 import { SAT_STARTER_CATALOG } from "./catalog";
+import { EXTRA_ACCOUNTS_FOR_CLASSIFICATION } from "./classify-egreso";
 
 /**
  * Seeds the SAT COE starter catalog for a company. Idempotent — uses
@@ -14,7 +15,9 @@ export async function seedChartOfAccounts(companyId: string) {
   let created = 0;
   let skipped = 0;
 
-  for (const acc of SAT_STARTER_CATALOG) {
+  const allAccounts = [...SAT_STARTER_CATALOG, ...EXTRA_ACCOUNTS_FOR_CLASSIFICATION];
+
+  for (const acc of allAccounts) {
     const existing = await prisma.chartAccount.findFirst({
       where: {
         companyId,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
+import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { z } from "zod";
 
 const invoiceItemSchema = z.object({
@@ -185,27 +186,16 @@ export async function POST(req: Request) {
       ...(resolvedGlobal && { global: resolvedGlobal }),
     });
   } catch (e) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const err = e as any;
-    const status = err?.response?.status ?? err?.status ?? 0;
-    const data = err?.response?.data;
-    const message =
-      (typeof data === "string" && data) ||
-      data?.message ||
-      err?.message ||
-      "Error desconocido al timbrar";
-
-    console.error("[facturas] Facturapi error:", { status, message, data });
-
-    if (status === 401) {
-      return NextResponse.json(
-        { error: "La clave de Facturapi ya no es válida. Re-configura Facturapi en /empresa." },
-        { status: 422 }
-      );
-    }
+    const info = parseFacturapiError(e);
+    console.error("[facturas] Facturapi error:", info);
     return NextResponse.json(
-      { error: `Facturapi: ${message}`, details: data ?? null },
-      { status: 422 }
+      {
+        error: info.message,
+        kind: info.kind,
+        needsReconfigure: info.needsReconfigure,
+        details: info.details,
+      },
+      { status: info.status }
     );
   }
 

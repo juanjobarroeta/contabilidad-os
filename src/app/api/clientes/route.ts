@@ -89,8 +89,15 @@ export async function POST(req: Request) {
         },
       });
       facturapiId = fpCustomer.id;
-    } catch {
-      // Facturapi sync failed — continue without it
+    } catch (e) {
+      // Facturapi sync failed — continue without it, but log the reason
+      // so we can debug (common: 401 with dead key after org re-link).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const err = e as any;
+      console.error("[clientes/create] Facturapi sync failed:", {
+        status: err?.response?.status ?? err?.status,
+        message: err?.response?.data?.message ?? err?.message,
+      });
     }
   }
 
