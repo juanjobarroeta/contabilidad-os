@@ -25,6 +25,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { signApiToken } from "@/lib/api-token";
+import { effectiveModules } from "@/lib/module-access";
 
 const loginSchema = z.object({
   email: z.string().email().transform((s) => s.toLowerCase().trim()),
@@ -96,10 +97,13 @@ export async function POST(req: Request) {
 
   // Include the companies + modules the user belongs to so the client can
   // immediately decide which empresa to activate without a second roundtrip.
+  // Apply per-member allowedModules filtering so restricted users (e.g. a
+  // construction-only PM) see only the modules they're allowed to use.
   const memberships = await prisma.companyMember.findMany({
     where: { userId: user.id },
     select: {
       role: true,
+      allowedModules: true,
       company: {
         select: {
           id: true,
@@ -117,13 +121,22 @@ export async function POST(req: Request) {
 
   const companies = memberships
     .filter((m) => m.company.isActive)
-    .map((m) => ({
-      id: m.company.id,
-      rfc: m.company.rfc,
-      razonSocial: m.company.razonSocial,
-      role: m.role,
-      modulos: m.company.modules.map((x) => x.modulo),
-    }));
+    .map((m) => {
+      const enabled = m.company.modules.map((x) => x.modulo);
+      const modulos = effectiveModules(enabled, m.allowedModules);
+      return {
+        id: m.company.id,
+        rfc: m.company.rfc,
+        razonSocial: m.company.razonSocial,
+        role: m.role,
+        modulos,
+      };
+    })
+    // Hide companies the user can't actually do anything with (e.g. the
+    // company has CONTABILIDAD enabled but the user's allowedModules lists
+    // a module the company doesn't have). Without this, the satellite
+    // would show an empty company in the selector.
+    .filter((c) => c.modulos.length > 0);
 
   return NextResponse.json({
     token,

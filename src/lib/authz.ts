@@ -164,19 +164,75 @@ export async function requireOwner(companyId: string, req?: Request) {
 }
 
 /**
- * Verifies the company has contracted (and not disabled) the given product module.
- * Use on routes that belong to an add-on module — e.g. construction routes call
- * `await requireModule(companyId, "CONSTRUCCION")` after `requireMembership`.
+ * Verifies:
+ *   1. the company has contracted (and not disabled) the given product module
+ *   2. if `req` is supplied, the authenticated user has the module in their
+ *      effective set on this company (i.e. their CompanyMember.allowedModules
+ *      is empty OR includes this module, OR they have despacho access which
+ *      is always full)
  *
- * Throws AuthzError(403) if the module is missing or disabled.
+ * Use on routes that belong to an add-on module — e.g. construction routes:
+ *
+ *   await requireMembership(companyId, undefined, req);
+ *   await requireModule(companyId, "CONSTRUCCION", req);
+ *
+ * Throws AuthzError(403) if the module is missing, disabled, or the user
+ * isn't allowed to use it.
+ *
+ * The `req` param is optional for backwards compatibility — legacy callers
+ * that don't supply it only get the company-level check (no per-user
+ * restriction enforcement). All new routes should pass `req`.
  */
-export async function requireModule(companyId: string, modulo: ModuloApp) {
+export async function requireModule(
+  companyId: string,
+  modulo: ModuloApp,
+  req?: Request
+) {
+  // 1. Company-level check: the module must be enabled on this company
   const row = await prisma.companyModule.findUnique({
     where: { companyId_modulo: { companyId, modulo } },
   });
   if (!row?.habilitado) {
     throw new AuthzError(403, `Módulo ${modulo} no contratado para esta empresa`);
   }
+
+  // 2. User-level check (only when we know who the user is via req)
+  if (req) {
+    const user = await requireUser(req);
+
+    // Despacho access is always full — skip the per-module check if the
+    // user is on a despacho that owns this company.
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { despachoId: true },
+    });
+    if (company?.despachoId) {
+      const despachoMember = await prisma.despachoMember.findFirst({
+        where: { userId: user.id, despachoId: company.despachoId },
+        select: { id: true },
+      });
+      if (despachoMember) return row; // full access via despacho
+    }
+
+    // Direct membership — check allowedModules
+    const direct = await prisma.companyMember.findUnique({
+      where: { userId_companyId: { userId: user.id, companyId } },
+      select: { allowedModules: true },
+    });
+    if (!direct) {
+      // Already guarded by requireMembership in practice, but defensive:
+      throw new AuthzError(403, "Sin acceso a esta empresa");
+    }
+    const restricted =
+      Array.isArray(direct.allowedModules) && direct.allowedModules.length > 0;
+    if (restricted && !direct.allowedModules.includes(modulo)) {
+      throw new AuthzError(
+        403,
+        `Tu cuenta no tiene acceso al módulo ${modulo} en esta empresa`
+      );
+    }
+  }
+
   return row;
 }
 

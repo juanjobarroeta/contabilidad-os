@@ -1,6 +1,10 @@
 /**
  * Check what a given user email can log into and see in bartiz.
  *
+ * Accounts for the CompanyMember.allowedModules restriction: if a user's
+ * allowedModules is non-empty, the effective module set is the intersection
+ * of company enabled modules and the allowed set. Empty = full access.
+ *
  * Usage:
  *   set -a; . ./.env.local; set +a
  *   node scripts/check-user-access.mjs renriquealvarez@gmail.com
@@ -14,6 +18,12 @@ const email = (process.argv[2] ?? "").trim().toLowerCase();
 if (!email) {
   console.error("Usage: node scripts/check-user-access.mjs <email>");
   process.exit(1);
+}
+
+function effectiveModules(companyEnabled, allowed) {
+  if (!allowed || allowed.length === 0) return companyEnabled;
+  const set = new Set(allowed);
+  return companyEnabled.filter((m) => set.has(m));
 }
 
 const user = await prisma.user.findUnique({
@@ -50,7 +60,16 @@ if (!user) {
   process.exit(1);
 }
 
-// Also check despacho membership (the despacho feature grants implicit access)
+// allowedModules lives on CompanyMember itself
+const membershipRows = await prisma.companyMember.findMany({
+  where: { userId: user.id },
+  select: { companyId: true, allowedModules: true },
+});
+const allowedByCompanyId = new Map(
+  membershipRows.map((m) => [m.companyId, m.allowedModules ?? []])
+);
+
+// Despacho membership (grants implicit full access to all company modules)
 const despachoMember = await prisma.despachoMember.findFirst({
   where: { userId: user.id },
   include: {
@@ -79,7 +98,9 @@ console.log(`\n─── User ${user.email} ────────────
 console.log(`  id:                 ${user.id}`);
 console.log(`  name:               ${user.name ?? "(null)"}`);
 console.log(`  created:            ${user.createdAt.toISOString()}`);
-console.log(`  password set:       ${user.password ? "✓ yes" : "✗ NO (OAuth only, cannot login with password)"}`);
+console.log(
+  `  password set:       ${user.password ? "✓ yes" : "✗ NO (OAuth only, cannot login with password)"}`
+);
 console.log(`  subscriptionStatus: ${user.subscriptionStatus}`);
 console.log(`  trialEndsAt:        ${user.trialEndsAt?.toISOString() ?? "(null)"}`);
 
@@ -88,58 +109,94 @@ if (user.memberships.length === 0) {
   console.log("  (none)");
 } else {
   for (const m of user.memberships) {
-    const mods = m.company.modules.map((x) => x.modulo).join(", ") || "(none)";
-    const hasConstruccion = m.company.modules.some((x) => x.modulo === "CONSTRUCCION");
+    const allowed = allowedByCompanyId.get(m.company.id) ?? [];
+    const enabled = m.company.modules.map((x) => x.modulo);
+    const effective = effectiveModules(enabled, allowed);
+    const restricted = allowed.length > 0;
+    const hasConstruccion = effective.includes("CONSTRUCCION");
     console.log(
       `  ${hasConstruccion ? "✓" : "·"} ${m.company.razonSocial} (${m.company.rfc}) — role: ${m.role}`
     );
-    console.log(`    modules: ${mods}${hasConstruccion ? " 🏗️" : ""}`);
+    console.log(`    company enabled: ${enabled.join(", ") || "(none)"}`);
+    if (restricted) {
+      console.log(`    allowedModules:  ${allowed.join(", ")} (RESTRICTED)`);
+      console.log(`    effective:       ${effective.join(", ") || "(none)"}${hasConstruccion ? " 🏗️" : ""}`);
+    } else {
+      console.log(`    effective:       ${effective.join(", ") || "(none)"} (full access)${hasConstruccion ? " 🏗️" : ""}`);
+    }
   }
 }
 
-console.log("\n─── Despacho membership (implicit company access) ──");
+console.log("\n─── Despacho membership (implicit full access) ─────");
 if (!despachoMember) {
   console.log("  (none)");
 } else {
   console.log(`  Despacho: ${despachoMember.despacho.name} (role: ${despachoMember.role})`);
-  console.log(`  Implicit access to ${despachoMember.despacho.companies.length} companies:`);
+  console.log(
+    `  Implicit access to ${despachoMember.despacho.companies.length} companies:`
+  );
   for (const c of despachoMember.despacho.companies) {
     const mods = c.modules.map((x) => x.modulo).join(", ") || "(none)";
     const hasConstruccion = c.modules.some((x) => x.modulo === "CONSTRUCCION");
     console.log(`    ${hasConstruccion ? "✓" : "·"} ${c.razonSocial} (${c.rfc})`);
-    console.log(`      modules: ${mods}${hasConstruccion ? " 🏗️" : ""}`);
+    console.log(`      full modules: ${mods}${hasConstruccion ? " 🏗️" : ""}`);
   }
 }
 
-// Final verdict
+// Verdict — consider both direct + despacho paths
 console.log("\n─── Verdict ────────────────────────────────────────────");
-const allCompanies = [
-  ...user.memberships.map((m) => m.company),
-  ...(despachoMember?.despacho.companies ?? []),
-];
-const uniqueById = new Map(allCompanies.map((c) => [c.id, c]));
-const withConstruccion = [...uniqueById.values()].filter((c) =>
-  c.modules.some((x) => x.modulo === "CONSTRUCCION")
+
+const directEffectiveByCompany = new Map();
+for (const m of user.memberships) {
+  const allowed = allowedByCompanyId.get(m.company.id) ?? [];
+  const enabled = m.company.modules.map((x) => x.modulo);
+  directEffectiveByCompany.set(m.company.id, {
+    rfc: m.company.rfc,
+    razonSocial: m.company.razonSocial,
+    effective: effectiveModules(enabled, allowed),
+    isActive: m.company.isActive,
+  });
+}
+
+// Despacho companies contribute full enabled modules
+if (despachoMember) {
+  for (const c of despachoMember.despacho.companies) {
+    if (directEffectiveByCompany.has(c.id)) continue;
+    directEffectiveByCompany.set(c.id, {
+      rfc: c.rfc,
+      razonSocial: c.razonSocial,
+      effective: c.modules.map((x) => x.modulo),
+      isActive: true,
+    });
+  }
+}
+
+// Is user allowed into contabilidad-os web UI?
+const canAccessContabilidad = [...directEffectiveByCompany.values()].some(
+  (c) => c.isActive && c.effective.includes("CONTABILIDAD")
+);
+// Bartiz view: companies with CONSTRUCCION in effective set
+const bartizCompanies = [...directEffectiveByCompany.values()].filter(
+  (c) => c.isActive && c.effective.includes("CONSTRUCCION")
 );
 
 if (!user.password) {
-  console.log("❌ Cannot log into bartiz — user has no password set.");
-  console.log("   This user was probably created via OAuth only. To fix:");
-  console.log("   1. Have them sign out of bartiz");
-  console.log("   2. Go to contabilidad-os and set a password via the profile page");
+  console.log("❌ Cannot log in — user has no password set.");
 } else if (user.subscriptionStatus === "EXPIRED" || user.subscriptionStatus === "CANCELED") {
-  console.log(`❌ Cannot log into bartiz — subscription is ${user.subscriptionStatus}`);
-} else if (withConstruccion.length === 0) {
-  console.log("⚠️  Login will succeed but Proyectos page will show");
-  console.log('   "Módulo de Construcción no habilitado".');
-  console.log("");
-  console.log("   Fix: add this user as a CompanyMember of a company that");
-  console.log("   has CONSTRUCCION enabled, OR enable CONSTRUCCION on a");
-  console.log("   company the user already belongs to.");
+  console.log(`❌ Cannot log in — subscription is ${user.subscriptionStatus}`);
 } else {
-  console.log(`✅ Can log into bartiz and will see ${withConstruccion.length} company(ies) with CONSTRUCCION:`);
-  for (const c of withConstruccion) {
-    console.log(`   • ${c.razonSocial} (${c.rfc})`);
+  console.log(
+    `  contabilidad-os web UI: ${canAccessContabilidad ? "✅ allowed" : "🚫 redirected to /acceso-restringido"}`
+  );
+  if (bartizCompanies.length === 0) {
+    console.log("  bartiz:                 🚫 no companies with CONSTRUCCION");
+  } else {
+    console.log(
+      `  bartiz:                 ✅ access to ${bartizCompanies.length} company(ies) with CONSTRUCCION:`
+    );
+    for (const c of bartizCompanies) {
+      console.log(`                          • ${c.razonSocial} (${c.rfc})`);
+    }
   }
 }
 
