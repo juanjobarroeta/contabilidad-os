@@ -428,9 +428,13 @@ export default function EmpresaPage() {
                   Activar
                 </button>
               )}
-              <button className="p-1.5 rounded-md hover:bg-accent text-muted-foreground" title="Editar">
+              <a
+                href={`/configuracion/empresas/${company.id}`}
+                className="p-1.5 rounded-md hover:bg-accent text-muted-foreground"
+                title="Editar"
+              >
                 <Pencil className="h-3.5 w-3.5" />
-              </button>
+              </a>
             </div>
           </div>
         ))}

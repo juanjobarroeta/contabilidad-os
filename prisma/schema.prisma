@@ -595,6 +595,10 @@ enum PayrollStatus {
 
 // ─── Module 1: Tax Declarations ───────────────────────────────────────────────
 
+// Tax declarations. Created organically when the app computes a period,
+// or bulk-imported as historical baseline (isHistorical=true) during
+// onboarding via the AI wizard so contadores starting mid-year don't lose
+// the carryover of IVA saldos a favor and ISR provisional pagado.
 model TaxDeclaration {
   id            String             @id @default(cuid())
   companyId     String
@@ -628,6 +632,13 @@ model TaxDeclaration {
   lineaCaptura          String?
   fechaPresentacion     DateTime?
   fechaLimitePago       DateTime?
+
+  // True when the declaration was imported as a historical baseline during
+  // onboarding (from a SAT acuse PDF). These rows are treated normally by
+  // the carryover logic (saldo a favor, ISR pagado anterior) but are
+  // visually marked in the UI and excluded from "periodos pendientes de
+  // cierre" lists.
+  isHistorical          Boolean  @default(false)
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }

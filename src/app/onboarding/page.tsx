@@ -3,7 +3,72 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft } from "lucide-react";
+import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X } from "lucide-react";
+
+// ── Types for the multi-document onboarding package ───────────────────────
+type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
+
+type ParsedDoc = {
+  id: string;
+  fileName: string;
+  type: DocType;
+  extracted: {
+    csf: {
+      rfc: string | null;
+      tipoContribuyente: "PF" | "PM" | null;
+      razonSocial: string | null;
+      nombre: string | null;
+      primerApellido: string | null;
+      segundoApellido: string | null;
+      regimenFiscal: string | null;
+      regimenes: { code: string; label: string; since: string | null }[];
+      codigoPostal: string | null;
+      calle: string | null;
+      numExterior: string | null;
+      numInterior: string | null;
+      colonia: string | null;
+      correo: string | null;
+      telefono: string | null;
+      actividadEconomica: string | null;
+      confidenceNotes: string | null;
+    } | null;
+    imss: {
+      registroPatronal: string | null;
+      clase: string | null;
+      fraccion: string | null;
+      prima: number | null;
+    } | null;
+    acuseAnual: {
+      ejercicio: number | null;
+      coeficienteUtilidad: number | null;
+      utilidadFiscal: number | null;
+      isrCausado: number | null;
+      isrAPagar: number | null;
+      lineaCaptura: string | null;
+      fechaPresentacion: string | null;
+    } | null;
+    acuseMensual: {
+      periodoMes: number | null;
+      periodoAnio: number | null;
+      tipoImpuesto: "IVA" | "ISR" | "IVA_ISR" | "RETENCIONES" | null;
+      tipoPago: "PROVISIONAL" | "DEFINITIVO" | "NORMAL" | "COMPLEMENTARIA" | null;
+      ivaAPagar: number | null;
+      ivaAFavor: number | null;
+      isrAPagar: number | null;
+      lineaCaptura: string | null;
+      fechaPresentacion: string | null;
+    } | null;
+  };
+  warnings: string[];
+};
+
+const DOC_LABEL: Record<DocType, string> = {
+  CSF: "Constancia de Situación Fiscal",
+  TARJETA_IMSS: "Tarjeta Identificación Patronal IMSS",
+  ACUSE_ANUAL: "Acuse Declaración Anual",
+  ACUSE_MENSUAL: "Acuse Declaración Mensual",
+  OTRO: "Documento no reconocido",
+};
 
 const REGIMENES_FISCALES = [
   { value: "601", label: "601 – General de Ley Personas Morales" },
@@ -82,12 +147,13 @@ function OnboardingPageInner() {
   const [showCsdPassword, setShowCsdPassword] = useState(false);
   const [showFielPassword, setShowFielPassword] = useState(false);
 
-  // AI step state
-  const [csfFile, setCsfFile] = useState<File | null>(null);
+  // AI step state — multi-document onboarding package
+  const [parsedDocs, setParsedDocs] = useState<ParsedDoc[]>([]);
   const [aiParsing, setAiParsing] = useState(false);
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [aiConfidenceNotes, setAiConfidenceNotes] = useState<string | null>(null);
   const [aiExtracted, setAiExtracted] = useState(false);
+  const [detectedRegimenes, setDetectedRegimenes] = useState<{ code: string; label: string; since: string | null }[]>([]);
 
   // Form state
   const [fiscal, setFiscal] = useState({
@@ -107,77 +173,84 @@ function OnboardingPageInner() {
     password: "",
   });
 
-  // ── AI parse: upload CSF PDF, extract fields via /api/onboarding/parse-csf ──
-  async function handleParseCsf() {
-    if (!csfFile) {
-      setError("Sube el archivo PDF primero");
-      return;
-    }
+  // ── AI parse: upload N PDFs, classify + extract each via /api/onboarding/parse-document ──
+  async function handleUploadFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
     setAiParsing(true);
     setError("");
-    setAiWarnings([]);
-    setAiConfidenceNotes(null);
     try {
-      const form = new FormData();
-      form.append("file", csfFile);
-      const res = await fetch("/api/onboarding/parse-csf", {
-        method: "POST",
-        body: form,
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? "No se pudo procesar el PDF");
+      const results: ParsedDoc[] = [];
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/onboarding/parse-document", {
+          method: "POST",
+          body: form,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(`${file.name}: ${data.error ?? "No se pudo procesar"}`);
+          continue;
+        }
+        results.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          fileName: file.name,
+          type: data.type as DocType,
+          extracted: data.extracted,
+          warnings: data.warnings ?? [],
+        });
       }
-      const e = data.extracted as {
-        rfc: string | null;
-        razonSocial: string | null;
-        nombre: string | null;
-        primerApellido: string | null;
-        segundoApellido: string | null;
-        regimenFiscal: string | null;
-        codigoPostal: string | null;
-        calle: string | null;
-        numExterior: string | null;
-        numInterior: string | null;
-        colonia: string | null;
-        correo: string | null;
-        telefono: string | null;
-        actividadEconomica: string | null;
-        tipoContribuyente: "PF" | "PM" | null;
-        confidenceNotes: string | null;
-      };
-
-      // Build a reasonable domicilio string from the parts
-      const domicilioParts = [
-        e.calle && e.numExterior ? `${e.calle} ${e.numExterior}` : e.calle,
-        e.numInterior ? `Int. ${e.numInterior}` : null,
-        e.colonia ? `Col. ${e.colonia}` : null,
-      ].filter(Boolean);
-      const domicilioFiscal = domicilioParts.join(", ");
-
-      setFiscal({
-        rfc: e.rfc ?? "",
-        razonSocial: e.razonSocial ?? "",
-        regimenFiscal: e.regimenFiscal ?? "",
-        codigoPostal: e.codigoPostal ?? "",
-        domicilioFiscal,
-      });
-      setContacto({
-        nombreComercial: e.tipoContribuyente === "PM" ? "" : "",
-        email: e.correo ?? "",
-        telefono: e.telefono ?? "",
-        actividadEconomica: e.actividadEconomica ?? "",
-      });
-      setAiWarnings(data.warnings ?? []);
-      setAiConfidenceNotes(e.confidenceNotes);
-      setAiExtracted(true);
-      // Jump forward to the first review step so the user sees the pre-filled data
-      setStep(1);
+      setParsedDocs((prev) => [...prev, ...results]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error inesperado al procesar el CSF");
+      setError(err instanceof Error ? err.message : "Error inesperado al procesar documentos");
     } finally {
       setAiParsing(false);
     }
+  }
+
+  function removeParsedDoc(id: string) {
+    setParsedDocs((prev) => prev.filter((d) => d.id !== id));
+  }
+
+  // Apply aggregated docs → form state, then go to review step
+  function applyAndContinue() {
+    const csfDoc = parsedDocs.find((d) => d.type === "CSF" && d.extracted.csf);
+    if (!csfDoc || !csfDoc.extracted.csf) {
+      setError("Necesitas subir al menos una Constancia de Situación Fiscal (CSF)");
+      return;
+    }
+    const c = csfDoc.extracted.csf;
+
+    const domicilioParts = [
+      c.calle && c.numExterior ? `${c.calle} ${c.numExterior}` : c.calle,
+      c.numInterior ? `Int. ${c.numInterior}` : null,
+      c.colonia ? `Col. ${c.colonia}` : null,
+    ].filter(Boolean);
+
+    setFiscal({
+      rfc: c.rfc ?? "",
+      razonSocial: c.razonSocial ?? "",
+      regimenFiscal: c.regimenFiscal ?? "",
+      codigoPostal: c.codigoPostal ?? "",
+      domicilioFiscal: domicilioParts.join(", "),
+    });
+    setContacto({
+      nombreComercial: "",
+      email: c.correo ?? "",
+      telefono: c.telefono ?? "",
+      actividadEconomica: c.actividadEconomica ?? "",
+    });
+    setDetectedRegimenes(c.regimenes ?? []);
+
+    // Aggregate all warnings across all docs
+    const allWarnings = parsedDocs.flatMap((d) =>
+      d.warnings.map((w) => `${DOC_LABEL[d.type]}: ${w}`)
+    );
+    setAiWarnings(allWarnings);
+    setAiConfidenceNotes(c.confidenceNotes);
+    setAiExtracted(true);
+    setError("");
+    setStep(1);
   }
 
   function skipAi() {
@@ -228,6 +301,18 @@ function OnboardingPageInner() {
       if (fiel.cerFile) fielCer = await fileToBase64(fiel.cerFile);
       if (fiel.keyFile) fielKey = await fileToBase64(fiel.keyFile);
 
+      // Build onboardingPackage from parsed docs (IMSS, anual, mensuales)
+      const imssDoc = parsedDocs.find((d) => d.type === "TARJETA_IMSS");
+      const anualDoc = parsedDocs.find((d) => d.type === "ACUSE_ANUAL");
+      const mensualDocs = parsedDocs.filter((d) => d.type === "ACUSE_MENSUAL");
+      const onboardingPackage = (imssDoc || anualDoc || mensualDocs.length > 0)
+        ? {
+            imss: imssDoc?.extracted.imss ?? null,
+            acuseAnual: anualDoc?.extracted.acuseAnual ?? null,
+            acusesMensuales: mensualDocs.map((d) => d.extracted.acuseMensual).filter(Boolean),
+          }
+        : undefined;
+
       const res = await fetch("/api/companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -240,6 +325,7 @@ function OnboardingPageInner() {
           fielCer,
           fielKey,
           fielPassword: fiel.password || undefined,
+          onboardingPackage,
         }),
       });
 
@@ -306,7 +392,7 @@ function OnboardingPageInner() {
 
         <div className="px-8 py-6 space-y-5">
 
-          {/* ── STEP 0: Asistente IA ── */}
+          {/* ── STEP 0: Asistente IA (multi-documento) ── */}
           {step === 0 && (
             <>
               <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-indigo-50 border border-indigo-200 rounded-lg p-5">
@@ -315,42 +401,99 @@ function OnboardingPageInner() {
                     <Sparkles className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-indigo-900">Llena el formulario automáticamente</h3>
+                    <h3 className="font-semibold text-indigo-900">Onboarding asistido con IA</h3>
                     <p className="text-xs text-indigo-800 mt-0.5">
-                      Sube tu <strong>Constancia de Situación Fiscal</strong> (PDF del SAT) y el asistente extrae los datos.
-                      Podrás revisarlos y corregirlos antes de continuar.
+                      Sube todos los documentos relevantes en un solo paso. El asistente clasifica y extrae los datos automáticamente.
                     </p>
+                    <ul className="text-[11px] text-indigo-800 mt-2 space-y-0.5 list-disc list-inside">
+                      <li><strong>CSF</strong> (obligatorio) — datos fiscales base</li>
+                      <li><strong>Tarjeta IMSS</strong> — registro patronal para nómina</li>
+                      <li><strong>Acuse Anual</strong> — coeficiente de utilidad</li>
+                      <li><strong>Acuses Mensuales</strong> — histórico si onboardeas a mitad de año</li>
+                    </ul>
                   </div>
                 </div>
                 <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-indigo-300 rounded-md text-sm bg-white cursor-pointer hover:bg-indigo-50/50 transition-colors">
-                  <Upload className="h-4 w-4 text-indigo-600 shrink-0" />
-                  <span className={`truncate flex-1 ${csfFile ? "text-foreground" : "text-muted-foreground"}`}>
-                    {csfFile ? csfFile.name : "Seleccionar archivo PDF de tu CSF"}
-                  </span>
-                  {csfFile && (
-                    <span className="text-xs text-muted-foreground">
-                      {(csfFile.size / 1024).toFixed(0)} KB
-                    </span>
+                  {aiParsing ? (
+                    <Loader2 className="h-4 w-4 text-indigo-600 shrink-0 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 text-indigo-600 shrink-0" />
                   )}
+                  <span className="truncate flex-1 text-muted-foreground">
+                    {aiParsing ? "Procesando documentos..." : "Agregar archivos PDF (puedes seleccionar varios)"}
+                  </span>
                   <input
                     type="file"
                     accept="application/pdf,.pdf"
+                    multiple
+                    disabled={aiParsing}
                     className="hidden"
                     onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null;
-                      setCsfFile(f);
-                      setError("");
-                      setAiWarnings([]);
+                      handleUploadFiles(e.target.files);
+                      e.target.value = "";
                     }}
                   />
                 </label>
                 <p className="text-[10px] text-indigo-700 mt-2">
-                  🔒 El PDF se procesa con Claude (Anthropic) y no se almacena. Los datos fiscales son confidenciales.
+                  🔒 Los PDFs se procesan con Claude (Anthropic) y no se almacenan.
                 </p>
               </div>
 
+              {/* List of parsed docs */}
+              {parsedDocs.length > 0 && (
+                <div className="space-y-2">
+                  {parsedDocs.map((d) => (
+                    <div
+                      key={d.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-md border text-sm ${
+                        d.type === "OTRO"
+                          ? "bg-amber-50 border-amber-200"
+                          : "bg-white border-border"
+                      }`}
+                    >
+                      <FileText
+                        className={`h-4 w-4 shrink-0 ${
+                          d.type === "OTRO" ? "text-amber-600" : "text-primary"
+                        }`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{d.fileName}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {DOC_LABEL[d.type]}
+                          {d.type === "ACUSE_MENSUAL" && d.extracted.acuseMensual?.periodoMes && (
+                            <> · {String(d.extracted.acuseMensual.periodoMes).padStart(2, "0")}/{d.extracted.acuseMensual.periodoAnio}</>
+                          )}
+                          {d.type === "ACUSE_ANUAL" && d.extracted.acuseAnual?.ejercicio && (
+                            <> · Ejercicio {d.extracted.acuseAnual.ejercicio}</>
+                          )}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeParsedDoc(d.id)}
+                        className="p-1 rounded hover:bg-accent text-muted-foreground shrink-0"
+                        title="Quitar"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {parsedDocs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={applyAndContinue}
+                  className="w-full bg-indigo-600 text-white px-4 py-2.5 rounded-md text-sm font-medium hover:bg-indigo-700 flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Aplicar y continuar ({parsedDocs.length} {parsedDocs.length === 1 ? "documento" : "documentos"})
+                </button>
+              )}
+
               <div className="text-center text-xs text-muted-foreground">
-                ¿No tienes tu CSF a la mano?{" "}
+                ¿No tienes los documentos a la mano?{" "}
                 <button
                   type="button"
                   onClick={skipAi}
@@ -381,6 +524,42 @@ function OnboardingPageInner() {
             <div className="bg-green-50 border border-green-200 rounded-md px-4 py-3 text-sm text-green-800 flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
               Datos extraídos del CSF. Revisa y corrige si es necesario.
+            </div>
+          )}
+
+          {/* Multi-régimen picker — visible in step 1 if CSF had more than one */}
+          {step === 1 && detectedRegimenes.length > 1 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm">
+              <p className="font-semibold text-blue-900 text-xs mb-2">
+                Se detectaron {detectedRegimenes.length} regímenes en tu CSF. Elige el principal para esta empresa:
+              </p>
+              <div className="space-y-1.5">
+                {detectedRegimenes.map((r) => (
+                  <label
+                    key={r.code}
+                    className={`flex items-start gap-2 px-2.5 py-2 rounded cursor-pointer border ${
+                      fiscal.regimenFiscal === r.code
+                        ? "bg-white border-blue-400 ring-1 ring-blue-400"
+                        : "bg-white/60 border-transparent hover:bg-white"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="regimenPick"
+                      checked={fiscal.regimenFiscal === r.code}
+                      onChange={() => setFiscal((p) => ({ ...p, regimenFiscal: r.code }))}
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono font-semibold">{r.code}</p>
+                      <p className="text-[11px] text-muted-foreground">{r.label}</p>
+                      {r.since && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Desde {r.since}</p>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
           )}
 
@@ -595,17 +774,7 @@ function OnboardingPageInner() {
               </button>
             )}
 
-            {step === 0 ? (
-              <button
-                type="button"
-                onClick={handleParseCsf}
-                disabled={!csfFile || aiParsing}
-                className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                {aiParsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {aiParsing ? "Analizando PDF..." : "Extraer datos con IA"}
-              </button>
-            ) : step < 4 ? (
+            {step === 0 ? null : step < 4 ? (
               <button
                 type="button"
                 onClick={nextStep}
