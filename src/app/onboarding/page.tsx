@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle } from "lucide-react";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft } from "lucide-react";
 
 const REGIMENES_FISCALES = [
   { value: "601", label: "601 – General de Ley Personas Morales" },
@@ -37,8 +38,31 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+// Suspense-wrapped page root — useSearchParams() requires this boundary
+// in Next.js 15 app router to avoid static-generation bailout.
 export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground text-sm">
+          <Loader2 className="h-4 w-4 animate-spin mr-2" /> Cargando…
+        </div>
+      }
+    >
+      <OnboardingPageInner />
+    </Suspense>
+  );
+}
+
+function OnboardingPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // When launched from /configuracion/empresas we're in "add another company"
+  // mode — adjust the header, back link target, and post-success redirect.
+  const fromEmpresas = searchParams.get("from") === "empresas";
+  const backHref = fromEmpresas ? "/configuracion/empresas" : null;
+  const successHref = fromEmpresas ? "/configuracion/empresas" : "/dashboard";
+
   const [step, setStep] = useState(0); // start on AI step
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -211,7 +235,7 @@ export default function OnboardingPage() {
         throw new Error(data.error ?? "Error al crear la empresa");
       }
 
-      router.push("/dashboard");
+      router.push(successHref);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado");
@@ -226,8 +250,22 @@ export default function OnboardingPage() {
 
         {/* Header */}
         <div className="px-8 pt-8 pb-6 border-b border-border">
-          <h1 className="text-xl font-bold text-foreground mb-1">Configura tu empresa</h1>
-          <p className="text-sm text-muted-foreground">Ingresa los datos fiscales del SAT</p>
+          {backHref && (
+            <Link
+              href={backHref}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-3"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Volver a Empresas
+            </Link>
+          )}
+          <h1 className="text-xl font-bold text-foreground mb-1">
+            {fromEmpresas ? "Agregar nueva empresa" : "Configura tu empresa"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {fromEmpresas
+              ? "Se agregará a tu despacho automáticamente"
+              : "Ingresa los datos fiscales del SAT"}
+          </p>
 
           {/* Step indicators */}
           <div className="flex items-center gap-1 mt-5">
