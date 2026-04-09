@@ -21,8 +21,23 @@ export async function GET(req: Request) {
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   // ── Period boundaries ─────────────────────────────────────────────────────
+  // When `cutoffDate` is passed (YYYY-MM-DD), we clamp the upper bound to
+  // that date + 1 day. This is how contadores do a "precierre": run the
+  // monthly numbers against partial data (e.g. through mid-month) to plan
+  // ahead before the fiscal deadline.
+  const cutoffStr = searchParams.get("cutoffDate");
   const from = new Date(year, month - 1, 1);
-  const to   = new Date(year, month, 1);       // exclusive upper bound
+  const defaultTo = new Date(year, month, 1);
+  let to = defaultTo;
+  if (cutoffStr) {
+    // cutoffStr is "YYYY-MM-DD" in the user's local calendar. Interpret
+    // inclusively: everything up to end-of-that-day.
+    const parsed = new Date(`${cutoffStr}T23:59:59.999`);
+    if (!isNaN(parsed.getTime()) && parsed >= from && parsed <= defaultTo) {
+      to = parsed;
+    }
+  }
+  const isPreliminar = to.getTime() !== defaultTo.getTime();
   const yearFrom = new Date(year, 0, 1);       // Jan 1 of this year
   const periodo  = `${year}-${String(month).padStart(2, "0")}`;
 
@@ -178,6 +193,8 @@ export async function GET(req: Request) {
     periodo,
     month,
     year,
+    cutoffDate: isPreliminar ? cutoffStr : null,
+    isPreliminar,
     iva: {
       trasladado: ivaTrasladadoTotal,
       retenidoPorClientes: ivaRetenidoPorClientes,

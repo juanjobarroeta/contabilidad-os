@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
+import { calcularIsrResicoPf, detectResicoKind, TARIFA_RESICO_PF_MENSUAL } from "@/lib/resico";
 
 // GET /api/papeles/isr?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -114,9 +115,26 @@ export async function GET(req: Request) {
 
   const MONTHS_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
+  // Detect RESICO PF — if so, swap the calculation to Art. 113-E LISR
+  // (tarifa progresiva sobre ingresos cobrados del mes, no acumulado).
+  const resicoKind = detectResicoKind(company?.regimenFiscal ?? null, company?.rfc ?? null);
+  const isResicoPf = resicoKind === "pf";
+
+  // For RESICO PF, ISR is on monthly ingresos (cobrados), not acumulado
+  const ingresosDelMes = monthlyTotals[monthlyTotals.length - 1]?.ingresos ?? 0;
+  const resicoCalc = isResicoPf ? calcularIsrResicoPf(ingresosDelMes) : null;
+
   const payload = {
     periodo: `${year}-${String(month).padStart(2, "0")}`,
     company: company ? { rfc: company.rfc, razonSocial: company.razonSocial, regimenFiscal: company.regimenFiscal } : null,
+    regimen: {
+      kind: isResicoPf ? "resico_pf" : resicoKind === "pm" ? "resico_pm" : "general_pm",
+      label: isResicoPf
+        ? "RESICO Persona Física (Art. 113-E LISR)"
+        : resicoKind === "pm"
+          ? "RESICO Persona Moral (Art. 14 LISR con flujo)"
+          : "Persona Moral Art. 14 LISR",
+    },
     base: {
       prevYear,
       prevIngresosTotal,
@@ -142,16 +160,30 @@ export async function GET(req: Request) {
       rfc: inv.customer?.rfc ?? "—",
       subtotal: inv.subtotal,
     })),
-    calculo: {
-      ingresosAcumulados,
-      coeficiente,
-      utilidadFiscal,
-      tasa: TASA_ISR,
-      isrDelEjercicio,
-      isrPagadoAnterior,
-      isrDelMes,
-      declaracionesAnteriores: prevDeclaraciones,
-    },
+    calculo: isResicoPf && resicoCalc
+      ? {
+          // RESICO PF calculation shape
+          tipo: "resico_pf" as const,
+          ingresosDelMes,
+          rangoLimiteInferior: resicoCalc.rangoLimiteInferior,
+          rangoLimiteSuperior: resicoCalc.rangoLimiteSuperior,
+          tasa: resicoCalc.tasa,
+          tasaPct: resicoCalc.tasaPct,
+          isrDelMes: resicoCalc.isr,
+          tarifa: TARIFA_RESICO_PF_MENSUAL,
+        }
+      : {
+          // Art. 14 LISR calculation shape (default PM)
+          tipo: "art14" as const,
+          ingresosAcumulados,
+          coeficiente,
+          utilidadFiscal,
+          tasa: TASA_ISR,
+          isrDelEjercicio,
+          isrPagadoAnterior,
+          isrDelMes,
+          declaracionesAnteriores: prevDeclaraciones,
+        },
   };
 
   if (format === "csv") {
@@ -163,27 +195,46 @@ export async function GET(req: Request) {
     ];
     const rows: CsvRow[] = [];
 
-    rows.push(["Base histórica", `Ingresos ${prevYear}`, String(prevYear), prevIngresosTotal.toFixed(2)]);
-    rows.push(["Base histórica", `Gastos ${prevYear}`, String(prevYear), prevGastosTotal.toFixed(2)]);
-    rows.push(["Base histórica", `Utilidad ${prevYear}`, String(prevYear), prevUtilidad.toFixed(2)]);
-    rows.push(["Base histórica", "Coeficiente de utilidad calculado", String(prevYear), coeficienteCalculado != null ? (coeficienteCalculado * 100).toFixed(4) + "%" : ""]);
-    rows.push(["Base histórica", `Coeficiente aplicado (${coeficienteFuente})`, String(year), coeficiente != null ? (coeficiente * 100).toFixed(4) + "%" : ""]);
-    rows.push([]);
+    if (isResicoPf && resicoCalc) {
+      rows.push(["Régimen", "RESICO Persona Física (Art. 113-E LISR)", "", ""]);
+      rows.push([]);
+      rows.push(["Tarifa RESICO PF mensual", "", "", ""]);
+      for (const tr of TARIFA_RESICO_PF_MENSUAL) {
+        rows.push([
+          "Tarifa RESICO PF mensual",
+          `${tr.limiteInferior.toFixed(2)} — ${tr.limiteSuperior === Infinity ? "en adelante" : tr.limiteSuperior.toFixed(2)}`,
+          "",
+          tr.tasaPct,
+        ]);
+      }
+      rows.push([]);
+      rows.push(["Cálculo", "Ingresos cobrados del mes", `${year}-${String(month).padStart(2, "0")}`, ingresosDelMes.toFixed(2)]);
+      rows.push(["Cálculo", `Rango aplicable (${resicoCalc.tasaPct})`, "", `${resicoCalc.rangoLimiteInferior.toFixed(2)} — ${resicoCalc.rangoLimiteSuperior === Infinity ? "∞" : resicoCalc.rangoLimiteSuperior.toFixed(2)}`]);
+      rows.push(["Cálculo", "× Tasa", "", resicoCalc.tasaPct]);
+      rows.push(["Cálculo", "= ISR DEL MES", "", resicoCalc.isr.toFixed(2)]);
+    } else {
+      rows.push(["Base histórica", `Ingresos ${prevYear}`, String(prevYear), prevIngresosTotal.toFixed(2)]);
+      rows.push(["Base histórica", `Gastos ${prevYear}`, String(prevYear), prevGastosTotal.toFixed(2)]);
+      rows.push(["Base histórica", `Utilidad ${prevYear}`, String(prevYear), prevUtilidad.toFixed(2)]);
+      rows.push(["Base histórica", "Coeficiente de utilidad calculado", String(prevYear), coeficienteCalculado != null ? (coeficienteCalculado * 100).toFixed(4) + "%" : ""]);
+      rows.push(["Base histórica", `Coeficiente aplicado (${coeficienteFuente})`, String(year), coeficiente != null ? (coeficiente * 100).toFixed(4) + "%" : ""]);
+      rows.push([]);
 
-    rows.push(["Ingresos acumulados", "", "", ""]);
-    for (const m of monthlyTotals) {
-      rows.push(["Ingresos acumulados", MONTHS_ES[m.month - 1], `${year}-${String(m.month).padStart(2, "0")}`, m.ingresos.toFixed(2)]);
+      rows.push(["Ingresos acumulados", "", "", ""]);
+      for (const m of monthlyTotals) {
+        rows.push(["Ingresos acumulados", MONTHS_ES[m.month - 1], `${year}-${String(m.month).padStart(2, "0")}`, m.ingresos.toFixed(2)]);
+      }
+      rows.push(["Ingresos acumulados", "Total", "", ingresosAcumulados.toFixed(2)]);
+      rows.push([]);
+
+      rows.push(["Cálculo ISR", "Ingresos acumulados", "", ingresosAcumulados.toFixed(2)]);
+      rows.push(["Cálculo ISR", "× Coeficiente", "", coeficiente != null ? (coeficiente * 100).toFixed(4) + "%" : "—"]);
+      rows.push(["Cálculo ISR", "= Utilidad fiscal estimada", "", utilidadFiscal != null ? utilidadFiscal.toFixed(2) : "—"]);
+      rows.push(["Cálculo ISR", "× Tasa ISR", "", (TASA_ISR * 100).toFixed(0) + "%"]);
+      rows.push(["Cálculo ISR", "= ISR del ejercicio acumulado", "", isrDelEjercicio != null ? isrDelEjercicio.toFixed(2) : "—"]);
+      rows.push(["Cálculo ISR", "− ISR pagado en meses anteriores", "", isrPagadoAnterior.toFixed(2)]);
+      rows.push(["Cálculo ISR", "= ISR DEL MES", "", isrDelMes != null ? isrDelMes.toFixed(2) : "—"]);
     }
-    rows.push(["Ingresos acumulados", "Total", "", ingresosAcumulados.toFixed(2)]);
-    rows.push([]);
-
-    rows.push(["Cálculo ISR", "Ingresos acumulados", "", ingresosAcumulados.toFixed(2)]);
-    rows.push(["Cálculo ISR", "× Coeficiente", "", coeficiente != null ? (coeficiente * 100).toFixed(4) + "%" : "—"]);
-    rows.push(["Cálculo ISR", "= Utilidad fiscal estimada", "", utilidadFiscal != null ? utilidadFiscal.toFixed(2) : "—"]);
-    rows.push(["Cálculo ISR", "× Tasa ISR", "", (TASA_ISR * 100).toFixed(0) + "%"]);
-    rows.push(["Cálculo ISR", "= ISR del ejercicio acumulado", "", isrDelEjercicio != null ? isrDelEjercicio.toFixed(2) : "—"]);
-    rows.push(["Cálculo ISR", "− ISR pagado en meses anteriores", "", isrPagadoAnterior.toFixed(2)]);
-    rows.push(["Cálculo ISR", "= ISR DEL MES", "", isrDelMes != null ? isrDelMes.toFixed(2) : "—"]);
 
     const csv = toCsv(headers, rows);
     const filename = `papel_isr_${company?.rfc ?? ""}_${year}-${String(month).padStart(2, "0")}.csv`;

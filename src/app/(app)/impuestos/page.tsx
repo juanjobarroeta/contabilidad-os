@@ -52,6 +52,8 @@ interface ApiResult {
   periodo: string;
   month: number;
   year: number;
+  cutoffDate: string | null;
+  isPreliminar: boolean;
   iva: IvaApiData;
   isr: IsrApiData;
   facturas: FacturaRow[];
@@ -147,6 +149,12 @@ export default function ImpuestosPage() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear]   = useState(now.getFullYear());
+  // cutoffDate: optional mid-month cutoff for "precierre" mode. If null the
+  // full calendar month is used. Stored as "YYYY-MM-DD" string.
+  const [cutoffDate, setCutoffDate] = useState<string | null>(null);
+  // Fiscal projection inputs — hypothetical additional amounts
+  const [projIngresoAdicional, setProjIngresoAdicional] = useState("");
+  const [projGastoAdicional, setProjGastoAdicional] = useState("");
 
   const [loading, setLoading]   = useState(false);
   const [saving, setSaving]     = useState(false);
@@ -206,9 +214,9 @@ export default function ImpuestosPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(
-        `/api/impuestos?companyId=${activeCompany.id}&month=${month}&year=${year}`
-      );
+      const params = new URLSearchParams({ companyId: activeCompany.id, month: String(month), year: String(year) });
+      if (cutoffDate) params.set("cutoffDate", cutoffDate);
+      const res = await fetch(`/api/impuestos?${params}`);
       if (!res.ok) throw new Error("Error al calcular");
       const data: ApiResult = await res.json();
       setResult(data);
@@ -235,7 +243,7 @@ export default function ImpuestosPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeCompany, month, year]);
+  }, [activeCompany, month, year, cutoffDate]);
 
   useEffect(() => { calcular(); }, [calcular]);
 
@@ -403,12 +411,12 @@ export default function ImpuestosPage() {
       </div>
 
       {/* Period selector */}
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={prevMonth} className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <button onClick={() => { prevMonth(); setCutoffDate(null); }} className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors">
           <ChevronLeft className="h-4 w-4" />
         </button>
         <span className="text-lg font-semibold min-w-[160px] text-center">{MONTHS[month - 1]} {year}</span>
-        <button onClick={nextMonth} className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors">
+        <button onClick={() => { nextMonth(); setCutoffDate(null); }} className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors">
           <ChevronRight className="h-4 w-4" />
         </button>
         {savedStatus && (
@@ -416,7 +424,40 @@ export default function ImpuestosPage() {
             {STATUS_LABELS[savedStatus] ?? savedStatus}
           </span>
         )}
+
+        {/* Precierre cutoff picker */}
+        <div className="ml-auto flex items-center gap-2">
+          <label className="text-xs text-muted-foreground">Precierre hasta:</label>
+          <input
+            type="date"
+            value={cutoffDate ?? ""}
+            min={`${year}-${String(month).padStart(2, "0")}-01`}
+            max={`${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`}
+            onChange={(e) => setCutoffDate(e.target.value || null)}
+            className="text-xs border border-border rounded-md px-2 py-1.5 bg-white"
+          />
+          {cutoffDate && (
+            <button
+              onClick={() => setCutoffDate(null)}
+              className="text-xs text-muted-foreground hover:text-foreground"
+              title="Limpiar cutoff (usar mes completo)"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Preliminar banner */}
+      {result?.isPreliminar && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-900 mb-4">
+          <Info className="h-4 w-4 shrink-0" />
+          <span className="flex-1">
+            <strong>Cálculo preliminar</strong> — valores estimados con datos hasta el <strong>{cutoffDate}</strong>.
+            No incluye CFDIs ni movimientos bancarios posteriores a esa fecha.
+          </span>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-4">
@@ -518,6 +559,17 @@ export default function ImpuestosPage() {
               </div>
             )}
           </div>
+
+          {/* ── Fiscal projection widget ── */}
+          <ProjectionCard
+            ivaComputed={ivaComputed}
+            isrComputed={isrComputed}
+            coeficiente={coeficiente}
+            projIngresoAdicional={projIngresoAdicional}
+            projGastoAdicional={projGastoAdicional}
+            onIngresoChange={setProjIngresoAdicional}
+            onGastoChange={setProjGastoAdicional}
+          />
 
           {/* ── ISR Card ── */}
           <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
@@ -971,6 +1023,163 @@ export default function ImpuestosPage() {
 
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// ── Projection card ─────────────────────────────────────────────────────────
+// Simulates the impact of an additional ingreso or gasto on the current
+// month's IVA and ISR. Pure frontend math — it recomputes from the already
+// displayed values so there's no extra API call.
+function ProjectionCard({
+  ivaComputed,
+  isrComputed,
+  coeficiente,
+  projIngresoAdicional,
+  projGastoAdicional,
+  onIngresoChange,
+  onGastoChange,
+}: {
+  ivaComputed: { trasladado: number; retenidoPorClientes: number; acreditable: number; saldoFavorAnterior: number; pagar: number; saldoFavor: number } | null;
+  isrComputed: { utilidadFiscal: number; isrDelEjercicio: number; esteMes: number } | null;
+  coeficiente: number | null;
+  projIngresoAdicional: string;
+  projGastoAdicional: string;
+  onIngresoChange: (v: string) => void;
+  onGastoChange: (v: string) => void;
+}) {
+  if (!ivaComputed) return null;
+
+  const addIngreso = parseFloat(projIngresoAdicional) || 0;
+  const addGasto = parseFloat(projGastoAdicional) || 0;
+
+  // Assume new ingreso has IVA 16% trasladado, new gasto has IVA 16% acreditable
+  const ivaAddedTrasladado = addIngreso * 0.16;
+  const ivaAddedAcreditable = addGasto * 0.16;
+
+  const newTrasladado = ivaComputed.trasladado + ivaAddedTrasladado;
+  const newAcreditable = ivaComputed.acreditable + ivaAddedAcreditable;
+
+  const newIvaCargo =
+    newTrasladado - ivaComputed.retenidoPorClientes - newAcreditable - ivaComputed.saldoFavorAnterior;
+  const newIvaPagar = newIvaCargo > 0 ? newIvaCargo : 0;
+  const newIvaSaldoFavor = newIvaCargo < 0 ? -newIvaCargo : 0;
+
+  // ISR: the Art. 14 LISR calc uses acumulado × coeficiente × 30%. Adding an
+  // ingreso increases acumulado directly. Adding a gasto does NOT reduce the
+  // calc (coeficiente is based on prior year) unless coeficiente itself
+  // accounted for it. We show both scenarios so contador knows the gap.
+  let newIsrEsteMes: number | null = null;
+  if (isrComputed && coeficiente != null) {
+    // Rough projection: delta = addIngreso × coeficiente × 0.30
+    const isrDelta = addIngreso * coeficiente * 0.30;
+    newIsrEsteMes = Math.max(0, isrComputed.esteMes + isrDelta);
+  }
+
+  const deltaIvaPagar = newIvaPagar - ivaComputed.pagar;
+  const deltaIsr = newIsrEsteMes != null && isrComputed ? newIsrEsteMes - isrComputed.esteMes : 0;
+  const hasProjection = addIngreso > 0 || addGasto > 0;
+
+  return (
+    <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+          <Sparkles className="h-4 w-4 text-indigo-600" />
+        </div>
+        <div>
+          <h2 className="font-semibold text-sm">Simulación fiscal</h2>
+          <p className="text-xs text-muted-foreground">Proyecta el impacto de ingresos o gastos adicionales</p>
+        </div>
+      </div>
+      <div className="p-5">
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-medium mb-1 text-muted-foreground">
+              + Ingreso adicional (subtotal, sin IVA)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={projIngresoAdicional}
+              onChange={(e) => onIngresoChange(e.target.value)}
+              placeholder="0.00"
+              className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1 text-muted-foreground">
+              + Gasto adicional con CFDI (subtotal, sin IVA)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={projGastoAdicional}
+              onChange={(e) => onGastoChange(e.target.value)}
+              placeholder="0.00"
+              className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono"
+            />
+          </div>
+        </div>
+
+        {hasProjection ? (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-sm">
+            <p className="font-semibold text-indigo-900 mb-3">Impacto proyectado:</p>
+            <dl className="space-y-1.5 font-mono text-xs">
+              <div className="flex justify-between">
+                <dt className="text-indigo-700">IVA trasladado adicional</dt>
+                <dd className="font-medium">+{formatCurrency(ivaAddedTrasladado)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-indigo-700">IVA acreditable adicional</dt>
+                <dd className="font-medium">+{formatCurrency(ivaAddedAcreditable)}</dd>
+              </div>
+              <div className="flex justify-between border-t border-indigo-200 pt-1.5 mt-1.5">
+                <dt className="text-indigo-900 font-semibold">IVA a pagar actual</dt>
+                <dd className="font-medium">{formatCurrency(ivaComputed.pagar)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-indigo-900 font-semibold">IVA a pagar proyectado</dt>
+                <dd className={`font-bold ${deltaIvaPagar >= 0 ? "text-red-700" : "text-green-700"}`}>
+                  {formatCurrency(newIvaPagar)}
+                  <span className="ml-2 text-xs">({deltaIvaPagar >= 0 ? "+" : ""}{formatCurrency(deltaIvaPagar)})</span>
+                </dd>
+              </div>
+              {newIvaSaldoFavor > 0 && (
+                <div className="flex justify-between text-green-700">
+                  <dt>Saldo a favor proyectado</dt>
+                  <dd className="font-semibold">{formatCurrency(newIvaSaldoFavor)}</dd>
+                </div>
+              )}
+              {newIsrEsteMes != null && isrComputed && (
+                <>
+                  <div className="flex justify-between border-t border-indigo-200 pt-1.5 mt-1.5">
+                    <dt className="text-indigo-900 font-semibold">ISR provisional actual</dt>
+                    <dd className="font-medium">{formatCurrency(isrComputed.esteMes)}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-indigo-900 font-semibold">ISR provisional proyectado</dt>
+                    <dd className={`font-bold ${deltaIsr >= 0 ? "text-red-700" : "text-green-700"}`}>
+                      {formatCurrency(newIsrEsteMes)}
+                      <span className="ml-2 text-xs">({deltaIsr >= 0 ? "+" : ""}{formatCurrency(deltaIsr)})</span>
+                    </dd>
+                  </div>
+                </>
+              )}
+            </dl>
+            <p className="text-[10px] text-indigo-700 mt-3">
+              Asume IVA 16% en ambos conceptos. El ISR usa el coeficiente vigente sin considerar
+              deducciones adicionales — en el régimen PM Art. 14 LISR los gastos no reducen el provisional
+              directamente, solo el coeficiente del año siguiente.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Escribe un monto arriba para ver el impacto en tu IVA e ISR del mes.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

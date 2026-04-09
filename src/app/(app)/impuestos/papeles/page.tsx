@@ -242,16 +242,27 @@ function IvaSection({ title, subtitle, rows }: { title: string; subtitle: string
 interface IsrData {
   periodo: string;
   company: { rfc: string; razonSocial: string; regimenFiscal: string } | null;
+  regimen: { kind: "resico_pf" | "resico_pm" | "general_pm"; label: string };
   base: {
     prevYear: number; prevIngresosTotal: number; prevGastosTotal: number; prevUtilidad: number;
     coeficienteCalculado: number | null; coeficiente: number | null;
     coeficienteFuente: "manual" | "calculado" | "ninguno";
   };
   acumulado: { mes: number; mesLabel: string; ingresos: number; facturas: number }[];
-  calculo: {
-    ingresosAcumulados: number; coeficiente: number | null; utilidadFiscal: number | null;
-    tasa: number; isrDelEjercicio: number | null; isrPagadoAnterior: number; isrDelMes: number | null;
-  };
+  calculo:
+    | {
+        tipo: "art14";
+        ingresosAcumulados: number; coeficiente: number | null; utilidadFiscal: number | null;
+        tasa: number; isrDelEjercicio: number | null; isrPagadoAnterior: number; isrDelMes: number | null;
+      }
+    | {
+        tipo: "resico_pf";
+        ingresosDelMes: number;
+        rangoLimiteInferior: number; rangoLimiteSuperior: number;
+        tasa: number; tasaPct: string;
+        isrDelMes: number;
+        tarifa: Array<{ limiteInferior: number; limiteSuperior: number; tasa: number; tasaPct: string }>;
+      };
 }
 
 function IsrPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
@@ -269,88 +280,162 @@ function IsrPanel({ companyId, year, month }: { companyId: string; year: number;
   if (loading) return <Loading />;
   if (!data) return <Empty />;
 
-  const esResico = data.company?.regimenFiscal === "626";
-
   return (
     <div className="space-y-6">
       <DownloadCsvButton href={`/api/papeles/isr?companyId=${companyId}&year=${year}&month=${month}&format=csv`} />
 
-      {esResico && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-900">
-          Esta empresa está en régimen 626 RESICO — el ISR no se calcula con coeficiente de utilidad sino con tarifa sobre ingresos.
-          Esta vista usa la fórmula del Art. 14 LISR que aplica a PMs generales, no aplica para RESICO. Será reemplazada en la próxima iteración.
-        </div>
-      )}
-
-      <div className="bg-white border border-border rounded-xl p-5 print:border-2">
-        <h3 className="font-semibold text-sm mb-3">Coeficiente de utilidad</h3>
-        <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-          <div>
-            <dt className="text-xs text-muted-foreground">Ingresos {data.base.prevYear}</dt>
-            <dd className="font-mono font-medium">{formatCurrency(data.base.prevIngresosTotal)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Gastos {data.base.prevYear}</dt>
-            <dd className="font-mono font-medium">{formatCurrency(data.base.prevGastosTotal)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Utilidad {data.base.prevYear}</dt>
-            <dd className="font-mono font-medium">{formatCurrency(data.base.prevUtilidad)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">
-              Coeficiente aplicado ({data.base.coeficienteFuente})
-            </dt>
-            <dd className="font-mono font-medium">
-              {data.base.coeficiente != null ? (data.base.coeficiente * 100).toFixed(4) + "%" : "—"}
-            </dd>
-          </div>
-        </dl>
+      <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 text-sm text-indigo-900">
+        <FileText className="h-4 w-4 shrink-0" />
+        <span><strong>{data.regimen.label}</strong></span>
       </div>
 
-      <div className="bg-white border border-border rounded-xl overflow-hidden print:border-2">
-        <div className="px-4 py-3 border-b border-border">
-          <h3 className="font-semibold text-sm">Ingresos acumulados del ejercicio</h3>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-xs">
-            <tr>
-              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Mes</th>
-              <th className="text-right px-3 py-2 font-medium text-muted-foreground"># Facturas</th>
-              <th className="text-right px-3 py-2 font-medium text-muted-foreground">Ingresos</th>
-              <th className="text-right px-3 py-2 font-medium text-muted-foreground">Acumulado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.acumulado.map((m, i) => {
-              const acumulado = data.acumulado.slice(0, i + 1).reduce((s, x) => s + x.ingresos, 0);
-              return (
-                <tr key={m.mes} className="border-t border-border">
-                  <td className="px-3 py-1.5 text-xs">{m.mesLabel}</td>
-                  <td className="px-3 py-1.5 text-xs text-right">{m.facturas}</td>
-                  <td className="px-3 py-1.5 text-xs text-right font-mono">{formatCurrency(m.ingresos)}</td>
-                  <td className="px-3 py-1.5 text-xs text-right font-mono font-semibold">{formatCurrency(acumulado)}</td>
+      {data.calculo.tipo === "resico_pf" ? (
+        <>
+          {/* Tarifa table */}
+          <div className="bg-white border border-border rounded-xl overflow-hidden print:border-2">
+            <div className="px-4 py-3 border-b border-border">
+              <h3 className="font-semibold text-sm">Tarifa RESICO PF mensual (Art. 113-E LISR)</h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Rango de ingresos (mensual)</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Tasa</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="bg-white border border-border rounded-xl p-5 text-sm print:border-2">
-        <h3 className="font-semibold mb-3">Cálculo ISR provisional (Art. 14 LISR)</h3>
-        <dl className="space-y-1.5 font-mono">
-          <Line label="Ingresos acumulados del ejercicio" value={data.calculo.ingresosAcumulados} />
-          <Line label={`× Coeficiente de utilidad (${data.calculo.coeficiente != null ? (data.calculo.coeficiente * 100).toFixed(4) + "%" : "—"})`} value={null} />
-          <Line label="= Utilidad fiscal estimada" value={data.calculo.utilidadFiscal} strong />
-          <Line label={`× Tasa ISR (${(data.calculo.tasa * 100).toFixed(0)}%)`} value={null} />
-          <Line label="= ISR del ejercicio acumulado" value={data.calculo.isrDelEjercicio} strong />
-          <Line label="− ISR pagado en meses anteriores" value={data.calculo.isrPagadoAnterior > 0 ? -data.calculo.isrPagadoAnterior : 0} />
-          <div className="border-t border-border pt-2">
-            <Line label="= ISR DEL MES" value={data.calculo.isrDelMes} strong big colorClass="text-red-700" />
+              </thead>
+              <tbody>
+                {data.calculo.tarifa.map((t, i) => {
+                  const active =
+                    data.calculo.tipo === "resico_pf" &&
+                    t.limiteInferior === data.calculo.rangoLimiteInferior;
+                  return (
+                    <tr key={i} className={`border-t border-border ${active ? "bg-indigo-50 font-semibold" : ""}`}>
+                      <td className="px-3 py-1.5 text-xs font-mono">
+                        {formatCurrency(t.limiteInferior)} — {t.limiteSuperior === Infinity || t.limiteSuperior > 1e10 ? "en adelante" : formatCurrency(t.limiteSuperior)}
+                      </td>
+                      <td className="px-3 py-1.5 text-xs text-right">{t.tasaPct}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </dl>
-      </div>
+
+          {/* Monthly ingresos detail */}
+          <div className="bg-white border border-border rounded-xl overflow-hidden print:border-2">
+            <div className="px-4 py-3 border-b border-border">
+              <h3 className="font-semibold text-sm">Ingresos cobrados del mes</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                RESICO PF usa ingresos efectivamente cobrados (flow-through). El cálculo es sobre este monto, no sobre acumulado.
+              </p>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Mes</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground"># Facturas</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Ingresos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.acumulado.map((m) => (
+                  <tr key={m.mes} className="border-t border-border">
+                    <td className="px-3 py-1.5 text-xs">{m.mesLabel}</td>
+                    <td className="px-3 py-1.5 text-xs text-right">{m.facturas}</td>
+                    <td className="px-3 py-1.5 text-xs text-right font-mono">{formatCurrency(m.ingresos)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Calculation */}
+          <div className="bg-white border border-border rounded-xl p-5 text-sm print:border-2">
+            <h3 className="font-semibold mb-3">Cálculo ISR RESICO PF</h3>
+            <dl className="space-y-1.5 font-mono">
+              <Line label="Ingresos cobrados del mes" value={data.calculo.ingresosDelMes} />
+              <Line
+                label={`Rango aplicable: ${formatCurrency(data.calculo.rangoLimiteInferior)} — ${data.calculo.rangoLimiteSuperior === Infinity || data.calculo.rangoLimiteSuperior > 1e10 ? "∞" : formatCurrency(data.calculo.rangoLimiteSuperior)}`}
+                value={null}
+              />
+              <Line label={`× Tasa (${data.calculo.tasaPct})`} value={null} />
+              <div className="border-t border-border pt-2">
+                <Line label="= ISR DEL MES" value={data.calculo.isrDelMes} strong big colorClass="text-red-700" />
+              </div>
+            </dl>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="bg-white border border-border rounded-xl p-5 print:border-2">
+            <h3 className="font-semibold text-sm mb-3">Coeficiente de utilidad</h3>
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">Ingresos {data.base.prevYear}</dt>
+                <dd className="font-mono font-medium">{formatCurrency(data.base.prevIngresosTotal)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Gastos {data.base.prevYear}</dt>
+                <dd className="font-mono font-medium">{formatCurrency(data.base.prevGastosTotal)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Utilidad {data.base.prevYear}</dt>
+                <dd className="font-mono font-medium">{formatCurrency(data.base.prevUtilidad)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Coeficiente aplicado ({data.base.coeficienteFuente})</dt>
+                <dd className="font-mono font-medium">
+                  {data.base.coeficiente != null ? (data.base.coeficiente * 100).toFixed(4) + "%" : "—"}
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="bg-white border border-border rounded-xl overflow-hidden print:border-2">
+            <div className="px-4 py-3 border-b border-border">
+              <h3 className="font-semibold text-sm">Ingresos acumulados del ejercicio</h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Mes</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground"># Facturas</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Ingresos</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Acumulado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.acumulado.map((m, i) => {
+                  const acumulado = data.acumulado.slice(0, i + 1).reduce((s, x) => s + x.ingresos, 0);
+                  return (
+                    <tr key={m.mes} className="border-t border-border">
+                      <td className="px-3 py-1.5 text-xs">{m.mesLabel}</td>
+                      <td className="px-3 py-1.5 text-xs text-right">{m.facturas}</td>
+                      <td className="px-3 py-1.5 text-xs text-right font-mono">{formatCurrency(m.ingresos)}</td>
+                      <td className="px-3 py-1.5 text-xs text-right font-mono font-semibold">{formatCurrency(acumulado)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="bg-white border border-border rounded-xl p-5 text-sm print:border-2">
+            <h3 className="font-semibold mb-3">Cálculo ISR provisional (Art. 14 LISR)</h3>
+            <dl className="space-y-1.5 font-mono">
+              <Line label="Ingresos acumulados del ejercicio" value={data.calculo.ingresosAcumulados} />
+              <Line label={`× Coeficiente de utilidad (${data.calculo.coeficiente != null ? (data.calculo.coeficiente * 100).toFixed(4) + "%" : "—"})`} value={null} />
+              <Line label="= Utilidad fiscal estimada" value={data.calculo.utilidadFiscal} strong />
+              <Line label={`× Tasa ISR (${(data.calculo.tasa * 100).toFixed(0)}%)`} value={null} />
+              <Line label="= ISR del ejercicio acumulado" value={data.calculo.isrDelEjercicio} strong />
+              <Line label="− ISR pagado en meses anteriores" value={data.calculo.isrPagadoAnterior > 0 ? -data.calculo.isrPagadoAnterior : 0} />
+              <div className="border-t border-border pt-2">
+                <Line label="= ISR DEL MES" value={data.calculo.isrDelMes} strong big colorClass="text-red-700" />
+              </div>
+            </dl>
+          </div>
+        </>
+      )}
     </div>
   );
 }
