@@ -54,14 +54,27 @@ export default function OnboardingPage() {
   );
 }
 
+// Safe relative path allowlist — we only honor internal paths in returnTo to
+// prevent open redirects.
+function safeReturnTo(raw: string | null): string | null {
+  if (!raw) return null;
+  if (!raw.startsWith("/")) return null;
+  if (raw.startsWith("//")) return null; // protocol-relative
+  return raw;
+}
+
 function OnboardingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // When launched from /configuracion/empresas we're in "add another company"
-  // mode — adjust the header, back link target, and post-success redirect.
+  // When launched from an "add another company" entry point we adjust the
+  // header, back link target, and post-success redirect.
   const fromEmpresas = searchParams.get("from") === "empresas";
-  const backHref = fromEmpresas ? "/configuracion/empresas" : null;
-  const successHref = fromEmpresas ? "/configuracion/empresas" : "/dashboard";
+  const explicitReturn = safeReturnTo(searchParams.get("returnTo"));
+  // returnTo (if passed) beats fromEmpresas default; both beat first-run default
+  const backHref =
+    explicitReturn ?? (fromEmpresas ? "/configuracion/empresas" : null);
+  const successHref =
+    explicitReturn ?? (fromEmpresas ? "/configuracion/empresas" : "/dashboard");
 
   const [step, setStep] = useState(0); // start on AI step
   const [loading, setLoading] = useState(false);

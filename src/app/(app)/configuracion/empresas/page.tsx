@@ -43,7 +43,7 @@ export default async function EmpresasPage() {
           </p>
         </div>
         <Link
-          href="/onboarding?from=empresas"
+          href="/onboarding?from=empresas&returnTo=/configuracion/empresas"
           className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" /> Nueva empresa

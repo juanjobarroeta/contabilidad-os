@@ -338,13 +338,13 @@ export default function EmpresaPage() {
           <h1 className="text-2xl font-bold">Mi Empresa</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Gestiona tus empresas y configuración fiscal</p>
         </div>
-        <button
-          onClick={() => setShowAddForm((v) => !v)}
+        <a
+          href="/onboarding?from=empresas&returnTo=/empresa"
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
           Nueva empresa
-        </button>
+        </a>
       </div>
 
       {/* Add Company Form */}
