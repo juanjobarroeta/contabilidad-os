@@ -289,10 +289,16 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
 
     const delta = inv.total - inv.subtotal;
 
-    // Classify based on the dominant line item's claveProdServ
-    const classification = classifyInvoice(
-      inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
-    );
+    // Classification: user override wins, otherwise auto-classify from SAT code.
+    // The override is stored as the subcuenta SAT code (e.g. "601.15");
+    // resolveCached will raise an error if it doesn't exist, which is what
+    // we want — it means a user-supplied bad override, which shouldn't
+    // silently fall back to Otros gastos.
+    const classification = inv.overrideCuenta
+      ? { cuenta: inv.overrideCuenta, label: "manual" }
+      : classifyInvoice(
+          inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
+        );
     const gastoAccountId = await resolveCached(classification.cuenta);
 
     drafts.push({

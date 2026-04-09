@@ -344,6 +344,11 @@ model Invoice {
   total        Float
   notas        String?
 
+  // Contador override: if set, the posting engine uses this SAT account
+  // instead of whatever classifyInvoice() would return. Stores the short
+  // code like "601.15" — must match a ChartAccount in the catalog.
+  overrideCuenta String?
+
   // SAT stamping data (from PAC/Facturapi)
   status       InvoiceStatus @default(DRAFT)
   uuid         String?       @unique // Folio fiscal

@@ -389,9 +389,17 @@ export default function ImpuestosPage() {
   return (
     <div className="p-6 max-w-4xl">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Declaraciones Fiscales</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">{activeCompany.razonSocial}</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Declaraciones Fiscales</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{activeCompany.razonSocial}</p>
+        </div>
+        <a
+          href="/impuestos/papeles"
+          className="flex items-center gap-2 border border-border px-4 py-2 rounded-md text-sm font-medium hover:bg-accent shrink-0"
+        >
+          <FileText className="h-4 w-4" /> Papeles de trabajo
+        </a>
       </div>
 
       {/* Period selector */}

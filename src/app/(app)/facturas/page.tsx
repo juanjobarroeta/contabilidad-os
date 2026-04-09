@@ -26,6 +26,7 @@ interface Invoice {
   usoCfdi: string;
   notas: string | null;
   facturapiId: string | null;
+  overrideCuenta: string | null;
   customer: { razonSocial: string; rfc: string } | null;
   items: {
     id: string;
@@ -436,6 +437,20 @@ export default function FacturasPage() {
                 </p>
               </div>
 
+              {/* Classification override (only for EGRESOs — ingresos always go to 401.x) */}
+              {detailInvoice.tipo === "EGRESO" && (
+                <ClassificationOverride
+                  invoice={detailInvoice}
+                  onUpdated={(updated) => {
+                    setDetailInvoice((d) => d && d.id === updated.id ? { ...d, overrideCuenta: updated.overrideCuenta } : d);
+                    // Also update the list entry so the badge updates without a refetch
+                    setInvoices((list) =>
+                      list.map((i) => (i.id === updated.id ? { ...i, overrideCuenta: updated.overrideCuenta } : i))
+                    );
+                  }}
+                />
+              )}
+
               {/* Conceptos */}
               {detailInvoice.items.length > 0 && (
                 <div>
@@ -582,6 +597,143 @@ export default function FacturasPage() {
                 Mantener
               </button>
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Classification override (small inline editor) ──────────────────────────
+function ClassificationOverride({
+  invoice,
+  onUpdated,
+}: {
+  invoice: Invoice;
+  onUpdated: (updated: { id: string; overrideCuenta: string | null }) => void;
+}) {
+  // Current effective classification (auto from first item, or manual override)
+  const auto = invoice.items[0]
+    ? classifyEgreso(invoice.items[0].claveProdServ)
+    : { cuenta: "601.99", label: "Otros gastos" };
+  const effective = invoice.overrideCuenta ?? auto.cuenta;
+  const isOverridden = !!invoice.overrideCuenta;
+
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(effective);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/facturas/${invoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ overrideCuenta: value.trim() || null }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? "Error");
+      }
+      const updated = await res.json();
+      onUpdated({ id: updated.id, overrideCuenta: updated.overrideCuenta });
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearOverride() {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/facturas/${invoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ overrideCuenta: null }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      onUpdated({ id: updated.id, overrideCuenta: updated.overrideCuenta });
+      setValue(auto.cuenta);
+      setEditing(false);
+    } catch {
+      setError("Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="border border-border rounded-lg p-3 bg-gray-50/50">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Clasificación contable
+        </p>
+        {!editing && (
+          <button
+            onClick={() => { setEditing(true); setValue(effective); }}
+            className="text-xs text-primary hover:underline"
+          >
+            Editar
+          </button>
+        )}
+      </div>
+
+      {!editing ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-sm">{effective}</span>
+          <span className="text-xs text-muted-foreground">· {isOverridden ? "manual" : auto.label}</span>
+          {isOverridden && (
+            <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+              override
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="601.15"
+            autoFocus
+            className="w-full px-2 py-1 border border-border rounded text-sm font-mono"
+          />
+          <p className="text-[10px] text-muted-foreground">
+            Código SAT de la subcuenta (ej. <code>601.02</code> Honorarios, <code>601.15</code> Combustibles).
+            Debe existir en tu catálogo.
+          </p>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={save}
+              disabled={saving || !value.trim()}
+              className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded font-medium disabled:opacity-50 flex items-center gap-1"
+            >
+              {saving && <Loader2 className="h-3 w-3 animate-spin" />}
+              Guardar
+            </button>
+            {isOverridden && (
+              <button
+                onClick={clearOverride}
+                disabled={saving}
+                className="text-xs border border-border px-3 py-1.5 rounded font-medium"
+              >
+                Usar automática
+              </button>
+            )}
+            <button
+              onClick={() => { setEditing(false); setValue(effective); setError(""); }}
+              disabled={saving}
+              className="text-xs text-muted-foreground px-2 py-1.5"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}
