@@ -5,8 +5,9 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   FileText, Plus, Download, XCircle, Loader2,
-  AlertCircle, X, FileCode2, Archive, ChevronRight,
+  AlertCircle, X, FileCode2, Archive, ChevronRight, Tag,
 } from "lucide-react";
+import { classifyEgreso } from "@/lib/contabilidad/classify-egreso";
 
 interface Invoice {
   id: string;
@@ -52,7 +53,7 @@ const TIPO_COLOR: Record<string, string> = {
   TRASLADO: "bg-amber-100 text-amber-700",
 };
 
-type TipoFilter = "all" | "INGRESO" | "EGRESO" | "NOMINA" | "PAGO";
+type TipoFilter = "all" | "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "CANCELLED";
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Borrador",
@@ -153,21 +154,31 @@ export default function FacturasPage() {
     }
   }
 
-  // Filter
-  const filtered = tipoFilter === "all"
-    ? invoices
-    : invoices.filter((i) => i.tipo === tipoFilter);
+  // Filter.
+  // "CANCELLED" is a status-level filter (any tipo); all other filters are
+  // tipo-level and EXCLUDE cancelled by default so the main tabs show
+  // only fiscally valid CFDIs (matches how SAT's own export behaves).
+  const filtered =
+    tipoFilter === "CANCELLED"
+      ? invoices.filter((i) => i.status === "CANCELLED")
+      : tipoFilter === "all"
+        ? invoices.filter((i) => i.status !== "CANCELLED")
+        : invoices.filter((i) => i.tipo === tipoFilter && i.status !== "CANCELLED");
 
   // Totals summary (across filtered)
   const stamped = filtered.filter((i) => i.status === "STAMPED");
   const totalMes = stamped.reduce((s, i) => s + i.total, 0);
   const ivaTotal = stamped.reduce((s, i) => s + i.totalImpuestos, 0);
 
-  // Counts per tipo (always from full set)
+  // Counts per tipo (always from non-cancelled full set)
   const tipoCounts = invoices.reduce(
-    (acc, i) => { acc[i.tipo] = (acc[i.tipo] ?? 0) + 1; return acc; },
+    (acc, i) => {
+      if (i.status !== "CANCELLED") acc[i.tipo] = (acc[i.tipo] ?? 0) + 1;
+      return acc;
+    },
     {} as Record<string, number>
   );
+  const cancelledCount = invoices.filter((i) => i.status === "CANCELLED").length;
 
   if (!activeCompany) {
     return (
@@ -185,13 +196,23 @@ export default function FacturasPage() {
           <h1 className="text-2xl font-bold">Facturas (CFDI)</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{activeCompany.razonSocial}</p>
         </div>
-        <a
-          href="/facturas/nueva"
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva factura
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            href={`/api/facturas/export?companyId=${activeCompany.id}${tipoFilter !== "all" ? `&tipo=${tipoFilter}` : ""}`}
+            title="Descargar todas las facturas filtradas en Excel (CSV UTF-8)"
+            className="flex items-center gap-2 border border-border px-4 py-2 rounded-md text-sm font-medium hover:bg-accent transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            Descargar Excel
+          </a>
+          <a
+            href="/facturas/nueva"
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Nueva factura
+          </a>
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -215,24 +236,32 @@ export default function FacturasPage() {
       {/* Tipo filter pills */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         {([
-          ["all",     "Todos",        invoices.length],
-          ["INGRESO", "Ingresos",     tipoCounts.INGRESO ?? 0],
-          ["EGRESO",  "Egresos",      tipoCounts.EGRESO ?? 0],
-          ["NOMINA",  "Nómina",       tipoCounts.NOMINA ?? 0],
-          ["PAGO",    "Pagos (REP)",  tipoCounts.PAGO ?? 0],
-        ] as const).map(([f, label, count]) => (
-          <button
-            key={f}
-            onClick={() => setTipoFilter(f)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              tipoFilter === f
-                ? "bg-primary text-primary-foreground"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {label}{count > 0 ? ` (${count})` : ""}
-          </button>
-        ))}
+          ["all",       "Todos",        invoices.length - cancelledCount, "default"],
+          ["INGRESO",   "Ingresos",     tipoCounts.INGRESO ?? 0,           "default"],
+          ["EGRESO",    "Egresos",      tipoCounts.EGRESO ?? 0,            "default"],
+          ["NOMINA",    "Nómina",       tipoCounts.NOMINA ?? 0,            "default"],
+          ["PAGO",      "Pagos (REP)",  tipoCounts.PAGO ?? 0,              "default"],
+          ["CANCELLED", "Canceladas",   cancelledCount,                    "danger"],
+        ] as const).map(([f, label, count, tone]) => {
+          const active = tipoFilter === f;
+          const dangerTone = tone === "danger";
+          const baseCls = active
+            ? dangerTone
+              ? "bg-red-600 text-white"
+              : "bg-primary text-primary-foreground"
+            : dangerTone
+              ? "bg-red-50 text-red-700 hover:bg-red-100"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200";
+          return (
+            <button
+              key={f}
+              onClick={() => setTipoFilter(f)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${baseCls}`}
+            >
+              {label}{count > 0 ? ` (${count})` : ""}
+            </button>
+          );
+        })}
       </div>
 
       {/* Table */}
@@ -270,41 +299,48 @@ export default function FacturasPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((inv) => (
-                <tr
-                  key={inv.id}
-                  className="border-b border-border last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => setDetailInvoice(inv)}
-                >
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${TIPO_COLOR[inv.tipo] ?? "bg-gray-100 text-gray-600"}`}>
-                      {TIPO_LABEL[inv.tipo] ?? inv.tipo}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden lg:table-cell">
-                    {inv.folio ? `${inv.serie ?? ""}${inv.folio}` : inv.uuid ? inv.uuid.substring(0, 8) + "…" : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium truncate max-w-[280px]">{inv.customer?.razonSocial ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">{inv.customer?.rfc ?? ""}</p>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDate(inv.fecha)}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell">
-                    <span>{inv.formaPago}</span>
-                    <span className="ml-1 bg-gray-100 px-1.5 py-0.5 rounded text-xs">{inv.metodoPago}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right text-muted-foreground hidden md:table-cell">{formatCurrency(inv.subtotal)}</td>
-                  <td className="px-4 py-3 text-right font-semibold">{formatCurrency(inv.total)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[inv.status] ?? "bg-gray-100 text-gray-600"}`}>
-                      {STATUS_LABEL[inv.status] ?? inv.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((inv) => {
+                const isCancelled = inv.status === "CANCELLED";
+                return (
+                  <tr
+                    key={inv.id}
+                    className={`border-b border-border last:border-0 transition-colors cursor-pointer ${
+                      isCancelled
+                        ? "bg-red-50/40 text-muted-foreground hover:bg-red-50"
+                        : "hover:bg-gray-50"
+                    }`}
+                    onClick={() => setDetailInvoice(inv)}
+                  >
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${TIPO_COLOR[inv.tipo] ?? "bg-gray-100 text-gray-600"}`}>
+                        {TIPO_LABEL[inv.tipo] ?? inv.tipo}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden lg:table-cell">
+                      {inv.folio ? `${inv.serie ?? ""}${inv.folio}` : inv.uuid ? inv.uuid.substring(0, 8) + "…" : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className={`font-medium truncate max-w-[280px] ${isCancelled ? "line-through" : ""}`}>{inv.customer?.razonSocial ?? "—"}</p>
+                      <p className="text-xs text-muted-foreground">{inv.customer?.rfc ?? ""}</p>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDate(inv.fecha)}</td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell">
+                      <span>{inv.formaPago}</span>
+                      <span className="ml-1 bg-gray-100 px-1.5 py-0.5 rounded text-xs">{inv.metodoPago}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-muted-foreground hidden md:table-cell">{formatCurrency(inv.subtotal)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${isCancelled ? "line-through" : ""}`}>{formatCurrency(inv.total)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[inv.status] ?? "bg-gray-100 text-gray-600"}`}>
+                        {STATUS_LABEL[inv.status] ?? inv.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -405,20 +441,39 @@ export default function FacturasPage() {
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Conceptos</p>
                   <div className="border border-border rounded-lg overflow-hidden">
-                    {detailInvoice.items.map((item, i) => (
-                      <div
-                        key={item.id}
-                        className={`px-3 py-2.5 text-sm ${i < detailInvoice.items.length - 1 ? "border-b border-border" : ""}`}
-                      >
-                        <p className="font-medium">{item.descripcion}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {item.cantidad} × {formatCurrency(item.valorUnitario)}
-                          <span className="ml-2 font-medium text-foreground">{formatCurrency(item.importe)}</span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">{item.claveProdServ} · {item.claveUnidad}</p>
-                      </div>
-                    ))}
+                    {detailInvoice.items.map((item, i) => {
+                      const classification = detailInvoice.tipo === "EGRESO"
+                        ? classifyEgreso(item.claveProdServ)
+                        : null;
+                      return (
+                        <div
+                          key={item.id}
+                          className={`px-3 py-2.5 text-sm ${i < detailInvoice.items.length - 1 ? "border-b border-border" : ""}`}
+                        >
+                          <p className="font-medium">{item.descripcion}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {item.cantidad} × {formatCurrency(item.valorUnitario)}
+                            <span className="ml-2 font-medium text-foreground">{formatCurrency(item.importe)}</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                            {item.claveProdServ} · {item.claveUnidad}
+                          </p>
+                          {classification && (
+                            <div className="mt-1.5 inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
+                              <Tag className="h-3 w-3" />
+                              <span className="font-mono">{classification.cuenta}</span>
+                              <span>· {classification.label}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
+                  {detailInvoice.tipo === "EGRESO" && detailInvoice.items.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Clasificación sugerida por clave del SAT. Se aplica en el cierre mensual.
+                    </p>
+                  )}
                 </div>
               )}
 
