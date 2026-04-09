@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2 } from "lucide-react";
+import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle } from "lucide-react";
 
 const REGIMENES_FISCALES = [
   { value: "601", label: "601 – General de Ley Personas Morales" },
@@ -21,6 +21,7 @@ const REGIMENES_FISCALES = [
 ];
 
 const STEPS = [
+  { id: 0, label: "Asistente IA",      icon: Sparkles },
   { id: 1, label: "Datos fiscales",    icon: Building2 },
   { id: 2, label: "Contacto",          icon: Building2 },
   { id: 3, label: "CSD",               icon: FileKey2 },
@@ -38,11 +39,18 @@ function fileToBase64(file: File): Promise<string> {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0); // start on AI step
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showCsdPassword, setShowCsdPassword] = useState(false);
   const [showFielPassword, setShowFielPassword] = useState(false);
+
+  // AI step state
+  const [csfFile, setCsfFile] = useState<File | null>(null);
+  const [aiParsing, setAiParsing] = useState(false);
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
+  const [aiConfidenceNotes, setAiConfidenceNotes] = useState<string | null>(null);
+  const [aiExtracted, setAiExtracted] = useState(false);
 
   // Form state
   const [fiscal, setFiscal] = useState({
@@ -61,6 +69,84 @@ export default function OnboardingPage() {
     keyFile: null as File | null,
     password: "",
   });
+
+  // ── AI parse: upload CSF PDF, extract fields via /api/onboarding/parse-csf ──
+  async function handleParseCsf() {
+    if (!csfFile) {
+      setError("Sube el archivo PDF primero");
+      return;
+    }
+    setAiParsing(true);
+    setError("");
+    setAiWarnings([]);
+    setAiConfidenceNotes(null);
+    try {
+      const form = new FormData();
+      form.append("file", csfFile);
+      const res = await fetch("/api/onboarding/parse-csf", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? "No se pudo procesar el PDF");
+      }
+      const e = data.extracted as {
+        rfc: string | null;
+        razonSocial: string | null;
+        nombre: string | null;
+        primerApellido: string | null;
+        segundoApellido: string | null;
+        regimenFiscal: string | null;
+        codigoPostal: string | null;
+        calle: string | null;
+        numExterior: string | null;
+        numInterior: string | null;
+        colonia: string | null;
+        correo: string | null;
+        telefono: string | null;
+        actividadEconomica: string | null;
+        tipoContribuyente: "PF" | "PM" | null;
+        confidenceNotes: string | null;
+      };
+
+      // Build a reasonable domicilio string from the parts
+      const domicilioParts = [
+        e.calle && e.numExterior ? `${e.calle} ${e.numExterior}` : e.calle,
+        e.numInterior ? `Int. ${e.numInterior}` : null,
+        e.colonia ? `Col. ${e.colonia}` : null,
+      ].filter(Boolean);
+      const domicilioFiscal = domicilioParts.join(", ");
+
+      setFiscal({
+        rfc: e.rfc ?? "",
+        razonSocial: e.razonSocial ?? "",
+        regimenFiscal: e.regimenFiscal ?? "",
+        codigoPostal: e.codigoPostal ?? "",
+        domicilioFiscal,
+      });
+      setContacto({
+        nombreComercial: e.tipoContribuyente === "PM" ? "" : "",
+        email: e.correo ?? "",
+        telefono: e.telefono ?? "",
+        actividadEconomica: e.actividadEconomica ?? "",
+      });
+      setAiWarnings(data.warnings ?? []);
+      setAiConfidenceNotes(e.confidenceNotes);
+      setAiExtracted(true);
+      // Jump forward to the first review step so the user sees the pre-filled data
+      setStep(1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error inesperado al procesar el CSF");
+    } finally {
+      setAiParsing(false);
+    }
+  }
+
+  function skipAi() {
+    setError("");
+    setStep(1);
+  }
 
   function handleFiscalChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target;
@@ -168,6 +254,84 @@ export default function OnboardingPage() {
         </div>
 
         <div className="px-8 py-6 space-y-5">
+
+          {/* ── STEP 0: Asistente IA ── */}
+          {step === 0 && (
+            <>
+              <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-indigo-50 border border-indigo-200 rounded-lg p-5">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="h-10 w-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-indigo-900">Llena el formulario automáticamente</h3>
+                    <p className="text-xs text-indigo-800 mt-0.5">
+                      Sube tu <strong>Constancia de Situación Fiscal</strong> (PDF del SAT) y el asistente extrae los datos.
+                      Podrás revisarlos y corregirlos antes de continuar.
+                    </p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-indigo-300 rounded-md text-sm bg-white cursor-pointer hover:bg-indigo-50/50 transition-colors">
+                  <Upload className="h-4 w-4 text-indigo-600 shrink-0" />
+                  <span className={`truncate flex-1 ${csfFile ? "text-foreground" : "text-muted-foreground"}`}>
+                    {csfFile ? csfFile.name : "Seleccionar archivo PDF de tu CSF"}
+                  </span>
+                  {csfFile && (
+                    <span className="text-xs text-muted-foreground">
+                      {(csfFile.size / 1024).toFixed(0)} KB
+                    </span>
+                  )}
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      setCsfFile(f);
+                      setError("");
+                      setAiWarnings([]);
+                    }}
+                  />
+                </label>
+                <p className="text-[10px] text-indigo-700 mt-2">
+                  🔒 El PDF se procesa con Claude (Anthropic) y no se almacena. Los datos fiscales son confidenciales.
+                </p>
+              </div>
+
+              <div className="text-center text-xs text-muted-foreground">
+                ¿No tienes tu CSF a la mano?{" "}
+                <button
+                  type="button"
+                  onClick={skipAi}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Llénalo manualmente
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* AI warnings banner — visible in step 1 after AI extraction */}
+          {step === 1 && aiExtracted && (aiWarnings.length > 0 || aiConfidenceNotes) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-md px-4 py-3 text-sm text-amber-900">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div className="flex-1 space-y-1">
+                  <p className="font-semibold">Revisa los datos extraídos</p>
+                  {aiWarnings.map((w, i) => (
+                    <p key={i} className="text-xs">• {w}</p>
+                  ))}
+                  {aiConfidenceNotes && <p className="text-xs italic">{aiConfidenceNotes}</p>}
+                </div>
+              </div>
+            </div>
+          )}
+          {step === 1 && aiExtracted && aiWarnings.length === 0 && !aiConfidenceNotes && (
+            <div className="bg-green-50 border border-green-200 rounded-md px-4 py-3 text-sm text-green-800 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              Datos extraídos del CSF. Revisa y corrige si es necesario.
+            </div>
+          )}
 
           {/* ── STEP 1: Datos Fiscales ── */}
           {step === 1 && (
@@ -370,7 +534,7 @@ export default function OnboardingPage() {
 
           {/* Navigation */}
           <div className="flex gap-3 pt-2">
-            {step > 1 && (
+            {step > 0 && step !== 1 && (
               <button
                 type="button"
                 onClick={() => { setError(""); setStep((s) => s - 1); }}
@@ -380,7 +544,17 @@ export default function OnboardingPage() {
               </button>
             )}
 
-            {step < 4 ? (
+            {step === 0 ? (
+              <button
+                type="button"
+                onClick={handleParseCsf}
+                disabled={!csfFile || aiParsing}
+                className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {aiParsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {aiParsing ? "Analizando PDF..." : "Extraer datos con IA"}
+              </button>
+            ) : step < 4 ? (
               <button
                 type="button"
                 onClick={nextStep}
