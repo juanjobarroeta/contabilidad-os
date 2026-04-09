@@ -70,6 +70,55 @@ function despachoRoleToCompanyRole(r: "OWNER" | "ADMIN" | "ACCOUNTANT"): MemberR
 }
 
 /**
+ * Returns the effective membership a user has on a company, considering
+ * BOTH direct CompanyMember rows and despacho-based implicit access.
+ *
+ * Drop-in replacement for `prisma.companyMember.findUnique({ where: { userId_companyId } })`
+ * in legacy routes that were written before the despacho layer existed.
+ * Returns `null` if the user has no access at all, or a synthetic membership
+ * object with the effective role (most-permissive wins).
+ *
+ * Prefer `requireMembership()` for new code — this helper exists purely for
+ * minimal-diff migration of the 22 pre-despacho routes.
+ */
+export async function getEffectiveCompanyMembership(
+  userId: string,
+  companyId: string
+): Promise<{ userId: string; companyId: string; role: MemberRole } | null> {
+  const [direct, company] = await Promise.all([
+    prisma.companyMember.findUnique({
+      where: { userId_companyId: { userId, companyId } },
+    }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { despachoId: true },
+    }),
+  ]);
+
+  let despachoMember: { role: "OWNER" | "ADMIN" | "ACCOUNTANT" } | null = null;
+  if (company?.despachoId) {
+    despachoMember = await prisma.despachoMember.findFirst({
+      where: { userId, despachoId: company.despachoId },
+      select: { role: true },
+    });
+  }
+
+  if (!direct && !despachoMember) return null;
+
+  const rank: Record<MemberRole, number> = { OWNER: 4, ADMIN: 3, ACCOUNTANT: 2, VIEWER: 1 };
+  let effectiveRole: MemberRole = direct?.role ?? "VIEWER";
+  if (despachoMember) {
+    const implied = despachoRoleToCompanyRole(despachoMember.role);
+    if (rank[implied] > rank[effectiveRole]) effectiveRole = implied;
+  }
+  if (!direct && despachoMember) {
+    effectiveRole = despachoRoleToCompanyRole(despachoMember.role);
+  }
+
+  return { userId, companyId, role: effectiveRole };
+}
+
+/**
  * Verifies the current user is a member of `companyId` and (optionally)
  * has one of the allowed roles. Returns the membership row (or a synthetic
  * one derived from despacho membership).

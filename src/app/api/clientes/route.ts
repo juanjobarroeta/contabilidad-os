@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 // GET /api/clientes?companyId=xxx&search=xxx
 export async function GET(req: Request) {
@@ -15,9 +16,7 @@ export async function GET(req: Request) {
   if (!companyId) return NextResponse.json([], { status: 400 });
 
   // Verify membership
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json([], { status: 403 });
 
   const clientes = await prisma.customer.findMany({
@@ -54,9 +53,7 @@ export async function POST(req: Request) {
   }
 
   // Verify membership
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // Check duplicate RFC

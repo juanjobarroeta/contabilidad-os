@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -13,9 +14,7 @@ export async function POST(req: Request, { params }: Params) {
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId: account.companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   const companyId = account.companyId;
@@ -101,9 +100,7 @@ export async function GET(req: Request, { params }: Params) {
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId: account.companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const tx = await prisma.bankTransaction.findUnique({ where: { id: txId } });

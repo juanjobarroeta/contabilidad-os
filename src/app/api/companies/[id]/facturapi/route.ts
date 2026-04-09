@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 type Params = { params: Promise<{ id: string }> };
 
 async function verifyOwner(userId: string, companyId: string) {
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(userId, companyId);
   return member && (member.role === "OWNER" || member.role === "ADMIN");
 }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -21,9 +22,7 @@ export async function GET(req: Request, { params }: Params) {
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId: account.companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   // Tag-based subcategories of IGNORED that we surface as their own tabs.
@@ -123,9 +122,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId: account.companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   await prisma.bankAccount.delete({ where: { id: bankAccountId } });

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { AuthzError, requireMembership, requireOwner } from "@/lib/authz";
+import { AuthzError, requireMembership, requireOwner, getEffectiveCompanyMembership } from "@/lib/authz";
 import type { MemberRole } from "@prisma/client";
 
 type Params = { params: Promise<{ id: string }> };
@@ -87,9 +87,7 @@ export async function POST(req: Request, { params }: Params) {
     }
 
     // Check if already a member
-    const existing = await prisma.companyMember.findUnique({
-      where: { userId_companyId: { userId: user.id, companyId } },
-    });
+    const existing = await getEffectiveCompanyMembership(user.id, companyId);
     if (existing) {
       return NextResponse.json(
         { error: "Este usuario ya es miembro de la empresa" },

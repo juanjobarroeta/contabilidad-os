@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { z } from "zod";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 const invoiceItemSchema = z.object({
   quantity: z.number().positive(),
@@ -51,9 +52,7 @@ export async function GET(req: Request) {
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
   // Verify membership
-  const membership = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const membership = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!membership) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const q = searchParams.get("q")?.trim();
@@ -124,9 +123,7 @@ export async function POST(req: Request) {
   const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes, global: globalInfo } = parsed.data;
 
   // Verify membership with at least ACCOUNTANT role
-  const membership = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const membership = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!membership || membership.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }

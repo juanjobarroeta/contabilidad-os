@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 // POST /api/facturas/[id]/cancel — handled via DELETE for simplicity
 export async function DELETE(
@@ -21,9 +22,7 @@ export async function DELETE(
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
   // Verify membership
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId: invoice.companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, invoice.companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }

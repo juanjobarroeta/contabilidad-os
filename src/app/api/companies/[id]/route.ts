@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -12,9 +13,7 @@ export async function GET(_req: Request, { params }: Params) {
 
   const { id: companyId } = await params;
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const company = await prisma.company.findUnique({
@@ -63,9 +62,7 @@ export async function PATCH(req: Request, { params }: Params) {
 
   const { id: companyId } = await params;
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }

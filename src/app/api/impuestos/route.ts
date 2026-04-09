@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 // GET /api/impuestos?companyId=xxx&month=4&year=2026
 export async function GET(req: Request) {
@@ -16,9 +17,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "companyId, month y year son requeridos" }, { status: 400 });
   }
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   // ── Period boundaries ─────────────────────────────────────────────────────
@@ -238,9 +237,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
   }
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }

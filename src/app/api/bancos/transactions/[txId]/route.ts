@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 type Params = { params: Promise<{ txId: string }> };
 
@@ -14,9 +15,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const tx = await prisma.bankTransaction.findUnique({ where: { id: txId } });
   if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId: tx.companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, tx.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   const { action, invoiceId, notes } = await req.json();

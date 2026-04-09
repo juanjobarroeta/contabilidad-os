@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 async function getMember(userId: string, customerId: string) {
   const customer = await prisma.customer.findUnique({
@@ -11,9 +12,7 @@ async function getMember(userId: string, customerId: string) {
   });
   if (!customer) return null;
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId, companyId: customer.companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(userId, customer.companyId);
   return member ? customer : null;
 }
 

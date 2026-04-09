@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -27,9 +28,7 @@ export async function POST(req: Request) {
   }
 
   // Verify company membership
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) {
     return NextResponse.json({ error: "Sin acceso a esta empresa" }, { status: 403 });
   }

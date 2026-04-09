@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TaxDeclarationType } from "@prisma/client";
 import { getObligacionesPorRegimen } from "@/lib/obligaciones";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 // GET /api/dashboard?companyId=xxx
 export async function GET(req: Request) {
@@ -15,9 +16,7 @@ export async function GET(req: Request) {
   if (!companyId)
     return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const now   = new Date();

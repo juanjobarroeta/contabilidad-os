@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parsearTextoCsf, mapCsfObligacion, REGIMEN_MAP } from "@/lib/obligaciones";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 // POST /api/obligaciones/csf
 // Body: { companyId, csfBase64 }
@@ -17,9 +18,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "companyId y csfBase64 son requeridos" }, { status: 400 });
   }
 
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }

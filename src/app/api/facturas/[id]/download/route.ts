@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 const FACTURAPI_BASE = "https://www.facturapi.io/v2";
 
@@ -28,9 +29,7 @@ export async function GET(
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
   // Verify membership
-  const member = await prisma.companyMember.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId: invoice.companyId } },
-  });
+  const member = await getEffectiveCompanyMembership(session.user.id, invoice.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   if (!invoice.facturapiId) {
