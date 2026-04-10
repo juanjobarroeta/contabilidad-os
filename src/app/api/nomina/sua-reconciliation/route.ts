@@ -37,7 +37,10 @@ SCHEMA:
       "cuotaObrera": number | null,
       "cuotaPatronal": number | null,
       "cuotaTotal": number | null,
-      "ramo": string | null
+      "ramo": string | null,
+      "infonavitMonto": number | null,
+      "infonavitCredito": string | null,
+      "infonavitTipo": string | null
     }
   ],
   "totales": {
@@ -48,6 +51,7 @@ SCHEMA:
 }
 
 Si hay múltiples líneas por empleado (por ramo), agrúpalas en una sola entrada con la suma. El campo "ramo" es informativo.
+Si el documento muestra descuentos de Infonavit/crédito de vivienda por empleado, extrae infonavitMonto (el importe), infonavitCredito (número de crédito si aparece), e infonavitTipo ("PESOS" si es cuota fija, "PCT_SBC" si es porcentaje, "VSM" si es veces salario mínimo).
 Montos como números sin comas ni signos de pesos.`;
 
 export async function POST(req: Request) {
@@ -97,6 +101,9 @@ export async function POST(req: Request) {
       cuotaObrera: number | null;
       cuotaPatronal: number | null;
       cuotaTotal: number | null;
+      infonavitMonto: number | null;
+      infonavitCredito: string | null;
+      infonavitTipo: string | null;
     }[];
     totales: { cuotaObrera: number | null; cuotaPatronal: number | null; total: number | null };
   };
@@ -139,6 +146,7 @@ export async function POST(req: Request) {
     select: {
       id: true, nombre: true, apellidoPaterno: true, nss: true,
       salarioDiario: true, salarioDiarioIntegrado: true, riesgoPuesto: true,
+      descuentoInfonavit: true, tipoDescuentoInfonavit: true, creditoInfonavit: true,
     },
   });
 
@@ -244,6 +252,66 @@ export async function POST(req: Request) {
     }
   }
 
+  // ── Infonavit auto-detection ──
+  // Flag employees that have Infonavit in SUA but NOT in our system
+  type InfonavitAction = {
+    nss: string;
+    employeeId: string;
+    nombre: string;
+    action: "ADD" | "UPDATE" | "REMOVE";
+    suaMonto: number | null;
+    suaCredito: string | null;
+    suaTipo: string | null;
+    ourMonto: number | null;
+  };
+  const infonavitActions: InfonavitAction[] = [];
+
+  for (const suaEmp of suaData.employees) {
+    const ourEmp = ourByNss.get(suaEmp.nss);
+    if (!ourEmp) continue;
+
+    const suaHasInfonavit = suaEmp.infonavitMonto != null && suaEmp.infonavitMonto > 0;
+    const ourHasInfonavit = ourEmp.descuentoInfonavit != null && ourEmp.descuentoInfonavit > 0;
+
+    if (suaHasInfonavit && !ourHasInfonavit) {
+      // SUA says they have Infonavit but we don't — need to add
+      infonavitActions.push({
+        nss: suaEmp.nss,
+        employeeId: ourEmp.id,
+        nombre: `${ourEmp.nombre} ${ourEmp.apellidoPaterno}`,
+        action: "ADD",
+        suaMonto: suaEmp.infonavitMonto,
+        suaCredito: suaEmp.infonavitCredito,
+        suaTipo: suaEmp.infonavitTipo,
+        ourMonto: null,
+      });
+    } else if (suaHasInfonavit && ourHasInfonavit && Math.abs((suaEmp.infonavitMonto ?? 0) - (ourEmp.descuentoInfonavit ?? 0)) > 1) {
+      // Both have it but amounts differ
+      infonavitActions.push({
+        nss: suaEmp.nss,
+        employeeId: ourEmp.id,
+        nombre: `${ourEmp.nombre} ${ourEmp.apellidoPaterno}`,
+        action: "UPDATE",
+        suaMonto: suaEmp.infonavitMonto,
+        suaCredito: suaEmp.infonavitCredito,
+        suaTipo: suaEmp.infonavitTipo,
+        ourMonto: ourEmp.descuentoInfonavit,
+      });
+    } else if (!suaHasInfonavit && ourHasInfonavit) {
+      // We have Infonavit but SUA doesn't — credit might be paid off
+      infonavitActions.push({
+        nss: suaEmp.nss,
+        employeeId: ourEmp.id,
+        nombre: `${ourEmp.nombre} ${ourEmp.apellidoPaterno}`,
+        action: "REMOVE",
+        suaMonto: null,
+        suaCredito: null,
+        suaTipo: null,
+        ourMonto: ourEmp.descuentoInfonavit,
+      });
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     suaType: suaData.type,
@@ -255,9 +323,11 @@ export async function POST(req: Request) {
       withDiscrepancies: matched.filter((m) => m.status === "diff").length,
       suaOnly: suaOnly.length,
       ourOnly: ourOnly.length,
+      infonavitActions: infonavitActions.length,
     },
     suaTotals: suaData.totales,
     discrepancies,
+    infonavitActions,
     suaOnly,
     ourOnly,
   });
