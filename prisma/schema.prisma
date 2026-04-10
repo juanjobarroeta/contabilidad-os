@@ -165,6 +165,7 @@ model Company {
   presupuestos      Presupuesto[]
   estimaciones      Estimacion[]
   solicitudesCompra SolicitudCompra[]
+  imssMovimientos   ImssMovimiento[]
 
   // Despacho per-company scoping junction
   despachoMemberScopes DespachoMemberCompany[]
@@ -546,10 +547,49 @@ model Employee {
   tipoDescuentoInfonavit String?  // "PCT_SBC" | "VSM" | "PESOS"
   descuentoInfonavit     Float?
 
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  payrollItems PayrollItem[]
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payrollItems     PayrollItem[]
+  imssMovimientos  ImssMovimiento[]
 
   @@unique([companyId, rfc])
+}
+
+// IMSS Movimientos Afiliatorios — auto-detected from employee changes
+model ImssMovimiento {
+  id          String   @id @default(cuid())
+  companyId   String
+  employeeId  String
+  createdAt   DateTime @default(now())
+
+  tipo        ImssMovimientoTipo  // ALTA, BAJA, MODIFICACION_SALARIO, REINGRESO
+  fechaMovimiento DateTime        // When the movement should be effective
+  sbcAnterior     Float?          // Previous SBC (for modifications)
+  sbcNuevo        Float?          // New SBC
+  motivo          String?         // Reason text
+
+  // Filing status
+  status      ImssMovimientoStatus @default(PENDING)
+  filedAt     DateTime?           // When it was filed with IMSS
+  idseConfirmation String?        // IDSE confirmation number
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([companyId, status])
+}
+
+enum ImssMovimientoTipo {
+  ALTA
+  BAJA
+  MODIFICACION_SALARIO
+  REINGRESO
+}
+
+enum ImssMovimientoStatus {
+  PENDING    // Needs to be filed
+  EXPORTED   // Included in an IDSE export
+  FILED      // Filed with IMSS
+  REJECTED   // IMSS rejected it
 }
 
 model PayrollRun {
