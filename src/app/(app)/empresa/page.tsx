@@ -6,8 +6,25 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   Building2, Plus, Loader2, Pencil, CheckCircle2,
   Zap, Key, AlertCircle, Trash2, ExternalLink, Eye, EyeOff, X,
-  Shield, Upload, FileKey2,
+  Shield, Upload, FileKey2, FileText, Sparkles,
 } from "lucide-react";
+
+type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
+type ImportDoc = {
+  id: string;
+  fileName: string;
+  type: DocType;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extracted: any;
+  warnings: string[];
+};
+const DOC_LABEL: Record<DocType, string> = {
+  CSF: "Constancia de Situación Fiscal",
+  TARJETA_IMSS: "Tarjeta IMSS",
+  ACUSE_ANUAL: "Declaración Anual",
+  ACUSE_MENSUAL: "Declaración Mensual",
+  OTRO: "No reconocido",
+};
 
 const REGIMENES_FISCALES = [
   { value: "601", label: "601 – General de Ley Personas Morales" },
@@ -109,6 +126,13 @@ export default function EmpresaPage() {
   const [fielSaving, setFielSaving] = useState(false);
   const [fielSuccess, setFielSuccess] = useState("");
   const [fielError, setFielError] = useState("");
+
+  // Import declarations
+  const [importDocs, setImportDocs] = useState<ImportDoc[]>([]);
+  const [importParsing, setImportParsing] = useState(false);
+  const [importSaving, setImportSaving] = useState(false);
+  const [importSuccess, setImportSuccess] = useState("");
+  const [importError, setImportError] = useState("");
 
   // Delete company
   const [disconnectLoading, setDisconnectLoading] = useState(false);
@@ -323,6 +347,83 @@ export default function EmpresaPage() {
       setFielError(err instanceof Error ? err.message : "Error inesperado");
     } finally {
       setFielSaving(false);
+    }
+  }
+
+  // ── Import declarations handlers ──
+  async function handleImportUpload(files: FileList | null) {
+    if (!files || files.length === 0 || !activeCompany) return;
+    setImportParsing(true);
+    setImportError("");
+    setImportSuccess("");
+    try {
+      const results: ImportDoc[] = [];
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/onboarding/parse-document", {
+          method: "POST",
+          body: form,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setImportError(`${file.name}: ${data.error ?? "No se pudo procesar"}`);
+          continue;
+        }
+        if (data.type === "ACUSE_ANUAL" || data.type === "ACUSE_MENSUAL") {
+          results.push({
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            fileName: file.name,
+            type: data.type,
+            extracted: data.extracted,
+            warnings: data.warnings ?? [],
+          });
+        } else {
+          setImportError(
+            `${file.name}: Detectado como "${DOC_LABEL[data.type as DocType]}". Solo se importan declaraciones anuales y mensuales.`
+          );
+        }
+      }
+      setImportDocs((prev) => [...prev, ...results]);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setImportParsing(false);
+    }
+  }
+
+  function removeImportDoc(id: string) {
+    setImportDocs((prev) => prev.filter((d) => d.id !== id));
+  }
+
+  async function handleImportSave() {
+    if (!activeCompany || importDocs.length === 0) return;
+    setImportSaving(true);
+    setImportError("");
+    setImportSuccess("");
+    try {
+      const anualDoc = importDocs.find((d) => d.type === "ACUSE_ANUAL");
+      const mensualDocs = importDocs.filter((d) => d.type === "ACUSE_MENSUAL");
+
+      const res = await fetch(`/api/companies/${activeCompany.id}/import-declarations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          acuseAnual: anualDoc?.extracted?.acuseAnual ?? null,
+          acusesMensuales: mensualDocs.map((d) => d.extracted?.acuseMensual).filter(Boolean),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al importar");
+
+      setImportSuccess(
+        `✓ ${data.total} declaración${data.total !== 1 ? "es" : ""} importada${data.total !== 1 ? "s" : ""}: ${data.created.join(", ")}`
+      );
+      setImportDocs([]);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setImportSaving(false);
     }
   }
 
@@ -869,6 +970,116 @@ export default function EmpresaPage() {
             </button>
           </div>
         </div>
+        {/* ── Importar Declaraciones ── */}
+        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden mt-5">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+                <Sparkles className="h-5 w-5 text-indigo-600" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-sm">Importar Declaraciones</h2>
+                <p className="text-xs text-muted-foreground">Sube acuses del SAT para cargar histórico de IVA e ISR</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Sube los PDFs de tus <strong>acuses de declaración anual y/o mensual</strong> del SAT.
+              El asistente los clasifica y extrae automáticamente los datos (IVA a favor, ISR, coeficiente de utilidad, etc.)
+              para que el módulo de impuestos tenga la línea base correcta.
+            </p>
+
+            <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-indigo-200 rounded-md text-sm bg-indigo-50/50 cursor-pointer hover:bg-indigo-50 transition-colors">
+              {importParsing ? (
+                <Loader2 className="h-4 w-4 text-indigo-600 shrink-0 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4 text-indigo-600 shrink-0" />
+              )}
+              <span className="text-muted-foreground truncate flex-1">
+                {importParsing ? "Procesando…" : "Seleccionar acuses PDF (puedes elegir varios)"}
+              </span>
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                disabled={importParsing}
+                className="hidden"
+                onChange={(e) => {
+                  handleImportUpload(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+
+            {/* Parsed docs list */}
+            {importDocs.length > 0 && (
+              <div className="space-y-1.5">
+                {importDocs.map((d) => (
+                  <div
+                    key={d.id}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-md border text-sm ${
+                      d.type === "OTRO" ? "bg-amber-50 border-amber-200" : "bg-white border-border"
+                    }`}
+                  >
+                    <FileText className={`h-4 w-4 shrink-0 ${d.type === "OTRO" ? "text-amber-600" : "text-indigo-600"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{d.fileName}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {DOC_LABEL[d.type]}
+                        {d.type === "ACUSE_MENSUAL" && d.extracted?.acuseMensual?.periodoMes && (
+                          <> · {String(d.extracted.acuseMensual.periodoMes).padStart(2, "0")}/{d.extracted.acuseMensual.periodoAnio}</>
+                        )}
+                        {d.type === "ACUSE_ANUAL" && d.extracted?.acuseAnual?.ejercicio && (
+                          <> · Ejercicio {d.extracted.acuseAnual.ejercicio}</>
+                        )}
+                        {d.type === "ACUSE_ANUAL" && d.extracted?.acuseAnual?.coeficienteUtilidad != null && (
+                          <> · CU: {d.extracted.acuseAnual.coeficienteUtilidad}</>
+                        )}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeImportDoc(d.id)}
+                      className="p-1 rounded hover:bg-accent text-muted-foreground shrink-0"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {importError && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span className="text-xs">{importError}</span>
+              </div>
+            )}
+
+            {importSuccess && (
+              <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
+                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                <span className="text-xs">{importSuccess}</span>
+              </div>
+            )}
+
+            {importDocs.length > 0 && (
+              <button
+                onClick={handleImportSave}
+                disabled={importSaving}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {importSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {importSaving
+                  ? "Importando…"
+                  : `Importar ${importDocs.length} declaración${importDocs.length !== 1 ? "es" : ""}`}
+              </button>
+            )}
+          </div>
+        </div>
+
         </>
       )}
     </div>
