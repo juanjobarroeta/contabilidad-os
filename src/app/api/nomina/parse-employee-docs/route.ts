@@ -54,6 +54,8 @@ SCHEMA DE RESPUESTA:
     "codigoPostal": string | null,
     "claveEntFed": string | null,
     "salarioDiario": number | null,
+    "salarioDiarioIntegrado": number | null,
+    "salarioBaseCotizacion": number | null,
     "salarioMensual": number | null,
     "puesto": string | null,
     "departamento": string | null,
@@ -70,7 +72,8 @@ SCHEMA DE RESPUESTA:
   "confidenceNotes": string | null
 }
 
-8. Para CFDI nómina: si hay una deducción tipo "010" (Pago por crédito de vivienda/Infonavit), extrae el importe como descuentoInfonavit y pon tipoDescuentoInfonavit como "PESOS". Si el campo creditoInfonavit aparece, extráelo también.
+8. IMPORTANTE para salarios: "Sueldo diario" y "Salario diario integrado" (SDI) y "Salario base cotización" (SBC) son DIFERENTES. El campo salarioDiario debe ser el "Sueldo diario" (el más bajo de los tres). El SDI y SBC son más altos porque incluyen factor de integración. Si solo ves SBC/SDI pero no sueldo diario, pon salarioDiario como null.
+9. Para CFDI nómina: si hay una deducción tipo "010" (Pago por crédito de vivienda/Infonavit), extrae el importe como descuentoInfonavit y pon tipoDescuentoInfonavit como "PESOS". Si el campo creditoInfonavit aparece, extráelo también.
 
 Códigos SAT para tipoContrato: "01"=Indefinido, "02"=Temporal, "03"=Obra, "04"=Temporada, "05"=Prueba, "09"=Jubilado.
 Códigos SAT para tipoJornada: "01"=Diurna, "02"=Nocturna, "03"=Mixta, "04"=Por hora, "99"=Otra.

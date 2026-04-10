@@ -6,7 +6,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Plus, Users2, Loader2, X, AlertCircle, CheckCircle2, Receipt,
   Upload, Sparkles, FileText, Play, Download, Calendar, ClipboardList,
-  ArrowLeftRight, Shield, ChevronDown, ChevronUp, UserX,
+  ArrowLeftRight, Shield, ChevronDown, ChevronUp, UserX, Trash2,
 } from "lucide-react";
 
 interface PayrollItemDetail {
@@ -193,6 +193,17 @@ export default function NominaPage() {
       setRunItems(data.items ?? []);
     } catch { setRunItems([]); }
     finally { setRunItemsLoading(false); }
+  }
+
+  async function handleDeleteRun(runId: string) {
+    if (!confirm("¿Eliminar esta corrida? Los cálculos se perderán.")) return;
+    try {
+      const res = await fetch(`/api/nomina/run/${runId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Error al eliminar"); return; }
+      setError("✓ Corrida eliminada");
+      loadRuns();
+    } catch { setError("Error al eliminar"); }
   }
 
   async function handleStamp(runId: string) {
@@ -394,6 +405,13 @@ export default function NominaPage() {
                             className="flex items-center gap-1.5 border border-border px-3 py-1.5 rounded-md text-xs hover:bg-accent">
                             <ArrowLeftRight className="h-3.5 w-3.5" /> Dispersión
                           </a>
+                        )}
+                        {(run.status === "DRAFT" || run.status === "CALCULATED") && (
+                          <button onClick={() => handleDeleteRun(run.id)}
+                            className="flex items-center gap-1 border border-red-200 text-red-600 px-2.5 py-1.5 rounded-md text-xs hover:bg-red-50"
+                            title="Eliminar corrida">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         )}
                         {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                       </div>
@@ -626,7 +644,7 @@ function NewEmployeeModal({
           curp: e.curp?.trim().toUpperCase() || prev.curp,
           nss: String(e.nss ?? "").trim() || prev.nss,
           fechaIngreso: e.fechaIngreso || e.fechaAlta || prev.fechaIngreso,
-          salarioDiario: e.salarioDiario ? String(e.salarioDiario) : (e.salarioMensual ? String(Math.round((e.salarioMensual / 30.4) * 100) / 100) : prev.salarioDiario),
+          salarioDiario: e.salarioDiario ? String(e.salarioDiario) : (e.salarioMensual ? String(Math.round((e.salarioMensual / 30.4) * 100) / 100) : (e.salarioBaseCotizacion && !e.salarioDiario ? "" : prev.salarioDiario)),
           periodicidadPago: e.periodicidadPago || prev.periodicidadPago,
           puesto: e.puesto?.trim() || prev.puesto,
           departamento: e.departamento?.trim() || prev.departamento,
