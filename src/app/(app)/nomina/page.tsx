@@ -958,6 +958,7 @@ function EditEmployeeModal({
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [skipImss, setSkipImss] = useState(true); // default: corrections don't generate IMSS
 
   // Load full employee data (including Infonavit) on mount
   useEffect(() => {
@@ -989,6 +990,7 @@ function EditEmployeeModal({
           creditoInfonavit: form.creditoInfonavit || null,
           tipoDescuentoInfonavit: form.tipoDescuentoInfonavit || null,
           descuentoInfonavit: form.descuentoInfonavit ? parseFloat(form.descuentoInfonavit) : null,
+          skipImssMovimiento: skipImss,
         }),
       });
       const data = await res.json();
@@ -1022,7 +1024,10 @@ function EditEmployeeModal({
               <input required type="number" min="0" step="0.01" value={form.salarioDiario}
                 onChange={e => setForm(p => ({ ...p, salarioDiario: e.target.value }))} className={inputCls} />
               {parseFloat(form.salarioDiario) !== employee.salarioDiario && (
-                <p className="text-[10px] text-amber-600 mt-0.5">⚠ Cambio de salario generará movimiento IMSS automáticamente</p>
+                <label className="flex items-start gap-2 mt-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 cursor-pointer">
+                  <input type="checkbox" checked={skipImss} onChange={e => setSkipImss(e.target.checked)} className="mt-0.5" />
+                  <span>Es una corrección de datos, <strong>no generar</strong> movimiento IMSS</span>
+                </label>
               )}
             </Field>
             <Field label="Periodicidad">

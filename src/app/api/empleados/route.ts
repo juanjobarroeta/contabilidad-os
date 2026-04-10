@@ -139,7 +139,8 @@ export async function PATCH(req: Request) {
     if (fields.riesgoPuesto) data.riesgoPuesto = fields.riesgoPuesto;
     if (fields.claveEntFed) data.claveEntFed = fields.claveEntFed;
 
-    // Salary change → also triggers IMSS modificación
+    // Salary change → triggers IMSS modificación UNLESS skipImssMovimiento is set
+    // (use skipImssMovimiento: true for data corrections that don't represent a real raise)
     if (fields.salarioDiario != null && fields.salarioDiario !== employee.salarioDiario) {
       const newSalario = Number(fields.salarioDiario);
       data.salarioDiario = newSalario;
@@ -147,18 +148,19 @@ export async function PATCH(req: Request) {
         ? Number(fields.salarioDiarioIntegrado)
         : +(newSalario * 1.0452).toFixed(2);
 
-      // Auto-create IMSS Modificación de Salario movement
-      await prisma.imssMovimiento.create({
-        data: {
-          companyId,
-          employeeId,
-          tipo: "MODIFICACION_SALARIO",
-          fechaMovimiento: new Date(),
-          sbcAnterior: employee.salarioDiarioIntegrado ?? employee.salarioDiario,
-          sbcNuevo: data.salarioDiarioIntegrado,
-          motivo: `Cambio de salario: $${employee.salarioDiario} → $${newSalario}`,
-        },
-      });
+      if (!fields.skipImssMovimiento) {
+        await prisma.imssMovimiento.create({
+          data: {
+            companyId,
+            employeeId,
+            tipo: "MODIFICACION_SALARIO",
+            fechaMovimiento: new Date(),
+            sbcAnterior: employee.salarioDiarioIntegrado ?? employee.salarioDiario,
+            sbcNuevo: data.salarioDiarioIntegrado,
+            motivo: `Cambio de salario: $${employee.salarioDiario} → $${newSalario}`,
+          },
+        });
+      }
     }
 
     // Infonavit
