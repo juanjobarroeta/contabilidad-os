@@ -5,6 +5,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Plus, Users2, Loader2, X, AlertCircle, CheckCircle2, Receipt,
+  Upload, Sparkles, FileText,
 } from "lucide-react";
 
 interface Employee {
@@ -191,9 +192,56 @@ function NewEmployeeModal({
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [aiParsing, setAiParsing] = useState(false);
+  const [aiDocs, setAiDocs] = useState<{ name: string; type: string }[]>([]);
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
 
   function set<K extends keyof typeof form>(k: K, v: string) {
     setForm(p => ({ ...p, [k]: v }));
+  }
+
+  async function handleAiUpload(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setAiParsing(true);
+    setErr("");
+    setAiWarnings([]);
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/nomina/parse-employee-docs", {
+          method: "POST", body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok) { setErr(`${file.name}: ${data.error ?? "Error"}`); continue; }
+
+        setAiDocs(prev => [...prev, { name: file.name, type: data.type }]);
+        if (data.warnings?.length) setAiWarnings(prev => [...prev, ...data.warnings]);
+
+        // Merge extracted fields (non-empty override existing)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const e: any = data.employee ?? {};
+        setForm(prev => ({
+          nombre: e.nombre?.trim() || prev.nombre,
+          apellidoPaterno: e.apellidoPaterno?.trim() || prev.apellidoPaterno,
+          apellidoMaterno: e.apellidoMaterno?.trim() || prev.apellidoMaterno,
+          rfc: e.rfc?.trim().toUpperCase() || prev.rfc,
+          curp: e.curp?.trim().toUpperCase() || prev.curp,
+          nss: String(e.nss ?? "").trim() || prev.nss,
+          fechaIngreso: e.fechaIngreso || e.fechaAlta || prev.fechaIngreso,
+          salarioDiario: e.salarioDiario ? String(e.salarioDiario) : (e.salarioMensual ? String(Math.round((e.salarioMensual / 30.4) * 100) / 100) : prev.salarioDiario),
+          periodicidadPago: e.periodicidadPago || prev.periodicidadPago,
+          puesto: e.puesto?.trim() || prev.puesto,
+          departamento: e.departamento?.trim() || prev.departamento,
+          riesgoPuesto: prev.riesgoPuesto,
+          claveEntFed: e.claveEntFed || prev.claveEntFed,
+        }));
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    } finally {
+      setAiParsing(false);
+    }
   }
 
   async function submit(e: React.FormEvent) {
@@ -230,6 +278,46 @@ function NewEmployeeModal({
           <button onClick={onClose}><X className="h-4 w-4" /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-3">
+          {/* AI Upload Zone */}
+          <div className="bg-indigo-50/60 border border-indigo-200 rounded-lg p-3">
+            <label className="flex items-center gap-3 px-3 py-2.5 border-2 border-dashed border-indigo-300 rounded-md text-sm bg-white cursor-pointer hover:bg-indigo-50/50 transition-colors">
+              {aiParsing ? (
+                <Loader2 className="h-4 w-4 text-indigo-600 shrink-0 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 text-indigo-600 shrink-0" />
+              )}
+              <span className="text-muted-foreground truncate flex-1 text-xs">
+                {aiParsing ? "Leyendo documentos…" : "Sube CURP, NSS, contrato, INE — llena automáticamente"}
+              </span>
+              <input
+                type="file"
+                accept="application/pdf,.pdf,image/*"
+                multiple
+                disabled={aiParsing}
+                className="hidden"
+                onChange={(e) => { handleAiUpload(e.target.files); e.target.value = ""; }}
+              />
+            </label>
+            {aiDocs.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {aiDocs.map((d, i) => (
+                  <div key={i} className="flex items-center gap-2 text-[10px] text-indigo-800">
+                    <FileText className="h-3 w-3" />
+                    <span className="truncate">{d.name}</span>
+                    <span className="text-indigo-600 font-medium">{d.type}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {aiWarnings.length > 0 && (
+              <div className="mt-2 space-y-0.5">
+                {aiWarnings.map((w, i) => (
+                  <p key={i} className="text-[10px] text-amber-700">⚠ {w}</p>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <Field label="Nombre(s)*"><input required value={form.nombre} onChange={e => set("nombre", e.target.value)} className={inputCls} /></Field>
             <Field label="Apellido paterno*"><input required value={form.apellidoPaterno} onChange={e => set("apellidoPaterno", e.target.value)} className={inputCls} /></Field>
