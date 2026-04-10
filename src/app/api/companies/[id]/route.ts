@@ -68,9 +68,16 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   const body = await req.json();
-  const { fielCer, fielKey, fielPassword, csdCer, csdKey, csdPassword, registroPatronal } = body;
+  const {
+    fielCer, fielKey, fielPassword, csdCer, csdKey, csdPassword,
+    registroPatronal,
+    // Editable fiscal/contact fields
+    razonSocial, regimenFiscal, codigoPostal, domicilioFiscal,
+    nombreComercial, email, telefono, actividadEconomica,
+  } = body;
 
-  const data: Record<string, string | null> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: Record<string, any> = {};
   if (fielCer) data.fielCer = fielCer;
   if (fielKey) data.fielKey = fielKey;
   if (fielPassword) data.fielPassword = fielPassword;
@@ -81,6 +88,15 @@ export async function PATCH(req: Request, { params }: Params) {
     // Accept empty string as "clear it"
     data.registroPatronal = registroPatronal?.trim() || null;
   }
+  // General fields — only accept non-empty truthy values
+  if (razonSocial?.trim()) data.razonSocial = razonSocial.trim();
+  if (regimenFiscal?.trim()) data.regimenFiscal = regimenFiscal.trim();
+  if (codigoPostal?.trim()) data.codigoPostal = codigoPostal.trim();
+  if (domicilioFiscal !== undefined) data.domicilioFiscal = domicilioFiscal?.trim() || null;
+  if (nombreComercial !== undefined) data.nombreComercial = nombreComercial?.trim() || null;
+  if (email !== undefined) data.email = email?.trim() || null;
+  if (telefono !== undefined) data.telefono = telefono?.trim() || null;
+  if (actividadEconomica !== undefined) data.actividadEconomica = actividadEconomica?.trim() || null;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "No hay datos para actualizar" }, { status: 400 });
