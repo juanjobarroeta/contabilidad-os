@@ -31,14 +31,24 @@ export async function GET() {
     }),
     prisma.despachoMember.findFirst({
       where: { userId: session.user.id },
-      select: { despachoId: true },
+      select: { id: true, despachoId: true },
     }),
   ]);
 
   let despachoCompanies: typeof direct[number]["company"][] = [];
   if (despachoMember) {
+    // Check per-company scoping: if member has scope rows, filter to those
+    const scopeRows = await prisma.despachoMemberCompany.findMany({
+      where: { despachoMemberId: despachoMember.id },
+      select: { companyId: true },
+    });
+    const scopedIds = scopeRows.map(s => s.companyId);
+
     despachoCompanies = await prisma.company.findMany({
-      where: { despachoId: despachoMember.despachoId },
+      where: {
+        despachoId: despachoMember.despachoId,
+        ...(scopedIds.length > 0 ? { id: { in: scopedIds } } : {}),
+      },
       select: {
         id: true,
         rfc: true,

@@ -108,6 +108,14 @@ export async function GET(req: Request) {
     // This month's existing declaration (to restore overrides)
     prisma.taxDeclaration.findFirst({
       where: { companyId, tipo: "IVA_MENSUAL", periodo },
+      select: {
+        id: true, status: true, isHistorical: true,
+        ivaSaldoFavorAnterior: true, isrCoeficienteUtilidad: true,
+        ivaSaldoFavor: true, ivaTrasladadoCobrado: true, ivaAcreditableGastado: true,
+        ivaPagar: true, isrIngresos: true, isrDeducciones: true,
+        isrBaseGravable: true, isrTasa: true, isrPagar: true,
+        acuseUrl: true, lineaCaptura: true, fechaPresentacion: true, fechaLimitePago: true,
+      },
     }),
     // Company — coeficiente override
     prisma.company.findUnique({
@@ -222,6 +230,7 @@ export async function GET(req: Request) {
     declaracionGuardada: declaracionGuardada ? {
       id: declaracionGuardada.id,
       status: declaracionGuardada.status,
+      isHistorical: declaracionGuardada.isHistorical ?? false,
       // Restore any manual overrides the user saved last time
       saldoFavorAnteriorOverride: declaracionGuardada.ivaSaldoFavorAnterior,
       coeficienteOverride: declaracionGuardada.isrCoeficienteUtilidad,

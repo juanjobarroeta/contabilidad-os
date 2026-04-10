@@ -60,6 +60,7 @@ interface ApiResult {
   declaracionGuardada: {
     id: string;
     status: string;
+    isHistorical?: boolean;
     saldoFavorAnteriorOverride: number | null;
     coeficienteOverride: number | null;
     acuseUrl: string | null;
@@ -161,6 +162,7 @@ export default function ImpuestosPage() {
   const [result, setResult]     = useState<ApiResult | null>(null);
   const [error, setError]       = useState("");
   const [savedStatus, setSavedStatus] = useState<string | null>(null);
+  const [isHistorical, setIsHistorical] = useState(false);
 
   // User-adjustable overrides (initialized from API / saved declaration)
   const [saldoFavorAnterior, setSaldoFavorAnterior] = useState(0);
@@ -221,6 +223,7 @@ export default function ImpuestosPage() {
       const data: ApiResult = await res.json();
       setResult(data);
       setSavedStatus(data.declaracionGuardada?.status ?? null);
+      setIsHistorical(data.declaracionGuardada?.isHistorical ?? false);
 
       // Restore saved overrides, otherwise use auto values
       const savedSaldo = data.declaracionGuardada?.saldoFavorAnteriorOverride;
@@ -422,6 +425,11 @@ export default function ImpuestosPage() {
         {savedStatus && (
           <span className={`ml-3 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[savedStatus] ?? "bg-gray-100 text-gray-600"}`}>
             {STATUS_LABELS[savedStatus] ?? savedStatus}
+          </span>
+        )}
+        {isHistorical && (
+          <span className="ml-2 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+            📄 Importado del SAT
           </span>
         )}
 

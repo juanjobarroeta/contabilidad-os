@@ -46,9 +46,16 @@ export async function GET(req: Request) {
       companyId,
       periodo: { startsWith: String(year) },
     },
-    select: { tipo: true, periodo: true, status: true },
+    select: { tipo: true, periodo: true, status: true, isHistorical: true },
   });
   const declMap = new Map(declarations.map(d => [`${d.tipo}::${d.periodo}`, d.status]));
+
+  // Find company creation date — periods before this shouldn't be OVERDUE
+  const companyRecord = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { createdAt: true },
+  });
+  const companyCreatedAt = companyRecord?.createdAt ?? new Date();
 
   const now = new Date();
 
@@ -80,6 +87,9 @@ export async function GET(req: Request) {
           estado = "FILED";
         } else if (declStatus === "CALCULATED") {
           estado = "PENDING";
+        } else if (vencimiento < companyCreatedAt) {
+          // Period ended before the company was onboarded — don't show as overdue
+          estado = "NOT_APPLICABLE";
         } else if (vencimiento < now) {
           estado = "OVERDUE";
         } else if (vencimiento.getTime() - now.getTime() < 30 * 24 * 60 * 60 * 1000) {

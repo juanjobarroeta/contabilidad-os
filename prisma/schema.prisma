@@ -165,6 +165,9 @@ model Company {
   presupuestos      Presupuesto[]
   estimaciones      Estimacion[]
   solicitudesCompra SolicitudCompra[]
+
+  // Despacho per-company scoping junction
+  despachoMemberScopes DespachoMemberCompany[]
 }
 
 model CompanyMember {
@@ -240,11 +243,31 @@ model DespachoMember {
   despacho Despacho @relation(fields: [despachoId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Per-company scoping: if this member has DespachoMemberCompany rows,
+  // they can ONLY access those companies. If they have ZERO rows, they
+  // get access to ALL despacho companies (backwards-compatible default).
+  companyScopes DespachoMemberCompany[]
+
   @@unique([userId, despachoId])
   // A user belongs to at most one despacho — enforced by unique(userId)
   // so we can't accidentally double-enroll. Remove this if you ever need
   // multi-despacho users.
   @@unique([userId])
+}
+
+// Per-company access scoping within a despacho. When a DespachoMember has
+// rows here, they can only access those specific companies. When they have
+// NO rows, they get access to all despacho companies (default/owner behavior).
+model DespachoMemberCompany {
+  id               String @id @default(cuid())
+  despachoMemberId String
+  companyId        String
+  createdAt        DateTime @default(now())
+
+  member  DespachoMember @relation(fields: [despachoMemberId], references: [id], onDelete: Cascade)
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([despachoMemberId, companyId])
 }
 
 enum DespachoRole {

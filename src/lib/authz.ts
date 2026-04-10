@@ -95,12 +95,27 @@ export async function getEffectiveCompanyMembership(
     }),
   ]);
 
-  let despachoMember: { role: "OWNER" | "ADMIN" | "ACCOUNTANT" } | null = null;
+  let despachoMember: { id: string; role: "OWNER" | "ADMIN" | "ACCOUNTANT" } | null = null;
   if (company?.despachoId) {
     despachoMember = await prisma.despachoMember.findFirst({
       where: { userId, despachoId: company.despachoId },
-      select: { role: true },
+      select: { id: true, role: true },
     });
+  }
+
+  // Per-company scoping: if despacho member has company scope rows, check
+  // that this company is in their allowed set. If they have ZERO scope rows,
+  // they get access to all despacho companies (owner/admin default).
+  if (despachoMember) {
+    const scopeCount = await prisma.despachoMemberCompany.count({
+      where: { despachoMemberId: despachoMember.id },
+    });
+    if (scopeCount > 0) {
+      const hasScope = await prisma.despachoMemberCompany.findFirst({
+        where: { despachoMemberId: despachoMember.id, companyId },
+      });
+      if (!hasScope) despachoMember = null; // scoped out of this company
+    }
   }
 
   if (!direct && !despachoMember) return null;
@@ -154,12 +169,25 @@ export async function requireMembership(
     }),
   ]);
 
-  let despachoMember: { role: "OWNER" | "ADMIN" | "ACCOUNTANT" } | null = null;
+  let despachoMember: { id: string; role: "OWNER" | "ADMIN" | "ACCOUNTANT" } | null = null;
   if (company?.despachoId) {
     despachoMember = await prisma.despachoMember.findFirst({
       where: { userId: user.id, despachoId: company.despachoId },
-      select: { role: true },
+      select: { id: true, role: true },
     });
+  }
+
+  // Per-company scoping within despacho
+  if (despachoMember) {
+    const scopeCount = await prisma.despachoMemberCompany.count({
+      where: { despachoMemberId: despachoMember.id },
+    });
+    if (scopeCount > 0) {
+      const hasScope = await prisma.despachoMemberCompany.findFirst({
+        where: { despachoMemberId: despachoMember.id, companyId },
+      });
+      if (!hasScope) despachoMember = null;
+    }
   }
 
   if (!direct && !despachoMember) {
