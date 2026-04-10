@@ -57,6 +57,8 @@ export const COE_CODES = {
   GASTOS_NO_DEDUCIBLES: "603.01",
   OTROS_GASTOS:         "601.99",
   IMPUESTOS_DERECHOS:   "601.20",
+  CUOTAS_IMSS_PATRONAL: "601.14",  // Cuotas IMSS a cargo del patrón (gasto)
+  CUOTAS_INFONAVIT:     "601.15",  // Aportaciones Infonavit patronal (gasto)
   DIFERENCIAS_REDONDEO: "704.01",
 } as const;
 
@@ -122,6 +124,8 @@ export const SAT_STARTER_CATALOG: CatalogAccount[] = [
   { cuentaSAT: "601", subcuenta: "601.02",     nombre: "Honorarios",                          tipo: "GASTO",   nivel: 3 },
   { cuentaSAT: "601", subcuenta: "601.03",     nombre: "Rentas",                              tipo: "GASTO",   nivel: 3 },
   { cuentaSAT: "601", subcuenta: "601.20",     nombre: "Impuestos y derechos",                tipo: "GASTO",   nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.14",     nombre: "Cuotas IMSS patronal",                tipo: "GASTO",   nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.15",     nombre: "Aportaciones Infonavit patronal",     tipo: "GASTO",   nivel: 3 },
   { cuentaSAT: "601", subcuenta: "601.84",     nombre: "Comisiones bancarias",                tipo: "GASTO",   nivel: 3 },
   { cuentaSAT: "601", subcuenta: "601.99",     nombre: "Otros gastos",                        tipo: "GASTO",   nivel: 3 },
   { cuentaSAT: "603", subcuenta: null,         nombre: "Gastos no deducibles",                tipo: "GASTO",   nivel: 2 },

@@ -60,6 +60,8 @@ export async function GET(req: Request) {
     prevDeclaracion,
     declaracionGuardada,
     company,
+    nominaThisMonth,
+    nominaPrevMonths,
   ] = await Promise.all([
     // This month's invoices
     prisma.invoice.findMany({
@@ -122,6 +124,28 @@ export async function GET(req: Request) {
       where: { id: companyId },
       select: { coeficienteUtilidad: true, coeficienteAnio: true },
     }),
+    // Nómina ISR retenciones this month (from PayrollItems)
+    prisma.payrollItem.aggregate({
+      where: {
+        payrollRun: {
+          companyId,
+          status: { in: ["CALCULATED", "STAMPED", "PAID"] },
+          fechaPago: { gte: from, lt: to },
+        },
+      },
+      _sum: { isrRetenido: true, imssObrero: true, imssPatronal: true, infonavit: true, totalPercepciones: true },
+    }),
+    // Nómina ISR retenciones Jan → prev month (cumulative for ISR ya pagado)
+    prisma.payrollItem.aggregate({
+      where: {
+        payrollRun: {
+          companyId,
+          status: { in: ["CALCULATED", "STAMPED", "PAID"] },
+          fechaPago: { gte: yearFrom, lt: from },
+        },
+      },
+      _sum: { isrRetenido: true },
+    }),
   ]);
 
   // ── IVA calculations ──────────────────────────────────────────────────────
@@ -174,6 +198,14 @@ export async function GET(req: Request) {
   const ingresosAcumulados = ingresosAcumuladosAgg._sum.subtotal ?? 0;
   const isrPagadoAnterior  = declaracionesPrevias.reduce((s, d) => s + (d.isrPagar ?? 0), 0);
 
+  // ── Nómina retenciones ──────────────────────────────────────────────────
+  const nominaIsrMes       = nominaThisMonth._sum.isrRetenido ?? 0;
+  const nominaImssMes      = nominaThisMonth._sum.imssObrero ?? 0;
+  const nominaImssPatronal = nominaThisMonth._sum.imssPatronal ?? 0;
+  const nominaInfonavitMes = nominaThisMonth._sum.infonavit ?? 0;
+  const nominaPercepMes    = nominaThisMonth._sum.totalPercepciones ?? 0;
+  const nominaIsrAcum      = nominaPrevMonths._sum.isrRetenido ?? 0; // Jan → prev month
+
   // Raw month figures (for the invoices table)
   const ingresosDelMes = facturasEmitidas.reduce((s, inv) => s + inv.subtotal, 0);
   const gastosDelMes   = facturasEgresos.reduce((s, inv) => s + inv.subtotal, 0);
@@ -210,6 +242,14 @@ export async function GET(req: Request) {
       // Auto carryover from previous month — can be overridden on frontend
       saldoFavorAnterior: saldoFavorAnteriorAuto,
       saldoFavorAnteriorPeriodo: saldoFavorAnteriorAuto > 0 ? prevPeriodo : null,
+    },
+    nomina: {
+      isrRetenidoMes: nominaIsrMes,
+      imssObreroMes: nominaImssMes,
+      imssPatronalMes: nominaImssPatronal,
+      infonavitMes: nominaInfonavitMes,
+      percepcionesMes: nominaPercepMes,
+      isrRetenidoAcumulado: nominaIsrAcum + nominaIsrMes,
     },
     isr: {
       ingresosDelMes,

@@ -96,6 +96,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accPrestamosPorPagar,
     accPrestamosOtorgados,
     accCapitalSocial,
+    accImssPatronalGasto,
+    accImssPorPagar,
   ] = await Promise.all([
     resolveAccount(companyId, COE_CODES.BANCOS),
     resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
@@ -113,6 +115,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.PRESTAMOS_RECIBIDOS),
     resolveAccount(companyId, COE_CODES.PRESTAMOS_OTORGADOS),
     resolveAccount(companyId, COE_CODES.CAPITAL_SOCIAL),
+    resolveAccount(companyId, COE_CODES.CUOTAS_IMSS_PATRONAL),
+    resolveAccount(companyId, COE_CODES.IMSS_POR_PAGAR),
   ]);
 
   // ─── 1. CFDIs emitted (INGRESO) ────────────────────────────────────────
@@ -246,6 +250,47 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       monto: inv.total,
       tipo: "ABONO",
     });
+  }
+
+  // ─── 1.6 IMSS Patronal — employer's IMSS cost from PayrollItems ────────
+  // The nómina CFDIs above only record what the employee gets/has deducted.
+  // The EMPLOYER's IMSS contribution is an additional cost not in the CFDI.
+  // We post it as: DR Cuotas IMSS Patronal (gasto) / CR IMSS por Pagar (pasivo)
+  {
+    const payrollItems = await prisma.payrollItem.findMany({
+      where: {
+        payrollRun: {
+          companyId,
+          status: { in: ["CALCULATED", "STAMPED", "PAID"] },
+          fechaPago: { gte: start, lt: end },
+        },
+        imssPatronal: { gt: 0 },
+      },
+      select: { imssPatronal: true, payrollRun: { select: { periodo: true } } },
+    });
+
+    const totalImssPatronal = payrollItems.reduce((s, i) => s + i.imssPatronal, 0);
+    if (totalImssPatronal > 0.01) {
+      const base = {
+        fecha: new Date(year, month - 1, Math.min(15, end.getDate())),
+        descripcion: `Cuotas IMSS patronal ${year}-${String(month).padStart(2, "0")}`,
+        referencia: `IMSS-PATRONAL-${year}-${String(month).padStart(2, "0")}`,
+        referenciaTipo: "NOMINA" as const,
+        fuente: "NOMINA" as EntrySource,
+      };
+      drafts.push({
+        ...base,
+        chartAccountId: accImssPatronalGasto.id,
+        monto: Math.round(totalImssPatronal * 100) / 100,
+        tipo: "CARGO",
+      });
+      drafts.push({
+        ...base,
+        chartAccountId: accImssPorPagar.id,
+        monto: Math.round(totalImssPatronal * 100) / 100,
+        tipo: "ABONO",
+      });
+    }
   }
 
   // ─── 2. CFDIs received (EGRESO) ────────────────────────────────────────
