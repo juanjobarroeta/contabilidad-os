@@ -108,3 +108,76 @@ export async function POST(req: Request) {
     throw e;
   }
 }
+
+// PATCH /api/empleados — update employee fields
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json();
+    const { employeeId, companyId, ...fields } = body;
+
+    if (!employeeId || !companyId) {
+      return NextResponse.json({ error: "employeeId y companyId requeridos" }, { status: 400 });
+    }
+
+    await requireWriter(companyId);
+
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, companyId },
+    });
+    if (!employee) return NextResponse.json({ error: "Empleado no encontrado" }, { status: 404 });
+
+    // Build update data — only accept known fields, ignore nullish
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: Record<string, any> = {};
+    if (fields.nombre?.trim()) data.nombre = fields.nombre.trim();
+    if (fields.apellidoPaterno?.trim()) data.apellidoPaterno = fields.apellidoPaterno.trim();
+    if (fields.apellidoMaterno !== undefined) data.apellidoMaterno = fields.apellidoMaterno?.trim() || null;
+    if (fields.puesto !== undefined) data.puesto = fields.puesto?.trim() || null;
+    if (fields.departamento !== undefined) data.departamento = fields.departamento?.trim() || null;
+    if (fields.email !== undefined) data.email = fields.email?.trim() || null;
+    if (fields.periodicidadPago) data.periodicidadPago = fields.periodicidadPago;
+    if (fields.riesgoPuesto) data.riesgoPuesto = fields.riesgoPuesto;
+    if (fields.claveEntFed) data.claveEntFed = fields.claveEntFed;
+
+    // Salary change → also triggers IMSS modificación
+    if (fields.salarioDiario != null && fields.salarioDiario !== employee.salarioDiario) {
+      const newSalario = Number(fields.salarioDiario);
+      data.salarioDiario = newSalario;
+      data.salarioDiarioIntegrado = fields.salarioDiarioIntegrado
+        ? Number(fields.salarioDiarioIntegrado)
+        : +(newSalario * 1.0452).toFixed(2);
+
+      // Auto-create IMSS Modificación de Salario movement
+      await prisma.imssMovimiento.create({
+        data: {
+          companyId,
+          employeeId,
+          tipo: "MODIFICACION_SALARIO",
+          fechaMovimiento: new Date(),
+          sbcAnterior: employee.salarioDiarioIntegrado ?? employee.salarioDiario,
+          sbcNuevo: data.salarioDiarioIntegrado,
+          motivo: `Cambio de salario: $${employee.salarioDiario} → $${newSalario}`,
+        },
+      });
+    }
+
+    // Infonavit
+    if (fields.creditoInfonavit !== undefined) data.creditoInfonavit = fields.creditoInfonavit?.trim() || null;
+    if (fields.tipoDescuentoInfonavit !== undefined) data.tipoDescuentoInfonavit = fields.tipoDescuentoInfonavit || null;
+    if (fields.descuentoInfonavit !== undefined) data.descuentoInfonavit = fields.descuentoInfonavit != null ? Number(fields.descuentoInfonavit) : null;
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "No hay datos para actualizar" }, { status: 400 });
+    }
+
+    const updated = await prisma.employee.update({
+      where: { id: employeeId },
+      data,
+    });
+
+    return NextResponse.json(updated);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
+}

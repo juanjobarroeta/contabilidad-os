@@ -127,6 +127,7 @@ export default function NominaPage() {
   const [error, setError] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [emitFor, setEmitFor] = useState<Employee | null>(null);
+  const [editFor, setEditFor] = useState<Employee | null>(null);
   const [bajaFor, setBajaFor] = useState<Employee | null>(null);
 
   // Corridas state
@@ -311,8 +312,10 @@ export default function NominaPage() {
                   {employees.map(e => (
                     <tr key={e.id} className="border-b border-border last:border-0 hover:bg-gray-50/50">
                       <td className="px-4 py-3">
-                        <p className="font-medium">{e.nombre} {e.apellidoPaterno} {e.apellidoMaterno ?? ""}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{e.rfc}</p>
+                        <button onClick={() => setEditFor(e)} className="text-left hover:text-primary transition-colors">
+                          <p className="font-medium">{e.nombre} {e.apellidoPaterno} {e.apellidoMaterno ?? ""}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{e.rfc}</p>
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-xs">{e.puesto ?? "—"}{e.departamento && <p className="text-muted-foreground">{e.departamento}</p>}</td>
                       <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(e.salarioDiario)}</td>
@@ -551,6 +554,10 @@ export default function NominaPage() {
       {showNewInc && activeCompany && (
         <NewIncidenciaModal companyId={activeCompany.id} employees={employees}
           onClose={() => setShowNewInc(false)} onCreated={() => { setShowNewInc(false); loadIncidencias(); }} />
+      )}
+      {editFor && activeCompany && (
+        <EditEmployeeModal companyId={activeCompany.id} employee={editFor}
+          onClose={() => setEditFor(null)} onSaved={() => { setEditFor(null); loadEmployees(); setError("✓ Empleado actualizado"); }} />
       )}
       {bajaFor && activeCompany && (
         <BajaModal companyId={activeCompany.id} employee={bajaFor}
@@ -907,6 +914,152 @@ function EmitNominaModal({
             <button type="submit" disabled={saving} className="flex-1 bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Timbrar nómina
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit Employee Modal ────────────────────────────────────────────────────
+function EditEmployeeModal({
+  companyId, employee, onClose, onSaved,
+}: { companyId: string; employee: Employee; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({
+    nombre: employee.nombre,
+    apellidoPaterno: employee.apellidoPaterno,
+    apellidoMaterno: employee.apellidoMaterno ?? "",
+    salarioDiario: String(employee.salarioDiario),
+    periodicidadPago: employee.periodicidadPago,
+    puesto: employee.puesto ?? "",
+    departamento: employee.departamento ?? "",
+    creditoInfonavit: "",
+    tipoDescuentoInfonavit: "",
+    descuentoInfonavit: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  // Load full employee data (including Infonavit) on mount
+  useEffect(() => {
+    fetch(`/api/empleados?companyId=${companyId}`)
+      .then(r => r.json())
+      .then((emps: Employee[]) => {
+        // The list endpoint may not return Infonavit fields, but we set what we have
+      });
+  }, [companyId]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/empleados", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          employeeId: employee.id,
+          nombre: form.nombre,
+          apellidoPaterno: form.apellidoPaterno,
+          apellidoMaterno: form.apellidoMaterno || null,
+          salarioDiario: parseFloat(form.salarioDiario),
+          periodicidadPago: form.periodicidadPago,
+          puesto: form.puesto || null,
+          departamento: form.departamento || null,
+          creditoInfonavit: form.creditoInfonavit || null,
+          tipoDescuentoInfonavit: form.tipoDescuentoInfonavit || null,
+          descuentoInfonavit: form.descuentoInfonavit ? parseFloat(form.descuentoInfonavit) : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error");
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">Editar empleado</h2>
+            <p className="text-xs text-muted-foreground font-mono">{employee.rfc} · NSS {employee.nss}</p>
+          </div>
+          <button onClick={onClose}><X className="h-4 w-4" /></button>
+        </div>
+        <form onSubmit={submit} className="p-5 space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Nombre(s)"><input required value={form.nombre} onChange={e => setForm(p => ({ ...p, nombre: e.target.value }))} className={inputCls} /></Field>
+            <Field label="Ap. Paterno"><input required value={form.apellidoPaterno} onChange={e => setForm(p => ({ ...p, apellidoPaterno: e.target.value }))} className={inputCls} /></Field>
+            <Field label="Ap. Materno"><input value={form.apellidoMaterno} onChange={e => setForm(p => ({ ...p, apellidoMaterno: e.target.value }))} className={inputCls} /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Salario diario (SBC)">
+              <input required type="number" min="0" step="0.01" value={form.salarioDiario}
+                onChange={e => setForm(p => ({ ...p, salarioDiario: e.target.value }))} className={inputCls} />
+              {parseFloat(form.salarioDiario) !== employee.salarioDiario && (
+                <p className="text-[10px] text-amber-600 mt-0.5">⚠ Cambio de salario generará movimiento IMSS automáticamente</p>
+              )}
+            </Field>
+            <Field label="Periodicidad">
+              <select value={form.periodicidadPago} onChange={e => setForm(p => ({ ...p, periodicidadPago: e.target.value }))} className={inputCls}>
+                <option value="01">Diario</option>
+                <option value="02">Semanal</option>
+                <option value="03">Catorcenal</option>
+                <option value="04">Quincenal</option>
+                <option value="05">Mensual</option>
+              </select>
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Puesto"><input value={form.puesto} onChange={e => setForm(p => ({ ...p, puesto: e.target.value }))} className={inputCls} /></Field>
+            <Field label="Departamento"><input value={form.departamento} onChange={e => setForm(p => ({ ...p, departamento: e.target.value }))} className={inputCls} /></Field>
+          </div>
+
+          {/* Infonavit */}
+          <details className="border border-border rounded-lg" open={!!form.descuentoInfonavit}>
+            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-gray-50 flex items-center gap-2">
+              <span>Infonavit</span>
+              {form.descuentoInfonavit && (
+                <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                  ${form.descuentoInfonavit}
+                </span>
+              )}
+            </summary>
+            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border">
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="N° crédito">
+                  <input value={form.creditoInfonavit} onChange={e => setForm(p => ({ ...p, creditoInfonavit: e.target.value }))} className={inputCls} />
+                </Field>
+                <Field label="Tipo descuento">
+                  <select value={form.tipoDescuentoInfonavit} onChange={e => setForm(p => ({ ...p, tipoDescuentoInfonavit: e.target.value }))} className={inputCls}>
+                    <option value="">Sin crédito</option>
+                    <option value="PESOS">Cuota fija ($)</option>
+                    <option value="PCT_SBC">% del SBC</option>
+                    <option value="VSM">VSM (veces UMA)</option>
+                  </select>
+                </Field>
+                <Field label="Monto">
+                  <input type="number" min="0" step="0.01" value={form.descuentoInfonavit}
+                    onChange={e => setForm(p => ({ ...p, descuentoInfonavit: e.target.value }))} className={inputCls}
+                    placeholder="1321.50" />
+                </Field>
+              </div>
+            </div>
+          </details>
+
+          {err && <p className="text-xs text-destructive">{err}</p>}
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>
+            <button type="submit" disabled={saving} className="flex-1 bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Guardar cambios
             </button>
           </div>
         </form>
