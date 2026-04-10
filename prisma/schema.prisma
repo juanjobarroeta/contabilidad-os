@@ -166,6 +166,7 @@ model Company {
   estimaciones      Estimacion[]
   solicitudesCompra SolicitudCompra[]
   imssMovimientos   ImssMovimiento[]
+  incidencias       Incidencia[]
 
   // Despacho per-company scoping junction
   despachoMemberScopes DespachoMemberCompany[]
@@ -550,8 +551,47 @@ model Employee {
   company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   payrollItems     PayrollItem[]
   imssMovimientos  ImssMovimiento[]
+  incidencias      Incidencia[]
 
   @@unique([companyId, rfc])
+}
+
+// Incidencias — absences, overtime, sick leave, permits that affect payroll
+model Incidencia {
+  id          String          @id @default(cuid())
+  companyId   String
+  employeeId  String
+  createdAt   DateTime        @default(now())
+
+  tipo        IncidenciaTipo
+  fecha       DateTime        // Date of the incident
+  fechaFin    DateTime?       // End date for multi-day (incapacidad, vacaciones)
+  dias        Float           @default(1) // Number of days affected
+  horas       Float?          // For overtime: number of extra hours
+
+  // Incapacidad-specific
+  folioImss   String?         // IMSS disability folio number
+  ramoImss    String?         // "01"=Riesgo trabajo, "02"=Enfermedad, "03"=Maternidad
+
+  notas       String?
+  periodo     String?         // e.g. "2026-04" — linked to payroll period
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([companyId, periodo])
+  @@index([employeeId, fecha])
+}
+
+enum IncidenciaTipo {
+  FALTA               // Absence (unjustified)
+  FALTA_JUSTIFICADA   // Justified absence
+  INCAPACIDAD         // IMSS disability leave
+  PERMISO_CON_GOCE    // Paid leave
+  PERMISO_SIN_GOCE    // Unpaid leave
+  HORAS_EXTRA         // Overtime
+  VACACIONES          // Vacation days taken
+  RETARDO             // Late arrival
 }
 
 // IMSS Movimientos Afiliatorios — auto-detected from employee changes
