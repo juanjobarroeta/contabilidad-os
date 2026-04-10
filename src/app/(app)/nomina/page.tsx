@@ -730,7 +730,7 @@ function EmitNominaModal({
           </Field>
           <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-xs text-blue-900">
             <p className="font-medium mb-1">Cómo se calcula</p>
-            <p>El ISR se calcula con la tarifa Art. 96 LISR + subsidio para el empleo. El IMSS obrero usa 2.5% del SBC × días (aproximación). La cuota patronal IMSS y SUA quedan a cargo del contador externo por ahora.</p>
+            <p>ISR: tarifa Art. 96 LISR + subsidio al empleo. IMSS: cuotas reales escalonadas (EyM, IyV, retiro, cesantía, guarderías) según clase de riesgo. Infonavit se deduce si el empleado tiene crédito activo. Exporta a SUA desde la pestaña Corridas.</p>
           </div>
           {err && <p className="text-xs text-destructive">{err}</p>}
           <div className="flex gap-2 pt-2">
