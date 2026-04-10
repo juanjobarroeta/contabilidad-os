@@ -6,7 +6,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Plus, Users2, Loader2, X, AlertCircle, CheckCircle2, Receipt,
   Upload, Sparkles, FileText, Play, Download, Calendar, ClipboardList,
-  ArrowLeftRight, Shield, ChevronDown, ChevronUp,
+  ArrowLeftRight, Shield, ChevronDown, ChevronUp, UserX,
 } from "lucide-react";
 
 interface PayrollItemDetail {
@@ -127,6 +127,7 @@ export default function NominaPage() {
   const [error, setError] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [emitFor, setEmitFor] = useState<Employee | null>(null);
+  const [bajaFor, setBajaFor] = useState<Employee | null>(null);
 
   // Corridas state
   const [runs, setRuns] = useState<PayrollRun[]>([]);
@@ -317,9 +318,13 @@ export default function NominaPage() {
                       <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(e.salarioDiario)}</td>
                       <td className="px-4 py-3 text-xs">{PERIODICIDAD_LABEL[e.periodicidadPago] ?? e.periodicidadPago}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(e.fechaIngreso)}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right space-x-1.5">
                         <button onClick={() => setEmitFor(e)} className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary/90 inline-flex items-center gap-1.5">
                           <Receipt className="h-3.5 w-3.5" /> Emitir recibo
+                        </button>
+                        <button onClick={() => setBajaFor(e)} className="text-xs border border-red-200 text-red-600 px-2.5 py-1.5 rounded-md hover:bg-red-50 inline-flex items-center gap-1"
+                          title="Dar de baja">
+                          <UserX className="h-3.5 w-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -546,6 +551,10 @@ export default function NominaPage() {
       {showNewInc && activeCompany && (
         <NewIncidenciaModal companyId={activeCompany.id} employees={employees}
           onClose={() => setShowNewInc(false)} onCreated={() => { setShowNewInc(false); loadIncidencias(); }} />
+      )}
+      {bajaFor && activeCompany && (
+        <BajaModal companyId={activeCompany.id} employee={bajaFor}
+          onClose={() => setBajaFor(null)} onDone={(msg) => { setBajaFor(null); loadEmployees(); setError(`✓ ${msg}`); }} />
       )}
     </div>
   );
@@ -902,6 +911,160 @@ function EmitNominaModal({
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ── Baja Modal ─────────────────────────────────────────────────────────────
+function BajaModal({
+  companyId, employee, onClose, onDone,
+}: { companyId: string; employee: Employee; onClose: () => void; onDone: (msg: string) => void }) {
+  const [motivo, setMotivo] = useState<"VOLUNTARIA" | "JUSTIFICADA" | "INJUSTIFICADA">("VOLUNTARIA");
+  const [fechaBaja, setFechaBaja] = useState(new Date().toISOString().slice(0, 10));
+  const [diasPendientes, setDiasPendientes] = useState("0");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [result, setResult] = useState<any>(null);
+
+  async function submit() {
+    setSaving(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/nomina/baja", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          employeeId: employee.id,
+          fechaBaja,
+          motivo,
+          diasSalarioPendiente: parseInt(diasPendientes) || 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error");
+      setResult(data);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const f = result?.finiquito;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <h2 className="font-semibold text-red-700">Dar de baja</h2>
+          <button onClick={onClose}><X className="h-4 w-4" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm">
+            <p className="font-semibold text-red-900">{employee.nombre} {employee.apellidoPaterno}</p>
+            <p className="text-xs text-red-700 font-mono">{employee.rfc} · NSS {employee.nss}</p>
+            <p className="text-xs text-red-700 mt-0.5">Ingreso: {formatDate(employee.fechaIngreso)} · SBC: {formatCurrency(employee.salarioDiario)}/día</p>
+          </div>
+
+          {!result ? (
+            <>
+              <div>
+                <label className="block text-xs font-medium mb-1">Motivo de baja</label>
+                <select value={motivo} onChange={e => setMotivo(e.target.value as typeof motivo)}
+                  className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white">
+                  <option value="VOLUNTARIA">Renuncia voluntaria</option>
+                  <option value="JUSTIFICADA">Despido justificado (Art. 47 LFT)</option>
+                  <option value="INJUSTIFICADA">Despido injustificado → Liquidación</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1">Fecha de baja</label>
+                  <input type="date" value={fechaBaja} onChange={e => setFechaBaja(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-md text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Días de salario pendiente</label>
+                  <input type="number" min="0" value={diasPendientes} onChange={e => setDiasPendientes(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-md text-sm" />
+                </div>
+              </div>
+              {motivo === "INJUSTIFICADA" && (
+                <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800">
+                  <p className="font-medium">Liquidación (Art. 50 LFT)</p>
+                  <p>Incluye 3 meses de indemnización + 20 días por año + prima de antigüedad, además del finiquito base.</p>
+                </div>
+              )}
+              {err && <p className="text-xs text-destructive">{err}</p>}
+              <div className="flex gap-2">
+                <button onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>
+                <button onClick={submit} disabled={saving}
+                  className="flex-1 bg-red-600 text-white rounded-md py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Procesar baja
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-green-50 border border-green-200 rounded-md px-4 py-3 text-sm text-green-800">
+                <p className="font-medium">✓ Baja procesada</p>
+                <p className="text-xs mt-0.5">{result.imssMovimiento}</p>
+                <p className="text-xs">Antigüedad: {result.aniosAntiguedad} año(s)</p>
+              </div>
+
+              {f && (
+                <div className="bg-white border border-border rounded-lg p-4 text-sm space-y-2">
+                  <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Cálculo de finiquito</p>
+                  <div className="space-y-1 text-xs">
+                    {f.salariosPendientes > 0 && <Row label="Salarios pendientes" value={f.salariosPendientes} />}
+                    <Row label="Aguinaldo proporcional" value={f.aguinaldoProporcional} />
+                    <Row label="Vacaciones proporcionales" value={f.vacacionesProporcionales} />
+                    <Row label="Prima vacacional" value={f.primaVacacional} />
+                    <div className="border-t border-border pt-1">
+                      <Row label="Subtotal finiquito" value={f.subtotalFiniquito} bold />
+                    </div>
+                    {f.subtotalLiquidacion > 0 && (
+                      <>
+                        <div className="border-t border-border pt-1 mt-1">
+                          <p className="font-medium text-red-700 mb-1">Liquidación</p>
+                          <Row label="Indemnización 3 meses" value={f.indemnizacion3Meses} />
+                          <Row label="20 días por año" value={f.indemnizacion20Dias} />
+                          <Row label="Prima de antigüedad" value={f.primaAntiguedad} />
+                        </div>
+                        <div className="border-t border-border pt-1">
+                          <Row label="Subtotal liquidación" value={f.subtotalLiquidacion} bold />
+                        </div>
+                      </>
+                    )}
+                    <div className="border-t-2 border-border pt-2 mt-2">
+                      <Row label="Total bruto" value={f.totalBruto} bold />
+                      <Row label="Exento de ISR" value={f.totalExento} muted />
+                      <Row label="Gravado" value={f.totalGravado} muted />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => onDone(`${employee.nombre} ${employee.apellidoPaterno} dado de baja`)}
+                className="w-full bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium">
+                Cerrar
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value, bold, muted }: { label: string; value: number; bold?: boolean; muted?: boolean }) {
+  return (
+    <div className={`flex justify-between ${bold ? "font-semibold" : ""} ${muted ? "text-muted-foreground" : ""}`}>
+      <span>{label}</span>
+      <span className="font-mono">{formatCurrency(value)}</span>
     </div>
   );
 }
