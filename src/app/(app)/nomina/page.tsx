@@ -6,8 +6,27 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Plus, Users2, Loader2, X, AlertCircle, CheckCircle2, Receipt,
   Upload, Sparkles, FileText, Play, Download, Calendar, ClipboardList,
-  ArrowLeftRight, Shield,
+  ArrowLeftRight, Shield, ChevronDown, ChevronUp,
 } from "lucide-react";
+
+interface PayrollItemDetail {
+  id: string;
+  employeeId: string;
+  sueldoBase: number;
+  isrRetenido: number;
+  imssObrero: number;
+  imssPatronal: number;
+  infonavit: number;
+  aguinaldo: number;
+  primaVacacional: number;
+  vacaciones: number;
+  ptu: number;
+  totalPercepciones: number;
+  totalDeducciones: number;
+  netoAPagar: number;
+  cfdiUuid: string | null;
+  employee: { nombre: string; apellidoPaterno: string; rfc: string };
+}
 
 // ── PayrollRun types ─────────────────────────────────────────────────────────
 interface PayrollRun {
@@ -114,6 +133,9 @@ export default function NominaPage() {
   const [runsLoading, setRunsLoading] = useState(false);
   const [showNewRun, setShowNewRun] = useState(false);
   const [stampingId, setStampingId] = useState<string | null>(null);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [runItems, setRunItems] = useState<PayrollItemDetail[]>([]);
+  const [runItemsLoading, setRunItemsLoading] = useState(false);
 
   // Incidencias state
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
@@ -158,6 +180,18 @@ export default function NominaPage() {
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
   useEffect(() => { if (tab === "corridas") loadRuns(); }, [tab, loadRuns]);
   useEffect(() => { if (tab === "incidencias") loadIncidencias(); }, [tab, loadIncidencias, incPeriodo]);
+
+  async function toggleRunDetail(runId: string) {
+    if (expandedRunId === runId) { setExpandedRunId(null); return; }
+    setExpandedRunId(runId);
+    setRunItemsLoading(true);
+    try {
+      const res = await fetch(`/api/nomina/run/${runId}`);
+      const data = await res.json();
+      setRunItems(data.items ?? []);
+    } catch { setRunItems([]); }
+    finally { setRunItemsLoading(false); }
+  }
 
   async function handleStamp(runId: string) {
     setStampingId(runId);
@@ -312,46 +346,130 @@ export default function NominaPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {runs.map(run => (
-                <div key={run.id} className="bg-white border border-border rounded-xl p-4 flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm">{TIPO_RUN_LABEL[run.tipo] ?? run.tipo}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_RUN_COLOR[run.status] ?? "bg-gray-100"}`}>
-                        {STATUS_RUN_LABEL[run.status] ?? run.status}
-                      </span>
-                      {run.extraData && !!(run.extraData as Record<string, unknown>).stampingInProgress && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 flex items-center gap-1">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Timbrado {String((run.extraData as Record<string, unknown>).stampedCount ?? 0)}/{String(run._count?.items ?? "?")}
-                        </span>
-                      )}
+              {runs.map(run => {
+                const isExpanded = expandedRunId === run.id;
+                return (
+                  <div key={run.id} className="bg-white border border-border rounded-xl overflow-hidden">
+                    {/* Run header — clickable to expand */}
+                    <div className="p-4 flex items-center gap-4 cursor-pointer hover:bg-gray-50/50" onClick={() => toggleRunDetail(run.id)}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-sm">{TIPO_RUN_LABEL[run.tipo] ?? run.tipo}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_RUN_COLOR[run.status] ?? "bg-gray-100"}`}>
+                            {STATUS_RUN_LABEL[run.status] ?? run.status}
+                          </span>
+                          {run.extraData && !!(run.extraData as Record<string, unknown>).stampingInProgress && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Timbrado {String((run.extraData as Record<string, unknown>).stampedCount ?? 0)}/{String(run._count?.items ?? "?")}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{run.periodo}</p>
+                        <div className="flex gap-4 mt-1 text-xs">
+                          <span>Empleados: <strong>{run._count?.items ?? "—"}</strong></span>
+                          <span>Percepciones: <strong>{formatCurrency(run.totalPercepciones)}</strong></span>
+                          <span>Deducciones: <strong>{formatCurrency(run.totalDeducciones)}</strong></span>
+                          <span>Neto: <strong className="text-green-700">{formatCurrency(run.totalNeto)}</strong></span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                        {run.status === "CALCULATED" && (
+                          <button onClick={() => handleStamp(run.id)} disabled={stampingId === run.id}
+                            className="flex items-center gap-1.5 bg-green-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                            {stampingId === run.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                            Timbrar todo
+                          </button>
+                        )}
+                        {(run.status === "STAMPED" || run.status === "CALCULATED") && (
+                          <a href={`/api/nomina/dispersion?runId=${run.id}`}
+                            className="flex items-center gap-1.5 border border-border px-3 py-1.5 rounded-md text-xs hover:bg-accent">
+                            <ArrowLeftRight className="h-3.5 w-3.5" /> Dispersión
+                          </a>
+                        )}
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">{run.periodo}</p>
-                    <div className="flex gap-4 mt-1 text-xs">
-                      <span>Empleados: <strong>{run._count?.items ?? "—"}</strong></span>
-                      <span>Percepciones: <strong>{formatCurrency(run.totalPercepciones)}</strong></span>
-                      <span>Deducciones: <strong>{formatCurrency(run.totalDeducciones)}</strong></span>
-                      <span>Neto: <strong className="text-green-700">{formatCurrency(run.totalNeto)}</strong></span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {run.status === "CALCULATED" && (
-                      <button onClick={() => handleStamp(run.id)} disabled={stampingId === run.id}
-                        className="flex items-center gap-1.5 bg-green-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-green-700 disabled:opacity-50">
-                        {stampingId === run.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                        Timbrar todo
-                      </button>
+
+                    {/* Expanded detail table */}
+                    {isExpanded && (
+                      <div className="border-t border-border">
+                        {runItemsLoading ? (
+                          <div className="flex items-center gap-2 text-muted-foreground text-xs py-6 justify-center">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Cargando desglose…
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="bg-gray-50 border-b border-border">
+                                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Empleado</th>
+                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Sueldo</th>
+                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">ISR</th>
+                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">IMSS Obr.</th>
+                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">IMSS Pat.</th>
+                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Infonavit</th>
+                                  {run.tipo === "AGUINALDO" && <th className="text-right px-3 py-2 font-medium text-muted-foreground">Aguinaldo</th>}
+                                  {run.tipo === "PTU" && <th className="text-right px-3 py-2 font-medium text-muted-foreground">PTU</th>}
+                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Percepciones</th>
+                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Deducciones</th>
+                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground font-bold">Neto</th>
+                                  <th className="text-center px-3 py-2 font-medium text-muted-foreground">CFDI</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {runItems.map(item => (
+                                  <tr key={item.id} className="border-b border-border last:border-0 hover:bg-gray-50/50">
+                                    <td className="px-3 py-2">
+                                      <span className="font-medium">{item.employee.nombre} {item.employee.apellidoPaterno}</span>
+                                      <span className="text-muted-foreground ml-1.5 font-mono">{item.employee.rfc}</span>
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.sueldoBase)}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{item.isrRetenido > 0 ? formatCurrency(item.isrRetenido) : "—"}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{item.imssObrero > 0 ? formatCurrency(item.imssObrero) : "—"}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.imssPatronal > 0 ? formatCurrency(item.imssPatronal) : "—"}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{item.infonavit > 0 ? formatCurrency(item.infonavit) : "—"}</td>
+                                    {run.tipo === "AGUINALDO" && <td className="px-3 py-2 text-right font-mono">{item.aguinaldo > 0 ? formatCurrency(item.aguinaldo) : "—"}</td>}
+                                    {run.tipo === "PTU" && <td className="px-3 py-2 text-right font-mono">{item.ptu > 0 ? formatCurrency(item.ptu) : "—"}</td>}
+                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.totalPercepciones)}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-red-600">{formatCurrency(item.totalDeducciones)}</td>
+                                    <td className="px-3 py-2 text-right font-mono font-bold text-green-700">{formatCurrency(item.netoAPagar)}</td>
+                                    <td className="px-3 py-2 text-center">
+                                      {item.cfdiUuid ? (
+                                        <span className="text-green-600" title={item.cfdiUuid}>✓</span>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              {runItems.length > 1 && (
+                                <tfoot>
+                                  <tr className="bg-gray-50 font-semibold">
+                                    <td className="px-3 py-2">Total ({runItems.length} empleados)</td>
+                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.sueldoBase, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.isrRetenido, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.imssObrero, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatCurrency(runItems.reduce((s, i) => s + i.imssPatronal, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.infonavit, 0))}</td>
+                                    {run.tipo === "AGUINALDO" && <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.aguinaldo, 0))}</td>}
+                                    {run.tipo === "PTU" && <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.ptu, 0))}</td>}
+                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.totalPercepciones, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-red-600">{formatCurrency(runItems.reduce((s, i) => s + i.totalDeducciones, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono font-bold text-green-700">{formatCurrency(runItems.reduce((s, i) => s + i.netoAPagar, 0))}</td>
+                                    <td className="px-3 py-2 text-center text-xs">{runItems.filter(i => i.cfdiUuid).length}/{runItems.length}</td>
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
+                        )}
+                      </div>
                     )}
-                    {(run.status === "STAMPED" || run.status === "CALCULATED") && (
-                      <a href={`/api/nomina/dispersion?runId=${run.id}`}
-                        className="flex items-center gap-1.5 border border-border px-3 py-1.5 rounded-md text-xs hover:bg-accent">
-                        <ArrowLeftRight className="h-3.5 w-3.5" /> Dispersión
-                      </a>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
