@@ -5,7 +5,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency } from "@/lib/utils";
 import {
   Calendar, CheckCircle2, AlertCircle, Loader2, X,
-  RotateCcw, FileText, BookOpen, Download,
+  RotateCcw, FileText, BookOpen, Download, ArrowLeftRight,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -52,7 +52,16 @@ const MESES = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
-type TabId = "periods" | "balanza" | "estado";
+interface SaldoRow {
+  companyId: string;
+  rfc: string;
+  razonSocial: string;
+  prestamosOtorgados: number;
+  prestamosPorPagar: number;
+  neto: number;
+}
+
+type TabId = "periods" | "balanza" | "estado" | "saldos";
 
 export default function ContabilidadPage() {
   const { activeCompany } = useCompany();
@@ -158,6 +167,7 @@ export default function ContabilidadPage() {
             ["periods", "Cierres mensuales", Calendar],
             ["balanza", "Balanza de comprobación", BookOpen],
             ["estado",  "Estado de resultados", FileText],
+            ["saldos",  "Saldos interempresa", ArrowLeftRight],
           ] as const).map(([id, label, Icon]) => (
             <button
               key={id}
@@ -203,6 +213,10 @@ export default function ContabilidadPage() {
           month={selectedMonth}
           onChangePeriod={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }}
         />
+      )}
+
+      {tab === "saldos" && (
+        <SaldosInterempresaPanel companyId={activeCompany.id} />
       )}
     </div>
   );
@@ -523,6 +537,97 @@ function Section({
           {formatCurrency(total)}
         </span>
       </div>
+    </div>
+  );
+}
+
+function SaldosInterempresaPanel({ companyId }: { companyId: string }) {
+  const [rows, setRows] = useState<SaldoRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/contabilidad/saldos-interempresa?companyId=${companyId}`);
+        const data = await res.json();
+        setRows(data.rows ?? []);
+      } catch {
+        // silent
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [companyId]);
+
+  const totalOtorgados = rows.reduce((s, r) => s + r.prestamosOtorgados, 0);
+  const totalPorPagar = rows.reduce((s, r) => s + r.prestamosPorPagar, 0);
+  const hasActivity = rows.some((r) => Math.abs(r.neto) > 0.01);
+
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground mb-4">
+        Posición neta de préstamos entre todas las empresas del despacho.
+        Saldo positivo = prestamista neto, negativo = deudor neto.
+      </p>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+          <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
+        </div>
+      ) : !hasActivity ? (
+        <div className="bg-white border border-dashed border-border rounded-xl p-12 text-center">
+          <ArrowLeftRight className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
+          <p className="text-sm text-muted-foreground">Sin préstamos interempresa registrados.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Los préstamos aparecen cuando clasificas transacciones bancarias como
+            &ldquo;Préstamo otorgado&rdquo; o &ldquo;Préstamo recibido&rdquo; y cierras el mes.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-gray-50">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Empresa</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">RFC</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Otorgados</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Por pagar</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Neto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.companyId} className="border-b border-border last:border-0 hover:bg-gray-50/50">
+                  <td className="px-4 py-2.5 font-medium">{r.razonSocial}</td>
+                  <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{r.rfc}</td>
+                  <td className="px-4 py-2.5 text-right font-mono text-xs">
+                    {r.prestamosOtorgados > 0 ? formatCurrency(r.prestamosOtorgados) : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono text-xs">
+                    {r.prestamosPorPagar > 0 ? formatCurrency(r.prestamosPorPagar) : "—"}
+                  </td>
+                  <td className={`px-4 py-2.5 text-right font-mono text-xs font-semibold ${
+                    r.neto > 0 ? "text-green-700" : r.neto < 0 ? "text-red-600" : ""
+                  }`}>
+                    {Math.abs(r.neto) < 0.01 ? "—" : formatCurrency(r.neto)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-50 font-semibold">
+                <td className="px-4 py-2.5" colSpan={2}>Total despacho</td>
+                <td className="px-4 py-2.5 text-right font-mono text-xs">{formatCurrency(totalOtorgados)}</td>
+                <td className="px-4 py-2.5 text-right font-mono text-xs">{formatCurrency(totalPorPagar)}</td>
+                <td className="px-4 py-2.5 text-right font-mono text-xs font-bold">
+                  {formatCurrency(totalOtorgados - totalPorPagar)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
