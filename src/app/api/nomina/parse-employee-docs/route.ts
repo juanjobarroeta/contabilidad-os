@@ -25,6 +25,7 @@ REGLAS CRÍTICAS:
    - "INE": Credencial INE/IFE (muestra nombre, CURP, fecha nacimiento, domicilio).
    - "RFC_SAT": Constancia RFC del SAT (muestra RFC de 13 caracteres para persona física).
    - "COMPROBANTE_DOMICILIO": Comprobante de domicilio (muestra dirección, CP).
+   - "CFDI_NOMINA": Recibo de nómina CFDI (muestra percepciones, deducciones, RFC emisor/receptor, NSS, CURP, SBC, SDI, registro patronal). Extrae todos los datos del receptor (empleado).
    - "MULTI": El documento contiene datos de VARIOS tipos (ej. un contrato que incluye RFC, CURP y NSS).
    - "OTRO": cualquier otro documento.
 4. Extrae TODOS los campos que puedas encontrar, sin importar el tipo de documento.
@@ -61,10 +62,15 @@ SCHEMA DE RESPUESTA:
     "periodicidadPago": string | null,
     "fechaIngreso": string | null,
     "fechaAlta": string | null,
-    "numEmpleado": string | null
+    "numEmpleado": string | null,
+    "creditoInfonavit": string | null,
+    "tipoDescuentoInfonavit": "PCT_SBC" | "VSM" | "PESOS" | null,
+    "descuentoInfonavit": number | null
   },
   "confidenceNotes": string | null
 }
+
+8. Para CFDI nómina: si hay una deducción tipo "010" (Pago por crédito de vivienda/Infonavit), extrae el importe como descuentoInfonavit y pon tipoDescuentoInfonavit como "PESOS". Si el campo creditoInfonavit aparece, extráelo también.
 
 Códigos SAT para tipoContrato: "01"=Indefinido, "02"=Temporal, "03"=Obra, "04"=Temporada, "05"=Prueba, "09"=Jubilado.
 Códigos SAT para tipoJornada: "01"=Diurna, "02"=Nocturna, "03"=Mixta, "04"=Por hora, "99"=Otra.

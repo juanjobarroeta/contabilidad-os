@@ -567,6 +567,9 @@ function NewEmployeeModal({
     departamento: "",
     riesgoPuesto: "1",
     claveEntFed: "PUE",
+    creditoInfonavit: "",
+    tipoDescuentoInfonavit: "",
+    descuentoInfonavit: "",
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -613,6 +616,9 @@ function NewEmployeeModal({
           departamento: e.departamento?.trim() || prev.departamento,
           riesgoPuesto: prev.riesgoPuesto,
           claveEntFed: e.claveEntFed || prev.claveEntFed,
+          creditoInfonavit: e.creditoInfonavit?.trim() || prev.creditoInfonavit,
+          tipoDescuentoInfonavit: e.tipoDescuentoInfonavit || prev.tipoDescuentoInfonavit,
+          descuentoInfonavit: e.descuentoInfonavit ? String(e.descuentoInfonavit) : prev.descuentoInfonavit,
         }));
       }
     } catch (e) {
@@ -636,6 +642,9 @@ function NewEmployeeModal({
           rfc: form.rfc.toUpperCase(),
           curp: form.curp.toUpperCase(),
           salarioDiario: parseFloat(form.salarioDiario),
+          creditoInfonavit: form.creditoInfonavit || undefined,
+          tipoDescuentoInfonavit: form.tipoDescuentoInfonavit || undefined,
+          descuentoInfonavit: form.descuentoInfonavit ? parseFloat(form.descuentoInfonavit) : undefined,
         }),
       });
       const data = await res.json();
@@ -738,6 +747,39 @@ function NewEmployeeModal({
             <Field label="Puesto"><input value={form.puesto} onChange={e => set("puesto", e.target.value)} className={inputCls} /></Field>
             <Field label="Departamento"><input value={form.departamento} onChange={e => set("departamento", e.target.value)} className={inputCls} /></Field>
           </div>
+
+          {/* Infonavit section */}
+          <details className="border border-border rounded-lg">
+            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-gray-50 flex items-center gap-2">
+              <span>Infonavit</span>
+              {form.descuentoInfonavit && (
+                <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                  ${form.descuentoInfonavit}
+                </span>
+              )}
+            </summary>
+            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border">
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="N° crédito">
+                  <input value={form.creditoInfonavit} onChange={e => set("creditoInfonavit", e.target.value)} className={inputCls} placeholder="Opcional" />
+                </Field>
+                <Field label="Tipo descuento">
+                  <select value={form.tipoDescuentoInfonavit} onChange={e => set("tipoDescuentoInfonavit", e.target.value)} className={inputCls}>
+                    <option value="">Sin crédito</option>
+                    <option value="PESOS">Cuota fija ($)</option>
+                    <option value="PCT_SBC">% del SBC</option>
+                    <option value="VSM">VSM (veces UMA)</option>
+                  </select>
+                </Field>
+                <Field label={form.tipoDescuentoInfonavit === "PCT_SBC" ? "Porcentaje" : form.tipoDescuentoInfonavit === "VSM" ? "Veces UMA" : "Monto"}>
+                  <input type="number" min="0" step="0.01" value={form.descuentoInfonavit}
+                    onChange={e => set("descuentoInfonavit", e.target.value)} className={inputCls}
+                    placeholder={form.tipoDescuentoInfonavit === "PCT_SBC" ? "Ej: 0.20" : form.tipoDescuentoInfonavit === "VSM" ? "Ej: 3.5" : "Ej: 1321.50"} />
+                </Field>
+              </div>
+            </div>
+          </details>
+
           {err && <p className="text-xs text-destructive">{err}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>

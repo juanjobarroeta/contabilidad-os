@@ -46,6 +46,9 @@ const createSchema = z.object({
   puesto: z.string().optional(),
   riesgoPuesto: z.string().default("1"),
   claveEntFed: z.string().default("PUE"),
+  creditoInfonavit: z.string().optional(),
+  tipoDescuentoInfonavit: z.enum(["PCT_SBC", "VSM", "PESOS"]).optional(),
+  descuentoInfonavit: z.number().optional(),
 });
 
 export async function POST(req: Request) {
@@ -85,6 +88,9 @@ export async function POST(req: Request) {
         puesto: data.puesto || null,
         riesgoPuesto: data.riesgoPuesto,
         claveEntFed: data.claveEntFed,
+        creditoInfonavit: data.creditoInfonavit || null,
+        tipoDescuentoInfonavit: data.tipoDescuentoInfonavit || null,
+        descuentoInfonavit: data.descuentoInfonavit ?? null,
       },
     });
 
