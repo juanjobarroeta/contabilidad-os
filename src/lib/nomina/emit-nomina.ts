@@ -6,7 +6,9 @@
 
 import { prisma } from "../prisma";
 import { getFacturapiClient } from "../facturapi";
-import { calcularIsrRetenido, calcularImssObrero } from "./isr";
+import { calcularIsrRetenido } from "./isr";
+import { calcularImss } from "./imss";
+import { calcularInfonavit } from "./infonavit";
 import type { Employee } from "@prisma/client";
 
 export type EmitNominaInput = {
@@ -58,11 +60,26 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     baseGravable: sueldoBruto,
     periodicidadPago: employee.periodicidadPago,
   });
-  const imssObrero = calcularImssObrero(employee.salarioDiario, input.diasPagados);
+  const imssCalc = calcularImss({
+    salarioBaseCotizacion: sdi,
+    diasPagados: input.diasPagados,
+    riesgoPuesto: employee.riesgoPuesto,
+  });
+  const imssObrero = imssCalc.obrero.total;
+  const imssPatronal = imssCalc.patronal.total;
+  const infonavitDeduccion = calcularInfonavit({
+    tipoDescuento: (employee as Employee & { tipoDescuentoInfonavit?: string | null }).tipoDescuentoInfonavit ?? null,
+    descuentoInfonavit: employee.descuentoInfonavit ?? null,
+    salarioBaseCotizacion: sdi,
+    diasPagados: input.diasPagados,
+  });
 
   const totalPercepciones = sueldoBruto;
-  const totalDeducciones = +(isrCalc.isrRetenido + imssObrero).toFixed(2);
+  const totalDeducciones = +(isrCalc.isrRetenido + imssObrero + infonavitDeduccion).toFixed(2);
   const netoAPagar = +(totalPercepciones - totalDeducciones).toFixed(2);
+
+  // Log for debugging
+  console.log(`[nomina] ${employee.nombre}: bruto=${sueldoBruto} ISR=${isrCalc.isrRetenido} IMSS_obrero=${imssObrero} IMSS_patronal=${imssPatronal} INFONAVIT=${infonavitDeduccion} neto=${netoAPagar}`);
 
   // ── Construir el payload Facturapi ─────────────────────────────────────
   const facturapi = getFacturapiClient(company.facturapiApiKey);
@@ -154,6 +171,16 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
                     clave: "001",
                     concepto: "IMSS",
                     importe: imssObrero,
+                  },
+                ]
+              : []),
+            ...(infonavitDeduccion > 0
+              ? [
+                  {
+                    tipo_deduccion: "010", // Descuento INFONAVIT (vivienda)
+                    clave: "006",
+                    concepto: "INFONAVIT",
+                    importe: infonavitDeduccion,
                   },
                 ]
               : []),

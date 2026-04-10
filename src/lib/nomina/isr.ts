@@ -116,14 +116,8 @@ export function calcularIsrRetenido(input: IsrCalcInput): IsrCalcResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// IMSS obrero (cuotas a cargo del trabajador)
-// Simplificado para v1: porcentaje plano del SBC × días pagados.
-// Real-world: las cuotas IMSS son un cálculo escalonado por concepto
-// (enfermedades, invalidez, retiro, etc.). El usuario corrige en SUA después.
+// IMSS calculation moved to src/lib/nomina/imss.ts (v2 — real stepped rates).
+// Re-export for backwards compatibility with any callers.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const IMSS_OBRERO_PCT = 0.025; // ≈ 2.5% del SBC (aproximación conservadora)
-
-export function calcularImssObrero(salarioBaseCotizacion: number, diasPagados: number): number {
-  return +((salarioBaseCotizacion * diasPagados) * IMSS_OBRERO_PCT).toFixed(2);
-}
+export { calcularImss } from "./imss";
+export type { ImssCalcResult, ImssDesglose } from "./imss";

@@ -542,8 +542,9 @@ model Employee {
   claveEntFed      String          @default("PUE") // Estado SAT code (PUE, JAL, CMX, etc.)
 
   // INFONAVIT
-  creditoInfonavit String?
-  descuentoInfonavit Float?
+  creditoInfonavit       String?
+  tipoDescuentoInfonavit String?  // "PCT_SBC" | "VSM" | "PESOS"
+  descuentoInfonavit     Float?
 
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   payrollItems PayrollItem[]
@@ -566,6 +567,10 @@ model PayrollRun {
   totalDeducciones  Float     @default(0)
   totalNeto         Float     @default(0)
 
+  // Type-specific data (e.g. { utilidadFiscalGravable } for PTU,
+  // { diasAguinaldo, fechaCorte } for AGUINALDO)
+  extraData         Json?
+
   company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   items    PayrollItem[]
 }
@@ -584,10 +589,17 @@ model PayrollItem {
   otrasPercepciones Float @default(0)
 
   // Deducciones
-  isrRetenido  Float   @default(0)
-  imssObrero   Float   @default(0)
-  infonavit    Float   @default(0)
-  otrasDeducc  Float   @default(0)
+  isrRetenido    Float   @default(0)
+  imssObrero     Float   @default(0)
+  imssPatronal   Float   @default(0)  // Informational (employer cost, not deducted from employee)
+  infonavit      Float   @default(0)
+  otrasDeducc    Float   @default(0)
+
+  // Extraordinary percepciones (aguinaldo, vacaciones, PTU)
+  aguinaldo        Float   @default(0)
+  primaVacacional  Float   @default(0)
+  vacaciones       Float   @default(0)
+  ptu              Float   @default(0)
 
   totalPercepciones Float
   totalDeducciones  Float
@@ -606,6 +618,7 @@ enum PayrollRunType {
   EXTRAORDINARIA
   FINIQUITO
   AGUINALDO
+  VACACIONES
   PTU
 }
 
