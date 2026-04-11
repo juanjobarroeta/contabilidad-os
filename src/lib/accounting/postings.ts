@@ -36,6 +36,7 @@ const DEFAULT_ACCOUNTS: Array<{
   { cuentaSAT: "4101", nombre: "Ingresos por obra",     tipo: "INGRESO" },
   { cuentaSAT: "5101", nombre: "Costo de obra",         tipo: "COSTO"   },
   { cuentaSAT: "5102", nombre: "Mano de obra directa",  tipo: "COSTO"   },
+  { cuentaSAT: "2103", nombre: "Anticipos de clientes", tipo: "PASIVO"  },
 ];
 
 /**
@@ -269,5 +270,68 @@ export async function postEstimacionTimbrada(
         fuente: "CONSTRUCCION",
       },
     ],
+  });
+}
+
+/**
+ * Anticipo received from a construction client.
+ *   DR 1101 Bancos
+ *   CR 2103 Anticipos de clientes
+ *
+ * The anticipo creates a liability (Anticipos de clientes) that is
+ * amortized proportionally against each estimación during the project.
+ */
+export async function postAnticipoRecibido(
+  tx: Tx,
+  args: {
+    companyId: string;
+    proyectoId: string;
+    proyectoCodigo: string;
+    monto: number;
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: `Anticipo recibido — proyecto ${args.proyectoCodigo}`,
+    monto: args.monto,
+    fuente: "CONSTRUCCION",
+    referencia: args.proyectoId,
+    referenciaTipo: "ANTICIPO_PROYECTO",
+    cargo: { cuentaSAT: "1101" },
+    abono: { cuentaSAT: "2103" },
+  });
+}
+
+/**
+ * Amortización de anticipo against an estimación.
+ *   DR 2103 Anticipos de clientes
+ *   CR 1103 Cuentas por cobrar
+ *
+ * Each estimación amortizes a proportional share of the original anticipo.
+ * Reduces both the liability and the receivable.
+ */
+export async function postAnticipoAmortizacion(
+  tx: Tx,
+  args: {
+    companyId: string;
+    estimacionId: string;
+    proyectoCodigo: string;
+    numero: number;
+    monto: number;
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: `Amortización anticipo — estimación #${args.numero} ${args.proyectoCodigo}`,
+    monto: args.monto,
+    fuente: "CONSTRUCCION",
+    referencia: args.estimacionId,
+    referenciaTipo: "ANTICIPO_AMORTIZACION",
+    cargo: { cuentaSAT: "2103" },
+    abono: { cuentaSAT: "1103" },
   });
 }

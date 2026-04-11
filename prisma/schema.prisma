@@ -971,6 +971,13 @@ model Proyecto {
   anticipoPorc    Float?    // typical 30
   retencionPorc   Float?    // typical 5
 
+  // Anticipo tracking — filled when the customer pays the anticipo
+  anticipoMonto       Float?     // actual $ received (montoContratado × anticipoPorc / 100)
+  anticipoFecha       DateTime?  // date received
+  anticipoAmortizado  Float     @default(0)  // running total amortized across estimaciones
+  anticipoBankTxId    String?   // link to the BankTransaction that recorded the deposit
+  anticipoInvoiceId   String?   // link to the CFDI de anticipo (Invoice)
+
   company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer          Customer?           @relation(fields: [customerId], references: [id])
   presupuestos      Presupuesto[]
