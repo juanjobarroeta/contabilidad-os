@@ -33,6 +33,30 @@ export const GET = withAuthz(
             montoTotal: true,
             createdAt: true,
             _count: { select: { partidas: true } },
+            // Include partidas with cost data for the financial summary.
+            // Only returned for APROBADO/EN_EJECUCION presupuestos to keep
+            // the response lean when there are many BORRADOR drafts.
+            partidas: {
+              select: {
+                id: true,
+                cantidad: true,
+                precioUnitario: true,
+                importe: true,
+                zona: true,
+                partida: true,
+                concepto: {
+                  select: {
+                    codigo: true,
+                    descripcion: true,
+                    unidad: true,
+                    apuActual: {
+                      select: { costoDirecto: true, precioUnitario: true },
+                    },
+                  },
+                },
+              },
+              orderBy: [{ zona: "asc" }, { partida: "asc" }, { orden: "asc" }],
+            },
           },
           orderBy: { version: "asc" },
         },
