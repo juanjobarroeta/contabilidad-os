@@ -57,14 +57,16 @@ async function recomputeApuTotals(tx: Tx, apuId: string) {
   if (!apu) throw new Error("apu not found during recompute");
 
   const costoDirecto = apu.insumos.reduce((acc, l) => acc + l.importe, 0);
-  const overheadFactor =
-    1 +
-    apu.indirectosPorc +
-    apu.financierosPorc +
-    apu.utilidadPorc +
-    apu.cargosAdicPorc;
+  // Cascading overhead formula matching Mexican construction standard:
+  //   subtotal1 = CD + (CD × indirectos)
+  //   subtotal2 = subtotal1 + (subtotal1 × financieros)
+  //   PU        = subtotal2 + (subtotal2 × utilidad) + (subtotal2 × cargosAdic)
+  // Then divide by rendimiento if > 1.
   const rendimiento = apu.rendimiento > 0 ? apu.rendimiento : 1;
-  const precioUnitario = (costoDirecto * overheadFactor) / rendimiento;
+  const subtotal1 = costoDirecto * (1 + apu.indirectosPorc);
+  const subtotal2 = subtotal1 * (1 + apu.financierosPorc);
+  const precioUnitario =
+    (subtotal2 * (1 + apu.utilidadPorc + apu.cargosAdicPorc)) / rendimiento;
 
   return tx.aPU.update({
     where: { id: apuId },
