@@ -82,9 +82,8 @@ function parseOFXDate(s: string): Date | null {
 function parseCSV(content: string): ParseResult {
   const warnings: string[] = [];
 
-  // 1. Detect separator
-  const firstLine = content.split("\n")[0];
-  const sep = detectSeparator(firstLine);
+  // 1. Detect separator (scan multiple lines — header may not be on line 1)
+  const sep = detectSeparator(content);
 
   // 2. Parse into 2-D array (handle quoted fields)
   const rows = splitCSV(content, sep)
@@ -101,11 +100,15 @@ function parseCSV(content: string): ParseResult {
     return parseBajio(rows, warnings);
   }
 
-  // 3. Find the header row (first row that contains recognisable column names)
+  // 3. Find the header row (scan up to 25 rows — Banamex has 16 summary lines)
+  // Must contain a date keyword AND an amount keyword to avoid matching section titles
   let headerIdx = 0;
-  for (let i = 0; i < Math.min(5, rows.length); i++) {
-    const row = rows[i].join(" ").toLowerCase();
-    if (/fecha|date|descripci|concepto|movimiento|monto|cargo|abono|importe/.test(row)) {
+  for (let i = 0; i < Math.min(25, rows.length); i++) {
+    const row = rows[i].join(" ").toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const hasDate = /fecha|date|fch/.test(row);
+    const hasAmount = /monto|cargo|abono|importe|deposito|retiro|movimiento|descripci|concepto/.test(row);
+    if (hasDate && hasAmount) {
       headerIdx = i;
       break;
     }
@@ -118,8 +121,8 @@ function parseCSV(content: string): ParseResult {
   const dateCol    = detectCol(headers, ["fecha", "date", "fecha de operacion", "fch"]);
   const descCol    = detectCol(headers, ["descripcion", "descripci", "concepto", "movimiento", "referencia", "detalle", "memo"]);
   const amountCol  = detectCol(headers, ["monto", "importe", "amount", "movimiento"]);
-  const debitCol   = detectCol(headers, ["cargo", "debito", "egreso", "retiro", "debe"]);
-  const creditCol  = detectCol(headers, ["abono", "credito", "ingreso", "deposito", "haber"]);
+  const debitCol   = detectCol(headers, ["cargo", "debito", "egreso", "retiro", "retiros", "debe"]);
+  const creditCol  = detectCol(headers, ["abono", "credito", "ingreso", "deposito", "depositos", "haber"]);
   const balanceCol = detectCol(headers, ["saldo", "balance", "disponible"]);
   const refCol     = detectCol(headers, ["referencia", "folio", "num operacion", "id", "fitid"]);
 
@@ -154,12 +157,23 @@ function parseCSV(content: string): ParseResult {
 
     if (isNaN(monto) || monto === 0) continue;
 
+    // Extract description
+    let desc = descCol >= 0 ? (row[descCol] ?? "") : row.join(" ");
+    desc = desc.replace(/\s+/g, " ").trim();
+
+    // Auto-extract reference from Banamex descriptions (embedded "Referencia Numérica: XXXX")
+    let ref = refCol >= 0 ? row[refCol] : undefined;
+    if (!ref) {
+      const refMatch = desc.match(/[Rr]eferencia\s+[Nn].{0,10}?:\s*(\S+)/);
+      if (refMatch) ref = refMatch[1].replace(/^0+/, "") || refMatch[1]; // strip leading zeros
+    }
+
     transactions.push({
       fecha,
-      descripcion: descCol >= 0 ? (row[descCol] ?? "") : row.join(" "),
+      descripcion: desc,
       monto,
-      referencia:  refCol >= 0    ? row[refCol]    : undefined,
-      saldo:       balanceCol >= 0 ? parseMXNumber(row[balanceCol] ?? "") : undefined,
+      referencia: ref?.trim() || undefined,
+      saldo: balanceCol >= 0 ? parseMXNumber(row[balanceCol] ?? "") : undefined,
     });
   }
 
@@ -201,12 +215,14 @@ function parseBajio(rows: string[][], warnings: string[]): ParseResult {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function detectSeparator(line: string): string {
+function detectSeparator(content: string): string {
+  // Sample first 30 lines (not just the first — header may be deep in the file)
+  const sample = content.split("\n").slice(0, 30).join("\n");
   const counts = {
-    ";": (line.match(/;/g) ?? []).length,
-    ",": (line.match(/,/g) ?? []).length,
-    "|": (line.match(/\|/g) ?? []).length,
-    "\t": (line.match(/\t/g) ?? []).length,
+    ";": (sample.match(/;/g) ?? []).length,
+    ",": (sample.match(/,/g) ?? []).length,
+    "|": (sample.match(/\|/g) ?? []).length,
+    "\t": (sample.match(/\t/g) ?? []).length,
   };
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
 }
@@ -238,7 +254,7 @@ function detectBank(headers: string[], content: string): string | undefined {
   const h = headers.join(" ");
   const c = content.substring(0, 500).toLowerCase();
   if (c.includes("bbva") || h.includes("num de referencia")) return "BBVA";
-  if (c.includes("banamex") || c.includes("citibanamex"))    return "Banamex";
+  if (c.includes("banamex") || c.includes("citibanamex") || c.includes("cuenta cheques"))    return "Banamex";
   if (c.includes("santander"))                                return "Santander";
   if (c.includes("banorte"))                                  return "Banorte";
   if (c.includes("hsbc"))                                     return "HSBC";
