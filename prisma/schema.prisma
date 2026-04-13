@@ -493,6 +493,8 @@ model BankTransaction {
 
   // Source
   source         String              @default("UPLOAD") // UPLOAD or BELVO
+  belvoId        String?             @unique // Belvo transaction ID (for dedup)
+  belvoCategory  String?             // Belvo auto-category (e.g. "Bills & Utilities")
 
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
