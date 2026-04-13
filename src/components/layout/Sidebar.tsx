@@ -19,6 +19,7 @@ import {
   Plus,
   Settings,
   ShieldCheck,
+  ClipboardList,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { href: "/nomina",       label: "Nómina",          icon: Users2 },
   { href: "/impuestos",    label: "Impuestos",       icon: Calculator },
   { href: "/cumplimiento", label: "Cumplimiento",    icon: ShieldCheck },
+  { href: "/declaracion-anual", label: "Dec. Anual",  icon: ClipboardList },
   { href: "/contabilidad", label: "Contabilidad",    icon: BookOpen },
 ];
 
