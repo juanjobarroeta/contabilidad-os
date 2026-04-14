@@ -151,8 +151,11 @@ function parseCSV(content: string): ParseResult {
     } else {
       const credit = parseMXNumber(row[creditCol] ?? "");
       const debit  = parseMXNumber(row[debitCol] ?? "");
+      // NaN means empty cell (e.g. "-" or blank) — treat as 0
+      const creditVal = isNaN(credit) ? 0 : credit;
+      const debitVal  = isNaN(debit)  ? 0 : debit;
       // credit is positive, debit is negative
-      monto = credit !== 0 ? Math.abs(credit) : -Math.abs(debit);
+      monto = creditVal !== 0 ? Math.abs(creditVal) : -Math.abs(debitVal);
     }
 
     if (isNaN(monto) || monto === 0) continue;
@@ -255,7 +258,7 @@ function detectBank(headers: string[], content: string): string | undefined {
   const c = content.substring(0, 500).toLowerCase();
   if (c.includes("bbva") || h.includes("num de referencia")) return "BBVA";
   if (c.includes("banamex") || c.includes("citibanamex") || c.includes("cuenta cheques"))    return "Banamex";
-  if (c.includes("santander"))                                return "Santander";
+  if (c.includes("santander") || h.includes("sucursal"))       return "Santander";
   if (c.includes("banorte"))                                  return "Banorte";
   if (c.includes("hsbc"))                                     return "HSBC";
   if (c.includes("scotiabank"))                               return "Scotiabank";
