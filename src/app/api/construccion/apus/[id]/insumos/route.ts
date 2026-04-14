@@ -24,12 +24,18 @@ import {
 } from "@/lib/authz";
 import type { Prisma } from "@prisma/client";
 
+// Each line references EITHER an insumoId (raw material/labor/equipment)
+// OR a conceptoRefId (sub-APU / concepto compuesto). Exactly one must be set.
 const lineSchema = z.object({
-  insumoId: z.string().min(1),
+  insumoId: z.string().min(1).optional(),
+  conceptoRefId: z.string().min(1).optional(),
   cantidad: z.number().positive(),
   costoUnitario: z.number().nonnegative(),
   orden: z.number().int().nonnegative().optional(),
-});
+}).refine(
+  (d) => (d.insumoId && !d.conceptoRefId) || (!d.insumoId && d.conceptoRefId),
+  { message: "Exactly one of insumoId or conceptoRefId must be set" }
+);
 
 const addLineBody = lineSchema;
 const replaceLinesBody = z.object({
@@ -87,6 +93,17 @@ async function recomputeApuTotals(tx: Tx, apuId: string) {
               costoActual: true,
             },
           },
+          conceptoRef: {
+            select: {
+              id: true,
+              codigo: true,
+              descripcion: true,
+              unidad: true,
+              apuActual: {
+                select: { precioUnitario: true },
+              },
+            },
+          },
         },
         orderBy: { orden: "asc" },
       },
@@ -124,13 +141,23 @@ export const POST = withAuthz(
     }
     const apu = await loadAndGuardApu(id, req);
 
-    // Ensure the insumo is from the same company
-    const insumo = await prisma.insumo.findUnique({
-      where: { id: parsed.data.insumoId },
-      select: { companyId: true },
-    });
-    if (!insumo || insumo.companyId !== apu.companyId) {
-      return NextResponse.json({ error: "Insumo inválido" }, { status: 400 });
+    // Validate the reference (insumo OR concepto sub-APU)
+    if (parsed.data.insumoId) {
+      const insumo = await prisma.insumo.findUnique({
+        where: { id: parsed.data.insumoId },
+        select: { companyId: true },
+      });
+      if (!insumo || insumo.companyId !== apu.companyId) {
+        return NextResponse.json({ error: "Insumo inválido" }, { status: 400 });
+      }
+    } else if (parsed.data.conceptoRefId) {
+      const ref = await prisma.concepto.findUnique({
+        where: { id: parsed.data.conceptoRefId },
+        select: { companyId: true },
+      });
+      if (!ref || ref.companyId !== apu.companyId) {
+        return NextResponse.json({ error: "Concepto de referencia inválido" }, { status: 400 });
+      }
     }
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -138,7 +165,8 @@ export const POST = withAuthz(
       await tx.aPUInsumo.create({
         data: {
           apuId: id,
-          insumoId: parsed.data.insumoId,
+          insumoId: parsed.data.insumoId ?? null,
+          conceptoRefId: parsed.data.conceptoRefId ?? null,
           cantidad: parsed.data.cantidad,
           costoUnitario: parsed.data.costoUnitario,
           importe: round2(parsed.data.cantidad * parsed.data.costoUnitario),
@@ -162,14 +190,26 @@ export const PUT = withAuthz(
     }
     const apu = await loadAndGuardApu(id, req);
 
-    // Verify every insumo id belongs to the same company in one query
+    // Verify every insumo/concepto ref belongs to the same company
     if (parsed.data.lines.length) {
-      const ids = [...new Set(parsed.data.lines.map((l) => l.insumoId))];
-      const count = await prisma.insumo.count({
-        where: { id: { in: ids }, companyId: apu.companyId },
-      });
-      if (count !== ids.length) {
-        return NextResponse.json({ error: "Uno o más insumos son inválidos" }, { status: 400 });
+      const insumoIds = [...new Set(parsed.data.lines.filter(l => l.insumoId).map(l => l.insumoId!))];
+      const conceptoIds = [...new Set(parsed.data.lines.filter(l => l.conceptoRefId).map(l => l.conceptoRefId!))];
+
+      if (insumoIds.length) {
+        const count = await prisma.insumo.count({
+          where: { id: { in: insumoIds }, companyId: apu.companyId },
+        });
+        if (count !== insumoIds.length) {
+          return NextResponse.json({ error: "Uno o más insumos son inválidos" }, { status: 400 });
+        }
+      }
+      if (conceptoIds.length) {
+        const count = await prisma.concepto.count({
+          where: { id: { in: conceptoIds }, companyId: apu.companyId },
+        });
+        if (count !== conceptoIds.length) {
+          return NextResponse.json({ error: "Uno o más conceptos de referencia son inválidos" }, { status: 400 });
+        }
       }
     }
 
@@ -191,7 +231,8 @@ export const PUT = withAuthz(
         await tx.aPUInsumo.createMany({
           data: parsed.data.lines.map((l, idx) => ({
             apuId: id,
-            insumoId: l.insumoId,
+            insumoId: l.insumoId ?? null,
+            conceptoRefId: l.conceptoRefId ?? null,
             cantidad: l.cantidad,
             costoUnitario: l.costoUnitario,
             importe: round2(l.cantidad * l.costoUnitario),

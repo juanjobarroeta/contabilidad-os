@@ -36,6 +36,17 @@ export const GET = withAuthz(
                     costoActual: true,
                   },
                 },
+                conceptoRef: {
+                  select: {
+                    id: true,
+                    codigo: true,
+                    descripcion: true,
+                    unidad: true,
+                    apuActual: {
+                      select: { precioUnitario: true },
+                    },
+                  },
+                },
               },
               orderBy: { orden: "asc" },
             },

@@ -1024,6 +1024,7 @@ model Concepto {
 
   apus       APU[]                 @relation("ConceptoApus")
   partidas   PresupuestoPartida[]
+  usedAsSubAPU APUInsumo[]         @relation("SubAPU")  // where this concepto is referenced as a sub-APU
   company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, codigo])
@@ -1056,17 +1057,30 @@ model APU {
 }
 
 // Each line of an APU: a material, labor category, equipment, or basic.
+// Each line of an APU references EITHER a raw Insumo (material, labor,
+// equipment) OR another Concepto (sub-APU / concepto compuesto).
+// Exactly one of insumoId or conceptoRefId must be set.
+//
+// When conceptoRefId is set:
+//   - costoUnitario = the referenced concepto's apuActual.precioUnitario
+//   - importe = cantidad × costoUnitario (same formula)
+//   - the referenced concepto acts as a reusable building block
+//     (e.g. "Mortero 1:3" used inside "Repellado" and "Aplanado")
+//   - when the sub-APU's PU changes, the parent APU must be recomputed
+//     (handled by the bulk price update and the recompute function)
 model APUInsumo {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   apuId         String
-  insumoId      String
+  insumoId      String?  // raw insumo reference (mutually exclusive with conceptoRefId)
+  conceptoRefId String?  // sub-APU reference (mutually exclusive with insumoId)
   cantidad      Float
-  costoUnitario Float  // snapshot at time of APU build
-  importe       Float  // = cantidad * costoUnitario
-  orden         Int    @default(0)
+  costoUnitario Float    // snapshot at time of APU build
+  importe       Float    // = cantidad * costoUnitario
+  orden         Int      @default(0)
 
-  apu    APU    @relation(fields: [apuId], references: [id], onDelete: Cascade)
-  insumo Insumo @relation(fields: [insumoId], references: [id])
+  apu         APU       @relation(fields: [apuId], references: [id], onDelete: Cascade)
+  insumo      Insumo?   @relation(fields: [insumoId], references: [id])
+  conceptoRef Concepto? @relation("SubAPU", fields: [conceptoRefId], references: [id])
 }
 
 // Master list of inputs: materials, labor categories, equipment, basics.

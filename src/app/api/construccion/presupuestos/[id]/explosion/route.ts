@@ -95,6 +95,10 @@ export const GET = withAuthz(
     for (const partida of presupuesto.partidas) {
       const apuInsumos = partida.concepto?.apuActual?.insumos ?? [];
       for (const line of apuInsumos) {
+        // Skip sub-APU lines (conceptoRef) — they'll be expanded separately
+        // if/when we add recursive explosion. For now, only raw insumos.
+        if (!line.insumo) continue;
+
         const totalQty = round2(partida.cantidad * line.cantidad);
         const totalCost = round2(totalQty * line.costoUnitario);
 
