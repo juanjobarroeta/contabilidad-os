@@ -405,12 +405,21 @@ export default function ImpuestosPage() {
           <h1 className="text-2xl font-bold">Declaraciones Fiscales</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{activeCompany.razonSocial}</p>
         </div>
-        <a
-          href="/impuestos/papeles"
-          className="flex items-center gap-2 border border-border px-4 py-2 rounded-md text-sm font-medium hover:bg-accent shrink-0"
-        >
-          <FileText className="h-4 w-4" /> Papeles de trabajo
-        </a>
+        <div className="flex items-center gap-2 shrink-0">
+          <a
+            href={`/api/impuestos/diot?companyId=${activeCompany.id}&month=${month}&year=${year}&format=txt`}
+            className="flex items-center gap-2 border border-border px-3 py-2 rounded-md text-xs font-medium hover:bg-accent"
+            title="Descargar DIOT del periodo"
+          >
+            <FileText className="h-3.5 w-3.5" /> DIOT
+          </a>
+          <a
+            href="/impuestos/papeles"
+            className="flex items-center gap-2 border border-border px-3 py-2 rounded-md text-xs font-medium hover:bg-accent"
+          >
+            <FileText className="h-3.5 w-3.5" /> Papeles
+          </a>
+        </div>
       </div>
 
       {/* Period selector */}
