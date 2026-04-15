@@ -183,7 +183,9 @@ export async function GET(req: Request) {
   let coeficiente: number | null;
   let coeficienteFuente: "manual" | "calculado" | "ninguno";
 
-  if (company?.coeficienteAnio === year && company?.coeficienteUtilidad != null) {
+  if (company?.coeficienteUtilidad != null && (company.coeficienteAnio === year || company.coeficienteAnio == null)) {
+    // Use stored CU: either it's explicitly for this year, or it was imported
+    // without a year (legacy) and we use it as the best available
     coeficiente      = company.coeficienteUtilidad;
     coeficienteFuente = "manual";
   } else if (coeficienteCalculado !== null) {

@@ -101,10 +101,14 @@ export async function POST(req: Request, { params }: Params) {
       }
 
       // Update Company.coeficienteUtilidad if present
+      // CU from year X applies to year X+1's provisionales
       if (a.coeficienteUtilidad != null) {
         await prisma.company.update({
           where: { id: companyId },
-          data: { coeficienteUtilidad: a.coeficienteUtilidad },
+          data: {
+            coeficienteUtilidad: a.coeficienteUtilidad,
+            coeficienteAnio: (a.ejercicio ?? 0) + 1,
+          },
         });
       }
     } catch (e) {
