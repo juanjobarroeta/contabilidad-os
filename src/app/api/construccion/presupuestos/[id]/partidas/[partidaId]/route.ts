@@ -54,7 +54,7 @@ async function loadAndGuard(
   }
   await requireWriter(partida.presupuesto.companyId, req);
   await requireModule(partida.presupuesto.companyId, "CONSTRUCCION");
-  if (partida.presupuesto.estado !== "BORRADOR") {
+  if (partida.presupuesto.estado !== "BORRADOR" && partida.presupuesto.estado !== "EN_EJECUCION") {
     throw new AuthzError(
       422,
       `Solo se pueden editar presupuestos en BORRADOR (estado actual: ${partida.presupuesto.estado}). Clónalo primero.`

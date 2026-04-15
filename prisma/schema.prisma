@@ -165,6 +165,7 @@ model Company {
   presupuestos      Presupuesto[]
   estimaciones      Estimacion[]
   solicitudesCompra SolicitudCompra[]
+  pagos             Pago[]
   imssMovimientos   ImssMovimiento[]
   incidencias       Incidencia[]
 
@@ -986,6 +987,8 @@ model Proyecto {
   estimaciones      Estimacion[]
   programa          ProgramaActividad[]
   solicitudesCompra SolicitudCompra[]
+  bitacora          BitacoraEntrada[]
+  pagos             Pago[]
 
   @@unique([companyId, codigo])
   @@index([companyId, estado])
@@ -1128,20 +1131,32 @@ model Presupuesto {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Human-readable label (e.g. "Mantenimiento Básico", "Rehabilitación Integral")
-  // so a single proyecto can carry multiple presupuestos side-by-side in the UI
-  // and the customer picks one in a meeting.
   nombre      String?
 
   version     Int               @default(1)
   estado      PresupuestoEstado @default(BORRADOR)
   montoTotal  Float             @default(0)
 
+  // Contrato vs Ejecutado distinction.
+  // CONTRATO = frozen, customer-signed. Revenue basis. Default for all existing rows.
+  // EJECUTADO = living document reflecting actual construction reality.
+  tipoPresupuesto  TipoPresupuesto @default(CONTRATO)
+  // For EJECUTADO only: FK back to the contrato it was cloned from.
+  contratoOrigenId String?
+  contratoOrigen   Presupuesto?  @relation("ContratoEjecutado", fields: [contratoOrigenId], references: [id])
+  ejecutados       Presupuesto[] @relation("ContratoEjecutado")
+
   partidas     PresupuestoPartida[]
   estimaciones Estimacion[]
+  versiones    PresupuestoVersion[]
 
   proyecto Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+enum TipoPresupuesto {
+  CONTRATO
+  EJECUTADO
 }
 
 enum PresupuestoEstado {
@@ -1170,6 +1185,8 @@ model PresupuestoPartida {
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
   concepto    Concepto    @relation(fields: [conceptoId], references: [id])
   avances     EstimacionPartida[]
+  compras     SolicitudPartida[]
+  bitacora    BitacoraEntrada[]
 }
 
 // Estimaciones: government billing flow. Each one becomes a CFDI when timbrada.
@@ -1288,6 +1305,83 @@ model SolicitudPartida {
   precioUnitario Float
   importe        Float
 
+  // Link purchase to a specific ejecutado partida for cost tracking
+  presupuestoPartidaId String?
+  presupuestoPartida   PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
+
   solicitud SolicitudCompra @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
   insumo    Insumo?         @relation(fields: [insumoId], references: [id])
+}
+
+// ─── Presupuesto versioning (ejecutado change log) ───────────────────────────
+
+model PresupuestoVersion {
+  id              String   @id @default(cuid())
+  presupuestoId   String
+  version         Int
+  createdAt       DateTime @default(now())
+  descripcion     String?  // "Engineer found stone walls", "Added waterproofing"
+  snapshotTotal   Float    // montoTotal at time of snapshot
+
+  presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+
+  @@unique([presupuestoId, version])
+}
+
+// ─── Bitácora de obra (field log) ────────────────────────────────────────────
+
+model BitacoraEntrada {
+  id          String       @id @default(cuid())
+  proyectoId  String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  fecha       DateTime     @default(now())  // field date (may differ from createdAt)
+  texto       String       @db.Text
+  tipo        BitacoraTipo @default(NOTA)
+
+  // Optional links
+  presupuestoPartidaId String?
+  fotos                String[]  // URL array for photos
+
+  proyecto           Proyecto            @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
+
+  @@index([proyectoId, fecha])
+}
+
+enum BitacoraTipo {
+  NOTA
+  DECISION
+  PROBLEMA
+  CLIMA
+  FOTO
+}
+
+// ─── Pagos de proyecto (anticipo, estimaciones, retención) ───────────────────
+
+model Pago {
+  id                String   @id @default(cuid())
+  proyectoId        String
+  companyId         String
+  createdAt         DateTime @default(now())
+
+  tipo              PagoTipo
+  monto             Float
+  fecha             DateTime
+  referencia        String?
+  bankAccountId     String?
+  bankTransactionId String?  @unique
+  estimacionId      String?
+
+  proyecto Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([proyectoId])
+}
+
+enum PagoTipo {
+  ANTICIPO
+  ESTIMACION
+  RETENCION_LIBERADA
 }

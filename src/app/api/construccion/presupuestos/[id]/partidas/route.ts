@@ -67,7 +67,7 @@ export const POST = withAuthz(
     await requireWriter(presupuesto.companyId, req);
     await requireModule(presupuesto.companyId, "CONSTRUCCION");
 
-    if (presupuesto.estado !== "BORRADOR") {
+    if (presupuesto.estado !== "BORRADOR" && presupuesto.estado !== "EN_EJECUCION") {
       return NextResponse.json(
         {
           error: `Solo se pueden editar presupuestos en BORRADOR (estado actual: ${presupuesto.estado}). Clónalo primero.`,

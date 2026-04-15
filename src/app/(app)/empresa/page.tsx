@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { formatCurrency } from "@/lib/utils";
 import {
   Building2, Plus, Loader2, Pencil, CheckCircle2,
   Zap, Key, AlertCircle, Trash2, ExternalLink, Eye, EyeOff, X,
@@ -133,6 +134,7 @@ export default function EmpresaPage() {
   const [importSaving, setImportSaving] = useState(false);
   const [importSuccess, setImportSuccess] = useState("");
   const [importError, setImportError] = useState("");
+  const [historicalDecs, setHistoricalDecs] = useState<{ id: string; tipo: string; periodo: string; status: string; isrPagar: number | null; ivaPagar: number | null; ivaSaldoFavor: number | null; isrCoeficienteUtilidad: number | null }[]>([]);
 
   // Delete company
   const [disconnectLoading, setDisconnectLoading] = useState(false);
@@ -350,6 +352,20 @@ export default function EmpresaPage() {
     }
   }
 
+  // Load historical declarations
+  const loadHistorical = useCallback(async () => {
+    if (!activeCompany) return;
+    try {
+      const res = await fetch(`/api/impuestos/historical?companyId=${activeCompany.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoricalDecs(data.declarations ?? []);
+      }
+    } catch { /* silent */ }
+  }, [activeCompany]);
+
+  useEffect(() => { loadHistorical(); }, [loadHistorical]);
+
   // ── Import declarations handlers ──
   async function handleImportUpload(files: FileList | null) {
     if (!files || files.length === 0 || !activeCompany) return;
@@ -420,6 +436,7 @@ export default function EmpresaPage() {
         `✓ ${data.total} declaración${data.total !== 1 ? "es" : ""} importada${data.total !== 1 ? "s" : ""}: ${data.created.join(", ")}`
       );
       setImportDocs([]);
+      loadHistorical();
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Error inesperado");
     } finally {
@@ -1076,6 +1093,39 @@ export default function EmpresaPage() {
                   ? "Importando…"
                   : `Importar ${importDocs.length} declaración${importDocs.length !== 1 ? "es" : ""}`}
               </button>
+            )}
+            {/* Historical declarations already imported */}
+            {historicalDecs.length > 0 && (
+              <div className="border-t border-border pt-3 mt-1">
+                <p className="text-xs font-medium text-muted-foreground mb-2">📄 Declaraciones importadas</p>
+                <div className="space-y-1">
+                  {historicalDecs.map(d => (
+                    <div key={d.id} className="flex items-center justify-between text-xs bg-white border border-border rounded px-3 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-medium">{d.periodo}</span>
+                        <span className="text-muted-foreground">
+                          {d.tipo === "DECLARACION_ANUAL" ? "Anual" : d.tipo === "IVA_MENSUAL" ? "IVA" : d.tipo === "ISR_PROVISIONAL" ? "ISR" : d.tipo}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-muted-foreground">
+                        {d.isrCoeficienteUtilidad != null && (
+                          <span>CU: <strong className="text-foreground">{d.isrCoeficienteUtilidad}</strong></span>
+                        )}
+                        {d.ivaPagar != null && d.ivaPagar > 0 && (
+                          <span>IVA: <strong className="text-red-600">{formatCurrency(d.ivaPagar)}</strong></span>
+                        )}
+                        {d.ivaSaldoFavor != null && d.ivaSaldoFavor > 0 && (
+                          <span>IVA favor: <strong className="text-green-700">{formatCurrency(d.ivaSaldoFavor)}</strong></span>
+                        )}
+                        {d.isrPagar != null && d.isrPagar > 0 && (
+                          <span>ISR: <strong className="text-red-600">{formatCurrency(d.isrPagar)}</strong></span>
+                        )}
+                        <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium text-[10px]">Importado</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>

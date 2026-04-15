@@ -31,8 +31,15 @@ export const GET = withAuthz(
             version: true,
             estado: true,
             montoTotal: true,
+            tipoPresupuesto: true,
+            contratoOrigenId: true,
             createdAt: true,
             _count: { select: { partidas: true } },
+            versiones: {
+              select: { version: true, descripcion: true, snapshotTotal: true, createdAt: true },
+              orderBy: { version: "desc" as const },
+              take: 10,
+            },
             // Include partidas with cost data for the financial summary.
             // Only returned for APROBADO/EN_EJECUCION presupuestos to keep
             // the response lean when there are many BORRADOR drafts.
@@ -86,6 +93,31 @@ export const GET = withAuthz(
           },
           orderBy: { createdAt: "desc" },
           take: 20,
+        },
+        pagos: {
+          select: {
+            id: true,
+            tipo: true,
+            monto: true,
+            fecha: true,
+            referencia: true,
+            estimacionId: true,
+          },
+          orderBy: { fecha: "desc" },
+        },
+        bitacora: {
+          select: {
+            id: true,
+            fecha: true,
+            texto: true,
+            tipo: true,
+            fotos: true,
+            presupuestoPartida: {
+              select: { zona: true, partida: true, concepto: { select: { codigo: true } } },
+            },
+          },
+          orderBy: { fecha: "desc" },
+          take: 10,
         },
       },
     });
