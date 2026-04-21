@@ -1178,9 +1178,12 @@ model PresupuestoPartida {
   orden           Int      @default(0)
 
   // Hierarchical grouping (flat + 2 string fields, not a nested tree).
-  // Matches the partner's PDF layout: HACIENDA → ZONA → PARTIDA → conceptos.
-  zona    String?    // "PLANTA BAJA" | "PLANTA ALTA" | "PASILLO" | "AZOTEA" | "FACHADA"
-  partida String?    // "A1 PRELIMINARES" | "A2 MURO" | "D2 IMPERMEABILIZANTE" | ...
+  zona    String?
+  partida String?
+
+  // Internal operational notes — not shown to the customer.
+  // "Verificar stock", "cambio aprobado por cliente", etc.
+  notas   String?    @db.Text
 
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
   concepto    Concepto    @relation(fields: [conceptoId], references: [id])

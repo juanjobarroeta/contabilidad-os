@@ -27,6 +27,7 @@ const patchSchema = z.object({
   zona: z.string().max(80).nullable().optional(),
   partida: z.string().max(80).nullable().optional(),
   orden: z.number().int().nonnegative().optional(),
+  notas: z.string().nullable().optional(),
 });
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -109,6 +110,7 @@ export const PATCH = withAuthz(
             partida: parsed.data.partida,
           }),
           ...(parsed.data.orden !== undefined && { orden: parsed.data.orden }),
+          ...(parsed.data.notas !== undefined && { notas: parsed.data.notas }),
         },
         include: {
           concepto: {
