@@ -79,6 +79,14 @@ export const GET = withAuthz(
             total: true,
             invoiceId: true,
             createdAt: true,
+            partidas: {
+              select: {
+                presupuestoPartidaId: true,
+                cantidadEjecutada: true,
+                cantidadAcumulada: true,
+                importe: true,
+              },
+            },
           },
           orderBy: { numero: "desc" },
         },
@@ -90,9 +98,17 @@ export const GET = withAuthz(
             total: true,
             createdAt: true,
             supplier: { select: { id: true, razonSocial: true } },
+            partidas: {
+              select: {
+                id: true,
+                cantidad: true,
+                importe: true,
+                presupuestoPartidaId: true,
+              },
+            },
           },
           orderBy: { createdAt: "desc" },
-          take: 20,
+          take: 50,
         },
         pagos: {
           select: {
