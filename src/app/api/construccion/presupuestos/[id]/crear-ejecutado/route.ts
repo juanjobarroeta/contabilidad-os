@@ -19,7 +19,7 @@ export const POST = withAuthz(
       include: {
         partidas: {
           select: {
-            conceptoId: true, apuVersion: true, cantidad: true,
+            id: true, conceptoId: true, apuVersion: true, cantidad: true,
             precioUnitario: true, importe: true, orden: true, zona: true, partida: true,
           },
         },
@@ -73,6 +73,8 @@ export const POST = withAuthz(
               orden: p.orden,
               zona: p.zona,
               partida: p.partida,
+              // Link back to the contrato partida for avance tracking
+              contratoPartidaId: p.id,
             })),
           },
         },

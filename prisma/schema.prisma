@@ -1185,6 +1185,14 @@ model PresupuestoPartida {
   // "Verificar stock", "cambio aprobado por cliente", etc.
   notas   String?    @db.Text
 
+  // For ejecutado partidas: FK back to the contrato partida they were
+  // cloned from. Enables avance tracking to span contrato↔ejecutado
+  // (estimaciones reference contrato partidas, but the UI displays
+  // avance on the ejecutado).
+  contratoPartidaId String?
+  contratoPartida   PresupuestoPartida?  @relation("PartidaContratoEjecutado", fields: [contratoPartidaId], references: [id])
+  ejecutadoPartidas PresupuestoPartida[] @relation("PartidaContratoEjecutado")
+
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
   concepto    Concepto    @relation(fields: [conceptoId], references: [id])
   avances     EstimacionPartida[]

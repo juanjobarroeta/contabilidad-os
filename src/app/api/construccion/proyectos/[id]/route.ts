@@ -51,6 +51,7 @@ export const GET = withAuthz(
                 importe: true,
                 zona: true,
                 partida: true,
+                contratoPartidaId: true,
                 concepto: {
                   select: {
                     codigo: true,
