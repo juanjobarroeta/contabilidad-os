@@ -60,18 +60,28 @@ export async function GET(req: Request) {
     prevDeclaracion,
     declaracionGuardada,
     company,
+    ppdIngresosCobrados,
+    ppdEgresosPagados,
     nominaThisMonth,
     nominaPrevMonths,
   ] = await Promise.all([
-    // This month's invoices
+    // This month's invoices (includes metodoPago for flujo de efectivo)
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
-      include: { customer: { select: { razonSocial: true, rfc: true } }, taxes: true },
+      include: {
+        customer: { select: { razonSocial: true, rfc: true } },
+        taxes: true,
+        bankTransactions: { select: { id: true, fecha: true, monto: true, status: true } },
+      },
       orderBy: { fecha: "asc" },
     }),
     prisma.invoice.findMany({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
-      include: { customer: { select: { razonSocial: true, rfc: true } }, taxes: true },
+      include: {
+        customer: { select: { razonSocial: true, rfc: true } },
+        taxes: true,
+        bankTransactions: { select: { id: true, fecha: true, monto: true, status: true } },
+      },
       orderBy: { fecha: "asc" },
     }),
     // Previous year totals — for coeficiente calculation
@@ -124,6 +134,37 @@ export async function GET(req: Request) {
       where: { id: companyId },
       select: { coeficienteUtilidad: true, coeficienteAnio: true },
     }),
+    // PPD INGRESOS from PRIOR months with bank payments matched THIS month
+    // (IVA causa cobrado this month per flujo de efectivo — Art. 1-B LIVA)
+    prisma.invoice.findMany({
+      where: {
+        companyId, status: "STAMPED", tipo: "INGRESO", metodoPago: "PPD",
+        fecha: { lt: from },
+        bankTransactions: { some: { status: "MATCHED", fecha: { gte: from, lt: to } } },
+      },
+      include: {
+        taxes: true,
+        bankTransactions: {
+          where: { status: "MATCHED", fecha: { gte: from, lt: to } },
+          select: { monto: true },
+        },
+      },
+    }),
+    // PPD EGRESOS from PRIOR months paid THIS month (IVA acreditable pagado)
+    prisma.invoice.findMany({
+      where: {
+        companyId, status: "STAMPED", tipo: "EGRESO", metodoPago: "PPD",
+        fecha: { lt: from },
+        bankTransactions: { some: { status: "MATCHED", fecha: { gte: from, lt: to } } },
+      },
+      include: {
+        taxes: true,
+        bankTransactions: {
+          where: { status: "MATCHED", fecha: { gte: from, lt: to } },
+          select: { monto: true },
+        },
+      },
+    }),
     // Nómina ISR retenciones this month (from PayrollItems)
     prisma.payrollItem.aggregate({
       where: {
@@ -149,22 +190,73 @@ export async function GET(req: Request) {
   ]);
 
   // ── IVA calculations ──────────────────────────────────────────────────────
-  const ivaTrasladadoTotal = facturasEmitidas.reduce((sum, inv) => {
+  // IVA works on FLUJO DE EFECTIVO (cash basis, Art. 1-B LIVA):
+  // - PUE: IVA causa el mes de emisión (se asume pagada)
+  // - PPD: IVA causa el mes en que se recibe el pago (bank tx match)
+  //
+  // For acreditable the same rule applies: PUE = mes de factura,
+  // PPD = mes en que se paga al proveedor.
+
+  // Helper to extract IVA trasladado (excludes retenciones) from an invoice
+  type InvoiceLike = { taxes: { tipo: string; retencion: boolean; importe: number }[]; totalImpuestos: number | null };
+  function ivaTrasladado(inv: InvoiceLike): number {
     const ivaTaxes = inv.taxes.filter((t) => t.tipo === "IVA" && !t.retencion);
-    return sum + (ivaTaxes.length > 0
+    return ivaTaxes.length > 0
       ? ivaTaxes.reduce((s, t) => s + t.importe, 0)
-      : (inv.totalImpuestos ?? 0));
-  }, 0);
+      : (inv.totalImpuestos ?? 0);
+  }
+
+  // Helper: compute what fraction of an invoice has been paid this month
+  // (proportional IVA for partial payments on PPDs)
+  type InvoiceWithBank = InvoiceLike & { total: number; bankTransactions: { monto: number }[] };
+  function paidFractionThisMonth(inv: InvoiceWithBank): number {
+    if (!inv.bankTransactions.length) return 0;
+    const paid = inv.bankTransactions.reduce((s, t) => s + Math.abs(t.monto), 0);
+    return inv.total > 0 ? Math.min(1, paid / inv.total) : 0;
+  }
+
+  // IVA trasladado cobrado (flujo de efectivo):
+  // - PUE del mes: IVA completo
+  // - PPD del mes con pago matched en el mes: IVA completo si full-paid, proporcional si partial
+  // - PPD de meses anteriores con pago recibido este mes: IVA proporcional
+  const ivaTrasladadoPUE = facturasEmitidas
+    .filter(inv => inv.metodoPago === "PUE")
+    .reduce((s, inv) => s + ivaTrasladado(inv), 0);
+
+  const ivaTrasladadoPPDMes = facturasEmitidas
+    .filter(inv => inv.metodoPago === "PPD")
+    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
+
+  const ivaTrasladadoPPDPrev = ppdIngresosCobrados
+    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
+
+  const ivaTrasladadoTotal = ivaTrasladadoPUE + ivaTrasladadoPPDMes + ivaTrasladadoPPDPrev;
+
+  // IVA devengado (all stamped CFDIs regardless of payment) — informational
+  const ivaTrasladadoDevengado = facturasEmitidas.reduce((s, inv) => s + ivaTrasladado(inv), 0);
 
   const ivaRetenidoPorClientes = facturasEmitidas.reduce((sum, inv) =>
     sum + inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion).reduce((s, t) => s + t.importe, 0), 0);
 
-  const ivaAcreditable = facturasEgresos.reduce((sum, inv) => {
-    const ivaTaxes = inv.taxes.filter((t) => t.tipo === "IVA" && !t.retencion);
-    return sum + (ivaTaxes.length > 0
-      ? ivaTaxes.reduce((s, t) => s + t.importe, 0)
-      : (inv.totalImpuestos ?? 0));
-  }, 0);
+  // IVA acreditable pagado (same logic as trasladado but for egresos)
+  const ivaAcreditablePUE = facturasEgresos
+    .filter(inv => inv.metodoPago === "PUE")
+    .reduce((s, inv) => s + ivaTrasladado(inv), 0);
+
+  const ivaAcreditablePPDMes = facturasEgresos
+    .filter(inv => inv.metodoPago === "PPD")
+    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
+
+  const ivaAcreditablePPDPrev = ppdEgresosPagados
+    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
+
+  const ivaAcreditable = ivaAcreditablePUE + ivaAcreditablePPDMes + ivaAcreditablePPDPrev;
+
+  const ivaAcreditableDevengado = facturasEgresos.reduce((s, inv) => s + ivaTrasladado(inv), 0);
+
+  // Pending IVA (emitted but not yet collected) — useful for planning
+  const ivaPendienteCobrar = ivaTrasladadoDevengado - ivaTrasladadoPUE - ivaTrasladadoPPDMes;
+  const ivaPendientePagar = ivaAcreditableDevengado - ivaAcreditablePUE - ivaAcreditablePPDMes;
 
   // Auto saldo a favor from previous month's declaration
   const saldoFavorAnteriorAuto = prevDeclaracion?.ivaSaldoFavor ?? 0;
@@ -238,12 +330,31 @@ export async function GET(req: Request) {
     cutoffDate: isPreliminar ? cutoffStr : null,
     isPreliminar,
     iva: {
+      // Flujo de efectivo (what SAT actually expects)
       trasladado: ivaTrasladadoTotal,
       retenidoPorClientes: ivaRetenidoPorClientes,
       acreditable: ivaAcreditable,
-      // Auto carryover from previous month — can be overridden on frontend
       saldoFavorAnterior: saldoFavorAnteriorAuto,
       saldoFavorAnteriorPeriodo: saldoFavorAnteriorAuto > 0 ? prevPeriodo : null,
+      // Desglose flujo de efectivo
+      desglose: {
+        trasladadoPUE: ivaTrasladadoPUE,
+        trasladadoPPDCobradoEsteMes: ivaTrasladadoPPDMes,
+        trasladadoPPDCobradoMesesAnteriores: ivaTrasladadoPPDPrev,
+        acreditablePUE: ivaAcreditablePUE,
+        acreditablePPDPagadoEsteMes: ivaAcreditablePPDMes,
+        acreditablePPDPagadoMesesAnteriores: ivaAcreditablePPDPrev,
+      },
+      // Devengado (informational — NOT what SAT expects, but useful for comparison)
+      devengado: {
+        trasladado: ivaTrasladadoDevengado,
+        acreditable: ivaAcreditableDevengado,
+      },
+      // Pendiente (invoices emitted but not yet paid — "IVA atrapado")
+      pendiente: {
+        porCobrar: ivaPendienteCobrar,
+        porPagar: ivaPendientePagar,
+      },
     },
     nomina: {
       isrRetenidoMes: nominaIsrMes,
