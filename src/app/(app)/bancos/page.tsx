@@ -31,7 +31,11 @@ interface BankTx {
 interface Candidate {
   id: string; uuid?: string | null; fecha: string; total: number;
   cliente: string; rfc: string; score: number;
+  folio?: string | null; serie?: string | null; metodoPago?: string;
   confidence: "alta" | "media" | "baja";
+  alreadyMatched?: boolean;
+  matchedAmount?: number;
+  remainingBalance?: number;
 }
 
 type TxFilter =
@@ -646,22 +650,57 @@ function MatchPanel({ tx, candidates, loading, onMatch, onIgnore, onCategorize, 
         </p>
       ) : (
         <div className="space-y-1.5 mb-2">
-          {candidates.map(c => (
-            <button key={c.id} onClick={() => onMatch(c.id)}
-              className="w-full flex items-center gap-3 text-left bg-white border border-border rounded-lg px-3 py-2 hover:border-primary hover:bg-primary/5 transition-colors group">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate">{c.cliente}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(c.fecha)} · {c.rfc}</p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="text-xs font-semibold">{formatCurrency(c.total)}</p>
-                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${CONFIDENCE_COLORS[c.confidence]}`}>
-                  {c.confidence}
-                </span>
-              </div>
-              <LinkIcon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0" />
-            </button>
-          ))}
+          {candidates.map(c => {
+            const isPue = c.metodoPago === "PUE";
+            const fullyMatched = c.alreadyMatched && isPue;
+            const partiallyMatched = c.alreadyMatched && !isPue && (c.remainingBalance ?? 0) > 0.01;
+            return (
+              <button
+                key={c.id}
+                onClick={() => !fullyMatched && onMatch(c.id)}
+                disabled={fullyMatched}
+                className={`w-full flex items-center gap-3 text-left border rounded-lg px-3 py-2 transition-colors group ${
+                  fullyMatched
+                    ? "bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed"
+                    : partiallyMatched
+                      ? "bg-amber-50 border-amber-300 hover:border-amber-400"
+                      : "bg-white border-border hover:border-primary hover:bg-primary/5"
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium truncate">{c.cliente}</p>
+                    {c.metodoPago && (
+                      <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-gray-100 text-gray-600">{c.metodoPago}</span>
+                    )}
+                    {c.alreadyMatched && (
+                      <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${
+                        fullyMatched ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {fullyMatched ? "Ya conciliada" : "Parcial"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(c.fecha)} · {c.rfc}
+                    {c.serie || c.folio ? ` · ${c.serie ?? ""}${c.folio ?? ""}` : ""}
+                  </p>
+                  {partiallyMatched && (
+                    <p className="text-[10px] text-amber-700 mt-0.5">
+                      Ya cobrado: {formatCurrency(c.matchedAmount ?? 0)} · Falta: {formatCurrency(c.remainingBalance ?? 0)}
+                    </p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-semibold">{formatCurrency(c.total)}</p>
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${CONFIDENCE_COLORS[c.confidence]}`}>
+                    {c.confidence}
+                  </span>
+                </div>
+                {!fullyMatched && <LinkIcon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0" />}
+              </button>
+            );
+          })}
         </div>
       )}
 

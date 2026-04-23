@@ -123,8 +123,20 @@ export async function GET(req: Request, { params }: Params) {
         lte: new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000),
       },
       total: { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
+      // Exclude PUE invoices already matched to another bank tx.
+      // Keep PPD invoices visible — they can have multiple partial payments.
+      OR: [
+        { metodoPago: "PPD" },
+        { bankTransactions: { none: { status: "MATCHED" } } },
+      ],
     },
-    include: { customer: { select: { rfc: true, razonSocial: true } } },
+    include: {
+      customer: { select: { rfc: true, razonSocial: true } },
+      bankTransactions: {
+        where: { status: "MATCHED" },
+        select: { id: true, fecha: true, monto: true },
+      },
+    },
     orderBy: { fecha: "desc" },
     take: 10,
   });
@@ -142,15 +154,23 @@ export async function GET(req: Request, { params }: Params) {
     else if (daysDiff <= 7)  score += 10;
     const rfc = inv.customer?.rfc ?? "";
     if (rfc && tx.descripcion.toUpperCase().includes(rfc)) score += 25;
+    const alreadyMatched = inv.bankTransactions.length > 0;
+    const matchedAmount = inv.bankTransactions.reduce((s, t) => s + Math.abs(t.monto), 0);
     return {
       id:          inv.id,
       uuid:        inv.uuid,
       fecha:       inv.fecha,
+      folio:       inv.folio,
+      serie:       inv.serie,
+      metodoPago:  inv.metodoPago,
       total:       inv.total,
       cliente:     inv.customer?.razonSocial ?? "—",
       rfc:         inv.customer?.rfc ?? "—",
       score,
       confidence:  score >= 100 ? "alta" : score >= 50 ? "media" : "baja",
+      alreadyMatched,
+      matchedAmount: Math.round(matchedAmount * 100) / 100,
+      remainingBalance: Math.round((inv.total - matchedAmount) * 100) / 100,
     };
   }).sort((a, b) => b.score - a.score);
 
