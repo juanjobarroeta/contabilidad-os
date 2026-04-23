@@ -75,8 +75,14 @@ export async function POST(req: Request, { params }: Params) {
     scored.sort((a, b) => b.score - a.score);
     const best = scored[0];
 
-    // Auto-apply only when confidence is very high (≥130 points: exact amount + date within 7d)
-    if (best.score >= 130) {
+    // Auto-apply only when confidence is very high AND unambiguous:
+    // - Score ≥ 130 (exact amount + date within 7d)
+    // - No other candidate within 20 points of the winner (avoids wrong match
+    //   when multiple invoices have the same amount)
+    const secondBest = scored[1];
+    const unambiguous = !secondBest || (best.score - secondBest.score) >= 20;
+
+    if (best.score >= 130 && unambiguous) {
       await prisma.bankTransaction.update({
         where: { id: tx.id },
         data: { status: "MATCHED", invoiceId: best.inv.id },
