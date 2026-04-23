@@ -109,14 +109,27 @@ export async function POST(req: Request) {
     ServiceEndpoints.cfdi()
   );
 
-  // Period: full month — but clamp end date to right now if month is not yet complete
-  // SAT rejects requests with end dates in the future (code 301)
+  // Period: full month — but clamp end date to YESTERDAY if month is not complete.
+  // SAT rejects requests with end dates that include today or the future (code 301).
+  // Their system considers today's CFDIs as "en tránsito" and the range must end
+  // at 23:59:59 of a day that has fully passed.
   const lastDay = new Date(year, month, 0).getDate();
   const pad = (n: number) => String(n).padStart(2, "0");
 
   const requestedEnd = new Date(year, month - 1, lastDay, 23, 59, 59);
   const now = new Date();
-  const effectiveEnd = requestedEnd > now ? now : requestedEnd;
+  // Yesterday at 23:59:59 in local time
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+  const effectiveEnd = requestedEnd > yesterday ? yesterday : requestedEnd;
+
+  // Guard: if the effective end is before the month's start, there's no data to sync yet
+  const monthStart = new Date(year, month - 1, 1);
+  if (effectiveEnd < monthStart) {
+    return NextResponse.json(
+      { error: `El mes ${month}/${year} aún no tiene días completos para consultar al SAT. Intenta mañana.` },
+      { status: 400 }
+    );
+  }
 
   const startIso = `${year}-${pad(month)}-01T00:00:00`;
   const endIso = [
