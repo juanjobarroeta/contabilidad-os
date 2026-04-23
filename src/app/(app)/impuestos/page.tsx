@@ -164,6 +164,10 @@ export default function ImpuestosPage() {
   const [savedStatus, setSavedStatus] = useState<string | null>(null);
   const [isHistorical, setIsHistorical] = useState(false);
 
+  // Complemento de pagos (REP) check — PPDs with bank match but missing REP
+  const [repPending, setRepPending] = useState<{ count: number; monto: number; invoices: { id: string; folio: string | null; serie: string | null; customer: string; pendingAmount: number; uuid: string | null }[] }>({ count: 0, monto: 0, invoices: [] });
+  const [repEmitting, setRepEmitting] = useState(false);
+
   // User-adjustable overrides (initialized from API / saved declaration)
   const [saldoFavorAnterior, setSaldoFavorAnterior] = useState(0);
   const [saldoFavorEdited, setSaldoFavorEdited]     = useState(false);
@@ -224,6 +228,27 @@ export default function ImpuestosPage() {
       setResult(data);
       setSavedStatus(data.declaracionGuardada?.status ?? null);
       setIsHistorical(data.declaracionGuardada?.isHistorical ?? false);
+
+      // Fire-and-forget check for missing complementos de pago
+      fetch(`/api/facturas/complemento-pagos?companyId=${activeCompany.id}`)
+        .then(r => r.ok ? r.json() : null)
+        .then((repData) => {
+          if (!repData) return;
+          const needing = (repData.pendientes ?? []).filter((p: { needsRep: boolean }) => p.needsRep);
+          setRepPending({
+            count: needing.length,
+            monto: needing.reduce((s: number, p: { pendingAmount: number }) => s + p.pendingAmount, 0),
+            invoices: needing.map((p: { invoice: { id: string; folio: string | null; serie: string | null; uuid: string | null; customer: { razonSocial: string } | null }; pendingAmount: number }) => ({
+              id: p.invoice.id,
+              folio: p.invoice.folio,
+              serie: p.invoice.serie,
+              uuid: p.invoice.uuid,
+              customer: p.invoice.customer?.razonSocial ?? "—",
+              pendingAmount: p.pendingAmount,
+            })),
+          });
+        })
+        .catch(() => { /* silent */ });
 
       // Restore saved overrides, otherwise use auto values
       const savedSaldo = data.declaracionGuardada?.saldoFavorAnteriorOverride;
@@ -473,6 +498,75 @@ export default function ImpuestosPage() {
             <strong>Cálculo preliminar</strong> — valores estimados con datos hasta el <strong>{cutoffDate}</strong>.
             No incluye CFDIs ni movimientos bancarios posteriores a esa fecha.
           </span>
+        </div>
+      )}
+
+      {/* Precierre — Complementos de Pago pendientes */}
+      {repPending.count > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-900">
+                Precierre: {repPending.count} complemento{repPending.count !== 1 ? "s" : ""} de pago pendiente{repPending.count !== 1 ? "s" : ""}
+              </p>
+              <p className="text-xs text-red-700 mt-0.5">
+                {repPending.count} factura{repPending.count !== 1 ? "s" : ""} PPD con pago recibido en banco pero sin REP emitido.
+                Monto pendiente: <strong>{formatCurrency(repPending.monto)}</strong>.
+                SAT requiere el complemento para documentar la cobranza.
+              </p>
+              <details className="mt-2">
+                <summary className="text-xs font-medium text-red-800 cursor-pointer hover:underline">Ver facturas</summary>
+                <div className="mt-2 space-y-1">
+                  {repPending.invoices.map(inv => (
+                    <div key={inv.id} className="flex items-center justify-between bg-white border border-red-200 rounded px-2.5 py-1.5 text-xs">
+                      <span className="font-mono text-muted-foreground">{inv.serie ?? ""}{inv.folio ?? inv.uuid?.slice(-8)}</span>
+                      <span className="flex-1 mx-3 truncate">{inv.customer}</span>
+                      <span className="font-mono">{formatCurrency(inv.pendingAmount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={async () => {
+                    setRepEmitting(true);
+                    let emitted = 0;
+                    const errors: string[] = [];
+                    for (const inv of repPending.invoices) {
+                      try {
+                        const res = await fetch("/api/facturas/complemento-pagos", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            companyId: activeCompany.id,
+                            invoiceId: inv.id,
+                            monto: inv.pendingAmount,
+                          }),
+                        });
+                        if (res.ok) emitted++;
+                        else errors.push(`${inv.customer}: ${(await res.json()).error ?? "Error"}`);
+                      } catch { errors.push(inv.customer); }
+                    }
+                    setRepEmitting(false);
+                    if (errors.length === 0) {
+                      setError(`✓ ${emitted} complemento${emitted !== 1 ? "s" : ""} de pago emitido${emitted !== 1 ? "s" : ""}`);
+                    } else {
+                      setError(`Emitidos ${emitted} de ${repPending.invoices.length}. Errores: ${errors.slice(0, 3).join("; ")}`);
+                    }
+                    setRepPending({ count: 0, monto: 0, invoices: [] });
+                    // Reload
+                    calcular();
+                  }}
+                  disabled={repEmitting}
+                  className="flex items-center gap-1.5 bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-red-700 disabled:opacity-50"
+                >
+                  {repEmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                  Emitir {repPending.count} complemento{repPending.count !== 1 ? "s" : ""}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
