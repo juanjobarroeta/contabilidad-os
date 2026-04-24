@@ -122,6 +122,18 @@ export const GET = withAuthz(
           },
           orderBy: { fecha: "desc" },
         },
+        unidades: {
+          select: {
+            id: true,
+            parentId: true,
+            nombre: true,
+            tipo: true,
+            codigo: true,
+            orden: true,
+            metadata: true,
+          },
+          orderBy: [{ parentId: "asc" }, { orden: "asc" }],
+        },
         bitacora: {
           select: {
             id: true,

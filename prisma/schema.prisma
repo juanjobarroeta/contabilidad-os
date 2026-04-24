@@ -989,6 +989,7 @@ model Proyecto {
   solicitudesCompra SolicitudCompra[]
   bitacora          BitacoraEntrada[]
   pagos             Pago[]
+  unidades          UnidadProyecto[]
 
   @@unique([companyId, codigo])
   @@index([companyId, estado])
@@ -1170,31 +1171,46 @@ enum PresupuestoEstado {
 model PresupuestoPartida {
   id              String   @id @default(cuid())
   presupuestoId   String
-  conceptoId      String
-  apuVersion      Int                    // snapshot of which APU version was used
-  cantidad        Float
-  precioUnitario  Float                  // snapshot at presupuesto approval time
-  importe         Float
-  orden           Int      @default(0)
+  // conceptoId is required for LEAF partidas (actual work items) and null
+  // for BRANCH partidas (capítulo rollup rows). See esRollup.
+  conceptoId      String?
+  apuVersion      Int      @default(1) // snapshot of which APU version was used (leaves only)
+  cantidad        Float?                // leaves only
+  precioUnitario  Float    @default(0)  // leaves only; branches compute from children
+  importe         Float    @default(0)  // leaves: cantidad × PU; branches: sum of children
+  orden           Int      @default(0)  // global display order within the presupuesto
 
-  // Hierarchical grouping (flat + 2 string fields, not a nested tree).
+  // Legacy flat grouping (kept nullable for backwards read-compat during
+  // the tree migration). Superseded by parentPartidaId + codigo.
   zona    String?
   partida String?
 
   // Internal operational notes — not shown to the customer.
-  // "Verificar stock", "cambio aprobado por cliente", etc.
   notas   String?    @db.Text
 
+  // Capítulo tree (same pattern as ProgramaActividad).
+  // Branches are rollup nodes: esRollup=true, conceptoId=null, cantidad=null.
+  // Leaves are real work items: esRollup=false, conceptoId set, cantidad set.
+  parentPartidaId String?
+  parent          PresupuestoPartida?  @relation("PartidaHierarchy", fields: [parentPartidaId], references: [id])
+  hijos           PresupuestoPartida[] @relation("PartidaHierarchy")
+  nivel           Int                  @default(0)  // denormalized depth, 0 = root
+  codigo          String?                           // dotted path "1.1.3.5" — computed on write
+  esRollup        Boolean              @default(false)
+
+  // Optional unidad scope — usually null for template partidas; set when a
+  // partida is specific to one depto/torre (e.g. "ventana custom Depto 101").
+  unidadProyectoId String?
+  unidad           UnidadProyecto? @relation(fields: [unidadProyectoId], references: [id])
+
   // For ejecutado partidas: FK back to the contrato partida they were
-  // cloned from. Enables avance tracking to span contrato↔ejecutado
-  // (estimaciones reference contrato partidas, but the UI displays
-  // avance on the ejecutado).
+  // cloned from. Enables avance tracking to span contrato↔ejecutado.
   contratoPartidaId String?
   contratoPartida   PresupuestoPartida?  @relation("PartidaContratoEjecutado", fields: [contratoPartidaId], references: [id])
   ejecutadoPartidas PresupuestoPartida[] @relation("PartidaContratoEjecutado")
 
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
-  concepto    Concepto    @relation(fields: [conceptoId], references: [id])
+  concepto    Concepto?   @relation(fields: [conceptoId], references: [id])
   avances     EstimacionPartida[]
   compras     SolicitudPartida[]
   bitacora    BitacoraEntrada[]
@@ -1248,8 +1264,41 @@ model EstimacionPartida {
   cantidadAcumulada    Float  // running total
   importe              Float
 
-  estimacion         Estimacion         @relation(fields: [estimacionId], references: [id], onDelete: Cascade)
-  presupuestoPartida PresupuestoPartida @relation(fields: [presupuestoPartidaId], references: [id])
+  // Optional — records which unidad (e.g. Depto 101) consumed this avance.
+  // Null for projects without unidad breakdowns.
+  unidadProyectoId String?
+
+  estimacion         Estimacion          @relation(fields: [estimacionId], references: [id], onDelete: Cascade)
+  presupuestoPartida PresupuestoPartida  @relation(fields: [presupuestoPartidaId], references: [id])
+  unidad             UnidadProyecto?     @relation(fields: [unidadProyectoId], references: [id])
+}
+
+// Project subdivisions — supports tower/apartment/nivel tree for multi-unit
+// construction projects (Decolsa's Torres Platino: 3 towers × ~12 deptos each).
+// Presupuesto partidas are usually scoped to the proyecto (template), and the
+// specific unidad that consumed each unit of avance is recorded on the
+// EstimacionPartida row.
+model UnidadProyecto {
+  id         String  @id @default(cuid())
+  proyectoId String
+  parentId   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  nombre     String              // "Torre A", "Depto 101", "Nivel 3"
+  tipo       String?             // "TORRE" | "NIVEL" | "DEPTO" — free-form tag
+  codigo     String?             // "T-A", "101"
+  orden      Int     @default(0)
+  metadata   Json?               // {"superficie": 95.5, "recamaras": 2}
+
+  parent   UnidadProyecto?  @relation("UnidadHierarchy", fields: [parentId], references: [id])
+  hijos    UnidadProyecto[] @relation("UnidadHierarchy")
+  proyecto Proyecto         @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+
+  partidas           PresupuestoPartida[]
+  estimacionPartidas EstimacionPartida[]
+
+  @@index([proyectoId, parentId])
 }
 
 // Programa de obra: hierarchical activity tree (Gantt source).

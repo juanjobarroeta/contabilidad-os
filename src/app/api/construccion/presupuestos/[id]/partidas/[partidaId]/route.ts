@@ -66,7 +66,7 @@ async function loadAndGuard(
 
 async function recomputeTotal(tx: typeof prisma, presupuestoId: string) {
   const agg = await tx.presupuestoPartida.aggregate({
-    where: { presupuestoId },
+    where: { presupuestoId, esRollup: false },
     _sum: { importe: true },
   });
   const montoTotal = round2(agg._sum.importe ?? 0);
@@ -94,7 +94,14 @@ export const PATCH = withAuthz(
 
     const partida = await loadAndGuard(id, partidaId, req);
 
-    const nextCantidad = parsed.data.cantidad ?? partida.cantidad;
+    if (partida.esRollup) {
+      throw new AuthzError(
+        422,
+        "Las ramas (rollup) no se editan por este endpoint; reparéntalas o cambia sus hijos."
+      );
+    }
+
+    const nextCantidad = parsed.data.cantidad ?? partida.cantidad ?? 0;
     const nextImporte = round2(nextCantidad * partida.precioUnitario);
 
     const result = await prisma.$transaction(async (tx) => {

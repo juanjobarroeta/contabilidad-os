@@ -64,7 +64,14 @@ export const GET = withAuthz(
               },
             },
           },
-          orderBy: [{ zona: "asc" }, { partida: "asc" }, { orden: "asc" }],
+          // Return flat; client assembles the tree via parentPartidaId.
+          // Order by (nivel ASC, codigo ASC, orden ASC) so parents always
+          // precede their children even before the client sorts.
+          orderBy: [
+            { nivel: "asc" },
+            { codigo: "asc" },
+            { orden: "asc" },
+          ],
         },
       },
     });

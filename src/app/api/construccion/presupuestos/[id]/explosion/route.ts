@@ -37,6 +37,9 @@ export const GET = withAuthz(
         nombre: true,
         montoTotal: true,
         partidas: {
+          // Rollup branches have no concepto and no cantidad — skip them,
+          // their children's importes are what we want to aggregate.
+          where: { esRollup: false },
           select: {
             cantidad: true,
             concepto: {
@@ -93,6 +96,7 @@ export const GET = withAuthz(
     >();
 
     for (const partida of presupuesto.partidas) {
+      if (partida.cantidad == null) continue; // defensive — leaves always have cantidad
       const apuInsumos = partida.concepto?.apuActual?.insumos ?? [];
       for (const line of apuInsumos) {
         // Skip sub-APU lines (conceptoRef) — they'll be expanded separately

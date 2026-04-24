@@ -50,6 +50,7 @@ export const POST = withAuthz(
       include: {
         partidas: {
           select: {
+            id: true,
             conceptoId: true,
             apuVersion: true,
             cantidad: true,
@@ -58,7 +59,13 @@ export const POST = withAuthz(
             orden: true,
             zona: true,
             partida: true,
+            parentPartidaId: true,
+            nivel: true,
+            codigo: true,
+            esRollup: true,
+            unidadProyectoId: true,
           },
+          orderBy: { orden: "asc" },
         },
       },
     });
@@ -80,16 +87,24 @@ export const POST = withAuthz(
       parsed.data.nombre ??
       `${source.nombre ?? `Presupuesto v${source.version}`} (Editado)`;
 
-    const clone = await prisma.presupuesto.create({
-      data: {
-        companyId: source.companyId,
-        proyectoId: source.proyectoId,
-        nombre,
-        version: nextVersion,
-        estado: "BORRADOR",
-        montoTotal: source.montoTotal,
-        partidas: {
-          create: source.partidas.map((p) => ({
+    // Two-pass clone so parentPartidaId can be rewired to the new IDs.
+    const clone = await prisma.$transaction(async (tx) => {
+      const created = await tx.presupuesto.create({
+        data: {
+          companyId: source.companyId,
+          proyectoId: source.proyectoId,
+          nombre,
+          version: nextVersion,
+          estado: "BORRADOR",
+          montoTotal: source.montoTotal,
+        },
+      });
+
+      const idMap = new Map<string, string>();
+      for (const p of source.partidas) {
+        const newP = await tx.presupuestoPartida.create({
+          data: {
+            presupuestoId: created.id,
             conceptoId: p.conceptoId,
             apuVersion: p.apuVersion,
             cantidad: p.cantidad,
@@ -98,12 +113,29 @@ export const POST = withAuthz(
             orden: p.orden,
             zona: p.zona,
             partida: p.partida,
-          })),
-        },
-      },
-      include: {
-        _count: { select: { partidas: true } },
-      },
+            nivel: p.nivel,
+            codigo: p.codigo,
+            esRollup: p.esRollup,
+            unidadProyectoId: p.unidadProyectoId,
+          },
+          select: { id: true },
+        });
+        idMap.set(p.id, newP.id);
+      }
+      for (const p of source.partidas) {
+        if (!p.parentPartidaId) continue;
+        const newParentId = idMap.get(p.parentPartidaId);
+        if (!newParentId) continue;
+        await tx.presupuestoPartida.update({
+          where: { id: idMap.get(p.id)! },
+          data: { parentPartidaId: newParentId },
+        });
+      }
+
+      return tx.presupuesto.findUnique({
+        where: { id: created.id },
+        include: { _count: { select: { partidas: true } } },
+      });
     });
 
     return NextResponse.json(clone, { status: 201 });

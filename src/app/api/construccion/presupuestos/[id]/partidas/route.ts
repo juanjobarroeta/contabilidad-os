@@ -32,13 +32,24 @@ import {
   withAuthz,
 } from "@/lib/authz";
 
-const createSchema = z.object({
-  conceptoId: z.string().min(1),
-  cantidad: z.number().positive(),
-  zona: z.string().max(80).optional(),
-  partida: z.string().max(80).optional(),
-  orden: z.number().int().nonnegative().optional(),
-});
+const createSchema = z
+  .object({
+    // Leaves: require conceptoId + cantidad. Branches: omit both, set esRollup=true.
+    conceptoId: z.string().min(1).optional(),
+    cantidad: z.number().positive().optional(),
+    zona: z.string().max(80).optional(),
+    partida: z.string().max(80).optional(),
+    orden: z.number().int().nonnegative().optional(),
+    parentPartidaId: z.string().min(1).nullable().optional(),
+    esRollup: z.boolean().optional(),
+    unidadProyectoId: z.string().min(1).nullable().optional(),
+    codigo: z.string().max(40).optional(), // client may supply dotted code; server validates/defaults
+    nombre: z.string().max(200).optional(), // for branches, stored as `partida`
+  })
+  .refine(
+    (d) => d.esRollup === true || (d.conceptoId && d.cantidad !== undefined),
+    { message: "Hojas requieren conceptoId + cantidad; ramas esRollup=true" }
+  );
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
@@ -76,9 +87,78 @@ export const POST = withAuthz(
       );
     }
 
+    // Resolve parent (if any) — drives nivel + default codigo prefix
+    let parentNivel = -1;
+    let parentCodigo: string | null = null;
+    if (data.parentPartidaId) {
+      const parent = await prisma.presupuestoPartida.findUnique({
+        where: { id: data.parentPartidaId },
+        select: {
+          id: true,
+          presupuestoId: true,
+          nivel: true,
+          codigo: true,
+          esRollup: true,
+        },
+      });
+      if (!parent || parent.presupuestoId !== id) {
+        return NextResponse.json(
+          { error: "parentPartidaId inválido" },
+          { status: 400 }
+        );
+      }
+      if (!parent.esRollup) {
+        return NextResponse.json(
+          { error: "El padre debe ser una rama (esRollup=true)" },
+          { status: 400 }
+        );
+      }
+      parentNivel = parent.nivel;
+      parentCodigo = parent.codigo;
+    }
+    const nivel = parentNivel + 1;
+
+    // Branch (rollup) path — no concepto, no cantidad/PU
+    if (data.esRollup) {
+      const tail = await prisma.presupuestoPartida.aggregate({
+        where: { presupuestoId: id, parentPartidaId: data.parentPartidaId ?? null },
+        _max: { orden: true },
+      });
+      const orden = data.orden ?? (tail._max.orden ?? -1) + 1;
+
+      // Default codigo: parentCodigo.N (1-based sibling index), or N for roots
+      const siblingCount = await prisma.presupuestoPartida.count({
+        where: { presupuestoId: id, parentPartidaId: data.parentPartidaId ?? null },
+      });
+      const codigo =
+        data.codigo ??
+        (parentCodigo ? `${parentCodigo}.${siblingCount + 1}` : `${siblingCount + 1}`);
+
+      const created = await prisma.presupuestoPartida.create({
+        data: {
+          presupuestoId: id,
+          conceptoId: null,
+          apuVersion: 1,
+          cantidad: null,
+          precioUnitario: 0,
+          importe: 0,
+          orden,
+          zona: data.zona,
+          partida: data.partida ?? data.nombre ?? null,
+          parentPartidaId: data.parentPartidaId ?? null,
+          nivel,
+          codigo,
+          esRollup: true,
+          unidadProyectoId: data.unidadProyectoId ?? null,
+        },
+      });
+      return NextResponse.json({ partida: created }, { status: 201 });
+    }
+
+    // Leaf path — existing behavior, with optional parent
     // Cross-company check + pull current PU
     const concepto = await prisma.concepto.findUnique({
-      where: { id: data.conceptoId },
+      where: { id: data.conceptoId! },
       include: {
         apuActual: {
           select: { id: true, version: true, precioUnitario: true },
@@ -90,20 +170,28 @@ export const POST = withAuthz(
     }
 
     const precioUnitario = concepto.apuActual?.precioUnitario ?? 0;
-    const importe = round2(data.cantidad * precioUnitario);
+    const importe = round2(data.cantidad! * precioUnitario);
 
-    // If orden not supplied, append
+    // If orden not supplied, append within same parent
     let orden = data.orden;
     if (orden === undefined) {
       const tail = await prisma.presupuestoPartida.aggregate({
         where: {
           presupuestoId: id,
-          zona: data.zona ?? null,
-          partida: data.partida ?? null,
+          parentPartidaId: data.parentPartidaId ?? null,
         },
         _max: { orden: true },
       });
       orden = (tail._max.orden ?? -1) + 1;
+    }
+
+    // Compute leaf codigo if parent known
+    let leafCodigo: string | null = data.codigo ?? null;
+    if (!leafCodigo && parentCodigo) {
+      const siblingCount = await prisma.presupuestoPartida.count({
+        where: { presupuestoId: id, parentPartidaId: data.parentPartidaId ?? null },
+      });
+      leafCodigo = `${parentCodigo}.${siblingCount + 1}`;
     }
 
     // Atomic: insert + recompute montoTotal
@@ -113,12 +201,17 @@ export const POST = withAuthz(
           presupuestoId: id,
           conceptoId: concepto.id,
           apuVersion: concepto.apuActual?.version ?? 1,
-          cantidad: data.cantidad,
+          cantidad: data.cantidad!,
           precioUnitario,
           importe,
           orden,
           zona: data.zona,
           partida: data.partida,
+          parentPartidaId: data.parentPartidaId ?? null,
+          nivel,
+          codigo: leafCodigo,
+          esRollup: false,
+          unidadProyectoId: data.unidadProyectoId ?? null,
         },
         include: {
           concepto: {
@@ -128,7 +221,7 @@ export const POST = withAuthz(
       });
 
       const agg = await tx.presupuestoPartida.aggregate({
-        where: { presupuestoId: id },
+        where: { presupuestoId: id, esRollup: false },
         _sum: { importe: true },
       });
       const montoTotal = round2(agg._sum.importe ?? 0);
