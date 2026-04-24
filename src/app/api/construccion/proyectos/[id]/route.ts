@@ -52,6 +52,12 @@ export const GET = withAuthz(
                 zona: true,
                 partida: true,
                 contratoPartidaId: true,
+                // Tree fields so the client can skip rollup branches when
+                // summing / grouping (they're metadata, not line items).
+                parentPartidaId: true,
+                nivel: true,
+                codigo: true,
+                esRollup: true,
                 concepto: {
                   select: {
                     codigo: true,
@@ -63,7 +69,7 @@ export const GET = withAuthz(
                   },
                 },
               },
-              orderBy: [{ zona: "asc" }, { partida: "asc" }, { orden: "asc" }],
+              orderBy: [{ nivel: "asc" }, { codigo: "asc" }, { orden: "asc" }],
             },
           },
           orderBy: { version: "asc" },
