@@ -72,6 +72,32 @@ export const POST = withAuthz(
       );
     }
 
+    // Budget-attribution rule: every gasto must be either linked (directo)
+    // or explicitly flagged as indirecto. Without this guard the $0-budget-
+    // impact bug happens: Katia approves, money leaves, nothing tracked.
+    const isDirecto = !!(gasto.presupuestoPartidaId || gasto.insumoId);
+    const isIndirecto = gasto.indirecto === true;
+    if (!isDirecto && !isIndirecto) {
+      return NextResponse.json(
+        {
+          error:
+            "No se puede aprobar: el gasto debe vincularse a una partida/insumo o marcarse como indirecto (gasolina, viáticos, etc).",
+          code: "GASTO_SIN_ATRIBUCION",
+        },
+        { status: 422 }
+      );
+    }
+    if (isIndirecto && !gasto.categoriaIndirecto) {
+      return NextResponse.json(
+        {
+          error:
+            "Gasto indirecto requiere una categoría (GASOLINA, VIATICOS, FLETE, etc.).",
+          code: "GASTO_INDIRECTO_SIN_CATEGORIA",
+        },
+        { status: 422 }
+      );
+    }
+
     const user = await requireUser(req).catch(() => null);
     const userId = user?.id ?? null;
 

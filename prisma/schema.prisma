@@ -1645,6 +1645,19 @@ model Gasto {
   // bankAccount.tipo=CAJA but kept for fast filtering and audit).
   caja         Boolean     @default(false)
 
+  // "Indirecto" = overhead / costo indirecto: gasolina, viáticos,
+  // herramienta menor, flete, seguridad, renta de andamios, alimentos
+  // del personal. These are legitimate project costs that DON'T belong
+  // to a specific partida/insumo. Real construction accounting breaks
+  // them out as % sobre MO+materiales.
+  //
+  // Approval rule enforced in aprobar-pagar: a Gasto must be EITHER
+  //   - linked to a presupuestoPartidaId or insumoId (directo), OR
+  //   - indirecto=true with a categoriaIndirecto tag.
+  // Otherwise approval is refused — guarantees budget attribution.
+  indirecto         Boolean @default(false)
+  categoriaIndirecto String? // free-text tag: "GASOLINA" | "VIATICOS" | "FLETE" | "HERRAMIENTA_MENOR" | "EQUIPO_SEGURIDAD" | "RENTA_EQUIPO" | "ALIMENTOS" | etc.
+
   // Populated on /aprobar-pagar
   bankTransactionId String?   @unique
   pagadoAt          DateTime?

@@ -128,6 +128,8 @@ export const GET = withAuthz(
             caja: true,
             presupuestoPartidaId: true,
             insumoId: true,
+            indirecto: true,
+            categoriaIndirecto: true,
             beneficiarioNombre: true,
             descripcion: true,
             createdAt: true,

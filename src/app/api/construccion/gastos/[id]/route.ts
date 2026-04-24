@@ -23,6 +23,11 @@ const patchSchema = z.object({
   comprobanteUrl: z.string().max(1000).nullable().optional(),
   notas: z.string().max(1000).nullable().optional(),
   estado: z.enum(["PENDIENTE", "RECHAZADO"]).optional(),
+  // Indirecto flag + categoría — Katia can set these from the 3-button picker.
+  // Writing indirecto=true auto-clears any stray partida/insumo link since
+  // the two paths are mutually exclusive.
+  indirecto: z.boolean().optional(),
+  categoriaIndirecto: z.string().max(40).nullable().optional(),
 });
 
 async function loadGasto(id: string, req: Request) {
@@ -51,9 +56,22 @@ export const PATCH = withAuthz(
         { status: 422 }
       );
     }
+    // If the client sets indirecto=true, clear any partida/insumo link
+    // (the two branches are mutually exclusive). And vice-versa — if
+    // they set a partida/insumo, clear indirecto + categoría.
+    const data: Record<string, unknown> = { ...parsed.data };
+    if (parsed.data.indirecto === true) {
+      data.presupuestoPartidaId = null;
+      data.insumoId = null;
+    }
+    if (parsed.data.presupuestoPartidaId || parsed.data.insumoId) {
+      data.indirecto = false;
+      data.categoriaIndirecto = null;
+    }
+
     const updated = await prisma.gasto.update({
       where: { id },
-      data: parsed.data,
+      data,
       include: {
         bankAccount: { select: { id: true, banco: true, nombre: true } },
         presupuestoPartida: {

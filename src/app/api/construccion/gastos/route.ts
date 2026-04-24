@@ -39,6 +39,9 @@ const createSchema = z.object({
   comprobanteUrl: z.string().max(1000).nullable().optional(),
   notas: z.string().max(1000).nullable().optional(),
   caja: z.boolean().optional(),
+  // Indirecto = overhead / costo indirecto. See Gasto schema comment.
+  indirecto: z.boolean().optional(),
+  categoriaIndirecto: z.string().max(40).nullable().optional(),
 });
 
 export const GET = withAuthz(async (req: Request) => {
@@ -143,6 +146,8 @@ export const POST = withAuthz(async (req: Request) => {
       comprobanteUrl: parsed.data.comprobanteUrl ?? null,
       notas: parsed.data.notas ?? null,
       caja,
+      indirecto: parsed.data.indirecto ?? false,
+      categoriaIndirecto: parsed.data.categoriaIndirecto ?? null,
     },
     include: {
       bankAccount: { select: { id: true, banco: true, nombre: true, tipo: true, titular: true } },
