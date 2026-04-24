@@ -33,6 +33,10 @@ import {
 } from "@/lib/authz";
 
 const bodySchema = z.object({
+  // Link to an existing BankTransaction (preferred: Katia picks from the
+  // imported Santander CSV) OR let the endpoint create a fresh one from
+  // fecha + referencia. See gastos/aprobar-pagar for the same pattern.
+  bankTransactionId: z.string().min(1).optional(),
   fecha: z.string().optional(),
   referencia: z.string().max(80).nullable().optional(),
   pagoComprobanteUrl: z.string().max(1000).nullable().optional(),
@@ -128,7 +132,31 @@ export const POST = withAuthz(
         throw new AuthzError(409, "El reembolso ya fue pagado");
       }
 
-      const bankTx = await tx.bankTransaction.create({
+      let bankTx;
+      if (parsed.data.bankTransactionId) {
+        const existing = await tx.bankTransaction.findUnique({
+          where: { id: parsed.data.bankTransactionId },
+          select: {
+            id: true,
+            companyId: true,
+            monto: true,
+            gastoPagado: { select: { id: true } },
+            rayaPagada: { select: { id: true } },
+            reembolsoPagado: { select: { id: true } },
+          },
+        });
+        if (!existing || existing.companyId !== reembolso.companyId) {
+          throw new AuthzError(400, "BankTransaction inválido");
+        }
+        if (existing.gastoPagado || existing.rayaPagada || existing.reembolsoPagado) {
+          throw new AuthzError(409, "Esa transacción bancaria ya está vinculada a otro pago");
+        }
+        bankTx = await tx.bankTransaction.update({
+          where: { id: existing.id },
+          data: { status: "MATCHED" },
+        });
+      } else {
+        bankTx = await tx.bankTransaction.create({
         data: {
           companyId: reembolso.companyId,
           bankAccountId: reembolso.bankAccountId,
@@ -137,8 +165,10 @@ export const POST = withAuthz(
           referencia: parsed.data.referencia ?? null,
           monto: -Math.abs(totalReembolso),
           tipo: "DEBITO",
+          status: "MATCHED",
         },
-      });
+        });
+      }
 
       // Flip every gasto to PAGADO pointing at the single BT. If any
       // gasto was already PAGADO individually (edge case — someone paid

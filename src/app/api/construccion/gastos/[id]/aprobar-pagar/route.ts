@@ -34,6 +34,14 @@ import {
 } from "@/lib/authz";
 
 const bodySchema = z.object({
+  // Two mutually-exclusive paths for recording the payment:
+  //   A) bankTransactionId — Katia picks an existing tx Juan already
+  //      imported (e.g. from Santander CSV / Belvo). System just links.
+  //      Preferred — matches reconciliation with contabilidad-os.
+  //   B) fecha + referencia — fallback where a new BT is created from
+  //      scratch. Used when the tx isn't yet imported (cash-paid, for
+  //      example).
+  bankTransactionId: z.string().min(1).optional(),
   fecha: z.string().optional(),
   referencia: z.string().max(80).nullable().optional(),
   pagoComprobanteUrl: z.string().max(1000).nullable().optional(),
@@ -113,17 +121,48 @@ export const POST = withAuthz(
         throw new AuthzError(409, "El gasto ya fue pagado");
       }
 
-      const bankTx = await tx.bankTransaction.create({
-        data: {
-          companyId: gasto.companyId,
-          bankAccountId: gasto.bankAccountId,
-          fecha: parsed.data.fecha ? new Date(parsed.data.fecha) : new Date(),
-          descripcion: desc,
-          referencia: parsed.data.referencia ?? null,
-          monto: -Math.abs(gasto.importe),
-          tipo: "DEBITO",
-        },
-      });
+      let bankTx;
+      if (parsed.data.bankTransactionId) {
+        // Link existing BankTransaction — validate same company, still
+        // unmatched and not already linked to another gasto.
+        const existing = await tx.bankTransaction.findUnique({
+          where: { id: parsed.data.bankTransactionId },
+          select: {
+            id: true,
+            companyId: true,
+            bankAccountId: true,
+            monto: true,
+            status: true,
+            gastoPagado: { select: { id: true } },
+            rayaPagada: { select: { id: true } },
+            reembolsoPagado: { select: { id: true } },
+          },
+        });
+        if (!existing || existing.companyId !== gasto.companyId) {
+          throw new AuthzError(400, "BankTransaction inválido");
+        }
+        if (existing.gastoPagado || existing.rayaPagada || existing.reembolsoPagado) {
+          throw new AuthzError(409, "Esa transacción bancaria ya está vinculada a otro pago");
+        }
+        // Flip status to MATCHED so it no longer shows up in the picker
+        bankTx = await tx.bankTransaction.update({
+          where: { id: existing.id },
+          data: { status: "MATCHED" },
+        });
+      } else {
+        bankTx = await tx.bankTransaction.create({
+          data: {
+            companyId: gasto.companyId,
+            bankAccountId: gasto.bankAccountId,
+            fecha: parsed.data.fecha ? new Date(parsed.data.fecha) : new Date(),
+            descripcion: desc,
+            referencia: parsed.data.referencia ?? null,
+            monto: -Math.abs(gasto.importe),
+            tipo: "DEBITO",
+            status: "MATCHED",
+          },
+        });
+      }
 
       const updated = await tx.gasto.update({
         where: { id },

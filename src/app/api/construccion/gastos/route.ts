@@ -37,6 +37,10 @@ const createSchema = z.object({
   presupuestoPartidaId: z.string().min(1).nullable().optional(),
   insumoId: z.string().min(1).nullable().optional(),
   comprobanteUrl: z.string().max(1000).nullable().optional(),
+  // Direct file attachment (base64). Served back via /comprobante endpoint.
+  comprobanteData: z.string().nullable().optional(),
+  comprobanteMime: z.string().max(80).nullable().optional(),
+  comprobanteName: z.string().max(200).nullable().optional(),
   notas: z.string().max(1000).nullable().optional(),
   caja: z.boolean().optional(),
   // Indirecto = overhead / costo indirecto. See Gasto schema comment.
@@ -144,6 +148,9 @@ export const POST = withAuthz(async (req: Request) => {
       presupuestoPartidaId: parsed.data.presupuestoPartidaId ?? null,
       insumoId: parsed.data.insumoId ?? null,
       comprobanteUrl: parsed.data.comprobanteUrl ?? null,
+      comprobanteData: parsed.data.comprobanteData ?? null,
+      comprobanteMime: parsed.data.comprobanteMime ?? null,
+      comprobanteName: parsed.data.comprobanteName ?? null,
       notas: parsed.data.notas ?? null,
       caja,
       indirecto: parsed.data.indirecto ?? false,

@@ -1649,9 +1649,20 @@ model Gasto {
   // of a Rosy-style weekly reimbursement package; null for one-off pays.
   reembolsoId String?
 
-  // Attachments — S3/Vercel Blob URLs
-  comprobanteUrl     String?  // WhatsApp photo of the invoice/receipt Rosy sent
-  pagoComprobanteUrl String?  // SPEI transfer screenshot
+  // Attachments — two flavors:
+  //   *Url  = external URL (legacy, back-compat with pre-upload flow)
+  //   *Data = base64 content directly in DB (same pattern as csdCer /
+  //           fielCer elsewhere). Small-file friendly — Rosy's WhatsApp
+  //           photos are usually < 2 MB. Mime + name let us serve them
+  //           back with the right headers.
+  comprobanteUrl      String?  // invoice/receipt URL
+  comprobanteData     String?  @db.Text
+  comprobanteMime     String?
+  comprobanteName     String?
+  pagoComprobanteUrl  String?  // SPEI / cheque screenshot URL
+  pagoComprobanteData String?  @db.Text
+  pagoComprobanteMime String?
+  pagoComprobanteName String?
 
   estado       GastoEstado @default(PENDIENTE)
 
