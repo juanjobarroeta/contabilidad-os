@@ -24,8 +24,11 @@ import {
 
 const createSchema = z.object({
   nombre: z.string().min(1).max(120),
-  tipo: z.string().max(40).optional(),
-  codigo: z.string().max(40).optional(),
+  // tipo + codigo are free-text optional fields; the UI passes null when
+  // not set, so accept null in addition to undefined (matches the PUT
+  // schema shape).
+  tipo: z.string().max(40).nullable().optional(),
+  codigo: z.string().max(40).nullable().optional(),
   parentId: z.string().min(1).nullable().optional(),
   orden: z.number().int().nonnegative().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
