@@ -1,0 +1,111 @@
+/**
+ * GET  /api/construccion/reembolsos?companyId=... [&proyectoId=...] [&estado=...]
+ * POST /api/construccion/reembolsos
+ *
+ * ReembolsoSemanal = Rosy's weekly "concentrado de gastos" package.
+ * Header row that groups multiple Gasto line items + (future) nómina.
+ * List endpoint returns summary rows with running totals; POST creates
+ * a new empty SUBMITTED package that Katia fills line by line.
+ */
+
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import {
+  AuthzError,
+  requireMembership,
+  requireModule,
+  requireWriter,
+  withAuthz,
+} from "@/lib/authz";
+
+const createSchema = z.object({
+  proyectoId: z.string().min(1),
+  bankAccountId: z.string().min(1),
+  semanaInicio: z.string(),
+  semanaFin: z.string(),
+  anticipoAplicado: z.number().nonnegative().optional(),
+  notas: z.string().max(1000).nullable().optional(),
+});
+
+export const GET = withAuthz(async (req: Request) => {
+  const url = new URL(req.url);
+  const companyId = url.searchParams.get("companyId");
+  const proyectoId = url.searchParams.get("proyectoId");
+  const estado = url.searchParams.get("estado");
+  if (!companyId) {
+    return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
+  }
+  await requireMembership(companyId, undefined, req);
+  await requireModule(companyId, "CONSTRUCCION");
+
+  const rows = await prisma.reembolsoSemanal.findMany({
+    where: {
+      companyId,
+      ...(proyectoId ? { proyectoId } : {}),
+      ...(estado
+        ? {
+            estado: estado as
+              | "SUBMITTED"
+              | "REVISADO"
+              | "REEMBOLSADO"
+              | "RECHAZADO",
+          }
+        : {}),
+    },
+    include: {
+      proyecto: { select: { id: true, codigo: true, nombre: true } },
+      bankAccount: { select: { id: true, banco: true, nombre: true, tipo: true } },
+      _count: { select: { gastos: true } },
+    },
+    orderBy: { semanaInicio: "desc" },
+    take: 200,
+  });
+  return NextResponse.json(rows);
+});
+
+export const POST = withAuthz(async (req: Request) => {
+  const body = await req.json().catch(() => ({}));
+  const parsed = createSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  const proyecto = await prisma.proyecto.findUnique({
+    where: { id: parsed.data.proyectoId },
+    select: { companyId: true },
+  });
+  if (!proyecto) throw new AuthzError(404, "Proyecto no encontrado");
+  await requireWriter(proyecto.companyId, req);
+  await requireModule(proyecto.companyId, "CONSTRUCCION");
+
+  const account = await prisma.bankAccount.findUnique({
+    where: { id: parsed.data.bankAccountId },
+    select: { id: true, companyId: true },
+  });
+  if (!account || account.companyId !== proyecto.companyId) {
+    return NextResponse.json({ error: "BankAccount inválido" }, { status: 400 });
+  }
+
+  try {
+    const created = await prisma.reembolsoSemanal.create({
+      data: {
+        companyId: proyecto.companyId,
+        proyectoId: parsed.data.proyectoId,
+        bankAccountId: parsed.data.bankAccountId,
+        semanaInicio: new Date(parsed.data.semanaInicio),
+        semanaFin: new Date(parsed.data.semanaFin),
+        anticipoAplicado: parsed.data.anticipoAplicado ?? 0,
+        notas: parsed.data.notas ?? null,
+      },
+    });
+    return NextResponse.json(created, { status: 201 });
+  } catch (e: unknown) {
+    if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2002") {
+      return NextResponse.json(
+        { error: "Ya existe un reembolso para este proyecto en esa semana" },
+        { status: 409 }
+      );
+    }
+    throw e;
+  }
+});

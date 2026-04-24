@@ -175,6 +175,7 @@ model Company {
 
   // Gastos (Katia's validation + pay workflow for Bartiz field expenses)
   gastos            Gasto[]
+  reembolsos        ReembolsoSemanal[]
 
   // Despacho per-company scoping junction
   despachoMemberScopes DespachoMemberCompany[]
@@ -484,6 +485,7 @@ model BankAccount {
   company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]
   gastos       Gasto[]
+  reembolsos   ReembolsoSemanal[]
 
   @@unique([companyId, numeroCuenta])
 }
@@ -522,8 +524,9 @@ model BankTransaction {
   bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   supplier    Supplier?   @relation(fields: [supplierId], references: [id])
   invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
-  rayaPagada  RayaSemanal?
-  gastoPagado Gasto?
+  rayaPagada      RayaSemanal?
+  gastoPagado     Gasto?
+  reembolsoPagado ReembolsoSemanal?
 }
 
 enum BankTransactionType {
@@ -1017,6 +1020,7 @@ model Proyecto {
   cuadrillas        Cuadrilla[]
   rayas             RayaSemanal[]
   gastos            Gasto[]
+  reembolsos        ReembolsoSemanal[]
 
   @@unique([companyId, codigo])
   @@index([companyId, estado])
@@ -1631,9 +1635,19 @@ model Gasto {
   descripcion        String   // free-text what was bought: "varilla y arena"
   importe            Float
 
+  // Physical quantity + unit — optional for indirect gastos but required
+  // for a meaningful insumo variance view (planned vs real PU). If set,
+  // importe / cantidad should match the real PU Rosy paid.
+  cantidad Float?
+  unidad   String?
+
   // Optional budget linkage — Katia picks from auto-suggest
   presupuestoPartidaId String?
   insumoId             String?
+
+  // Weekly reembolso this gasto belongs to. Set when the gasto is part
+  // of a Rosy-style weekly reimbursement package; null for one-off pays.
+  reembolsoId String?
 
   // Attachments — S3/Vercel Blob URLs
   comprobanteUrl     String?  // WhatsApp photo of the invoice/receipt Rosy sent
@@ -1674,9 +1688,11 @@ model Gasto {
   presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
   insumo            Insumo?             @relation(fields: [insumoId], references: [id])
   bankTransaction   BankTransaction?    @relation(fields: [bankTransactionId], references: [id])
+  reembolso         ReembolsoSemanal?   @relation(fields: [reembolsoId], references: [id], onDelete: SetNull)
 
   @@index([companyId, estado])
   @@index([proyectoId, createdAt])
+  @@index([reembolsoId])
 }
 
 enum GastoEstado {
@@ -1684,4 +1700,73 @@ enum GastoEstado {
   APROBADO   // Katia validated; still waiting to pay
   PAGADO     // BankTransaction created
   RECHAZADO  // out of budget, duplicate, etc.
+}
+
+// ─── ReembolsoSemanal (Concentrado Semanal / weekly reimbursement) ───────────
+//
+// Rosy's pattern: at end of each week she submits a PDF package of what
+// she spent + the nómina + next-week caja chica advance. Katia validates
+// line-by-line, the system computes the total, and Juan SPEIs the
+// balance to Rosy as a single transfer. Replaces the "WhatsApp table →
+// spreadsheet → SPEI screenshot" loop.
+//
+// A ReembolsoSemanal is a HEADER containing many Gasto rows (each tied
+// to insumo/partida or marked indirecto). On /reembolsar we:
+//   1. Validate every gasto has attribution (enforced on aprobar-pagar
+//      already, but double-check here so the reembolso as a whole is
+//      consistent).
+//   2. Compute totalGastos from the joined Gastos.
+//   3. Create ONE BankTransaction DEBITO for totalReembolso (anticipo
+//      aplicado is subtracted — that's the caja chica previously
+//      advanced to Rosy).
+//   4. Flip every Gasto in the package to PAGADO + set their
+//      bankTransactionId to the single BT, so the cash-flow ties out.
+//   5. Flip reembolso.estado = REEMBOLSADO.
+//
+// Integration with nómina (Phase A-5, deferred): a RayaSemanal can
+// optionally point at a Reembolso so the weekly nómina is part of the
+// same package. For now the v1 treats nómina as just another Gasto
+// line with indirecto=true, categoriaIndirecto=NOMINA.
+model ReembolsoSemanal {
+  id            String             @id @default(cuid())
+  companyId     String
+  proyectoId    String
+  bankAccountId String             // account that will pay the final SPEI (usually CHEQUES)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  semanaInicio  DateTime
+  semanaFin     DateTime
+  estado        ReembolsoEstado    @default(SUBMITTED)
+
+  // Running totals (denormalized for fast list views; recomputed on gasto add/remove)
+  totalGastos   Float              @default(0)
+  // Adelanto previo de caja chica que este reembolso justifica.
+  // Ejemplo: Rosy recibió $5,000 el lunes para caja chica; gastó $7,500
+  // en la semana; reembolso total a pagar = $7,500 - $5,000 = $2,500.
+  anticipoAplicado Float           @default(0)
+  totalReembolso Float             @default(0)  // totalGastos - anticipoAplicado
+
+  // Pago
+  bankTransactionId String?        @unique
+  reembolsadoAt DateTime?
+  reembolsadoPor String?
+
+  notas         String?
+
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto      Proyecto           @relation(fields: [proyectoId], references: [id])
+  bankAccount   BankAccount        @relation(fields: [bankAccountId], references: [id])
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  gastos        Gasto[]
+
+  @@unique([proyectoId, semanaInicio])
+  @@index([companyId, estado])
+}
+
+enum ReembolsoEstado {
+  SUBMITTED   // Rosy mandó el paquete, Katia aún no revisa
+  REVISADO    // Katia validó líneas, listo para pagar
+  REEMBOLSADO // Juan ya SPEIó a Rosy, BankTransaction creada
+  RECHAZADO   // inconsistencias / duplicados / no justificado
 }
