@@ -28,6 +28,8 @@ export const GET = withAuthz(async (req: Request) => {
       nombre: true,
       numeroCuenta: true,
       moneda: true,
+      tipo: true,
+      titular: true,
     },
     orderBy: { nombre: "asc" },
   });

@@ -173,6 +173,9 @@ model Company {
   cuadrillas        Cuadrilla[]
   rayas             RayaSemanal[]
 
+  // Gastos (Katia's validation + pay workflow for Bartiz field expenses)
+  gastos            Gasto[]
+
   // Despacho per-company scoping junction
   despachoMemberScopes DespachoMemberCompany[]
 }
@@ -468,14 +471,27 @@ model BankAccount {
   clabe        String?
   moneda       String   @default("MXN")
 
+  // CHEQUES = main operating account; TARJETA_DEPARTAMENTAL = debit card
+  // handed to a specific person (GDCS, Esteban…) whose CSV gets imported
+  // separately; CAJA = petty cash fund held by a field PM (Rosy's $5k caja chica).
+  tipo         BankAccountTipo @default(CHEQUES)
+  titular      String?         // free-text cardholder / account owner name
+
   // Belvo / open banking
   belvoAccountId String?
   belvoLinkId    String?
 
   company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]
+  gastos       Gasto[]
 
   @@unique([companyId, numeroCuenta])
+}
+
+enum BankAccountTipo {
+  CHEQUES
+  TARJETA_DEPARTAMENTAL
+  CAJA
 }
 
 model BankTransaction {
@@ -507,6 +523,7 @@ model BankTransaction {
   supplier    Supplier?   @relation(fields: [supplierId], references: [id])
   invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
   rayaPagada  RayaSemanal?
+  gastoPagado Gasto?
 }
 
 enum BankTransactionType {
@@ -999,6 +1016,7 @@ model Proyecto {
   unidades          UnidadProyecto[]
   cuadrillas        Cuadrilla[]
   rayas             RayaSemanal[]
+  gastos            Gasto[]
 
   @@unique([companyId, codigo])
   @@index([companyId, estado])
@@ -1120,6 +1138,7 @@ model Insumo {
 
   apuLineas APUInsumo[]
   partidas  SolicitudPartida[]
+  gastos    Gasto[]
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, codigo])
@@ -1224,6 +1243,7 @@ model PresupuestoPartida {
   compras     SolicitudPartida[]
   bitacora    BitacoraEntrada[]
   rayaTrabajos RayaTrabajo[]
+  gastos      Gasto[]
 }
 
 // Estimaciones: government billing flow. Each one becomes a CFDI when timbrada.
@@ -1579,4 +1599,76 @@ model RayaDetalleMiembro {
   miembro CuadrillaMiembro @relation(fields: [miembroId], references: [id])
 
   @@unique([rayaId, miembroId])
+}
+
+// ─── Gasto (Katia's pay-and-register workflow) ──────────────────────────────
+//
+// Lightweight expense model for the WhatsApp-driven field-spending flow
+// that SolicitudCompra is too heavy for. Rosy (field PM) requests a
+// payment via WhatsApp; Katia (admin) creates a Gasto row, the system
+// suggests which insumo/partida matches, she approves and pays in one
+// click. Optional caja=true flag means the money came out of the petty
+// cash fund (BankAccount with tipo=CAJA), not a main cuenta.
+//
+// Why a new model instead of extending SolicitudCompra:
+//   - SolicitudCompra has partidas array, approval chain, receive step;
+//     overkill for a single-line SPEI "varilla arena $2,375 to Jose Luis".
+//   - Matching target is either a PresupuestoPartida (budget leaf) OR an
+//     Insumo (material master) OR both. SolicitudPartida only links to
+//     PresupuestoPartida.
+//   - The value-add is fast entry + the "does this fit the explosión
+//     de insumos" check, which is its own endpoint.
+model Gasto {
+  id           String     @id @default(cuid())
+  companyId    String
+  proyectoId   String
+  bankAccountId String     // which account paid (main cuenta or caja chica)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // What + to whom + how much
+  beneficiarioNombre String   // "Lesly Flores", "Jose Luis Lopez Pozos"
+  descripcion        String   // free-text what was bought: "varilla y arena"
+  importe            Float
+
+  // Optional budget linkage — Katia picks from auto-suggest
+  presupuestoPartidaId String?
+  insumoId             String?
+
+  // Attachments — S3/Vercel Blob URLs
+  comprobanteUrl     String?  // WhatsApp photo of the invoice/receipt Rosy sent
+  pagoComprobanteUrl String?  // SPEI transfer screenshot
+
+  estado       GastoEstado @default(PENDIENTE)
+
+  // Flag that this came out of the caja chica account (redundant with
+  // bankAccount.tipo=CAJA but kept for fast filtering and audit).
+  caja         Boolean     @default(false)
+
+  // Populated on /aprobar-pagar
+  bankTransactionId String?   @unique
+  pagadoAt          DateTime?
+
+  // Katia's approval audit
+  aprobadoPor  String?   // User id
+  aprobadoAt   DateTime?
+
+  notas        String?
+
+  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto          Proyecto            @relation(fields: [proyectoId], references: [id])
+  bankAccount       BankAccount         @relation(fields: [bankAccountId], references: [id])
+  presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
+  insumo            Insumo?             @relation(fields: [insumoId], references: [id])
+  bankTransaction   BankTransaction?    @relation(fields: [bankTransactionId], references: [id])
+
+  @@index([companyId, estado])
+  @@index([proyectoId, createdAt])
+}
+
+enum GastoEstado {
+  PENDIENTE
+  APROBADO   // Katia validated; still waiting to pay
+  PAGADO     // BankTransaction created
+  RECHAZADO  // out of budget, duplicate, etc.
 }
