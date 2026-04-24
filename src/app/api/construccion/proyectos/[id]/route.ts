@@ -117,6 +117,25 @@ export const GET = withAuthz(
           orderBy: { createdAt: "desc" },
           take: 50,
         },
+        // Gastos (Katia-validated quick payments) feed the "gastado por
+        // partida" bar alongside SolicitudCompras. Only APROBADO+PAGADO
+        // count toward budget consumption; PENDIENTE are just pipeline.
+        gastos: {
+          select: {
+            id: true,
+            importe: true,
+            estado: true,
+            caja: true,
+            presupuestoPartidaId: true,
+            insumoId: true,
+            beneficiarioNombre: true,
+            descripcion: true,
+            createdAt: true,
+            pagadoAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        },
         pagos: {
           select: {
             id: true,
