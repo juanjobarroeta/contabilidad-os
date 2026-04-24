@@ -169,6 +169,10 @@ model Company {
   imssMovimientos   ImssMovimiento[]
   incidencias       Incidencia[]
 
+  // CONSTRUCCION_CUADRILLAS add-on (only populated when that module is enabled)
+  cuadrillas        Cuadrilla[]
+  rayas             RayaSemanal[]
+
   // Despacho per-company scoping junction
   despachoMemberScopes DespachoMemberCompany[]
 }
@@ -299,6 +303,7 @@ model CompanyModule {
 enum ModuloApp {
   CONTABILIDAD
   CONSTRUCCION
+  CONSTRUCCION_CUADRILLAS
   FLOTA
   MARKETING
 }
@@ -501,6 +506,7 @@ model BankTransaction {
   bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   supplier    Supplier?   @relation(fields: [supplierId], references: [id])
   invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
+  rayaPagada  RayaSemanal?
 }
 
 enum BankTransactionType {
@@ -555,6 +561,7 @@ model Employee {
   payrollItems     PayrollItem[]
   imssMovimientos  ImssMovimiento[]
   incidencias      Incidencia[]
+  cuadrillaMiembros CuadrillaMiembro[]
 
   @@unique([companyId, rfc])
 }
@@ -990,6 +997,8 @@ model Proyecto {
   bitacora          BitacoraEntrada[]
   pagos             Pago[]
   unidades          UnidadProyecto[]
+  cuadrillas        Cuadrilla[]
+  rayas             RayaSemanal[]
 
   @@unique([companyId, codigo])
   @@index([companyId, estado])
@@ -1214,6 +1223,7 @@ model PresupuestoPartida {
   avances     EstimacionPartida[]
   compras     SolicitudPartida[]
   bitacora    BitacoraEntrada[]
+  rayaTrabajos RayaTrabajo[]
 }
 
 // Estimaciones: government billing flow. Each one becomes a CFDI when timbrada.
@@ -1297,6 +1307,7 @@ model UnidadProyecto {
 
   partidas           PresupuestoPartida[]
   estimacionPartidas EstimacionPartida[]
+  rayaTrabajos       RayaTrabajo[]
 
   @@index([proyectoId, parentId])
 }
@@ -1444,4 +1455,128 @@ enum PagoTipo {
   ANTICIPO
   ESTIMACION
   RETENCION_LIBERADA
+}
+
+// ─── CONSTRUCCION_CUADRILLAS add-on ─────────────────────────────────────────
+//
+// Decolsa-style weekly destajo workflow. A Cuadrilla is a trade team
+// (albañilería, plomería, etc.) scoped to one proyecto. Miembros are
+// optional named references — some may be IMSS-registered (employeeId FK),
+// most are cash-only (free-text nombre, employeeId=null).
+//
+// Rayas are WEEKLY cash-flow events. When a raya is marked PAGADA we
+// emit a BankTransaction; the raya keeps the FK so we can reconcile
+// later. No PayrollRun integration — rayas sit parallel to the nomina
+// module because most destajo workers are not formally registered.
+
+model Cuadrilla {
+  id           String   @id @default(cuid())
+  companyId    String
+  proyectoId   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  nombre       String   // "Albañilería", "Plomería y Gas"
+  especialidad String   // free-text tag: "ALBANILERIA" | "PLOMERIA" | "ELECTRICO" | ...
+  jefeNombre   String?  // "Maestro Juan", purely descriptive
+  notas        String?
+  isActive     Boolean  @default(true)
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto  Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  miembros  CuadrillaMiembro[]
+  rayas     RayaSemanal[]
+
+  @@unique([proyectoId, nombre])
+  @@index([companyId, isActive])
+}
+
+model CuadrillaMiembro {
+  id             String   @id @default(cuid())
+  cuadrillaId    String
+  createdAt      DateTime @default(now())
+
+  nombre         String   // free-text (works for both formal & cash workers)
+  employeeId     String?  // optional FK when this miembro is also an IMSS-registered Employee
+  rolEnCuadrilla String?  // "Oficial" | "Ayudante" | "Maestro" — free text
+  isActive       Boolean  @default(true)
+
+  cuadrilla Cuadrilla @relation(fields: [cuadrillaId], references: [id], onDelete: Cascade)
+  employee  Employee? @relation(fields: [employeeId], references: [id])
+  detalles  RayaDetalleMiembro[]
+
+  @@index([cuadrillaId, isActive])
+}
+
+// A weekly raya for one cuadrilla. Always a cash-flow event — on pagar
+// we create a BankTransaction debited from the cuadrilla's paying account
+// and store its id here.
+model RayaSemanal {
+  id           String   @id @default(cuid())
+  companyId    String
+  proyectoId   String
+  cuadrillaId  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  semanaInicio DateTime    // Monday 00:00 local
+  semanaFin    DateTime    // Sunday 23:59 local
+  estado       RayaEstado  @default(BORRADOR)
+  totalDestajo Float       @default(0)  // sum of RayaTrabajo.importeDestajo
+  notas        String?
+
+  // Filled when marked PAGADA. Unique so we can't double-book a raya.
+  bankTransactionId String? @unique
+  pagadaAt          DateTime?
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto  Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  cuadrilla Cuadrilla @relation(fields: [cuadrillaId], references: [id])
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  trabajos  RayaTrabajo[]
+  detalles  RayaDetalleMiembro[]
+
+  @@unique([cuadrillaId, semanaInicio])
+  @@index([proyectoId, semanaInicio])
+  @@index([companyId, estado])
+}
+
+enum RayaEstado {
+  BORRADOR
+  APROBADA
+  PAGADA
+}
+
+// Line item inside a raya: "en el Depto 101, hicimos X de aplanados por $Y"
+model RayaTrabajo {
+  id                   String   @id @default(cuid())
+  rayaId               String
+  presupuestoPartidaId String?  // optional link to a leaf partida (drives avance)
+  unidadProyectoId     String?  // optional "en el Depto 101"
+  descripcion          String
+  cantidad             Float?
+  unidad               String?
+  importeDestajo       Float
+
+  raya               RayaSemanal         @relation(fields: [rayaId], references: [id], onDelete: Cascade)
+  presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
+  unidadProyecto     UnidadProyecto?     @relation(fields: [unidadProyectoId], references: [id])
+
+  @@index([rayaId])
+}
+
+// How much each miembro got paid in this raya (days + importe). The sum
+// of detalles.importe should match the raya's totalDestajo, but we don't
+// enforce it at the DB level — the UI will show a diff if they disagree.
+model RayaDetalleMiembro {
+  id             String @id @default(cuid())
+  rayaId         String
+  miembroId      String
+  diasTrabajados Float  @default(6)
+  importe        Float
+
+  raya    RayaSemanal      @relation(fields: [rayaId], references: [id], onDelete: Cascade)
+  miembro CuadrillaMiembro @relation(fields: [miembroId], references: [id])
+
+  @@unique([rayaId, miembroId])
 }
