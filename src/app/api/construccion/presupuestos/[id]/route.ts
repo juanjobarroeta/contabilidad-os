@@ -141,6 +141,14 @@ export const PATCH = withAuthz(
       parsed.data.cascade === true && parsed.data.estado === "APROBADO";
 
     if (shouldCascade) {
+      // Read current proyecto estado so we only auto-graduate PLANEACION
+      // projects — don't stomp SUSPENDIDO/TERMINADO/CANCELADO states.
+      const currentProy = await prisma.proyecto.findUnique({
+        where: { id: presupuesto.proyectoId },
+        select: { estado: true },
+      });
+      const shouldStartExecution = currentProy?.estado === "PLANEACION";
+
       // Atomic: update this presupuesto, mark siblings as RECHAZADO, set proyecto.montoContratado
       const [updated, siblingResult, proyecto] = await prisma.$transaction([
         prisma.presupuesto.update({
@@ -162,7 +170,10 @@ export const PATCH = withAuthz(
         }),
         prisma.proyecto.update({
           where: { id: presupuesto.proyectoId },
-          data: { montoContratado: presupuesto.montoTotal },
+          data: {
+            montoContratado: presupuesto.montoTotal,
+            ...(shouldStartExecution && { estado: "EN_EJECUCION" as const }),
+          },
           select: { id: true, montoContratado: true, estado: true },
         }),
       ]);
