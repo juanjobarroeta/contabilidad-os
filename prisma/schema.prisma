@@ -352,6 +352,7 @@ model Supplier {
   company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankTransactions     BankTransaction[]
   solicitudesCompra    SolicitudCompra[]
+  cotizaciones         SolicitudCompraCotizacion[]
 
   @@unique([companyId, rfc])
 }
@@ -1378,6 +1379,7 @@ model SolicitudCompra {
   supplier Supplier?         @relation(fields: [supplierId], references: [id])
   company  Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   partidas SolicitudPartida[]
+  cotizaciones SolicitudCompraCotizacion[]
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
@@ -1406,6 +1408,57 @@ model SolicitudPartida {
 
   solicitud SolicitudCompra @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
   insumo    Insumo?         @relation(fields: [insumoId], references: [id])
+  cotizaciones SolicitudCotizacionPartida[]
+}
+
+// ─── Cotizaciones (multi-vendor quotes for a requisición) ────────────────────
+//
+// Gerardo's flow: he sends a requisición (SolicitudCompra in REQUESTED
+// state) to several proveedores, each comes back with their own pricing
+// per line. The winning quote becomes the SolicitudCompra final + drives
+// the eventual OC. Replaces the manual "compare 3 Excels" loop.
+//
+// One Cotizacion row per vendor per requisición; many CotizacionPartida
+// rows per cotización (one per item priced). Switching the winner is a
+// single isSelected flip.
+model SolicitudCompraCotizacion {
+  id              String   @id @default(cuid())
+  solicitudId     String
+  supplierId      String?
+  supplierNombre  String   // "RYSCO", "BARAMAT" — free-text when supplier row doesn't exist yet
+  fechaCotizacion DateTime @default(now())
+  vigenciaHasta   DateTime?
+  total           Float    @default(0)
+  moneda          String   @default("MXN")
+  notas           String?
+  isSelected      Boolean  @default(false)
+  // Scanned/uploaded quote — same dual-storage pattern as Gasto comprobantes.
+  archivoUrl      String?
+  archivoData     String?  @db.Text
+  archivoMime     String?
+  archivoName     String?
+  createdAt       DateTime @default(now())
+
+  solicitud SolicitudCompra @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  supplier  Supplier?       @relation(fields: [supplierId], references: [id])
+  partidas  SolicitudCotizacionPartida[]
+
+  @@index([solicitudId, isSelected])
+}
+
+model SolicitudCotizacionPartida {
+  id                 String @id @default(cuid())
+  cotizacionId       String
+  solicitudPartidaId String
+  precioUnitario     Float
+  importe            Float
+  tiempoEntrega      String?
+  notas              String?
+
+  cotizacion       SolicitudCompraCotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  solicitudPartida SolicitudPartida          @relation(fields: [solicitudPartidaId], references: [id])
+
+  @@unique([cotizacionId, solicitudPartidaId])
 }
 
 // ─── Presupuesto versioning (ejecutado change log) ───────────────────────────
