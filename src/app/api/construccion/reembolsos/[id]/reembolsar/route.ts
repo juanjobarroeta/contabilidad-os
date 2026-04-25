@@ -33,13 +33,17 @@ import {
 } from "@/lib/authz";
 
 const bodySchema = z.object({
-  // Link to an existing BankTransaction (preferred: Katia picks from the
-  // imported Santander CSV) OR let the endpoint create a fresh one from
-  // fecha + referencia. See gastos/aprobar-pagar for the same pattern.
+  // Three close modes:
+  //   A) bankTransactionId — link to an existing CSV-imported tx
+  //   B) fecha + referencia — create a fresh BT (manual fallback)
+  //   C) offBooks=true — close the período WITHOUT creating a BT.
+  //      Used when the reimbursement is handled outside the system
+  //      (cash, off-books transfer, etc.). Bartiz uses this today.
   bankTransactionId: z.string().min(1).optional(),
   fecha: z.string().optional(),
   referencia: z.string().max(80).nullable().optional(),
   pagoComprobanteUrl: z.string().max(1000).nullable().optional(),
+  offBooks: z.boolean().optional(),
 });
 
 export const POST = withAuthz(
@@ -132,8 +136,13 @@ export const POST = withAuthz(
         throw new AuthzError(409, "El reembolso ya fue pagado");
       }
 
-      let bankTx;
-      if (parsed.data.bankTransactionId) {
+      let bankTx: { id: string } | null = null;
+      if (parsed.data.offBooks) {
+        // Off-books close: don't create or link any BankTransaction.
+        // The reimbursement to the responsable is handled outside the
+        // system. Gastos still flip to PAGADO so they don't keep
+        // showing as pending, but their bankTransactionId stays null.
+      } else if (parsed.data.bankTransactionId) {
         const existing = await tx.bankTransaction.findUnique({
           where: { id: parsed.data.bankTransactionId },
           select: {
@@ -173,17 +182,15 @@ export const POST = withAuthz(
         });
       }
 
-      // Flip every gasto to PAGADO pointing at the single BT. If any
-      // gasto was already PAGADO individually (edge case — someone paid
-      // through /gastos/[id]/aprobar-pagar before this), keep its
-      // bankTransactionId; don't override.
+      // Flip every gasto to PAGADO. Link to the BT if one was created
+      // or matched; null otherwise (off-books mode).
       for (const g of reembolso.gastos) {
         if (g.estado === "PAGADO") continue;
         await tx.gasto.update({
           where: { id: g.id },
           data: {
             estado: "PAGADO",
-            bankTransactionId: bankTx.id,
+            bankTransactionId: bankTx?.id ?? null,
             pagadoAt: new Date(),
             aprobadoPor: user?.id ?? null,
             aprobadoAt: new Date(),
@@ -196,7 +203,7 @@ export const POST = withAuthz(
         where: { id },
         data: {
           estado: "REEMBOLSADO",
-          bankTransactionId: bankTx.id,
+          bankTransactionId: bankTx?.id ?? null,
           reembolsadoAt: new Date(),
           reembolsadoPor: user?.id ?? null,
         },
