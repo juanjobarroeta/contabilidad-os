@@ -68,6 +68,10 @@ export const GET = withAuthz(async (req: Request) => {
       ...(estado ? { estado: estado as "PENDIENTE" | "APROBADO" | "PAGADO" | "RECHAZADO" } : {}),
       ...(cajaOnly ? { caja: true } : {}),
     },
+    // Explicitly omit comprobanteData / pagoComprobanteData — they can be
+    // megabytes each, and the list view only needs the name+mime to
+    // render the "📎" link. The full bytes stream via /comprobante on demand.
+    omit: { comprobanteData: true, pagoComprobanteData: true },
     include: {
       proyecto: { select: { id: true, codigo: true, nombre: true } },
       bankAccount: { select: { id: true, banco: true, nombre: true, tipo: true, titular: true } },

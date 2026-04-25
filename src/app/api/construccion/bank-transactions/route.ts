@@ -62,7 +62,7 @@ export const GET = withAuthz(async (req: Request) => {
       monto: true,
       tipo: true,
       status: true,
-      source: true,
+      source: true, // "UPLOAD" (CSV/PDF), "BELVO", "MANUAL" (gasto pay flow fallback)
       bankAccount: {
         select: { id: true, banco: true, nombre: true, tipo: true, titular: true },
       },

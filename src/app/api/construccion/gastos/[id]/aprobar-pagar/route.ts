@@ -150,6 +150,10 @@ export const POST = withAuthz(
           data: { status: "MATCHED" },
         });
       } else {
+        // Manual-fallback path: no existing bank tx was picked, so we
+        // create a synthetic one. Tagged source="MANUAL" so admins can
+        // tell it didn't come from a CSV import. The preferred path is
+        // always to import the CSV first and pick the matching tx.
         bankTx = await tx.bankTransaction.create({
           data: {
             companyId: gasto.companyId,
@@ -160,6 +164,7 @@ export const POST = withAuthz(
             monto: -Math.abs(gasto.importe),
             tipo: "DEBITO",
             status: "MATCHED",
+            source: "MANUAL",
           },
         });
       }

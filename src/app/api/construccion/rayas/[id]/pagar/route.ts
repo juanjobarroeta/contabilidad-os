@@ -86,6 +86,9 @@ export const POST = withAuthz(
           referencia: parsed.data.referencia ?? null,
           monto: -Math.abs(raya.totalDestajo),
           tipo: "DEBITO",
+          status: "MATCHED",
+          // Manual fallback when no existing CSV-imported tx is picked.
+          source: "MANUAL",
         },
       });
 

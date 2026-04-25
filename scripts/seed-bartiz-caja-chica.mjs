@@ -61,19 +61,10 @@ async function main() {
       },
     });
     console.log(`✓ Created Caja Chica BankAccount (${caja.id})`);
-    // Initial top-up $5,000 CREDITO
-    await prisma.bankTransaction.create({
-      data: {
-        companyId: company.id,
-        bankAccountId: caja.id,
-        fecha: new Date("2026-04-21T09:00:00"),
-        descripcion: "Carga inicial caja chica",
-        referencia: "SEED",
-        monto: 5000,
-        tipo: "CREDITO",
-      },
-    });
-    console.log(`  ✓ Initial $5,000 top-up recorded`);
+    console.log(`  ↳ NOTE: no synthetic top-up created. Bank movements come`);
+    console.log(`          exclusively from CSV imports — Juan importa el`);
+    console.log(`          estado de cuenta de la caja y los movimientos`);
+    console.log(`          aparecen automáticamente.`);
   } else {
     console.log(`✓ Caja Chica already exists (${caja.id})`);
   }

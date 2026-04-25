@@ -156,6 +156,8 @@ export const POST = withAuthz(
           data: { status: "MATCHED" },
         });
       } else {
+        // Manual fallback. Same rationale as aprobar-pagar — preferred
+        // is to import the CSV and pick the real bank tx.
         bankTx = await tx.bankTransaction.create({
         data: {
           companyId: reembolso.companyId,
@@ -166,6 +168,7 @@ export const POST = withAuthz(
           monto: -Math.abs(totalReembolso),
           tipo: "DEBITO",
           status: "MATCHED",
+          source: "MANUAL",
         },
         });
       }
