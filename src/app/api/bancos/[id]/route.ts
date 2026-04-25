@@ -60,6 +60,35 @@ export async function GET(req: Request, { params }: Params) {
         invoice: {
           select: { id: true, uuid: true, total: true, fecha: true, customer: { select: { razonSocial: true } } },
         },
+        // Include construcción-side links so the bancos UI can show
+        // "↳ Gasto / Reembolso / Raya" descriptors next to txs that
+        // bartiz already linked.
+        gastoPagado: {
+          select: {
+            id: true,
+            beneficiarioNombre: true,
+            importe: true,
+            descripcion: true,
+            proyecto: { select: { codigo: true } },
+          },
+        },
+        reembolsoPagado: {
+          select: {
+            id: true,
+            totalReembolso: true,
+            semanaInicio: true,
+            semanaFin: true,
+            proyecto: { select: { codigo: true } },
+          },
+        },
+        rayaPagada: {
+          select: {
+            id: true,
+            totalDestajo: true,
+            cuadrilla: { select: { nombre: true } },
+            proyecto: { select: { codigo: true } },
+          },
+        },
       },
       orderBy: { fecha: "desc" },
       skip: (page - 1) * pageSize,

@@ -27,6 +27,12 @@ interface BankTx {
   tipo: "CREDITO" | "DEBITO"; status: "UNMATCHED" | "MATCHED" | "IGNORED";
   invoiceId?: string | null; notes?: string | null;
   invoice?: InvoiceRef | null;
+  // Construcción-side links (from bartiz). These show as "↳ Gasto …",
+  // "↳ Reembolso …", "↳ Raya …" under the description so admins know
+  // which bartiz entity this bank movement settles.
+  gastoPagado?: { id: string; beneficiarioNombre: string; importe: number; descripcion: string; proyecto?: { codigo: string } | null } | null;
+  reembolsoPagado?: { id: string; totalReembolso: number; semanaInicio: string; semanaFin: string; proyecto?: { codigo: string } | null } | null;
+  rayaPagada?: { id: string; totalDestajo: number; cuadrilla?: { nombre: string } | null; proyecto?: { codigo: string } | null } | null;
 }
 interface Candidate {
   id: string; uuid?: string | null; fecha: string; total: number;
@@ -530,6 +536,24 @@ function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgn
         {tx.status === "MATCHED" && tx.invoice && (
           <p className="text-xs text-green-700 mt-0.5">
             ↳ {tx.invoice.customer?.razonSocial ?? "Factura"} · {formatCurrency(tx.invoice.total)}
+          </p>
+        )}
+        {tx.status === "MATCHED" && tx.gastoPagado && (
+          <p className="text-xs text-green-700 mt-0.5">
+            ↳ Gasto: {tx.gastoPagado.beneficiarioNombre} ·
+            {tx.gastoPagado.proyecto?.codigo ? ` ${tx.gastoPagado.proyecto.codigo} ·` : ""}
+            {" "}{formatCurrency(tx.gastoPagado.importe)}
+          </p>
+        )}
+        {tx.status === "MATCHED" && tx.reembolsoPagado && (
+          <p className="text-xs text-green-700 mt-0.5">
+            ↳ Reembolso semanal{tx.reembolsoPagado.proyecto?.codigo ? ` · ${tx.reembolsoPagado.proyecto.codigo}` : ""} · {formatCurrency(tx.reembolsoPagado.totalReembolso)}
+          </p>
+        )}
+        {tx.status === "MATCHED" && tx.rayaPagada && (
+          <p className="text-xs text-green-700 mt-0.5">
+            ↳ Raya: {tx.rayaPagada.cuadrilla?.nombre ?? "destajo"}
+            {tx.rayaPagada.proyecto?.codigo ? ` · ${tx.rayaPagada.proyecto.codigo}` : ""} · {formatCurrency(tx.rayaPagada.totalDestajo)}
           </p>
         )}
         {/* Category badge now shown in Estado column; no inline note needed */}
