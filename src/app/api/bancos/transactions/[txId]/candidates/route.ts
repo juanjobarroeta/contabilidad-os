@@ -4,7 +4,7 @@
  * For an UNMATCHED bank transaction, returns the most likely candidates
  * across all four entity types it could be matched against:
  *
- *   { gastos: [], reembolsos: [], rayas: [], invoices: [] }
+ *   { gastos: [], reembolsos: [], rayas: [], solicitudesCompra: [], invoices: [] }
  *
  * Ranking heuristics:
  *   - Same company (always)
@@ -57,8 +57,8 @@ export async function GET(_req: Request, { params }: Params) {
   const isOutflow = tx.monto < 0 || tx.tipo === "DEBITO";
   const isInflow = tx.monto > 0 || tx.tipo === "CREDITO";
 
-  // ── Outgoing-side candidates (un-paid Gastos / Reembolsos / Rayas) ──
-  const [gastos, reembolsos, rayas] = isOutflow
+  // ── Outgoing-side candidates (un-paid Gastos / Reembolsos / Rayas / OCs) ──
+  const [gastos, reembolsos, rayas, solicitudesCompra] = isOutflow
     ? await Promise.all([
         prisma.gasto.findMany({
           where: {
@@ -116,8 +116,29 @@ export async function GET(_req: Request, { params }: Params) {
           take: 5,
           orderBy: { semanaInicio: "desc" },
         }),
+        prisma.solicitudCompra.findMany({
+          where: {
+            companyId: tx.companyId,
+            bankTransactionId: null,
+            estado: "APROBADA",
+            total: { gte: minAmt, lte: maxAmt },
+            // OCs use createdAt as the timestamp window — matches when SPEI
+            // hits within ~10 days of OC creation, the typical lag.
+            createdAt: { gte: dateLow, lte: dateHigh },
+          },
+          select: {
+            id: true,
+            folio: true,
+            total: true,
+            createdAt: true,
+            supplier: { select: { razonSocial: true, rfc: true } },
+            proyecto: { select: { codigo: true } },
+          },
+          take: 8,
+          orderBy: { createdAt: "desc" },
+        }),
       ])
-    : [[], [], []];
+    : [[], [], [], []];
 
   // ── Incoming-side candidates (Invoices not yet linked) ──
   const invoices = isInflow
@@ -145,5 +166,5 @@ export async function GET(_req: Request, { params }: Params) {
       }).catch(() => [])
     : [];
 
-  return NextResponse.json({ tx, gastos, reembolsos, rayas, invoices });
+  return NextResponse.json({ tx, gastos, reembolsos, rayas, solicitudesCompra, invoices });
 }

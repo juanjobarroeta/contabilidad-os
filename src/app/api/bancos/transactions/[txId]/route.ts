@@ -9,10 +9,11 @@ type Params = { params: Promise<{ txId: string }> };
  * PATCH /api/bancos/transactions/[txId]
  *
  * Body shapes:
- *   { action: "match", invoiceId }       ← legacy CFDI match
- *   { action: "match", gastoId }         ← NEW: link to construcción Gasto
- *   { action: "match", reembolsoId }     ← NEW: link to ReembolsoSemanal
- *   { action: "match", rayaId }          ← NEW: link to RayaSemanal
+ *   { action: "match", invoiceId }              ← legacy CFDI match
+ *   { action: "match", gastoId }                ← link to construcción Gasto
+ *   { action: "match", reembolsoId }            ← link to ReembolsoSemanal
+ *   { action: "match", rayaId }                 ← link to RayaSemanal
+ *   { action: "match", solicitudCompraId }      ← link to OC / Requisición
  *   { action: "unmatch" }
  *   { action: "ignore", notes? }
  *   { action: "unignore" }
@@ -31,6 +32,7 @@ export async function PATCH(req: Request, { params }: Params) {
       gastoPagado: { select: { id: true } },
       reembolsoPagado: { select: { id: true } },
       rayaPagada: { select: { id: true } },
+      solicitudCompraPagada: { select: { id: true } },
     },
   });
   if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
@@ -38,12 +40,13 @@ export async function PATCH(req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(session.user.id, tx.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
-  const { action, invoiceId, gastoId, reembolsoId, rayaId, notes } = await req.json();
+  const { action, invoiceId, gastoId, reembolsoId, rayaId, solicitudCompraId, notes } = await req.json();
 
   async function clearConstruccionLinks() {
     if (tx?.gastoPagado) await prisma.gasto.update({ where: { id: tx.gastoPagado.id }, data: { bankTransactionId: null } });
     if (tx?.reembolsoPagado) await prisma.reembolsoSemanal.update({ where: { id: tx.reembolsoPagado.id }, data: { bankTransactionId: null } });
     if (tx?.rayaPagada) await prisma.rayaSemanal.update({ where: { id: tx.rayaPagada.id }, data: { bankTransactionId: null } });
+    if (tx?.solicitudCompraPagada) await prisma.solicitudCompra.update({ where: { id: tx.solicitudCompraPagada.id }, data: { bankTransactionId: null } });
   }
 
   switch (action) {
@@ -68,6 +71,38 @@ export async function PATCH(req: Request, { params }: Params) {
         ]);
         break;
       }
+      if (solicitudCompraId) {
+        const sc = await prisma.solicitudCompra.findUnique({
+          where: { id: solicitudCompraId },
+          select: { id: true, companyId: true, bankTransactionId: true, estado: true },
+        });
+        if (!sc || sc.companyId !== tx.companyId) {
+          return NextResponse.json({ error: "Requisición inválida" }, { status: 400 });
+        }
+        if (sc.bankTransactionId && sc.bankTransactionId !== txId) {
+          return NextResponse.json(
+            { error: "Esa requisición ya está vinculada a otra transacción" },
+            { status: 409 }
+          );
+        }
+        if (sc.estado !== "APROBADA" && sc.estado !== "PAGADA") {
+          return NextResponse.json(
+            { error: `La requisición debe estar APROBADA (estado actual: ${sc.estado})` },
+            { status: 422 }
+          );
+        }
+        await prisma.$transaction([
+          prisma.solicitudCompra.update({
+            where: { id: solicitudCompraId },
+            data: { bankTransactionId: txId, estado: "PAGADA", pagadaAt: new Date() },
+          }),
+          prisma.bankTransaction.update({
+            where: { id: txId },
+            data: { status: "MATCHED", invoiceId: null, notes: notes ?? null },
+          }),
+        ]);
+        break;
+      }
       if (rayaId) {
         const ry = await prisma.rayaSemanal.findUnique({ where: { id: rayaId }, select: { id: true, companyId: true, bankTransactionId: true } });
         if (!ry || ry.companyId !== tx.companyId) return NextResponse.json({ error: "Raya inválida" }, { status: 400 });
@@ -79,7 +114,7 @@ export async function PATCH(req: Request, { params }: Params) {
         break;
       }
       // Legacy invoice path
-      if (!invoiceId) return NextResponse.json({ error: "invoiceId / gastoId / reembolsoId / rayaId requerido para conciliar" }, { status: 400 });
+      if (!invoiceId) return NextResponse.json({ error: "invoiceId / gastoId / reembolsoId / rayaId / solicitudCompraId requerido para conciliar" }, { status: 400 });
       await clearConstruccionLinks();
       await prisma.bankTransaction.update({
         where: { id: txId },
@@ -138,6 +173,32 @@ export async function PATCH(req: Request, { params }: Params) {
           totalDestajo: true,
           cuadrilla: { select: { nombre: true } },
           proyecto: { select: { codigo: true } },
+        },
+      },
+      solicitudCompraPagada: {
+        select: {
+          id: true,
+          folio: true,
+          total: true,
+          estado: true,
+          supplier: { select: { razonSocial: true, rfc: true } },
+          proyecto: { select: { codigo: true } },
+          partidas: {
+            select: {
+              id: true,
+              descripcion: true,
+              cantidad: true,
+              unidad: true,
+              importe: true,
+              presupuestoPartida: {
+                select: {
+                  id: true,
+                  codigo: true,
+                  concepto: { select: { descripcion: true } },
+                },
+              },
+            },
+          },
         },
       },
     },

@@ -40,6 +40,17 @@ export const GET = withAuthz(
           },
           orderBy: { fechaCotizacion: "desc" },
         },
+        bankTransaction: {
+          select: {
+            id: true,
+            fecha: true,
+            monto: true,
+            descripcion: true,
+            referencia: true,
+            status: true,
+            bankAccount: { select: { banco: true, nombre: true } },
+          },
+        },
       },
     });
     if (!sol) throw new AuthzError(404, "Solicitud no encontrada");

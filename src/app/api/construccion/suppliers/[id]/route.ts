@@ -96,6 +96,9 @@ export const GET = withAuthz(
             referencia: true,
             status: true,
             bankAccount: { select: { banco: true, nombre: true } },
+            solicitudCompraPagada: {
+              select: { id: true, folio: true, proyecto: { select: { codigo: true } } },
+            },
           },
           orderBy: { fecha: "desc" },
           take: 50,

@@ -535,9 +535,10 @@ model BankTransaction {
   bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   supplier    Supplier?   @relation(fields: [supplierId], references: [id])
   invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
-  rayaPagada      RayaSemanal?
-  gastoPagado     Gasto?
-  reembolsoPagado ReembolsoSemanal?
+  rayaPagada              RayaSemanal?
+  gastoPagado             Gasto?
+  reembolsoPagado         ReembolsoSemanal?
+  solicitudCompraPagada   SolicitudCompra?
 }
 
 enum BankTransactionType {
@@ -1391,11 +1392,12 @@ model SolicitudCompra {
   // When paid, link to the BankTransaction that funded it
   bankTransactionId String? @unique
 
-  proyecto Proyecto?         @relation(fields: [proyectoId], references: [id])
-  supplier Supplier?         @relation(fields: [supplierId], references: [id])
-  company  Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  partidas SolicitudPartida[]
-  cotizaciones SolicitudCompraCotizacion[]
+  proyecto        Proyecto?           @relation(fields: [proyectoId], references: [id])
+  supplier        Supplier?           @relation(fields: [supplierId], references: [id])
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankTransaction BankTransaction?    @relation(fields: [bankTransactionId], references: [id])
+  partidas        SolicitudPartida[]
+  cotizaciones    SolicitudCompraCotizacion[]
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
