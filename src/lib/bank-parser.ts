@@ -13,7 +13,7 @@ export interface ParsedTransaction {
 
 export interface ParseResult {
   transactions: ParsedTransaction[];
-  format: "csv" | "ofx";
+  format: "csv" | "ofx" | "spreadsheetml";
   detectedBank?: string;
   warnings: string[];
 }
@@ -22,6 +22,7 @@ export interface ParseResult {
 export function parseStatement(content: string, filename: string): ParseResult {
   const clean = content.replace(/^\uFEFF/, "").trim(); // strip BOM
 
+  // OFX / QFX
   if (
     clean.includes("<OFX>") ||
     clean.includes("<STMTTRN>") ||
@@ -30,6 +31,16 @@ export function parseStatement(content: string, filename: string): ParseResult {
   ) {
     return parseOFX(clean);
   }
+
+  // SpreadsheetML 2003 — BBVA "RSM" exports save as .xls but are XML
+  if (
+    clean.includes("urn:schemas-microsoft-com:office:spreadsheet") ||
+    clean.includes("<Workbook") ||
+    clean.includes("mso-application")
+  ) {
+    return parseSpreadsheetML(clean);
+  }
+
   return parseCSV(clean);
 }
 
@@ -215,6 +226,126 @@ function parseBajio(rows: string[][], warnings: string[]): ParseResult {
     detectedBank: "Banco del Bajío",
     warnings,
   };
+}
+
+// ── SpreadsheetML 2003 parser (BBVA RSM "Banca Net Cash" exports) ──────────
+// Excel XML format. Each <Row> has <Cell><Data>...</Data></Cell> children.
+function parseSpreadsheetML(content: string): ParseResult {
+  const warnings: string[] = [];
+  const transactions: ParsedTransaction[] = [];
+
+  // Detect bank from author/company metadata
+  let detectedBank: string | undefined;
+  if (/bbva|bancomer/i.test(content)) detectedBank = "BBVA";
+  else if (/banamex|citibanamex/i.test(content)) detectedBank = "Banamex";
+
+  // Extract <Row>...</Row> blocks
+  const rowRegex = /<Row[^>]*>([\s\S]*?)<\/Row>/gi;
+  const rows: string[][] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = rowRegex.exec(content)) !== null) {
+    const rowXml = match[1];
+    const cells: string[] = [];
+
+    // Each <Cell> may have ss:Index="N" to skip columns; honor that for alignment
+    const cellRegex = /<Cell([^>]*)>([\s\S]*?)<\/Cell>/gi;
+    let cellMatch: RegExpExecArray | null;
+    let cursor = 0;
+
+    while ((cellMatch = cellRegex.exec(rowXml)) !== null) {
+      const attrs = cellMatch[1];
+      const inner = cellMatch[2];
+
+      // Honor ss:Index="N" — pad missing cells with empty strings
+      const idxMatch = attrs.match(/ss:Index="(\d+)"/i);
+      if (idxMatch) {
+        const targetIdx = parseInt(idxMatch[1]) - 1;
+        while (cursor < targetIdx) { cells.push(""); cursor++; }
+      }
+
+      // Extract the text inside <Data ...>...</Data>
+      const dataMatch = inner.match(/<Data[^>]*>([\s\S]*?)<\/Data>/i);
+      const value = dataMatch ? dataMatch[1].replace(/<[^>]+>/g, "").trim() : "";
+      cells.push(value);
+      cursor++;
+    }
+    rows.push(cells);
+  }
+
+  if (rows.length < 2) {
+    return { transactions: [], format: "spreadsheetml", warnings: ["Archivo XLS sin filas suficientes"], detectedBank };
+  }
+
+  // Find header row — look for "Fecha" + amount keyword
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(15, rows.length); i++) {
+    const joined = rows[i].join(" ").toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (/fecha/.test(joined) && /(cargo|abono|monto|importe|deposito|retiro)/.test(joined)) {
+      headerIdx = i;
+      break;
+    }
+  }
+
+  if (headerIdx < 0) {
+    return { transactions: [], format: "spreadsheetml", warnings: ["No se encontró fila de encabezados"], detectedBank };
+  }
+
+  const headers = rows[headerIdx].map(h =>
+    h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+  );
+
+  const dateCol    = detectCol(headers, ["fecha", "date", "fch"]);
+  const descCol    = detectCol(headers, ["concepto", "descripcion", "movimiento", "detalle"]);
+  const amountCol  = detectCol(headers, ["monto", "importe"]);
+  const debitCol   = detectCol(headers, ["cargo", "debito", "egreso", "retiro"]);
+  const creditCol  = detectCol(headers, ["abono", "credito", "ingreso", "deposito"]);
+  const balanceCol = detectCol(headers, ["saldo", "balance"]);
+  const refCol     = detectCol(headers, ["referencia", "folio"]);
+
+  if (dateCol < 0) {
+    return { transactions: [], format: "spreadsheetml", warnings: ["Sin columna de fecha"], detectedBank };
+  }
+
+  for (const row of rows.slice(headerIdx + 1)) {
+    if (row.every(c => !c)) continue;
+
+    const fecha = parseDateMX(row[dateCol] ?? "");
+    if (!fecha) continue;
+
+    let monto: number;
+    if (amountCol >= 0) {
+      monto = parseMXNumber(row[amountCol] ?? "");
+    } else {
+      const credit = parseMXNumber(row[creditCol] ?? "");
+      const debit  = parseMXNumber(row[debitCol] ?? "");
+      const creditVal = isNaN(credit) ? 0 : credit;
+      const debitVal  = isNaN(debit)  ? 0 : debit;
+      monto = creditVal !== 0 ? Math.abs(creditVal) : -Math.abs(debitVal);
+    }
+
+    if (isNaN(monto) || monto === 0) continue;
+
+    const desc = (descCol >= 0 ? (row[descCol] ?? "") : row.join(" ")).replace(/\s+/g, " ").trim();
+    let ref = refCol >= 0 ? row[refCol] : undefined;
+
+    // Combine reference + reference ampliada if both exist
+    const refAmpCol = headers.findIndex(h => h.includes("ampliada"));
+    if (refAmpCol >= 0 && row[refAmpCol]) {
+      ref = ref ? `${ref} ${row[refAmpCol]}` : row[refAmpCol];
+    }
+
+    transactions.push({
+      fecha,
+      descripcion: desc,
+      monto,
+      referencia: ref?.trim() || undefined,
+      saldo: balanceCol >= 0 ? parseMXNumber(row[balanceCol] ?? "") : undefined,
+    });
+  }
+
+  return { transactions, format: "spreadsheetml", detectedBank, warnings };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -883,8 +883,8 @@ function UploadModal({ accountId, accountName, onClose, onImported }: {
         }`}>
           <Upload className="h-6 w-6 text-muted-foreground mb-2" />
           <p className="text-sm font-medium">{file ? file.name : "Selecciona un archivo"}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">CSV, TXT u OFX/QFX — todos los bancos</p>
-          <input type="file" accept=".csv,.txt,.ofx,.qfx" className="hidden"
+          <p className="text-xs text-muted-foreground mt-0.5">CSV, TXT, XLS (BBVA RSM) u OFX/QFX — todos los bancos</p>
+          <input type="file" accept=".csv,.txt,.ofx,.qfx,.xls,.xml" className="hidden"
             onChange={e => { setFile(e.target.files?.[0] ?? null); setErr(""); setResult(null); }} />
         </label>
 
