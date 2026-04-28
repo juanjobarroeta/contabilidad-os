@@ -78,8 +78,13 @@ export async function importBankStatement(opts: {
 
     const desc = tx.descripcion;
     const isBankFee = /comisi[oó]n|iva\s+comisi/i.test(desc);
-    const isTaxPayment = /pago\s+de\s+impuestos|^impuesto|recaudaci[oó]n|sat\s|tesofe/i.test(desc);
+    // SAT can appear as standalone ("SAT") or with text after ("SAT 2026", etc.)
+    // — anchor with word boundary + optional trailing whitespace/digit/punct.
+    const isTaxPayment =
+      /pago\s+de\s+impuestos|^impuesto|recaudaci[oó]n|\bsat\b|tesofe/i.test(desc);
     const isInternalTransfer = /traspaso\s+(entre|a)\s+cuentas?\s+propias?|transferencia\s+propia/i.test(desc);
+    // BBVA noise: zero-amount compensation rows ("COMPENSACION POR RETRASO")
+    const isBankNoise = /compensaci[oó]n\s+por\s+retraso/i.test(desc) || tx.monto === 0;
 
     let status: "UNMATCHED" | "IGNORED" = "UNMATCHED";
     let notes: string | null = null;
@@ -92,6 +97,9 @@ export async function importBankStatement(opts: {
     } else if (isInternalTransfer) {
       status = "IGNORED";
       notes = "INTERNAL_TRANSFER";
+    } else if (isBankNoise) {
+      status = "IGNORED";
+      notes = "BANK_NOISE";
     }
 
     await prisma.bankTransaction.create({
