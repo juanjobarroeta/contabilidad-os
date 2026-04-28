@@ -27,6 +27,16 @@ const putSchema = z.object({
   razonSocial: z.string().min(1).max(200).optional(),
   regimenFiscal: z.string().max(10).nullable().optional(),
   email: z.string().email().max(200).nullable().optional(),
+  clabe: z
+    .string()
+    .trim()
+    .regex(/^\d{18}$/, "CLABE debe tener 18 dígitos")
+    .nullable()
+    .optional()
+    .or(z.literal("").transform(() => null)),
+  banco: z.string().max(60).nullable().optional(),
+  cuentaBancaria: z.string().max(30).nullable().optional(),
+  titularCuenta: z.string().max(200).nullable().optional(),
 });
 
 async function loadSupplier(id: string, req: Request, write = false) {
@@ -125,6 +135,10 @@ export const PUT = withAuthz(
         ...(parsed.data.razonSocial && { razonSocial: parsed.data.razonSocial.trim() }),
         ...(parsed.data.regimenFiscal !== undefined && { regimenFiscal: parsed.data.regimenFiscal }),
         ...(parsed.data.email !== undefined && { email: parsed.data.email }),
+        ...(parsed.data.clabe !== undefined && { clabe: parsed.data.clabe }),
+        ...(parsed.data.banco !== undefined && { banco: parsed.data.banco?.trim() || null }),
+        ...(parsed.data.cuentaBancaria !== undefined && { cuentaBancaria: parsed.data.cuentaBancaria?.trim() || null }),
+        ...(parsed.data.titularCuenta !== undefined && { titularCuenta: parsed.data.titularCuenta?.trim() || null }),
       },
     });
     return NextResponse.json(updated);

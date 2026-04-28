@@ -31,6 +31,18 @@ const createSchema = z.object({
   razonSocial: z.string().min(1).max(200),
   regimenFiscal: z.string().max(10).nullable().optional(),
   email: z.string().email().max(200).nullable().optional(),
+  // Bank info for SPEI payments. CLABE must be 18 digits when provided;
+  // empty/missing is fine (we keep the field optional).
+  clabe: z
+    .string()
+    .trim()
+    .regex(/^\d{18}$/, "CLABE debe tener 18 dígitos")
+    .nullable()
+    .optional()
+    .or(z.literal("").transform(() => null)),
+  banco: z.string().max(60).nullable().optional(),
+  cuentaBancaria: z.string().max(30).nullable().optional(),
+  titularCuenta: z.string().max(200).nullable().optional(),
 });
 
 export const GET = withAuthz(async (req: Request) => {
@@ -83,6 +95,10 @@ export const POST = withAuthz(async (req: Request) => {
         razonSocial: data.razonSocial.trim(),
         regimenFiscal: data.regimenFiscal ?? null,
         email: data.email ?? null,
+        clabe: data.clabe ?? null,
+        banco: data.banco?.trim() || null,
+        cuentaBancaria: data.cuentaBancaria?.trim() || null,
+        titularCuenta: data.titularCuenta?.trim() || null,
       },
     });
     return NextResponse.json(created, { status: 201 });

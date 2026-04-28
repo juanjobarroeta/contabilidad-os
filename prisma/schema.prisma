@@ -349,6 +349,16 @@ model Supplier {
   regimenFiscal String?
   email        String?
 
+  // Datos bancarios para enviar SPEIs. CLABE es el dato canónico (18 dígitos);
+  // `banco` y `cuentaBancaria` son auxiliares cuando el proveedor proporciona
+  // sólo cuenta interbancaria. `titularCuenta` cubre el caso donde la cuenta
+  // está a nombre de un tercero (común con personas físicas que facturan a
+  // otro RFC).
+  clabe         String?
+  banco         String?
+  cuentaBancaria String?
+  titularCuenta String?
+
   company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankTransactions     BankTransaction[]
   solicitudesCompra    SolicitudCompra[]
