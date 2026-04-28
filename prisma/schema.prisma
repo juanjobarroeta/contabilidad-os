@@ -1367,6 +1367,12 @@ model SolicitudCompra {
   total  Float
   notas  String?
 
+  // Header metadata — matches the partner's "SOLICITUD DE COTIZACIÓN"
+  // Excel template (OBRA / Fecha solicitud / Fecha entrega / SOLICITUD N° /
+  // CRÉDITO vs CONTADO).
+  fechaEntrega DateTime?
+  formaPago    SolicitudFormaPago?
+
   // Approval tracking
   aprobadaPorId String?
   aprobadaAt    DateTime?
@@ -1393,11 +1399,17 @@ enum SolicitudEstado {
   CANCELADA
 }
 
+enum SolicitudFormaPago {
+  CREDITO
+  CONTADO
+}
+
 model SolicitudPartida {
   id             String @id @default(cuid())
   solicitudId    String
   insumoId       String?
   descripcion    String
+  unidad         String?  // TON, PALLET, m3, kg, pza — keeps requisición rows aligned with the Excel template
   cantidad       Float
   precioUnitario Float
   importe        Float

@@ -6,6 +6,7 @@ import { requireMembership, requireModule, requireWriter, withAuthz } from "@/li
 const partidaSchema = z.object({
   insumoId: z.string().optional(),
   descripcion: z.string().min(1),
+  unidad: z.string().max(20).nullable().optional(), // TON, PALLET, m3, kg, pza
   cantidad: z.number().positive(),
   precioUnitario: z.number().nonnegative(),
 });
@@ -16,6 +17,9 @@ const createSolicitudSchema = z.object({
   proyectoId: z.string().optional(),
   supplierId: z.string().optional(),
   notas: z.string().optional(),
+  // Header fields matching the partner's Excel template:
+  fechaEntrega: z.string().nullable().optional(), // ISO date string
+  formaPago: z.enum(["CREDITO", "CONTADO"]).nullable().optional(),
   partidas: z.array(partidaSchema).min(1),
 });
 
@@ -39,7 +43,7 @@ export const GET = withAuthz(async (req: Request) => {
     include: {
       proyecto: { select: { id: true, codigo: true, nombre: true } },
       supplier: { select: { id: true, razonSocial: true, rfc: true } },
-      partidas: true,
+      _count: { select: { partidas: true, cotizaciones: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -96,9 +100,18 @@ export const POST = withAuthz(async (req: Request) => {
         proyectoId: data.proyectoId,
         supplierId: data.supplierId,
         notas: data.notas,
+        fechaEntrega: data.fechaEntrega ? new Date(data.fechaEntrega) : null,
+        formaPago: data.formaPago ?? null,
         total,
         partidas: {
-          create: partidasWithImporte,
+          create: partidasWithImporte.map((p) => ({
+            insumoId: p.insumoId,
+            descripcion: p.descripcion,
+            unidad: p.unidad ?? null,
+            cantidad: p.cantidad,
+            precioUnitario: p.precioUnitario,
+            importe: p.importe,
+          })),
         },
       },
       include: { partidas: true },
