@@ -162,9 +162,10 @@ model Company {
   conceptos         Concepto[]
   apus              APU[]
   insumos           Insumo[]
-  presupuestos      Presupuesto[]
-  estimaciones      Estimacion[]
-  solicitudesCompra SolicitudCompra[]
+  presupuestos       Presupuesto[]
+  estimaciones       Estimacion[]
+  estimacionTemplates EstimacionTemplate[]
+  solicitudesCompra  SolicitudCompra[]
   pagos             Pago[]
   imssMovimientos   ImssMovimiento[]
   incidencias       Incidencia[]
@@ -539,6 +540,7 @@ model BankTransaction {
   gastoPagado             Gasto?
   reembolsoPagado         ReembolsoSemanal?
   solicitudCompraPagada   SolicitudCompra?
+  estimacionCobrada       Estimacion?
 }
 
 enum BankTransactionType {
@@ -1018,12 +1020,26 @@ model Proyecto {
   // de leaves del Presupuesto. Si null, no se aplica utilidad sobre direct.
   utilidadPorc    Float?    @default(10)
 
+  // Vivienda en sector privado no causa IVA. Para otros proyectos (gobierno,
+  // remodelación comercial) sí. Default true para no romper el flujo
+  // existente; Decolsa lo apaga al crear sus proyectos.
+  aplicaIva       Boolean   @default(true)
+
   // Track the source spreadsheet so we can audit / re-import. The file
   // itself is stored elsewhere (S3 / Railway volume) — we just keep a
   // pointer + an "imported at" timestamp so the UI can tell Gerardo whether
   // the project's master Presupuesto was loaded from Excel and when.
   presupuestoSourceFile  String?
   presupuestoImportadoAt DateTime?
+
+  // Estimación / vivienda tracking (Decolsa workflow).
+  //   viviendasObjetivo = denominador para % avance por partida
+  //                       (48 = 2 torres × 24 deptos en Torres Platino).
+  //   weekCount         = semanas del programa físico financiero (default
+  //                       calculado de fechaInicio..fechaFinPlan).
+  // Ambos editables después del import.
+  viviendasObjetivo Int?
+  weekCount         Int?
 
   // Anticipo tracking — filled when the customer pays the anticipo
   anticipoMonto       Float?     // actual $ received (montoContratado × anticipoPorc / 100)
@@ -1032,19 +1048,20 @@ model Proyecto {
   anticipoBankTxId    String?   // link to the BankTransaction that recorded the deposit
   anticipoInvoiceId   String?   // link to the CFDI de anticipo (Invoice)
 
-  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer          Customer?           @relation(fields: [customerId], references: [id])
-  presupuestos      Presupuesto[]
-  estimaciones      Estimacion[]
-  programa          ProgramaActividad[]
-  solicitudesCompra SolicitudCompra[]
-  bitacora          BitacoraEntrada[]
-  pagos             Pago[]
-  unidades          UnidadProyecto[]
-  cuadrillas        Cuadrilla[]
-  rayas             RayaSemanal[]
-  gastos            Gasto[]
-  reembolsos        ReembolsoSemanal[]
+  company             Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer            Customer?           @relation(fields: [customerId], references: [id])
+  presupuestos        Presupuesto[]
+  estimaciones        Estimacion[]
+  estimacionTemplate  EstimacionTemplate?
+  programa            ProgramaActividad[]
+  solicitudesCompra   SolicitudCompra[]
+  bitacora            BitacoraEntrada[]
+  pagos               Pago[]
+  unidades            UnidadProyecto[]
+  cuadrillas          Cuadrilla[]
+  rayas               RayaSemanal[]
+  gastos              Gasto[]
+  reembolsos          ReembolsoSemanal[]
 
   @@unique([companyId, codigo])
   @@index([companyId, estado])
@@ -1265,13 +1282,14 @@ model PresupuestoPartida {
   contratoPartida   PresupuestoPartida?  @relation("PartidaContratoEjecutado", fields: [contratoPartidaId], references: [id])
   ejecutadoPartidas PresupuestoPartida[] @relation("PartidaContratoEjecutado")
 
-  presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
-  concepto    Concepto?   @relation(fields: [conceptoId], references: [id])
-  avances     EstimacionPartida[]
-  compras     SolicitudPartida[]
-  bitacora    BitacoraEntrada[]
-  rayaTrabajos RayaTrabajo[]
-  gastos      Gasto[]
+  presupuesto       Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  concepto          Concepto?   @relation(fields: [conceptoId], references: [id])
+  avances           EstimacionPartida[]
+  templateLinks     EstimacionTemplatePartida[]
+  compras           SolicitudPartida[]
+  bitacora          BitacoraEntrada[]
+  rayaTrabajos      RayaTrabajo[]
+  gastos            Gasto[]
 }
 
 // Estimaciones: government billing flow. Each one becomes a CFDI when timbrada.
@@ -1286,6 +1304,7 @@ model Estimacion {
   numero        Int      // 1, 2, 3... per project
   periodoInicio DateTime
   periodoFin    DateTime
+  fechaCorte    DateTime?  // Decolsa workflow: "CORTE AL" — cuando se cierra el período
   estado        EstimacionEstado @default(BORRADOR)
 
   subtotal             Float
@@ -1294,9 +1313,21 @@ model Estimacion {
   iva                  Float
   total                Float
 
+  // Cumulative figures cached at the time this estimación is approved. Lets
+  // us render the dashboard without recomputing every time.
+  importeAcumulado     Float @default(0)
+  pctPeriodo           Float @default(0)
+  pctAcumulado         Float @default(0)
+
   // Link to the actual stamped CFDI when timbrada
   invoiceId String?  @unique
   invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+
+  // Cobranza link — when the cliente paga, the matched BankTransaction lands
+  // here and the estado flips to PAGADA. Auto-matched by the bancos /
+  // candidates flow (amount + invoice match) or set manually from the UI.
+  bankTransactionId String?  @unique
+  bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id])
 
   proyecto    Proyecto    @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id])
@@ -1314,21 +1345,101 @@ enum EstimacionEstado {
   CANCELADA
 }
 
+// One row per estimación-period × tracking-row. There are TWO measurement
+// modes (mutually exclusive on a single row but coexist in the same model
+// because every product wants the same Estimacion parent):
+//
+//   1. LEAF MODE  (Bartiz pattern, original)
+//      presupuestoPartidaId set → tracks cantidadEjecutada on a leaf partida.
+//      Used for unit-by-unit avance tracking (qty m³, kg, etc.).
+//
+//   2. TEMPLATE MODE  (Decolsa pattern, Run 2)
+//      templatePartidaId set → tracks viviendasAvancePeriodo against the
+//      compacted EstimacionTemplate row. Used for vivienda billing where
+//      the customer measures # viviendas completed per partida.
+//
+// Snapshot fields (descripcionSnapshot, importeContrato) freeze the contract
+// numbers at the time the estimación is approved so editing the template
+// later doesn't invalidate prior estimaciones.
 model EstimacionPartida {
   id                   String @id @default(cuid())
   estimacionId         String
-  presupuestoPartidaId String
-  cantidadEjecutada    Float  // this period
-  cantidadAcumulada    Float  // running total
-  importe              Float
 
-  // Optional — records which unidad (e.g. Depto 101) consumed this avance.
-  // Null for projects without unidad breakdowns.
-  unidadProyectoId String?
+  // ── LEAF MODE (Bartiz)
+  presupuestoPartidaId String?
+  cantidadEjecutada    Float?  // this period
+  cantidadAcumulada    Float?  // running total
 
-  estimacion         Estimacion          @relation(fields: [estimacionId], references: [id], onDelete: Cascade)
-  presupuestoPartida PresupuestoPartida  @relation(fields: [presupuestoPartidaId], references: [id])
-  unidad             UnidadProyecto?     @relation(fields: [unidadProyectoId], references: [id])
+  // ── TEMPLATE MODE (Decolsa)
+  templatePartidaId        String?
+  viviendasObjetivo        Int?    // snapshot of denominator
+  viviendasAvancePeriodo   Int?    // ← Gerardo's input
+  viviendasAvanceAnterior  Int?    // carried forward from prev estimación
+  viviendasAvanceAcumulado Int?    // computed
+  pctPeriodo               Float?  // computed
+  pctAcumulado             Float?  // computed
+  descripcionSnapshot      String?
+  importeContrato          Float?  // capítulo total at template-set time
+
+  // ── Both modes share these
+  importe              Float   // periodo importe (qty × PU OR pct × contrato)
+  unidadProyectoId     String? // optional: which depto / nivel consumed this
+
+  estimacion         Estimacion                 @relation(fields: [estimacionId], references: [id], onDelete: Cascade)
+  presupuestoPartida PresupuestoPartida?        @relation(fields: [presupuestoPartidaId], references: [id])
+  template           EstimacionTemplatePartida? @relation(fields: [templatePartidaId], references: [id])
+  unidad             UnidadProyecto?            @relation(fields: [unidadProyectoId], references: [id])
+}
+
+// Compacted billing structure — defines which capítulos (or sub-capítulos)
+// of the master tree show up as a single row in the estimaciones grid.
+// Bootstrapped on /presupuesto/import using Decolsa's default rule
+// (capítulos 1–15 rolled at nivel 1, ≥16 broken at nivel 2). Always editable.
+model EstimacionTemplate {
+  id         String   @id @default(cuid())
+  proyectoId String   @unique
+  companyId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  proyecto Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  partidas EstimacionTemplatePartida[]
+  curvas   EstimacionCurvaCapitulo[]
+}
+
+model EstimacionTemplatePartida {
+  id                   String  @id @default(cuid())
+  templateId           String
+  presupuestoPartidaId String  // FK to master tree at any nivel
+
+  // Display
+  orden        Int    @default(0)
+  descripcion  String // free-form label (defaults to the partida's descripcion)
+  capituloCode String // top-level capítulo "1", "2", ..., "30" — for curve lookup
+
+  // Per-partida override of viviendasObjetivo. Null = inherit from Proyecto.
+  viviendasObjetivo Int?
+
+  template            EstimacionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  presupuestoPartida  PresupuestoPartida @relation(fields: [presupuestoPartidaId], references: [id])
+  estimacionPartidas  EstimacionPartida[]
+}
+
+// Customer's expected weekly distribution per top-level capítulo.
+// Bootstrapped from CURVA_VIVIENDA_2R_DEFAULT on import; Gerardo can edit.
+// Each row = one capítulo (1, 2, …, 30) with its weekly pesos.
+model EstimacionCurvaCapitulo {
+  id           String  @id @default(cuid())
+  templateId   String
+  capituloCode String  // "1", "2", ... matches EstimacionTemplatePartida.capituloCode
+
+  descripcion    String?  // snapshot for display
+  pesoPctSemanal Json     // Float[] sized to project.weekCount; sum ≈ 1.0
+
+  template EstimacionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, capituloCode])
 }
 
 // Project subdivisions — supports tower/apartment/nivel tree for multi-unit

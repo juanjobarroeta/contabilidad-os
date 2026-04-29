@@ -41,6 +41,8 @@ import type {
   ParsedInsumo,
   PresupuestoParseResult,
 } from "@/lib/construccion/presupuesto-parser";
+import { bootstrapEstimacionTemplate } from "@/lib/construccion/estimacion-template-bootstrap";
+import { CURVA_DEFAULT_WEEK_COUNT } from "@/lib/construccion/curva-vivienda-default";
 
 // We trust the structure but validate the shape so a malformed payload can't
 // hose the import. Numbers must be finite, strings non-empty, etc.
@@ -95,6 +97,13 @@ const bodySchema = z.object({
     }),
   }),
   filename: z.string().optional(),
+  // Decolsa workflow extras — set during the import wizard. All optional;
+  // when missing we fall back to schema defaults / leave fields null.
+  viviendasObjetivo: z.number().int().positive().nullable().optional(),
+  aplicaIva: z.boolean().optional(),
+  weekCount: z.number().int().positive().nullable().optional(),
+  fechaInicio: z.string().datetime().nullable().optional(),
+  fechaFinPlan: z.string().datetime().nullable().optional(),
   // Confirmation flag — UI sets this when the user has acknowledged the
   // warnings panel. Belt-and-suspenders so a stale tab can't import without
   // the user seeing the preview.
@@ -121,7 +130,15 @@ export const POST = withAuthz(
         { status: 400 }
       );
     }
-    const { parsed, filename } = validated.data;
+    const {
+      parsed,
+      filename,
+      viviendasObjetivo,
+      aplicaIva,
+      weekCount,
+      fechaInicio,
+      fechaFinPlan,
+    } = validated.data;
 
     // Reimport guard
     const existing = await prisma.presupuesto.count({ where: { proyectoId: id } });
@@ -320,17 +337,23 @@ export const POST = withAuthz(
         });
 
         // ─── Step 5: Stamp the proyecto ──────────────────────────────────────
+        // Stamp the proyecto with file metadata + the wizard fields the user
+        // supplied (viviendasObjetivo, aplicaIva, weekCount, fechas).
+        const finalWeekCount = weekCount ?? CURVA_DEFAULT_WEEK_COUNT;
         await tx.proyecto.update({
           where: { id },
           data: {
             presupuestoSourceFile: filename ?? null,
             presupuestoImportadoAt: new Date(),
-            // Auto-fill montoContratado if the proyecto doesn't have one yet.
-            // Vivienda en sector privado: costo directo + utilidad (sin IVA).
-            montoContratado: undefined, // handled below
+            ...(viviendasObjetivo != null ? { viviendasObjetivo } : {}),
+            ...(aplicaIva !== undefined ? { aplicaIva } : {}),
+            weekCount: finalWeekCount,
+            ...(fechaInicio ? { fechaInicio: new Date(fechaInicio) } : {}),
+            ...(fechaFinPlan ? { fechaFinPlan: new Date(fechaFinPlan) } : {}),
           },
         });
 
+        // Auto-fill montoContratado if not set (cost × utilidad).
         const proyectoActual = await tx.proyecto.findUnique({
           where: { id },
           select: { montoContratado: true, utilidadPorc: true },
@@ -343,6 +366,17 @@ export const POST = withAuthz(
           });
         }
 
+        // ─── Step 6: Bootstrap the EstimacionTemplate ────────────────────────
+        // Decolsa workflow needs the compacted billing structure ready
+        // immediately. This creates the template + per-capítulo curvas using
+        // the 1-15-rolled / ≥16-open default. Gerardo can edit afterwards.
+        const bootstrap = await bootstrapEstimacionTemplate(tx, {
+          proyectoId: id,
+          companyId: proyecto.companyId,
+          presupuestoId: presupuesto.id,
+          weekCount: finalWeekCount,
+        });
+
         return {
           presupuestoId: presupuesto.id,
           leafCount: parsed.leaves.length,
@@ -350,6 +384,9 @@ export const POST = withAuthz(
           conceptosCreated,
           insumosCreated,
           total,
+          templateId: bootstrap.templateId,
+          templatePartidasCreated: bootstrap.partidasCreated,
+          curvasCreated: bootstrap.curvasCreated,
         };
       },
       // Bigger projects (Decolsa: ~2000 rows) need a longer interactive tx.
