@@ -1,18 +1,21 @@
 /**
- * GET  /api/construccion/estimaciones/[id]   — detail with partidas
- * PATCH /api/construccion/estimaciones/[id]  — update partidas (mark avance)
+ * GET    /api/construccion/estimaciones/[id]
+ * PATCH  /api/construccion/estimaciones/[id]
+ * DELETE /api/construccion/estimaciones/[id]
  *
- * The PATCH accepts an array of partida avance entries:
- * {
- *   partidas: [
- *     { presupuestoPartidaId: string, cantidadEjecutada: number },
- *     ...
- *   ]
- * }
+ * Detalle, edición y borrado. Soporta DOS modos:
  *
- * The server computes cantidadAcumulada (sum of all previous estimaciones
- * + this one) and importe (cantidadEjecutada × presupuestoPartida.PU),
- * then updates the estimación's subtotal, IVA, and total.
+ *   • LEAF MODE (Bartiz original): body con partidas keyed por
+ *     presupuestoPartidaId + cantidadEjecutada. Wipe-and-recreate.
+ *
+ *   • TEMPLATE MODE (Decolsa, Run 2B): body con partidas keyed por
+ *     EstimacionPartida.id + viviendasAvancePeriodo. Update in-place.
+ *     Recomputa pct + importe por partida y subtotal/iva/total/importeAcum
+ *     a nivel estimación.
+ *
+ * También permite editar el header (periodoInicio, periodoFin, fechaCorte).
+ *
+ * Solo en estado BORRADOR. Aprobada / timbrada / pagada → 422.
  */
 
 import { NextResponse } from "next/server";
@@ -20,6 +23,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
   AuthzError,
+  requireMembership,
   requireModule,
   requireWriter,
   withAuthz,
@@ -30,124 +34,306 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export const GET = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
     const { id } = await ctx.params;
-
     const estimacion = await prisma.estimacion.findUnique({
       where: { id },
       include: {
-        proyecto: { select: { id: true, codigo: true, nombre: true, montoContratado: true, anticipoMonto: true, anticipoAmortizado: true, retencionPorc: true } },
+        proyecto: {
+          select: {
+            id: true,
+            codigo: true,
+            nombre: true,
+            companyId: true,
+            viviendasObjetivo: true,
+            aplicaIva: true,
+            montoContratado: true,
+            anticipoMonto: true,
+            anticipoAmortizado: true,
+            retencionPorc: true,
+          },
+        },
         presupuesto: { select: { id: true, nombre: true, montoTotal: true } },
         partidas: {
+          // Order: template-mode rows by template.orden, leaf-mode by partida.orden
+          orderBy: [{ template: { orden: "asc" } }, { presupuestoPartida: { orden: "asc" } }],
           include: {
+            template: {
+              select: {
+                id: true,
+                orden: true,
+                descripcion: true,
+                capituloCode: true,
+                viviendasObjetivo: true,
+                presupuestoPartida: {
+                  select: { codigo: true, partida: true, importe: true },
+                },
+              },
+            },
             presupuestoPartida: {
               include: {
                 concepto: { select: { codigo: true, descripcion: true, unidad: true } },
               },
             },
           },
-          orderBy: { presupuestoPartida: { orden: "asc" } },
+        },
+        invoice: {
+          select: {
+            id: true,
+            folio: true,
+            serie: true,
+            fecha: true,
+            total: true,
+            uuid: true,
+            status: true,
+          },
+        },
+        bankTransaction: {
+          select: {
+            id: true,
+            fecha: true,
+            monto: true,
+            descripcion: true,
+            referencia: true,
+          },
         },
       },
     });
-
     if (!estimacion) throw new AuthzError(404, "Estimación no encontrada");
-
-    await requireWriter(estimacion.companyId, req);
+    await requireMembership(estimacion.companyId, undefined, req);
     await requireModule(estimacion.companyId, "CONSTRUCCION");
-
     return NextResponse.json(estimacion);
   }
 );
 
+// ─── PATCH body shapes ───────────────────────────────────────────────────────
+// Header-only update is allowed alongside partida updates.
+const headerSchema = z.object({
+  periodoInicio: z.string().datetime().optional(),
+  periodoFin: z.string().datetime().optional(),
+  fechaCorte: z.string().datetime().optional(),
+});
+
+const leafPartidaSchema = z.object({
+  presupuestoPartidaId: z.string().min(1),
+  cantidadEjecutada: z.number().nonnegative(),
+});
+
+const templatePartidaSchema = z.object({
+  id: z.string().min(1),
+  viviendasAvancePeriodo: z.number().int().min(0),
+});
+
 const patchSchema = z.object({
-  partidas: z.array(
-    z.object({
-      presupuestoPartidaId: z.string().min(1),
-      cantidadEjecutada: z.number().nonnegative(),
-    })
-  ),
+  header: headerSchema.optional(),
+  // Either leaf-mode or template-mode partidas; arrays are differentiated by
+  // their first key. Both can be empty/absent for header-only updates.
+  partidas: z
+    .union([z.array(leafPartidaSchema), z.array(templatePartidaSchema)])
+    .optional(),
 });
 
 export const PATCH = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
     const { id } = await ctx.params;
-
-    const body = await req.json().catch(() => ({}));
-    const parsed = patchSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    }
-
     const estimacion = await prisma.estimacion.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true, proyectoId: true, presupuestoId: true, numero: true },
+      select: {
+        id: true,
+        companyId: true,
+        estado: true,
+        proyectoId: true,
+        presupuestoId: true,
+        numero: true,
+      },
     });
     if (!estimacion) throw new AuthzError(404, "Estimación no encontrada");
+    await requireWriter(estimacion.companyId, req);
+    await requireModule(estimacion.companyId, "CONSTRUCCION");
+
     if (estimacion.estado !== "BORRADOR") {
       return NextResponse.json(
-        { error: `Solo se pueden editar estimaciones en BORRADOR (estado: ${estimacion.estado})` },
+        { error: `No se puede editar (estado: ${estimacion.estado})` },
         { status: 422 }
       );
     }
 
-    await requireWriter(estimacion.companyId, req);
-    await requireModule(estimacion.companyId, "CONSTRUCCION");
+    const body = await req.json().catch(() => ({}));
+    const parsed = patchSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
 
-    // For each partida entry, compute cantidadAcumulada from prior estimaciones
-    const result = await prisma.$transaction(async (tx) => {
-      // Wipe existing partidas on this estimación and recreate
-      await tx.estimacionPartida.deleteMany({ where: { estimacionId: id } });
-
-      let subtotal = 0;
-
-      for (const p of parsed.data.partidas) {
-        if (p.cantidadEjecutada <= 0) continue;
-
-        // Get the presupuesto partida for PU lookup
-        const pp = await tx.presupuestoPartida.findUnique({
-          where: { id: p.presupuestoPartidaId },
-          select: { id: true, presupuestoId: true, precioUnitario: true, cantidad: true },
-        });
-        if (!pp || pp.presupuestoId !== estimacion.presupuestoId) continue;
-
-        // Sum cantidadEjecutada from all OTHER estimaciones on this same partida
-        const priorAgg = await tx.estimacionPartida.aggregate({
-          where: {
-            presupuestoPartidaId: p.presupuestoPartidaId,
-            estimacion: {
-              proyectoId: estimacion.proyectoId,
-              id: { not: id }, // exclude current
-            },
-          },
-          _sum: { cantidadEjecutada: true },
-        });
-        const priorExecuted = priorAgg._sum.cantidadEjecutada ?? 0;
-        const cantidadAcumulada = round2(priorExecuted + p.cantidadEjecutada);
-        const importe = round2(p.cantidadEjecutada * pp.precioUnitario);
-        subtotal += importe;
-
-        await tx.estimacionPartida.create({
+    await prisma.$transaction(async (tx) => {
+      if (parsed.data.header) {
+        const hdr = parsed.data.header;
+        await tx.estimacion.update({
+          where: { id },
           data: {
-            estimacionId: id,
-            presupuestoPartidaId: p.presupuestoPartidaId,
-            cantidadEjecutada: p.cantidadEjecutada,
-            cantidadAcumulada,
-            importe,
+            ...(hdr.periodoInicio && { periodoInicio: new Date(hdr.periodoInicio) }),
+            ...(hdr.periodoFin && { periodoFin: new Date(hdr.periodoFin) }),
+            ...(hdr.fechaCorte && { fechaCorte: new Date(hdr.fechaCorte) }),
           },
         });
       }
 
-      subtotal = round2(subtotal);
-      const iva = round2(subtotal * 0.16);
-      const total = round2(subtotal + iva);
+      if (parsed.data.partidas && parsed.data.partidas.length > 0) {
+        const first = parsed.data.partidas[0];
+        const isTemplate = "id" in first;
 
-      const updated = await tx.estimacion.update({
-        where: { id },
-        data: { subtotal, iva, total },
+        if (isTemplate) {
+          // ── TEMPLATE MODE (Decolsa) ──────────────────────────────────────
+          const updates = new Map<string, number>();
+          for (const p of parsed.data.partidas as z.infer<typeof templatePartidaSchema>[]) {
+            updates.set(p.id, p.viviendasAvancePeriodo);
+          }
+          const current = await tx.estimacionPartida.findMany({
+            where: { estimacionId: id, id: { in: [...updates.keys()] } },
+            select: {
+              id: true,
+              viviendasAvanceAnterior: true,
+              viviendasObjetivo: true,
+              importeContrato: true,
+            },
+          });
+          for (const p of current) {
+            const newPeriodo = updates.get(p.id)!;
+            const obj = p.viviendasObjetivo ?? 1;
+            const anterior = p.viviendasAvanceAnterior ?? 0;
+            const acumulado = Math.min(anterior + newPeriodo, obj);
+            const cappedPeriodo = acumulado - anterior;
+            const importeC = p.importeContrato ?? 0;
+            const pctAcum = obj > 0 ? acumulado / obj : 0;
+            const pctPer = obj > 0 ? cappedPeriodo / obj : 0;
+            const importePer = round2(importeC * pctPer);
+            await tx.estimacionPartida.update({
+              where: { id: p.id },
+              data: {
+                viviendasAvancePeriodo: cappedPeriodo,
+                viviendasAvanceAcumulado: acumulado,
+                pctPeriodo: pctPer,
+                pctAcumulado: pctAcum,
+                importe: importePer,
+              },
+            });
+          }
+        } else {
+          // ── LEAF MODE (Bartiz original) ──────────────────────────────────
+          // Wipe + recreate behavior preserved.
+          await tx.estimacionPartida.deleteMany({ where: { estimacionId: id } });
+          for (const p of parsed.data.partidas as z.infer<typeof leafPartidaSchema>[]) {
+            if (p.cantidadEjecutada <= 0) continue;
+            const pp = await tx.presupuestoPartida.findUnique({
+              where: { id: p.presupuestoPartidaId },
+              select: { id: true, presupuestoId: true, precioUnitario: true },
+            });
+            if (!pp || pp.presupuestoId !== estimacion.presupuestoId) continue;
+            const priorAgg = await tx.estimacionPartida.aggregate({
+              where: {
+                presupuestoPartidaId: p.presupuestoPartidaId,
+                estimacion: { proyectoId: estimacion.proyectoId, id: { not: id } },
+              },
+              _sum: { cantidadEjecutada: true },
+            });
+            const priorExecuted = priorAgg._sum.cantidadEjecutada ?? 0;
+            const cantidadAcumulada = round2(priorExecuted + p.cantidadEjecutada);
+            const importe = round2(p.cantidadEjecutada * pp.precioUnitario);
+            await tx.estimacionPartida.create({
+              data: {
+                estimacionId: id,
+                presupuestoPartidaId: p.presupuestoPartidaId,
+                cantidadEjecutada: p.cantidadEjecutada,
+                cantidadAcumulada,
+                importe,
+              },
+            });
+          }
+        }
+      }
+
+      // ── Recompute estimación-level totals ──────────────────────────────
+      const allPartidas = await tx.estimacionPartida.findMany({
+        where: { estimacionId: id },
+        select: {
+          importe: true,
+          pctAcumulado: true,
+          importeContrato: true,
+        },
       });
+      const subtotal = round2(
+        allPartidas.reduce((a, p) => a + (p.importe ?? 0), 0)
+      );
+      const importeContratoTotal = allPartidas.reduce(
+        (a, p) => a + (p.importeContrato ?? 0),
+        0
+      );
+      const importeAcumPartidas = round2(
+        allPartidas.reduce(
+          (a, p) => a + (p.importeContrato ?? 0) * (p.pctAcumulado ?? 0),
+          0
+        )
+      );
+      const proy = await tx.estimacion.findUnique({
+        where: { id },
+        select: { proyecto: { select: { aplicaIva: true } } },
+      });
+      const aplicaIva = proy?.proyecto?.aplicaIva ?? false;
+      const iva = aplicaIva ? round2(subtotal * 0.16) : 0;
+      const total = round2(subtotal + iva);
+      const pctPeriodo =
+        importeContratoTotal > 0 ? subtotal / importeContratoTotal : 0;
+      const pctAcumulado =
+        importeContratoTotal > 0
+          ? importeAcumPartidas / importeContratoTotal
+          : 0;
 
-      return updated;
+      await tx.estimacion.update({
+        where: { id },
+        data: {
+          subtotal,
+          iva,
+          total,
+          importeAcumulado: importeAcumPartidas,
+          pctPeriodo,
+          pctAcumulado,
+        },
+      });
     });
 
-    return NextResponse.json(result);
+    const updated = await prisma.estimacion.findUnique({
+      where: { id },
+      include: {
+        partidas: {
+          orderBy: [
+            { template: { orden: "asc" } },
+            { presupuestoPartida: { orden: "asc" } },
+          ],
+        },
+      },
+    });
+    return NextResponse.json(updated);
+  }
+);
+
+export const DELETE = withAuthz(
+  async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+    const { id } = await ctx.params;
+    const estimacion = await prisma.estimacion.findUnique({
+      where: { id },
+      select: { id: true, companyId: true, estado: true },
+    });
+    if (!estimacion) throw new AuthzError(404, "Estimación no encontrada");
+    await requireWriter(estimacion.companyId, req);
+    await requireModule(estimacion.companyId, "CONSTRUCCION");
+
+    if (estimacion.estado !== "BORRADOR") {
+      return NextResponse.json(
+        { error: "Solo se pueden eliminar estimaciones en BORRADOR." },
+        { status: 422 }
+      );
+    }
+    await prisma.estimacion.delete({ where: { id } });
+    return NextResponse.json({ deleted: id });
   }
 );
