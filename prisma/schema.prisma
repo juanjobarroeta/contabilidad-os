@@ -1402,10 +1402,11 @@ model EstimacionTemplate {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  proyecto Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
-  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  partidas EstimacionTemplatePartida[]
-  curvas   EstimacionCurvaCapitulo[]
+  proyecto         Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  partidas         EstimacionTemplatePartida[]
+  curvas           EstimacionCurvaCapitulo[]
+  calendarioCierre CalendarioCierreCapitulo[]
 }
 
 model EstimacionTemplatePartida {
@@ -1436,6 +1437,30 @@ model EstimacionCurvaCapitulo {
 
   descripcion    String?  // snapshot for display
   pesoPctSemanal Json     // Float[] sized to project.weekCount; sum ≈ 1.0
+
+  template EstimacionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, capituloCode])
+}
+
+// CALENDARIO CIERRE — Gerardo's internal cashflow planner (sheet 4 of his
+// Excel template). Same shape as EstimacionCurvaCapitulo (capítulo × weekly
+// distribution) but for INTERNAL planning, not the customer's expected
+// curve. Sums per capítulo can be < 1.0 (Gerardo only marks weeks where he
+// expects to spend; unmarked = no plan).
+//
+// Used to project monthly/weekly outflow against the customer's expected
+// inflow curve (sheet 3) — gives Gerardo his cashflow projection.
+//
+// Bootstrapped empty when the EstimacionTemplate is created. Editable
+// per-cell from the Programa tab.
+model CalendarioCierreCapitulo {
+  id           String  @id @default(cuid())
+  templateId   String
+  capituloCode String  // "1", "2", ... matches EstimacionTemplatePartida.capituloCode
+
+  descripcion    String?
+  pesoPctSemanal Json     // Float[] sized to project.weekCount; sum ≤ 1.0
 
   template EstimacionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 

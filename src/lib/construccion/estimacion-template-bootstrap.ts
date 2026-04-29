@@ -33,6 +33,7 @@ export type BootstrapResult = {
   templateId: string;
   partidasCreated: number;
   curvasCreated: number;
+  calendarioCreated: number;
 };
 
 /**
@@ -238,10 +239,25 @@ export async function bootstrapEstimacionTemplate(
     await tx.estimacionCurvaCapitulo.createMany({ data: curvaRows });
   }
 
+  // Calendario Cierre — Gerardo's internal cashflow planner. We seed empty
+  // rows (one per capítulo, all-zero weekly distribution) so the editor has
+  // a row to render. Gerardo fills cells by hand to project his outflow.
+  const calRows = [...usedCapitulos].map((cap) => ({
+    templateId: template.id,
+    capituloCode: cap,
+    descripcion:
+      picks.find((p) => p.capituloCode === cap)?.descripcion ?? `Capítulo ${cap}`,
+    pesoPctSemanal: new Array(weekCount).fill(0),
+  }));
+  if (calRows.length > 0) {
+    await tx.calendarioCierreCapitulo.createMany({ data: calRows });
+  }
+
   return {
     templateId: template.id,
     partidasCreated: picks.length,
     curvasCreated: curvaRows.length,
+    calendarioCreated: calRows.length,
   };
 }
 
