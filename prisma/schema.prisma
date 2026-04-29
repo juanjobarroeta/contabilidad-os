@@ -1013,6 +1013,18 @@ model Proyecto {
   anticipoPorc    Float?    // typical 30
   retencionPorc   Float?    // typical 5
 
+  // Decolsa workflow: el contrato con el cliente es costo directo + utilidad
+  // (típicamente 10% en vivienda — sector sin IVA). Se aplica sobre la suma
+  // de leaves del Presupuesto. Si null, no se aplica utilidad sobre direct.
+  utilidadPorc    Float?    @default(10)
+
+  // Track the source spreadsheet so we can audit / re-import. The file
+  // itself is stored elsewhere (S3 / Railway volume) — we just keep a
+  // pointer + an "imported at" timestamp so the UI can tell Gerardo whether
+  // the project's master Presupuesto was loaded from Excel and when.
+  presupuestoSourceFile  String?
+  presupuestoImportadoAt DateTime?
+
   // Anticipo tracking — filled when the customer pays the anticipo
   anticipoMonto       Float?     // actual $ received (montoContratado × anticipoPorc / 100)
   anticipoFecha       DateTime?  // date received
