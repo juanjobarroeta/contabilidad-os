@@ -53,23 +53,15 @@ async function userCanAccessContabilidad(userId: string): Promise<boolean> {
     }
   }
 
-  // Despacho access — always full, just needs one despacho-owned company
-  // that has CONTABILIDAD enabled
+  // Despacho access — any despacho membership grants contabilidad access.
+  // A brand-new despacho with zero companies still needs to reach /onboarding
+  // to add the first one; gating on "has at least one company" would lock
+  // out new despacho owners.
   const despachoMember = await prisma.despachoMember.findFirst({
     where: { userId },
-    select: { despachoId: true },
+    select: { id: true },
   });
-  if (despachoMember) {
-    const companiesWithAccounting = await prisma.company.findFirst({
-      where: {
-        despachoId: despachoMember.despachoId,
-        isActive: true,
-        modules: { some: { modulo: "CONTABILIDAD", habilitado: true } },
-      },
-      select: { id: true },
-    });
-    if (companiesWithAccounting) return true;
-  }
+  if (despachoMember) return true;
 
   return false;
 }
