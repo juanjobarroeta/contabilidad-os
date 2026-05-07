@@ -36,7 +36,7 @@ async function main() {
   }
 
   console.log(
-    `Template: ${template._count?.partidas ?? template.partidas.length} partidas, ${template.curvas.length} curvas, ${template.calendarioCierre.length} calendario`
+    `Template: ${template.partidas.length} partidas, ${template.curvas.length} curvas, ${template.calendarioCierre.length} calendario`
   );
 
   const importeByCap = new Map();
