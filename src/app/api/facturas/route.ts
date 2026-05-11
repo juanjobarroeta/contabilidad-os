@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { z } from "zod";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 
 const invoiceItemSchema = z.object({
   quantity: z.number().positive(),
@@ -52,7 +51,7 @@ export async function GET(req: Request) {
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
   // Verify membership
-  const membership = await getEffectiveCompanyMembership(session.user.id, companyId);
+  const membership = await getEffectiveCompanyMembership(userId, companyId);
   if (!membership) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const q = searchParams.get("q")?.trim();
@@ -111,8 +110,14 @@ export async function GET(req: Request) {
 
 // POST /api/facturas — emit CFDI via Facturapi
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let userId: string;
+  try {
+    const user = await requireUser(req);
+    userId = user.id;
+  } catch (e) {
+    const status = e instanceof AuthzError ? e.status : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
+  }
 
   const body = await req.json();
   const parsed = createInvoiceSchema.safeParse(body);
@@ -123,7 +128,7 @@ export async function POST(req: Request) {
   const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes, global: globalInfo } = parsed.data;
 
   // Verify membership with at least ACCOUNTANT role
-  const membership = await getEffectiveCompanyMembership(session.user.id, companyId);
+  const membership = await getEffectiveCompanyMembership(userId, companyId);
   if (!membership || membership.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
