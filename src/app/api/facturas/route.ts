@@ -43,15 +43,20 @@ const createInvoiceSchema = z.object({
 
 // GET /api/facturas?companyId=xxx&q=search&tipo=EGRESO&take=20
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json([], { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
   // Verify membership
-  const membership = await getEffectiveCompanyMembership(userId, companyId);
+  const membership = await getEffectiveCompanyMembership(user.id, companyId);
   if (!membership) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const q = searchParams.get("q")?.trim();
