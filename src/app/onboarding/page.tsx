@@ -301,6 +301,16 @@ function OnboardingPageInner() {
       if (fiel.cerFile) fielCer = await fileToBase64(fiel.cerFile);
       if (fiel.keyFile) fielKey = await fileToBase64(fiel.keyFile);
 
+      // Earliest régimen start date from the CSF — used server-side as the
+      // lower bound for the historical SAT backfill (we never ask SAT for
+      // CFDIs before the company existed).
+      const csfDoc = parsedDocs.find((d) => d.type === "CSF" && d.extracted.csf);
+      const regimenSinces = (csfDoc?.extracted.csf?.regimenes ?? [])
+        .map((r) => r.since)
+        .filter((s): s is string => !!s && !isNaN(new Date(s).getTime()))
+        .sort();
+      const fechaInicioRegimen = regimenSinces[0] ?? undefined;
+
       // Build onboardingPackage from parsed docs (IMSS, anual, mensuales)
       const imssDoc = parsedDocs.find((d) => d.type === "TARJETA_IMSS");
       const anualDoc = parsedDocs.find((d) => d.type === "ACUSE_ANUAL");
@@ -325,6 +335,7 @@ function OnboardingPageInner() {
           fielCer,
           fielKey,
           fielPassword: fiel.password || undefined,
+          fechaInicioRegimen,
           onboardingPackage,
         }),
       });

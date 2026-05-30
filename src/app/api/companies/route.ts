@@ -89,6 +89,7 @@ export async function POST(req: Request) {
     nombreComercial, email, telefono, actividadEconomica,
     csdCer, csdKey, csdPassword,
     fielCer, fielKey, fielPassword,
+    fechaInicioRegimen,
     onboardingPackage,
   } = body as {
     rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string;
@@ -96,6 +97,7 @@ export async function POST(req: Request) {
     telefono?: string; actividadEconomica?: string;
     csdCer?: string; csdKey?: string; csdPassword?: string;
     fielCer?: string; fielKey?: string; fielPassword?: string;
+    fechaInicioRegimen?: string | null;
     onboardingPackage?: {
       imss?: {
         registroPatronal?: string | null;
@@ -151,6 +153,15 @@ export async function POST(req: Request) {
   const registroPatronal = onboardingPackage?.imss?.registroPatronal ?? null;
   const coeficienteUtilidad = onboardingPackage?.acuseAnual?.coeficienteUtilidad ?? null;
 
+  // fechaInicioRegimen (from the Constancia de Situación Fiscal) becomes the
+  // lower bound for the historical SAT backfill — we never ask SAT for CFDIs
+  // before this date. Parse defensively: accept a valid ISO date or skip.
+  let fechaInicioOperaciones: Date | null = null;
+  if (fechaInicioRegimen) {
+    const parsed = new Date(fechaInicioRegimen);
+    if (!isNaN(parsed.getTime())) fechaInicioOperaciones = parsed;
+  }
+
   const company = await prisma.company.create({
     data: {
       rfc: rfc.toUpperCase(),
@@ -168,6 +179,7 @@ export async function POST(req: Request) {
       fielCer,
       fielKey,
       fielPassword,
+      fechaInicioOperaciones: fechaInicioOperaciones ?? undefined,
       registroPatronal: registroPatronal ?? undefined,
       coeficienteUtilidad: coeficienteUtilidad ?? undefined,
       despachoId: despachoMembership?.despachoId ?? null,

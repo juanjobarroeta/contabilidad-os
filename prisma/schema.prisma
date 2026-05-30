@@ -122,6 +122,19 @@ model Company {
   fielPassword      String?            // encrypted password
   fielVigencia      DateTime?          // expiry date
 
+  // Automatic SAT sync (cron-driven Descarga Masiva). When enabled, the
+  // background job periodically pulls emitidos/recibidos CFDIs without the
+  // user having to click "Sincronizar". Defaults on so every company with a
+  // valid FIEL is covered; can be turned off per-company.
+  autoSyncEnabled   Boolean   @default(true)
+  lastAutoSyncAt    DateTime?           // last time the cron touched this company
+
+  // Earliest date this RFC could have CFDIs — captured from the Constancia de
+  // Situación Fiscal (fechaInicioRegimen) at onboarding. Used to clamp the
+  // historical backfill so we don't ask SAT for periods before the company
+  // existed (which would waste the per-RFC request quota).
+  fechaInicioOperaciones DateTime?
+
   // Facturapi integration
   facturapiOrgId    String?  // Facturapi organization ID for this company
   facturapiApiKey   String?  // live API key stored encrypted
