@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X, ListChecks, RefreshCw, CreditCard } from "lucide-react";
+import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X, ListChecks, RefreshCw, CreditCard, ExternalLink } from "lucide-react";
 
 // ── Types for the multi-document onboarding package ───────────────────────
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
@@ -200,6 +200,8 @@ function OnboardingPageInner() {
   // SAT historical backfill depth (years) + selected plan tier.
   const [satBackfillYears, setSatBackfillYears] = useState(5);
   const [plan, setPlan] = useState("PROFESIONAL");
+  // Acknowledgement that the user must sign Facturapi's Carta Manifiesto.
+  const [manifiestoAck, setManifiestoAck] = useState(false);
 
   // Form state
   const [fiscal, setFiscal] = useState({
@@ -359,6 +361,10 @@ function OnboardingPageInner() {
   function nextStep() {
     setError("");
     if (step === 1 && !validateStep1()) return;
+    if (step === 6 && !manifiestoAck) {
+      setError("Confirma la Carta Manifiesto de Facturapi para continuar (o usa Omitir).");
+      return;
+    }
     setStep((s) => s + 1);
   }
 
@@ -430,6 +436,7 @@ function OnboardingPageInner() {
           csfObligaciones,
           satBackfillYears,
           plan,
+          manifiestoAck,
           onboardingPackage,
         }),
       });
@@ -990,6 +997,33 @@ function OnboardingPageInner() {
                     {showCsdPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+              </div>
+
+              {/* Carta Manifiesto de Facturapi — forced acknowledgement */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+                <p className="font-semibold mb-1">✍️ Carta Manifiesto (obligatoria para timbrar)</p>
+                <p className="text-xs">
+                  Facturapi requiere que firmes la Carta Manifiesto con tu <strong>e.firma</strong> directamente en su portal seguro — no se pueden enviar las llaves desde nuestra app. Hazlo ahora para dejarlo listo.
+                </p>
+                <a
+                  href="https://www.facturapi.io/manifiesto"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium bg-amber-600 text-white px-2.5 py-1.5 rounded hover:bg-amber-700"
+                >
+                  Firmar Carta Manifiesto en Facturapi
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <p className="text-[10px] text-amber-700 mt-1">Necesitarás tu .cer, .key y contraseña de la e.firma.</p>
+                <label className="flex items-start gap-2 mt-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={manifiestoAck}
+                    onChange={(e) => setManifiestoAck(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-xs">Confirmo que firmé (o firmaré) la Carta Manifiesto en Facturapi.</span>
+                </label>
               </div>
             </>
           )}

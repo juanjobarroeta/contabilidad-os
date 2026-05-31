@@ -149,6 +149,10 @@ model Company {
   // Facturapi integration
   facturapiOrgId    String?  // Facturapi organization ID for this company
   facturapiApiKey   String?  // live API key stored encrypted
+  // When the user acknowledged they must sign Facturapi's Carta Manifiesto
+  // (signed with e.firma on Facturapi's portal — we can't verify completion,
+  // only that they were prompted during onboarding).
+  facturapiManifiestoAckAt DateTime?
 
   // Logo / branding
   logoUrl           String?

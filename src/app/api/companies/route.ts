@@ -95,6 +95,7 @@ export async function POST(req: Request) {
     satBackfillYears,
     plan,
     csfObligaciones,
+    manifiestoAck,
     onboardingPackage,
   } = body as {
     rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string;
@@ -107,6 +108,7 @@ export async function POST(req: Request) {
     satBackfillYears?: number;
     plan?: string;
     csfObligaciones?: string[];
+    manifiestoAck?: boolean;
     onboardingPackage?: {
       imss?: {
         registroPatronal?: string | null;
@@ -227,6 +229,7 @@ export async function POST(req: Request) {
       plan: ["BASICO", "PROFESIONAL", "DESPACHO"].includes(plan ?? "")
         ? plan
         : undefined,
+      facturapiManifiestoAckAt: manifiestoAck ? new Date() : undefined,
       registroPatronal: registroPatronal ?? undefined,
       coeficienteUtilidad: coeficienteUtilidad ?? undefined,
       despachoId: despachoMembership?.despachoId ?? null,
