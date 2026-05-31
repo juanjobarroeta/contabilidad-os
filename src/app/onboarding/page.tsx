@@ -3,7 +3,8 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X } from "lucide-react";
+import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X, ListChecks, RefreshCw, CreditCard, ExternalLink } from "lucide-react";
+import { mapCsfObligacion, TIPO_DESC } from "@/lib/obligaciones";
 
 // ── Types for the multi-document onboarding package ───────────────────────
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
@@ -30,6 +31,7 @@ type ParsedDoc = {
       correo: string | null;
       telefono: string | null;
       actividadEconomica: string | null;
+      obligaciones: string[] | null;
       confidenceNotes: string | null;
     } | null;
     imss: {
@@ -89,9 +91,47 @@ const REGIMENES_FISCALES = [
 const STEPS = [
   { id: 0, label: "Asistente IA",      icon: Sparkles },
   { id: 1, label: "Datos fiscales",    icon: Building2 },
-  { id: 2, label: "Contacto",          icon: Building2 },
-  { id: 3, label: "CSD",               icon: FileKey2 },
-  { id: 4, label: "e.firma / FIEL",    icon: Shield },
+  { id: 2, label: "Revisión",          icon: ListChecks },
+  { id: 3, label: "Sincronización",    icon: RefreshCw },
+  { id: 4, label: "Plan",              icon: CreditCard },
+  { id: 5, label: "Contacto",          icon: Building2 },
+  { id: 6, label: "CSD",               icon: FileKey2 },
+  { id: 7, label: "e.firma / FIEL",    icon: Shield },
+];
+
+const LAST_STEP = 7;
+
+// 3-tier plan cards — UI/trial only for now (no billing). Prices MXN/mes.
+const PLANS = [
+  {
+    id: "BASICO",
+    name: "Básico",
+    price: "$499",
+    blurb: "1 empresa",
+    features: ["Sincronización SAT", "Consultas y reportes", "Declaraciones"],
+  },
+  {
+    id: "PROFESIONAL",
+    name: "Profesional",
+    price: "$999",
+    blurb: "Para tu negocio",
+    features: ["Todo lo de Básico", "WhatsApp + alertas", "Conciliación bancaria", "Complementos de pago"],
+    highlight: true,
+  },
+  {
+    id: "DESPACHO",
+    name: "Despacho",
+    price: "$399",
+    blurb: "por empresa · contadores",
+    features: ["Multiempresa", "Todo lo Profesional", "Gestión de clientes"],
+  },
+];
+
+// How far back to pull CFDIs on the first sync.
+const BACKFILL_OPTIONS = [
+  { years: 5, label: "Últimos 5 años", desc: "Máximo histórico permitido por el SAT. Recomendado." },
+  { years: 1, label: "Último año", desc: "Más rápido: solo los últimos 12 meses." },
+  { years: 0, label: "No sincronizar ahora", desc: "Empieza sin historial; puedes sincronizar después." },
 ];
 
 function fileToBase64(file: File): Promise<string> {
@@ -154,6 +194,15 @@ function OnboardingPageInner() {
   const [aiConfidenceNotes, setAiConfidenceNotes] = useState<string | null>(null);
   const [aiExtracted, setAiExtracted] = useState(false);
   const [detectedRegimenes, setDetectedRegimenes] = useState<{ code: string; label: string; since: string | null }[]>([]);
+  // Which detected régimenes the user includes for this company (codes). The
+  // primary is fiscal.regimenFiscal below.
+  const [selectedRegimenes, setSelectedRegimenes] = useState<string[]>([]);
+
+  // SAT historical backfill depth (years) + selected plan tier.
+  const [satBackfillYears, setSatBackfillYears] = useState(5);
+  const [plan, setPlan] = useState("PROFESIONAL");
+  // Acknowledgement that the user must sign Facturapi's Carta Manifiesto.
+  const [manifiestoAck, setManifiestoAck] = useState(false);
 
   // Form state
   const [fiscal, setFiscal] = useState({
@@ -240,7 +289,14 @@ function OnboardingPageInner() {
       telefono: c.telefono ?? "",
       actividadEconomica: c.actividadEconomica ?? "",
     });
-    setDetectedRegimenes(c.regimenes ?? []);
+    const regs = c.regimenes ?? [];
+    setDetectedRegimenes(regs);
+    // Include every detected régimen by default; the company has all of them.
+    setSelectedRegimenes(regs.map((r) => r.code));
+    // Default the primary: parser's pick if valid, else the first detected.
+    if (!c.regimenFiscal && regs.length > 0) {
+      setFiscal((p) => ({ ...p, regimenFiscal: regs[0].code }));
+    }
 
     // Aggregate all warnings across all docs
     const allWarnings = parsedDocs.flatMap((d) =>
@@ -268,6 +324,22 @@ function OnboardingPageInner() {
     setContacto((p) => ({ ...p, [name]: value }));
   }
 
+  // Toggle a detected régimen on/off for this company. Keep the primary valid:
+  // never let the user un-check the primary without picking a new one.
+  function toggleRegimen(code: string) {
+    setSelectedRegimenes((prev) => {
+      const has = prev.includes(code);
+      const next = has ? prev.filter((c) => c !== code) : [...prev, code];
+      if (has && fiscal.regimenFiscal === code) {
+        setFiscal((p) => ({ ...p, regimenFiscal: next[0] ?? "" }));
+      }
+      if (!has && !fiscal.regimenFiscal) {
+        setFiscal((p) => ({ ...p, regimenFiscal: code }));
+      }
+      return next;
+    });
+  }
+
   function validateStep1() {
     const rfcRegex = /^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
     if (!rfcRegex.test(fiscal.rfc)) {
@@ -275,7 +347,14 @@ function OnboardingPageInner() {
       return false;
     }
     if (!fiscal.razonSocial.trim()) { setError("La Razón Social es requerida"); return false; }
-    if (!fiscal.regimenFiscal) { setError("Selecciona un Régimen Fiscal"); return false; }
+    if (!fiscal.regimenFiscal) { setError("Selecciona un Régimen Fiscal principal"); return false; }
+    if (detectedRegimenes.length > 0) {
+      if (selectedRegimenes.length === 0) { setError("Incluye al menos un régimen"); return false; }
+      if (!selectedRegimenes.includes(fiscal.regimenFiscal)) {
+        setError("El régimen principal debe estar entre los incluidos");
+        return false;
+      }
+    }
     if (fiscal.codigoPostal.length !== 5) { setError("El código postal debe tener 5 dígitos"); return false; }
     return true;
   }
@@ -283,6 +362,10 @@ function OnboardingPageInner() {
   function nextStep() {
     setError("");
     if (step === 1 && !validateStep1()) return;
+    if (step === 6 && !manifiestoAck) {
+      setError("Confirma la Carta Manifiesto de Facturapi para continuar (o usa Omitir).");
+      return;
+    }
     setStep((s) => s + 1);
   }
 
@@ -300,6 +383,30 @@ function OnboardingPageInner() {
       if (csd.keyFile) csdKey = await fileToBase64(csd.keyFile);
       if (fiel.cerFile) fielCer = await fileToBase64(fiel.cerFile);
       if (fiel.keyFile) fielKey = await fileToBase64(fiel.keyFile);
+
+      // Earliest régimen start date from the CSF — used server-side as the
+      // lower bound for the historical SAT backfill (we never ask SAT for
+      // CFDIs before the company existed).
+      const csfDoc = parsedDocs.find((d) => d.type === "CSF" && d.extracted.csf);
+      const regimenSinces = (csfDoc?.extracted.csf?.regimenes ?? [])
+        .map((r) => r.since)
+        .filter((s): s is string => !!s && !isNaN(new Date(s).getTime()))
+        .sort();
+      const fechaInicioRegimen = regimenSinces[0] ?? undefined;
+
+      // Full régimen list detected on the CSF — persisted as CompanyRegimen rows
+      // alongside the chosen primary (fiscal.regimenFiscal).
+      // Only the régimenes the user kept checked (fall back to detected list if
+      // selection state is empty, e.g. manual entry).
+      const detected = (csfDoc?.extracted.csf?.regimenes ?? []).filter((r) => r.code);
+      const regimenes =
+        selectedRegimenes.length > 0
+          ? detected.filter((r) => selectedRegimenes.includes(r.code))
+          : detected;
+
+      // The CSF's explicit obligaciones — authoritative source for which
+      // obligations the SAT registered for this taxpayer.
+      const csfObligaciones = csfDoc?.extracted.csf?.obligaciones ?? [];
 
       // Build onboardingPackage from parsed docs (IMSS, anual, mensuales)
       const imssDoc = parsedDocs.find((d) => d.type === "TARJETA_IMSS");
@@ -325,6 +432,12 @@ function OnboardingPageInner() {
           fielCer,
           fielKey,
           fielPassword: fiel.password || undefined,
+          fechaInicioRegimen,
+          regimenes,
+          csfObligaciones,
+          satBackfillYears,
+          plan,
+          manifiestoAck,
           onboardingPackage,
         }),
       });
@@ -342,6 +455,32 @@ function OnboardingPageInner() {
       setLoading(false);
     }
   }
+
+  // ── Derived data for the Revisión step ──────────────────────────────────────
+  const csfObligaciones =
+    parsedDocs.find((d) => d.type === "CSF")?.extracted.csf?.obligaciones ?? [];
+  // Normalize the CSF's obligation strings to the tipos we actually generate
+  // (IVA mensual, DIOT, ISR provisional/anual…), de-duped — same logic the
+  // server uses to seed CompanyObligation, so the user confirms the real set.
+  const mappedObligaciones = [
+    ...new Map(
+      csfObligaciones
+        .map((descripcion) => {
+          const tipo = mapCsfObligacion(descripcion);
+          return tipo ? { tipo, label: TIPO_DESC[tipo] ?? tipo, descripcion } : null;
+        })
+        .filter((x): x is { tipo: string; label: string; descripcion: string } => !!x)
+        .map((x) => [x.tipo, x] as const)
+    ).values(),
+  ];
+  const anualDocReview =
+    parsedDocs.find((d) => d.type === "ACUSE_ANUAL")?.extracted.acuseAnual ?? null;
+  const mensualesReview = parsedDocs
+    .filter((d) => d.type === "ACUSE_MENSUAL")
+    .map((d) => d.extracted.acuseMensual)
+    .filter((m): m is NonNullable<typeof m> => !!m);
+  const money = (n: number | null | undefined) =>
+    n == null ? "—" : n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -366,28 +505,36 @@ function OnboardingPageInner() {
               : "Ingresa los datos fiscales del SAT"}
           </p>
 
-          {/* Step indicators */}
-          <div className="flex items-center gap-1 mt-5">
-            {STEPS.map((s, i) => (
-              <div key={s.id} className="flex items-center gap-1 flex-1">
-                <div className="flex flex-col items-center flex-1">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    step > s.id ? "bg-green-500 text-white" :
-                    step === s.id ? "bg-primary text-primary-foreground" :
-                    "bg-gray-100 text-muted-foreground"
-                  }`}>
-                    {step > s.id ? <CheckCircle2 className="h-4 w-4" /> : s.id}
+          {/* Step indicators — icon dots + connectors, with a single active-step caption */}
+          <div className="flex items-center mt-5">
+            {STEPS.map((s, i) => {
+              const Icon = s.icon;
+              const done = step > s.id;
+              const active = step === s.id;
+              return (
+                <div key={s.id} className="flex items-center flex-1 last:flex-none">
+                  <div
+                    className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                      done
+                        ? "bg-green-500 text-white"
+                        : active
+                        ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
+                        : "bg-gray-100 text-muted-foreground"
+                    }`}
+                  >
+                    {done ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                   </div>
-                  <span className={`text-xs mt-1 text-center leading-tight ${step === s.id ? "text-primary font-medium" : "text-muted-foreground"}`}>
-                    {s.label}
-                  </span>
+                  {i < STEPS.length - 1 && (
+                    <div className={`h-px flex-1 mx-1.5 ${done ? "bg-green-400" : "bg-gray-200"}`} />
+                  )}
                 </div>
-                {i < STEPS.length - 1 && (
-                  <div className={`h-px flex-1 mb-4 ${step > s.id ? "bg-green-400" : "bg-gray-200"}`} />
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
+          <p className="text-xs text-center mt-3">
+            <span className="text-muted-foreground">Paso {step + 1} de {STEPS.length} · </span>
+            <span className="font-medium text-primary">{STEPS[step]?.label}</span>
+          </p>
         </div>
 
         <div className="px-8 py-6 space-y-5">
@@ -527,38 +674,51 @@ function OnboardingPageInner() {
             </div>
           )}
 
-          {/* Multi-régimen picker — visible in step 1 if CSF had more than one */}
-          {step === 1 && detectedRegimenes.length > 1 && (
+          {/* Régimen confirmation — confirm ALL detected régimenes, mark the primary */}
+          {step === 1 && detectedRegimenes.length >= 1 && (
             <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm">
-              <p className="font-semibold text-blue-900 text-xs mb-2">
-                Se detectaron {detectedRegimenes.length} regímenes en tu CSF. Elige el principal para esta empresa:
+              <p className="font-semibold text-blue-900 text-xs mb-1">
+                Detectamos {detectedRegimenes.length} {detectedRegimenes.length === 1 ? "régimen" : "regímenes"} en tu CSF
+              </p>
+              <p className="text-[11px] text-blue-800/80 mb-2">
+                Confirma cuáles aplican y marca el principal (el que usas para facturar). Generaremos las obligaciones de todos los incluidos.
               </p>
               <div className="space-y-1.5">
-                {detectedRegimenes.map((r) => (
-                  <label
-                    key={r.code}
-                    className={`flex items-start gap-2 px-2.5 py-2 rounded cursor-pointer border ${
-                      fiscal.regimenFiscal === r.code
-                        ? "bg-white border-blue-400 ring-1 ring-blue-400"
-                        : "bg-white/60 border-transparent hover:bg-white"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="regimenPick"
-                      checked={fiscal.regimenFiscal === r.code}
-                      onChange={() => setFiscal((p) => ({ ...p, regimenFiscal: r.code }))}
-                      className="mt-0.5"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-mono font-semibold">{r.code}</p>
-                      <p className="text-[11px] text-muted-foreground">{r.label}</p>
-                      {r.since && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Desde {r.since}</p>
-                      )}
+                {detectedRegimenes.map((r) => {
+                  const included = selectedRegimenes.includes(r.code);
+                  const isPrimary = fiscal.regimenFiscal === r.code;
+                  return (
+                    <div
+                      key={r.code}
+                      className={`flex items-center gap-2 px-2.5 py-2 rounded border ${
+                        included ? "bg-white border-blue-300" : "bg-white/40 border-transparent opacity-60"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={included}
+                        onChange={() => toggleRegimen(r.code)}
+                        className="shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs"><span className="font-mono font-semibold">{r.code}</span> · {r.label}</p>
+                        {r.since && <p className="text-[10px] text-muted-foreground">Desde {r.since}</p>}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!included}
+                        onClick={() => setFiscal((p) => ({ ...p, regimenFiscal: r.code }))}
+                        className={`text-[10px] px-2 py-1 rounded-full border shrink-0 transition-colors ${
+                          isPrimary
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-blue-700 border-blue-300 hover:bg-blue-100 disabled:opacity-40"
+                        }`}
+                      >
+                        {isPrimary ? "Principal ✓" : "Hacer principal"}
+                      </button>
                     </div>
-                  </label>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -584,18 +744,20 @@ function OnboardingPageInner() {
                 />
                 <p className="text-xs text-muted-foreground mt-1">Tal como aparece en la Constancia de Situación Fiscal</p>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-red-500">*</span></label>
-                <select
-                  name="regimenFiscal" value={fiscal.regimenFiscal} onChange={handleFiscalChange} required
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                >
-                  <option value="">Selecciona un régimen...</option>
-                  {REGIMENES_FISCALES.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
+              {detectedRegimenes.length === 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-red-500">*</span></label>
+                  <select
+                    name="regimenFiscal" value={fiscal.regimenFiscal} onChange={handleFiscalChange} required
+                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                  >
+                    <option value="">Selecciona un régimen...</option>
+                    {REGIMENES_FISCALES.map((r) => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Código Postal <span className="text-red-500">*</span></label>
@@ -617,8 +779,173 @@ function OnboardingPageInner() {
             </>
           )}
 
-          {/* ── STEP 2: Contacto ── */}
+          {/* ── STEP 2: Revisión (obligaciones + declaraciones) ── */}
           {step === 2 && (
+            <>
+              <div className="bg-slate-50 border border-slate-200 rounded-md px-4 py-3 text-sm text-slate-700">
+                Revisa lo que detectamos en tus documentos. Confirmamos los regímenes, las obligaciones de tu CSF y los datos de tus declaraciones.
+              </div>
+
+              {/* Régimenes incluidos */}
+              <div>
+                <p className="text-sm font-semibold mb-2">Regímenes</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedRegimenes.length === 0 && (
+                    <span className="text-xs text-muted-foreground">{fiscal.regimenFiscal || "—"}</span>
+                  )}
+                  {selectedRegimenes.map((code) => {
+                    const r = detectedRegimenes.find((x) => x.code === code);
+                    return (
+                      <span key={code} className={`text-xs px-2 py-1 rounded-full border ${
+                        fiscal.regimenFiscal === code ? "bg-blue-600 text-white border-blue-600" : "bg-white border-slate-300"
+                      }`}>
+                        {code}{r ? ` · ${r.label}` : ""}{fiscal.regimenFiscal === code ? " (principal)" : ""}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Obligaciones — normalized to the tipos we'll actually track */}
+              <div>
+                <p className="text-sm font-semibold mb-2">Obligaciones fiscales</p>
+                {mappedObligaciones.length > 0 ? (
+                  <>
+                    <ul className="space-y-1.5">
+                      {mappedObligaciones.map((o) => (
+                        <li key={o.tipo} className="flex items-start gap-2 text-xs">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0 mt-0.5" />
+                          <span>
+                            <span className="font-medium">{o.label}</span>
+                            <span className="text-muted-foreground"> — {o.descripcion}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[10px] text-muted-foreground mt-2">
+                      Generaremos el calendario de estas obligaciones con sus fechas de vencimiento.
+                    </p>
+                  </>
+                ) : csfObligaciones.length > 0 ? (
+                  <ul className="space-y-1">
+                    {csfObligaciones.map((o, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0 mt-0.5" />
+                        <span>{o}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No se detectaron obligaciones en el CSF. Se generarán a partir de tus regímenes.</p>
+                )}
+              </div>
+
+              {/* Declaraciones (acuses) */}
+              {(anualDocReview || mensualesReview.length > 0) && (
+                <div>
+                  <p className="text-sm font-semibold mb-2">Declaraciones cargadas</p>
+                  {anualDocReview && (
+                    <div className="border border-slate-200 rounded-md p-3 mb-2 text-xs space-y-1">
+                      <p className="font-medium">Declaración anual {anualDocReview.ejercicio ?? ""}</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-muted-foreground">
+                        <span>Coeficiente de utilidad:</span><span className="text-foreground">{anualDocReview.coeficienteUtilidad ?? "—"}</span>
+                        <span>Utilidad fiscal:</span><span className="text-foreground">{money(anualDocReview.utilidadFiscal)}</span>
+                        <span>ISR a pagar:</span><span className="text-foreground">{money(anualDocReview.isrAPagar)}</span>
+                      </div>
+                    </div>
+                  )}
+                  {mensualesReview.map((m, i) => (
+                    <div key={i} className="border border-slate-200 rounded-md p-3 mb-2 text-xs space-y-1">
+                      <p className="font-medium">{m.tipoImpuesto ?? "Pago"} · {m.periodoMes ?? "?"}/{m.periodoAnio ?? "?"}</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-muted-foreground">
+                        <span>IVA a pagar:</span><span className="text-foreground">{money(m.ivaAPagar)}</span>
+                        <span>ISR a pagar:</span><span className="text-foreground">{money(m.isrAPagar)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── STEP 3: Sincronización SAT ── */}
+          {step === 3 && (
+            <>
+              <div className="bg-slate-50 border border-slate-200 rounded-md px-4 py-3 text-sm text-slate-700">
+                ¿Qué tan atrás traemos tus CFDIs del SAT? Esto define la sincronización inicial; siempre se respeta tu fecha de inicio de operaciones.
+              </div>
+              <div className="space-y-2">
+                {BACKFILL_OPTIONS.map((o) => (
+                  <label
+                    key={o.years}
+                    className={`flex items-start gap-3 px-3 py-3 rounded-md cursor-pointer border ${
+                      satBackfillYears === o.years ? "bg-blue-50 border-blue-400 ring-1 ring-blue-400" : "border-border hover:bg-accent"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="backfill"
+                      checked={satBackfillYears === o.years}
+                      onChange={() => setSatBackfillYears(o.years)}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{o.label}</p>
+                      <p className="text-xs text-muted-foreground">{o.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ── STEP 4: Plan ── */}
+          {step === 4 && (
+            <>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-md px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 shrink-0" />
+                Elige tu plan. Empiezas con una <strong>prueba gratis</strong> — no se cobra nada todavía.
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {PLANS.map((p) => {
+                  const selected = plan === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPlan(p.id)}
+                      className={`text-left rounded-lg border p-3 transition-colors relative ${
+                        selected ? "border-blue-500 ring-2 ring-blue-400 bg-blue-50/50" : "border-border hover:bg-accent"
+                      }`}
+                    >
+                      {p.highlight && (
+                        <span className="absolute -top-2 right-2 text-[9px] font-semibold bg-blue-600 text-white px-1.5 py-0.5 rounded-full">
+                          POPULAR
+                        </span>
+                      )}
+                      <p className="text-sm font-bold">{p.name}</p>
+                      <p className="text-lg font-bold">{p.price}<span className="text-xs font-normal text-muted-foreground"> MXN/mes</span></p>
+                      <p className="text-[11px] text-muted-foreground mb-2">{p.blurb}</p>
+                      <ul className="space-y-0.5">
+                        {p.features.map((f, i) => (
+                          <li key={i} className="flex items-start gap-1 text-[11px]">
+                            <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0 mt-0.5" />
+                            <span>{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-muted-foreground text-center">
+                Sin tarjeta por ahora. Podrás cambiar de plan cuando activemos los pagos.
+              </p>
+            </>
+          )}
+
+          {/* ── STEP 5: Contacto ── */}
+          {step === 5 && (
             <>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Nombre Comercial <span className="text-muted-foreground font-normal text-xs">(opcional)</span></label>
@@ -657,8 +984,8 @@ function OnboardingPageInner() {
             </>
           )}
 
-          {/* ── STEP 3: CSD ── */}
-          {step === 3 && (
+          {/* ── STEP 6: CSD ── */}
+          {step === 6 && (
             <>
               <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
                 <p className="font-semibold mb-1">¿Qué es el CSD?</p>
@@ -703,11 +1030,38 @@ function OnboardingPageInner() {
                   </button>
                 </div>
               </div>
+
+              {/* Carta Manifiesto de Facturapi — forced acknowledgement */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+                <p className="font-semibold mb-1">✍️ Carta Manifiesto (obligatoria para timbrar)</p>
+                <p className="text-xs">
+                  Facturapi requiere que firmes la Carta Manifiesto con tu <strong>e.firma</strong> directamente en su portal seguro — no se pueden enviar las llaves desde nuestra app. Hazlo ahora para dejarlo listo.
+                </p>
+                <a
+                  href="https://www.facturapi.io/manifiesto"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium bg-amber-600 text-white px-2.5 py-1.5 rounded hover:bg-amber-700"
+                >
+                  Firmar Carta Manifiesto en Facturapi
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <p className="text-[10px] text-amber-700 mt-1">Necesitarás tu .cer, .key y contraseña de la e.firma.</p>
+                <label className="flex items-start gap-2 mt-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={manifiestoAck}
+                    onChange={(e) => setManifiestoAck(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-xs">Confirmo que firmé (o firmaré) la Carta Manifiesto en Facturapi.</span>
+                </label>
+              </div>
             </>
           )}
 
-          {/* ── STEP 4: e.firma / FIEL ── */}
-          {step === 4 && (
+          {/* ── STEP 7: e.firma / FIEL ── */}
+          {step === 7 && (
             <>
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
                 <p className="font-semibold mb-1">¿Qué es la e.firma / FIEL?</p>
@@ -774,7 +1128,7 @@ function OnboardingPageInner() {
               </button>
             )}
 
-            {step === 0 ? null : step < 4 ? (
+            {step === 0 ? null : step < LAST_STEP ? (
               <button
                 type="button"
                 onClick={nextStep}
@@ -794,11 +1148,11 @@ function OnboardingPageInner() {
               </button>
             )}
 
-            {/* Skip CSD/FIEL steps */}
-            {(step === 3 || step === 4) && (
+            {/* Skip CSD/FIEL steps (the optional credential steps) */}
+            {(step === 6 || step === 7) && (
               <button
                 type="button"
-                onClick={() => step === 4 ? handleSubmit() : setStep((s) => s + 1)}
+                onClick={() => step === LAST_STEP ? handleSubmit() : setStep((s) => s + 1)}
                 disabled={loading}
                 className="px-4 py-2.5 rounded-md text-sm text-muted-foreground border border-border hover:bg-accent transition-colors"
               >

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { encryptSecret } from "@/lib/crypto";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -59,15 +60,16 @@ export async function PATCH(req: Request, { params }: Params) {
   const { apiKey, orgId } = await req.json();
   if (!apiKey) return NextResponse.json({ error: "apiKey requerido" }, { status: 400 });
 
-  const updated = await prisma.company.update({
+  await prisma.company.update({
     where: { id: companyId },
     data: {
-      facturapiApiKey: apiKey,
+      facturapiApiKey: encryptSecret(apiKey), // encrypted at rest
       ...(orgId ? { facturapiOrgId: orgId } : {}),
     },
   });
 
-  return NextResponse.json({ ok: true, company: updated });
+  // Never echo the key back in the response.
+  return NextResponse.json({ ok: true });
 }
 
 // DELETE /api/companies/[id]/facturapi

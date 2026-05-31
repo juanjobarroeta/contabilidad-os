@@ -1,5 +1,6 @@
 import { Fiel } from "@nodecfdi/sat-ws-descarga-masiva";
 import { prisma } from "./prisma";
+import { decryptSecret } from "./crypto";
 
 export async function getFielForCompany(companyId: string): Promise<Fiel> {
   const company = await prisma.company.findUnique({
@@ -13,13 +14,14 @@ export async function getFielForCompany(companyId: string): Promise<Fiel> {
     );
   }
 
-  const cerBuffer = Buffer.from(company.fielCer, "base64");
-  const keyBuffer = Buffer.from(company.fielKey, "base64");
+  // Stored encrypted at rest — decrypt before use (legacy plaintext passes through).
+  const cerBuffer = Buffer.from(decryptSecret(company.fielCer), "base64");
+  const keyBuffer = Buffer.from(decryptSecret(company.fielKey), "base64");
 
   const fiel = Fiel.create(
     cerBuffer.toString("binary"),
     keyBuffer.toString("binary"),
-    company.fielPassword
+    decryptSecret(company.fielPassword)
   );
 
   if (!fiel.isValid()) {

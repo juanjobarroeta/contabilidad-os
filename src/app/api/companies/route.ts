@@ -5,6 +5,8 @@ import { requireActiveSubscription } from "@/lib/subscription";
 import { AuthzError } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
+import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
+import { encryptNullable } from "@/lib/crypto";
 
 export async function GET() {
   const session = await auth();
@@ -89,6 +91,12 @@ export async function POST(req: Request) {
     nombreComercial, email, telefono, actividadEconomica,
     csdCer, csdKey, csdPassword,
     fielCer, fielKey, fielPassword,
+    fechaInicioRegimen,
+    regimenes,
+    satBackfillYears,
+    plan,
+    csfObligaciones,
+    manifiestoAck,
     onboardingPackage,
   } = body as {
     rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string;
@@ -96,6 +104,12 @@ export async function POST(req: Request) {
     telefono?: string; actividadEconomica?: string;
     csdCer?: string; csdKey?: string; csdPassword?: string;
     fielCer?: string; fielKey?: string; fielPassword?: string;
+    fechaInicioRegimen?: string | null;
+    regimenes?: Array<{ code: string; label?: string | null; since?: string | null }>;
+    satBackfillYears?: number;
+    plan?: string;
+    csfObligaciones?: string[];
+    manifiestoAck?: boolean;
     onboardingPackage?: {
       imss?: {
         registroPatronal?: string | null;
@@ -151,6 +165,47 @@ export async function POST(req: Request) {
   const registroPatronal = onboardingPackage?.imss?.registroPatronal ?? null;
   const coeficienteUtilidad = onboardingPackage?.acuseAnual?.coeficienteUtilidad ?? null;
 
+  // fechaInicioRegimen (from the Constancia de Situación Fiscal) becomes the
+  // lower bound for the historical SAT backfill — we never ask SAT for CFDIs
+  // before this date. Parse defensively: accept a valid ISO date or skip.
+  let fechaInicioOperaciones: Date | null = null;
+  if (fechaInicioRegimen) {
+    const parsed = new Date(fechaInicioRegimen);
+    if (!isNaN(parsed.getTime())) fechaInicioOperaciones = parsed;
+  }
+
+  // Build the full régimen list. `regimenFiscal` is the chosen primary; the
+  // `regimenes` array (from onboarding) holds every régimen on the CSF. Always
+  // ensure the primary is present and flagged, de-dupe by code, and fall back
+  // to a single-row list for older clients that don't send the array.
+  const parseSince = (s?: string | null): Date | null => {
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const regimenByCode = new Map<
+    string,
+    { code: string; label: string; since: Date | null; isPrimary: boolean }
+  >();
+  for (const r of regimenes ?? []) {
+    if (!r?.code || regimenByCode.has(r.code)) continue;
+    regimenByCode.set(r.code, {
+      code: r.code,
+      label: r.label || r.code,
+      since: parseSince(r.since),
+      isPrimary: r.code === regimenFiscal,
+    });
+  }
+  if (!regimenByCode.has(regimenFiscal)) {
+    regimenByCode.set(regimenFiscal, {
+      code: regimenFiscal,
+      label: regimenFiscal,
+      since: fechaInicioOperaciones,
+      isPrimary: true,
+    });
+  }
+  const regimenCreate = [...regimenByCode.values()];
+
   const company = await prisma.company.create({
     data: {
       rfc: rfc.toUpperCase(),
@@ -162,12 +217,20 @@ export async function POST(req: Request) {
       email,
       telefono,
       actividadEconomica,
-      csdCer,
-      csdKey,
-      csdPassword,
-      fielCer,
-      fielKey,
-      fielPassword,
+      csdCer: encryptNullable(csdCer),
+      csdKey: encryptNullable(csdKey),
+      csdPassword: encryptNullable(csdPassword),
+      fielCer: encryptNullable(fielCer),
+      fielKey: encryptNullable(fielKey),
+      fielPassword: encryptNullable(fielPassword),
+      fechaInicioOperaciones: fechaInicioOperaciones ?? undefined,
+      satBackfillYears: [0, 1, 5].includes(satBackfillYears as number)
+        ? (satBackfillYears as number)
+        : undefined,
+      plan: ["BASICO", "PROFESIONAL", "DESPACHO"].includes(plan ?? "")
+        ? plan
+        : undefined,
+      facturapiManifiestoAckAt: manifiestoAck ? new Date() : undefined,
       registroPatronal: registroPatronal ?? undefined,
       coeficienteUtilidad: coeficienteUtilidad ?? undefined,
       despachoId: despachoMembership?.despachoId ?? null,
@@ -183,8 +246,25 @@ export async function POST(req: Request) {
       modules: {
         create: { modulo: "CONTABILIDAD" },
       },
+      regimenes: {
+        create: regimenCreate,
+      },
     },
   });
+
+  // Auto-seed recurring fiscal obligations now (rather than lazily on first
+  // Cumplimiento page load). Uses the CSF's explicit obligaciones when present
+  // (authoritative), else derives from the full set of régimen codes.
+  try {
+    await seedCompanyObligaciones(
+      company.id,
+      regimenCreate.map((r) => r.code),
+      { csfObligaciones: Array.isArray(csfObligaciones) ? csfObligaciones : undefined }
+    );
+  } catch (e) {
+    // Non-fatal: obligations also seed lazily on the Cumplimiento page.
+    console.error("[companies] obligation seed failed", e);
+  }
 
   // Persist historical monthly declarations parsed from acuses
   // These are flagged isHistorical=true so they're treated as baseline data

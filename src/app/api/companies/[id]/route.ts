@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { encryptSecret } from "@/lib/crypto";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -78,12 +79,13 @@ export async function PATCH(req: Request, { params }: Params) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: Record<string, any> = {};
-  if (fielCer) data.fielCer = fielCer;
-  if (fielKey) data.fielKey = fielKey;
-  if (fielPassword) data.fielPassword = fielPassword;
-  if (csdCer) data.csdCer = csdCer;
-  if (csdKey) data.csdKey = csdKey;
-  if (csdPassword) data.csdPassword = csdPassword;
+  // Encrypt credential material at rest (AES-256-GCM via lib/crypto).
+  if (fielCer) data.fielCer = encryptSecret(fielCer);
+  if (fielKey) data.fielKey = encryptSecret(fielKey);
+  if (fielPassword) data.fielPassword = encryptSecret(fielPassword);
+  if (csdCer) data.csdCer = encryptSecret(csdCer);
+  if (csdKey) data.csdKey = encryptSecret(csdKey);
+  if (csdPassword) data.csdPassword = encryptSecret(csdPassword);
   if (registroPatronal !== undefined) {
     // Accept empty string as "clear it"
     data.registroPatronal = registroPatronal?.trim() || null;

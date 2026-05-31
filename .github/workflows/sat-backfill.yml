@@ -1,0 +1,30 @@
+name: SAT backfill (hourly)
+
+# Drives the throttled 5-year historical CFDI backfill. Resumes each run and
+# auto-stops per company once satBackfillCompletedAt is set, so it safely
+# no-ops once history is filled.
+#
+# Requires two repo secrets (Settings → Secrets and variables → Actions):
+#   CRON_SECRET  — same value as the app's CRON_SECRET env var
+#   STAGING_URL  — e.g. https://contabilidad-os-staging.up.railway.app
+#
+# NOTE: GitHub only runs `schedule:` triggers from the DEFAULT branch (main).
+# Until this is merged to main it stays dormant; use "Run workflow" or the
+# manual curl to exercise it in the meantime.
+
+on:
+  schedule:
+    - cron: "0 * * * *" # top of every hour (UTC)
+  workflow_dispatch: {} # manual "Run workflow" button
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger SAT backfill
+        run: |
+          curl -fsS -X POST "${STAGING_URL}/api/cron/sat-backfill" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

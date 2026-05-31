@@ -38,6 +38,8 @@ model User {
   // Per-company CompanyMember rows are still used for one-off access grants
   // to users outside the owning despacho.
   despachoMemberships DespachoMember[]
+  // Verified WhatsApp numbers bound to this user (W0 channel).
+  whatsappLinks       WhatsappLink[]
 }
 
 enum SubscriptionStatus {
@@ -110,21 +112,51 @@ model Company {
   telefono          String?
   actividadEconomica String? // SCIAN code description
 
-  // CSD — Certificado de Sello Digital (for CFDI stamping)
-  csdCer            String?  @db.Text  // base64 encoded .cer file
-  csdKey            String?  @db.Text  // base64 encoded .key file
+  // CSD — Certificado de Sello Digital (for CFDI stamping).
+  // All three are AES-256-GCM encrypted at rest via lib/crypto (enc:v1:… envelope).
+  csdCer            String?  @db.Text  // encrypted(base64 .cer)
+  csdKey            String?  @db.Text  // encrypted(base64 .key — private key!)
   csdPassword       String?            // encrypted password
   csdVigencia       DateTime?          // expiry date
 
-  // e.firma / FIEL (for SAT declarations)
-  fielCer           String?  @db.Text  // base64 encoded .cer file
-  fielKey           String?  @db.Text  // base64 encoded .key file
+  // e.firma / FIEL (for SAT declarations). Encrypted at rest (see above).
+  fielCer           String?  @db.Text  // encrypted(base64 .cer)
+  fielKey           String?  @db.Text  // encrypted(base64 .key — private key!)
   fielPassword      String?            // encrypted password
   fielVigencia      DateTime?          // expiry date
+
+  // Automatic SAT sync (cron-driven Descarga Masiva). When enabled, the
+  // background job periodically pulls emitidos/recibidos CFDIs without the
+  // user having to click "Sincronizar". Defaults on so every company with a
+  // valid FIEL is covered; can be turned off per-company.
+  autoSyncEnabled   Boolean   @default(true)
+  lastAutoSyncAt    DateTime?           // last time the cron touched this company
+
+  // How far back to pull CFDIs on the initial historical backfill, chosen at
+  // onboarding. 5 = SAT legal maximum, 1 = last year, 0 = no backfill. Still
+  // clamped by fechaInicioOperaciones so we never ask before the RFC existed.
+  satBackfillYears  Int       @default(5)
+  // Set once the historical backfill has fully completed (all in-range periods
+  // imported). Lets the throttled backfill cron skip finished companies.
+  satBackfillCompletedAt DateTime?
+
+  // Selected subscription plan (UI/trial only for now — no billing yet):
+  // "BASICO" | "PROFESIONAL" | "DESPACHO".
+  plan              String?
+
+  // Earliest date this RFC could have CFDIs — captured from the Constancia de
+  // Situación Fiscal (fechaInicioRegimen) at onboarding. Used to clamp the
+  // historical backfill so we don't ask SAT for periods before the company
+  // existed (which would waste the per-RFC request quota).
+  fechaInicioOperaciones DateTime?
 
   // Facturapi integration
   facturapiOrgId    String?  // Facturapi organization ID for this company
   facturapiApiKey   String?  // live API key stored encrypted
+  // When the user acknowledged they must sign Facturapi's Carta Manifiesto
+  // (signed with e.firma on Facturapi's portal — we can't verify completion,
+  // only that they were prompted during onboarding).
+  facturapiManifiestoAckAt DateTime?
 
   // Logo / branding
   logoUrl           String?
@@ -180,6 +212,16 @@ model Company {
 
   // Despacho per-company scoping junction
   despachoMemberScopes DespachoMemberCompany[]
+
+  // WhatsApp channel (W0)
+  whatsappLinks         WhatsappLink[]         @relation("WhatsappActiveCompany")
+  whatsappConversations WhatsappConversation[]
+
+  // All SAT régimenes this taxpayer is registered under. `regimenFiscal` above
+  // remains the single "primary" (operative) régimen used by most flows; this
+  // list captures the rest (common for personas físicas) so obligation and
+  // annual-declaration logic can reason across all of them.
+  regimenes             CompanyRegimen[]
 }
 
 model CompanyMember {
@@ -2005,4 +2047,97 @@ enum ReembolsoEstado {
   REVISADO    // Katia validó líneas, listo para pagar
   REEMBOLSADO // Juan ya SPEIó a Rosy, BankTransaction creada
   RECHAZADO   // inconsistencias / duplicados / no justificado
+}
+
+// ─── WhatsApp channel (W0) ─────────────────────────────────────────────────────
+
+// A verified binding between a WhatsApp phone number and an app user.
+//
+// SECURITY: caller ID alone is NEVER trusted. A link is only honored once
+// `verifiedAt` is set via the in-app 6-digit code flow. Until then the row is
+// inert (resolvePhone ignores it). One user may link several numbers; a number
+// maps to exactly one user (a phone is an identity, not a shared mailbox).
+model WhatsappLink {
+  id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  phoneE164     String    @unique          // normalized, e.g. "+5215512345678"
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Verification (code-based, started in-app). Unverified rows are inert.
+  verifiedAt    DateTime?
+  codeHash      String?                     // sha256 of the 6-digit code (never store the code)
+  codeExpiresAt DateTime?
+  attempts      Int       @default(0)       // failed verify attempts → lockout
+
+  // Which company this number is currently "talking about". Set after the user
+  // disambiguates; switchable mid-conversation. Null = ask again on next inbound.
+  activeCompanyId String?
+  activeCompany   Company? @relation("WhatsappActiveCompany", fields: [activeCompanyId], references: [id], onDelete: SetNull)
+
+  conversations WhatsappConversation[]
+
+  @@index([userId])
+}
+
+// One thread per (link, company). Holds rolling history + a reserved slot for a
+// pending write action (unused in W0; for the W4 confirmation flow).
+model WhatsappConversation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  linkId    String
+  link      WhatsappLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Reserved for Pillar-F writes: a serialized action awaiting in-app/code
+  // confirmation. Always null in W0 (read-only).
+  pendingAction Json?
+
+  messages  WhatsappMessage[]
+
+  @@unique([linkId, companyId])
+  @@index([companyId])
+}
+
+enum WhatsappRole {
+  USER
+  ASSISTANT
+}
+
+// One SAT régimen a company/PF is registered under. The `isPrimary` row mirrors
+// Company.regimenFiscal (kept in sync at create time). A taxpayer often has
+// several (e.g. Sueldos y Salarios + Arrendamiento + Dividendos).
+model CompanyRegimen {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  code      String    // 3-digit SAT régimen code, e.g. "606"
+  label     String    // human label, e.g. "Arrendamiento"
+  since     DateTime? // "Fecha Inicio" from the CSF régimenes table
+  isPrimary Boolean  @default(false)
+
+  @@unique([companyId, code])
+  @@index([companyId])
+}
+
+model WhatsappMessage {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+
+  conversationId String
+  conversation   WhatsappConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role           WhatsappRole
+  body           String   @db.Text
+  providerSid    String?  // Twilio message SID — inbound dedup / outbound audit
+
+  @@index([conversationId, createdAt])
 }

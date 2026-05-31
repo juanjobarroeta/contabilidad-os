@@ -1,0 +1,575 @@
+import { prisma } from "./prisma";
+import { getFielForCompany, parseCfdiXml } from "./sat-fiel";
+import {
+  HttpsWebClient,
+  FielRequestBuilder,
+  Service,
+  ServiceEndpoints,
+  QueryParameters,
+  DateTimePeriod,
+  DateTime,
+  DownloadType,
+  RequestType,
+  DocumentStatus,
+  CfdiPackageReader,
+} from "@nodecfdi/sat-ws-descarga-masiva";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared, session-free SAT Descarga Masiva logic.
+//
+// These functions contain the actual SAT request/verify/import work with NO
+// dependency on an HTTP request or a logged-in user. They are called from:
+//   1. The interactive HTTP routes (/api/sat/sync, /api/sat/sync/verify) which
+//      handle auth + membership and then delegate here.
+//   2. The background cron job (/api/cron/sat-sync) which iterates over all
+//      eligible companies unattended.
+//
+// Keeping the logic here (instead of inside the route handlers) is what makes
+// automatic, scheduled syncing possible without duplicating the SAT plumbing.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Reuse-window: how recent must an existing request be before we trust it
+// instead of creating a new one. SAT keeps requests alive ~72h; we use 24h
+// to be safe and to retry if something got stuck.
+export const REUSE_WINDOW_HOURS = 24;
+const REUSABLE_STATUSES = ["PENDING", "ACCEPTED", "IN_PROGRESS", "FINISHED"] as const;
+type ReusableStatus = "PENDING" | "ACCEPTED" | "IN_PROGRESS" | "FINISHED";
+
+function buildService(fiel: Awaited<ReturnType<typeof getFielForCompany>>): Service {
+  return new Service(
+    new FielRequestBuilder(fiel),
+    new HttpsWebClient(),
+    undefined,
+    ServiceEndpoints.cfdi()
+  );
+}
+
+export function formatSatError(side: string, code: number, msg: string): string {
+  // 5002 = se agotaron las solicitudes de por vida (per-RFC quota hit)
+  if (code === 5002) {
+    return `${side}: SAT alcanzó su límite de solicitudes simultáneas (código 5002). Espera 1-3 horas y vuelve a intentar — las solicitudes pendientes se procesarán automáticamente.`;
+  }
+  // 5004 = no hay CFDIs en el rango — not really an error
+  if (code === 5004) {
+    return `${side}: sin CFDIs en este período (código 5004)`;
+  }
+  return `${side} rechazado por SAT: ${msg} (código ${code})`;
+}
+
+// ── Submit ──────────────────────────────────────────────────────────────────
+
+export type SubmitSatSyncResult =
+  | {
+      ok: true;
+      emitidosRequestId: string | null;
+      recibidosRequestId: string | null;
+      reusedEmitidos: boolean;
+      reusedRecibidos: boolean;
+      month: number;
+      year: number;
+      warnings?: string[];
+      message?: string;
+    }
+  | {
+      ok: false;
+      status: number; // suggested HTTP status for the route layer
+      error: string;
+      warnings?: string[];
+    };
+
+/**
+ * Submit TWO requests to SAT (emitidos + recibidos) for the given period,
+ * UNLESS we already have a recent pending/finished request for the same period
+ * — in which case we reuse the SAT requestId so we don't waste quota.
+ *
+ * Pure of any auth concerns: callers must authorize access to `companyId` first.
+ */
+export async function submitSatSync(
+  companyId: string,
+  year: number,
+  month: number,
+  force = false
+): Promise<SubmitSatSyncResult> {
+  // ── Reuse path ──────────────────────────────────────────────────────────
+  // Check if we already have recent requests for this period that we can reuse.
+  // This is the FIX for SAT error 5002 ("se han agotado las solicitudes de
+  // por vida"): every click was creating new requests, hitting SAT's quota.
+  if (!force) {
+    const cutoff = new Date(Date.now() - REUSE_WINDOW_HOURS * 60 * 60 * 1000);
+    const [reEmitidos, reRecibidos] = await Promise.all([
+      prisma.satSyncRequest.findFirst({
+        where: {
+          companyId,
+          year,
+          month,
+          tipo: "EMITIDOS",
+          status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
+          createdAt: { gte: cutoff },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.satSyncRequest.findFirst({
+        where: {
+          companyId,
+          year,
+          month,
+          tipo: "RECIBIDOS",
+          status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
+          createdAt: { gte: cutoff },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    // If both are reusable, return them immediately — no SAT call needed
+    if (reEmitidos && reRecibidos) {
+      return {
+        ok: true,
+        emitidosRequestId: reEmitidos.requestId,
+        recibidosRequestId: reRecibidos.requestId,
+        reusedEmitidos: true,
+        reusedRecibidos: true,
+        month,
+        year,
+        message: "Reutilizando solicitudes existentes en SAT",
+      };
+    }
+    // Fall through to query SAT for whatever side is missing.
+  }
+
+  // Load FIEL from company
+  let fiel;
+  try {
+    fiel = await getFielForCompany(companyId);
+  } catch (err) {
+    return {
+      ok: false,
+      status: 422,
+      error: err instanceof Error ? err.message : "Error cargando FIEL",
+    };
+  }
+
+  const service = buildService(fiel);
+
+  // Period: full month — but clamp end date to YESTERDAY if month is not complete.
+  // SAT rejects requests with end dates that include today or the future (code 301).
+  // Their system considers today's CFDIs as "en tránsito" and the range must end
+  // at 23:59:59 of a day that has fully passed.
+  const lastDay = new Date(year, month, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const requestedEnd = new Date(year, month - 1, lastDay, 23, 59, 59);
+  const now = new Date();
+  // Yesterday at 23:59:59 in local time
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+  const effectiveEnd = requestedEnd > yesterday ? yesterday : requestedEnd;
+
+  // Guard: if the effective end is before the month's start, there's no data to sync yet
+  const monthStart = new Date(year, month - 1, 1);
+  if (effectiveEnd < monthStart) {
+    return {
+      ok: false,
+      status: 400,
+      error: `El mes ${month}/${year} aún no tiene días completos para consultar al SAT. Intenta mañana.`,
+    };
+  }
+
+  const startIso = `${year}-${pad(month)}-01T00:00:00`;
+  const endIso =
+    [effectiveEnd.getFullYear(), pad(effectiveEnd.getMonth() + 1), pad(effectiveEnd.getDate())].join(
+      "-"
+    ) +
+    "T" +
+    [pad(effectiveEnd.getHours()), pad(effectiveEnd.getMinutes()), pad(effectiveEnd.getSeconds())].join(
+      ":"
+    );
+
+  console.log("[sat/sync] period:", startIso, "→", endIso);
+
+  const period = DateTimePeriod.create(new DateTime(startIso), new DateTime(endIso));
+
+  // Re-check what we already have (in case we fell through from the reuse path)
+  const cutoff = new Date(Date.now() - REUSE_WINDOW_HOURS * 60 * 60 * 1000);
+  const [existingEmitidos, existingRecibidos] = await Promise.all([
+    prisma.satSyncRequest.findFirst({
+      where: {
+        companyId,
+        year,
+        month,
+        tipo: "EMITIDOS",
+        status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
+        createdAt: { gte: cutoff },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.satSyncRequest.findFirst({
+      where: {
+        companyId,
+        year,
+        month,
+        tipo: "RECIBIDOS",
+        status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
+        createdAt: { gte: cutoff },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  let emitidosRequestId: string | null = existingEmitidos?.requestId ?? null;
+  let recibidosRequestId: string | null = existingRecibidos?.requestId ?? null;
+  const reusedEmitidos = !!existingEmitidos;
+  const reusedRecibidos = !!existingRecibidos;
+  const warnings: string[] = [];
+
+  // Request emitidos only if we don't have a reusable one
+  if (!emitidosRequestId) {
+    try {
+      const emitidosResult = await service.query(
+        QueryParameters.create()
+          .withPeriod(period)
+          .withDownloadType(new DownloadType("issued"))
+          .withRequestType(new RequestType("xml"))
+      );
+      console.log(
+        "[sat/sync] emitidos status:",
+        emitidosResult.getStatus().getMessage(),
+        "code:",
+        emitidosResult.getStatus().getCode()
+      );
+      if (emitidosResult.getStatus().isAccepted()) {
+        emitidosRequestId = emitidosResult.getRequestId();
+        await prisma.satSyncRequest.create({
+          data: { companyId, year, month, tipo: "EMITIDOS", requestId: emitidosRequestId, status: "ACCEPTED" },
+        });
+      } else {
+        const code = emitidosResult.getStatus().getCode();
+        const msg = emitidosResult.getStatus().getMessage();
+        warnings.push(formatSatError("emitidos", code, msg));
+      }
+    } catch (e) {
+      console.error("[sat/sync] emitidos error:", e);
+      warnings.push(`Emitidos error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  if (!recibidosRequestId) {
+    try {
+      const recibidosResult = await service.query(
+        QueryParameters.create()
+          .withPeriod(period)
+          .withDownloadType(new DownloadType("received"))
+          .withRequestType(new RequestType("xml"))
+          .withDocumentStatus(new DocumentStatus("active"))
+      );
+      console.log(
+        "[sat/sync] recibidos status:",
+        recibidosResult.getStatus().getMessage(),
+        "code:",
+        recibidosResult.getStatus().getCode()
+      );
+      if (recibidosResult.getStatus().isAccepted()) {
+        recibidosRequestId = recibidosResult.getRequestId();
+        await prisma.satSyncRequest.create({
+          data: { companyId, year, month, tipo: "RECIBIDOS", requestId: recibidosRequestId, status: "ACCEPTED" },
+        });
+      } else {
+        const code = recibidosResult.getStatus().getCode();
+        const msg = recibidosResult.getStatus().getMessage();
+        warnings.push(formatSatError("recibidos", code, msg));
+      }
+    } catch (e) {
+      console.error("[sat/sync] recibidos error:", e);
+      warnings.push(`Recibidos error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // Both failed — surface the actual SAT error messages
+  if (!emitidosRequestId && !recibidosRequestId) {
+    console.error("[sat/sync] BOTH requests rejected:", { companyId, year, month, warnings });
+    return {
+      ok: false,
+      status: 422,
+      error:
+        warnings.length > 0 ? warnings.join(" | ") : "SAT rechazó ambas solicitudes sin mensaje de error",
+      warnings,
+    };
+  }
+
+  return {
+    ok: true,
+    emitidosRequestId,
+    recibidosRequestId,
+    reusedEmitidos,
+    reusedRecibidos,
+    month,
+    year,
+    warnings: warnings.length > 0 ? warnings : undefined,
+  };
+}
+
+// ── Verify + import ───────────────────────────────────────────────────────────
+
+export type VerifySatSyncResult =
+  | {
+      ok: true;
+      status: "pending" | "done" | "empty" | "partial";
+      imported?: number;
+      skipped?: number;
+      message: string;
+    }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Poll the given SAT request IDs and, for any that SAT reports as Finished,
+ * download the packages and import the CFDIs into the Invoice table
+ * (deduping by UUID). Idempotent — safe to call repeatedly.
+ *
+ * Pure of any auth concerns: callers must authorize access to `companyId` first.
+ */
+export async function verifyAndImportSatSync(
+  companyId: string,
+  emitidosRequestId?: string | null,
+  recibidosRequestId?: string | null
+): Promise<VerifySatSyncResult> {
+  if (!emitidosRequestId && !recibidosRequestId) {
+    return { ok: false, status: 400, error: "Faltan parámetros" };
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { rfc: true },
+  });
+
+  let fiel;
+  try {
+    fiel = await getFielForCompany(companyId);
+  } catch (err) {
+    return { ok: false, status: 422, error: err instanceof Error ? err.message : "Error cargando FIEL" };
+  }
+
+  const service = buildService(fiel);
+
+  // Poll both request IDs and collect all pending/ready package IDs
+  const pendingIds: string[] = [];
+  const readyPackageIds: string[] = [];
+  const typeMap = new Map<string, "emitidos" | "recibidos">(); // packageId → tipo
+
+  const requestPairs: Array<{ id: string; tipo: "emitidos" | "recibidos" }> = [];
+  if (emitidosRequestId) requestPairs.push({ id: emitidosRequestId, tipo: "emitidos" });
+  if (recibidosRequestId) requestPairs.push({ id: recibidosRequestId, tipo: "recibidos" });
+
+  let totalCfdis = 0;
+
+  for (const { id, tipo } of requestPairs) {
+    const verifyResult = await service.verify(id);
+
+    if (!verifyResult.getStatus().isAccepted()) {
+      await prisma.satSyncRequest.updateMany({
+        where: { requestId: id },
+        data: {
+          status: "FAILED",
+          errorMessage: verifyResult.getStatus().getMessage(),
+          lastVerifiedAt: new Date(),
+        },
+      });
+      continue;
+    }
+
+    const codeRequest = verifyResult.getCodeRequest().getValue();
+    const statusRequest = verifyResult.getStatusRequest();
+    const packageIds = verifyResult.getPackageIds();
+    const numCfdis = verifyResult.getNumberCfdis();
+    totalCfdis += numCfdis;
+
+    console.log(
+      `[sat/verify] ${tipo} codeRequest:${codeRequest} status:${statusRequest.getEntryId()} packages:${packageIds.length} cfdis:${numCfdis}`
+    );
+
+    // 5004 = no CFDIs found for this period/type
+    if (codeRequest === 5004) {
+      await prisma.satSyncRequest.updateMany({
+        where: { requestId: id },
+        data: { status: "FINISHED", cfdisFound: 0, lastVerifiedAt: new Date() },
+      });
+      continue;
+    }
+
+    // Only download when SAT says the request is Finished
+    // StatusRequest: Accepted | InProgress | Finished | Failure | Rejected | Expired
+    const isFinished = statusRequest.isTypeOf("Finished" as Parameters<typeof statusRequest.isTypeOf>[0]);
+
+    if (!isFinished) {
+      // Still processing — come back later
+      pendingIds.push(id);
+      await prisma.satSyncRequest.updateMany({
+        where: { requestId: id },
+        data: { status: "IN_PROGRESS", cfdisFound: numCfdis, lastVerifiedAt: new Date() },
+      });
+    } else {
+      for (const pkgId of packageIds) {
+        readyPackageIds.push(pkgId);
+        typeMap.set(pkgId, tipo);
+      }
+      await prisma.satSyncRequest.updateMany({
+        where: { requestId: id },
+        data: { status: "FINISHED", cfdisFound: numCfdis, lastVerifiedAt: new Date() },
+      });
+    }
+  }
+
+  // If any are still pending, return pending
+  if (pendingIds.length > 0 && readyPackageIds.length === 0) {
+    return {
+      ok: true,
+      status: "pending",
+      message: `SAT preparando paquetes... ${totalCfdis} CFDIs encontrados`,
+    };
+  }
+
+  if (readyPackageIds.length === 0) {
+    return { ok: true, status: "empty", message: "No se encontraron CFDIs en este período" };
+  }
+
+  // Download and import all ready packages
+  let imported = 0;
+  let skipped = 0;
+
+  for (const packageId of readyPackageIds) {
+    const tipo = typeMap.get(packageId) ?? "recibidos";
+    const downloadResult = await service.download(packageId);
+    if (!downloadResult.getStatus().isAccepted()) continue;
+
+    // getPackageContent() returns base64 — decode to binary string for createFromContents
+    // (the library writes with { encoding: "binary" } so expects latin1, not base64)
+    const base64Content = downloadResult.getPackageContent();
+    const binaryContent = Buffer.from(base64Content, "base64").toString("binary");
+
+    const reader = await CfdiPackageReader.createFromContents(binaryContent);
+
+    for await (const cfdiMap of reader.cfdis()) {
+      for (const [uuid, xmlContent] of cfdiMap) {
+        // Skip if already in DB
+        const existing = await prisma.invoice.findFirst({ where: { uuid } });
+        if (existing) {
+          skipped++;
+          continue;
+        }
+
+        const cfdi = parseCfdiXml(xmlContent);
+        if (!cfdi.uuid || !cfdi.fecha) {
+          skipped++;
+          continue;
+        }
+
+        // Map SAT TipoDeComprobante (I/E/N/P/T) to our InvoiceType enum.
+        // If for some reason it's missing, fall back to direction-based guess.
+        const isEmisor = tipo === "emitidos" || cfdi.rfcEmisor === company?.rfc;
+        const SAT_TIPO_MAP: Record<string, "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO"> = {
+          I: "INGRESO",
+          E: "EGRESO",
+          N: "NOMINA",
+          P: "PAGO",
+          T: "TRASLADO",
+        };
+        const mappedType = cfdi.tipo ? SAT_TIPO_MAP[cfdi.tipo] : undefined;
+        const invoiceType: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO" =
+          mappedType ?? (isEmisor ? "INGRESO" : "EGRESO");
+
+        // Find or create counterparty customer record
+        const counterpartyRfc = isEmisor ? cfdi.rfcReceptor : cfdi.rfcEmisor;
+        const counterpartyName = isEmisor ? cfdi.nombreReceptor : cfdi.nombreEmisor;
+
+        let customerId: string | null = null;
+        if (
+          counterpartyRfc &&
+          counterpartyRfc !== "XAXX010101000" &&
+          counterpartyRfc !== "XEXX010101000"
+        ) {
+          const existingCustomer = await prisma.customer.findFirst({
+            where: { companyId, rfc: counterpartyRfc },
+          });
+          if (existingCustomer) {
+            customerId = existingCustomer.id;
+          } else if (counterpartyName) {
+            try {
+              const newCustomer = await prisma.customer.create({
+                data: {
+                  companyId,
+                  rfc: counterpartyRfc,
+                  razonSocial: counterpartyName,
+                  regimenFiscal: isEmisor ? "616" : (cfdi.regimenEmisor ?? "616"),
+                },
+              });
+              customerId = newCustomer.id;
+            } catch {
+              /* ignore duplicate RFC */
+            }
+          }
+        }
+
+        await prisma.invoice.create({
+          data: {
+            companyId,
+            customerId,
+            tipo: invoiceType,
+            fecha: new Date(cfdi.fecha),
+            serie: cfdi.serie ?? null,
+            folio: cfdi.folio ?? null,
+            formaPago: cfdi.formaPago ?? "99",
+            metodoPago: cfdi.metodoPago ?? "PUE",
+            usoCfdi: cfdi.usoCfdi ?? "G03",
+            moneda: cfdi.moneda ?? "MXN",
+            subtotal: cfdi.subtotal,
+            total: cfdi.total,
+            totalImpuestos: cfdi.ivaTotal,
+            status: "STAMPED",
+            uuid,
+            notas: `SAT — ${tipo}`,
+            items:
+              cfdi.items && cfdi.items.length > 0
+                ? {
+                    create: cfdi.items.map((it) => ({
+                      cantidad: it.cantidad,
+                      claveUnidad: it.claveUnidad,
+                      unidad: it.unidad,
+                      claveProdServ: it.claveProdServ,
+                      descripcion: it.descripcion,
+                      valorUnitario: it.valorUnitario,
+                      importe: it.importe,
+                      descuento: it.descuento,
+                    })),
+                  }
+                : undefined,
+          },
+        });
+        imported++;
+      }
+    }
+  }
+
+  // Persist the imported counts back to the SatSyncRequest rows we updated
+  if (emitidosRequestId) {
+    await prisma.satSyncRequest
+      .updateMany({ where: { requestId: emitidosRequestId }, data: { imported: { increment: imported } } })
+      .catch(() => {});
+  }
+
+  // If some packages are still pending but we processed some, report partial
+  if (pendingIds.length > 0) {
+    return {
+      ok: true,
+      status: "partial",
+      imported,
+      skipped,
+      message: `${imported} importados hasta ahora. Todavía hay paquetes pendientes, vuelve a verificar en un momento.`,
+    };
+  }
+
+  return {
+    ok: true,
+    status: "done",
+    imported,
+    skipped,
+    message: `✓ ${imported} CFDI(s) importados${skipped > 0 ? `, ${skipped} ya existían` : ""}`,
+  };
+}

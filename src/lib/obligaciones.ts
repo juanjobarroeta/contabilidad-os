@@ -1,5 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Mexican fiscal obligations — static régimen map + due date calculator + CSF parser
+//
+// This module is PURE (no prisma/IO) so it can be imported from client
+// components too. The DB seeding lives in obligaciones-seed.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ObligacionConfig {
@@ -314,22 +317,51 @@ export function parsearTextoCsf(text: string): CsfData {
   return result;
 }
 
+// ── Obligation seeding engine ─────────────────────────────────────────────────
+
+export const TIPO_DESC: Record<string, string> = {
+  IVA_MENSUAL: "IVA mensual",
+  IVA_BIMESTRAL: "IVA bimestral",
+  ISR_PROVISIONAL: "ISR pagos provisionales",
+  ISR_BIMESTRAL: "ISR bimestral",
+  ISR_ANUAL: "ISR del ejercicio",
+  DIOT: "DIOT mensual",
+  RETENCIONES_ISR: "Retenciones de ISR",
+};
+
+/** Best-effort config for an obligation tipo not present in the régimen map. */
+export function defaultConfigForTipo(tipo: string): ObligacionConfig {
+  const descripcion = TIPO_DESC[tipo] ?? tipo;
+  if (tipo.endsWith("ANUAL")) {
+    // Default to the PF deadline (Apr 30); PM (Mar 31) comes from the régimen map.
+    return { tipo, descripcion, periodicidad: "ANUAL", diaVencimiento: 30, mesVencimiento: 4 };
+  }
+  if (tipo.includes("BIMESTRAL")) {
+    return { tipo, descripcion, periodicidad: "BIMESTRAL", diaVencimiento: 17 };
+  }
+  return { tipo, descripcion, periodicidad: "MENSUAL", diaVencimiento: 17 };
+}
+
 /**
  * Map a CSF obligation description to our internal obligation tipo.
  * Returns null if no match found.
  */
 export function mapCsfObligacion(descripcion: string): string | null {
   const d = descripcion.toLowerCase();
-  if (d.includes("valor agregado") || d.includes(" iva ") || d.startsWith("iva")) {
+  // DIOT FIRST: the SAT labels it "Declaración de proveedores de IVA", which
+  // contains "iva" — so it must be caught before the IVA branch below.
+  if (d.includes("diot") || d.includes("operaciones con terceros") || d.includes("proveedores")) {
+    return "DIOT";
+  }
+  if (d.includes("valor agregado") || /\biva\b/.test(d)) {
     if (d.includes("bimestral")) return "IVA_BIMESTRAL";
     return "IVA_MENSUAL";
   }
-  if (d.includes("renta") || d.includes("isr") || d.includes("pagos provisionales")) {
+  if (d.includes("renta") || /\bisr\b/.test(d) || d.includes("pago provisional") || d.includes("pagos provisionales")) {
     if (d.includes("bimestral")) return "ISR_BIMESTRAL";
     if (d.includes("ejercicio") || d.includes("anual")) return "ISR_ANUAL";
     return "ISR_PROVISIONAL";
   }
-  if (d.includes("diot") || d.includes("operaciones con terceros")) return "DIOT";
   if (d.includes("retenci")) return "RETENCIONES_ISR";
   if (d.includes("declaraci") && d.includes("anual")) return "ISR_ANUAL";
   return null;
