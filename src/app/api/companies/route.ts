@@ -91,6 +91,8 @@ export async function POST(req: Request) {
     fielCer, fielKey, fielPassword,
     fechaInicioRegimen,
     regimenes,
+    satBackfillYears,
+    plan,
     onboardingPackage,
   } = body as {
     rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string;
@@ -100,6 +102,8 @@ export async function POST(req: Request) {
     fielCer?: string; fielKey?: string; fielPassword?: string;
     fechaInicioRegimen?: string | null;
     regimenes?: Array<{ code: string; label?: string | null; since?: string | null }>;
+    satBackfillYears?: number;
+    plan?: string;
     onboardingPackage?: {
       imss?: {
         registroPatronal?: string | null;
@@ -214,6 +218,12 @@ export async function POST(req: Request) {
       fielKey,
       fielPassword,
       fechaInicioOperaciones: fechaInicioOperaciones ?? undefined,
+      satBackfillYears: [0, 1, 5].includes(satBackfillYears as number)
+        ? (satBackfillYears as number)
+        : undefined,
+      plan: ["BASICO", "PROFESIONAL", "DESPACHO"].includes(plan ?? "")
+        ? plan
+        : undefined,
       registroPatronal: registroPatronal ?? undefined,
       coeficienteUtilidad: coeficienteUtilidad ?? undefined,
       despachoId: despachoMembership?.despachoId ?? null,

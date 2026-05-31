@@ -131,6 +131,15 @@ model Company {
   autoSyncEnabled   Boolean   @default(true)
   lastAutoSyncAt    DateTime?           // last time the cron touched this company
 
+  // How far back to pull CFDIs on the initial historical backfill, chosen at
+  // onboarding. 5 = SAT legal maximum, 1 = last year, 0 = no backfill. Still
+  // clamped by fechaInicioOperaciones so we never ask before the RFC existed.
+  satBackfillYears  Int       @default(5)
+
+  // Selected subscription plan (UI/trial only for now — no billing yet):
+  // "BASICO" | "PROFESIONAL" | "DESPACHO".
+  plan              String?
+
   // Earliest date this RFC could have CFDIs — captured from the Constancia de
   // Situación Fiscal (fechaInicioRegimen) at onboarding. Used to clamp the
   // historical backfill so we don't ask SAT for periods before the company
