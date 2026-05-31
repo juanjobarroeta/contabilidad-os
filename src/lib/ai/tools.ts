@@ -107,6 +107,19 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "query_tax_position",
+    description:
+      "Calcula la posición fiscal del mes (IVA a pagar e ISR provisional) a partir de los CFDIs sincronizados, en flujo de efectivo. Úsala cuando pregunten '¿cuánto IVA/ISR debo este mes?', cuánto van a pagar de impuestos, o la posición fiscal de un periodo. Devuelve IVA trasladado/acreditable/a pagar, saldo a favor, y el ISR provisional (Art. 14) con su coeficiente de utilidad. Si no se dan mes/año, usa el mes actual.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        year: { type: "number", description: "Año del periodo, e.g. 2026. Default: año actual." },
+        month: { type: "number", description: "Mes 1-12. Default: mes actual." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "query_complementos_pendientes",
     description:
       "Detecta facturas PPD (pago en parcialidades o diferido) que recibieron pago pero a las que aún les falta emitir el Complemento de Pago (REP). Incluye la fecha límite legal (día 5 del mes siguiente al pago) y la urgencia (VENCIDO / POR_VENCER / EN_TIEMPO). Úsala cuando pregunten por complementos de pago, REP, o qué les falta timbrar.",

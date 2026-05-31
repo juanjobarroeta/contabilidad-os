@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { detectComplementosPendientes } from "@/lib/complementos";
+import { computeTaxPosition } from "@/lib/impuestos";
 
 type ToolInput = Record<string, unknown>;
 
@@ -31,6 +32,12 @@ export async function executeToolCall(
       return analyzeAnomalies(input, companyId);
     case "query_complementos_pendientes":
       return JSON.stringify(await detectComplementosPendientes(companyId));
+    case "query_tax_position": {
+      const now = new Date();
+      const year = typeof input.year === "number" ? input.year : now.getFullYear();
+      const month = typeof input.month === "number" ? input.month : now.getMonth() + 1;
+      return JSON.stringify(await computeTaxPosition(companyId, year, month));
+    }
     default:
       return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });
   }
