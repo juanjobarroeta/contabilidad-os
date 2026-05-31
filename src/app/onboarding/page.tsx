@@ -483,28 +483,36 @@ function OnboardingPageInner() {
               : "Ingresa los datos fiscales del SAT"}
           </p>
 
-          {/* Step indicators */}
-          <div className="flex items-center gap-1 mt-5">
-            {STEPS.map((s, i) => (
-              <div key={s.id} className="flex items-center gap-1 flex-1">
-                <div className="flex flex-col items-center flex-1">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    step > s.id ? "bg-green-500 text-white" :
-                    step === s.id ? "bg-primary text-primary-foreground" :
-                    "bg-gray-100 text-muted-foreground"
-                  }`}>
-                    {step > s.id ? <CheckCircle2 className="h-4 w-4" /> : s.id}
+          {/* Step indicators — icon dots + connectors, with a single active-step caption */}
+          <div className="flex items-center mt-5">
+            {STEPS.map((s, i) => {
+              const Icon = s.icon;
+              const done = step > s.id;
+              const active = step === s.id;
+              return (
+                <div key={s.id} className="flex items-center flex-1 last:flex-none">
+                  <div
+                    className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                      done
+                        ? "bg-green-500 text-white"
+                        : active
+                        ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
+                        : "bg-gray-100 text-muted-foreground"
+                    }`}
+                  >
+                    {done ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                   </div>
-                  <span className={`text-xs mt-1 text-center leading-tight ${step === s.id ? "text-primary font-medium" : "text-muted-foreground"}`}>
-                    {s.label}
-                  </span>
+                  {i < STEPS.length - 1 && (
+                    <div className={`h-px flex-1 mx-1.5 ${done ? "bg-green-400" : "bg-gray-200"}`} />
+                  )}
                 </div>
-                {i < STEPS.length - 1 && (
-                  <div className={`h-px flex-1 mb-4 ${step > s.id ? "bg-green-400" : "bg-gray-200"}`} />
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
+          <p className="text-xs text-center mt-3">
+            <span className="text-muted-foreground">Paso {step + 1} de {STEPS.length} · </span>
+            <span className="font-medium text-primary">{STEPS[step]?.label}</span>
+          </p>
         </div>
 
         <div className="px-8 py-6 space-y-5">
