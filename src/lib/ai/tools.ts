@@ -164,7 +164,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "analyze_anomalies",
     description:
-      "Analiza transacciones e invoices recientes buscando anomalías: montos duplicados, facturas sin CFDI correspondiente, transacciones inusualmente altas, patrones sospechosos.",
+      "Revisa qué podría estar mal en la contabilidad: montos duplicados, transacciones inusualmente altas, movimientos sin conciliar, CFDIs cancelados (que no deben contar en IVA/ISR), y complementos de pago pendientes en ambas direcciones (los que debes emitir y los que te deben tus proveedores, con riesgo a tu deducción). Úsala para '¿qué tengo mal?', '¿hay riesgos en mis deducciones?', revisiones generales.",
     input_schema: {
       type: "object" as const,
       properties: {
