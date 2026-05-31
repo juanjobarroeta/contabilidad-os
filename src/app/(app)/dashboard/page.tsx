@@ -63,6 +63,17 @@ interface DashboardData {
   recentInvoices: RecentInvoice[];
   bankSummary: BankSummaryItem[];
   totalUnmatched: number;
+  complementos: {
+    stats: { totalPendientes: number; vencidos: number; porVencer: number; montoPendiente: number };
+    pendientes: {
+      invoiceId: string;
+      cliente: string | null;
+      montoPendiente: number;
+      fechaLimite: string;
+      urgencia: "VENCIDO" | "POR_VENCER" | "EN_TIEMPO";
+      diasParaVencer: number;
+    }[];
+  };
   lastDeclaracion: {
     periodo: string;
     status: string;
@@ -360,6 +371,57 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+
+          {/* ── Complementos de pago pendientes ── */}
+          {data.complementos && data.complementos.stats.totalPendientes > 0 && (
+            <div className="bg-white rounded-xl border border-border overflow-hidden">
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                  <h3 className="font-semibold text-sm">Complementos de pago pendientes</h3>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {data.complementos.stats.totalPendientes} pendiente
+                  {data.complementos.stats.totalPendientes !== 1 ? "s" : ""}
+                  {data.complementos.stats.vencidos > 0 && (
+                    <span className="text-red-600 font-medium"> · {data.complementos.stats.vencidos} vencido{data.complementos.stats.vencidos !== 1 ? "s" : ""}</span>
+                  )}
+                </span>
+              </div>
+              <ul className="divide-y divide-border">
+                {data.complementos.pendientes.map((c) => (
+                  <li key={c.invoiceId} className="px-4 py-3 flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium truncate">{c.cliente ?? "Cliente"}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {formatCurrency(c.montoPendiente)} · límite {formatDate(c.fechaLimite)}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                        c.urgencia === "VENCIDO"
+                          ? "bg-red-100 text-red-700"
+                          : c.urgencia === "POR_VENCER"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {c.urgencia === "VENCIDO"
+                        ? `Vencido ${Math.abs(c.diasParaVencer)}d`
+                        : c.urgencia === "POR_VENCER"
+                        ? `${c.diasParaVencer}d`
+                        : "En tiempo"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="px-4 py-2.5 border-t border-border">
+                <Link href="/facturas" className="text-xs text-primary hover:underline">
+                  Emitir complementos →
+                </Link>
+              </div>
+            </div>
+          )}
 
           {/* ── Bottom Row: Recent Invoices + Bank ── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TaxDeclarationType } from "@prisma/client";
 import { getObligacionesPorRegimen } from "@/lib/obligaciones";
+import { detectComplementosPendientes } from "@/lib/complementos";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 // GET /api/dashboard?companyId=xxx
@@ -292,6 +293,9 @@ export async function GET(req: Request) {
   const gastosDelMes   = gastosThisMonth._sum.subtotal   ?? 0;
   const utilidadBruta  = ingresosDelMes - gastosDelMes;
 
+  // Complementos de pago pendientes (REP owed on collected PPD invoices).
+  const complementos = await detectComplementosPendientes(companyId, now);
+
   return NextResponse.json({
     periodo: { year, month },
     kpis: {
@@ -309,6 +313,11 @@ export async function GET(req: Request) {
     recentInvoices: recentRows,
     bankSummary,
     totalUnmatched,
+    complementos: {
+      stats: complementos.stats,
+      // Top few most-urgent for the dashboard card.
+      pendientes: complementos.pendientes.slice(0, 5),
+    },
     lastDeclaracion: savedDeclaracion ? {
       periodo: savedDeclaracion.periodo,
       status:  savedDeclaracion.status,
