@@ -130,6 +130,12 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "query_complementos_recibidos_pendientes",
+    description:
+      "Detecta gastos PPD que YA PAGASTE pero para los que el PROVEEDOR aún no te ha enviado el Complemento de Pago (REP). Sin ese complemento, la deducción del gasto está en riesgo. Úsala cuando pregunten qué complementos les deben los proveedores, o qué gastos están en riesgo por falta de complemento. Devuelve proveedor, monto pagado, fecha límite y urgencia.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
     name: "categorize_transaction",
     description:
       "Dada la descripción de una transacción bancaria, sugiere la cuenta contable (del catálogo SAT/COE) más apropiada para clasificarla. Usa el catálogo de cuentas de la empresa.",

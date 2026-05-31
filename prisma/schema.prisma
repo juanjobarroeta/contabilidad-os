@@ -457,6 +457,28 @@ model Invoice {
   taxes            InvoiceTax[]
   bankTransactions BankTransaction[]
   estimacion       Estimacion?
+  // When this invoice is a complemento de pago (tipo=PAGO), the parent
+  // invoice UUIDs it pays off (parsed from <pago:DoctoRelacionado>).
+  doctosRelacionados PagoDoctoRelacionado[]
+}
+
+// One <pago:DoctoRelacionado> line on a complemento de pago (REP). Links a
+// PAGO Invoice to the UUID of a parent invoice it pays. Stored for both
+// emitidos and recibidos so we can tell, accurately, whether a PPD invoice's
+// payment has been complementado (vs. a fragile RFC+amount heuristic).
+model PagoDoctoRelacionado {
+  id              String   @id @default(cuid())
+  pagoInvoiceId   String   // the tipo=PAGO Invoice that carries this node
+  parentUuid      String   // UUID of the invoice being paid (IdDocumento)
+  impPagado       Float?
+  numParcialidad  Int?
+  impSaldoAnterior Float?
+  impSaldoInsoluto Float?
+
+  pagoInvoice Invoice @relation(fields: [pagoInvoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([pagoInvoiceId, parentUuid])
+  @@index([parentUuid])
 }
 
 model InvoiceItem {
