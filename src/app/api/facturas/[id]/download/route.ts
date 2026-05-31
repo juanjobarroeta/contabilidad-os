@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { decryptSecret } from "@/lib/crypto";
 
 const FACTURAPI_BASE = "https://www.facturapi.io/v2";
 
@@ -39,12 +40,12 @@ export async function GET(
     return NextResponse.json({ error: "Facturapi no configurado" }, { status: 422 });
   }
 
-  // Proxy the download from Facturapi
+  // Proxy the download from Facturapi (key is encrypted at rest — decrypt here)
   const fpRes = await fetch(
     `${FACTURAPI_BASE}/invoices/${invoice.facturapiId}/${format}`,
     {
       headers: {
-        Authorization: `Bearer ${invoice.company.facturapiApiKey}`,
+        Authorization: `Bearer ${decryptSecret(invoice.company.facturapiApiKey)}`,
       },
     }
   );

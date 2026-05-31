@@ -112,15 +112,16 @@ model Company {
   telefono          String?
   actividadEconomica String? // SCIAN code description
 
-  // CSD — Certificado de Sello Digital (for CFDI stamping)
-  csdCer            String?  @db.Text  // base64 encoded .cer file
-  csdKey            String?  @db.Text  // base64 encoded .key file
+  // CSD — Certificado de Sello Digital (for CFDI stamping).
+  // All three are AES-256-GCM encrypted at rest via lib/crypto (enc:v1:… envelope).
+  csdCer            String?  @db.Text  // encrypted(base64 .cer)
+  csdKey            String?  @db.Text  // encrypted(base64 .key — private key!)
   csdPassword       String?            // encrypted password
   csdVigencia       DateTime?          // expiry date
 
-  // e.firma / FIEL (for SAT declarations)
-  fielCer           String?  @db.Text  // base64 encoded .cer file
-  fielKey           String?  @db.Text  // base64 encoded .key file
+  // e.firma / FIEL (for SAT declarations). Encrypted at rest (see above).
+  fielCer           String?  @db.Text  // encrypted(base64 .cer)
+  fielKey           String?  @db.Text  // encrypted(base64 .key — private key!)
   fielPassword      String?            // encrypted password
   fielVigencia      DateTime?          // expiry date
 

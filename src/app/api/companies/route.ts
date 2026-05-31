@@ -6,6 +6,7 @@ import { AuthzError } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 import { seedCompanyObligaciones } from "@/lib/obligaciones";
+import { encryptNullable } from "@/lib/crypto";
 
 export async function GET() {
   const session = await auth();
@@ -216,12 +217,12 @@ export async function POST(req: Request) {
       email,
       telefono,
       actividadEconomica,
-      csdCer,
-      csdKey,
-      csdPassword,
-      fielCer,
-      fielKey,
-      fielPassword,
+      csdCer: encryptNullable(csdCer),
+      csdKey: encryptNullable(csdKey),
+      csdPassword: encryptNullable(csdPassword),
+      fielCer: encryptNullable(fielCer),
+      fielKey: encryptNullable(fielKey),
+      fielPassword: encryptNullable(fielPassword),
       fechaInicioOperaciones: fechaInicioOperaciones ?? undefined,
       satBackfillYears: [0, 1, 5].includes(satBackfillYears as number)
         ? (satBackfillYears as number)

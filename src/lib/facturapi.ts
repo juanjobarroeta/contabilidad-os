@@ -1,6 +1,7 @@
 import Facturapi from "facturapi";
 import { Readable } from "stream";
 import { prisma } from "./prisma";
+import { decryptSecret, encryptSecret } from "./crypto";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Master client — uses the user-level (sk_user_/sk_live_) key from Facturapi.
@@ -34,9 +35,11 @@ export const facturapiAdmin = new Proxy({} as Facturapi, {
   },
 });
 
-// Per-company Facturapi client using the company's own org-scoped API key
+// Per-company Facturapi client using the company's own org-scoped API key.
+// The key is stored encrypted at rest; decrypt here so all callers can pass the
+// raw stored value (legacy plaintext passes through unchanged).
 export function getFacturapiClient(companyApiKey: string) {
-  return new Facturapi(companyApiKey);
+  return new Facturapi(decryptSecret(companyApiKey));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -147,9 +150,9 @@ export async function provisionFacturapiOrg(companyId: string): Promise<Provisio
       try {
         await admin.organizations.uploadCertificate(
           orgId,
-          base64ToStream(company.csdCer),
-          base64ToStream(company.csdKey),
-          company.csdPassword
+          base64ToStream(decryptSecret(company.csdCer)),
+          base64ToStream(decryptSecret(company.csdKey)),
+          decryptSecret(company.csdPassword)
         );
         csdUploaded = true;
 
@@ -180,7 +183,7 @@ export async function provisionFacturapiOrg(companyId: string): Promise<Provisio
       where: { id: companyId },
       data: {
         facturapiOrgId: orgId,
-        ...(liveKey ? { facturapiApiKey: liveKey } : {}),
+        ...(liveKey ? { facturapiApiKey: encryptSecret(liveKey) } : {}),
       },
     });
 
