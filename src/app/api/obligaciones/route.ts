@@ -3,8 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import {
-  getObligacionesPorRegimen,
   calcularVencimiento,
+  seedCompanyObligaciones,
   ObligacionConfig,
 } from "@/lib/obligaciones";
 
@@ -27,12 +27,19 @@ export async function GET(req: Request) {
 
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { regimenFiscal: true },
+    select: { regimenFiscal: true, regimenes: { select: { code: true } } },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
-  // Ensure obligations are seeded for this company
-  await seedObligaciones(companyId, company.regimenFiscal);
+  // Ensure obligations are seeded for this company (idempotent). Prefer the full
+  // CompanyRegimen list; fall back to the comma-separated primary for legacy rows.
+  const regimenCodes =
+    company.regimenes.length > 0
+      ? company.regimenes.map((r) => r.code)
+      : company.regimenFiscal
+      ? company.regimenFiscal.split(",").map((c) => c.trim()).filter(Boolean)
+      : [];
+  await seedCompanyObligaciones(companyId, regimenCodes);
 
   // Load obligations from DB (includes any CSF overrides)
   const dbObligaciones = await prisma.companyObligation.findMany({
@@ -128,12 +135,21 @@ export async function POST(req: Request) {
   }
 
   if (action === "resync") {
-    // Delete REGIMEN-sourced obligations and re-seed from current régimen
+    // Delete REGIMEN-sourced obligations and re-seed from the full régimen set.
     await prisma.companyObligation.deleteMany({ where: { companyId, fuente: "REGIMEN" } });
     const company = await prisma.company.findUnique({
-      where: { id: companyId }, select: { regimenFiscal: true },
+      where: { id: companyId },
+      select: { regimenFiscal: true, regimenes: { select: { code: true } } },
     });
-    if (company) await seedObligaciones(companyId, company.regimenFiscal, true);
+    if (company) {
+      const codes =
+        company.regimenes.length > 0
+          ? company.regimenes.map((r) => r.code)
+          : company.regimenFiscal
+          ? company.regimenFiscal.split(",").map((c) => c.trim()).filter(Boolean)
+          : [];
+      await seedCompanyObligaciones(companyId, codes, { force: true });
+    }
   }
 
   const updated = await prisma.companyObligation.findMany({
@@ -143,21 +159,6 @@ export async function POST(req: Request) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function seedObligaciones(companyId: string, regimenFiscal: string, force = false) {
-  // Only seed if no obligations exist yet (or if forced)
-  const existing = await prisma.companyObligation.count({ where: { companyId } });
-  if (existing > 0 && !force) return;
-
-  const configs = getObligacionesPorRegimen(regimenFiscal);
-  for (const ob of configs) {
-    await prisma.companyObligation.upsert({
-      where: { companyId_tipo: { companyId, tipo: ob.tipo } },
-      update: { descripcion: ob.descripcion, periodicidad: ob.periodicidad, diaVencimiento: ob.diaVencimiento, mesVencimiento: ob.mesVencimiento ?? null, fuente: "REGIMEN", activa: true },
-      create: { companyId, tipo: ob.tipo, descripcion: ob.descripcion, periodicidad: ob.periodicidad, diaVencimiento: ob.diaVencimiento, mesVencimiento: ob.mesVencimiento ?? null, fuente: "REGIMEN" },
-    });
-  }
-}
 
 function buildPeriodos(ob: ObligacionConfig, year: number): string[] {
   if (ob.periodicidad === "ANUAL") return [String(year)];

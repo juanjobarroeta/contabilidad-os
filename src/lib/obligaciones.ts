@@ -2,6 +2,8 @@
 // Mexican fiscal obligations — static régimen map + due date calculator + CSF parser
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { prisma } from "./prisma";
+
 export interface ObligacionConfig {
   tipo: string;
   descripcion: string;
@@ -314,22 +316,119 @@ export function parsearTextoCsf(text: string): CsfData {
   return result;
 }
 
+// ── Obligation seeding engine ─────────────────────────────────────────────────
+
+const TIPO_DESC: Record<string, string> = {
+  IVA_MENSUAL: "IVA mensual",
+  IVA_BIMESTRAL: "IVA bimestral",
+  ISR_PROVISIONAL: "ISR pagos provisionales",
+  ISR_BIMESTRAL: "ISR bimestral",
+  ISR_ANUAL: "ISR del ejercicio",
+  DIOT: "DIOT mensual",
+  RETENCIONES_ISR: "Retenciones de ISR",
+};
+
+/** Best-effort config for an obligation tipo not present in the régimen map. */
+function defaultConfigForTipo(tipo: string): ObligacionConfig {
+  const descripcion = TIPO_DESC[tipo] ?? tipo;
+  if (tipo.endsWith("ANUAL")) {
+    // Default to the PF deadline (Apr 30); PM (Mar 31) comes from the régimen map.
+    return { tipo, descripcion, periodicidad: "ANUAL", diaVencimiento: 30, mesVencimiento: 4 };
+  }
+  if (tipo.includes("BIMESTRAL")) {
+    return { tipo, descripcion, periodicidad: "BIMESTRAL", diaVencimiento: 17 };
+  }
+  return { tipo, descripcion, periodicidad: "MENSUAL", diaVencimiento: 17 };
+}
+
+/**
+ * Seed a company's recurring fiscal obligations (CompanyObligation rows).
+ *
+ * Source of truth:
+ *   1. If the CSF lists explicit obligaciones, those WIN — they reflect what the
+ *      SAT actually registered for this taxpayer (e.g. an employee under 605
+ *      doesn't file retenciones; a 606 arrendador may also owe DIOT). We keep
+ *      the régimen map's periodicity/due-date for each tipo when available,
+ *      else fall back to a sensible default. Tagged fuente="CSF".
+ *   2. Otherwise (manual entry, no CSF), derive the union of obligations from
+ *      all of the company's régimen codes. Tagged fuente="REGIMEN".
+ *
+ * Idempotent: skips if the company already has obligations unless `force`.
+ * Returns the number of obligation types seeded.
+ */
+export async function seedCompanyObligaciones(
+  companyId: string,
+  regimenCodes: string[],
+  opts: { force?: boolean; csfObligaciones?: string[] } = {}
+): Promise<number> {
+  const existing = await prisma.companyObligation.count({ where: { companyId } });
+  if (existing > 0 && !opts.force) return 0;
+
+  const regimenConfigs = getObligacionesPorRegimen(regimenCodes.join(","));
+  const regimenByTipo = new Map(regimenConfigs.map((o) => [o.tipo, o]));
+
+  const csfTipos = [
+    ...new Set(
+      (opts.csfObligaciones ?? [])
+        .map(mapCsfObligacion)
+        .filter((t): t is string => !!t)
+    ),
+  ];
+
+  // CSF list wins when it yields at least one mapped obligation.
+  const toSeed: { config: ObligacionConfig; fuente: string }[] =
+    csfTipos.length > 0
+      ? csfTipos.map((tipo) => ({
+          config: regimenByTipo.get(tipo) ?? defaultConfigForTipo(tipo),
+          fuente: "CSF",
+        }))
+      : regimenConfigs.map((config) => ({ config, fuente: "REGIMEN" }));
+
+  for (const { config, fuente } of toSeed) {
+    await prisma.companyObligation.upsert({
+      where: { companyId_tipo: { companyId, tipo: config.tipo } },
+      update: {
+        descripcion: config.descripcion,
+        periodicidad: config.periodicidad,
+        diaVencimiento: config.diaVencimiento,
+        mesVencimiento: config.mesVencimiento ?? null,
+        fuente,
+        activa: true,
+      },
+      create: {
+        companyId,
+        tipo: config.tipo,
+        descripcion: config.descripcion,
+        periodicidad: config.periodicidad,
+        diaVencimiento: config.diaVencimiento,
+        mesVencimiento: config.mesVencimiento ?? null,
+        fuente,
+      },
+    });
+  }
+  return toSeed.length;
+}
+
 /**
  * Map a CSF obligation description to our internal obligation tipo.
  * Returns null if no match found.
  */
 export function mapCsfObligacion(descripcion: string): string | null {
   const d = descripcion.toLowerCase();
-  if (d.includes("valor agregado") || d.includes(" iva ") || d.startsWith("iva")) {
+  // DIOT FIRST: the SAT labels it "Declaración de proveedores de IVA", which
+  // contains "iva" — so it must be caught before the IVA branch below.
+  if (d.includes("diot") || d.includes("operaciones con terceros") || d.includes("proveedores")) {
+    return "DIOT";
+  }
+  if (d.includes("valor agregado") || /\biva\b/.test(d)) {
     if (d.includes("bimestral")) return "IVA_BIMESTRAL";
     return "IVA_MENSUAL";
   }
-  if (d.includes("renta") || d.includes("isr") || d.includes("pagos provisionales")) {
+  if (d.includes("renta") || /\bisr\b/.test(d) || d.includes("pago provisional") || d.includes("pagos provisionales")) {
     if (d.includes("bimestral")) return "ISR_BIMESTRAL";
     if (d.includes("ejercicio") || d.includes("anual")) return "ISR_ANUAL";
     return "ISR_PROVISIONAL";
   }
-  if (d.includes("diot") || d.includes("operaciones con terceros")) return "DIOT";
   if (d.includes("retenci")) return "RETENCIONES_ISR";
   if (d.includes("declaraci") && d.includes("anual")) return "ISR_ANUAL";
   return null;

@@ -5,6 +5,7 @@ import { requireActiveSubscription } from "@/lib/subscription";
 import { AuthzError } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
+import { seedCompanyObligaciones } from "@/lib/obligaciones";
 
 export async function GET() {
   const session = await auth();
@@ -93,6 +94,7 @@ export async function POST(req: Request) {
     regimenes,
     satBackfillYears,
     plan,
+    csfObligaciones,
     onboardingPackage,
   } = body as {
     rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string;
@@ -104,6 +106,7 @@ export async function POST(req: Request) {
     regimenes?: Array<{ code: string; label?: string | null; since?: string | null }>;
     satBackfillYears?: number;
     plan?: string;
+    csfObligaciones?: string[];
     onboardingPackage?: {
       imss?: {
         registroPatronal?: string | null;
@@ -244,6 +247,20 @@ export async function POST(req: Request) {
       },
     },
   });
+
+  // Auto-seed recurring fiscal obligations now (rather than lazily on first
+  // Cumplimiento page load). Uses the CSF's explicit obligaciones when present
+  // (authoritative), else derives from the full set of régimen codes.
+  try {
+    await seedCompanyObligaciones(
+      company.id,
+      regimenCreate.map((r) => r.code),
+      { csfObligaciones: Array.isArray(csfObligaciones) ? csfObligaciones : undefined }
+    );
+  } catch (e) {
+    // Non-fatal: obligations also seed lazily on the Cumplimiento page.
+    console.error("[companies] obligation seed failed", e);
+  }
 
   // Persist historical monthly declarations parsed from acuses
   // These are flagged isHistorical=true so they're treated as baseline data

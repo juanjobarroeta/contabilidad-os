@@ -397,6 +397,10 @@ function OnboardingPageInner() {
           ? detected.filter((r) => selectedRegimenes.includes(r.code))
           : detected;
 
+      // The CSF's explicit obligaciones — authoritative source for which
+      // obligations the SAT registered for this taxpayer.
+      const csfObligaciones = csfDoc?.extracted.csf?.obligaciones ?? [];
+
       // Build onboardingPackage from parsed docs (IMSS, anual, mensuales)
       const imssDoc = parsedDocs.find((d) => d.type === "TARJETA_IMSS");
       const anualDoc = parsedDocs.find((d) => d.type === "ACUSE_ANUAL");
@@ -423,6 +427,7 @@ function OnboardingPageInner() {
           fielPassword: fiel.password || undefined,
           fechaInicioRegimen,
           regimenes,
+          csfObligaciones,
           satBackfillYears,
           plan,
           onboardingPackage,
