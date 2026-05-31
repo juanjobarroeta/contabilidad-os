@@ -311,6 +311,10 @@ function OnboardingPageInner() {
         .sort();
       const fechaInicioRegimen = regimenSinces[0] ?? undefined;
 
+      // Full régimen list detected on the CSF — persisted as CompanyRegimen rows
+      // alongside the chosen primary (fiscal.regimenFiscal).
+      const regimenes = (csfDoc?.extracted.csf?.regimenes ?? []).filter((r) => r.code);
+
       // Build onboardingPackage from parsed docs (IMSS, anual, mensuales)
       const imssDoc = parsedDocs.find((d) => d.type === "TARJETA_IMSS");
       const anualDoc = parsedDocs.find((d) => d.type === "ACUSE_ANUAL");
@@ -336,6 +340,7 @@ function OnboardingPageInner() {
           fielKey,
           fielPassword: fiel.password || undefined,
           fechaInicioRegimen,
+          regimenes,
           onboardingPackage,
         }),
       });

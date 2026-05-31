@@ -199,6 +199,12 @@ model Company {
   // WhatsApp channel (W0)
   whatsappLinks         WhatsappLink[]         @relation("WhatsappActiveCompany")
   whatsappConversations WhatsappConversation[]
+
+  // All SAT régimenes this taxpayer is registered under. `regimenFiscal` above
+  // remains the single "primary" (operative) régimen used by most flows; this
+  // list captures the rest (common for personas físicas) so obligation and
+  // annual-declaration logic can reason across all of them.
+  regimenes             CompanyRegimen[]
 }
 
 model CompanyMember {
@@ -2084,6 +2090,25 @@ model WhatsappConversation {
 enum WhatsappRole {
   USER
   ASSISTANT
+}
+
+// One SAT régimen a company/PF is registered under. The `isPrimary` row mirrors
+// Company.regimenFiscal (kept in sync at create time). A taxpayer often has
+// several (e.g. Sueldos y Salarios + Arrendamiento + Dividendos).
+model CompanyRegimen {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  code      String    // 3-digit SAT régimen code, e.g. "606"
+  label     String    // human label, e.g. "Arrendamiento"
+  since     DateTime? // "Fecha Inicio" from the CSF régimenes table
+  isPrimary Boolean  @default(false)
+
+  @@unique([companyId, code])
+  @@index([companyId])
 }
 
 model WhatsappMessage {

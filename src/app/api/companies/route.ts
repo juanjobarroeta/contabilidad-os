@@ -90,6 +90,7 @@ export async function POST(req: Request) {
     csdCer, csdKey, csdPassword,
     fielCer, fielKey, fielPassword,
     fechaInicioRegimen,
+    regimenes,
     onboardingPackage,
   } = body as {
     rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string;
@@ -98,6 +99,7 @@ export async function POST(req: Request) {
     csdCer?: string; csdKey?: string; csdPassword?: string;
     fielCer?: string; fielKey?: string; fielPassword?: string;
     fechaInicioRegimen?: string | null;
+    regimenes?: Array<{ code: string; label?: string | null; since?: string | null }>;
     onboardingPackage?: {
       imss?: {
         registroPatronal?: string | null;
@@ -162,6 +164,38 @@ export async function POST(req: Request) {
     if (!isNaN(parsed.getTime())) fechaInicioOperaciones = parsed;
   }
 
+  // Build the full régimen list. `regimenFiscal` is the chosen primary; the
+  // `regimenes` array (from onboarding) holds every régimen on the CSF. Always
+  // ensure the primary is present and flagged, de-dupe by code, and fall back
+  // to a single-row list for older clients that don't send the array.
+  const parseSince = (s?: string | null): Date | null => {
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const regimenByCode = new Map<
+    string,
+    { code: string; label: string; since: Date | null; isPrimary: boolean }
+  >();
+  for (const r of regimenes ?? []) {
+    if (!r?.code || regimenByCode.has(r.code)) continue;
+    regimenByCode.set(r.code, {
+      code: r.code,
+      label: r.label || r.code,
+      since: parseSince(r.since),
+      isPrimary: r.code === regimenFiscal,
+    });
+  }
+  if (!regimenByCode.has(regimenFiscal)) {
+    regimenByCode.set(regimenFiscal, {
+      code: regimenFiscal,
+      label: regimenFiscal,
+      since: fechaInicioOperaciones,
+      isPrimary: true,
+    });
+  }
+  const regimenCreate = [...regimenByCode.values()];
+
   const company = await prisma.company.create({
     data: {
       rfc: rfc.toUpperCase(),
@@ -194,6 +228,9 @@ export async function POST(req: Request) {
       // by an admin or by the Stripe webhook on add-on purchase.
       modules: {
         create: { modulo: "CONTABILIDAD" },
+      },
+      regimenes: {
+        create: regimenCreate,
       },
     },
   });
