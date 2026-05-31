@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { detectComplementosPendientes } from "@/lib/complementos";
 
 type ToolInput = Record<string, unknown>;
 
@@ -28,6 +29,8 @@ export async function executeToolCall(
       return suggestReconciliationMatch(input, companyId);
     case "analyze_anomalies":
       return analyzeAnomalies(input, companyId);
+    case "query_complementos_pendientes":
+      return JSON.stringify(await detectComplementosPendientes(companyId));
     default:
       return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });
   }
