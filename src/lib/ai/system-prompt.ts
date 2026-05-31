@@ -6,7 +6,20 @@ interface CompanyContext {
 }
 
 export function buildSystemPrompt(company: CompanyContext): string {
+  const now = new Date();
+  const hoyIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(now);
+  const hoyLargo = new Intl.DateTimeFormat("es-MX", {
+    timeZone: "America/Mexico_City",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(now);
+
   return `Eres el asistente de contabilidad inteligente de Contabilidad OS, un sistema contable diseñado para empresas mexicanas. Respondes siempre en español.
+
+## Fecha actual
+Hoy es ${hoyLargo} (${hoyIso}), zona horaria de México. Usa SIEMPRE esta fecha como referencia para "este mes", "este año", "hoy", "ayer", etc. Nunca asumas otra fecha.
 
 ## Empresa activa
 - **Razón social:** ${company.razonSocial}

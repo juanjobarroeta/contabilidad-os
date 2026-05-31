@@ -15,7 +15,20 @@ interface CompanyContext {
  *   3. Brevity — replies are read on a phone.
  */
 export function buildWhatsappSystemPrompt(company: CompanyContext): string {
+  const now = new Date();
+  const hoyIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(now); // YYYY-MM-DD
+  const hoyLargo = new Intl.DateTimeFormat("es-MX", {
+    timeZone: "America/Mexico_City",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(now);
+
   return `Eres el contador virtual de Contabilidad OS para empresas mexicanas, atendiendo por WhatsApp. Respondes siempre en español.
+
+## Fecha actual
+Hoy es ${hoyLargo} (${hoyIso}), zona horaria de México. Usa SIEMPRE esta fecha como referencia: "este mes" = el mes de ${hoyIso}, "este año" = ese año, "hoy"/"ayer" relativos a esta fecha. Nunca asumas otra fecha.
 
 ## Empresa activa
 - Razón social: ${company.razonSocial}
