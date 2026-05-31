@@ -2,11 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
-import {
-  calcularVencimiento,
-  seedCompanyObligaciones,
-  ObligacionConfig,
-} from "@/lib/obligaciones";
+import { calcularVencimiento, ObligacionConfig } from "@/lib/obligaciones";
+import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 
 // ── GET /api/obligaciones?companyId=xxx&year=2026 ─────────────────────────────
 // Returns the obligation calendar for the year, with filing status for each period.

@@ -5,7 +5,7 @@ import { requireActiveSubscription } from "@/lib/subscription";
 import { AuthzError } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
-import { seedCompanyObligaciones } from "@/lib/obligaciones";
+import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 import { encryptNullable } from "@/lib/crypto";
 
 export async function GET() {

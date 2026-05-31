@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X, ListChecks, RefreshCw, CreditCard, ExternalLink } from "lucide-react";
+import { mapCsfObligacion, TIPO_DESC } from "@/lib/obligaciones";
 
 // ── Types for the multi-document onboarding package ───────────────────────
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
@@ -458,6 +459,20 @@ function OnboardingPageInner() {
   // ── Derived data for the Revisión step ──────────────────────────────────────
   const csfObligaciones =
     parsedDocs.find((d) => d.type === "CSF")?.extracted.csf?.obligaciones ?? [];
+  // Normalize the CSF's obligation strings to the tipos we actually generate
+  // (IVA mensual, DIOT, ISR provisional/anual…), de-duped — same logic the
+  // server uses to seed CompanyObligation, so the user confirms the real set.
+  const mappedObligaciones = [
+    ...new Map(
+      csfObligaciones
+        .map((descripcion) => {
+          const tipo = mapCsfObligacion(descripcion);
+          return tipo ? { tipo, label: TIPO_DESC[tipo] ?? tipo, descripcion } : null;
+        })
+        .filter((x): x is { tipo: string; label: string; descripcion: string } => !!x)
+        .map((x) => [x.tipo, x] as const)
+    ).values(),
+  ];
   const anualDocReview =
     parsedDocs.find((d) => d.type === "ACUSE_ANUAL")?.extracted.acuseAnual ?? null;
   const mensualesReview = parsedDocs
@@ -791,12 +806,27 @@ function OnboardingPageInner() {
                 </div>
               </div>
 
-              {/* Obligaciones detectadas en el CSF */}
+              {/* Obligaciones — normalized to the tipos we'll actually track */}
               <div>
                 <p className="text-sm font-semibold mb-2">Obligaciones fiscales</p>
-                {csfObligaciones.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No se detectaron obligaciones en el CSF. Se generarán a partir de tus regímenes.</p>
-                ) : (
+                {mappedObligaciones.length > 0 ? (
+                  <>
+                    <ul className="space-y-1.5">
+                      {mappedObligaciones.map((o) => (
+                        <li key={o.tipo} className="flex items-start gap-2 text-xs">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0 mt-0.5" />
+                          <span>
+                            <span className="font-medium">{o.label}</span>
+                            <span className="text-muted-foreground"> — {o.descripcion}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[10px] text-muted-foreground mt-2">
+                      Generaremos el calendario de estas obligaciones con sus fechas de vencimiento.
+                    </p>
+                  </>
+                ) : csfObligaciones.length > 0 ? (
                   <ul className="space-y-1">
                     {csfObligaciones.map((o, i) => (
                       <li key={i} className="flex items-start gap-2 text-xs">
@@ -805,6 +835,8 @@ function OnboardingPageInner() {
                       </li>
                     ))}
                   </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No se detectaron obligaciones en el CSF. Se generarán a partir de tus regímenes.</p>
                 )}
               </div>
 

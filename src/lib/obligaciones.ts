@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Mexican fiscal obligations — static régimen map + due date calculator + CSF parser
+//
+// This module is PURE (no prisma/IO) so it can be imported from client
+// components too. The DB seeding lives in obligaciones-seed.ts.
 // ─────────────────────────────────────────────────────────────────────────────
-
-import { prisma } from "./prisma";
 
 export interface ObligacionConfig {
   tipo: string;
@@ -318,7 +319,7 @@ export function parsearTextoCsf(text: string): CsfData {
 
 // ── Obligation seeding engine ─────────────────────────────────────────────────
 
-const TIPO_DESC: Record<string, string> = {
+export const TIPO_DESC: Record<string, string> = {
   IVA_MENSUAL: "IVA mensual",
   IVA_BIMESTRAL: "IVA bimestral",
   ISR_PROVISIONAL: "ISR pagos provisionales",
@@ -329,7 +330,7 @@ const TIPO_DESC: Record<string, string> = {
 };
 
 /** Best-effort config for an obligation tipo not present in the régimen map. */
-function defaultConfigForTipo(tipo: string): ObligacionConfig {
+export function defaultConfigForTipo(tipo: string): ObligacionConfig {
   const descripcion = TIPO_DESC[tipo] ?? tipo;
   if (tipo.endsWith("ANUAL")) {
     // Default to the PF deadline (Apr 30); PM (Mar 31) comes from the régimen map.
@@ -339,74 +340,6 @@ function defaultConfigForTipo(tipo: string): ObligacionConfig {
     return { tipo, descripcion, periodicidad: "BIMESTRAL", diaVencimiento: 17 };
   }
   return { tipo, descripcion, periodicidad: "MENSUAL", diaVencimiento: 17 };
-}
-
-/**
- * Seed a company's recurring fiscal obligations (CompanyObligation rows).
- *
- * Source of truth:
- *   1. If the CSF lists explicit obligaciones, those WIN — they reflect what the
- *      SAT actually registered for this taxpayer (e.g. an employee under 605
- *      doesn't file retenciones; a 606 arrendador may also owe DIOT). We keep
- *      the régimen map's periodicity/due-date for each tipo when available,
- *      else fall back to a sensible default. Tagged fuente="CSF".
- *   2. Otherwise (manual entry, no CSF), derive the union of obligations from
- *      all of the company's régimen codes. Tagged fuente="REGIMEN".
- *
- * Idempotent: skips if the company already has obligations unless `force`.
- * Returns the number of obligation types seeded.
- */
-export async function seedCompanyObligaciones(
-  companyId: string,
-  regimenCodes: string[],
-  opts: { force?: boolean; csfObligaciones?: string[] } = {}
-): Promise<number> {
-  const existing = await prisma.companyObligation.count({ where: { companyId } });
-  if (existing > 0 && !opts.force) return 0;
-
-  const regimenConfigs = getObligacionesPorRegimen(regimenCodes.join(","));
-  const regimenByTipo = new Map(regimenConfigs.map((o) => [o.tipo, o]));
-
-  const csfTipos = [
-    ...new Set(
-      (opts.csfObligaciones ?? [])
-        .map(mapCsfObligacion)
-        .filter((t): t is string => !!t)
-    ),
-  ];
-
-  // CSF list wins when it yields at least one mapped obligation.
-  const toSeed: { config: ObligacionConfig; fuente: string }[] =
-    csfTipos.length > 0
-      ? csfTipos.map((tipo) => ({
-          config: regimenByTipo.get(tipo) ?? defaultConfigForTipo(tipo),
-          fuente: "CSF",
-        }))
-      : regimenConfigs.map((config) => ({ config, fuente: "REGIMEN" }));
-
-  for (const { config, fuente } of toSeed) {
-    await prisma.companyObligation.upsert({
-      where: { companyId_tipo: { companyId, tipo: config.tipo } },
-      update: {
-        descripcion: config.descripcion,
-        periodicidad: config.periodicidad,
-        diaVencimiento: config.diaVencimiento,
-        mesVencimiento: config.mesVencimiento ?? null,
-        fuente,
-        activa: true,
-      },
-      create: {
-        companyId,
-        tipo: config.tipo,
-        descripcion: config.descripcion,
-        periodicidad: config.periodicidad,
-        diaVencimiento: config.diaVencimiento,
-        mesVencimiento: config.mesVencimiento ?? null,
-        fuente,
-      },
-    });
-  }
-  return toSeed.length;
 }
 
 /**
