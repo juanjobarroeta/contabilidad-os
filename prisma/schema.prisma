@@ -136,6 +136,9 @@ model Company {
   // onboarding. 5 = SAT legal maximum, 1 = last year, 0 = no backfill. Still
   // clamped by fechaInicioOperaciones so we never ask before the RFC existed.
   satBackfillYears  Int       @default(5)
+  // Set once the historical backfill has fully completed (all in-range periods
+  // imported). Lets the throttled backfill cron skip finished companies.
+  satBackfillCompletedAt DateTime?
 
   // Selected subscription plan (UI/trial only for now — no billing yet):
   // "BASICO" | "PROFESIONAL" | "DESPACHO".
