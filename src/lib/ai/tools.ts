@@ -107,6 +107,25 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "query_sat_sync_status",
+    description:
+      "Reporta el estado de la sincronización de CFDIs con el SAT: si la descarga histórica (backfill) ya terminó, cuántos periodos (meses) están completos vs. pendientes, el rango de fechas cubierto, cuántos CFDIs se han importado, y qué meses faltan. Úsala cuando pregunten '¿ya se descargaron todos mis CFDIs?', '¿ya terminó la descarga de 5 años?', '¿faltan facturas por bajar del SAT?'.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "query_tax_position",
+    description:
+      "Calcula la posición fiscal del mes (IVA a pagar e ISR provisional) a partir de los CFDIs sincronizados, en flujo de efectivo. Úsala cuando pregunten '¿cuánto IVA/ISR debo este mes?', cuánto van a pagar de impuestos, o la posición fiscal de un periodo. Devuelve IVA trasladado/acreditable/a pagar, saldo a favor, y el ISR provisional (Art. 14) con su coeficiente de utilidad. Si no se dan mes/año, usa el mes actual.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        year: { type: "number", description: "Año del periodo, e.g. 2026. Default: año actual." },
+        month: { type: "number", description: "Mes 1-12. Default: mes actual." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "query_complementos_pendientes",
     description:
       "Detecta facturas PPD (pago en parcialidades o diferido) que recibieron pago pero a las que aún les falta emitir el Complemento de Pago (REP). Incluye la fecha límite legal (día 5 del mes siguiente al pago) y la urgencia (VENCIDO / POR_VENCER / EN_TIEMPO). Úsala cuando pregunten por complementos de pago, REP, o qué les falta timbrar.",
@@ -115,6 +134,12 @@ export const tools: Anthropic.Tool[] = [
       properties: {},
       required: [],
     },
+  },
+  {
+    name: "query_complementos_recibidos_pendientes",
+    description:
+      "Detecta gastos PPD que YA PAGASTE pero para los que el PROVEEDOR aún no te ha enviado el Complemento de Pago (REP). Sin ese complemento, la deducción del gasto está en riesgo. Úsala cuando pregunten qué complementos les deben los proveedores, o qué gastos están en riesgo por falta de complemento. Devuelve proveedor, monto pagado, fecha límite y urgencia.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
   },
   {
     name: "categorize_transaction",
@@ -145,7 +170,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "analyze_anomalies",
     description:
-      "Analiza transacciones e invoices recientes buscando anomalías: montos duplicados, facturas sin CFDI correspondiente, transacciones inusualmente altas, patrones sospechosos.",
+      "Revisa qué podría estar mal en la contabilidad: montos duplicados, transacciones inusualmente altas, movimientos sin conciliar, CFDIs cancelados (que no deben contar en IVA/ISR), y complementos de pago pendientes en ambas direcciones (los que debes emitir y los que te deben tus proveedores, con riesgo a tu deducción). Úsala para '¿qué tengo mal?', '¿hay riesgos en mis deducciones?', revisiones generales.",
     input_schema: {
       type: "object" as const,
       properties: {

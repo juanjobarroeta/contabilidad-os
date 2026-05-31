@@ -1,8 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import {
-  verifyTwilioSignature,
-  resolveWebhookUrl,
+  candidateWebhookUrls,
+  verifyTwilioSignatureAny,
+  sendWhatsappMessage,
   twiml,
   toE164,
   twilioConfigured,
@@ -14,8 +15,10 @@ import {
   setActiveCompany,
   type AccessibleCompany,
 } from "@/lib/whatsapp/identity";
-import { runWhatsappAgent } from "@/lib/whatsapp/agent";
+import { runWhatsappAgent, type WhatsappCompany } from "@/lib/whatsapp/agent";
 
+// Long-running Node server (Railway `next start`), NOT serverless — so the
+// background agent work kicked off after we respond keeps running to completion.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -58,17 +61,48 @@ function parseSelection(
 
 const SWITCH_RE = /\b(cambiar|cambia(r)?\s+(de\s+)?empresa|otra\s+empresa)\b/i;
 
+/**
+ * The slow part: run the read-only agent and deliver the answer via the Twilio
+ * REST API. Runs in the background (NOT awaited by the webhook) so Twilio gets
+ * an instant 200 and never hits its ~15s webhook timeout. Failures are reported
+ * to the user over REST rather than swallowed.
+ */
+async function processAgentTurn(opts: {
+  companyId: string;
+  company: WhatsappCompany;
+  conversationId: string;
+  history: Anthropic.MessageParam[];
+  userText: string;
+  phone: string;
+}): Promise<void> {
+  const { companyId, company, conversationId, history, userText, phone } = opts;
+  let answer: string;
+  try {
+    answer = await runWhatsappAgent({ companyId, company, history, userText });
+  } catch (e) {
+    console.error("[whatsapp] agent error", e);
+    answer = "Tuve un problema al procesar tu consulta. Inténtalo de nuevo en un momento.";
+  }
+  try {
+    await prisma.whatsappMessage.create({
+      data: { conversationId, role: "ASSISTANT", body: answer },
+    });
+    await sendWhatsappMessage(phone, answer);
+  } catch (e) {
+    console.error("[whatsapp] failed to deliver answer", e);
+  }
+}
+
 export async function POST(req: Request) {
   // ── 1. Trust boundary: verify Twilio signature. Fail closed. ──────────────
   if (!twilioConfigured()) return ack();
 
-  const url = resolveWebhookUrl(req);
   const form = await req.formData();
   const params: Record<string, string> = {};
   for (const [k, v] of form.entries()) params[k] = typeof v === "string" ? v : "";
 
   const signature = req.headers.get("x-twilio-signature");
-  if (!verifyTwilioSignature(url, params, signature)) {
+  if (!verifyTwilioSignatureAny(candidateWebhookUrls(req), params, signature)) {
     return new Response("invalid signature", { status: 403 });
   }
 
@@ -77,6 +111,7 @@ export async function POST(req: Request) {
   const messageSid = params.MessageSid ?? params.SmsMessageSid ?? "";
   const phone = toE164(from);
 
+  // No text body (e.g. a voice note or media-only message) — nothing to answer yet.
   if (!phone || !body) return ack();
 
   // ── 2. Inbound dedup (Twilio retries on timeout). ─────────────────────────
@@ -102,16 +137,14 @@ export async function POST(req: Request) {
     return reply("Tu cuenta no tiene empresas activas asignadas todavía.");
   }
 
-  // ── 4. Resolve which company this turn is about. ──────────────────────────
+  // ── 4. Resolve which company this turn is about (fast, inline replies). ────
   let activeCompanyId: string | null = sender.activeCompanyId;
 
-  // Explicit "cambiar empresa" → drop selection and show the menu.
   if (SWITCH_RE.test(body) && companies.length > 1) {
     await setActiveCompany(sender.linkId, null);
     return reply(menuText(companies));
   }
 
-  // Validate any remembered selection still grants access.
   if (activeCompanyId && !(await userCanAccessCompany(sender.userId, activeCompanyId))) {
     activeCompanyId = null;
     await setActiveCompany(sender.linkId, null);
@@ -122,9 +155,6 @@ export async function POST(req: Request) {
       activeCompanyId = companies[0].id;
       await setActiveCompany(sender.linkId, activeCompanyId);
     } else {
-      // Multiple companies and nothing chosen: treat a bare number as a pick,
-      // otherwise present the menu. Menu order is deterministic (sorted), so we
-      // can resolve the reply without persisting the menu itself.
       const picked = parseSelection(body, companies);
       if (!picked) return reply(menuText(companies));
       activeCompanyId = picked.id;
@@ -135,7 +165,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // ── 5. Load company context + conversation history. ───────────────────────
+  // ── 5. Load context fast, then hand the slow agent work to the background. ─
   const company = await prisma.company.findUnique({
     where: { id: activeCompanyId },
     select: { rfc: true, razonSocial: true, regimenFiscal: true, codigoPostal: true },
@@ -149,6 +179,7 @@ export async function POST(req: Request) {
     select: { id: true },
   });
 
+  // History BEFORE persisting the current turn, so it isn't duplicated.
   const recent = await prisma.whatsappMessage.findMany({
     where: { conversationId: conversation.id },
     orderBy: { createdAt: "desc" },
@@ -157,33 +188,27 @@ export async function POST(req: Request) {
   });
   const history: Anthropic.MessageParam[] = recent
     .reverse()
-    .map((m) => ({
-      role: m.role === "ASSISTANT" ? "assistant" : "user",
-      content: m.body,
-    }));
+    .map((m) => ({ role: m.role === "ASSISTANT" ? "assistant" : "user", content: m.body }));
 
-  // ── 6. Run the read-only agent. ───────────────────────────────────────────
-  let answer: string;
-  try {
-    answer = await runWhatsappAgent({
-      companyId: activeCompanyId,
-      company,
-      history,
-      userText: body,
-    });
-  } catch (e) {
-    console.error("[whatsapp] agent error", e);
-    answer =
-      "Tuve un problema al procesar tu consulta. Inténtalo de nuevo en un momento.";
-  }
-
-  // ── 7. Persist the turn and reply. ────────────────────────────────────────
-  await prisma.whatsappMessage.createMany({
-    data: [
-      { conversationId: conversation.id, role: "USER", body, providerSid: messageSid || null },
-      { conversationId: conversation.id, role: "ASSISTANT", body: answer },
-    ],
+  // Persist the user message now (also dedups Twilio retries via providerSid).
+  await prisma.whatsappMessage.create({
+    data: {
+      conversationId: conversation.id,
+      role: "USER",
+      body,
+      providerSid: messageSid || null,
+    },
   });
 
-  return reply(answer);
+  // Fire-and-forget the agent + REST delivery; respond to Twilio immediately.
+  void processAgentTurn({
+    companyId: activeCompanyId,
+    company,
+    conversationId: conversation.id,
+    history,
+    userText: body,
+    phone,
+  });
+
+  return ack();
 }

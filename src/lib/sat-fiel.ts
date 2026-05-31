@@ -101,6 +101,34 @@ export function parseCfdiXml(xml: string) {
     });
   }
 
+  // Complemento de Pago (tipo P): DoctoRelacionado nodes carry the UUID(s) of
+  // the parent invoices this payment applies to. Capturing these lets us link
+  // a REP to the invoice it pays — for both emitidos (do I still owe a REP?)
+  // and recibidos (did my vendor send the REP for a gasto I paid?).
+  const doctosRelacionados: Array<{
+    uuid: string;
+    impPagado: number | null;
+    numParcialidad: number | null;
+    impSaldoAnterior: number | null;
+    impSaldoInsoluto: number | null;
+  }> = [];
+  const doctoRe = /<(?:[a-zA-Z0-9]+:)?DoctoRelacionado\b([^>]*)(?:\/>|>)/g;
+  let dm: RegExpExecArray | null;
+  while ((dm = doctoRe.exec(xml)) !== null) {
+    const attrs = dm[1];
+    const get = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
+    const id = get("IdDocumento");
+    if (!id) continue;
+    const num = (v: string | null) => (v != null && v !== "" ? parseFloat(v) : null);
+    doctosRelacionados.push({
+      uuid: id.toUpperCase(),
+      impPagado: num(get("ImpPagado")),
+      numParcialidad: num(get("NumParcialidad")),
+      impSaldoAnterior: num(get("ImpSaldoAnt")),
+      impSaldoInsoluto: num(get("ImpSaldoInsoluto")),
+    });
+  }
+
   return {
     uuid,
     fecha,
@@ -120,5 +148,6 @@ export function parseCfdiXml(xml: string) {
     rfcReceptor,
     nombreReceptor,
     items,
+    doctosRelacionados,
   };
 }

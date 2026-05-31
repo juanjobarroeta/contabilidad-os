@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { detectComplementosPendientes } from "@/lib/complementos";
+import {
+  detectComplementosPendientes,
+  detectComplementosRecibidosPendientes,
+} from "@/lib/complementos";
+import { computeTaxPosition } from "@/lib/impuestos";
+import { getSatSyncStatus } from "@/lib/sat-status";
 
 type ToolInput = Record<string, unknown>;
 
@@ -31,6 +36,16 @@ export async function executeToolCall(
       return analyzeAnomalies(input, companyId);
     case "query_complementos_pendientes":
       return JSON.stringify(await detectComplementosPendientes(companyId));
+    case "query_complementos_recibidos_pendientes":
+      return JSON.stringify(await detectComplementosRecibidosPendientes(companyId));
+    case "query_sat_sync_status":
+      return JSON.stringify(await getSatSyncStatus(companyId));
+    case "query_tax_position": {
+      const now = new Date();
+      const year = typeof input.year === "number" ? input.year : now.getFullYear();
+      const month = typeof input.month === "number" ? input.month : now.getMonth() + 1;
+      return JSON.stringify(await computeTaxPosition(companyId, year, month));
+    }
     default:
       return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });
   }
@@ -481,6 +496,19 @@ async function analyzeAnomalies(input: ToolInput, companyId: string) {
   // Unmatched transactions count
   const unmatchedCount = transactions.filter((t) => t.status === "UNMATCHED").length;
 
+  // ── Fiscal-specific checks ────────────────────────────────────────────────
+  // Cancelled CFDIs in the window — these must NOT be counted in IVA/ISR, a
+  // common error when a CFDI is cancelled after the declaration was computed.
+  const cancelledCount = await prisma.invoice.count({
+    where: { companyId, status: "CANCELLED", fecha: { gte: since } },
+  });
+
+  // Complementos de pago: both directions (accurate, deadline-aware).
+  const [emitidos, recibidos] = await Promise.all([
+    detectComplementosPendientes(companyId),
+    detectComplementosRecibidosPendientes(companyId),
+  ]);
+
   return JSON.stringify({
     periodo: `Últimos ${days} días`,
     totalFacturas: invoices.length,
@@ -488,6 +516,22 @@ async function analyzeAnomalies(input: ToolInput, companyId: string) {
     duplicateAmounts: duplicateAmounts.slice(0, 10),
     unusualTransactions: unusualTransactions.slice(0, 10),
     unmatchedTransactions: unmatchedCount,
+    cfdisCancelados: cancelledCount,
+    complementosQueDebesEmitir: {
+      total: emitidos.stats.totalPendientes,
+      vencidos: emitidos.stats.vencidos,
+      montoPendiente: emitidos.stats.montoPendiente,
+    },
+    complementosQueTeDebenProveedores: {
+      total: recibidos.stats.totalPendientes,
+      vencidos: recibidos.stats.vencidos,
+      ejemplos: recibidos.pendientes.slice(0, 5).map((p) => ({
+        proveedor: p.proveedor,
+        totalPagado: p.totalPagado,
+        fechaLimite: p.fechaLimite,
+        urgencia: p.urgencia,
+      })),
+    },
     stats: { mean: Math.round(mean), stdDev: Math.round(std), threshold: Math.round(threshold) },
   });
 }

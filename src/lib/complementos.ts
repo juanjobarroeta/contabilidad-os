@@ -44,6 +44,24 @@ export interface ComplementosResult {
   };
 }
 
+export interface ComplementoRecibidoPendiente {
+  invoiceId: string;
+  uuid: string | null;
+  proveedor: string | null;
+  fechaFactura: string;
+  total: number;
+  totalPagado: number;
+  ultimoPago: string;
+  fechaLimite: string;
+  urgencia: Urgencia;
+  diasParaVencer: number;
+}
+
+export interface ComplementosRecibidosResult {
+  pendientes: ComplementoRecibidoPendiente[];
+  stats: { totalPendientes: number; vencidos: number; porVencer: number };
+}
+
 /** Complemento deadline: the 5th of the month AFTER the payment month. */
 export function fechaLimiteComplemento(pago: Date): Date {
   const y = pago.getUTCFullYear();
@@ -144,6 +162,84 @@ export async function detectComplementosPendientes(
       vencidos: pendientes.filter((p) => p.urgencia === "VENCIDO").length,
       porVencer: pendientes.filter((p) => p.urgencia === "POR_VENCER").length,
       montoPendiente: Math.round(pendientes.reduce((s, p) => s + p.montoPendiente, 0) * 100) / 100,
+    },
+  };
+}
+
+/**
+ * Direction 2 — complementos a vendor owes YOU.
+ *
+ * For each PPD EGRESO (gasto) you've paid (matched outgoing bank tx), check
+ * whether a received complemento de pago references its UUID via the parsed
+ * DoctoRelacionado links. If you paid but no REP references that invoice, the
+ * vendor still owes you the complemento — a real risk to your deduction.
+ *
+ * Accuracy: uses the actual DoctoRelacionado UUID linkage (parsed at import),
+ * not an RFC+amount heuristic, so it won't cry wolf.
+ */
+export async function detectComplementosRecibidosPendientes(
+  companyId: string,
+  now: Date = new Date()
+): Promise<ComplementosRecibidosResult> {
+  const ppdGastos = await prisma.invoice.findMany({
+    where: { companyId, tipo: "EGRESO", metodoPago: "PPD", status: "STAMPED" },
+    select: {
+      id: true,
+      uuid: true,
+      fecha: true,
+      total: true,
+      customer: { select: { razonSocial: true } },
+      bankTransactions: {
+        where: { status: "MATCHED", monto: { lt: 0 } }, // outgoing = payments made
+        select: { fecha: true, monto: true },
+      },
+    },
+  });
+
+  const paid = ppdGastos.filter((g) => g.bankTransactions.length > 0 && g.uuid);
+  if (paid.length === 0) {
+    return { pendientes: [], stats: { totalPendientes: 0, vencidos: 0, porVencer: 0 } };
+  }
+
+  // Which of these parent UUIDs are referenced by ANY received PAGO complemento?
+  const uuids = paid.map((g) => g.uuid!) as string[];
+  const links = await prisma.pagoDoctoRelacionado.findMany({
+    where: {
+      parentUuid: { in: uuids },
+      pagoInvoice: { companyId, tipo: "PAGO" },
+    },
+    select: { parentUuid: true },
+  });
+  const complementado = new Set(links.map((l) => l.parentUuid));
+
+  const pendientes: ComplementoRecibidoPendiente[] = [];
+  for (const g of paid) {
+    if (complementado.has(g.uuid!)) continue; // vendor already sent the REP
+    const totalPagado = g.bankTransactions.reduce((s, t) => s + Math.abs(t.monto), 0);
+    const ultimoPago = g.bankTransactions.reduce((a, b) => (a.fecha > b.fecha ? a : b)).fecha;
+    const fechaLimite = fechaLimiteComplemento(ultimoPago);
+    const { urgencia, dias } = classify(fechaLimite, now);
+    pendientes.push({
+      invoiceId: g.id,
+      uuid: g.uuid,
+      proveedor: g.customer?.razonSocial ?? null,
+      fechaFactura: g.fecha.toISOString().slice(0, 10),
+      total: g.total,
+      totalPagado: Math.round(totalPagado * 100) / 100,
+      ultimoPago: ultimoPago.toISOString().slice(0, 10),
+      fechaLimite: fechaLimite.toISOString().slice(0, 10),
+      urgencia,
+      diasParaVencer: dias,
+    });
+  }
+  pendientes.sort((a, b) => a.diasParaVencer - b.diasParaVencer);
+
+  return {
+    pendientes,
+    stats: {
+      totalPendientes: pendientes.length,
+      vencidos: pendientes.filter((p) => p.urgencia === "VENCIDO").length,
+      porVencer: pendientes.filter((p) => p.urgencia === "POR_VENCER").length,
     },
   };
 }

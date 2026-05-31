@@ -507,7 +507,7 @@ export async function verifyAndImportSatSync(
           }
         }
 
-        await prisma.invoice.create({
+        const createdInvoice = await prisma.invoice.create({
           data: {
             companyId,
             customerId,
@@ -542,6 +542,21 @@ export async function verifyAndImportSatSync(
                 : undefined,
           },
         });
+
+        // Persist complemento de pago links (DoctoRelacionado parent UUIDs).
+        if (invoiceType === "PAGO" && cfdi.doctosRelacionados?.length) {
+          await prisma.pagoDoctoRelacionado.createMany({
+            data: cfdi.doctosRelacionados.map((d) => ({
+              pagoInvoiceId: createdInvoice.id,
+              parentUuid: d.uuid,
+              impPagado: d.impPagado,
+              numParcialidad: d.numParcialidad != null ? Math.trunc(d.numParcialidad) : null,
+              impSaldoAnterior: d.impSaldoAnterior,
+              impSaldoInsoluto: d.impSaldoInsoluto,
+            })),
+            skipDuplicates: true,
+          });
+        }
         imported++;
       }
     }

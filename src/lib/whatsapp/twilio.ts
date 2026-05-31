@@ -74,6 +74,37 @@ export function resolveWebhookUrl(req: Request): string {
   return `${proto}://${host}${pathname}${search}`;
 }
 
+/**
+ * Every plausible URL Twilio might have signed: the pinned env value (if set)
+ * plus URLs reconstructed from the proxy headers (https + the host variants).
+ * A pinned URL that's subtly wrong (trailing slash, stale host) is the usual
+ * cause of a 403 — verifying against all candidates makes that non-fatal
+ * without weakening security: an attacker still can't forge a valid HMAC for
+ * ANY url without the auth token.
+ */
+export function candidateWebhookUrls(req: Request): string[] {
+  const urls = new Set<string>();
+  if (process.env.TWILIO_WEBHOOK_URL) urls.add(process.env.TWILIO_WEBHOOK_URL);
+  const h = req.headers;
+  const { pathname, search } = new URL(req.url);
+  const hosts = [h.get("x-forwarded-host"), h.get("host")].filter(Boolean) as string[];
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  for (const host of hosts) {
+    urls.add(`${proto}://${host}${pathname}${search}`);
+    urls.add(`https://${host}${pathname}${search}`);
+  }
+  return [...urls];
+}
+
+/** True if the signature matches ANY candidate URL. */
+export function verifyTwilioSignatureAny(
+  urls: string[],
+  params: Record<string, string>,
+  signature: string | null
+): boolean {
+  return urls.some((u) => verifyTwilioSignature(u, params, signature));
+}
+
 /** Sends a WhatsApp message via Twilio REST. Returns the message SID. */
 export async function sendWhatsappMessage(
   toE164: string,
