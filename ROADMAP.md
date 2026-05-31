@@ -64,7 +64,7 @@ party; contador gets a separate "manage clients" view.
 
 ## 3. Execution ladder
 
-### W0 — Channel + identity + read-only Q&A (Pillar A)
+### W0 — Channel + identity + read-only Q&A (Pillar A) — *backend built; pending DB push + settings UI + live test*
 - `POST /api/whatsapp/webhook` (Twilio), **verify `X-Twilio-Signature`** on every request.
 - **New tables:** `WhatsappLink` (phoneE164, userId, verifiedAt, activeCompanyId),
   `WhatsappConversation`, `WhatsappMessage` (history + `pendingAction` slot for later).

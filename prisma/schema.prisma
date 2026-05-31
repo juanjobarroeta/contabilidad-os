@@ -38,6 +38,8 @@ model User {
   // Per-company CompanyMember rows are still used for one-off access grants
   // to users outside the owning despacho.
   despachoMemberships DespachoMember[]
+  // Verified WhatsApp numbers bound to this user (W0 channel).
+  whatsappLinks       WhatsappLink[]
 }
 
 enum SubscriptionStatus {
@@ -193,6 +195,10 @@ model Company {
 
   // Despacho per-company scoping junction
   despachoMemberScopes DespachoMemberCompany[]
+
+  // WhatsApp channel (W0)
+  whatsappLinks         WhatsappLink[]         @relation("WhatsappActiveCompany")
+  whatsappConversations WhatsappConversation[]
 }
 
 model CompanyMember {
@@ -2018,4 +2024,78 @@ enum ReembolsoEstado {
   REVISADO    // Katia validó líneas, listo para pagar
   REEMBOLSADO // Juan ya SPEIó a Rosy, BankTransaction creada
   RECHAZADO   // inconsistencias / duplicados / no justificado
+}
+
+// ─── WhatsApp channel (W0) ─────────────────────────────────────────────────────
+
+// A verified binding between a WhatsApp phone number and an app user.
+//
+// SECURITY: caller ID alone is NEVER trusted. A link is only honored once
+// `verifiedAt` is set via the in-app 6-digit code flow. Until then the row is
+// inert (resolvePhone ignores it). One user may link several numbers; a number
+// maps to exactly one user (a phone is an identity, not a shared mailbox).
+model WhatsappLink {
+  id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  phoneE164     String    @unique          // normalized, e.g. "+5215512345678"
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Verification (code-based, started in-app). Unverified rows are inert.
+  verifiedAt    DateTime?
+  codeHash      String?                     // sha256 of the 6-digit code (never store the code)
+  codeExpiresAt DateTime?
+  attempts      Int       @default(0)       // failed verify attempts → lockout
+
+  // Which company this number is currently "talking about". Set after the user
+  // disambiguates; switchable mid-conversation. Null = ask again on next inbound.
+  activeCompanyId String?
+  activeCompany   Company? @relation("WhatsappActiveCompany", fields: [activeCompanyId], references: [id], onDelete: SetNull)
+
+  conversations WhatsappConversation[]
+
+  @@index([userId])
+}
+
+// One thread per (link, company). Holds rolling history + a reserved slot for a
+// pending write action (unused in W0; for the W4 confirmation flow).
+model WhatsappConversation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  linkId    String
+  link      WhatsappLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Reserved for Pillar-F writes: a serialized action awaiting in-app/code
+  // confirmation. Always null in W0 (read-only).
+  pendingAction Json?
+
+  messages  WhatsappMessage[]
+
+  @@unique([linkId, companyId])
+  @@index([companyId])
+}
+
+enum WhatsappRole {
+  USER
+  ASSISTANT
+}
+
+model WhatsappMessage {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+
+  conversationId String
+  conversation   WhatsappConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role           WhatsappRole
+  body           String   @db.Text
+  providerSid    String?  // Twilio message SID — inbound dedup / outbound audit
+
+  @@index([conversationId, createdAt])
 }
