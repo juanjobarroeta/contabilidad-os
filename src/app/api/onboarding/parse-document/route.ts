@@ -49,6 +49,12 @@ const REGIMEN_LABELS: Record<string, string> = {
   "626": "Régimen Simplificado de Confianza",
 };
 
+// Rendered into the prompt so the model can map régimen NAMES (which is all the
+// CSF prints) to their 3-digit SAT codes instead of guessing.
+const REGIMEN_CATALOG = Object.entries(REGIMEN_LABELS)
+  .map(([code, label]) => `${code} — ${label}`)
+  .join("\n");
+
 const SYSTEM_PROMPT = `Eres un asistente experto en documentos fiscales del SAT y del IMSS mexicanos. Tu tarea es CLASIFICAR un documento y EXTRAER sus datos estructurados en una sola pasada.
 
 REGLAS CRÍTICAS:
@@ -62,7 +68,10 @@ REGLAS CRÍTICAS:
    - "OTRO": cualquier otro documento.
 4. Devuelve los campos correspondientes al type detectado. Los demás quedan como null o arrays vacíos.
 5. Fechas en formato ISO YYYY-MM-DD. Montos como números (no strings, sin símbolos).
-6. Para CSF: detecta TODOS los regímenes listados, no solo uno. Devuélvelos en "regimenes" como array de { code, label, since }.
+6. Para CSF: en la sección "Regímenes" del documento los regímenes aparecen por su NOMBRE, no por su clave numérica. Detecta TODOS los que estén listados (pueden ser varios) y asigna a cada uno su clave de 3 dígitos usando el catálogo de abajo. Devuélvelos en "regimenes" como array de { code, label, since } donde "code" es la clave de 3 dígitos y "label" el nombre. Si hay más de uno, deja "regimenFiscal" (el principal) en null para que el usuario elija; NO inventes uno.
+
+CATÁLOGO DE RÉGIMENES (clave — nombre). Usa exactamente estas claves:
+${REGIMEN_CATALOG}
 
 SCHEMA DE RESPUESTA (devuelve exactamente estos campos, null cuando no apliquen):
 {
@@ -173,6 +182,49 @@ type ParsedDocument = {
   acuseMensual: Record<string, unknown> | null;
   confidenceNotes: string | null;
 };
+
+// Normalize a régimen string for fuzzy name matching: lowercase, strip
+// accents, drop the "Régimen de…" scaffolding and punctuation.
+function normalizeRegimen(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/r[eé]?gimen|de los|de las|\bdel\b|\bde\b/g, " ")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const REGIMEN_BY_NAME = Object.entries(REGIMEN_LABELS).map(([code, label]) => ({
+  code,
+  norm: normalizeRegimen(label),
+}));
+
+/**
+ * Recover the real 3-digit régimen code. The CSF prints régimenes by name, so
+ * the model sometimes returns a wrong code or puts the name in the code field.
+ * Trust a valid numeric code if present; otherwise match the printed name
+ * against our catalog (longest containment match wins).
+ */
+function resolveRegimenCode(
+  code: string | null | undefined,
+  label: string | null | undefined
+): string | null {
+  const c = (code ?? "").trim();
+  if (VALID_REGIMENES.has(c)) return c;
+  const hay = normalizeRegimen(label || code || "");
+  if (!hay) return null;
+  let best: { code: string; score: number } | null = null;
+  for (const r of REGIMEN_BY_NAME) {
+    if (!r.norm) continue;
+    if (hay === r.norm || hay.includes(r.norm) || r.norm.includes(hay)) {
+      const score = Math.min(hay.length, r.norm.length);
+      if (!best || score > best.score) best = { code: r.code, score };
+    }
+  }
+  return best?.code ?? null;
+}
 
 function validateRfc(rfc: string | null): { valid: boolean; reason?: string } {
   if (!rfc) return { valid: false, reason: "RFC no encontrado" };
@@ -305,14 +357,28 @@ export async function POST(req: Request) {
     if (parsed.csf.rfc) parsed.csf.rfc = parsed.csf.rfc.trim().toUpperCase();
     if (parsed.csf.curp) parsed.csf.curp = parsed.csf.curp.trim().toUpperCase();
     if (!Array.isArray(parsed.csf.regimenes)) parsed.csf.regimenes = [];
-    // Fill in missing labels from our catalog
+    // Recover the real 3-digit code (the CSF prints names, not codes, so the
+    // model can return a wrong/empty code), then fill the label from our
+    // catalog. Drop entries we genuinely can't resolve, and de-dupe by code.
+    const seen = new Set<string>();
     parsed.csf.regimenes = parsed.csf.regimenes
-      .filter((r) => r && r.code)
-      .map((r) => ({
-        code: r.code,
-        label: r.label || REGIMEN_LABELS[r.code] || r.code,
-        since: r.since ?? null,
-      }));
+      .filter((r) => r && (r.code || r.label))
+      .map((r) => {
+        const code = resolveRegimenCode(r.code, r.label) ?? "";
+        return { code, label: REGIMEN_LABELS[code] || r.label || code, since: r.since ?? null };
+      })
+      .filter((r) => {
+        if (!VALID_REGIMENES.has(r.code) || seen.has(r.code)) return false;
+        seen.add(r.code);
+        return true;
+      });
+
+    // Resolve the single "primary" field too. Leave it null when there are
+    // several so the user explicitly picks; default it when there's exactly one.
+    parsed.csf.regimenFiscal = resolveRegimenCode(parsed.csf.regimenFiscal, null);
+    if (!parsed.csf.regimenFiscal && parsed.csf.regimenes.length === 1) {
+      parsed.csf.regimenFiscal = parsed.csf.regimenes[0].code;
+    }
     if (parsed.csf.tipoContribuyente === "PF" && !parsed.csf.razonSocial) {
       const parts = [parsed.csf.nombre, parsed.csf.primerApellido, parsed.csf.segundoApellido]
         .filter(Boolean)
