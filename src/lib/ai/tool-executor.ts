@@ -4,6 +4,7 @@ import {
   detectComplementosRecibidosPendientes,
 } from "@/lib/complementos";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { getSatSyncStatus } from "@/lib/sat-status";
 
 type ToolInput = Record<string, unknown>;
 
@@ -37,6 +38,8 @@ export async function executeToolCall(
       return JSON.stringify(await detectComplementosPendientes(companyId));
     case "query_complementos_recibidos_pendientes":
       return JSON.stringify(await detectComplementosRecibidosPendientes(companyId));
+    case "query_sat_sync_status":
+      return JSON.stringify(await getSatSyncStatus(companyId));
     case "query_tax_position": {
       const now = new Date();
       const year = typeof input.year === "number" ? input.year : now.getFullYear();

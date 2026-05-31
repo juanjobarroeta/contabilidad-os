@@ -72,7 +72,7 @@ export async function runWhatsappAgent(opts: {
         .map((b) => b.text)
         .join("")
         .trim();
-      return text || "No tengo una respuesta para eso ahora mismo.";
+      return toWhatsappText(text) || "No tengo una respuesta para eso ahora mismo.";
     }
 
     // Execute tools and feed results back.
@@ -102,4 +102,18 @@ export async function runWhatsappAgent(opts: {
   }
 
   return "Esta consulta es más compleja de lo que puedo resolver por aquí. ¿Puedes preguntarlo de otra forma o revisarlo en la aplicación?";
+}
+
+/**
+ * Safety net: WhatsApp doesn't render markdown. Convert **bold** → *bold*,
+ * strip leading ## headings, and drop stray code fences, so even if the model
+ * slips past the prompt instructions the user never sees literal markdown.
+ */
+function toWhatsappText(s: string): string {
+  return s
+    .replace(/```[a-z]*\n?/gi, "") // code fences
+    .replace(/\*\*([^*]+)\*\*/g, "*$1*") // **bold** → *bold*
+    .replace(/^#{1,6}\s+/gm, "") // ## headings → plain
+    .replace(/^\s*[-*]\s+/gm, "- ") // normalize bullets
+    .trim();
 }

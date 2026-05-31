@@ -6,6 +6,58 @@
 
 ---
 
+## WhatsApp capability map — what a contador should handle
+
+> North star: a contador runs their whole month from WhatsApp — asks anything,
+> gets nudged before deadlines, sends a statement to reconcile, and one-taps the
+> routine actions. The web app is the audit/detail surface; WhatsApp is the
+> daily driver.
+
+**Tier 1 — Ask (read-only)** — ✅ mostly built
+- Facturación: cuánto facturé/gasté (mes, cliente, proveedor). ✅
+- Posición fiscal del mes: IVA a pagar, ISR provisional. ✅ (`query_tax_position`)
+- Obligaciones y vencimientos. ✅
+- Complementos de pago pendientes — ambas direcciones. ✅
+- Anomalías / riesgos de deducción. ✅
+- Estado de sincronización SAT ("¿ya bajaron mis 5 años?"). ✅ (`query_sat_sync_status`)
+- Conciliación: qué movimientos faltan por conciliar. ⏳
+
+**Tier 2 — Documents (inbound)** — 🔜
+- Estado de cuenta (PDF/foto) → parsear (vision + balance-check) → conciliar.
+- CFDI / ticket suelto → registrar.
+- Voice notes → transcribir → tratar como texto.
+
+**Tier 3 — Act (writes, behind step-up confirmation)** — 🔒 needs safety layer
+- Emitir complemento de pago (un toque).
+- Timbrar una factura.
+- Confirmar/guardar una declaración; marcar obligación como presentada.
+
+**Tier 4 — Proactive (outbound)** — 📣 needs prod WhatsApp + Meta templates
+- Digest diario/semanal; alertas (complemento por vencer, IVA estimado antes del 17, CFDI nuevo recibido).
+
+### Accounting depth — design considerations (don't oversimplify)
+These are the nuances that separate a real contador tool from a toy. Track them
+as we deepen each capability:
+- **IVA flujo de efectivo vs devengado** — SAT cobra sobre lo *cobrado/pagado*
+  (Art. 1-B), no lo emitido. We already split these (`devengado` vs flujo);
+  always be explicit about which we report.
+- **IVA acreditable vs trasladado, retenciones** — separate IVA retenido (por
+  clientes / a proveedores) from trasladado; don't net naively.
+- **Saldos a favor** — IVA saldo a favor se arrastra mes a mes (compensación
+  vs devolución vs acreditamiento). Carryover already modeled; surface it.
+- **Nómina** — ISR retenido, IMSS obrero/patronal, INFONAVIT, subsidio; nómina
+  feeds both ISR retenciones and deducciones. Incidencias (faltas, horas extra,
+  finiquitos) change the calc.
+- **Timbrar** — CSD + Carta Manifiesto + PAC; cancelaciones (con acuse, plazos),
+  sustituciones, relación de CFDIs.
+- **ISR provisional Art. 14** — coeficiente de utilidad, PTU, pérdidas
+  fiscales, pagos provisionales acumulados. PF vs PM differ (tasa, fechas).
+- **Régimen-specific** — RESICO, arrendamiento, actividad empresarial, sueldos
+  each have distinct obligations/rates (see régimen map + obligations engine).
+- **DIOT, contabilidad electrónica, declaración anual** — distinct artifacts.
+
+---
+
 ## 0. Where we are today (built)
 
 - **SAT auto-sync** — Descarga Masiva (CFDIs emitidos/recibidos) via FIEL, with a
