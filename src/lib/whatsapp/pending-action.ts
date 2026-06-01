@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { stampInvoice, type StampInput, type StampResult } from "@/lib/facturas/stamp";
+import { reconcileTransaction } from "@/lib/conciliacion";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WhatsApp write-action confirmation gate.
@@ -14,31 +15,53 @@ import { stampInvoice, type StampInput, type StampResult } from "@/lib/facturas/
 
 const TTL_MS = 15 * 60 * 1000; // pending action expires in 15 min
 
-export type PendingAction = {
-  type: "timbrar";
-  code: string; // 6-digit confirmation code
-  expiresAt: number; // epoch ms
-  payload: StampInput;
-  preview: string; // human summary shown to the user
-};
+export type PendingAction =
+  | {
+      type: "timbrar";
+      code: string;
+      expiresAt: number;
+      payload: StampInput;
+      preview: string;
+      companyId: string;
+    }
+  | {
+      type: "conciliar";
+      code: string;
+      expiresAt: number;
+      payload: { txId: string; invoiceId: string };
+      preview: string;
+      companyId: string;
+    };
 
 function genCode(): string {
   return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
-export async function stagePendingTimbrar(
-  conversationId: string,
-  payload: StampInput,
-  preview: string
-): Promise<{ code: string }> {
-  const code = genCode();
-  const action: PendingAction = { type: "timbrar", code, expiresAt: Date.now() + TTL_MS, payload, preview };
+async function stage(conversationId: string, action: PendingAction): Promise<{ code: string }> {
   await prisma.whatsappConversation.update({
     where: { id: conversationId },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: { pendingAction: action as any },
   });
-  return { code };
+  return { code: action.code };
+}
+
+export async function stagePendingTimbrar(
+  conversationId: string,
+  companyId: string,
+  payload: StampInput,
+  preview: string
+): Promise<{ code: string }> {
+  return stage(conversationId, { type: "timbrar", code: genCode(), expiresAt: Date.now() + TTL_MS, payload, preview, companyId });
+}
+
+export async function stagePendingConciliar(
+  conversationId: string,
+  companyId: string,
+  payload: { txId: string; invoiceId: string },
+  preview: string
+): Promise<{ code: string }> {
+  return stage(conversationId, { type: "conciliar", code: genCode(), expiresAt: Date.now() + TTL_MS, payload, preview, companyId });
 }
 
 export async function clearPendingAction(conversationId: string): Promise<void> {
@@ -93,6 +116,7 @@ export async function tryConfirmPendingAction(
 
   // Correct code → execute the write.
   await clearPendingAction(conversationId);
+
   if (pa.type === "timbrar") {
     let result: StampResult;
     try {
@@ -109,5 +133,17 @@ export async function tryConfirmPendingAction(
       `Pídeme el XML/PDF cuando lo necesites.`
     );
   }
+
+  if (pa.type === "conciliar") {
+    try {
+      const r = await reconcileTransaction(pa.payload.txId, pa.payload.invoiceId, pa.companyId);
+      if (!r.ok) return `No se pudo conciliar: ${r.error}`;
+      return `✅ Movimiento conciliado con la factura de ${r.cliente}${r.uuid ? ` (${r.uuid})` : ""}.`;
+    } catch (e) {
+      console.error("[whatsapp] reconcile error", e);
+      return "Hubo un error al conciliar. Inténtalo de nuevo o hazlo desde la app.";
+    }
+  }
+
   return "Acción desconocida.";
 }

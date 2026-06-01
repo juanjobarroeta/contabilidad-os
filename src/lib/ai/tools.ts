@@ -107,6 +107,29 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "list_unmatched_transactions",
+    description:
+      "Lista los movimientos bancarios sin conciliar (UNMATCHED), cada uno con su mejor factura candidata. Úsala cuando pregunten qué falta por conciliar, o para iniciar la conciliación bancaria. Devuelve el total pendiente y los movimientos con su candidato sugerido.",
+    input_schema: {
+      type: "object" as const,
+      properties: { limit: { type: "number", description: "Máx. movimientos a listar (default 10)" } },
+      required: [],
+    },
+  },
+  {
+    name: "preview_conciliacion",
+    description:
+      "Prepara la conciliación de un movimiento bancario con una factura y la deja PENDIENTE de confirmación (NO la concilia). Devuelve un código que el usuario debe responder para confirmar. Úsala cuando el usuario quiera conciliar/emparejar un movimiento con una factura. Necesitas el id del movimiento (transaction_id) y el id de la factura (invoice_id) — obténlos de list_unmatched_transactions. Tras llamarla, muestra el resumen y pide el código.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        transaction_id: { type: "string", description: "ID del movimiento bancario" },
+        invoice_id: { type: "string", description: "ID de la factura a conciliar" },
+      },
+      required: ["transaction_id", "invoice_id"],
+    },
+  },
+  {
     name: "preview_factura",
     description:
       "Prepara una factura (CFDI de ingreso) para TIMBRAR y la deja PENDIENTE de confirmación. NO la timbra: genera un resumen y un código que el usuario debe responder para confirmar. Úsala cuando el usuario pida emitir/timbrar/hacer una factura. Necesitas: cliente (RFC o nombre ya dado de alta), y conceptos (descripción, cantidad, precio unitario). Pregunta lo que falte ANTES de llamar la herramienta. Tras llamarla, muestra el resumen y pide el código de confirmación — nunca afirmes que ya se timbró.",
