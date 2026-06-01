@@ -5,6 +5,7 @@ import {
 } from "@/lib/complementos";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { getSatSyncStatus } from "@/lib/sat-status";
+import { signFileToken, publicBaseUrl } from "@/lib/facturas/file-token";
 
 type ToolInput = Record<string, unknown>;
 
@@ -40,6 +41,8 @@ export async function executeToolCall(
       return JSON.stringify(await detectComplementosRecibidosPendientes(companyId));
     case "query_sat_sync_status":
       return JSON.stringify(await getSatSyncStatus(companyId));
+    case "get_invoice_files":
+      return getInvoiceFiles(input, companyId);
     case "query_tax_position": {
       const now = new Date();
       const year = typeof input.year === "number" ? input.year : now.getFullYear();
@@ -52,6 +55,62 @@ export async function executeToolCall(
 }
 
 // ─── query_invoices ──────────────────────────────────────────────────────────
+
+async function getInvoiceFiles(input: ToolInput, companyId: string): Promise<string> {
+  const where: Record<string, unknown> = { companyId };
+  if (input.uuid) where.uuid = String(input.uuid).toUpperCase();
+  if (input.date_from || input.date_to) {
+    where.fecha = {
+      ...(input.date_from ? { gte: new Date(String(input.date_from)) } : {}),
+      ...(input.date_to ? { lte: new Date(`${input.date_to}T23:59:59`) } : {}),
+    };
+  }
+  if (input.cliente) {
+    where.customer = {
+      OR: [
+        { razonSocial: { contains: String(input.cliente), mode: "insensitive" } },
+        { rfc: { contains: String(input.cliente).toUpperCase() } },
+      ],
+    };
+  }
+  const limit = typeof input.limit === "number" ? Math.min(input.limit, 20) : 10;
+
+  const invoices = await prisma.invoice.findMany({
+    where,
+    select: {
+      id: true, uuid: true, fecha: true, total: true,
+      rawXml: true, facturapiId: true,
+      customer: { select: { razonSocial: true } },
+    },
+    orderBy: { fecha: "desc" },
+    take: limit,
+  });
+
+  if (invoices.length === 0) {
+    return JSON.stringify({ count: 0, message: "No encontré facturas con esos criterios." });
+  }
+
+  const base = publicBaseUrl();
+  const files = invoices.map((inv) => {
+    const hasXml = !!inv.rawXml;
+    const hasPdf = !!inv.facturapiId;
+    return {
+      uuid: inv.uuid,
+      fecha: inv.fecha.toISOString().slice(0, 10),
+      cliente: inv.customer?.razonSocial ?? null,
+      total: inv.total,
+      xmlUrl: hasXml ? `${base}/api/facturas/${inv.id}/file?format=xml&token=${signFileToken(inv.id, "xml")}` : null,
+      pdfUrl: hasPdf ? `${base}/api/facturas/${inv.id}/file?format=pdf&token=${signFileToken(inv.id, "pdf")}` : null,
+      nota: !hasXml ? "XML no disponible (factura importada antes de guardarse el archivo)" : (!hasPdf ? "Solo XML disponible (las facturas del SAT no tienen PDF)" : undefined),
+    };
+  });
+
+  return JSON.stringify({
+    count: files.length,
+    files,
+    instrucciones: "Comparte los enlaces con el usuario. Son temporales (30 min). Si falta el XML, explícale que esa factura se importó antes de que guardáramos el archivo.",
+  });
+}
 
 async function queryInvoices(input: ToolInput, companyId: string) {
   const where: Record<string, unknown> = { companyId };

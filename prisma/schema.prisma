@@ -444,6 +444,10 @@ model Invoice {
   facturapiId  String?       // Facturapi invoice ID
   xmlUrl       String?
   pdfUrl       String?
+  // Original CFDI XML as downloaded from SAT (or uploaded). Stored so we can
+  // re-send the authentic file (the legal artifact) over WhatsApp/web without
+  // re-querying SAT. Only populated for CFDIs imported after this shipped.
+  rawXml       String?       @db.Text
   cadenaOriginal String?     @db.Text
   selloSAT     String?       @db.Text
   selloCFD     String?       @db.Text
