@@ -6,15 +6,22 @@ import {
 import { computeTaxPosition } from "@/lib/impuestos";
 import { getSatSyncStatus } from "@/lib/sat-status";
 import { signFileToken, publicBaseUrl } from "@/lib/facturas/file-token";
+import { previewTimbrar } from "@/lib/facturas/preview-timbrar";
 
 type ToolInput = Record<string, unknown>;
+
+/** Extra context for write tools (e.g. which WhatsApp conversation staged it). */
+export type ToolContext = { conversationId?: string };
 
 export async function executeToolCall(
   toolName: string,
   input: ToolInput,
-  companyId: string
+  companyId: string,
+  context: ToolContext = {}
 ): Promise<string> {
   switch (toolName) {
+    case "preview_factura":
+      return previewTimbrar(input, companyId, context.conversationId);
     case "query_invoices":
       return queryInvoices(input, companyId);
     case "query_bank_transactions":

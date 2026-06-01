@@ -34,8 +34,9 @@ export async function runWhatsappAgent(opts: {
   company: WhatsappCompany;
   history: Anthropic.MessageParam[];
   userText: string;
+  conversationId?: string;
 }): Promise<string> {
-  const { companyId, company, history, userText } = opts;
+  const { companyId, company, history, userText, conversationId } = opts;
 
   // Cache the system prompt + tool definitions across turns to cut cost/latency.
   const system: Anthropic.TextBlockParam[] = [
@@ -83,7 +84,8 @@ export async function runWhatsappAgent(opts: {
         content = await executeToolCall(
           tu.name,
           tu.input as Record<string, unknown>,
-          companyId
+          companyId,
+          { conversationId }
         );
       } catch (e) {
         content = `Error al ejecutar ${tu.name}: ${
