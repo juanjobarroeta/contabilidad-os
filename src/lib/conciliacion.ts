@@ -14,6 +14,7 @@ export interface MatchCandidate {
   uuid: string | null;
   fecha: string;
   total: number;
+  tipo: string;
   cliente: string;
   rfc: string;
   metodoPago: string;
@@ -32,12 +33,17 @@ export async function scoreCandidates(txId: string, companyId: string): Promise<
   if (!tx) return { tx: null, candidates: [] };
 
   const absAmount = Math.abs(tx.monto);
-  const invoiceType = tx.monto > 0 ? "INGRESO" : "EGRESO";
+  // Incoming deposit → income CFDIs: INGRESO you issued, OR a NOMINA you
+  // RECEIVED (asimilados/sueldos paid to you — a real income deposit).
+  // Outgoing debit → expense CFDIs: EGRESO, OR a NOMINA you issued as employer.
+  const incomingTypes = ["INGRESO", "NOMINA"] as const;
+  const outgoingTypes = ["EGRESO", "NOMINA"] as const;
+  const tipoIn = tx.monto > 0 ? [...incomingTypes] : [...outgoingTypes];
 
   const invoices = await prisma.invoice.findMany({
     where: {
       companyId,
-      tipo: invoiceType,
+      tipo: { in: tipoIn },
       status: "STAMPED",
       fecha: {
         gte: new Date(tx.fecha.getTime() - WINDOW_DAYS * 86400000),
@@ -70,6 +76,7 @@ export async function scoreCandidates(txId: string, companyId: string): Promise<
         uuid: inv.uuid,
         fecha: inv.fecha.toISOString().slice(0, 10),
         total: inv.total,
+        tipo: inv.tipo,
         cliente: inv.customer?.razonSocial ?? "—",
         rfc: inv.customer?.rfc ?? "—",
         metodoPago: inv.metodoPago,
