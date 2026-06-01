@@ -56,9 +56,7 @@ export async function handleWhatsappMedia(opts: {
     }
   }
 
-  if (kind === "audio") {
-    return "Por ahora solo puedo leer texto y documentos (PDF, imagen o XML). Las notas de voz aún no — escríbeme o mándame el archivo. 🙏";
-  }
+  // Audio is handled upstream (transcription) before reaching here.
   if (kind !== "pdf" && kind !== "image") {
     return "No reconozco ese tipo de archivo. Mándame un PDF, una foto, o el XML del CFDI.";
   }
