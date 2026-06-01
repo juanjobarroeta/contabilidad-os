@@ -107,6 +107,37 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "preview_factura",
+    description:
+      "Prepara una factura (CFDI de ingreso) para TIMBRAR y la deja PENDIENTE de confirmación. NO la timbra: genera un resumen y un código que el usuario debe responder para confirmar. Úsala cuando el usuario pida emitir/timbrar/hacer una factura. Necesitas: cliente (RFC o nombre ya dado de alta), y conceptos (descripción, cantidad, precio unitario). Pregunta lo que falte ANTES de llamar la herramienta. Tras llamarla, muestra el resumen y pide el código de confirmación — nunca afirmes que ya se timbró.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        customer_rfc: { type: "string", description: "RFC del cliente (receptor)" },
+        customer_name: { type: "string", description: "Nombre/razón social del cliente si no hay RFC" },
+        forma_pago: { type: "string", description: "Clave SAT forma de pago, e.g. 03 transferencia, 01 efectivo (default 99)" },
+        metodo_pago: { type: "string", enum: ["PUE", "PPD"], description: "PUE pago en una exhibición, PPD en parcialidades (default PUE)" },
+        uso_cfdi: { type: "string", description: "Clave SAT uso CFDI, e.g. G03 (default G03)" },
+        items: {
+          type: "array",
+          description: "Conceptos de la factura",
+          items: {
+            type: "object",
+            properties: {
+              description: { type: "string" },
+              quantity: { type: "number" },
+              unit_price: { type: "number", description: "Precio unitario antes de IVA" },
+              product_key: { type: "string", description: "Clave ProdServ SAT si se conoce" },
+              iva_rate: { type: "number", description: "Tasa IVA, default 0.16; usa 0 si exento" },
+            },
+            required: ["description", "unit_price"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+  },
+  {
     name: "get_invoice_files",
     description:
       "Genera enlaces de descarga para el XML (y PDF si está disponible) de facturas/CFDIs. Úsala cuando el usuario pida 'mándame el XML/PDF de la factura X', 'descarga mis facturas de mayo', etc. Filtra por UUID, cliente, o rango de fechas. El XML está disponible para facturas descargadas del SAT después de cierta fecha; el PDF solo para facturas emitidas con Facturapi. Devuelve enlaces temporales (30 min) que el usuario abre para descargar.",

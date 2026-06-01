@@ -19,6 +19,7 @@ import {
   type AccessibleCompany,
 } from "@/lib/whatsapp/identity";
 import { runWhatsappAgent, type WhatsappCompany } from "@/lib/whatsapp/agent";
+import { tryConfirmPendingAction } from "@/lib/whatsapp/pending-action";
 
 // Long-running Node server (Railway `next start`), NOT serverless — so the
 // background agent work kicked off after we respond keeps running to completion.
@@ -81,7 +82,10 @@ async function processAgentTurn(opts: {
   const { companyId, company, conversationId, history, userText, phone } = opts;
   let answer: string;
   try {
-    answer = await runWhatsappAgent({ companyId, company, history, userText });
+    // Safety gate: if a write (e.g. timbrar) is staged, this message may be the
+    // confirmation. Handle it BEFORE the agent — only the exact code executes.
+    const confirmed = await tryConfirmPendingAction(conversationId, userText);
+    answer = confirmed ?? (await runWhatsappAgent({ companyId, company, history, userText, conversationId }));
   } catch (e) {
     console.error("[whatsapp] agent error", e);
     answer = "Tuve un problema al procesar tu consulta. Inténtalo de nuevo en un momento.";
