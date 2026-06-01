@@ -4,10 +4,12 @@ import {
   candidateWebhookUrls,
   verifyTwilioSignatureAny,
   sendWhatsappMessage,
+  downloadTwilioMedia,
   twiml,
   toE164,
   twilioConfigured,
 } from "@/lib/whatsapp/twilio";
+import { handleWhatsappMedia } from "@/lib/whatsapp/media";
 import {
   resolveSender,
   listAccessibleCompanies,
@@ -93,6 +95,43 @@ async function processAgentTurn(opts: {
   }
 }
 
+/**
+ * Background: download inbound media attachment(s), route to the right
+ * extractor (statement / CFDI), and deliver the summary via REST. Like the
+ * agent turn, runs detached so Twilio gets an instant 200.
+ */
+async function processMediaTurn(opts: {
+  companyId: string;
+  conversationId: string;
+  phone: string;
+  media: { url: string; contentType: string }[];
+}): Promise<void> {
+  const { companyId, conversationId, phone, media } = opts;
+  const summaries: string[] = [];
+  for (const m of media) {
+    try {
+      const { buffer, contentType } = await downloadTwilioMedia(m.url);
+      const summary = await handleWhatsappMedia({
+        companyId,
+        buffer,
+        contentType: contentType || m.contentType,
+        filename: "",
+      });
+      summaries.push(summary);
+    } catch (e) {
+      console.error("[whatsapp] media error", e);
+      summaries.push("No pude procesar uno de los archivos. Inténtalo de nuevo.");
+    }
+  }
+  const answer = summaries.join("\n\n") || "No recibí ningún archivo legible.";
+  try {
+    await prisma.whatsappMessage.create({ data: { conversationId, role: "ASSISTANT", body: answer } });
+    await sendWhatsappMessage(phone, answer);
+  } catch (e) {
+    console.error("[whatsapp] failed to deliver media summary", e);
+  }
+}
+
 export async function POST(req: Request) {
   // ── 1. Trust boundary: verify Twilio signature. Fail closed. ──────────────
   if (!twilioConfigured()) return ack();
@@ -111,8 +150,16 @@ export async function POST(req: Request) {
   const messageSid = params.MessageSid ?? params.SmsMessageSid ?? "";
   const phone = toE164(from);
 
-  // No text body (e.g. a voice note or media-only message) — nothing to answer yet.
-  if (!phone || !body) return ack();
+  // Inbound media (forwarded statement / invoice / photo).
+  const numMedia = parseInt(params.NumMedia ?? "0", 10) || 0;
+  const media: { url: string; contentType: string }[] = [];
+  for (let i = 0; i < numMedia; i++) {
+    const url = params[`MediaUrl${i}`];
+    if (url) media.push({ url, contentType: params[`MediaContentType${i}`] ?? "" });
+  }
+
+  // Nothing actionable (no text AND no media) — e.g. an empty/unsupported event.
+  if (!phone || (!body && media.length === 0)) return ack();
 
   // ── 2. Inbound dedup (Twilio retries on timeout). ─────────────────────────
   if (messageSid) {
@@ -178,6 +225,27 @@ export async function POST(req: Request) {
     create: { linkId: sender.linkId, companyId: activeCompanyId },
     select: { id: true },
   });
+
+  // ── Media branch: a forwarded statement / invoice / photo. ────────────────
+  // Route to the extractors instead of the chat agent. (If the message has
+  // BOTH media and a caption, we process the media — the document is the intent.)
+  if (media.length > 0) {
+    await prisma.whatsappMessage.create({
+      data: {
+        conversationId: conversation.id,
+        role: "USER",
+        body: body || `[${media.length} archivo(s) adjunto(s)]`,
+        providerSid: messageSid || null,
+      },
+    });
+    void processMediaTurn({
+      companyId: activeCompanyId,
+      conversationId: conversation.id,
+      phone,
+      media,
+    });
+    return ack();
+  }
 
   // History BEFORE persisting the current turn, so it isn't duplicated.
   const recent = await prisma.whatsappMessage.findMany({

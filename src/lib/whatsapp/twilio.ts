@@ -151,3 +151,22 @@ export function twiml(message: string): string {
 export function toE164(whatsappAddr: string): string {
   return whatsappAddr.replace(/^whatsapp:/, "").trim();
 }
+
+/**
+ * Download an inbound media attachment from its Twilio MediaUrl. Twilio media
+ * URLs require the account's Basic auth. Returns the bytes + content type.
+ */
+export async function downloadTwilioMedia(
+  url: string
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const sid = process.env.TWILIO_ACCOUNT_SID!;
+  const token = process.env.TWILIO_AUTH_TOKEN!;
+  const res = await fetch(url, {
+    headers: { Authorization: "Basic " + Buffer.from(`${sid}:${token}`).toString("base64") },
+    redirect: "follow",
+  });
+  if (!res.ok) throw new Error(`Twilio media download failed (${res.status})`);
+  const contentType = res.headers.get("content-type") ?? "application/octet-stream";
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { buffer, contentType };
+}
