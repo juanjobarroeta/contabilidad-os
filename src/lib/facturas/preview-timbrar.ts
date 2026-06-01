@@ -75,6 +75,11 @@ export async function previewTimbrar(
         description: it.description,
         product_key: it.product_key ?? "01010101", // genérico; idealmente el usuario lo da
         price: it.unit_price,
+        // CRITICAL: our preview treats unit_price as the BASE (subtotal + IVA).
+        // Facturapi defaults tax_included=true (price = total, backs out base),
+        // which would stamp different numbers than the user confirmed. Force
+        // tax_included=false so the stamp matches the preview exactly.
+        tax_included: false,
         taxes: rate > 0 ? [{ type: "IVA", rate, factor: "Tasa" }] : [],
       },
     });
