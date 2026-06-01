@@ -118,6 +118,8 @@ export default function FacturasPage() {
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
+  const [cancelMotivo, setCancelMotivo] = useState("02");
+  const [cancelSustituye, setCancelSustituye] = useState("");
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [tipoFilter, setTipoFilter] = useState<TipoFilter>("all");
 
@@ -137,16 +139,29 @@ export default function FacturasPage() {
 
   async function handleCancel() {
     if (!cancelId) return;
+    if (cancelMotivo === "01" && !cancelSustituye.trim()) {
+      setCancelError("El motivo 01 requiere el UUID de la factura que sustituye.");
+      return;
+    }
     setCancelling(true);
     setCancelError("");
     try {
-      const res = await fetch(`/api/facturas/${cancelId}`, { method: "DELETE" });
+      const res = await fetch(`/api/facturas/${cancelId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          motivo: cancelMotivo,
+          ...(cancelMotivo === "01" ? { sustituyeUuid: cancelSustituye.trim() } : {}),
+        }),
+      });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error ?? "Error al cancelar");
       }
       setCancelId(null);
       setDetailInvoice(null);
+      setCancelMotivo("02");
+      setCancelSustituye("");
       fetchInvoices();
     } catch (err) {
       setCancelError(err instanceof Error ? err.message : "Error inesperado");
@@ -574,8 +589,34 @@ export default function FacturasPage() {
               </button>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Se enviará la solicitud de cancelación al SAT a través de Facturapi. Esta acción no se puede deshacer fácilmente.
+              Se enviará la solicitud de cancelación al SAT a través de Facturapi. Solo se marcará como cancelada si el SAT lo confirma.
             </p>
+
+            <label className="block text-xs font-medium mb-1.5">Motivo de cancelación (SAT)</label>
+            <select
+              value={cancelMotivo}
+              onChange={(e) => setCancelMotivo(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white mb-3"
+            >
+              <option value="02">02 · Comprobante emitido con errores sin relación</option>
+              <option value="01">01 · Comprobante emitido con errores con relación (sustitución)</option>
+              <option value="03">03 · No se llevó a cabo la operación</option>
+              <option value="04">04 · Operación nominativa en factura global</option>
+            </select>
+
+            {cancelMotivo === "01" && (
+              <div className="mb-3">
+                <label className="block text-xs font-medium mb-1.5">UUID de la factura que la sustituye</label>
+                <input
+                  value={cancelSustituye}
+                  onChange={(e) => setCancelSustituye(e.target.value)}
+                  placeholder="Folio fiscal del CFDI nuevo"
+                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono uppercase"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">Emite primero el CFDI corregido y pega aquí su UUID.</p>
+              </div>
+            )}
+
             {cancelError && (
               <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 text-sm text-red-700 mb-4">
                 {cancelError}

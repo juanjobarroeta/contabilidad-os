@@ -2,11 +2,23 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
+import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 
-// POST /api/facturas/[id]/cancel — handled via DELETE for simplicity
+const VALID_MOTIVOS = ["01", "02", "03", "04"] as const;
+
+// DELETE /api/facturas/[id] — cancel a CFDI.
+// Body (JSON): { motivo: "01"|"02"|"03"|"04", sustituyeUuid?: string }
+//   01 = comprobante emitido con errores CON relación (requiere sustituyeUuid)
+//   02 = comprobante emitido con errores SIN relación
+//   03 = no se llevó a cabo la operación
+//   04 = operación nominativa relacionada en una factura global
+//
+// SAFETY: we ONLY mark the invoice CANCELLED if Facturapi/SAT confirms. A failed
+// SAT cancellation no longer silently flips our DB to CANCELLED (the old bug,
+// which gave a false sense the CFDI was dead at SAT when it was still live).
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -14,38 +26,77 @@ export async function DELETE(
 
   const { id } = await params;
 
+  const body = await req.json().catch(() => ({}));
+  const motivo = String(body?.motivo ?? "");
+  const sustituyeUuid: string | undefined = body?.sustituyeUuid
+    ? String(body.sustituyeUuid).toUpperCase()
+    : undefined;
+
+  if (!VALID_MOTIVOS.includes(motivo as (typeof VALID_MOTIVOS)[number])) {
+    return NextResponse.json(
+      { error: "Falta el motivo de cancelación (01, 02, 03 o 04)." },
+      { status: 400 }
+    );
+  }
+  if (motivo === "01" && !sustituyeUuid) {
+    return NextResponse.json(
+      { error: "El motivo 01 requiere el UUID de la factura que la sustituye." },
+      { status: 400 }
+    );
+  }
+
   const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: { company: true },
   });
-
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
-  // Verify membership
   const member = await getEffectiveCompanyMembership(session.user.id, invoice.companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
-
   if (invoice.status === "CANCELLED") {
     return NextResponse.json({ error: "La factura ya está cancelada" }, { status: 409 });
   }
 
-  // Cancel in Facturapi if stamped
+  // Stamped CFDI → must cancel at SAT via Facturapi, with the motivo.
   if (invoice.facturapiId && invoice.company.facturapiApiKey) {
     try {
       const fp = getFacturapiClient(invoice.company.facturapiApiKey);
-      await fp.invoices.cancel(invoice.facturapiId);
-    } catch {
-      // Log but continue — mark as cancelled in DB either way
+      // Facturapi params: { motive, substitution? }. Only confirmed if it
+      // returns without throwing and the status reflects cancellation.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (fp as any).invoices.cancel(invoice.facturapiId, {
+        motive: motivo,
+        ...(sustituyeUuid ? { substitution: sustituyeUuid } : {}),
+      });
+    } catch (e) {
+      const info = parseFacturapiError(e);
+      // DO NOT mark CANCELLED — the CFDI is still live at SAT.
+      return NextResponse.json(
+        { error: `No se pudo cancelar ante el SAT: ${info.message}`, kind: info.kind },
+        { status: info.status }
+      );
     }
+  } else if (invoice.status !== "STAMPED") {
+    // DRAFT / never stamped → safe to cancel locally only.
+  } else {
+    // Stamped but no Facturapi key → we can't reach SAT. Don't fake it.
+    return NextResponse.json(
+      { error: "No hay conexión con Facturapi para cancelar ante el SAT. Configúrala o cancela desde el portal." },
+      { status: 422 }
+    );
   }
 
   const updated = await prisma.invoice.update({
     where: { id },
-    data: { status: "CANCELLED" },
+    data: {
+      status: "CANCELLED",
+      canceladaAt: new Date(),
+      cancelMotivo: motivo,
+      cancelSustituyeUuid: sustituyeUuid ?? null,
+    },
   });
-
   return NextResponse.json(updated);
 }
 
