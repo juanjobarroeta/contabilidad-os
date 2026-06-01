@@ -4,10 +4,13 @@ import {
   candidateWebhookUrls,
   verifyTwilioSignatureAny,
   sendWhatsappMessage,
+  downloadTwilioMedia,
   twiml,
   toE164,
   twilioConfigured,
 } from "@/lib/whatsapp/twilio";
+import { handleWhatsappMedia } from "@/lib/whatsapp/media";
+import { transcribeAudio, transcriptionConfigured } from "@/lib/whatsapp/transcribe";
 import {
   resolveSender,
   listAccessibleCompanies,
@@ -93,6 +96,78 @@ async function processAgentTurn(opts: {
   }
 }
 
+/**
+ * Background: handle inbound media. Documents (statement/CFDI/photo) go to the
+ * extractors; audio (voice notes) is transcribed and routed through the chat
+ * agent exactly like a typed message. Runs detached so Twilio gets an instant
+ * 200; the result is delivered via REST.
+ */
+async function processMediaTurn(opts: {
+  companyId: string;
+  company: WhatsappCompany;
+  conversationId: string;
+  phone: string;
+  media: { url: string; contentType: string }[];
+  history: Anthropic.MessageParam[];
+}): Promise<void> {
+  const { companyId, company, conversationId, phone, media, history } = opts;
+
+  // Voice note → transcribe → answer like a normal question.
+  const audio = media.find((m) => m.contentType.toLowerCase().startsWith("audio/"));
+  if (audio) {
+    if (!transcriptionConfigured()) {
+      return deliver(conversationId, phone,
+        "Por ahora solo leo texto y documentos (PDF, imagen, XML). Escríbeme o mándame el archivo. 🙏");
+    }
+    let transcript = "";
+    try {
+      const { buffer, contentType } = await downloadTwilioMedia(audio.url);
+      transcript = await transcribeAudio(buffer, contentType || audio.contentType);
+    } catch (e) {
+      console.error("[whatsapp] transcription error", e);
+    }
+    if (!transcript) {
+      return deliver(conversationId, phone,
+        "No pude entender la nota de voz. ¿Puedes repetirla o escribirme el mensaje?");
+    }
+    // Record the transcript as the user turn, then answer it.
+    await prisma.whatsappMessage.create({
+      data: { conversationId, role: "USER", body: `🎤 ${transcript}` },
+    });
+    let answer: string;
+    try {
+      answer = await runWhatsappAgent({ companyId, company, history, userText: transcript });
+    } catch (e) {
+      console.error("[whatsapp] agent error (voice)", e);
+      answer = "Tuve un problema al procesar tu consulta. Inténtalo de nuevo.";
+    }
+    return deliver(conversationId, phone, answer);
+  }
+
+  // Documents → extractors.
+  const summaries: string[] = [];
+  for (const m of media) {
+    try {
+      const { buffer, contentType } = await downloadTwilioMedia(m.url);
+      summaries.push(await handleWhatsappMedia({ companyId, buffer, contentType: contentType || m.contentType, filename: "" }));
+    } catch (e) {
+      console.error("[whatsapp] media error", e);
+      summaries.push("No pude procesar uno de los archivos. Inténtalo de nuevo.");
+    }
+  }
+  await deliver(conversationId, phone, summaries.join("\n\n") || "No recibí ningún archivo legible.");
+}
+
+/** Persist an assistant message and send it via REST. */
+async function deliver(conversationId: string, phone: string, answer: string): Promise<void> {
+  try {
+    await prisma.whatsappMessage.create({ data: { conversationId, role: "ASSISTANT", body: answer } });
+    await sendWhatsappMessage(phone, answer);
+  } catch (e) {
+    console.error("[whatsapp] failed to deliver", e);
+  }
+}
+
 export async function POST(req: Request) {
   // ── 1. Trust boundary: verify Twilio signature. Fail closed. ──────────────
   if (!twilioConfigured()) return ack();
@@ -111,8 +186,16 @@ export async function POST(req: Request) {
   const messageSid = params.MessageSid ?? params.SmsMessageSid ?? "";
   const phone = toE164(from);
 
-  // No text body (e.g. a voice note or media-only message) — nothing to answer yet.
-  if (!phone || !body) return ack();
+  // Inbound media (forwarded statement / invoice / photo).
+  const numMedia = parseInt(params.NumMedia ?? "0", 10) || 0;
+  const media: { url: string; contentType: string }[] = [];
+  for (let i = 0; i < numMedia; i++) {
+    const url = params[`MediaUrl${i}`];
+    if (url) media.push({ url, contentType: params[`MediaContentType${i}`] ?? "" });
+  }
+
+  // Nothing actionable (no text AND no media) — e.g. an empty/unsupported event.
+  if (!phone || (!body && media.length === 0)) return ack();
 
   // ── 2. Inbound dedup (Twilio retries on timeout). ─────────────────────────
   if (messageSid) {
@@ -189,6 +272,34 @@ export async function POST(req: Request) {
   const history: Anthropic.MessageParam[] = recent
     .reverse()
     .map((m) => ({ role: m.role === "ASSISTANT" ? "assistant" : "user", content: m.body }));
+
+  // ── Media branch: forwarded document, photo, or voice note. ───────────────
+  // Documents go to the extractors; voice notes are transcribed and answered
+  // like a normal question. (Caption + media → the media is the intent.)
+  if (media.length > 0) {
+    const isAudioOnly = media.every((m) => m.contentType.toLowerCase().startsWith("audio/"));
+    // For documents we record a placeholder user turn here; for audio the
+    // transcript becomes the user turn inside processMediaTurn.
+    if (!isAudioOnly) {
+      await prisma.whatsappMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "USER",
+          body: body || `[${media.length} archivo(s) adjunto(s)]`,
+          providerSid: messageSid || null,
+        },
+      });
+    }
+    void processMediaTurn({
+      companyId: activeCompanyId,
+      company,
+      conversationId: conversation.id,
+      phone,
+      media,
+      history,
+    });
+    return ack();
+  }
 
   // Persist the user message now (also dedups Twilio retries via providerSid).
   await prisma.whatsappMessage.create({
