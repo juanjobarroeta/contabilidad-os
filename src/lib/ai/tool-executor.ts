@@ -7,6 +7,8 @@ import { computeTaxPosition } from "@/lib/impuestos";
 import { getSatSyncStatus } from "@/lib/sat-status";
 import { signFileToken, publicBaseUrl } from "@/lib/facturas/file-token";
 import { previewTimbrar } from "@/lib/facturas/preview-timbrar";
+import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
+import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
 
 type ToolInput = Record<string, unknown>;
 
@@ -22,6 +24,12 @@ export async function executeToolCall(
   switch (toolName) {
     case "preview_factura":
       return previewTimbrar(input, companyId, context.conversationId);
+    case "list_unmatched_transactions":
+      return JSON.stringify(
+        await listUnmatched(companyId, typeof input.limit === "number" ? input.limit : 10)
+      );
+    case "preview_conciliacion":
+      return previewConciliacion(input, companyId, context.conversationId);
     case "query_invoices":
       return queryInvoices(input, companyId);
     case "query_bank_transactions":
@@ -62,6 +70,50 @@ export async function executeToolCall(
 }
 
 // ─── query_invoices ──────────────────────────────────────────────────────────
+
+async function previewConciliacion(
+  input: ToolInput,
+  companyId: string,
+  conversationId?: string
+): Promise<string> {
+  if (!conversationId) {
+    return JSON.stringify({ error: "La conciliación con confirmación solo está disponible por WhatsApp." });
+  }
+  const txId = String(input.transaction_id ?? "");
+  const invoiceId = String(input.invoice_id ?? "");
+  if (!txId || !invoiceId) {
+    return JSON.stringify({ error: "Faltan transaction_id e invoice_id." });
+  }
+
+  // Validate both belong to the company and build a preview.
+  const { tx, candidates } = await scoreCandidates(txId, companyId);
+  if (!tx) return JSON.stringify({ error: "Movimiento no encontrado." });
+  const cand = candidates.find((c) => c.invoiceId === invoiceId);
+
+  const inv = await prisma.invoice.findFirst({
+    where: { id: invoiceId, companyId },
+    select: { id: true, uuid: true, total: true, fecha: true, customer: { select: { razonSocial: true } } },
+  });
+  if (!inv) return JSON.stringify({ error: "Factura no encontrada para esta empresa." });
+
+  const MXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+  const montoMatch = Math.abs(tx.monto).toFixed(2) === inv.total.toFixed(2);
+  const preview =
+    `Movimiento: ${tx.fecha} · ${tx.descripcion} · ${MXN(tx.monto)}\n` +
+    `Factura: ${inv.customer?.razonSocial ?? "—"} · ${MXN(inv.total)} · ${inv.fecha.toISOString().slice(0, 10)}\n` +
+    `${montoMatch ? "Los montos coinciden ✅" : "⚠️ Los montos NO coinciden exactamente — revisa."}`;
+
+  const { code } = await stagePendingConciliar(conversationId, companyId, { txId, invoiceId }, preview);
+  return JSON.stringify({
+    staged: true,
+    preview,
+    confianza: cand?.confidence ?? "baja",
+    instruccion_para_el_asistente:
+      `Muestra el resumen y pide al usuario que confirme con el código ${code} para conciliar, o 'cancelar'. ` +
+      `NO digas que ya se concilió — solo ocurre cuando el usuario envía el código.`,
+    codigo_confirmacion: code,
+  });
+}
 
 async function getInvoiceFiles(input: ToolInput, companyId: string): Promise<string> {
   const where: Record<string, unknown> = { companyId };

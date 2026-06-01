@@ -110,7 +110,7 @@ export async function previewTimbrar(
     `Subtotal: ${MXN(subtotal)}\nIVA: ${MXN(iva)}\n*Total: ${MXN(total)}*\n` +
     `Método: ${payload.metodoPago} · Uso: ${payload.usoCfdi}`;
 
-  const { code } = await stagePendingTimbrar(conversationId, payload, preview);
+  const { code } = await stagePendingTimbrar(conversationId, companyId, payload, preview);
 
   // The model relays this to the user. It must NOT claim it already stamped.
   return JSON.stringify({

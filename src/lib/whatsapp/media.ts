@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { extractStatementFromDocument } from "@/lib/bancos/vision-statement";
-import { persistTransactions } from "@/lib/bancos/import";
+import { persistTransactions, importBankStatement } from "@/lib/bancos/import";
 import { importCfdiFromXml } from "@/lib/facturas/import-cfdi";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -14,13 +14,36 @@ import { importCfdiFromXml } from "@/lib/facturas/import-cfdi";
 
 const MXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
-function classifyContentType(ct: string, filename: string): "xml" | "pdf" | "image" | "audio" | "other" {
+function classifyContentType(
+  ct: string,
+  filename: string,
+  buffer?: Buffer
+): "xml" | "pdf" | "image" | "audio" | "statement_text" | "other" {
   const c = ct.toLowerCase();
   const f = filename.toLowerCase();
   if (c.includes("xml") || f.endsWith(".xml")) return "xml";
   if (c.includes("pdf") || f.endsWith(".pdf")) return "pdf";
   if (c.startsWith("image/")) return "image";
   if (c.startsWith("audio/")) return "audio";
+
+  // CSV / Excel / OFX bank statement files. WhatsApp/Twilio often send these as
+  // text/csv, application/vnd.ms-excel, or a generic octet-stream — so also
+  // sniff the content for OFX tags or comma/semicolon-delimited rows.
+  const isCsvLikeType =
+    c.includes("csv") ||
+    c.includes("excel") ||
+    c.includes("spreadsheet") ||
+    c.includes("text/plain") ||
+    c.includes("officedocument.spreadsheet");
+  const isCsvLikeName = /\.(csv|ofx|qfx|xls|xlsx|txt)$/.test(f);
+  if (isCsvLikeType || isCsvLikeName) return "statement_text";
+
+  if (buffer && (c.includes("octet-stream") || c === "")) {
+    const head = buffer.subarray(0, 2048).toString("utf-8");
+    const looksOfx = head.includes("<OFX>") || head.includes("<STMTTRN>");
+    const looksCsv = /[^\n]+[;,\t][^\n]+\n[^\n]+[;,\t]/.test(head); // ≥2 delimited rows
+    if (looksOfx || looksCsv) return "statement_text";
+  }
   return "other";
 }
 
@@ -41,7 +64,7 @@ export async function handleWhatsappMedia(opts: {
   filename: string;
 }): Promise<string> {
   const { companyId, buffer, contentType, filename } = opts;
-  const kind = classifyContentType(contentType, filename);
+  const kind = classifyContentType(contentType, filename, buffer);
 
   // ── XML → exact CFDI register ─────────────────────────────────────────────
   if (kind === "xml") {
@@ -56,9 +79,31 @@ export async function handleWhatsappMedia(opts: {
     }
   }
 
+  // ── CSV / Excel / OFX bank statement → exact text parser ──────────────────
+  if (kind === "statement_text") {
+    const bankAccountId = await resolveBankAccount(companyId);
+    if (!bankAccountId) {
+      return "Recibí el archivo de movimientos, pero tienes varias cuentas bancarias (o ninguna). Súbelo desde la app en la cuenta correcta, o dime a cuál cuenta corresponde.";
+    }
+    try {
+      const r = await importBankStatement({
+        bankAccountId,
+        companyId,
+        fileContent: buffer.toString("utf-8"),
+        filename: filename || "estado.csv",
+      });
+      if (!r.ok) return `No pude leer ese archivo de movimientos: ${r.error ?? "formato no reconocido"}. Si es Excel, expórtalo a CSV.`;
+      const banco = r.detectedBank ? ` de ${r.detectedBank}` : "";
+      return `Listo ✅ Importé ${r.imported} movimiento(s)${banco}${r.skipped ? ` (${r.skipped} ya existían)` : ""}. Ya puedes conciliarlos — dime "conciliemos lo pendiente".`;
+    } catch (e) {
+      console.error("[whatsapp] csv import error", e);
+      return "Tuve un problema importando el archivo. Inténtalo de nuevo o súbelo desde la app.";
+    }
+  }
+
   // Audio is handled upstream (transcription) before reaching here.
   if (kind !== "pdf" && kind !== "image") {
-    return "No reconozco ese tipo de archivo. Mándame un PDF, una foto, o el XML del CFDI.";
+    return "No reconozco ese tipo de archivo. Mándame el estado de cuenta en PDF, foto, CSV/Excel del banco, o el XML del CFDI.";
   }
 
   // ── PDF/image: classify statement vs invoice via vision ───────────────────
