@@ -6,9 +6,10 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, FileText, AlertCircle,
   ArrowUpRight, ArrowDownLeft, CheckCircle2, Clock,
-  Loader2, Landmark, ShieldCheck, Info,
+  Landmark, ShieldCheck, Info,
 } from "lucide-react";
 import Link from "next/link";
+import { PageContainer, Alert, Loading } from "@/components/ui";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface TrendPoint {
@@ -222,7 +223,7 @@ export default function DashboardPage() {
   const mesLabel = `${MONTHS[month - 1]} ${year}`;
 
   return (
-    <div className="p-6 max-w-6xl space-y-6">
+    <PageContainer className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -244,15 +245,13 @@ export default function DashboardPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+        <Alert tone="danger" className="flex items-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0" />{error}
-        </div>
+        </Alert>
       )}
 
       {loading ? (
-        <div className="flex items-center gap-2 text-muted-foreground text-sm py-16 justify-center">
-          <Loader2 className="h-5 w-5 animate-spin" />Cargando datos...
-        </div>
+        <Loading label="Cargando datos…" className="py-16" />
       ) : data ? (
         <>
           {/* ── KPI Row ── */}
@@ -537,6 +536,6 @@ export default function DashboardPage() {
           </div>
         </>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }
