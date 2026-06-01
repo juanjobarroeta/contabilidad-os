@@ -452,6 +452,13 @@ model Invoice {
   selloSAT     String?       @db.Text
   selloCFD     String?       @db.Text
 
+  // Cancellation (CFDI 4.0). motivo: SAT reason code 01-04. For motivo 01 a
+  // substitution UUID is required (the replacement CFDI). We only set status
+  // CANCELLED once Facturapi/SAT confirms — never optimistically.
+  canceladaAt        DateTime?
+  cancelMotivo       String?   // "01" | "02" | "03" | "04"
+  cancelSustituyeUuid String?  // required when motivo = 01
+
   // Provenance: which product module created this invoice. NULL = generic/manual.
   origenModulo ModuloApp?
 
