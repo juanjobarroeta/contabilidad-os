@@ -206,21 +206,49 @@ async function queryInvoices(input: ToolInput, companyId: string) {
     take: Math.min((input.limit as number) || 20, 50),
   });
 
-  return JSON.stringify(
-    invoices.map((inv) => ({
-      id: inv.id,
-      tipo: inv.tipo,
-      fecha: inv.fecha.toISOString().substring(0, 10),
-      cliente: inv.customer?.razonSocial ?? "—",
-      clienteRfc: inv.customer?.rfc ?? "—",
-      subtotal: inv.subtotal,
-      total: inv.total,
-      status: inv.status,
-      uuid: inv.uuid,
-      formaPago: inv.formaPago,
-      metodoPago: inv.metodoPago,
-    }))
-  );
+  // Direction: INGRESO/EGRESO imply it directly; for NOMINA/PAGO it comes from
+  // the SAT import tag in `notas` ("emitidos"/"recibidos"). Direction is what
+  // determines income vs. expense — critical to get right.
+  const directionOf = (inv: { tipo: string; notas: string | null }): "EMITIDO" | "RECIBIDO" | "DESCONOCIDO" => {
+    if (inv.tipo === "INGRESO") return "EMITIDO";
+    if (inv.tipo === "EGRESO") return "RECIBIDO";
+    const n = (inv.notas ?? "").toLowerCase();
+    if (n.includes("emitido")) return "EMITIDO";
+    if (n.includes("recibido")) return "RECIBIDO";
+    return "DESCONOCIDO";
+  };
+
+  const interpret = (tipo: string, dir: string): string => {
+    if (tipo === "NOMINA") {
+      if (dir === "RECIBIDO") return "CFDI de nómina que TE pagaron (sueldos o asimilados a salarios): es tu INGRESO, NO un gasto deducible tuyo.";
+      if (dir === "EMITIDO") return "Nómina que TÚ pagaste como patrón: es tu gasto/deducción.";
+    }
+    if (tipo === "INGRESO") return "Factura que emitiste: tu ingreso.";
+    if (tipo === "EGRESO") return "Factura que recibiste de un proveedor: tu gasto.";
+    return "";
+  };
+
+  return JSON.stringify({
+    _nota: "Revisa 'direccion' e 'interpretacion' para no confundir ingreso vs gasto. Un CFDI de nómina RECIBIDO es ingreso tuyo, no gasto.",
+    facturas: invoices.map((inv) => {
+      const direccion = directionOf(inv);
+      return {
+        id: inv.id,
+        tipo: inv.tipo,
+        direccion, // EMITIDO = tú lo expediste · RECIBIDO = te lo expidieron
+        interpretacion: interpret(inv.tipo, direccion),
+        fecha: inv.fecha.toISOString().substring(0, 10),
+        contraparte: inv.customer?.razonSocial ?? "—",
+        contraparteRfc: inv.customer?.rfc ?? "—",
+        subtotal: inv.subtotal,
+        total: inv.total,
+        status: inv.status,
+        uuid: inv.uuid,
+        formaPago: inv.formaPago,
+        metodoPago: inv.metodoPago,
+      };
+    }),
+  });
 }
 
 // ─── query_bank_transactions ─────────────────────────────────────────────────
@@ -245,12 +273,27 @@ async function queryBankTransactions(input: ToolInput, companyId: string) {
   }
 
   if (input.summary_only) {
-    const [agg, count] = await Promise.all([
+    const [agg, count, ingresos, egresos] = await Promise.all([
       prisma.bankTransaction.aggregate({ where, _sum: { monto: true } }),
       prisma.bankTransaction.count({ where }),
+      prisma.bankTransaction.aggregate({ where: { ...where, monto: { gt: 0 } }, _sum: { monto: true } }),
+      prisma.bankTransaction.aggregate({ where: { ...where, monto: { lt: 0 } }, _sum: { monto: true } }),
     ]);
-    return JSON.stringify({ count, totalMonto: agg._sum.monto ?? 0 });
+    return JSON.stringify({
+      _convencion: "monto positivo = INGRESO (entró dinero); negativo = EGRESO (salió dinero).",
+      count,
+      totalNeto: agg._sum.monto ?? 0,
+      totalIngresos: ingresos._sum.monto ?? 0,
+      totalEgresos: Math.abs(egresos._sum.monto ?? 0),
+    });
   }
+
+  // Sorting: by date (default) or by amount. For "mayor egreso" the agent
+  // should sort egresos by monto ASC (most negative first); for "mayor ingreso"
+  // by monto DESC. We expose explicit options so it doesn't have to guess.
+  let orderBy: Record<string, "asc" | "desc"> = { fecha: "desc" };
+  if (input.sort_by === "monto_asc") orderBy = { monto: "asc" }; // mayor egreso primero
+  else if (input.sort_by === "monto_desc") orderBy = { monto: "desc" }; // mayor ingreso primero
 
   const txs = await prisma.bankTransaction.findMany({
     where,
@@ -259,25 +302,28 @@ async function queryBankTransactions(input: ToolInput, companyId: string) {
       invoice: { select: { uuid: true, total: true, tipo: true } },
       supplier: { select: { razonSocial: true, rfc: true } },
     },
-    orderBy: { fecha: "desc" },
+    orderBy,
     take: Math.min((input.limit as number) || 20, 50),
   });
 
-  return JSON.stringify(
-    txs.map((tx) => ({
+  return JSON.stringify({
+    _convencion: "monto positivo = INGRESO (entró dinero); monto negativo = EGRESO (salió dinero). El 'mayor egreso' es el monto MÁS NEGATIVO (mayor en valor absoluto entre los negativos).",
+    movimientos: txs.map((tx) => ({
       id: tx.id,
       fecha: tx.fecha.toISOString().substring(0, 10),
       descripcion: tx.descripcion,
       referencia: tx.referencia,
       monto: tx.monto,
+      montoAbsoluto: Math.abs(tx.monto),
+      flujo: tx.monto >= 0 ? "INGRESO" : "EGRESO",
       tipo: tx.tipo,
       status: tx.status,
       banco: tx.bankAccount.banco,
       cuenta: tx.bankAccount.nombre,
       invoiceUuid: tx.invoice?.uuid,
       supplier: tx.supplier?.razonSocial,
-    }))
-  );
+    })),
+  });
 }
 
 // ─── query_tax_declarations ──────────────────────────────────────────────────

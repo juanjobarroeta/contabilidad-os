@@ -25,7 +25,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "query_bank_transactions",
     description:
-      "Busca transacciones bancarias. Puede filtrar por cuenta, rango de fechas, estatus de conciliación (UNMATCHED/MATCHED/IGNORED), tipo (CREDITO/DEBITO), o rango de monto.",
+      "Busca transacciones bancarias. Convención: monto positivo = INGRESO (entró dinero), negativo = EGRESO (salió). Para el MAYOR EGRESO usa sort_by='monto_asc' y tipo='DEBITO'; para el MAYOR INGRESO usa sort_by='monto_desc'. Puede filtrar por cuenta, fechas, estatus (UNMATCHED/MATCHED/IGNORED), tipo (CREDITO/DEBITO), o rango de monto.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -33,7 +33,8 @@ export const tools: Anthropic.Tool[] = [
         date_from: { type: "string", description: "Fecha inicio ISO" },
         date_to: { type: "string", description: "Fecha fin ISO" },
         status: { type: "string", enum: ["UNMATCHED", "MATCHED", "IGNORED"] },
-        tipo: { type: "string", enum: ["CREDITO", "DEBITO"] },
+        tipo: { type: "string", enum: ["CREDITO", "DEBITO"], description: "CREDITO=ingreso, DEBITO=egreso" },
+        sort_by: { type: "string", enum: ["fecha", "monto_asc", "monto_desc"], description: "monto_asc = mayor egreso primero; monto_desc = mayor ingreso primero" },
         monto_min: { type: "number" },
         monto_max: { type: "number" },
         summary_only: { type: "boolean" },
