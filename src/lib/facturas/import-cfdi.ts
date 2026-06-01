@@ -86,6 +86,7 @@ export async function importCfdiFromXml(opts: {
       totalImpuestos: cfdi.ivaTotal,
       status: "STAMPED", // it carries a UUID — already stamped by the issuer
       uuid: cfdi.uuid,
+      rawXml: xml, // keep the authentic CFDI so we can re-send it
       notas: "Subido (XML)",
       items: cfdi.items.length
         ? {

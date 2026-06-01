@@ -107,6 +107,22 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "get_invoice_files",
+    description:
+      "Genera enlaces de descarga para el XML (y PDF si está disponible) de facturas/CFDIs. Úsala cuando el usuario pida 'mándame el XML/PDF de la factura X', 'descarga mis facturas de mayo', etc. Filtra por UUID, cliente, o rango de fechas. El XML está disponible para facturas descargadas del SAT después de cierta fecha; el PDF solo para facturas emitidas con Facturapi. Devuelve enlaces temporales (30 min) que el usuario abre para descargar.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        uuid: { type: "string", description: "UUID (folio fiscal) exacto de una factura" },
+        date_from: { type: "string", description: "Fecha desde (YYYY-MM-DD)" },
+        date_to: { type: "string", description: "Fecha hasta (YYYY-MM-DD)" },
+        cliente: { type: "string", description: "Nombre o RFC del cliente/proveedor" },
+        limit: { type: "number", description: "Máx. facturas (default 10)" },
+      },
+      required: [],
+    },
+  },
+  {
     name: "query_sat_sync_status",
     description:
       "Reporta el estado de la sincronización de CFDIs con el SAT: si la descarga histórica (backfill) ya terminó, cuántos periodos (meses) están completos vs. pendientes, el rango de fechas cubierto, cuántos CFDIs se han importado, y qué meses faltan. Úsala cuando pregunten '¿ya se descargaron todos mis CFDIs?', '¿ya terminó la descarga de 5 años?', '¿faltan facturas por bajar del SAT?'.",

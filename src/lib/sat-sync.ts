@@ -524,6 +524,7 @@ export async function verifyAndImportSatSync(
             totalImpuestos: cfdi.ivaTotal,
             status: "STAMPED",
             uuid,
+            rawXml: xmlContent, // keep the authentic CFDI so we can re-send it
             notas: `SAT — ${tipo}`,
             items:
               cfdi.items && cfdi.items.length > 0
