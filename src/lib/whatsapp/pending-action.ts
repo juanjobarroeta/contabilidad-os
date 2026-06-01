@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { stampInvoice, type StampInput, type StampResult } from "@/lib/facturas/stamp";
 import { reconcileTransaction } from "@/lib/conciliacion";
@@ -67,7 +68,10 @@ export async function stagePendingConciliar(
 export async function clearPendingAction(conversationId: string): Promise<void> {
   await prisma.whatsappConversation.update({
     where: { id: conversationId },
-    data: { pendingAction: undefined },
+    // Prisma treats `undefined` as "skip this field" (a no-op). To actually
+    // clear a Json column we must use DbNull — this was the bug that left a
+    // stamped invoice's pending action lingering and re-prompting for the code.
+    data: { pendingAction: Prisma.DbNull },
   });
 }
 
@@ -96,18 +100,20 @@ export async function tryConfirmPendingAction(
   const pa = await getPendingAction(conversationId);
   if (!pa) return null;
 
+  const accionLabel = pa.type === "conciliar" ? "conciliación" : "factura";
+
   const text = body.trim().toLowerCase();
   if (/^(cancelar|cancela|no)\b/.test(text)) {
     await clearPendingAction(conversationId);
-    return "Cancelado. No se timbró nada.";
+    return `Cancelado. No se realizó la ${accionLabel}.`;
   }
 
   const codeMatch = body.trim().match(/\b(\d{6})\b/);
   if (!codeMatch) {
     // They said something else while an action is pending — remind, don't execute.
     return (
-      `Tienes una factura pendiente de confirmar. Para timbrarla, responde con el código *${pa.code}*. ` +
-      "Para cancelar, escribe *cancelar*."
+      `Tienes una ${accionLabel} pendiente de confirmar. Responde con el código *${pa.code}* para proceder, ` +
+      "o escribe *cancelar* para descartarla y seguir con otra cosa."
     );
   }
   if (codeMatch[1] !== pa.code) {
