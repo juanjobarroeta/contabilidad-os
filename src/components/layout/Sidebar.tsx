@@ -20,8 +20,10 @@ import {
   Settings,
   ShieldCheck,
   ClipboardList,
+  Menu,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const NAV_ITEMS = [
   { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard },
@@ -48,12 +50,54 @@ export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
   const { companies, activeCompany, setActiveCompany } = useCompany();
   const [companyOpen, setCompanyOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close the mobile drawer on navigation.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   return (
-    <aside className="w-60 bg-white border-r border-border flex flex-col h-full shrink-0">
-      {/* Logo */}
-      <div className="px-4 py-4 border-b border-border">
+    <>
+      {/* Mobile top bar with hamburger (hidden on md+) */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-border flex items-center gap-3 px-4">
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Abrir menú"
+          className="p-2 -ml-2 rounded-md hover:bg-accent"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <span className="font-bold text-primary">ContabilidadOS</span>
+      </div>
+
+      {/* Backdrop (mobile only, when open) */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/40"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+      )}
+
+      <aside
+        className={cn(
+          "bg-white border-r border-border flex flex-col h-full w-60 shrink-0",
+          // Desktop: static in the flex row. Mobile: off-canvas drawer.
+          "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:transition-transform",
+          mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
+        )}
+      >
+      {/* Logo (with close button on mobile) */}
+      <div className="px-4 py-4 border-b border-border flex items-center justify-between">
         <span className="font-bold text-primary text-lg">ContabilidadOS</span>
+        <button
+          onClick={() => setMobileOpen(false)}
+          aria-label="Cerrar menú"
+          className="md:hidden p-1 rounded-md hover:bg-accent"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Company switcher */}
@@ -158,6 +202,7 @@ export function Sidebar({ user }: SidebarProps) {
           Cerrar sesión
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
