@@ -448,9 +448,16 @@ export async function verifyAndImportSatSync(
 
     for await (const cfdiMap of reader.cfdis()) {
       for (const [uuid, xmlContent] of cfdiMap) {
-        // Skip if already in DB
-        const existing = await prisma.invoice.findFirst({ where: { uuid } });
+        // Already in DB: skip — but backfill rawXml if it's missing, so a
+        // re-sync repairs CFDIs imported before we started storing the file.
+        const existing = await prisma.invoice.findFirst({
+          where: { uuid },
+          select: { id: true, rawXml: true },
+        });
         if (existing) {
+          if (!existing.rawXml) {
+            await prisma.invoice.update({ where: { id: existing.id }, data: { rawXml: xmlContent } });
+          }
           skipped++;
           continue;
         }
