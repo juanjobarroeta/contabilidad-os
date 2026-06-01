@@ -17,7 +17,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { parseStatement } from "@/lib/bank-parser";
+import { parseStatement, type ParsedTransaction } from "@/lib/bank-parser";
 
 export type ImportResult = {
   ok: boolean;
@@ -30,35 +30,23 @@ export type ImportResult = {
   error?: string;
 };
 
-export async function importBankStatement(opts: {
+/**
+ * Persist already-parsed transactions: dedup + auto-categorize + insert.
+ * Shared by the text-format importer (parseStatement) and the vision/PDF
+ * importer, so dedup and categorization behave identically regardless of how
+ * the transactions were parsed. `source` distinguishes provenance.
+ */
+export async function persistTransactions(opts: {
   bankAccountId: string;
   companyId: string;
-  fileContent: string;
-  filename: string;
-}): Promise<ImportResult> {
-  const { bankAccountId, companyId, fileContent, filename } = opts;
-
-  if (!fileContent) {
-    return { ok: false, imported: 0, skipped: 0, message: "Archivo vacío", error: "Archivo vacío" };
-  }
-
-  const parseResult = parseStatement(fileContent, filename ?? "statement.csv");
-
-  if (parseResult.transactions.length === 0) {
-    return {
-      ok: false,
-      imported: 0,
-      skipped: 0,
-      warnings: parseResult.warnings,
-      message: "No se encontraron transacciones en el archivo.",
-      error: "No se encontraron transacciones en el archivo.",
-    };
-  }
-
+  transactions: ParsedTransaction[];
+  source?: string;
+}): Promise<{ imported: number; skipped: number }> {
+  const { bankAccountId, companyId, transactions, source = "UPLOAD" } = opts;
   let imported = 0;
   let skipped = 0;
 
-  for (const tx of parseResult.transactions) {
+  for (const tx of transactions) {
     const fechaStart = new Date(tx.fecha);
     fechaStart.setHours(0, 0, 0, 0);
     const fechaEnd = new Date(tx.fecha);
@@ -78,12 +66,9 @@ export async function importBankStatement(opts: {
 
     const desc = tx.descripcion;
     const isBankFee = /comisi[oó]n|iva\s+comisi/i.test(desc);
-    // SAT can appear as standalone ("SAT") or with text after ("SAT 2026", etc.)
-    // — anchor with word boundary + optional trailing whitespace/digit/punct.
     const isTaxPayment =
       /pago\s+de\s+impuestos|^impuesto|recaudaci[oó]n|\bsat\b|tesofe/i.test(desc);
     const isInternalTransfer = /traspaso\s+(entre|a)\s+cuentas?\s+propias?|transferencia\s+propia/i.test(desc);
-    // BBVA noise: zero-amount compensation rows ("COMPENSACION POR RETRASO")
     const isBankNoise = /compensaci[oó]n\s+por\s+retraso/i.test(desc) || tx.monto === 0;
 
     let status: "UNMATCHED" | "IGNORED" = "UNMATCHED";
@@ -114,11 +99,46 @@ export async function importBankStatement(opts: {
         tipo: tx.monto >= 0 ? "CREDITO" : "DEBITO",
         status,
         notes,
-        source: "UPLOAD",
+        source,
       },
     });
     imported++;
   }
+
+  return { imported, skipped };
+}
+
+export async function importBankStatement(opts: {
+  bankAccountId: string;
+  companyId: string;
+  fileContent: string;
+  filename: string;
+}): Promise<ImportResult> {
+  const { bankAccountId, companyId, fileContent, filename } = opts;
+
+  if (!fileContent) {
+    return { ok: false, imported: 0, skipped: 0, message: "Archivo vacío", error: "Archivo vacío" };
+  }
+
+  const parseResult = parseStatement(fileContent, filename ?? "statement.csv");
+
+  if (parseResult.transactions.length === 0) {
+    return {
+      ok: false,
+      imported: 0,
+      skipped: 0,
+      warnings: parseResult.warnings,
+      message: "No se encontraron transacciones en el archivo.",
+      error: "No se encontraron transacciones en el archivo.",
+    };
+  }
+
+  const { imported, skipped } = await persistTransactions({
+    bankAccountId,
+    companyId,
+    transactions: parseResult.transactions,
+    source: "UPLOAD",
+  });
 
   return {
     ok: true,
