@@ -1,0 +1,319 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useCompany } from "@/components/layout/CompanyProvider";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import {
+  ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, Clock,
+  Loader2, Printer, FileText, Lock, RotateCcw, Save,
+} from "lucide-react";
+
+const MONTHS = [
+  "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre",
+];
+
+type Estado = "FILED" | "PENDING" | "OVERDUE" | "UPCOMING";
+const ESTADO_CONFIG: Record<Estado, { label: string; bg: string; text: string; icon: typeof CheckCircle2 }> = {
+  FILED:    { label: "Presentada", bg: "bg-green-50", text: "text-green-700", icon: CheckCircle2 },
+  PENDING:  { label: "Pendiente",  bg: "bg-gray-50",  text: "text-gray-600",  icon: Clock },
+  OVERDUE:  { label: "Vencida",    bg: "bg-red-50",   text: "text-red-700",   icon: AlertCircle },
+  UPCOMING: { label: "Por vencer", bg: "bg-amber-50", text: "text-amber-700", icon: Clock },
+};
+
+interface FederalLinea { tipo: string; descripcion: string; monto: number; tipoMonto: "pagar" | "favor" | "enterar"; }
+interface CierreData {
+  periodo: string; month: number; year: number;
+  federal: {
+    lineas: FederalLinea[];
+    totalAPagar: number; saldoFavorIva: number;
+    vencimiento: string; estado: Estado;
+    lineaCaptura: string | null; acuseUrl: string | null; fechaPresentacion: string | null;
+    calculado: boolean;
+  };
+  diot: {
+    aplica: boolean; proveedores: number; vencimiento: string;
+    estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null;
+  } | null;
+  readiness: Record<string, { ok: boolean; aplica: boolean; detail: string }>;
+  resumen: { totalAPagar: number; obligacionesPresentadas: number; obligacionesTotal: number; mesCerrado: boolean; };
+}
+
+const READINESS_LABELS: Record<string, string> = {
+  cfdisSincronizados: "CFDIs sincronizados",
+  nominaTimbrada: "Nómina del mes timbrada",
+  periodoCerrado: "Periodo concluido",
+};
+
+export default function CierreMensualPage() {
+  const { activeCompany } = useCompany();
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+  const [data, setData] = useState<CierreData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Federal acuse capture
+  const [federalLinea, setFederalLinea] = useState("");
+  const [federalAcuse, setFederalAcuse] = useState("");
+  const [federalFecha, setFederalFecha] = useState("");
+  const [savingFederal, setSavingFederal] = useState(false);
+  // DIOT acuse capture
+  const [diotAcuse, setDiotAcuse] = useState("");
+  const [savingDiot, setSavingDiot] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!activeCompany) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/impuestos/cierre?companyId=${activeCompany.id}&month=${month}&year=${year}`);
+      if (!res.ok) throw new Error("Error al cargar el cierre");
+      const d: CierreData = await res.json();
+      setData(d);
+      setFederalLinea(d.federal.lineaCaptura ?? "");
+      setFederalAcuse(d.federal.acuseUrl ?? "");
+      setFederalFecha(d.federal.fechaPresentacion ? d.federal.fechaPresentacion.substring(0, 10) : "");
+      setDiotAcuse(d.diot?.acuseUrl ?? "");
+    } catch {
+      setError("No se pudo cargar el cierre del mes");
+    } finally {
+      setLoading(false);
+    }
+  }, [activeCompany, month, year]);
+
+  useEffect(() => { load(); }, [load]);
+
+  function prevMonth() { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); }
+  function nextMonth() { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); }
+
+  async function post(body: Record<string, unknown>) {
+    const res = await fetch("/api/impuestos/cierre", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyId: activeCompany!.id, periodo: data!.periodo, ...body }),
+    });
+    if (!res.ok) throw new Error("Error");
+  }
+
+  async function fileFederal(filing: boolean) {
+    if (!activeCompany || !data) return;
+    setSavingFederal(true);
+    try {
+      await post({
+        action: filing ? "file-federal" : "unfile-federal",
+        lineaCaptura: federalLinea || null,
+        acuseUrl: federalAcuse || null,
+        fechaPresentacion: federalFecha || null,
+      });
+      await load();
+    } catch { setError("No se pudo guardar la declaración federal"); }
+    finally { setSavingFederal(false); }
+  }
+
+  async function fileDiot(filing: boolean) {
+    if (!activeCompany || !data) return;
+    setSavingDiot(true);
+    try {
+      await post({ action: filing ? "file-diot" : "unfile-diot", acuseUrl: diotAcuse || null });
+      await load();
+    } catch { setError("No se pudo guardar la DIOT"); }
+    finally { setSavingDiot(false); }
+  }
+
+  const EstadoBadge = ({ estado }: { estado: Estado }) => {
+    const c = ESTADO_CONFIG[estado];
+    const Icon = c.icon;
+    return (
+      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${c.bg} ${c.text}`}>
+        <Icon className="h-3.5 w-3.5" /> {c.label}
+      </span>
+    );
+  };
+
+  const montoLabel = (l: FederalLinea) =>
+    l.tipoMonto === "favor" ? "a favor" : l.tipoMonto === "enterar" ? "a enterar" : "a pagar";
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-6">
+      {/* Scoped print styles: only #cierre-packet prints. */}
+      <style>{`@media print {
+        body * { visibility: hidden !important; }
+        #cierre-packet, #cierre-packet * { visibility: visible !important; }
+        #cierre-packet { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+      }`}</style>
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4 print:hidden">
+        <div>
+          <h1 className="text-xl font-bold flex items-center gap-2"><Lock className="h-5 w-5" /> Cierre mensual</h1>
+          <p className="text-sm text-muted-foreground">Revisa, presenta y cierra todas las obligaciones del mes.</p>
+        </div>
+        <button
+          onClick={() => window.print()}
+          disabled={!data}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-sm hover:bg-accent disabled:opacity-50"
+        >
+          <Printer className="h-4 w-4" /> Imprimir paquete
+        </button>
+      </div>
+
+      {/* Period selector */}
+      <div className="flex items-center gap-3 mb-5 print:hidden">
+        <button onClick={prevMonth} className="p-1.5 rounded-md border border-border hover:bg-accent"><ChevronLeft className="h-4 w-4" /></button>
+        <span className="text-lg font-semibold min-w-[160px] text-center">{MONTHS[month - 1]} {year}</span>
+        <button onClick={nextMonth} className="p-1.5 rounded-md border border-border hover:bg-accent"><ChevronRight className="h-4 w-4" /></button>
+        {data?.resumen.mesCerrado && (
+          <span className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">
+            <CheckCircle2 className="h-3.5 w-3.5" /> Mes cerrado
+          </span>
+        )}
+      </div>
+
+      {error && <div className="mb-4 p-3 rounded-md bg-red-50 text-red-700 text-sm print:hidden">{error}</div>}
+      {loading && <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center"><Loader2 className="h-5 w-5 animate-spin" /> Cargando…</div>}
+
+      {data && !loading && (
+        <div className="space-y-5">
+          {/* ── Preparación ── */}
+          <section className="rounded-lg border border-border p-4 print:hidden">
+            <h2 className="font-semibold text-sm mb-3">Preparación</h2>
+            <ul className="space-y-2">
+              {Object.entries(data.readiness).filter(([, v]) => v.aplica).map(([key, v]) => (
+                <li key={key} className="flex items-center gap-2 text-sm">
+                  {v.ok
+                    ? <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                    : <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />}
+                  <span className="font-medium">{READINESS_LABELS[key] ?? key}</span>
+                  <span className="text-muted-foreground">— {v.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* ── Declaración federal ── */}
+          <section className="rounded-lg border border-border p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-sm">Declaración provisional de impuestos federales</h2>
+              <EstadoBadge estado={data.federal.estado} />
+            </div>
+
+            <table className="w-full text-sm mb-3">
+              <tbody>
+                {data.federal.lineas.map((l) => (
+                  <tr key={l.tipo} className="border-b border-border/50 last:border-0">
+                    <td className="py-1.5">{l.descripcion}</td>
+                    <td className={`py-1.5 text-right font-medium tabular-nums ${l.tipoMonto === "favor" ? "text-green-600" : ""}`}>
+                      {formatCurrency(l.monto)} <span className="text-xs text-muted-foreground">{montoLabel(l)}</span>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="font-semibold">
+                  <td className="pt-2">Total a pagar</td>
+                  <td className="pt-2 text-right tabular-nums text-red-600">{formatCurrency(data.federal.totalAPagar)}</td>
+                </tr>
+                {data.federal.saldoFavorIva > 0 && (
+                  <tr className="text-green-700 text-xs">
+                    <td>Saldo a favor de IVA (se arrastra)</td>
+                    <td className="text-right tabular-nums">{formatCurrency(data.federal.saldoFavorIva)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+
+            <p className="text-xs text-muted-foreground mb-3">Vence el {formatDate(data.federal.vencimiento)}</p>
+
+            {data.federal.estado === "FILED" ? (
+              <div className="flex items-center justify-between gap-3 rounded-md bg-green-50 p-3 text-sm">
+                <div>
+                  <p className="font-medium text-green-800">Presentada {data.federal.fechaPresentacion ? `el ${formatDate(data.federal.fechaPresentacion)}` : ""}</p>
+                  {data.federal.lineaCaptura && <p className="text-green-700 text-xs">Línea de captura: {data.federal.lineaCaptura}</p>}
+                  {data.federal.acuseUrl && <a href={data.federal.acuseUrl} target="_blank" rel="noreferrer" className="text-green-700 text-xs underline">Ver acuse</a>}
+                </div>
+                <button onClick={() => fileFederal(false)} disabled={savingFederal} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs hover:bg-white print:hidden">
+                  {savingFederal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2 print:hidden">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input value={federalLinea} onChange={e => setFederalLinea(e.target.value)} placeholder="Línea de captura"
+                    className="px-2.5 py-1.5 rounded-md border border-border text-sm" />
+                  <input value={federalAcuse} onChange={e => setFederalAcuse(e.target.value)} placeholder="URL del acuse (opcional)"
+                    className="px-2.5 py-1.5 rounded-md border border-border text-sm" />
+                  <input type="date" value={federalFecha} onChange={e => setFederalFecha(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-md border border-border text-sm" />
+                </div>
+                <button onClick={() => fileFederal(true)} disabled={savingFederal || !data.federal.calculado}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-foreground text-background text-sm hover:opacity-90 disabled:opacity-50">
+                  {savingFederal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Marcar presentada
+                </button>
+                {!data.federal.calculado && (
+                  <p className="text-xs text-amber-600">Calcula y guarda la declaración en la página de Impuestos antes de marcarla presentada.</p>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* ── DIOT ── */}
+          {data.diot && (
+            <section className="rounded-lg border border-border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-sm flex items-center gap-1.5"><FileText className="h-4 w-4" /> DIOT</h2>
+                <EstadoBadge estado={data.diot.estado} />
+              </div>
+              <p className="text-sm mb-1">{data.diot.proveedores} proveedor(es) con IVA en el mes</p>
+              <p className="text-xs text-muted-foreground mb-3">Vence el {formatDate(data.diot.vencimiento)}</p>
+              <a href={`/api/impuestos/diot?companyId=${activeCompany?.id}&month=${month}&year=${year}&format=txt`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs hover:bg-accent mb-3 print:hidden">
+                <FileText className="h-3.5 w-3.5" /> Descargar archivo DIOT (.txt)
+              </a>
+
+              {data.diot.estado === "FILED" ? (
+                <div className="flex items-center justify-between gap-3 rounded-md bg-green-50 p-3 text-sm">
+                  <p className="font-medium text-green-800">Presentada {data.diot.fechaPresentacion ? `el ${formatDate(data.diot.fechaPresentacion)}` : ""}</p>
+                  <button onClick={() => fileDiot(false)} disabled={savingDiot} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs hover:bg-white print:hidden">
+                    {savingDiot ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2 print:hidden">
+                  <input value={diotAcuse} onChange={e => setDiotAcuse(e.target.value)} placeholder="URL del acuse (opcional)"
+                    className="flex-1 px-2.5 py-1.5 rounded-md border border-border text-sm" />
+                  <button onClick={() => fileDiot(true)} disabled={savingDiot}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-foreground text-background text-sm hover:opacity-90 disabled:opacity-50">
+                    {savingDiot ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Marcar presentada
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── Print packet ── */}
+          <div id="cierre-packet" className="hidden print:block text-sm">
+            <h1 className="text-lg font-bold mb-1">Paquete de cierre — {MONTHS[month - 1]} {year}</h1>
+            <p className="mb-4 text-muted-foreground">{activeCompany?.razonSocial ?? activeCompany?.rfc ?? ""}</p>
+            <h2 className="font-semibold mb-1">Declaración provisional de impuestos federales</h2>
+            <table className="w-full mb-3">
+              <tbody>
+                {data.federal.lineas.map((l) => (
+                  <tr key={l.tipo}><td>{l.descripcion} ({montoLabel(l)})</td><td className="text-right tabular-nums">{formatCurrency(l.monto)}</td></tr>
+                ))}
+                <tr className="font-semibold border-t border-border"><td>Total a pagar</td><td className="text-right tabular-nums">{formatCurrency(data.federal.totalAPagar)}</td></tr>
+              </tbody>
+            </table>
+            <p>Estado: {ESTADO_CONFIG[data.federal.estado].label}{data.federal.lineaCaptura ? ` · Línea de captura: ${data.federal.lineaCaptura}` : ""}</p>
+            <p className="mb-4">Vence el {formatDate(data.federal.vencimiento)}</p>
+            {data.diot && (
+              <>
+                <h2 className="font-semibold mb-1">DIOT</h2>
+                <p>{data.diot.proveedores} proveedor(es) · Estado: {ESTADO_CONFIG[data.diot.estado].label} · Vence el {formatDate(data.diot.vencimiento)}</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
