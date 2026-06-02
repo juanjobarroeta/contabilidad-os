@@ -20,6 +20,7 @@ import {
   Settings,
   ShieldCheck,
   ClipboardList,
+  Lock,
   Menu,
   X,
 } from "lucide-react";
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { href: "/bancos",       label: "Bancos",          icon: Landmark },
   { href: "/nomina",       label: "Nómina",          icon: Users2 },
   { href: "/impuestos",    label: "Impuestos",       icon: Calculator },
+  { href: "/impuestos/cierre", label: "Cierre mensual", icon: Lock },
   { href: "/cumplimiento", label: "Cumplimiento",    icon: ShieldCheck },
   { href: "/declaracion-anual", label: "Dec. Anual",  icon: ClipboardList },
   { href: "/contabilidad", label: "Contabilidad",    icon: BookOpen },
@@ -56,6 +58,12 @@ export function Sidebar({ user }: SidebarProps) {
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  // Highlight only the most specific matching item, so a nested route (e.g.
+  // /impuestos/cierre) doesn't also light up its parent (/impuestos).
+  const activeNavHref = [...NAV_ITEMS, ...BOTTOM_NAV_ITEMS]
+    .filter(({ href }) => pathname === href || pathname.startsWith(href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
 
   return (
     <>
@@ -151,7 +159,7 @@ export function Sidebar({ user }: SidebarProps) {
             href={href}
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-              pathname === href || pathname.startsWith(href + "/")
+              href === activeNavHref
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground"
             )}
@@ -169,7 +177,7 @@ export function Sidebar({ user }: SidebarProps) {
               href={href}
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-                pathname === href || pathname.startsWith(href + "/")
+                href === activeNavHref
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
