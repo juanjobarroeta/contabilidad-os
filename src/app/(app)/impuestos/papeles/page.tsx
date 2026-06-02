@@ -22,6 +22,18 @@ export default function PapelesPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
 
+  // Honor deep-links from the cierre workspace (?tab=&month=&year=). Read from
+  // the URL directly to avoid forcing a Suspense boundary (useSearchParams).
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get("tab");
+    if (t === "iva" || t === "isr" || t === "retenciones") setTab(t);
+    const m = parseInt(sp.get("month") ?? "");
+    if (m >= 1 && m <= 12) setMonth(m);
+    const y = parseInt(sp.get("year") ?? "");
+    if (y >= 2000 && y <= 2100) setYear(y);
+  }, []);
+
   if (!activeCompany) {
     return (
       <div className="p-8 text-muted-foreground text-sm">

@@ -5,7 +5,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, Clock,
-  Loader2, Printer, FileText, Lock, RotateCcw, Save,
+  Loader2, Printer, FileText, Lock, RotateCcw, Save, Download, ExternalLink,
 } from "lucide-react";
 
 const MONTHS = [
@@ -43,6 +43,19 @@ const READINESS_LABELS: Record<string, string> = {
   cfdisSincronizados: "CFDIs sincronizados",
   nominaTimbrada: "Nómina del mes timbrada",
   periodoCerrado: "Periodo concluido",
+};
+
+// Each federal sub-obligation has a downloadable working paper backing its figure.
+type PapelId = "iva" | "isr" | "retenciones";
+const PAPEL_BY_TIPO: Record<string, PapelId | undefined> = {
+  IVA_MENSUAL: "iva",
+  ISR_PROVISIONAL: "isr",
+  RETENCIONES_ISR: "retenciones",
+};
+const PAPEL_LABEL: Record<PapelId, string> = {
+  iva: "IVA — acreditable, trasladado y determinación",
+  isr: "ISR provisional — base, coeficiente y cálculo",
+  retenciones: "Retenciones — recibidas y efectuadas",
 };
 
 export default function CierreMensualPage() {
@@ -255,6 +268,36 @@ export default function CierreMensualPage() {
               </div>
             )}
           </section>
+
+          {/* ── Papeles de trabajo ── */}
+          {data.federal.lineas.some((l) => PAPEL_BY_TIPO[l.tipo]) && (
+            <section className="rounded-lg border border-border p-4 print:hidden">
+              <h2 className="font-semibold text-sm flex items-center gap-1.5"><FileText className="h-4 w-4" /> Papeles de trabajo</h2>
+              <p className="text-xs text-muted-foreground mb-3">Respaldo auditable de cada cifra de la declaración. Descárgalos en Excel o revísalos a detalle.</p>
+              <ul className="divide-y divide-border/50">
+                {data.federal.lineas.map((l) => {
+                  const papel = PAPEL_BY_TIPO[l.tipo];
+                  if (!papel) return null;
+                  const qs = `companyId=${activeCompany?.id}&year=${year}&month=${month}`;
+                  return (
+                    <li key={l.tipo} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <span className="min-w-0">{PAPEL_LABEL[papel]}</span>
+                      <span className="flex items-center gap-3 shrink-0">
+                        <a href={`/api/papeles/${papel}?${qs}&format=csv`}
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                          <Download className="h-3.5 w-3.5" /> Excel
+                        </a>
+                        <a href={`/impuestos/papeles?tab=${papel}&month=${month}&year=${year}`}
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                          <ExternalLink className="h-3.5 w-3.5" /> Ver
+                        </a>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
 
           {/* ── DIOT ── */}
           {data.diot && (
