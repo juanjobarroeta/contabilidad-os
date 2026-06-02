@@ -217,6 +217,9 @@ model Company {
   whatsappLinks         WhatsappLink[]         @relation("WhatsappActiveCompany")
   whatsappConversations WhatsappConversation[]
 
+  // Post-sync IVA-change notices (one baseline per unfiled period)
+  ivaPeriodNotices      IvaPeriodNotice[]
+
   // All SAT régimenes this taxpayer is registered under. `regimenFiscal` above
   // remains the single "primary" (operative) régimen used by most flows; this
   // list captures the rest (common for personas físicas) so obligation and
@@ -486,10 +489,42 @@ model PagoDoctoRelacionado {
   impSaldoAnterior Float?
   impSaldoInsoluto Float?
 
+  // FechaPago of the parent <pago:Pago> node — the legal date of the payment,
+  // which the SAT uses to attribute IVA to a period (not the REP's emission
+  // date). Present in both complemento 1.0 and 2.0.
+  fechaPago       DateTime?
+
+  // Per-docto IVA breakdown. Complemento de Pago 2.0 carries ImpuestosDR/
+  // TrasladoDR (firm, payment-level IVA); 1.0 does not. When the XML lacks the
+  // breakdown (legacy 1.0, or 2.0 ObjetoImpDR "03"), these are null and
+  // ivaDerivado is set so the tax engine prorates the parent invoice's IVA
+  // instead of reading a firm value.
+  baseTraslado    Float?
+  ivaTrasladado   Float?
+  ivaDerivado     Boolean  @default(false)
+
   pagoInvoice Invoice @relation(fields: [pagoInvoiceId], references: [id], onDelete: Cascade)
 
   @@unique([pagoInvoiceId, parentUuid])
   @@index([parentUuid])
+  @@index([fechaPago])
+}
+
+// Tracks the last IVA trasladado we baselined/notified per (company, period),
+// so the post-sync job can detect when a newly imported REP moves an unfiled
+// period's IVA and avoid re-notifying about an unchanged figure.
+model IvaPeriodNotice {
+  id             String    @id @default(cuid())
+  companyId      String
+  periodo        String    // "YYYY-MM"
+  ivaTrasladado  Float     // value at last baseline/notification
+  lastNotifiedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, periodo])
 }
 
 model InvoiceItem {
