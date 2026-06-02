@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularIsrResicoPf, detectResicoKind, TARIFA_RESICO_PF_MENSUAL } from "@/lib/resico";
+import { sumIsrPagar } from "@/lib/isr-provisional";
 
 // GET /api/papeles/isr?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -63,11 +64,12 @@ export async function GET(req: Request) {
     prisma.taxDeclaration.findMany({
       where: {
         companyId,
-        tipo: "ISR_PROVISIONAL",
+        // Both shapes: dedicated ISR_PROVISIONAL rows and legacy folded IVA_MENSUAL rows.
+        tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL"] },
         periodo: { gte: `${year}-01`, lt: `${year}-${String(month).padStart(2, "0")}` },
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
-      select: { periodo: true, isrPagar: true },
+      select: { tipo: true, periodo: true, isrPagar: true },
     }),
   ]);
 
@@ -108,8 +110,9 @@ export async function GET(req: Request) {
   const TASA_ISR = 0.30;
   const isrDelEjercicio = utilidadFiscal != null ? utilidadFiscal * TASA_ISR : null;
 
-  // Sum ISR already paid in prior months of this year
-  const isrPagadoAnterior = prevDeclaraciones.reduce((s, d) => s + (d.isrPagar ?? 0), 0);
+  // Sum ISR already paid in prior months of this year (deduped per periodo across
+  // the dedicated ISR_PROVISIONAL rows and any legacy folded IVA_MENSUAL rows).
+  const isrPagadoAnterior = sumIsrPagar(prevDeclaraciones);
   const isrDelMes =
     isrDelEjercicio != null ? Math.max(0, isrDelEjercicio - isrPagadoAnterior) : null;
 

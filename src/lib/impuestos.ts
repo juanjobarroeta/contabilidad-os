@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { sumIsrPagar } from "./isr-provisional";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Monthly tax position (IVA + ISR provisional) computed from synced CFDIs.
@@ -122,11 +123,12 @@ export async function computeTaxPosition(
     prisma.taxDeclaration.findMany({
       where: {
         companyId,
-        tipo: "IVA_MENSUAL",
+        // Both shapes: dedicated ISR_PROVISIONAL rows and legacy folded IVA_MENSUAL rows.
+        tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL"] },
         periodo: { gte: `${year}-01`, lt: periodo },
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
-      select: { isrPagar: true },
+      select: { tipo: true, periodo: true, isrPagar: true },
     }),
     prisma.taxDeclaration.findFirst({
       where: {
@@ -218,7 +220,7 @@ export async function computeTaxPosition(
   }
 
   const ingresosAcumulados = ingresosAcumuladosAgg._sum.subtotal ?? 0;
-  const isrPagadoAnterior = declaracionesPrevias.reduce((s, d) => s + (d.isrPagar ?? 0), 0);
+  const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
 
   let utilidadFiscal: number | null = null;
   let isrDelEjercicio: number | null = null;

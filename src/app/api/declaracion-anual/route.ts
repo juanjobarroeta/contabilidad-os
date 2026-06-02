@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { calcularDeclaracionAnual, type DeclaracionAnualInput } from "@/lib/declaracion-anual";
+import { sumIsrPagar } from "@/lib/isr-provisional";
 
 // GET /api/declaracion-anual?companyId=xxx&ejercicio=2025
 // Aggregates all data for the annual declaration and calculates the result.
@@ -75,7 +76,7 @@ export async function GET(req: Request) {
         periodo: { startsWith: String(ejercicio) },
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
-      select: { isrPagar: true, tipo: true },
+      select: { isrPagar: true, tipo: true, periodo: true },
     }),
     // Check for existing saved annual declaration
     prisma.taxDeclaration.findFirst({
@@ -88,7 +89,9 @@ export async function GET(req: Request) {
   const sueldos = nominaAgg._sum.totalPercepciones ?? 0;
   const imssPatronal = nominaAgg._sum.imssPatronal ?? 0;
   const ptuPagado = nominaAgg._sum.ptu ?? 0;
-  const isrProvTotal = isrProvisionalesAgg.reduce((s, d) => s + (d.isrPagar ?? 0), 0);
+  // Dedupe per periodo: prefer the dedicated ISR_PROVISIONAL row, fall back to a
+  // legacy folded IVA_MENSUAL row, so imported and live-saved ISR are each counted once.
+  const isrProvTotal = sumIsrPagar(isrProvisionalesAgg);
 
   // Tipo persona from RFC length
   const tipoPersona = company.rfc.length === 12 ? "PM" : "PF";
