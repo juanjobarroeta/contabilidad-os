@@ -5,6 +5,7 @@ import { CompanyProvider } from "@/components/layout/CompanyProvider";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { TrialBanner } from "@/components/layout/TrialBanner";
 import { getUserSubscriptionState } from "@/lib/subscription";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -98,6 +99,7 @@ export default async function AppLayout({
           <div className="flex-1 overflow-auto">{children}</div>
         </main>
         <ChatPanel />
+        <InstallPrompt />
       </div>
     </CompanyProvider>
   );
