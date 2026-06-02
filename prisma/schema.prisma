@@ -881,6 +881,14 @@ model TaxDeclaration {
   // cierre" lists.
   isHistorical          Boolean  @default(false)
 
+  // SAT acuse capture (cierre mensual). When the user uploads the acuse PDF at
+  // filing time we extract the filed figures and store them here alongside a
+  // snapshot of what the app computed + the flagged diffs. The filed values are
+  // authoritative (they drive carry-forward: ivaSaldoFavor, isrCoeficienteUtilidad);
+  // the snapshot/diffs keep a filing mistake visible (e.g. needing a complementaria).
+  // Shape: { extractedAt, tipoImpuesto, tipoPago, filed:{…}, computed:{…}, diffs:[…] }
+  acuseData             Json?
+
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
 
