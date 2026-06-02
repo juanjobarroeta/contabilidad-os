@@ -293,6 +293,18 @@ export async function GET(req: Request) {
   const gastosDelMes   = gastosThisMonth._sum.subtotal   ?? 0;
   const utilidadBruta  = ingresosDelMes - gastosDelMes;
 
+  // ISR provisional now lives on its own ISR_PROVISIONAL row; the IVA_MENSUAL row
+  // above carries only IVA. Pull the matching ISR figure for the card, falling
+  // back to any legacy folded value still on the IVA_MENSUAL row.
+  let lastIsrPagar = savedDeclaracion?.isrPagar ?? null;
+  if (savedDeclaracion && lastIsrPagar == null) {
+    const isrRow = await prisma.taxDeclaration.findFirst({
+      where: { companyId, tipo: TaxDeclarationType.ISR_PROVISIONAL, periodo: savedDeclaracion.periodo },
+      select: { isrPagar: true },
+    });
+    lastIsrPagar = isrRow?.isrPagar ?? null;
+  }
+
   // Complementos de pago pendientes (REP owed on collected PPD invoices).
   const complementos = await detectComplementosPendientes(companyId, now);
 
@@ -322,7 +334,7 @@ export async function GET(req: Request) {
       periodo: savedDeclaracion.periodo,
       status:  savedDeclaracion.status,
       ivaPagar: savedDeclaracion.ivaPagar,
-      isrPagar: savedDeclaracion.isrPagar,
+      isrPagar: lastIsrPagar,
     } : null,
   });
 }

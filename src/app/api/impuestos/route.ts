@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { sumIsrPagar } from "@/lib/isr-provisional";
+import type { TaxDeclarationType } from "@prisma/client";
 
 // GET /api/impuestos?companyId=xxx&month=4&year=2026
 export async function GET(req: Request) {
@@ -99,14 +101,17 @@ export async function GET(req: Request) {
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearFrom, lt: to } },
       _sum: { subtotal: true },
     }),
-    // Saved declarations Jan → month-1 of this year (for ISR ya pagado)
+    // Saved declarations Jan → month-1 of this year (for ISR ya pagado). Includes
+    // both the dedicated ISR_PROVISIONAL rows AND legacy folded IVA_MENSUAL rows;
+    // sumIsrPagar dedupes per periodo so imported history is counted exactly once.
     prisma.taxDeclaration.findMany({
       where: {
         companyId,
-        tipo: "IVA_MENSUAL",
+        tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL"] },
         periodo: { gte: `${year}-01`, lt: periodo },
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
+      select: { tipo: true, periodo: true, isrPagar: true },
     }),
     // Previous month's declaration — for IVA saldo a favor carryover
     prisma.taxDeclaration.findFirst({
@@ -197,6 +202,14 @@ export async function GET(req: Request) {
       id: true, status: true, retencionesIsr: true,
       acuseUrl: true, lineaCaptura: true, fechaPresentacion: true, fechaLimitePago: true,
     },
+  });
+
+  // This period's dedicated ISR provisional row (source of truth for ISR figures
+  // and the coeficiente override). Legacy periods may still carry these on the
+  // IVA_MENSUAL row instead — declaracionGuardada below falls back to it.
+  const isrProvGuardada = await prisma.taxDeclaration.findFirst({
+    where: { companyId, tipo: "ISR_PROVISIONAL", periodo },
+    select: { id: true, status: true, isrPagar: true, isrCoeficienteUtilidad: true },
   });
 
   // ── IVA calculations ──────────────────────────────────────────────────────
@@ -300,7 +313,7 @@ export async function GET(req: Request) {
 
   // ── ISR cumulative figures ────────────────────────────────────────────────
   const ingresosAcumulados = ingresosAcumuladosAgg._sum.subtotal ?? 0;
-  const isrPagadoAnterior  = declaracionesPrevias.reduce((s, d) => s + (d.isrPagar ?? 0), 0);
+  const isrPagadoAnterior  = sumIsrPagar(declaracionesPrevias);
 
   // ── Nómina retenciones ──────────────────────────────────────────────────
   const nominaIsrMes       = nominaThisMonth._sum.isrRetenido ?? 0;
@@ -409,9 +422,11 @@ export async function GET(req: Request) {
       id: declaracionGuardada.id,
       status: declaracionGuardada.status,
       isHistorical: declaracionGuardada.isHistorical ?? false,
-      // Restore any manual overrides the user saved last time
+      // Restore any manual overrides the user saved last time. The coeficiente
+      // now lives on the dedicated ISR_PROVISIONAL row; fall back to the legacy
+      // folded value on the IVA_MENSUAL row for periods saved before the split.
       saldoFavorAnteriorOverride: declaracionGuardada.ivaSaldoFavorAnterior,
-      coeficienteOverride: declaracionGuardada.isrCoeficienteUtilidad,
+      coeficienteOverride: isrProvGuardada?.isrCoeficienteUtilidad ?? declaracionGuardada.isrCoeficienteUtilidad,
       // Acuse fields
       acuseUrl: declaracionGuardada.acuseUrl,
       lineaCaptura: declaracionGuardada.lineaCaptura,
@@ -446,24 +461,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const declarationData = {
-    status: status ?? "CALCULATED",
-    ivaTrasladadoCobrado:  ivaData?.trasladado  ?? null,
-    ivaAcreditableGastado: ivaData?.acreditable ?? null,
-    ivaSaldoFavor:         ivaData?.saldoFavor  ?? null,
-    ivaPagar:              ivaData?.pagar        ?? null,
-    ivaSaldoFavorAnterior: typeof saldoFavorAnterior === "number" ? saldoFavorAnterior : null,
-    isrIngresos:           isrData?.ingresosAcumulados ?? null,
-    isrDeducciones:        isrData?.gastosDelMes       ?? null,
-    isrBaseGravable:       isrData?.utilidadFiscal     ?? null,
-    isrTasa:               0.30,
-    isrPagar:              isrData?.esteMes            ?? null,
-    isrCoeficienteUtilidad: typeof coeficienteUtilidad === "number" ? coeficienteUtilidad : null,
-    // Retenciones (ISR retenido a enterar — nómina). Lives on its own RETENCIONES_ISR row.
-    retencionesIsr:        retencionesData?.aEnterar   ?? null,
-    // Acuse de recibo — only update if provided
-    ...(acuseUrl       !== undefined && { acuseUrl:       acuseUrl ?? null }),
-    ...(lineaCaptura   !== undefined && { lineaCaptura:   lineaCaptura ?? null }),
+  // Acuse/presentación patch shared by every row of the period. Each field is
+  // included only when the caller actually sent it, so a partial save (e.g.
+  // acuse-only) never wipes previously-saved figures.
+  const acusePatch = {
+    ...(status !== undefined && { status: status ?? "CALCULATED" }),
+    ...(acuseUrl !== undefined && { acuseUrl: acuseUrl ?? null }),
+    ...(lineaCaptura !== undefined && { lineaCaptura: lineaCaptura ?? null }),
     ...(fechaPresentacion !== undefined && {
       fechaPresentacion: fechaPresentacion ? new Date(fechaPresentacion) : null,
     }),
@@ -472,24 +476,89 @@ export async function POST(req: Request) {
     }),
   };
 
-  const existing = await prisma.taxDeclaration.findFirst({
-    where: { companyId, tipo, periodo },
+  // Upsert a single declaration row by (companyId, tipo, periodo), applying only
+  // the provided fields.
+  async function upsertRow(rowTipo: TaxDeclarationType, patch: Record<string, unknown>) {
+    const existing = await prisma.taxDeclaration.findFirst({
+      where: { companyId, tipo: rowTipo, periodo },
+      select: { id: true },
+    });
+    return existing
+      ? prisma.taxDeclaration.update({ where: { id: existing.id }, data: patch })
+      : prisma.taxDeclaration.create({
+          data: { companyId, tipo: rowTipo, periodo, status: "CALCULATED", ...patch },
+        });
+  }
+
+  const isrFields = (d: NonNullable<typeof isrData>) => ({
+    isrIngresos:    d.ingresosAcumulados ?? null,
+    isrDeducciones: d.gastosDelMes       ?? null,
+    isrBaseGravable: d.utilidadFiscal    ?? null,
+    isrTasa:        0.30,
+    isrPagar:       d.esteMes            ?? null,
+    ...(typeof coeficienteUtilidad === "number" && { isrCoeficienteUtilidad: coeficienteUtilidad }),
   });
 
-  const [declaration] = await Promise.all([
-    // Save/update declaration
-    existing
-      ? prisma.taxDeclaration.update({ where: { id: existing.id }, data: declarationData })
-      : prisma.taxDeclaration.create({ data: { companyId, tipo, periodo, ...declarationData } }),
+  let primary;
 
-    // Persist coeficiente to Company so it applies to all months of this year
-    typeof coeficienteUtilidad === "number" && year
-      ? prisma.company.update({
-          where: { id: companyId },
-          data: { coeficienteUtilidad, coeficienteAnio: year },
-        })
-      : Promise.resolve(null),
-  ]);
+  if (tipo === "IVA_MENSUAL") {
+    // IVA figures stay on the IVA_MENSUAL row; ISR provisional figures move to
+    // their own ISR_PROVISIONAL row (Art. 14 — a distinct obligation). When IVA
+    // data is sent we also clear any legacy folded ISR on this row so periods
+    // saved before the split migrate cleanly on re-save.
+    primary = await upsertRow("IVA_MENSUAL", {
+      ...acusePatch,
+      ...(typeof saldoFavorAnterior === "number" && { ivaSaldoFavorAnterior: saldoFavorAnterior }),
+      ...(ivaData && {
+        ivaTrasladadoCobrado:  ivaData.trasladado  ?? null,
+        ivaAcreditableGastado: ivaData.acreditable ?? null,
+        ivaSaldoFavor:         ivaData.saldoFavor  ?? null,
+        ivaPagar:              ivaData.pagar        ?? null,
+        isrIngresos: null, isrDeducciones: null, isrBaseGravable: null,
+        isrTasa: null, isrPagar: null, isrCoeficienteUtilidad: null,
+      }),
+    });
 
-  return NextResponse.json(declaration);
+    if (isrData) {
+      await upsertRow("ISR_PROVISIONAL", { ...acusePatch, ...isrFields(isrData) });
+    } else if (Object.keys(acusePatch).length > 0) {
+      // Acuse-/status-only save: IVA and ISR provisional are filed in one
+      // presentation, so mirror the acuse onto an existing ISR_PROVISIONAL row.
+      // Don't create one from acuse alone — there are no ISR figures to back it.
+      await prisma.taxDeclaration.updateMany({
+        where: { companyId, tipo: "ISR_PROVISIONAL", periodo },
+        data: acusePatch,
+      });
+    }
+  } else if (tipo === "RETENCIONES_ISR") {
+    // ISR retenido a enterar (nómina) — its own row, separate from ISR provisional.
+    primary = await upsertRow("RETENCIONES_ISR", {
+      ...acusePatch,
+      ...(retencionesData && { retencionesIsr: retencionesData.aEnterar ?? null }),
+    });
+  } else {
+    // Generic single-row save (ISR_PROVISIONAL direct, DECLARACION_ANUAL, etc.)
+    primary = await upsertRow(tipo, {
+      ...acusePatch,
+      ...(typeof saldoFavorAnterior === "number" && { ivaSaldoFavorAnterior: saldoFavorAnterior }),
+      ...(ivaData && {
+        ivaTrasladadoCobrado:  ivaData.trasladado  ?? null,
+        ivaAcreditableGastado: ivaData.acreditable ?? null,
+        ivaSaldoFavor:         ivaData.saldoFavor  ?? null,
+        ivaPagar:              ivaData.pagar        ?? null,
+      }),
+      ...(isrData && isrFields(isrData)),
+      ...(retencionesData && { retencionesIsr: retencionesData.aEnterar ?? null }),
+    });
+  }
+
+  // Persist coeficiente to Company so it applies to all months of this year.
+  if (typeof coeficienteUtilidad === "number" && year) {
+    await prisma.company.update({
+      where: { id: companyId },
+      data: { coeficienteUtilidad, coeficienteAnio: year },
+    });
+  }
+
+  return NextResponse.json(primary);
 }

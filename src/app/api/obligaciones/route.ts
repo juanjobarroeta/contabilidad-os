@@ -57,9 +57,20 @@ export async function GET(req: Request) {
       companyId,
       periodo: { startsWith: String(year) },
     },
-    select: { tipo: true, periodo: true, status: true, isHistorical: true },
+    select: { tipo: true, periodo: true, status: true, isHistorical: true, isrPagar: true },
   });
   const declMap = new Map(declarations.map(d => [`${d.tipo}::${d.periodo}`, d.status]));
+
+  // Legacy compat: before the ISR row split, a single IVA_MENSUAL row carried the
+  // ISR provisional figures. For such periods (folded isrPagar, no dedicated
+  // ISR_PROVISIONAL row) reflect the ISR obligation's status from the IVA row so
+  // the calendar doesn't regress to "pendiente" for already-filed periods.
+  for (const d of declarations) {
+    if (d.tipo === "IVA_MENSUAL" && d.isrPagar != null) {
+      const key = `ISR_PROVISIONAL::${d.periodo}`;
+      if (!declMap.has(key)) declMap.set(key, d.status);
+    }
+  }
 
   // Find company creation date — periods before this shouldn't be OVERDUE
   const companyRecord = await prisma.company.findUnique({
@@ -224,7 +235,7 @@ function periodoLabel(periodo: string, periodicidad: string): string {
 function mapObligacionToDeclType(tipo: string): string | null {
   const map: Record<string, string> = {
     "IVA_MENSUAL":     "IVA_MENSUAL",
-    "ISR_PROVISIONAL": "IVA_MENSUAL",  // we store both in IVA_MENSUAL declarations for now
+    "ISR_PROVISIONAL": "ISR_PROVISIONAL", // dedicated row (legacy folded rows handled in GET)
     "RETENCIONES_ISR": "RETENCIONES_ISR", // enteramiento de ISR retenido (nómina) — su propio renglón
     "DIOT":            "IVA_MENSUAL",
     "ISR_ANUAL":       "DECLARACION_ANUAL",
