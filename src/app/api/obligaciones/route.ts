@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
-import { calcularVencimiento, ObligacionConfig } from "@/lib/obligaciones";
+import { calcularVencimiento, defaultConfigForTipo, ObligacionConfig } from "@/lib/obligaciones";
 import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 
 // ── GET /api/obligaciones?companyId=xxx&year=2026 ─────────────────────────────
@@ -37,6 +37,13 @@ export async function GET(req: Request) {
       ? company.regimenFiscal.split(",").map((c) => c.trim()).filter(Boolean)
       : [];
   await seedCompanyObligaciones(companyId, regimenCodes);
+
+  // Data-driven retenciones obligation: a patrón that runs payroll must enter the
+  // ISR it withholds from salaries (Art. 96 LISR) by día 17 — regardless of whether
+  // its régimen map happens to list RETENCIONES_ISR (601 PM doesn't). We only add it
+  // when the company actually has payroll, so companies without employees don't get
+  // a phantom overdue obligation.
+  await ensureRetencionesObligation(companyId);
 
   // Load obligations from DB (includes any CSF overrides)
   const dbObligaciones = await prisma.companyObligation.findMany({
@@ -157,6 +164,39 @@ export async function POST(req: Request) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Ensure a company that runs payroll has a RETENCIONES_ISR obligation. Idempotent:
+ * creates the obligation only the first time payroll is detected and leaves any
+ * existing row (incl. CSF-sourced) untouched. Never deletes — if a company stops
+ * running payroll the obligation stays so historical periods remain trackable.
+ */
+async function ensureRetencionesObligation(companyId: string): Promise<void> {
+  const existing = await prisma.companyObligation.findUnique({
+    where: { companyId_tipo: { companyId, tipo: "RETENCIONES_ISR" } },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const hasPayroll = await prisma.payrollItem.findFirst({
+    where: { payrollRun: { companyId, status: { in: ["CALCULATED", "STAMPED", "PAID"] } } },
+    select: { id: true },
+  });
+  if (!hasPayroll) return;
+
+  const cfg = defaultConfigForTipo("RETENCIONES_ISR");
+  await prisma.companyObligation.create({
+    data: {
+      companyId,
+      tipo: cfg.tipo,
+      descripcion: "ISR retenciones por sueldos y salarios",
+      periodicidad: cfg.periodicidad,
+      diaVencimiento: cfg.diaVencimiento,
+      mesVencimiento: cfg.mesVencimiento ?? null,
+      fuente: "NOMINA",
+    },
+  });
+}
+
 function buildPeriodos(ob: ObligacionConfig, year: number): string[] {
   if (ob.periodicidad === "ANUAL") return [String(year)];
   if (ob.periodicidad === "BIMESTRAL") {
@@ -185,6 +225,7 @@ function mapObligacionToDeclType(tipo: string): string | null {
   const map: Record<string, string> = {
     "IVA_MENSUAL":     "IVA_MENSUAL",
     "ISR_PROVISIONAL": "IVA_MENSUAL",  // we store both in IVA_MENSUAL declarations for now
+    "RETENCIONES_ISR": "RETENCIONES_ISR", // enteramiento de ISR retenido (nómina) — su propio renglón
     "DIOT":            "IVA_MENSUAL",
     "ISR_ANUAL":       "DECLARACION_ANUAL",
     "ISR_BIMESTRAL":   "IVA_MENSUAL",

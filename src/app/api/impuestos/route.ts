@@ -189,6 +189,16 @@ export async function GET(req: Request) {
     }),
   ]);
 
+  // Saved retenciones (nómina) enteramiento for this period — its own RETENCIONES_ISR
+  // row, separate from the IVA/ISR declaration. Lets the UI reflect filing status.
+  const retencionesGuardada = await prisma.taxDeclaration.findFirst({
+    where: { companyId, tipo: "RETENCIONES_ISR", periodo },
+    select: {
+      id: true, status: true, retencionesIsr: true,
+      acuseUrl: true, lineaCaptura: true, fechaPresentacion: true, fechaLimitePago: true,
+    },
+  });
+
   // ── IVA calculations ──────────────────────────────────────────────────────
   // IVA works on FLUJO DE EFECTIVO (cash basis, Art. 1-B LIVA):
   // - PUE: IVA causa el mes de emisión (se asume pagada)
@@ -363,6 +373,21 @@ export async function GET(req: Request) {
       infonavitMes: nominaInfonavitMes,
       percepcionesMes: nominaPercepMes,
       isrRetenidoAcumulado: nominaIsrAcum + nominaIsrMes,
+      // ISR retenido a enterar este mes (Art. 96 LISR — impuesto del trabajador,
+      // enteramiento aparte; NO acredita contra el ISR provisional propio).
+      isrRetencionesAEnterar: nominaIsrMes,
+      // Estado del enteramiento guardado (su propio renglón RETENCIONES_ISR)
+      enteramiento: retencionesGuardada
+        ? {
+            id: retencionesGuardada.id,
+            status: retencionesGuardada.status,
+            montoEnterado: retencionesGuardada.retencionesIsr,
+            acuseUrl: retencionesGuardada.acuseUrl,
+            lineaCaptura: retencionesGuardada.lineaCaptura,
+            fechaPresentacion: retencionesGuardada.fechaPresentacion,
+            fechaLimitePago: retencionesGuardada.fechaLimitePago,
+          }
+        : null,
     },
     isr: {
       ingresosDelMes,
@@ -404,7 +429,7 @@ export async function POST(req: Request) {
   const body = await req.json();
   const {
     companyId, periodo, tipo,
-    ivaData, isrData, status,
+    ivaData, isrData, retencionesData, status,
     saldoFavorAnterior,
     coeficienteUtilidad,
     year,
@@ -434,6 +459,8 @@ export async function POST(req: Request) {
     isrTasa:               0.30,
     isrPagar:              isrData?.esteMes            ?? null,
     isrCoeficienteUtilidad: typeof coeficienteUtilidad === "number" ? coeficienteUtilidad : null,
+    // Retenciones (ISR retenido a enterar — nómina). Lives on its own RETENCIONES_ISR row.
+    retencionesIsr:        retencionesData?.aEnterar   ?? null,
     // Acuse de recibo — only update if provided
     ...(acuseUrl       !== undefined && { acuseUrl:       acuseUrl ?? null }),
     ...(lineaCaptura   !== undefined && { lineaCaptura:   lineaCaptura ?? null }),

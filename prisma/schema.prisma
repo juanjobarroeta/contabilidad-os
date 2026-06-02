@@ -859,6 +859,12 @@ model TaxDeclaration {
   isrPagar              Float?
   isrCoeficienteUtilidad Float?  // Coeficiente asignado por el SAT del ejercicio anterior
 
+  // Retenciones (enteramiento de ISR retenido a terceros — p.ej. nómina). Es un
+  // impuesto del trabajador que el patrón sólo retiene y entera (Art. 96 LISR);
+  // NO se acredita contra el ISR provisional propio de la empresa, por eso vive
+  // en su propio renglón con tipo RETENCIONES_ISR.
+  retencionesIsr        Float?  // ISR retenido a enterar en el periodo
+
   // DIOT
   diotXmlUrl            String?
 
@@ -902,6 +908,7 @@ model CompanyObligation {
 enum TaxDeclarationType {
   IVA_MENSUAL
   ISR_PROVISIONAL
+  RETENCIONES_ISR
   DIOT
   DECLARACION_ANUAL
   CERO
