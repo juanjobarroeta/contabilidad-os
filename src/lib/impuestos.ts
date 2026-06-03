@@ -1,5 +1,7 @@
 import { prisma } from "./prisma";
 import { sumIsrPagar } from "./isr-provisional";
+import { detectResicoKind, calcularIsrResicoPf } from "./resico";
+import { calcularIsrProvisionalPf } from "./fiscal/isr-pf";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Monthly tax position (IVA + ISR provisional) computed from synced CFDIs.
@@ -46,6 +48,57 @@ function repIvaTrasladado(
   return parentIva * (link.impPagado / parent.total);
 }
 
+/**
+ * Cumulative income actually collected and deductions actually paid in
+ * [from, to) — the FLUJO DE EFECTIVO base personas físicas need (Art. 106).
+ * PUE is treated as collected/paid on emission; PPD by REP payment (FechaPago),
+ * taking the subtotal-equivalent of each payment (impPagado × subtotal/total).
+ */
+async function flujoEfectivoAcum(
+  companyId: string,
+  from: Date,
+  to: Date
+): Promise<{ ingresosCobrados: number; deduccionesPagadas: number }> {
+  const [puIngreso, puEgreso, repLinks] = await Promise.all([
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "INGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
+      _sum: { subtotal: true },
+    }),
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "EGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
+      _sum: { subtotal: true },
+    }),
+    prisma.pagoDoctoRelacionado.findMany({
+      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" } },
+      select: { parentUuid: true, impPagado: true },
+    }),
+  ]);
+
+  const uuids = [...new Set(repLinks.map((l) => l.parentUuid))];
+  const parents = uuids.length
+    ? await prisma.invoice.findMany({
+        where: { companyId, uuid: { in: uuids }, metodoPago: "PPD", status: "STAMPED" },
+        select: { uuid: true, tipo: true, subtotal: true, total: true },
+      })
+    : [];
+  const byUuid = new Map(parents.map((p) => [p.uuid!, p]));
+
+  let ppdIngreso = 0;
+  let ppdEgreso = 0;
+  for (const l of repLinks) {
+    const p = byUuid.get(l.parentUuid);
+    if (!p || p.total <= 0 || l.impPagado == null) continue;
+    const base = l.impPagado * (p.subtotal / p.total); // subtotal-equivalent collected/paid
+    if (p.tipo === "INGRESO") ppdIngreso += base;
+    else if (p.tipo === "EGRESO") ppdEgreso += base;
+  }
+
+  return {
+    ingresosCobrados: (puIngreso._sum.subtotal ?? 0) + ppdIngreso,
+    deduccionesPagadas: (puEgreso._sum.subtotal ?? 0) + ppdEgreso,
+  };
+}
+
 export interface TaxPosition {
   periodo: string;
   month: number;
@@ -61,18 +114,29 @@ export interface TaxPosition {
     devengado: { trasladado: number; acreditable: number };
   };
   isr: {
+    /** Which régimen's method produced these figures. */
+    metodo: IsrMetodo;
     ingresosDelMes: number;
     gastosDelMes: number;
+    /** Acumulado ene→mes. Nominal/devengado for PM; cobrado for PF act. empresarial. */
     ingresosAcumulados: number;
     isrPagadoAnterior: number;
     coeficiente: number | null;
     coeficienteFuente: "manual" | "calculado" | "ninguno";
-    /** Art. 14 derived figures; null when no coeficiente is available. */
+    /** Base gravable: utilidad (×coef para PM, cobrado−deducciones para PF). */
+    baseGravable: number | null;
+    /** Tasa aplicada cuando es plana (PM 0.30, RESICO bracket); null si es tarifa progresiva. */
+    tasa: number | null;
+    /** Art. 14 derived figures; null when no coeficiente/tarifa is available. */
     utilidadFiscal: number | null;
     isrDelEjercicio: number | null;
     isrPagar: number | null;
+    /** False when the tarifa used has NOT been verified vs the authoritative source. */
+    tarifaVerificada: boolean;
   };
 }
+
+export type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF";
 
 const ISR_TASA_PM = 0.3;
 
@@ -152,7 +216,7 @@ export async function computeTaxPosition(
     }),
     prisma.company.findUnique({
       where: { id: companyId },
-      select: { coeficienteUtilidad: true, coeficienteAnio: true },
+      select: { coeficienteUtilidad: true, coeficienteAnio: true, regimenFiscal: true, rfc: true },
     }),
     // PPD IVA is on a REP (complemento de pago) basis: every payment whose
     // FechaPago falls in this month, across all REPs of this company. Direction
@@ -211,35 +275,110 @@ export async function computeTaxPosition(
   const ivaPagar = Math.max(0, round2(ivaNeto));
   const ivaSaldoAFavor = ivaNeto < 0 ? round2(-ivaNeto) : 0;
 
-  // ── ISR provisional (Art. 14) ────────────────────────────────────────────
-  const prevIngresosTotal = prevYearIngresos._sum.subtotal ?? 0;
-  const prevGastosTotal = prevYearEgresos._sum.subtotal ?? 0;
-  const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
-  const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
-
-  let coeficiente: number | null;
-  let coeficienteFuente: "manual" | "calculado" | "ninguno";
-  if (company?.coeficienteUtilidad != null && (company.coeficienteAnio === year || company.coeficienteAnio == null)) {
-    coeficiente = company.coeficienteUtilidad;
-    coeficienteFuente = "manual";
-  } else if (coeficienteCalculado !== null) {
-    coeficiente = coeficienteCalculado;
-    coeficienteFuente = "calculado";
-  } else {
-    coeficiente = null;
-    coeficienteFuente = "ninguno";
-  }
-
+  // ── ISR provisional — régimen-aware ──────────────────────────────────────
+  const ingresosDelMes = round2(facturasEmitidas.reduce((s, inv) => s + inv.subtotal, 0));
+  const gastosDelMes = round2(facturasEgresos.reduce((s, inv) => s + inv.subtotal, 0));
   const ingresosAcumulados = ingresosAcumuladosAgg._sum.subtotal ?? 0;
   const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
 
-  let utilidadFiscal: number | null = null;
-  let isrDelEjercicio: number | null = null;
-  let isrPagar: number | null = null;
-  if (coeficiente !== null && coeficiente > 0) {
-    utilidadFiscal = round2(ingresosAcumulados * coeficiente);
-    isrDelEjercicio = round2(utilidadFiscal * ISR_TASA_PM);
-    isrPagar = Math.max(0, round2(isrDelEjercicio - isrPagadoAnterior));
+  const resicoKind = detectResicoKind(company?.regimenFiscal ?? null, company?.rfc ?? null);
+  const esPfActEmpresarial =
+    company?.regimenFiscal === "612" && (company?.rfc?.trim().length ?? 0) === 13;
+
+  let isr: TaxPosition["isr"];
+
+  if (resicoKind === "pf") {
+    // RESICO PF (Art. 113-E): tarifa mensual sobre ingresos del mes (cobrado
+    // approximado por ingresos stamped del mes — igual que el cálculo actual).
+    const res = calcularIsrResicoPf(ingresosDelMes);
+    isr = {
+      metodo: "RESICO_PF",
+      ingresosDelMes,
+      gastosDelMes,
+      ingresosAcumulados: round2(ingresosAcumulados),
+      isrPagadoAnterior: round2(isrPagadoAnterior),
+      coeficiente: null,
+      coeficienteFuente: "ninguno",
+      baseGravable: res.ingresos,
+      tasa: res.tasa,
+      utilidadFiscal: null,
+      isrDelEjercicio: res.isr, // mensual definitivo (no acumulado)
+      isrPagar: res.isr,
+      tarifaVerificada: true,
+    };
+  } else if (esPfActEmpresarial) {
+    // PF con actividad empresarial (Art. 106): base en FLUJO DE EFECTIVO
+    // (ingresos cobrados − deducciones pagadas, acumulado) × tarifa Art. 96.
+    const { ingresosCobrados, deduccionesPagadas } = await flujoEfectivoAcum(companyId, yearFrom, to);
+    const r = calcularIsrProvisionalPf({
+      ejercicio: year,
+      meses: month,
+      ingresosCobradosAcum: ingresosCobrados,
+      deduccionesPagadasAcum: deduccionesPagadas,
+      pagosProvisionalesAnteriores: isrPagadoAnterior,
+      // TODO: retencionesAcum (ISR 10% retenido por personas morales, Art. 106)
+      // — aún no se captura como dato; se acreditará cuando exista.
+    });
+    isr = {
+      metodo: "PF_ACT_EMPRESARIAL",
+      ingresosDelMes,
+      gastosDelMes,
+      ingresosAcumulados: round2(ingresosCobrados), // cash basis cumulative
+      isrPagadoAnterior: round2(isrPagadoAnterior),
+      coeficiente: null,
+      coeficienteFuente: "ninguno",
+      baseGravable: r ? r.baseGravable : null,
+      tasa: null, // tarifa progresiva
+      utilidadFiscal: r ? r.baseGravable : null,
+      isrDelEjercicio: r ? r.isrCausado : null,
+      isrPagar: r ? r.isrPagar : null,
+      tarifaVerificada: r ? r.tarifaVerificada : false,
+    };
+  } else {
+    // Persona moral general / RESICO PM / otros: Art. 14 (coeficiente × 30%
+    // sobre ingresos nominales acumulados).
+    const prevIngresosTotal = prevYearIngresos._sum.subtotal ?? 0;
+    const prevGastosTotal = prevYearEgresos._sum.subtotal ?? 0;
+    const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
+    const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
+
+    let coeficiente: number | null;
+    let coeficienteFuente: "manual" | "calculado" | "ninguno";
+    if (company?.coeficienteUtilidad != null && (company.coeficienteAnio === year || company.coeficienteAnio == null)) {
+      coeficiente = company.coeficienteUtilidad;
+      coeficienteFuente = "manual";
+    } else if (coeficienteCalculado !== null) {
+      coeficiente = coeficienteCalculado;
+      coeficienteFuente = "calculado";
+    } else {
+      coeficiente = null;
+      coeficienteFuente = "ninguno";
+    }
+
+    let utilidadFiscal: number | null = null;
+    let isrDelEjercicio: number | null = null;
+    let isrPagar: number | null = null;
+    if (coeficiente !== null && coeficiente > 0) {
+      utilidadFiscal = round2(ingresosAcumulados * coeficiente);
+      isrDelEjercicio = round2(utilidadFiscal * ISR_TASA_PM);
+      isrPagar = Math.max(0, round2(isrDelEjercicio - isrPagadoAnterior));
+    }
+
+    isr = {
+      metodo: "PM_ART14",
+      ingresosDelMes,
+      gastosDelMes,
+      ingresosAcumulados: round2(ingresosAcumulados),
+      isrPagadoAnterior: round2(isrPagadoAnterior),
+      coeficiente,
+      coeficienteFuente,
+      baseGravable: utilidadFiscal,
+      tasa: ISR_TASA_PM,
+      utilidadFiscal,
+      isrDelEjercicio,
+      isrPagar,
+      tarifaVerificada: true,
+    };
   }
 
   return {
@@ -258,17 +397,7 @@ export async function computeTaxPosition(
         acreditable: round2(ivaAcreditableDevengado),
       },
     },
-    isr: {
-      ingresosDelMes: round2(facturasEmitidas.reduce((s, inv) => s + inv.subtotal, 0)),
-      gastosDelMes: round2(facturasEgresos.reduce((s, inv) => s + inv.subtotal, 0)),
-      ingresosAcumulados: round2(ingresosAcumulados),
-      isrPagadoAnterior: round2(isrPagadoAnterior),
-      coeficiente,
-      coeficienteFuente,
-      utilidadFiscal,
-      isrDelEjercicio,
-      isrPagar,
-    },
+    isr,
   };
 }
 
