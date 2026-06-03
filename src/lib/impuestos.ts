@@ -123,6 +123,8 @@ export interface TaxPosition {
     isrPagadoAnterior: number;
     coeficiente: number | null;
     coeficienteFuente: "manual" | "calculado" | "ninguno";
+    /** How the auto coeficiente was derived (PM only); null for other régimenes. */
+    coeficienteBase: { year: number; ingresos: number; utilidad: number; invoiceCount: number } | null;
     /** Base gravable: utilidad (×coef para PM, cobrado−deducciones para PF). */
     baseGravable: number | null;
     /** Tasa aplicada cuando es plana (PM 0.30, RESICO bracket); null si es tarifa progresiva. */
@@ -147,10 +149,12 @@ const ISR_TASA_PM = 0.3;
 export async function computeTaxPosition(
   companyId: string,
   year: number,
-  month: number
+  month: number,
+  /** Optional upper bound for "precierre" (mid-month cutoff). Defaults to month end. */
+  cutoff?: Date
 ): Promise<TaxPosition> {
   const from = new Date(year, month - 1, 1);
-  const to = new Date(year, month, 1);
+  const to = cutoff ?? new Date(year, month, 1);
   const yearFrom = new Date(year, 0, 1);
   const periodo = `${year}-${String(month).padStart(2, "0")}`;
 
@@ -186,6 +190,7 @@ export async function computeTaxPosition(
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
       _sum: { subtotal: true },
+      _count: { id: true },
     }),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
@@ -299,6 +304,7 @@ export async function computeTaxPosition(
       isrPagadoAnterior: round2(isrPagadoAnterior),
       coeficiente: null,
       coeficienteFuente: "ninguno",
+      coeficienteBase: null,
       baseGravable: res.ingresos,
       tasa: res.tasa,
       utilidadFiscal: null,
@@ -327,6 +333,7 @@ export async function computeTaxPosition(
       isrPagadoAnterior: round2(isrPagadoAnterior),
       coeficiente: null,
       coeficienteFuente: "ninguno",
+      coeficienteBase: null,
       baseGravable: r ? r.baseGravable : null,
       tasa: null, // tarifa progresiva
       utilidadFiscal: r ? r.baseGravable : null,
@@ -372,6 +379,15 @@ export async function computeTaxPosition(
       isrPagadoAnterior: round2(isrPagadoAnterior),
       coeficiente,
       coeficienteFuente,
+      coeficienteBase:
+        coeficienteFuente === "calculado"
+          ? {
+              year: prevYear,
+              ingresos: round2(prevIngresosTotal),
+              utilidad: round2(prevUtilidad),
+              invoiceCount: prevYearIngresos._count.id,
+            }
+          : null,
       baseGravable: utilidadFiscal,
       tasa: ISR_TASA_PM,
       utilidadFiscal,
