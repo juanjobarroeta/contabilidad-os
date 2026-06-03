@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
-import { sumIsrPagar } from "@/lib/isr-provisional";
+import { computeTaxPosition } from "@/lib/impuestos";
 import type { TaxDeclarationType } from "@prisma/client";
 
 // GET /api/impuestos?companyId=xxx&month=4&year=2026
@@ -42,135 +42,38 @@ export async function GET(req: Request) {
   const isPreliminar = to.getTime() !== defaultTo.getTime();
   const yearFrom = new Date(year, 0, 1);       // Jan 1 of this year
   const periodo  = `${year}-${String(month).padStart(2, "0")}`;
-
-  // ── Parallel data fetch ───────────────────────────────────────────────────
-  const prevYear     = year - 1;
-  const prevYearFrom = new Date(prevYear, 0, 1);
-  const prevYearTo   = new Date(prevYear, 11, 31, 23, 59, 59);
-
   const prevPeriodo = month === 1
     ? `${year - 1}-12`
     : `${year}-${String(month - 1).padStart(2, "0")}`;
 
+  // ── Core IVA + ISR from the single engine ─────────────────────────────────
+  // computeTaxPosition is THE source of truth for the tax math (régimen-aware
+  // ISR + base-REP IVA, flujo de efectivo). This route only adds presentation
+  // extras: the invoices table, nómina figures and saved-declaration state.
+  const pos = await computeTaxPosition(companyId, year, month, isPreliminar ? to : undefined);
+
+  // ── Presentation extras (not duplicated in the engine) ────────────────────
   const [
     facturasEmitidas,
     facturasEgresos,
-    prevYearIngresos,
-    prevYearEgresos,
-    ingresosAcumuladosAgg,
-    declaracionesPrevias,
-    prevDeclaracion,
-    declaracionGuardada,
-    company,
-    ppdIngresosCobrados,
-    ppdEgresosPagados,
     nominaThisMonth,
-    nominaPrevMonths,
+    declaracionGuardada,
+    retencionesGuardada,
+    isrProvGuardada,
   ] = await Promise.all([
-    // This month's invoices (includes metodoPago for flujo de efectivo)
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
-      include: {
-        customer: { select: { razonSocial: true, rfc: true } },
-        taxes: true,
-        bankTransactions: { select: { id: true, fecha: true, monto: true, status: true } },
-      },
+      select: { id: true, uuid: true, fecha: true, subtotal: true, total: true, totalImpuestos: true,
+        customer: { select: { razonSocial: true, rfc: true } } },
       orderBy: { fecha: "asc" },
     }),
     prisma.invoice.findMany({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
-      include: {
-        customer: { select: { razonSocial: true, rfc: true } },
-        taxes: true,
-        bankTransactions: { select: { id: true, fecha: true, monto: true, status: true } },
-      },
+      select: { id: true, uuid: true, fecha: true, subtotal: true, total: true, totalImpuestos: true,
+        customer: { select: { razonSocial: true, rfc: true } } },
       orderBy: { fecha: "asc" },
     }),
-    // Previous year totals — for coeficiente calculation
-    prisma.invoice.aggregate({
-      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
-      _sum: { subtotal: true },
-      _count: { id: true },
-    }),
-    prisma.invoice.aggregate({
-      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
-      _sum: { subtotal: true },
-    }),
-    // Cumulative ingresos Jan → end of current month (for ISR acumulado)
-    prisma.invoice.aggregate({
-      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearFrom, lt: to } },
-      _sum: { subtotal: true },
-    }),
-    // Saved declarations Jan → month-1 of this year (for ISR ya pagado). Includes
-    // both the dedicated ISR_PROVISIONAL rows AND legacy folded IVA_MENSUAL rows;
-    // sumIsrPagar dedupes per periodo so imported history is counted exactly once.
-    prisma.taxDeclaration.findMany({
-      where: {
-        companyId,
-        tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL"] },
-        periodo: { gte: `${year}-01`, lt: periodo },
-        status: { in: ["CALCULATED", "FILED", "PAID"] },
-      },
-      select: { tipo: true, periodo: true, isrPagar: true },
-    }),
-    // Previous month's declaration — for IVA saldo a favor carryover
-    prisma.taxDeclaration.findFirst({
-      where: {
-        companyId,
-        tipo: "IVA_MENSUAL",
-        periodo: prevPeriodo,
-        status: { in: ["CALCULATED", "FILED", "PAID"] },
-      },
-    }),
-    // This month's existing declaration (to restore overrides)
-    prisma.taxDeclaration.findFirst({
-      where: { companyId, tipo: "IVA_MENSUAL", periodo },
-      select: {
-        id: true, status: true, isHistorical: true,
-        ivaSaldoFavorAnterior: true, isrCoeficienteUtilidad: true,
-        ivaSaldoFavor: true, ivaTrasladadoCobrado: true, ivaAcreditableGastado: true,
-        ivaPagar: true, isrIngresos: true, isrDeducciones: true,
-        isrBaseGravable: true, isrTasa: true, isrPagar: true,
-        acuseUrl: true, lineaCaptura: true, fechaPresentacion: true, fechaLimitePago: true,
-      },
-    }),
-    // Company — coeficiente override
-    prisma.company.findUnique({
-      where: { id: companyId },
-      select: { coeficienteUtilidad: true, coeficienteAnio: true },
-    }),
-    // PPD INGRESOS from PRIOR months with bank payments matched THIS month
-    // (IVA causa cobrado this month per flujo de efectivo — Art. 1-B LIVA)
-    prisma.invoice.findMany({
-      where: {
-        companyId, status: "STAMPED", tipo: "INGRESO", metodoPago: "PPD",
-        fecha: { lt: from },
-        bankTransactions: { some: { status: "MATCHED", fecha: { gte: from, lt: to } } },
-      },
-      include: {
-        taxes: true,
-        bankTransactions: {
-          where: { status: "MATCHED", fecha: { gte: from, lt: to } },
-          select: { monto: true },
-        },
-      },
-    }),
-    // PPD EGRESOS from PRIOR months paid THIS month (IVA acreditable pagado)
-    prisma.invoice.findMany({
-      where: {
-        companyId, status: "STAMPED", tipo: "EGRESO", metodoPago: "PPD",
-        fecha: { lt: from },
-        bankTransactions: { some: { status: "MATCHED", fecha: { gte: from, lt: to } } },
-      },
-      include: {
-        taxes: true,
-        bankTransactions: {
-          where: { status: "MATCHED", fecha: { gte: from, lt: to } },
-          select: { monto: true },
-        },
-      },
-    }),
-    // Nómina ISR retenciones this month (from PayrollItems)
+    // Nómina retenciones this month (informational + enteramiento status)
     prisma.payrollItem.aggregate({
       where: {
         payrollRun: {
@@ -181,139 +84,29 @@ export async function GET(req: Request) {
       },
       _sum: { isrRetenido: true, imssObrero: true, imssPatronal: true, infonavit: true, totalPercepciones: true },
     }),
-    // Nómina ISR retenciones Jan → prev month (cumulative for ISR ya pagado)
-    prisma.payrollItem.aggregate({
-      where: {
-        payrollRun: {
-          companyId,
-          status: { in: ["CALCULATED", "STAMPED", "PAID"] },
-          fechaPago: { gte: yearFrom, lt: from },
-        },
+    // This month's existing IVA declaration (to restore overrides + acuse)
+    prisma.taxDeclaration.findFirst({
+      where: { companyId, tipo: "IVA_MENSUAL", periodo },
+      select: {
+        id: true, status: true, isHistorical: true,
+        ivaSaldoFavorAnterior: true, isrCoeficienteUtilidad: true,
+        acuseUrl: true, lineaCaptura: true, fechaPresentacion: true, fechaLimitePago: true,
       },
-      _sum: { isrRetenido: true },
+    }),
+    // Saved retenciones (nómina) enteramiento — its own RETENCIONES_ISR row.
+    prisma.taxDeclaration.findFirst({
+      where: { companyId, tipo: "RETENCIONES_ISR", periodo },
+      select: {
+        id: true, status: true, retencionesIsr: true,
+        acuseUrl: true, lineaCaptura: true, fechaPresentacion: true, fechaLimitePago: true,
+      },
+    }),
+    // This period's dedicated ISR provisional row (source of the coeficiente override).
+    prisma.taxDeclaration.findFirst({
+      where: { companyId, tipo: "ISR_PROVISIONAL", periodo },
+      select: { id: true, status: true, isrPagar: true, isrCoeficienteUtilidad: true },
     }),
   ]);
-
-  // Saved retenciones (nómina) enteramiento for this period — its own RETENCIONES_ISR
-  // row, separate from the IVA/ISR declaration. Lets the UI reflect filing status.
-  const retencionesGuardada = await prisma.taxDeclaration.findFirst({
-    where: { companyId, tipo: "RETENCIONES_ISR", periodo },
-    select: {
-      id: true, status: true, retencionesIsr: true,
-      acuseUrl: true, lineaCaptura: true, fechaPresentacion: true, fechaLimitePago: true,
-    },
-  });
-
-  // This period's dedicated ISR provisional row (source of truth for ISR figures
-  // and the coeficiente override). Legacy periods may still carry these on the
-  // IVA_MENSUAL row instead — declaracionGuardada below falls back to it.
-  const isrProvGuardada = await prisma.taxDeclaration.findFirst({
-    where: { companyId, tipo: "ISR_PROVISIONAL", periodo },
-    select: { id: true, status: true, isrPagar: true, isrCoeficienteUtilidad: true },
-  });
-
-  // ── IVA calculations ──────────────────────────────────────────────────────
-  // IVA works on FLUJO DE EFECTIVO (cash basis, Art. 1-B LIVA):
-  // - PUE: IVA causa el mes de emisión (se asume pagada)
-  // - PPD: IVA causa el mes en que se recibe el pago (bank tx match)
-  //
-  // For acreditable the same rule applies: PUE = mes de factura,
-  // PPD = mes en que se paga al proveedor.
-
-  // Helper to extract IVA trasladado (excludes retenciones) from an invoice
-  type InvoiceLike = { taxes: { tipo: string; retencion: boolean; importe: number }[]; totalImpuestos: number | null };
-  function ivaTrasladado(inv: InvoiceLike): number {
-    const ivaTaxes = inv.taxes.filter((t) => t.tipo === "IVA" && !t.retencion);
-    return ivaTaxes.length > 0
-      ? ivaTaxes.reduce((s, t) => s + t.importe, 0)
-      : (inv.totalImpuestos ?? 0);
-  }
-
-  // Helper: compute what fraction of an invoice has been paid this month
-  // (proportional IVA for partial payments on PPDs)
-  type InvoiceWithBank = InvoiceLike & { total: number; bankTransactions: { monto: number }[] };
-  function paidFractionThisMonth(inv: InvoiceWithBank): number {
-    if (!inv.bankTransactions.length) return 0;
-    const paid = inv.bankTransactions.reduce((s, t) => s + Math.abs(t.monto), 0);
-    return inv.total > 0 ? Math.min(1, paid / inv.total) : 0;
-  }
-
-  // IVA trasladado cobrado (flujo de efectivo):
-  // - PUE del mes: IVA completo
-  // - PPD del mes con pago matched en el mes: IVA completo si full-paid, proporcional si partial
-  // - PPD de meses anteriores con pago recibido este mes: IVA proporcional
-  const ivaTrasladadoPUE = facturasEmitidas
-    .filter(inv => inv.metodoPago === "PUE")
-    .reduce((s, inv) => s + ivaTrasladado(inv), 0);
-
-  const ivaTrasladadoPPDMes = facturasEmitidas
-    .filter(inv => inv.metodoPago === "PPD")
-    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
-
-  const ivaTrasladadoPPDPrev = ppdIngresosCobrados
-    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
-
-  const ivaTrasladadoTotal = ivaTrasladadoPUE + ivaTrasladadoPPDMes + ivaTrasladadoPPDPrev;
-
-  // IVA devengado (all stamped CFDIs regardless of payment) — informational
-  const ivaTrasladadoDevengado = facturasEmitidas.reduce((s, inv) => s + ivaTrasladado(inv), 0);
-
-  const ivaRetenidoPorClientes = facturasEmitidas.reduce((sum, inv) =>
-    sum + inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion).reduce((s, t) => s + t.importe, 0), 0);
-
-  // IVA acreditable pagado (same logic as trasladado but for egresos)
-  const ivaAcreditablePUE = facturasEgresos
-    .filter(inv => inv.metodoPago === "PUE")
-    .reduce((s, inv) => s + ivaTrasladado(inv), 0);
-
-  const ivaAcreditablePPDMes = facturasEgresos
-    .filter(inv => inv.metodoPago === "PPD")
-    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
-
-  const ivaAcreditablePPDPrev = ppdEgresosPagados
-    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
-
-  const ivaAcreditable = ivaAcreditablePUE + ivaAcreditablePPDMes + ivaAcreditablePPDPrev;
-
-  const ivaAcreditableDevengado = facturasEgresos.reduce((s, inv) => s + ivaTrasladado(inv), 0);
-
-  // Pending IVA (emitted but not yet collected) — useful for planning
-  const ivaPendienteCobrar = ivaTrasladadoDevengado - ivaTrasladadoPUE - ivaTrasladadoPPDMes;
-  const ivaPendientePagar = ivaAcreditableDevengado - ivaAcreditablePUE - ivaAcreditablePPDMes;
-
-  // Auto saldo a favor from previous month's declaration
-  const saldoFavorAnteriorAuto = prevDeclaracion?.ivaSaldoFavor ?? 0;
-
-  // ── ISR — coeficiente de utilidad ─────────────────────────────────────────
-  const prevIngresosTotal  = prevYearIngresos._sum.subtotal ?? 0;
-  const prevGastosTotal    = prevYearEgresos._sum.subtotal ?? 0;
-  const prevUtilidad       = Math.max(0, prevIngresosTotal - prevGastosTotal);
-  const invoiceCountPrevYear = prevYearIngresos._count.id;
-
-  const coeficienteCalculado = prevIngresosTotal > 0
-    ? prevUtilidad / prevIngresosTotal
-    : null;
-
-  // Priority: (1) Company override for this year, (2) auto-calculated, (3) null
-  let coeficiente: number | null;
-  let coeficienteFuente: "manual" | "calculado" | "ninguno";
-
-  if (company?.coeficienteUtilidad != null && (company.coeficienteAnio === year || company.coeficienteAnio == null)) {
-    // Use stored CU: either it's explicitly for this year, or it was imported
-    // without a year (legacy) and we use it as the best available
-    coeficiente      = company.coeficienteUtilidad;
-    coeficienteFuente = "manual";
-  } else if (coeficienteCalculado !== null) {
-    coeficiente      = coeficienteCalculado;
-    coeficienteFuente = "calculado";
-  } else {
-    coeficiente      = null;
-    coeficienteFuente = "ninguno";
-  }
-
-  // ── ISR cumulative figures ────────────────────────────────────────────────
-  const ingresosAcumulados = ingresosAcumuladosAgg._sum.subtotal ?? 0;
-  const isrPagadoAnterior  = sumIsrPagar(declaracionesPrevias);
 
   // ── Nómina retenciones ──────────────────────────────────────────────────
   const nominaIsrMes       = nominaThisMonth._sum.isrRetenido ?? 0;
@@ -321,15 +114,10 @@ export async function GET(req: Request) {
   const nominaImssPatronal = nominaThisMonth._sum.imssPatronal ?? 0;
   const nominaInfonavitMes = nominaThisMonth._sum.infonavit ?? 0;
   const nominaPercepMes    = nominaThisMonth._sum.totalPercepciones ?? 0;
-  const nominaIsrAcum      = nominaPrevMonths._sum.isrRetenido ?? 0; // Jan → prev month
-
-  // Raw month figures (for the invoices table)
-  const ingresosDelMes = facturasEmitidas.reduce((s, inv) => s + inv.subtotal, 0);
-  const gastosDelMes   = facturasEgresos.reduce((s, inv) => s + inv.subtotal, 0);
 
   // ── Build unified facturas list ───────────────────────────────────────────
-  type InvoiceWithRelations = typeof facturasEmitidas[number];
-  const toRow = (inv: InvoiceWithRelations, tipo: "INGRESO" | "EGRESO") => ({
+  type InvoiceRow = typeof facturasEmitidas[number];
+  const toRow = (inv: InvoiceRow, tipo: "INGRESO" | "EGRESO") => ({
     id: inv.id,
     uuid: inv.uuid,
     tipo,
@@ -353,31 +141,16 @@ export async function GET(req: Request) {
     cutoffDate: isPreliminar ? cutoffStr : null,
     isPreliminar,
     iva: {
-      // Flujo de efectivo (what SAT actually expects)
-      trasladado: ivaTrasladadoTotal,
-      retenidoPorClientes: ivaRetenidoPorClientes,
-      acreditable: ivaAcreditable,
-      saldoFavorAnterior: saldoFavorAnteriorAuto,
-      saldoFavorAnteriorPeriodo: saldoFavorAnteriorAuto > 0 ? prevPeriodo : null,
-      // Desglose flujo de efectivo
-      desglose: {
-        trasladadoPUE: ivaTrasladadoPUE,
-        trasladadoPPDCobradoEsteMes: ivaTrasladadoPPDMes,
-        trasladadoPPDCobradoMesesAnteriores: ivaTrasladadoPPDPrev,
-        acreditablePUE: ivaAcreditablePUE,
-        acreditablePPDPagadoEsteMes: ivaAcreditablePPDMes,
-        acreditablePPDPagadoMesesAnteriores: ivaAcreditablePPDPrev,
-      },
-      // Devengado (informational — NOT what SAT expects, but useful for comparison)
-      devengado: {
-        trasladado: ivaTrasladadoDevengado,
-        acreditable: ivaAcreditableDevengado,
-      },
-      // Pendiente (invoices emitted but not yet paid — "IVA atrapado")
-      pendiente: {
-        porCobrar: ivaPendienteCobrar,
-        porPagar: ivaPendientePagar,
-      },
+      // Flujo de efectivo, base-REP (what SAT actually expects) — from the engine.
+      trasladado: pos.iva.trasladado,
+      retenidoPorClientes: pos.iva.retenidoPorClientes,
+      acreditable: pos.iva.acreditable,
+      saldoFavorAnterior: pos.iva.saldoFavorAnterior,
+      saldoFavorAnteriorPeriodo: pos.iva.saldoFavorAnterior > 0 ? prevPeriodo : null,
+      pagar: pos.iva.pagar,
+      saldoAFavor: pos.iva.saldoAFavor,
+      // Devengado (informational — all stamped CFDIs regardless of payment)
+      devengado: pos.iva.devengado,
     },
     nomina: {
       isrRetenidoMes: nominaIsrMes,
@@ -385,11 +158,9 @@ export async function GET(req: Request) {
       imssPatronalMes: nominaImssPatronal,
       infonavitMes: nominaInfonavitMes,
       percepcionesMes: nominaPercepMes,
-      isrRetenidoAcumulado: nominaIsrAcum + nominaIsrMes,
       // ISR retenido a enterar este mes (Art. 96 LISR — impuesto del trabajador,
       // enteramiento aparte; NO acredita contra el ISR provisional propio).
       isrRetencionesAEnterar: nominaIsrMes,
-      // Estado del enteramiento guardado (su propio renglón RETENCIONES_ISR)
       enteramiento: retencionesGuardada
         ? {
             id: retencionesGuardada.id,
@@ -402,20 +173,22 @@ export async function GET(req: Request) {
           }
         : null,
     },
+    // ISR provisional — régimen-aware, straight from the engine.
     isr: {
-      ingresosDelMes,
-      gastosDelMes,
-      ingresosAcumulados,        // Jan → this month (for Art. 14 formula)
-      isrPagadoAnterior,         // ISR already paid Jan → prev month
-      coeficiente,               // null if no data at all
-      coeficienteFuente,
-      // Details shown to user explaining how it was calculated
-      coeficienteBase: coeficienteFuente === "calculado" ? {
-        year: prevYear,
-        ingresos: prevIngresosTotal,
-        utilidad: prevUtilidad,
-        invoiceCount: invoiceCountPrevYear,
-      } : null,
+      metodo: pos.isr.metodo,
+      ingresosDelMes: pos.isr.ingresosDelMes,
+      gastosDelMes: pos.isr.gastosDelMes,
+      ingresosAcumulados: pos.isr.ingresosAcumulados,
+      isrPagadoAnterior: pos.isr.isrPagadoAnterior,
+      coeficiente: pos.isr.coeficiente,
+      coeficienteFuente: pos.isr.coeficienteFuente,
+      coeficienteBase: pos.isr.coeficienteBase,
+      baseGravable: pos.isr.baseGravable,
+      tasa: pos.isr.tasa,
+      utilidadFiscal: pos.isr.utilidadFiscal,
+      isrDelEjercicio: pos.isr.isrDelEjercicio,
+      isrPagar: pos.isr.isrPagar,
+      tarifaVerificada: pos.isr.tarifaVerificada,
     },
     facturas,
     declaracionGuardada: declaracionGuardada ? {
@@ -490,12 +263,14 @@ export async function POST(req: Request) {
         });
   }
 
+  // Régimen-aware: PM sends utilidadFiscal/esteMes/tasa 0.30; PF (act. empresarial
+  // o RESICO) sends baseGravable/isrPagar and tasa null (tarifa progresiva).
   const isrFields = (d: NonNullable<typeof isrData>) => ({
     isrIngresos:    d.ingresosAcumulados ?? null,
     isrDeducciones: d.gastosDelMes       ?? null,
-    isrBaseGravable: d.utilidadFiscal    ?? null,
-    isrTasa:        0.30,
-    isrPagar:       d.esteMes            ?? null,
+    isrBaseGravable: (d.baseGravable ?? d.utilidadFiscal) ?? null,
+    isrTasa:        d.tasa ?? null,
+    isrPagar:       (d.isrPagar ?? d.esteMes) ?? null,
     ...(typeof coeficienteUtilidad === "number" && { isrCoeficienteUtilidad: coeficienteUtilidad }),
   });
 

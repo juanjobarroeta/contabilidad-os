@@ -23,7 +23,9 @@ interface IvaApiData {
   saldoFavorAnterior: number;
   saldoFavorAnteriorPeriodo: string | null;
 }
+type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF";
 interface IsrApiData {
+  metodo: IsrMetodo;
   ingresosDelMes: number;
   gastosDelMes: number;
   ingresosAcumulados: number;
@@ -36,7 +38,20 @@ interface IsrApiData {
     utilidad: number;
     invoiceCount: number;
   } | null;
+  /** Server-computed figures (régimen-aware). For PF/RESICO these are authoritative. */
+  baseGravable: number | null;
+  tasa: number | null;
+  utilidadFiscal: number | null;
+  isrDelEjercicio: number | null;
+  isrPagar: number | null;
+  tarifaVerificada: boolean;
 }
+
+const ISR_METODO_LABEL: Record<IsrMetodo, string> = {
+  PM_ART14: "Art. 14 LISR (coeficiente)",
+  PF_ACT_EMPRESARIAL: "Art. 106 LISR (act. empresarial)",
+  RESICO_PF: "Art. 113-E LISR (RESICO)",
+};
 interface FacturaRow {
   id: string;
   uuid: string | null;
@@ -203,15 +218,28 @@ export default function ImpuestosPage() {
     };
   }, [result, saldoFavorAnterior]);
 
-  // ── Derived ISR (Art. 14 LISR cumulative formula) ────────────────────────────
+  // ── Derived ISR (régimen-aware) ──────────────────────────────────────────────
+  // PM (Art. 14): live recompute from the user-editable coeficiente.
+  // PF act. empresarial / RESICO: the server (computeTaxPosition) is authoritative
+  // — there is no coeficiente to edit, so we display its figures directly.
   const isrComputed = useMemo(() => {
     if (!result) return null;
-    const { ingresosAcumulados, isrPagadoAnterior } = result.isr;
-    if (coeficiente === null || coeficiente === 0) return null;
-    const utilidadFiscal   = ingresosAcumulados * coeficiente;
-    const isrDelEjercicio  = utilidadFiscal * 0.30;
-    const esteMes          = Math.max(0, isrDelEjercicio - isrPagadoAnterior);
-    return { utilidadFiscal, isrDelEjercicio, esteMes };
+    const isr = result.isr;
+    if (isr.metodo === "PM_ART14") {
+      if (coeficiente === null || coeficiente === 0) return null;
+      const utilidadFiscal   = isr.ingresosAcumulados * coeficiente;
+      const isrDelEjercicio  = utilidadFiscal * 0.30;
+      const esteMes          = Math.max(0, isrDelEjercicio - isr.isrPagadoAnterior);
+      return { utilidadFiscal, isrDelEjercicio, esteMes, baseGravable: utilidadFiscal, tasa: 0.30 };
+    }
+    if (isr.isrPagar === null) return null;
+    return {
+      utilidadFiscal: isr.baseGravable ?? 0,
+      isrDelEjercicio: isr.isrDelEjercicio ?? isr.isrPagar,
+      esteMes: isr.isrPagar,
+      baseGravable: isr.baseGravable ?? 0,
+      tasa: isr.tasa,
+    };
   }, [result, coeficiente]);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
@@ -321,11 +349,13 @@ export default function ImpuestosPage() {
           isrData: isrComputed ? {
             ingresosAcumulados: result.isr.ingresosAcumulados,
             gastosDelMes:       result.isr.gastosDelMes,
-            utilidadFiscal:     isrComputed.utilidadFiscal,
-            esteMes:            isrComputed.esteMes,
+            baseGravable:       isrComputed.baseGravable,
+            isrPagar:           isrComputed.esteMes,
+            tasa:               isrComputed.tasa,
           } : null,
           saldoFavorAnterior,
-          coeficienteUtilidad: coeficiente,
+          // Coeficiente sólo aplica a PM (Art. 14); para PF/RESICO va null.
+          coeficienteUtilidad: result.isr.metodo === "PM_ART14" ? coeficiente : null,
           status,
         }),
       });
@@ -690,10 +720,20 @@ export default function ImpuestosPage() {
                   <TrendingUp className="h-4 w-4 text-purple-600" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-sm">ISR Provisional</h2>
+                  <h2 className="font-semibold text-sm">
+                    ISR {result.isr.metodo === "RESICO_PF" ? "Mensual" : "Provisional"}
+                  </h2>
                   <p className="text-xs text-muted-foreground">
-                    Acumulado {MONTHS[0]}–{MONTHS[month - 1]} {year} · Art. 14 LISR
+                    {result.isr.metodo === "RESICO_PF"
+                      ? MONTHS[month - 1]
+                      : `Acumulado ${MONTHS[0]}–${MONTHS[month - 1]}`}{" "}
+                    {year} · {ISR_METODO_LABEL[result.isr.metodo]}
                   </p>
+                  {!result.isr.tarifaVerificada && (
+                    <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-0.5">
+                      <Info className="h-3 w-3" /> Tarifa sin verificar contra Anexo 8
+                    </p>
+                  )}
                 </div>
               </div>
               {isrComputed ? (
@@ -703,10 +743,12 @@ export default function ImpuestosPage() {
                 </div>
               ) : (
                 <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md">
-                  Requiere coeficiente
+                  {result.isr.metodo === "PM_ART14" ? "Requiere coeficiente" : "Tarifa no disponible"}
                 </span>
               )}
             </div>
+            {result.isr.metodo === "PM_ART14" ? (
+            <>
             <div className="px-5 py-4 space-y-0.5">
               <Row
                 label={`Ingresos acumulados ${MONTHS[0]}–${MONTHS[month - 1]} (${month} mes${month > 1 ? "es" : ""})`}
@@ -802,6 +844,44 @@ export default function ImpuestosPage() {
                   Edítalo arriba si necesitas corregirlo.
                 </div>
               </div>
+            )}
+            </>
+            ) : (
+            /* ── PF actividad empresarial / RESICO PF — server-computed ── */
+            <div className="px-5 py-4 space-y-0.5">
+              {isrComputed ? (
+                result.isr.metodo === "RESICO_PF" ? (
+                  <>
+                    <Row label={`Ingresos del mes (${MONTHS[month - 1]})`} value={formatCurrency(result.isr.ingresosDelMes)} accent="blue" />
+                    <Row label={`× Tasa RESICO (${result.isr.tasa != null ? (result.isr.tasa * 100).toFixed(2) : "—"}%)`} value="" indent />
+                    <Row label="= ISR del mes" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
+                  </>
+                ) : (
+                  <>
+                    <Row
+                      label={`Ingresos cobrados acum. ${MONTHS[0]}–${MONTHS[month - 1]} (${month} mes${month > 1 ? "es" : ""})`}
+                      value={formatCurrency(result.isr.ingresosAcumulados)}
+                      accent="blue"
+                    />
+                    <Row label="= Base gravable (ingresos cobrados − deducciones pagadas)" value={formatCurrency(isrComputed.baseGravable)} indent bold />
+                    <Row label="× Tarifa Art. 96 (progresiva, elevada al periodo)" value="" indent />
+                    <Row label="= ISR causado" value={formatCurrency(isrComputed.isrDelEjercicio)} indent bold />
+                    {result.isr.isrPagadoAnterior > 0 && (
+                      <Row
+                        label={`− Pagos provisionales anteriores (${month - 1} pago${month > 2 ? "s" : ""})`}
+                        value={`(${formatCurrency(result.isr.isrPagadoAnterior)})`}
+                      />
+                    )}
+                    <Row label="ISR a pagar este mes" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
+                  </>
+                )
+              ) : (
+                <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  No hay tarifa ISR cargada para {year} en el módulo de tarifas. No es posible calcular el ISR de este régimen.
+                </div>
+              )}
+            </div>
             )}
           </div>
 
