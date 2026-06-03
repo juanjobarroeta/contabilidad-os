@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
+import { notifyIvaChanges } from "@/lib/iva-change-notify";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-sync
@@ -84,6 +85,7 @@ async function handle(req: Request) {
   let companiesProcessed = 0;
   let totalImported = 0;
   let totalSubmitted = 0;
+  let totalNotified = 0;
   const errors: Array<{ companyId: string; rfc: string; error: string }> = [];
 
   for (const company of companies) {
@@ -125,6 +127,16 @@ async function handle(req: Request) {
           data: { lastAutoSyncAt: new Date() },
         });
         companiesProcessed++;
+
+        // A freshly imported REP may have moved an unfiled period's IVA — let the
+        // owner know (dormant unless IVA_CHANGE_NOTICE_ENABLED). Never fail the
+        // sync over a notification problem.
+        try {
+          const notice = await notifyIvaChanges(company.id);
+          totalNotified += notice.notified;
+        } catch (e) {
+          console.error(`[cron/sat-sync] iva-change notice failed for ${company.id}:`, e);
+        }
       }
     } catch (e) {
       console.error(`[cron/sat-sync] company ${company.id} failed:`, e);
@@ -143,6 +155,7 @@ async function handle(req: Request) {
     monthsBack,
     submitted: totalSubmitted,
     imported: totalImported,
+    notified: totalNotified,
     errors,
     elapsedMs: Date.now() - startedAt,
   };

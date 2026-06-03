@@ -6,6 +6,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, Clock,
   Loader2, Printer, FileText, Lock, RotateCcw, Save, Download, ExternalLink,
+  Upload, AlertTriangle, Sparkles,
 } from "lucide-react";
 
 const MONTHS = [
@@ -22,6 +23,23 @@ const ESTADO_CONFIG: Record<Estado, { label: string; bg: string; text: string; i
 };
 
 interface FederalLinea { tipo: string; descripcion: string; monto: number; tipoMonto: "pagar" | "favor" | "enterar"; }
+
+// Filed figures parsed from the SAT acuse PDF (shape from /api/onboarding/parse-document).
+interface AcuseMensualParsed {
+  rfc: string | null; periodoMes: number | null; periodoAnio: number | null;
+  tipoImpuesto: string | null; tipoPago: string | null;
+  ivaCausado: number | null; ivaAcreditable: number | null;
+  ivaAPagar: number | null; ivaAFavor: number | null; ivaSaldoFavorAplicado: number | null;
+  isrIngresos: number | null; isrRetenciones: number | null; isrPagosAnteriores: number | null;
+  isrAPagar: number | null; coeficienteUtilidadAplicado: number | null;
+  lineaCaptura: string | null; fechaPresentacion: string | null;
+}
+interface AcuseDiff { campo: string; filed: number; computed: number; delta: number; }
+interface AcuseData {
+  extractedAt: string; tipoImpuesto: string | null; tipoPago: string | null; rfc: string | null;
+  diffs: AcuseDiff[];
+}
+
 interface CierreData {
   periodo: string; month: number; year: number;
   federal: {
@@ -29,6 +47,7 @@ interface CierreData {
     totalAPagar: number; saldoFavorIva: number;
     vencimiento: string; estado: Estado;
     lineaCaptura: string | null; acuseUrl: string | null; fechaPresentacion: string | null;
+    acuseData: AcuseData | null;
     calculado: boolean;
   };
   diot: {
@@ -43,6 +62,7 @@ const READINESS_LABELS: Record<string, string> = {
   cfdisSincronizados: "CFDIs sincronizados",
   nominaTimbrada: "Nómina del mes timbrada",
   periodoCerrado: "Periodo concluido",
+  complementosPago: "Complementos de pago (REP)",
 };
 
 // Each federal sub-obligation has a downloadable working paper backing its figure.
@@ -72,6 +92,11 @@ export default function CierreMensualPage() {
   const [federalAcuse, setFederalAcuse] = useState("");
   const [federalFecha, setFederalFecha] = useState("");
   const [savingFederal, setSavingFederal] = useState(false);
+  // Acuse PDF extraction (federal)
+  const [acuseParsed, setAcuseParsed] = useState<AcuseMensualParsed | null>(null);
+  const [acuseFileName, setAcuseFileName] = useState("");
+  const [acuseUploading, setAcuseUploading] = useState(false);
+  const [acuseError, setAcuseError] = useState<string | null>(null);
   // DIOT acuse capture
   const [diotAcuse, setDiotAcuse] = useState("");
   const [savingDiot, setSavingDiot] = useState(false);
@@ -89,6 +114,10 @@ export default function CierreMensualPage() {
       setFederalAcuse(d.federal.acuseUrl ?? "");
       setFederalFecha(d.federal.fechaPresentacion ? d.federal.fechaPresentacion.substring(0, 10) : "");
       setDiotAcuse(d.diot?.acuseUrl ?? "");
+      // Clear any staged-but-unfiled acuse when the period/company changes.
+      setAcuseParsed(null);
+      setAcuseFileName("");
+      setAcuseError(null);
     } catch {
       setError("No se pudo cargar el cierre del mes");
     } finally {
@@ -119,10 +148,43 @@ export default function CierreMensualPage() {
         lineaCaptura: federalLinea || null,
         acuseUrl: federalAcuse || null,
         fechaPresentacion: federalFecha || null,
+        // When an acuse was extracted, send its filed figures so they become the
+        // authoritative (carry-forward) values and any diff is persisted.
+        ...(filing && acuseParsed ? { acuse: acuseParsed } : {}),
       });
       await load();
     } catch { setError("No se pudo guardar la declaración federal"); }
     finally { setSavingFederal(false); }
+  }
+
+  // Extract the SAT acuse PDF via the existing document parser, then auto-fill
+  // the capture fields. We don't persist anything until the user confirms with
+  // "Marcar presentada".
+  async function handleAcuseUpload(file: File) {
+    setAcuseUploading(true);
+    setAcuseError(null);
+    setAcuseParsed(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/onboarding/parse-document", { method: "POST", body: fd });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "No se pudo leer el acuse");
+      if (d.type !== "ACUSE_MENSUAL" || !d.extracted?.acuseMensual) {
+        throw new Error(
+          `El documento se detectó como "${d.type ?? "desconocido"}". Sube el acuse de la declaración mensual (PDF).`
+        );
+      }
+      const m = d.extracted.acuseMensual as AcuseMensualParsed;
+      setAcuseParsed(m);
+      setAcuseFileName(file.name);
+      if (m.lineaCaptura) setFederalLinea(m.lineaCaptura);
+      if (m.fechaPresentacion) setFederalFecha(m.fechaPresentacion.substring(0, 10));
+    } catch (e) {
+      setAcuseError(e instanceof Error ? e.message : "Error al leer el acuse");
+    } finally {
+      setAcuseUploading(false);
+    }
   }
 
   async function fileDiot(filing: boolean) {
@@ -238,18 +300,39 @@ export default function CierreMensualPage() {
             <p className="text-xs text-muted-foreground mb-3">Vence el {formatDate(data.federal.vencimiento)}</p>
 
             {data.federal.estado === "FILED" ? (
-              <div className="flex items-center justify-between gap-3 rounded-md bg-green-50 p-3 text-sm">
-                <div>
-                  <p className="font-medium text-green-800">Presentada {data.federal.fechaPresentacion ? `el ${formatDate(data.federal.fechaPresentacion)}` : ""}</p>
-                  {data.federal.lineaCaptura && <p className="text-green-700 text-xs">Línea de captura: {data.federal.lineaCaptura}</p>}
-                  {data.federal.acuseUrl && <a href={data.federal.acuseUrl} target="_blank" rel="noreferrer" className="text-green-700 text-xs underline">Ver acuse</a>}
+              <>
+                <div className="flex items-center justify-between gap-3 rounded-md bg-green-50 p-3 text-sm">
+                  <div>
+                    <p className="font-medium text-green-800">Presentada {data.federal.fechaPresentacion ? `el ${formatDate(data.federal.fechaPresentacion)}` : ""}</p>
+                    {data.federal.lineaCaptura && <p className="text-green-700 text-xs">Línea de captura: {data.federal.lineaCaptura}</p>}
+                    {data.federal.acuseUrl && <a href={data.federal.acuseUrl} target="_blank" rel="noreferrer" className="text-green-700 text-xs underline">Ver acuse</a>}
+                  </div>
+                  <button onClick={() => fileFederal(false)} disabled={savingFederal} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs hover:bg-white print:hidden">
+                    {savingFederal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+                  </button>
                 </div>
-                <button onClick={() => fileFederal(false)} disabled={savingFederal} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs hover:bg-white print:hidden">
-                  {savingFederal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
-                </button>
-              </div>
+                {data.federal.acuseData && <AcuseDiffFlag acuseData={data.federal.acuseData} />}
+              </>
             ) : (
-              <div className="space-y-2 print:hidden">
+              <div className="space-y-3 print:hidden">
+                {/* Acuse PDF capture — extracts the filed figures + auto-fills below. */}
+                <div className="rounded-md border border-dashed border-border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> ¿Ya la presentaste? Sube el acuse (PDF)</p>
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs cursor-pointer hover:bg-accent">
+                      {acuseUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                      {acuseUploading ? "Leyendo…" : "Subir acuse"}
+                      <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={acuseUploading}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleAcuseUpload(f); e.target.value = ""; }} />
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">Extraemos línea de captura, fecha y los importes presentados, y los comparamos con lo calculado.</p>
+                  {acuseError && <p className="text-xs text-red-600 mt-2">{acuseError}</p>}
+                  {acuseParsed && (
+                    <AcuseComparison acuse={acuseParsed} federal={data.federal} month={month} year={year} fileName={acuseFileName} />
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <input value={federalLinea} onChange={e => setFederalLinea(e.target.value)} placeholder="Línea de captura"
                     className="px-2.5 py-1.5 rounded-md border border-border text-sm" />
@@ -258,12 +341,13 @@ export default function CierreMensualPage() {
                   <input type="date" value={federalFecha} onChange={e => setFederalFecha(e.target.value)}
                     className="px-2.5 py-1.5 rounded-md border border-border text-sm" />
                 </div>
-                <button onClick={() => fileFederal(true)} disabled={savingFederal || !data.federal.calculado}
+                <button onClick={() => fileFederal(true)} disabled={savingFederal || (!data.federal.calculado && !acuseParsed)}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-foreground text-background text-sm hover:opacity-90 disabled:opacity-50">
-                  {savingFederal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Marcar presentada
+                  {savingFederal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {acuseParsed ? "Confirmar acuse y marcar presentada" : "Marcar presentada"}
                 </button>
-                {!data.federal.calculado && (
-                  <p className="text-xs text-amber-600">Calcula y guarda la declaración en la página de Impuestos antes de marcarla presentada.</p>
+                {!data.federal.calculado && !acuseParsed && (
+                  <p className="text-xs text-amber-600">Calcula y guarda la declaración en la página de Impuestos, o sube el acuse, antes de marcarla presentada.</p>
                 )}
               </div>
             )}
@@ -357,6 +441,108 @@ export default function CierreMensualPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Format an acuse value: the coeficiente is a 4-decimal ratio, everything else is MXN.
+function fmtAcuseValue(campo: string, v: number): string {
+  return campo === "Coeficiente de utilidad" ? `${(v * 100).toFixed(4)}%` : formatCurrency(v);
+}
+
+// Pre-file: what the app computed vs what the acuse says, mismatches highlighted.
+function AcuseComparison({ acuse, federal, month, year, fileName }: {
+  acuse: AcuseMensualParsed;
+  federal: CierreData["federal"];
+  month: number; year: number; fileName: string;
+}) {
+  const ivaLinea = federal.lineas.find((l) => l.tipo === "IVA_MENSUAL");
+  const isrLinea = federal.lineas.find((l) => l.tipo === "ISR_PROVISIONAL");
+  const rows: { campo: string; computed: number; filed: number | null }[] = [
+    { campo: "IVA a pagar", computed: ivaLinea && ivaLinea.tipoMonto === "pagar" ? ivaLinea.monto : 0, filed: acuse.ivaAPagar },
+    { campo: "IVA a favor", computed: federal.saldoFavorIva, filed: acuse.ivaAFavor },
+    { campo: "ISR a pagar", computed: isrLinea ? isrLinea.monto : 0, filed: acuse.isrAPagar },
+  ].filter((r) => r.filed != null || r.computed > 0);
+
+  const periodMismatch =
+    acuse.periodoMes != null && acuse.periodoAnio != null &&
+    (acuse.periodoMes !== month || acuse.periodoAnio !== year);
+
+  return (
+    <div className="mt-3 rounded-md border border-blue-200 bg-blue-50/60 p-3 text-xs space-y-2">
+      <p className="flex items-center gap-1.5 font-medium text-blue-900">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Acuse leído{fileName ? ` — ${fileName}` : ""}
+      </p>
+      {periodMismatch && (
+        <p className="flex items-start gap-1.5 text-amber-700">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+          El acuse es del periodo {String(acuse.periodoMes).padStart(2, "0")}/{acuse.periodoAnio}, no {String(month).padStart(2, "0")}/{year}. Verifica que sea el mes correcto.
+        </p>
+      )}
+      <table className="w-full">
+        <thead className="text-blue-700/80">
+          <tr>
+            <th className="text-left font-normal py-0.5">Concepto</th>
+            <th className="text-right font-normal">Calculado</th>
+            <th className="text-right font-normal">Acuse</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const mism = r.filed != null && Math.abs(r.filed - r.computed) > 1;
+            return (
+              <tr key={r.campo} className={mism ? "text-amber-800" : "text-blue-900"}>
+                <td className="py-0.5">{r.campo}{mism ? " ⚠️" : ""}</td>
+                <td className="text-right tabular-nums">{formatCurrency(r.computed)}</td>
+                <td className="text-right tabular-nums font-medium">{r.filed != null ? formatCurrency(r.filed) : "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="text-blue-800/90 space-y-0.5 pt-1 border-t border-blue-200">
+        {acuse.coeficienteUtilidadAplicado != null && <p>Coeficiente aplicado: <strong>{(acuse.coeficienteUtilidadAplicado * 100).toFixed(4)}%</strong></p>}
+        {acuse.lineaCaptura && <p>Línea de captura: <strong>{acuse.lineaCaptura}</strong></p>}
+        {acuse.fechaPresentacion && <p>Fecha de presentación: <strong>{acuse.fechaPresentacion.substring(0, 10)}</strong></p>}
+      </div>
+      <p className="text-[11px] text-blue-700/80">
+        Al confirmar se guardan los valores del acuse como definitivos (alimentan el arrastre de saldo a favor y coeficiente). Las diferencias quedan registradas.
+      </p>
+    </div>
+  );
+}
+
+// Filed: a persisted flag when the acuse disagreed with the app's computation.
+function AcuseDiffFlag({ acuseData }: { acuseData: AcuseData }) {
+  if (!acuseData.diffs?.length) return null;
+  return (
+    <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 p-3 text-xs print:hidden">
+      <p className="flex items-center gap-1.5 font-medium text-amber-800 mb-1.5">
+        <AlertTriangle className="h-3.5 w-3.5" /> El acuse presentado no coincide con lo calculado
+      </p>
+      <table className="w-full">
+        <thead className="text-amber-700/80">
+          <tr>
+            <th className="text-left font-normal py-0.5">Concepto</th>
+            <th className="text-right font-normal">Calculado</th>
+            <th className="text-right font-normal">Acuse</th>
+            <th className="text-right font-normal">Diferencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          {acuseData.diffs.map((d) => (
+            <tr key={d.campo} className="text-amber-900">
+              <td className="py-0.5">{d.campo}</td>
+              <td className="text-right tabular-nums">{fmtAcuseValue(d.campo, d.computed)}</td>
+              <td className="text-right tabular-nums">{fmtAcuseValue(d.campo, d.filed)}</td>
+              <td className="text-right tabular-nums font-medium">{fmtAcuseValue(d.campo, d.delta)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-amber-700/80 mt-1.5">
+        Se guardaron los valores del acuse (lo presentado ante el SAT). Si la declaración tiene un error, considera una complementaria.
+      </p>
     </div>
   );
 }

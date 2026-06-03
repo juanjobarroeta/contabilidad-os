@@ -3,8 +3,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { detectComplementosPendientes } from "@/lib/complementos";
+import { formatCurrency } from "@/lib/utils";
 import { calcularVencimiento, type ObligacionConfig } from "@/lib/obligaciones";
-import type { TaxDeclarationType } from "@prisma/client";
+import { Prisma, type TaxDeclarationType } from "@prisma/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cierre mensual — the "ready to file" workspace for a single period.
@@ -71,15 +73,16 @@ export async function GET(req: Request) {
   const from = new Date(year, month - 1, 1);
   const to = new Date(year, month, 1);
 
-  const [pos, obligaciones, declaraciones, nominaRet, egresosConIvaCount, cfdiCount, nominaRunsCount] =
+  const [pos, complementos, obligaciones, declaraciones, nominaRet, egresosConIvaCount, cfdiCount, nominaRunsCount] =
     await Promise.all([
       computeTaxPosition(companyId, year, month),
+      detectComplementosPendientes(companyId),
       prisma.companyObligation.findMany({ where: { companyId, activa: true } }),
       prisma.taxDeclaration.findMany({
         where: { companyId, periodo, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR", "DIOT"] } },
         select: {
           tipo: true, status: true, lineaCaptura: true, acuseUrl: true,
-          fechaPresentacion: true, fechaLimitePago: true,
+          fechaPresentacion: true, fechaLimitePago: true, acuseData: true,
         },
       }),
       nominaRetencionesMes(companyId, from, to),
@@ -172,6 +175,19 @@ export async function GET(req: Request) {
       aplica: true,
       detail: isCurrentMonth ? "El mes en curso aún puede recibir más CFDIs" : "Periodo concluido",
     },
+    // Cobros PPD sin REP: no bloquea, pero ese IVA aún no causa (base-REP) y el
+    // complemento vence el día 5 del mes siguiente al pago. Surfacing it here
+    // closes the loop with the cash-basis IVA engine.
+    complementosPago: {
+      ok: complementos.stats.totalPendientes === 0,
+      aplica: true,
+      detail:
+        complementos.stats.totalPendientes === 0
+          ? "Sin cobros PPD pendientes de complemento"
+          : `${complementos.stats.totalPendientes} cobro(s) PPD sin REP` +
+            (complementos.stats.vencidos > 0 ? ` — ${complementos.stats.vencidos} vencido(s)` : "") +
+            ` (vence día 5; ${formatCurrency(complementos.stats.montoPendiente)} sin complementar)`,
+    },
   };
 
   const obligacionesPresentadas =
@@ -191,6 +207,7 @@ export async function GET(req: Request) {
       lineaCaptura: federalDecl?.lineaCaptura ?? null,
       acuseUrl: federalDecl?.acuseUrl ?? null,
       fechaPresentacion: federalDecl?.fechaPresentacion ?? null,
+      acuseData: federalDecl?.acuseData ?? null,
       // True once the figures have been persisted (so "marcar presentada" is safe).
       calculado: !!declOf("IVA_MENSUAL") || !!declOf("ISR_PROVISIONAL"),
     },
@@ -220,7 +237,12 @@ export async function POST(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { companyId, periodo, action, lineaCaptura, acuseUrl, fechaPresentacion, fechaLimitePago } = body;
+  const { companyId, periodo, action, lineaCaptura, acuseUrl, fechaPresentacion, fechaLimitePago, acuse } = body as {
+    companyId?: string; periodo?: string; action?: string;
+    lineaCaptura?: string | null; acuseUrl?: string | null;
+    fechaPresentacion?: string | null; fechaLimitePago?: string | null;
+    acuse?: AcuseFederal | null;
+  };
 
   if (!companyId || !periodo || !action) {
     return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
@@ -253,24 +275,44 @@ export async function POST(req: Request) {
     const nominaRet = await nominaRetencionesMes(companyId, from, to);
     const status = filing ? "FILED" : "CALCULATED";
 
+    // When an acuse PDF was captured, its filed figures are authoritative (they
+    // drive carry-forward); otherwise we persist the app-computed position as
+    // before. The diffs between the two are stored so a filing error stays visible.
+    const useAcuse = filing && !!acuse;
+    const pick = (filed: number | null | undefined, computed: number): number =>
+      useAcuse && filed != null ? filed : computed;
+
+    const ivaTrasladado = pick(acuse?.ivaCausado, pos.iva.trasladado);
+    const ivaAcreditable = pick(acuse?.ivaAcreditable, pos.iva.acreditable);
+    const ivaPagar = pick(acuse?.ivaAPagar, pos.iva.pagar);
+    const ivaSaldoFavor = pick(acuse?.ivaAFavor, pos.iva.saldoAFavor);
+    const isrIngresos = pick(acuse?.isrIngresos, pos.isr.ingresosAcumulados);
+    const isrPagar = pick(acuse?.isrAPagar, pos.isr.isrPagar ?? 0);
+    const coeficiente =
+      useAcuse && acuse?.coeficienteUtilidadAplicado != null
+        ? acuse.coeficienteUtilidadAplicado
+        : pos.isr.coeficiente;
+    const acuseData = useAcuse ? buildAcuseData(acuse!, pos, nominaRet) : null;
+
     // Upsert the three federal rows with their figures + shared acuse, so a
     // never-saved period can still be filed in one click.
     await prisma.$transaction(async (tx) => {
       await upsertRow(tx, companyId, periodo, "IVA_MENSUAL", {
         status,
-        ivaTrasladadoCobrado: pos.iva.trasladado,
-        ivaAcreditableGastado: pos.iva.acreditable,
-        ivaPagar: pos.iva.pagar,
-        ivaSaldoFavor: pos.iva.saldoAFavor,
+        ivaTrasladadoCobrado: ivaTrasladado,
+        ivaAcreditableGastado: ivaAcreditable,
+        ivaPagar,
+        ivaSaldoFavor,
+        acuseData: acuseData ?? Prisma.DbNull,
         ...(filing ? acusePatch : clearAcuse()),
       });
       await upsertRow(tx, companyId, periodo, "ISR_PROVISIONAL", {
         status,
-        isrIngresos: pos.isr.ingresosAcumulados,
+        isrIngresos,
         isrBaseGravable: pos.isr.utilidadFiscal,
         isrTasa: 0.3,
-        isrPagar: pos.isr.isrPagar,
-        ...(typeof pos.isr.coeficiente === "number" && { isrCoeficienteUtilidad: pos.isr.coeficiente }),
+        isrPagar,
+        ...(typeof coeficiente === "number" && { isrCoeficienteUtilidad: coeficiente }),
         ...(filing ? acusePatch : clearAcuse()),
       });
       if (nominaRet > 0) {
@@ -282,7 +324,7 @@ export async function POST(req: Request) {
       }
     });
 
-    return NextResponse.json({ ok: true, action });
+    return NextResponse.json({ ok: true, action, diffs: acuseData?.diffs ?? [] });
   }
 
   if (action === "file-diot" || action === "unfile-diot") {
@@ -299,6 +341,82 @@ export async function POST(req: Request) {
 
 function clearAcuse() {
   return { lineaCaptura: null, acuseUrl: null, fechaPresentacion: null, fechaLimitePago: null };
+}
+
+// ── Acuse extraction (cierre) ─────────────────────────────────────────────────
+// Filed figures extracted from the SAT acuse PDF (subset of /api/onboarding/
+// parse-document's acuseMensual that's relevant to the federal declaration).
+interface AcuseFederal {
+  tipoImpuesto?: string | null;
+  tipoPago?: string | null;
+  rfc?: string | null;
+  periodoMes?: number | null;
+  periodoAnio?: number | null;
+  ivaCausado?: number | null;
+  ivaAcreditable?: number | null;
+  ivaAPagar?: number | null;
+  ivaAFavor?: number | null;
+  ivaSaldoFavorAplicado?: number | null;
+  isrIngresos?: number | null;
+  isrAPagar?: number | null;
+  coeficienteUtilidadAplicado?: number | null;
+  lineaCaptura?: string | null;
+  fechaPresentacion?: string | null;
+}
+
+type Pos = Awaited<ReturnType<typeof computeTaxPosition>>;
+interface AcuseDiff { campo: string; filed: number; computed: number; delta: number }
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Build the stored acuse record: filed values + computed snapshot + flagged diffs. */
+function buildAcuseData(acuse: AcuseFederal, pos: Pos, nominaRet: number) {
+  const AMT_TOL = 1;       // MXN — rounding slack
+  const COEF_TOL = 0.0001; // coeficiente is a 4-decimal ratio
+  const computedCoef = typeof pos.isr.coeficiente === "number" ? pos.isr.coeficiente : null;
+  const diffs: AcuseDiff[] = [];
+
+  const cmpAmt = (campo: string, filed: number | null | undefined, computed: number) => {
+    if (filed == null) return;
+    const delta = round2(filed - computed);
+    if (Math.abs(delta) > AMT_TOL) diffs.push({ campo, filed: round2(filed), computed: round2(computed), delta });
+  };
+  cmpAmt("IVA a pagar", acuse.ivaAPagar, pos.iva.pagar);
+  cmpAmt("IVA a favor", acuse.ivaAFavor, pos.iva.saldoAFavor);
+  cmpAmt("ISR a pagar", acuse.isrAPagar, pos.isr.isrPagar ?? 0);
+  if (acuse.coeficienteUtilidadAplicado != null && computedCoef != null) {
+    const delta = Math.round((acuse.coeficienteUtilidadAplicado - computedCoef) * 1e6) / 1e6;
+    if (Math.abs(delta) > COEF_TOL) {
+      diffs.push({ campo: "Coeficiente de utilidad", filed: acuse.coeficienteUtilidadAplicado, computed: computedCoef, delta });
+    }
+  }
+
+  return {
+    extractedAt: new Date().toISOString(),
+    tipoImpuesto: acuse.tipoImpuesto ?? null,
+    tipoPago: acuse.tipoPago ?? null,
+    rfc: acuse.rfc ?? null,
+    filed: {
+      ivaCausado: acuse.ivaCausado ?? null,
+      ivaAcreditable: acuse.ivaAcreditable ?? null,
+      ivaAPagar: acuse.ivaAPagar ?? null,
+      ivaAFavor: acuse.ivaAFavor ?? null,
+      ivaSaldoFavorAplicado: acuse.ivaSaldoFavorAplicado ?? null,
+      isrIngresos: acuse.isrIngresos ?? null,
+      isrAPagar: acuse.isrAPagar ?? null,
+      coeficiente: acuse.coeficienteUtilidadAplicado ?? null,
+      lineaCaptura: acuse.lineaCaptura ?? null,
+      fechaPresentacion: acuse.fechaPresentacion ?? null,
+    },
+    computed: {
+      ivaPagar: round2(pos.iva.pagar),
+      ivaSaldoFavor: round2(pos.iva.saldoAFavor),
+      isrPagar: round2(pos.isr.isrPagar ?? 0),
+      coeficiente: computedCoef,
+      nominaRet: round2(nominaRet),
+    },
+    diffs,
+  };
 }
 
 // Minimal upsert-by-(company,tipo,periodo) usable inside or outside a transaction.
