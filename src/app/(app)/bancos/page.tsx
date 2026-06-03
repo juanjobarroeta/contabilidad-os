@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
@@ -248,16 +248,16 @@ export default function BancosPage() {
   );
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className="p-4 sm:p-6 max-w-5xl">
       {/* Header */}
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Bancos y Conciliación</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{activeCompany.razonSocial}</p>
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold">Bancos y Conciliación</h1>
+          <p className="text-muted-foreground text-sm mt-0.5 truncate">{activeCompany.razonSocial}</p>
         </div>
         <button onClick={() => setShowAddAccount(true)}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors">
-          <Plus className="h-4 w-4" />Agregar cuenta
+          className="shrink-0 flex items-center gap-2 bg-primary text-primary-foreground px-3 sm:px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors">
+          <Plus className="h-4 w-4" /><span className="hidden sm:inline">Agregar cuenta</span><span className="sm:hidden">Cuenta</span>
         </button>
       </div>
 
@@ -288,26 +288,26 @@ export default function BancosPage() {
           {selectedAccount && (
             <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
               {/* Panel header */}
-              <div className="px-5 py-4 border-b border-border flex flex-wrap items-center gap-3">
-                <div>
-                  <h2 className="font-semibold text-sm">{selectedAccount.banco} — {selectedAccount.nombre}</h2>
+              <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center gap-3">
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-sm truncate">{selectedAccount.banco} — {selectedAccount.nombre}</h2>
                   <p className="text-xs text-muted-foreground">••••{selectedAccount.numeroCuenta.slice(-4)}</p>
                 </div>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="w-full sm:w-auto sm:ml-auto flex items-center gap-2">
                   <button onClick={() => setShowUpload(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-md text-xs font-medium hover:bg-accent transition-colors">
+                    className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-md text-xs font-medium hover:bg-accent transition-colors">
                     <Upload className="h-3.5 w-3.5" />Cargar estado de cuenta
                   </button>
                   <button onClick={handleAutoMatch} disabled={loading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                    className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
                     {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
                     Conciliar automáticamente
                   </button>
                 </div>
               </div>
 
-              {/* Filter tabs */}
-              <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
+              {/* Filter tabs — single scrollable row on mobile, wraps on desktop */}
+              <div className="px-4 sm:px-5 py-3 border-b border-border flex items-center gap-2 overflow-x-auto sm:flex-wrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {([
                   ["all",                  "Todos",                  statusCounts.total],
                   ["UNMATCHED",            "Sin conciliar",          statusCounts.UNMATCHED],
@@ -323,7 +323,7 @@ export default function BancosPage() {
                   ["IGNORED",              "Ignorados",              statusCounts.IGNORED],
                 ] as const).map(([f, label, count]) => (
                   <button key={f} onClick={() => setFilter(f)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    className={`shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       filter === f
                         ? "bg-primary text-primary-foreground"
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -335,7 +335,7 @@ export default function BancosPage() {
 
               {/* Bulk-match selection bar (only shown when user selected rows) */}
               {selectionCount > 0 && (
-                <div className="px-5 py-3 bg-blue-50 border-b border-blue-200 flex items-center justify-between gap-3 flex-wrap">
+                <div className="px-4 sm:px-5 py-3 bg-blue-50 border-b border-blue-200 flex items-center justify-between gap-3 flex-wrap">
                   <div className="text-sm text-blue-900">
                     <strong>{selectionCount}</strong> movimiento{selectionCount === 1 ? "" : "s"} seleccionado{selectionCount === 1 ? "" : "s"} ·{" "}
                     <strong>{formatCurrency(selectionSum)}</strong>
@@ -374,7 +374,8 @@ export default function BancosPage() {
                 </div>
               ) : (
                 <>
-                  <table className="w-full text-sm">
+                  {/* Desktop: table */}
+                  <table className="hidden md:table w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-gray-50">
                         <th className="px-3 py-2.5 w-8">
@@ -396,8 +397,8 @@ export default function BancosPage() {
                     </thead>
                     <tbody>
                       {txs.map(tx => (
-                        <>
-                          <TxRow key={tx.id} tx={tx}
+                        <Fragment key={tx.id}>
+                          <TxRow tx={tx}
                             expanded={expandedTxId === tx.id}
                             acting={matchingTxId === tx.id}
                             selected={selectedTxIds.has(tx.id)}
@@ -408,7 +409,7 @@ export default function BancosPage() {
                             onUnignore={() => applyAction(tx.id, "unignore")}
                           />
                           {expandedTxId === tx.id && (
-                            <tr key={`${tx.id}-panel`}>
+                            <tr>
                               <td colSpan={7} className="bg-blue-50/60 border-b border-border px-5 pb-4 pt-2">
                                 <MatchPanel
                                   tx={tx}
@@ -422,10 +423,53 @@ export default function BancosPage() {
                               </td>
                             </tr>
                           )}
-                        </>
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
+
+                  {/* Mobile: card list (the table overflows horizontally and hides Monto) */}
+                  <div className="md:hidden">
+                    <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-gray-50 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={txs.length > 0 && selectedTxIds.size === txs.length}
+                        onChange={(e) => (e.target.checked ? selectAllVisible() : clearSelection())}
+                        className="h-4 w-4 rounded border-border cursor-pointer"
+                        title="Seleccionar todos los visibles"
+                      />
+                      <span>Seleccionar todos · {txs.length} movimiento{txs.length === 1 ? "" : "s"}</span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {txs.map(tx => (
+                        <div key={tx.id}>
+                          <TxCard tx={tx}
+                            expanded={expandedTxId === tx.id}
+                            acting={matchingTxId === tx.id}
+                            selected={selectedTxIds.has(tx.id)}
+                            onToggleSelect={() => toggleTxSelection(tx.id)}
+                            onExpand={() => toggleExpand(tx.id)}
+                            onIgnore={() => applyAction(tx.id, "ignore")}
+                            onUnmatch={() => applyAction(tx.id, "unmatch")}
+                            onUnignore={() => applyAction(tx.id, "unignore")}
+                          />
+                          {expandedTxId === tx.id && (
+                            <div className="bg-blue-50/60 border-b border-border px-4 pb-4 pt-2">
+                              <MatchPanel
+                                tx={tx}
+                                candidates={candidates}
+                                loading={candidatesLoading}
+                                onMatch={(id) => applyAction(tx.id, "match", id)}
+                                onIgnore={() => applyAction(tx.id, "ignore")}
+                                onCategorize={(tag) => applyAction(tx.id, "ignore", undefined, tag)}
+                                onClose={() => setExpandedTxId(null)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
                   {totalPages > 1 && (
                     <div className="flex items-center justify-center gap-3 px-5 py-3 border-t border-border">
@@ -509,54 +553,138 @@ function AccountCard({ account, selected, onSelect }: {
   );
 }
 
-// ── TxRow ─────────────────────────────────────────────────────────────────────
-function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgnore, onUnmatch, onUnignore }: {
-  tx: BankTx; expanded: boolean; acting: boolean; selected: boolean;
-  onToggleSelect: () => void;
+// ── Shared row pieces (used by both the desktop table and the mobile cards) ────
+interface RowActionProps {
+  tx: BankTx; expanded: boolean;
   onExpand: () => void; onIgnore: () => void;
   onUnmatch: () => void; onUnignore: () => void;
-}) {
+}
+
+/** The "↳ Factura/Gasto/Reembolso/Raya" lines shown under a matched movement. */
+function MatchedLinks({ tx }: { tx: BankTx }) {
+  if (tx.status !== "MATCHED") return null;
+  return (
+    <>
+      {tx.invoice && (
+        <p className="text-xs text-green-700 mt-0.5">
+          ↳ {tx.invoice.customer?.razonSocial ?? "Factura"} · {formatCurrency(tx.invoice.total)}
+        </p>
+      )}
+      {tx.gastoPagado && (
+        <p className="text-xs text-green-700 mt-0.5">
+          ↳ Gasto: {tx.gastoPagado.beneficiarioNombre} ·
+          {tx.gastoPagado.proyecto?.codigo ? ` ${tx.gastoPagado.proyecto.codigo} ·` : ""}
+          {" "}{formatCurrency(tx.gastoPagado.importe)}
+        </p>
+      )}
+      {tx.reembolsoPagado && (
+        <p className="text-xs text-green-700 mt-0.5">
+          ↳ Reembolso semanal{tx.reembolsoPagado.proyecto?.codigo ? ` · ${tx.reembolsoPagado.proyecto.codigo}` : ""} · {formatCurrency(tx.reembolsoPagado.totalReembolso)}
+        </p>
+      )}
+      {tx.rayaPagada && (
+        <p className="text-xs text-green-700 mt-0.5">
+          ↳ Raya: {tx.rayaPagada.cuadrilla?.nombre ?? "destajo"}
+          {tx.rayaPagada.proyecto?.codigo ? ` · ${tx.rayaPagada.proyecto.codigo}` : ""} · {formatCurrency(tx.rayaPagada.totalDestajo)}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Estado pill: Sin conciliar / Conciliado / category tag / Ignorado. */
+function StatusBadge({ tx }: { tx: BankTx }) {
+  if (tx.status === "UNMATCHED") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+        <AlertCircle className="h-3 w-3" />Sin conciliar
+      </span>
+    );
+  }
+  if (tx.status === "MATCHED") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded">
+        <CheckCircle2 className="h-3 w-3" />Conciliado
+      </span>
+    );
+  }
+  // IGNORED — may carry a category tag in notes.
+  const map: Record<string, { label: string; cls: string }> = {
+    PENDING_MONTHLY_CFDI: { label: "Pendiente CFDI", cls: "text-blue-700 bg-blue-50" },
+    TAX_PAYMENT:          { label: "Impuestos",      cls: "text-purple-700 bg-purple-50" },
+    PAYROLL_NO_CFDI:      { label: "Nómina",         cls: "text-indigo-700 bg-indigo-50" },
+    LOAN_RECEIVED:        { label: "Préstamo",       cls: "text-pink-700 bg-pink-50" },
+    LOAN_GIVEN:           { label: "Préstamo otorg.",cls: "text-pink-700 bg-pink-50" },
+    CAPITAL_CONTRIBUTION: { label: "Capital",        cls: "text-emerald-700 bg-emerald-50" },
+    INTERNAL_TRANSFER:    { label: "Transferencia",  cls: "text-cyan-700 bg-cyan-50" },
+    NON_DEDUCTIBLE:       { label: "No deducible",   cls: "text-orange-700 bg-orange-50" },
+  };
+  const m = map[tx.notes ?? ""];
+  return m ? (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded ${m.cls}`}>{m.label}</span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+      <X className="h-3 w-3" />Ignorado
+    </span>
+  );
+}
+
+/** Per-movement action buttons (conciliar / ignorar / desconectar / etc.). */
+function RowActions({ tx, expanded, onExpand, onIgnore, onUnmatch, onUnignore }: RowActionProps) {
+  return (
+    <div className="flex items-center gap-1 justify-end">
+      {tx.status === "UNMATCHED" && (
+        <>
+          <button onClick={onExpand} title={expanded ? "Cerrar" : "Conciliar"}
+            className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
+            <LinkIcon className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={onIgnore} title="Ignorar"
+            className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </>
+      )}
+      {tx.status === "MATCHED" && (
+        <button onClick={onUnmatch} title="Desconectar"
+          className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
+          <Unlink className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {tx.status === "IGNORED" && (
+        <>
+          <button onClick={onExpand} title="Re-categorizar / conciliar"
+            className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
+            <LinkIcon className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={onUnignore} title="Mover a sin conciliar"
+            className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+interface TxItemProps extends RowActionProps {
+  acting: boolean; selected: boolean; onToggleSelect: () => void;
+}
+
+// ── TxRow (desktop table) ──────────────────────────────────────────────────────
+function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgnore, onUnmatch, onUnignore }: TxItemProps) {
   const isCredit = tx.monto > 0;
   return (
     <tr className={`border-b border-border last:border-0 ${acting ? "opacity-50" : ""} ${selected ? "bg-blue-50" : expanded ? "bg-blue-50/40" : "hover:bg-gray-50/50"}`}>
       <td className="px-3 py-3 w-8">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggleSelect}
-          className="h-3.5 w-3.5 rounded border-border cursor-pointer"
-        />
+        <input type="checkbox" checked={selected} onChange={onToggleSelect}
+          className="h-3.5 w-3.5 rounded border-border cursor-pointer" />
       </td>
-      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-        {formatDate(tx.fecha)}
-      </td>
+      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{formatDate(tx.fecha)}</td>
       <td className="px-4 py-3 max-w-[280px]">
         <p className="text-xs font-medium truncate">{tx.descripcion}</p>
         {tx.referencia && <p className="text-xs text-muted-foreground">Ref: {tx.referencia}</p>}
-        {tx.status === "MATCHED" && tx.invoice && (
-          <p className="text-xs text-green-700 mt-0.5">
-            ↳ {tx.invoice.customer?.razonSocial ?? "Factura"} · {formatCurrency(tx.invoice.total)}
-          </p>
-        )}
-        {tx.status === "MATCHED" && tx.gastoPagado && (
-          <p className="text-xs text-green-700 mt-0.5">
-            ↳ Gasto: {tx.gastoPagado.beneficiarioNombre} ·
-            {tx.gastoPagado.proyecto?.codigo ? ` ${tx.gastoPagado.proyecto.codigo} ·` : ""}
-            {" "}{formatCurrency(tx.gastoPagado.importe)}
-          </p>
-        )}
-        {tx.status === "MATCHED" && tx.reembolsoPagado && (
-          <p className="text-xs text-green-700 mt-0.5">
-            ↳ Reembolso semanal{tx.reembolsoPagado.proyecto?.codigo ? ` · ${tx.reembolsoPagado.proyecto.codigo}` : ""} · {formatCurrency(tx.reembolsoPagado.totalReembolso)}
-          </p>
-        )}
-        {tx.status === "MATCHED" && tx.rayaPagada && (
-          <p className="text-xs text-green-700 mt-0.5">
-            ↳ Raya: {tx.rayaPagada.cuadrilla?.nombre ?? "destajo"}
-            {tx.rayaPagada.proyecto?.codigo ? ` · ${tx.rayaPagada.proyecto.codigo}` : ""} · {formatCurrency(tx.rayaPagada.totalDestajo)}
-          </p>
-        )}
-        {/* Category badge now shown in Estado column; no inline note needed */}
+        <MatchedLinks tx={tx} />
       </td>
       <td className="px-4 py-3 text-right whitespace-nowrap">
         <span className={`text-sm font-semibold flex items-center justify-end gap-1 ${isCredit ? "text-green-700" : "text-red-600"}`}>
@@ -567,80 +695,45 @@ function TxRow({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgn
       <td className="px-4 py-3 text-right text-xs text-muted-foreground whitespace-nowrap">
         {tx.saldo != null ? formatCurrency(tx.saldo) : "—"}
       </td>
-      <td className="px-4 py-3">
-        {tx.status === "UNMATCHED" && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
-            <AlertCircle className="h-3 w-3" />Sin conciliar
-          </span>
-        )}
-        {tx.status === "MATCHED" && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded">
-            <CheckCircle2 className="h-3 w-3" />Conciliado
-          </span>
-        )}
-        {tx.status === "IGNORED" && (() => {
-          const tag = tx.notes ?? "";
-          const map: Record<string, { label: string; cls: string }> = {
-            PENDING_MONTHLY_CFDI: { label: "Pendiente CFDI", cls: "text-blue-700 bg-blue-50" },
-            TAX_PAYMENT:          { label: "Impuestos",      cls: "text-purple-700 bg-purple-50" },
-            PAYROLL_NO_CFDI:      { label: "Nómina",         cls: "text-indigo-700 bg-indigo-50" },
-            LOAN_RECEIVED:        { label: "Préstamo",       cls: "text-pink-700 bg-pink-50" },
-            LOAN_GIVEN:           { label: "Préstamo otorg.",cls: "text-pink-700 bg-pink-50" },
-            CAPITAL_CONTRIBUTION: { label: "Capital",        cls: "text-emerald-700 bg-emerald-50" },
-            INTERNAL_TRANSFER:    { label: "Transferencia",  cls: "text-cyan-700 bg-cyan-50" },
-            NON_DEDUCTIBLE:       { label: "No deducible",   cls: "text-orange-700 bg-orange-50" },
-          };
-          const m = map[tag];
-          return m ? (
-            <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded ${m.cls}`}>
-              {m.label}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-              <X className="h-3 w-3" />Ignorado
-            </span>
-          );
-        })()}
-      </td>
+      <td className="px-4 py-3"><StatusBadge tx={tx} /></td>
       <td className="px-4 py-3">
         {acting
           ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground ml-auto" />
-          : (
-          <div className="flex items-center gap-1 justify-end">
-            {tx.status === "UNMATCHED" && (
-              <>
-                <button onClick={onExpand} title={expanded ? "Cerrar" : "Conciliar"}
-                  className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
-                  <LinkIcon className="h-3.5 w-3.5" />
-                </button>
-                <button onClick={onIgnore} title="Ignorar"
-                  className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-            {tx.status === "MATCHED" && (
-              <button onClick={onUnmatch} title="Desconectar"
-                className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
-                <Unlink className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {tx.status === "IGNORED" && (
-              <>
-                <button onClick={onExpand} title="Re-categorizar / conciliar"
-                  className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
-                  <LinkIcon className="h-3.5 w-3.5" />
-                </button>
-                <button onClick={onUnignore} title="Mover a sin conciliar"
-                  className="p-1.5 rounded hover:bg-gray-200 text-muted-foreground hover:text-foreground transition-colors">
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
-        )}
+          : <RowActions tx={tx} expanded={expanded} onExpand={onExpand} onIgnore={onIgnore} onUnmatch={onUnmatch} onUnignore={onUnignore} />}
       </td>
     </tr>
+  );
+}
+
+// ── TxCard (mobile) ────────────────────────────────────────────────────────────
+// Same data as TxRow, laid out vertically so the monto is always visible and the
+// description can wrap instead of being clipped off-screen.
+function TxCard({ tx, expanded, acting, selected, onToggleSelect, onExpand, onIgnore, onUnmatch, onUnignore }: TxItemProps) {
+  const isCredit = tx.monto > 0;
+  return (
+    <div className={`flex items-start gap-3 px-4 py-3 ${acting ? "opacity-50" : ""} ${selected ? "bg-blue-50" : expanded ? "bg-blue-50/40" : ""}`}>
+      <input type="checkbox" checked={selected} onChange={onToggleSelect}
+        className="mt-1 h-4 w-4 rounded border-border cursor-pointer shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(tx.fecha)}</span>
+          <span className={`text-sm font-semibold flex items-center gap-1 shrink-0 ${isCredit ? "text-green-700" : "text-red-600"}`}>
+            {isCredit ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownLeft className="h-3.5 w-3.5" />}
+            {formatCurrency(Math.abs(tx.monto))}
+          </span>
+        </div>
+        <p className="text-sm font-medium mt-0.5 line-clamp-2 break-words">{tx.descripcion}</p>
+        {tx.referencia && <p className="text-xs text-muted-foreground">Ref: {tx.referencia}</p>}
+        {tx.saldo != null && <p className="text-xs text-muted-foreground">Saldo: {formatCurrency(tx.saldo)}</p>}
+        <MatchedLinks tx={tx} />
+        <div className="flex items-center justify-between gap-2 mt-1.5">
+          <StatusBadge tx={tx} />
+          {acting
+            ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            : <RowActions tx={tx} expanded={expanded} onExpand={onExpand} onIgnore={onIgnore} onUnmatch={onUnmatch} onUnignore={onUnignore} />}
+        </div>
+      </div>
+    </div>
   );
 }
 
