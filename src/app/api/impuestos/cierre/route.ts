@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { detectComplementosPendientes } from "@/lib/complementos";
+import { formatCurrency } from "@/lib/utils";
 import { calcularVencimiento, type ObligacionConfig } from "@/lib/obligaciones";
 import { Prisma, type TaxDeclarationType } from "@prisma/client";
 
@@ -71,9 +73,10 @@ export async function GET(req: Request) {
   const from = new Date(year, month - 1, 1);
   const to = new Date(year, month, 1);
 
-  const [pos, obligaciones, declaraciones, nominaRet, egresosConIvaCount, cfdiCount, nominaRunsCount] =
+  const [pos, complementos, obligaciones, declaraciones, nominaRet, egresosConIvaCount, cfdiCount, nominaRunsCount] =
     await Promise.all([
       computeTaxPosition(companyId, year, month),
+      detectComplementosPendientes(companyId),
       prisma.companyObligation.findMany({ where: { companyId, activa: true } }),
       prisma.taxDeclaration.findMany({
         where: { companyId, periodo, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR", "DIOT"] } },
@@ -171,6 +174,19 @@ export async function GET(req: Request) {
       ok: !isCurrentMonth,
       aplica: true,
       detail: isCurrentMonth ? "El mes en curso aún puede recibir más CFDIs" : "Periodo concluido",
+    },
+    // Cobros PPD sin REP: no bloquea, pero ese IVA aún no causa (base-REP) y el
+    // complemento vence el día 5 del mes siguiente al pago. Surfacing it here
+    // closes the loop with the cash-basis IVA engine.
+    complementosPago: {
+      ok: complementos.stats.totalPendientes === 0,
+      aplica: true,
+      detail:
+        complementos.stats.totalPendientes === 0
+          ? "Sin cobros PPD pendientes de complemento"
+          : `${complementos.stats.totalPendientes} cobro(s) PPD sin REP` +
+            (complementos.stats.vencidos > 0 ? ` — ${complementos.stats.vencidos} vencido(s)` : "") +
+            ` (vence día 5; ${formatCurrency(complementos.stats.montoPendiente)} sin complementar)`,
     },
   };
 

@@ -561,6 +561,10 @@ export async function verifyAndImportSatSync(
               numParcialidad: d.numParcialidad != null ? Math.trunc(d.numParcialidad) : null,
               impSaldoAnterior: d.impSaldoAnterior,
               impSaldoInsoluto: d.impSaldoInsoluto,
+              fechaPago: d.fechaPago ? new Date(d.fechaPago) : null,
+              baseTraslado: d.baseTraslado,
+              ivaTrasladado: d.ivaTrasladado,
+              ivaDerivado: d.ivaDerivado,
             })),
             skipDuplicates: true,
           });

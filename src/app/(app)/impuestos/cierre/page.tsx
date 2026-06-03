@@ -62,6 +62,7 @@ const READINESS_LABELS: Record<string, string> = {
   cfdisSincronizados: "CFDIs sincronizados",
   nominaTimbrada: "Nómina del mes timbrada",
   periodoCerrado: "Periodo concluido",
+  complementosPago: "Complementos de pago (REP)",
 };
 
 // Each federal sub-obligation has a downloadable working paper backing its figure.

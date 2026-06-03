@@ -9,7 +9,11 @@ import { sumIsrPagar } from "./isr-provisional";
 //
 // IVA is on FLUJO DE EFECTIVO (cash basis, Art. 1-B LIVA):
 //   - PUE: causa el mes de emisión (se asume pagada)
-//   - PPD: causa el mes en que se cobra/paga (bank tx match), proporcional a lo pagado
+//   - PPD: causa el mes del PAGO, tomado del Complemento de Pago (REP). El IVA
+//     trasladado proviene del propio REP (complemento 2.0, valor firme) o se
+//     prorratea de la factura madre para REP legacy 1.0 sin desglose. La
+//     FechaPago del REP define el periodo — NO el match bancario. Un cobro PPD
+//     sin REP todavía no causa IVA (lo detecta el recordatorio de complementos).
 // ISR provisional uses the Art. 14 cumulative formula with the coeficiente de
 // utilidad (manual override → prior-year calculated → none).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,7 +22,6 @@ type InvoiceLike = {
   taxes: { tipo: string; retencion: boolean; importe: number }[];
   totalImpuestos: number | null;
 };
-type InvoiceWithBank = InvoiceLike & { total: number; bankTransactions: { monto: number }[] };
 
 function ivaTrasladado(inv: InvoiceLike): number {
   const ivaTaxes = inv.taxes.filter((t) => t.tipo === "IVA" && !t.retencion);
@@ -27,10 +30,20 @@ function ivaTrasladado(inv: InvoiceLike): number {
     : (inv.totalImpuestos ?? 0);
 }
 
-function paidFractionThisMonth(inv: InvoiceWithBank): number {
-  if (!inv.bankTransactions.length) return 0;
-  const paid = inv.bankTransactions.reduce((s, t) => s + Math.abs(t.monto), 0);
-  return inv.total > 0 ? Math.min(1, paid / inv.total) : 0;
+/**
+ * IVA of a single REP payment toward a parent invoice. Uses the firm
+ * payment-level IVA from complemento 2.0 when present; otherwise (legacy 1.0
+ * or 2.0 without desglose) prorates the parent invoice's IVA by the fraction
+ * paid in this REP.
+ */
+function repIvaTrasladado(
+  link: { impPagado: number | null; ivaTrasladado: number | null; ivaDerivado: boolean },
+  parent: InvoiceLike & { total: number }
+): number {
+  if (link.ivaTrasladado != null && !link.ivaDerivado) return link.ivaTrasladado;
+  const parentIva = ivaTrasladado(parent);
+  if (parent.total <= 0 || link.impPagado == null) return 0;
+  return parentIva * (link.impPagado / parent.total);
 }
 
 export interface TaxPosition {
@@ -85,7 +98,6 @@ export async function computeTaxPosition(
 
   const invoiceInclude = {
     taxes: true,
-    bankTransactions: { select: { monto: true, status: true, fecha: true } },
   } as const;
 
   const [
@@ -97,8 +109,7 @@ export async function computeTaxPosition(
     declaracionesPrevias,
     prevDeclaracion,
     company,
-    ppdIngresosCobrados,
-    ppdEgresosPagados,
+    repCobrosDelMes,
   ] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
@@ -143,40 +154,45 @@ export async function computeTaxPosition(
       where: { id: companyId },
       select: { coeficienteUtilidad: true, coeficienteAnio: true },
     }),
-    prisma.invoice.findMany({
+    // PPD IVA is on a REP (complemento de pago) basis: every payment whose
+    // FechaPago falls in this month, across all REPs of this company. Direction
+    // (causado vs acreditable) is resolved from the parent invoice below.
+    prisma.pagoDoctoRelacionado.findMany({
       where: {
-        companyId, status: "STAMPED", tipo: "INGRESO", metodoPago: "PPD",
-        fecha: { lt: from },
-        bankTransactions: { some: { status: "MATCHED", fecha: { gte: from, lt: to } } },
+        fechaPago: { gte: from, lt: to },
+        pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
       },
-      include: {
-        taxes: true,
-        bankTransactions: { where: { status: "MATCHED", fecha: { gte: from, lt: to } }, select: { monto: true } },
-      },
-    }),
-    prisma.invoice.findMany({
-      where: {
-        companyId, status: "STAMPED", tipo: "EGRESO", metodoPago: "PPD",
-        fecha: { lt: from },
-        bankTransactions: { some: { status: "MATCHED", fecha: { gte: from, lt: to } } },
-      },
-      include: {
-        taxes: true,
-        bankTransactions: { where: { status: "MATCHED", fecha: { gte: from, lt: to } }, select: { monto: true } },
-      },
+      select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
     }),
   ]);
+
+  // Resolve the parent PPD invoices these REP payments settle: the parent's
+  // tipo decides direction (INGRESO → trasladado, EGRESO → acreditable) and its
+  // IVA/total is the proration base for legacy 1.0 complementos.
+  const repParentUuids = [...new Set(repCobrosDelMes.map((r) => r.parentUuid))];
+  const repParents = repParentUuids.length
+    ? await prisma.invoice.findMany({
+        where: { companyId, uuid: { in: repParentUuids }, metodoPago: "PPD", status: "STAMPED" },
+        select: { uuid: true, tipo: true, total: true, totalImpuestos: true, taxes: true },
+      })
+    : [];
+  const repParentByUuid = new Map(repParents.map((p) => [p.uuid!, p]));
+
+  let ivaTrasladadoPPD = 0;
+  let ivaAcreditablePPD = 0;
+  for (const link of repCobrosDelMes) {
+    const parent = repParentByUuid.get(link.parentUuid);
+    if (!parent) continue; // REP references a non-PPD or unknown invoice — skip
+    const iva = repIvaTrasladado(link, parent);
+    if (parent.tipo === "INGRESO") ivaTrasladadoPPD += iva;
+    else if (parent.tipo === "EGRESO") ivaAcreditablePPD += iva;
+  }
 
   // ── IVA (flujo de efectivo) ──────────────────────────────────────────────
   const ivaTrasladadoPUE = facturasEmitidas
     .filter((inv) => inv.metodoPago === "PUE")
     .reduce((s, inv) => s + ivaTrasladado(inv), 0);
-  const ivaTrasladadoPPDMes = facturasEmitidas
-    .filter((inv) => inv.metodoPago === "PPD")
-    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
-  const ivaTrasladadoPPDPrev = ppdIngresosCobrados
-    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
-  const ivaTrasladadoTotal = ivaTrasladadoPUE + ivaTrasladadoPPDMes + ivaTrasladadoPPDPrev;
+  const ivaTrasladadoTotal = ivaTrasladadoPUE + ivaTrasladadoPPD;
 
   const ivaTrasladadoDevengado = facturasEmitidas.reduce((s, inv) => s + ivaTrasladado(inv), 0);
   const ivaRetenidoPorClientes = facturasEmitidas.reduce(
@@ -187,12 +203,7 @@ export async function computeTaxPosition(
   const ivaAcreditablePUE = facturasEgresos
     .filter((inv) => inv.metodoPago === "PUE")
     .reduce((s, inv) => s + ivaTrasladado(inv), 0);
-  const ivaAcreditablePPDMes = facturasEgresos
-    .filter((inv) => inv.metodoPago === "PPD")
-    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
-  const ivaAcreditablePPDPrev = ppdEgresosPagados
-    .reduce((s, inv) => s + ivaTrasladado(inv) * paidFractionThisMonth(inv as InvoiceWithBank), 0);
-  const ivaAcreditable = ivaAcreditablePUE + ivaAcreditablePPDMes + ivaAcreditablePPDPrev;
+  const ivaAcreditable = ivaAcreditablePUE + ivaAcreditablePPD;
   const ivaAcreditableDevengado = facturasEgresos.reduce((s, inv) => s + ivaTrasladado(inv), 0);
 
   const saldoFavorAnterior = prevDeclaracion?.ivaSaldoFavor ?? 0;

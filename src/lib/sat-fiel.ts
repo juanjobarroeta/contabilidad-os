@@ -101,32 +101,89 @@ export function parseCfdiXml(xml: string) {
     });
   }
 
-  // Complemento de Pago (tipo P): DoctoRelacionado nodes carry the UUID(s) of
-  // the parent invoices this payment applies to. Capturing these lets us link
-  // a REP to the invoice it pays — for both emitidos (do I still owe a REP?)
-  // and recibidos (did my vendor send the REP for a gasto I paid?).
+  // Complemento de Pago (tipo P): each <pago:Pago> node carries the payment date
+  // (FechaPago) and one or more DoctoRelacionado children naming the parent
+  // invoice(s) it settles. Capturing these links a REP to the invoice it pays —
+  // for both emitidos (do I still owe a REP?) and recibidos (did my vendor send
+  // the REP for a gasto I paid?).
+  //
+  // Complemento 2.0 adds a per-docto IVA breakdown (ImpuestosDR/TrasladoDR) —
+  // the firm, payment-level IVA the SAT expects. Complemento 1.0 (legacy, CFDI
+  // 3.3) carries no breakdown, so IVA for those is flagged `ivaDerivado` and
+  // prorated from the parent invoice downstream. We walk per-Pago so FechaPago
+  // and each TrasladoDR stay bound to the right DoctoRelacionado. The regexes
+  // are namespace-agnostic (pago10/pago20).
   const doctosRelacionados: Array<{
     uuid: string;
     impPagado: number | null;
     numParcialidad: number | null;
     impSaldoAnterior: number | null;
     impSaldoInsoluto: number | null;
+    fechaPago: string | null;
+    baseTraslado: number | null;
+    ivaTrasladado: number | null;
+    ivaDerivado: boolean;
   }> = [];
-  const doctoRe = /<(?:[a-zA-Z0-9]+:)?DoctoRelacionado\b([^>]*)(?:\/>|>)/g;
-  let dm: RegExpExecArray | null;
-  while ((dm = doctoRe.exec(xml)) !== null) {
-    const attrs = dm[1];
-    const get = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
-    const id = get("IdDocumento");
-    if (!id) continue;
-    const num = (v: string | null) => (v != null && v !== "" ? parseFloat(v) : null);
-    doctosRelacionados.push({
-      uuid: id.toUpperCase(),
-      impPagado: num(get("ImpPagado")),
-      numParcialidad: num(get("NumParcialidad")),
-      impSaldoAnterior: num(get("ImpSaldoAnt")),
-      impSaldoInsoluto: num(get("ImpSaldoInsoluto")),
-    });
+  const numOf = (v: string | null) => (v != null && v !== "" ? parseFloat(v) : null);
+
+  const pagoRe = /<(?:[a-zA-Z0-9]+:)?Pago\b([^>]*)>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?Pago>/g;
+  let pm: RegExpExecArray | null;
+  while ((pm = pagoRe.exec(xml)) !== null) {
+    const pagoAttrs = pm[1];
+    const pagoBody = pm[2];
+    const fechaPago = /\bFechaPago="([^"]*)"/.exec(pagoAttrs)?.[1] ?? null;
+
+    // Each DoctoRelacionado is self-closing (1.0) or wraps ImpuestosDR (2.0).
+    const doctoRe = /<(?:[a-zA-Z0-9]+:)?DoctoRelacionado\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?DoctoRelacionado>)/g;
+    let dm: RegExpExecArray | null;
+    while ((dm = doctoRe.exec(pagoBody)) !== null) {
+      const attrs = dm[1];
+      const body = dm[2] ?? "";
+      const get = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
+      const id = get("IdDocumento");
+      if (!id) continue;
+
+      // Per-docto IVA breakdown (complemento 2.0). ImpuestoDR "002" = IVA.
+      let baseTraslado: number | null = null;
+      let ivaTrasladado: number | null = null;
+      let sawTraslado = false;
+      const trasladoRe = /<(?:[a-zA-Z0-9]+:)?TrasladoDR\b([^>]*?)\/?>/g;
+      let tm: RegExpExecArray | null;
+      while ((tm = trasladoRe.exec(body)) !== null) {
+        const tAttrs = tm[1];
+        const tget = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(tAttrs)?.[1] ?? null;
+        if (tget("ImpuestoDR") !== "002") continue; // IVA only
+        sawTraslado = true;
+        baseTraslado = (baseTraslado ?? 0) + (numOf(tget("BaseDR")) ?? 0);
+        ivaTrasladado = (ivaTrasladado ?? 0) + (numOf(tget("ImporteDR")) ?? 0);
+      }
+
+      // Decide whether IVA is firm, a firm zero, or must be derived downstream.
+      const objetoImp = get("ObjetoImpDR"); // null in 1.0
+      let ivaDerivado = false;
+      if (!sawTraslado) {
+        if (objetoImp === "01") {
+          // 2.0, explicitly "no objeto de impuesto" → firm zero.
+          baseTraslado = 0;
+          ivaTrasladado = 0;
+        } else {
+          // 1.0 (no breakdown) or 2.0 ObjetoImpDR "03" (no desglose) → derive.
+          ivaDerivado = true;
+        }
+      }
+
+      doctosRelacionados.push({
+        uuid: id.toUpperCase(),
+        impPagado: numOf(get("ImpPagado")),
+        numParcialidad: numOf(get("NumParcialidad")),
+        impSaldoAnterior: numOf(get("ImpSaldoAnt")),
+        impSaldoInsoluto: numOf(get("ImpSaldoInsoluto")),
+        fechaPago,
+        baseTraslado,
+        ivaTrasladado,
+        ivaDerivado,
+      });
+    }
   }
 
   return {
