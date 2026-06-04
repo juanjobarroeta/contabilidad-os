@@ -53,13 +53,20 @@ function repIvaTrasladado(
  * [from, to) — the FLUJO DE EFECTIVO base personas físicas need (Art. 106).
  * PUE is treated as collected/paid on emission; PPD by REP payment (FechaPago),
  * taking the subtotal-equivalent of each payment (impPagado × subtotal/total).
+ *
+ * Also accumulates `isrRetenidoCobrado`: the 10% ISR withheld by personas
+ * morales on the PF's INGRESO (Art. 106) — credited on the SAME flujo basis as
+ * the income, so a retención is only acreditada once its income is collected
+ * (PUE on emission; PPD prorated by the fraction paid). The REP carries no ISR
+ * breakdown, so for PPD the parent invoice's retención is prorated by
+ * impPagado/total, mirroring the income proration.
  */
 async function flujoEfectivoAcum(
   companyId: string,
   from: Date,
   to: Date
-): Promise<{ ingresosCobrados: number; deduccionesPagadas: number }> {
-  const [puIngreso, puEgreso, repLinks] = await Promise.all([
+): Promise<{ ingresosCobrados: number; deduccionesPagadas: number; isrRetenidoCobrado: number }> {
+  const [puIngreso, puEgreso, puIngresoIsrRet, repLinks] = await Promise.all([
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
       _sum: { subtotal: true },
@@ -67,6 +74,15 @@ async function flujoEfectivoAcum(
     prisma.invoice.aggregate({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
       _sum: { subtotal: true },
+    }),
+    // ISR retenido (10% Art. 106) on PUE INGRESO — fully cobrado on emission.
+    prisma.invoiceTax.aggregate({
+      where: {
+        tipo: "ISR",
+        retencion: true,
+        invoice: { companyId, tipo: "INGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
+      },
+      _sum: { importe: true },
     }),
     prisma.pagoDoctoRelacionado.findMany({
       where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" } },
@@ -78,24 +94,38 @@ async function flujoEfectivoAcum(
   const parents = uuids.length
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: uuids }, metodoPago: "PPD", status: "STAMPED" },
-        select: { uuid: true, tipo: true, subtotal: true, total: true },
+        select: {
+          uuid: true,
+          tipo: true,
+          subtotal: true,
+          total: true,
+          taxes: { where: { tipo: "ISR", retencion: true }, select: { importe: true } },
+        },
       })
     : [];
   const byUuid = new Map(parents.map((p) => [p.uuid!, p]));
 
   let ppdIngreso = 0;
   let ppdEgreso = 0;
+  let ppdIsrRetenido = 0;
   for (const l of repLinks) {
     const p = byUuid.get(l.parentUuid);
     if (!p || p.total <= 0 || l.impPagado == null) continue;
+    const fraccionPagada = l.impPagado / p.total;
     const base = l.impPagado * (p.subtotal / p.total); // subtotal-equivalent collected/paid
-    if (p.tipo === "INGRESO") ppdIngreso += base;
-    else if (p.tipo === "EGRESO") ppdEgreso += base;
+    if (p.tipo === "INGRESO") {
+      ppdIngreso += base;
+      const parentIsrRet = p.taxes.reduce((s, t) => s + t.importe, 0);
+      ppdIsrRetenido += parentIsrRet * fraccionPagada; // retención del ingreso cobrado
+    } else if (p.tipo === "EGRESO") {
+      ppdEgreso += base;
+    }
   }
 
   return {
     ingresosCobrados: (puIngreso._sum.subtotal ?? 0) + ppdIngreso,
     deduccionesPagadas: (puEgreso._sum.subtotal ?? 0) + ppdEgreso,
+    isrRetenidoCobrado: (puIngresoIsrRet._sum.importe ?? 0) + ppdIsrRetenido,
   };
 }
 
@@ -133,6 +163,8 @@ export interface TaxPosition {
     utilidadFiscal: number | null;
     isrDelEjercicio: number | null;
     isrPagar: number | null;
+    /** ISR retenido (Art. 106, 10% por PM) acreditado contra el provisional. 0 si no aplica al régimen. */
+    retencionesAcreditadas: number;
     /** False when the tarifa used has NOT been verified vs the authoritative source. */
     tarifaVerificada: boolean;
   };
@@ -310,20 +342,22 @@ export async function computeTaxPosition(
       utilidadFiscal: null,
       isrDelEjercicio: res.isr, // mensual definitivo (no acumulado)
       isrPagar: res.isr,
+      retencionesAcreditadas: 0, // RESICO PF (1.25% PM) — fuera de alcance de #20
       tarifaVerificada: true,
     };
   } else if (esPfActEmpresarial) {
     // PF con actividad empresarial (Art. 106): base en FLUJO DE EFECTIVO
     // (ingresos cobrados − deducciones pagadas, acumulado) × tarifa Art. 96.
-    const { ingresosCobrados, deduccionesPagadas } = await flujoEfectivoAcum(companyId, yearFrom, to);
+    const { ingresosCobrados, deduccionesPagadas, isrRetenidoCobrado } = await flujoEfectivoAcum(companyId, yearFrom, to);
     const r = calcularIsrProvisionalPf({
       ejercicio: year,
       meses: month,
       ingresosCobradosAcum: ingresosCobrados,
       deduccionesPagadasAcum: deduccionesPagadas,
       pagosProvisionalesAnteriores: isrPagadoAnterior,
-      // TODO: retencionesAcum (ISR 10% retenido por personas morales, Art. 106)
-      // — aún no se captura como dato; se acreditará cuando exista.
+      // ISR 10% retenido por personas morales (Art. 106), acreditado en flujo:
+      // sólo la retención de ingresos efectivamente cobrados (ene→mes).
+      retencionesAcum: isrRetenidoCobrado,
     });
     isr = {
       metodo: "PF_ACT_EMPRESARIAL",
@@ -339,6 +373,7 @@ export async function computeTaxPosition(
       utilidadFiscal: r ? r.baseGravable : null,
       isrDelEjercicio: r ? r.isrCausado : null,
       isrPagar: r ? r.isrPagar : null,
+      retencionesAcreditadas: r ? r.retencionesAcum : 0,
       tarifaVerificada: r ? r.tarifaVerificada : false,
     };
   } else {
@@ -393,6 +428,7 @@ export async function computeTaxPosition(
       utilidadFiscal,
       isrDelEjercicio,
       isrPagar,
+      retencionesAcreditadas: 0, // PM Art. 14 no acredita retención 10% PF
       tarifaVerificada: true,
     };
   }
