@@ -32,6 +32,8 @@ declare module "facturapi" {
     items: FacturapiInvoiceItem[];
     pdf_custom_section?: string;
     global?: FacturapiInvoiceGlobal;
+    /** "draft" creates a borrador (no stamp/timbre consumed) for preview. */
+    status?: "draft";
   }
 
   interface FacturapiInvoice {
@@ -40,6 +42,7 @@ declare module "facturapi" {
     subtotal: number;
     total: number;
     status: string;
+    folio_number?: number;
     pdf_custom_section?: string;
   }
 
@@ -114,6 +117,12 @@ declare module "facturapi" {
     invoices: {
       create(options: FacturapiCreateInvoiceOptions): Promise<FacturapiInvoice>;
       cancel(id: string): Promise<FacturapiInvoice>;
+      retrieve(id: string): Promise<FacturapiInvoice>;
+      /** Promotes a "draft" invoice to a stamped CFDI (consumes one timbre). */
+      stampDraft(id: string, params?: object): Promise<FacturapiInvoice>;
+      editDraft(id: string, data: Partial<FacturapiCreateInvoiceOptions>): Promise<FacturapiInvoice>;
+      downloadPdf(id: string): Promise<NodeJS.ReadableStream>;
+      downloadXml(id: string): Promise<NodeJS.ReadableStream>;
     };
 
     customers: {

@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import { checkStampReadiness, type StampInput, type StampItem } from "@/lib/facturas/stamp";
+import { createDraftInvoice, type StampInput, type StampItem } from "@/lib/facturas/stamp";
+import { signDraftToken, publicBaseUrl } from "@/lib/facturas/file-token";
 import { stagePendingTimbrar } from "@/lib/whatsapp/pending-action";
 
-// Builds a CFDI preview from a natural-language-ish tool input, validates
-// readiness, and stages it as a pending action requiring a confirmation code.
-// Does NOT stamp — that only happens when the user replies with the code.
+// Builds a CFDI PREFACTURA (Facturapi borrador) from a natural-language-ish tool
+// input, validates readiness, links its PDF so the user can verify the SAT
+// classification (clave producto/servicio + unidad), and stages it as a pending
+// action requiring a confirmation code. Does NOT stamp — the draft is promoted
+// to a real CFDI only when the user replies with the code.
 
 type PreviewInput = {
   customer_id?: string;
@@ -16,6 +19,8 @@ type PreviewInput = {
   items?: Array<{
     description?: string;
     product_key?: string;
+    unit_key?: string;
+    tipo?: "servicio" | "producto";
     quantity?: number;
     unit_price?: number;
     iva_rate?: number; // default 0.16
@@ -24,6 +29,23 @@ type PreviewInput = {
 };
 
 const MXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+
+// Human labels for the common SAT ClaveUnidad values we set, so the resumen
+// reads "E48 Servicio" / "H87 Pieza" rather than a bare code.
+const UNIDAD_LABEL: Record<string, string> = {
+  E48: "Unidad de servicio",
+  H87: "Pieza",
+  ACT: "Actividad",
+  KGM: "Kilogramo",
+  LTR: "Litro",
+  MTR: "Metro",
+  E51: "Trabajo",
+};
+
+function unidadLabel(clave: string): string {
+  const l = UNIDAD_LABEL[clave];
+  return l ? `${clave} ${l}` : clave;
+}
 
 export async function previewTimbrar(
   raw: Record<string, unknown>,
@@ -59,7 +81,7 @@ export async function previewTimbrar(
     });
   }
 
-  // ── Validate items ────────────────────────────────────────────────────────
+  // ── Validate + build items ────────────────────────────────────────────────
   if (!input.items?.length) {
     return JSON.stringify({ error: "Faltan los conceptos (descripción, cantidad, precio) para la factura." });
   }
@@ -69,11 +91,16 @@ export async function previewTimbrar(
       return JSON.stringify({ error: "Cada concepto necesita descripción y precio unitario." });
     }
     const rate = typeof it.iva_rate === "number" ? it.iva_rate : 0.16;
+    // ClaveUnidad: explicit wins; otherwise infer from tipo. Default to E48
+    // (servicio) rather than letting Facturapi fall back to H87 "Pieza" — that
+    // default is exactly what stamped a service as a physical piece before.
+    const unitKey = it.unit_key ?? (it.tipo === "producto" ? "H87" : "E48");
     items.push({
       quantity: it.quantity ?? 1,
       product: {
         description: it.description,
-        product_key: it.product_key ?? "01010101", // genérico; idealmente el usuario lo da
+        product_key: it.product_key ?? "01010101", // genérico; el modelo debe dar uno específico
+        unit_key: unitKey,
         price: it.unit_price,
         // CRITICAL: our preview treats unit_price as the BASE (subtotal + IVA).
         // Facturapi defaults tax_included=true (price = total, backs out base),
@@ -95,9 +122,9 @@ export async function previewTimbrar(
     notes: input.notes,
   };
 
-  // ── Readiness check before we even preview ────────────────────────────────
-  const notReady = await checkStampReadiness(companyId, customer.id);
-  if (notReady && !notReady.ok) return JSON.stringify({ error: notReady.error });
+  // ── Create the Facturapi draft (borrador) — validates readiness + math ─────
+  const draft = await createDraftInvoice(payload);
+  if (!draft.ok) return JSON.stringify({ error: draft.error });
 
   // ── Build preview + totals ────────────────────────────────────────────────
   const subtotal = items.reduce((s, it) => s + it.quantity * it.product.price, 0);
@@ -107,23 +134,39 @@ export async function previewTimbrar(
   );
   const total = subtotal + iva;
   const lines = items
-    .map((it) => `• ${it.quantity} x ${it.product.description} @ ${MXN(it.product.price)}`)
+    .map(
+      (it) =>
+        `• ${it.quantity} x ${it.product.description} @ ${MXN(it.product.price)}\n` +
+        `   SAT: clave ${it.product.product_key} · unidad ${unidadLabel(it.product.unit_key ?? "E48")}`
+    )
     .join("\n");
+
+  // Tokenized, session-less link to the borrador PDF (30-min TTL).
+  const base = publicBaseUrl();
+  const pdfUrl = base
+    ? `${base}/api/facturas/draft/${draft.draftId}/pdf?companyId=${companyId}&token=${signDraftToken(companyId, draft.draftId)}`
+    : null;
+
   const preview =
+    `*PREFACTURA (borrador — aún NO timbrada)*\n` +
     `Cliente: ${customer.razonSocial} (${customer.rfc})\n` +
     `${lines}\n` +
     `Subtotal: ${MXN(subtotal)}\nIVA: ${MXN(iva)}\n*Total: ${MXN(total)}*\n` +
-    `Método: ${payload.metodoPago} · Uso: ${payload.usoCfdi}`;
+    `Método: ${payload.metodoPago} · Uso: ${payload.usoCfdi}` +
+    (pdfUrl ? `\n📄 Revisa el borrador: ${pdfUrl}` : "");
 
-  const { code } = await stagePendingTimbrar(conversationId, companyId, payload, preview);
+  const { code } = await stagePendingTimbrar(conversationId, companyId, payload, draft.draftId, preview);
 
   // The model relays this to the user. It must NOT claim it already stamped.
   return JSON.stringify({
     staged: true,
     preview,
+    prefactura_pdf: pdfUrl,
     instruccion_para_el_asistente:
-      `Muestra este resumen al usuario y pídele que confirme respondiendo con el código ${code} para timbrar, ` +
-      `o 'cancelar'. NO digas que ya se timbró — aún NO se ha timbrado. El timbrado ocurre solo cuando el usuario envía el código.`,
+      `Muestra este resumen al usuario, INCLUYE el enlace de la prefactura (PDF borrador) para que valide la ` +
+      `clasificación SAT (clave producto/servicio y unidad), y pídele que confirme respondiendo con el código ${code} ` +
+      `para timbrar, o 'cancelar'. Si la clave o la unidad están mal (p.ej. salió "Pieza" para un servicio), corrige y ` +
+      `vuelve a llamar preview_factura. NO digas que ya se timbró — aún NO se ha timbrado.`,
     codigo_confirmacion: code,
   });
 }
