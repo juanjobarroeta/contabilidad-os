@@ -40,8 +40,8 @@ const TARIFA_ANUAL_PF: TarifaVersionada[] = [
     ejercicio: 2024,
     vigenciaDesde: "2024-01-01",
     vigenciaHasta: "2024-12-31",
-    fuente: "Art. 152 LISR / Anexo 8 RMF 2024",
-    verificado: false,
+    fuente: "Art. 152 LISR / Anexo 8 RMF 2024 (DOF 29-dic-2023, fracc. II)",
+    verificado: true,
     filas: [
       { limiteInferior: 0.01, cuotaFija: 0, tasaExcedente: 0.0192 },
       { limiteInferior: 8952.5, cuotaFija: 171.88, tasaExcedente: 0.064 },
