@@ -40,6 +40,38 @@ export function verifyFileToken(
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// ── Facturapi draft (prefactura) PDF tokens ──────────────────────────────────
+// A draft invoice has no local Invoice row yet, so it can't use signFileToken
+// (scoped to an invoiceId). These sign over companyId + the Facturapi draft id
+// so the session-less /api/facturas/draft/[draftId]/pdf route can stream the
+// borrador PDF the WhatsApp bot links to before the user confirms timbrado.
+
+export function signDraftToken(companyId: string, draftId: string): string {
+  const exp = Date.now() + TTL_MS;
+  const sig = crypto
+    .createHmac("sha256", secret())
+    .update(`${companyId}.${draftId}.${exp}`)
+    .digest("base64url");
+  return `${exp}.${sig}`;
+}
+
+export function verifyDraftToken(
+  companyId: string,
+  draftId: string,
+  token: string
+): boolean {
+  const [expStr, sig] = token.split(".");
+  const exp = parseInt(expStr, 10);
+  if (!exp || !sig || Date.now() > exp) return false;
+  const expected = crypto
+    .createHmac("sha256", secret())
+    .update(`${companyId}.${draftId}.${exp}`)
+    .digest("base64url");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 /** Absolute base URL for building links (prod/staging public URL). */
 export function publicBaseUrl(): string {
   return (

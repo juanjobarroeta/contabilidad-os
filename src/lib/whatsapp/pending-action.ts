@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { stampInvoice, type StampInput, type StampResult } from "@/lib/facturas/stamp";
+import { stampDraftFromPending, discardDraft, type StampInput, type StampResult } from "@/lib/facturas/stamp";
 import { reconcileTransaction } from "@/lib/conciliacion";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,6 +22,8 @@ export type PendingAction =
       code: string;
       expiresAt: number;
       payload: StampInput;
+      /** Facturapi draft (borrador) id; stamping promotes this exact draft. */
+      draftId: string;
       preview: string;
       companyId: string;
     }
@@ -51,9 +53,10 @@ export async function stagePendingTimbrar(
   conversationId: string,
   companyId: string,
   payload: StampInput,
+  draftId: string,
   preview: string
 ): Promise<{ code: string }> {
-  return stage(conversationId, { type: "timbrar", code: genCode(), expiresAt: Date.now() + TTL_MS, payload, preview, companyId });
+  return stage(conversationId, { type: "timbrar", code: genCode(), expiresAt: Date.now() + TTL_MS, payload, draftId, preview, companyId });
 }
 
 export async function stagePendingConciliar(
@@ -105,6 +108,8 @@ export async function tryConfirmPendingAction(
   const text = body.trim().toLowerCase();
   if (/^(cancelar|cancela|no)\b/.test(text)) {
     await clearPendingAction(conversationId);
+    // Drop the throwaway Facturapi draft so cancelled prefacturas don't linger.
+    if (pa.type === "timbrar") await discardDraft(pa.companyId, pa.draftId);
     return `Cancelado. No se realizó la ${accionLabel}.`;
   }
 
@@ -126,7 +131,9 @@ export async function tryConfirmPendingAction(
   if (pa.type === "timbrar") {
     let result: StampResult;
     try {
-      result = await stampInvoice(pa.payload);
+      // Promote the borrador the user reviewed into a stamped CFDI — same draft,
+      // so what they validated is exactly what gets timbrado.
+      result = await stampDraftFromPending(pa.payload, pa.draftId);
     } catch (e) {
       console.error("[whatsapp] stamp error", e);
       return "Hubo un error al timbrar. No se generó la factura. Inténtalo de nuevo o hazlo desde la app.";

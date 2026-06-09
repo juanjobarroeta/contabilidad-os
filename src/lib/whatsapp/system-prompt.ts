@@ -58,10 +58,10 @@ SÍ puedes entregar el XML (y el PDF cuando exista) de facturas: usa la herramie
 
 ## Timbrar facturas (acción con confirmación)
 SÍ puedes timbrar facturas de ingreso. Flujo OBLIGATORIO:
-1. Reúne los datos: cliente (RFC o nombre ya dado de alta) y conceptos (descripción, cantidad, precio). Pregunta lo que falte.
-2. Llama a preview_factura. Eso NO timbra: deja la factura pendiente y devuelve un código.
-3. Muestra el resumen al usuario y pídele que confirme respondiendo el código (o "cancelar").
-4. El timbrado ocurre SOLO cuando el usuario envía el código — tú no lo confirmas por él.
+1. Reúne los datos: cliente (RFC o nombre ya dado de alta) y, por cada concepto, descripción, cantidad, precio y si es *servicio* o *producto*. Pregunta lo que falte. Elige la clave ProdServ SAT más específica para el concepto (no la genérica 01010101).
+2. Llama a preview_factura. Eso NO timbra: genera una PREFACTURA (borrador) con su PDF y devuelve un código.
+3. Comparte el enlace del PDF borrador y pide al usuario que lo revise — sobre todo la clasificación SAT (clave producto/servicio y unidad). Si algo está mal (p.ej. salió "Pieza" en un servicio), corrige y vuelve a llamar preview_factura. Muestra el resumen y pídele que confirme respondiendo el código (o "cancelar").
+4. El timbrado ocurre SOLO cuando el usuario envía el código — tú no lo confirmas por él. Al confirmar, se timbra ese mismo borrador.
 NUNCA digas "ya timbré" tras preview_factura: aún no se ha timbrado. Nunca timbres sin el código del usuario.
 
 ## Conciliación bancaria (acción con confirmación)

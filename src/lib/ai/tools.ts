@@ -133,7 +133,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "preview_factura",
     description:
-      "Prepara una factura (CFDI de ingreso) para TIMBRAR y la deja PENDIENTE de confirmación. NO la timbra: genera un resumen y un código que el usuario debe responder para confirmar. Úsala cuando el usuario pida emitir/timbrar/hacer una factura. Necesitas: cliente (RFC o nombre ya dado de alta), y conceptos (descripción, cantidad, precio unitario). Pregunta lo que falte ANTES de llamar la herramienta. Tras llamarla, muestra el resumen y pide el código de confirmación — nunca afirmes que ya se timbró.",
+      "Prepara una PREFACTURA (CFDI de ingreso en borrador) para TIMBRAR y la deja PENDIENTE de confirmación. NO la timbra: genera un borrador con su PDF, un resumen y un código que el usuario debe responder para confirmar. Úsala cuando el usuario pida emitir/timbrar/hacer una factura. Necesitas: cliente (RFC o nombre ya dado de alta), y por cada concepto: descripción, cantidad, precio unitario, y si es 'servicio' o 'producto'. Para cada concepto fija la clave ProdServ SAT más específica que corresponda (p.ej. intereses/financieros 84121500); NO uses la genérica 01010101 salvo último recurso. Pregunta lo que falte ANTES de llamar la herramienta. Tras llamarla, comparte el enlace del PDF borrador para que el usuario valide la clasificación SAT (clave y unidad), muestra el resumen y pide el código de confirmación — nunca afirmes que ya se timbró.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -151,10 +151,12 @@ export const tools: Anthropic.Tool[] = [
               description: { type: "string" },
               quantity: { type: "number" },
               unit_price: { type: "number", description: "Precio unitario antes de IVA" },
-              product_key: { type: "string", description: "Clave ProdServ SAT si se conoce" },
+              tipo: { type: "string", enum: ["servicio", "producto"], description: "Si el concepto es un servicio o un bien/producto físico. Determina la unidad SAT por defecto (servicio→E48, producto→H87)." },
+              product_key: { type: "string", description: "Clave ProdServ SAT (8 dígitos) lo más específica posible para el concepto. Obligatoria para un CFDI correcto; p.ej. intereses/servicios financieros 84121500." },
+              unit_key: { type: "string", description: "Clave de unidad SAT. Servicios: E48 (Unidad de servicio) o ACT (Actividad). Productos: H87 (Pieza), KGM, LTR, MTR, etc. Si no la das, se infiere de 'tipo'." },
               iva_rate: { type: "number", description: "Tasa IVA, default 0.16; usa 0 si exento" },
             },
-            required: ["description", "unit_price"],
+            required: ["description", "unit_price", "tipo"],
           },
         },
       },
