@@ -243,8 +243,8 @@ export default function InicioPage() {
 
             <Card className="rounded-card border-cos-line p-5 shadow-card">
               <span className={LBL}>Tu mes en números</span>
-              <div className="mt-3.5 grid grid-cols-3 gap-3.5">
-                <div className="flex flex-col gap-1">
+              <div className="mt-3.5 grid grid-cols-1 gap-3.5 min-[460px]:grid-cols-3">
+                <div className="flex flex-row items-baseline justify-between gap-2 min-[460px]:flex-col min-[460px]:items-start min-[460px]:justify-start min-[460px]:gap-1">
                   <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-medium text-cos-ink-faint">
                     <ArrowUpRight className="h-3.5 w-3.5" /> Te pagaron
                   </span>
@@ -253,7 +253,7 @@ export default function InicioPage() {
                     {data.kpis.facturasEmitidas} factura{data.kpis.facturasEmitidas === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-row items-baseline justify-between gap-2 min-[460px]:flex-col min-[460px]:items-start min-[460px]:justify-start min-[460px]:gap-1">
                   <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-medium text-cos-ink-faint">
                     <ArrowDownLeft className="h-3.5 w-3.5" /> Gastaste
                   </span>
@@ -262,7 +262,7 @@ export default function InicioPage() {
                     {data.kpis.facturasRecibidas} factura{data.kpis.facturasRecibidas === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-row items-baseline justify-between gap-2 min-[460px]:flex-col min-[460px]:items-start min-[460px]:justify-start min-[460px]:gap-1">
                   <span className="text-[12.5px] font-medium text-cos-ink-faint">Te queda</span>
                   <Money value={data.kpis.utilidadBruta} size={19} sign />
                   <span className="text-[12px] text-cos-ink-faint">antes de impuestos</span>
