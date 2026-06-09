@@ -1,90 +1,73 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import { Search, Plus, Download, X, Info, Loader2, AlertTriangle } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import {
-  FileText, Plus, Download, XCircle, Loader2,
-  AlertCircle, X, FileCode2, Archive, ChevronRight, Tag,
-} from "lucide-react";
-import { classifyEgreso } from "@/lib/contabilidad/classify-egreso";
+import { Card, Money, Button } from "@/components/ui";
 
+// ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
   id: string;
   uuid: string | null;
   fecha: string;
   tipo: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO";
-  status: string;
-  serie: string | null;
-  folio: string | null;
-  moneda: string;
-  total: number;
+  status: string; // DRAFT | STAMPED | CANCELLED
   subtotal: number;
+  total: number;
   totalImpuestos: number;
-  formaPago: string;
-  metodoPago: string;
-  usoCfdi: string;
   notas: string | null;
   facturapiId: string | null;
-  overrideCuenta: string | null;
   customer: { razonSocial: string; rfc: string } | null;
-  items: {
-    id: string;
-    descripcion: string;
-    cantidad: number;
-    valorUnitario: number;
-    importe: number;
-    claveProdServ: string;
-    claveUnidad: string;
-  }[];
+}
+interface Resumen { timbradas: number; totalFacturado: number; ivaCobrado: number }
+
+type FilterKey = "todas" | "ingreso" | "egreso" | "nomina" | "pago" | "cancelada";
+
+// CFDI tipo → plain-language presentation (Contia palette).
+const TIPO_META: Record<string, { label: string; plain: string; badge: string }> = {
+  ingreso:   { label: "Ingreso",    plain: "Te pagaron",          badge: "bg-cos-jade-tint text-cos-jade-ink" },
+  egreso:    { label: "Gasto",      plain: "Pagaste",             badge: "bg-cos-red-tint text-cos-red-ink" },
+  nomina:    { label: "Nómina",     plain: "Sueldo",              badge: "bg-cos-brand-tint text-cos-brand-ink" },
+  pago:      { label: "Pago (REP)", plain: "Comprobante de pago", badge: "bg-cos-slate-tint text-cos-ink-soft" },
+  traslado:  { label: "Traslado",   plain: "Traslado",            badge: "bg-cos-slate-tint text-cos-ink-soft" },
+  cancelada: { label: "Cancelada",  plain: "Cancelada",           badge: "bg-cos-red-tint text-cos-red-ink" },
+};
+
+/** The filter/badge key for an invoice: cancelled wins, else its tipo. */
+function keyOf(inv: Invoice): FilterKey | "traslado" {
+  if (inv.status === "CANCELLED") return "cancelada";
+  return inv.tipo.toLowerCase() as FilterKey | "traslado";
+}
+function estadoOf(inv: Invoice): string {
+  if (inv.status === "CANCELLED") return "Cancelada";
+  if (inv.status === "DRAFT") return "Borrador";
+  return inv.tipo === "EGRESO" ? "Recibida" : "Emitida";
+}
+function fmtFecha(iso: string): string {
+  const MES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, "0")} ${MES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-const TIPO_LABEL: Record<string, string> = {
-  INGRESO:  "Ingreso",
-  EGRESO:   "Egreso",
-  NOMINA:   "Nómina",
-  PAGO:     "Pago (REP)",
-  TRASLADO: "Traslado",
-};
-const TIPO_COLOR: Record<string, string> = {
-  INGRESO:  "bg-green-100 text-green-700",
-  EGRESO:   "bg-red-100 text-red-700",
-  NOMINA:   "bg-indigo-100 text-indigo-700",
-  PAGO:     "bg-blue-100 text-blue-700",
-  TRASLADO: "bg-amber-100 text-amber-700",
-};
+const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint";
+const FILTERS: { k: FilterKey; t: string }[] = [
+  { k: "todas", t: "Todas" },
+  { k: "ingreso", t: "Te pagaron" },
+  { k: "egreso", t: "Pagaste" },
+  { k: "nomina", t: "Nómina" },
+  { k: "pago", t: "Pagos" },
+  { k: "cancelada", t: "Canceladas" },
+];
 
-type TipoFilter = "all" | "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "CANCELLED";
-
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT: "Borrador",
-  STAMPED: "Timbrada",
-  CANCELLED: "Cancelada",
-};
-const STATUS_COLOR: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-600",
-  STAMPED: "bg-green-100 text-green-700",
-  CANCELLED: "bg-red-100 text-red-600",
-};
-
-function DownloadButton({
-  invoiceId,
-  format,
-  label,
-  icon,
-}: {
-  invoiceId: string;
-  format: "pdf" | "xml" | "zip";
-  label: string;
-  icon: React.ReactNode;
-}) {
+// ── XML / PDF download (reuses the existing per-invoice endpoint) ─────────────
+function DownloadBtn({ id, format }: { id: string; format: "xml" | "pdf" }) {
   const [loading, setLoading] = useState(false);
-
-  async function handleDownload() {
+  async function go() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/facturas/${invoiceId}/download?format=${format}`);
-      if (!res.ok) throw new Error("Error al descargar");
+      const res = await fetch(`/api/facturas/${id}/download?format=${format}`);
+      if (!res.ok) throw new Error();
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -98,686 +81,334 @@ function DownloadButton({
       setLoading(false);
     }
   }
-
   return (
-    <button
-      onClick={handleDownload}
-      disabled={loading}
-      className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors text-left disabled:opacity-50"
-    >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin shrink-0" /> : icon}
-      {label}
-    </button>
+    <Button variant="soft" size="md" onClick={go} disabled={loading} className="flex-1">
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+      {format.toUpperCase()}
+    </Button>
   );
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function FacturasPage() {
   const { activeCompany } = useCompany();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [resumen, setResumen] = useState<Resumen | null>(null);
   const [loading, setLoading] = useState(false);
-  const [cancelId, setCancelId] = useState<string | null>(null);
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelError, setCancelError] = useState("");
-  const [cancelMotivo, setCancelMotivo] = useState("02");
-  const [cancelSustituye, setCancelSustituye] = useState("");
-  const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
-  const [tipoFilter, setTipoFilter] = useState<TipoFilter>("all");
+  const [filter, setFilter] = useState<FilterKey>("todas");
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState<Invoice | null>(null);
+  const [toast, setToast] = useState("");
 
-  const fetchInvoices = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/facturas?companyId=${activeCompany.id}`);
-      const data = await res.json();
-      setInvoices(data);
+      const [list, res] = await Promise.all([
+        fetch(`/api/facturas?companyId=${activeCompany.id}&take=200`).then((r) => r.json()),
+        fetch(`/api/facturas/resumen?companyId=${activeCompany.id}`).then((r) => r.json()),
+      ]);
+      setInvoices(Array.isArray(list) ? list : []);
+      setResumen(res);
     } finally {
       setLoading(false);
     }
   }, [activeCompany]);
 
-  useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  async function handleCancel() {
-    if (!cancelId) return;
-    if (cancelMotivo === "01" && !cancelSustituye.trim()) {
-      setCancelError("El motivo 01 requiere el UUID de la factura que sustituye.");
-      return;
-    }
-    setCancelling(true);
-    setCancelError("");
-    try {
-      const res = await fetch(`/api/facturas/${cancelId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          motivo: cancelMotivo,
-          ...(cancelMotivo === "01" ? { sustituyeUuid: cancelSustituye.trim() } : {}),
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "Error al cancelar");
-      }
-      setCancelId(null);
-      setDetailInvoice(null);
-      setCancelMotivo("02");
-      setCancelSustituye("");
-      fetchInvoices();
-    } catch (err) {
-      setCancelError(err instanceof Error ? err.message : "Error inesperado");
-    } finally {
-      setCancelling(false);
-    }
+  function showToast(m: string) {
+    setToast(m);
+    setTimeout(() => setToast(""), 2800);
   }
 
-  // Filter.
-  // "CANCELLED" is a status-level filter (any tipo); all other filters are
-  // tipo-level and EXCLUDE cancelled by default so the main tabs show
-  // only fiscally valid CFDIs (matches how SAT's own export behaves).
-  const filtered =
-    tipoFilter === "CANCELLED"
-      ? invoices.filter((i) => i.status === "CANCELLED")
-      : tipoFilter === "all"
-        ? invoices.filter((i) => i.status !== "CANCELLED")
-        : invoices.filter((i) => i.tipo === tipoFilter && i.status !== "CANCELLED");
+  // Counts reflect the loaded set (so chips match the table).
+  const counts: Record<FilterKey, number> = {
+    todas: invoices.length,
+    ingreso: invoices.filter((i) => keyOf(i) === "ingreso").length,
+    egreso: invoices.filter((i) => keyOf(i) === "egreso").length,
+    nomina: invoices.filter((i) => keyOf(i) === "nomina").length,
+    pago: invoices.filter((i) => keyOf(i) === "pago").length,
+    cancelada: invoices.filter((i) => keyOf(i) === "cancelada").length,
+  };
 
-  // Totals summary (across filtered)
-  const stamped = filtered.filter((i) => i.status === "STAMPED");
-  const totalMes = stamped.reduce((s, i) => s + i.total, 0);
-  const ivaTotal = stamped.reduce((s, i) => s + i.totalImpuestos, 0);
-
-  // Counts per tipo (always from non-cancelled full set)
-  const tipoCounts = invoices.reduce(
-    (acc, i) => {
-      if (i.status !== "CANCELLED") acc[i.tipo] = (acc[i.tipo] ?? 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
-  const cancelledCount = invoices.filter((i) => i.status === "CANCELLED").length;
-
-  if (!activeCompany) {
-    return (
-      <div className="p-8 text-muted-foreground text-sm">
-        Selecciona una empresa para ver sus facturas.
-      </div>
+  let rows = invoices.filter((i) => filter === "todas" || keyOf(i) === filter);
+  if (q.trim()) {
+    const s = q.toLowerCase();
+    rows = rows.filter(
+      (i) =>
+        (i.customer?.razonSocial ?? "").toLowerCase().includes(s) ||
+        (i.customer?.rfc ?? "").toLowerCase().includes(s) ||
+        (i.uuid ?? "").toLowerCase().includes(s)
     );
   }
 
+  if (!activeCompany) {
+    return <div className="p-8 text-sm text-cos-ink-faint">Selecciona una empresa.</div>;
+  }
+
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-[1000px] px-4 py-6 sm:px-8 sm:py-8">
+      {/* header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Facturas (CFDI)</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{activeCompany.razonSocial}</p>
+          <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Facturas</h1>
+          <p className="mt-1.5 max-w-[60ch] text-[15px] text-cos-ink-soft">
+            Tus comprobantes fiscales (CFDI) — lo que emites y lo que recibes.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <a
-            href={`/api/facturas/export?companyId=${activeCompany.id}${tipoFilter !== "all" ? `&tipo=${tipoFilter}` : ""}`}
-            title="Descargar todas las facturas filtradas en Excel (CSV UTF-8)"
-            className="flex items-center gap-2 border border-border px-4 py-2 rounded-md text-sm font-medium hover:bg-accent transition-colors"
-          >
-            <Download className="h-4 w-4" />
-            Descargar Excel
+        <div className="flex gap-2.5">
+          <a href={`/api/facturas/export?companyId=${activeCompany.id}`}>
+            <Button variant="soft" size="md"><Download className="h-4 w-4" /> Excel</Button>
           </a>
-          <a
-            href="/facturas/nueva"
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Nueva factura
-          </a>
+          <Link href="/facturas/nueva">
+            <Button variant="brand" size="md"><Plus className="h-4 w-4" /> Nueva factura</Button>
+          </Link>
         </div>
       </div>
 
-      {/* Summary cards */}
-      {stamped.length > 0 && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white border border-border rounded-xl p-4 shadow-sm">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Facturas timbradas</p>
-            <p className="text-2xl font-bold">{stamped.length}</p>
-          </div>
-          <div className="bg-white border border-border rounded-xl p-4 shadow-sm">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total facturado</p>
-            <p className="text-2xl font-bold">{formatCurrency(totalMes)}</p>
-          </div>
-          <div className="bg-white border border-border rounded-xl p-4 shadow-sm">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">IVA cobrado</p>
-            <p className="text-2xl font-bold">{formatCurrency(ivaTotal)}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Tipo filter pills */}
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {([
-          ["all",       "Todos",        invoices.length - cancelledCount, "default"],
-          ["INGRESO",   "Ingresos",     tipoCounts.INGRESO ?? 0,           "default"],
-          ["EGRESO",    "Egresos",      tipoCounts.EGRESO ?? 0,            "default"],
-          ["NOMINA",    "Nómina",       tipoCounts.NOMINA ?? 0,            "default"],
-          ["PAGO",      "Pagos (REP)",  tipoCounts.PAGO ?? 0,              "default"],
-          ["CANCELLED", "Canceladas",   cancelledCount,                    "danger"],
-        ] as const).map(([f, label, count, tone]) => {
-          const active = tipoFilter === f;
-          const dangerTone = tone === "danger";
-          const baseCls = active
-            ? dangerTone
-              ? "bg-red-600 text-white"
-              : "bg-primary text-primary-foreground"
-            : dangerTone
-              ? "bg-red-50 text-red-700 hover:bg-red-100"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200";
-          return (
-            <button
-              key={f}
-              onClick={() => setTipoFilter(f)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${baseCls}`}
-            >
-              {label}{count > 0 ? ` (${count})` : ""}
-            </button>
-          );
-        })}
+      {/* stat cards */}
+      <div className="mt-4 grid grid-cols-1 gap-4 min-[560px]:grid-cols-3">
+        <Card className="rounded-card border-cos-line p-5 shadow-card">
+          <span className={LBL}>Facturas timbradas</span>
+          <div className="my-1 text-[28px] font-semibold tracking-[-0.02em] text-cos-ink">{resumen?.timbradas ?? "—"}</div>
+          <span className="text-[12.5px] text-cos-ink-faint">este año</span>
+        </Card>
+        <Card className="rounded-card border-cos-line p-5 shadow-card">
+          <span className={LBL}>Total facturado</span>
+          <div className="my-1"><Money value={resumen?.totalFacturado ?? 0} size={26} /></div>
+          <span className="text-[12.5px] text-cos-ink-faint">emitido este año</span>
+        </Card>
+        <Card className="rounded-card border-cos-line p-5 shadow-card">
+          <span className={LBL}>IVA cobrado</span>
+          <div className="my-1"><Money value={resumen?.ivaCobrado ?? 0} size={26} /></div>
+          <span className="text-[12.5px] text-cos-ink-faint">trasladado a clientes</span>
+        </Card>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-border overflow-hidden shadow-sm">
+      {/* search */}
+      <div className="mt-[18px] flex items-center gap-2.5 rounded-control border border-cos-line bg-white px-3.5 text-cos-ink-faint">
+        <Search className="h-[18px] w-[18px]" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por nombre o RFC…"
+          className="flex-1 border-0 bg-transparent py-3 text-[14.5px] text-cos-ink outline-none"
+        />
+      </div>
+
+      {/* filter chips */}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {FILTERS.map((f) => (
+          <button
+            key={f.k}
+            onClick={() => setFilter(f.k)}
+            className={
+              "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium transition-colors " +
+              (filter === f.k
+                ? "border-cos-brand bg-cos-brand text-white"
+                : "border-cos-line bg-white text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")
+            }
+          >
+            {f.t} <span className="font-mono text-[12px] opacity-80">{counts[f.k]}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* table */}
+      <Card className="mt-3 overflow-hidden rounded-card border-cos-line shadow-card">
+        <div className="grid grid-cols-[108px_1fr_130px] gap-3 border-b border-cos-line px-[18px] py-3.5 text-[12px] font-semibold uppercase tracking-[0.05em] text-cos-ink-faint max-[860px]:grid-cols-[90px_1fr_auto]">
+          <span>Tipo</span>
+          <span>Contraparte</span>
+          <span className="text-right">Total</span>
+        </div>
+
         {loading ? (
-          <div className="p-8 flex items-center justify-center gap-2 text-muted-foreground text-sm">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Cargando facturas...
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-cos-ink-faint">
+            <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="p-12 text-center">
-            <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
-            <p className="font-medium">No hay facturas aún</p>
-            <p className="text-muted-foreground text-sm mt-1">Emite tu primera factura CFDI 4.0</p>
-            <a
-              href="/facturas/nueva"
-              className="mt-4 inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4" /> Nueva factura
-            </a>
-          </div>
+        ) : rows.length === 0 ? (
+          <div className="px-10 py-10 text-center text-cos-ink-faint">No hay facturas con ese filtro.</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Tipo</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden lg:table-cell">UUID / Folio</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Contraparte</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Fecha</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">Pago</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">Subtotal</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">Total</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Estado</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((inv) => {
-                const isCancelled = inv.status === "CANCELLED";
-                return (
-                  <tr
-                    key={inv.id}
-                    className={`border-b border-border last:border-0 transition-colors cursor-pointer ${
-                      isCancelled
-                        ? "bg-red-50/40 text-muted-foreground hover:bg-red-50"
-                        : "hover:bg-gray-50"
-                    }`}
-                    onClick={() => setDetailInvoice(inv)}
-                  >
-                    <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${TIPO_COLOR[inv.tipo] ?? "bg-gray-100 text-gray-600"}`}>
-                        {TIPO_LABEL[inv.tipo] ?? inv.tipo}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden lg:table-cell">
-                      {inv.folio ? `${inv.serie ?? ""}${inv.folio}` : inv.uuid ? inv.uuid.substring(0, 8) + "…" : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className={`font-medium truncate max-w-[280px] ${isCancelled ? "line-through" : ""}`}>{inv.customer?.razonSocial ?? "—"}</p>
-                      <p className="text-xs text-muted-foreground">{inv.customer?.rfc ?? ""}</p>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDate(inv.fecha)}</td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell">
-                      <span>{inv.formaPago}</span>
-                      <span className="ml-1 bg-gray-100 px-1.5 py-0.5 rounded text-xs">{inv.metodoPago}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-muted-foreground hidden md:table-cell">{formatCurrency(inv.subtotal)}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${isCancelled ? "line-through" : ""}`}>{formatCurrency(inv.total)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[inv.status] ?? "bg-gray-100 text-gray-600"}`}>
-                        {STATUS_LABEL[inv.status] ?? inv.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* ── Detail Drawer ── */}
-      {detailInvoice && (
-        <div className="fixed inset-0 z-50 flex">
-          {/* Backdrop */}
-          <div
-            className="flex-1 bg-black/40"
-            onClick={() => setDetailInvoice(null)}
-          />
-          {/* Panel */}
-          <div className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-y-auto">
-            {/* Drawer header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div className="min-w-0 flex-1">
-                <h2 className="font-semibold text-base">{TIPO_LABEL[detailInvoice.tipo] ?? "Factura"}</h2>
-                <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
-                  {detailInvoice.uuid ?? "Sin UUID"}
-                </p>
-              </div>
+          rows.map((inv) => {
+            const k = keyOf(inv);
+            const meta = TIPO_META[k];
+            const signed = k === "ingreso" || k === "egreso";
+            const signVal = k === "egreso" ? -inv.total : inv.total;
+            return (
               <button
-                onClick={() => setDetailInvoice(null)}
-                className="p-1.5 rounded hover:bg-accent text-muted-foreground shrink-0"
+                key={inv.id}
+                onClick={() => setSel(inv)}
+                className="grid w-full grid-cols-[108px_1fr_130px] items-center gap-3 border-t border-cos-line-soft px-[18px] py-3.5 text-left first:border-t-0 hover:bg-cos-paper max-[860px]:grid-cols-[90px_1fr_auto]"
               >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="p-5 flex flex-col gap-5">
-              {/* Tipo + Status badges */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${TIPO_COLOR[detailInvoice.tipo] ?? "bg-gray-100 text-gray-600"}`}>
-                  {TIPO_LABEL[detailInvoice.tipo] ?? detailInvoice.tipo}
-                </span>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLOR[detailInvoice.status] ?? "bg-gray-100 text-gray-600"}`}>
-                  {STATUS_LABEL[detailInvoice.status] ?? detailInvoice.status}
-                </span>
-                {detailInvoice.usoCfdi === "CN01" && (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                    Recibo de nómina
+                <span>
+                  <span className={`inline-block rounded-[7px] px-[9px] py-[3px] text-[12px] font-semibold ${meta.badge}`}>
+                    {meta.label}
                   </span>
-                )}
-              </div>
-
-              {/* Counterparty */}
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                  {detailInvoice.tipo === "EGRESO" || detailInvoice.tipo === "PAGO" ? "Proveedor" :
-                   detailInvoice.tipo === "NOMINA" ? "Empleado" : "Cliente / Receptor"}
-                </p>
-                <p className="font-medium">{detailInvoice.customer?.razonSocial ?? "—"}</p>
-                <p className="text-sm text-muted-foreground font-mono">{detailInvoice.customer?.rfc ?? ""}</p>
-              </div>
-
-              {/* Fields grid */}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground">Fecha</p>
-                  <p className="font-medium">{formatDate(detailInvoice.fecha)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Folio / Serie</p>
-                  <p className="font-medium font-mono">
-                    {detailInvoice.folio ? `${detailInvoice.serie ?? ""}${detailInvoice.folio}` : "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Forma de pago</p>
-                  <p className="font-medium">{detailInvoice.formaPago}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Método de pago</p>
-                  <p className="font-medium">{detailInvoice.metodoPago}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Uso CFDI</p>
-                  <p className="font-medium">{detailInvoice.usoCfdi}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Moneda</p>
-                  <p className="font-medium">{detailInvoice.moneda}</p>
-                </div>
-              </div>
-
-              {/* UUID full */}
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">UUID</p>
-                <p className="font-mono text-xs break-all bg-gray-50 border border-border rounded p-2">
-                  {detailInvoice.uuid ?? "—"}
-                </p>
-              </div>
-
-              {/* Classification override (only for EGRESOs — ingresos always go to 401.x) */}
-              {detailInvoice.tipo === "EGRESO" && (
-                <ClassificationOverride
-                  invoice={detailInvoice}
-                  onUpdated={(updated) => {
-                    setDetailInvoice((d) => d && d.id === updated.id ? { ...d, overrideCuenta: updated.overrideCuenta } : d);
-                    // Also update the list entry so the badge updates without a refetch
-                    setInvoices((list) =>
-                      list.map((i) => (i.id === updated.id ? { ...i, overrideCuenta: updated.overrideCuenta } : i))
-                    );
-                  }}
-                />
-              )}
-
-              {/* Conceptos */}
-              {detailInvoice.items.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Conceptos</p>
-                  <div className="border border-border rounded-lg overflow-hidden">
-                    {detailInvoice.items.map((item, i) => {
-                      const classification = detailInvoice.tipo === "EGRESO"
-                        ? classifyEgreso(item.claveProdServ)
-                        : null;
-                      return (
-                        <div
-                          key={item.id}
-                          className={`px-3 py-2.5 text-sm ${i < detailInvoice.items.length - 1 ? "border-b border-border" : ""}`}
-                        >
-                          <p className="font-medium">{item.descripcion}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {item.cantidad} × {formatCurrency(item.valorUnitario)}
-                            <span className="ml-2 font-medium text-foreground">{formatCurrency(item.importe)}</span>
-                          </p>
-                          <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                            {item.claveProdServ} · {item.claveUnidad}
-                          </p>
-                          {classification && (
-                            <div className="mt-1.5 inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
-                              <Tag className="h-3 w-3" />
-                              <span className="font-mono">{classification.cuenta}</span>
-                              <span>· {classification.label}</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {detailInvoice.tipo === "EGRESO" && detailInvoice.items.length > 0 && (
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Clasificación sugerida por clave del SAT. Se aplica en el cierre mensual.
-                    </p>
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[14.5px] font-medium text-cos-ink">{inv.customer?.razonSocial ?? "—"}</span>
+                  <span className="mt-0.5 block font-mono text-[12px] text-cos-ink-faint">{inv.customer?.rfc ?? "—"}</span>
+                </span>
+                <span className="text-right">
+                  {signed ? (
+                    <Money value={signVal} sign size={15} />
+                  ) : (
+                    <Money value={inv.total} size={15} muted />
                   )}
-                </div>
-              )}
-
-              {/* Totals */}
-              <div className="border border-border rounded-lg p-3 text-sm space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>{formatCurrency(detailInvoice.subtotal)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">IVA</span>
-                  <span>{formatCurrency(detailInvoice.totalImpuestos)}</span>
-                </div>
-                <div className="flex justify-between font-semibold border-t border-border pt-1.5">
-                  <span>Total</span>
-                  <span>{formatCurrency(detailInvoice.total)}</span>
-                </div>
-              </div>
-
-              {/* Notes */}
-              {detailInvoice.notas && (
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Notas</p>
-                  <p className="text-sm">{detailInvoice.notas}</p>
-                </div>
-              )}
-
-              {/* Downloads */}
-              {detailInvoice.status === "STAMPED" && detailInvoice.facturapiId && (
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Descargas</p>
-                  <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
-                    <DownloadButton
-                      invoiceId={detailInvoice.id}
-                      format="pdf"
-                      label="Descargar PDF"
-                      icon={<Download className="h-4 w-4 text-red-500 shrink-0" />}
-                    />
-                    <DownloadButton
-                      invoiceId={detailInvoice.id}
-                      format="xml"
-                      label="Descargar XML"
-                      icon={<FileCode2 className="h-4 w-4 text-blue-500 shrink-0" />}
-                    />
-                    <DownloadButton
-                      invoiceId={detailInvoice.id}
-                      format="zip"
-                      label="Descargar ZIP (PDF + XML)"
-                      icon={<Archive className="h-4 w-4 text-purple-500 shrink-0" />}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Cancel */}
-              {detailInvoice.status === "STAMPED" && (
-                <button
-                  onClick={() => { setCancelId(detailInvoice.id); setCancelError(""); }}
-                  className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-md transition-colors w-full"
-                >
-                  <XCircle className="h-4 w-4" />
-                  Cancelar CFDI
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Cancel Confirm Modal ── */}
-      {cancelId && (
-        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                  <AlertCircle className="h-5 w-5 text-red-600" />
-                </div>
-                <h2 className="text-base font-semibold">¿Cancelar CFDI?</h2>
-              </div>
-              <button onClick={() => setCancelId(null)} className="p-1.5 rounded hover:bg-accent text-muted-foreground">
-                <X className="h-4 w-4" />
+                  <span className="mt-0.5 block text-[12px] text-cos-ink-faint">{fmtFecha(inv.fecha)}</span>
+                </span>
               </button>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Se enviará la solicitud de cancelación al SAT a través de Facturapi. Solo se marcará como cancelada si el SAT lo confirma.
-            </p>
+            );
+          })
+        )}
+      </Card>
 
-            <label className="block text-xs font-medium mb-1.5">Motivo de cancelación (SAT)</label>
-            <select
-              value={cancelMotivo}
-              onChange={(e) => setCancelMotivo(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white mb-3"
-            >
-              <option value="02">02 · Comprobante emitido con errores sin relación</option>
-              <option value="01">01 · Comprobante emitido con errores con relación (sustitución)</option>
-              <option value="03">03 · No se llevó a cabo la operación</option>
-              <option value="04">04 · Operación nominativa en factura global</option>
-            </select>
+      {sel && <FacturaModal inv={sel} onClose={() => setSel(null)} onCancelled={() => { setSel(null); fetchData(); showToast("Factura cancelada"); }} />}
 
-            {cancelMotivo === "01" && (
-              <div className="mb-3">
-                <label className="block text-xs font-medium mb-1.5">UUID de la factura que la sustituye</label>
-                <input
-                  value={cancelSustituye}
-                  onChange={(e) => setCancelSustituye(e.target.value)}
-                  placeholder="Folio fiscal del CFDI nuevo"
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono uppercase"
-                />
-                <p className="text-[11px] text-muted-foreground mt-1">Emite primero el CFDI corregido y pega aquí su UUID.</p>
-              </div>
-            )}
-
-            {cancelError && (
-              <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 text-sm text-red-700 mb-4">
-                {cancelError}
-              </div>
-            )}
-            <div className="flex gap-3">
-              <button
-                onClick={handleCancel}
-                disabled={cancelling}
-                className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-              >
-                {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
-                Cancelar CFDI
-              </button>
-              <button
-                onClick={() => setCancelId(null)}
-                className="flex-1 px-4 py-2 rounded-md text-sm border border-border hover:bg-accent"
-              >
-                Mantener
-              </button>
-            </div>
-          </div>
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-cos-ink px-5 py-3 text-sm font-medium text-white shadow-lg">
+          {toast}
         </div>
       )}
     </div>
   );
 }
 
-// ── Classification override (small inline editor) ──────────────────────────
-function ClassificationOverride({
-  invoice,
-  onUpdated,
-}: {
-  invoice: Invoice;
-  onUpdated: (updated: { id: string; overrideCuenta: string | null }) => void;
-}) {
-  // Current effective classification (auto from first item, or manual override)
-  const auto = invoice.items[0]
-    ? classifyEgreso(invoice.items[0].claveProdServ)
-    : { cuenta: "601.99", label: "Otros gastos" };
-  const effective = invoice.overrideCuenta ?? auto.cuenta;
-  const isOverridden = !!invoice.overrideCuenta;
+// ── Detail modal (+ Cancelar CFDI, preserved from the old screen) ─────────────
+function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: () => void; onCancelled: () => void }) {
+  const k = keyOf(inv);
+  const meta = TIPO_META[k];
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [motivo, setMotivo] = useState("02");
+  const [sustituye, setSustituye] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(effective);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  // Only emitted-and-stamped CFDIs we own can be cancelled at the SAT.
+  const canCancel = inv.status === "STAMPED" && inv.tipo === "INGRESO" && !!inv.facturapiId;
+  const nota = k === "pago" ? "Complemento de pago (REP)" : inv.notas;
 
-  async function save() {
-    setSaving(true);
-    setError("");
-    try {
-      const res = await fetch(`/api/facturas/${invoice.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ overrideCuenta: value.trim() || null }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error ?? "Error");
-      }
-      const updated = await res.json();
-      onUpdated({ id: updated.id, overrideCuenta: updated.overrideCuenta });
-      setEditing(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
-    } finally {
-      setSaving(false);
+  async function doCancel() {
+    if (motivo === "01" && !sustituye.trim()) {
+      setErr("El motivo 01 requiere el UUID de la factura que sustituye.");
+      return;
     }
-  }
-
-  async function clearOverride() {
-    setSaving(true);
-    setError("");
+    setBusy(true);
+    setErr("");
     try {
-      const res = await fetch(`/api/facturas/${invoice.id}`, {
-        method: "PATCH",
+      const res = await fetch(`/api/facturas/${inv.id}`, {
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ overrideCuenta: null }),
+        body: JSON.stringify({ motivo, ...(motivo === "01" ? { sustituyeUuid: sustituye.trim() } : {}) }),
       });
-      if (!res.ok) throw new Error();
-      const updated = await res.json();
-      onUpdated({ id: updated.id, overrideCuenta: updated.overrideCuenta });
-      setValue(auto.cuenta);
-      setEditing(false);
-    } catch {
-      setError("Error");
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error al cancelar");
+      onCancelled();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error al cancelar");
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   }
 
   return (
-    <div className="border border-border rounded-lg p-3 bg-gray-50/50">
-      <div className="flex items-center justify-between mb-1">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Clasificación contable
-        </p>
-        {!editing && (
-          <button
-            onClick={() => { setEditing(true); setValue(effective); }}
-            className="text-xs text-primary hover:underline"
-          >
-            Editar
+    <div
+      className="fixed inset-0 z-[60] grid place-items-center bg-[oklch(0.2_0.02_258_/_0.45)] p-[18px]"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[440px] rounded-[18px] bg-white p-6 shadow-[0_30px_60px_-20px_oklch(0.2_0.05_258_/_0.5)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <span className={`inline-block rounded-[7px] px-[9px] py-[3px] text-[12px] font-semibold ${meta.badge}`}>{meta.label}</span>
+            <span className="ml-2.5 text-[13px] text-cos-ink-soft">{meta.plain}</span>
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-control text-cos-ink-soft hover:bg-cos-paper">
+            <X className="h-5 w-5" />
           </button>
-        )}
-      </div>
-
-      {!editing ? (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono text-sm">{effective}</span>
-          <span className="text-xs text-muted-foreground">· {isOverridden ? "manual" : auto.label}</span>
-          {isOverridden && (
-            <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-              override
-            </span>
-          )}
         </div>
-      ) : (
-        <div className="space-y-2">
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="601.15"
-            autoFocus
-            className="w-full px-2 py-1 border border-border rounded text-sm font-mono"
-          />
-          <p className="text-[10px] text-muted-foreground">
-            Código SAT de la subcuenta (ej. <code>601.02</code> Honorarios, <code>601.15</code> Combustibles).
-            Debe existir en tu catálogo.
+
+        <h3 className="mt-4 text-[20px] font-semibold leading-tight tracking-[-0.02em] text-cos-ink">
+          {inv.customer?.razonSocial ?? "—"}
+        </h3>
+        <p className="font-mono text-[13px] text-cos-ink-faint">
+          {inv.customer?.rfc ?? "—"} · {estadoOf(inv)} · {fmtFecha(inv.fecha)}
+        </p>
+
+        {nota && (
+          <p className="mt-3 flex items-center gap-1.5 rounded-[10px] bg-cos-amber-tint px-3 py-2.5 text-[13px] text-cos-amber-ink">
+            <Info className="h-3.5 w-3.5" /> {nota}
           </p>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <div className="flex gap-2">
-            <button
-              onClick={save}
-              disabled={saving || !value.trim()}
-              className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded font-medium disabled:opacity-50 flex items-center gap-1"
-            >
-              {saving && <Loader2 className="h-3 w-3 animate-spin" />}
-              Guardar
-            </button>
-            {isOverridden && (
-              <button
-                onClick={clearOverride}
-                disabled={saving}
-                className="text-xs border border-border px-3 py-1.5 rounded font-medium"
-              >
-                Usar automática
-              </button>
-            )}
-            <button
-              onClick={() => { setEditing(false); setValue(effective); setError(""); }}
-              disabled={saving}
-              className="text-xs text-muted-foreground px-2 py-1.5"
-            >
-              Cancelar
-            </button>
+        )}
+
+        <div className="mt-[18px] border-t border-cos-line-soft">
+          <div className="flex justify-between border-b border-cos-line-soft py-2.5 text-[14px] text-cos-ink-soft">
+            <span>Subtotal</span><Money value={inv.subtotal} size={15} weight={500} />
+          </div>
+          <div className="flex justify-between border-b border-cos-line-soft py-2.5 text-[14px] text-cos-ink-soft">
+            <span>IVA / impuestos</span><Money value={inv.totalImpuestos} size={15} weight={500} />
+          </div>
+          <div className="flex justify-between py-2.5 text-[14px] font-semibold text-cos-ink">
+            <span>Total</span><Money value={inv.total} size={18} weight={700} />
           </div>
         </div>
-      )}
+
+        <div className="mt-[18px] flex gap-2.5">
+          <DownloadBtn id={inv.id} format="xml" />
+          <DownloadBtn id={inv.id} format="pdf" />
+        </div>
+
+        {canCancel && !cancelOpen && (
+          <button
+            onClick={() => setCancelOpen(true)}
+            className="mt-3 w-full rounded-control py-2 text-[13px] font-medium text-cos-red-ink hover:bg-cos-red-tint"
+          >
+            Cancelar factura
+          </button>
+        )}
+
+        {cancelOpen && (
+          <div className="mt-3 rounded-[12px] border border-cos-line bg-cos-paper p-3.5">
+            <p className="text-[13px] font-medium text-cos-ink">Cancelar ante el SAT</p>
+            {err && (
+              <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-cos-red-ink">
+                <AlertTriangle className="h-3.5 w-3.5" /> {err}
+              </p>
+            )}
+            <label className="mt-2.5 block text-[12.5px] text-cos-ink-soft">
+              Motivo
+              <select
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                className="mt-1 w-full rounded-control border border-cos-line bg-white px-2.5 py-2 text-[13.5px] text-cos-ink outline-none"
+              >
+                <option value="02">02 — Comprobante con errores sin relación</option>
+                <option value="01">01 — Comprobante con errores con relación</option>
+                <option value="03">03 — No se llevó a cabo la operación</option>
+                <option value="04">04 — Operación nominativa en factura global</option>
+              </select>
+            </label>
+            {motivo === "01" && (
+              <input
+                value={sustituye}
+                onChange={(e) => setSustituye(e.target.value)}
+                placeholder="UUID que la sustituye"
+                className="mt-2 w-full rounded-control border border-cos-line bg-white px-2.5 py-2 font-mono text-[12.5px] text-cos-ink outline-none"
+              />
+            )}
+            <div className="mt-3 flex gap-2.5">
+              <Button variant="soft" size="md" className="flex-1" onClick={() => setCancelOpen(false)} disabled={busy}>
+                Volver
+              </Button>
+              <Button variant="destructive" size="md" className="flex-1" onClick={doCancel} loading={busy}>
+                Confirmar cancelación
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
