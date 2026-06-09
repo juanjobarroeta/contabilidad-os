@@ -191,6 +191,8 @@ export async function GET(req: Request) {
     dueDate: string;
     dueDateFmt: string;
     periodo: string;
+    /** Declaration period key to match filings against (YYYY-MM monthly/bimestral; ejercicio year for anual). */
+    periodoKey: string;
     daysUntil: number;
     status: "OVERDUE" | "SOON" | "UPCOMING";
   }[] = [];
@@ -209,6 +211,7 @@ export async function GET(req: Request) {
           dueDate:      due.toISOString().substring(0, 10),
           dueDateFmt:   `${ob.diaVencimiento} ${MONTH_NAMES[dueM - 1]} ${dueYear}`,
           periodo:      `${dueYear}`,
+          periodoKey:   `${dueYear - 1}`, // anual: ejercicio declarado (año anterior al vencimiento)
           daysUntil:    diff,
           status:       diff === 0 ? "OVERDUE" : diff <= 7 ? "SOON" : "UPCOMING",
         });
@@ -236,6 +239,7 @@ export async function GET(req: Request) {
             dueDate:      due.toISOString().substring(0, 10),
             dueDateFmt:   `${ob.diaVencimiento} ${MONTH_NAMES[dueM - 1]} ${dueY}`,
             periodo:      periodoStr,
+            periodoKey:   `${y2}-${String(m2).padStart(2, "0")}`, // periodo declarado (mes que cubre la obligación)
             daysUntil:    diff,
             status:       diff === 0 ? "OVERDUE" : diff <= 7 ? "SOON" : "UPCOMING",
           });
@@ -255,11 +259,17 @@ export async function GET(req: Request) {
       const tipoEnum = Object.values(TaxDeclarationType).includes(ob.tipo as TaxDeclarationType)
         ? (ob.tipo as TaxDeclarationType)
         : null;
+      // Match THIS obligation's period — not just any filed declaration of the
+      // tipo, otherwise an earlier month's filing marks every period presentada.
+      // Anual periodos vary in format (YYYY / YYYY-MM), so match by prefix.
+      const periodoFilter =
+        ob.periodicidad === "ANUAL" ? { startsWith: ob.periodoKey } : ob.periodoKey;
       const filed = tipoEnum
         ? await prisma.taxDeclaration.findFirst({
             where: {
               companyId,
               tipo: tipoEnum,
+              periodo: periodoFilter,
               status: { in: ["FILED", "PAID", "CALCULATED"] },
             },
             orderBy: { periodo: "desc" },
