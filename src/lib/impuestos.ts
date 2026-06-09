@@ -152,7 +152,7 @@ export interface TaxPosition {
     ingresosAcumulados: number;
     isrPagadoAnterior: number;
     coeficiente: number | null;
-    coeficienteFuente: "manual" | "calculado" | "ninguno";
+    coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
     /** How the auto coeficiente was derived (PM only); null for other régimenes. */
     coeficienteBase: { year: number; ingresos: number; utilidad: number; invoiceCount: number } | null;
     /** Base gravable: utilidad (×coef para PM, cobrado−deducciones para PF). */
@@ -210,6 +210,7 @@ export async function computeTaxPosition(
     prevDeclaracion,
     company,
     repCobrosDelMes,
+    annualDecl,
   ] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
@@ -264,6 +265,19 @@ export async function computeTaxPosition(
         pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
       },
       select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
+    }),
+    // Coeficiente autoritativo: declaración anual del ejercicio anterior
+    // (utilidad fiscal ÷ ingresos). El periodo de las anuales varía de formato,
+    // así que se busca por prefijo del año.
+    prisma.taxDeclaration.findFirst({
+      where: {
+        companyId,
+        tipo: "DECLARACION_ANUAL",
+        periodo: { startsWith: String(prevYear) },
+        status: { in: ["CALCULATED", "FILED", "PAID"] },
+      },
+      orderBy: { periodo: "desc" },
+      select: { isrIngresos: true, isrBaseGravable: true },
     }),
   ]);
 
@@ -384,11 +398,21 @@ export async function computeTaxPosition(
     const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
     const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 
+    // Coeficiente del ejercicio anterior tomado de la declaración anual
+    // (utilidad fiscal ÷ ingresos) — la fuente autoritativa por ley (Art. 14).
+    const coeficienteAnual =
+      annualDecl?.isrIngresos != null && annualDecl.isrIngresos > 0 && annualDecl.isrBaseGravable != null
+        ? annualDecl.isrBaseGravable / annualDecl.isrIngresos
+        : null;
+
     let coeficiente: number | null;
-    let coeficienteFuente: "manual" | "calculado" | "ninguno";
+    let coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
     if (company?.coeficienteUtilidad != null && (company.coeficienteAnio === year || company.coeficienteAnio == null)) {
       coeficiente = company.coeficienteUtilidad;
       coeficienteFuente = "manual";
+    } else if (coeficienteAnual !== null) {
+      coeficiente = coeficienteAnual;
+      coeficienteFuente = "declaracion_anual";
     } else if (coeficienteCalculado !== null) {
       coeficiente = coeficienteCalculado;
       coeficienteFuente = "calculado";

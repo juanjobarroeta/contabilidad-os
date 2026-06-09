@@ -11,7 +11,7 @@ interface ImpuestosData {
   isr: {
     metodo: "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF";
     ingresosDelMes: number; gastosDelMes: number; ingresosAcumulados: number;
-    coeficiente: number | null; coeficienteFuente: "manual" | "calculado" | "ninguno";
+    coeficiente: number | null; coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
     baseGravable: number | null; isrPagar: number | null; tarifaVerificada: boolean;
   };
 }
@@ -102,6 +102,7 @@ export default function ImpuestosPage() {
     if (d.isr.coeficiente == null) return "Falta tu declaración anual — sin coeficiente";
     const pct = `${(d.isr.coeficiente * 100).toFixed(2)}%`;
     if (d.isr.coeficienteFuente === "manual") return `Coeficiente ${pct} · ajuste del contador`;
+    if (d.isr.coeficienteFuente === "declaracion_anual") return `Coeficiente ${pct} · de tu declaración anual ${year - 1}`;
     if (d.isr.coeficienteFuente === "calculado") return `Coeficiente ${pct} · estimado de tus CFDIs ${year - 1}`;
     return `Coeficiente ${pct}`;
   };
