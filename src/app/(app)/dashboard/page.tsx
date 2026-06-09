@@ -330,16 +330,16 @@ export default function InicioPage() {
             ) : (
               <MiniBars trend={data.trend} />
             )}
-            <div className="mt-3.5 grid grid-cols-3 gap-3 border-t border-cos-line-soft pt-3.5">
-              <div className="flex flex-col gap-0.5">
+            <div className="mt-3.5 grid grid-cols-1 gap-3 border-t border-cos-line-soft pt-3.5 min-[640px]:grid-cols-3">
+              <div className="flex flex-row items-baseline justify-between gap-2 min-[640px]:flex-col min-[640px]:items-start min-[640px]:gap-0.5">
                 <span className="text-[12px] text-cos-ink-faint">Ingresos 6m</span>
                 <Money value={data.trend.reduce((s, t) => s + t.ingresos, 0)} size={16} />
               </div>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-row items-baseline justify-between gap-2 min-[640px]:flex-col min-[640px]:items-start min-[640px]:gap-0.5">
                 <span className="text-[12px] text-cos-ink-faint">Gastos 6m</span>
                 <Money value={data.trend.reduce((s, t) => s + t.gastos, 0)} size={16} />
               </div>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-row items-baseline justify-between gap-2 min-[640px]:flex-col min-[640px]:items-start min-[640px]:gap-0.5">
                 <span className="text-[12px] text-cos-ink-faint">Te quedó</span>
                 <Money value={data.trend.reduce((s, t) => s + t.ingresos - t.gastos, 0)} size={16} sign />
               </div>

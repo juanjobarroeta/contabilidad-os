@@ -168,7 +168,7 @@ export default function FacturasPage() {
       </div>
 
       {/* stat cards */}
-      <div className="mt-4 grid grid-cols-1 gap-4 min-[560px]:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 min-[680px]:grid-cols-3">
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <span className={LBL}>Facturas timbradas</span>
           <div className="my-1 text-[28px] font-semibold tracking-[-0.02em] text-cos-ink">{resumen?.timbradas ?? "—"}</div>
@@ -176,12 +176,12 @@ export default function FacturasPage() {
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <span className={LBL}>Total facturado</span>
-          <div className="my-1"><Money value={resumen?.totalFacturado ?? 0} size={26} /></div>
+          <div className="my-1"><Money value={resumen?.totalFacturado ?? 0} size={24} /></div>
           <span className="text-[12.5px] text-cos-ink-faint">emitido este año</span>
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <span className={LBL}>IVA cobrado</span>
-          <div className="my-1"><Money value={resumen?.ivaCobrado ?? 0} size={26} /></div>
+          <div className="my-1"><Money value={resumen?.ivaCobrado ?? 0} size={24} /></div>
           <span className="text-[12.5px] text-cos-ink-faint">trasladado a clientes</span>
         </Card>
       </div>
