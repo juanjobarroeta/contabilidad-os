@@ -188,6 +188,7 @@ export async function GET(req: Request) {
       utilidadFiscal: pos.isr.utilidadFiscal,
       isrDelEjercicio: pos.isr.isrDelEjercicio,
       isrPagar: pos.isr.isrPagar,
+      retencionesAcreditadas: pos.isr.retencionesAcreditadas,
       tarifaVerificada: pos.isr.tarifaVerificada,
     },
     facturas,
