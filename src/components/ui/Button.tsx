@@ -2,7 +2,16 @@ import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Variant = "primary" | "secondary" | "ghost" | "destructive" | "outline";
+type Variant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "destructive"
+  | "outline"
+  // ── Contia redesign variants (brand palette) ──
+  | "brand"
+  | "soft"
+  | "ghostBrand";
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
@@ -11,6 +20,9 @@ const VARIANTS: Record<Variant, string> = {
   ghost: "hover:bg-accent hover:text-accent-foreground",
   destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
   outline: "border border-border bg-transparent hover:bg-accent",
+  brand: "bg-cos-brand text-white hover:bg-cos-brand-deep",
+  soft: "bg-card border border-cos-line text-cos-ink hover:bg-cos-paper",
+  ghostBrand: "bg-transparent text-cos-brand-ink hover:bg-cos-brand-tint",
 };
 
 const SIZES: Record<Size, string> = {
