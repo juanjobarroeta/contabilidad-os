@@ -5,6 +5,7 @@ import { TaxDeclarationType } from "@prisma/client";
 import { getObligacionesPorRegimen } from "@/lib/obligaciones";
 import { detectComplementosPendientes } from "@/lib/complementos";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { computeTaxPosition } from "@/lib/impuestos";
 
 // GET /api/dashboard?companyId=xxx
 export async function GET(req: Request) {
@@ -51,6 +52,7 @@ export async function GET(req: Request) {
     bankAccounts,
     savedDeclaracion,
     company,
+    taxPosition,
   ] = await Promise.all([
     // Ingresos this month
     prisma.invoice.aggregate({
@@ -114,6 +116,9 @@ export async function GET(req: Request) {
       where: { id: companyId },
       include: { obligations: { where: { activa: true } } },
     }),
+    // Real fiscal-engine position for this month (IVA flujo + régimen-aware ISR) —
+    // the source of truth for "¿Cuánto debo?", not the rough ivaEstimado above.
+    computeTaxPosition(companyId, year, month),
   ]);
 
   // ── 6-month trend ─────────────────────────────────────────────────────────
@@ -308,8 +313,26 @@ export async function GET(req: Request) {
   // Complementos de pago pendientes (REP owed on collected PPD invoices).
   const complementos = await detectComplementosPendientes(companyId, now);
 
+  // ── Lo que se debe este mes (motor fiscal real, no estimación) ────────────
+  // IVA en flujo de efectivo + ISR por régimen. El IVA/ISR mensual se presenta
+  // ~día 17 del mes siguiente. isr puede ser null (sin coeficiente/tarifa).
+  const MES_ABBR = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  const taxDue = new Date(year, month, 17);
+  const isrPagarMes = taxPosition.isr.isrPagar;
+  const totalPagarMes = taxPosition.iva.pagar + (isrPagarMes ?? 0);
+
   return NextResponse.json({
     periodo: { year, month },
+    taxThisMonth: {
+      iva: taxPosition.iva.pagar,
+      isr: isrPagarMes,
+      total: totalPagarMes,
+      saldoAFavor: taxPosition.iva.saldoAFavor,
+      vence: taxDue.toISOString().substring(0, 10),
+      venceFmt: `${taxDue.getDate()} ${MES_ABBR[taxDue.getMonth()]} ${taxDue.getFullYear()}`,
+      diasRestantes: Math.round((taxDue.getTime() - today.getTime()) / 86400000),
+      tarifaVerificada: taxPosition.isr.tarifaVerificada,
+    },
     kpis: {
       ingresosDelMes,
       gastosDelMes,

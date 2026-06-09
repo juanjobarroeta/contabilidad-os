@@ -1,86 +1,33 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useCompany } from "@/components/layout/CompanyProvider";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import {
-  TrendingUp, TrendingDown, FileText, AlertCircle,
-  ArrowUpRight, ArrowDownLeft, CheckCircle2, Clock,
-  Landmark, ShieldCheck, Info,
-} from "lucide-react";
 import Link from "next/link";
-import { PageContainer, Alert, Loading } from "@/components/ui";
+import {
+  AlertTriangle, Clock, CheckCircle2, CalendarDays,
+  ArrowUpRight, ArrowDownLeft, ChevronRight, Sparkles, ShieldQuestion,
+} from "lucide-react";
+import { useCompany } from "@/components/layout/CompanyProvider";
+import { Card, Money, Chip, type ChipStatus, Alert, Loading } from "@/components/ui";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-interface TrendPoint {
-  label: string;
-  periodo: string;
-  ingresos: number;
-  gastos: number;
-}
+// ── Types (mirrors /api/dashboard) ───────────────────────────────────────────
+interface TrendPoint { label: string; periodo: string; ingresos: number; gastos: number }
 interface UpcomingOb {
-  tipo: string;
-  descripcion: string;
-  periodicidad: string;
-  dueDate: string;
-  dueDateFmt: string;
-  periodo: string;
-  daysUntil: number;
-  status: "OVERDUE" | "SOON" | "UPCOMING";
-  filed: boolean;
-}
-interface RecentInvoice {
-  id: string;
-  tipo: string;
-  fecha: string;
-  contraparte: string;
-  rfc: string;
-  total: number;
-  status: string;
-}
-interface BankSummaryItem {
-  id: string;
-  banco: string;
-  nombre: string;
-  numeroCuenta: string;
-  totalTx: number;
-  unmatchedCount: number;
-  unmatchedTotal: number;
+  tipo: string; descripcion: string; periodicidad: string;
+  dueDate: string; dueDateFmt: string; periodo: string;
+  daysUntil: number; status: "OVERDUE" | "SOON" | "UPCOMING"; filed: boolean;
 }
 interface DashboardData {
   periodo: { year: number; month: number };
+  taxThisMonth: {
+    iva: number; isr: number | null; total: number; saldoAFavor: number;
+    vence: string; venceFmt: string; diasRestantes: number; tarifaVerificada: boolean;
+  };
   kpis: {
-    ingresosDelMes: number;
-    gastosDelMes: number;
-    utilidadBruta: number;
-    ivaEstimado: number;
-    ivaTrasladado: number;
-    ivaAcreditable: number;
-    facturasEmitidas: number;
-    facturasRecibidas: number;
+    ingresosDelMes: number; gastosDelMes: number; utilidadBruta: number;
+    facturasEmitidas: number; facturasRecibidas: number;
   };
   trend: TrendPoint[];
   upcomingObligations: UpcomingOb[];
-  recentInvoices: RecentInvoice[];
-  bankSummary: BankSummaryItem[];
-  totalUnmatched: number;
-  complementos: {
-    stats: { totalPendientes: number; vencidos: number; porVencer: number; montoPendiente: number };
-    pendientes: {
-      invoiceId: string;
-      cliente: string | null;
-      montoPendiente: number;
-      fechaLimite: string;
-      urgencia: "VENCIDO" | "POR_VENCER" | "EN_TIEMPO";
-      diasParaVencer: number;
-    }[];
-  };
-  lastDeclaracion: {
-    periodo: string;
-    status: string;
-    ivaPagar: number | null;
-    isrPagar: number | null;
-  } | null;
 }
 
 const MONTHS = [
@@ -88,100 +35,112 @@ const MONTHS = [
   "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre",
 ];
 
-// ── KPI Card ──────────────────────────────────────────────────────────────────
-function KpiCard({
-  title, value, sub, icon, trend, href,
-}: {
-  title: string; value: string; sub: string;
-  icon: React.ReactNode;
-  trend?: "up" | "down" | "neutral";
-  href?: string;
-}) {
-  const card = (
-    <div className={`bg-white rounded-xl border border-border p-5 flex flex-col gap-3 ${href ? "hover:shadow-md transition-shadow cursor-pointer" : ""}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground font-medium">{title}</span>
-        <div className="h-8 w-8 rounded-lg bg-gray-50 flex items-center justify-center">{icon}</div>
-      </div>
-      <div>
-        <p className={`text-2xl font-bold ${trend === "up" ? "text-green-700" : trend === "down" ? "text-red-600" : ""}`}>
-          {value}
-        </p>
-        <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
-      </div>
-    </div>
-  );
-  return href ? <Link href={href}>{card}</Link> : card;
+/** Strip the legal-entity suffix for a friendlier short name in the greeting. */
+function shortName(razonSocial: string): string {
+  return razonSocial
+    .replace(/\s*,?\s*S\.?\s*A\.?\s*P\.?\s*I\.?\s*(\s*DE\s*)?C\.?\s*V\.?$/i, "")
+    .replace(/\s*,?\s*S\.?\s*(DE\s*)?R\.?\s*L\.?\s*(\s*DE\s*)?C\.?\s*V\.?$/i, "")
+    .replace(/\s*,?\s*S\.?\s*A\.?\s*(\s*DE\s*)?C\.?\s*V\.?$/i, "")
+    .replace(/\s*,?\s*S\.?\s*C\.?$/i, "")
+    .replace(/\s*,?\s*S\.?\s*A\.?$/i, "")
+    .trim() || razonSocial;
 }
 
-// ── Sparkline bar chart (pure CSS) ────────────────────────────────────────────
-function TrendChart({ data }: { data: TrendPoint[] }) {
-  const maxVal = Math.max(...data.flatMap((d) => [d.ingresos, d.gastos]), 1);
+// Map the API obligation state → the shared Chip status vocabulary.
+function obChip(ob: UpcomingOb): ChipStatus {
+  if (ob.filed) return "presentada";
+  if (ob.status === "OVERDUE") return "vencida";
+  if (ob.status === "SOON") return "porvencer";
+  return "pendiente";
+}
+
+// ── 6-month bars (ingresos jade / gastos red) ─────────────────────────────────
+function MiniBars({ trend }: { trend: TrendPoint[] }) {
+  const max = Math.max(...trend.flatMap((t) => [t.ingresos, t.gastos]), 1);
   return (
-    <div className="flex items-end gap-2 h-28">
-      {data.map((d) => (
-        <div key={d.periodo} className="flex-1 flex flex-col items-center gap-1">
-          <div className="w-full flex items-end gap-0.5 h-20">
-            {/* Ingresos bar */}
-            <div className="flex-1 flex flex-col justify-end">
-              <div
-                className="rounded-t bg-green-400 transition-all duration-500"
-                style={{ height: `${Math.round((d.ingresos / maxVal) * 100)}%`, minHeight: d.ingresos > 0 ? "2px" : "0" }}
-                title={`Ingresos: ${formatCurrency(d.ingresos)}`}
-              />
-            </div>
-            {/* Gastos bar */}
-            <div className="flex-1 flex flex-col justify-end">
-              <div
-                className="rounded-t bg-red-300 transition-all duration-500"
-                style={{ height: `${Math.round((d.gastos / maxVal) * 100)}%`, minHeight: d.gastos > 0 ? "2px" : "0" }}
-                title={`Gastos: ${formatCurrency(d.gastos)}`}
-              />
-            </div>
+    <div className="flex items-end gap-2.5 h-[150px] pt-2.5">
+      {trend.map((t) => (
+        <div key={t.periodo} className="flex-1 flex flex-col items-center gap-2 h-full">
+          <div className="flex-1 w-full flex items-end justify-center gap-[5px]">
+            <div
+              className="w-[38%] max-w-[22px] rounded-t-[5px] bg-cos-jade min-h-[3px]"
+              style={{ height: `${(t.ingresos / max) * 100}%` }}
+              title={`Ingresos ${t.ingresos.toLocaleString("en-US")}`}
+            />
+            <div
+              className="w-[38%] max-w-[22px] rounded-t-[5px] bg-[oklch(0.78_0.13_25)] min-h-[3px]"
+              style={{ height: `${(t.gastos / max) * 100}%` }}
+              title={`Gastos ${t.gastos.toLocaleString("en-US")}`}
+            />
           </div>
-          <span className="text-[10px] text-muted-foreground text-center leading-tight">{d.label}</span>
+          <span className="font-mono text-[11.5px] text-cos-ink-faint">{t.label}</span>
         </div>
       ))}
     </div>
   );
 }
 
-// ── Obligation status chip ────────────────────────────────────────────────────
-function ObStatus({ ob }: { ob: UpcomingOb }) {
-  if (ob.filed) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
-        <CheckCircle2 className="h-3 w-3" />Presentada
-      </span>
-    );
+// ── Hero status band ──────────────────────────────────────────────────────────
+function HeroBand({ obligaciones }: { obligaciones: UpcomingOb[] }) {
+  const vencidas = obligaciones.filter((o) => !o.filed && o.status === "OVERDUE").length;
+  const pendientes = obligaciones.filter((o) => !o.filed && o.status !== "OVERDUE").length;
+
+  let tone: "red" | "blue" | "jade";
+  let Icon = CheckCircle2;
+  let title: string;
+  let body: string;
+
+  if (vencidas > 0) {
+    tone = "red"; Icon = AlertTriangle;
+    title = vencidas === 1 ? "Tienes 1 obligación vencida" : `Tienes ${vencidas} obligaciones vencidas`;
+    body = "Preséntala lo antes posible para evitar recargos. Te decimos exactamente cuánto y cómo.";
+  } else if (pendientes > 0) {
+    tone = "blue"; Icon = Clock;
+    title = "Casi listo este mes";
+    body = `Te queda ${pendientes === 1 ? "1 trámite" : `${pendientes} trámites`} por presentar. Nada urgente — tienes tiempo.`;
+  } else {
+    tone = "jade"; Icon = CheckCircle2;
+    title = "Vas al día";
+    body = "Todas tus obligaciones de este mes están presentadas. No tienes que hacer nada.";
   }
-  if (ob.status === "OVERDUE") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">
-        <AlertCircle className="h-3 w-3" />Vencida
-      </span>
-    );
-  }
-  if (ob.status === "SOON") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
-        <Clock className="h-3 w-3" />{ob.daysUntil}d
-      </span>
-    );
-  }
+
+  const band = {
+    red: "bg-cos-red-tint",
+    blue: "bg-cos-brand-tint",
+    jade: "bg-cos-jade-tint",
+  }[tone];
+  const tile = {
+    red: "bg-cos-red",
+    blue: "bg-cos-brand",
+    jade: "bg-cos-jade",
+  }[tone];
+  const ink = {
+    red: "text-cos-red-ink",
+    blue: "text-cos-brand-ink",
+    jade: "text-cos-jade-ink",
+  }[tone];
+
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
-      <Clock className="h-3 w-3" />{ob.daysUntil}d
-    </span>
+    <div className={`flex items-center gap-4 rounded-card px-6 py-[22px] ${band}`}>
+      <div className={`grid h-12 w-12 flex-none place-items-center rounded-[14px] text-white ${tile}`}>
+        <Icon className="h-[26px] w-[26px]" strokeWidth={2.2} />
+      </div>
+      <div>
+        <h2 className={`text-[21px] font-semibold tracking-[-0.02em] ${ink}`}>{title}</h2>
+        <p className={`mt-1 text-[14.5px] leading-snug ${ink} opacity-90`}>{body}</p>
+      </div>
+    </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
-export default function DashboardPage() {
+const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint";
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+export default function InicioPage() {
   const { activeCompany, loading: companyLoading } = useCompany();
-  const [data, setData]     = useState<DashboardData | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState("");
+  const [error, setError] = useState("");
 
   const fetchDashboard = useCallback(async () => {
     if (!activeCompany) return;
@@ -189,10 +148,10 @@ export default function DashboardPage() {
     setError("");
     try {
       const res = await fetch(`/api/dashboard?companyId=${activeCompany.id}`);
-      if (!res.ok) throw new Error("Error al cargar dashboard");
+      if (!res.ok) throw new Error();
       setData(await res.json());
     } catch {
-      setError("No se pudo cargar el dashboard");
+      setError("No se pudo cargar el inicio");
     } finally {
       setLoading(false);
     }
@@ -200,342 +159,208 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
-  if (companyLoading) return <div className="p-8 text-muted-foreground text-sm">Cargando...</div>;
+  if (companyLoading) return <div className="p-8 text-sm text-cos-ink-faint">Cargando…</div>;
 
   if (!activeCompany) {
     return (
-      <div className="p-8">
-        <div className="max-w-md mx-auto text-center mt-20">
-          <h2 className="text-lg font-semibold">No hay empresas registradas</h2>
-          <p className="text-muted-foreground text-sm mt-2">Agrega tu primera empresa para comenzar.</p>
-          <Link href="/empresas/nueva"
-            className="mt-4 inline-block bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium">
-            Agregar empresa
-          </Link>
-        </div>
+      <div className="mx-auto mt-20 max-w-md p-8 text-center">
+        <h2 className="text-lg font-semibold text-cos-ink">No hay empresas registradas</h2>
+        <p className="mt-2 text-sm text-cos-ink-soft">Agrega tu primera empresa para comenzar.</p>
+        <Link href="/onboarding" className="mt-4 inline-block rounded-control bg-cos-brand px-4 py-2 text-sm font-semibold text-white hover:bg-cos-brand-deep">
+          Agregar empresa
+        </Link>
       </div>
     );
   }
 
-  const now   = new Date();
-  const month = now.getMonth() + 1;
-  const year  = now.getFullYear();
+  const { year, month } = data?.periodo ?? { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
   const mesLabel = `${MONTHS[month - 1]} ${year}`;
 
+  // "Ask AI" — forward-compatible hook the AI panel will listen for once wired.
+  const askAi = () =>
+    window.dispatchEvent(new CustomEvent("cos:ask-ai", { detail: { companyId: activeCompany.id } }));
+
   return (
-    <PageContainer className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{activeCompany.razonSocial}</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">RFC: {activeCompany.rfc} · {mesLabel}</p>
-        </div>
-        {data?.lastDeclaracion && (
-          <Link href="/impuestos"
-            className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-              data.lastDeclaracion.status === "PAID"   ? "bg-green-100 text-green-700" :
-              data.lastDeclaracion.status === "FILED"  ? "bg-yellow-100 text-yellow-700" :
-              data.lastDeclaracion.status === "CALCULATED" ? "bg-blue-100 text-blue-700" :
-              "bg-gray-100 text-gray-600"
-            }`}>
-            Última declaración: {data.lastDeclaracion.periodo} ·{" "}
-            {{ DRAFT: "Borrador", CALCULATED: "Calculada", FILED: "Presentada", PAID: "Pagada" }[data.lastDeclaracion.status] ?? data.lastDeclaracion.status}
-          </Link>
-        )}
+    <div className="mx-auto max-w-[1000px] px-4 py-6 sm:px-8 sm:py-8">
+      {/* greeting */}
+      <div className="mb-[18px]">
+        <p className="text-[15px] text-cos-ink-faint">Hola, esto es lo importante de</p>
+        <h1 className="mt-0.5 text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">
+          {shortName(activeCompany.razonSocial)}
+        </h1>
+        <p className="mt-1.5 text-[14px] text-cos-ink-soft">
+          <span className="font-mono">{activeCompany.rfc}</span> · {mesLabel}
+        </p>
       </div>
 
       {error && (
-        <Alert tone="danger" className="flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 shrink-0" />{error}
+        <Alert tone="danger" className="mb-4 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />{error}
         </Alert>
       )}
 
-      {loading ? (
+      {loading || !data ? (
         <Loading label="Cargando datos…" className="py-16" />
-      ) : data ? (
-        <>
-          {/* ── KPI Row ── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard
-              title={`Ingresos · ${mesLabel}`}
-              value={formatCurrency(data.kpis.ingresosDelMes)}
-              sub={`${data.kpis.facturasEmitidas} factura${data.kpis.facturasEmitidas !== 1 ? "s" : ""} emitida${data.kpis.facturasEmitidas !== 1 ? "s" : ""}`}
-              icon={<TrendingUp className="h-4 w-4 text-green-600" />}
-              trend="up"
-              href="/facturas"
-            />
-            <KpiCard
-              title={`Gastos · ${mesLabel}`}
-              value={formatCurrency(data.kpis.gastosDelMes)}
-              sub={`${data.kpis.facturasRecibidas} factura${data.kpis.facturasRecibidas !== 1 ? "s" : ""} recibida${data.kpis.facturasRecibidas !== 1 ? "s" : ""}`}
-              icon={<TrendingDown className="h-4 w-4 text-red-500" />}
-              trend="down"
-              href="/facturas"
-            />
-            <KpiCard
-              title="Utilidad bruta"
-              value={formatCurrency(data.kpis.utilidadBruta)}
-              sub={data.kpis.utilidadBruta >= 0 ? "Positiva este mes" : "Pérdida este mes"}
-              icon={<FileText className="h-4 w-4 text-blue-600" />}
-              trend={data.kpis.utilidadBruta >= 0 ? "up" : "down"}
-            />
-            <KpiCard
-              title="IVA estimado"
-              value={formatCurrency(Math.abs(data.kpis.ivaEstimado))}
-              sub={data.kpis.ivaEstimado > 0 ? "Estimado a cargo" : data.kpis.ivaEstimado < 0 ? "Saldo a favor" : "Sin movimiento"}
-              icon={<AlertCircle className={`h-4 w-4 ${data.kpis.ivaEstimado > 0 ? "text-amber-500" : "text-green-600"}`} />}
-              href="/impuestos"
-            />
-          </div>
+      ) : (
+        <div className="space-y-5">
+          <HeroBand obligaciones={data.upcomingObligations} />
 
-          {/* ── Middle Row: Trend + Obligations ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-            {/* Trend chart — takes 2 cols */}
-            <div className="lg:col-span-2 bg-white rounded-xl border border-border p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-sm">Tendencia 6 meses</h3>
-                  <p className="text-xs text-muted-foreground">Ingresos vs gastos (sin IVA)</p>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-400" />Ingresos</span>
-                  <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-300" />Gastos</span>
-                </div>
+          {/* cuánto debo + mes en números */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card className="rounded-card border-cos-line p-5 shadow-card">
+              <span className={LBL}>¿Cuánto debo este mes?</span>
+              <div className="my-2.5">
+                <Money value={data.taxThisMonth.total} size={40} weight={700} />
               </div>
-              {data.trend.every(d => d.ingresos === 0 && d.gastos === 0) ? (
-                <div className="h-28 flex items-center justify-center">
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">Sin facturas en los últimos 6 meses</p>
-                    <Link href="/facturas" className="text-xs text-primary hover:underline mt-1 inline-block">
-                      Importar CFDIs del SAT →
-                    </Link>
-                  </div>
+              <div className="flex flex-col gap-2 border-y border-cos-line-soft py-3.5">
+                <div className="flex items-center justify-between gap-3 text-[14px] text-cos-ink-soft">
+                  <span className="whitespace-nowrap">IVA mensual</span>
+                  <Money value={data.taxThisMonth.iva} size={15} weight={500} muted />
                 </div>
-              ) : (
-                <TrendChart data={data.trend} />
-              )}
-              {/* Summary row */}
-              <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border">
-                <div>
-                  <p className="text-xs text-muted-foreground">Total ingresos 6m</p>
-                  <p className="text-sm font-semibold text-green-700">
-                    {formatCurrency(data.trend.reduce((s, d) => s + d.ingresos, 0))}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total gastos 6m</p>
-                  <p className="text-sm font-semibold text-red-600">
-                    {formatCurrency(data.trend.reduce((s, d) => s + d.gastos, 0))}
-                  </p>
-                </div>
-                <div className="ml-auto">
-                  <p className="text-xs text-muted-foreground">Utilidad 6m</p>
-                  <p className={`text-sm font-semibold ${
-                    data.trend.reduce((s, d) => s + d.ingresos - d.gastos, 0) >= 0
-                      ? "text-blue-700" : "text-red-600"
-                  }`}>
-                    {formatCurrency(data.trend.reduce((s, d) => s + d.ingresos - d.gastos, 0))}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Upcoming obligations */}
-            <div className="bg-white rounded-xl border border-border overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-semibold text-sm">Próximas obligaciones</h3>
-                </div>
-                <Link href="/cumplimiento" className="text-xs text-primary hover:underline">Ver todo</Link>
-              </div>
-              {data.upcomingObligations.length === 0 ? (
-                <div className="p-5 text-center">
-                  <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2 opacity-60" />
-                  <p className="text-xs text-muted-foreground">Sin obligaciones próximas en 45 días</p>
-                </div>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {data.upcomingObligations.map((ob) => (
-                    <li key={ob.tipo} className="px-4 py-3 flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{ob.descripcion}</p>
-                        <p className="text-[11px] text-muted-foreground">{ob.periodo} · vence {ob.dueDateFmt}</p>
-                      </div>
-                      <ObStatus ob={ob} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          {/* ── Complementos de pago pendientes ── */}
-          {data.complementos && data.complementos.stats.totalPendientes > 0 && (
-            <div className="bg-white rounded-xl border border-border overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-500" />
-                  <h3 className="font-semibold text-sm">Complementos de pago pendientes</h3>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {data.complementos.stats.totalPendientes} pendiente
-                  {data.complementos.stats.totalPendientes !== 1 ? "s" : ""}
-                  {data.complementos.stats.vencidos > 0 && (
-                    <span className="text-red-600 font-medium"> · {data.complementos.stats.vencidos} vencido{data.complementos.stats.vencidos !== 1 ? "s" : ""}</span>
+                <div className="flex items-center justify-between gap-3 text-[14px] text-cos-ink-soft">
+                  <span className="whitespace-nowrap">ISR (anticipo)</span>
+                  {data.taxThisMonth.isr == null ? (
+                    <span className="font-mono text-[15px] text-cos-ink-faint">—</span>
+                  ) : (
+                    <Money value={data.taxThisMonth.isr} size={15} weight={500} muted />
                   )}
-                </span>
+                </div>
               </div>
-              <ul className="divide-y divide-border">
-                {data.complementos.pendientes.map((c) => (
-                  <li key={c.invoiceId} className="px-4 py-3 flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">{c.cliente ?? "Cliente"}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {formatCurrency(c.montoPendiente)} · límite {formatDate(c.fechaLimite)}
-                      </p>
-                    </div>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
-                        c.urgencia === "VENCIDO"
-                          ? "bg-red-100 text-red-700"
-                          : c.urgencia === "POR_VENCER"
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {c.urgencia === "VENCIDO"
-                        ? `Vencido ${Math.abs(c.diasParaVencer)}d`
-                        : c.urgencia === "POR_VENCER"
-                        ? `${c.diasParaVencer}d`
-                        : "En tiempo"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <div className="px-4 py-2.5 border-t border-border">
-                <Link href="/facturas" className="text-xs text-primary hover:underline">
-                  Emitir complementos →
+              <div className="mt-3.5 flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 text-[13.5px] text-cos-ink-soft">
+                  <CalendarDays className="h-[15px] w-[15px]" /> Vence el {data.taxThisMonth.venceFmt}
+                </span>
+                <Link href="/impuestos" className="inline-flex items-center gap-1 rounded-control px-2 py-1.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
+                  Ver detalle <ChevronRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
-            </div>
-          )}
-
-          {/* ── Bottom Row: Recent Invoices + Bank ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-            {/* Recent invoices */}
-            <div className="lg:col-span-2 bg-white rounded-xl border border-border overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-semibold text-sm">Facturas recientes</h3>
-                </div>
-                <Link href="/facturas" className="text-xs text-primary hover:underline">Ver todas</Link>
-              </div>
-              {data.recentInvoices.length === 0 ? (
-                <div className="p-10 text-center">
-                  <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-30" />
-                  <p className="text-sm text-muted-foreground">Sin facturas registradas</p>
-                  <Link href="/impuestos" className="text-xs text-primary hover:underline mt-1 inline-block">
-                    Sincronizar desde SAT →
-                  </Link>
-                </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-border">
-                      <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground w-20">Tipo</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Fecha</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Contraparte</th>
-                      <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.recentInvoices.map((inv) => (
-                      <tr key={inv.id} className="border-b border-border last:border-0 hover:bg-gray-50/50">
-                        <td className="px-4 py-2.5">
-                          {inv.tipo === "INGRESO" ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
-                              <ArrowUpRight className="h-3 w-3" />Emitida
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-orange-50 text-orange-700">
-                              <ArrowDownLeft className="h-3 w-3" />Recibida
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground">{formatDate(inv.fecha)}</td>
-                        <td className="px-4 py-2.5">
-                          <p className="text-xs font-medium truncate max-w-[160px]">{inv.contraparte}</p>
-                          <p className="text-[11px] text-muted-foreground">{inv.rfc}</p>
-                        </td>
-                        <td className={`px-4 py-2.5 text-right text-xs font-semibold ${inv.tipo === "INGRESO" ? "text-green-700" : "text-orange-700"}`}>
-                          {inv.tipo === "EGRESO" && "("}
-                          {formatCurrency(inv.total)}
-                          {inv.tipo === "EGRESO" && ")"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {!data.taxThisMonth.tarifaVerificada && (
+                <p className="mt-2 text-[12px] text-cos-amber-ink">
+                  Tarifa ISR sin verificar contra Anexo 8 — cifra provisional.
+                </p>
               )}
-            </div>
+            </Card>
 
-            {/* Bank reconciliation summary */}
-            <div className="bg-white rounded-xl border border-border overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Landmark className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-semibold text-sm">Conciliación bancaria</h3>
+            <Card className="rounded-card border-cos-line p-5 shadow-card">
+              <span className={LBL}>Tu mes en números</span>
+              <div className="mt-3.5 grid grid-cols-3 gap-3.5">
+                <div className="flex flex-col gap-1">
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-medium text-cos-ink-faint">
+                    <ArrowUpRight className="h-3.5 w-3.5" /> Te pagaron
+                  </span>
+                  <Money value={data.kpis.ingresosDelMes} size={19} />
+                  <span className="text-[12px] text-cos-ink-faint">
+                    {data.kpis.facturasEmitidas} factura{data.kpis.facturasEmitidas === 1 ? "" : "s"}
+                  </span>
                 </div>
-                <Link href="/bancos" className="text-xs text-primary hover:underline">Gestionar</Link>
+                <div className="flex flex-col gap-1">
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-medium text-cos-ink-faint">
+                    <ArrowDownLeft className="h-3.5 w-3.5" /> Gastaste
+                  </span>
+                  <Money value={data.kpis.gastosDelMes} size={19} />
+                  <span className="text-[12px] text-cos-ink-faint">
+                    {data.kpis.facturasRecibidas} factura{data.kpis.facturasRecibidas === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[12.5px] font-medium text-cos-ink-faint">Te queda</span>
+                  <Money value={data.kpis.utilidadBruta} size={19} sign />
+                  <span className="text-[12px] text-cos-ink-faint">antes de impuestos</span>
+                </div>
               </div>
-              {data.bankSummary.length === 0 ? (
-                <div className="p-5 text-center">
-                  <Landmark className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-30" />
-                  <p className="text-xs text-muted-foreground mb-2">Sin cuentas bancarias</p>
-                  <Link href="/bancos"
-                    className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md font-medium hover:bg-primary/90 inline-block">
-                    Agregar cuenta
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  {data.totalUnmatched > 0 && (
-                    <div className="mx-4 mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
-                      <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                      <span><strong>{data.totalUnmatched}</strong> movimiento{data.totalUnmatched !== 1 ? "s" : ""} sin conciliar</span>
-                    </div>
-                  )}
-                  <ul className="divide-y divide-border mt-2">
-                    {data.bankSummary.map((acct) => (
-                      <li key={acct.id} className="px-4 py-3">
-                        <div className="flex items-center justify-between">
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium">{acct.banco} · {acct.nombre}</p>
-                            <p className="text-[11px] text-muted-foreground">····{acct.numeroCuenta.slice(-4)} · {acct.totalTx} movimientos</p>
-                          </div>
-                          {acct.unmatchedCount > 0 ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 shrink-0">
-                              {acct.unmatchedCount} pend.
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 shrink-0">
-                              <CheckCircle2 className="h-3 w-3" />Al día
-                            </span>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
+            </Card>
           </div>
-        </>
-      ) : null}
-    </PageContainer>
+
+          {/* obligaciones */}
+          <Card className="rounded-card border-cos-line p-5 shadow-card">
+            <div className="mb-3.5 flex items-start justify-between gap-3">
+              <span className={LBL}>Próximos trámites con el SAT</span>
+              <Link href="/impuestos" className="rounded-control px-2 py-1.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
+                Ver todos
+              </Link>
+            </div>
+            {data.upcomingObligations.length === 0 ? (
+              <div className="py-6 text-center">
+                <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-cos-jade opacity-70" />
+                <p className="text-[13px] text-cos-ink-faint">Sin trámites próximos en 45 días</p>
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                {data.upcomingObligations.map((ob) => (
+                  <div key={ob.tipo} className="flex items-center justify-between gap-3.5 border-t border-cos-line-soft py-3.5 first:border-t-0">
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold text-cos-ink">{ob.descripcion}</p>
+                      <p className="mt-0.5 text-[13px] text-cos-ink-soft">
+                        {ob.periodo} · vence {ob.dueDateFmt}
+                      </p>
+                    </div>
+                    <div className="flex flex-none flex-col items-end gap-1.5">
+                      <Chip status={obChip(ob)} />
+                      <span className="text-[12px] text-cos-ink-faint">
+                        {ob.filed ? "listo" : ob.status === "OVERDUE" ? `venció ${ob.dueDateFmt}` : `${ob.daysUntil}d`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* trend */}
+          <Card className="rounded-card border-cos-line p-5 shadow-card">
+            <div className="mb-1 flex items-start justify-between gap-3">
+              <div>
+                <span className={LBL}>Cómo te ha ido</span>
+                <p className="mt-1 text-[13px] text-cos-ink-soft">Últimos 6 meses · sin IVA</p>
+              </div>
+              <div className="flex gap-3.5 text-[12.5px] text-cos-ink-soft">
+                <span className="inline-flex items-center gap-1.5"><i className="h-[9px] w-[9px] rounded-[3px] bg-cos-jade" /> Ingresos</span>
+                <span className="inline-flex items-center gap-1.5"><i className="h-[9px] w-[9px] rounded-[3px] bg-cos-red" /> Gastos</span>
+              </div>
+            </div>
+            {data.trend.every((t) => t.ingresos === 0 && t.gastos === 0) ? (
+              <div className="flex h-[150px] items-center justify-center">
+                <div className="text-center">
+                  <p className="text-sm text-cos-ink-soft">Sin facturas en los últimos 6 meses</p>
+                  <Link href="/impuestos" className="mt-1 inline-block text-xs text-cos-brand-ink hover:underline">
+                    Importar CFDIs del SAT →
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <MiniBars trend={data.trend} />
+            )}
+            <div className="mt-3.5 grid grid-cols-3 gap-3 border-t border-cos-line-soft pt-3.5">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[12px] text-cos-ink-faint">Ingresos 6m</span>
+                <Money value={data.trend.reduce((s, t) => s + t.ingresos, 0)} size={16} />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[12px] text-cos-ink-faint">Gastos 6m</span>
+                <Money value={data.trend.reduce((s, t) => s + t.gastos, 0)} size={16} />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[12px] text-cos-ink-faint">Te quedó</span>
+                <Money value={data.trend.reduce((s, t) => s + t.ingresos - t.gastos, 0)} size={16} sign />
+              </div>
+            </div>
+          </Card>
+
+          {/* ask AI */}
+          <button
+            onClick={askAi}
+            className="flex w-full items-center gap-3.5 rounded-card border border-dashed border-[oklch(0.55_0.16_258_/_0.35)] bg-cos-brand-tint px-[18px] py-[15px] text-left text-[14px] text-cos-brand-ink hover:bg-[oklch(0.95_0.03_258)]"
+          >
+            <span className="grid h-[34px] w-[34px] flex-none place-items-center rounded-[10px] bg-cos-brand text-white">
+              <Sparkles className="h-[18px] w-[18px]" />
+            </span>
+            <span className="flex-1">
+              ¿Tienes dudas? Pregúntale al asistente — “¿por qué debo este IVA?”, “¿qué pasa si no presento la DIOT?”
+            </span>
+            <ShieldQuestion className="h-4 w-4 flex-none opacity-60" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
