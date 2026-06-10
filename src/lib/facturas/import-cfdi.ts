@@ -50,7 +50,15 @@ export async function importCfdiFromXml(opts: {
   }
 
   const isEmisor = cfdi.rfcEmisor === companyRfc;
-  const tipo = (cfdi.tipo ? SAT_TIPO_MAP[cfdi.tipo] : undefined) ?? (isEmisor ? "INGRESO" : "EGRESO");
+  // TipoDeComprobante I/E reflects the ISSUER's perspective — a supplier's
+  // sales invoice TO us is "I" (ingreso para él) yet it's OUR expense. Only
+  // N/P/T are standalone categories; for I/E the company's accounting
+  // direction is decided by emisor-vs-receptor, never by cfdi.tipo.
+  const satType = cfdi.tipo ? SAT_TIPO_MAP[cfdi.tipo] : undefined;
+  const tipo: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO" =
+    satType === "NOMINA" || satType === "PAGO" || satType === "TRASLADO"
+      ? satType
+      : isEmisor ? "INGRESO" : "EGRESO";
 
   // Counterparty (emisor for recibidos, receptor for emitidos).
   const cpRfc = isEmisor ? cfdi.rfcReceptor : cfdi.rfcEmisor;

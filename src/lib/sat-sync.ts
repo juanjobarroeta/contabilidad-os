@@ -479,8 +479,13 @@ export async function verifyAndImportSatSync(
           T: "TRASLADO",
         };
         const mappedType = cfdi.tipo ? SAT_TIPO_MAP[cfdi.tipo] : undefined;
+        // TipoDeComprobante I/E is the ISSUER's perspective — a supplier's
+        // "I" sales invoice in our RECIBIDOS bucket is OUR expense. Only N/P/T
+        // are standalone categories; for I/E follow emisor-vs-receptor.
         const invoiceType: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO" =
-          mappedType ?? (isEmisor ? "INGRESO" : "EGRESO");
+          mappedType === "NOMINA" || mappedType === "PAGO" || mappedType === "TRASLADO"
+            ? mappedType
+            : isEmisor ? "INGRESO" : "EGRESO";
 
         // Find or create counterparty customer record
         const counterpartyRfc = isEmisor ? cfdi.rfcReceptor : cfdi.rfcEmisor;
