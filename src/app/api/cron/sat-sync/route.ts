@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
 import { notifyIvaChanges } from "@/lib/iva-change-notify";
+import { notifyNewInvoices } from "@/lib/notify-new-invoices";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-sync
@@ -90,6 +91,9 @@ async function handle(req: Request) {
 
   for (const company of companies) {
     let companyTouched = false;
+    // Mark the start so we can detect which CFDIs this run newly imported
+    // (Invoice.createdAt >= companyRunStart) for the push digest below.
+    const companyRunStart = new Date();
     try {
       for (const { year, month } of periods) {
         // Skip periods that end before the company started operating.
@@ -136,6 +140,15 @@ async function handle(req: Request) {
           totalNotified += notice.notified;
         } catch (e) {
           console.error(`[cron/sat-sync] iva-change notice failed for ${company.id}:`, e);
+        }
+
+        // Push digest of new facturas emitidas/recibidas (PWA + desktop).
+        // Only fires on this incremental cron — never on the historical
+        // backfill — so it stays a day-to-day "new invoices" alert.
+        try {
+          await notifyNewInvoices(company.id, companyRunStart);
+        } catch (e) {
+          console.error(`[cron/sat-sync] push notify failed for ${company.id}:`, e);
         }
       }
     } catch (e) {

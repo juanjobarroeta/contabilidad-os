@@ -41,14 +41,31 @@ export function PushOptIn() {
   async function enable() {
     if (!VAPID_PUBLIC_KEY) return;
     setState("enabling");
+    // Watchdog: never spin forever — if something stalls, reset so the user
+    // can retry (and we log why).
+    const watchdog = setTimeout(() => {
+      console.error("[push] activación tardó demasiado; reinicia y reintenta.");
+      setState("idle");
+    }, 20000);
     try {
       const permission = await Notification.requestPermission();
-      if (permission !== "granted") { setState(permission === "denied" ? "denied" : "idle"); return; }
+      if (permission !== "granted") {
+        setState(permission === "denied" ? "denied" : "idle");
+        return;
+      }
+      // Register the SW ourselves — ServiceWorkerRegister attaches to the
+      // `load` event, which is often already fired by the time React hydrates,
+      // leaving navigator.serviceWorker.ready pending forever. register()
+      // resolves regardless and updates to the latest sw.js (with the push
+      // handler), which skipWaiting/claim activate immediately.
+      await navigator.serviceWorker.register("/sw.js");
       const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
-      });
+      const sub =
+        (await reg.pushManager.getSubscription()) ??
+        (await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
+        }));
       const res = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -57,8 +74,11 @@ export function PushOptIn() {
       setState(res.ok ? "enabled" : "idle");
       // Fire a one-off confirmation push so the user sees it works immediately.
       if (res.ok) fetch("/api/push/test", { method: "POST" }).catch(() => {});
-    } catch {
+    } catch (err) {
+      console.error("[push] no se pudo activar:", err);
       setState("idle");
+    } finally {
+      clearTimeout(watchdog);
     }
   }
 
