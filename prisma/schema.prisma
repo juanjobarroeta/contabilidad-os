@@ -2224,3 +2224,17 @@ model WhatsappMessage {
 
   @@index([conversationId, createdAt])
 }
+
+// Web Push (PWA + desktop) subscription — one row per browser/device. Pruned
+// automatically when the push service returns 404/410 (expired endpoint).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String   // client public key (keys.p256dh)
+  auth      String   // client auth secret (keys.auth)
+  userId    String
+  companyId String?  // active company when subscribed (optional scoping)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

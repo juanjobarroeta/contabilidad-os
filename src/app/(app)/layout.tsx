@@ -6,6 +6,7 @@ import { ChatPanel } from "@/components/ai/ChatPanel";
 import { TrialBanner } from "@/components/layout/TrialBanner";
 import { getUserSubscriptionState } from "@/lib/subscription";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { PushOptIn } from "@/components/pwa/PushOptIn";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -100,6 +101,7 @@ export default async function AppLayout({
         </main>
         <ChatPanel />
         <InstallPrompt />
+        <PushOptIn />
       </div>
     </CompanyProvider>
   );
