@@ -23,7 +23,14 @@ jobs:
     steps:
       - name: Trigger SAT backfill
         run: |
-          curl -fsS -X POST "${STAGING_URL}/api/cron/sat-backfill" \
+          set -euo pipefail
+          # A trailing newline/space in the STAGING_URL secret makes curl reject
+          # the URL ("Malformed input to a URL function"), and without pipefail
+          # the `| tee` masks that failure as success. Strip whitespace and fail
+          # loudly so a broken sync is actually visible.
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/sat-backfill" \
             -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
         env:
           STAGING_URL: ${{ secrets.STAGING_URL }}
