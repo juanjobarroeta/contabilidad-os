@@ -40,6 +40,13 @@ export function ChatPanel() {
     if (isOpen) inputRef.current?.focus();
   }, [isOpen]);
 
+  // Open from anywhere via the `cos:ask-ai` event (e.g. the Inicio ask-row).
+  useEffect(() => {
+    const open = () => setIsOpen(true);
+    window.addEventListener("cos:ask-ai", open);
+    return () => window.removeEventListener("cos:ask-ai", open);
+  }, []);
+
   const sendMessage = useCallback(async () => {
     if (!input.trim() || isLoading || !activeCompany) return;
 
@@ -154,7 +161,7 @@ export function ChatPanel() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg transition-transform hover:scale-105 hover:bg-indigo-700 active:scale-95"
+          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-cos-brand text-white shadow-lg transition-transform hover:scale-105 hover:bg-cos-brand-deep active:scale-95"
           title="Asistente IA"
         >
           <Sparkles className="h-6 w-6" />
@@ -168,17 +175,17 @@ export function ChatPanel() {
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-indigo-600 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-cos-brand px-4 py-3">
           <div className="flex items-center gap-2 text-white">
             <Bot className="h-5 w-5" />
             <div>
               <h3 className="text-sm font-semibold">Asistente Contable</h3>
-              <p className="text-xs text-indigo-200">{activeCompany.razonSocial}</p>
+              <p className="text-xs text-white/75">{activeCompany.razonSocial}</p>
             </div>
           </div>
           <button
             onClick={() => setIsOpen(false)}
-            className="rounded-lg p-1 text-indigo-200 hover:bg-indigo-700 hover:text-white"
+            className="rounded-lg p-1 text-white/75 hover:bg-cos-brand-deep hover:text-white"
           >
             <X className="h-5 w-5" />
           </button>
@@ -188,7 +195,7 @@ export function ChatPanel() {
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
-              <Sparkles className="mb-3 h-10 w-10 text-indigo-300" />
+              <Sparkles className="mb-3 h-10 w-10 text-cos-brand" />
               <p className="text-sm font-medium text-gray-500">Asistente Contable IA</p>
               <p className="mt-1 text-xs text-gray-400">
                 Pregunta sobre tus facturas, impuestos, transacciones bancarias, o pide ayuda con
@@ -206,7 +213,7 @@ export function ChatPanel() {
                       setInput(q);
                       inputRef.current?.focus();
                     }}
-                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-cos-brand hover:bg-cos-brand-tint hover:text-cos-brand-ink"
                   >
                     {q}
                   </button>
@@ -223,7 +230,7 @@ export function ChatPanel() {
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-indigo-600 text-white"
+                    ? "bg-cos-brand text-white"
                     : "bg-gray-100 text-gray-800"
                 }`}
               >
@@ -265,7 +272,7 @@ export function ChatPanel() {
               onKeyDown={handleKeyDown}
               placeholder="Pregunta algo..."
               rows={1}
-              className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand"
               style={{ maxHeight: "120px" }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
@@ -276,7 +283,7 @@ export function ChatPanel() {
             <button
               onClick={sendMessage}
               disabled={!input.trim() || isLoading}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition-colors hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-cos-brand text-white transition-colors hover:bg-cos-brand-deep disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               <Send className="h-4 w-4" />
             </button>

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useCompany } from "./CompanyProvider";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/ui";
 import {
   LayoutDashboard,
   FileText,
@@ -27,8 +28,8 @@ import {
 import { useState, useEffect } from "react";
 
 const NAV_ITEMS = [
-  { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/facturas",     label: "Facturas (CFDI)", icon: FileText },
+  { href: "/dashboard",    label: "Inicio",          icon: LayoutDashboard },
+  { href: "/facturas",     label: "Facturas",        icon: FileText },
   { href: "/clientes",     label: "Clientes",        icon: Users },
   { href: "/bancos",       label: "Bancos",          icon: Landmark },
   { href: "/nomina",       label: "Nómina",          icon: Users2 },
@@ -76,7 +77,10 @@ export function Sidebar({ user }: SidebarProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="font-bold text-primary">ContabilidadOS</span>
+        <span className="flex items-center gap-2 text-[16px] font-semibold tracking-[-0.02em] text-cos-ink">
+          <BrandMark size={20} className="text-cos-brand" />
+          Contabilidad<span className="text-cos-brand">OS</span>
+        </span>
       </div>
 
       {/* Backdrop (mobile only, when open) */}
@@ -97,8 +101,11 @@ export function Sidebar({ user }: SidebarProps) {
         )}
       >
       {/* Logo (with close button on mobile) */}
-      <div className="px-4 py-4 border-b border-border flex items-center justify-between">
-        <span className="font-bold text-primary text-lg">ContabilidadOS</span>
+      <div className="px-4 py-4 border-b border-cos-line flex items-center justify-between">
+        <span className="flex items-center gap-2 text-[19px] font-semibold tracking-[-0.03em] text-cos-ink">
+          <BrandMark size={24} className="text-cos-brand" />
+          Contabilidad<span className="text-cos-brand">OS</span>
+        </span>
         <button
           onClick={() => setMobileOpen(false)}
           aria-label="Cerrar menú"
@@ -142,7 +149,7 @@ export function Sidebar({ user }: SidebarProps) {
             <Link
               href="/onboarding"
               onClick={() => setCompanyOpen(false)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-primary hover:bg-accent border-t border-border"
+              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-cos-brand-ink hover:bg-cos-paper border-t border-cos-line"
             >
               <Plus className="h-3 w-3" />
               Agregar empresa
@@ -160,8 +167,8 @@ export function Sidebar({ user }: SidebarProps) {
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
               href === activeNavHref
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                ? "bg-cos-brand text-white"
+                : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
@@ -192,7 +199,7 @@ export function Sidebar({ user }: SidebarProps) {
       {/* User */}
       <div className="px-3 py-3 border-t border-border">
         <div className="flex items-center gap-2 px-2 py-1 mb-1">
-          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+          <div className="h-7 w-7 rounded-full bg-cos-brand-tint flex items-center justify-center text-xs font-bold text-cos-brand-ink">
             {user.name?.[0] ?? user.email?.[0] ?? "U"}
           </div>
           <div className="flex-1 min-w-0">

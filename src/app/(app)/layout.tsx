@@ -91,7 +91,7 @@ export default async function AppLayout({
 
   return (
     <CompanyProvider userId={session.user.id!}>
-      <div className="flex h-screen bg-gray-50">
+      <div className="flex h-screen bg-cos-paper">
         <Sidebar user={session.user} />
         {/* pt-14 on mobile clears the fixed top bar; none on md+ */}
         <main className="flex-1 overflow-auto flex flex-col pt-14 md:pt-0">
