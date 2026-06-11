@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
+import { Building2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 // Server constant — en cliente aplica el default (el override por env sólo
 // vive en el servidor; la validación dura del run se hace server-side).
@@ -63,7 +64,7 @@ const STATUS_RUN_LABEL: Record<string, string> = {
 const MONTHS = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
 export default function NominaPage() {
-  const { activeCompany } = useCompany();
+  const { activeCompany, companies } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,6 +219,17 @@ export default function NominaPage() {
               El monto y su estado viven en <Link href="/impuestos" className="font-semibold text-cos-brand-ink hover:underline">Impuestos</Link>.
             </span>
           </div>
+
+          {/* multi-RFC cockpit (despacho) */}
+          {companies.length > 1 && (
+            <Link href="/nomina/cockpit" className="flex items-center gap-3 rounded-card border border-cos-line bg-white px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
+              <Building2 className="h-[18px] w-[18px] flex-none" />
+              <span className="flex-1">
+                <b className="text-cos-ink">Cockpit multi-RFC</b> — la nómina de tus {companies.length} empresas en un solo panel
+              </span>
+              <ChevronR className="h-4 w-4 flex-none" />
+            </Link>
+          )}
 
           {/* expert depth: link to workspace */}
           <Link href="/nomina/detalle" className="flex items-center gap-3 rounded-card border border-dashed border-cos-line bg-white px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">

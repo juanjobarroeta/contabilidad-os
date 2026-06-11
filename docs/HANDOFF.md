@@ -136,7 +136,11 @@ El despacho objetivo hace **outsourcing de nómina** sobre varias empresas.
   workspace completo movido a `/nomina/detalle` (roster, corridas, incidencias, modales).
   `createPayrollRun` devuelve `salarioMinimoWarning` + `tarifaWarning` y el modal de nueva
   corrida los muestra al contador.
-- **Cockpit multi-RFC**: PENDIENTE — ver/operar varias empresas desde un solo panel.
+- ✅ **Cockpit multi-RFC**: hecho — `/nomina/cockpit` (+ `/api/nomina/cockpit`): tabla de todas
+  las empresas accesibles (membresía directa ∪ despacho con scoping) con empleados, masa
+  salarial, neto del mes, última corrida, semáforo operativo (al corriente / sin timbrar /
+  sin corrida / setup incompleto / bajo mínimo) y botón "Operar" que cambia la empresa activa
+  y abre su workspace. Agregados con groupBy/distinct — sin N+1.
 
 ---
 
