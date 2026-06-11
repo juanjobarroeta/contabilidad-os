@@ -4,6 +4,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { tarifaPeriodoPF, aplicarTarifa } from "@/lib/fiscal/tarifas";
 import { calcularIsrResicoPf } from "@/lib/resico";
+import { calcularIsrArrendamientoMensual } from "@/lib/fiscal/isr-arrendamiento";
 
 const IVA = 0.16;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -74,6 +75,18 @@ export async function GET(req: Request) {
           r2(causado - pos.isr.isrPagadoAnterior - pos.isr.retencionesAcreditadas)
         );
       }
+      break;
+    }
+    case "PF_ARRENDAMIENTO": {
+      // Arts. 114-116: mensual standalone — (ingresos + delta) − ciega 35% →
+      // tarifa mensual − retenciones del mes. El gasto no mueve el ISR (la
+      // deducción ciega sustituye a las comprobadas).
+      const r = calcularIsrArrendamientoMensual({
+        ejercicio: year,
+        ingresosCobradosMes: pos.isr.ingresosAcumulados + addIngreso,
+        retencionesMes: pos.isr.retencionesAcreditadas,
+      });
+      newIsr = r ? r.isrPagar : null;
       break;
     }
     case "RESICO_PF": {
