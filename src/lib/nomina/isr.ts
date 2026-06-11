@@ -1,64 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ISR retención por sueldos — Tarifa Art. 96 LISR + Subsidio para el Empleo
 //
-// Tarifas vigentes 2024-2026 publicadas por SAT. Si SAT actualiza las tarifas
-// (típicamente 1 enero), hay que actualizar las dos constantes de abajo.
+// Las tablas viven en src/lib/fiscal/tarifas.ts (versionadas, con vigencia,
+// procedencia y `verificado`), NO inline aquí: son correctness-critical y se
+// mantienen por PR revisado. El subsidio usa el mecanismo del decreto
+// DOF 01-may-2024 (monto único = pct × UMA mensual hasta un tope de ingreso),
+// que sustituyó a la tabla decreciente 2013-2023.
 //
-// Reference:
-//   https://www.sat.gob.mx/cs/Satellite?blobcol=urldata&blobkey=id&blobtable=...
+// `tarifaVerificada: false` en el resultado significa que la retención se
+// calculó con una tabla vencida o sin cotejar (p.ej. tarifa 2026 pendiente de
+// Cuadros Permanentes 2026) — el llamador debe señalarlo, no confiar en
+// silencio.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type TarifaRow = {
-  limiteInferior: number;
-  limiteSuperior: number;
-  cuotaFija: number;
-  porcentaje: number; // decimal, e.g. 0.064 = 6.4%
-};
-
-// Tarifa MENSUAL (Art. 96 LISR)
-const TARIFA_MENSUAL: TarifaRow[] = [
-  { limiteInferior: 0.01,        limiteSuperior: 746.04,     cuotaFija: 0.00,      porcentaje: 0.0192 },
-  { limiteInferior: 746.05,      limiteSuperior: 6332.05,    cuotaFija: 14.32,     porcentaje: 0.0640 },
-  { limiteInferior: 6332.06,     limiteSuperior: 11128.01,   cuotaFija: 371.83,    porcentaje: 0.1088 },
-  { limiteInferior: 11128.02,    limiteSuperior: 12935.82,   cuotaFija: 893.63,    porcentaje: 0.1600 },
-  { limiteInferior: 12935.83,    limiteSuperior: 15487.71,   cuotaFija: 1182.88,   porcentaje: 0.1792 },
-  { limiteInferior: 15487.72,    limiteSuperior: 31236.49,   cuotaFija: 1640.18,   porcentaje: 0.2136 },
-  { limiteInferior: 31236.50,    limiteSuperior: 49233.00,   cuotaFija: 5004.12,   porcentaje: 0.2352 },
-  { limiteInferior: 49233.01,    limiteSuperior: 93993.90,   cuotaFija: 9236.89,   porcentaje: 0.3000 },
-  { limiteInferior: 93993.91,    limiteSuperior: 125325.20,  cuotaFija: 22665.17,  porcentaje: 0.3200 },
-  { limiteInferior: 125325.21,   limiteSuperior: 375975.61,  cuotaFija: 32691.18,  porcentaje: 0.3400 },
-  { limiteInferior: 375975.62,   limiteSuperior: Infinity,   cuotaFija: 117912.32, porcentaje: 0.3500 },
-];
-
-// Subsidio para el empleo (tabla mensual)
-type SubsidioRow = { limiteInferior: number; limiteSuperior: number; subsidio: number };
-const SUBSIDIO_MENSUAL: SubsidioRow[] = [
-  { limiteInferior: 0.01,    limiteSuperior: 1768.96, subsidio: 407.02 },
-  { limiteInferior: 1768.97, limiteSuperior: 2653.38, subsidio: 406.83 },
-  { limiteInferior: 2653.39, limiteSuperior: 3472.84, subsidio: 406.62 },
-  { limiteInferior: 3472.85, limiteSuperior: 3537.87, subsidio: 392.77 },
-  { limiteInferior: 3537.88, limiteSuperior: 4446.15, subsidio: 382.46 },
-  { limiteInferior: 4446.16, limiteSuperior: 4717.18, subsidio: 354.23 },
-  { limiteInferior: 4717.19, limiteSuperior: 5335.42, subsidio: 324.87 },
-  { limiteInferior: 5335.43, limiteSuperior: 6224.67, subsidio: 294.63 },
-  { limiteInferior: 6224.68, limiteSuperior: 7113.90, subsidio: 253.54 },
-  { limiteInferior: 7113.91, limiteSuperior: 7382.33, subsidio: 217.61 },
-  { limiteInferior: 7382.34, limiteSuperior: Infinity, subsidio: 0 },
-];
-
-function applyTarifa(base: number, tarifa: TarifaRow[]): number {
-  if (base <= 0) return 0;
-  const row = tarifa.find((r) => base >= r.limiteInferior && base <= r.limiteSuperior);
-  if (!row) return 0;
-  const excedente = base - row.limiteInferior;
-  return row.cuotaFija + excedente * row.porcentaje;
-}
-
-function applySubsidio(base: number, tabla: SubsidioRow[]): number {
-  if (base <= 0) return 0;
-  const row = tabla.find((r) => base >= r.limiteInferior && base <= r.limiteSuperior);
-  return row?.subsidio ?? 0;
-}
+import { tarifaMensualSueldos, subsidioEmpleo, aplicarTarifa } from "../fiscal/tarifas";
+import { UMA_MENSUAL, UMA_MENSUAL_2025 } from "./constants";
 
 // Periodicidad → factor para convertir base del periodo a base mensual
 // (la tarifa está en mensual; convertimos primero, calculamos, luego dividimos
@@ -80,6 +36,10 @@ export type IsrCalcInput = {
   baseGravable: number;
   /** SAT periodicidad code: "04"=quincenal, "05"=mensual, etc. */
   periodicidadPago: string;
+  /** Ejercicio fiscal (año de la fecha de pago). Default: año actual. */
+  ejercicio?: number;
+  /** Mes de la fecha de pago (1-12). Sólo afecta el subsidio de enero (transitorio). Default: mes actual. */
+  mes?: number;
 };
 
 export type IsrCalcResult = {
@@ -87,31 +47,75 @@ export type IsrCalcResult = {
   isrSegunTarifa: number;
   subsidio: number;
   isrRetenido: number;
+  /** Ejercicio de la tabla efectivamente usada (puede ser anterior por roll-forward). */
+  tarifaEjercicio: number;
+  /**
+   * False cuando la tarifa usada está vencida para el ejercicio (roll-forward
+   * a una tabla superada) o el subsidio aplicado no está cotejado.
+   */
+  tarifaVerificada: boolean;
 };
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Calcula el ISR retenido por sueldos para un periodo dado.
  * 1. Convierte la base gravable a equivalente mensual
- * 2. Aplica la tarifa Art. 96 LISR
- * 3. Resta el subsidio para el empleo (si aplica)
+ * 2. Aplica la tarifa Art. 96 LISR del ejercicio
+ * 3. Resta el subsidio para el empleo si el ingreso mensual no excede el tope
+ *    (decreto: monto único, no devolutivo — sólo baja el ISR hasta cero)
  * 4. Convierte de vuelta a la proporción del periodo
  */
 export function calcularIsrRetenido(input: IsrCalcInput): IsrCalcResult {
+  const ejercicio = input.ejercicio ?? new Date().getFullYear();
+  const mes = input.mes ?? new Date().getMonth() + 1;
   const factor = PERIODICIDAD_FACTOR[input.periodicidadPago] ?? 1;
   const baseMensual = input.baseGravable / factor;
 
-  const isrMensual = applyTarifa(baseMensual, TARIFA_MENSUAL);
-  const subsidioMensual = applySubsidio(baseMensual, SUBSIDIO_MENSUAL);
+  const t = tarifaMensualSueldos(ejercicio);
+  if (!t) {
+    // Sin tabla para el ejercicio (anterior a las versionadas): no retener a
+    // ciegas — devolver 0 marcado como NO verificado para que se señale.
+    return {
+      baseMensual,
+      isrSegunTarifa: 0,
+      subsidio: 0,
+      isrRetenido: 0,
+      tarifaEjercicio: ejercicio,
+      tarifaVerificada: false,
+    };
+  }
+
+  const isrMensual = aplicarTarifa(baseMensual, t.tarifa.filas);
+
+  // Subsidio para el empleo (decreto): monto único mensual cuando el ingreso
+  // mensual no excede el tope. Se compara contra la base mensualizada.
+  // ENERO (transitorio): la UMA del año entra en vigor el 1-feb (Art. 5 LUMA),
+  // así que el decreto fija para enero un pct mayor sobre la UMA del año
+  // anterior — se calcula contra la UMA 2025 histórica fija, no la env, para
+  // que un recálculo de enero siga siendo exacto después de actualizar la UMA.
+  const sub = subsidioEmpleo(ejercicio);
+  let subsidioMensual = 0;
+  if (sub && baseMensual > 0 && baseMensual <= sub.topeIngresoMensual) {
+    subsidioMensual =
+      mes === 1 && ejercicio === 2026 && sub.pctUmaMensualEnero != null
+        ? r2(sub.pctUmaMensualEnero * UMA_MENSUAL_2025)
+        : r2(sub.pctUmaMensual * UMA_MENSUAL);
+  }
+
   const retencionMensual = Math.max(0, isrMensual - subsidioMensual);
 
   // Pro-rata back to the period
-  const isrRetenido = +(retencionMensual * factor).toFixed(2);
+  const isrRetenido = r2(retencionMensual * factor);
 
   return {
     baseMensual,
-    isrSegunTarifa: +(isrMensual * factor).toFixed(2),
-    subsidio: +(subsidioMensual * factor).toFixed(2),
+    isrSegunTarifa: r2(isrMensual * factor),
+    subsidio: r2(subsidioMensual * factor),
     isrRetenido,
+    tarifaEjercicio: t.tarifa.ejercicio,
+    tarifaVerificada:
+      t.vigente && t.tarifa.verificado && (subsidioMensual === 0 || (sub?.verificado ?? false)),
   };
 }
 

@@ -111,6 +111,17 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
 - Borrar branches `claude/*` ya mergeados.
 - Al arrancar nómina: extraer del PDF "Cuadros Permanentes 2026" la tarifa **mensual Art. 96**
   + tablas de **subsidio** + tablas **RESICO** y agregarlas a `tarifas.ts` con `verificado: true`.
+  **Avance**: `tarifas.ts` tiene `tarifaMensualSueldos()` — **2026 verificada** fila por fila
+  contra Cuadros Permanentes 2026 (`docs/fiscal/cuadros-permanentes-2026.pdf`, Anexo 8 RMF 2026
+  DOF 28-dic-2025), que además re-verificó la anual 2026, las elevadas Art. 106 (el escalado
+  meses/12 coincide al centavo) y que la mensual Art. 116 (arrendamiento) es la MISMA tabla.
+  La nómina consume las tablas versionadas por ejercicio de la fecha de pago y el run devuelve
+  `tarifaWarning` cuando calcula con tablas sin verificar.
+  ✅ **Resuelto** (decreto DOF 31-dic-2025 + INEGI, aportados en sesión): subsidio 2026
+  verificado (15.02% UMA, tope $11,492.66; **enero 15.59% sobre UMA 2025** por transitorio —
+  la UMA del año rige desde el 1-feb), 2025 confirmado (13.8%/$10,171); UMA 2026 $117.31
+  (default en `constants.ts`, env `UMA_DIARIO` overridea); salario mínimo 2026 $315.04
+  (`SALARIO_MINIMO_GENERAL`). El motor de nómina queda con todas las tablas 2026 verificadas.
 
 ---
 

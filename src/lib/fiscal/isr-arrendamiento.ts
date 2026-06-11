@@ -1,4 +1,4 @@
-import { tarifaPeriodoPF, aplicarTarifa } from "./tarifas";
+import { tarifaMensualSueldos, aplicarTarifa } from "./tarifas";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ISR pago provisional — Persona Física con ingresos por ARRENDAMIENTO
@@ -15,9 +15,10 @@ import { tarifaPeriodoPF, aplicarTarifa } from "./tarifas";
 // requiere comprobar gastos del inmueble. NO suma predial (no lo trackeamos).
 // El refinamiento (elegir comprobadas cuando convenga + predial) queda anotado.
 //
-// La tarifa mensual se obtiene de tarifaPeriodoPF(ejercicio, 1) — la anual
-// escalada a 1/12, equivalente sub-peso a la tabla mensual publicada (ver nota
-// en tarifas.ts).
+// La tarifa mensual es la publicada en el Anexo 8 (tarifaMensualSueldos): el
+// Anexo publica UNA tabla mensual que sirve tanto para sueldos (Art. 96) como
+// para los provisionales de arrendamiento (Art. 116) — verificado contra
+// Cuadros Permanentes 2026, donde ambas tablas son idénticas.
 //
 // Pendiente (anotado): opción de pago TRIMESTRAL cuando los ingresos del mes
 // no exceden 10 UMA mensuales (Art. 116 tercer párrafo).
@@ -58,13 +59,13 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export function calcularIsrArrendamientoMensual(
   input: IsrArrendamientoInput
 ): IsrArrendamientoResult | null {
-  const periodo = tarifaPeriodoPF(input.ejercicio, 1); // tarifa mensual
-  if (!periodo) return null;
+  const t = tarifaMensualSueldos(input.ejercicio); // tarifa mensual publicada (Anexo 8)
+  if (!t) return null;
 
   const ingresos = Math.max(0, input.ingresosCobradosMes);
   const deduccionCiega = r2(ingresos * DEDUCCION_CIEGA_ARRENDAMIENTO);
   const baseGravable = Math.max(0, r2(ingresos - deduccionCiega));
-  const isrCausado = r2(aplicarTarifa(baseGravable, periodo.tarifa));
+  const isrCausado = r2(aplicarTarifa(baseGravable, t.tarifa.filas));
   const retenciones = r2(input.retencionesMes ?? 0);
   const isrPagar = Math.max(0, r2(isrCausado - retenciones));
 
@@ -75,8 +76,9 @@ export function calcularIsrArrendamientoMensual(
     isrCausado,
     retenciones,
     isrPagar,
-    tarifaEjercicio: periodo.base.ejercicio,
-    tarifaFuente: periodo.base.fuente,
-    tarifaVerificada: periodo.base.verificado,
+    tarifaEjercicio: t.tarifa.ejercicio,
+    tarifaFuente: t.tarifa.fuente,
+    // No vigente (roll-forward a tabla superada) cuenta como NO verificada.
+    tarifaVerificada: t.vigente && t.tarifa.verificado,
   };
 }
