@@ -35,8 +35,12 @@ export async function GET(req: Request) {
   const pos = await computeTaxPosition(companyId, year, month);
 
   // ── IVA (flujo, base-REP): trasladado/acreditable move linearly with 16% ──
+  // El gasto hipotético se prorratea con la proporción de acreditamiento del
+  // periodo (Art. 5-V); el ingreso hipotético se asume gravado y la proporción
+  // se mantiene constante (aproximación del simulador).
   const newTrasladado = pos.iva.trasladado + addIngreso * IVA;
-  const newAcreditable = pos.iva.acreditable + addGasto * IVA;
+  const newAcreditable =
+    (pos.iva.acreditableBruto + addGasto * IVA) * pos.iva.proporcionAcreditamiento;
   const newIvaNeto =
     newTrasladado - newAcreditable - pos.iva.retenidoPorClientes - pos.iva.saldoFavorAnterior;
   const newIva = Math.max(0, r2(newIvaNeto));

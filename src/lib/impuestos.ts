@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { sumIsrPagar } from "./isr-provisional";
 import { detectResicoKind, calcularIsrResicoPf } from "./resico";
 import { calcularIsrProvisionalPf } from "./fiscal/isr-pf";
+import { calcularActosDelPeriodo } from "./fiscal/iva";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Monthly tax position (IVA + ISR provisional) computed from synced CFDIs.
@@ -136,7 +137,15 @@ export interface TaxPosition {
   iva: {
     trasladado: number;
     retenidoPorClientes: number;
+    /** IVA acreditable PROCEDENTE (ya aplicada la proporción Art. 5-V) — la cifra que entra al cálculo. */
     acreditable: number;
+    /** IVA acreditable antes de proporción (suma de los gastos del periodo). */
+    acreditableBruto: number;
+    /** Proporción de acreditamiento (Art. 5-V LIVA): gravados/(gravados+exentos). 1 cuando no hay exentos. */
+    proporcionAcreditamiento: number;
+    /** Términos de la proporción — valor de actos del mes por tipo. */
+    actosGravados: number;
+    actosExentos: number;
     saldoFavorAnterior: number;
     /** Net IVA a pagar this period (>=0); excess becomes saldoAFavor. */
     pagar: number;
@@ -335,8 +344,15 @@ export async function computeTaxPosition(
   const ivaAcreditablePUE = facturasEgresos
     .filter((inv) => inv.metodoPago === "PUE")
     .reduce((s, inv) => s + ivaTrasladado(inv), 0);
-  const ivaAcreditable = ivaAcreditablePUE + ivaAcreditablePPD;
+  const ivaAcreditableBruto = ivaAcreditablePUE + ivaAcreditablePPD;
   const ivaAcreditableDevengado = facturasEgresos.reduce((s, inv) => s + ivaTrasladado(inv), 0);
+
+  // Proporción de acreditamiento (Art. 5-V LIVA): con actos exentos en el mes,
+  // el IVA de los gastos sólo procede en gravados/(gravados+exentos). v1 trata
+  // todos los gastos como indistintos (sin destino etiquetado por gasto). Sin
+  // exentos la proporción es 1 y el comportamiento no cambia.
+  const actos = calcularActosDelPeriodo(facturasEmitidas);
+  const ivaAcreditable = round2(ivaAcreditableBruto * actos.proporcion);
 
   const saldoFavorAnterior = prevDeclaracion?.ivaSaldoFavor ?? 0;
   const ivaNeto = ivaTrasladadoTotal - ivaAcreditable - ivaRetenidoPorClientes - saldoFavorAnterior;
@@ -508,6 +524,10 @@ export async function computeTaxPosition(
       trasladado: round2(ivaTrasladadoTotal),
       retenidoPorClientes: round2(ivaRetenidoPorClientes),
       acreditable: round2(ivaAcreditable),
+      acreditableBruto: round2(ivaAcreditableBruto),
+      proporcionAcreditamiento: actos.proporcion,
+      actosGravados: actos.gravados,
+      actosExentos: actos.exentos,
       saldoFavorAnterior: round2(saldoFavorAnterior),
       pagar: ivaPagar,
       saldoAFavor: ivaSaldoAFavor,

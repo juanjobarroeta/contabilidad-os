@@ -131,6 +131,7 @@ interface IvaData {
   retenidoAProveedores: IvaRow[];
   totales: {
     trasladado: number; acreditable: number; retenidoPorClientes: number; retenidoAProveedores: number;
+    proporcionAcreditamiento: number; actosGravados: number; actosExentos: number; acreditableProcedente: number;
     ivaCargo: number; saldoFavorAnterior: number; ivaPagar: number; saldoFavorMes: number;
   };
 }
@@ -188,7 +189,18 @@ function IvaPanel({ companyId, year, month }: { companyId: string; year: number;
         <dl className="space-y-1.5 font-mono">
           <Line label="IVA trasladado (+)" value={data.totales.trasladado} />
           <Line label="IVA retenido por clientes (−)" value={-data.totales.retenidoPorClientes} />
-          <Line label="IVA acreditable (−)" value={-data.totales.acreditable} />
+          {data.totales.proporcionAcreditamiento < 1 ? (
+            <>
+              <Line label="IVA acreditable bruto" value={data.totales.acreditable} />
+              <Line
+                label={`× Proporción de acreditamiento Art. 5-V (gravados ${formatCurrency(data.totales.actosGravados)} / exentos ${formatCurrency(data.totales.actosExentos)})`}
+                value={null}
+              />
+              <Line label={`= IVA acreditable procedente (${(data.totales.proporcionAcreditamiento * 100).toFixed(2)}%) (−)`} value={-data.totales.acreditableProcedente} />
+            </>
+          ) : (
+            <Line label="IVA acreditable (−)" value={-data.totales.acreditable} />
+          )}
           <Line label="= IVA a cargo" value={data.totales.ivaCargo} strong />
           <Line label="Saldo a favor anterior (−)" value={-data.totales.saldoFavorAnterior} />
           <div className="border-t border-border pt-2">

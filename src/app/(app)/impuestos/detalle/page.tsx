@@ -19,7 +19,12 @@ const MONTHS = [
 interface IvaApiData {
   trasladado: number;
   retenidoPorClientes: number;
+  /** Acreditable procedente — ya aplicada la proporción Art. 5-V. */
   acreditable: number;
+  acreditableBruto: number;
+  proporcionAcreditamiento: number;
+  actosGravados: number;
+  actosExentos: number;
   saldoFavorAnterior: number;
   saldoFavorAnteriorPeriodo: string | null;
 }
@@ -653,7 +658,19 @@ export default function ImpuestosPage() {
               {ivaComputed.retenidoPorClientes > 0 && (
                 <Row label="IVA retenido por clientes" value={`(${formatCurrency(ivaComputed.retenidoPorClientes)})`} />
               )}
-              <Row label="IVA acreditable (facturas de proveedores)" value={`(${formatCurrency(ivaComputed.acreditable)})`} />
+              {result.iva.proporcionAcreditamiento < 1 ? (
+                <>
+                  <Row label="IVA acreditable bruto (facturas de proveedores)" value={formatCurrency(result.iva.acreditableBruto)} />
+                  <Row
+                    label={`× Proporción de acreditamiento Art. 5-V (${(result.iva.proporcionAcreditamiento * 100).toFixed(2)}%)`}
+                    value=""
+                    indent
+                  />
+                  <Row label="= IVA acreditable procedente" value={`(${formatCurrency(ivaComputed.acreditable)})`} indent bold />
+                </>
+              ) : (
+                <Row label="IVA acreditable (facturas de proveedores)" value={`(${formatCurrency(ivaComputed.acreditable)})`} />
+              )}
 
               {/* Saldo a favor anterior — auto-filled, editable */}
               <Row label="Saldo a favor meses anteriores">
@@ -700,6 +717,17 @@ export default function ImpuestosPage() {
                 bold accent={ivaComputed.pagar > 0 ? "red" : "green"}
               />
             </div>
+            {result.iva.proporcionAcreditamiento < 1 && (
+              <div className="px-5 pb-4">
+                <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  Este mes facturaste actos exentos ({formatCurrency(result.iva.actosExentos)}) además de gravados
+                  ({formatCurrency(result.iva.actosGravados)}). Por Art. 5-V LIVA el IVA de los gastos sólo se acredita
+                  en la proporción gravados ÷ total; el resto ({formatCurrency(result.iva.acreditableBruto - result.iva.acreditable)})
+                  no es acreditable.
+                </div>
+              </div>
+            )}
             {ivaComputed.acreditable === 0 && (
               <div className="px-5 pb-4">
                 <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">

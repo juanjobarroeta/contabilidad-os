@@ -81,8 +81,13 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
    - 625 Plataformas digitales (retención por plataforma).
    - 621 RIF (en extinción, reducción decreciente).
    - 622 AGAPES (exención + reducción).
-2. **IVA proporción de acreditamiento (Art. 5 LIVA)**: cuando hay actos gravados y exentos,
-   el IVA acreditable se prorratea. Hoy se acredita 100%.
+✅ **IVA proporción de acreditamiento (Art. 5 LIVA)**: hecho — `calcularActosDelPeriodo`
+   (`src/lib/fiscal/iva.ts`) calcula gravados/exentos desde el desglose real del CFDI
+   (filas `InvoiceTax` con `factor` EXENTO y `base`) y el motor prorratea el acreditable.
+   v1 trata todo gasto como "indistinto" (Art. 5-V c); refinamiento futuro: destino por
+   gasto. Prerequisito resuelto: el parser ahora extrae el nodo `<cfdi:Impuestos>` completo
+   (traslados + retenciones) y hay backfill (`/api/cron/invoice-taxes-backfill`) — esto
+   también arregló que las retenciones acreditadas leyeran 0 en CFDIs sincronizados del SAT.
 3. **PTU + pérdidas fiscales**: arrastre de pérdidas (10 años, actualizadas) y PTU pagada
    como disminución de la base.
 4. **Cancel sync**: descarga de metadata para detectar CFDIs cancelados y revertir su efecto.
