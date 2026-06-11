@@ -1,6 +1,12 @@
 # Fiscal Knowledge Base (Agente fiscal) — Design Doc
 
-> Status: **Proposal / not yet built.** This document specifies a retrieval-augmented
+> Status: **Phases 0–1 built** (schema, LISR ingestion, chunker, embeddings,
+> `search_fiscal_knowledge` tool wired into the assistant — see `src/lib/fiscal-kb/`).
+> Pending: run against a live DB (`npm run fiscal:setup` → `npm run db:push` →
+> `npm run fiscal:ingest-ley LISR`) and judge retrieval quality on the 10-question
+> gate (§10 Phase 0) before continuing to Phase 2+.
+>
+> This document specifies a retrieval-augmented
 > fiscal knowledge base that ingests Mexican tax authority sources (leyes vigentes,
 > DOF, RMF, criterios SAT) and exposes them to the existing AI assistant as a
 > citable, version-aware retrieval tool. It is the natural deepening of the
@@ -265,11 +271,14 @@ returns the source text, the assistant is grounded rather than recalling.
 
 ## 10. Phased execution
 
-- **Phase 0 — Spike (½–1 day).** pgvector migration + `FiscalChunk`; ingest **one law**
-  (LISR) by hand; raw `$queryRaw` cosine search in a script. Validate retrieval quality
-  on 10 real fiscal questions. *Decision gate before investing further.*
-- **Phase 1 — Vertical slice.** Article-aware chunker; embed pipeline; `search_fiscal_knowledge`
-  tool wired into the chat assistant; system-prompt update. Sources: CFF + LISR + LIVA.
+- **Phase 0 — Spike (½–1 day).** ✅ Built (`src/lib/fiscal-kb/`, `scripts/fiscal-*.ts`).
+  pgvector schema + ingest one law (LISR) + cosine search script. Chunker validated
+  against the real LISR PDF (313 pp → 327 chunks, 236 artículos, breadcrumbs intact).
+  **Gate still open:** run against a live DB + OPENAI_API_KEY and validate retrieval
+  quality on 10 real fiscal questions before investing further.
+- **Phase 1 — Vertical slice.** ✅ Built for LISR/LIVA/CFF/LIEPS (catalog in
+  `ingest-leyes.ts`); `search_fiscal_knowledge` wired into tools + executor +
+  system prompt. Pending: actually ingest LIVA/CFF and spot-check.
 - **Phase 2 — Vigencia.** Version-close logic; `fecha_vigencia` filtering; backfill ≥1
   prior version of one law to prove time-travel works.
 - **Phase 3 — Coverage.** RMF + anexos + criterios SAT; weekly cron; hash-based skip.

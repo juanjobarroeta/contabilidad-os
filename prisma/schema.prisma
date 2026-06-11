@@ -18,21 +18,21 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
-  password      String?   // hashed, null if OAuth only
+  password      String? // hashed, null if OAuth only
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // Subscription / trial — billing-per-RFC, sub lives on the account owner
-  subscriptionStatus SubscriptionStatus @default(TRIALING)
-  trialEndsAt        DateTime?
+  subscriptionStatus   SubscriptionStatus @default(TRIALING)
+  trialEndsAt          DateTime?
   // Stripe (filled in when phase 5 lands)
-  stripeCustomerId     String?  @unique
-  stripeSubscriptionId String?  @unique
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
   currentPeriodEnd     DateTime?
 
-  accounts      Account[]
-  sessions      Session[]
-  memberships   CompanyMember[]
+  accounts            Account[]
+  sessions            Session[]
+  memberships         CompanyMember[]
   // Despacho membership — each user belongs to at most ONE despacho.
   // Companies owned by the despacho are automatically visible to all members.
   // Per-company CompanyMember rows are still used for one-off access grants
@@ -89,60 +89,60 @@ model VerificationToken {
 // ─── Companies (Multi-tenant core) ───────────────────────────────────────────
 
 model Company {
-  id                String   @id @default(cuid())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Despacho that owns this company. All despacho members have implicit ADMIN
   // access. Nullable for backwards-compat with companies created before the
   // despacho model was introduced; backfilled by the migration script.
-  despachoId        String?
-  despacho          Despacho? @relation(fields: [despachoId], references: [id], onDelete: SetNull)
+  despachoId String?
+  despacho   Despacho? @relation(fields: [despachoId], references: [id], onDelete: SetNull)
 
   // SAT / fiscal data
-  rfc               String   @unique
-  razonSocial       String
-  regimenFiscal     String   // e.g. "601" = General de Ley Personas Morales
-  codigoPostal      String
-  domicilioFiscal   String?
+  rfc             String  @unique
+  razonSocial     String
+  regimenFiscal   String // e.g. "601" = General de Ley Personas Morales
+  codigoPostal    String
+  domicilioFiscal String?
 
   // Contact / additional info
-  nombreComercial   String?
-  email             String?
-  telefono          String?
+  nombreComercial    String?
+  email              String?
+  telefono           String?
   actividadEconomica String? // SCIAN code description
 
   // CSD — Certificado de Sello Digital (for CFDI stamping).
   // All three are AES-256-GCM encrypted at rest via lib/crypto (enc:v1:… envelope).
-  csdCer            String?  @db.Text  // encrypted(base64 .cer)
-  csdKey            String?  @db.Text  // encrypted(base64 .key — private key!)
-  csdPassword       String?            // encrypted password
-  csdVigencia       DateTime?          // expiry date
+  csdCer      String?   @db.Text // encrypted(base64 .cer)
+  csdKey      String?   @db.Text // encrypted(base64 .key — private key!)
+  csdPassword String? // encrypted password
+  csdVigencia DateTime? // expiry date
 
   // e.firma / FIEL (for SAT declarations). Encrypted at rest (see above).
-  fielCer           String?  @db.Text  // encrypted(base64 .cer)
-  fielKey           String?  @db.Text  // encrypted(base64 .key — private key!)
-  fielPassword      String?            // encrypted password
-  fielVigencia      DateTime?          // expiry date
+  fielCer      String?   @db.Text // encrypted(base64 .cer)
+  fielKey      String?   @db.Text // encrypted(base64 .key — private key!)
+  fielPassword String? // encrypted password
+  fielVigencia DateTime? // expiry date
 
   // Automatic SAT sync (cron-driven Descarga Masiva). When enabled, the
   // background job periodically pulls emitidos/recibidos CFDIs without the
   // user having to click "Sincronizar". Defaults on so every company with a
   // valid FIEL is covered; can be turned off per-company.
-  autoSyncEnabled   Boolean   @default(true)
-  lastAutoSyncAt    DateTime?           // last time the cron touched this company
+  autoSyncEnabled Boolean   @default(true)
+  lastAutoSyncAt  DateTime? // last time the cron touched this company
 
   // How far back to pull CFDIs on the initial historical backfill, chosen at
   // onboarding. 5 = SAT legal maximum, 1 = last year, 0 = no backfill. Still
   // clamped by fechaInicioOperaciones so we never ask before the RFC existed.
-  satBackfillYears  Int       @default(5)
+  satBackfillYears       Int       @default(5)
   // Set once the historical backfill has fully completed (all in-range periods
   // imported). Lets the throttled backfill cron skip finished companies.
   satBackfillCompletedAt DateTime?
 
   // Selected subscription plan (UI/trial only for now — no billing yet):
   // "BASICO" | "PROFESIONAL" | "DESPACHO".
-  plan              String?
+  plan String?
 
   // Earliest date this RFC could have CFDIs — captured from the Constancia de
   // Situación Fiscal (fechaInicioRegimen) at onboarding. Used to clamp the
@@ -151,24 +151,24 @@ model Company {
   fechaInicioOperaciones DateTime?
 
   // Facturapi integration
-  facturapiOrgId    String?  // Facturapi organization ID for this company
-  facturapiApiKey   String?  // live API key stored encrypted
+  facturapiOrgId           String? // Facturapi organization ID for this company
+  facturapiApiKey          String? // live API key stored encrypted
   // When the user acknowledged they must sign Facturapi's Carta Manifiesto
   // (signed with e.firma on Facturapi's portal — we can't verify completion,
   // only that they were prompted during onboarding).
   facturapiManifiestoAckAt DateTime?
 
   // Logo / branding
-  logoUrl           String?
+  logoUrl String?
 
   // ISR — Coeficiente de utilidad (Art. 14 LISR) set once per fiscal year
-  coeficienteUtilidad Float?  // Stored after user confirms/overrides auto-calculation
-  coeficienteAnio     Int?    // Which fiscal year this coeficiente applies to
+  coeficienteUtilidad Float? // Stored after user confirms/overrides auto-calculation
+  coeficienteAnio     Int? // Which fiscal year this coeficiente applies to
 
   // Nómina — IMSS registro patronal (required for CFDI nómina emisor block)
-  registroPatronal String?  // e.g. "A7025105103"
+  registroPatronal String? // e.g. "A7025105103"
 
-  isActive          Boolean  @default(true)
+  isActive Boolean @default(true)
 
   // Relations
   members           CompanyMember[]
@@ -187,28 +187,28 @@ model Company {
   satSyncRequests   SatSyncRequest[]
 
   // Module gating (SaaS): which features this company has contracted
-  modules           CompanyModule[]
+  modules CompanyModule[]
 
   // Construction module (only used when CONSTRUCCION is enabled)
-  proyectos         Proyecto[]
-  conceptos         Concepto[]
-  apus              APU[]
-  insumos           Insumo[]
-  presupuestos       Presupuesto[]
-  estimaciones       Estimacion[]
+  proyectos           Proyecto[]
+  conceptos           Concepto[]
+  apus                APU[]
+  insumos             Insumo[]
+  presupuestos        Presupuesto[]
+  estimaciones        Estimacion[]
   estimacionTemplates EstimacionTemplate[]
-  solicitudesCompra  SolicitudCompra[]
-  pagos             Pago[]
-  imssMovimientos   ImssMovimiento[]
-  incidencias       Incidencia[]
+  solicitudesCompra   SolicitudCompra[]
+  pagos               Pago[]
+  imssMovimientos     ImssMovimiento[]
+  incidencias         Incidencia[]
 
   // CONSTRUCCION_CUADRILLAS add-on (only populated when that module is enabled)
-  cuadrillas        Cuadrilla[]
-  rayas             RayaSemanal[]
+  cuadrillas Cuadrilla[]
+  rayas      RayaSemanal[]
 
   // Gastos (Katia's validation + pay workflow for Bartiz field expenses)
-  gastos            Gasto[]
-  reembolsos        ReembolsoSemanal[]
+  gastos     Gasto[]
+  reembolsos ReembolsoSemanal[]
 
   // Despacho per-company scoping junction
   despachoMemberScopes DespachoMemberCompany[]
@@ -218,21 +218,21 @@ model Company {
   whatsappConversations WhatsappConversation[]
 
   // Post-sync IVA-change notices (one baseline per unfiled period)
-  ivaPeriodNotices      IvaPeriodNotice[]
+  ivaPeriodNotices IvaPeriodNotice[]
 
   // All SAT régimenes this taxpayer is registered under. `regimenFiscal` above
   // remains the single "primary" (operative) régimen used by most flows; this
   // list captures the rest (common for personas físicas) so obligation and
   // annual-declaration logic can reason across all of them.
-  regimenes             CompanyRegimen[]
+  regimenes CompanyRegimen[]
 }
 
 model CompanyMember {
-  id        String      @id @default(cuid())
+  id        String     @id @default(cuid())
   userId    String
   companyId String
-  role      MemberRole  @default(VIEWER)
-  createdAt DateTime    @default(now())
+  role      MemberRole @default(VIEWER)
+  createdAt DateTime   @default(now())
 
   /// Per-user module restriction. Empty array = full access to every module
   /// the company has enabled (backwards-compatible default). Non-empty =
@@ -316,7 +316,7 @@ model DespachoMember {
 // rows here, they can only access those specific companies. When they have
 // NO rows, they get access to all despacho companies (default/owner behavior).
 model DespachoMemberCompany {
-  id               String @id @default(cuid())
+  id               String   @id @default(cuid())
   despachoMemberId String
   companyId        String
   createdAt        DateTime @default(now())
@@ -361,80 +361,80 @@ enum ModuloApp {
 // ─── Module 3: Invoicing / CFDI ───────────────────────────────────────────────
 
 model Customer {
-  id           String   @id @default(cuid())
-  companyId    String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  rfc          String
-  razonSocial  String
+  rfc           String
+  razonSocial   String
   regimenFiscal String
-  email        String?
-  phone        String?
-  domicilio    String?
-  codigoPostal String?
+  email         String?
+  phone         String?
+  domicilio     String?
+  codigoPostal  String?
 
   // Facturapi customer ID
-  facturapiId  String?
+  facturapiId String?
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  invoices Invoice[]
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoices  Invoice[]
   proyectos Proyecto[]
 
   @@unique([companyId, rfc])
 }
 
 model Supplier {
-  id           String   @id @default(cuid())
-  companyId    String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  rfc          String
-  razonSocial  String
+  rfc           String
+  razonSocial   String
   regimenFiscal String?
-  email        String?
+  email         String?
 
   // Datos bancarios para enviar SPEIs. CLABE es el dato canónico (18 dígitos);
   // `banco` y `cuentaBancaria` son auxiliares cuando el proveedor proporciona
   // sólo cuenta interbancaria. `titularCuenta` cubre el caso donde la cuenta
   // está a nombre de un tercero (común con personas físicas que facturan a
   // otro RFC).
-  clabe         String?
-  banco         String?
+  clabe          String?
+  banco          String?
   cuentaBancaria String?
-  titularCuenta String?
+  titularCuenta  String?
 
-  company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  bankTransactions     BankTransaction[]
-  solicitudesCompra    SolicitudCompra[]
-  cotizaciones         SolicitudCompraCotizacion[]
+  company           Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankTransactions  BankTransaction[]
+  solicitudesCompra SolicitudCompra[]
+  cotizaciones      SolicitudCompraCotizacion[]
 
   @@unique([companyId, rfc])
 }
 
 model Invoice {
-  id           String        @id @default(cuid())
-  companyId    String
-  customerId   String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   // CFDI data
-  tipo         InvoiceType   // INGRESO, EGRESO, TRASLADO, NOMINA, PAGO
-  serie        String?
-  folio        String?
-  fecha        DateTime
-  formaPago    String        // SAT catalog key e.g. "01" = Efectivo
-  metodoPago   String        // "PUE" or "PPD"
-  usoCfdi      String        // SAT catalog key e.g. "G01"
-  moneda       String        @default("MXN")
-  tipoCambio   Float         @default(1.0)
-  subtotal     Float
-  descuento    Float         @default(0)
+  tipo           InvoiceType // INGRESO, EGRESO, TRASLADO, NOMINA, PAGO
+  serie          String?
+  folio          String?
+  fecha          DateTime
+  formaPago      String // SAT catalog key e.g. "01" = Efectivo
+  metodoPago     String // "PUE" or "PPD"
+  usoCfdi        String // SAT catalog key e.g. "G01"
+  moneda         String      @default("MXN")
+  tipoCambio     Float       @default(1.0)
+  subtotal       Float
+  descuento      Float       @default(0)
   totalImpuestos Float       @default(0)
-  total        Float
-  notas        String?
+  total          Float
+  notas          String?
 
   // Contador override: if set, the posting engine uses this SAT account
   // instead of whatever classifyInvoice() would return. Stores the short
@@ -442,35 +442,35 @@ model Invoice {
   overrideCuenta String?
 
   // SAT stamping data (from PAC/Facturapi)
-  status       InvoiceStatus @default(DRAFT)
-  uuid         String?       @unique // Folio fiscal
-  facturapiId  String?       // Facturapi invoice ID
-  xmlUrl       String?
-  pdfUrl       String?
+  status         InvoiceStatus @default(DRAFT)
+  uuid           String?       @unique // Folio fiscal
+  facturapiId    String? // Facturapi invoice ID
+  xmlUrl         String?
+  pdfUrl         String?
   // Original CFDI XML as downloaded from SAT (or uploaded). Stored so we can
   // re-send the authentic file (the legal artifact) over WhatsApp/web without
   // re-querying SAT. Only populated for CFDIs imported after this shipped.
-  rawXml       String?       @db.Text
-  cadenaOriginal String?     @db.Text
-  selloSAT     String?       @db.Text
-  selloCFD     String?       @db.Text
+  rawXml         String?       @db.Text
+  cadenaOriginal String?       @db.Text
+  selloSAT       String?       @db.Text
+  selloCFD       String?       @db.Text
 
   // Cancellation (CFDI 4.0). motivo: SAT reason code 01-04. For motivo 01 a
   // substitution UUID is required (the replacement CFDI). We only set status
   // CANCELLED once Facturapi/SAT confirms — never optimistically.
-  canceladaAt        DateTime?
-  cancelMotivo       String?   // "01" | "02" | "03" | "04"
-  cancelSustituyeUuid String?  // required when motivo = 01
+  canceladaAt         DateTime?
+  cancelMotivo        String? // "01" | "02" | "03" | "04"
+  cancelSustituyeUuid String? // required when motivo = 01
 
   // Provenance: which product module created this invoice. NULL = generic/manual.
   origenModulo ModuloApp?
 
-  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer         Customer?        @relation(fields: [customerId], references: [id])
-  items            InvoiceItem[]
-  taxes            InvoiceTax[]
-  bankTransactions BankTransaction[]
-  estimacion       Estimacion?
+  company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer           Customer?              @relation(fields: [customerId], references: [id])
+  items              InvoiceItem[]
+  taxes              InvoiceTax[]
+  bankTransactions   BankTransaction[]
+  estimacion         Estimacion?
   // When this invoice is a complemento de pago (tipo=PAGO), the parent
   // invoice UUIDs it pays off (parsed from <pago:DoctoRelacionado>).
   doctosRelacionados PagoDoctoRelacionado[]
@@ -481,27 +481,27 @@ model Invoice {
 // emitidos and recibidos so we can tell, accurately, whether a PPD invoice's
 // payment has been complementado (vs. a fragile RFC+amount heuristic).
 model PagoDoctoRelacionado {
-  id              String   @id @default(cuid())
-  pagoInvoiceId   String   // the tipo=PAGO Invoice that carries this node
-  parentUuid      String   // UUID of the invoice being paid (IdDocumento)
-  impPagado       Float?
-  numParcialidad  Int?
+  id               String @id @default(cuid())
+  pagoInvoiceId    String // the tipo=PAGO Invoice that carries this node
+  parentUuid       String // UUID of the invoice being paid (IdDocumento)
+  impPagado        Float?
+  numParcialidad   Int?
   impSaldoAnterior Float?
   impSaldoInsoluto Float?
 
   // FechaPago of the parent <pago:Pago> node — the legal date of the payment,
   // which the SAT uses to attribute IVA to a period (not the REP's emission
   // date). Present in both complemento 1.0 and 2.0.
-  fechaPago       DateTime?
+  fechaPago DateTime?
 
   // Per-docto IVA breakdown. Complemento de Pago 2.0 carries ImpuestosDR/
   // TrasladoDR (firm, payment-level IVA); 1.0 does not. When the XML lacks the
   // breakdown (legacy 1.0, or 2.0 ObjetoImpDR "03"), these are null and
   // ivaDerivado is set so the tax engine prorates the parent invoice's IVA
   // instead of reading a firm value.
-  baseTraslado    Float?
-  ivaTrasladado   Float?
-  ivaDerivado     Boolean  @default(false)
+  baseTraslado  Float?
+  ivaTrasladado Float?
+  ivaDerivado   Boolean @default(false)
 
   pagoInvoice Invoice @relation(fields: [pagoInvoiceId], references: [id], onDelete: Cascade)
 
@@ -516,8 +516,8 @@ model PagoDoctoRelacionado {
 model IvaPeriodNotice {
   id             String    @id @default(cuid())
   companyId      String
-  periodo        String    // "YYYY-MM"
-  ivaTrasladado  Float     // value at last baseline/notification
+  periodo        String // "YYYY-MM"
+  ivaTrasladado  Float // value at last baseline/notification
   lastNotifiedAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -528,28 +528,28 @@ model IvaPeriodNotice {
 }
 
 model InvoiceItem {
-  id           String  @id @default(cuid())
-  invoiceId    String
-  cantidad     Float
-  claveUnidad  String  // SAT catalog key e.g. "E48"
-  unidad       String?
+  id            String  @id @default(cuid())
+  invoiceId     String
+  cantidad      Float
+  claveUnidad   String // SAT catalog key e.g. "E48"
+  unidad        String?
   claveProdServ String // SAT product/service catalog key
-  descripcion  String
+  descripcion   String
   valorUnitario Float
-  importe      Float
-  descuento    Float   @default(0)
+  importe       Float
+  descuento     Float   @default(0)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }
 
 model InvoiceTax {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   invoiceId String
-  tipo      TaxType  // IVA, ISR, IEPS
+  tipo      TaxType // IVA, ISR, IEPS
   factor    TaxFactor // TASA, CUOTA, EXENTO
   tasa      Float
   importe   Float
-  retencion Boolean  @default(false)
+  retencion Boolean   @default(false)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }
@@ -564,7 +564,7 @@ enum InvoiceType {
 
 enum InvoiceStatus {
   DRAFT
-  STAMPED    // timbrado
+  STAMPED // timbrado
   CANCELLED
 }
 
@@ -583,28 +583,28 @@ enum TaxFactor {
 // ─── Module 4: Bank Reconciliation ───────────────────────────────────────────
 
 model BankAccount {
-  id           String   @id @default(cuid())
-  companyId    String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  banco        String   // e.g. "BBVA", "Banamex", "Santander"
-  nombre       String   // friendly name
+  banco        String // e.g. "BBVA", "Banamex", "Santander"
+  nombre       String // friendly name
   numeroCuenta String
   clabe        String?
-  moneda       String   @default("MXN")
+  moneda       String  @default("MXN")
 
   // CHEQUES = main operating account; TARJETA_DEPARTAMENTAL = debit card
   // handed to a specific person (GDCS, Esteban…) whose CSV gets imported
   // separately; CAJA = petty cash fund held by a field PM (Rosy's $5k caja chica).
-  tipo         BankAccountTipo @default(CHEQUES)
-  titular      String?         // free-text cardholder / account owner name
+  tipo    BankAccountTipo @default(CHEQUES)
+  titular String? // free-text cardholder / account owner name
 
   // Belvo / open banking
   belvoAccountId String?
   belvoLinkId    String?
 
-  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]
   gastos       Gasto[]
   reembolsos   ReembolsoSemanal[]
@@ -619,38 +619,38 @@ enum BankAccountTipo {
 }
 
 model BankTransaction {
-  id             String              @id @default(cuid())
-  companyId      String
-  bankAccountId  String
-  createdAt      DateTime            @default(now())
+  id            String   @id @default(cuid())
+  companyId     String
+  bankAccountId String
+  createdAt     DateTime @default(now())
 
-  fecha          DateTime
-  descripcion    String
-  referencia     String?
-  monto          Float               // positive = credit, negative = debit
-  saldo          Float?
-  tipo           BankTransactionType
+  fecha       DateTime
+  descripcion String
+  referencia  String?
+  monto       Float // positive = credit, negative = debit
+  saldo       Float?
+  tipo        BankTransactionType
 
   // Reconciliation
-  status         ReconciliationStatus @default(UNMATCHED)
-  invoiceId      String?
-  supplierId     String?
-  notes          String?
+  status     ReconciliationStatus @default(UNMATCHED)
+  invoiceId  String?
+  supplierId String?
+  notes      String?
 
   // Source
-  source         String              @default("UPLOAD") // UPLOAD or BELVO
-  belvoId        String?             @unique // Belvo transaction ID (for dedup)
-  belvoCategory  String?             // Belvo auto-category (e.g. "Bills & Utilities")
+  source        String  @default("UPLOAD") // UPLOAD or BELVO
+  belvoId       String? @unique // Belvo transaction ID (for dedup)
+  belvoCategory String? // Belvo auto-category (e.g. "Bills & Utilities")
 
-  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  supplier    Supplier?   @relation(fields: [supplierId], references: [id])
-  invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
-  rayaPagada              RayaSemanal?
-  gastoPagado             Gasto?
-  reembolsoPagado         ReembolsoSemanal?
-  solicitudCompraPagada   SolicitudCompra?
-  estimacionCobrada       Estimacion?
+  company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankAccount           BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  supplier              Supplier?         @relation(fields: [supplierId], references: [id])
+  invoice               Invoice?          @relation(fields: [invoiceId], references: [id])
+  rayaPagada            RayaSemanal?
+  gastoPagado           Gasto?
+  reembolsoPagado       ReembolsoSemanal?
+  solicitudCompraPagada SolicitudCompra?
+  estimacionCobrada     Estimacion?
 }
 
 enum BankTransactionType {
@@ -667,44 +667,44 @@ enum ReconciliationStatus {
 // ─── Module 2: Nómina & IMSS ──────────────────────────────────────────────────
 
 model Employee {
-  id               String          @id @default(cuid())
-  companyId        String
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  nombre           String
-  apellidoPaterno  String
-  apellidoMaterno  String?
-  rfc              String
-  curp             String
-  nss              String          // Número de Seguridad Social
-  email            String?
-  fechaIngreso     DateTime
-  fechaBaja        DateTime?
-  isActive         Boolean         @default(true)
+  nombre          String
+  apellidoPaterno String
+  apellidoMaterno String?
+  rfc             String
+  curp            String
+  nss             String // Número de Seguridad Social
+  email           String?
+  fechaIngreso    DateTime
+  fechaBaja       DateTime?
+  isActive        Boolean   @default(true)
 
   // Contract
-  tipoContrato     String          // e.g. "01" = Indefinido
-  tipoJornada      String          // e.g. "01" = Diurna
-  tipoRegimen      String          @default("02")  // "02" = Sueldos, "05" = Asimilados
-  salarioDiario    Float           // SBC for IMSS
-  salarioDiarioIntegrado Float?    // SDI
-  periodicidadPago String          // "04" = Quincenal, "05" = Mensual
-  numEmpleado      String?         // Internal employee number; defaults to short id
-  departamento     String?
-  puesto           String?
-  riesgoPuesto     String          @default("1")  // 1=Class I, 2=II, 3=III, 4=IV, 5=V
-  claveEntFed      String          @default("PUE") // Estado SAT code (PUE, JAL, CMX, etc.)
+  tipoContrato           String // e.g. "01" = Indefinido
+  tipoJornada            String // e.g. "01" = Diurna
+  tipoRegimen            String  @default("02") // "02" = Sueldos, "05" = Asimilados
+  salarioDiario          Float // SBC for IMSS
+  salarioDiarioIntegrado Float? // SDI
+  periodicidadPago       String // "04" = Quincenal, "05" = Mensual
+  numEmpleado            String? // Internal employee number; defaults to short id
+  departamento           String?
+  puesto                 String?
+  riesgoPuesto           String  @default("1") // 1=Class I, 2=II, 3=III, 4=IV, 5=V
+  claveEntFed            String  @default("PUE") // Estado SAT code (PUE, JAL, CMX, etc.)
 
   // INFONAVIT
   creditoInfonavit       String?
-  tipoDescuentoInfonavit String?  // "PCT_SBC" | "VSM" | "PESOS"
+  tipoDescuentoInfonavit String? // "PCT_SBC" | "VSM" | "PESOS"
   descuentoInfonavit     Float?
 
-  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  payrollItems     PayrollItem[]
-  imssMovimientos  ImssMovimiento[]
-  incidencias      Incidencia[]
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payrollItems      PayrollItem[]
+  imssMovimientos   ImssMovimiento[]
+  incidencias       Incidencia[]
   cuadrillaMiembros CuadrillaMiembro[]
 
   @@unique([companyId, rfc])
@@ -712,23 +712,23 @@ model Employee {
 
 // Incidencias — absences, overtime, sick leave, permits that affect payroll
 model Incidencia {
-  id          String          @id @default(cuid())
-  companyId   String
-  employeeId  String
-  createdAt   DateTime        @default(now())
+  id         String   @id @default(cuid())
+  companyId  String
+  employeeId String
+  createdAt  DateTime @default(now())
 
-  tipo        IncidenciaTipo
-  fecha       DateTime        // Date of the incident
-  fechaFin    DateTime?       // End date for multi-day (incapacidad, vacaciones)
-  dias        Float           @default(1) // Number of days affected
-  horas       Float?          // For overtime: number of extra hours
+  tipo     IncidenciaTipo
+  fecha    DateTime // Date of the incident
+  fechaFin DateTime? // End date for multi-day (incapacidad, vacaciones)
+  dias     Float          @default(1) // Number of days affected
+  horas    Float? // For overtime: number of extra hours
 
   // Incapacidad-specific
-  folioImss   String?         // IMSS disability folio number
-  ramoImss    String?         // "01"=Riesgo trabajo, "02"=Enfermedad, "03"=Maternidad
+  folioImss String? // IMSS disability folio number
+  ramoImss  String? // "01"=Riesgo trabajo, "02"=Enfermedad, "03"=Maternidad
 
-  notas       String?
-  periodo     String?         // e.g. "2026-04" — linked to payroll period
+  notas   String?
+  periodo String? // e.g. "2026-04" — linked to payroll period
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee Employee @relation(fields: [employeeId], references: [id])
@@ -738,33 +738,33 @@ model Incidencia {
 }
 
 enum IncidenciaTipo {
-  FALTA               // Absence (unjustified)
-  FALTA_JUSTIFICADA   // Justified absence
-  INCAPACIDAD         // IMSS disability leave
-  PERMISO_CON_GOCE    // Paid leave
-  PERMISO_SIN_GOCE    // Unpaid leave
-  HORAS_EXTRA         // Overtime
-  VACACIONES          // Vacation days taken
-  RETARDO             // Late arrival
+  FALTA // Absence (unjustified)
+  FALTA_JUSTIFICADA // Justified absence
+  INCAPACIDAD // IMSS disability leave
+  PERMISO_CON_GOCE // Paid leave
+  PERMISO_SIN_GOCE // Unpaid leave
+  HORAS_EXTRA // Overtime
+  VACACIONES // Vacation days taken
+  RETARDO // Late arrival
 }
 
 // IMSS Movimientos Afiliatorios — auto-detected from employee changes
 model ImssMovimiento {
-  id          String   @id @default(cuid())
-  companyId   String
-  employeeId  String
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  companyId  String
+  employeeId String
+  createdAt  DateTime @default(now())
 
-  tipo        ImssMovimientoTipo  // ALTA, BAJA, MODIFICACION_SALARIO, REINGRESO
-  fechaMovimiento DateTime        // When the movement should be effective
-  sbcAnterior     Float?          // Previous SBC (for modifications)
-  sbcNuevo        Float?          // New SBC
-  motivo          String?         // Reason text
+  tipo            ImssMovimientoTipo // ALTA, BAJA, MODIFICACION_SALARIO, REINGRESO
+  fechaMovimiento DateTime // When the movement should be effective
+  sbcAnterior     Float? // Previous SBC (for modifications)
+  sbcNuevo        Float? // New SBC
+  motivo          String? // Reason text
 
   // Filing status
-  status      ImssMovimientoStatus @default(PENDING)
-  filedAt     DateTime?           // When it was filed with IMSS
-  idseConfirmation String?        // IDSE confirmation number
+  status           ImssMovimientoStatus @default(PENDING)
+  filedAt          DateTime? // When it was filed with IMSS
+  idseConfirmation String? // IDSE confirmation number
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee Employee @relation(fields: [employeeId], references: [id])
@@ -780,68 +780,68 @@ enum ImssMovimientoTipo {
 }
 
 enum ImssMovimientoStatus {
-  PENDING    // Needs to be filed
-  EXPORTED   // Included in an IDSE export
-  FILED      // Filed with IMSS
-  REJECTED   // IMSS rejected it
+  PENDING // Needs to be filed
+  EXPORTED // Included in an IDSE export
+  FILED // Filed with IMSS
+  REJECTED // IMSS rejected it
 }
 
 model PayrollRun {
-  id          String          @id @default(cuid())
-  companyId   String
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  periodo     String          // e.g. "2024-01-01/2024-01-15"
-  fechaPago   DateTime
-  tipo        PayrollRunType  // ORDINARIA, EXTRAORDINARIA, FINIQUITO, AGUINALDO
-  status      PayrollStatus   @default(DRAFT)
+  periodo   String // e.g. "2024-01-01/2024-01-15"
+  fechaPago DateTime
+  tipo      PayrollRunType // ORDINARIA, EXTRAORDINARIA, FINIQUITO, AGUINALDO
+  status    PayrollStatus  @default(DRAFT)
 
-  totalPercepciones Float     @default(0)
-  totalDeducciones  Float     @default(0)
-  totalNeto         Float     @default(0)
+  totalPercepciones Float @default(0)
+  totalDeducciones  Float @default(0)
+  totalNeto         Float @default(0)
 
   // Type-specific data (e.g. { utilidadFiscalGravable } for PTU,
   // { diasAguinaldo, fechaCorte } for AGUINALDO)
-  extraData         Json?
+  extraData Json?
 
-  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  items    PayrollItem[]
+  company Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items   PayrollItem[]
 }
 
 model PayrollItem {
-  id           String  @id @default(cuid())
+  id           String @id @default(cuid())
   payrollRunId String
   employeeId   String
 
   // Percepciones
-  sueldoBase   Float
-  horasExtra   Float   @default(0)
-  bonosPagoFijo Float  @default(0)
-  bonosPagoVar Float   @default(0)
-  vales        Float   @default(0)
+  sueldoBase        Float
+  horasExtra        Float @default(0)
+  bonosPagoFijo     Float @default(0)
+  bonosPagoVar      Float @default(0)
+  vales             Float @default(0)
   otrasPercepciones Float @default(0)
 
   // Deducciones
-  isrRetenido    Float   @default(0)
-  imssObrero     Float   @default(0)
-  imssPatronal   Float   @default(0)  // Informational (employer cost, not deducted from employee)
-  infonavit      Float   @default(0)
-  otrasDeducc    Float   @default(0)
+  isrRetenido  Float @default(0)
+  imssObrero   Float @default(0)
+  imssPatronal Float @default(0) // Informational (employer cost, not deducted from employee)
+  infonavit    Float @default(0)
+  otrasDeducc  Float @default(0)
 
   // Extraordinary percepciones (aguinaldo, vacaciones, PTU)
-  aguinaldo        Float   @default(0)
-  primaVacacional  Float   @default(0)
-  vacaciones       Float   @default(0)
-  ptu              Float   @default(0)
+  aguinaldo       Float @default(0)
+  primaVacacional Float @default(0)
+  vacaciones      Float @default(0)
+  ptu             Float @default(0)
 
   totalPercepciones Float
   totalDeducciones  Float
   netoAPagar        Float
 
   // CFDI nómina
-  cfdiUuid     String?
-  facturapiId  String?
+  cfdiUuid    String?
+  facturapiId String?
 
   payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
   employee   Employee   @relation(fields: [employeeId], references: [id])
@@ -870,56 +870,56 @@ enum PayrollStatus {
 // onboarding via the AI wizard so contadores starting mid-year don't lose
 // the carryover of IVA saldos a favor and ISR provisional pagado.
 model TaxDeclaration {
-  id            String             @id @default(cuid())
-  companyId     String
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tipo          TaxDeclarationType // IVA_MENSUAL, ISR_PROVISIONAL, DIOT, ANUAL
-  periodo       String             // e.g. "2024-01" or "2024"
-  status        DeclarationStatus  @default(DRAFT)
+  tipo    TaxDeclarationType // IVA_MENSUAL, ISR_PROVISIONAL, DIOT, ANUAL
+  periodo String // e.g. "2024-01" or "2024"
+  status  DeclarationStatus  @default(DRAFT)
 
   // IVA
   ivaTrasladadoCobrado  Float?
   ivaAcreditableGastado Float?
   ivaSaldoFavor         Float?
   ivaPagar              Float?
-  ivaSaldoFavorAnterior Float?   // Carryover from previous months
+  ivaSaldoFavorAnterior Float? // Carryover from previous months
 
   // ISR
-  isrIngresos           Float?
-  isrDeducciones        Float?
-  isrBaseGravable       Float?
-  isrTasa               Float?
-  isrPagar              Float?
-  isrCoeficienteUtilidad Float?  // Coeficiente asignado por el SAT del ejercicio anterior
+  isrIngresos            Float?
+  isrDeducciones         Float?
+  isrBaseGravable        Float?
+  isrTasa                Float?
+  isrPagar               Float?
+  isrCoeficienteUtilidad Float? // Coeficiente asignado por el SAT del ejercicio anterior
   // Saldo a favor de ISR generado en el periodo (RESICO PF: retención 1.25% de
   // PM, Art. 113-J, que excedió el ISR definitivo del mes). Se arrastra al
   // periodo siguiente dentro del mismo ejercicio — el excedente de diciembre se
   // recupera en la anual (Art. 113-F), no contra enero.
-  isrSaldoFavor         Float?
+  isrSaldoFavor          Float?
 
   // Retenciones (enteramiento de ISR retenido a terceros — p.ej. nómina). Es un
   // impuesto del trabajador que el patrón sólo retiene y entera (Art. 96 LISR);
   // NO se acredita contra el ISR provisional propio de la empresa, por eso vive
   // en su propio renglón con tipo RETENCIONES_ISR.
-  retencionesIsr        Float?  // ISR retenido a enterar en el periodo
+  retencionesIsr Float? // ISR retenido a enterar en el periodo
 
   // DIOT
-  diotXmlUrl            String?
+  diotXmlUrl String?
 
   // Presentación
-  acuseUrl              String?
-  lineaCaptura          String?
-  fechaPresentacion     DateTime?
-  fechaLimitePago       DateTime?
+  acuseUrl          String?
+  lineaCaptura      String?
+  fechaPresentacion DateTime?
+  fechaLimitePago   DateTime?
 
   // True when the declaration was imported as a historical baseline during
   // onboarding (from a SAT acuse PDF). These rows are treated normally by
   // the carryover logic (saldo a favor, ISR pagado anterior) but are
   // visually marked in the UI and excluded from "periodos pendientes de
   // cierre" lists.
-  isHistorical          Boolean  @default(false)
+  isHistorical Boolean @default(false)
 
   // SAT acuse capture (cierre mensual). When the user uploads the acuse PDF at
   // filing time we extract the filed figures and store them here alongside a
@@ -927,26 +927,26 @@ model TaxDeclaration {
   // authoritative (they drive carry-forward: ivaSaldoFavor, isrCoeficienteUtilidad);
   // the snapshot/diffs keep a filing mistake visible (e.g. needing a complementaria).
   // Shape: { extractedAt, tipoImpuesto, tipoPago, filed:{…}, computed:{…}, diffs:[…] }
-  acuseData             Json?
+  acuseData Json?
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
 
 // Tracks which fiscal obligations each company has (derived from régimen or parsed from CSF)
 model CompanyObligation {
-  id            String   @id @default(cuid())
-  companyId     String
-  tipo          String   // "IVA_MENSUAL" | "ISR_PROVISIONAL" | "DIOT" | "ISR_ANUAL" | etc.
-  descripcion   String
-  periodicidad  String   // "MENSUAL" | "BIMESTRAL" | "ANUAL"
-  diaVencimiento Int     // day of month due (17 for most, 31 for ISR anual PM, 30 for PF)
-  mesVencimiento Int?    // for ANUAL: 3 = March (PM), 4 = April (PF)
-  activa        Boolean  @default(true)
-  fuente        String   @default("REGIMEN") // "REGIMEN" | "CSF"
-  desdeAnio     Int?
-  desdeMes      Int?
+  id             String  @id @default(cuid())
+  companyId      String
+  tipo           String // "IVA_MENSUAL" | "ISR_PROVISIONAL" | "DIOT" | "ISR_ANUAL" | etc.
+  descripcion    String
+  periodicidad   String // "MENSUAL" | "BIMESTRAL" | "ANUAL"
+  diaVencimiento Int // day of month due (17 for most, 31 for ISR anual PM, 30 for PF)
+  mesVencimiento Int? // for ANUAL: 3 = March (PM), 4 = April (PF)
+  activa         Boolean @default(true)
+  fuente         String  @default("REGIMEN") // "REGIMEN" | "CSF"
+  desdeAnio      Int?
+  desdeMes       Int?
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -972,46 +972,46 @@ enum DeclarationStatus {
 // ─── Module 5: Chart of Accounts / COE ────────────────────────────────────────
 
 model ChartAccount {
-  id          String   @id @default(cuid())
-  companyId   String
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
 
   // SAT COE catalog
-  cuentaSAT   String   // e.g. "101"
-  subcuenta   String?  // e.g. "101.01"
-  nombre      String
-  tipo        AccountType // ACTIVO, PASIVO, CAPITAL, INGRESO, GASTO, COSTO
-  nivel       Int         @default(1)
-  isActive    Boolean     @default(true)
+  cuentaSAT String // e.g. "101"
+  subcuenta String? // e.g. "101.01"
+  nombre    String
+  tipo      AccountType // ACTIVO, PASIVO, CAPITAL, INGRESO, GASTO, COSTO
+  nivel     Int         @default(1)
+  isActive  Boolean     @default(true)
 
-  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  entries  AccountingEntry[]
+  company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries AccountingEntry[]
 
   @@unique([companyId, cuentaSAT, subcuenta])
 }
 
 model AccountingEntry {
-  id            String   @id @default(cuid())
-  companyId     String
+  id             String   @id @default(cuid())
+  companyId      String
   chartAccountId String
-  createdAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
 
-  fecha         DateTime
+  fecha          DateTime
   // Posting period (year + month) — denormalized so we can filter/delete
   // entire periods efficiently without a range query over fecha.
-  year          Int
-  month         Int       // 1-12
-  periodId      String?   // FK to AccountingPeriod row
-  descripcion   String
-  referencia    String?   // e.g. UUID del CFDI, ESTIMACION id, etc.
-  referenciaTipo String?  // "CFDI" | "ESTIMACION" | "SOLICITUD_COMPRA" | "BANK_TX" | etc.
-  monto         Float
-  tipo          EntryType // CARGO, ABONO
-  fuente        EntrySource // CFDI, NOMINA, BANCO, MANUAL, CONSTRUCCION, FLOTA
+  year           Int
+  month          Int // 1-12
+  periodId       String? // FK to AccountingPeriod row
+  descripcion    String
+  referencia     String? // e.g. UUID del CFDI, ESTIMACION id, etc.
+  referenciaTipo String? // "CFDI" | "ESTIMACION" | "SOLICITUD_COMPRA" | "BANK_TX" | etc.
+  monto          Float
+  tipo           EntryType // CARGO, ABONO
+  fuente         EntrySource // CFDI, NOMINA, BANCO, MANUAL, CONSTRUCCION, FLOTA
 
-  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  chartAccount ChartAccount       @relation(fields: [chartAccountId], references: [id])
-  period       AccountingPeriod?  @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chartAccount ChartAccount      @relation(fields: [chartAccountId], references: [id])
+  period       AccountingPeriod? @relation(fields: [periodId], references: [id], onDelete: SetNull)
 
   @@index([companyId, year, month])
 }
@@ -1021,19 +1021,19 @@ model AccountingEntry {
 // engine scans all CFDIs and bank txs with fecha in [monthStart, monthEnd]
 // and writes the corresponding AccountingEntry rows.
 model AccountingPeriod {
-  id           String              @id @default(cuid())
+  id           String                 @id @default(cuid())
   companyId    String
   year         Int
-  month        Int                 // 1-12
+  month        Int // 1-12
   status       AccountingPeriodStatus @default(DRAFT)
   postedAt     DateTime?
   postedById   String?
   // Summary counts so the UI can show period health at a glance
-  entriesCount Int                 @default(0)
-  totalCargos  Float               @default(0)
-  totalAbonos  Float               @default(0)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  entriesCount Int                    @default(0)
+  totalCargos  Float                  @default(0)
+  totalAbonos  Float                  @default(0)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
 
   company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   entries AccountingEntry[]
@@ -1042,9 +1042,9 @@ model AccountingPeriod {
 }
 
 enum AccountingPeriodStatus {
-  DRAFT   // No entries yet (month hasn't been closed)
-  POSTED  // Entries generated — can still be deleted and re-posted
-  CLOSED  // Officially closed — no more edits (for audit)
+  DRAFT // No entries yet (month hasn't been closed)
+  POSTED // Entries generated — can still be deleted and re-posted
+  CLOSED // Officially closed — no more edits (for audit)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1058,19 +1058,19 @@ enum AccountingPeriodStatus {
 //   3. Show the user the request history per period
 // ─────────────────────────────────────────────────────────────────────────────
 model SatSyncRequest {
-  id             String              @id @default(cuid())
+  id             String           @id @default(cuid())
   companyId      String
   tipo           SatRequestType
   year           Int
   month          Int
-  requestId      String              @unique  // SAT's RequestID
-  status         SatRequestStatus    @default(PENDING)
-  cfdisFound     Int                 @default(0)
-  imported       Int                 @default(0)
+  requestId      String           @unique // SAT's RequestID
+  status         SatRequestStatus @default(PENDING)
+  cfdisFound     Int              @default(0)
+  imported       Int              @default(0)
   lastVerifiedAt DateTime?
   errorMessage   String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -1083,12 +1083,12 @@ enum SatRequestType {
 }
 
 enum SatRequestStatus {
-  PENDING       // Just submitted, SAT hasn't acknowledged yet
-  ACCEPTED      // SAT accepted the request, queued for processing
-  IN_PROGRESS   // SAT is preparing the package
-  FINISHED      // Packages ready (or empty)
-  FAILED        // SAT rejected or our parsing failed
-  EXPIRED       // SAT removed the request (>72h typically)
+  PENDING // Just submitted, SAT hasn't acknowledged yet
+  ACCEPTED // SAT accepted the request, queued for processing
+  IN_PROGRESS // SAT is preparing the package
+  FINISHED // Packages ready (or empty)
+  FAILED // SAT rejected or our parsing failed
+  EXPIRED // SAT removed the request (>72h typically)
 }
 
 enum AccountType {
@@ -1119,41 +1119,41 @@ enum EntrySource {
 // company but are only populated and exposed in the UI when the module is on.
 
 model Proyecto {
-  id            String          @id @default(cuid())
-  companyId     String
-  customerId    String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  codigo        String
-  nombre        String
-  descripcion   String?
-  ubicacion     String?
-  tipo          ProyectoTipo    @default(PRIVADO)
-  estado        ProyectoEstado  @default(PLANEACION)
+  codigo      String
+  nombre      String
+  descripcion String?
+  ubicacion   String?
+  tipo        ProyectoTipo   @default(PRIVADO)
+  estado      ProyectoEstado @default(PLANEACION)
 
   // Government contract metadata
   numeroContrato     String?
   numeroLicitacion   String?
-  modalidadContrato  String?  // "OBRA_PUBLICA" | "ADJUDICACION_DIRECTA" | "INVITACION"
+  modalidadContrato  String? // "OBRA_PUBLICA" | "ADJUDICACION_DIRECTA" | "INVITACION"
   dependenciaCliente String?
 
   fechaInicio     DateTime?
   fechaFinPlan    DateTime?
   fechaFinReal    DateTime?
   montoContratado Float?
-  anticipoPorc    Float?    // typical 30
-  retencionPorc   Float?    // typical 5
+  anticipoPorc    Float? // typical 30
+  retencionPorc   Float? // typical 5
 
   // Decolsa workflow: el contrato con el cliente es costo directo + utilidad
   // (típicamente 10% en vivienda — sector sin IVA). Se aplica sobre la suma
   // de leaves del Presupuesto. Si null, no se aplica utilidad sobre direct.
-  utilidadPorc    Float?    @default(10)
+  utilidadPorc Float? @default(10)
 
   // Vivienda en sector privado no causa IVA. Para otros proyectos (gobierno,
   // remodelación comercial) sí. Default true para no romper el flujo
   // existente; Decolsa lo apaga al crear sus proyectos.
-  aplicaIva       Boolean   @default(true)
+  aplicaIva Boolean @default(true)
 
   // Track the source spreadsheet so we can audit / re-import. The file
   // itself is stored elsewhere (S3 / Railway volume) — we just keep a
@@ -1172,26 +1172,26 @@ model Proyecto {
   weekCount         Int?
 
   // Anticipo tracking — filled when the customer pays the anticipo
-  anticipoMonto       Float?     // actual $ received (montoContratado × anticipoPorc / 100)
-  anticipoFecha       DateTime?  // date received
-  anticipoAmortizado  Float     @default(0)  // running total amortized across estimaciones
-  anticipoBankTxId    String?   // link to the BankTransaction that recorded the deposit
-  anticipoInvoiceId   String?   // link to the CFDI de anticipo (Invoice)
+  anticipoMonto      Float? // actual $ received (montoContratado × anticipoPorc / 100)
+  anticipoFecha      DateTime? // date received
+  anticipoAmortizado Float     @default(0) // running total amortized across estimaciones
+  anticipoBankTxId   String? // link to the BankTransaction that recorded the deposit
+  anticipoInvoiceId  String? // link to the CFDI de anticipo (Invoice)
 
-  company             Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer            Customer?           @relation(fields: [customerId], references: [id])
-  presupuestos        Presupuesto[]
-  estimaciones        Estimacion[]
-  estimacionTemplate  EstimacionTemplate?
-  programa            ProgramaActividad[]
-  solicitudesCompra   SolicitudCompra[]
-  bitacora            BitacoraEntrada[]
-  pagos               Pago[]
-  unidades            UnidadProyecto[]
-  cuadrillas          Cuadrilla[]
-  rayas               RayaSemanal[]
-  gastos              Gasto[]
-  reembolsos          ReembolsoSemanal[]
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer           Customer?           @relation(fields: [customerId], references: [id])
+  presupuestos       Presupuesto[]
+  estimaciones       Estimacion[]
+  estimacionTemplate EstimacionTemplate?
+  programa           ProgramaActividad[]
+  solicitudesCompra  SolicitudCompra[]
+  bitacora           BitacoraEntrada[]
+  pagos              Pago[]
+  unidades           UnidadProyecto[]
+  cuadrillas         Cuadrilla[]
+  rayas              RayaSemanal[]
+  gastos             Gasto[]
+  reembolsos         ReembolsoSemanal[]
 
   @@unique([companyId, codigo])
   @@index([companyId, estado])
@@ -1214,24 +1214,24 @@ enum ProyectoEstado {
 // Catálogo de conceptos: master list per company. Each concepto is the
 // header of an APU and is reusable across projects.
 model Concepto {
-  id          String   @id @default(cuid())
-  companyId   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   codigo      String
   descripcion String
-  unidad      String   // "m3", "m2", "ton", "pza"
-  categoria   String?  // "Preliminares" | "Cimentación" | etc.
+  unidad      String // "m3", "m2", "ton", "pza"
+  categoria   String? // "Preliminares" | "Cimentación" | etc.
 
   // Pointer to the current/active APU version. Versioning lives on APU.
-  apuActualId String?  @unique
-  apuActual   APU?     @relation("ConceptoApuActual", fields: [apuActualId], references: [id])
+  apuActualId String? @unique
+  apuActual   APU?    @relation("ConceptoApuActual", fields: [apuActualId], references: [id])
 
-  apus       APU[]                 @relation("ConceptoApus")
-  partidas   PresupuestoPartida[]
-  usedAsSubAPU APUInsumo[]         @relation("SubAPU")  // where this concepto is referenced as a sub-APU
-  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  apus         APU[]                @relation("ConceptoApus")
+  partidas     PresupuestoPartida[]
+  usedAsSubAPU APUInsumo[]          @relation("SubAPU") // where this concepto is referenced as a sub-APU
+  company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, codigo])
 }
@@ -1239,25 +1239,25 @@ model Concepto {
 // Análisis de Precios Unitarios: canonical cost breakdown for one Concepto.
 // Versioned: each material edit creates a new APU; conceptos point to current.
 model APU {
-  id              String   @id @default(cuid())
-  companyId       String
-  conceptoId      String
-  createdAt       DateTime @default(now())
-  version         Int      @default(1)
+  id         String   @id @default(cuid())
+  companyId  String
+  conceptoId String
+  createdAt  DateTime @default(now())
+  version    Int      @default(1)
 
   // Roll-up totals (computed from APUInsumo at write time, validated server-side)
-  costoDirecto    Float    // sum of all insumos
-  indirectosPorc  Float    @default(0)
-  financierosPorc Float    @default(0)
-  utilidadPorc    Float    @default(0)
-  cargosAdicPorc  Float    @default(0)
-  precioUnitario  Float    // final PU after all overhead
-  rendimiento     Float    @default(1)  // qty produced per cuadrilla-day
+  costoDirecto    Float // sum of all insumos
+  indirectosPorc  Float @default(0)
+  financierosPorc Float @default(0)
+  utilidadPorc    Float @default(0)
+  cargosAdicPorc  Float @default(0)
+  precioUnitario  Float // final PU after all overhead
+  rendimiento     Float @default(1) // qty produced per cuadrilla-day
 
-  concepto           Concepto  @relation("ConceptoApus", fields: [conceptoId], references: [id], onDelete: Cascade)
-  conceptoComoActual Concepto? @relation("ConceptoApuActual")
+  concepto           Concepto    @relation("ConceptoApus", fields: [conceptoId], references: [id], onDelete: Cascade)
+  conceptoComoActual Concepto?   @relation("ConceptoApuActual")
   insumos            APUInsumo[]
-  company            Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company            Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([conceptoId, version])
 }
@@ -1277,12 +1277,12 @@ model APU {
 model APUInsumo {
   id            String  @id @default(cuid())
   apuId         String
-  insumoId      String?  // raw insumo reference (mutually exclusive with conceptoRefId)
-  conceptoRefId String?  // sub-APU reference (mutually exclusive with insumoId)
+  insumoId      String? // raw insumo reference (mutually exclusive with conceptoRefId)
+  conceptoRefId String? // sub-APU reference (mutually exclusive with insumoId)
   cantidad      Float
-  costoUnitario Float    // snapshot at time of APU build
-  importe       Float    // = cantidad * costoUnitario
-  orden         Int      @default(0)
+  costoUnitario Float // snapshot at time of APU build
+  importe       Float // = cantidad * costoUnitario
+  orden         Int     @default(0)
 
   apu         APU       @relation(fields: [apuId], references: [id], onDelete: Cascade)
   insumo      Insumo?   @relation(fields: [insumoId], references: [id])
@@ -1291,10 +1291,10 @@ model APUInsumo {
 
 // Master list of inputs: materials, labor categories, equipment, basics.
 model Insumo {
-  id          String     @id @default(cuid())
-  companyId   String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   codigo      String
   descripcion String
@@ -1304,8 +1304,8 @@ model Insumo {
   monedaCosto String     @default("MXN")
 
   // For MANO_OBRA: link to IMSS factor calc inputs
-  salarioBase   Float?   // daily base (SBC)
-  factorSalario Float?   // SDR factor including IMSS/INFONAVIT/prestaciones
+  salarioBase   Float? // daily base (SBC)
+  factorSalario Float? // SDR factor including IMSS/INFONAVIT/prestaciones
 
   // For MATERIAL: SAT product key (carries over to CFDI)
   claveProdServ String?
@@ -1314,7 +1314,7 @@ model Insumo {
   apuLineas APUInsumo[]
   partidas  SolicitudPartida[]
   gastos    Gasto[]
-  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, codigo])
 }
@@ -1329,17 +1329,17 @@ enum InsumoTipo {
 
 // Presupuesto = a project's catálogo de conceptos with quantities.
 model Presupuesto {
-  id          String   @id @default(cuid())
-  companyId   String
-  proyectoId  String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  companyId  String
+  proyectoId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  nombre      String?
+  nombre String?
 
-  version     Int               @default(1)
-  estado      PresupuestoEstado @default(BORRADOR)
-  montoTotal  Float             @default(0)
+  version    Int               @default(1)
+  estado     PresupuestoEstado @default(BORRADOR)
+  montoTotal Float             @default(0)
 
   // Contrato vs Ejecutado distinction.
   // CONTRATO = frozen, customer-signed. Revenue basis. Default for all existing rows.
@@ -1347,8 +1347,8 @@ model Presupuesto {
   tipoPresupuesto  TipoPresupuesto @default(CONTRATO)
   // For EJECUTADO only: FK back to the contrato it was cloned from.
   contratoOrigenId String?
-  contratoOrigen   Presupuesto?  @relation("ContratoEjecutado", fields: [contratoOrigenId], references: [id])
-  ejecutados       Presupuesto[] @relation("ContratoEjecutado")
+  contratoOrigen   Presupuesto?    @relation("ContratoEjecutado", fields: [contratoOrigenId], references: [id])
+  ejecutados       Presupuesto[]   @relation("ContratoEjecutado")
 
   partidas     PresupuestoPartida[]
   estimaciones Estimacion[]
@@ -1368,20 +1368,20 @@ enum PresupuestoEstado {
   APROBADO
   EN_EJECUCION
   CERRADO
-  RECHAZADO     // customer chose a different presupuesto in the same proyecto
+  RECHAZADO // customer chose a different presupuesto in the same proyecto
 }
 
 model PresupuestoPartida {
-  id              String   @id @default(cuid())
-  presupuestoId   String
+  id             String  @id @default(cuid())
+  presupuestoId  String
   // conceptoId is required for LEAF partidas (actual work items) and null
   // for BRANCH partidas (capítulo rollup rows). See esRollup.
-  conceptoId      String?
-  apuVersion      Int      @default(1) // snapshot of which APU version was used (leaves only)
-  cantidad        Float?                // leaves only
-  precioUnitario  Float    @default(0)  // leaves only; branches compute from children
-  importe         Float    @default(0)  // leaves: cantidad × PU; branches: sum of children
-  orden           Int      @default(0)  // global display order within the presupuesto
+  conceptoId     String?
+  apuVersion     Int     @default(1) // snapshot of which APU version was used (leaves only)
+  cantidad       Float? // leaves only
+  precioUnitario Float   @default(0) // leaves only; branches compute from children
+  importe        Float   @default(0) // leaves: cantidad × PU; branches: sum of children
+  orden          Int     @default(0) // global display order within the presupuesto
 
   // Legacy flat grouping (kept nullable for backwards read-compat during
   // the tree migration). Superseded by parentPartidaId + codigo.
@@ -1389,7 +1389,7 @@ model PresupuestoPartida {
   partida String?
 
   // Internal operational notes — not shown to the customer.
-  notas   String?    @db.Text
+  notas String? @db.Text
 
   // Capítulo tree (same pattern as ProgramaActividad).
   // Branches are rollup nodes: esRollup=true, conceptoId=null, cantidad=null.
@@ -1397,8 +1397,8 @@ model PresupuestoPartida {
   parentPartidaId String?
   parent          PresupuestoPartida?  @relation("PartidaHierarchy", fields: [parentPartidaId], references: [id])
   hijos           PresupuestoPartida[] @relation("PartidaHierarchy")
-  nivel           Int                  @default(0)  // denormalized depth, 0 = root
-  codigo          String?                           // dotted path "1.1.3.5" — computed on write
+  nivel           Int                  @default(0) // denormalized depth, 0 = root
+  codigo          String? // dotted path "1.1.3.5" — computed on write
   esRollup        Boolean              @default(false)
 
   // Optional unidad scope — usually null for template partidas; set when a
@@ -1412,14 +1412,14 @@ model PresupuestoPartida {
   contratoPartida   PresupuestoPartida?  @relation("PartidaContratoEjecutado", fields: [contratoPartidaId], references: [id])
   ejecutadoPartidas PresupuestoPartida[] @relation("PartidaContratoEjecutado")
 
-  presupuesto       Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
-  concepto          Concepto?   @relation(fields: [conceptoId], references: [id])
-  avances           EstimacionPartida[]
-  templateLinks     EstimacionTemplatePartida[]
-  compras           SolicitudPartida[]
-  bitacora          BitacoraEntrada[]
-  rayaTrabajos      RayaTrabajo[]
-  gastos            Gasto[]
+  presupuesto   Presupuesto                 @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  concepto      Concepto?                   @relation(fields: [conceptoId], references: [id])
+  avances       EstimacionPartida[]
+  templateLinks EstimacionTemplatePartida[]
+  compras       SolicitudPartida[]
+  bitacora      BitacoraEntrada[]
+  rayaTrabajos  RayaTrabajo[]
+  gastos        Gasto[]
 }
 
 // Estimaciones: government billing flow. Each one becomes a CFDI when timbrada.
@@ -1431,10 +1431,10 @@ model Estimacion {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  numero        Int      // 1, 2, 3... per project
+  numero        Int // 1, 2, 3... per project
   periodoInicio DateTime
   periodoFin    DateTime
-  fechaCorte    DateTime?  // Decolsa workflow: "CORTE AL" — cuando se cierra el período
+  fechaCorte    DateTime? // Decolsa workflow: "CORTE AL" — cuando se cierra el período
   estado        EstimacionEstado @default(BORRADOR)
 
   subtotal             Float
@@ -1445,9 +1445,9 @@ model Estimacion {
 
   // Cumulative figures cached at the time this estimación is approved. Lets
   // us render the dashboard without recomputing every time.
-  importeAcumulado     Float @default(0)
-  pctPeriodo           Float @default(0)
-  pctAcumulado         Float @default(0)
+  importeAcumulado Float @default(0)
+  pctPeriodo       Float @default(0)
+  pctAcumulado     Float @default(0)
 
   // Link to the actual stamped CFDI when timbrada
   invoiceId String?  @unique
@@ -1456,13 +1456,13 @@ model Estimacion {
   // Cobranza link — when the cliente paga, the matched BankTransaction lands
   // here and the estado flips to PAGADA. Auto-matched by the bancos /
   // candidates flow (amount + invoice match) or set manually from the UI.
-  bankTransactionId String?  @unique
+  bankTransactionId String?          @unique
   bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id])
 
-  proyecto    Proyecto    @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
-  presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id])
+  proyecto    Proyecto            @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  presupuesto Presupuesto         @relation(fields: [presupuestoId], references: [id])
   partidas    EstimacionPartida[]
-  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([proyectoId, numero])
 }
@@ -1492,28 +1492,28 @@ enum EstimacionEstado {
 // numbers at the time the estimación is approved so editing the template
 // later doesn't invalidate prior estimaciones.
 model EstimacionPartida {
-  id                   String @id @default(cuid())
-  estimacionId         String
+  id           String @id @default(cuid())
+  estimacionId String
 
   // ── LEAF MODE (Bartiz)
   presupuestoPartidaId String?
-  cantidadEjecutada    Float?  // this period
-  cantidadAcumulada    Float?  // running total
+  cantidadEjecutada    Float? // this period
+  cantidadAcumulada    Float? // running total
 
   // ── TEMPLATE MODE (Decolsa)
   templatePartidaId        String?
-  viviendasObjetivo        Int?    // snapshot of denominator
-  viviendasAvancePeriodo   Int?    // ← Gerardo's input
-  viviendasAvanceAnterior  Int?    // carried forward from prev estimación
-  viviendasAvanceAcumulado Int?    // computed
-  pctPeriodo               Float?  // computed
-  pctAcumulado             Float?  // computed
+  viviendasObjetivo        Int? // snapshot of denominator
+  viviendasAvancePeriodo   Int? // ← Gerardo's input
+  viviendasAvanceAnterior  Int? // carried forward from prev estimación
+  viviendasAvanceAcumulado Int? // computed
+  pctPeriodo               Float? // computed
+  pctAcumulado             Float? // computed
   descripcionSnapshot      String?
-  importeContrato          Float?  // capítulo total at template-set time
+  importeContrato          Float? // capítulo total at template-set time
 
   // ── Both modes share these
-  importe              Float   // periodo importe (qty × PU OR pct × contrato)
-  unidadProyectoId     String? // optional: which depto / nivel consumed this
+  importe          Float // periodo importe (qty × PU OR pct × contrato)
+  unidadProyectoId String? // optional: which depto / nivel consumed this
 
   estimacion         Estimacion                 @relation(fields: [estimacionId], references: [id], onDelete: Cascade)
   presupuestoPartida PresupuestoPartida?        @relation(fields: [presupuestoPartidaId], references: [id])
@@ -1532,17 +1532,17 @@ model EstimacionTemplate {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  proyecto         Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
-  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto         Proyecto                    @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  company          Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   partidas         EstimacionTemplatePartida[]
   curvas           EstimacionCurvaCapitulo[]
   calendarioCierre CalendarioCierreCapitulo[]
 }
 
 model EstimacionTemplatePartida {
-  id                   String  @id @default(cuid())
+  id                   String @id @default(cuid())
   templateId           String
-  presupuestoPartidaId String  // FK to master tree at any nivel
+  presupuestoPartidaId String // FK to master tree at any nivel
 
   // Display
   orden        Int    @default(0)
@@ -1552,21 +1552,21 @@ model EstimacionTemplatePartida {
   // Per-partida override of viviendasObjetivo. Null = inherit from Proyecto.
   viviendasObjetivo Int?
 
-  template            EstimacionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  presupuestoPartida  PresupuestoPartida @relation(fields: [presupuestoPartidaId], references: [id])
-  estimacionPartidas  EstimacionPartida[]
+  template           EstimacionTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  presupuestoPartida PresupuestoPartida  @relation(fields: [presupuestoPartidaId], references: [id])
+  estimacionPartidas EstimacionPartida[]
 }
 
 // Customer's expected weekly distribution per top-level capítulo.
 // Bootstrapped from CURVA_VIVIENDA_2R_DEFAULT on import; Gerardo can edit.
 // Each row = one capítulo (1, 2, …, 30) with its weekly pesos.
 model EstimacionCurvaCapitulo {
-  id           String  @id @default(cuid())
+  id           String @id @default(cuid())
   templateId   String
-  capituloCode String  // "1", "2", ... matches EstimacionTemplatePartida.capituloCode
+  capituloCode String // "1", "2", ... matches EstimacionTemplatePartida.capituloCode
 
-  descripcion    String?  // snapshot for display
-  pesoPctSemanal Json     // Float[] sized to project.weekCount; sum ≈ 1.0
+  descripcion    String? // snapshot for display
+  pesoPctSemanal Json // Float[] sized to project.weekCount; sum ≈ 1.0
 
   template EstimacionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
@@ -1585,12 +1585,12 @@ model EstimacionCurvaCapitulo {
 // Bootstrapped empty when the EstimacionTemplate is created. Editable
 // per-cell from the Programa tab.
 model CalendarioCierreCapitulo {
-  id           String  @id @default(cuid())
+  id           String @id @default(cuid())
   templateId   String
-  capituloCode String  // "1", "2", ... matches EstimacionTemplatePartida.capituloCode
+  capituloCode String // "1", "2", ... matches EstimacionTemplatePartida.capituloCode
 
   descripcion    String?
-  pesoPctSemanal Json     // Float[] sized to project.weekCount; sum ≤ 1.0
+  pesoPctSemanal Json // Float[] sized to project.weekCount; sum ≤ 1.0
 
   template EstimacionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
@@ -1603,17 +1603,17 @@ model CalendarioCierreCapitulo {
 // specific unidad that consumed each unit of avance is recorded on the
 // EstimacionPartida row.
 model UnidadProyecto {
-  id         String  @id @default(cuid())
+  id         String   @id @default(cuid())
   proyectoId String
   parentId   String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  nombre     String              // "Torre A", "Depto 101", "Nivel 3"
-  tipo       String?             // "TORRE" | "NIVEL" | "DEPTO" — free-form tag
-  codigo     String?             // "T-A", "101"
-  orden      Int     @default(0)
-  metadata   Json?               // {"superficie": 95.5, "recamaras": 2}
+  nombre   String // "Torre A", "Depto 101", "Nivel 3"
+  tipo     String? // "TORRE" | "NIVEL" | "DEPTO" — free-form tag
+  codigo   String? // "T-A", "101"
+  orden    Int     @default(0)
+  metadata Json? // {"superficie": 95.5, "recamaras": 2}
 
   parent   UnidadProyecto?  @relation("UnidadHierarchy", fields: [parentId], references: [id])
   hijos    UnidadProyecto[] @relation("UnidadHierarchy")
@@ -1644,12 +1644,12 @@ model ProgramaActividad {
 // Solicitudes de compra: purchase request → approval → payment workflow.
 // When pagada, links to a BankTransaction so the bank reconciliation loop closes.
 model SolicitudCompra {
-  id          String   @id @default(cuid())
-  companyId   String
-  proyectoId  String?
-  supplierId  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  companyId  String
+  proyectoId String?
+  supplierId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   folio  String
   estado SolicitudEstado @default(PENDIENTE)
@@ -1670,10 +1670,10 @@ model SolicitudCompra {
   // When paid, link to the BankTransaction that funded it
   bankTransactionId String? @unique
 
-  proyecto        Proyecto?           @relation(fields: [proyectoId], references: [id])
-  supplier        Supplier?           @relation(fields: [supplierId], references: [id])
-  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  bankTransaction BankTransaction?    @relation(fields: [bankTransactionId], references: [id])
+  proyecto        Proyecto?                   @relation(fields: [proyectoId], references: [id])
+  supplier        Supplier?                   @relation(fields: [supplierId], references: [id])
+  company         Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankTransaction BankTransaction?            @relation(fields: [bankTransactionId], references: [id])
   partidas        SolicitudPartida[]
   cotizaciones    SolicitudCompraCotizacion[]
 
@@ -1695,11 +1695,11 @@ enum SolicitudFormaPago {
 }
 
 model SolicitudPartida {
-  id             String @id @default(cuid())
+  id             String  @id @default(cuid())
   solicitudId    String
   insumoId       String?
   descripcion    String
-  unidad         String?  // TON, PALLET, m3, kg, pza — keeps requisición rows aligned with the Excel template
+  unidad         String? // TON, PALLET, m3, kg, pza — keeps requisición rows aligned with the Excel template
   cantidad       Float
   precioUnitario Float
   importe        Float
@@ -1708,8 +1708,8 @@ model SolicitudPartida {
   presupuestoPartidaId String?
   presupuestoPartida   PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
 
-  solicitud SolicitudCompra @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
-  insumo    Insumo?         @relation(fields: [insumoId], references: [id])
+  solicitud    SolicitudCompra              @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  insumo       Insumo?                      @relation(fields: [insumoId], references: [id])
   cotizaciones SolicitudCotizacionPartida[]
 }
 
@@ -1724,32 +1724,32 @@ model SolicitudPartida {
 // rows per cotización (one per item priced). Switching the winner is a
 // single isSelected flip.
 model SolicitudCompraCotizacion {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   solicitudId     String
   supplierId      String?
-  supplierNombre  String   // "RYSCO", "BARAMAT" — free-text when supplier row doesn't exist yet
-  fechaCotizacion DateTime @default(now())
+  supplierNombre  String // "RYSCO", "BARAMAT" — free-text when supplier row doesn't exist yet
+  fechaCotizacion DateTime  @default(now())
   vigenciaHasta   DateTime?
-  total           Float    @default(0)
-  moneda          String   @default("MXN")
+  total           Float     @default(0)
+  moneda          String    @default("MXN")
   notas           String?
-  isSelected      Boolean  @default(false)
+  isSelected      Boolean   @default(false)
   // Scanned/uploaded quote — same dual-storage pattern as Gasto comprobantes.
   archivoUrl      String?
-  archivoData     String?  @db.Text
+  archivoData     String?   @db.Text
   archivoMime     String?
   archivoName     String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
-  solicitud SolicitudCompra @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
-  supplier  Supplier?       @relation(fields: [supplierId], references: [id])
+  solicitud SolicitudCompra              @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  supplier  Supplier?                    @relation(fields: [supplierId], references: [id])
   partidas  SolicitudCotizacionPartida[]
 
   @@index([solicitudId, isSelected])
 }
 
 model SolicitudCotizacionPartida {
-  id                 String @id @default(cuid())
+  id                 String  @id @default(cuid())
   cotizacionId       String
   solicitudPartidaId String
   precioUnitario     Float
@@ -1766,12 +1766,12 @@ model SolicitudCotizacionPartida {
 // ─── Presupuesto versioning (ejecutado change log) ───────────────────────────
 
 model PresupuestoVersion {
-  id              String   @id @default(cuid())
-  presupuestoId   String
-  version         Int
-  createdAt       DateTime @default(now())
-  descripcion     String?  // "Engineer found stone walls", "Added waterproofing"
-  snapshotTotal   Float    // montoTotal at time of snapshot
+  id            String   @id @default(cuid())
+  presupuestoId String
+  version       Int
+  createdAt     DateTime @default(now())
+  descripcion   String? // "Engineer found stone walls", "Added waterproofing"
+  snapshotTotal Float // montoTotal at time of snapshot
 
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
 
@@ -1781,18 +1781,18 @@ model PresupuestoVersion {
 // ─── Bitácora de obra (field log) ────────────────────────────────────────────
 
 model BitacoraEntrada {
-  id          String       @id @default(cuid())
-  proyectoId  String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id         String   @id @default(cuid())
+  proyectoId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  fecha       DateTime     @default(now())  // field date (may differ from createdAt)
-  texto       String       @db.Text
-  tipo        BitacoraTipo @default(NOTA)
+  fecha DateTime     @default(now()) // field date (may differ from createdAt)
+  texto String       @db.Text
+  tipo  BitacoraTipo @default(NOTA)
 
   // Optional links
   presupuestoPartidaId String?
-  fotos                String[]  // URL array for photos
+  fotos                String[] // URL array for photos
 
   proyecto           Proyecto            @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
   presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
@@ -1811,10 +1811,10 @@ enum BitacoraTipo {
 // ─── Pagos de proyecto (anticipo, estimaciones, retención) ───────────────────
 
 model Pago {
-  id                String   @id @default(cuid())
-  proyectoId        String
-  companyId         String
-  createdAt         DateTime @default(now())
+  id         String   @id @default(cuid())
+  proyectoId String
+  companyId  String
+  createdAt  DateTime @default(now())
 
   tipo              PagoTipo
   monto             Float
@@ -1849,39 +1849,39 @@ enum PagoTipo {
 // module because most destajo workers are not formally registered.
 
 model Cuadrilla {
-  id           String   @id @default(cuid())
-  companyId    String
-  proyectoId   String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id         String   @id @default(cuid())
+  companyId  String
+  proyectoId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  nombre       String   // "Albañilería", "Plomería y Gas"
-  especialidad String   // free-text tag: "ALBANILERIA" | "PLOMERIA" | "ELECTRICO" | ...
-  jefeNombre   String?  // "Maestro Juan", purely descriptive
+  nombre       String // "Albañilería", "Plomería y Gas"
+  especialidad String // free-text tag: "ALBANILERIA" | "PLOMERIA" | "ELECTRICO" | ...
+  jefeNombre   String? // "Maestro Juan", purely descriptive
   notas        String?
-  isActive     Boolean  @default(true)
+  isActive     Boolean @default(true)
 
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  proyecto  Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
-  miembros  CuadrillaMiembro[]
-  rayas     RayaSemanal[]
+  company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto Proyecto           @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  miembros CuadrillaMiembro[]
+  rayas    RayaSemanal[]
 
   @@unique([proyectoId, nombre])
   @@index([companyId, isActive])
 }
 
 model CuadrillaMiembro {
-  id             String   @id @default(cuid())
-  cuadrillaId    String
-  createdAt      DateTime @default(now())
+  id          String   @id @default(cuid())
+  cuadrillaId String
+  createdAt   DateTime @default(now())
 
-  nombre         String   // free-text (works for both formal & cash workers)
-  employeeId     String?  // optional FK when this miembro is also an IMSS-registered Employee
-  rolEnCuadrilla String?  // "Oficial" | "Ayudante" | "Maestro" — free text
-  isActive       Boolean  @default(true)
+  nombre         String // free-text (works for both formal & cash workers)
+  employeeId     String? // optional FK when this miembro is also an IMSS-registered Employee
+  rolEnCuadrilla String? // "Oficial" | "Ayudante" | "Maestro" — free text
+  isActive       Boolean @default(true)
 
-  cuadrilla Cuadrilla @relation(fields: [cuadrillaId], references: [id], onDelete: Cascade)
-  employee  Employee? @relation(fields: [employeeId], references: [id])
+  cuadrilla Cuadrilla            @relation(fields: [cuadrillaId], references: [id], onDelete: Cascade)
+  employee  Employee?            @relation(fields: [employeeId], references: [id])
   detalles  RayaDetalleMiembro[]
 
   @@index([cuadrillaId, isActive])
@@ -1891,29 +1891,29 @@ model CuadrillaMiembro {
 // we create a BankTransaction debited from the cuadrilla's paying account
 // and store its id here.
 model RayaSemanal {
-  id           String   @id @default(cuid())
-  companyId    String
-  proyectoId   String
-  cuadrillaId  String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  companyId   String
+  proyectoId  String
+  cuadrillaId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  semanaInicio DateTime    // Monday 00:00 local
-  semanaFin    DateTime    // Sunday 23:59 local
-  estado       RayaEstado  @default(BORRADOR)
-  totalDestajo Float       @default(0)  // sum of RayaTrabajo.importeDestajo
+  semanaInicio DateTime // Monday 00:00 local
+  semanaFin    DateTime // Sunday 23:59 local
+  estado       RayaEstado @default(BORRADOR)
+  totalDestajo Float      @default(0) // sum of RayaTrabajo.importeDestajo
   notas        String?
 
   // Filled when marked PAGADA. Unique so we can't double-book a raya.
-  bankTransactionId String? @unique
+  bankTransactionId String?   @unique
   pagadaAt          DateTime?
 
-  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  proyecto  Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
-  cuadrilla Cuadrilla @relation(fields: [cuadrillaId], references: [id])
-  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
-  trabajos  RayaTrabajo[]
-  detalles  RayaDetalleMiembro[]
+  company         Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto        Proyecto             @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  cuadrilla       Cuadrilla            @relation(fields: [cuadrillaId], references: [id])
+  bankTransaction BankTransaction?     @relation(fields: [bankTransactionId], references: [id])
+  trabajos        RayaTrabajo[]
+  detalles        RayaDetalleMiembro[]
 
   @@unique([cuadrillaId, semanaInicio])
   @@index([proyectoId, semanaInicio])
@@ -1928,10 +1928,10 @@ enum RayaEstado {
 
 // Line item inside a raya: "en el Depto 101, hicimos X de aplanados por $Y"
 model RayaTrabajo {
-  id                   String   @id @default(cuid())
+  id                   String  @id @default(cuid())
   rayaId               String
-  presupuestoPartidaId String?  // optional link to a leaf partida (drives avance)
-  unidadProyectoId     String?  // optional "en el Depto 101"
+  presupuestoPartidaId String? // optional link to a leaf partida (drives avance)
+  unidadProyectoId     String? // optional "en el Depto 101"
   descripcion          String
   cantidad             Float?
   unidad               String?
@@ -1978,16 +1978,16 @@ model RayaDetalleMiembro {
 //   - The value-add is fast entry + the "does this fit the explosión
 //     de insumos" check, which is its own endpoint.
 model Gasto {
-  id           String     @id @default(cuid())
-  companyId    String
-  proyectoId   String
-  bankAccountId String     // which account paid (main cuenta or caja chica)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id            String   @id @default(cuid())
+  companyId     String
+  proyectoId    String
+  bankAccountId String // which account paid (main cuenta or caja chica)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // What + to whom + how much
-  beneficiarioNombre String   // "Lesly Flores", "Jose Luis Lopez Pozos"
-  descripcion        String   // free-text what was bought: "varilla y arena"
+  beneficiarioNombre String // "Lesly Flores", "Jose Luis Lopez Pozos"
+  descripcion        String // free-text what was bought: "varilla y arena"
   importe            Float
 
   // Physical quantity + unit — optional for indirect gastos but required
@@ -2010,20 +2010,20 @@ model Gasto {
   //           fielCer elsewhere). Small-file friendly — Rosy's WhatsApp
   //           photos are usually < 2 MB. Mime + name let us serve them
   //           back with the right headers.
-  comprobanteUrl      String?  // invoice/receipt URL
-  comprobanteData     String?  @db.Text
+  comprobanteUrl      String? // invoice/receipt URL
+  comprobanteData     String? @db.Text
   comprobanteMime     String?
   comprobanteName     String?
-  pagoComprobanteUrl  String?  // SPEI / cheque screenshot URL
-  pagoComprobanteData String?  @db.Text
+  pagoComprobanteUrl  String? // SPEI / cheque screenshot URL
+  pagoComprobanteData String? @db.Text
   pagoComprobanteMime String?
   pagoComprobanteName String?
 
-  estado       GastoEstado @default(PENDIENTE)
+  estado GastoEstado @default(PENDIENTE)
 
   // Flag that this came out of the caja chica account (redundant with
   // bankAccount.tipo=CAJA but kept for fast filtering and audit).
-  caja         Boolean     @default(false)
+  caja Boolean @default(false)
 
   // "Indirecto" = overhead / costo indirecto: gasolina, viáticos,
   // herramienta menor, flete, seguridad, renta de andamios, alimentos
@@ -2035,7 +2035,7 @@ model Gasto {
   //   - linked to a presupuestoPartidaId or insumoId (directo), OR
   //   - indirecto=true with a categoriaIndirecto tag.
   // Otherwise approval is refused — guarantees budget attribution.
-  indirecto         Boolean @default(false)
+  indirecto          Boolean @default(false)
   categoriaIndirecto String? // free-text tag: "GASOLINA" | "VIATICOS" | "FLETE" | "HERRAMIENTA_MENOR" | "EQUIPO_SEGURIDAD" | "RENTA_EQUIPO" | "ALIMENTOS" | etc.
 
   // Populated on /aprobar-pagar
@@ -2043,18 +2043,18 @@ model Gasto {
   pagadoAt          DateTime?
 
   // Katia's approval audit
-  aprobadoPor  String?   // User id
-  aprobadoAt   DateTime?
+  aprobadoPor String? // User id
+  aprobadoAt  DateTime?
 
-  notas        String?
+  notas String?
 
-  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  proyecto          Proyecto            @relation(fields: [proyectoId], references: [id])
-  bankAccount       BankAccount         @relation(fields: [bankAccountId], references: [id])
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto           Proyecto            @relation(fields: [proyectoId], references: [id])
+  bankAccount        BankAccount         @relation(fields: [bankAccountId], references: [id])
   presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
-  insumo            Insumo?             @relation(fields: [insumoId], references: [id])
-  bankTransaction   BankTransaction?    @relation(fields: [bankTransactionId], references: [id])
-  reembolso         ReembolsoSemanal?   @relation(fields: [reembolsoId], references: [id], onDelete: SetNull)
+  insumo             Insumo?             @relation(fields: [insumoId], references: [id])
+  bankTransaction    BankTransaction?    @relation(fields: [bankTransactionId], references: [id])
+  reembolso          ReembolsoSemanal?   @relation(fields: [reembolsoId], references: [id], onDelete: SetNull)
 
   @@index([companyId, estado])
   @@index([proyectoId, createdAt])
@@ -2063,9 +2063,9 @@ model Gasto {
 
 enum GastoEstado {
   PENDIENTE
-  APROBADO   // Katia validated; still waiting to pay
-  PAGADO     // BankTransaction created
-  RECHAZADO  // out of budget, duplicate, etc.
+  APROBADO // Katia validated; still waiting to pay
+  PAGADO // BankTransaction created
+  RECHAZADO // out of budget, duplicate, etc.
 }
 
 // ─── ReembolsoSemanal (Concentrado Semanal / weekly reimbursement) ───────────
@@ -2094,47 +2094,47 @@ enum GastoEstado {
 // same package. For now the v1 treats nómina as just another Gasto
 // line with indirecto=true, categoriaIndirecto=NOMINA.
 model ReembolsoSemanal {
-  id            String             @id @default(cuid())
+  id            String   @id @default(cuid())
   companyId     String
   proyectoId    String
-  bankAccountId String             // account that will pay the final SPEI (usually CHEQUES)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  bankAccountId String // account that will pay the final SPEI (usually CHEQUES)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  semanaInicio  DateTime
-  semanaFin     DateTime
-  estado        ReembolsoEstado    @default(SUBMITTED)
+  semanaInicio DateTime
+  semanaFin    DateTime
+  estado       ReembolsoEstado @default(SUBMITTED)
 
   // Running totals (denormalized for fast list views; recomputed on gasto add/remove)
-  totalGastos   Float              @default(0)
+  totalGastos      Float @default(0)
   // Adelanto previo de caja chica que este reembolso justifica.
   // Ejemplo: Rosy recibió $5,000 el lunes para caja chica; gastó $7,500
   // en la semana; reembolso total a pagar = $7,500 - $5,000 = $2,500.
-  anticipoAplicado Float           @default(0)
-  totalReembolso Float             @default(0)  // totalGastos - anticipoAplicado
+  anticipoAplicado Float @default(0)
+  totalReembolso   Float @default(0) // totalGastos - anticipoAplicado
 
   // Pago
-  bankTransactionId String?        @unique
-  reembolsadoAt DateTime?
-  reembolsadoPor String?
+  bankTransactionId String?   @unique
+  reembolsadoAt     DateTime?
+  reembolsadoPor    String?
 
-  notas         String?
+  notas String?
 
-  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  proyecto      Proyecto           @relation(fields: [proyectoId], references: [id])
-  bankAccount   BankAccount        @relation(fields: [bankAccountId], references: [id])
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto        Proyecto         @relation(fields: [proyectoId], references: [id])
+  bankAccount     BankAccount      @relation(fields: [bankAccountId], references: [id])
   bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
-  gastos        Gasto[]
+  gastos          Gasto[]
 
   @@unique([proyectoId, semanaInicio])
   @@index([companyId, estado])
 }
 
 enum ReembolsoEstado {
-  SUBMITTED   // Rosy mandó el paquete, Katia aún no revisa
-  REVISADO    // Katia validó líneas, listo para pagar
+  SUBMITTED // Rosy mandó el paquete, Katia aún no revisa
+  REVISADO // Katia validó líneas, listo para pagar
   REEMBOLSADO // Juan ya SPEIó a Rosy, BankTransaction creada
-  RECHAZADO   // inconsistencias / duplicados / no justificado
+  RECHAZADO // inconsistencias / duplicados / no justificado
 }
 
 // ─── WhatsApp channel (W0) ─────────────────────────────────────────────────────
@@ -2146,19 +2146,19 @@ enum ReembolsoEstado {
 // inert (resolvePhone ignores it). One user may link several numbers; a number
 // maps to exactly one user (a phone is an identity, not a shared mailbox).
 model WhatsappLink {
-  id            String    @id @default(cuid())
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  phoneE164     String    @unique          // normalized, e.g. "+5215512345678"
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneE164 String @unique // normalized, e.g. "+5215512345678"
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Verification (code-based, started in-app). Unverified rows are inert.
   verifiedAt    DateTime?
-  codeHash      String?                     // sha256 of the 6-digit code (never store the code)
+  codeHash      String? // sha256 of the 6-digit code (never store the code)
   codeExpiresAt DateTime?
-  attempts      Int       @default(0)       // failed verify attempts → lockout
+  attempts      Int       @default(0) // failed verify attempts → lockout
 
   // Which company this number is currently "talking about". Set after the user
   // disambiguates; switchable mid-conversation. Null = ask again on next inbound.
@@ -2180,13 +2180,13 @@ model WhatsappConversation {
   linkId    String
   link      WhatsappLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   // Reserved for Pillar-F writes: a serialized action awaiting in-app/code
   // confirmation. Always null in W0 (read-only).
   pendingAction Json?
 
-  messages  WhatsappMessage[]
+  messages WhatsappMessage[]
 
   @@unique([linkId, companyId])
   @@index([companyId])
@@ -2205,27 +2205,27 @@ model CompanyRegimen {
   createdAt DateTime @default(now())
 
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  code      String    // 3-digit SAT régimen code, e.g. "606"
-  label     String    // human label, e.g. "Arrendamiento"
+  code      String // 3-digit SAT régimen code, e.g. "606"
+  label     String // human label, e.g. "Arrendamiento"
   since     DateTime? // "Fecha Inicio" from the CSF régimenes table
-  isPrimary Boolean  @default(false)
+  isPrimary Boolean   @default(false)
 
   @@unique([companyId, code])
   @@index([companyId])
 }
 
 model WhatsappMessage {
-  id             String   @id @default(cuid())
-  createdAt      DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   conversationId String
   conversation   WhatsappConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  role           WhatsappRole
-  body           String   @db.Text
-  providerSid    String?  // Twilio message SID — inbound dedup / outbound audit
+  role        WhatsappRole
+  body        String       @db.Text
+  providerSid String? // Twilio message SID — inbound dedup / outbound audit
 
   @@index([conversationId, createdAt])
 }
@@ -2235,11 +2235,58 @@ model WhatsappMessage {
 model PushSubscription {
   id        String   @id @default(cuid())
   endpoint  String   @unique
-  p256dh    String   // client public key (keys.p256dh)
-  auth      String   // client auth secret (keys.auth)
+  p256dh    String // client public key (keys.p256dh)
+  auth      String // client auth secret (keys.auth)
   userId    String
-  companyId String?  // active company when subscribed (optional scoping)
+  companyId String? // active company when subscribed (optional scoping)
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// ─── Fiscal knowledge base (RAG sobre legislación fiscal) ───────────────────
+// Cited, version-aware retrieval over leyes/RMF/criterios/DOF. Requires the
+// pgvector extension — run `npm run fiscal:setup` BEFORE `npm run db:push`.
+// Design doc: docs/FISCAL-KNOWLEDGE-BASE.md
+
+enum FiscalSource {
+  LEY
+  RMF
+  CRITERIO
+  DOF
+  REGLAMENTO
+  TESIS
+}
+
+model FiscalDocument {
+  id            String        @id @default(cuid())
+  source        FiscalSource
+  clave         String // "LISR", "CFF", "RMF-2026"
+  titulo        String
+  url           String // canonical source URL
+  publicadoDof  DateTime? // DOF publication date of this version, if known
+  vigenciaDesde DateTime
+  vigenciaHasta DateTime? // null = texto vigente
+  hash          String // sha256 of normalized text — skips unchanged re-ingest
+  chunks        FiscalChunk[]
+  createdAt     DateTime      @default(now())
+
+  @@unique([clave, vigenciaDesde])
+  @@index([source, clave])
+}
+
+model FiscalChunk {
+  id            String                      @id @default(cuid())
+  documentId    String
+  document      FiscalDocument              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  articulo      String? // "113-E", "TRANSITORIOS"; null = preámbulo
+  parte         Int? // sub-chunk index (1-based) for long articles
+  contexto      String? // breadcrumb: TÍTULO / CAPÍTULO / SECCIÓN
+  texto         String                      @db.Text
+  embedding     Unsupported("vector(1536)") // dim must match EMBEDDING_DIM in src/lib/fiscal-kb/embed.ts
+  vigenciaDesde DateTime // denormalized from document → filtered vector search sin join extra
+  vigenciaHasta DateTime?
+  regimenes     String[]                    @default([])
+
+  @@index([documentId])
 }
