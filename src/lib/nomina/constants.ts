@@ -14,10 +14,12 @@ export const UMA_DIARIO_2025 = 113.14;
 export const UMA_MENSUAL_2025 = UMA_DIARIO_2025 * 30.4;
 
 // ─── Salario mínimo ──────────────────────────────────────────────────────────
-// 2026: $315.04 general (CONASAMI Boletín 14/2025, +13% vs $278.80 de 2025;
-// citado en el decreto del subsidio DOF 31-dic-2025). El de la Zona Libre de la
-// Frontera Norte es distinto — configúralo por env si aplica.
+// Vigentes desde el 1-ene-2026 (CONASAMI, resolución dic-2025):
+//   General: $315.04 (+13% vs $278.80 de 2025)
+//   Zona Libre de la Frontera Norte: $440.87 (+5% vs $419.88 de 2025)
+// Env overridea ambos para el ajuste anual.
 export const SALARIO_MINIMO_GENERAL = parseFloat(process.env.SALARIO_MINIMO_GENERAL ?? "315.04");
+export const SALARIO_MINIMO_ZLFN = parseFloat(process.env.SALARIO_MINIMO_ZLFN ?? "440.87");
 
 // SBC topes
 export const TOPE_SBC_25_UMA = UMA_DIARIO * 25;
