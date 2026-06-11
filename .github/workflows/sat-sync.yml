@@ -30,3 +30,17 @@ jobs:
         env:
           STAGING_URL: ${{ secrets.STAGING_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      # Tras sincronizar los XML vigentes, detecta cancelaciones en el SAT
+      # (descarga de metadata) y revierte su efecto. Asíncrono como el sync: lo
+      # que no esté listo se resuelve en la siguiente corrida.
+      - name: Trigger SAT cancel-sync (detectar cancelaciones)
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/sat-cancel-sync" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee cancel-response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

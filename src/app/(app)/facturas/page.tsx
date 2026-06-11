@@ -18,8 +18,17 @@ interface Invoice {
   totalImpuestos: number;
   notas: string | null;
   facturapiId: string | null;
+  naturaleza: "GASTO" | "INVERSION" | "INVENTARIO" | "SIN_EFECTOS" | null;
+  naturalezaRevision: boolean;
   customer: { razonSocial: string; rfc: string } | null;
 }
+
+const NATURALEZA_META: Record<string, { label: string; hint: string }> = {
+  GASTO:       { label: "Gasto",        hint: "Deducible en el periodo (Art. 25/27)" },
+  INVERSION:   { label: "Activo fijo",  hint: "Se deduce vía depreciación (Art. 31/34)" },
+  INVENTARIO:  { label: "Inventario",   hint: "Se deduce al venderse — costo de lo vendido (Art. 39)" },
+  SIN_EFECTOS: { label: "Sin efectos",  hint: "No deducible" },
+};
 interface Resumen { timbradas: number; totalFacturado: number; ivaCobrado: number }
 
 type FilterKey = "todas" | "ingreso" | "egreso" | "nomina" | "pago" | "cancelada";
@@ -275,6 +284,59 @@ export default function FacturasPage() {
   );
 }
 
+// ── Naturaleza fiscal (deducibilidad) — badge + override del contador ─────────
+function NaturalezaRow({ inv }: { inv: Invoice }) {
+  const [valor, setValor] = useState<string>(inv.naturaleza ?? "GASTO");
+  const [revision, setRevision] = useState(inv.naturalezaRevision);
+  const [saving, setSaving] = useState(false);
+
+  async function save(nuevo: string) {
+    const prev = valor;
+    setValor(nuevo);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/facturas/${inv.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ naturaleza: nuevo }),
+      });
+      if (!res.ok) throw new Error();
+      setRevision(false);
+    } catch {
+      setValor(prev); // revertir si falla
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const meta = NATURALEZA_META[valor];
+  return (
+    <div className="mt-3 rounded-[10px] border border-cos-line-soft px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Naturaleza fiscal</span>
+        <select
+          value={valor}
+          disabled={saving}
+          onChange={(e) => save(e.target.value)}
+          className="rounded-control border border-cos-line bg-white px-2 py-1 text-[13px] focus:outline-none focus:ring-1 focus:ring-cos-brand"
+        >
+          <option value="GASTO">Gasto</option>
+          <option value="INVERSION">Activo fijo</option>
+          <option value="INVENTARIO">Inventario</option>
+          <option value="SIN_EFECTOS">Sin efectos</option>
+        </select>
+      </div>
+      <p className="mt-1 text-[12px] text-cos-ink-soft">{meta?.hint}</p>
+      {revision && (
+        <p className="mt-1.5 flex items-start gap-1.5 text-[12px] text-cos-amber-ink">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Clasificación automática por revisar — la clave del producto sugiere que podría ser activo fijo (a depreciar) en vez de gasto inmediato.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Detail modal (+ Cancelar CFDI, preserved from the old screen) ─────────────
 function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: () => void; onCancelled: () => void }) {
   const k = keyOf(inv);
@@ -342,6 +404,8 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
             <Info className="h-3.5 w-3.5" /> {nota}
           </p>
         )}
+
+        {inv.tipo === "EGRESO" && <NaturalezaRow inv={inv} />}
 
         <div className="mt-[18px] border-t border-cos-line-soft">
           <div className="flex justify-between border-b border-cos-line-soft py-2.5 text-[14px] text-cos-ink-soft">

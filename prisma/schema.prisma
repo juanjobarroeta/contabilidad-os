@@ -467,6 +467,16 @@ model Invoice {
   // code like "601.15" — must match a ChartAccount in the catalog.
   overrideCuenta String?
 
+  // Naturaleza fiscal (deducibilidad): GASTO | INVERSION | INVENTARIO |
+  // SIN_EFECTOS, derivada del usoCfdi al importar (ver lib/fiscal/clasificar-cfdi).
+  // Decide CÓMO se deduce un EGRESO (gasto inmediato vs depreciación vs costo de
+  // lo vendido). NO se consume aún en el cálculo de ISR — se prepara el dato.
+  naturaleza        String?
+  /** True cuando la clasificación necesita revisión del contador (señal no concluyente). */
+  naturalezaRevision Boolean @default(false)
+  /** True cuando el contador fijó la naturaleza a mano — no la sobrescribe el re-sync. */
+  naturalezaManual  Boolean @default(false)
+
   // SAT stamping data (from PAC/Facturapi)
   status         InvoiceStatus @default(DRAFT)
   uuid           String?       @unique // Folio fiscal
@@ -1110,6 +1120,9 @@ model SatSyncRequest {
 enum SatRequestType {
   EMITIDOS
   RECIBIDOS
+  // Consultas de METADATA (no XML) para detectar CFDIs cancelados en el SAT.
+  METADATA_EMITIDOS
+  METADATA_RECIBIDOS
 }
 
 enum SatRequestStatus {

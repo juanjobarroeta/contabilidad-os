@@ -12,7 +12,10 @@ import {
   RequestType,
   DocumentStatus,
   CfdiPackageReader,
+  MetadataPackageReader,
 } from "@nodecfdi/sat-ws-descarga-masiva";
+import { interpretarCancelaciones, type SatMetadataRow } from "./sat-cancelaciones";
+import { clasificarCfdi } from "./fiscal/clasificar-cfdi";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared, session-free SAT Descarga Masiva logic.
@@ -528,6 +531,13 @@ export async function verifyAndImportSatSync(
           }
         }
 
+        const clasif = clasificarCfdi({
+          tipo: invoiceType,
+          usoCfdi: cfdi.usoCfdi ?? null,
+          usoEsDefault: !cfdi.usoCfdi,
+          items: (cfdi.items ?? []).map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
+        });
+
         const createdInvoice = await prisma.invoice.create({
           data: {
             companyId,
@@ -539,6 +549,8 @@ export async function verifyAndImportSatSync(
             formaPago: cfdi.formaPago ?? "99",
             metodoPago: cfdi.metodoPago ?? "PUE",
             usoCfdi: cfdi.usoCfdi ?? "G03",
+            naturaleza: clasif.fuente === "no_aplica" ? null : clasif.naturaleza,
+            naturalezaRevision: clasif.requiereRevision,
             moneda: cfdi.moneda ?? "MXN",
             subtotal: cfdi.subtotal,
             total: cfdi.total,
@@ -617,4 +629,187 @@ export async function verifyAndImportSatSync(
     skipped,
     message: `✓ ${imported} CFDI(s) importados${skipped > 0 ? `, ${skipped} ya existían` : ""}`,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cancel-sync — detección de CFDIs cancelados en el SAT (descarga de METADATA).
+//
+// Mismo patrón submit→verify que el sync de XML, pero con RequestType
+// "metadata": el paquete trae el estatus (vigente/cancelado) de cada CFDI del
+// periodo. Para los UUIDs que tenemos como STAMPED y el SAT reporta cancelados,
+// marcamos la factura CANCELLED — y el motor fiscal (que filtra status STAMPED)
+// deja de contarlos. La decisión vive en sat-cancelaciones.ts (pura/testeable).
+//
+// ⚠️ La descarga/parseo de metadata requiere una corrida real contra el SAT
+// para confirmar el formato del paquete antes de confiar ciegamente; el marcado
+// es conservador (sólo STAMPED→CANCELLED de UUIDs que ya tenemos).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Periodo de un mes, recortado a ayer (SAT rechaza rangos que incluyen hoy). */
+function buildMonthPeriod(year: number, month: number): DateTimePeriod | null {
+  const lastDay = new Date(year, month, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const requestedEnd = new Date(year, month - 1, lastDay, 23, 59, 59);
+  const now = new Date();
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+  const effectiveEnd = requestedEnd > yesterday ? yesterday : requestedEnd;
+  if (effectiveEnd < new Date(year, month - 1, 1)) return null;
+  const startIso = `${year}-${pad(month)}-01T00:00:00`;
+  const endIso =
+    [effectiveEnd.getFullYear(), pad(effectiveEnd.getMonth() + 1), pad(effectiveEnd.getDate())].join("-") +
+    "T" +
+    [pad(effectiveEnd.getHours()), pad(effectiveEnd.getMinutes()), pad(effectiveEnd.getSeconds())].join(":");
+  return DateTimePeriod.create(new DateTime(startIso), new DateTime(endIso));
+}
+
+export interface CancelSyncResult {
+  ok: boolean;
+  status?: "pending" | "done" | "empty" | "error";
+  cancelled?: number;
+  checked?: number;
+  /** Sólo en dryRun: los UUIDs que SE cancelarían (sin escribir). */
+  wouldCancel?: { id: string; uuid: string }[];
+  error?: string;
+}
+
+/**
+ * Submit (or reuse) the two metadata requests for a period and, when SAT has a
+ * package ready, download it and apply cancellations. Self-contained: persists
+ * the metadata request IDs in SatSyncRequest (tipos METADATA_*) so a later cron
+ * run picks up packages SAT finished asynchronously — same cadence as XML sync.
+ *
+ * `dryRun`: descarga y decide pero NO escribe — devuelve `wouldCancel` para
+ * confirmar el formato del metadata contra una cancelación conocida antes de
+ * confiar en el automático.
+ */
+export async function syncCancelacionesPeriodo(
+  companyId: string,
+  year: number,
+  month: number,
+  dryRun = false
+): Promise<CancelSyncResult> {
+  let fiel;
+  try {
+    fiel = await getFielForCompany(companyId);
+  } catch (err) {
+    return { ok: false, status: "error", error: err instanceof Error ? err.message : "Error FIEL" };
+  }
+  const service = buildService(fiel);
+  const period = buildMonthPeriod(year, month);
+  if (!period) return { ok: true, status: "empty" };
+
+  const cutoff = new Date(Date.now() - REUSE_WINDOW_HOURS * 60 * 60 * 1000);
+  const sides: Array<{ tipo: "METADATA_EMITIDOS" | "METADATA_RECIBIDOS"; download: "issued" | "received" }> = [
+    { tipo: "METADATA_EMITIDOS", download: "issued" },
+    { tipo: "METADATA_RECIBIDOS", download: "received" },
+  ];
+
+  // 1. Ensure a request per side (reuse within the 24h window, else submit).
+  const requestIds: string[] = [];
+  for (const side of sides) {
+    const existing = await prisma.satSyncRequest.findFirst({
+      where: {
+        companyId, year, month, tipo: side.tipo,
+        status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
+        createdAt: { gte: cutoff },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing) {
+      requestIds.push(existing.requestId);
+      continue;
+    }
+    try {
+      const res = await service.query(
+        QueryParameters.create()
+          .withPeriod(period)
+          .withDownloadType(new DownloadType(side.download))
+          .withRequestType(new RequestType("metadata"))
+      );
+      if (res.getStatus().isAccepted()) {
+        const reqId = res.getRequestId();
+        await prisma.satSyncRequest.create({
+          data: { companyId, year, month, tipo: side.tipo, requestId: reqId, status: "ACCEPTED" },
+        });
+        requestIds.push(reqId);
+      }
+    } catch (e) {
+      console.error("[sat/cancel-sync] query error:", e);
+    }
+  }
+  if (requestIds.length === 0) return { ok: true, status: "pending" };
+
+  // 2. Verify each request; collect ready package IDs.
+  const readyPackageIds: string[] = [];
+  let anyPending = false;
+  for (const id of requestIds) {
+    try {
+      const verify = await service.verify(id);
+      if (!verify.getStatus().isAccepted()) {
+        await prisma.satSyncRequest.updateMany({ where: { requestId: id }, data: { status: "FAILED", lastVerifiedAt: new Date() } });
+        continue;
+      }
+      const codeRequest = verify.getCodeRequest().getValue();
+      if (codeRequest === 5004) {
+        await prisma.satSyncRequest.updateMany({ where: { requestId: id }, data: { status: "FINISHED", cfdisFound: 0, lastVerifiedAt: new Date() } });
+        continue;
+      }
+      const statusRequest = verify.getStatusRequest();
+      const isFinished = statusRequest.isTypeOf("Finished" as Parameters<typeof statusRequest.isTypeOf>[0]);
+      if (!isFinished) {
+        anyPending = true;
+        await prisma.satSyncRequest.updateMany({ where: { requestId: id }, data: { status: "IN_PROGRESS", lastVerifiedAt: new Date() } });
+      } else {
+        for (const pkg of verify.getPackageIds()) readyPackageIds.push(pkg);
+        await prisma.satSyncRequest.updateMany({ where: { requestId: id }, data: { status: "FINISHED", lastVerifiedAt: new Date() } });
+      }
+    } catch (e) {
+      console.error("[sat/cancel-sync] verify error:", e);
+    }
+  }
+  if (readyPackageIds.length === 0) return { ok: true, status: anyPending ? "pending" : "empty" };
+
+  // 3. Download metadata packages, parse rows.
+  const rows: SatMetadataRow[] = [];
+  for (const pkgId of readyPackageIds) {
+    const dl = await service.download(pkgId);
+    if (!dl.getStatus().isAccepted()) continue;
+    const binary = Buffer.from(dl.getPackageContent(), "base64").toString("binary");
+    const reader = await MetadataPackageReader.createFromContents(binary);
+    for await (const item of reader.metadata()) {
+      rows.push({
+        uuid: item.get("uuid"),
+        estatus: item.get("estatus"),
+        fechaCancelacion: item.get("fechaCancelacion") || undefined,
+      });
+    }
+  }
+  if (rows.length === 0) return { ok: true, status: "done", cancelled: 0, checked: 0 };
+
+  // 4. Apply: only STAMPED invoices we own that SAT reports cancelled.
+  const uuids = rows.map((r) => r.uuid?.trim().toUpperCase()).filter(Boolean) as string[];
+  const owned = await prisma.invoice.findMany({
+    where: { companyId, uuid: { in: uuids } },
+    select: { id: true, uuid: true, status: true },
+  });
+  const { toCancel } = interpretarCancelaciones(
+    rows,
+    owned.map((o) => ({ id: o.id, uuid: o.uuid ?? "", status: o.status }))
+  );
+  if (dryRun) {
+    return {
+      ok: true,
+      status: "done",
+      cancelled: 0,
+      checked: rows.length,
+      wouldCancel: toCancel.map((t) => ({ id: t.id, uuid: t.uuid })),
+    };
+  }
+  if (toCancel.length > 0) {
+    await prisma.invoice.updateMany({
+      where: { id: { in: toCancel.map((t) => t.id) } },
+      data: { status: "CANCELLED" },
+    });
+  }
+  return { ok: true, status: "done", cancelled: toCancel.length, checked: rows.length };
 }
