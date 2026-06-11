@@ -197,6 +197,7 @@ export async function GET(req: Request) {
       saldoFavorAnteriorPeriodo: pos.isr.saldoFavorAnterior > 0 ? prevPeriodo : null,
       saldoAFavor: pos.isr.saldoAFavor,
       tarifaVerificada: pos.isr.tarifaVerificada,
+      plataformaActividad: pos.isr.plataformaActividad ?? null,
     },
     facturas,
     declaracionGuardada: declaracionGuardada ? {

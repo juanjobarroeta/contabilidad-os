@@ -5,6 +5,7 @@ import { computeTaxPosition } from "@/lib/impuestos";
 import { tarifaPeriodoPF, aplicarTarifa } from "@/lib/fiscal/tarifas";
 import { calcularIsrResicoPf } from "@/lib/resico";
 import { calcularIsrArrendamientoMensual } from "@/lib/fiscal/isr-arrendamiento";
+import { calcularIsrPlataformas, normalizarActividadPlataforma } from "@/lib/fiscal/isr-plataformas";
 
 const IVA = 0.16;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -87,6 +88,16 @@ export async function GET(req: Request) {
         retencionesMes: pos.isr.retencionesAcreditadas,
       });
       newIsr = r ? r.isrPagar : null;
+      break;
+    }
+    case "PF_PLATAFORMAS": {
+      // Art. 113-A: tasa fija × (ingresos + delta) − retenciones del mes.
+      const r = calcularIsrPlataformas({
+        ingresosCobradosMes: pos.isr.ingresosAcumulados + addIngreso,
+        retencionesMes: pos.isr.retencionesAcreditadas,
+        actividad: normalizarActividadPlataforma(pos.isr.plataformaActividad?.kind),
+      });
+      newIsr = r.isrPagar;
       break;
     }
     case "RESICO_PF": {

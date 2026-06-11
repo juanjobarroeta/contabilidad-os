@@ -40,6 +40,7 @@ export async function GET(_req: Request, { params }: Params) {
       fielKey: true,
       fielVigencia: true,
       registroPatronal: true,
+      plataformaActividad: true,
       isActive: true,
       createdAt: true,
     },
@@ -73,6 +74,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const {
     fielCer, fielKey, fielPassword, csdCer, csdKey, csdPassword,
     registroPatronal,
+    plataformaActividad,
     // Editable fiscal/contact fields
     razonSocial, regimenFiscal, codigoPostal, domicilioFiscal,
     nombreComercial, email, telefono, actividadEconomica,
@@ -101,6 +103,11 @@ export async function PATCH(req: Request, { params }: Params) {
   if (email !== undefined) data.email = email?.trim() || null;
   if (telefono !== undefined) data.telefono = telefono?.trim() || null;
   if (actividadEconomica !== undefined) data.actividadEconomica = actividadEconomica?.trim() || null;
+  if (plataformaActividad !== undefined) {
+    // Tipo de actividad de plataforma (625) que define la tasa Art. 113-A.
+    const v = plataformaActividad?.trim();
+    data.plataformaActividad = v === "transporte" || v === "hospedaje" || v === "servicios" ? v : null;
+  }
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "No hay datos para actualizar" }, { status: 400 });
