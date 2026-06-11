@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
+import { parseCertExpiry } from "@/lib/fiel";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -83,6 +84,7 @@ export async function PATCH(req: Request, { params }: Params) {
   if (fielCer) data.fielCer = encryptSecret(fielCer);
   if (fielKey) data.fielKey = encryptSecret(fielKey);
   if (fielPassword) data.fielPassword = encryptSecret(fielPassword);
+  if (fielCer) data.fielVigencia = parseCertExpiry(fielCer); // capture e.firma expiry
   if (csdCer) data.csdCer = encryptSecret(csdCer);
   if (csdKey) data.csdKey = encryptSecret(csdKey);
   if (csdPassword) data.csdPassword = encryptSecret(csdPassword);

@@ -7,6 +7,7 @@ import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 import { encryptNullable } from "@/lib/crypto";
+import { parseCertExpiry } from "@/lib/fiel";
 
 export async function GET() {
   const session = await auth();
@@ -223,6 +224,8 @@ export async function POST(req: Request) {
       fielCer: encryptNullable(fielCer),
       fielKey: encryptNullable(fielKey),
       fielPassword: encryptNullable(fielPassword),
+      fielVigencia: fielCer ? parseCertExpiry(fielCer) : undefined, // e.firma expiry
+
       fechaInicioOperaciones: fechaInicioOperaciones ?? undefined,
       satBackfillYears: [0, 1, 5].includes(satBackfillYears as number)
         ? (satBackfillYears as number)
