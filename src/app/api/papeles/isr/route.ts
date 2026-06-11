@@ -5,6 +5,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularIsrResicoPf, detectResicoKind, TARIFA_RESICO_PF_MENSUAL } from "@/lib/resico";
 import { sumIsrPagar } from "@/lib/isr-provisional";
+import { computeTaxPosition } from "@/lib/impuestos";
 
 // GET /api/papeles/isr?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -127,12 +128,21 @@ export async function GET(req: Request) {
   const ingresosDelMes = monthlyTotals[monthlyTotals.length - 1]?.ingresos ?? 0;
   const resicoCalc = isResicoPf ? calcularIsrResicoPf(ingresosDelMes) : null;
 
+  // PF con actividad empresarial/profesional (612, Art. 106): the working paper
+  // must use the real flujo-de-efectivo engine, not the PM Art. 14 coeficiente
+  // shape — otherwise the papel diverged from the Impuestos screen.
+  const esPfActEmpresarial =
+    company?.regimenFiscal === "612" && (company?.rfc?.trim().length ?? 0) === 13;
+  const pfPos = esPfActEmpresarial ? await computeTaxPosition(companyId, year, month) : null;
+
   const payload = {
     periodo: `${year}-${String(month).padStart(2, "0")}`,
     company: company ? { rfc: company.rfc, razonSocial: company.razonSocial, regimenFiscal: company.regimenFiscal } : null,
     regimen: {
-      kind: isResicoPf ? "resico_pf" : resicoKind === "pm" ? "resico_pm" : "general_pm",
-      label: isResicoPf
+      kind: esPfActEmpresarial ? "pf_act_empresarial" : isResicoPf ? "resico_pf" : resicoKind === "pm" ? "resico_pm" : "general_pm",
+      label: esPfActEmpresarial
+        ? "Persona Física · Actividad Empresarial y Profesional (Art. 106 LISR)"
+        : isResicoPf
         ? "RESICO Persona Física (Art. 113-E LISR)"
         : resicoKind === "pm"
           ? "RESICO Persona Moral (Art. 14 LISR con flujo)"
@@ -163,7 +173,19 @@ export async function GET(req: Request) {
       rfc: inv.customer?.rfc ?? "—",
       subtotal: inv.subtotal,
     })),
-    calculo: isResicoPf && resicoCalc
+    calculo: esPfActEmpresarial && pfPos
+      ? {
+          // PF actividad empresarial (Art. 106) — straight from the engine.
+          tipo: "pf_act_empresarial" as const,
+          ingresosCobradosAcum: pfPos.isr.ingresosAcumulados,
+          baseGravable: pfPos.isr.baseGravable,
+          isrCausado: pfPos.isr.isrDelEjercicio,
+          isrPagadoAnterior: pfPos.isr.isrPagadoAnterior,
+          retencionesAcreditadas: pfPos.isr.retencionesAcreditadas,
+          isrDelMes: pfPos.isr.isrPagar,
+          tarifaVerificada: pfPos.isr.tarifaVerificada,
+        }
+      : isResicoPf && resicoCalc
       ? {
           // RESICO PF calculation shape
           tipo: "resico_pf" as const,
@@ -198,7 +220,17 @@ export async function GET(req: Request) {
     ];
     const rows: CsvRow[] = [];
 
-    if (isResicoPf && resicoCalc) {
+    if (esPfActEmpresarial && pfPos) {
+      const p = `${year}-${String(month).padStart(2, "0")}`;
+      rows.push(["Régimen", "PF · Actividad Empresarial y Profesional (Art. 106 LISR)", "", ""]);
+      rows.push([]);
+      rows.push(["Cálculo ISR", "Ingresos cobrados (acumulado)", p, pfPos.isr.ingresosAcumulados.toFixed(2)]);
+      rows.push(["Cálculo ISR", "= Base gravable", "", (pfPos.isr.baseGravable ?? 0).toFixed(2)]);
+      rows.push(["Cálculo ISR", "ISR causado (tarifa Art. 96 elevada al periodo)", "", (pfPos.isr.isrDelEjercicio ?? 0).toFixed(2)]);
+      rows.push(["Cálculo ISR", "− Pagos provisionales anteriores", "", pfPos.isr.isrPagadoAnterior.toFixed(2)]);
+      rows.push(["Cálculo ISR", "− Retenciones 10% PM (Art. 106)", "", pfPos.isr.retencionesAcreditadas.toFixed(2)]);
+      rows.push(["Cálculo ISR", "= ISR DEL MES", "", (pfPos.isr.isrPagar ?? 0).toFixed(2)]);
+    } else if (isResicoPf && resicoCalc) {
       rows.push(["Régimen", "RESICO Persona Física (Art. 113-E LISR)", "", ""]);
       rows.push([]);
       rows.push(["Tarifa RESICO PF mensual", "", "", ""]);
