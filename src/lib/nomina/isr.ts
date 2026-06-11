@@ -14,7 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { tarifaMensualSueldos, subsidioEmpleo, aplicarTarifa } from "../fiscal/tarifas";
-import { UMA_MENSUAL } from "./constants";
+import { UMA_MENSUAL, UMA_MENSUAL_2025 } from "./constants";
 
 // Periodicidad → factor para convertir base del periodo a base mensual
 // (la tarifa está en mensual; convertimos primero, calculamos, luego dividimos
@@ -38,6 +38,8 @@ export type IsrCalcInput = {
   periodicidadPago: string;
   /** Ejercicio fiscal (año de la fecha de pago). Default: año actual. */
   ejercicio?: number;
+  /** Mes de la fecha de pago (1-12). Sólo afecta el subsidio de enero (transitorio). Default: mes actual. */
+  mes?: number;
 };
 
 export type IsrCalcResult = {
@@ -66,6 +68,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  */
 export function calcularIsrRetenido(input: IsrCalcInput): IsrCalcResult {
   const ejercicio = input.ejercicio ?? new Date().getFullYear();
+  const mes = input.mes ?? new Date().getMonth() + 1;
   const factor = PERIODICIDAD_FACTOR[input.periodicidadPago] ?? 1;
   const baseMensual = input.baseGravable / factor;
 
@@ -87,11 +90,18 @@ export function calcularIsrRetenido(input: IsrCalcInput): IsrCalcResult {
 
   // Subsidio para el empleo (decreto): monto único mensual cuando el ingreso
   // mensual no excede el tope. Se compara contra la base mensualizada.
+  // ENERO (transitorio): la UMA del año entra en vigor el 1-feb (Art. 5 LUMA),
+  // así que el decreto fija para enero un pct mayor sobre la UMA del año
+  // anterior — se calcula contra la UMA 2025 histórica fija, no la env, para
+  // que un recálculo de enero siga siendo exacto después de actualizar la UMA.
   const sub = subsidioEmpleo(ejercicio);
-  const subsidioMensual =
-    sub && baseMensual > 0 && baseMensual <= sub.topeIngresoMensual
-      ? r2(sub.pctUmaMensual * UMA_MENSUAL)
-      : 0;
+  let subsidioMensual = 0;
+  if (sub && baseMensual > 0 && baseMensual <= sub.topeIngresoMensual) {
+    subsidioMensual =
+      mes === 1 && ejercicio === 2026 && sub.pctUmaMensualEnero != null
+        ? r2(sub.pctUmaMensualEnero * UMA_MENSUAL_2025)
+        : r2(sub.pctUmaMensual * UMA_MENSUAL);
+  }
 
   const retencionMensual = Math.max(0, isrMensual - subsidioMensual);
 

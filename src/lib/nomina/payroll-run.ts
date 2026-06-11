@@ -115,8 +115,9 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
       employee: emp as Employee & { tipoDescuentoInfonavit?: string | null },
       diasPagados: input.diasPagados,
       tipo: input.tipo,
-      // Tarifa/subsidio del ejercicio de la FECHA DE PAGO (Art. 96).
+      // Tarifa/subsidio del ejercicio/mes de la FECHA DE PAGO (Art. 96).
       ejercicio: input.fechaPago.getFullYear(),
+      mes: input.fechaPago.getMonth() + 1,
       diasAguinaldo: input.diasAguinaldo,
       fechaCorte: input.fechaCorte,
       diasVacacionesTomar: input.diasVacacionesTomar,

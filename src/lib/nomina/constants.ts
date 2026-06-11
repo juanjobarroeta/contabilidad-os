@@ -1,11 +1,23 @@
 // ─── Nómina Constants ────────────────────────────────────────────────────────
 // Central source of truth for UMA, IMSS rates, and payroll reference values.
-// UMA is updated annually by INEGI (typically February). Update the env var
-// and redeploy when the new value is published.
+// UMA is updated annually by INEGI and enters into force on FEBRUARY 1st
+// (Art. 5 LUMA). Update the env var and redeploy when the new value publishes.
 
-export const UMA_DIARIO = parseFloat(process.env.UMA_DIARIO ?? "113.14");
+// UMA 2026: $117.31 diaria (INEGI, vigente 1-feb-2026).
+export const UMA_DIARIO = parseFloat(process.env.UMA_DIARIO ?? "117.31");
 export const UMA_MENSUAL = UMA_DIARIO * 30.4;
 export const UMA_ANUAL = UMA_DIARIO * 365;
+
+// UMA 2025 (histórica, fija): la usa el transitorio del subsidio al empleo de
+// enero 2026 (DOF 31-dic-2025), porque en enero aún rige la UMA del año previo.
+export const UMA_DIARIO_2025 = 113.14;
+export const UMA_MENSUAL_2025 = UMA_DIARIO_2025 * 30.4;
+
+// ─── Salario mínimo ──────────────────────────────────────────────────────────
+// 2026: $315.04 general (CONASAMI Boletín 14/2025, +13% vs $278.80 de 2025;
+// citado en el decreto del subsidio DOF 31-dic-2025). El de la Zona Libre de la
+// Frontera Norte es distinto — configúralo por env si aplica.
+export const SALARIO_MINIMO_GENERAL = parseFloat(process.env.SALARIO_MINIMO_GENERAL ?? "315.04");
 
 // SBC topes
 export const TOPE_SBC_25_UMA = UMA_DIARIO * 25;

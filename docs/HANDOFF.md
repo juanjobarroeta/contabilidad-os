@@ -117,9 +117,11 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
   meses/12 coincide al centavo) y que la mensual Art. 116 (arrendamiento) es la MISMA tabla.
   La nómina consume las tablas versionadas por ejercicio de la fecha de pago y el run devuelve
   `tarifaWarning` cuando calcula con tablas sin verificar.
-  **Falta** (NO viene en ese PDF): (1) subsidio al empleo 2026 — cotejar pct/tope del decreto
-  (el registro 2025 está `verificado: false` con 13.8%/10,171), (2) UMA 2026 (env `UMA_DIARIO`,
-  hoy 113.14 = valor 2025), (3) salario mínimo 2026. Fuentes: decreto DOF / CONASAMI / INEGI.
+  ✅ **Resuelto** (decreto DOF 31-dic-2025 + INEGI, aportados en sesión): subsidio 2026
+  verificado (15.02% UMA, tope $11,492.66; **enero 15.59% sobre UMA 2025** por transitorio —
+  la UMA del año rige desde el 1-feb), 2025 confirmado (13.8%/$10,171); UMA 2026 $117.31
+  (default en `constants.ts`, env `UMA_DIARIO` overridea); salario mínimo 2026 $315.04
+  (`SALARIO_MINIMO_GENERAL`). El motor de nómina queda con todas las tablas 2026 verificadas.
 
 ---
 

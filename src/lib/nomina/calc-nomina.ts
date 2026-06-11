@@ -35,6 +35,8 @@ export type NominaCalcInput = {
   sueldoBruto?: number;
   /** Ejercicio fiscal (año de la fecha de pago) — selecciona tarifa/subsidio. Default: año actual. */
   ejercicio?: number;
+  /** Mes de la fecha de pago (1-12) — sólo afecta el subsidio de enero (transitorio). */
+  mes?: number;
   // For AGUINALDO
   diasAguinaldo?: number;
   fechaCorte?: Date;
@@ -161,6 +163,7 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     baseGravable: totalGravado,
     periodicidadPago: tipo === "ORDINARIA" ? employee.periodicidadPago : "05", // monthly equiv for extraordinary
     ejercicio: input.ejercicio,
+    mes: input.mes,
   });
   if (isrCalc.isrRetenido > 0) {
     deducciones.push({

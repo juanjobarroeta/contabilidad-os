@@ -60,6 +60,7 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     baseGravable: sueldoBruto,
     periodicidadPago: employee.periodicidadPago,
     ejercicio: input.fechaPago.getFullYear(),
+    mes: input.fechaPago.getMonth() + 1,
   });
   const imssCalc = calcularImss({
     salarioBaseCotizacion: sdi,

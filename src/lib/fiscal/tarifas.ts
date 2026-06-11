@@ -165,6 +165,13 @@ export interface SubsidioEmpleoVersionado {
   pctUmaMensual: number;
   /** Ingreso mensual máximo (total) para tener derecho al subsidio. */
   topeIngresoMensual: number;
+  /**
+   * Porcentaje especial para ENERO del ejercicio (transitorio): la UMA del año
+   * entra en vigor el 1 de febrero (Art. 5 LUMA), así que en enero el decreto
+   * aplica un pct mayor sobre la UMA del año ANTERIOR para producir el mismo
+   * monto en pesos. El llamador debe usarlo con la UMA vigente en enero.
+   */
+  pctUmaMensualEnero?: number;
 }
 
 const SUBSIDIO_EMPLEO: SubsidioEmpleoVersionado[] = [
@@ -178,17 +185,30 @@ const SUBSIDIO_EMPLEO: SubsidioEmpleoVersionado[] = [
     topeIngresoMensual: 9081.0,
   },
   {
-    // Modificación del decreto para 2025. ⚠️ verificado: false — cotejar pct y
-    // tope contra el decreto (DOF 31-dic-2024) / Cuadros Permanentes antes de
-    // confiar en una retención real. 2026 resuelve aquí por roll-forward
-    // mientras no se cargue el valor 2026 verificado.
+    // pct 13.8% confirmado por los considerandos del decreto DOF 31-dic-2025
+    // ("se actualiza el porcentaje de 13.8% ... a 15.02%"); tope = 1.2 × salario
+    // mínimo 2025 ($278.80) × 30.4 = 10,170.62 ≈ 10,171.
     ejercicio: 2025,
     vigenciaDesde: "2025-01-01",
-    vigenciaHasta: null,
-    fuente: "Decreto subsidio para el empleo, modificación (DOF 31-dic-2024) — SIN COTEJAR",
-    verificado: false,
+    vigenciaHasta: "2025-12-31",
+    fuente: "Decreto subsidio para el empleo, modificación (DOF 31-dic-2024)",
+    verificado: true,
     pctUmaMensual: 0.138,
     topeIngresoMensual: 10171.0,
+  },
+  {
+    // 15.02% × UMA mensual ≈ $536.22; tope = 1.2 × salario mínimo 2026
+    // ($315.04) × 30.4 = $11,492.66 exacto. Transitorio SEGUNDO: en enero 2026
+    // se aplica 15.59% sobre la UMA vigente en enero (la de 2025) — mismo monto
+    // en pesos.
+    ejercicio: 2026,
+    vigenciaDesde: "2026-01-01",
+    vigenciaHasta: null,
+    fuente: "Decreto subsidio para el empleo, modificación (DOF 31-dic-2025)",
+    verificado: true,
+    pctUmaMensual: 0.1502,
+    topeIngresoMensual: 11492.66,
+    pctUmaMensualEnero: 0.1559,
   },
 ];
 
