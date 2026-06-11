@@ -255,7 +255,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "search_fiscal_knowledge",
     description:
-      "Busca en la legislación fiscal mexicana vigente (LISR, LIVA, CFF, y eventualmente RMF/criterios/DOF) y devuelve fragmentos con su cita (artículo, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento fiscal — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
+      "Busca en la legislación y normatividad fiscal mexicana vigente (leyes: LISR/LIVA/CFF; RMF y sus reglas; guías de llenado del CFDI / Anexo 20, incluyendo complemento de pago, PUE/PPD, método de pago) y devuelve fragmentos con su cita (artículo/regla/guía, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento fiscal — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -266,8 +266,8 @@ export const tools: Anthropic.Tool[] = [
         },
         fuentes: {
           type: "array",
-          items: { type: "string", enum: ["LEY", "RMF", "CRITERIO", "DOF", "REGLAMENTO", "TESIS"] },
-          description: "Filtrar por tipo de fuente (opcional)",
+          items: { type: "string", enum: ["LEY", "RMF", "CRITERIO", "DOF", "REGLAMENTO", "TESIS", "GUIA"] },
+          description: "Filtrar por tipo de fuente (opcional). GUIA = guías de llenado del CFDI / Anexo 20.",
         },
         limit: { type: "number", description: "Máximo de fragmentos (default 6)" },
       },

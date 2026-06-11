@@ -2266,6 +2266,7 @@ enum FiscalSource {
   DOF
   REGLAMENTO
   TESIS
+  GUIA // guías de llenado / Anexo 20 (SAT)
 }
 
 model FiscalDocument {

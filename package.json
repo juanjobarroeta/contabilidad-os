@@ -16,6 +16,7 @@
     "validate:iva-rep": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/validate-iva-rep.ts",
     "fiscal:setup": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-setup.ts",
     "fiscal:ingest-ley": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-ingest-ley.ts",
+    "fiscal:ingest-doc": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-ingest-doc.ts",
     "fiscal:search": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-search.ts"
   },
   "dependencies": {

@@ -42,6 +42,22 @@ export interface FiscalSearchResult {
 const DEFAULT_LIMIT = 6;
 const DEFAULT_MIN_SIMILARITY = 0.25;
 
+/** Source-aware citation label: leyes cite artículos, RMF cita reglas, guías su título. */
+function buildCita(source: string, clave: string, articulo: string | null, titulo: string): string {
+  if (articulo === "TRANSITORIOS") return `${clave} — TRANSITORIOS`;
+  switch (source) {
+    case "LEY":
+    case "REGLAMENTO":
+      return articulo ? `Art. ${articulo} ${clave}` : clave;
+    case "RMF":
+      return articulo ? `Regla ${articulo} ${clave}` : clave;
+    case "GUIA":
+      return titulo; // guías no tienen numeración de artículo
+    default:
+      return articulo ? `${clave} ${articulo}` : clave;
+  }
+}
+
 export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOptions = {}): Promise<FiscalSearchResult> {
   const fecha = opts.fechaVigencia ?? new Date();
   const limit = Math.min(opts.limit ?? DEFAULT_LIMIT, 20);
@@ -83,7 +99,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
   const resultados = rows
     .filter((r) => r.similitud >= minSim)
     .map((r) => ({
-      cita: r.articulo === "TRANSITORIOS" ? `${r.clave} — TRANSITORIOS` : r.articulo ? `Art. ${r.articulo} ${r.clave}` : r.clave,
+      cita: buildCita(r.source, r.clave, r.articulo, r.titulo),
       texto: r.texto,
       fuente: r.source,
       ley: r.clave,
