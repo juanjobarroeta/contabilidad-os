@@ -129,10 +129,14 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
 
 El despacho objetivo hace **outsourcing de nómina** sobre varias empresas.
 
-- **Correctitud**: Art. 96 mensual + subsidio al empleo, IMSS/INFONAVIT, finiquito, aguinaldo.
-- **Rediseño** (patrón "dos profundidades": vista amigable en la ruta + workspace en `/<ruta>/detalle`):
-  roster de empleados, run-payroll, enteramiento.
-- **Cockpit multi-RFC**: ver/operar varias empresas desde un solo panel.
+- ✅ **Correctitud**: Art. 96 mensual + subsidio al empleo — hecho con tablas 2026 verificadas
+  (ver §6). IMSS/INFONAVIT/finiquito/aguinaldo ya existían (`src/lib/nomina/*`).
+- ✅ **Rediseño dos profundidades**: hecho — vista amigable en `/nomina` (equipo, masa salarial,
+  última corrida, alerta de salarios bajo el mínimo, recordatorio de enteramiento) y el
+  workspace completo movido a `/nomina/detalle` (roster, corridas, incidencias, modales).
+  `createPayrollRun` devuelve `salarioMinimoWarning` + `tarifaWarning` y el modal de nueva
+  corrida los muestra al contador.
+- **Cockpit multi-RFC**: PENDIENTE — ver/operar varias empresas desde un solo panel.
 
 ---
 

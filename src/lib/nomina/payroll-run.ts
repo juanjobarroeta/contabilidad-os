@@ -11,6 +11,7 @@ import { prisma } from "../prisma";
 import { calcularNomina, type NominaCalcInput } from "./calc-nomina";
 import { calcularPtu, type PtuEmployeeData } from "./ptu";
 import { emitNominaCfdi } from "./emit-nomina";
+import { SALARIO_MINIMO_GENERAL } from "./constants";
 import type { PayrollRunType, Employee, Prisma } from "@prisma/client";
 
 // Concurrency limit for Facturapi calls
@@ -42,6 +43,8 @@ export type PayrollRunResult = {
   totalNeto?: number;
   /** Set cuando el ISR se calculó con tarifa/subsidio sin verificar para el ejercicio. */
   tarifaWarning?: string | null;
+  /** Empleados con salario diario por debajo del mínimo general vigente. */
+  salarioMinimoWarning?: string | null;
   error?: string;
 };
 
@@ -178,6 +181,14 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
     tarifaWarning: tarifasVerificadas
       ? null
       : "ISR retenido calculado con tarifa/subsidio sin verificar para el ejercicio — cotejar contra Anexo 8 / decreto vigente antes de timbrar.",
+    // Pagar bajo el mínimo es violación LFT y el SBC queda mal — avisar, no
+    // bloquear (el mínimo aplicable puede ser ZLFN; el general es el piso país).
+    salarioMinimoWarning: (() => {
+      const bajo = employees.filter((e) => e.salarioDiario < SALARIO_MINIMO_GENERAL);
+      if (bajo.length === 0) return null;
+      const nombres = bajo.slice(0, 5).map((e) => `${e.nombre} ${e.apellidoPaterno}`).join(", ");
+      return `${bajo.length} empleado(s) con salario diario por debajo del mínimo general (${SALARIO_MINIMO_GENERAL.toFixed(2)}): ${nombres}${bajo.length > 5 ? "…" : ""}`;
+    })(),
   };
 }
 
