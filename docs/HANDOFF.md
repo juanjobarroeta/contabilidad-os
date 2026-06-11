@@ -97,8 +97,13 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
    también arregló que las retenciones acreditadas leyeran 0 en CFDIs sincronizados del SAT.
 3. **PTU + pérdidas fiscales**: arrastre de pérdidas (10 años, actualizadas) y PTU pagada
    como disminución de la base.
-4. **Cancel sync**: descarga de metadata para detectar CFDIs cancelados y revertir su efecto.
-   Necesita prueba contra SAT en vivo (descarga masiva, RequestType metadata).
+4. ✅ **Cancel sync**: implementado — `syncCancelacionesPeriodo` (sat-sync.ts) baja metadata
+   (RequestType "metadata", `MetadataPackageReader`) y `interpretarCancelaciones`
+   (`sat-cancelaciones.ts`, puro/unit-testeado) marca CANCELLED las facturas STAMPED que el
+   SAT reporta canceladas (el motor ya las excluye). Cron `/api/cron/sat-cancel-sync`
+   encadenado a `sat-sync.yml` (2×/día). ⚠️ Falta una corrida real contra el SAT para
+   confirmar el formato del paquete de metadata antes de confiar 100% — el marcado es
+   conservador (sólo STAMPED→CANCELLED de UUIDs que ya tenemos).
 ✅ **RESICO PF — retención 1.25% (Art. 113-J)**: hecho — `computeTaxPosition` acredita lo
    retenido en los CFDIs de ingreso del mes contra el ISR RESICO definitivo.
 

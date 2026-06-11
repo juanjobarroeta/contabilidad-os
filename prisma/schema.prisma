@@ -1090,6 +1090,9 @@ model SatSyncRequest {
 enum SatRequestType {
   EMITIDOS
   RECIBIDOS
+  // Consultas de METADATA (no XML) para detectar CFDIs cancelados en el SAT.
+  METADATA_EMITIDOS
+  METADATA_RECIBIDOS
 }
 
 enum SatRequestStatus {
