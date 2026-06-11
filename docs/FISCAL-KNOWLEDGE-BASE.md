@@ -1,10 +1,11 @@
 # Fiscal Knowledge Base (Agente fiscal) — Design Doc
 
-> Status: **Phases 0–1 built** (schema, LISR ingestion, chunker, embeddings,
-> `search_fiscal_knowledge` tool wired into the assistant — see `src/lib/fiscal-kb/`).
-> Pending: run against a live DB (`npm run fiscal:setup` → `npm run db:push` →
-> `npm run fiscal:ingest-ley LISR`) and judge retrieval quality on the 10-question
-> gate (§10 Phase 0) before continuing to Phase 2+.
+> Status: **Phases 0–1 live; Phase 3 (RMF + guías/Anexo 20) in progress.**
+> Live in production over LISR (schema, ingestion, chunker, embeddings,
+> `search_fiscal_knowledge` wired into the assistant — `src/lib/fiscal-kb/`).
+> Phase 3 adds a generic ingester for SAT/DOF docs: RMF reglas + guías de
+> llenado (Anexo 20), ingestible from URL **or** a local file (DOF blocks bots,
+> SAT URLs rot). Run: `npm run fiscal:ingest-doc GUIA-PAGOS`.
 >
 > This document specifies a retrieval-augmented
 > fiscal knowledge base that ingests Mexican tax authority sources (leyes vigentes,
@@ -281,7 +282,13 @@ returns the source text, the assistant is grounded rather than recalling.
   system prompt. Pending: actually ingest LIVA/CFF and spot-check.
 - **Phase 2 — Vigencia.** Version-close logic; `fecha_vigencia` filtering; backfill ≥1
   prior version of one law to prove time-travel works.
-- **Phase 3 — Coverage.** RMF + anexos + criterios SAT; weekly cron; hash-based skip.
+- **Phase 3 — Coverage.** 🟡 In progress. Generic ingester (`ingest-docs.ts` +
+  `fiscal:ingest-doc`) handles RMF reglas (`chunkRegla`) and guías de llenado /
+  Anexo 20 (`chunkGeneric`), from URL **or** `--file` (DOF blocks bots; SAT URLs
+  rot). New `GUIA` source + source-aware citations ("Regla 2.7.1.32 RMF-2026",
+  guía título). Verified: guía-pagos PDF → 19 clean chunks; regla detection on
+  realistic RMF sample. Pending: a real RMF PDF (manual download) + weekly cron.
+  Next: criterios SAT; dedup vs leyes.
 - **Phase 4 — DOF.** Daily index with SHCP/SAT filtering; dedup against already-ingested
   leyes (DOF often *is* the reforma source).
 - **Phase 5 — Polish.** Confidence floor tuning, reranking, optional Voyage swap,
