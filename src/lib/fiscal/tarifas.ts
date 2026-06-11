@@ -56,6 +56,28 @@ const TARIFA_ANUAL_PF: TarifaVersionada[] = [
       { limiteInferior: 4511707.38, cuotaFija: 1414947.85, tasaExcedente: 0.35 },
     ],
   },
+  {
+    // 2025 es idéntica a 2024 (no hubo actualización) y la resuelve el registro
+    // de 2024 vía vigencia. 2026 SÍ se actualizó por inflación.
+    ejercicio: 2026,
+    vigenciaDesde: "2026-01-01",
+    vigenciaHasta: "2026-12-31",
+    fuente: "Art. 152 LISR / Cuadros Permanentes 2026 (Anexo 8 RMF 2026)",
+    verificado: true,
+    filas: [
+      { limiteInferior: 0.01, cuotaFija: 0, tasaExcedente: 0.0192 },
+      { limiteInferior: 10135.12, cuotaFija: 194.59, tasaExcedente: 0.064 },
+      { limiteInferior: 86022.12, cuotaFija: 5051.37, tasaExcedente: 0.1088 },
+      { limiteInferior: 151176.2, cuotaFija: 12140.13, tasaExcedente: 0.16 },
+      { limiteInferior: 175735.67, cuotaFija: 16069.64, tasaExcedente: 0.1792 },
+      { limiteInferior: 210403.7, cuotaFija: 22282.14, tasaExcedente: 0.2136 },
+      { limiteInferior: 424353.98, cuotaFija: 67981.92, tasaExcedente: 0.2352 },
+      { limiteInferior: 668840.15, cuotaFija: 125485.07, tasaExcedente: 0.3 },
+      { limiteInferior: 1276925.99, cuotaFija: 307910.81, tasaExcedente: 0.32 },
+      { limiteInferior: 1702567.98, cuotaFija: 444116.23, tasaExcedente: 0.34 },
+      { limiteInferior: 5107703.93, cuotaFija: 1601862.46, tasaExcedente: 0.35 },
+    ],
+  },
 ];
 
 /** Select the tarifa whose vigencia covers `fecha` (default: ejercicio match). */
