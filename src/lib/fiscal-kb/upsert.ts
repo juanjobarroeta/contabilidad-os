@@ -20,6 +20,10 @@ export interface UpsertDocumentInput {
   vigenciaDesde: Date;
   cleanText: string; // hashed for change detection
   chunks: LawChunk[];
+  /** Replace all existing versions of this clave even if the hash is unchanged.
+   *  Use after a chunker/embedding change, where the source text is identical
+   *  but the chunks differ (a normal upsert would hash-skip). */
+  force?: boolean;
 }
 
 export interface UpsertResult {
@@ -40,10 +44,10 @@ export async function upsertFiscalDocument(input: UpsertDocumentInput): Promise<
     where: { clave: input.clave },
     orderBy: { vigenciaDesde: "desc" },
   });
-  if (latest?.hash === hash) {
+  if (!input.force && latest?.hash === hash) {
     return { skipped: true, documentId: latest.id };
   }
-  if (latest && latest.vigenciaDesde >= input.vigenciaDesde) {
+  if (!input.force && latest && latest.vigenciaDesde >= input.vigenciaDesde) {
     throw new Error(
       `${input.clave}: la versión nueva (vigencia ${input.vigenciaDesde.toISOString().slice(0, 10)}) no es posterior a la almacenada (${latest.vigenciaDesde.toISOString().slice(0, 10)}) pero el contenido cambió — revisa la fuente antes de ingerir.`
     );
@@ -57,7 +61,11 @@ export async function upsertFiscalDocument(input: UpsertDocumentInput): Promise<
 
   await prisma.$transaction(
     async (tx) => {
-      if (latest && latest.vigenciaHasta === null) {
+      if (input.force) {
+        // Clean replacement: drop every prior version of this clave (chunks
+        // cascade) so a re-chunk doesn't leave stale historical versions.
+        await tx.fiscalDocument.deleteMany({ where: { clave: input.clave } });
+      } else if (latest && latest.vigenciaHasta === null) {
         await tx.fiscalDocument.update({
           where: { id: latest.id },
           data: { vigenciaHasta: dayBefore(input.vigenciaDesde) },
