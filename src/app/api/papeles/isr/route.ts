@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularIsrResicoPf, detectResicoKind, TARIFA_RESICO_PF_MENSUAL } from "@/lib/resico";
+import { DEDUCCION_CIEGA_ARRENDAMIENTO } from "@/lib/fiscal/isr-arrendamiento";
 import { sumIsrPagar } from "@/lib/isr-provisional";
 import { computeTaxPosition } from "@/lib/impuestos";
 
@@ -124,14 +125,17 @@ export async function GET(req: Request) {
   const resicoKind = detectResicoKind(company?.regimenFiscal ?? null, company?.rfc ?? null);
   const isResicoPf = resicoKind === "pf";
 
-  // PF act. empresarial (612, Art. 106) y RESICO PF (Art. 113-E) usan el motor
-  // real (computeTaxPosition) como única fuente de verdad — incluida la
-  // retención acreditada — para que el papel no diverja de la pantalla de
-  // Impuestos.
-  const esPfActEmpresarial =
-    company?.regimenFiscal === "612" && (company?.rfc?.trim().length ?? 0) === 13;
+  // PF act. empresarial (612, Art. 106), RESICO PF (Art. 113-E) y PF
+  // arrendamiento (606, Arts. 114-116) usan el motor real (computeTaxPosition)
+  // como única fuente de verdad — incluida la retención acreditada — para que
+  // el papel no diverja de la pantalla de Impuestos.
+  const esPf = (company?.rfc?.trim().length ?? 0) === 13;
+  const esPfActEmpresarial = company?.regimenFiscal === "612" && esPf;
+  const esPfArrendamiento = company?.regimenFiscal === "606" && esPf;
   const enginePos =
-    esPfActEmpresarial || isResicoPf ? await computeTaxPosition(companyId, year, month) : null;
+    esPfActEmpresarial || esPfArrendamiento || isResicoPf
+      ? await computeTaxPosition(companyId, year, month)
+      : null;
 
   // For RESICO PF, ISR is on monthly ingresos (cobrados), not acumulado — tomado
   // del motor para coincidir con la pantalla. El rango/tasa de la tarifa se
@@ -143,9 +147,19 @@ export async function GET(req: Request) {
     periodo: `${year}-${String(month).padStart(2, "0")}`,
     company: company ? { rfc: company.rfc, razonSocial: company.razonSocial, regimenFiscal: company.regimenFiscal } : null,
     regimen: {
-      kind: esPfActEmpresarial ? "pf_act_empresarial" : isResicoPf ? "resico_pf" : resicoKind === "pm" ? "resico_pm" : "general_pm",
+      kind: esPfActEmpresarial
+        ? "pf_act_empresarial"
+        : esPfArrendamiento
+        ? "pf_arrendamiento"
+        : isResicoPf
+        ? "resico_pf"
+        : resicoKind === "pm"
+        ? "resico_pm"
+        : "general_pm",
       label: esPfActEmpresarial
         ? "Persona Física · Actividad Empresarial y Profesional (Art. 106 LISR)"
+        : esPfArrendamiento
+        ? "Persona Física · Arrendamiento (Arts. 114-116 LISR)"
         : isResicoPf
         ? "RESICO Persona Física (Art. 113-E LISR)"
         : resicoKind === "pm"
@@ -177,7 +191,19 @@ export async function GET(req: Request) {
       rfc: inv.customer?.rfc ?? "—",
       subtotal: inv.subtotal,
     })),
-    calculo: esPfActEmpresarial && enginePos
+    calculo: esPfArrendamiento && enginePos
+      ? {
+          // PF arrendamiento (Arts. 114-116) — mensual standalone, del motor.
+          tipo: "pf_arrendamiento" as const,
+          ingresosCobradosMes: enginePos.isr.ingresosAcumulados,
+          deduccionCiega: +(enginePos.isr.ingresosAcumulados * DEDUCCION_CIEGA_ARRENDAMIENTO).toFixed(2),
+          baseGravable: enginePos.isr.baseGravable,
+          isrCausado: enginePos.isr.isrDelEjercicio,
+          retencionesAcreditadas: enginePos.isr.retencionesAcreditadas,
+          isrDelMes: enginePos.isr.isrPagar,
+          tarifaVerificada: enginePos.isr.tarifaVerificada,
+        }
+      : esPfActEmpresarial && enginePos
       ? {
           // PF actividad empresarial (Art. 106) — straight from the engine.
           tipo: "pf_act_empresarial" as const,
@@ -229,7 +255,17 @@ export async function GET(req: Request) {
     ];
     const rows: CsvRow[] = [];
 
-    if (esPfActEmpresarial && enginePos) {
+    if (esPfArrendamiento && enginePos) {
+      const p = `${year}-${String(month).padStart(2, "0")}`;
+      rows.push(["Régimen", "PF · Arrendamiento (Arts. 114-116 LISR)", "", ""]);
+      rows.push([]);
+      rows.push(["Cálculo ISR", "Ingresos cobrados del mes", p, enginePos.isr.ingresosAcumulados.toFixed(2)]);
+      rows.push(["Cálculo ISR", `− Deducción ciega ${(DEDUCCION_CIEGA_ARRENDAMIENTO * 100).toFixed(0)}% (Art. 115)`, "", (enginePos.isr.ingresosAcumulados * DEDUCCION_CIEGA_ARRENDAMIENTO).toFixed(2)]);
+      rows.push(["Cálculo ISR", "= Base gravable", "", (enginePos.isr.baseGravable ?? 0).toFixed(2)]);
+      rows.push(["Cálculo ISR", "ISR causado (tarifa mensual Art. 96)", "", (enginePos.isr.isrDelEjercicio ?? 0).toFixed(2)]);
+      rows.push(["Cálculo ISR", "− Retenciones 10% PM (Art. 116)", "", enginePos.isr.retencionesAcreditadas.toFixed(2)]);
+      rows.push(["Cálculo ISR", "= ISR DEL MES", "", (enginePos.isr.isrPagar ?? 0).toFixed(2)]);
+    } else if (esPfActEmpresarial && enginePos) {
       const p = `${year}-${String(month).padStart(2, "0")}`;
       rows.push(["Régimen", "PF · Actividad Empresarial y Profesional (Art. 106 LISR)", "", ""]);
       rows.push([]);

@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { sumIsrPagar } from "./isr-provisional";
 import { detectResicoKind, calcularIsrResicoPf } from "./resico";
 import { calcularIsrProvisionalPf } from "./fiscal/isr-pf";
+import { calcularIsrArrendamientoMensual } from "./fiscal/isr-arrendamiento";
 import { calcularActosDelPeriodo } from "./fiscal/iva";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,7 +184,7 @@ export interface TaxPosition {
   };
 }
 
-export type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF";
+export type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO";
 
 const ISR_TASA_PM = 0.3;
 
@@ -366,8 +367,9 @@ export async function computeTaxPosition(
   const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
 
   const resicoKind = detectResicoKind(company?.regimenFiscal ?? null, company?.rfc ?? null);
-  const esPfActEmpresarial =
-    company?.regimenFiscal === "612" && (company?.rfc?.trim().length ?? 0) === 13;
+  const esPf = (company?.rfc?.trim().length ?? 0) === 13;
+  const esPfActEmpresarial = company?.regimenFiscal === "612" && esPf;
+  const esPfArrendamiento = company?.regimenFiscal === "606" && esPf;
 
   let isr: TaxPosition["isr"];
 
@@ -411,6 +413,37 @@ export async function computeTaxPosition(
       saldoFavorAnterior: saldoFavorIsrAnterior,
       saldoAFavor: Math.max(0, round2(acreditableIsr - res.isr)),
       tarifaVerificada: true,
+    };
+  } else if (esPfArrendamiento) {
+    // PF arrendamiento (606, Arts. 114-116): pago provisional MENSUAL
+    // standalone (no acumulativo) sobre flujo — ingresos del mes efectivamente
+    // cobrados (base-REP) − deducción ciega 35% (Art. 115) → tarifa mensual
+    // Art. 96 − retención 10% de arrendatarios PM (Art. 116 último párrafo).
+    const mes = await flujoEfectivoAcum(companyId, from, to);
+    const r = calcularIsrArrendamientoMensual({
+      ejercicio: year,
+      ingresosCobradosMes: mes.ingresosCobrados,
+      retencionesMes: mes.isrRetenidoCobrado,
+    });
+    isr = {
+      metodo: "PF_ARRENDAMIENTO",
+      ingresosDelMes,
+      gastosDelMes,
+      // Mensual standalone: aquí "acumulado" reporta lo cobrado del MES.
+      ingresosAcumulados: r ? r.ingresos : round2(mes.ingresosCobrados),
+      isrPagadoAnterior: round2(isrPagadoAnterior),
+      coeficiente: null,
+      coeficienteFuente: "ninguno",
+      coeficienteBase: null,
+      baseGravable: r ? r.baseGravable : null,
+      tasa: null, // tarifa progresiva mensual
+      utilidadFiscal: r ? r.baseGravable : null,
+      isrDelEjercicio: r ? r.isrCausado : null, // causado del mes (provisional standalone)
+      isrPagar: r ? r.isrPagar : null,
+      retencionesAcreditadas: r ? r.retenciones : 0,
+      saldoFavorAnterior: 0,
+      saldoAFavor: 0,
+      tarifaVerificada: r ? r.tarifaVerificada : false,
     };
   } else if (esPfActEmpresarial) {
     // PF con actividad empresarial (Art. 106): base en FLUJO DE EFECTIVO

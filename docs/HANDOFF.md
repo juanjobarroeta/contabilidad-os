@@ -76,8 +76,11 @@ corregidas. ⚠️ La consola de Railway corre **una sola** sentencia a la vez �
 En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF / LISR.
 
 1. **Otros regímenes ISR**:
-   - 606 Arrendamiento (deducción opcional 35% "ciega" vs. comprobada).
-   - 605 Sueldos y salarios (Art. 96 mensual + subsidio).
+   - ✅ 606 Arrendamiento: hecho — `src/lib/fiscal/isr-arrendamiento.ts`, mensual standalone
+     sobre flujo (base-REP), deducción ciega 35% (Art. 115, sin predial), tarifa mensual
+     Art. 96 (= anual/12), retención 10% PM (Art. 116). Pendiente anotado: opción
+     comprobadas + predial, y pago trimestral (≤10 UMA).
+   - 605 Sueldos y salarios (Art. 96 mensual + subsidio) — mejor junto con el track de nómina.
    - 625 Plataformas digitales (retención por plataforma).
    - 621 RIF (en extinción, reducción decreciente).
    - 622 AGAPES (exención + reducción).

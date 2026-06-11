@@ -13,7 +13,7 @@ interface ImpuestosData {
     retenidoPorClientes: number; saldoFavorAnterior: number; pagar: number; saldoAFavor: number;
   };
   isr: {
-    metodo: "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF";
+    metodo: "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO";
     ingresosDelMes: number; gastosDelMes: number; ingresosAcumulados: number;
     coeficiente: number | null; coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
     baseGravable: number | null; isrPagar: number | null;

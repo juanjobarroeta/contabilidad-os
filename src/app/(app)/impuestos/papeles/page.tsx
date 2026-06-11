@@ -266,7 +266,7 @@ function IvaSection({ title, subtitle, rows }: { title: string; subtitle: string
 interface IsrData {
   periodo: string;
   company: { rfc: string; razonSocial: string; regimenFiscal: string } | null;
-  regimen: { kind: "pf_act_empresarial" | "resico_pf" | "resico_pm" | "general_pm"; label: string };
+  regimen: { kind: "pf_act_empresarial" | "pf_arrendamiento" | "resico_pf" | "resico_pm" | "general_pm"; label: string };
   base: {
     prevYear: number; prevIngresosTotal: number; prevGastosTotal: number; prevUtilidad: number;
     coeficienteCalculado: number | null; coeficiente: number | null;
@@ -293,6 +293,12 @@ interface IsrData {
         tipo: "pf_act_empresarial";
         ingresosCobradosAcum: number; baseGravable: number | null; isrCausado: number | null;
         isrPagadoAnterior: number; retencionesAcreditadas: number; isrDelMes: number | null;
+        tarifaVerificada: boolean;
+      }
+    | {
+        tipo: "pf_arrendamiento";
+        ingresosCobradosMes: number; deduccionCiega: number; baseGravable: number | null;
+        isrCausado: number | null; retencionesAcreditadas: number; isrDelMes: number | null;
         tarifaVerificada: boolean;
       };
 }
@@ -321,7 +327,23 @@ function IsrPanel({ companyId, year, month }: { companyId: string; year: number;
         <span><strong>{data.regimen.label}</strong></span>
       </div>
 
-      {data.calculo.tipo === "pf_act_empresarial" ? (
+      {data.calculo.tipo === "pf_arrendamiento" ? (
+        <div className="bg-white border border-border rounded-xl overflow-hidden print:border-2">
+          <div className="px-4 py-3 border-b border-border">
+            <h3 className="font-semibold text-sm">ISR pago provisional — PF Arrendamiento (Arts. 114-116 LISR)</h3>
+          </div>
+          <div className="p-4 space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Ingresos cobrados del mes</span><span className="font-mono">{formatCurrency(data.calculo.ingresosCobradosMes)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">− Deducción ciega 35% (Art. 115)</span><span className="font-mono">{formatCurrency(data.calculo.deduccionCiega)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">= Base gravable</span><span className="font-mono">{data.calculo.baseGravable != null ? formatCurrency(data.calculo.baseGravable) : "—"}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">ISR causado (tarifa mensual Art. 96)</span><span className="font-mono">{data.calculo.isrCausado != null ? formatCurrency(data.calculo.isrCausado) : "—"}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">− Retenciones 10% PM (Art. 116)</span><span className="font-mono">{formatCurrency(data.calculo.retencionesAcreditadas)}</span></div>
+            <div className="flex justify-between border-t border-border pt-2 font-semibold"><span>= ISR del mes</span><span className="font-mono">{data.calculo.isrDelMes != null ? formatCurrency(data.calculo.isrDelMes) : "—"}</span></div>
+            {!data.calculo.tarifaVerificada && <p className="pt-1 text-xs text-amber-700">Tarifa ISR sin verificar contra Anexo 8 — cifra provisional.</p>}
+            <p className="pt-1 text-xs text-muted-foreground">Deducción opcional ciega (sin predial). Si convienen las deducciones comprobadas, ajústalo manualmente — el comparativo automático está pendiente.</p>
+          </div>
+        </div>
+      ) : data.calculo.tipo === "pf_act_empresarial" ? (
         <div className="bg-white border border-border rounded-xl overflow-hidden print:border-2">
           <div className="px-4 py-3 border-b border-border">
             <h3 className="font-semibold text-sm">ISR provisional — PF Actividad Empresarial y Profesional (Art. 106 LISR)</h3>

@@ -28,7 +28,7 @@ interface IvaApiData {
   saldoFavorAnterior: number;
   saldoFavorAnteriorPeriodo: string | null;
 }
-type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF";
+type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO";
 interface IsrApiData {
   metodo: IsrMetodo;
   ingresosDelMes: number;
@@ -62,6 +62,7 @@ const ISR_METODO_LABEL: Record<IsrMetodo, string> = {
   PM_ART14: "Art. 14 LISR (coeficiente)",
   PF_ACT_EMPRESARIAL: "Art. 106 LISR (act. empresarial)",
   RESICO_PF: "Art. 113-E LISR (RESICO)",
+  PF_ARRENDAMIENTO: "Arts. 114-116 LISR (arrendamiento)",
 };
 interface FacturaRow {
   id: string;
@@ -761,7 +762,7 @@ export default function ImpuestosPage() {
                     ISR {result.isr.metodo === "RESICO_PF" ? "Mensual" : "Provisional"}
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    {result.isr.metodo === "RESICO_PF"
+                    {result.isr.metodo === "RESICO_PF" || result.isr.metodo === "PF_ARRENDAMIENTO"
                       ? MONTHS[month - 1]
                       : `Acumulado ${MONTHS[0]}–${MONTHS[month - 1]}`}{" "}
                     {year} · {ISR_METODO_LABEL[result.isr.metodo]}
@@ -887,7 +888,22 @@ export default function ImpuestosPage() {
             /* ── PF actividad empresarial / RESICO PF — server-computed ── */
             <div className="px-5 py-4 space-y-0.5">
               {isrComputed ? (
-                result.isr.metodo === "RESICO_PF" ? (
+                result.isr.metodo === "PF_ARRENDAMIENTO" ? (
+                  <>
+                    <Row label={`Ingresos cobrados del mes (${MONTHS[month - 1]})`} value={formatCurrency(result.isr.ingresosAcumulados)} accent="blue" />
+                    <Row label="− Deducción ciega 35% (Art. 115)" value={`(${formatCurrency(result.isr.ingresosAcumulados * 0.35)})`} />
+                    <Row label="= Base gravable" value={formatCurrency(isrComputed.baseGravable)} indent bold />
+                    <Row label="× Tarifa mensual Art. 96 (progresiva)" value="" indent />
+                    <Row label="= ISR causado" value={formatCurrency(isrComputed.isrDelEjercicio)} indent bold />
+                    {result.isr.retencionesAcreditadas > 0 && (
+                      <Row label="− Retenciones 10% PM (Art. 116)" value={`(${formatCurrency(result.isr.retencionesAcreditadas)})`} />
+                    )}
+                    <Row label="= ISR del mes" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
+                    <p className="pt-2 text-[11px] text-muted-foreground">
+                      Deducción opcional ciega (Art. 115, sin predial). Si convienen las deducciones comprobadas, ajusta manualmente.
+                    </p>
+                  </>
+                ) : result.isr.metodo === "RESICO_PF" ? (
                   <>
                     <Row label={`Ingresos del mes (${MONTHS[month - 1]})`} value={formatCurrency(result.isr.ingresosDelMes)} accent="blue" />
                     <Row label={`× Tasa RESICO (${result.isr.tasa != null ? (result.isr.tasa * 100).toFixed(2) : "—"}%)`} value="" indent />
