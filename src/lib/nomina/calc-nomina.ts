@@ -33,6 +33,8 @@ export type NominaCalcInput = {
   diasPagados: number;
   tipo: PayrollRunType;
   sueldoBruto?: number;
+  /** Ejercicio fiscal (año de la fecha de pago) — selecciona tarifa/subsidio. Default: año actual. */
+  ejercicio?: number;
   // For AGUINALDO
   diasAguinaldo?: number;
   fechaCorte?: Date;
@@ -52,6 +54,8 @@ export type NominaCalcResult = {
   netoAPagar: number;
   imssCalc: ImssCalcResult;
   isrRetenido: number;
+  /** False cuando la tarifa/subsidio usados están vencidos o sin cotejar (ver nomina/isr.ts). */
+  isrTarifaVerificada: boolean;
   imssObrero: number;
   imssPatronal: number;
   infonavitDeduccion: number;
@@ -156,6 +160,7 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
   const isrCalc = calcularIsrRetenido({
     baseGravable: totalGravado,
     periodicidadPago: tipo === "ORDINARIA" ? employee.periodicidadPago : "05", // monthly equiv for extraordinary
+    ejercicio: input.ejercicio,
   });
   if (isrCalc.isrRetenido > 0) {
     deducciones.push({
@@ -211,6 +216,7 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     netoAPagar,
     imssCalc,
     isrRetenido: isrCalc.isrRetenido,
+    isrTarifaVerificada: isrCalc.tarifaVerificada,
     imssObrero: tipo === "ORDINARIA" ? imssCalc.obrero.total : 0,
     imssPatronal: imssCalc.patronal.total,
     infonavitDeduccion,

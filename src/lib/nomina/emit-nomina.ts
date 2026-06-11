@@ -59,6 +59,7 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
   const isrCalc = calcularIsrRetenido({
     baseGravable: sueldoBruto,
     periodicidadPago: employee.periodicidadPago,
+    ejercicio: input.fechaPago.getFullYear(),
   });
   const imssCalc = calcularImss({
     salarioBaseCotizacion: sdi,

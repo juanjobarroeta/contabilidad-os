@@ -40,6 +40,8 @@ export type PayrollRunResult = {
   totalPercepciones?: number;
   totalDeducciones?: number;
   totalNeto?: number;
+  /** Set cuando el ISR se calculó con tarifa/subsidio sin verificar para el ejercicio. */
+  tarifaWarning?: string | null;
   error?: string;
 };
 
@@ -105,6 +107,7 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
 
   // Calculate all employees (pure math, no network calls)
   let sumPerc = 0, sumDed = 0, sumNeto = 0;
+  let tarifasVerificadas = true;
   const itemsData: Prisma.PayrollItemCreateManyInput[] = [];
 
   for (const emp of employees) {
@@ -112,6 +115,8 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
       employee: emp as Employee & { tipoDescuentoInfonavit?: string | null },
       diasPagados: input.diasPagados,
       tipo: input.tipo,
+      // Tarifa/subsidio del ejercicio de la FECHA DE PAGO (Art. 96).
+      ejercicio: input.fechaPago.getFullYear(),
       diasAguinaldo: input.diasAguinaldo,
       fechaCorte: input.fechaCorte,
       diasVacacionesTomar: input.diasVacacionesTomar,
@@ -143,6 +148,7 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
     sumPerc += calc.totalPercepciones;
     sumDed += calc.totalDeducciones;
     sumNeto += calc.netoAPagar;
+    if (!calc.isrTarifaVerificada) tarifasVerificadas = false;
   }
 
   // Batch insert all items in one query
@@ -166,6 +172,11 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
     totalPercepciones: Math.round(sumPerc * 100) / 100,
     totalDeducciones: Math.round(sumDed * 100) / 100,
     totalNeto: Math.round(sumNeto * 100) / 100,
+    // ISR calculado con tarifa vencida o subsidio sin cotejar (p.ej. tarifa
+    // mensual 2026 pendiente de Cuadros Permanentes) — revisar antes de timbrar.
+    tarifaWarning: tarifasVerificadas
+      ? null
+      : "ISR retenido calculado con tarifa/subsidio sin verificar para el ejercicio — cotejar contra Anexo 8 / decreto vigente antes de timbrar.",
   };
 }
 
