@@ -81,7 +81,11 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
      Art. 96 (= anual/12), retención 10% PM (Art. 116). Pendiente anotado: opción
      comprobadas + predial, y pago trimestral (≤10 UMA).
    - 605 Sueldos y salarios (Art. 96 mensual + subsidio) — mejor junto con el track de nómina.
-   - 625 Plataformas digitales (retención por plataforma).
+   - ✅ 625 Plataformas digitales: hecho — `src/lib/fiscal/isr-plataformas.ts`, pago definitivo
+     mensual con tasa fija Art. 113-A por actividad (transporte 2.1% / hospedaje 4% / servicios
+     1%) sobre ingresos cobrados (flujo) − retenciones de plataformas (del CFDI). El tipo de
+     actividad se configura en `/empresa` (campo `Company.plataformaActividad`); sin configurar
+     asume servicios 1% y lo señala.
    - 621 RIF (en extinción, reducción decreciente).
    - 622 AGAPES (exención + reducción).
 ✅ **IVA proporción de acreditamiento (Art. 5 LIVA)**: hecho — `calcularActosDelPeriodo`

@@ -3,6 +3,7 @@ import { sumIsrPagar } from "./isr-provisional";
 import { detectResicoKind, calcularIsrResicoPf } from "./resico";
 import { calcularIsrProvisionalPf } from "./fiscal/isr-pf";
 import { calcularIsrArrendamientoMensual } from "./fiscal/isr-arrendamiento";
+import { calcularIsrPlataformas, normalizarActividadPlataforma, TASAS_PLATAFORMA } from "./fiscal/isr-plataformas";
 import { calcularActosDelPeriodo } from "./fiscal/iva";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -181,10 +182,12 @@ export interface TaxPosition {
     saldoAFavor: number;
     /** False when the tarifa used has NOT been verified vs the authoritative source. */
     tarifaVerificada: boolean;
+    /** Plataformas (625): actividad y etiqueta de la tasa aplicada; null en otros régimenes. */
+    plataformaActividad?: { kind: string; label: string; asumida: boolean };
   };
 }
 
-export type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO";
+export type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO" | "PF_PLATAFORMAS";
 
 const ISR_TASA_PM = 0.3;
 
@@ -281,7 +284,7 @@ export async function computeTaxPosition(
     }),
     prisma.company.findUnique({
       where: { id: companyId },
-      select: { coeficienteUtilidad: true, coeficienteAnio: true, regimenFiscal: true, rfc: true },
+      select: { coeficienteUtilidad: true, coeficienteAnio: true, regimenFiscal: true, rfc: true, plataformaActividad: true },
     }),
     // PPD IVA is on a REP (complemento de pago) basis: every payment whose
     // FechaPago falls in this month, across all REPs of this company. Direction
@@ -370,10 +373,43 @@ export async function computeTaxPosition(
   const esPf = (company?.rfc?.trim().length ?? 0) === 13;
   const esPfActEmpresarial = company?.regimenFiscal === "612" && esPf;
   const esPfArrendamiento = company?.regimenFiscal === "606" && esPf;
+  const esPfPlataformas = company?.regimenFiscal === "625" && esPf;
 
   let isr: TaxPosition["isr"];
 
-  if (resicoKind === "pf") {
+  if (esPfPlataformas) {
+    // PF plataformas tecnológicas (625, Art. 113-A): tasa fija por actividad
+    // sobre ingresos cobrados del mes (flujo, base-REP) − retenciones que las
+    // plataformas efectuaron (del desglose del CFDI). Pago definitivo.
+    const mesFlujo = await flujoEfectivoAcum(companyId, from, to);
+    const asumida = !company?.plataformaActividad;
+    const actividad = normalizarActividadPlataforma(company?.plataformaActividad);
+    const r = calcularIsrPlataformas({
+      ingresosCobradosMes: mesFlujo.ingresosCobrados,
+      retencionesMes: mesFlujo.isrRetenidoCobrado,
+      actividad,
+    });
+    isr = {
+      metodo: "PF_PLATAFORMAS",
+      ingresosDelMes,
+      gastosDelMes,
+      ingresosAcumulados: round2(r.ingresos), // cobrado del mes (definitivo, no acum.)
+      isrPagadoAnterior: round2(isrPagadoAnterior),
+      coeficiente: null,
+      coeficienteFuente: "ninguno",
+      coeficienteBase: null,
+      baseGravable: r.ingresos,
+      tasa: r.tasa,
+      utilidadFiscal: null,
+      isrDelEjercicio: r.isrCausado, // causado del mes (tasa × ingresos)
+      isrPagar: r.isrPagar,
+      retencionesAcreditadas: r.retenciones,
+      saldoFavorAnterior: 0,
+      saldoAFavor: 0,
+      tarifaVerificada: true, // tasas fijas Art. 113-A (sin actualización anual)
+      plataformaActividad: { kind: actividad, label: TASAS_PLATAFORMA[actividad].label, asumida },
+    };
+  } else if (resicoKind === "pf") {
     // RESICO PF (Art. 113-E): tarifa mensual sobre ingresos del mes (cobrado
     // approximado por ingresos stamped del mes — igual que el cálculo actual).
     const res = calcularIsrResicoPf(ingresosDelMes);

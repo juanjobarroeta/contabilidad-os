@@ -60,6 +60,7 @@ interface CompanyDetail {
   fielCer?: string;
   fielKey?: string;
   registroPatronal?: string | null;
+  plataformaActividad?: string | null;
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -273,6 +274,20 @@ export default function EmpresaPage() {
       setRpMessage(e instanceof Error ? e.message : "Error");
     } finally {
       setRpSaving(false);
+    }
+  }
+
+  async function handleSavePlataformaActividad(value: string) {
+    if (!activeCompany) return;
+    try {
+      await fetch(`/api/companies/${activeCompany.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plataformaActividad: value }),
+      });
+      fetchCompanyDetail();
+    } catch {
+      /* noop — el selector refleja el valor guardado al recargar */
     }
   }
 
@@ -597,6 +612,30 @@ export default function EmpresaPage() {
               Actual: <code className="font-mono text-foreground">{companyDetail.registroPatronal}</code>
             </p>
           )}
+        </div>
+      )}
+
+      {/* ── Plataformas tecnológicas (625) — tipo de actividad / tasa ── */}
+      {activeCompany && companyDetail?.regimenFiscal === "625" && (
+        <div className="bg-white border border-border rounded-xl shadow-sm p-5 mb-5">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="h-9 w-9 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+              <Building2 className="h-4 w-4 text-indigo-600" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-sm">Plataformas tecnológicas — tipo de actividad</h2>
+              <p className="text-xs text-muted-foreground">Define la tasa de retención de ISR (Art. 113-A LISR). Sin configurar, el cálculo asume servicios (1%).</p>
+            </div>
+          </div>
+          <select
+            value={companyDetail?.plataformaActividad ?? "servicios"}
+            onChange={(e) => handleSavePlataformaActividad(e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="transporte">Transporte de pasajeros / entrega de bienes — 2.1%</option>
+            <option value="hospedaje">Servicios de hospedaje — 4%</option>
+            <option value="servicios">Enajenación de bienes / prestación de servicios — 1%</option>
+          </select>
         </div>
       )}
 

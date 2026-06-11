@@ -28,7 +28,7 @@ interface IvaApiData {
   saldoFavorAnterior: number;
   saldoFavorAnteriorPeriodo: string | null;
 }
-type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO";
+type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO" | "PF_PLATAFORMAS";
 interface IsrApiData {
   metodo: IsrMetodo;
   ingresosDelMes: number;
@@ -56,6 +56,7 @@ interface IsrApiData {
   /** Saldo a favor ISR generado este periodo — se arrastra al guardar (RESICO). 0 si no aplica. */
   saldoAFavor: number;
   tarifaVerificada: boolean;
+  plataformaActividad?: { kind: string; label: string; asumida: boolean } | null;
 }
 
 const ISR_METODO_LABEL: Record<IsrMetodo, string> = {
@@ -63,6 +64,7 @@ const ISR_METODO_LABEL: Record<IsrMetodo, string> = {
   PF_ACT_EMPRESARIAL: "Art. 106 LISR (act. empresarial)",
   RESICO_PF: "Art. 113-E LISR (RESICO)",
   PF_ARRENDAMIENTO: "Arts. 114-116 LISR (arrendamiento)",
+  PF_PLATAFORMAS: "Art. 113-A LISR (plataformas)",
 };
 interface FacturaRow {
   id: string;
@@ -759,10 +761,10 @@ export default function ImpuestosPage() {
                 </div>
                 <div>
                   <h2 className="font-semibold text-sm">
-                    ISR {result.isr.metodo === "RESICO_PF" ? "Mensual" : "Provisional"}
+                    ISR {result.isr.metodo === "RESICO_PF" || result.isr.metodo === "PF_PLATAFORMAS" ? "Mensual" : "Provisional"}
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    {result.isr.metodo === "RESICO_PF" || result.isr.metodo === "PF_ARRENDAMIENTO"
+                    {result.isr.metodo === "RESICO_PF" || result.isr.metodo === "PF_ARRENDAMIENTO" || result.isr.metodo === "PF_PLATAFORMAS"
                       ? MONTHS[month - 1]
                       : `Acumulado ${MONTHS[0]}–${MONTHS[month - 1]}`}{" "}
                     {year} · {ISR_METODO_LABEL[result.isr.metodo]}
@@ -888,7 +890,22 @@ export default function ImpuestosPage() {
             /* ── PF actividad empresarial / RESICO PF — server-computed ── */
             <div className="px-5 py-4 space-y-0.5">
               {isrComputed ? (
-                result.isr.metodo === "PF_ARRENDAMIENTO" ? (
+                result.isr.metodo === "PF_PLATAFORMAS" ? (
+                  <>
+                    <Row label={`Ingresos cobrados del mes (${MONTHS[month - 1]})`} value={formatCurrency(result.isr.ingresosAcumulados)} accent="blue" />
+                    <Row label={`× Tasa ${result.isr.plataformaActividad?.label ?? ""} (${result.isr.tasa != null ? (result.isr.tasa * 100).toFixed(2) : "—"}%)`} value="" indent />
+                    <Row label="= ISR causado" value={formatCurrency(isrComputed.isrDelEjercicio)} indent bold />
+                    {result.isr.retencionesAcreditadas > 0 && (
+                      <Row label="− Retenciones de plataformas" value={`(${formatCurrency(result.isr.retencionesAcreditadas)})`} />
+                    )}
+                    <Row label="= ISR del mes (definitivo)" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
+                    {result.isr.plataformaActividad?.asumida && (
+                      <p className="pt-2 text-[11px] text-amber-600">
+                        Tasa asumida (servicios/enajenación, 1%). Si la actividad es transporte (2.1%) u hospedaje (4%), configúrala en la empresa.
+                      </p>
+                    )}
+                  </>
+                ) : result.isr.metodo === "PF_ARRENDAMIENTO" ? (
                   <>
                     <Row label={`Ingresos cobrados del mes (${MONTHS[month - 1]})`} value={formatCurrency(result.isr.ingresosAcumulados)} accent="blue" />
                     <Row label="− Deducción ciega 35% (Art. 115)" value={`(${formatCurrency(result.isr.ingresosAcumulados * 0.35)})`} />

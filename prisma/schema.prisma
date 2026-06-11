@@ -165,6 +165,12 @@ model Company {
   coeficienteUtilidad Float? // Stored after user confirms/overrides auto-calculation
   coeficienteAnio     Int? // Which fiscal year this coeficiente applies to
 
+  // Plataformas tecnológicas (régimen 625, Art. 113-A LISR): tipo de actividad
+  // que define la tasa de retención. "transporte" (2.1%), "hospedaje" (4%) o
+  // "servicios" = enajenación de bienes / prestación de servicios (1%).
+  // Null → el motor asume "servicios" y lo señala.
+  plataformaActividad String?
+
   // Nómina — IMSS registro patronal (required for CFDI nómina emisor block)
   registroPatronal String? // e.g. "A7025105103"
 

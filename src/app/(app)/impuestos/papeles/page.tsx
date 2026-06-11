@@ -266,7 +266,7 @@ function IvaSection({ title, subtitle, rows }: { title: string; subtitle: string
 interface IsrData {
   periodo: string;
   company: { rfc: string; razonSocial: string; regimenFiscal: string } | null;
-  regimen: { kind: "pf_act_empresarial" | "pf_arrendamiento" | "resico_pf" | "resico_pm" | "general_pm"; label: string };
+  regimen: { kind: "pf_act_empresarial" | "pf_arrendamiento" | "pf_plataformas" | "resico_pf" | "resico_pm" | "general_pm"; label: string };
   base: {
     prevYear: number; prevIngresosTotal: number; prevGastosTotal: number; prevUtilidad: number;
     coeficienteCalculado: number | null; coeficiente: number | null;
@@ -300,6 +300,11 @@ interface IsrData {
         ingresosCobradosMes: number; deduccionCiega: number; baseGravable: number | null;
         isrCausado: number | null; retencionesAcreditadas: number; isrDelMes: number | null;
         tarifaVerificada: boolean;
+      }
+    | {
+        tipo: "pf_plataformas";
+        ingresosCobradosMes: number; actividad: string; actividadAsumida: boolean;
+        tasa: number | null; isrCausado: number | null; retencionesAcreditadas: number; isrDelMes: number | null;
       };
 }
 
@@ -327,7 +332,23 @@ function IsrPanel({ companyId, year, month }: { companyId: string; year: number;
         <span><strong>{data.regimen.label}</strong></span>
       </div>
 
-      {data.calculo.tipo === "pf_arrendamiento" ? (
+      {data.calculo.tipo === "pf_plataformas" ? (
+        <div className="bg-white border border-border rounded-xl overflow-hidden print:border-2">
+          <div className="px-4 py-3 border-b border-border">
+            <h3 className="font-semibold text-sm">ISR plataformas tecnológicas (Art. 113-A LISR)</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Pago definitivo — tasa fija sobre ingresos cobrados, menos lo retenido por las plataformas.</p>
+          </div>
+          <div className="p-4 space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Actividad</span><span>{data.calculo.actividad}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Ingresos cobrados del mes</span><span className="font-mono">{formatCurrency(data.calculo.ingresosCobradosMes)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">× Tasa</span><span className="font-mono">{data.calculo.tasa != null ? (data.calculo.tasa * 100).toFixed(2) + "%" : "—"}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">= ISR causado</span><span className="font-mono">{data.calculo.isrCausado != null ? formatCurrency(data.calculo.isrCausado) : "—"}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">− Retenciones de plataformas</span><span className="font-mono">{formatCurrency(data.calculo.retencionesAcreditadas)}</span></div>
+            <div className="flex justify-between border-t border-border pt-2 font-semibold"><span>= ISR del mes</span><span className="font-mono">{data.calculo.isrDelMes != null ? formatCurrency(data.calculo.isrDelMes) : "—"}</span></div>
+            {data.calculo.actividadAsumida && <p className="pt-1 text-xs text-amber-700">Tasa asumida (enajenación/servicios, 1%). Configura el tipo de actividad de plataforma de la empresa si es transporte (2.1%) u hospedaje (4%).</p>}
+          </div>
+        </div>
+      ) : data.calculo.tipo === "pf_arrendamiento" ? (
         <div className="bg-white border border-border rounded-xl overflow-hidden print:border-2">
           <div className="px-4 py-3 border-b border-border">
             <h3 className="font-semibold text-sm">ISR pago provisional — PF Arrendamiento (Arts. 114-116 LISR)</h3>

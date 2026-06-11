@@ -132,8 +132,9 @@ export async function GET(req: Request) {
   const esPf = (company?.rfc?.trim().length ?? 0) === 13;
   const esPfActEmpresarial = company?.regimenFiscal === "612" && esPf;
   const esPfArrendamiento = company?.regimenFiscal === "606" && esPf;
+  const esPfPlataformas = company?.regimenFiscal === "625" && esPf;
   const enginePos =
-    esPfActEmpresarial || esPfArrendamiento || isResicoPf
+    esPfActEmpresarial || esPfArrendamiento || esPfPlataformas || isResicoPf
       ? await computeTaxPosition(companyId, year, month)
       : null;
 
@@ -151,6 +152,8 @@ export async function GET(req: Request) {
         ? "pf_act_empresarial"
         : esPfArrendamiento
         ? "pf_arrendamiento"
+        : esPfPlataformas
+        ? "pf_plataformas"
         : isResicoPf
         ? "resico_pf"
         : resicoKind === "pm"
@@ -160,6 +163,8 @@ export async function GET(req: Request) {
         ? "Persona Física · Actividad Empresarial y Profesional (Art. 106 LISR)"
         : esPfArrendamiento
         ? "Persona Física · Arrendamiento (Arts. 114-116 LISR)"
+        : esPfPlataformas
+        ? "Persona Física · Plataformas Tecnológicas (Art. 113-A LISR)"
         : isResicoPf
         ? "RESICO Persona Física (Art. 113-E LISR)"
         : resicoKind === "pm"
@@ -191,7 +196,19 @@ export async function GET(req: Request) {
       rfc: inv.customer?.rfc ?? "—",
       subtotal: inv.subtotal,
     })),
-    calculo: esPfArrendamiento && enginePos
+    calculo: esPfPlataformas && enginePos
+      ? {
+          // PF plataformas (Art. 113-A) — tasa fija × ingresos − retenciones.
+          tipo: "pf_plataformas" as const,
+          ingresosCobradosMes: enginePos.isr.ingresosAcumulados,
+          actividad: enginePos.isr.plataformaActividad?.label ?? "",
+          actividadAsumida: enginePos.isr.plataformaActividad?.asumida ?? false,
+          tasa: enginePos.isr.tasa,
+          isrCausado: enginePos.isr.isrDelEjercicio,
+          retencionesAcreditadas: enginePos.isr.retencionesAcreditadas,
+          isrDelMes: enginePos.isr.isrPagar,
+        }
+      : esPfArrendamiento && enginePos
       ? {
           // PF arrendamiento (Arts. 114-116) — mensual standalone, del motor.
           tipo: "pf_arrendamiento" as const,
@@ -255,7 +272,17 @@ export async function GET(req: Request) {
     ];
     const rows: CsvRow[] = [];
 
-    if (esPfArrendamiento && enginePos) {
+    if (esPfPlataformas && enginePos) {
+      const p = `${year}-${String(month).padStart(2, "0")}`;
+      rows.push(["Régimen", "PF · Plataformas Tecnológicas (Art. 113-A LISR)", "", ""]);
+      rows.push([]);
+      rows.push(["Cálculo ISR", `Actividad: ${enginePos.isr.plataformaActividad?.label ?? "—"}`, "", ""]);
+      rows.push(["Cálculo ISR", "Ingresos cobrados del mes", p, enginePos.isr.ingresosAcumulados.toFixed(2)]);
+      rows.push(["Cálculo ISR", `× Tasa (${((enginePos.isr.tasa ?? 0) * 100).toFixed(2)}%)`, "", ""]);
+      rows.push(["Cálculo ISR", "= ISR causado", "", (enginePos.isr.isrDelEjercicio ?? 0).toFixed(2)]);
+      rows.push(["Cálculo ISR", "− Retenciones de plataformas", "", enginePos.isr.retencionesAcreditadas.toFixed(2)]);
+      rows.push(["Cálculo ISR", "= ISR DEL MES", "", (enginePos.isr.isrPagar ?? 0).toFixed(2)]);
+    } else if (esPfArrendamiento && enginePos) {
       const p = `${year}-${String(month).padStart(2, "0")}`;
       rows.push(["Régimen", "PF · Arrendamiento (Arts. 114-116 LISR)", "", ""]);
       rows.push([]);
