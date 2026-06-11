@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
+import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
 
 // GET /api/papeles/iva?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -196,8 +197,14 @@ export async function GET(req: Request) {
   const totalRetenidoClientes = sum(retenidoPorClientes);
   const totalRetenidoProv = sum(retenidoAProveedores);
 
-  // IVA cargo = trasladado - retenidoPorClientes - acreditable
-  const ivaCargo = totalTrasladado - totalRetenidoClientes - totalAcreditable;
+  // Proporción de acreditamiento (Art. 5-V LIVA): con actos exentos en el mes,
+  // el IVA acreditable sólo procede en gravados/(gravados+exentos). Mismo
+  // helper que el motor (computeTaxPosition) para no divergir.
+  const actos = calcularActosDelPeriodo(ingresos);
+  const acreditableProcedente = +(totalAcreditable * actos.proporcion).toFixed(2);
+
+  // IVA cargo = trasladado - retenidoPorClientes - acreditable procedente
+  const ivaCargo = totalTrasladado - totalRetenidoClientes - acreditableProcedente;
   const saldoFavorAnterior = prevDecl?.ivaSaldoFavor ?? 0;
   const cargoFinal = ivaCargo - saldoFavorAnterior;
   const ivaPagar = cargoFinal > 0 ? cargoFinal : 0;
@@ -213,6 +220,10 @@ export async function GET(req: Request) {
     totales: {
       trasladado: totalTrasladado,
       acreditable: totalAcreditable,
+      proporcionAcreditamiento: actos.proporcion,
+      actosGravados: actos.gravados,
+      actosExentos: actos.exentos,
+      acreditableProcedente,
       retenidoPorClientes: totalRetenidoClientes,
       retenidoAProveedores: totalRetenidoProv,
       ivaCargo,
@@ -261,6 +272,14 @@ export async function GET(req: Request) {
       ["TOTALES"],
       ["Total IVA trasladado", "", "", "", "", "", "", "", "", totalTrasladado.toFixed(2), ""],
       ["Total IVA acreditable", "", "", "", "", "", "", "", "", totalAcreditable.toFixed(2), ""],
+      ...(actos.proporcion < 1
+        ? ([
+            ["Actos gravados del mes (16%/0%)", "", "", "", "", "", "", "", "", actos.gravados.toFixed(2), ""],
+            ["Actos exentos del mes", "", "", "", "", "", "", "", "", actos.exentos.toFixed(2), ""],
+            ["Proporción de acreditamiento (Art. 5-V LIVA)", "", "", "", "", "", "", "", "", (actos.proporcion * 100).toFixed(4) + "%", ""],
+            ["IVA acreditable procedente", "", "", "", "", "", "", "", "", acreditableProcedente.toFixed(2), ""],
+          ] as CsvRow[])
+        : []),
       ["Total IVA retenido por clientes", "", "", "", "", "", "", "", "", totalRetenidoClientes.toFixed(2), ""],
       ["Total IVA retenido a proveedores", "", "", "", "", "", "", "", "", totalRetenidoProv.toFixed(2), ""],
       ["IVA a cargo (antes de saldo a favor)", "", "", "", "", "", "", "", "", ivaCargo.toFixed(2), ""],

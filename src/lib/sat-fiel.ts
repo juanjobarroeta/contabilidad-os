@@ -52,10 +52,63 @@ export function parseCfdiXml(xml: string) {
   const metodoPago = attr("MetodoPago") ?? "PUE";
   const usoCfdi = attrIn("Receptor", "UsoCFDI") ?? "G03";
   const moneda = attr("Moneda") ?? "MXN";
+  const numOf = (v: string | null) => (v != null && v !== "" ? parseFloat(v) : null);
 
-  // IVA trasladado total
+  // ── Desglose de impuestos a nivel comprobante ──────────────────────────────
+  // The invoice-level <cfdi:Impuestos> node — the one AFTER </cfdi:Conceptos> —
+  // carries the authoritative totals per impuesto/factor/tasa, including
+  // TipoFactor="Exento" rows whose Base is the valor de actos exentos that the
+  // IVA proporción de acreditamiento (Art. 5 LIVA) needs. Concepto-level
+  // Traslado/Retencion nodes are excluded by scoping to the tail after the
+  // Conceptos block. The (Traslado|Retencion)\b boundary skips the plural
+  // container tags and the complemento-de-pago TrasladoDR/TrasladoP variants.
+  const IMPUESTO_MAP: Record<string, "ISR" | "IVA" | "IEPS"> = { "001": "ISR", "002": "IVA", "003": "IEPS" };
+  const FACTOR_MAP: Record<string, "TASA" | "CUOTA" | "EXENTO"> = { tasa: "TASA", cuota: "CUOTA", exento: "EXENTO" };
+  const taxes: Array<{
+    tipo: "ISR" | "IVA" | "IEPS";
+    factor: "TASA" | "CUOTA" | "EXENTO";
+    tasa: number;
+    base: number | null;
+    importe: number;
+    retencion: boolean;
+  }> = [];
+  let impuestosNode = false;
+  const conceptosEnd = xml.search(/<\/(?:[a-zA-Z0-9]+:)?Conceptos>/);
+  if (conceptosEnd !== -1) {
+    const tail = xml.slice(conceptosEnd);
+    const impuestosBlock =
+      /<(?:[a-zA-Z0-9]+:)?Impuestos\b[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?Impuestos>/.exec(tail)?.[1];
+    if (impuestosBlock != null) {
+      impuestosNode = true;
+      const nodeRe = /<(?:[a-zA-Z0-9]+:)?(Traslado|Retencion)\b([^>]*?)\/?>/g;
+      let txm: RegExpExecArray | null;
+      while ((txm = nodeRe.exec(impuestosBlock)) !== null) {
+        const attrs = txm[2];
+        const get = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
+        const tipoImp = IMPUESTO_MAP[get("Impuesto") ?? ""];
+        if (!tipoImp) continue;
+        taxes.push({
+          tipo: tipoImp,
+          // Retenciones a nivel comprobante no traen TipoFactor/TasaOCuota.
+          factor: FACTOR_MAP[(get("TipoFactor") ?? "Tasa").toLowerCase()] ?? "TASA",
+          tasa: numOf(get("TasaOCuota")) ?? 0,
+          base: numOf(get("Base")),
+          importe: numOf(get("Importe")) ?? 0,
+          retencion: txm[1] === "Retencion",
+        });
+      }
+    }
+  }
+
+  // IVA trasladado total. Prefer the parsed IVA-only sum: the legacy
+  // TotalImpuestosTrasladados attr includes IEPS, and the total−subtotal
+  // fallback is wrong when there are retenciones.
   const ivaMatch = /TotalImpuestosTrasladados="([^"]+)"/.exec(xml);
-  const ivaTotal = ivaMatch ? parseFloat(ivaMatch[1]) : total - subtotal;
+  const ivaTotal = impuestosNode
+    ? taxes.filter((t) => t.tipo === "IVA" && !t.retencion).reduce((s, t) => s + t.importe, 0)
+    : ivaMatch
+      ? parseFloat(ivaMatch[1])
+      : total - subtotal;
 
   // Emisor
   const rfcEmisor = attrIn("Emisor", "Rfc");
@@ -124,7 +177,6 @@ export function parseCfdiXml(xml: string) {
     ivaTrasladado: number | null;
     ivaDerivado: boolean;
   }> = [];
-  const numOf = (v: string | null) => (v != null && v !== "" ? parseFloat(v) : null);
 
   const pagoRe = /<(?:[a-zA-Z0-9]+:)?Pago\b([^>]*)>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?Pago>/g;
   let pm: RegExpExecArray | null;
@@ -205,6 +257,7 @@ export function parseCfdiXml(xml: string) {
     rfcReceptor,
     nombreReceptor,
     items,
+    taxes,
     doctosRelacionados,
   };
 }

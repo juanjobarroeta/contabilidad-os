@@ -7,7 +7,11 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 
 interface ImpuestosData {
-  iva: { trasladado: number; acreditable: number; retenidoPorClientes: number; saldoFavorAnterior: number; pagar: number; saldoAFavor: number };
+  iva: {
+    trasladado: number; acreditable: number; acreditableBruto: number;
+    proporcionAcreditamiento: number; actosGravados: number; actosExentos: number;
+    retenidoPorClientes: number; saldoFavorAnterior: number; pagar: number; saldoAFavor: number;
+  };
   isr: {
     metodo: "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF";
     ingresosDelMes: number; gastosDelMes: number; ingresosAcumulados: number;
@@ -147,8 +151,22 @@ export default function ImpuestosPage() {
               </div>
               <p className="mb-3.5 text-[13.5px] leading-relaxed text-cos-ink-soft">El IVA que cobras a tus clientes <b>no es tuyo</b> — se lo juntas al SAT. A eso le restas el IVA que tú pagaste en gastos con factura.</p>
               <Row label="IVA que cobraste" value={data.iva.trasladado} />
-              <Row label="IVA que pagaste (gastos)" value={-data.iva.acreditable} negative />
+              <Row
+                label={
+                  data.iva.proporcionAcreditamiento < 1
+                    ? `IVA que pagaste, acreditable al ${(data.iva.proporcionAcreditamiento * 100).toFixed(0)}%`
+                    : "IVA que pagaste (gastos)"
+                }
+                value={-data.iva.acreditable}
+                negative
+              />
               <Row label="A pagar" value={data.iva.pagar} total />
+              {data.iva.proporcionAcreditamiento < 1 && (
+                <p className="mt-2 text-[12px] text-cos-ink-faint">
+                  Facturaste actos exentos este mes — por ley (Art. 5 LIVA) solo se acredita la
+                  proporción gravada de tu IVA pagado.
+                </p>
+              )}
             </Card>
 
             <Card className="rounded-card border-cos-line p-5 shadow-card">

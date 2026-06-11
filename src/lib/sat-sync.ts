@@ -448,15 +448,24 @@ export async function verifyAndImportSatSync(
 
     for await (const cfdiMap of reader.cfdis()) {
       for (const [uuid, xmlContent] of cfdiMap) {
-        // Already in DB: skip — but backfill rawXml if it's missing, so a
-        // re-sync repairs CFDIs imported before we started storing the file.
+        // Already in DB: skip — but backfill rawXml and the per-tax desglose if
+        // they're missing, so a re-sync repairs CFDIs imported before we stored
+        // the file / parsed the <cfdi:Impuestos> node.
         const existing = await prisma.invoice.findFirst({
           where: { uuid },
-          select: { id: true, rawXml: true },
+          select: { id: true, rawXml: true, _count: { select: { taxes: true } } },
         });
         if (existing) {
           if (!existing.rawXml) {
             await prisma.invoice.update({ where: { id: existing.id }, data: { rawXml: xmlContent } });
+          }
+          if (existing._count.taxes === 0) {
+            const parsed = parseCfdiXml(xmlContent);
+            if (parsed.taxes.length > 0) {
+              await prisma.invoiceTax.createMany({
+                data: parsed.taxes.map((t) => ({ invoiceId: existing.id, ...t })),
+              });
+            }
           }
           skipped++;
           continue;
@@ -553,6 +562,10 @@ export async function verifyAndImportSatSync(
                     })),
                   }
                 : undefined,
+            // Desglose real del nodo <cfdi:Impuestos> (traslados con factor
+            // Tasa/Exento + retenciones IVA/ISR) — alimenta retenciones
+            // acreditadas y la proporción de acreditamiento (Art. 5 LIVA).
+            taxes: cfdi.taxes.length > 0 ? { create: cfdi.taxes } : undefined,
           },
         });
 

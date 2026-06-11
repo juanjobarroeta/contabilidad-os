@@ -29,3 +29,18 @@ jobs:
         env:
           STAGING_URL: ${{ secrets.STAGING_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      # As rawXml fills in, parse it locally to create the per-tax desglose
+      # (InvoiceTax rows: traslados Tasa/Exento + retenciones). No SAT quota
+      # involved. A stable non-zero 'remaining' (CFDIs without an Impuestos
+      # node: P/T/N, no objeto) is expected — see the endpoint's note.
+      - name: Trigger invoice taxes backfill (desglose de impuestos)
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/invoice-taxes-backfill" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee taxes-response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
