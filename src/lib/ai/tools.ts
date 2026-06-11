@@ -252,4 +252,26 @@ export const tools: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: "search_fiscal_knowledge",
+    description:
+      "Busca en la legislación fiscal mexicana vigente (LISR, LIVA, CFF, y eventualmente RMF/criterios/DOF) y devuelve fragmentos con su cita (artículo, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento fiscal — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Consulta en lenguaje natural (e.g. '¿quién puede tributar en RESICO?')" },
+        fecha_vigencia: {
+          type: "string",
+          description: "Fecha ISO (YYYY-MM-DD) del periodo fiscal relevante. Default: hoy. Para periodos pasados usa una fecha de ese periodo.",
+        },
+        fuentes: {
+          type: "array",
+          items: { type: "string", enum: ["LEY", "RMF", "CRITERIO", "DOF", "REGLAMENTO", "TESIS"] },
+          description: "Filtrar por tipo de fuente (opcional)",
+        },
+        limit: { type: "number", description: "Máximo de fragmentos (default 6)" },
+      },
+      required: ["query"],
+    },
+  },
 ];

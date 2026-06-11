@@ -137,6 +137,10 @@ party; contador gets a separate "manage clients" view.
 ### W2 — Guidance (Pillar E)
 - Declaración checklists + "what's missing" + estimates. Smarter Q&A, no writes.
   Can ship early — it's low risk.
+- **Fiscal knowledge base (agente fiscal)** — RAG over Mexican tax sources (leyes
+  vigentes, RMF, criterios SAT, DOF) so guidance is *cited* and *version-aware*
+  instead of relying on hardcoded prompt prose. Design doc:
+  `docs/FISCAL-KNOWLEDGE-BASE.md`. The hard part is vigencia (temporal versioning).
 
 ### W3 — Document intake + reconciliation (Pillars C, D)
 - Bank-statement-via-WhatsApp (§5b) and conversational reconciliation.

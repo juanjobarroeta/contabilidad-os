@@ -13,7 +13,10 @@
     "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "rotate:key": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/rotate-encryption-key.ts",
     "backfill:rep-iva": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/backfill-rep-iva.ts",
-    "validate:iva-rep": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/validate-iva-rep.ts"
+    "validate:iva-rep": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/validate-iva-rep.ts",
+    "fiscal:setup": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-setup.ts",
+    "fiscal:ingest-ley": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-ingest-ley.ts",
+    "fiscal:search": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-search.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",

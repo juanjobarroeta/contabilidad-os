@@ -9,6 +9,7 @@ import { signFileToken, publicBaseUrl } from "@/lib/facturas/file-token";
 import { previewTimbrar } from "@/lib/facturas/preview-timbrar";
 import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
+import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
 
 type ToolInput = Record<string, unknown>;
 
@@ -64,6 +65,26 @@ export async function executeToolCall(
       const month = typeof input.month === "number" ? input.month : now.getMonth() + 1;
       return JSON.stringify(await computeTaxPosition(companyId, year, month));
     }
+    // Knowledge base de legislación fiscal — company-independent (es ley, no
+    // datos de la empresa), por eso ignora companyId.
+    case "search_fiscal_knowledge":
+      try {
+        return JSON.stringify(
+          await searchFiscalKnowledge(String(input.query ?? ""), {
+            fechaVigencia: typeof input.fecha_vigencia === "string" ? new Date(input.fecha_vigencia) : undefined,
+            fuentes: Array.isArray(input.fuentes) ? input.fuentes.map(String) : undefined,
+            limit: typeof input.limit === "number" ? input.limit : undefined,
+          })
+        );
+      } catch (err) {
+        // KB aún no aprovisionado (sin pgvector/ingesta/OPENAI_API_KEY) — que
+        // el modelo lo diga honestamente en vez de tumbar el chat.
+        console.error("[search_fiscal_knowledge]", err);
+        return JSON.stringify({
+          error: "Knowledge base fiscal no disponible en este momento.",
+          instruccion: "Indica al usuario que no puedes citar fundamento legal ahora; NO inventes artículos.",
+        });
+      }
     default:
       return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });
   }
