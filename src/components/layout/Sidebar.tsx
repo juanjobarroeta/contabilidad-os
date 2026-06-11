@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   ClipboardList,
   Lock,
+  Boxes,
   Menu,
   X,
 } from "lucide-react";
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { href: "/impuestos/cierre", label: "Cierre mensual", icon: Lock },
   { href: "/cumplimiento", label: "Cumplimiento",    icon: ShieldCheck },
   { href: "/declaracion-anual", label: "Dec. Anual",  icon: ClipboardList },
+  { href: "/activos",      label: "Activo fijo",     icon: Boxes },
   { href: "/contabilidad", label: "Contabilidad",    icon: BookOpen },
 ];
 
