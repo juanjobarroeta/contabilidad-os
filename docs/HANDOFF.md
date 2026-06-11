@@ -28,8 +28,9 @@ hecho, dónde vive la lógica crítica, y qué falta — en orden de prioridad.
   (`coeficienteFuente`), con fallback calculado.
 - **Retenciones**: acreditadas vía `retencionesAcreditadas` (lo efectivamente retenido en
   los CFDIs, no una tasa asumida): 10% PM a PF act. empresarial (Art. 106) y 1.25% PM a
-  RESICO PF (Art. 113-J). En RESICO la retención suele exceder el causado en brackets bajos →
-  `isrPagar` queda en 0 (over-retención = saldo a favor, todavía no auto-calculado).
+  RESICO PF (Art. 113-J). En RESICO la over-retención (común en brackets bajos) se arrastra
+  como saldo a favor al periodo siguiente (`isr.saldoAFavor` → `isrSaldoFavor` en la
+  declaración guardada → `isr.saldoFavorAnterior` del mes siguiente). Dentro del ejercicio.
 
 ---
 
@@ -86,11 +87,13 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
    como disminución de la base.
 4. **Cancel sync**: descarga de metadata para detectar CFDIs cancelados y revertir su efecto.
    Necesita prueba contra SAT en vivo (descarga masiva, RequestType metadata).
-5. **Saldo a favor RESICO**: la retención 1.25% que excede el ISR definitivo del mes hoy
-   sólo flotea `isrPagar` a 0; falta arrastrarla como saldo a favor del periodo siguiente.
-
-   ✅ **RESICO PF — retención 1.25% (Art. 113-J)**: hecho — `computeTaxPosition` acredita lo
+✅ **RESICO PF — retención 1.25% (Art. 113-J)**: hecho — `computeTaxPosition` acredita lo
    retenido en los CFDIs de ingreso del mes contra el ISR RESICO definitivo.
+
+✅ **Saldo a favor RESICO**: hecho — la over-retención se arrastra al periodo siguiente vía
+   `isrSaldoFavor` en la fila `ISR_PROVISIONAL` guardada (mismo patrón de cadena que el IVA:
+   depende de declaraciones guardadas). No cruza ejercicios — el excedente de diciembre se
+   recupera en la anual (Art. 113-F), no contra enero.
 
 ---
 

@@ -201,6 +201,8 @@ export async function GET(req: Request) {
           tasaPct: resicoCalc.tasaPct,
           isrCausado: enginePos.isr.isrDelEjercicio ?? resicoCalc.isr,
           retencionesAcreditadas: enginePos.isr.retencionesAcreditadas,
+          saldoFavorAnterior: enginePos.isr.saldoFavorAnterior,
+          saldoAFavor: enginePos.isr.saldoAFavor,
           isrDelMes: enginePos.isr.isrPagar ?? resicoCalc.isr,
           tarifa: TARIFA_RESICO_PF_MENSUAL,
         }
@@ -255,7 +257,13 @@ export async function GET(req: Request) {
       rows.push(["Cálculo", "× Tasa", "", resicoCalc.tasaPct]);
       rows.push(["Cálculo", "= ISR causado", "", (enginePos.isr.isrDelEjercicio ?? resicoCalc.isr).toFixed(2)]);
       rows.push(["Cálculo", "− Retenciones 1.25% PM (Art. 113-J)", "", enginePos.isr.retencionesAcreditadas.toFixed(2)]);
+      if (enginePos.isr.saldoFavorAnterior > 0) {
+        rows.push(["Cálculo", "− Saldo a favor del periodo anterior", "", enginePos.isr.saldoFavorAnterior.toFixed(2)]);
+      }
       rows.push(["Cálculo", "= ISR DEL MES", "", (enginePos.isr.isrPagar ?? resicoCalc.isr).toFixed(2)]);
+      if (enginePos.isr.saldoAFavor > 0) {
+        rows.push(["Cálculo", "Saldo a favor que se arrastra al siguiente periodo", "", enginePos.isr.saldoAFavor.toFixed(2)]);
+      }
     } else {
       rows.push(["Base histórica", `Ingresos ${prevYear}`, String(prevYear), prevIngresosTotal.toFixed(2)]);
       rows.push(["Base histórica", `Gastos ${prevYear}`, String(prevYear), prevGastosTotal.toFixed(2)]);

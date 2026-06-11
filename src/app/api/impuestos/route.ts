@@ -189,6 +189,9 @@ export async function GET(req: Request) {
       isrDelEjercicio: pos.isr.isrDelEjercicio,
       isrPagar: pos.isr.isrPagar,
       retencionesAcreditadas: pos.isr.retencionesAcreditadas,
+      saldoFavorAnterior: pos.isr.saldoFavorAnterior,
+      saldoFavorAnteriorPeriodo: pos.isr.saldoFavorAnterior > 0 ? prevPeriodo : null,
+      saldoAFavor: pos.isr.saldoAFavor,
       tarifaVerificada: pos.isr.tarifaVerificada,
     },
     facturas,
@@ -272,6 +275,9 @@ export async function POST(req: Request) {
     isrBaseGravable: (d.baseGravable ?? d.utilidadFiscal) ?? null,
     isrTasa:        d.tasa ?? null,
     isrPagar:       (d.isrPagar ?? d.esteMes) ?? null,
+    // Saldo a favor RESICO (retención 1.25% que excedió el causado) — la fila
+    // guardada es el eslabón del arrastre al periodo siguiente.
+    isrSaldoFavor:  d.saldoAFavor ?? null,
     ...(typeof coeficienteUtilidad === "number" && { isrCoeficienteUtilidad: coeficienteUtilidad }),
   });
 

@@ -312,6 +312,9 @@ export async function POST(req: Request) {
         isrBaseGravable: pos.isr.utilidadFiscal,
         isrTasa: 0.3,
         isrPagar,
+        // Saldo a favor RESICO generado este periodo (retención 1.25% > causado)
+        // — eslabón del arrastre que el motor lee el mes siguiente.
+        isrSaldoFavor: pos.isr.saldoAFavor > 0 ? round2(pos.isr.saldoAFavor) : null,
         ...(typeof coeficiente === "number" && { isrCoeficienteUtilidad: coeficiente }),
         ...(filing ? acusePatch : clearAcuse()),
       });

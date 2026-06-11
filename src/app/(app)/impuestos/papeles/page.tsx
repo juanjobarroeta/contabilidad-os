@@ -273,6 +273,7 @@ interface IsrData {
         rangoLimiteInferior: number; rangoLimiteSuperior: number;
         tasa: number; tasaPct: string;
         isrCausado: number; retencionesAcreditadas: number;
+        saldoFavorAnterior: number; saldoAFavor: number;
         isrDelMes: number;
         tarifa: Array<{ limiteInferior: number; limiteSuperior: number; tasa: number; tasaPct: string }>;
       }
@@ -397,9 +398,18 @@ function IsrPanel({ companyId, year, month }: { companyId: string; year: number;
               {data.calculo.retencionesAcreditadas > 0 && (
                 <Line label="− Retenciones 1.25% PM (Art. 113-J)" value={-data.calculo.retencionesAcreditadas} />
               )}
+              {data.calculo.saldoFavorAnterior > 0 && (
+                <Line label="− Saldo a favor del periodo anterior" value={-data.calculo.saldoFavorAnterior} />
+              )}
               <div className="border-t border-border pt-2">
                 <Line label="= ISR DEL MES" value={data.calculo.isrDelMes} strong big colorClass="text-red-700" />
               </div>
+              {data.calculo.saldoAFavor > 0 && (
+                <p className="pt-2 text-xs text-green-700">
+                  La retención acreditable excede el ISR del mes: {formatCurrency(data.calculo.saldoAFavor)} se
+                  arrastra como saldo a favor al siguiente periodo (al guardar la declaración).
+                </p>
+              )}
             </dl>
           </div>
         </>
