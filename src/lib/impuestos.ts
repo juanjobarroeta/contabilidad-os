@@ -342,6 +342,18 @@ export async function computeTaxPosition(
     // RESICO PF (Art. 113-E): tarifa mensual sobre ingresos del mes (cobrado
     // approximado por ingresos stamped del mes — igual que el cálculo actual).
     const res = calcularIsrResicoPf(ingresosDelMes);
+    // ISR retenido (1.25%, Art. 113-J) por los clientes personas morales sobre
+    // los ingresos del mes, acreditable contra el pago definitivo del periodo.
+    // Se toma lo efectivamente retenido en los CFDIs de ingreso del mes (misma
+    // base que ingresosDelMes), no una tasa asumida — así un cliente que retiene
+    // de menos/más queda reflejado tal cual.
+    const isrRetenidoMes = round2(
+      facturasEmitidas.reduce(
+        (sum, inv) =>
+          sum + inv.taxes.filter((t) => t.tipo === "ISR" && t.retencion).reduce((s, t) => s + t.importe, 0),
+        0
+      )
+    );
     isr = {
       metodo: "RESICO_PF",
       ingresosDelMes,
@@ -354,9 +366,9 @@ export async function computeTaxPosition(
       baseGravable: res.ingresos,
       tasa: res.tasa,
       utilidadFiscal: null,
-      isrDelEjercicio: res.isr, // mensual definitivo (no acumulado)
-      isrPagar: res.isr,
-      retencionesAcreditadas: 0, // RESICO PF (1.25% PM) — fuera de alcance de #20
+      isrDelEjercicio: res.isr, // causado mensual definitivo (antes de retención)
+      isrPagar: Math.max(0, round2(res.isr - isrRetenidoMes)),
+      retencionesAcreditadas: isrRetenidoMes, // 1.25% retenido por clientes PM (Art. 113-J)
       tarifaVerificada: true,
     };
   } else if (esPfActEmpresarial) {

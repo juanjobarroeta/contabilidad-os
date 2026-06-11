@@ -272,6 +272,7 @@ interface IsrData {
         ingresosDelMes: number;
         rangoLimiteInferior: number; rangoLimiteSuperior: number;
         tasa: number; tasaPct: string;
+        isrCausado: number; retencionesAcreditadas: number;
         isrDelMes: number;
         tarifa: Array<{ limiteInferior: number; limiteSuperior: number; tasa: number; tasaPct: string }>;
       }
@@ -392,6 +393,10 @@ function IsrPanel({ companyId, year, month }: { companyId: string; year: number;
                 value={null}
               />
               <Line label={`× Tasa (${data.calculo.tasaPct})`} value={null} />
+              <Line label="= ISR causado" value={data.calculo.isrCausado} strong />
+              {data.calculo.retencionesAcreditadas > 0 && (
+                <Line label="− Retenciones 1.25% PM (Art. 113-J)" value={-data.calculo.retencionesAcreditadas} />
+              )}
               <div className="border-t border-border pt-2">
                 <Line label="= ISR DEL MES" value={data.calculo.isrDelMes} strong big colorClass="text-red-700" />
               </div>

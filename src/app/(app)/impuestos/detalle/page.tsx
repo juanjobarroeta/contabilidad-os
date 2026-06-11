@@ -44,6 +44,8 @@ interface IsrApiData {
   utilidadFiscal: number | null;
   isrDelEjercicio: number | null;
   isrPagar: number | null;
+  /** ISR retenido acreditado contra el provisional/definitivo (10% PM Art. 106 PF; 1.25% Art. 113-J RESICO). */
+  retencionesAcreditadas: number;
   tarifaVerificada: boolean;
 }
 
@@ -854,6 +856,10 @@ export default function ImpuestosPage() {
                   <>
                     <Row label={`Ingresos del mes (${MONTHS[month - 1]})`} value={formatCurrency(result.isr.ingresosDelMes)} accent="blue" />
                     <Row label={`× Tasa RESICO (${result.isr.tasa != null ? (result.isr.tasa * 100).toFixed(2) : "—"}%)`} value="" indent />
+                    <Row label="= ISR causado" value={formatCurrency(isrComputed.isrDelEjercicio)} indent bold />
+                    {result.isr.retencionesAcreditadas > 0 && (
+                      <Row label="− Retenciones 1.25% PM (Art. 113-J)" value={`(${formatCurrency(result.isr.retencionesAcreditadas)})`} />
+                    )}
                     <Row label="= ISR del mes" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
                   </>
                 ) : (
@@ -871,6 +877,9 @@ export default function ImpuestosPage() {
                         label={`− Pagos provisionales anteriores (${month - 1} pago${month > 2 ? "s" : ""})`}
                         value={`(${formatCurrency(result.isr.isrPagadoAnterior)})`}
                       />
+                    )}
+                    {result.isr.retencionesAcreditadas > 0 && (
+                      <Row label="− Retenciones 10% PM (Art. 106)" value={`(${formatCurrency(result.isr.retencionesAcreditadas)})`} />
                     )}
                     <Row label="ISR a pagar este mes" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
                   </>
