@@ -20,7 +20,7 @@ export interface IngestResult {
 }
 
 /** Ingest a ley vigente (Cámara de Diputados) by catalog clave. */
-export async function ingestLey(clave: string): Promise<IngestResult> {
+export async function ingestLey(clave: string, opts: { force?: boolean } = {}): Promise<IngestResult> {
   const ley = await fetchLey(clave);
   if (!ley.ultimaReformaDof) {
     throw new Error(`${clave}: no se detectó la fecha de última reforma — sin ella no hay versionado de vigencia.`);
@@ -36,6 +36,7 @@ export async function ingestLey(clave: string): Promise<IngestResult> {
     vigenciaDesde: ley.ultimaReformaDof,
     cleanText: clean,
     chunks,
+    force: opts.force,
   });
   return {
     clave: ley.descriptor.clave,
@@ -48,7 +49,7 @@ export async function ingestLey(clave: string): Promise<IngestResult> {
 }
 
 /** Ingest a SAT/DOF document (RMF / guía) by catalog clave. */
-export async function ingestDoc(clave: string, opts: { file?: string; vigencia?: string } = {}): Promise<IngestResult> {
+export async function ingestDoc(clave: string, opts: { file?: string; vigencia?: string; force?: boolean } = {}): Promise<IngestResult> {
   const { spec, rawText } = await fetchDoc(clave, { file: opts.file });
   const chunks = chunkDocument(rawText, spec.kind);
   const vigenciaDesde = new Date(`${opts.vigencia ?? spec.vigenciaDesde}T00:00:00Z`);
@@ -61,6 +62,7 @@ export async function ingestDoc(clave: string, opts: { file?: string; vigencia?:
     vigenciaDesde,
     cleanText: rawText,
     chunks,
+    force: opts.force,
   });
   return {
     clave: spec.clave,

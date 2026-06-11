@@ -31,9 +31,10 @@ async function main() {
 
   const file = getFlag("file");
   const vigencia = getFlag("vigencia");
-  console.log(`→ Ingesta de ${clave}${file ? ` (archivo local: ${file})` : " (URL del SAT)"}…`);
+  const force = process.argv.includes("--force");
+  console.log(`→ Ingesta de ${clave}${file ? ` (archivo local: ${file})` : " (URL del SAT)"}${force ? " [force]" : ""}…`);
 
-  const r = await ingestDoc(clave, { file, vigencia });
+  const r = await ingestDoc(clave, { file, vigencia, force });
   if (r.skipped) {
     console.log("✓ Sin cambios desde la última ingesta (hash idéntico).");
     return;

@@ -15,8 +15,9 @@ import { ingestLey } from "../src/lib/fiscal-kb/orchestrate";
 
 async function main() {
   const clave = (process.argv[2] ?? "LISR").toUpperCase();
-  console.log(`→ Ingesta de ${clave} (descarga + chunk + embeddings + upsert versionado)…`);
-  const r = await ingestLey(clave);
+  const force = process.argv.includes("--force");
+  console.log(`→ Ingesta de ${clave} (descarga + chunk + embeddings + upsert versionado)${force ? " [force]" : ""}…`);
+  const r = await ingestLey(clave, { force });
   if (r.skipped) {
     console.log("✓ Sin cambios desde la última ingesta (hash idéntico) — nada que hacer.");
     return;

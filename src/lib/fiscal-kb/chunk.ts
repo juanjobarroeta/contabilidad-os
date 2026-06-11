@@ -23,7 +23,11 @@ const MAX_CHUNK_CHARS = 6000;
 /** Lines of overlap carried between sub-chunks of a long article. */
 const OVERLAP_LINES = 2;
 
-const ARTICLE_RE = /^Artículo (\d+[A-Za-zÑ-]*)\.(?=\s)/gm;
+// Matches article headers across the two notations used by Mexican leyes:
+//   LISR style:  "Artículo 5.", "Artículo 113-E.", "Artículo 32-Bis."
+//   LIVA/CFF:    "Artículo 5o.-", "Artículo 1o.-A.-" (ordinal o/º/° + ".-" intro)
+// Captures the number + optional "-Suffix" (drops the ordinal mark from the cite).
+const ARTICLE_RE = /^Artículo (\d+(?:-[A-Za-zÑ]+)?|\d+[oº°](?:-[A-Za-zÑ]+)?)\.-?(?=\s)/gm;
 const TRANSITORIOS_RE = /^\s*(?:ARTÍCULOS?\s+)?TRANSITORIOS?\s*$/m;
 const HEADING_RE = /^(TÍTULO|CAPÍTULO|SECCIÓN)\s+/;
 

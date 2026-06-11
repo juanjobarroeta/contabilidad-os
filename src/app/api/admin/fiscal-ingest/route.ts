@@ -31,6 +31,7 @@ interface Job {
   type: "ley" | "doc";
   clave: string;
   vigencia?: string;
+  force?: boolean; // replace existing version even if hash unchanged (re-chunk)
 }
 
 function isAuthorized(req: Request): boolean {
@@ -71,7 +72,10 @@ export async function POST(req: Request) {
   const results: (IngestResult & { ok: boolean; error?: string })[] = [];
   for (const job of jobs) {
     try {
-      const r = job.type === "ley" ? await ingestLey(job.clave) : await ingestDoc(job.clave, { vigencia: job.vigencia });
+      const r =
+        job.type === "ley"
+          ? await ingestLey(job.clave, { force: job.force })
+          : await ingestDoc(job.clave, { vigencia: job.vigencia, force: job.force });
       results.push({ ...r, ok: true });
     } catch (err) {
       results.push({ clave: job.clave, skipped: false, ok: false, error: err instanceof Error ? err.message : String(err) });
