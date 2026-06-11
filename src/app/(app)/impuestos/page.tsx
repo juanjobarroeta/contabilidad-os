@@ -12,7 +12,8 @@ interface ImpuestosData {
     metodo: "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF";
     ingresosDelMes: number; gastosDelMes: number; ingresosAcumulados: number;
     coeficiente: number | null; coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
-    baseGravable: number | null; isrPagar: number | null; tarifaVerificada: boolean;
+    baseGravable: number | null; isrPagar: number | null;
+    retencionesAcreditadas: number; saldoAFavor: number; tarifaVerificada: boolean;
   };
 }
 interface SimResult {
@@ -168,6 +169,11 @@ export default function ImpuestosPage() {
                   <Row label="Ingresos del mes" value={data.isr.ingresosDelMes} />
                   <Row label="Gastos del mes" value={-data.isr.gastosDelMes} negative />
                   <Row label="Anticipo a pagar" value={data.isr.isrPagar ?? 0} total />
+                  {data.isr.saldoAFavor > 0 && (
+                    <p className="mt-2 text-[12px] text-cos-jade-ink">
+                      Te retuvieron más ISR del que causaste: {peso(data.isr.saldoAFavor)} queda a tu favor para el siguiente mes.
+                    </p>
+                  )}
                 </>
               )}
               {!data.isr.tarifaVerificada && <p className="mt-2.5 text-[12px] text-cos-amber-ink">Tarifa ISR sin verificar contra Anexo 8 — cifra provisional.</p>}

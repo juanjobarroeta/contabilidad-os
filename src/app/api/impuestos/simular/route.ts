@@ -74,9 +74,10 @@ export async function GET(req: Request) {
     }
     case "RESICO_PF": {
       // Art. 113-E: tarifa sobre ingresos del mes (definitivo), menos la
-      // retención 1.25% de clientes PM (Art. 113-J) ya acreditada.
+      // retención 1.25% de clientes PM (Art. 113-J) y el saldo a favor
+      // arrastrado del periodo anterior.
       const causado = calcularIsrResicoPf(pos.isr.ingresosDelMes + addIngreso).isr;
-      newIsr = Math.max(0, r2(causado - pos.isr.retencionesAcreditadas));
+      newIsr = Math.max(0, r2(causado - pos.isr.retencionesAcreditadas - pos.isr.saldoFavorAnterior));
       break;
     }
     default:

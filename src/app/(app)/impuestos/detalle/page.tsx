@@ -46,6 +46,10 @@ interface IsrApiData {
   isrPagar: number | null;
   /** ISR retenido acreditado contra el provisional/definitivo (10% PM Art. 106 PF; 1.25% Art. 113-J RESICO). */
   retencionesAcreditadas: number;
+  /** Saldo a favor ISR arrastrado del periodo anterior (RESICO). 0 si no aplica. */
+  saldoFavorAnterior: number;
+  /** Saldo a favor ISR generado este periodo — se arrastra al guardar (RESICO). 0 si no aplica. */
+  saldoAFavor: number;
   tarifaVerificada: boolean;
 }
 
@@ -354,6 +358,9 @@ export default function ImpuestosPage() {
             baseGravable:       isrComputed.baseGravable,
             isrPagar:           isrComputed.esteMes,
             tasa:               isrComputed.tasa,
+            // Saldo a favor RESICO generado (retención 1.25% > causado) — la fila
+            // guardada es el eslabón del arrastre que el motor lee el mes siguiente.
+            saldoAFavor:        result.isr.saldoAFavor,
           } : null,
           saldoFavorAnterior,
           // Coeficiente sólo aplica a PM (Art. 14); para PF/RESICO va null.
@@ -860,7 +867,17 @@ export default function ImpuestosPage() {
                     {result.isr.retencionesAcreditadas > 0 && (
                       <Row label="− Retenciones 1.25% PM (Art. 113-J)" value={`(${formatCurrency(result.isr.retencionesAcreditadas)})`} />
                     )}
+                    {result.isr.saldoFavorAnterior > 0 && (
+                      <Row label="− Saldo a favor del periodo anterior" value={`(${formatCurrency(result.isr.saldoFavorAnterior)})`} />
+                    )}
                     <Row label="= ISR del mes" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
+                    {result.isr.saldoAFavor > 0 && (
+                      <div className="mt-2 flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-700">
+                        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        La retención acreditable excede el ISR del mes: <strong>{formatCurrency(result.isr.saldoAFavor)}</strong>{" "}
+                        se arrastra como saldo a favor al siguiente periodo. Guarda la declaración para que el arrastre aplique.
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>

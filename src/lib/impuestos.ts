@@ -165,6 +165,10 @@ export interface TaxPosition {
     isrPagar: number | null;
     /** ISR retenido (Art. 106, 10% por PM) acreditado contra el provisional. 0 si no aplica al régimen. */
     retencionesAcreditadas: number;
+    /** Saldo a favor de ISR arrastrado del periodo anterior (RESICO: retención 1.25% que excedió el causado). 0 si no aplica. */
+    saldoFavorAnterior: number;
+    /** Saldo a favor de ISR generado este periodo — se arrastra al siguiente al guardar la declaración. 0 si no aplica. */
+    saldoAFavor: number;
     /** False when the tarifa used has NOT been verified vs the authoritative source. */
     tarifaVerificada: boolean;
   };
@@ -208,6 +212,7 @@ export async function computeTaxPosition(
     ingresosAcumuladosAgg,
     declaracionesPrevias,
     prevDeclaracion,
+    prevIsrDeclaracion,
     company,
     repCobrosDelMes,
     annualDecl,
@@ -251,6 +256,18 @@ export async function computeTaxPosition(
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
       select: { ivaSaldoFavor: true },
+    }),
+    // Saldo a favor de ISR del periodo anterior (RESICO PF: retención 1.25%
+    // que excedió el causado). Vive en la fila ISR_PROVISIONAL guardada — la
+    // cadena de arrastre depende de declaraciones guardadas, igual que el IVA.
+    prisma.taxDeclaration.findFirst({
+      where: {
+        companyId,
+        tipo: "ISR_PROVISIONAL",
+        periodo: prevPeriodo,
+        status: { in: ["CALCULATED", "FILED", "PAID"] },
+      },
+      select: { isrSaldoFavor: true },
     }),
     prisma.company.findUnique({
       where: { id: companyId },
@@ -354,6 +371,12 @@ export async function computeTaxPosition(
         0
       )
     );
+    // Arrastre del saldo a favor: retención que excedió el causado en el
+    // periodo anterior (isrSaldoFavor de la declaración guardada). No cruza
+    // ejercicios — el excedente de diciembre se recupera en la declaración
+    // anual (Art. 113-F), no contra enero.
+    const saldoFavorIsrAnterior = month === 1 ? 0 : round2(prevIsrDeclaracion?.isrSaldoFavor ?? 0);
+    const acreditableIsr = isrRetenidoMes + saldoFavorIsrAnterior;
     isr = {
       metodo: "RESICO_PF",
       ingresosDelMes,
@@ -367,8 +390,10 @@ export async function computeTaxPosition(
       tasa: res.tasa,
       utilidadFiscal: null,
       isrDelEjercicio: res.isr, // causado mensual definitivo (antes de retención)
-      isrPagar: Math.max(0, round2(res.isr - isrRetenidoMes)),
+      isrPagar: Math.max(0, round2(res.isr - acreditableIsr)),
       retencionesAcreditadas: isrRetenidoMes, // 1.25% retenido por clientes PM (Art. 113-J)
+      saldoFavorAnterior: saldoFavorIsrAnterior,
+      saldoAFavor: Math.max(0, round2(acreditableIsr - res.isr)),
       tarifaVerificada: true,
     };
   } else if (esPfActEmpresarial) {
@@ -400,6 +425,10 @@ export async function computeTaxPosition(
       isrDelEjercicio: r ? r.isrCausado : null,
       isrPagar: r ? r.isrPagar : null,
       retencionesAcreditadas: r ? r.retencionesAcum : 0,
+      // Art. 106 es acumulativo: una retención que excede el causado de un mes
+      // se auto-corrige en el cálculo acumulado — no necesita arrastre explícito.
+      saldoFavorAnterior: 0,
+      saldoAFavor: 0,
       tarifaVerificada: r ? r.tarifaVerificada : false,
     };
   } else {
@@ -465,6 +494,8 @@ export async function computeTaxPosition(
       isrDelEjercicio,
       isrPagar,
       retencionesAcreditadas: 0, // PM Art. 14 no acredita retención 10% PF
+      saldoFavorAnterior: 0,
+      saldoAFavor: 0,
       tarifaVerificada: true,
     };
   }

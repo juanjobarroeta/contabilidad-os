@@ -893,6 +893,11 @@ model TaxDeclaration {
   isrTasa               Float?
   isrPagar              Float?
   isrCoeficienteUtilidad Float?  // Coeficiente asignado por el SAT del ejercicio anterior
+  // Saldo a favor de ISR generado en el periodo (RESICO PF: retención 1.25% de
+  // PM, Art. 113-J, que excedió el ISR definitivo del mes). Se arrastra al
+  // periodo siguiente dentro del mismo ejercicio — el excedente de diciembre se
+  // recupera en la anual (Art. 113-F), no contra enero.
+  isrSaldoFavor         Float?
 
   // Retenciones (enteramiento de ISR retenido a terceros — p.ej. nómina). Es un
   // impuesto del trabajador que el patrón sólo retiene y entera (Art. 96 LISR);
