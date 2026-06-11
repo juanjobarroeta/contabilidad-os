@@ -73,8 +73,10 @@ export async function GET(req: Request) {
       break;
     }
     case "RESICO_PF": {
-      // Art. 113-E: tarifa sobre ingresos del mes (definitivo).
-      newIsr = calcularIsrResicoPf(pos.isr.ingresosDelMes + addIngreso).isr;
+      // Art. 113-E: tarifa sobre ingresos del mes (definitivo), menos la
+      // retención 1.25% de clientes PM (Art. 113-J) ya acreditada.
+      const causado = calcularIsrResicoPf(pos.isr.ingresosDelMes + addIngreso).isr;
+      newIsr = Math.max(0, r2(causado - pos.isr.retencionesAcreditadas));
       break;
     }
     default:

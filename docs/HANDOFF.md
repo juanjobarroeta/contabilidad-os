@@ -26,7 +26,10 @@ hecho, dónde vive la lógica crítica, y qué falta — en orden de prioridad.
   - RESICO PF (626) → Art. 113-E: tasa sobre ingresos cobrados.
 - **Coeficiente de utilidad**: autoritativo desde `DECLARACION_ANUAL` del año previo
   (`coeficienteFuente`), con fallback calculado.
-- **Retenciones**: 10% (servicios profesionales) acreditadas vía `retencionesAcreditadas`.
+- **Retenciones**: acreditadas vía `retencionesAcreditadas` (lo efectivamente retenido en
+  los CFDIs, no una tasa asumida): 10% PM a PF act. empresarial (Art. 106) y 1.25% PM a
+  RESICO PF (Art. 113-J). En RESICO la retención suele exceder el causado en brackets bajos →
+  `isrPagar` queda en 0 (over-retención = saldo a favor, todavía no auto-calculado).
 
 ---
 
@@ -79,12 +82,15 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
    - 622 AGAPES (exención + reducción).
 2. **IVA proporción de acreditamiento (Art. 5 LIVA)**: cuando hay actos gravados y exentos,
    el IVA acreditable se prorratea. Hoy se acredita 100%.
-3. **RESICO PF — retención 1.25%**: cuando el cliente es PM, retiene 1.25% (Art. 113-J).
-   Acreditarla contra el ISR RESICO del periodo.
-4. **PTU + pérdidas fiscales**: arrastre de pérdidas (10 años, actualizadas) y PTU pagada
+3. **PTU + pérdidas fiscales**: arrastre de pérdidas (10 años, actualizadas) y PTU pagada
    como disminución de la base.
-5. **Cancel sync**: descarga de metadata para detectar CFDIs cancelados y revertir su efecto.
+4. **Cancel sync**: descarga de metadata para detectar CFDIs cancelados y revertir su efecto.
    Necesita prueba contra SAT en vivo (descarga masiva, RequestType metadata).
+5. **Saldo a favor RESICO**: la retención 1.25% que excede el ISR definitivo del mes hoy
+   sólo flotea `isrPagar` a 0; falta arrastrarla como saldo a favor del periodo siguiente.
+
+   ✅ **RESICO PF — retención 1.25% (Art. 113-J)**: hecho — `computeTaxPosition` acredita lo
+   retenido en los CFDIs de ingreso del mes contra el ISR RESICO definitivo.
 
 ---
 

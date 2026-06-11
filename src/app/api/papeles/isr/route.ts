@@ -124,16 +124,20 @@ export async function GET(req: Request) {
   const resicoKind = detectResicoKind(company?.regimenFiscal ?? null, company?.rfc ?? null);
   const isResicoPf = resicoKind === "pf";
 
-  // For RESICO PF, ISR is on monthly ingresos (cobrados), not acumulado
-  const ingresosDelMes = monthlyTotals[monthlyTotals.length - 1]?.ingresos ?? 0;
-  const resicoCalc = isResicoPf ? calcularIsrResicoPf(ingresosDelMes) : null;
-
-  // PF con actividad empresarial/profesional (612, Art. 106): the working paper
-  // must use the real flujo-de-efectivo engine, not the PM Art. 14 coeficiente
-  // shape — otherwise the papel diverged from the Impuestos screen.
+  // PF act. empresarial (612, Art. 106) y RESICO PF (Art. 113-E) usan el motor
+  // real (computeTaxPosition) como única fuente de verdad — incluida la
+  // retención acreditada — para que el papel no diverja de la pantalla de
+  // Impuestos.
   const esPfActEmpresarial =
     company?.regimenFiscal === "612" && (company?.rfc?.trim().length ?? 0) === 13;
-  const pfPos = esPfActEmpresarial ? await computeTaxPosition(companyId, year, month) : null;
+  const enginePos =
+    esPfActEmpresarial || isResicoPf ? await computeTaxPosition(companyId, year, month) : null;
+
+  // For RESICO PF, ISR is on monthly ingresos (cobrados), not acumulado — tomado
+  // del motor para coincidir con la pantalla. El rango/tasa de la tarifa se
+  // obtienen de la función pura sobre ese mismo ingreso.
+  const ingresosDelMes = enginePos?.isr.ingresosDelMes ?? monthlyTotals[monthlyTotals.length - 1]?.ingresos ?? 0;
+  const resicoCalc = isResicoPf && enginePos ? calcularIsrResicoPf(ingresosDelMes) : null;
 
   const payload = {
     periodo: `${year}-${String(month).padStart(2, "0")}`,
@@ -173,28 +177,31 @@ export async function GET(req: Request) {
       rfc: inv.customer?.rfc ?? "—",
       subtotal: inv.subtotal,
     })),
-    calculo: esPfActEmpresarial && pfPos
+    calculo: esPfActEmpresarial && enginePos
       ? {
           // PF actividad empresarial (Art. 106) — straight from the engine.
           tipo: "pf_act_empresarial" as const,
-          ingresosCobradosAcum: pfPos.isr.ingresosAcumulados,
-          baseGravable: pfPos.isr.baseGravable,
-          isrCausado: pfPos.isr.isrDelEjercicio,
-          isrPagadoAnterior: pfPos.isr.isrPagadoAnterior,
-          retencionesAcreditadas: pfPos.isr.retencionesAcreditadas,
-          isrDelMes: pfPos.isr.isrPagar,
-          tarifaVerificada: pfPos.isr.tarifaVerificada,
+          ingresosCobradosAcum: enginePos.isr.ingresosAcumulados,
+          baseGravable: enginePos.isr.baseGravable,
+          isrCausado: enginePos.isr.isrDelEjercicio,
+          isrPagadoAnterior: enginePos.isr.isrPagadoAnterior,
+          retencionesAcreditadas: enginePos.isr.retencionesAcreditadas,
+          isrDelMes: enginePos.isr.isrPagar,
+          tarifaVerificada: enginePos.isr.tarifaVerificada,
         }
-      : isResicoPf && resicoCalc
+      : isResicoPf && resicoCalc && enginePos
       ? {
-          // RESICO PF calculation shape
+          // RESICO PF (Art. 113-E) — causado del motor menos la retención 1.25%
+          // (Art. 113-J) ya acreditada, para coincidir con la pantalla.
           tipo: "resico_pf" as const,
           ingresosDelMes,
           rangoLimiteInferior: resicoCalc.rangoLimiteInferior,
           rangoLimiteSuperior: resicoCalc.rangoLimiteSuperior,
           tasa: resicoCalc.tasa,
           tasaPct: resicoCalc.tasaPct,
-          isrDelMes: resicoCalc.isr,
+          isrCausado: enginePos.isr.isrDelEjercicio ?? resicoCalc.isr,
+          retencionesAcreditadas: enginePos.isr.retencionesAcreditadas,
+          isrDelMes: enginePos.isr.isrPagar ?? resicoCalc.isr,
           tarifa: TARIFA_RESICO_PF_MENSUAL,
         }
       : {
@@ -220,17 +227,17 @@ export async function GET(req: Request) {
     ];
     const rows: CsvRow[] = [];
 
-    if (esPfActEmpresarial && pfPos) {
+    if (esPfActEmpresarial && enginePos) {
       const p = `${year}-${String(month).padStart(2, "0")}`;
       rows.push(["Régimen", "PF · Actividad Empresarial y Profesional (Art. 106 LISR)", "", ""]);
       rows.push([]);
-      rows.push(["Cálculo ISR", "Ingresos cobrados (acumulado)", p, pfPos.isr.ingresosAcumulados.toFixed(2)]);
-      rows.push(["Cálculo ISR", "= Base gravable", "", (pfPos.isr.baseGravable ?? 0).toFixed(2)]);
-      rows.push(["Cálculo ISR", "ISR causado (tarifa Art. 96 elevada al periodo)", "", (pfPos.isr.isrDelEjercicio ?? 0).toFixed(2)]);
-      rows.push(["Cálculo ISR", "− Pagos provisionales anteriores", "", pfPos.isr.isrPagadoAnterior.toFixed(2)]);
-      rows.push(["Cálculo ISR", "− Retenciones 10% PM (Art. 106)", "", pfPos.isr.retencionesAcreditadas.toFixed(2)]);
-      rows.push(["Cálculo ISR", "= ISR DEL MES", "", (pfPos.isr.isrPagar ?? 0).toFixed(2)]);
-    } else if (isResicoPf && resicoCalc) {
+      rows.push(["Cálculo ISR", "Ingresos cobrados (acumulado)", p, enginePos.isr.ingresosAcumulados.toFixed(2)]);
+      rows.push(["Cálculo ISR", "= Base gravable", "", (enginePos.isr.baseGravable ?? 0).toFixed(2)]);
+      rows.push(["Cálculo ISR", "ISR causado (tarifa Art. 96 elevada al periodo)", "", (enginePos.isr.isrDelEjercicio ?? 0).toFixed(2)]);
+      rows.push(["Cálculo ISR", "− Pagos provisionales anteriores", "", enginePos.isr.isrPagadoAnterior.toFixed(2)]);
+      rows.push(["Cálculo ISR", "− Retenciones 10% PM (Art. 106)", "", enginePos.isr.retencionesAcreditadas.toFixed(2)]);
+      rows.push(["Cálculo ISR", "= ISR DEL MES", "", (enginePos.isr.isrPagar ?? 0).toFixed(2)]);
+    } else if (isResicoPf && resicoCalc && enginePos) {
       rows.push(["Régimen", "RESICO Persona Física (Art. 113-E LISR)", "", ""]);
       rows.push([]);
       rows.push(["Tarifa RESICO PF mensual", "", "", ""]);
@@ -246,7 +253,9 @@ export async function GET(req: Request) {
       rows.push(["Cálculo", "Ingresos cobrados del mes", `${year}-${String(month).padStart(2, "0")}`, ingresosDelMes.toFixed(2)]);
       rows.push(["Cálculo", `Rango aplicable (${resicoCalc.tasaPct})`, "", `${resicoCalc.rangoLimiteInferior.toFixed(2)} — ${resicoCalc.rangoLimiteSuperior === Infinity ? "∞" : resicoCalc.rangoLimiteSuperior.toFixed(2)}`]);
       rows.push(["Cálculo", "× Tasa", "", resicoCalc.tasaPct]);
-      rows.push(["Cálculo", "= ISR DEL MES", "", resicoCalc.isr.toFixed(2)]);
+      rows.push(["Cálculo", "= ISR causado", "", (enginePos.isr.isrDelEjercicio ?? resicoCalc.isr).toFixed(2)]);
+      rows.push(["Cálculo", "− Retenciones 1.25% PM (Art. 113-J)", "", enginePos.isr.retencionesAcreditadas.toFixed(2)]);
+      rows.push(["Cálculo", "= ISR DEL MES", "", (enginePos.isr.isrPagar ?? resicoCalc.isr).toFixed(2)]);
     } else {
       rows.push(["Base histórica", `Ingresos ${prevYear}`, String(prevYear), prevIngresosTotal.toFixed(2)]);
       rows.push(["Base histórica", `Gastos ${prevYear}`, String(prevYear), prevGastosTotal.toFixed(2)]);
