@@ -548,6 +548,10 @@ model InvoiceTax {
   tipo      TaxType  // IVA, ISR, IEPS
   factor    TaxFactor // TASA, CUOTA, EXENTO
   tasa      Float
+  // Base del impuesto (atributo Base del nodo Traslado a nivel comprobante).
+  // Para filas EXENTO es el valor de los actos exentos — el insumo de la
+  // proporción de acreditamiento (Art. 5 LIVA). Null en filas legacy/retención.
+  base      Float?
   importe   Float
   retencion Boolean  @default(false)
 

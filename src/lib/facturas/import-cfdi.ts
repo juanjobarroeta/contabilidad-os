@@ -110,7 +110,12 @@ export async function importCfdiFromXml(opts: {
             })),
           }
         : undefined,
-      taxes: cfdi.ivaTotal > 0
+      // Desglose real del nodo <cfdi:Impuestos> (traslados Tasa/Exento +
+      // retenciones). Fallback sintético sólo si el XML no trae el nodo pero
+      // sí un total de IVA (CFDIs atípicos).
+      taxes: cfdi.taxes.length > 0
+        ? { create: cfdi.taxes }
+        : cfdi.ivaTotal > 0
         ? { create: [{ tipo: "IVA", factor: "TASA", tasa: 0.16, importe: cfdi.ivaTotal, retencion: false }] }
         : undefined,
     },
