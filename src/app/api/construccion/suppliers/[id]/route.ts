@@ -59,6 +59,7 @@ export const GET = withAuthz(
     const supplier = await prisma.supplier.findUnique({
       where: { id },
       include: {
+        terms: true,
         cotizaciones: {
           include: {
             solicitud: {

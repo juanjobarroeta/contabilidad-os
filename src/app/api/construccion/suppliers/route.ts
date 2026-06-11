@@ -66,6 +66,7 @@ export const GET = withAuthz(async (req: Request) => {
   const suppliers = await prisma.supplier.findMany({
     where,
     include: {
+      terms: true,
       _count: {
         select: { cotizaciones: true, solicitudesCompra: true, bankTransactions: true },
       },
