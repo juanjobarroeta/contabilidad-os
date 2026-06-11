@@ -182,6 +182,16 @@ Pipeline per document:
 5. **Upsert with vigencia** — if a newer version of the same `clave` exists, close the
    prior version's `vigenciaHasta`; insert the new `FiscalDocument` + `FiscalChunk`s.
 
+**Triggering ingestion.** Two entry points share one orchestrator
+(`src/lib/fiscal-kb/orchestrate.ts` — `ingestLey` / `ingestDoc`):
+- **CLI** (`npm run fiscal:ingest-ley|doc`) — for local/manual runs and RMF
+  `--file` uploads.
+- **HTTP** (`POST /api/admin/fiscal-ingest`, `CRON_SECRET` auth) — runs ingestion
+  *inside* the deployment. Required in practice: the Railway Postgres is on a
+  private host (`postgres.railway.internal`) / non-HTTP proxy port, so ingestion
+  can't run from an external machine behind an HTTPS-only network. Body:
+  `{ "jobs": [ {"type":"ley","clave":"LIVA"}, {"type":"doc","clave":"GUIA-PAGOS"} ] }`.
+
 **Schedule** (`src/app/api/cron/fiscal-ingest/route.ts`, `CRON_SECRET` auth):
 - DOF index: daily.
 - Leyes / reglamentos: weekly (cheap hash check; re-embed only on change).
