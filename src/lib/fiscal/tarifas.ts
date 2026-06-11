@@ -62,7 +62,8 @@ const TARIFA_ANUAL_PF: TarifaVersionada[] = [
     ejercicio: 2026,
     vigenciaDesde: "2026-01-01",
     vigenciaHasta: "2026-12-31",
-    fuente: "Art. 152 LISR / Cuadros Permanentes 2026 (Anexo 8 RMF 2026)",
+    fuente:
+      "Art. 152 LISR / Anexo 8 RMF 2026 (DOF 28-dic-2025) — re-cotejada vs Cuadros Permanentes 2026 (docs/fiscal)",
     verificado: true,
     filas: [
       { limiteInferior: 0.01, cuotaFija: 0, tasaExcedente: 0.0192 },
@@ -81,18 +82,17 @@ const TARIFA_ANUAL_PF: TarifaVersionada[] = [
 ];
 
 // ── Tarifa MENSUAL ISR (Art. 96 LISR) — retención por sueldos y salarios ─────
-// La tarifa con la que el patrón retiene ISR a los trabajadores cada mes.
-// 2024 cotejada contra Anexo 8 RMF 2024. 2025 fue idéntica (sin actualización).
-// 2026 SÍ se actualizó por inflación (igual que la anual) — PENDIENTE de cargar
-// desde Cuadros Permanentes 2026: mientras tanto el resolver devuelve la de
-// 2024-2025 marcada como NO vigente para que la nómina lo señale.
+// La tarifa con la que el patrón retiene ISR a los trabajadores cada mes. Es la
+// MISMA tabla mensual publicada para los pagos provisionales de arrendamiento
+// (Art. 116) — el Anexo 8 publica una sola mensual.
+// 2024 cotejada contra Anexo 8 RMF 2024 (2025 idéntica, resuelve por
+// roll-forward). 2026 cotejada fila por fila contra Cuadros Permanentes 2026
+// (Anexo 8 RMF 2026, DOF 28-dic-2025).
 const TARIFA_MENSUAL_SUELDOS: TarifaVersionada[] = [
   {
     ejercicio: 2024,
     vigenciaDesde: "2024-01-01",
-    // Superada a partir de 2026 (actualización por inflación) — el registro
-    // 2026 se agrega al verificarlo contra Cuadros Permanentes 2026.
-    vigenciaHasta: "2025-12-31",
+    vigenciaHasta: "2025-12-31", // superada por la actualización 2026
     fuente: "Art. 96 LISR / Anexo 8 RMF 2024 (DOF 29-dic-2023, fracc. I)",
     verificado: true,
     filas: [
@@ -107,6 +107,27 @@ const TARIFA_MENSUAL_SUELDOS: TarifaVersionada[] = [
       { limiteInferior: 93993.91, cuotaFija: 22665.17, tasaExcedente: 0.32 },
       { limiteInferior: 125325.21, cuotaFija: 32691.18, tasaExcedente: 0.34 },
       { limiteInferior: 375975.62, cuotaFija: 117912.32, tasaExcedente: 0.35 },
+    ],
+  },
+  {
+    ejercicio: 2026,
+    vigenciaDesde: "2026-01-01",
+    vigenciaHasta: "2026-12-31",
+    fuente:
+      "Art. 96 LISR / Anexo 8 RMF 2026 (DOF 28-dic-2025) — cotejada vs Cuadros Permanentes 2026 (docs/fiscal)",
+    verificado: true,
+    filas: [
+      { limiteInferior: 0.01, cuotaFija: 0, tasaExcedente: 0.0192 },
+      { limiteInferior: 844.6, cuotaFija: 16.22, tasaExcedente: 0.064 },
+      { limiteInferior: 7168.52, cuotaFija: 420.95, tasaExcedente: 0.1088 },
+      { limiteInferior: 12598.03, cuotaFija: 1011.68, tasaExcedente: 0.16 },
+      { limiteInferior: 14644.65, cuotaFija: 1339.14, tasaExcedente: 0.1792 },
+      { limiteInferior: 17533.65, cuotaFija: 1856.84, tasaExcedente: 0.2136 },
+      { limiteInferior: 35362.84, cuotaFija: 5665.16, tasaExcedente: 0.2352 },
+      { limiteInferior: 55736.69, cuotaFija: 10457.09, tasaExcedente: 0.3 },
+      { limiteInferior: 106410.51, cuotaFija: 25659.23, tasaExcedente: 0.32 },
+      { limiteInferior: 141880.67, cuotaFija: 37009.69, tasaExcedente: 0.34 },
+      { limiteInferior: 425642.0, cuotaFija: 133488.54, tasaExcedente: 0.35 },
     ],
   },
 ];
@@ -200,7 +221,9 @@ export function tarifaAnualPF(ejercicio: number): TarifaVersionada | null {
  * número de meses del periodo acumulado. Operacionalmente equivale a escalar la
  * tarifa anual por meses/12, lo que evita una segunda tabla de centavos (y su
  * riesgo de divergencia). La diferencia contra la tarifa mensual oficial
- * elevada es sub-peso por redondeo.
+ * elevada es sub-peso por redondeo — VERIFICADO contra las tablas elevadas
+ * publicadas para 2026 (Anexo 8 RMF 2026, p.ej. febrero: cuota publicada
+ * 3,713.68 vs 22,282.14×2/12 = 3,713.69).
  */
 export function tarifaPeriodoPF(ejercicio: number, meses: number): { tarifa: TarifaRow[]; base: TarifaVersionada } | null {
   const base = tarifaAnualPF(ejercicio);

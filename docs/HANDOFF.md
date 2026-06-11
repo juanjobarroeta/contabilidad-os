@@ -111,12 +111,15 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
 - Borrar branches `claude/*` ya mergeados.
 - Al arrancar nómina: extraer del PDF "Cuadros Permanentes 2026" la tarifa **mensual Art. 96**
   + tablas de **subsidio** + tablas **RESICO** y agregarlas a `tarifas.ts` con `verificado: true`.
-  **Avance**: la plomería ya está — `tarifas.ts` tiene `tarifaMensualSueldos()` (2024 verificada,
-  2026 resuelve roll-forward marcado NO vigente) y `subsidioEmpleo()` (mecanismo del decreto
-  DOF 01-may-2024; 2025 con pct 13.8%/tope 10,171 **sin cotejar**). La nómina ya consume estas
-  tablas versionadas por ejercicio de la fecha de pago y el run devuelve `tarifaWarning` cuando
-  calcula con tablas sin verificar. **Falta solo**: del PDF, (1) tarifa mensual 2026, (2) subsidio
-  2026 (pct + tope), (3) UMA 2026 (env `UMA_DIARIO`), (4) salario mínimo 2026 → flip verificado.
+  **Avance**: `tarifas.ts` tiene `tarifaMensualSueldos()` — **2026 verificada** fila por fila
+  contra Cuadros Permanentes 2026 (`docs/fiscal/cuadros-permanentes-2026.pdf`, Anexo 8 RMF 2026
+  DOF 28-dic-2025), que además re-verificó la anual 2026, las elevadas Art. 106 (el escalado
+  meses/12 coincide al centavo) y que la mensual Art. 116 (arrendamiento) es la MISMA tabla.
+  La nómina consume las tablas versionadas por ejercicio de la fecha de pago y el run devuelve
+  `tarifaWarning` cuando calcula con tablas sin verificar.
+  **Falta** (NO viene en ese PDF): (1) subsidio al empleo 2026 — cotejar pct/tope del decreto
+  (el registro 2025 está `verificado: false` con 13.8%/10,171), (2) UMA 2026 (env `UMA_DIARIO`,
+  hoy 113.14 = valor 2025), (3) salario mínimo 2026. Fuentes: decreto DOF / CONASAMI / INEGI.
 
 ---
 
