@@ -40,6 +40,9 @@ async function handle(req: Request) {
   const monthsParam = parseInt(url.searchParams.get("months") ?? "", 10);
   const monthsBack = Number.isFinite(monthsParam) ? Math.min(Math.max(monthsParam, 1), 12) : DEFAULT_MONTHS_BACK;
   const onlyCompanyId = url.searchParams.get("companyId");
+  // dryRun: descarga y reporta qué cancelaría, SIN escribir — para validar el
+  // formato del metadata contra una cancelación conocida antes de confiar.
+  const dryRun = ["1", "true", "yes"].includes((url.searchParams.get("dryRun") ?? "").toLowerCase());
   const startedAt = Date.now();
 
   const companies = await prisma.company.findMany({
@@ -62,13 +65,15 @@ async function handle(req: Request) {
 
   let companiesProcessed = 0;
   let totalCancelled = 0;
+  let totalWouldCancel = 0;
   const errors: Array<{ companyId: string; rfc: string; error: string }> = [];
 
   for (const company of companies) {
     try {
       for (const { year, month } of periods) {
-        const res = await syncCancelacionesPeriodo(company.id, year, month);
+        const res = await syncCancelacionesPeriodo(company.id, year, month, dryRun);
         if (res.ok && res.cancelled) totalCancelled += res.cancelled;
+        if (res.ok && res.wouldCancel) totalWouldCancel += res.wouldCancel.length;
         if (!res.ok && res.error) {
           errors.push({ companyId: company.id, rfc: company.rfc, error: res.error });
         }
@@ -81,9 +86,10 @@ async function handle(req: Request) {
 
   const summary = {
     ok: true,
+    dryRun,
     companies: companies.length,
     companiesProcessed,
-    cancelledDetected: totalCancelled,
+    ...(dryRun ? { wouldCancelDetected: totalWouldCancel } : { cancelledDetected: totalCancelled }),
     errors,
     elapsedMs: Date.now() - startedAt,
   };

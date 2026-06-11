@@ -667,6 +667,8 @@ export interface CancelSyncResult {
   status?: "pending" | "done" | "empty" | "error";
   cancelled?: number;
   checked?: number;
+  /** Sólo en dryRun: los UUIDs que SE cancelarían (sin escribir). */
+  wouldCancel?: { id: string; uuid: string }[];
   error?: string;
 }
 
@@ -675,11 +677,16 @@ export interface CancelSyncResult {
  * package ready, download it and apply cancellations. Self-contained: persists
  * the metadata request IDs in SatSyncRequest (tipos METADATA_*) so a later cron
  * run picks up packages SAT finished asynchronously — same cadence as XML sync.
+ *
+ * `dryRun`: descarga y decide pero NO escribe — devuelve `wouldCancel` para
+ * confirmar el formato del metadata contra una cancelación conocida antes de
+ * confiar en el automático.
  */
 export async function syncCancelacionesPeriodo(
   companyId: string,
   year: number,
-  month: number
+  month: number,
+  dryRun = false
 ): Promise<CancelSyncResult> {
   let fiel;
   try {
@@ -789,6 +796,15 @@ export async function syncCancelacionesPeriodo(
     rows,
     owned.map((o) => ({ id: o.id, uuid: o.uuid ?? "", status: o.status }))
   );
+  if (dryRun) {
+    return {
+      ok: true,
+      status: "done",
+      cancelled: 0,
+      checked: rows.length,
+      wouldCancel: toCancel.map((t) => ({ id: t.id, uuid: t.uuid })),
+    };
+  }
   if (toCancel.length > 0) {
     await prisma.invoice.updateMany({
       where: { id: { in: toCancel.map((t) => t.id) } },
