@@ -153,6 +153,31 @@ El despacho objetivo hace **outsourcing de nómina** sobre varias empresas.
 
 ---
 
+## 9. EN PROGRESO — motor de deducibilidad (naturaleza del CFDI)
+
+Complementa `docs/HANDOFF-deduction-engine.md` (branch `claude/handoff-deduction-engine`) y
+las reglas del asistente en `system-prompt.ts` ("Naturaleza fiscal de un CFDI"). Hoy un activo
+fijo (computadora, vehículo) entra 100% como gasto del periodo en vez de depreciarse →
+sobre-deducción.
+
+- ✅ **Fase 1 — clasificación (hecho)**: `src/lib/fiscal/clasificar-cfdi.ts` (puro, unit-testeado)
+  deriva la **naturaleza** del `usoCfdi`: G01→INVENTARIO (Art. 39), I01–I08→INVERSION (Art.
+  31/34, con subtipo y bandera de tope Art. 36-II para autos de pasajeros vs carga), S01→
+  SIN_EFECTOS, G03/faltante→GASTO (y **marca revisión** si la clave de producto parece activo
+  fijo — el default G03 no se confía a ciegas). Campos nuevos en `Invoice`: `naturaleza`,
+  `naturalezaRevision`, `naturalezaManual`. Se asigna en los 3 paths de import (sat-sync,
+  import-cfdi, upload-cfdi); backfill en `/api/cron/naturaleza-backfill`; override del contador
+  vía `PATCH /api/facturas/[id]` ({naturaleza}) y selector en el modal de la factura.
+  **NO toca el cálculo de ISR todavía** (a propósito).
+- ⏳ **Fase 2 — registro de inversiones + depreciación (siguiente)**: por cada CFDI INVERSION,
+  MOI + fecha + tasa (Art. 34) + tope (Art. 36-II) → depreciación mensual/anual actualizada por
+  INPC. **Guardrail crítico**: al excluir INVERSION de las deducciones inmediatas, sumar su
+  depreciación en el MISMO cambio — si no, se sub-deduce. Tocar `impuestos.ts` y
+  `declaracion-anual.ts` juntos. Ojo: IVA acreditable del activo es inmediato (flujo), sólo el
+  ISR se difiere.
+- ⏳ **Fase 3 — costo de lo vendido (sólo PM que venden)**: método periódico (inv. inicial +
+  compras − inv. final). No requiere tracker perpetuo por SKU. Diferido.
+
 ## 8. Convenciones del repo
 
 - Next.js 15 App Router · Tailwind 3.4 (HSL vars shadcn) · Radix · lucide-react · Prisma/PostgreSQL · NextAuth.

@@ -15,6 +15,7 @@ import {
   MetadataPackageReader,
 } from "@nodecfdi/sat-ws-descarga-masiva";
 import { interpretarCancelaciones, type SatMetadataRow } from "./sat-cancelaciones";
+import { clasificarCfdi } from "./fiscal/clasificar-cfdi";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared, session-free SAT Descarga Masiva logic.
@@ -530,6 +531,13 @@ export async function verifyAndImportSatSync(
           }
         }
 
+        const clasif = clasificarCfdi({
+          tipo: invoiceType,
+          usoCfdi: cfdi.usoCfdi ?? null,
+          usoEsDefault: !cfdi.usoCfdi,
+          items: (cfdi.items ?? []).map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
+        });
+
         const createdInvoice = await prisma.invoice.create({
           data: {
             companyId,
@@ -541,6 +549,8 @@ export async function verifyAndImportSatSync(
             formaPago: cfdi.formaPago ?? "99",
             metodoPago: cfdi.metodoPago ?? "PUE",
             usoCfdi: cfdi.usoCfdi ?? "G03",
+            naturaleza: clasif.fuente === "no_aplica" ? null : clasif.naturaleza,
+            naturalezaRevision: clasif.requiereRevision,
             moneda: cfdi.moneda ?? "MXN",
             subtotal: cfdi.subtotal,
             total: cfdi.total,

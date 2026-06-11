@@ -131,7 +131,27 @@ export async function PATCH(
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-  const data: { overrideCuenta?: string | null } = {};
+  const data: {
+    overrideCuenta?: string | null;
+    naturaleza?: string;
+    naturalezaManual?: boolean;
+    naturalezaRevision?: boolean;
+  } = {};
+
+  // Override de naturaleza fiscal por el contador (GASTO/INVERSION/INVENTARIO/
+  // SIN_EFECTOS). Marca naturalezaManual para que el re-sync no lo pise, y
+  // limpia la bandera de revisión.
+  if ("naturaleza" in body) {
+    const v = body.naturaleza;
+    const valid = ["GASTO", "INVERSION", "INVENTARIO", "SIN_EFECTOS"];
+    if (typeof v !== "string" || !valid.includes(v)) {
+      return NextResponse.json({ error: "naturaleza inválida" }, { status: 400 });
+    }
+    data.naturaleza = v;
+    data.naturalezaManual = true;
+    data.naturalezaRevision = false;
+  }
+
   if ("overrideCuenta" in body) {
     const v = body.overrideCuenta;
     if (v === null || v === "" || v === undefined) {

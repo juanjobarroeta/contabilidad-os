@@ -116,6 +116,9 @@ export async function POST(req: Request) {
       formaPago: p.formaPago ?? "99",
       metodoPago: p.metodoPago === "PPD" ? "PPD" : "PUE",
       usoCfdi: "G03",
+      // PDF lossy → usoCfdi se asume G03; naturaleza queda GASTO por default
+      // (sin items para detectar activo fijo). El re-upload del XML la corrige.
+      naturaleza: tipo === "EGRESO" ? "GASTO" : null,
       subtotal: p.subtotal ?? 0,
       totalImpuestos: p.totalImpuestos ?? 0,
       total: p.total ?? 0,

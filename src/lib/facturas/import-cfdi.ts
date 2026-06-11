@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { parseCfdiXml } from "@/lib/sat-fiel";
+import { clasificarCfdi } from "@/lib/fiscal/clasificar-cfdi";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Record a CFDI from an uploaded file as an Invoice (NOT Facturapi-stamped —
@@ -77,6 +78,13 @@ export async function importCfdiFromXml(opts: {
     }
   }
 
+  const clasif = clasificarCfdi({
+    tipo,
+    usoCfdi: cfdi.usoCfdi ?? null,
+    usoEsDefault: !cfdi.usoCfdi,
+    items: cfdi.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
+  });
+
   const invoice = await prisma.invoice.create({
     data: {
       companyId,
@@ -88,6 +96,8 @@ export async function importCfdiFromXml(opts: {
       formaPago: cfdi.formaPago ?? "99",
       metodoPago: cfdi.metodoPago ?? "PUE",
       usoCfdi: cfdi.usoCfdi ?? "G03",
+      naturaleza: clasif.fuente === "no_aplica" ? null : clasif.naturaleza,
+      naturalezaRevision: clasif.requiereRevision,
       moneda: cfdi.moneda ?? "MXN",
       subtotal: cfdi.subtotal,
       total: cfdi.total,
