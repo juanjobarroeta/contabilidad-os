@@ -409,8 +409,28 @@ model Supplier {
   bankTransactions  BankTransaction[]
   solicitudesCompra SolicitudCompra[]
   cotizaciones      SolicitudCompraCotizacion[]
+  terms             SupplierTerms?
 
   @@unique([companyId, rfc])
+}
+
+// Términos de crédito del proveedor — datos operativos del módulo
+// construcción, deliberadamente fuera del Supplier fiscal (que se queda en
+// RFC / régimen / CLABE). Relación 1:1 con el proveedor; cuentas-por-pagar /
+// cashflow derivan el vencimiento de diasCredito más adelante.
+model SupplierTerms {
+  id         String   @id @default(cuid())
+  supplierId String   @unique
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  tieneCredito  Boolean  @default(false)
+  diasCredito   Int      @default(0) // 0 = contado
+  limiteCredito Decimal? @db.Decimal(14, 2) // tope de crédito opcional (MXN)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("construccion_supplier_terms")
 }
 
 model Invoice {
