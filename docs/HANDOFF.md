@@ -1,0 +1,117 @@
+# ContabilidadOS — Handoff (estado fiscal y operativo)
+
+_Última actualización: 2026-06-11_
+
+Este documento es el punto de partida para una sesión nueva. Resume qué está
+hecho, dónde vive la lógica crítica, y qué falta — en orden de prioridad.
+
+---
+
+## 1. Motor fiscal — mapa de archivos
+
+| Archivo | Rol |
+|---|---|
+| `src/lib/impuestos.ts` | **`computeTaxPosition(companyId, year, month)` — fuente de verdad.** Calcula IVA (flujo) e ISR provisional régimen-aware. Devuelve `coeficienteFuente`, `retencionesAcreditadas`, `tarifaVerificada`. |
+| `src/lib/fiscal/tarifas.ts` | Tarifas ISR versionadas (git-tracked), con `vigencia` y `verificado`. Anual PF 2024 + 2026 (2025 resuelve a 2024 por roll-forward). Helpers: `tarifaAnualPF`, `tarifaPeriodoPF`, `aplicarTarifa`. |
+| `src/lib/fiscal/declaracion-anual.ts` | Declaración anual PF (aún tiene su propia tabla inline — TODO: importar de `tarifas.ts`). |
+| `src/lib/fiel.ts` | `parseCertExpiry()` (X509 `validTo`), `fielStatus()` → ok/por_vencer(≤30d)/vencida/sin_fiel. |
+| `src/lib/sat-sync.ts` + `src/lib/facturas/import-cfdi.ts` | Importación CFDI + **clasificación de dirección** (ver §3). |
+| `src/app/api/papeles/isr/route.ts` | Papel de trabajo ISR. El branch 612 (PF act. empresarial) ahora jala de `computeTaxPosition`. |
+
+### Cómo se calcula hoy
+- **IVA**: 100% por flujo (Art. 1-B), base-REP, sobre CFDIs. PM y PF igual.
+- **ISR provisional**:
+  - PM → Art. 14: coeficiente de utilidad × ingresos acum × 30%.
+  - PF act. empresarial (612) → Art. 106: tarifa elevada al periodo.
+  - RESICO PF (626) → Art. 113-E: tasa sobre ingresos cobrados.
+- **Coeficiente de utilidad**: autoritativo desde `DECLARACION_ANUAL` del año previo
+  (`coeficienteFuente`), con fallback calculado.
+- **Retenciones**: 10% (servicios profesionales) acreditadas vía `retencionesAcreditadas`.
+
+---
+
+## 2. Sincronización SAT (cron) — FUNCIONANDO
+
+- GitHub Actions → endpoints Railway con `CRON_SECRET`.
+- `/api/cron/sat-sync` corre periódicamente; `lastAutoSyncAt` se popula → confirmado vivo.
+- `/api/cron/sat-rawxml-backfill` cada 6h (workflow `.github/workflows/sat-rawxml-backfill.yml`).
+- **Gotcha resuelto**: el workflow necesita `set -euo pipefail` o `curl | tee` enmascara fallos
+  como éxito. `STAGING_URL` y `CRON_SECRET` deben estar seteados en GitHub Secrets (ambos
+  estaban vacíos antes; ya corregido).
+- Tras cada sync, `notifyNewInvoices(company.id, runStart)` dispara el digest push.
+
+---
+
+## 3. Bug resuelto: gastos contados como ingresos
+
+**Causa raíz**: se confiaba en `TipoDeComprobante` (I/E) en vez del rol emisor/receptor.
+Una factura tipo "I" emitida _hacia_ la empresa (gasto) entraba como INGRESO.
+
+**Fix de código** (ambos paths de import):
+```
+satType === NOMINA/PAGO/TRASLADO ? satType
+  : isEmisor ? "INGRESO" : "EGRESO"
+```
+**Fix de datos**: `UPDATE ... WHERE notas LIKE '%recibidos' AND tipo='INGRESO'` → 299 filas
+corregidas. ⚠️ La consola de Railway corre **una sola** sentencia a la vez — correr el UPDATE solo.
+
+---
+
+## 4. Notificaciones push (PWA + desktop) — FUNCIONANDO
+
+- Web Push con VAPID. SW en `public/sw.js` (handlers `push` + `notificationclick`).
+- `src/lib/push.ts`, `src/lib/notify-new-invoices.ts`, `src/components/pwa/PushOptIn.tsx`.
+- Endpoints `/api/push/subscribe` y `/api/push/test`. Modelo `PushSubscription`.
+- **Gotcha**: el opt-in debe registrar el SW explícitamente (no esperar `serviceWorker.ready`
+  durante hidratación) + watchdog.
+
+---
+
+## 5. PENDIENTE — batch de correctitud fiscal (para sesión nueva)
+
+En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF / LISR.
+
+1. **Otros regímenes ISR**:
+   - 606 Arrendamiento (deducción opcional 35% "ciega" vs. comprobada).
+   - 605 Sueldos y salarios (Art. 96 mensual + subsidio).
+   - 625 Plataformas digitales (retención por plataforma).
+   - 621 RIF (en extinción, reducción decreciente).
+   - 622 AGAPES (exención + reducción).
+2. **IVA proporción de acreditamiento (Art. 5 LIVA)**: cuando hay actos gravados y exentos,
+   el IVA acreditable se prorratea. Hoy se acredita 100%.
+3. **RESICO PF — retención 1.25%**: cuando el cliente es PM, retiene 1.25% (Art. 113-J).
+   Acreditarla contra el ISR RESICO del periodo.
+4. **PTU + pérdidas fiscales**: arrastre de pérdidas (10 años, actualizadas) y PTU pagada
+   como disminución de la base.
+5. **Cancel sync**: descarga de metadata para detectar CFDIs cancelados y revertir su efecto.
+   Necesita prueba contra SAT en vivo (descarga masiva, RequestType metadata).
+
+---
+
+## 6. PENDIENTE — operativo (lado usuario)
+
+- Rotar el password de la BD `uuOtmQtGzqOGddMaKfImDGpquMLdaAJf` (se expuso en chat).
+- Borrar branches `claude/*` ya mergeados.
+- Al arrancar nómina: extraer del PDF "Cuadros Permanentes 2026" la tarifa **mensual Art. 96**
+  + tablas de **subsidio** + tablas **RESICO** y agregarlas a `tarifas.ts` con `verificado: true`.
+
+---
+
+## 7. PENDIENTE — track de nómina (foco real del despacho)
+
+El despacho objetivo hace **outsourcing de nómina** sobre varias empresas.
+
+- **Correctitud**: Art. 96 mensual + subsidio al empleo, IMSS/INFONAVIT, finiquito, aguinaldo.
+- **Rediseño** (patrón "dos profundidades": vista amigable en la ruta + workspace en `/<ruta>/detalle`):
+  roster de empleados, run-payroll, enteramiento.
+- **Cockpit multi-RFC**: ver/operar varias empresas desde un solo panel.
+
+---
+
+## 8. Convenciones del repo
+
+- Next.js 15 App Router · Tailwind 3.4 (HSL vars shadcn) · Radix · lucide-react · Prisma/PostgreSQL · NextAuth.
+- Tokens de marca namespaced `cos-*` (OKLCH) para no pisar los built-in de Tailwind.
+- Patrón redesign: **vista amigable** en la ruta + **workspace power-user** en `/<ruta>/detalle`.
+- Validación en sandbox: solo `tsc` (no `next build` — fetch de Geist bloqueado).
+  Modelos nuevos: `npx prisma generate`. Lockfile: `npm install --package-lock-only`.
