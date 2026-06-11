@@ -40,6 +40,44 @@ export function ChatPanel() {
     if (isOpen) inputRef.current?.focus();
   }, [isOpen]);
 
+  // ── Mobile (PWA) keyboard fix ──────────────────────────────────────────────
+  // En iOS el teclado NO redimensiona el layout viewport (100vh/dvh ni los
+  // elementos fixed se encogen): sólo cambia window.visualViewport. Un panel
+  // `h-full` deja el input escondido detrás del teclado. Mientras el panel está
+  // abierto en pantallas angostas, lo dimensionamos al visual viewport y lo
+  // anclamos a su offsetTop, y bloqueamos el scroll del body para que iOS no
+  // "empuje" la página al enfocar el textarea.
+  const [vvBox, setVvBox] = useState<{ height: number; top: number } | null>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const vv = window.visualViewport;
+    const narrow = () => window.innerWidth < 1024;
+    const update = () => {
+      if (vv && narrow()) {
+        setVvBox({ height: Math.round(vv.height), top: Math.round(vv.offsetTop) });
+        // Mantén la conversación pegada al fondo cuando el teclado abre/cierra.
+        requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ block: "end" }));
+      } else {
+        setVvBox(null);
+      }
+    };
+    update();
+    vv?.addEventListener("resize", update);
+    vv?.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+
+    const prevOverflow = document.body.style.overflow;
+    if (narrow()) document.body.style.overflow = "hidden";
+
+    return () => {
+      vv?.removeEventListener("resize", update);
+      vv?.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      document.body.style.overflow = prevOverflow;
+      setVvBox(null);
+    };
+  }, [isOpen]);
+
   // Open from anywhere via the `cos:ask-ai` event (e.g. the Inicio ask-row).
   useEffect(() => {
     const open = () => setIsOpen(true);
@@ -168,11 +206,13 @@ export function ChatPanel() {
         </button>
       )}
 
-      {/* Chat panel */}
+      {/* Chat panel — full-width sheet en móvil (alto = visual viewport para
+          que el input quede arriba del teclado), side panel de 420px en desktop. */}
       <div
-        className={`fixed right-0 top-0 z-50 flex h-full w-[420px] flex-col border-l border-gray-200 bg-white shadow-2xl transition-transform duration-300 ${
+        className={`fixed right-0 top-0 z-50 flex h-dvh w-full flex-col border-l border-gray-200 bg-white shadow-2xl transition-transform duration-300 sm:w-[420px] ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
+        style={vvBox ? { height: `${vvBox.height}px`, top: `${vvBox.top}px` } : undefined}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 bg-cos-brand px-4 py-3">
@@ -192,7 +232,7 @@ export function ChatPanel() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
               <Sparkles className="mb-3 h-10 w-10 text-cos-brand" />
@@ -262,8 +302,9 @@ export function ChatPanel() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
-        <div className="border-t border-gray-200 bg-white p-4">
+        {/* Input — pb con safe-area para el home indicator (PWA standalone);
+            text-base en móvil: iOS hace auto-zoom de la página con inputs <16px. */}
+        <div className="border-t border-gray-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
           <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}
@@ -272,7 +313,8 @@ export function ChatPanel() {
               onKeyDown={handleKeyDown}
               placeholder="Pregunta algo..."
               rows={1}
-              className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand"
+              enterKeyHint="send"
+              className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-base focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand sm:text-sm"
               style={{ maxHeight: "120px" }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
