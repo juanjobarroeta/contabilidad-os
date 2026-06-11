@@ -6,6 +6,7 @@ import { getObligacionesPorRegimen } from "@/lib/obligaciones";
 import { detectComplementosPendientes } from "@/lib/complementos";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { fielStatus } from "@/lib/fiel";
 
 // GET /api/dashboard?companyId=xxx
 export async function GET(req: Request) {
@@ -327,12 +328,18 @@ export async function GET(req: Request) {
   // IVA en flujo de efectivo + ISR por régimen. El IVA/ISR mensual se presenta
   // ~día 17 del mes siguiente. isr puede ser null (sin coeficiente/tarifa).
   const MES_ABBR = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  // FIEL (e.firma) expiry status — proactive "por vencer / vencida" warning.
+  const fiel = company
+    ? fielStatus({ fielCer: company.fielCer, fielVigencia: company.fielVigencia })
+    : null;
+
   const taxDue = new Date(year, month, 17);
   const isrPagarMes = taxPosition.isr.isrPagar;
   const totalPagarMes = taxPosition.iva.pagar + (isrPagarMes ?? 0);
 
   return NextResponse.json({
     periodo: { year, month },
+    fiel,
     taxThisMonth: {
       iva: taxPosition.iva.pagar,
       isr: isrPagarMes,

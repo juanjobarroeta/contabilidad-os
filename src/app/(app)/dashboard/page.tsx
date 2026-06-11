@@ -18,6 +18,7 @@ interface UpcomingOb {
 }
 interface DashboardData {
   periodo: { year: number; month: number };
+  fiel: { estado: "ok" | "por_vencer" | "vencida" | "sin_fiel"; vigencia: string | null; diasRestantes: number | null } | null;
   taxThisMonth: {
     iva: number; isr: number | null; total: number; saldoAFavor: number;
     vence: string; venceFmt: string; diasRestantes: number; tarifaVerificada: boolean;
@@ -203,6 +204,16 @@ export default function InicioPage() {
         <Loading label="Cargando datos…" className="py-16" />
       ) : (
         <div className="space-y-5">
+          {data.fiel && (data.fiel.estado === "vencida" || data.fiel.estado === "por_vencer") && (
+            <div className={`flex items-center gap-3 rounded-card px-5 py-3.5 text-[14px] ${data.fiel.estado === "vencida" ? "bg-cos-red-tint text-cos-red-ink" : "bg-cos-amber-tint text-cos-amber-ink"}`}>
+              <AlertTriangle className="h-5 w-5 flex-none" />
+              <span>
+                {data.fiel.estado === "vencida"
+                  ? "Tu e.firma (FIEL) está vencida — la sincronización con el SAT está detenida. Renuévala en el SAT y vuelve a subirla."
+                  : `Tu e.firma (FIEL) vence en ${data.fiel.diasRestantes} día${data.fiel.diasRestantes === 1 ? "" : "s"}. Renuévala antes de que caduque para no interrumpir la sincronización de CFDIs.`}
+              </span>
+            </div>
+          )}
           <HeroBand obligaciones={data.upcomingObligations} />
 
           {/* cuánto debo + mes en números */}
