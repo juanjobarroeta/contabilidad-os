@@ -10,7 +10,11 @@
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
+    /* --primary / --ring remapeados al azul de marca Contia (= --brand
+       oklch(0.55 0.16 258) ≈ hsl(215 64% 49%)). Así NO conviven dos azules:
+       cualquier bg-primary/ring-primary residual de shadcn rinde el de marca.
+       Retiro suave del tema legacy sin romper los primitivos que aún lo usan. */
+    --primary: 215 64% 49%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -22,7 +26,7 @@
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 215 64% 49%;
     --radius: 0.5rem;
 
     /* ── Contia redesign tokens (additive; OKLCH = source of truth) ─────────── */
@@ -56,8 +60,9 @@
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    /* dark: mismo azul de marca (= --brand) para no reintroducir un segundo azul */
+    --primary: 215 64% 49%;
+    --primary-foreground: 210 40% 98%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
@@ -68,7 +73,7 @@
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --ring: 215 64% 49%;
   }
 }
 
