@@ -217,6 +217,16 @@ no. El **cálculo nunca depende del reloj** (cae a nominal/verificado:false); es
 capa de monitoreo. API `GET /api/fiscal/cobertura` (`?asOf=` para simular) y tarjeta en
 `/cumplimiento`. Cada dataset expone su `cobertura*()` (último cargado + verificado).
 
+## 11. Cockpit del despacho (multi-RFC, todas las obligaciones)
+
+`/despacho` (+ `GET /api/despacho/cockpit`): una fila por empresa accesible (helper
+`empresasAccesiblesIds` en authz, reutilizado por el cockpit de nómina) con el estado de la
+declaración del periodo (presentada/calculada/pendiente/vencida, derivado de `TaxDeclaration`
+guardadas — **sin recomputar el motor**, para escalar a muchos RFC), monto a pagar de lo ya
+calculado, nómina sin timbrar y empleados; "Operar" cambia la empresa activa y entra a su cierre/
+nómina. Franja superior con las alertas de cobertura de datos (§10). Complementa el cockpit de
+nómina (`/nomina/cockpit`, sólo nómina). Sidebar: "Despacho".
+
 ## 8. Convenciones del repo
 
 - Next.js 15 App Router · Tailwind 3.4 (HSL vars shadcn) · Radix · lucide-react · Prisma/PostgreSQL · NextAuth.

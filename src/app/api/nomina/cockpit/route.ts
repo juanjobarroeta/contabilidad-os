@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { empresasAccesiblesIds } from "@/lib/authz";
 import { SALARIO_MINIMO_GENERAL } from "@/lib/nomina/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,37 +19,11 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // ── Empresas accesibles (unión directa + despacho, deduplicada) ───────────
-  const [direct, despachoMember] = await Promise.all([
-    prisma.companyMember.findMany({
-      where: { userId: session.user.id },
-      select: { companyId: true },
-    }),
-    prisma.despachoMember.findFirst({
-      where: { userId: session.user.id },
-      select: { id: true, despachoId: true },
-    }),
-  ]);
-
-  const ids = new Set(direct.map((m) => m.companyId));
-  if (despachoMember) {
-    const scopeRows = await prisma.despachoMemberCompany.findMany({
-      where: { despachoMemberId: despachoMember.id },
-      select: { companyId: true },
-    });
-    const scopedIds = scopeRows.map((s) => s.companyId);
-    const despachoCompanies = await prisma.company.findMany({
-      where: {
-        despachoId: despachoMember.despachoId,
-        ...(scopedIds.length > 0 ? { id: { in: scopedIds } } : {}),
-      },
-      select: { id: true },
-    });
-    for (const c of despachoCompanies) ids.add(c.id);
-  }
+  // Empresas accesibles (membresía directa ∪ despacho con scoping).
+  const ids = await empresasAccesiblesIds(session.user.id);
 
   const companies = await prisma.company.findMany({
-    where: { id: { in: [...ids] }, isActive: true },
+    where: { id: { in: ids }, isActive: true },
     select: {
       id: true,
       rfc: true,
