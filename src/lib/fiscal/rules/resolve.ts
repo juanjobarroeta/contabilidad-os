@@ -81,6 +81,7 @@ export function getRule<V extends ValorRegla = ValorRegla>(
     unidad: elegida.unidad,
     fundamento: elegida.fundamento,
     verificado: elegida.verificado,
+    nota: elegida.nota,
   };
 }
 

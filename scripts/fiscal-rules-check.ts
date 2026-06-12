@@ -118,11 +118,18 @@ const empNLE = construirContexto(
   { rfc: "ABC120101AAA", regimenFiscal: "601", codigoPostal: "64000" },
   FECHA,
 );
+const empCMX = construirContexto(
+  { rfc: "ABC120101AAA", regimenFiscal: "601", codigoPostal: "06700" },
+  FECHA,
+);
 const isnJAL = getRule<number>("isn.tasa", empJAL);
 const isnNLE = getRule<number>("isn.tasa", empNLE);
-check("ISN Jalisco = 0.02", isnJAL?.valor === 0.02, `got ${isnJAL?.valor}`);
+const isnCMX = getRule<number>("isn.tasa", empCMX);
+check("ISN Jalisco = 0.03", isnJAL?.valor === 0.03, `got ${isnJAL?.valor}`);
 check("ISN Nuevo León = 0.03", isnNLE?.valor === 0.03, `got ${isnNLE?.valor}`);
+check("ISN CDMX = 0.04 (subió de 3%)", isnCMX?.valor === 0.04, `got ${isnCMX?.valor}`);
 check("ISN marcado verificado:false", isnJAL?.verificado === false);
+check("ISN trae nota de matiz cuando aplica", (isnJAL?.nota ?? "").length > 0);
 check("ISN cita ley estatal", (isnJAL?.fundamento.ley ?? "").includes("Jalisco"));
 check(
   "ISN no resuelve sin entidad conocida",

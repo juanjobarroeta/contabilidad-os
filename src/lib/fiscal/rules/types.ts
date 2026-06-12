@@ -86,6 +86,8 @@ export interface FiscalRule {
   fundamento: Fundamento;
   /** True once checked against the authoritative published source. */
   verificado: boolean;
+  /** Optional caveat (e.g. "progresivo", "+1% sobretasa") surfaced to consumers. */
+  nota?: string;
 }
 
 /** The company context a rule is resolved against. */
@@ -107,4 +109,6 @@ export interface ReglaResuelta<V extends ValorRegla = ValorRegla> {
   fundamento: Fundamento;
   /** Propagated so a consumer never silently trusts an unverified figure. */
   verificado: boolean;
+  /** Caveat from the rule (e.g. "progresivo", "+1% sobretasa"), if any. */
+  nota?: string;
 }
