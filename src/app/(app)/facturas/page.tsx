@@ -9,6 +9,7 @@ import { Card, Money, Button } from "@/components/ui";
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
   id: string;
+  companyId: string;
   uuid: string | null;
   fecha: string;
   tipo: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO";
@@ -289,6 +290,26 @@ function NaturalezaRow({ inv }: { inv: Invoice }) {
   const [valor, setValor] = useState<string>(inv.naturaleza ?? "GASTO");
   const [revision, setRevision] = useState(inv.naturalezaRevision);
   const [saving, setSaving] = useState(false);
+  const [activoMsg, setActivoMsg] = useState("");
+  const [registrando, setRegistrando] = useState(false);
+
+  async function registrarActivo() {
+    setRegistrando(true);
+    setActivoMsg("");
+    try {
+      const res = await fetch("/api/activos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: inv.companyId, invoiceId: inv.id }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      setActivoMsg("✓ Registrado en activo fijo — revisa la tasa y el tope en /activos");
+    } catch (e) {
+      setActivoMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setRegistrando(false);
+    }
+  }
 
   async function save(nuevo: string) {
     const prev = valor;
@@ -332,6 +353,18 @@ function NaturalezaRow({ inv }: { inv: Invoice }) {
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           Clasificación automática por revisar — la clave del producto sugiere que podría ser activo fijo (a depreciar) en vez de gasto inmediato.
         </p>
+      )}
+      {valor === "INVERSION" && (
+        <div className="mt-2">
+          <button
+            onClick={registrarActivo}
+            disabled={registrando}
+            className="rounded-control border border-cos-brand px-2.5 py-1 text-[12.5px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint disabled:opacity-50"
+          >
+            {registrando ? "Registrando…" : "Registrar como activo fijo"}
+          </button>
+          {activoMsg && <p className={`mt-1 text-[12px] ${activoMsg.startsWith("✓") ? "text-cos-jade-ink" : "text-cos-red-ink"}`}>{activoMsg}</p>}
+        </div>
       )}
     </div>
   );

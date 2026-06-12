@@ -226,6 +226,9 @@ model Company {
   // Post-sync IVA-change notices (one baseline per unfiled period)
   ivaPeriodNotices IvaPeriodNotice[]
 
+  // Activo fijo / inversiones — registro de depreciación (Art. 31/34 LISR)
+  activosFijos ActivoFijo[]
+
   // All SAT régimenes this taxpayer is registered under. `regimenFiscal` above
   // remains the single "primary" (operative) régimen used by most flows; this
   // list captures the rest (common for personas físicas) so obligation and
@@ -510,6 +513,43 @@ model Invoice {
   // When this invoice is a complemento de pago (tipo=PAGO), the parent
   // invoice UUIDs it pays off (parsed from <pago:DoctoRelacionado>).
   doctosRelacionados PagoDoctoRelacionado[]
+
+  // Activos fijos registrados a partir de este CFDI (naturaleza = INVERSION).
+  activosFijos ActivoFijo[]
+}
+
+// ── Activo fijo / inversión — registro de depreciación (Art. 31/34/36 LISR) ──
+// Un CFDI con naturaleza INVERSION no se deduce de golpe: se capitaliza aquí y
+// se deduce vía depreciación (lib/fiscal/depreciacion.ts). Un CFDI puede traer
+// varios activos; por eso es una tabla aparte y no campos en Invoice.
+model ActivoFijo {
+  id        String   @id @default(cuid())
+  companyId String
+  invoiceId String? // CFDI de origen (null si se capturó a mano)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  descripcion      String
+  tipo             String // construccion|mobiliario|transporte|computo|herramental|comunicaciones|maquinaria|otro
+  moi              Float // Monto Original de la Inversión (sin IVA)
+  fechaAdquisicion DateTime
+  /** Mes en que inicia su utilización, si difiere de la adquisición (Art. 31). */
+  fechaInicioUso   DateTime?
+  tasaAnual        Float // por ciento máximo Art. 34 aplicado (puede sobreescribirse)
+
+  // Automóviles: tope MOI deducible (Art. 36-II). Pickups de carga: esAutomovil=false.
+  esAutomovil        Boolean @default(false)
+  esElectricoHibrido Boolean @default(false)
+
+  // Baja / enajenación
+  fechaBaja DateTime?
+  motivoBaja String?
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([invoiceId])
 }
 
 // One <pago:DoctoRelacionado> line on a complemento de pago (REP). Links a

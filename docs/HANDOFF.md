@@ -169,12 +169,25 @@ sobre-deducción.
   import-cfdi, upload-cfdi); backfill en `/api/cron/naturaleza-backfill`; override del contador
   vía `PATCH /api/facturas/[id]` ({naturaleza}) y selector en el modal de la factura.
   **NO toca el cálculo de ISR todavía** (a propósito).
-- ⏳ **Fase 2 — registro de inversiones + depreciación (siguiente)**: por cada CFDI INVERSION,
-  MOI + fecha + tasa (Art. 34) + tope (Art. 36-II) → depreciación mensual/anual actualizada por
-  INPC. **Guardrail crítico**: al excluir INVERSION de las deducciones inmediatas, sumar su
-  depreciación en el MISMO cambio — si no, se sub-deduce. Tocar `impuestos.ts` y
-  `declaracion-anual.ts` juntos. Ojo: IVA acreditable del activo es inmediato (flujo), sólo el
-  ISR se difiere.
+- ✅ **Fase 2a — registro de inversiones + motor de depreciación (hecho)**:
+  `src/lib/fiscal/depreciacion.ts` (puro, unit-testeado): tasas Art. 34 por tipo, tope
+  Art. 36-II (auto $175k / eléctrico $250k; pickup de carga sin tope), prorrateo por meses de
+  uso, tope al saldo por deducir, factor INPC (Art. 31). **INPC cargado** en
+  `src/lib/fiscal/inpc.ts` (ene–ago 2016–2026 + ene–may 2026, incluye junio = numerador anual):
+  `factorActualizacionDepreciacion` calcula INPC(últ. mes 1ª mitad) ÷ INPC(mes adq.) y el
+  registro muestra el factor; cae a nominal donde falta el índice. ⚠️ INPC `verificado: false`
+  (faltan sep–dic y cotejar contra INEGI).
+  Modelo `ActivoFijo` + API `/api/activos` (alta desde CFDI INVERSION o manual, lista con la
+  depreciación calculada del ejercicio) y `/api/activos/[id]` (editar/baja/eliminar). Página
+  `/activos` (registro + tabla de depreciación) y botón "Registrar como activo fijo" en el modal
+  de la factura. **NO toca el ISR todavía.**
+- ⏳ **Fase 2b — wiring atómico (siguiente)**: excluir INVERSION (y SIN_EFECTOS) de las
+  deducciones inmediatas Y sumar la depreciación del registro, EN EL MISMO cambio. Anual primero
+  (`declaracion-anual` route: hoy `comprasPorCfdis` suma TODOS los EGRESO + `depreciacion` manual
+  → reemplazar por compras-sin-INVERSION + depreciación calculada), luego PF mensual
+  (`impuestos.ts` `flujoEfectivoAcum` deduce todo EGRESO pagado → restar la inversión, sumar su
+  depreciación del periodo). **Datos**: INPC ya cargado ene–ago 2016–2026 (faltan sep–dic +
+  cotejar). Ojo: IVA acreditable del activo es inmediato (flujo), sólo el ISR se difiere.
 - ⏳ **Fase 3 — costo de lo vendido (sólo PM que venden)**: método periódico (inv. inicial +
   compras − inv. final). No requiere tracker perpetuo por SKU. Diferido.
 
