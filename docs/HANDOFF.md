@@ -227,6 +227,18 @@ calculado, nómina sin timbrar y empleados; "Operar" cambia la empresa activa y 
 nómina. Franja superior con las alertas de cobertura de datos (§10). Complementa el cockpit de
 nómina (`/nomina/cockpit`, sólo nómina). Sidebar: "Despacho".
 
+## 12. Auditoría de diseño (Contia) — seguimiento
+
+Audit externo (~70% del proposal en main). Estado:
+- ✅ Cockpit del despacho (era el "flagship gap" del audit) — hecho (§11, `/despacho`).
+- ✅ Panel de IA re-skineado a spec (header blanco + tile sparkle, burbujas brand/paper, copy de
+  prompts "¿Por qué debo este IVA?/¿Qué pasa si no presento la DIOT?") + fix de tokens del grupo
+  inferior del sidebar (ya no usa `bg-primary` legacy).
+- ⏳ Migrar **Clientes** (CRUD simple, rápido) y **Contabilidad** (tabs, más grande) del tema
+  shadcn legacy a tokens `cos-*` / `Money` / `Chip`.
+- ⏳ Barrer **Configuración/Empresa** y confirmar; luego **retirar la paleta `--primary` legacy**
+  para que sólo exista un azul. (Nómina y Declaración Anual ya están en sistema.)
+
 ## 8. Convenciones del repo
 
 - Next.js 15 App Router · Tailwind 3.4 (HSL vars shadcn) · Radix · lucide-react · Prisma/PostgreSQL · NextAuth.
