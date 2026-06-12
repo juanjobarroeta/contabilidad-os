@@ -1,0 +1,27 @@
+name: Frescura del cerebro fiscal (mensual)
+
+# El cerebro audita su propia actualidad: cruza el registro de fuentes con el
+# catálogo de reglas y la cobertura del INPC. Corre mensual en --strict, así que
+# se pone ROJO cuando una fuente anual quedó atrás para el ejercicio (ISN, UMA,
+# salario mínimo, tarifas) o el INPC se atrasó — recordatorio de actualizar.
+# No auto-edita valores; los avisos de backlog (pendientes) no hacen fallar.
+#
+# NOTE: GitHub only runs `schedule:` from the DEFAULT branch (main).
+
+on:
+  schedule:
+    - cron: "0 16 5 * *" # día 5 de cada mes, ~10:00 CT
+  workflow_dispatch: {}
+
+jobs:
+  frescura:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Auditar frescura del cerebro
+        run: npm run fiscal:frescura-check -- --strict
