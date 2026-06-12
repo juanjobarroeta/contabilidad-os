@@ -22,7 +22,8 @@
     "fiscal:audit-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-audit-check.ts",
     "fiscal:isn-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-isn-check.ts",
     "fiscal:sources-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-sources-check.ts",
-    "fiscal:agapes-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-agapes-check.ts"
+    "fiscal:agapes-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-agapes-check.ts",
+    "fiscal:actualizacion-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-actualizacion-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
