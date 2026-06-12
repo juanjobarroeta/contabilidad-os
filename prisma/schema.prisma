@@ -22,6 +22,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Operador de plataforma: supervisión cross-despacho. Ve y opera TODAS las
+  // empresas activas de todos los despachos (soporte/supervisión de pilotos).
+  // Sólo se activa por script (scripts/set-operador.mjs) — nunca self-serve.
+  esOperador Boolean @default(false)
+
   // Subscription / trial — billing-per-RFC, sub lives on the account owner
   subscriptionStatus   SubscriptionStatus @default(TRIALING)
   trialEndsAt          DateTime?
@@ -98,6 +103,12 @@ model Company {
   // despacho model was introduced; backfilled by the migration script.
   despachoId String?
   despacho   Despacho? @relation(fields: [despachoId], references: [id], onDelete: SetNull)
+
+  // Grupo (sub-conjunto de empresas del mismo dueño que se facturan entre sí).
+  // Habilita la detección de operaciones intercompañía (Art. 69-B CFF) y las
+  // funciones del piloto (comisiones, materialidad) por grupo.
+  grupoId String?
+  grupo   Grupo? @relation(fields: [grupoId], references: [id], onDelete: SetNull)
 
   // SAT / fiscal data
   rfc             String  @unique
@@ -297,6 +308,24 @@ model Despacho {
 
   members   DespachoMember[]
   companies Company[]
+  grupos    Grupo[]
+}
+
+// Grupo de empresas — sub-conjunto del despacho del mismo dueño que se factura
+// entre sí (p.ej. 3 empresas que se emiten CFDIs). Es la base de la detección
+// intercompañía (Art. 69-B CFF) y de las funciones del piloto (comisiones,
+// materialidad). Vive bajo el despacho; una empresa pertenece a 0 o 1 grupo.
+model Grupo {
+  id         String   @id @default(cuid())
+  despachoId String
+  nombre     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  despacho  Despacho  @relation(fields: [despachoId], references: [id], onDelete: Cascade)
+  companies Company[]
+
+  @@index([despachoId])
 }
 
 model DespachoMember {

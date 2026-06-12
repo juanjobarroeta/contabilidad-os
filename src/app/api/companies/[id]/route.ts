@@ -75,6 +75,7 @@ export async function PATCH(req: Request, { params }: Params) {
     fielCer, fielKey, fielPassword, csdCer, csdKey, csdPassword,
     registroPatronal,
     plataformaActividad,
+    grupoId,
     // Editable fiscal/contact fields
     razonSocial, regimenFiscal, codigoPostal, domicilioFiscal,
     nombreComercial, email, telefono, actividadEconomica,
@@ -103,6 +104,19 @@ export async function PATCH(req: Request, { params }: Params) {
   if (email !== undefined) data.email = email?.trim() || null;
   if (telefono !== undefined) data.telefono = telefono?.trim() || null;
   if (actividadEconomica !== undefined) data.actividadEconomica = actividadEconomica?.trim() || null;
+  if (grupoId !== undefined) {
+    // Asignar/quitar grupo — solo si el grupo es del mismo despacho que la empresa.
+    if (!grupoId) {
+      data.grupoId = null;
+    } else {
+      const company = await prisma.company.findUnique({ where: { id: companyId }, select: { despachoId: true } });
+      const g = company?.despachoId
+        ? await prisma.grupo.findFirst({ where: { id: grupoId, despachoId: company.despachoId }, select: { id: true } })
+        : null;
+      if (!g) return NextResponse.json({ error: "Grupo inválido para esta empresa" }, { status: 400 });
+      data.grupoId = g.id;
+    }
+  }
   if (plataformaActividad !== undefined) {
     // Tipo de actividad de plataforma (625) que define la tasa Art. 113-A.
     const v = plataformaActividad?.trim();
