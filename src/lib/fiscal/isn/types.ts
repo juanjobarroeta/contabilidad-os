@@ -42,4 +42,10 @@ export interface ResumenIsn {
   numEntidades: number;
   /** Suma de ISN estimado de las entidades con tasa conocida, MXN. */
   isnTotal: number;
+  /** De dónde salió la base: nómina real del periodo o estimada del salario. */
+  fuente: FuenteBase;
 }
+
+/** Origen de la base mensual de ISN. */
+export type FuenteBase = "payroll" | "estimado";
+

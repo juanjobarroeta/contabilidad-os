@@ -7,15 +7,20 @@
 import type { Contexto } from "../rules";
 import type { Hallazgo } from "../audit/types";
 import { calcularIsnPorEntidad } from "./calc";
-import type { EmpleadoNomina } from "./types";
+import type { EmpleadoNomina, FuenteBase } from "./types";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
 
 const ISN_FUNDAMENTO = { ley: "Leyes de Hacienda estatales", articulo: "ISN" };
 
-export function auditarIsn(empleados: EmpleadoNomina[], ctxBase: Contexto): Hallazgo[] {
-  const resumen = calcularIsnPorEntidad(empleados, ctxBase);
+export function auditarIsn(
+  empleados: EmpleadoNomina[],
+  ctxBase: Contexto,
+  fuente: FuenteBase = "estimado",
+): Hallazgo[] {
+  const resumen = calcularIsnPorEntidad(empleados, ctxBase, fuente);
+  const baseLabel = fuente === "payroll" ? "nómina del periodo" : "estimada (salario diario)";
   const hallazgos: Hallazgo[] = [];
 
   // Per-entidad: surface the estimated ISN obligation (info), or flag states
@@ -36,7 +41,7 @@ export function auditarIsn(empleados: EmpleadoNomina[], ctxBase: Contexto): Hall
     hallazgos.push({
       checkClave: "isn.obligacion",
       severidad: "info",
-      mensaje: `ISN estimado en ${r.entidad}: ${fmt(r.isn)} (${(r.tasa * 100).toFixed(2)}% sobre ${fmt(r.baseMensual)}, ${r.numEmpleados} empl.)${aprox}.`,
+      mensaje: `ISN estimado en ${r.entidad}: ${fmt(r.isn)} (${(r.tasa * 100).toFixed(2)}% sobre ${fmt(r.baseMensual)}, ${r.numEmpleados} empl.; base ${baseLabel})${aprox}.`,
       referencias: [r.entidad],
       fundamento: r.fundamento ?? ISN_FUNDAMENTO,
       sugerencia: r.verificado

@@ -6,7 +6,13 @@
 
 import { prisma } from "@/lib/prisma";
 import { construirContexto } from "@/lib/fiscal/rules";
-import { auditarIsn, empleadoNominaDesde } from "@/lib/fiscal/isn";
+import {
+  agregarNominaPorEmpleado,
+  auditarIsn,
+  empleadoNominaDesde,
+  type EmpleadoNomina,
+  type FuenteBase,
+} from "@/lib/fiscal/isn";
 import { auditar } from "./run";
 import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
 
@@ -50,6 +56,51 @@ export async function loadCompanyCfdis(companyId: string): Promise<CfdiNormaliza
   });
 }
 
+/**
+ * Load the ISN base for the month of `fechaIso`: prefer real payroll
+ * (PayrollItem.totalPercepciones from non-DRAFT runs paid that month), and fall
+ * back to the active-roster salary estimate when no payroll exists in-app.
+ */
+export async function cargarNominaParaIsn(
+  companyId: string,
+  fechaIso: string,
+): Promise<{ empleados: EmpleadoNomina[]; fuente: FuenteBase }> {
+  const d = new Date(fechaIso);
+  const inicio = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+  const fin = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+
+  const runs = await prisma.payrollRun.findMany({
+    where: { companyId, status: { not: "DRAFT" }, fechaPago: { gte: inicio, lt: fin } },
+    select: {
+      items: {
+        select: {
+          employeeId: true,
+          totalPercepciones: true,
+          employee: { select: { claveEntFed: true } },
+        },
+      },
+    },
+  });
+
+  const items = runs
+    .flatMap((r) => r.items)
+    .map((i) => ({
+      employeeId: i.employeeId,
+      claveEntFed: i.employee.claveEntFed,
+      totalPercepciones: i.totalPercepciones,
+    }));
+
+  if (items.length > 0) {
+    return { empleados: agregarNominaPorEmpleado(items), fuente: "payroll" };
+  }
+
+  const empleados = await prisma.employee.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, salarioDiario: true, claveEntFed: true, isActive: true },
+  });
+  return { empleados: empleados.map(empleadoNominaDesde), fuente: "estimado" };
+}
+
 export interface AuditResult {
   companyId: string;
   evaluados: number;
@@ -73,14 +124,11 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
   const ctx = construirContexto(company, fecha);
 
   const cfdis = await loadCompanyCfdis(companyId);
-  const empleados = await prisma.employee.findMany({
-    where: { companyId, isActive: true },
-    select: { id: true, salarioDiario: true, claveEntFed: true, isActive: true },
-  });
+  const { empleados, fuente } = await cargarNominaParaIsn(companyId, fecha);
 
   const hallazgos = [
     ...auditar(cfdis, ctx),
-    ...auditarIsn(empleados.map(empleadoNominaDesde), ctx),
+    ...auditarIsn(empleados, ctx, fuente),
   ];
 
   const vigentes = new Set<string>();

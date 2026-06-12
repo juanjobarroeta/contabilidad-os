@@ -26,3 +26,32 @@ export function empleadoNominaDesde(emp: EmployeeLike): EmpleadoNomina {
     activo: emp.isActive,
   };
 }
+
+/** A payroll line joined to its employee's claveEntFed (the exact-base source). */
+export interface PayrollItemLike {
+  employeeId: string;
+  claveEntFed: string;
+  /** Remuneraciones del comprobante de nómina. */
+  totalPercepciones: number;
+}
+
+/**
+ * Aggregate a period's PayrollItems into one EmpleadoNomina per employee, with
+ * baseMensual = sum of totalPercepciones (real gross — the exact ISN base,
+ * preferred over the salarioDiario estimate). An employee with payroll in the
+ * period is treated as activo.
+ */
+export function agregarNominaPorEmpleado(items: PayrollItemLike[]): EmpleadoNomina[] {
+  const porEmpleado = new Map<string, { claveEntFed: string; base: number }>();
+  for (const it of items) {
+    const prev = porEmpleado.get(it.employeeId);
+    if (prev) prev.base += it.totalPercepciones;
+    else porEmpleado.set(it.employeeId, { claveEntFed: it.claveEntFed, base: it.totalPercepciones });
+  }
+  return [...porEmpleado].map(([id, v]) => ({
+    id,
+    entidad: esEntidad(v.claveEntFed) ? v.claveEntFed : undefined,
+    baseMensual: v.base,
+    activo: true,
+  }));
+}
