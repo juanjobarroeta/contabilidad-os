@@ -116,6 +116,47 @@ const REGLAS_FEDERALES: FiscalRule[] = [
     verificado: true,
   },
 
+  // ── AGAPES (Art. 74 LISR) — exención en múltiplos de UMA anual ────────────────
+  {
+    // PF dedicada a AGAPES: exenta hasta 40 UMA anuales de ingresos del sector.
+    clave: "agapes.exencion.factor_uma_anual",
+    tipo: "VALOR",
+    valor: 40,
+    unidad: "UMA",
+    aplicabilidad: { regimenes: "*", actividades: ["AGAPES"], tipoPersona: "PF" },
+    vigenciaDesde: "2014-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "LISR", articulo: "74" },
+    verificado: false,
+    nota: "PF: exención de 40 UMA anuales sobre ingresos de AGAPES",
+  },
+  {
+    // PM dedicada a AGAPES: 20 UMA anuales por socio…
+    clave: "agapes.exencion.factor_uma_anual",
+    tipo: "VALOR",
+    valor: 20,
+    unidad: "UMA",
+    aplicabilidad: { regimenes: "*", actividades: ["AGAPES"], tipoPersona: "PM" },
+    vigenciaDesde: "2014-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "LISR", articulo: "74" },
+    verificado: false,
+    nota: "PM: 20 UMA anuales por cada socio o asociado",
+  },
+  {
+    // …sin exceder, en su totalidad, de 200 UMA anuales.
+    clave: "agapes.exencion.tope_uma_anual",
+    tipo: "VALOR",
+    valor: 200,
+    unidad: "UMA",
+    aplicabilidad: { regimenes: "*", actividades: ["AGAPES"], tipoPersona: "PM" },
+    vigenciaDesde: "2014-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "LISR", articulo: "74" },
+    verificado: false,
+    nota: "PM: tope total de la exención = 200 UMA anuales",
+  },
+
   // ── Valores de referencia (UMA, salario mínimo) ──────────────────────────────
   {
     // UMA vigente desde el 1-feb-2026 (INEGI). En enero 2026 aún aplica la de 2025.
