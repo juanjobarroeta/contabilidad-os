@@ -156,6 +156,73 @@ const REGLAS_FEDERALES: FiscalRule[] = [
     verificado: false,
     nota: "PM: tope total de la exención = 200 UMA anuales",
   },
+  {
+    // Reducción del ISR para AGAPES (sobre el impuesto determinado), aplicable
+    // mientras los ingresos no rebasen el límite (ver agapes.reduccion_isr.limite).
+    clave: "agapes.reduccion_isr.pct",
+    tipo: "RATE",
+    valor: 0.3,
+    unidad: "porcentaje",
+    aplicabilidad: { regimenes: "*", actividades: ["AGAPES"], tipoPersona: "*" },
+    vigenciaDesde: "2014-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "LISR", articulo: "74" },
+    verificado: false,
+    nota: "Reducción del 30% del ISR determinado; aplica también en provisionales",
+  },
+  {
+    // Tope de ingresos (UMA anuales) hasta el cual aplica la reducción del 30%.
+    clave: "agapes.reduccion_isr.limite_uma_anual",
+    tipo: "THRESHOLD",
+    valor: 423,
+    unidad: "UMA",
+    aplicabilidad: { regimenes: "*", actividades: ["AGAPES"], tipoPersona: "*" },
+    vigenciaDesde: "2014-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "LISR", articulo: "74" },
+    verificado: false,
+    nota: "Ingresos anuales hasta 423 UMA conservan la reducción del 30%",
+  },
+  {
+    // RFA — deducción sin CFDI de mano de obra eventual del campo, alimentación
+    // de ganado y gastos menores: hasta el 10% de los ingresos propios…
+    clave: "agapes.rfa.facilidad_pct",
+    tipo: "RATE",
+    valor: 0.1,
+    unidad: "porcentaje",
+    aplicabilidad: { regimenes: "*", actividades: ["AGAPES"], tipoPersona: "*" },
+    vigenciaDesde: "2025-02-18",
+    vigenciaHasta: null,
+    fundamento: { ley: "RFA", articulo: "Sector primario" },
+    verificado: false,
+    nota: "Deducción sin CFDI (mano de obra eventual, gastos menores); se fija cada año en la RFA — confirmar la vigente",
+  },
+  {
+    // …sin exceder de $800,000 en el ejercicio.
+    clave: "agapes.rfa.facilidad_tope",
+    tipo: "CAP",
+    valor: 800000,
+    unidad: "MXN",
+    aplicabilidad: { regimenes: "*", actividades: ["AGAPES"], tipoPersona: "*" },
+    vigenciaDesde: "2025-02-18",
+    vigenciaHasta: null,
+    fundamento: { ley: "RFA", articulo: "Sector primario" },
+    verificado: false,
+    nota: "Tope anual de la deducción sin CFDI",
+  },
+  {
+    // Cada gasto menor no debe exceder este monto.
+    clave: "agapes.rfa.gasto_menor_tope",
+    tipo: "CAP",
+    valor: 5000,
+    unidad: "MXN",
+    aplicabilidad: { regimenes: "*", actividades: ["AGAPES"], tipoPersona: "*" },
+    vigenciaDesde: "2025-02-18",
+    vigenciaHasta: null,
+    fundamento: { ley: "RFA", articulo: "Sector primario" },
+    verificado: false,
+    nota: "Tope por cada gasto menor individual",
+  },
 
   // ── Valores de referencia (UMA, salario mínimo) ──────────────────────────────
   {

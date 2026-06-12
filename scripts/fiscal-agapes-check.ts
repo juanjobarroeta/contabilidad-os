@@ -1,7 +1,11 @@
 // Verification harness for the AGAPES exención. Run: npm run fiscal:agapes-check
 
 import { construirContexto, type CompanyLike } from "../src/lib/fiscal/rules";
-import { exencionAgapesAnual } from "../src/lib/fiscal/agapes";
+import {
+  exencionAgapesAnual,
+  facilidadDeduccionAgapes,
+  reduccionIsrAgapes,
+} from "../src/lib/fiscal/agapes";
 
 let fallos = 0;
 function check(nombre: string, cond: boolean, detalle?: string) {
@@ -36,9 +40,31 @@ const pm15 = exencionAgapesAnual(ctxPM, { socios: 15 });
 check("PM 15 socios topado a 200 UMA (no 300)", pm15?.factorUMA === 200, `got ${pm15?.factorUMA}`);
 check("PM default 1 socio cuando no se indica", exencionAgapesAnual(ctxPM)?.factorUMA === 20);
 
+console.log("AGAPES reducción ISR (Art. 74)");
+const red = reduccionIsrAgapes(ctxPM, 100000, { ingresoAnual: 5000000 });
+check("reducción 30%", red?.reduccionPct === 0.3);
+check("reducción de 100,000 = 30,000", red?.reduccionMXN === 30000, `got ${red?.reduccionMXN}`);
+check("ISR reducido = 70,000", red?.isrReducido === 70000, `got ${red?.isrReducido}`);
+check("límite ingreso = 423 × UMA anual", red?.limiteIngresoMXN === Math.round(423 * UMA_ANUAL * 100) / 100, `got ${red?.limiteIngresoMXN}`);
+check("5M no excede el límite (423 UMA ≈ 18M)", red?.excedeLimite === false);
+const redAlto = reduccionIsrAgapes(ctxPM, 100000, { ingresoAnual: 20000000 });
+check("20M sí excede el límite", redAlto?.excedeLimite === true);
+
+console.log("AGAPES facilidad RFA (deducción sin CFDI)");
+const fac = facilidadDeduccionAgapes(ctxPM, 2000000);
+check("10% de 2,000,000 = 200,000 (bajo tope)", fac?.facilidadMXN === 200000, `got ${fac?.facilidadMXN}`);
+check("no topado a 2M de ingreso", fac?.topado === false);
+const facAlto = facilidadDeduccionAgapes(ctxPM, 10000000);
+check("10% de 10M topado a 800,000", facAlto?.facilidadMXN === 800000, `got ${facAlto?.facilidadMXN}`);
+check("marcado topado", facAlto?.topado === true);
+check("tope por gasto menor = 5,000", fac?.gastoMenorTope === 5000);
+check("cita RFA", fac?.fundamento.ley === "RFA");
+
 console.log("AGAPES — no aplica fuera del sector");
 const noAgapes = construirContexto({ rfc: "ABC120101AAA", regimenFiscal: "601" }, FECHA);
-check("empresa no-AGAPES → null", exencionAgapesAnual(noAgapes) === null);
+check("empresa no-AGAPES → exención null", exencionAgapesAnual(noAgapes) === null);
+check("empresa no-AGAPES → reducción null", reduccionIsrAgapes(noAgapes, 100000) === null);
+check("empresa no-AGAPES → facilidad null", facilidadDeduccionAgapes(noAgapes, 1000000) === null);
 
 console.log("");
 if (fallos === 0) {
