@@ -247,6 +247,26 @@ Audit externo (~70% del proposal en main). Estado:
   tokens `cos-*`, y entonces sí borrar la paleta legacy. Bajo valor visual ya (los grises no
   chocan; el azul ya está unificado); alto trabajo. Diferible.
 
+## 13. Piloto outsourcing — fundación de Grupos (multi-empresa, intercompañía)
+
+Contexto: cliente con 2 grupos × 3 empresas que se facturan entre sí; escalará a ~60.
+Decisión: NO se forkea el front — un solo código + módulos gateados (patrón `CONSTRUCCION`),
+shell de operador vía route-group si se quiere, y el alta de empresas es repetible/incremental
+(reusa `POST /api/companies`, que ya siembra catálogo/obligaciones/Facturapi/FIEL/sync). No
+hacer un wizard monolítico de 60.
+
+- ✅ **Grupo (hecho)**: modelo `Grupo` (bajo `Despacho`) + `Company.grupoId`. API `/api/grupos`
+  (GET con conteos/empresas, POST crear). `grupoId` se acepta en crear y editar empresa (valida
+  mismo despacho). Selector + "Nuevo grupo" en el form de alta (`/empresa`). Helper
+  `src/lib/grupo.ts`: `rfcsHermanos(companyId)` + `esContraparteIntercompania(...)` para detectar
+  CFDIs entre partes relacionadas (Art. 69-B CFF). **Coexistente, nada se sustituyó.**
+- ⏳ **Siguiente (piloto)**: (a) **alta repetible/batch** con prefill por CSF (IA) + grupo; (b)
+  **etiquetar CFDIs intercompañía** en facturas/papeles usando el helper; (c) **comisiones**
+  (ledger separado del motor fiscal: ganado vs gastado por grupo); (d) **materialidad** (evidencia
+  por CFDI: checklist contrato/entrega/pago/correspondencia; el pago se auto-cubre con la
+  conciliación bancaria; reforzada para intercompañía). Pendiente confirmar: quién cobra a quién
+  (comisiones) y backend de archivos (materialidad).
+
 ## 8. Convenciones del repo
 
 - Next.js 15 App Router · Tailwind 3.4 (HSL vars shadcn) · Radix · lucide-react · Prisma/PostgreSQL · NextAuth.

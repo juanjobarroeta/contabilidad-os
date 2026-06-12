@@ -99,6 +99,7 @@ export async function POST(req: Request) {
     csfObligaciones,
     manifiestoAck,
     onboardingPackage,
+    grupoId,
   } = body as {
     rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string;
     domicilioFiscal?: string; nombreComercial?: string; email?: string;
@@ -146,6 +147,7 @@ export async function POST(req: Request) {
         fechaPresentacion?: string | null;
       } | null>;
     };
+    grupoId?: string | null;
   };
 
   if (!rfc || !razonSocial || !regimenFiscal || !codigoPostal) {
@@ -165,6 +167,17 @@ export async function POST(req: Request) {
   // Extract IMSS + anual fields from onboardingPackage so they persist on Company row
   const registroPatronal = onboardingPackage?.imss?.registroPatronal ?? null;
   const coeficienteUtilidad = onboardingPackage?.acuseAnual?.coeficienteUtilidad ?? null;
+
+  // Grupo: solo se acepta si pertenece al MISMO despacho del creador (evita
+  // asignar una empresa a un grupo ajeno). Null si no aplica o no coincide.
+  let grupoIdValido: string | null = null;
+  if (grupoId && despachoMembership?.despachoId) {
+    const g = await prisma.grupo.findFirst({
+      where: { id: grupoId, despachoId: despachoMembership.despachoId },
+      select: { id: true },
+    });
+    grupoIdValido = g?.id ?? null;
+  }
 
   // fechaInicioRegimen (from the Constancia de Situación Fiscal) becomes the
   // lower bound for the historical SAT backfill — we never ask SAT for CFDIs
@@ -237,6 +250,7 @@ export async function POST(req: Request) {
       registroPatronal: registroPatronal ?? undefined,
       coeficienteUtilidad: coeficienteUtilidad ?? undefined,
       despachoId: despachoMembership?.despachoId ?? null,
+      grupoId: grupoIdValido,
       members: {
         create: {
           userId: session.user.id,

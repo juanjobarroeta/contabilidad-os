@@ -81,8 +81,32 @@ export default function EmpresaPage() {
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState("");
   const [addForm, setAddForm] = useState({
-    rfc: "", razonSocial: "", regimenFiscal: "", codigoPostal: "", domicilioFiscal: "",
+    rfc: "", razonSocial: "", regimenFiscal: "", codigoPostal: "", domicilioFiscal: "", grupoId: "",
   });
+  // Grupos del despacho (para asignar la empresa a un grupo al crearla).
+  const [grupos, setGrupos] = useState<{ id: string; nombre: string }[]>([]);
+  const loadGrupos = useCallback(async () => {
+    try {
+      const res = await fetch("/api/grupos");
+      if (res.ok) setGrupos((await res.json()).grupos ?? []);
+    } catch { /* sin despacho → sin grupos */ }
+  }, []);
+  useEffect(() => { loadGrupos(); }, [loadGrupos]);
+  async function crearGrupo() {
+    const nombre = window.prompt("Nombre del grupo (p.ej. Grupo Norte):")?.trim();
+    if (!nombre) return;
+    const res = await fetch("/api/grupos", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre }),
+    });
+    if (res.ok) {
+      const g = await res.json();
+      await loadGrupos();
+      setAddForm((p) => ({ ...p, grupoId: g.id }));
+    } else {
+      setAddError((await res.json()).error ?? "No se pudo crear el grupo");
+    }
+  }
 
   // Active company detail (from DB, includes sensitive fields not in provider)
   const [companyDetail, setCompanyDetail] = useState<CompanyDetail | null>(null);
@@ -517,6 +541,21 @@ export default function EmpresaPage() {
                 <option value="">Selecciona...</option>
                 {REGIMENES_FISCALES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
+            </div>
+            {/* Grupo (opcional): agrupa empresas del mismo dueño que se facturan
+                entre sí → habilita detección intercompañía (Art. 69-B) y comisiones. */}
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Grupo <span className="text-muted-foreground">(opcional)</span></label>
+              <div className="flex gap-2">
+                <select name="grupoId" value={addForm.grupoId} onChange={handleAddChange}
+                  className="flex-1 px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                  <option value="">Sin grupo</option>
+                  {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+                </select>
+                <button type="button" onClick={crearGrupo}
+                  className="px-3 py-2 rounded-md text-sm border border-border hover:bg-accent whitespace-nowrap">+ Nuevo grupo</button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Empresas del mismo dueño que se facturan entre sí. Se usa para detectar operaciones intercompañía.</p>
             </div>
             {addError && (
               <div className="bg-red-50 border border-red-200 rounded-md px-4 py-3 text-sm text-red-700">{addError}</div>
