@@ -58,6 +58,19 @@ export async function requireUser(req?: Request): Promise<AuthUser> {
 }
 
 /**
+ * True si el usuario es operador de plataforma (supervisión cross-despacho).
+ * Operadores ven y operan TODAS las empresas activas de todos los despachos.
+ * El flag sólo se prende por script (scripts/set-operador.mjs), nunca por API.
+ */
+export async function isOperador(userId: string): Promise<boolean> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { esOperador: true },
+  });
+  return u?.esOperador === true;
+}
+
+/**
  * Maps a DespachoRole into an implicit MemberRole on every company the
  * despacho owns. Despacho OWNER/ADMIN → company ADMIN; despacho ACCOUNTANT →
  * company ACCOUNTANT. Despacho members never get implicit OWNER of a company
@@ -85,6 +98,17 @@ export async function getEffectiveCompanyMembership(
   userId: string,
   companyId: string
 ): Promise<{ userId: string; companyId: string; role: MemberRole } | null> {
+  // Operador de plataforma: acceso OWNER a cualquier empresa, cruzando
+  // despachos. Sólo si la empresa existe (devolvemos null si no, para no
+  // inventar acceso a un id basura).
+  if (await isOperador(userId)) {
+    const exists = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { id: true },
+    });
+    return exists ? { userId, companyId, role: "OWNER" } : null;
+  }
+
   const [direct, company] = await Promise.all([
     prisma.companyMember.findUnique({
       where: { userId_companyId: { userId, companyId } },
@@ -157,6 +181,26 @@ export async function requireMembership(
   req?: Request
 ) {
   const user = await requireUser(req);
+
+  // Operador de plataforma: acceso OWNER a cualquier empresa existente.
+  if (await isOperador(user.id)) {
+    const exists = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { id: true },
+    });
+    if (!exists) throw new AuthzError(404, "Empresa no encontrada");
+    if (allowedRoles && !allowedRoles.includes("OWNER")) {
+      throw new AuthzError(403, "Sin permisos suficientes");
+    }
+    const membership = {
+      id: `operador:${user.id}:${companyId}`,
+      userId: user.id,
+      companyId,
+      role: "OWNER" as MemberRole,
+      createdAt: new Date(),
+    };
+    return { user, membership };
+  }
 
   // Load both paths in parallel
   const [direct, company] = await Promise.all([
@@ -277,6 +321,9 @@ export async function requireModule(
   if (req) {
     const user = await requireUser(req);
 
+    // Operador de plataforma: acceso total a módulos contratados.
+    if (await isOperador(user.id)) return row;
+
     // Despacho access is always full — skip the per-module check if the
     // user is on a despacho that owns this company.
     const company = await prisma.company.findUnique({
@@ -341,6 +388,16 @@ export function withAuthz<Args extends unknown[]>(
  */
 export async function empresasAccesiblesIds(userId: string): Promise<string[]> {
   const { prisma } = await import("./prisma");
+
+  // Operador de plataforma: todas las empresas activas de todos los despachos.
+  if (await isOperador(userId)) {
+    const all = await prisma.company.findMany({
+      where: { isActive: true },
+      select: { id: true },
+    });
+    return all.map((c) => c.id);
+  }
+
   const [direct, despachoMember] = await Promise.all([
     prisma.companyMember.findMany({ where: { userId }, select: { companyId: true } }),
     prisma.despachoMember.findFirst({ where: { userId }, select: { id: true, despachoId: true } }),

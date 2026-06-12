@@ -13,6 +13,28 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
 
+  // Operador de plataforma: ve TODAS las empresas activas de todos los
+  // despachos (supervisión cross-despacho). Bypasea la unión de membresías.
+  const operador = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { esOperador: true },
+  });
+  if (operador?.esOperador) {
+    const all = await prisma.company.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        rfc: true,
+        razonSocial: true,
+        regimenFiscal: true,
+        codigoPostal: true,
+        isActive: true,
+      },
+      orderBy: { razonSocial: "asc" },
+    });
+    return NextResponse.json(all);
+  }
+
   // Two access paths, union'd and deduped:
   //   1. Direct CompanyMember rows (explicit invitations)
   //   2. Companies owned by a Despacho the user is a member of

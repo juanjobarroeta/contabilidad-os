@@ -22,6 +22,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Operador de plataforma: supervisión cross-despacho. Ve y opera TODAS las
+  // empresas activas de todos los despachos (soporte/supervisión de pilotos).
+  // Sólo se activa por script (scripts/set-operador.mjs) — nunca self-serve.
+  esOperador Boolean @default(false)
+
   // Subscription / trial — billing-per-RFC, sub lives on the account owner
   subscriptionStatus   SubscriptionStatus @default(TRIALING)
   trialEndsAt          DateTime?
