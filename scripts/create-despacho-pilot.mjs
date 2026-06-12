@@ -25,16 +25,10 @@
  *
  * Si no pasas password, se genera una temporal aleatoria y se imprime al final.
  *
- * Supervisor (opcional) — para que el operador tenga un login dentro de ESTE
- * despacho como ACCOUNTANT (ve/opera todas las empresas del despacho, no
- * gestiona usuarios). Como un usuario sólo puede estar en UN despacho, el
- * supervisor debe ser una cuenta dedicada distinta a la del owner del piloto
- * y distinta a tu cuenta personal de operación. Para supervisión global
- * cross-despacho usa mejor scripts/set-operador.mjs (rol de plataforma).
- *
- *   SUPERVISOR_EMAIL=ops-people@tudominio.com \
- *   SUPERVISOR_NAME="Supervisor People" \
- *   node scripts/create-despacho-pilot.mjs "People HCS" enrique@peoplehcs.com.mx "Enrique"
+ * Para SUPERVISAR los pilotos no inscribas una cuenta en cada despacho: usa el
+ * rol de operador de plataforma (scripts/set-operador.mjs) sobre tu propia
+ * cuenta — ve y opera TODAS las empresas de TODOS los despachos con un solo
+ * login, y no aparece como miembro dentro del despacho del cliente.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -62,20 +56,6 @@ const TEMP_PASSWORD =
 if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(OWNER_EMAIL)) {
   console.error(`❌ Email inválido: ${OWNER_EMAIL}`);
   process.exit(1);
-}
-
-// Supervisor opcional (ACCOUNTANT de este despacho) vía env vars.
-const SUPERVISOR_EMAIL = process.env.SUPERVISOR_EMAIL?.trim().toLowerCase() || null;
-const SUPERVISOR_NAME = process.env.SUPERVISOR_NAME?.trim() || "Supervisor";
-if (SUPERVISOR_EMAIL) {
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(SUPERVISOR_EMAIL)) {
-    console.error(`❌ SUPERVISOR_EMAIL inválido: ${SUPERVISOR_EMAIL}`);
-    process.exit(1);
-  }
-  if (SUPERVISOR_EMAIL === OWNER_EMAIL) {
-    console.error(`❌ El supervisor no puede ser el mismo usuario que el owner.`);
-    process.exit(1);
-  }
 }
 
 async function main() {
@@ -143,54 +123,6 @@ async function main() {
     console.log(`✓ Ya es OWNER de "${despacho.name}"`);
   }
 
-  // 4. Supervisor opcional — ACCOUNTANT de ESTE despacho.
-  let supervisorPassword = null;
-  let supervisorCreated = false;
-  if (SUPERVISOR_EMAIL) {
-    let sup = await prisma.user.findUnique({
-      where: { email: SUPERVISOR_EMAIL },
-      select: { id: true, email: true },
-    });
-    if (!sup) {
-      supervisorPassword = `Sup-${randomBytes(4).toString("hex")}!`;
-      const hashed = await bcrypt.hash(supervisorPassword, 10);
-      sup = await prisma.user.create({
-        data: {
-          email: SUPERVISOR_EMAIL,
-          name: SUPERVISOR_NAME,
-          password: hashed,
-          subscriptionStatus: "ACTIVE",
-        },
-        select: { id: true, email: true },
-      });
-      supervisorCreated = true;
-      console.log(`✓ Supervisor creado: ${sup.email} (${sup.id})`);
-    } else {
-      console.log(`✓ Supervisor ya existe: ${sup.email} (${sup.id}) — password sin cambios`);
-    }
-
-    const supMember = await prisma.despachoMember.findUnique({
-      where: { userId: sup.id },
-      select: { id: true, despachoId: true, role: true, despacho: { select: { name: true } } },
-    });
-    if (supMember && supMember.despachoId !== despacho.id) {
-      console.error(
-        `❌ ${sup.email} ya pertenece al despacho "${supMember.despacho.name}". ` +
-          `Un usuario sólo puede estar en un despacho — usa otra cuenta dedicada ` +
-          `para supervisar, o usa scripts/set-operador.mjs para supervisión global.`
-      );
-      process.exit(1);
-    }
-    if (!supMember) {
-      await prisma.despachoMember.create({
-        data: { despachoId: despacho.id, userId: sup.id, role: "ACCOUNTANT" },
-      });
-      console.log(`✓ Supervisor inscrito como ACCOUNTANT de "${despacho.name}"`);
-    } else {
-      console.log(`✓ Supervisor ya es miembro de "${despacho.name}" (${supMember.role})`);
-    }
-  }
-
   // Verificación de aislamiento.
   const d = await prisma.despacho.findUnique({
     where: { id: despacho.id },
@@ -212,18 +144,7 @@ async function main() {
     console.log(`  Password: (sin cambios — el usuario ya existía)`);
   }
   console.log(`\n  ${OWNER_EMAIL} verá SÓLO las empresas de "${DESPACHO_NAME}" — aislado de otros despachos.`);
-
-  if (SUPERVISOR_EMAIL) {
-    console.log("\n─── Supervisor (ACCOUNTANT) ────────");
-    console.log(`  Email:    ${SUPERVISOR_EMAIL}`);
-    if (supervisorCreated) {
-      console.log(`  Password: ${supervisorPassword}`);
-      console.log(`  ⚠️  Compártela fuera de banda; pídele cambiarla al primer login.`);
-    } else {
-      console.log(`  Password: (sin cambios — el usuario ya existía)`);
-    }
-    console.log(`  Ve/opera todas las empresas de "${DESPACHO_NAME}" (no gestiona usuarios).`);
-  }
+  console.log(`  Para supervisar este piloto: scripts/set-operador.mjs sobre tu cuenta.`);
   console.log();
 }
 
