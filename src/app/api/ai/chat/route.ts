@@ -9,7 +9,17 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
+// Streaming, long-running turn (multiple tool rounds: DB + embeddings + model).
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+
 const MAX_TOOL_ROUNDS = 5;
+// Heartbeat keeps the SSE connection alive during the silent gaps while tools
+// execute (tax position, KB embedding/vector search) and the next model call
+// reaches its first token — otherwise mobile carriers/proxies drop the idle
+// stream and the client surfaces "Load failed".
+const HEARTBEAT_MS = 10_000;
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -48,6 +58,18 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      // Enqueue that no-ops if the stream is already closed (e.g. client gone).
+      const safeEnqueue = (chunk: Uint8Array) => {
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          /* stream closed */
+        }
+      };
+      const heartbeat = setInterval(() => {
+        safeEnqueue(encoder.encode(": ping\n\n")); // SSE comment; clients ignore it
+      }, HEARTBEAT_MS);
+
       try {
         let currentMessages = [...messages];
         let toolRounds = 0;
@@ -76,7 +98,7 @@ export async function POST(req: Request) {
                   input: "",
                 };
                 // Send a thinking indicator to the client
-                controller.enqueue(
+                safeEnqueue(
                   encoder.encode(
                     `data: ${JSON.stringify({ type: "tool_start", tool: event.content_block.name })}\n\n`
                   )
@@ -84,7 +106,7 @@ export async function POST(req: Request) {
               }
             } else if (event.type === "content_block_delta") {
               if (event.delta.type === "text_delta") {
-                controller.enqueue(
+                safeEnqueue(
                   encoder.encode(
                     `data: ${JSON.stringify({ type: "text", text: event.delta.text })}\n\n`
                   )
@@ -94,11 +116,17 @@ export async function POST(req: Request) {
               }
             } else if (event.type === "content_block_stop") {
               if (currentToolUse) {
+                let parsedInput: unknown = {};
+                try {
+                  parsedInput = JSON.parse(currentToolUse.input || "{}");
+                } catch {
+                  parsedInput = {}; // malformed partial JSON → run with empty input
+                }
                 toolUseBlocks.push({
                   type: "tool_use",
                   id: currentToolUse.id,
                   name: currentToolUse.name,
-                  input: JSON.parse(currentToolUse.input || "{}"),
+                  input: parsedInput,
                 });
                 currentToolUse = null;
               }
@@ -134,14 +162,19 @@ export async function POST(req: Request) {
           toolRounds++;
         }
 
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
-        controller.close();
+        safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
       } catch (error) {
         const message = error instanceof Error ? error.message : "Error interno";
-        controller.enqueue(
+        safeEnqueue(
           encoder.encode(`data: ${JSON.stringify({ type: "error", error: message })}\n\n`)
         );
-        controller.close();
+      } finally {
+        clearInterval(heartbeat);
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
       }
     },
   });

@@ -121,39 +121,51 @@ export function ChatPanel() {
 
       const decoder = new TextDecoder();
       let assistantText = "";
+      let buffer = "";
+
+      const handle = (data: { type: string; text?: string; tool?: string; error?: string }) => {
+        if (data.type === "text") {
+          assistantText += data.text ?? "";
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastMsg = updated[updated.length - 1];
+            if (lastMsg?.role === "assistant") {
+              lastMsg.content = assistantText;
+            } else {
+              updated.push({ role: "assistant", content: assistantText });
+            }
+            return [...updated];
+          });
+        } else if (data.type === "tool_start") {
+          setActiveTool(data.tool ?? null);
+        } else if (data.type === "done") {
+          setActiveTool(null);
+        } else if (data.type === "error") {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: `Error: ${data.error}` },
+          ]);
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
+        // Buffer across reads: an SSE event (or even a single line) can be split
+        // between chunks, so only process complete events ("\n\n"-delimited).
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? ""; // keep the trailing partial event
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = JSON.parse(line.slice(6));
-
-          if (data.type === "text") {
-            assistantText += data.text;
-            setMessages((prev) => {
-              const updated = [...prev];
-              const lastMsg = updated[updated.length - 1];
-              if (lastMsg?.role === "assistant") {
-                lastMsg.content = assistantText;
-              } else {
-                updated.push({ role: "assistant", content: assistantText });
-              }
-              return [...updated];
-            });
-          } else if (data.type === "tool_start") {
-            setActiveTool(data.tool);
-          } else if (data.type === "done") {
-            setActiveTool(null);
-          } else if (data.type === "error") {
-            setMessages((prev) => [
-              ...prev,
-              { role: "assistant", content: `Error: ${data.error}` },
-            ]);
+        for (const evt of events) {
+          for (const line of evt.split("\n")) {
+            if (!line.startsWith("data: ")) continue; // skips ": ping" heartbeats
+            try {
+              handle(JSON.parse(line.slice(6)));
+            } catch {
+              /* incomplete/!JSON line — ignore */
+            }
           }
         }
       }
