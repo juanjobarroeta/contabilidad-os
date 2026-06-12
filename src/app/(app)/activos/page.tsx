@@ -39,11 +39,14 @@ interface ActivoRow {
     topeAplicado: boolean;
     tasaAnual: number;
     mesesUsoEjercicio: number;
+    depreciacionNominalEjercicio: number;
     depreciacionEjercicio: number;
     depreciacionAcumuladaPrevia: number;
     saldoPendiente: number;
+    factorActualizacion: number;
     sinActualizar: boolean;
     tasaAproximada: boolean;
+    actualizacion: { completo: boolean };
   };
 }
 
@@ -156,7 +159,14 @@ export default function ActivosPage() {
                       {a.depreciacion.tasaAproximada && <span title="Tasa aproximada — confirma contra Art. 34/35"> *</span>}
                     </td>
                     <td className="px-3 py-3 text-right font-mono">{a.depreciacion.mesesUsoEjercicio}</td>
-                    <td className="px-3 py-3 text-right font-mono font-semibold">{formatCurrency(a.depreciacion.depreciacionEjercicio)}</td>
+                    <td className="px-3 py-3 text-right font-mono font-semibold">
+                      {formatCurrency(a.depreciacion.depreciacionEjercicio)}
+                      {!a.depreciacion.sinActualizar && (
+                        <p className="text-[11px] font-normal text-cos-ink-faint">
+                          INPC ×{a.depreciacion.factorActualizacion.toFixed(4)}
+                        </p>
+                      )}
+                    </td>
                     <td className="px-3 py-3 text-right font-mono text-cos-ink-soft">{formatCurrency(a.depreciacion.saldoPendiente)}</td>
                     <td className="px-3 py-3 text-right">
                       <button onClick={() => eliminar(a.id)} className="text-cos-ink-faint hover:text-cos-red-ink" title="Eliminar">
@@ -172,9 +182,11 @@ export default function ActivosPage() {
           <div className="mt-3 flex items-start gap-2 rounded-card border border-cos-line bg-white px-4 py-3 text-[12.5px] text-cos-ink-soft">
             <Info className="mt-0.5 h-4 w-4 flex-none text-cos-ink-faint" />
             <span>
-              Cifras <b>nominales</b> (sin actualización por INPC, Art. 31) — pendiente cargar la tabla INPC.
-              La depreciación <b>aún no se resta del ISR</b>; este registro prepara el dato para conectarlo a la
-              declaración (excluyendo la inversión de las deducciones inmediatas en el mismo cambio). <code>*</code> = tasa aproximada.
+              Actualización por <b>INPC</b> (Art. 31) aplicada cuando el índice del periodo está cargado
+              (ene–ago 2016–2026; incluye junio, el numerador anual) — <b>INPC aún sin cotejar</b> contra la
+              fuente oficial. Donde falta el índice, la cifra queda nominal. La depreciación <b>aún no se resta
+              del ISR</b>: este registro prepara el dato para conectarlo a la declaración (excluyendo la inversión
+              de las deducciones inmediatas en el mismo cambio). <code>*</code> = tasa aproximada.
             </span>
           </div>
         </>

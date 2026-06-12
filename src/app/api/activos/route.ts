@@ -4,10 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import {
   calcularDepreciacionEjercicio,
+  mesesUsoEnEjercicio,
   tipoActivoDesdeSubtipo,
   TASA_DEPRECIACION,
   type TipoActivo,
 } from "@/lib/fiscal/depreciacion";
+import { factorActualizacionDepreciacion, INPC_VERIFICADO } from "@/lib/fiscal/inpc";
 import { clasificarCfdi } from "@/lib/fiscal/clasificar-cfdi";
 
 const TIPOS = Object.keys(TASA_DEPRECIACION) as TipoActivo[];
@@ -52,6 +54,15 @@ export async function GET(req: Request) {
       });
       acumPrevia += prev.depreciacionNominalEjercicio;
     }
+    // Factor de actualización INPC (Art. 31) para el ejercicio consultado.
+    const meses = mesesUsoEnEjercicio(a.fechaAdquisicion, ejercicio, a.fechaBaja);
+    const startMonthIndex = a.fechaAdquisicion.getFullYear() < ejercicio ? 0 : a.fechaAdquisicion.getMonth();
+    const fa = factorActualizacionDepreciacion({
+      fechaAdquisicion: a.fechaAdquisicion,
+      ejercicio,
+      startMonthIndex,
+      mesesUso: meses,
+    });
     const dep = calcularDepreciacionEjercicio({
       moi: a.moi,
       fechaAdquisicion: a.fechaAdquisicion,
@@ -61,6 +72,7 @@ export async function GET(req: Request) {
       esElectricoHibrido: a.esElectricoHibrido,
       fechaBaja: a.fechaBaja,
       depreciacionAcumuladaPrevia: acumPrevia,
+      factorInpc: fa.factor,
     });
     totalDepreciacionEjercicio += dep.depreciacionEjercicio;
     return {
@@ -76,6 +88,7 @@ export async function GET(req: Request) {
       depreciacion: {
         ...dep,
         depreciacionAcumuladaPrevia: Math.round(acumPrevia * 100) / 100,
+        actualizacion: fa,
       },
     };
   });
@@ -84,8 +97,8 @@ export async function GET(req: Request) {
     ejercicio,
     activos: rows,
     totalDepreciacionEjercicio: Math.round(totalDepreciacionEjercicio * 100) / 100,
-    // Aviso: sin actualización INPC (Art. 31) — las cifras son nominales.
-    sinActualizarInpc: true,
+    // El INPC aún no está cotejado contra la fuente oficial (ver inpc.ts).
+    inpcVerificado: INPC_VERIFICADO,
   });
 }
 
