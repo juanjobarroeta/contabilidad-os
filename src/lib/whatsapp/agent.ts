@@ -5,10 +5,12 @@ import { buildWhatsappSystemPrompt } from "./system-prompt";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
-// Same model as the web assistant. WhatsApp conversations are chattier, so we
-// allow a couple more tool rounds — but cap hard to keep latency under Twilio's
-// webhook timeout and to bound cost.
-const MODEL = "claude-sonnet-4-20250514";
+// Same model as the web assistant (AI_CHAT_MODEL override; falls back once if
+// the API key's tier doesn't have the primary). WhatsApp conversations are
+// chattier, so we allow a couple more tool rounds — but cap hard to keep
+// latency under Twilio's webhook timeout and to bound cost.
+const MODEL = process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+const MODEL_FALLBACK = "claude-opus-4-8";
 const MAX_TOOL_ROUNDS = 6;
 const MAX_TOKENS = 1024; // replies are short on WhatsApp
 
@@ -53,14 +55,31 @@ export async function runWhatsappAgent(opts: {
   ];
 
   let rounds = 0;
+  let model = MODEL;
   while (rounds < MAX_TOOL_ROUNDS) {
-    const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      system,
-      tools,
-      messages,
-    });
+    let response;
+    try {
+      response = await anthropic.messages.create({
+        model,
+        max_tokens: MAX_TOKENS,
+        system,
+        tools,
+        messages,
+      });
+    } catch (err) {
+      if (model !== MODEL_FALLBACK && err instanceof Anthropic.NotFoundError) {
+        model = MODEL_FALLBACK;
+        response = await anthropic.messages.create({
+          model,
+          max_tokens: MAX_TOKENS,
+          system,
+          tools,
+          messages,
+        });
+      } else {
+        throw err;
+      }
+    }
 
     const toolUses = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
