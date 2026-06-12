@@ -27,7 +27,7 @@ type DecResult = {
     ingresos: { porCfdis: number; otros: number; ajusteInflacionAcumulable: number; total: number };
     deducciones: { compras: number; sueldos: number; cuotasImss: number; infonavitSar: number; depreciacion: number; ptu: number; ajusteInflacionDeducible: number; otras: number; total: number };
   };
-  dataSources: Record<string, { monto: number }>;
+  dataSources: Record<string, { monto: number; count?: string; sobreescritoManual?: boolean }>;
   existingDeclaration: { id: string; status: string } | null;
 };
 
@@ -40,10 +40,12 @@ export default function DeclaracionAnualPage() {
   const [error, setError] = useState("");
   const [editMode, setEditMode] = useState(false);
 
-  // Manual overrides
+  // Manual overrides. `depreciacion` arranca vacío: cuando está vacío, la API
+  // usa la depreciación calculada del registro de activo fijo; al escribir un
+  // valor, lo sobreescribe.
   const [overrides, setOverrides] = useState({
     otrosIngresos: "0",
-    depreciacion: "0",
+    depreciacion: "",
     otrasDeduccionesAutorizadas: "0",
     aportacionesInfonavitSar: "0",
     ajusteInflacionAcumulable: "0",
@@ -57,10 +59,15 @@ export default function DeclaracionAnualPage() {
     setLoading(true);
     setError("");
     try {
+      // Omitir overrides vacíos (p.ej. depreciacion) para que la API aplique su
+      // default calculado en vez de un 0 que pisaría el registro.
+      const overrideParams = Object.fromEntries(
+        Object.entries(overrides).filter(([, v]) => v !== "")
+      );
       const params = new URLSearchParams({
         companyId: activeCompany.id,
         ejercicio: String(ejercicio),
-        ...overrides,
+        ...overrideParams,
       });
       const res = await fetch(`/api/declaracion-anual?${params}`);
       const data = await res.json();
@@ -219,11 +226,27 @@ export default function DeclaracionAnualPage() {
             <Row label="Sueldos y salarios" value={result.desglose.deducciones.sueldos} />
             {result.desglose.deducciones.cuotasImss > 0 && <Row label="Cuotas IMSS patronal" value={result.desglose.deducciones.cuotasImss} />}
             {result.desglose.deducciones.infonavitSar > 0 && <Row label="Aportaciones Infonavit / SAR" value={result.desglose.deducciones.infonavitSar} />}
-            {result.desglose.deducciones.depreciacion > 0 && <Row label="Depreciación de activos fijos" value={result.desglose.deducciones.depreciacion} />}
+            {result.desglose.deducciones.depreciacion > 0 && (
+              <Row
+                label={`Depreciación de inversiones${result.dataSources.depreciacionInversiones?.sobreescritoManual ? " (manual)" : ` (${result.dataSources.depreciacionInversiones?.count ?? "registro"})`}`}
+                value={result.desglose.deducciones.depreciacion}
+              />
+            )}
             {result.desglose.deducciones.ptu > 0 && <Row label="PTU pagado" value={result.desglose.deducciones.ptu} />}
             {result.desglose.deducciones.ajusteInflacionDeducible > 0 && <Row label="Ajuste anual por inflación deducible" value={result.desglose.deducciones.ajusteInflacionDeducible} />}
             {result.desglose.deducciones.otras > 0 && <Row label="Otras deducciones" value={result.desglose.deducciones.otras} />}
             <TotalRow label="Total deducciones" value={result.desglose.deducciones.total} negative />
+            {(result.dataSources.inversionesExcluidas?.monto ?? 0) > 0 && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Nota: {formatCurrency(result.dataSources.inversionesExcluidas.monto)} de CFDIs de inversión NO se deducen como
+                compra — se deducen vía depreciación (Art. 31/34). Revisa el registro en Activo fijo.
+              </p>
+            )}
+            {(result.dataSources.sinEfectosExcluidos?.monto ?? 0) > 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {formatCurrency(result.dataSources.sinEfectosExcluidos.monto)} de CFDIs marcados “sin efectos fiscales” no son deducibles.
+              </p>
+            )}
           </Section>
 
           {/* Determinación del ISR */}

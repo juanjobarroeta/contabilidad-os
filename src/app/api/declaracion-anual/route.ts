@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { calcularDeclaracionAnual, type DeclaracionAnualInput } from "@/lib/declaracion-anual";
 import { sumIsrPagar } from "@/lib/isr-provisional";
+import { calcularDepreciacionRegistro } from "@/lib/fiscal/activos-registro";
 
 // GET /api/declaracion-anual?companyId=xxx&ejercicio=2025
 // Aggregates all data for the annual declaration and calculates the result.
@@ -36,18 +37,22 @@ export async function GET(req: Request) {
   // ── Parallel data aggregation ──
   const [
     ingresosAgg,
-    egresosAgg,
+    egresosPorNaturaleza,
     nominaAgg,
     isrProvisionalesAgg,
     existingAnual,
+    registroDepreciacion,
   ] = await Promise.all([
     // Total CFDI ingresos for the year
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearStart, lte: yearEnd } },
       _sum: { subtotal: true, totalImpuestos: true },
     }),
-    // Total CFDI egresos for the year
-    prisma.invoice.aggregate({
+    // CFDI egresos del ejercicio, AGRUPADOS por naturaleza fiscal: las
+    // INVERSION (activo fijo) se deducen vía depreciación —no como compra— y
+    // las SIN_EFECTOS no son deducibles; ambas se excluyen de "compras".
+    prisma.invoice.groupBy({
+      by: ["naturaleza"],
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lte: yearEnd } },
       _sum: { subtotal: true },
     }),
@@ -82,10 +87,26 @@ export async function GET(req: Request) {
     prisma.taxDeclaration.findFirst({
       where: { companyId, tipo: "DECLARACION_ANUAL", periodo: String(ejercicio) },
     }),
+    // Depreciación del registro de activo fijo (deducción de inversiones).
+    calcularDepreciacionRegistro(companyId, ejercicio),
   ]);
 
   const ingresosCfdis = ingresosAgg._sum.subtotal ?? 0;
-  const egresosCfdis = egresosAgg._sum.subtotal ?? 0;
+  // Compras/deducciones inmediatas = todo EGRESO salvo INVERSION (se deduce vía
+  // depreciación) y SIN_EFECTOS (no deducible). Los CFDIs sin clasificar (legacy
+  // null) se tratan como gasto, igual que antes — corre el backfill de naturaleza
+  // para clasificarlos. INVENTARIO sigue en compras (su costo de lo vendido es
+  // Fase 3; no regresamos ese comportamiento).
+  const sumaPorNaturaleza = (excluir: string[]) =>
+    egresosPorNaturaleza
+      .filter((g) => !excluir.includes(g.naturaleza ?? ""))
+      .reduce((s, g) => s + (g._sum.subtotal ?? 0), 0);
+  const egresosCfdis = sumaPorNaturaleza(["INVERSION", "SIN_EFECTOS"]);
+  const inversionesExcluidas = egresosPorNaturaleza.find((g) => g.naturaleza === "INVERSION")?._sum.subtotal ?? 0;
+  const sinEfectosExcluidos = egresosPorNaturaleza.find((g) => g.naturaleza === "SIN_EFECTOS")?._sum.subtotal ?? 0;
+  // Deducción de inversiones del ejercicio: del registro de activo fijo, salvo
+  // que el contador la sobreescriba por query param.
+  const depreciacionRegistro = registroDepreciacion.totalDepreciacionEjercicio;
   const sueldos = nominaAgg._sum.totalPercepciones ?? 0;
   const imssPatronal = nominaAgg._sum.imssPatronal ?? 0;
   const ptuPagado = nominaAgg._sum.ptu ?? 0;
@@ -107,7 +128,11 @@ export async function GET(req: Request) {
     sueldosYSalarios: sueldos,
     cuotasImssPatronal: imssPatronal,
     aportacionesInfonavitSar: parseFloat(searchParams.get("aportacionesInfonavitSar") ?? "0"),
-    depreciacion: parseFloat(searchParams.get("depreciacion") ?? "0"),
+    // Default: depreciación calculada del registro de activo fijo; el contador
+    // puede sobreescribirla con ?depreciacion=.
+    depreciacion: searchParams.has("depreciacion")
+      ? parseFloat(searchParams.get("depreciacion") ?? "0")
+      : depreciacionRegistro,
     otrasDeduccionesAutorizadas: parseFloat(searchParams.get("otrasDeduccionesAutorizadas") ?? "0"),
     ptuPagado,
     ajusteInflacionAcumulable: parseFloat(searchParams.get("ajusteInflacionAcumulable") ?? "0"),
@@ -125,11 +150,19 @@ export async function GET(req: Request) {
     // Sources for transparency
     dataSources: {
       ingresosCfdis: { count: "Facturas emitidas del ejercicio", monto: ingresosCfdis },
-      egresosCfdis: { count: "Facturas recibidas del ejercicio", monto: egresosCfdis },
+      egresosCfdis: { count: "Gastos deducibles (excl. inversión y sin efectos)", monto: egresosCfdis },
       sueldos: { count: "Nómina del ejercicio", monto: sueldos },
       imssPatronal: { monto: imssPatronal },
       ptu: { monto: ptuPagado },
       isrProvisionales: { monto: isrProvTotal },
+      // Deducibilidad por naturaleza (Fase 2b):
+      depreciacionInversiones: {
+        count: `${registroDepreciacion.activos.length} activo(s) en el registro`,
+        monto: depreciacionRegistro,
+        sobreescritoManual: searchParams.has("depreciacion"),
+      },
+      inversionesExcluidas: { count: "CFDI de inversión (se deducen vía depreciación)", monto: inversionesExcluidas },
+      sinEfectosExcluidos: { count: "CFDI sin efectos fiscales (no deducible)", monto: sinEfectosExcluidos },
     },
     existingDeclaration: existingAnual ? {
       id: existingAnual.id,
