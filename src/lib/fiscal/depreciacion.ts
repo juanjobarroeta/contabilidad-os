@@ -52,6 +52,8 @@ export interface DepreciacionInput {
   depreciacionAcumuladaPrevia?: number;
   /** Factor de actualización INPC (Art. 31). Default 1.0 (nominal, sin actualizar). */
   factorInpc?: number;
+  /** Acota el uso a ene→hastaMes (1-12) del ejercicio — depreciación proporcional al periodo provisional. */
+  hastaMes?: number;
 }
 
 export interface DepreciacionResult {
@@ -90,7 +92,9 @@ function toDate(d: Date | string): Date {
 export function mesesUsoEnEjercicio(
   fechaAdquisicion: Date | string,
   ejercicio: number,
-  fechaBaja?: Date | string | null
+  fechaBaja?: Date | string | null,
+  /** Limita el uso a ene→hastaMes (1-12) del ejercicio — para provisionales acumulados. */
+  hastaMes = 12
 ): number {
   const adq = toDate(fechaAdquisicion);
   const inicioEjercicio = new Date(ejercicio, 0, 1);
@@ -103,12 +107,13 @@ export function mesesUsoEnEjercicio(
   // Primer mes de uso dentro del ejercicio.
   const primerMes = adq > inicioEjercicio ? adq.getMonth() : 0;
   // Último mes de uso dentro del ejercicio (al dar de baja se deduce hasta el
-  // mes inmediato anterior; si no hay baja, hasta diciembre).
+  // mes inmediato anterior; si no hay baja, hasta diciembre). Acotado por hastaMes.
   let ultimoMes = 11;
   if (baja && baja <= finEjercicio) {
     ultimoMes = baja.getMonth() - 1;
     if (baja.getFullYear() < ejercicio) ultimoMes = -1;
   }
+  ultimoMes = Math.min(ultimoMes, Math.max(0, Math.min(12, hastaMes)) - 1);
   return Math.max(0, ultimoMes - primerMes + 1);
 }
 
@@ -131,7 +136,7 @@ export function calcularDepreciacionEjercicio(input: DepreciacionInput): Depreci
     }
   }
 
-  const meses = mesesUsoEnEjercicio(input.fechaAdquisicion, input.ejercicio, input.fechaBaja);
+  const meses = mesesUsoEnEjercicio(input.fechaAdquisicion, input.ejercicio, input.fechaBaja, input.hastaMes ?? 12);
 
   // Deducción anual nominal proporcional, topada al saldo pendiente por deducir.
   const acumPrevia = Math.max(0, input.depreciacionAcumuladaPrevia ?? 0);

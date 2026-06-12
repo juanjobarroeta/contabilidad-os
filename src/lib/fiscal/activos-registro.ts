@@ -84,3 +84,40 @@ export async function calcularDepreciacionRegistro(
 
   return { activos: rows, totalDepreciacionEjercicio: Math.round(totalDepreciacionEjercicio * 100) / 100 };
 }
+
+/**
+ * Depreciación acumulada del ejercicio ENE→hastaMes (1-12) — para el pago
+ * provisional de PF act. empresarial (Art. 106), que deduce la parte
+ * proporcional de la deducción de inversiones del periodo. Devuelve sólo el
+ * total (nominal × factor INPC del periodo, cae a nominal donde falte índice).
+ */
+export async function calcularDepreciacionRegistroPeriodo(
+  companyId: string,
+  ejercicio: number,
+  hastaMes: number
+): Promise<number> {
+  const activos = await prisma.activoFijo.findMany({ where: { companyId } });
+  let total = 0;
+  for (const a of activos) {
+    const adqYear = a.fechaAdquisicion.getFullYear();
+    let acumPrevia = 0;
+    for (let y = adqYear; y < ejercicio; y++) {
+      const prev = calcularDepreciacionEjercicio({
+        moi: a.moi, fechaAdquisicion: a.fechaAdquisicion, tipo: a.tipo as TipoActivo,
+        ejercicio: y, esAutomovil: a.esAutomovil, esElectricoHibrido: a.esElectricoHibrido,
+        fechaBaja: a.fechaBaja, depreciacionAcumuladaPrevia: acumPrevia,
+      });
+      acumPrevia += prev.depreciacionNominalEjercicio;
+    }
+    const meses = mesesUsoEnEjercicio(a.fechaAdquisicion, ejercicio, a.fechaBaja, hastaMes);
+    const startMonthIndex = adqYear < ejercicio ? 0 : a.fechaAdquisicion.getMonth();
+    const fa = factorActualizacionDepreciacion({ fechaAdquisicion: a.fechaAdquisicion, ejercicio, startMonthIndex, mesesUso: meses });
+    const dep = calcularDepreciacionEjercicio({
+      moi: a.moi, fechaAdquisicion: a.fechaAdquisicion, tipo: a.tipo as TipoActivo,
+      ejercicio, esAutomovil: a.esAutomovil, esElectricoHibrido: a.esElectricoHibrido,
+      fechaBaja: a.fechaBaja, depreciacionAcumuladaPrevia: acumPrevia, factorInpc: fa.factor, hastaMes,
+    });
+    total += dep.depreciacionEjercicio;
+  }
+  return Math.round(total * 100) / 100;
+}

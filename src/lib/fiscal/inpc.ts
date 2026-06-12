@@ -37,6 +37,21 @@ export function inpc(year: number, month: number): number | null {
   return fila[month - 1];
 }
 
+/** Último (año, mes) con INPC cargado — para el chequeo de cobertura de datos. */
+export function coberturaInpc(): { year: number; month: number } | null {
+  let best: { year: number; month: number } | null = null;
+  for (const [yStr, fila] of Object.entries(INPC)) {
+    const y = Number(yStr);
+    for (let m = 12; m >= 1; m--) {
+      if (fila[m - 1] != null) {
+        if (!best || y > best.year || (y === best.year && m > best.month)) best = { year: y, month: m };
+        break;
+      }
+    }
+  }
+  return best;
+}
+
 export interface FactorActualizacion {
   /** Factor INPC (num/den), 4 decimales. 1 cuando no se puede actualizar. */
   factor: number;
