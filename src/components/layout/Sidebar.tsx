@@ -180,7 +180,7 @@ export function Sidebar({ user }: SidebarProps) {
         ))}
 
         {/* Divider */}
-        <div className="pt-3 mt-3 border-t border-border space-y-1">
+        <div className="pt-3 mt-3 border-t border-cos-line space-y-1">
           {BOTTOM_NAV_ITEMS.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
@@ -188,8 +188,8 @@ export function Sidebar({ user }: SidebarProps) {
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
                 href === activeNavHref
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  ? "bg-cos-brand text-white"
+                  : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />

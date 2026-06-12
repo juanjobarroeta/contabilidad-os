@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Bot, X, Send, Loader2, Sparkles, Wrench } from "lucide-react";
+import { X, Send, Loader2, Sparkles, Wrench } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -209,23 +209,25 @@ export function ChatPanel() {
       {/* Chat panel — full-width sheet en móvil (alto = visual viewport para
           que el input quede arriba del teclado), side panel de 420px en desktop. */}
       <div
-        className={`fixed right-0 top-0 z-50 flex h-dvh w-full flex-col border-l border-gray-200 bg-white shadow-2xl transition-transform duration-300 sm:w-[420px] ${
+        className={`fixed right-0 top-0 z-50 flex h-dvh w-full flex-col border-l border-cos-line bg-white shadow-2xl transition-transform duration-300 sm:w-[420px] ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
         style={vvBox ? { height: `${vvBox.height}px`, top: `${vvBox.top}px` } : undefined}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-cos-brand px-4 py-3">
-          <div className="flex items-center gap-2 text-white">
-            <Bot className="h-5 w-5" />
+        {/* Header — white con tile de sparkle (spec Contia), no header sólido */}
+        <div className="flex items-center justify-between border-b border-cos-line bg-white px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <div className="grid h-9 w-9 place-items-center rounded-control bg-cos-brand-tint text-cos-brand-ink">
+              <Sparkles className="h-[18px] w-[18px]" />
+            </div>
             <div>
-              <h3 className="text-sm font-semibold">Asistente Contable</h3>
-              <p className="text-xs text-white/75">{activeCompany.razonSocial}</p>
+              <h3 className="text-[14px] font-semibold text-cos-ink">Asistente Contable</h3>
+              <p className="text-[12px] text-cos-ink-soft">{activeCompany.razonSocial}</p>
             </div>
           </div>
           <button
             onClick={() => setIsOpen(false)}
-            className="rounded-lg p-1 text-white/75 hover:bg-cos-brand-deep hover:text-white"
+            className="rounded-control p-1.5 text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink"
           >
             <X className="h-5 w-5" />
           </button>
@@ -234,18 +236,19 @@ export function ChatPanel() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
-              <Sparkles className="mb-3 h-10 w-10 text-cos-brand" />
-              <p className="text-sm font-medium text-gray-500">Asistente Contable IA</p>
-              <p className="mt-1 text-xs text-gray-400">
-                Pregunta sobre tus facturas, impuestos, transacciones bancarias, o pide ayuda con
-                conciliaciones.
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="mb-3 grid h-12 w-12 place-items-center rounded-card bg-cos-brand-tint text-cos-brand-ink">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <p className="text-[14px] font-semibold text-cos-ink">Asistente Contable</p>
+              <p className="mt-1 max-w-[34ch] text-[13px] text-cos-ink-soft">
+                Pregúntame sobre tus impuestos, facturas o conciliaciones — en lenguaje simple.
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {[
-                  "Cuántas facturas emití este mes?",
-                  "Cuál es mi IVA estimado?",
-                  "Tengo transacciones sin conciliar?",
+                  "¿Por qué debo este IVA?",
+                  "¿Qué pasa si no presento la DIOT?",
+                  "¿Tengo transacciones sin conciliar?",
                 ].map((q) => (
                   <button
                     key={q}
@@ -253,7 +256,7 @@ export function ChatPanel() {
                       setInput(q);
                       inputRef.current?.focus();
                     }}
-                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-cos-brand hover:bg-cos-brand-tint hover:text-cos-brand-ink"
+                    className="rounded-full border border-cos-line px-3 py-1.5 text-[12.5px] text-cos-ink-soft transition-colors hover:border-cos-brand hover:bg-cos-brand-tint hover:text-cos-brand-ink"
                   >
                     {q}
                   </button>
@@ -271,7 +274,7 @@ export function ChatPanel() {
                 className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                   msg.role === "user"
                     ? "bg-cos-brand text-white"
-                    : "bg-gray-100 text-gray-800"
+                    : "border border-cos-line bg-cos-paper text-cos-ink"
                 }`}
               >
                 <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -282,7 +285,7 @@ export function ChatPanel() {
           {/* Tool use indicator */}
           {activeTool && (
             <div className="mb-3 flex justify-start">
-              <div className="flex items-center gap-2 rounded-2xl bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
+              <div className="flex items-center gap-2 rounded-2xl bg-cos-amber-tint px-4 py-2.5 text-sm text-cos-amber-ink">
                 <Wrench className="h-4 w-4 animate-spin" />
                 <span>{TOOL_LABELS[activeTool] || activeTool}...</span>
               </div>
@@ -292,7 +295,7 @@ export function ChatPanel() {
           {/* General loading indicator */}
           {isLoading && !activeTool && messages[messages.length - 1]?.role === "user" && (
             <div className="mb-3 flex justify-start">
-              <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-4 py-2.5 text-sm text-gray-500">
+              <div className="flex items-center gap-2 rounded-2xl border border-cos-line bg-cos-paper px-4 py-2.5 text-sm text-cos-ink-soft">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Pensando...</span>
               </div>
@@ -304,17 +307,17 @@ export function ChatPanel() {
 
         {/* Input — pb con safe-area para el home indicator (PWA standalone);
             text-base en móvil: iOS hace auto-zoom de la página con inputs <16px. */}
-        <div className="border-t border-gray-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+        <div className="border-t border-cos-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
           <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Pregunta algo..."
+              placeholder="Pregunta algo…"
               rows={1}
               enterKeyHint="send"
-              className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-base focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand sm:text-sm"
+              className="flex-1 resize-none rounded-control border border-cos-line px-4 py-2.5 text-base focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand sm:text-sm"
               style={{ maxHeight: "120px" }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
@@ -325,7 +328,7 @@ export function ChatPanel() {
             <button
               onClick={sendMessage}
               disabled={!input.trim() || isLoading}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-cos-brand text-white transition-colors hover:bg-cos-brand-deep disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-control bg-cos-brand text-white transition-colors hover:bg-cos-brand-deep disabled:cursor-not-allowed disabled:bg-cos-line"
             >
               <Send className="h-4 w-4" />
             </button>
