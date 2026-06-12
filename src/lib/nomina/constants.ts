@@ -4,6 +4,10 @@
 // (Art. 5 LUMA). Update the env var and redeploy when the new value publishes.
 
 // UMA 2026: $117.31 diaria (INEGI, vigente 1-feb-2026).
+// Ejercicio que representan los valores hardcodeados — lo usa el chequeo de
+// cobertura para avisar cuando el año en curso ya rebasó el valor cargado.
+export const UMA_EJERCICIO = 2026;
+export const SALARIO_MINIMO_EJERCICIO = 2026;
 export const UMA_DIARIO = parseFloat(process.env.UMA_DIARIO ?? "117.31");
 export const UMA_MENSUAL = UMA_DIARIO * 30.4;
 export const UMA_ANUAL = UMA_DIARIO * 365;

@@ -267,3 +267,17 @@ export function aplicarTarifa(base: number, filas: TarifaRow[]): number {
   }
   return row.cuotaFija + (base - row.limiteInferior) * row.tasaExcedente;
 }
+
+// ── Cobertura de datos (para el chequeo time-aware de frescura) ──────────────
+// Último ejercicio cargado + si está cotejado, por dataset versionado.
+
+function ultimoEjercicio<T extends { ejercicio: number; verificado: boolean }>(
+  arr: T[]
+): { ejercicio: number; verificado: boolean } | null {
+  if (arr.length === 0) return null;
+  return arr.reduce((best, r) => (r.ejercicio > best.ejercicio ? r : best));
+}
+
+export const coberturaTarifaAnualPF = () => ultimoEjercicio(TARIFA_ANUAL_PF);
+export const coberturaTarifaMensualSueldos = () => ultimoEjercicio(TARIFA_MENSUAL_SUELDOS);
+export const coberturaSubsidioEmpleo = () => ultimoEjercicio(SUBSIDIO_EMPLEO);

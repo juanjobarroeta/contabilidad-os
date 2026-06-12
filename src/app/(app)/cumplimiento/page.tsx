@@ -172,6 +172,9 @@ export default function CumplimientoPage() {
             <ObligacionCard key={ob.tipo} ob={ob} onPeriodoClick={goToPeriodo} />
           ))}
 
+          {/* Cobertura de datos fiscales (frescura time-aware de tarifas/INPC/UMA…) */}
+          <CoberturaFiscalCard />
+
           {/* CSF info */}
           <div className="flex items-start gap-3 rounded-card border border-dashed border-cos-line bg-cos-brand-tint px-4 py-3 text-[13px] text-cos-brand-ink">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
@@ -258,5 +261,47 @@ function AnualRow({ p, onClick }: { p: PeriodoItem; onClick: () => void }) {
         <p className={`mt-0.5 text-[11px] opacity-70 ${cfg.text}`}>Vence {fmtShort(p.vencimiento)}</p>
       </div>
     </button>
+  );
+}
+
+// ── Cobertura de datos fiscales (chequeo time-aware de frescura) ──────────────
+interface CoberturaDataset {
+  clave: string; nombre: string; estado: "al_dia" | "por_publicar" | "faltante" | "sin_cotejar";
+  ultimoCargado: string | null; ultimoEsperado: string; detalle: string;
+}
+function CoberturaFiscalCard() {
+  const [data, setData] = useState<{ datasets: CoberturaDataset[]; resumen: { faltantes: number; sinCotejar: number } } | null>(null);
+  useEffect(() => {
+    fetch("/api/fiscal/cobertura").then((r) => (r.ok ? r.json() : null)).then(setData).catch(() => {});
+  }, []);
+  if (!data) return null;
+  // Sólo mostramos lo accionable: faltante o sin cotejar. Si todo al día, una línea.
+  const alertas = data.datasets.filter((d) => d.estado === "faltante" || d.estado === "sin_cotejar");
+
+  return (
+    <Card className="rounded-card border-cos-line p-5 shadow-card">
+      <div className="mb-1 flex items-center gap-2">
+        <h3 className="text-[15px] font-semibold text-cos-ink">Datos fiscales (tarifas, INPC, UMA…)</h3>
+      </div>
+      <p className="mb-3 text-[12.5px] text-cos-ink-soft">
+        Frescura de las tablas versionadas contra su calendario de publicación, al día de hoy.
+      </p>
+      {alertas.length === 0 ? (
+        <p className="text-[13px] text-cos-jade-ink">✓ Todo al día y cotejado.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {alertas.map((d) => (
+            <li key={d.clave} className="flex items-start gap-2 text-[13px]">
+              <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                d.estado === "faltante" ? "bg-cos-red-tint text-cos-red-ink" : "bg-cos-amber-tint text-cos-amber-ink"
+              }`}>
+                {d.estado === "faltante" ? "Falta" : "Sin cotejar"}
+              </span>
+              <span className="text-cos-ink-soft"><b className="text-cos-ink">{d.nombre}</b> — {d.detalle}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

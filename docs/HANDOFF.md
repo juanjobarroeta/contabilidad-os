@@ -201,6 +201,17 @@ sobre-deducción.
 - ⏳ **Fase 3 — costo de lo vendido (sólo PM que venden)**: método periódico (inv. inicial +
   compras − inv. final). No requiere tracker perpetuo por SKU. Diferido.
 
+## 10. Cobertura de datos fiscales (chequeo time-aware de frescura)
+
+`src/lib/fiscal/cobertura-datos.ts` → `evaluarCoberturaFiscal(asOf)`: dado el reloj del
+SERVIDOR y el calendario de publicación de cada dataset versionado (INPC ~día 9 del mes
+siguiente; tarifas/subsidio dic del año previo; UMA 1-feb; SM 1-ene), clasifica cada uno en
+`al_dia | por_publicar | faltante | sin_cotejar`. Distingue "aún no se publica" de "ya se
+publicó y no lo tenemos" — p.ej. en julio detecta que falta el INPC de junio, pero el 5-jul aún
+no. El **cálculo nunca depende del reloj** (cae a nominal/verificado:false); esto es sólo la
+capa de monitoreo. API `GET /api/fiscal/cobertura` (`?asOf=` para simular) y tarjeta en
+`/cumplimiento`. Cada dataset expone su `cobertura*()` (último cargado + verificado).
+
 ## 8. Convenciones del repo
 
 - Next.js 15 App Router · Tailwind 3.4 (HSL vars shadcn) · Radix · lucide-react · Prisma/PostgreSQL · NextAuth.
