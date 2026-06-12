@@ -8,5 +8,7 @@ export {
   inferTipoPersona,
   estadoDesdeCP,
   construirContexto,
+  ENTIDADES,
+  esEntidad,
   type CompanyLike,
 } from "./sector";

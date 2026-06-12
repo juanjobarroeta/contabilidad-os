@@ -6,6 +6,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { construirContexto } from "@/lib/fiscal/rules";
+import { auditarIsn, empleadoNominaDesde } from "@/lib/fiscal/isn";
 import { auditar } from "./run";
 import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
 
@@ -72,7 +73,15 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
   const ctx = construirContexto(company, fecha);
 
   const cfdis = await loadCompanyCfdis(companyId);
-  const hallazgos = auditar(cfdis, ctx);
+  const empleados = await prisma.employee.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, salarioDiario: true, claveEntFed: true, isActive: true },
+  });
+
+  const hallazgos = [
+    ...auditar(cfdis, ctx),
+    ...auditarIsn(empleados.map(empleadoNominaDesde), ctx),
+  ];
 
   const vigentes = new Set<string>();
   let nuevos = 0;

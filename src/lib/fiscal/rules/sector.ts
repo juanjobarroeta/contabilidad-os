@@ -48,6 +48,20 @@ const CP_ENTIDAD: { desde: number; hasta: number; entidad: Entidad }[] = [
   { desde: 98, hasta: 99, entidad: "ZAC" },
 ];
 
+/** All 32 entidades (SAT c_Estado codes) as a runtime list. */
+export const ENTIDADES: Entidad[] = [
+  "AGU", "BCN", "BCS", "CAM", "CHP", "CHH", "CMX", "COA", "COL", "DUR", "GUA",
+  "GRO", "HID", "JAL", "MEX", "MIC", "MOR", "NAY", "NLE", "OAX", "PUE", "QUE",
+  "ROO", "SLP", "SIN", "SON", "TAB", "TAM", "TLA", "VER", "YUC", "ZAC",
+];
+
+const SET_ENTIDADES = new Set<string>(ENTIDADES);
+
+/** Runtime guard: is a free string a valid entidad code? */
+export function esEntidad(s: string | null | undefined): s is Entidad {
+  return !!s && SET_ENTIDADES.has(s);
+}
+
 /** Best-effort entidad from a 5-digit código postal; undefined if unknown. */
 export function estadoDesdeCP(cp?: string | null): Entidad | undefined {
   if (!cp) return undefined;
