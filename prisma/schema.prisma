@@ -2334,3 +2334,36 @@ model FiscalChunk {
 
   @@index([documentId])
 }
+
+// Findings raised by the fiscal auditor (the "24/7 contador"). Deliberately
+// standalone — only a `companyId` scalar, no relation back to Company — so this
+// model is fully additive and touches no existing model. `dedupeKey` (checkClave
+// + sorted referencias) makes re-runs idempotent: the same finding upserts in
+// place and keeps its `estado` instead of duplicating.
+model FiscalHallazgo {
+  id        String @id @default(cuid())
+  companyId String
+
+  checkClave  String
+  severidad   String // "info" | "warn" | "error"
+  mensaje     String   @db.Text
+  referencias String[] // CFDI ids involucrados
+  sugerencia  String   @db.Text
+
+  // Fundamento legal citado (denormalizado para consulta directa).
+  fundamentoLey      String
+  fundamentoArticulo String
+  fundamentoFraccion String?
+
+  // Ciclo de vida gestionado por el usuario/contador.
+  estado String @default("ABIERTO") // "ABIERTO" | "RESUELTO" | "IGNORADO"
+
+  // Idempotencia de re-corridas del auditor.
+  dedupeKey String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, dedupeKey])
+  @@index([companyId, estado])
+}
