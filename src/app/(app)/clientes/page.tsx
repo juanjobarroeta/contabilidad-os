@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   Users, Plus, Search, Pencil, Trash2, Loader2,
-  FileText, X, ChevronDown, RefreshCw,
+  FileText, X, RefreshCw,
 } from "lucide-react";
 
 const REGIMENES_FISCALES = [
@@ -165,25 +165,25 @@ export default function ClientesPage() {
 
   if (!activeCompany) {
     return (
-      <div className="p-6 flex items-center justify-center h-full text-muted-foreground">
+      <div className="flex h-full items-center justify-center p-8 text-[14px] text-cos-ink-faint">
         Selecciona una empresa para ver clientes.
       </div>
     );
   }
 
   return (
-    <div className="p-6">
+    <div className="mx-auto max-w-[1000px] px-6 py-7">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Clientes</h1>
+          <p className="mt-1.5 text-[15px] text-cos-ink-soft">
             {activeCompany.razonSocial} · {clientes.length} cliente{clientes.length !== 1 ? "s" : ""}
           </p>
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+          className="inline-flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2.5 text-[14px] font-semibold text-white transition-colors hover:bg-cos-brand-deep"
         >
           <Plus className="h-4 w-4" />
           Nuevo cliente
@@ -191,96 +191,93 @@ export default function ClientesPage() {
       </div>
 
       {/* Search */}
-      <div className="relative mb-5 max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="relative mt-5 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-cos-ink-faint" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por RFC o Razón Social..."
-          className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          placeholder="Buscar por RFC o Razón Social…"
+          className="w-full rounded-control border border-cos-line py-2 pl-9 pr-3 text-[14px] focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand"
         />
       </div>
 
       {/* Table */}
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+        <div className="flex items-center justify-center gap-2 py-20 text-[14px] text-cos-ink-faint">
           <Loader2 className="h-5 w-5 animate-spin" />
-          Cargando clientes...
+          Cargando clientes…
         </div>
       ) : clientes.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-          <Users className="h-12 w-12 mb-3 opacity-30" />
-          <p className="font-medium">{search ? "Sin resultados" : "Sin clientes aún"}</p>
-          <p className="text-sm mt-1">
+        <div className="mt-5 flex flex-col items-center justify-center rounded-card border border-dashed border-cos-line bg-white py-16 text-center">
+          <Users className="mb-3 h-12 w-12 text-cos-ink-faint opacity-40" />
+          <p className="text-[14px] font-semibold text-cos-ink">{search ? "Sin resultados" : "Sin clientes aún"}</p>
+          <p className="mt-1 text-[13px] text-cos-ink-soft">
             {search ? "Intenta otro RFC o Razón Social" : "Agrega tu primer cliente para comenzar"}
           </p>
           {!search && (
             <button
               onClick={openCreate}
-              className="mt-4 flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
+              className="mt-4 inline-flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2.5 text-[14px] font-semibold text-white hover:bg-cos-brand-deep"
             >
               <Plus className="h-4 w-4" /> Nuevo cliente
             </button>
           )}
         </div>
       ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+        <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-white shadow-card">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-gray-50">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">RFC</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Razón Social</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Régimen</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Correo</th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground">Facturas</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Facturapi</th>
-                <th className="px-4 py-3" />
+            <thead className="bg-cos-paper text-[12px] uppercase tracking-[0.02em] text-cos-ink-faint">
+              <tr>
+                <th className="px-4 py-2.5 text-left font-medium">RFC</th>
+                <th className="px-4 py-2.5 text-left font-medium">Razón Social</th>
+                <th className="hidden px-4 py-2.5 text-left font-medium md:table-cell">Régimen</th>
+                <th className="hidden px-4 py-2.5 text-left font-medium lg:table-cell">Correo</th>
+                <th className="px-4 py-2.5 text-center font-medium">Facturas</th>
+                <th className="px-4 py-2.5 text-left font-medium">Facturapi</th>
+                <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody>
-              {clientes.map((c, i) => (
-                <tr
-                  key={c.id}
-                  className={`border-b border-border last:border-0 hover:bg-gray-50 transition-colors ${
-                    i % 2 === 0 ? "" : "bg-gray-50/50"
-                  }`}
-                >
-                  <td className="px-4 py-3 font-mono text-xs font-medium">{c.rfc}</td>
-                  <td className="px-4 py-3 font-medium">{c.razonSocial}</td>
-                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                    <span className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-0.5 rounded-full">
+              {clientes.map((c) => (
+                <tr key={c.id} className="border-t border-cos-line transition-colors hover:bg-cos-paper/60">
+                  <td className="px-4 py-3 font-mono text-[12px] font-medium text-cos-ink">{c.rfc}</td>
+                  <td className="px-4 py-3 font-medium text-cos-ink">{c.razonSocial}</td>
+                  <td className="hidden px-4 py-3 md:table-cell">
+                    <span
+                      title={regimenLabel(c.regimenFiscal)}
+                      className="inline-flex items-center gap-1 rounded-full bg-cos-slate-tint px-2 py-0.5 text-[12px] text-cos-ink-soft"
+                    >
                       {c.regimenFiscal}
-                      <ChevronDown className="h-3 w-3" />
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell text-xs">
+                  <td className="hidden px-4 py-3 text-[12px] text-cos-ink-soft lg:table-cell">
                     {c.email ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 text-[12px] text-cos-ink-soft">
                       <FileText className="h-3.5 w-3.5" />
                       {c._count.invoices}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     {c.facturapiId ? (
-                      <span className="text-xs bg-green-100 text-green-700 font-medium px-2 py-0.5 rounded-full">
+                      <span className="rounded-full bg-cos-jade-tint px-2 py-0.5 text-[12px] font-medium text-cos-jade-ink">
                         Sincronizado
                       </span>
                     ) : (
-                      <span className="text-xs bg-gray-100 text-muted-foreground px-2 py-0.5 rounded-full">
+                      <span className="rounded-full bg-cos-slate-tint px-2 py-0.5 text-[12px] text-cos-ink-soft">
                         Pendiente
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
+                    <div className="flex items-center justify-end gap-1">
                       {!c.facturapiId && (
                         <button
                           onClick={() => handleSync(c.id)}
                           disabled={syncingId === c.id}
-                          className="p-1.5 rounded-md hover:bg-blue-50 text-muted-foreground hover:text-blue-600 transition-colors"
+                          className="rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-brand-tint hover:text-cos-brand-ink"
                           title="Sincronizar con Facturapi"
                         >
                           {syncingId === c.id
@@ -290,14 +287,14 @@ export default function ClientesPage() {
                       )}
                       <button
                         onClick={() => openEdit(c)}
-                        className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                        className="rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-paper hover:text-cos-ink"
                         title="Editar"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
                         onClick={() => { setDeleteId(c.id); setDeleteError(""); }}
-                        className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                        className="rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-red-tint hover:text-cos-red-ink"
                         title="Eliminar"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -315,13 +312,13 @@ export default function ClientesPage() {
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-cos-line">
               <h2 className="text-base font-semibold">
                 {editingCliente ? "Editar cliente" : "Nuevo cliente"}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-1.5 rounded-md hover:bg-accent text-muted-foreground"
+                className="p-1.5 rounded-control hover:bg-cos-paper text-cos-ink-faint"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -337,10 +334,10 @@ export default function ClientesPage() {
                   type="text" name="rfc" value={form.rfc} onChange={handleChange}
                   placeholder="XAXX010101000" maxLength={13} required
                   disabled={!!editingCliente}
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase disabled:bg-gray-50 disabled:text-muted-foreground"
+                  className="w-full px-3 py-2 border border-cos-line rounded-control text-sm font-mono focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand uppercase disabled:bg-cos-paper disabled:text-cos-ink-faint"
                 />
                 {editingCliente && (
-                  <p className="text-xs text-muted-foreground mt-1">El RFC no se puede modificar</p>
+                  <p className="text-xs text-cos-ink-soft mt-1">El RFC no se puede modificar</p>
                 )}
               </div>
 
@@ -352,7 +349,7 @@ export default function ClientesPage() {
                 <input
                   type="text" name="razonSocial" value={form.razonSocial} onChange={handleChange}
                   placeholder="Mi Empresa SA de CV" required
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-cos-line rounded-control text-sm focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand"
                 />
               </div>
 
@@ -363,7 +360,7 @@ export default function ClientesPage() {
                 </label>
                 <select
                   name="regimenFiscal" value={form.regimenFiscal} onChange={handleChange} required
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                  className="w-full px-3 py-2 border border-cos-line rounded-control text-sm focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand bg-white"
                 >
                   <option value="">Selecciona un régimen...</option>
                   {REGIMENES_FISCALES.map((r) => (
@@ -379,7 +376,7 @@ export default function ClientesPage() {
                   <input
                     type="email" name="email" value={form.email} onChange={handleChange}
                     placeholder="cliente@empresa.com"
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-control text-sm focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand"
                   />
                 </div>
                 <div>
@@ -387,7 +384,7 @@ export default function ClientesPage() {
                   <input
                     type="tel" name="phone" value={form.phone} onChange={handleChange}
                     placeholder="55 1234 5678"
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-control text-sm focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand"
                   />
                 </div>
               </div>
@@ -399,7 +396,7 @@ export default function ClientesPage() {
                   <input
                     type="text" name="codigoPostal" value={form.codigoPostal} onChange={handleChange}
                     placeholder="06600" maxLength={5}
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-control text-sm font-mono focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand"
                   />
                 </div>
                 <div className="col-span-2">
@@ -407,13 +404,13 @@ export default function ClientesPage() {
                   <input
                     type="text" name="domicilio" value={form.domicilio} onChange={handleChange}
                     placeholder="Calle, Número, Colonia"
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-control text-sm focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand"
                   />
                 </div>
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-md px-4 py-3 text-sm text-red-700">
+                <div className="bg-cos-red-tint border border-cos-red/20 rounded-control px-4 py-3 text-sm text-cos-red-ink">
                   {error}
                 </div>
               )}
@@ -421,14 +418,14 @@ export default function ClientesPage() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="submit" disabled={saving}
-                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 bg-cos-brand text-white px-4 py-2.5 rounded-control text-sm font-semibold hover:bg-cos-brand-deep disabled:opacity-50"
                 >
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                   {editingCliente ? "Guardar cambios" : "Crear cliente"}
                 </button>
                 <button
                   type="button" onClick={() => setShowModal(false)}
-                  className="px-4 py-2.5 rounded-md text-sm border border-border hover:bg-accent"
+                  className="px-4 py-2.5 rounded-control text-sm border border-cos-line hover:bg-cos-paper"
                 >
                   Cancelar
                 </button>
@@ -448,25 +445,25 @@ export default function ClientesPage() {
               </div>
               <h2 className="text-base font-semibold">¿Eliminar cliente?</h2>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">
+            <p className="text-sm text-cos-ink-soft mb-4">
               Esta acción no se puede deshacer. El cliente será eliminado permanentemente.
             </p>
             {deleteError && (
-              <div className="bg-red-50 border border-red-200 rounded-md px-4 py-3 text-sm text-red-700 mb-4">
+              <div className="bg-cos-red-tint border border-cos-red/20 rounded-control px-4 py-3 text-sm text-cos-red-ink mb-4">
                 {deleteError}
               </div>
             )}
             <div className="flex gap-3">
               <button
                 onClick={handleDelete} disabled={deleting}
-                className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-2 bg-cos-red text-white px-4 py-2 rounded-control text-sm font-semibold hover:opacity-90 disabled:opacity-50"
               >
                 {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
                 Eliminar
               </button>
               <button
                 onClick={() => setDeleteId(null)}
-                className="flex-1 px-4 py-2 rounded-md text-sm border border-border hover:bg-accent"
+                className="flex-1 px-4 py-2 rounded-control text-sm border border-cos-line hover:bg-cos-paper"
               >
                 Cancelar
               </button>

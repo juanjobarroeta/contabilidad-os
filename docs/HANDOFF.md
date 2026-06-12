@@ -234,10 +234,11 @@ Audit externo (~70% del proposal en main). Estado:
 - ✅ Panel de IA re-skineado a spec (header blanco + tile sparkle, burbujas brand/paper, copy de
   prompts "¿Por qué debo este IVA?/¿Qué pasa si no presento la DIOT?") + fix de tokens del grupo
   inferior del sidebar (ya no usa `bg-primary` legacy).
-- ⏳ Migrar **Clientes** (CRUD simple, rápido) y **Contabilidad** (tabs, más grande) del tema
-  shadcn legacy a tokens `cos-*` / `Money` / `Chip`.
+- ✅ **Clientes** y **Contabilidad** migrados a tokens `cos-*` (tabla/tabs/modales/colores
+  semánticos jade-red). En Contabilidad se conservó `formatCurrency` en las tablas densas
+  (balanza/estado) para no romper alineación; el resto en sistema.
 - ⏳ Barrer **Configuración/Empresa** y confirmar; luego **retirar la paleta `--primary` legacy**
-  para que sólo exista un azul. (Nómina y Declaración Anual ya están en sistema.)
+  para que sólo exista un azul. (Nómina, Declaración Anual, Clientes, Contabilidad ya en sistema.)
 
 ## 8. Convenciones del repo
 
