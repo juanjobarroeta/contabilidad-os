@@ -25,6 +25,7 @@ export interface ActivoConDepreciacion {
   esAutomovil: boolean;
   esElectricoHibrido: boolean;
   fechaBaja: Date | null;
+  autoCreado: boolean;
   invoice: { uuid: string | null; serie: string | null; folio: string | null } | null;
   depreciacion: DepreciacionResult & {
     depreciacionAcumuladaPrevia: number;
@@ -77,7 +78,7 @@ export async function calcularDepreciacionRegistro(
     return {
       id: a.id, descripcion: a.descripcion, tipo: a.tipo, moi: a.moi,
       fechaAdquisicion: a.fechaAdquisicion, esAutomovil: a.esAutomovil,
-      esElectricoHibrido: a.esElectricoHibrido, fechaBaja: a.fechaBaja, invoice: a.invoice,
+      esElectricoHibrido: a.esElectricoHibrido, fechaBaja: a.fechaBaja, autoCreado: a.autoCreado, invoice: a.invoice,
       depreciacion: { ...dep, depreciacionAcumuladaPrevia: Math.round(acumPrevia * 100) / 100, actualizacion: fa },
     };
   });

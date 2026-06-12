@@ -181,6 +181,11 @@ sobre-deducción.
   depreciación calculada del ejercicio) y `/api/activos/[id]` (editar/baja/eliminar). Página
   `/activos` (registro + tabla de depreciación) y botón "Registrar como activo fijo" en el modal
   de la factura. **NO toca el ISR todavía.**
+  ✅ **Auto-registro (hecho)**: los CFDIs INVERSION se capitalizan SOLOS al sincronizar
+  (`src/lib/fiscal/auto-activo.ts`, idempotente por invoiceId) — depreciación sin captura
+  manual; el contador sólo revisa (badge "auto — revisa tipo/tasa/tope" en `/activos`, se limpia
+  al editar). Backfill `/api/cron/activos-backfill` para INVERSION ya importados. El edge "solo
+  corre" se mantiene end-to-end: sync → clasifica → capitaliza → deprecia → ISR.
 - ✅ **Fase 2b-anual — wiring atómico en la declaración anual (hecho)**: `declaracion-anual`
   route ahora agrupa los EGRESO por `naturaleza` y **excluye INVERSION y SIN_EFECTOS de las
   compras**, y alimenta la **depreciación calculada del registro** (helper compartido

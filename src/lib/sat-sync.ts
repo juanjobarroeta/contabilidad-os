@@ -16,6 +16,7 @@ import {
 } from "@nodecfdi/sat-ws-descarga-masiva";
 import { interpretarCancelaciones, type SatMetadataRow } from "./sat-cancelaciones";
 import { clasificarCfdi } from "./fiscal/clasificar-cfdi";
+import { crearActivoDesdeCfdiSiAplica } from "./fiscal/auto-activo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared, session-free SAT Descarga Masiva logic.
@@ -578,6 +579,22 @@ export async function verifyAndImportSatSync(
             // Tasa/Exento + retenciones IVA/ISR) — alimenta retenciones
             // acreditadas y la proporción de acreditamiento (Art. 5 LIVA).
             taxes: cfdi.taxes.length > 0 ? { create: cfdi.taxes } : undefined,
+          },
+        });
+
+        // Auto-registro de activo fijo si el CFDI es inversión (naturaleza
+        // INVERSION) — depreciación sin captura manual; el contador sólo revisa.
+        await crearActivoDesdeCfdiSiAplica(prisma, {
+          companyId,
+          invoiceId: createdInvoice.id,
+          subtotal: cfdi.subtotal,
+          fecha: new Date(cfdi.fecha),
+          descripcion: cfdi.items?.[0]?.descripcion,
+          clasifInput: {
+            tipo: invoiceType,
+            usoCfdi: cfdi.usoCfdi ?? null,
+            usoEsDefault: !cfdi.usoCfdi,
+            items: (cfdi.items ?? []).map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
           },
         });
 

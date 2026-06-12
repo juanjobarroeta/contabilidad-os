@@ -55,6 +55,14 @@ export async function POST(req: Request) {
     fechaAdquisicion: Date; esAutomovil: boolean;
   } | null = null;
   if (body.invoiceId) {
+    // Idempotencia: el sync ya pudo auto-registrarlo — no dupliques.
+    const yaExiste = await prisma.activoFijo.findFirst({
+      where: { invoiceId: body.invoiceId },
+      select: { id: true },
+    });
+    if (yaExiste) {
+      return NextResponse.json({ error: "Este CFDI ya está registrado como activo fijo.", id: yaExiste.id }, { status: 409 });
+    }
     const inv = await prisma.invoice.findFirst({
       where: { id: body.invoiceId, companyId: body.companyId },
       include: { items: { select: { claveProdServ: true, importe: true, descripcion: true } } },

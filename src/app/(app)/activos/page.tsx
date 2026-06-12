@@ -33,6 +33,7 @@ interface ActivoRow {
   esAutomovil: boolean;
   esElectricoHibrido: boolean;
   fechaBaja: string | null;
+  autoCreado: boolean;
   invoice: { uuid: string | null; serie: string | null; folio: string | null } | null;
   depreciacion: {
     moiDeducible: number;
@@ -146,6 +147,9 @@ export default function ActivosPage() {
                         {a.esAutomovil && " · automóvil"}
                         {a.depreciacion.topeAplicado && <span className="text-cos-amber-ink"> · tope Art. 36-II</span>}
                         {a.fechaBaja && <span className="text-cos-red-ink"> · baja {formatDate(a.fechaBaja)}</span>}
+                        {a.autoCreado && (
+                          <span className="text-cos-amber-ink"> · auto — revisa tipo/tasa{a.tipo === "transporte" ? "/tope auto-vs-carga" : ""}</span>
+                        )}
                       </p>
                     </td>
                     <td className="px-3 py-3 text-right font-mono">
