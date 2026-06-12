@@ -152,8 +152,8 @@ export default function ContabilidadPage() {
       {error && (
         <div className={`flex items-center gap-2 rounded-card px-4 py-3 text-sm mb-4 ${
           error.startsWith("✓")
-            ? "bg-cos-jade-tint border border-cos-jade/20 text-cos-jade-ink"
-            : "bg-cos-red-tint border border-cos-red/20 text-cos-red-ink"
+            ? "bg-cos-jade-tint border border-[oklch(0.66_0.12_168_/_0.28)] text-cos-jade-ink"
+            : "bg-cos-red-tint border border-[oklch(0.6_0.2_25_/_0.22)] text-cos-red-ink"
         }`}>
           {error.startsWith("✓") ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
           <span className="flex-1">{error}</span>
@@ -276,7 +276,7 @@ function PeriodsPanel({
             <div
               key={month}
               className={`bg-white border rounded-xl p-4 transition-colors ${
-                isPosted ? "border-cos-jade/30 bg-cos-jade-tint/40" : "border-cos-line"
+                isPosted ? "border-[oklch(0.66_0.12_168_/_0.35)] bg-cos-jade-tint" : "border-cos-line"
               }`}
             >
               <div className="flex items-start justify-between mb-3">

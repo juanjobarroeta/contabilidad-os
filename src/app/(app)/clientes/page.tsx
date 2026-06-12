@@ -410,7 +410,7 @@ export default function ClientesPage() {
               </div>
 
               {error && (
-                <div className="bg-cos-red-tint border border-cos-red/20 rounded-control px-4 py-3 text-sm text-cos-red-ink">
+                <div className="bg-cos-red-tint border border-[oklch(0.6_0.2_25_/_0.22)] rounded-control px-4 py-3 text-sm text-cos-red-ink">
                   {error}
                 </div>
               )}
@@ -449,7 +449,7 @@ export default function ClientesPage() {
               Esta acción no se puede deshacer. El cliente será eliminado permanentemente.
             </p>
             {deleteError && (
-              <div className="bg-cos-red-tint border border-cos-red/20 rounded-control px-4 py-3 text-sm text-cos-red-ink mb-4">
+              <div className="bg-cos-red-tint border border-[oklch(0.6_0.2_25_/_0.22)] rounded-control px-4 py-3 text-sm text-cos-red-ink mb-4">
                 {deleteError}
               </div>
             )}
