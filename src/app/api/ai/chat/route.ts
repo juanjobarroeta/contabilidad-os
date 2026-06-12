@@ -15,6 +15,11 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const MAX_TOOL_ROUNDS = 5;
+// Assistant brain: best available model, overridable per deployment. If the API
+// key's tier doesn't have the primary yet, fall back once instead of breaking
+// the chat.
+const CHAT_MODEL = process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+const CHAT_MODEL_FALLBACK = "claude-opus-4-8";
 // Heartbeat keeps the SSE connection alive during the silent gaps while tools
 // execute (tax position, KB embedding/vector search) and the next model call
 // reaches its first token — otherwise mobile carriers/proxies drop the idle
@@ -73,16 +78,34 @@ export async function POST(req: Request) {
       try {
         let currentMessages = [...messages];
         let toolRounds = 0;
+        let model = CHAT_MODEL;
 
         while (toolRounds < MAX_TOOL_ROUNDS) {
-          const response = await anthropic.messages.create({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 4096,
-            system: systemPrompt,
-            tools,
-            messages: currentMessages,
-            stream: true,
-          });
+          let response;
+          try {
+            response = await anthropic.messages.create({
+              model,
+              max_tokens: 4096,
+              system: systemPrompt,
+              tools,
+              messages: currentMessages,
+              stream: true,
+            });
+          } catch (err) {
+            if (model !== CHAT_MODEL_FALLBACK && err instanceof Anthropic.NotFoundError) {
+              model = CHAT_MODEL_FALLBACK;
+              response = await anthropic.messages.create({
+                model,
+                max_tokens: 4096,
+                system: systemPrompt,
+                tools,
+                messages: currentMessages,
+                stream: true,
+              });
+            } else {
+              throw err;
+            }
+          }
 
           let hasToolUse = false;
           const toolUseBlocks: Anthropic.ContentBlockParam[] = [];
