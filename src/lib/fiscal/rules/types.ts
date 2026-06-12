@@ -66,7 +66,8 @@ export type TipoRegla =
   | "THRESHOLD" // umbral
   | "EXEMPTION" // exención (valor boolean)
   | "DEPRECIATION" // tabla de tasas de depreciación
-  | "OBLIGATION"; // requisito / obligación (valor boolean)
+  | "OBLIGATION" // requisito / obligación (valor boolean)
+  | "VALOR"; // valor de referencia (UMA, salario mínimo, INPC…)
 
 /** A table value keys an asset/concept → number (e.g. depreciation rates). */
 export type Tabla = Record<string, number>;
