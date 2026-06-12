@@ -2,14 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
-import {
-  calcularDepreciacionEjercicio,
-  mesesUsoEnEjercicio,
-  tipoActivoDesdeSubtipo,
-  TASA_DEPRECIACION,
-  type TipoActivo,
-} from "@/lib/fiscal/depreciacion";
-import { factorActualizacionDepreciacion, INPC_VERIFICADO } from "@/lib/fiscal/inpc";
+import { tipoActivoDesdeSubtipo, TASA_DEPRECIACION, type TipoActivo } from "@/lib/fiscal/depreciacion";
+import { INPC_VERIFICADO } from "@/lib/fiscal/inpc";
+import { calcularDepreciacionRegistro } from "@/lib/fiscal/activos-registro";
 import { clasificarCfdi } from "@/lib/fiscal/clasificar-cfdi";
 
 const TIPOS = Object.keys(TASA_DEPRECIACION) as TipoActivo[];
@@ -29,74 +24,12 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const activos = await prisma.activoFijo.findMany({
-    where: { companyId },
-    orderBy: { fechaAdquisicion: "desc" },
-    include: { invoice: { select: { uuid: true, serie: true, folio: true } } },
-  });
-
-  let totalDepreciacionEjercicio = 0;
-  const rows = activos.map((a) => {
-    // Depreciación nominal acumulada de ejercicios ANTERIORES al consultado
-    // (años completos transcurridos desde la adquisición × MOI × tasa, topada).
-    const adqYear = a.fechaAdquisicion.getFullYear();
-    let acumPrevia = 0;
-    for (let y = adqYear; y < ejercicio; y++) {
-      const prev = calcularDepreciacionEjercicio({
-        moi: a.moi,
-        fechaAdquisicion: a.fechaAdquisicion,
-        tipo: a.tipo as TipoActivo,
-        ejercicio: y,
-        esAutomovil: a.esAutomovil,
-        esElectricoHibrido: a.esElectricoHibrido,
-        fechaBaja: a.fechaBaja,
-        depreciacionAcumuladaPrevia: acumPrevia,
-      });
-      acumPrevia += prev.depreciacionNominalEjercicio;
-    }
-    // Factor de actualización INPC (Art. 31) para el ejercicio consultado.
-    const meses = mesesUsoEnEjercicio(a.fechaAdquisicion, ejercicio, a.fechaBaja);
-    const startMonthIndex = a.fechaAdquisicion.getFullYear() < ejercicio ? 0 : a.fechaAdquisicion.getMonth();
-    const fa = factorActualizacionDepreciacion({
-      fechaAdquisicion: a.fechaAdquisicion,
-      ejercicio,
-      startMonthIndex,
-      mesesUso: meses,
-    });
-    const dep = calcularDepreciacionEjercicio({
-      moi: a.moi,
-      fechaAdquisicion: a.fechaAdquisicion,
-      tipo: a.tipo as TipoActivo,
-      ejercicio,
-      esAutomovil: a.esAutomovil,
-      esElectricoHibrido: a.esElectricoHibrido,
-      fechaBaja: a.fechaBaja,
-      depreciacionAcumuladaPrevia: acumPrevia,
-      factorInpc: fa.factor,
-    });
-    totalDepreciacionEjercicio += dep.depreciacionEjercicio;
-    return {
-      id: a.id,
-      descripcion: a.descripcion,
-      tipo: a.tipo,
-      moi: a.moi,
-      fechaAdquisicion: a.fechaAdquisicion,
-      esAutomovil: a.esAutomovil,
-      esElectricoHibrido: a.esElectricoHibrido,
-      fechaBaja: a.fechaBaja,
-      invoice: a.invoice,
-      depreciacion: {
-        ...dep,
-        depreciacionAcumuladaPrevia: Math.round(acumPrevia * 100) / 100,
-        actualizacion: fa,
-      },
-    };
-  });
+  const { activos, totalDepreciacionEjercicio } = await calcularDepreciacionRegistro(companyId, ejercicio);
 
   return NextResponse.json({
     ejercicio,
-    activos: rows,
-    totalDepreciacionEjercicio: Math.round(totalDepreciacionEjercicio * 100) / 100,
+    activos,
+    totalDepreciacionEjercicio,
     // El INPC aún no está cotejado contra la fuente oficial (ver inpc.ts).
     inpcVerificado: INPC_VERIFICADO,
   });

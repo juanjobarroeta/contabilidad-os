@@ -181,13 +181,21 @@ sobre-deducción.
   depreciación calculada del ejercicio) y `/api/activos/[id]` (editar/baja/eliminar). Página
   `/activos` (registro + tabla de depreciación) y botón "Registrar como activo fijo" en el modal
   de la factura. **NO toca el ISR todavía.**
-- ⏳ **Fase 2b — wiring atómico (siguiente)**: excluir INVERSION (y SIN_EFECTOS) de las
-  deducciones inmediatas Y sumar la depreciación del registro, EN EL MISMO cambio. Anual primero
-  (`declaracion-anual` route: hoy `comprasPorCfdis` suma TODOS los EGRESO + `depreciacion` manual
-  → reemplazar por compras-sin-INVERSION + depreciación calculada), luego PF mensual
-  (`impuestos.ts` `flujoEfectivoAcum` deduce todo EGRESO pagado → restar la inversión, sumar su
-  depreciación del periodo). **Datos**: INPC ya cargado ene–ago 2016–2026 (faltan sep–dic +
-  cotejar). Ojo: IVA acreditable del activo es inmediato (flujo), sólo el ISR se difiere.
+- ✅ **Fase 2b-anual — wiring atómico en la declaración anual (hecho)**: `declaracion-anual`
+  route ahora agrupa los EGRESO por `naturaleza` y **excluye INVERSION y SIN_EFECTOS de las
+  compras**, y alimenta la **depreciación calculada del registro** (helper compartido
+  `src/lib/fiscal/activos-registro.ts` → `calcularDepreciacionRegistro`, usado también por
+  `/api/activos`) como default de la deducción de inversiones (el contador la sobreescribe con
+  `?depreciacion=`). El UI muestra la fuente de la depreciación y las notas de inversión/sin-
+  efectos excluidas. INVENTARIO sigue en compras (su costo de lo vendido es Fase 3). El cálculo
+  anual es el definitivo, así que esto corrige el ISR del ejercicio aunque las provisionales
+  mensuales aún no lo reflejen.
+- ⏳ **Fase 2b-mensual (siguiente)**: PF act. empresarial (`impuestos.ts` `flujoEfectivoAcum`)
+  deduce hoy todo EGRESO pagado → excluir INVERSION/SIN_EFECTOS y sumar la depreciación
+  proporcional ene→mes (requiere variante del motor que tope los meses al mes en curso). Sólo
+  afecta provisionales 612 (PM usa coeficiente; RESICO/plataformas/arrendamiento no deducen
+  compras). **Datos**: INPC cargado ene–ago 2016–2026 (faltan sep–dic + cotejar). Ojo: IVA
+  acreditable del activo es inmediato (flujo), sólo el ISR se difiere.
 - ⏳ **Fase 3 — costo de lo vendido (sólo PM que venden)**: método periódico (inv. inicial +
   compras − inv. final). No requiere tracker perpetuo por SKU. Diferido.
 
