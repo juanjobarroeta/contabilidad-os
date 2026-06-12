@@ -25,6 +25,17 @@ export type Sector =
 
 export type TipoPersona = "PF" | "PM";
 
+/**
+ * Entidad federativa (SAT c_Estado codes). The jurisdiction dimension: state
+ * taxes (ISN, hospedaje, cedulares) vary by entidad. Federal rules leave
+ * `entidad` as "*"/undefined.
+ */
+export type Entidad =
+  | "AGU" | "BCN" | "BCS" | "CAM" | "CHP" | "CHH" | "CMX" | "COA" | "COL"
+  | "DUR" | "GUA" | "GRO" | "HID" | "JAL" | "MEX" | "MIC" | "MOR" | "NAY"
+  | "NLE" | "OAX" | "PUE" | "QUE" | "ROO" | "SLP" | "SIN" | "SON" | "TAB"
+  | "TAM" | "TLA" | "VER" | "YUC" | "ZAC";
+
 /** Who/when a rule applies. "*" = applies regardless of that dimension. */
 export interface Aplicabilidad {
   /** SAT régimen codes (e.g. ["601","626"]) or "*". */
@@ -32,6 +43,12 @@ export interface Aplicabilidad {
   /** Sector tags that must intersect the company's, or "*". */
   actividades: Sector[] | "*";
   tipoPersona: TipoPersona | "*";
+  /**
+   * Entidades federativas a rule applies to, or "*"/undefined for federal (any
+   * state). A state-specific rule only matches when the context's entidad is
+   * known and listed.
+   */
+  entidad?: Entidad[] | "*";
 }
 
 /** Pointer back to the citable narrative chunk a rule was distilled from. */
@@ -76,6 +93,8 @@ export interface Contexto {
   regimen: string;
   actividades: Sector[];
   tipoPersona: TipoPersona;
+  /** Entidad federativa, when known — gates state-specific rules. */
+  entidad?: Entidad;
   /** ISO date; selects the vigencia in force. */
   fecha: string;
 }

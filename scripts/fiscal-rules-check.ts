@@ -6,6 +6,7 @@
 
 import {
   construirContexto,
+  estadoDesdeCP,
   getRule,
   inferSectores,
   inferTipoPersona,
@@ -101,6 +102,33 @@ check(
   listRules(ctxPF, { tipo: "RATE" }).every((r) => r.tipo === "RATE"),
 );
 check("listRules dedup por clave (sin claves repetidas)", new Set(universales).size === universales.length);
+
+// ── Entidad / jurisdicción (ISN) ──────────────────────────────────────────────
+console.log("entidad / ISN");
+check("CP 44100 → JAL", estadoDesdeCP("44100") === "JAL");
+check("CP 64000 → NLE", estadoDesdeCP("64000") === "NLE");
+check("CP 06700 → CMX", estadoDesdeCP("06700") === "CMX");
+check("CP inválido → undefined", estadoDesdeCP("abc") === undefined);
+
+const empJAL = construirContexto(
+  { rfc: "ABC120101AAA", regimenFiscal: "601", codigoPostal: "44100" },
+  FECHA,
+);
+const empNLE = construirContexto(
+  { rfc: "ABC120101AAA", regimenFiscal: "601", codigoPostal: "64000" },
+  FECHA,
+);
+const isnJAL = getRule<number>("isn.tasa", empJAL);
+const isnNLE = getRule<number>("isn.tasa", empNLE);
+check("ISN Jalisco = 0.02", isnJAL?.valor === 0.02, `got ${isnJAL?.valor}`);
+check("ISN Nuevo León = 0.03", isnNLE?.valor === 0.03, `got ${isnNLE?.valor}`);
+check("ISN marcado verificado:false", isnJAL?.verificado === false);
+check("ISN cita ley estatal", (isnJAL?.fundamento.ley ?? "").includes("Jalisco"));
+check(
+  "ISN no resuelve sin entidad conocida",
+  getRule("isn.tasa", construirContexto({ rfc: "ABC120101AAA", regimenFiscal: "601" }, FECHA)) === null,
+);
+check("regla federal (IVA) sigue resolviendo con entidad presente", getRule("iva.tasa.general", empJAL)?.valor === 0.16);
 
 // ── Result ────────────────────────────────────────────────────────────────────
 console.log("");

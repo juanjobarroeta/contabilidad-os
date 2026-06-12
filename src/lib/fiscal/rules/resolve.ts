@@ -26,6 +26,10 @@ export function aplicaAplicabilidad(a: Aplicabilidad, ctx: Contexto): boolean {
   if (a.tipoPersona !== "*" && a.tipoPersona !== ctx.tipoPersona) return false;
   if (a.actividades !== "*" && !a.actividades.some((s) => ctx.actividades.includes(s)))
     return false;
+  // State-specific rule: only matches when the context's entidad is known and listed.
+  if (a.entidad && a.entidad !== "*") {
+    if (!ctx.entidad || !a.entidad.includes(ctx.entidad)) return false;
+  }
   return true;
 }
 
@@ -33,9 +37,10 @@ function aplica(r: FiscalRule, ctx: Contexto): boolean {
   return aplicaAplicabilidad(r.aplicabilidad, ctx);
 }
 
-/** Higher = more specific. Sector specificity outranks régimen, then persona. */
+/** Higher = more specific. Entidad (jurisdiction) outranks sector, then régimen, then persona. */
 function especificidad(r: FiscalRule): number {
   let s = 0;
+  if (r.aplicabilidad.entidad && r.aplicabilidad.entidad !== "*") s += 8;
   if (r.aplicabilidad.actividades !== "*") s += 4;
   if (r.aplicabilidad.regimenes !== "*") s += 2;
   if (r.aplicabilidad.tipoPersona !== "*") s += 1;
