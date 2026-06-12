@@ -3,10 +3,12 @@
 
 import { construirContexto, type CompanyLike } from "../src/lib/fiscal/rules";
 import {
+  agregarNominaPorEmpleado,
   auditarIsn,
   calcularIsnPorEntidad,
   empleadoNominaDesde,
   type EmpleadoNomina,
+  type PayrollItemLike,
 } from "../src/lib/fiscal/isn";
 
 let fallos = 0;
@@ -63,6 +65,28 @@ check("claveEntFed válida → entidad", a1.entidad === "JAL");
 check("base mensual = salarioDiario × 30.4", a1.baseMensual === 30400, `got ${a1.baseMensual}`);
 const a2 = empleadoNominaDesde({ id: "p2", salarioDiario: 1000, claveEntFed: "ZZZ", isActive: true });
 check("claveEntFed inválida → entidad undefined", a2.entidad === undefined);
+
+console.log("agregarNominaPorEmpleado — base real de nómina");
+const items: PayrollItemLike[] = [
+  // empleado p1: dos quincenas en el mes → se suman
+  { employeeId: "p1", claveEntFed: "JAL", totalPercepciones: 18000 },
+  { employeeId: "p1", claveEntFed: "JAL", totalPercepciones: 18000 },
+  // empleado p2: una corrida
+  { employeeId: "p2", claveEntFed: "CMX", totalPercepciones: 50000 },
+  // empleado p3: clave inválida → entidad undefined
+  { employeeId: "p3", claveEntFed: "ZZZ", totalPercepciones: 10000 },
+];
+const agregados = agregarNominaPorEmpleado(items);
+const p1 = agregados.find((e) => e.id === "p1");
+check("agrega 3 empleados distintos", agregados.length === 3);
+check("p1 suma dos quincenas = 36,000", p1?.baseMensual === 36000, `got ${p1?.baseMensual}`);
+check("p1 entidad JAL", p1?.entidad === "JAL");
+check("p3 clave inválida → entidad undefined", agregados.find((e) => e.id === "p3")?.entidad === undefined);
+const resPayroll = calcularIsnPorEntidad(agregados, ctx, "payroll");
+check("calc propaga fuente=payroll", resPayroll.fuente === "payroll");
+check("JAL ISN sobre nómina real = 1,080 (3% de 36,000)", resPayroll.porEntidad.find((r) => r.entidad === "JAL")?.isn === 1080, `got ${resPayroll.porEntidad.find((r) => r.entidad === "JAL")?.isn}`);
+const hPayroll = auditarIsn(agregados, ctx, "payroll");
+check("mensaje de obligación cita base 'nómina del periodo'", hPayroll.some((x) => x.checkClave === "isn.obligacion" && /nómina del periodo/.test(x.mensaje)));
 
 console.log("");
 if (fallos === 0) {

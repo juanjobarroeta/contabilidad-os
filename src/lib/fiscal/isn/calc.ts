@@ -5,18 +5,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { getRule, type Contexto } from "../rules";
-import type { EmpleadoNomina, ResultadoIsnEntidad, ResumenIsn } from "./types";
+import type { EmpleadoNomina, FuenteBase, ResultadoIsnEntidad, ResumenIsn } from "./types";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Compute ISN per entidad. `ctxBase` is the company's context (from
  * construirContexto); the entidad is overridden per employee-group so each
- * state's rate is resolved as of `ctxBase.fecha`.
+ * state's rate is resolved as of `ctxBase.fecha`. `fuente` records whether the
+ * base came from real payroll or a salary estimate.
  */
 export function calcularIsnPorEntidad(
   empleados: EmpleadoNomina[],
   ctxBase: Contexto,
+  fuente: FuenteBase = "estimado",
 ): ResumenIsn {
   const activos = empleados.filter((e) => e.activo);
 
@@ -61,5 +63,6 @@ export function calcularIsnPorEntidad(
     empleadosSinEntidad,
     numEntidades: porEntidad.length,
     isnTotal: r2(isnTotal),
+    fuente,
   };
 }
