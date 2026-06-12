@@ -34,6 +34,10 @@ export interface CfdiNormalizado {
   items: CfdiItem[];
   /** IVA trasladado (MXN), si se conoce — usado por checks de IVA. */
   ivaTrasladado?: number;
+  /** Moneda del CFDI (SAT c_Moneda); "MXN" por defecto. */
+  moneda?: string;
+  /** Tipo de cambio a MXN declarado en el CFDI (1 para MXN). */
+  tipoCambio?: number;
 }
 
 export interface Hallazgo {

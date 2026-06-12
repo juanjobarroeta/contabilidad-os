@@ -40,6 +40,12 @@ const cfdis: CfdiNormalizado[] = [
   // transferencia de $9,000 → sin hallazgo (no es efectivo)
   { id: "C4", direccion: "RECIBIDA", fecha: FECHA, formaPago: "03", total: 9000,
     items: [{ claveProdServ: "01010101", descripcion: "Servicios" }] },
+  // CFDI en USD sin tipo de cambio válido (TC=1) → check FX (warn)
+  { id: "C5", direccion: "RECIBIDA", fecha: FECHA, formaPago: "03", total: 1000, moneda: "USD", tipoCambio: 1,
+    items: [{ claveProdServ: "01010101", descripcion: "Software" }] },
+  // CFDI en USD con TC válido → sin hallazgo
+  { id: "C6", direccion: "RECIBIDA", fecha: FECHA, formaPago: "03", total: 1000, moneda: "USD", tipoCambio: 18.5,
+    items: [{ claveProdServ: "01010101", descripcion: "Software" }] },
 ];
 
 console.log("Auditor — PF");
@@ -47,6 +53,8 @@ const hPF = auditar(cfdis, ctxPF);
 const claves = hPF.map((h) => h.checkClave);
 check("combustible en efectivo detectado (C1)", hPF.some((h) => h.checkClave === "deduccion.combustible.efectivo" && h.referencias.includes("C1")));
 check("efectivo > límite detectado (C2)", hPF.some((h) => h.checkClave === "deduccion.efectivo.limite" && h.referencias.includes("C2")));
+check("USD sin TC válido detectado (C5)", hPF.some((h) => h.checkClave === "cfdi.moneda_extranjera_sin_tc" && h.referencias.includes("C5")));
+check("USD con TC válido NO marcado (C6)", !hPF.some((h) => h.referencias.includes("C6")));
 check("pago bajo el límite NO marcado (C3)", !hPF.some((h) => h.referencias.includes("C3")));
 check("transferencia NO marcada (C4)", !hPF.some((h) => h.referencias.includes("C4")));
 check("combustible NO duplicado por el check de límite", !claves.filter((c) => c === "deduccion.efectivo.limite").length || !hPF.some((h) => h.checkClave === "deduccion.efectivo.limite" && h.referencias.includes("C1")));
