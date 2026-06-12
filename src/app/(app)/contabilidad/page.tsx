@@ -136,24 +136,24 @@ export default function ContabilidadPage() {
 
   if (!activeCompany) {
     return (
-      <div className="p-8 text-muted-foreground text-sm">
+      <div className="p-8 text-cos-ink-soft text-sm">
         Selecciona una empresa para ver su contabilidad.
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-6xl">
+    <div className="mx-auto max-w-[1100px] px-6 py-7">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Contabilidad</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{activeCompany.razonSocial}</p>
+        <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Contabilidad</h1>
+        <p className="mt-1.5 text-[15px] text-cos-ink-soft">{activeCompany.razonSocial}</p>
       </div>
 
       {error && (
-        <div className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm mb-4 ${
+        <div className={`flex items-center gap-2 rounded-card px-4 py-3 text-sm mb-4 ${
           error.startsWith("✓")
-            ? "bg-green-50 border border-green-200 text-green-700"
-            : "bg-red-50 border border-red-200 text-red-700"
+            ? "bg-cos-jade-tint border border-cos-jade/20 text-cos-jade-ink"
+            : "bg-cos-red-tint border border-cos-red/20 text-cos-red-ink"
         }`}>
           {error.startsWith("✓") ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
           <span className="flex-1">{error}</span>
@@ -161,7 +161,7 @@ export default function ContabilidadPage() {
         </div>
       )}
 
-      <div className="border-b border-border mb-5">
+      <div className="border-b border-cos-line mb-5">
         <div className="flex gap-1">
           {([
             ["periods", "Cierres mensuales", Calendar],
@@ -174,8 +174,8 @@ export default function ContabilidadPage() {
               onClick={() => setTab(id as TabId)}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 tab === id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "border-cos-brand text-cos-brand-ink"
+                  : "border-transparent text-cos-ink-soft hover:text-cos-ink"
               }`}
             >
               <Icon className="h-4 w-4" /> {label}
@@ -241,7 +241,7 @@ function PeriodsPanel({
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-muted-foreground text-sm py-12 justify-center">
+      <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-12 justify-center">
         <Loader2 className="h-5 w-5 animate-spin" /> Cargando periodos...
       </div>
     );
@@ -252,14 +252,14 @@ function PeriodsPanel({
       <div className="flex items-center gap-3 mb-4">
         <button
           onClick={() => setYear(y => y - 1)}
-          className="text-sm px-3 py-1.5 border border-border rounded-md hover:bg-accent"
+          className="text-sm px-3 py-1.5 border border-cos-line rounded-md hover:bg-cos-paper"
         >
           ←
         </button>
         <h2 className="text-lg font-semibold flex-1">{year}</h2>
         <button
           onClick={() => setYear(y => y + 1)}
-          className="text-sm px-3 py-1.5 border border-border rounded-md hover:bg-accent"
+          className="text-sm px-3 py-1.5 border border-cos-line rounded-md hover:bg-cos-paper"
         >
           →
         </button>
@@ -276,16 +276,16 @@ function PeriodsPanel({
             <div
               key={month}
               className={`bg-white border rounded-xl p-4 transition-colors ${
-                isPosted ? "border-green-300 bg-green-50/30" : "border-border"
+                isPosted ? "border-cos-jade/30 bg-cos-jade-tint/40" : "border-cos-line"
               }`}
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <p className="font-semibold">{MESES[month - 1]}</p>
-                  <p className="text-xs text-muted-foreground">{year}</p>
+                  <p className="text-xs text-cos-ink-soft">{year}</p>
                 </div>
                 {isPosted && (
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded">
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-cos-jade-ink bg-cos-jade-tint px-2 py-0.5 rounded">
                     <CheckCircle2 className="h-3 w-3" /> Cerrado
                   </span>
                 )}
@@ -293,31 +293,31 @@ function PeriodsPanel({
 
               {period && isPosted ? (
                 <>
-                  <div className="text-xs text-muted-foreground space-y-1 mb-3">
+                  <div className="text-xs text-cos-ink-soft space-y-1 mb-3">
                     <div className="flex justify-between">
                       <span>Asientos</span>
-                      <span className="font-medium text-foreground">{period.entriesCount}</span>
+                      <span className="font-medium text-cos-ink">{period.entriesCount}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Cargos</span>
-                      <span className="font-medium text-foreground">{formatCurrency(period.totalCargos)}</span>
+                      <span className="font-medium text-cos-ink">{formatCurrency(period.totalCargos)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Abonos</span>
-                      <span className="font-medium text-foreground">{formatCurrency(period.totalAbonos)}</span>
+                      <span className="font-medium text-cos-ink">{formatCurrency(period.totalAbonos)}</span>
                     </div>
                   </div>
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={() => onSelect(year, month)}
-                      className="flex-1 text-xs border border-border rounded-md py-1.5 hover:bg-accent"
+                      className="flex-1 text-xs border border-cos-line rounded-md py-1.5 hover:bg-cos-paper"
                     >
                       Ver balanza
                     </button>
                     <button
                       onClick={() => onUnpost(year, month)}
                       disabled={isPosting}
-                      className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 disabled:opacity-50"
+                      className="text-xs text-cos-ink-soft hover:text-cos-ink px-2 py-1.5 disabled:opacity-50"
                       title="Reabrir periodo"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
@@ -326,14 +326,14 @@ function PeriodsPanel({
                   <div className="flex gap-1.5">
                     <a
                       href={`/api/contabilidad/coe/catalogo?companyId=${companyId}&year=${year}&month=${month}`}
-                      className="flex-1 flex items-center justify-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 rounded py-1"
+                      className="flex-1 flex items-center justify-center gap-1 text-[10px] bg-cos-slate-tint hover:bg-cos-line rounded py-1"
                       title="Descargar XML Catálogo de Cuentas"
                     >
                       <Download className="h-3 w-3" /> XML Catálogo
                     </a>
                     <a
                       href={`/api/contabilidad/coe/balanza?companyId=${companyId}&year=${year}&month=${month}`}
-                      className="flex-1 flex items-center justify-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 rounded py-1"
+                      className="flex-1 flex items-center justify-center gap-1 text-[10px] bg-cos-slate-tint hover:bg-cos-line rounded py-1"
                       title="Descargar XML Balanza de Comprobación"
                     >
                       <Download className="h-3 w-3" /> XML Balanza
@@ -344,7 +344,7 @@ function PeriodsPanel({
                 <button
                   onClick={() => onPost(year, month)}
                   disabled={isPosting}
-                  className="w-full bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full bg-cos-brand text-white rounded-md py-2 text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isPosting ? (
                     <>
@@ -371,7 +371,7 @@ function PeriodPicker({
       <select
         value={month}
         onChange={(e) => onChange(year, parseInt(e.target.value))}
-        className="text-sm border border-border rounded-md px-2 py-1.5 bg-white"
+        className="text-sm border border-cos-line rounded-md px-2 py-1.5 bg-white"
       >
         {MESES.map((m, i) => (
           <option key={i} value={i + 1}>{m}</option>
@@ -381,7 +381,7 @@ function PeriodPicker({
         type="number"
         value={year}
         onChange={(e) => onChange(parseInt(e.target.value), month)}
-        className="w-24 text-sm border border-border rounded-md px-2 py-1.5 bg-white"
+        className="w-24 text-sm border border-cos-line rounded-md px-2 py-1.5 bg-white"
       />
     </div>
   );
@@ -412,30 +412,30 @@ function BalanzaPanel({
       <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+        <div className="flex items-center gap-2 text-sm text-cos-ink-soft py-8 justify-center">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
       ) : nonZero.length === 0 ? (
-        <div className="bg-white border border-dashed border-border rounded-xl p-12 text-center">
-          <BookOpen className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
-          <p className="text-sm text-muted-foreground">Sin movimientos para este periodo.</p>
-          <p className="text-xs text-muted-foreground mt-1">Cierra el mes desde la pestaña &ldquo;Cierres mensuales&rdquo;.</p>
+        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+          <BookOpen className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
+          <p className="text-sm text-cos-ink-soft">Sin movimientos para este periodo.</p>
+          <p className="text-xs text-cos-ink-soft mt-1">Cierra el mes desde la pestaña &ldquo;Cierres mensuales&rdquo;.</p>
         </div>
       ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
+        <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-gray-50">
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Cuenta</th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Nombre</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Cargos</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Abonos</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Saldo</th>
+              <tr className="border-b border-cos-line bg-cos-paper">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Cuenta</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Nombre</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Cargos</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Abonos</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Saldo</th>
               </tr>
             </thead>
             <tbody>
               {nonZero.map((r, i) => (
-                <tr key={`${r.cuentaSAT}-${r.subcuenta}-${i}`} className="border-b border-border last:border-0 hover:bg-gray-50/50">
+                <tr key={`${r.cuentaSAT}-${r.subcuenta}-${i}`} className="border-b border-cos-line last:border-0 hover:bg-cos-paper/50">
                   <td className="px-4 py-2 text-xs font-mono">{r.subcuenta ?? r.cuentaSAT}</td>
                   <td className="px-4 py-2">{r.nombre}</td>
                   <td className="px-4 py-2 text-right font-mono text-xs">{r.cargos > 0 ? formatCurrency(r.cargos) : "—"}</td>
@@ -474,34 +474,34 @@ function EstadoResultadosPanel({
       <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+        <div className="flex items-center gap-2 text-sm text-cos-ink-soft py-8 justify-center">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
       ) : !data || (data.ingresos.length === 0 && data.gastos.length === 0) ? (
-        <div className="bg-white border border-dashed border-border rounded-xl p-12 text-center">
-          <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
-          <p className="text-sm text-muted-foreground">Sin movimientos para este periodo.</p>
+        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+          <FileText className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
+          <p className="text-sm text-cos-ink-soft">Sin movimientos para este periodo.</p>
         </div>
       ) : (
-        <div className="bg-white border border-border rounded-xl p-6 space-y-5 text-sm">
+        <div className="bg-white border border-cos-line rounded-xl p-6 space-y-5 text-sm">
           <Section label="Ingresos" rows={data.ingresos} total={data.totalIngresos} positive />
           {data.costos.length > 0 && (
             <Section label="Costos" rows={data.costos} total={data.totalCostos} positive={false} />
           )}
           <Section label="Gastos" rows={data.gastos} total={data.totalGastos} positive={false} />
 
-          <div className="border-t-2 border-border pt-4 space-y-2">
+          <div className="border-t-2 border-cos-line pt-4 space-y-2">
             {data.costos.length > 0 && (
               <div className="flex items-center justify-between font-medium">
                 <span>Utilidad bruta</span>
-                <span className={data.utilidadBruta >= 0 ? "text-green-700" : "text-red-600"}>
+                <span className={data.utilidadBruta >= 0 ? "text-cos-jade-ink" : "text-cos-red-ink"}>
                   {formatCurrency(data.utilidadBruta)}
                 </span>
               </div>
             )}
             <div className="flex items-center justify-between text-base font-bold">
               <span>Utilidad antes de impuestos</span>
-              <span className={data.utilidadAntesImpuestos >= 0 ? "text-green-700" : "text-red-600"}>
+              <span className={data.utilidadAntesImpuestos >= 0 ? "text-cos-jade-ink" : "text-cos-red-ink"}>
                 {formatCurrency(data.utilidadAntesImpuestos)}
               </span>
             </div>
@@ -522,18 +522,18 @@ function Section({
 }) {
   return (
     <div>
-      <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">{label}</p>
+      <p className="font-semibold text-xs uppercase tracking-wide text-cos-ink-soft mb-2">{label}</p>
       <div className="space-y-1">
         {rows.map((r) => (
           <div key={`${r.cuentaSAT}-${r.subcuenta}`} className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">{r.nombre}</span>
+            <span className="text-cos-ink-soft">{r.nombre}</span>
             <span className="font-mono">{formatCurrency(r.monto)}</span>
           </div>
         ))}
       </div>
-      <div className="flex items-center justify-between border-t border-border mt-2 pt-2 font-medium">
+      <div className="flex items-center justify-between border-t border-cos-line mt-2 pt-2 font-medium">
         <span>Total {label.toLowerCase()}</span>
-        <span className={`font-mono ${positive ? "text-green-700" : "text-red-600"}`}>
+        <span className={`font-mono ${positive ? "text-cos-jade-ink" : "text-cos-red-ink"}`}>
           {formatCurrency(total)}
         </span>
       </div>
@@ -566,41 +566,41 @@ function SaldosInterempresaPanel({ companyId }: { companyId: string }) {
 
   return (
     <div>
-      <p className="text-xs text-muted-foreground mb-4">
+      <p className="text-xs text-cos-ink-soft mb-4">
         Posición neta de préstamos entre todas las empresas del despacho.
         Saldo positivo = prestamista neto, negativo = deudor neto.
       </p>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+        <div className="flex items-center gap-2 text-sm text-cos-ink-soft py-8 justify-center">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
       ) : !hasActivity ? (
-        <div className="bg-white border border-dashed border-border rounded-xl p-12 text-center">
-          <ArrowLeftRight className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
-          <p className="text-sm text-muted-foreground">Sin préstamos interempresa registrados.</p>
-          <p className="text-xs text-muted-foreground mt-1">
+        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+          <ArrowLeftRight className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
+          <p className="text-sm text-cos-ink-soft">Sin préstamos interempresa registrados.</p>
+          <p className="text-xs text-cos-ink-soft mt-1">
             Los préstamos aparecen cuando clasificas transacciones bancarias como
             &ldquo;Préstamo otorgado&rdquo; o &ldquo;Préstamo recibido&rdquo; y cierras el mes.
           </p>
         </div>
       ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
+        <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-gray-50">
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Empresa</th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">RFC</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Otorgados</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Por pagar</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Neto</th>
+              <tr className="border-b border-cos-line bg-cos-paper">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Empresa</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">RFC</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Otorgados</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Por pagar</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Neto</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.companyId} className="border-b border-border last:border-0 hover:bg-gray-50/50">
+                <tr key={r.companyId} className="border-b border-cos-line last:border-0 hover:bg-cos-paper/50">
                   <td className="px-4 py-2.5 font-medium">{r.razonSocial}</td>
-                  <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{r.rfc}</td>
+                  <td className="px-4 py-2.5 text-xs font-mono text-cos-ink-soft">{r.rfc}</td>
                   <td className="px-4 py-2.5 text-right font-mono text-xs">
                     {r.prestamosOtorgados > 0 ? formatCurrency(r.prestamosOtorgados) : "—"}
                   </td>
@@ -608,7 +608,7 @@ function SaldosInterempresaPanel({ companyId }: { companyId: string }) {
                     {r.prestamosPorPagar > 0 ? formatCurrency(r.prestamosPorPagar) : "—"}
                   </td>
                   <td className={`px-4 py-2.5 text-right font-mono text-xs font-semibold ${
-                    r.neto > 0 ? "text-green-700" : r.neto < 0 ? "text-red-600" : ""
+                    r.neto > 0 ? "text-cos-jade-ink" : r.neto < 0 ? "text-cos-red-ink" : ""
                   }`}>
                     {Math.abs(r.neto) < 0.01 ? "—" : formatCurrency(r.neto)}
                   </td>
@@ -616,7 +616,7 @@ function SaldosInterempresaPanel({ companyId }: { companyId: string }) {
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-gray-50 font-semibold">
+              <tr className="bg-cos-paper font-semibold">
                 <td className="px-4 py-2.5" colSpan={2}>Total despacho</td>
                 <td className="px-4 py-2.5 text-right font-mono text-xs">{formatCurrency(totalOtorgados)}</td>
                 <td className="px-4 py-2.5 text-right font-mono text-xs">{formatCurrency(totalPorPagar)}</td>
