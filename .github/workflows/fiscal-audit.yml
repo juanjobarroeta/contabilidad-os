@@ -1,0 +1,35 @@
+name: Fiscal audit (24/7 contador, daily)
+
+# Runs the fiscal auditor for every company and persists findings
+# (FiscalHallazgo). Hits /api/cron/fiscal-audit, which is idempotent — safe on
+# any cadence. Scheduled after the morning SAT sync so it audits fresh data.
+#
+# Requires repo secrets CRON_SECRET and STAGING_URL (same as sat-sync.yml).
+# Prerequisites in the target deployment: the FiscalHallazgo table must exist
+# (prisma db push / the DDL) and CRON_SECRET must be set, else the endpoint
+# returns 401 (no secret) or reports per-company errors (no table).
+#
+# NOTE: GitHub only runs `schedule:` triggers from the DEFAULT branch (main).
+# Use the "Run workflow" button (workflow_dispatch) to trigger a run manually.
+
+on:
+  schedule:
+    - cron: "0 10 * * *" # ~04:00 CT (UTC-6), after the 08:00 UTC SAT sync
+  workflow_dispatch: {}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger fiscal audit
+        run: |
+          set -euo pipefail
+          # Strip whitespace from the URL secret and fail loudly (a trailing
+          # newline makes curl reject the URL, and `| tee` would mask it).
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/fiscal-audit" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
