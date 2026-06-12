@@ -1,0 +1,232 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Registry of the fiscal sources the brain depends on, with how often each one
+// changes and how it gets refreshed. This is the backbone for "perpetually
+// update the library": a monitoring cron iterates `fuentesAuto()` to re-ingest
+// the self-updating sources, and surfaces the `manual`/`semiauto` ones (and any
+// that look stale for their cadencia) as reminders.
+//
+// Two halves of the brain:
+//   • capa "narrativa" → KB en Postgres (FiscalDocument/FiscalChunk), refrescada
+//     por ingesta (src/lib/fiscal-kb).
+//   • capa "reglas"    → catálogo versionado en git (src/lib/fiscal/rules),
+//     refrescado por PR revisado.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type CapaBrain = "narrativa" | "reglas";
+
+/** Con qué frecuencia cambia / hay que revisar la fuente. */
+export type Cadencia = "diaria" | "mensual" | "anual" | "por-publicacion";
+
+/** ¿Puede el cerebro auto-actualizarla? */
+export type MetodoRefresco =
+  | "auto" // cron re-ingesta sin intervención (fuente pública, idempotente)
+  | "semiauto" // cron puede dispararla pero requiere insumo (p.ej. PDF) o revisión
+  | "manual"; // requiere captura/PR humano
+
+/** ¿Ya está en el cerebro o es un pendiente identificado? */
+export type EstadoFuente = "activo" | "pendiente";
+
+export interface FuenteFiscal {
+  clave: string;
+  nombre: string;
+  capa: CapaBrain;
+  cadencia: Cadencia;
+  metodo: MetodoRefresco;
+  estado: EstadoFuente;
+  /** Cómo se refresca (endpoint/script/acción manual). */
+  refresco: string;
+  /** Quién la publica. */
+  autoridad: string;
+  notas?: string;
+}
+
+export const FUENTES: FuenteFiscal[] = [
+  // ── Capa narrativa (KB) — leyes federales, auto desde diputados.gob.mx ───────
+  {
+    clave: "LISR",
+    nombre: "Ley del Impuesto Sobre la Renta",
+    capa: "narrativa",
+    cadencia: "por-publicacion",
+    metodo: "auto",
+    estado: "activo",
+    refresco: 'POST /api/admin/fiscal-ingest {"type":"ley","clave":"LISR"}',
+    autoridad: "Cámara de Diputados (texto vigente)",
+    notas: "Reformas típicas en el Paquete Económico anual (dic, vigor 1-ene). Ingesta idempotente (hash).",
+  },
+  {
+    clave: "LIVA",
+    nombre: "Ley del Impuesto al Valor Agregado",
+    capa: "narrativa",
+    cadencia: "por-publicacion",
+    metodo: "auto",
+    estado: "activo",
+    refresco: 'POST /api/admin/fiscal-ingest {"type":"ley","clave":"LIVA"}',
+    autoridad: "Cámara de Diputados (texto vigente)",
+  },
+  {
+    clave: "CFF",
+    nombre: "Código Fiscal de la Federación",
+    capa: "narrativa",
+    cadencia: "por-publicacion",
+    metodo: "auto",
+    estado: "activo",
+    refresco: 'POST /api/admin/fiscal-ingest {"type":"ley","clave":"CFF"}',
+    autoridad: "Cámara de Diputados (texto vigente)",
+  },
+  {
+    clave: "LIEPS",
+    nombre: "Ley del Impuesto Especial sobre Producción y Servicios",
+    capa: "narrativa",
+    cadencia: "anual",
+    metodo: "auto",
+    estado: "activo",
+    refresco: 'POST /api/admin/fiscal-ingest {"type":"ley","clave":"LIEPS"}',
+    autoridad: "Cámara de Diputados (texto vigente)",
+    notas: "Cuotas IEPS (combustibles, tabaco, bebidas) se actualizan por inflación cada año.",
+  },
+  {
+    clave: "GUIA-PAGOS",
+    nombre: "Guía de llenado del complemento de pagos (REP)",
+    capa: "narrativa",
+    cadencia: "por-publicacion",
+    metodo: "auto",
+    estado: "activo",
+    refresco: 'POST /api/admin/fiscal-ingest {"type":"doc","clave":"GUIA-PAGOS"}',
+    autoridad: "SAT",
+  },
+  {
+    clave: "GUIA-CFDI-GLOBAL",
+    nombre: "Guía de llenado del CFDI global",
+    capa: "narrativa",
+    cadencia: "por-publicacion",
+    metodo: "auto",
+    estado: "activo",
+    refresco: 'POST /api/admin/fiscal-ingest {"type":"doc","clave":"GUIA-CFDI-GLOBAL"}',
+    autoridad: "SAT",
+  },
+  {
+    clave: "RMF",
+    nombre: "Resolución Miscelánea Fiscal (+ resoluciones de modificaciones)",
+    capa: "narrativa",
+    cadencia: "anual",
+    metodo: "semiauto",
+    estado: "pendiente",
+    refresco: "Descargar PDF del DOF (bloquea bots) y subir: fiscal:ingest-doc -- RMF-2026 --file <ruta>",
+    autoridad: "SAT / DOF",
+    notas: "Anual (dic/ene) + 1ª, 2ª… modificaciones durante el año. Requiere PDF manual.",
+  },
+  {
+    clave: "RFA",
+    nombre: "Resolución de Facilidades Administrativas (AGAPES, autotransporte)",
+    capa: "narrativa",
+    cadencia: "anual",
+    metodo: "manual",
+    estado: "pendiente",
+    refresco: "Descargar del DOF y subir como doc; aún no en el catálogo de ingesta.",
+    autoridad: "SAT / DOF",
+  },
+
+  // ── Capa de reglas (catálogo versionado en git) ──────────────────────────────
+  {
+    clave: "TARIFAS-ISR",
+    nombre: "Tarifas ISR (mensual/anual) y subsidio al empleo",
+    capa: "reglas",
+    cadencia: "anual",
+    metodo: "semiauto",
+    estado: "activo",
+    refresco: "PR a src/lib/fiscal/tarifas.ts (verificar contra Anexo 8 RMF).",
+    autoridad: "SAT (Anexo 8 RMF)",
+    notas: "Se actualizan cuando la inflación acumulada supera 10% (Art. 152) o por reforma.",
+  },
+  {
+    clave: "ISN",
+    nombre: "Impuesto Sobre Nómina — tasas por entidad",
+    capa: "reglas",
+    cadencia: "anual",
+    metodo: "manual",
+    estado: "activo",
+    refresco: "PR a src/lib/fiscal/rules/catalog.ts (investigar Leyes de Ingresos estatales).",
+    autoridad: "Congresos / Secretarías de Finanzas estatales",
+    notas: "Cada estado fija su tasa en su Ley de Ingresos anual (dic). Varias subieron en 2025-2026.",
+  },
+  {
+    clave: "UMA",
+    nombre: "Unidad de Medida y Actualización",
+    capa: "reglas",
+    cadencia: "anual",
+    metodo: "manual",
+    estado: "pendiente",
+    refresco: "PR al catálogo de reglas con el valor diario/mensual/anual.",
+    autoridad: "INEGI",
+    notas: "Vigor 1-feb cada año. Base de multas, topes y exenciones (p.ej. AGAPES).",
+  },
+  {
+    clave: "SALARIO-MINIMO",
+    nombre: "Salario mínimo general y de frontera",
+    capa: "reglas",
+    cadencia: "anual",
+    metodo: "manual",
+    estado: "pendiente",
+    refresco: "PR al catálogo de reglas.",
+    autoridad: "CONASAMI",
+    notas: "Vigor 1-ene. Tope del subsidio al empleo y de previsión social.",
+  },
+  {
+    clave: "DEPRECIACION",
+    nombre: "Tasas de depreciación / deducción de inversiones (Art. 34-35 LISR)",
+    capa: "reglas",
+    cadencia: "por-publicacion",
+    metodo: "semiauto",
+    estado: "activo",
+    refresco: "PR a catalog.ts (verificar contra el texto de LISR ya ingerido).",
+    autoridad: "LISR",
+  },
+
+  // ── Factores externos (consumidos por cálculos; pendientes de cablear) ───────
+  {
+    clave: "INPC",
+    nombre: "Índice Nacional de Precios al Consumidor",
+    capa: "reglas",
+    cadencia: "mensual",
+    metodo: "semiauto",
+    estado: "pendiente",
+    refresco: "Cron mensual: leer INPC publicado y guardar la serie (para actualización por inflación).",
+    autoridad: "INEGI",
+    notas: "Publicado ~día 10 y 25. Necesario para actualizar depreciación, pérdidas, CUFIN.",
+  },
+  {
+    clave: "TIPO-CAMBIO-DOF",
+    nombre: "Tipo de cambio para solventar obligaciones (DOF)",
+    capa: "reglas",
+    cadencia: "diaria",
+    metodo: "semiauto",
+    estado: "pendiente",
+    refresco: "Cron diario: leer el TC del DOF y guardarlo (para CFDIs en moneda extranjera).",
+    autoridad: "Banxico / DOF",
+  },
+  {
+    clave: "CATALOGOS-SAT",
+    nombre: "Catálogos del CFDI 4.0 (c_ClaveProdServ, c_RegimenFiscal, c_UsoCFDI…)",
+    capa: "reglas",
+    cadencia: "por-publicacion",
+    metodo: "manual",
+    estado: "pendiente",
+    refresco: "Actualizar catálogos cuando el SAT publique nueva versión del Anexo 20.",
+    autoridad: "SAT",
+  },
+];
+
+/** Sources a cron can re-ingest without intervention, already wired up. */
+export function fuentesAuto(): FuenteFiscal[] {
+  return FUENTES.filter((f) => f.metodo === "auto" && f.estado === "activo");
+}
+
+/** Sources matching a cadencia (e.g. all "anual" to review each ejercicio). */
+export function fuentesPorCadencia(c: Cadencia): FuenteFiscal[] {
+  return FUENTES.filter((f) => f.cadencia === c);
+}
+
+/** Identified-but-not-yet-wired sources (the brain's freshness backlog). */
+export function fuentesPendientes(): FuenteFiscal[] {
+  return FUENTES.filter((f) => f.estado === "pendiente");
+}

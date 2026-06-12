@@ -1,0 +1,47 @@
+name: Fiscal KB refresh (weekly re-ingest)
+
+# Keeps the narrative KB fresh: re-ingests the self-updating fiscal sources
+# (leyes from diputados.gob.mx + SAT guías) so reforms are picked up within days
+# of publication. Ingesta is idempotent (content-hash) — unchanged sources are
+# skipped, so re-running weekly is cheap; only a changed law re-embeds.
+#
+# Mirrors the FUENTES with metodo "auto" in src/lib/fiscal/sources.ts.
+# Requires repo secrets CRON_SECRET and STAGING_URL (same as sat-sync.yml).
+#
+# NOTE: GitHub only runs `schedule:` triggers from the DEFAULT branch (main).
+# Use "Run workflow" (workflow_dispatch) to trigger manually.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays ~00:00 CT (UTC-6)
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-ingest auto fiscal sources (idempotent, versioned)
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          # One request per source so each stays within the route's maxDuration
+          # (a changed ley = 300+ chunks to embed).
+          JOBS='{"type":"ley","clave":"LISR"}
+          {"type":"ley","clave":"LIVA"}
+          {"type":"ley","clave":"CFF"}
+          {"type":"ley","clave":"LIEPS"}
+          {"type":"doc","clave":"GUIA-PAGOS"}
+          {"type":"doc","clave":"GUIA-CFDI-GLOBAL"}'
+          echo "$JOBS" | while read -r job; do
+            [ -z "$job" ] && continue
+            echo "→ ingest ${job}"
+            curl -fsS -X POST "${URL}/api/admin/fiscal-ingest" \
+              -H "x-cron-secret: ${CRON_SECRET}" \
+              -H "content-type: application/json" \
+              -d "{\"jobs\":[${job}]}" | tee -a response.json
+            echo
+          done
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

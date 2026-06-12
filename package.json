@@ -20,7 +20,8 @@
     "fiscal:search": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-search.ts",
     "fiscal:rules-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-rules-check.ts",
     "fiscal:audit-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-audit-check.ts",
-    "fiscal:isn-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-isn-check.ts"
+    "fiscal:isn-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-isn-check.ts",
+    "fiscal:sources-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-sources-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
