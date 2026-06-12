@@ -125,9 +125,41 @@ const casaHabitacionConIva: FiscalCheck = {
   },
 };
 
+// ── Check 4: CFDI en moneda extranjera sin tipo de cambio válido ─────────────
+// CFF Art. 20: las contribuciones se pagan en MXN; un CFDI en moneda extranjera
+// debe traer el TipoCambio (al MXN). Un TC ausente o = 1 en un CFDI no-MXN suele
+// ser un error de captura/importación que distorsiona ingresos/deducciones.
+const monedaExtranjeraSinTC: FiscalCheck = {
+  clave: "cfdi.moneda_extranjera_sin_tc",
+  descripcion: "CFDI en moneda extranjera sin tipo de cambio válido",
+  aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*" },
+  severidad: "warn",
+  fundamento: { ley: "CFF", articulo: "20" },
+  sugerencia:
+    "Captura el tipo de cambio del DOF (día anterior) en el CFDI; sin él, el monto en MXN queda mal valuado.",
+  evaluar(cfdis) {
+    const hallazgos: Hallazgo[] = [];
+    for (const c of cfdis) {
+      const moneda = (c.moneda ?? "MXN").toUpperCase();
+      if (moneda === "MXN" || moneda === "XXX") continue;
+      if (c.tipoCambio !== undefined && c.tipoCambio > 1) continue;
+      hallazgos.push({
+        checkClave: this.clave,
+        severidad: this.severidad,
+        mensaje: `CFDI en ${moneda} por ${fmt(c.total)} sin tipo de cambio válido (TC = ${c.tipoCambio ?? "n/d"}).`,
+        referencias: [c.id],
+        fundamento: this.fundamento,
+        sugerencia: this.sugerencia,
+      });
+    }
+    return hallazgos;
+  },
+};
+
 /** Full check registry. */
 export const CHECKS: FiscalCheck[] = [
   combustibleEfectivo,
   efectivoSobreLimite,
   casaHabitacionConIva,
+  monedaExtranjeraSinTC,
 ];

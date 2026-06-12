@@ -19,6 +19,8 @@ export interface InvoiceLike {
   formaPago: string;
   total: number;
   items: InvoiceItemLike[];
+  moneda?: string | null;
+  tipoCambio?: number | null;
 }
 
 function toIso(fecha: Date | string): string {
@@ -42,5 +44,7 @@ export function toCfdiNormalizado(
       descripcion: i.descripcion ?? undefined,
     })),
     ivaTrasladado: opts?.ivaTrasladado,
+    moneda: inv.moneda ?? undefined,
+    tipoCambio: inv.tipoCambio ?? undefined,
   };
 }

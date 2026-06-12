@@ -201,7 +201,7 @@ export const FUENTES: FuenteFiscal[] = [
     cadencia: "diaria",
     metodo: "semiauto",
     estado: "pendiente",
-    refresco: "Cron diario: leer el TC del DOF y guardarlo (para CFDIs en moneda extranjera).",
+    refresco: "Cron diario (pendiente): leer el TC del DOF y guardarlo en DB (para CFDIs en moneda extranjera). El auditor ya valida que un CFDI no-MXN traiga TC (check cfdi.moneda_extranjera_sin_tc).",
     autoridad: "Banxico / DOF",
   },
   {

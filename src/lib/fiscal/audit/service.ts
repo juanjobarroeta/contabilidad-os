@@ -34,6 +34,8 @@ export async function loadCompanyCfdis(companyId: string): Promise<CfdiNormaliza
       fecha: true,
       formaPago: true,
       total: true,
+      moneda: true,
+      tipoCambio: true,
       items: { select: { claveProdServ: true, descripcion: true } },
       taxes: { select: { tipo: true, importe: true, retencion: true } },
     },
@@ -52,6 +54,8 @@ export async function loadCompanyCfdis(companyId: string): Promise<CfdiNormaliza
       total: inv.total,
       items: inv.items.map((i) => ({ claveProdServ: i.claveProdServ, descripcion: i.descripcion })),
       ivaTrasladado: ivaTrasladado > 0 ? ivaTrasladado : undefined,
+      moneda: inv.moneda,
+      tipoCambio: inv.tipoCambio,
     };
   });
 }
