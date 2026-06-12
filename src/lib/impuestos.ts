@@ -5,6 +5,7 @@ import { calcularIsrProvisionalPf } from "./fiscal/isr-pf";
 import { calcularIsrArrendamientoMensual } from "./fiscal/isr-arrendamiento";
 import { calcularIsrPlataformas, normalizarActividadPlataforma, TASAS_PLATAFORMA } from "./fiscal/isr-plataformas";
 import { calcularActosDelPeriodo } from "./fiscal/iva";
+import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Monthly tax position (IVA + ISR provisional) computed from synced CFDIs.
@@ -75,7 +76,13 @@ async function flujoEfectivoAcum(
       _sum: { subtotal: true },
     }),
     prisma.invoice.aggregate({
-      where: { companyId, tipo: "EGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
+      // Deducciones inmediatas: excluye INVERSION (se deduce vía depreciación)
+      // y SIN_EFECTOS (no deducible). Los null (legacy sin clasificar) se
+      // conservan como gasto — corre el backfill de naturaleza para clasificarlos.
+      where: {
+        companyId, tipo: "EGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to },
+        OR: [{ naturaleza: null }, { naturaleza: { notIn: ["INVERSION", "SIN_EFECTOS"] } }],
+      },
       _sum: { subtotal: true },
     }),
     // ISR retenido (10% Art. 106) on PUE INGRESO — fully cobrado on emission.
@@ -102,11 +109,13 @@ async function flujoEfectivoAcum(
           tipo: true,
           subtotal: true,
           total: true,
+          naturaleza: true,
           taxes: { where: { tipo: "ISR", retencion: true }, select: { importe: true } },
         },
       })
     : [];
   const byUuid = new Map(parents.map((p) => [p.uuid!, p]));
+  const EXCLUIDAS_DEDUCCION = new Set(["INVERSION", "SIN_EFECTOS"]);
 
   let ppdIngreso = 0;
   let ppdEgreso = 0;
@@ -121,7 +130,8 @@ async function flujoEfectivoAcum(
       const parentIsrRet = p.taxes.reduce((s, t) => s + t.importe, 0);
       ppdIsrRetenido += parentIsrRet * fraccionPagada; // retención del ingreso cobrado
     } else if (p.tipo === "EGRESO") {
-      ppdEgreso += base;
+      // INVERSION/SIN_EFECTOS no son deducción inmediata (igual que el PUE).
+      if (!EXCLUIDAS_DEDUCCION.has(p.naturaleza ?? "")) ppdEgreso += base;
     }
   }
 
@@ -485,11 +495,16 @@ export async function computeTaxPosition(
     // PF con actividad empresarial (Art. 106): base en FLUJO DE EFECTIVO
     // (ingresos cobrados − deducciones pagadas, acumulado) × tarifa Art. 96.
     const { ingresosCobrados, deduccionesPagadas, isrRetenidoCobrado } = await flujoEfectivoAcum(companyId, yearFrom, to);
+    // Deducción de inversiones del periodo (Art. 106): depreciación proporcional
+    // ene→mes del registro de activo fijo. Los CFDIs de inversión ya quedaron
+    // EXCLUIDOS de deduccionesPagadas en flujoEfectivoAcum — aquí se suma su
+    // depreciación, sin doble conteo.
+    const depreciacionPeriodo = await calcularDepreciacionRegistroPeriodo(companyId, year, month);
     const r = calcularIsrProvisionalPf({
       ejercicio: year,
       meses: month,
       ingresosCobradosAcum: ingresosCobrados,
-      deduccionesPagadasAcum: deduccionesPagadas,
+      deduccionesPagadasAcum: round2(deduccionesPagadas + depreciacionPeriodo),
       pagosProvisionalesAnteriores: isrPagadoAnterior,
       // ISR 10% retenido por personas morales (Art. 106), acreditado en flujo:
       // sólo la retención de ingresos efectivamente cobrados (ene→mes).

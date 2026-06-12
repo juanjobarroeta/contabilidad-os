@@ -190,12 +190,14 @@ sobre-deducción.
   efectos excluidas. INVENTARIO sigue en compras (su costo de lo vendido es Fase 3). El cálculo
   anual es el definitivo, así que esto corrige el ISR del ejercicio aunque las provisionales
   mensuales aún no lo reflejen.
-- ⏳ **Fase 2b-mensual (siguiente)**: PF act. empresarial (`impuestos.ts` `flujoEfectivoAcum`)
-  deduce hoy todo EGRESO pagado → excluir INVERSION/SIN_EFECTOS y sumar la depreciación
-  proporcional ene→mes (requiere variante del motor que tope los meses al mes en curso). Sólo
-  afecta provisionales 612 (PM usa coeficiente; RESICO/plataformas/arrendamiento no deducen
-  compras). **Datos**: INPC cargado ene–ago 2016–2026 (faltan sep–dic + cotejar). Ojo: IVA
-  acreditable del activo es inmediato (flujo), sólo el ISR se difiere.
+- ✅ **Fase 2b-mensual (hecho)**: provisional PF act. empresarial (612) — `flujoEfectivoAcum`
+  excluye INVERSION/SIN_EFECTOS de `deduccionesPagadas` (filtro PUE + PPD por naturaleza del
+  padre; null/legacy se conserva como gasto) y la rama 612 suma la depreciación proporcional
+  ene→mes (`calcularDepreciacionRegistroPeriodo`, vía nuevo `hastaMes` del motor). Sin doble
+  conteo. Sólo afecta 612 (PM usa coeficiente; RESICO/plataformas/arrendamiento no deducen
+  compras). **El arco de deducibilidad queda cerrado** salvo Fase 3 y completar/cotejar INPC.
+  INPC cargado ene–ago 2016–2026 (faltan sep–dic + flip verificado). IVA acreditable del activo
+  es inmediato (flujo); sólo el ISR se difiere.
 - ⏳ **Fase 3 — costo de lo vendido (sólo PM que venden)**: método periódico (inv. inicial +
   compras − inv. final). No requiere tracker perpetuo por SKU. Diferido.
 
