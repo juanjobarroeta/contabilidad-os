@@ -35,6 +35,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "No hay cambios" }, { status: 400 });
 
+  // Editarlo = el contador ya lo revisó → quita la bandera de auto-creado.
+  data.autoCreado = false;
+
   const updated = await prisma.activoFijo.update({ where: { id }, data });
   return NextResponse.json(updated);
 }

@@ -30,6 +30,7 @@ import { useState, useEffect } from "react";
 
 const NAV_ITEMS = [
   { href: "/dashboard",    label: "Inicio",          icon: LayoutDashboard },
+  { href: "/despacho",     label: "Despacho",        icon: Building2 },
   { href: "/facturas",     label: "Facturas",        icon: FileText },
   { href: "/clientes",     label: "Clientes",        icon: Users },
   { href: "/bancos",       label: "Bancos",          icon: Landmark },

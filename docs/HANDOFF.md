@@ -181,6 +181,11 @@ sobre-deducción.
   depreciación calculada del ejercicio) y `/api/activos/[id]` (editar/baja/eliminar). Página
   `/activos` (registro + tabla de depreciación) y botón "Registrar como activo fijo" en el modal
   de la factura. **NO toca el ISR todavía.**
+  ✅ **Auto-registro (hecho)**: los CFDIs INVERSION se capitalizan SOLOS al sincronizar
+  (`src/lib/fiscal/auto-activo.ts`, idempotente por invoiceId) — depreciación sin captura
+  manual; el contador sólo revisa (badge "auto — revisa tipo/tasa/tope" en `/activos`, se limpia
+  al editar). Backfill `/api/cron/activos-backfill` para INVERSION ya importados. El edge "solo
+  corre" se mantiene end-to-end: sync → clasifica → capitaliza → deprecia → ISR.
 - ✅ **Fase 2b-anual — wiring atómico en la declaración anual (hecho)**: `declaracion-anual`
   route ahora agrupa los EGRESO por `naturaleza` y **excluye INVERSION y SIN_EFECTOS de las
   compras**, y alimenta la **depreciación calculada del registro** (helper compartido
@@ -211,6 +216,16 @@ publicó y no lo tenemos" — p.ej. en julio detecta que falta el INPC de junio,
 no. El **cálculo nunca depende del reloj** (cae a nominal/verificado:false); esto es sólo la
 capa de monitoreo. API `GET /api/fiscal/cobertura` (`?asOf=` para simular) y tarjeta en
 `/cumplimiento`. Cada dataset expone su `cobertura*()` (último cargado + verificado).
+
+## 11. Cockpit del despacho (multi-RFC, todas las obligaciones)
+
+`/despacho` (+ `GET /api/despacho/cockpit`): una fila por empresa accesible (helper
+`empresasAccesiblesIds` en authz, reutilizado por el cockpit de nómina) con el estado de la
+declaración del periodo (presentada/calculada/pendiente/vencida, derivado de `TaxDeclaration`
+guardadas — **sin recomputar el motor**, para escalar a muchos RFC), monto a pagar de lo ya
+calculado, nómina sin timbrar y empleados; "Operar" cambia la empresa activa y entra a su cierre/
+nómina. Franja superior con las alertas de cobertura de datos (§10). Complementa el cockpit de
+nómina (`/nomina/cockpit`, sólo nómina). Sidebar: "Despacho".
 
 ## 8. Convenciones del repo
 

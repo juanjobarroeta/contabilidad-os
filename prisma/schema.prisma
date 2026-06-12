@@ -545,6 +545,11 @@ model ActivoFijo {
   fechaBaja DateTime?
   motivoBaja String?
 
+  // True cuando lo creó el sync automáticamente desde un CFDI INVERSION (vs alta
+  // manual). El contador debe revisar tipo/tasa/tope — sobre todo transporte
+  // (auto de pasajeros con tope vs camioneta de carga sin tope).
+  autoCreado Boolean @default(false)
+
   company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 

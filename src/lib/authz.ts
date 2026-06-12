@@ -332,3 +332,34 @@ export function withAuthz<Args extends unknown[]>(
     }
   };
 }
+
+/**
+ * IDs de las empresas a las que un usuario tiene acceso: unión de membresías
+ * directas (CompanyMember) y de las empresas del despacho (con scoping por
+ * miembro si tiene filas DespachoMemberCompany). Misma lógica que /api/companies;
+ * extraída para los paneles multi-RFC (cockpits) que iteran sobre todas.
+ */
+export async function empresasAccesiblesIds(userId: string): Promise<string[]> {
+  const { prisma } = await import("./prisma");
+  const [direct, despachoMember] = await Promise.all([
+    prisma.companyMember.findMany({ where: { userId }, select: { companyId: true } }),
+    prisma.despachoMember.findFirst({ where: { userId }, select: { id: true, despachoId: true } }),
+  ]);
+  const ids = new Set(direct.map((m) => m.companyId));
+  if (despachoMember) {
+    const scope = await prisma.despachoMemberCompany.findMany({
+      where: { despachoMemberId: despachoMember.id },
+      select: { companyId: true },
+    });
+    const scopedIds = scope.map((s) => s.companyId);
+    const despachoCompanies = await prisma.company.findMany({
+      where: {
+        despachoId: despachoMember.despachoId,
+        ...(scopedIds.length > 0 ? { id: { in: scopedIds } } : {}),
+      },
+      select: { id: true },
+    });
+    for (const c of despachoCompanies) ids.add(c.id);
+  }
+  return [...ids];
+}

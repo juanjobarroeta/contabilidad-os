@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { parseCfdiXml } from "@/lib/sat-fiel";
 import { clasificarCfdi } from "@/lib/fiscal/clasificar-cfdi";
+import { crearActivoDesdeCfdiSiAplica } from "@/lib/fiscal/auto-activo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Record a CFDI from an uploaded file as an Invoice (NOT Facturapi-stamped —
@@ -128,6 +129,22 @@ export async function importCfdiFromXml(opts: {
         : cfdi.ivaTotal > 0
         ? { create: [{ tipo: "IVA", factor: "TASA", tasa: 0.16, importe: cfdi.ivaTotal, retencion: false }] }
         : undefined,
+    },
+  });
+
+  // Auto-registro de activo fijo si el CFDI es una inversión (naturaleza
+  // INVERSION) — depreciación sin captura manual; el contador sólo revisa.
+  await crearActivoDesdeCfdiSiAplica(prisma, {
+    companyId,
+    invoiceId: invoice.id,
+    subtotal: cfdi.subtotal,
+    fecha: new Date(cfdi.fecha),
+    descripcion: cfdi.items[0]?.descripcion,
+    clasifInput: {
+      tipo,
+      usoCfdi: cfdi.usoCfdi ?? null,
+      usoEsDefault: !cfdi.usoCfdi,
+      items: cfdi.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
     },
   });
 
