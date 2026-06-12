@@ -137,6 +137,23 @@ check(
 );
 check("regla federal (IVA) sigue resolviendo con entidad presente", getRule("iva.tasa.general", empJAL)?.valor === 0.16);
 
+// ── Valores de referencia (UMA, salario mínimo) ───────────────────────────────
+console.log("UMA / salario mínimo");
+const uma2026 = getRule<Tabla>("uma.valor", ctxPF);
+check("UMA 2026 diaria = 117.31", uma2026?.valor.diaria === 117.31, `got ${uma2026?.valor.diaria}`);
+check("UMA 2026 anual = 42,794.64", uma2026?.valor.anual === 42794.64, `got ${uma2026?.valor.anual}`);
+check("UMA verificada", uma2026?.verificado === true);
+const ctxEne2026 = construirContexto(personaFisica, "2026-01-15");
+check(
+  "UMA en enero 2026 aún resuelve la de 2025 (113.14)",
+  getRule<Tabla>("uma.valor", ctxEne2026)?.valor.diaria === 113.14,
+);
+const smg = getRule<number>("salario_minimo.general", ctxPF);
+const smf = getRule<number>("salario_minimo.frontera", ctxPF);
+check("salario mínimo general = 315.04", smg?.valor === 315.04, `got ${smg?.valor}`);
+check("salario mínimo frontera = 440.87", smf?.valor === 440.87, `got ${smf?.valor}`);
+check("salario mínimo verificado", smg?.verificado === true);
+
 // ── Result ────────────────────────────────────────────────────────────────────
 console.log("");
 if (fallos === 0) {

@@ -116,6 +116,57 @@ const REGLAS_FEDERALES: FiscalRule[] = [
     verificado: true,
   },
 
+  // ── Valores de referencia (UMA, salario mínimo) ──────────────────────────────
+  {
+    // UMA vigente desde el 1-feb-2026 (INEGI). En enero 2026 aún aplica la de 2025.
+    clave: "uma.valor",
+    tipo: "VALOR",
+    valor: { diaria: 117.31, mensual: 3566.22, anual: 42794.64 },
+    unidad: "MXN",
+    aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*" },
+    vigenciaDesde: "2026-02-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "INEGI (DOF)", articulo: "UMA 2026" },
+    verificado: true,
+  },
+  {
+    clave: "uma.valor",
+    tipo: "VALOR",
+    valor: { diaria: 113.14, mensual: 3439.46, anual: 41273.52 },
+    unidad: "MXN",
+    aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*" },
+    vigenciaDesde: "2025-02-01",
+    vigenciaHasta: "2026-01-31",
+    fundamento: { ley: "INEGI (DOF)", articulo: "UMA 2025" },
+    verificado: true,
+  },
+  {
+    // Salario mínimo general (resto del país), por día. Vigente 1-ene-2026.
+    clave: "salario_minimo.general",
+    tipo: "VALOR",
+    valor: 315.04,
+    unidad: "MXN",
+    aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*" },
+    vigenciaDesde: "2026-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "CONASAMI (DOF)", articulo: "SMG 2026" },
+    verificado: true,
+    nota: "monto diario",
+  },
+  {
+    // Salario mínimo de la Zona Libre de la Frontera Norte (ZLFN), por día.
+    clave: "salario_minimo.frontera",
+    tipo: "VALOR",
+    valor: 440.87,
+    unidad: "MXN",
+    aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*" },
+    vigenciaDesde: "2026-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "CONASAMI (DOF)", articulo: "SM ZLFN 2026" },
+    verificado: true,
+    nota: "monto diario; aplica solo a municipios de la Zona Libre de la Frontera Norte",
+  },
+
   // ── ISR — depreciación (deducción de inversiones) ────────────────────────────
   {
     // Tasas máximas de depreciación por tipo de activo. Tabla pendiente de
