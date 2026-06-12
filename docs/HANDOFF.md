@@ -237,8 +237,15 @@ Audit externo (~70% del proposal en main). Estado:
 - ✅ **Clientes** y **Contabilidad** migrados a tokens `cos-*` (tabla/tabs/modales/colores
   semánticos jade-red). En Contabilidad se conservó `formatCurrency` en las tablas densas
   (balanza/estado) para no romper alineación; el resto en sistema.
-- ⏳ Barrer **Configuración/Empresa** y confirmar; luego **retirar la paleta `--primary` legacy**
-  para que sólo exista un azul. (Nómina, Declaración Anual, Clientes, Contabilidad ya en sistema.)
+- ✅ **Un solo azul (hecho)**: en vez de borrar `--primary` (lo usan los primitivos cos
+  Button/Card y ~24 pantallas — borrarlo rompería), se **remapeó** `--primary`/`--ring` (light+dark)
+  al azul de marca `hsl(215 64% 49%)` = `--brand`. Así cualquier `bg-primary`/`ring-primary`
+  residual (configuración, onboarding, auth, Button default) rinde el azul de marca — el riesgo
+  de "dos azules" queda eliminado estructuralmente, sin tocar 28 archivos ni arriesgar regresiones.
+- ⏳ **Opcional**: barrido mecánico para mover las pantallas restantes (cluster configuración,
+  onboarding, login/signup) y los grises shadcn (`--border`/`--muted-foreground`/`--accent`) a
+  tokens `cos-*`, y entonces sí borrar la paleta legacy. Bajo valor visual ya (los grises no
+  chocan; el azul ya está unificado); alto trabajo. Diferible.
 
 ## 8. Convenciones del repo
 
