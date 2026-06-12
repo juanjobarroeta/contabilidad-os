@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { CATALOGO } from "./catalog";
-import type { Contexto, FiscalRule, ReglaResuelta, ValorRegla } from "./types";
+import type { Aplicabilidad, Contexto, FiscalRule, ReglaResuelta, ValorRegla } from "./types";
 
 function dentroDeVigencia(r: FiscalRule, fecha: string): boolean {
   if (fecha < r.vigenciaDesde) return false;
@@ -16,13 +16,21 @@ function dentroDeVigencia(r: FiscalRule, fecha: string): boolean {
   return true;
 }
 
-function aplica(r: FiscalRule, ctx: Contexto): boolean {
-  const a = r.aplicabilidad;
+/**
+ * Whether an `aplicabilidad` matches a context. Exported so other consumers
+ * (e.g. the auditor's checks) gate on the same régimen × sector × tipoPersona
+ * logic as rules do.
+ */
+export function aplicaAplicabilidad(a: Aplicabilidad, ctx: Contexto): boolean {
   if (a.regimenes !== "*" && !a.regimenes.includes(ctx.regimen)) return false;
   if (a.tipoPersona !== "*" && a.tipoPersona !== ctx.tipoPersona) return false;
   if (a.actividades !== "*" && !a.actividades.some((s) => ctx.actividades.includes(s)))
     return false;
   return true;
+}
+
+function aplica(r: FiscalRule, ctx: Contexto): boolean {
+  return aplicaAplicabilidad(r.aplicabilidad, ctx);
 }
 
 /** Higher = more specific. Sector specificity outranks régimen, then persona. */

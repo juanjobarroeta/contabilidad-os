@@ -18,7 +18,8 @@
     "fiscal:ingest-ley": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-ingest-ley.ts",
     "fiscal:ingest-doc": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-ingest-doc.ts",
     "fiscal:search": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-search.ts",
-    "fiscal:rules-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-rules-check.ts"
+    "fiscal:rules-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-rules-check.ts",
+    "fiscal:audit-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-audit-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",

@@ -2,7 +2,7 @@
 // Contract: docs/fiscal-brain-contract.md
 export * from "./types";
 export { CATALOGO } from "./catalog";
-export { getRule, listRules } from "./resolve";
+export { getRule, listRules, aplicaAplicabilidad } from "./resolve";
 export {
   inferSectores,
   inferTipoPersona,
