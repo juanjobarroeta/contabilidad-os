@@ -1,0 +1,27 @@
+name: INPC freshness (monthly)
+
+# The INPC series lives in code (src/lib/fiscal/inpc.ts) and is updated by PR.
+# This monthly job runs the freshness check in --strict mode, so it goes RED
+# when the series falls behind (INEGI publishes each month's INPC ~day 10 in the
+# DOF) — a standing reminder to add the new month. It does not auto-edit code;
+# correctness-critical values stay in code review.
+#
+# NOTE: GitHub only runs `schedule:` from the DEFAULT branch (main).
+
+on:
+  schedule:
+    - cron: "0 16 12 * *" # day 12 monthly, ~10:00 CT, after INEGI's day-10 publish
+  workflow_dispatch: {}
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Check INPC series is current
+        run: npm run fiscal:inpc-check -- --strict
