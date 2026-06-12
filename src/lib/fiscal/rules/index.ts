@@ -6,6 +6,7 @@ export { getRule, listRules, aplicaAplicabilidad } from "./resolve";
 export {
   inferSectores,
   inferTipoPersona,
+  estadoDesdeCP,
   construirContexto,
   type CompanyLike,
 } from "./sector";

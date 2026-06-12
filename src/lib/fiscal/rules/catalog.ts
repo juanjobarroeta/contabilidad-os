@@ -116,6 +116,66 @@ export const CATALOGO: FiscalRule[] = [
     verificado: true,
   },
 
+  // ── ISN — Impuesto Sobre Nómina (estatal) ───────────────────────────────────
+  // Tasa estatal sobre erogaciones por remuneraciones al trabajo personal. Cada
+  // entidad la fija en su Ley de Hacienda / Código Fiscal — varía ~1%–4% y cambia
+  // por ejercicio. Sembradas como verificado:false hasta ingerir cada ley estatal.
+  {
+    clave: "isn.tasa",
+    tipo: "RATE",
+    valor: 0.03,
+    unidad: "porcentaje",
+    aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*", entidad: ["CMX"] },
+    vigenciaDesde: "2024-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "Código Fiscal de la CDMX", articulo: "158" },
+    verificado: false,
+  },
+  {
+    clave: "isn.tasa",
+    tipo: "RATE",
+    valor: 0.03,
+    unidad: "porcentaje",
+    aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*", entidad: ["NLE"] },
+    vigenciaDesde: "2024-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "Ley de Hacienda del Estado de Nuevo León", articulo: "154" },
+    verificado: false,
+  },
+  {
+    clave: "isn.tasa",
+    tipo: "RATE",
+    valor: 0.03,
+    unidad: "porcentaje",
+    aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*", entidad: ["MEX"] },
+    vigenciaDesde: "2024-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "Código Financiero del Estado de México", articulo: "56" },
+    verificado: false,
+  },
+  {
+    clave: "isn.tasa",
+    tipo: "RATE",
+    valor: 0.02,
+    unidad: "porcentaje",
+    aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*", entidad: ["JAL"] },
+    vigenciaDesde: "2024-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "Ley de Hacienda del Estado de Jalisco", articulo: "41" },
+    verificado: false,
+  },
+  {
+    clave: "isn.tasa",
+    tipo: "RATE",
+    valor: 0.03,
+    unidad: "porcentaje",
+    aplicabilidad: { regimenes: "*", actividades: "*", tipoPersona: "*", entidad: ["GUA"] },
+    vigenciaDesde: "2024-01-01",
+    vigenciaHasta: null,
+    fundamento: { ley: "Ley de Hacienda para el Estado de Guanajuato", articulo: "9" },
+    verificado: false,
+  },
+
   // ── ISR — depreciación (deducción de inversiones) ────────────────────────────
   {
     // Tasas máximas de depreciación por tipo de activo. Tabla pendiente de

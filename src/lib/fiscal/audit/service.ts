@@ -64,7 +64,7 @@ export interface AuditResult {
 export async function runAuditForCompany(companyId: string, fechaIso?: string): Promise<AuditResult> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { rfc: true, regimenFiscal: true, actividadEconomica: true },
+    select: { rfc: true, regimenFiscal: true, actividadEconomica: true, codigoPostal: true },
   });
   if (!company) throw new Error(`Company ${companyId} not found`);
 
