@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Hallazgo } from "../audit/types";
-import type { CfdiProveedor, ListaEfos, SituacionEfos } from "./types";
+import type { CfdiProveedor, ListaEfos, RfcEntrada, SituacionEfos } from "./types";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
@@ -43,4 +43,44 @@ export function revisarEfos(recibidos: CfdiProveedor[], lista: ListaEfos): Halla
   }
   // Definitivos primero.
   return hallazgos.sort((a, b) => (a.severidad === "error" ? 0 : 1) - (b.severidad === "error" ? 0 : 1));
+}
+
+/**
+ * Cotejo a nivel RFC: cualquier RFC (propio, cliente o proveedor) que aparezca
+ * en la lista 69-B como DEFINITIVO o PRESUNTO se marca. Un RFC propio definitivo
+ * es existencial; una contraparte definitiva pone en riesgo las deducciones.
+ * Deduplica por RFC.
+ */
+export function revisarRfcs(entradas: RfcEntrada[], lista: ListaEfos): Hallazgo[] {
+  const out: Hallazgo[] = [];
+  const vistos = new Set<string>();
+  for (const e of entradas) {
+    const rfc = e.rfc.toUpperCase().trim();
+    if (!rfc || vistos.has(rfc)) continue;
+    const sit = lista.get(rfc);
+    if (sit !== "DEFINITIVO" && sit !== "PRESUNTO") continue;
+    vistos.add(rfc);
+
+    const definitivo = sit === "DEFINITIVO";
+    const propio = e.rol === "PROPIO";
+    const quien = propio ? "TU RFC" : `${rfc}${e.nombre ? ` (${e.nombre})` : ""}`;
+
+    out.push({
+      checkClave: `efos.${propio ? "propio" : "contraparte"}.${definitivo ? "definitivo" : "presunto"}`,
+      severidad: definitivo ? "error" : "warn",
+      mensaje: propio
+        ? `${quien} aparece en la lista 69-B como ${sit}.`
+        : `El RFC ${quien} con el que operas aparece en la lista 69-B como ${sit}.`,
+      referencias: [rfc],
+      fundamento: FUNDAMENTO,
+      sugerencia: propio
+        ? definitivo
+          ? "Atiende de inmediato: tu RFC como EFOS definitivo invalida tus CFDIs. Acredita la materialidad ante el SAT."
+          : "Tu RFC está presunto; presenta pruebas de materialidad en el plazo para desvirtuar."
+        : definitivo
+          ? "Revisa tus deducciones e IVA acreditable con este RFC; con un EFOS definitivo son improcedentes salvo que acredites materialidad."
+          : "Da seguimiento a este proveedor/cliente; resguarda la evidencia de materialidad de las operaciones.",
+    });
+  }
+  return out.sort((a, b) => (a.severidad === "error" ? 0 : 1) - (b.severidad === "error" ? 0 : 1));
 }

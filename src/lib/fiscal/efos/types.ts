@@ -26,3 +26,12 @@ export interface CfdiProveedor {
   fecha: string; // ISO
   total: number;
 }
+
+export type RolRfc = "PROPIO" | "CONTRAPARTE";
+
+/** Un RFC a cotejar contra la lista (empresa propia, cliente o proveedor). */
+export interface RfcEntrada {
+  rfc: string;
+  rol: RolRfc;
+  nombre?: string;
+}
