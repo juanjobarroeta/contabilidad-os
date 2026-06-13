@@ -217,7 +217,7 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       total: netoAPagar,
       totalImpuestos: -totalDeducciones, // negative because retenciones reduce the total
       status: "STAMPED",
-      uuid: facturapiResp.uuid ?? null,
+      uuid: facturapiResp.uuid?.toUpperCase() ?? null, // folio fiscal canónico en MAYÚSCULAS
       facturapiId: facturapiResp.id ?? null,
       notas: `Nómina ${employee.nombre} ${employee.apellidoPaterno} · ${input.periodoInicio.toISOString().slice(0, 10)} a ${input.periodoFin.toISOString().slice(0, 10)}`,
     },

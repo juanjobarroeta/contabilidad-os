@@ -95,7 +95,10 @@ async function persistStampedInvoice(
       totalImpuestos,
       notas: notes,
       status: "STAMPED",
-      uuid: fp.uuid,
+      // Canonizar a MAYÚSCULAS: Facturapi puede devolver el UUID en minúsculas
+      // y la descarga del SAT lo trae en mayúsculas — guardarlos distinto
+      // duplica el CFDI y rompe el empate de cancelaciones.
+      uuid: fp.uuid?.toUpperCase() ?? null,
       facturapiId: fp.id,
       items: {
         create: items.map((it) => ({

@@ -451,12 +451,16 @@ export async function verifyAndImportSatSync(
     const reader = await CfdiPackageReader.createFromContents(binaryContent);
 
     for await (const cfdiMap of reader.cfdis()) {
-      for (const [uuid, xmlContent] of cfdiMap) {
+      for (const [rawUuid, xmlContent] of cfdiMap) {
+        // Folio fiscal canónico en MAYÚSCULAS. La dedup empata sin distinguir
+        // caja (mode: insensitive) para reconocer copias previas guardadas en
+        // minúsculas (p.ej. timbradas por el PAC) y NO duplicarlas.
+        const uuid = rawUuid.trim().toUpperCase();
         // Already in DB: skip — but backfill rawXml and the per-tax desglose if
         // they're missing, so a re-sync repairs CFDIs imported before we stored
         // the file / parsed the <cfdi:Impuestos> node.
         const existing = await prisma.invoice.findFirst({
-          where: { uuid },
+          where: { uuid: { equals: uuid, mode: "insensitive" } },
           select: { id: true, rawXml: true, _count: { select: { taxes: true } } },
         });
         if (existing) {
@@ -804,11 +808,17 @@ export async function syncCancelacionesPeriodo(
   if (rows.length === 0) return { ok: true, status: "done", cancelled: 0, checked: 0 };
 
   // 4. Apply: only STAMPED invoices we own that SAT reports cancelled.
+  // Empate case-insensitive (upper(uuid)): facturas timbradas por el PAC pueden
+  // estar guardadas en minúsculas, y un `uuid IN (mayúsculas)` las dejaría fuera
+  // — el CFDI seguiría STAMPED pese a estar cancelado en el SAT.
   const uuids = rows.map((r) => r.uuid?.trim().toUpperCase()).filter(Boolean) as string[];
-  const owned = await prisma.invoice.findMany({
-    where: { companyId, uuid: { in: uuids } },
-    select: { id: true, uuid: true, status: true },
-  });
+  const owned =
+    uuids.length === 0
+      ? []
+      : await prisma.$queryRaw<{ id: string; uuid: string | null; status: string }[]>`
+          SELECT id, uuid, status FROM "Invoice"
+          WHERE "companyId" = ${companyId} AND upper(uuid) = ANY(${uuids})
+        `;
   const { toCancel } = interpretarCancelaciones(
     rows,
     owned.map((o) => ({ id: o.id, uuid: o.uuid ?? "", status: o.status }))

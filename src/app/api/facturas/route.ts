@@ -239,7 +239,7 @@ export async function POST(req: Request) {
       totalImpuestos,
       notas: notes,
       status: "STAMPED",
-      uuid: facturapiInvoice.uuid,
+      uuid: facturapiInvoice.uuid?.toUpperCase() ?? null, // folio fiscal canónico en MAYÚSCULAS
       facturapiId: facturapiInvoice.id,
       items: {
         create: items.map((item) => ({
