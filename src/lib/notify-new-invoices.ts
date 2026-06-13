@@ -40,6 +40,6 @@ export async function notifyNewInvoices(companyId: string, since: Date): Promise
     body: `${company?.razonSocial ? company.razonSocial + " — " : ""}${parts.join(" · ")}`,
     url: "/facturas",
     tag: `sync-${companyId}`,
-  });
+  }, "cfdis");
   return { notified: r.sent };
 }

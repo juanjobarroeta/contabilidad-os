@@ -32,6 +32,6 @@ export async function notifyDeclaracionesFaltantes(
       `súbelas para calcular saldos a favor, coeficiente y pagos provisionales.`,
     url: "/declaraciones",
     tag: "declaraciones-nag", // colapsa avisos repetidos en uno
-  });
+  }, "declaraciones");
   return { notified: r.sent, total, empresas: nEmp };
 }
