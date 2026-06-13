@@ -1,7 +1,10 @@
 // Verifica los mapeadores de Syntage (puro) y, si SYNTAGE_API_KEY está en el
 // entorno, hace una prueba de auth en vivo (read-only). Run: npm run fiscal:syntage-check
 
-import { mapTaxCompliance, mapTaxStatus, SyntageClient } from "../src/lib/fiscal/cumplimiento/syntage";
+// Import directo de los leaf modules (no del index, que re-exporta provision/
+// sync con alias @/ que ts-node no resuelve fuera de Next).
+import { mapTaxCompliance, mapTaxStatus } from "../src/lib/fiscal/cumplimiento/syntage/map";
+import { SyntageClient } from "../src/lib/fiscal/cumplimiento/syntage/client";
 
 let fallos = 0;
 function check(nombre: string, cond: boolean, detalle?: string) {
