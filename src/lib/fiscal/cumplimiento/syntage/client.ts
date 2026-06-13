@@ -187,6 +187,40 @@ export class SyntageClient {
     return { id: String(r.id), status: r.status as EstadoExtraccion, raw: r };
   }
 
+  /**
+   * Descarga el PDF del acuse a partir de la referencia guardada (`acuseUrl`).
+   * Robusto a ambos formatos: si es `/files/{id}` baja directo; si es el recurso
+   * (`/tax-compliance-checks/{id}` o `/tax-status/{id}`) primero lo lee para
+   * obtener `file.@id`. Devuelve los bytes para hacer stream desde un proxy
+   * server-side (la API key nunca llega al browser).
+   */
+  async downloadAcuse(ref: string): Promise<{ data: ArrayBuffer; contentType: string; filename?: string }> {
+    let fileId: string | null = null;
+    if (ref.includes("/files/")) {
+      fileId = ref.replace(/.*\/files\//, "").replace(/\/download$/, "") || null;
+    } else {
+      const path = ref.startsWith("/") ? ref : `/${ref}`;
+      const r = await this.request<Json>("GET", path);
+      const file = r.file as Json | undefined;
+      const fid = file ? String(file["@id"] ?? file.id ?? "") : "";
+      fileId = fid ? fid.replace(/.*\/files\//, "") || fid : null;
+    }
+    if (!fileId) throw new SyntageError(`No se pudo resolver el archivo de "${ref}"`);
+
+    const res = await fetch(`${this.baseUrl}/files/${fileId}/download`, {
+      headers: { "X-Api-Key": this.apiKey },
+    });
+    if (!res.ok) throw new SyntageError(`Syntage download /files/${fileId} → ${res.status}`, res.status);
+
+    const cd = res.headers.get("content-disposition") ?? "";
+    const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+    return {
+      data: await res.arrayBuffer(),
+      contentType: res.headers.get("content-type") ?? "application/pdf",
+      filename: m ? decodeURIComponent(m[1]) : undefined,
+    };
+  }
+
   /** Último TaxComplianceCheck (opinión) de la entidad, o null. */
   async getLatestTaxComplianceCheck(entityId: string): Promise<Json | null> {
     const r = await this.request<Json>(
