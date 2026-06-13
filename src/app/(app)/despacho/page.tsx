@@ -101,7 +101,10 @@ export default function DespachoCockpitPage() {
       )}
 
       <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-white shadow-card">
-        <table className="w-full text-sm">
+        {/* Scroll horizontal en móvil: 5 columnas no caben en ~360px y el
+            overflow-hidden del contenedor recortaba la columna Nómina. */}
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-cos-paper text-[12px] uppercase tracking-[0.02em] text-cos-ink-faint">
             <tr>
               <th className="px-4 py-2.5 text-left font-medium">Empresa</th>
@@ -159,6 +162,7 @@ export default function DespachoCockpitPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-4 text-[12.5px] text-cos-ink-faint">

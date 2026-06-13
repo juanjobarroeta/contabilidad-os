@@ -133,22 +133,50 @@ export function Sidebar({ user }: SidebarProps) {
 
         {companyOpen && (
           <div className="mt-1 bg-white border border-border rounded-md shadow-sm overflow-hidden">
-            {companies.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => {
-                  setActiveCompany(c);
-                  setCompanyOpen(false);
-                }}
-                className={cn(
-                  "w-full text-left px-3 py-2 text-xs hover:bg-accent truncate",
-                  activeCompany?.id === c.id && "bg-accent font-medium"
-                )}
-              >
-                <span className="block truncate">{c.razonSocial}</span>
-                <span className="block text-muted-foreground">{c.rfc}</span>
-              </button>
-            ))}
+            <div className="max-h-72 overflow-y-auto">
+              {(() => {
+                const renderCompany = (c: typeof companies[number]) => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setActiveCompany(c);
+                      setCompanyOpen(false);
+                    }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 text-xs hover:bg-accent truncate",
+                      activeCompany?.id === c.id && "bg-accent font-medium"
+                    )}
+                  >
+                    <span className="block truncate">{c.razonSocial}</span>
+                    <span className="block text-muted-foreground">{c.rfc}</span>
+                  </button>
+                );
+
+                // Agrupa por despacho sólo cuando hay más de uno (operador de
+                // plataforma). Para un usuario normal —un solo despacho— se
+                // mantiene la lista plana de siempre.
+                const despachos = Array.from(
+                  new Set(companies.map((c) => c.despachoNombre ?? null))
+                ).filter(Boolean);
+                if (despachos.length <= 1) return companies.map(renderCompany);
+
+                const groups = new Map<string, typeof companies>();
+                for (const c of companies) {
+                  const k = c.despachoNombre ?? "Sin despacho";
+                  const arr = groups.get(k) ?? [];
+                  arr.push(c);
+                  groups.set(k, arr);
+                }
+                return Array.from(groups.entries()).map(([nombre, list]) => (
+                  <div key={nombre}>
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-cos-paper sticky top-0">
+                      {nombre}
+                    </div>
+                    {list.map(renderCompany)}
+                  </div>
+                ));
+              })()}
+            </div>
             <Link
               href="/onboarding"
               onClick={() => setCompanyOpen(false)}
