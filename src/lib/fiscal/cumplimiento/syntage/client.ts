@@ -1,0 +1,155 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Cliente Syntage (api.syntage.com). Mecánica confirmada en docs:
+//   • Auth: header X-Api-Key.
+//   • Credenciales: POST /credentials  {type:"ciec", rfc, password}
+//                                      {type:"efirma", certificate, privateKey, password}
+//   • Extracción async: POST /extractions {extractor, entity, options} → status
+//     pending→running→finished/failed; GET /extractions/{id} para sondear.
+//   • Extractores: tax_compliance (opinión), tax_status (CSF), annual_tax_return,
+//     monthly_tax_return, invoice, tax_retention, …
+// Las claves exactas del RESULTADO (positiva/negativa, campos de la CSF) se
+// mapean en map.ts y están marcadas // VERIFY hasta cotejar una respuesta viva.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type Extractor =
+  | "tax_compliance"
+  | "tax_status"
+  | "annual_tax_return"
+  | "monthly_tax_return"
+  | "invoice"
+  | "tax_retention";
+
+export type EstadoCredencial =
+  | "waiting"
+  | "pending"
+  | "valid"
+  | "invalid"
+  | "disabled"
+  | "deactivated"
+  | "error";
+
+export type EstadoExtraccion =
+  | "pending"
+  | "running"
+  | "finished"
+  | "failed"
+  | "stopped"
+  | "cancelled";
+
+export interface SyntageConfig {
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+export class SyntageError extends Error {
+  constructor(message: string, readonly status?: number, readonly body?: unknown) {
+    super(message);
+    this.name = "SyntageError";
+  }
+}
+
+type Json = Record<string, unknown>;
+
+export class SyntageClient {
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
+
+  constructor(cfg: SyntageConfig = {}) {
+    this.apiKey = cfg.apiKey ?? process.env.SYNTAGE_API_KEY ?? "";
+    this.baseUrl = (cfg.baseUrl ?? process.env.SYNTAGE_BASE_URL ?? "https://api.syntage.com").replace(/\/$/, "");
+    if (!this.apiKey) throw new SyntageError("Falta SYNTAGE_API_KEY.");
+  }
+
+  private async request<T = Json>(method: string, path: string, body?: Json): Promise<T> {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: {
+        "X-Api-Key": this.apiKey,
+        "Content-Type": "application/json",
+        Accept: "application/ld+json, application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    const parsed: unknown = text ? safeJson(text) : null;
+    if (!res.ok) {
+      throw new SyntageError(`Syntage ${method} ${path} → ${res.status}`, res.status, parsed);
+    }
+    return parsed as T;
+  }
+
+  // ── Entidades ────────────────────────────────────────────────────────────────
+  /** Crea (o registra) una entidad por RFC. Devuelve su id. */
+  async createEntity(rfc: string): Promise<{ id: string }> {
+    const r = await this.request<Json>("POST", "/entities", { rfc }); // VERIFY: campos exactos
+    return { id: String(r.id ?? r["@id"] ?? "") };
+  }
+
+  async listEntities(): Promise<Json[]> {
+    const r = await this.request<Json>("GET", "/entities");
+    return asArray(r);
+  }
+
+  // ── Credenciales ──────────────────────────────────────────────────────────────
+  async createCiecCredential(rfc: string, password: string): Promise<{ id: string; status: EstadoCredencial }> {
+    const r = await this.request<Json>("POST", "/credentials", { type: "ciec", rfc, password });
+    return { id: String(r.id), status: r.status as EstadoCredencial };
+  }
+
+  async createEfirmaCredential(args: {
+    certificate: string; // base64 .cer
+    privateKey: string; // base64 .key
+    password: string;
+  }): Promise<{ id: string; status: EstadoCredencial }> {
+    const r = await this.request<Json>("POST", "/credentials", { type: "efirma", ...args });
+    return { id: String(r.id), status: r.status as EstadoCredencial };
+  }
+
+  // ── Extracciones ──────────────────────────────────────────────────────────────
+  async createExtraction(args: {
+    extractor: Extractor;
+    entity: string;
+    options?: Json; // p.ej. { period: { from, to } }
+  }): Promise<{ id: string; status: EstadoExtraccion }> {
+    const r = await this.request<Json>("POST", "/extractions", args as Json); // VERIFY body
+    return { id: String(r.id), status: r.status as EstadoExtraccion };
+  }
+
+  async getExtraction(id: string): Promise<{ id: string; status: EstadoExtraccion; raw: Json }> {
+    const r = await this.request<Json>("GET", `/extractions/${id}`);
+    return { id: String(r.id), status: r.status as EstadoExtraccion, raw: r };
+  }
+
+  /** Sondea una extracción hasta que termina o falla. */
+  async waitForExtraction(id: string, opts: { timeoutMs?: number; intervalMs?: number } = {}): Promise<Json> {
+    const timeoutMs = opts.timeoutMs ?? 120_000;
+    const intervalMs = opts.intervalMs ?? 3_000;
+    const t0 = Date.now();
+    for (;;) {
+      const { status, raw } = await this.getExtraction(id);
+      if (status === "finished") return raw;
+      if (status === "failed" || status === "stopped" || status === "cancelled") {
+        throw new SyntageError(`Extracción ${id} terminó en estado ${status}`, undefined, raw);
+      }
+      if (Date.now() - t0 > timeoutMs) throw new SyntageError(`Extracción ${id} excedió el tiempo de espera`);
+      await sleep(intervalMs);
+    }
+  }
+}
+
+function safeJson(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
+}
+function asArray(r: unknown): Json[] {
+  if (Array.isArray(r)) return r as Json[];
+  if (r && typeof r === "object") {
+    const members = (r as Json)["hydra:member"] ?? (r as Json).member ?? (r as Json).data;
+    if (Array.isArray(members)) return members as Json[];
+  }
+  return [];
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
