@@ -90,6 +90,20 @@ export class SyntageClient {
     return asArray(r);
   }
 
+  /** Busca una entidad existente por RFC (para no duplicar). */
+  async findEntityByRfc(rfc: string): Promise<{ id: string } | null> {
+    const list = await this.listEntities();
+    const m = list.find((e) => String(e.rfc ?? "").toUpperCase() === rfc.toUpperCase());
+    return m ? { id: String(m.id ?? "") } : null;
+  }
+
+  /** Crea la entidad o reutiliza la existente por RFC. */
+  async ensureEntity(rfc: string): Promise<{ id: string }> {
+    const found = await this.findEntityByRfc(rfc);
+    if (found) return found;
+    return this.createEntity(rfc);
+  }
+
   // ── Credenciales ──────────────────────────────────────────────────────────────
   async createCiecCredential(rfc: string, password: string): Promise<{ id: string; status: EstadoCredencial }> {
     const r = await this.request<Json>("POST", "/credentials", { type: "ciec", rfc, password });
@@ -103,6 +117,27 @@ export class SyntageClient {
   }): Promise<{ id: string; status: EstadoCredencial }> {
     const r = await this.request<Json>("POST", "/credentials", { type: "efirma", ...args });
     return { id: String(r.id), status: r.status as EstadoCredencial };
+  }
+
+  async getCredential(id: string): Promise<{ id: string; status: EstadoCredencial; raw: Json }> {
+    const r = await this.request<Json>("GET", `/credentials/${id}`);
+    return { id: String(r.id), status: r.status as EstadoCredencial, raw: r };
+  }
+
+  /** Sondea una credencial hasta que valida (o falla). */
+  async waitForCredentialValid(id: string, opts: { timeoutMs?: number; intervalMs?: number } = {}): Promise<void> {
+    const timeoutMs = opts.timeoutMs ?? 90_000;
+    const intervalMs = opts.intervalMs ?? 3_000;
+    const t0 = Date.now();
+    for (;;) {
+      const { status, raw } = await this.getCredential(id);
+      if (status === "valid") return;
+      if (status === "invalid" || status === "error" || status === "disabled" || status === "deactivated") {
+        throw new SyntageError(`Credencial ${id} en estado ${status}`, undefined, raw);
+      }
+      if (Date.now() - t0 > timeoutMs) throw new SyntageError(`Credencial ${id} no validó a tiempo`);
+      await sleep(intervalMs);
+    }
   }
 
   // ── Extracciones ──────────────────────────────────────────────────────────────
