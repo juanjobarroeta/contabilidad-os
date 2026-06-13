@@ -79,10 +79,18 @@ export class SyntageClient {
   }
 
   // ── Entidades ────────────────────────────────────────────────────────────────
-  /** Crea (o registra) una entidad por RFC. Devuelve su id. */
-  async createEntity(rfc: string): Promise<{ id: string }> {
-    const r = await this.request<Json>("POST", "/entities", { rfc }); // VERIFY: campos exactos
-    return { id: String(r.id ?? r["@id"] ?? "") };
+  /**
+   * Crea una entidad. `name` y `type` son obligatorios (type: "company" = PM,
+   * "person" = PF); `rfc` es opcional pero recomendado.
+   */
+  async createEntity(args: {
+    name: string;
+    type: "company" | "person";
+    rfc?: string;
+    datasources?: Json[];
+  }): Promise<{ id: string }> {
+    const r = await this.request<Json>("POST", "/entities", args as Json);
+    return { id: String(r.id ?? "") };
   }
 
   async listEntities(): Promise<Json[]> {
@@ -97,11 +105,12 @@ export class SyntageClient {
     return m ? { id: String(m.id ?? "") } : null;
   }
 
-  /** Crea la entidad o reutiliza la existente por RFC. */
-  async ensureEntity(rfc: string): Promise<{ id: string }> {
-    const found = await this.findEntityByRfc(rfc);
+  /** Crea la entidad o reutiliza la existente por RFC. Infiere el type por RFC. */
+  async ensureEntity(args: { rfc: string; name: string }): Promise<{ id: string }> {
+    const found = await this.findEntityByRfc(args.rfc);
     if (found) return found;
-    return this.createEntity(rfc);
+    const type = args.rfc.trim().length === 12 ? "company" : "person";
+    return this.createEntity({ name: args.name, type, rfc: args.rfc });
   }
 
   // ── Credenciales ──────────────────────────────────────────────────────────────
