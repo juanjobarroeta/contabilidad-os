@@ -26,7 +26,8 @@
     "fiscal:actualizacion-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-actualizacion-check.ts",
     "fiscal:frescura-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-frescura-check.ts",
     "fiscal:cumplimiento-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-cumplimiento-check.ts",
-    "fiscal:efos-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-efos-check.ts"
+    "fiscal:efos-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-efos-check.ts",
+    "fiscal:syntage-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/syntage-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
