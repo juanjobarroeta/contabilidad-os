@@ -53,6 +53,7 @@ export async function POST(req: Request) {
 
     // Resolver RFC + credencial.
     let rfc = body.rfc ?? "";
+    let nombre = body.rfc ?? "";
     let cred: CredInput | null = null;
 
     if (body.companyId || body.buscar) {
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
           });
       if (!c) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
       rfc = c.rfc;
+      nombre = c.razonSocial;
       pasos.push({ paso: "empresa", razonSocial: c.razonSocial, rfc });
       if (body.ciec) {
         cred = { type: "ciec", password: body.ciec };
@@ -91,7 +93,7 @@ export async function POST(req: Request) {
     }
 
     // 1) Entidad.
-    const entity = await client.ensureEntity(rfc);
+    const entity = await client.ensureEntity({ rfc, name: nombre || rfc });
     pasos.push({ paso: "entidad", entityId: entity.id });
 
     // 2) Credencial.
