@@ -1,0 +1,28 @@
+name: Cotejo de datos fiscales (semanal)
+
+# Coteja el INPC cargado contra INEGI (BIE) y marca el dataset verificado cuando
+# empata — sube "sin cotejar" → "al día" en la cobertura. Requiere INEGI_TOKEN
+# en el entorno de la app (Railway); sin él, el endpoint se omite solo.
+#
+# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
+# NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
+
+on:
+  schedule:
+    - cron: "0 16 * * 1" # lunes ~10:00 CT (el INPC mensual se publica ~día 9)
+  workflow_dispatch: {}
+
+jobs:
+  cotejo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar cotejo fiscal (INPC vs INEGI)
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/cotejo-fiscal" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

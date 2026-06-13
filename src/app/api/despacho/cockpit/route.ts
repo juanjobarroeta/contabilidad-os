@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { empresasAccesiblesIds } from "@/lib/authz";
-import { evaluarCoberturaFiscal } from "@/lib/fiscal/cobertura-datos";
+import { coberturaConCotejo } from "@/lib/fiscal/cobertura-con-cotejo";
 import { resumenObligacionesPorEmpresa } from "@/lib/obligaciones-resumen";
 
 // GET /api/despacho/cockpit
@@ -123,6 +123,6 @@ export async function GET(req: Request) {
       totalVencidas,
     },
     // Franja global: frescura de los datos fiscales del país (no por empresa).
-    cobertura: evaluarCoberturaFiscal(now).resumen,
+    cobertura: (await coberturaConCotejo(now)).resumen,
   });
 }
