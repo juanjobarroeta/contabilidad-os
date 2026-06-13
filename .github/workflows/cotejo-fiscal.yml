@@ -1,8 +1,8 @@
 name: Cotejo de datos fiscales (semanal)
 
-# Coteja el INPC cargado contra INEGI (BIE) y marca el dataset verificado cuando
-# empata — sube "sin cotejar" → "al día" en la cobertura. Requiere INEGI_TOKEN
-# en el entorno de la app (Railway); sin él, el endpoint se omite solo.
+# Coteja el INPC cargado contra Banxico SIE (serie SP1) y marca el dataset
+# verificado cuando empata — sube "sin cotejar" → "al día" en la cobertura.
+# Requiere BANXICO_TOKEN en el entorno de la app (Railway); sin él se omite solo.
 #
 # Requiere repo secrets CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
 # NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
