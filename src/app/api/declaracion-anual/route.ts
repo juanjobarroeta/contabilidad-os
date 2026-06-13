@@ -5,6 +5,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { calcularDeclaracionAnual, type DeclaracionAnualInput } from "@/lib/declaracion-anual";
 import { sumIsrPagar } from "@/lib/isr-provisional";
 import { calcularDepreciacionRegistro } from "@/lib/fiscal/activos-registro";
+import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 
 // GET /api/declaracion-anual?companyId=xxx&ejercicio=2025
 // Aggregates all data for the annual declaration and calculates the result.
@@ -34,6 +35,13 @@ export async function GET(req: Request) {
   const yearStart = new Date(ejercicio, 0, 1);
   const yearEnd = new Date(ejercicio, 11, 31, 23, 59, 59);
 
+  // Proveedores 69-B definitivos → sus egresos NO son deducibles (Art. 69-B);
+  // se excluyen de las compras igual que en el motor provisional.
+  const efosBloqueados = await efosRfcsBloqueados(companyId);
+  const efosWhere = efosBloqueados.size > 0
+    ? { NOT: { customer: { rfc: { in: [...efosBloqueados] } } } }
+    : {};
+
   // ── Parallel data aggregation ──
   const [
     ingresosAgg,
@@ -53,7 +61,7 @@ export async function GET(req: Request) {
     // las SIN_EFECTOS no son deducibles; ambas se excluyen de "compras".
     prisma.invoice.groupBy({
       by: ["naturaleza"],
-      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lte: yearEnd } },
+      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lte: yearEnd }, ...efosWhere },
       _sum: { subtotal: true },
     }),
     // Payroll totals for the year
@@ -104,6 +112,13 @@ export async function GET(req: Request) {
   const egresosCfdis = sumaPorNaturaleza(["INVERSION", "SIN_EFECTOS"]);
   const inversionesExcluidas = egresosPorNaturaleza.find((g) => g.naturaleza === "INVERSION")?._sum.subtotal ?? 0;
   const sinEfectosExcluidos = egresosPorNaturaleza.find((g) => g.naturaleza === "SIN_EFECTOS")?._sum.subtotal ?? 0;
+  // 69-B: monto excluido por proveedores definitivos (ya descontado de egresosCfdis).
+  const efosExcluidos = efosBloqueados.size > 0
+    ? (await prisma.invoice.aggregate({
+        where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lte: yearEnd }, customer: { rfc: { in: [...efosBloqueados] } } },
+        _sum: { subtotal: true }, _count: { id: true },
+      }))
+    : null;
   // Deducción de inversiones del ejercicio: del registro de activo fijo, salvo
   // que el contador la sobreescriba por query param.
   const depreciacionRegistro = registroDepreciacion.totalDepreciacionEjercicio;
@@ -163,6 +178,9 @@ export async function GET(req: Request) {
       },
       inversionesExcluidas: { count: "CFDI de inversión (se deducen vía depreciación)", monto: inversionesExcluidas },
       sinEfectosExcluidos: { count: "CFDI sin efectos fiscales (no deducible)", monto: sinEfectosExcluidos },
+      efosExcluidos: efosExcluidos
+        ? { count: `${efosExcluidos._count.id} CFDI(s) de proveedor 69-B definitivo (no deducible, Art. 69-B)`, monto: efosExcluidos._sum.subtotal ?? 0 }
+        : { count: "Sin proveedores 69-B definitivos", monto: 0 },
     },
     existingDeclaration: existingAnual ? {
       id: existingAnual.id,
