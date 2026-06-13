@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { evaluarCoberturaFiscal } from "@/lib/fiscal/cobertura-datos";
+import { coberturaConCotejo } from "@/lib/fiscal/cobertura-con-cotejo";
 
 // GET /api/fiscal/cobertura
 // Reporte time-aware de frescura de los datos fiscales versionados (INPC,
@@ -16,5 +16,5 @@ export async function GET(req: Request) {
   const asOf = asOfParam ? new Date(asOfParam) : new Date();
   if (isNaN(asOf.getTime())) return NextResponse.json({ error: "asOf inválido" }, { status: 400 });
 
-  return NextResponse.json(evaluarCoberturaFiscal(asOf));
+  return NextResponse.json(await coberturaConCotejo(asOf));
 }

@@ -52,6 +52,18 @@ export function coberturaInpc(): { year: number; month: number } | null {
   return best;
 }
 
+/** Todos los INPC cargados como lista — para cotejar contra la fuente (INEGI). */
+export function inpcCargados(): { year: number; month: number; valor: number }[] {
+  const out: { year: number; month: number; valor: number }[] = [];
+  for (const [yStr, fila] of Object.entries(INPC)) {
+    const y = Number(yStr);
+    fila.forEach((v, i) => {
+      if (v != null) out.push({ year: y, month: i + 1, valor: v });
+    });
+  }
+  return out;
+}
+
 export interface FactorActualizacion {
   /** Factor INPC (num/den), 4 decimales. 1 cuando no se puede actualizar. */
   factor: number;

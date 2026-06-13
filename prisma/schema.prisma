@@ -1086,6 +1086,21 @@ model CompanyObligation {
   @@unique([companyId, tipo])
 }
 
+// Resultado del cotejo automático de un dataset fiscal versionado (INPC, …)
+// contra su fuente oficial (INEGI). Lo escribe el cron /api/cron/cotejo-fiscal;
+// lo lee la cobertura para subir "sin cotejar" → "al día" cuando los valores
+// cargados empatan con la fuente. Una fila por dataset.
+model CotejoFiscal {
+  id              String    @id @default(cuid())
+  dataset         String    @unique // "INPC"
+  verificado      Boolean   @default(false)
+  verifiedThrough String? // último periodo cotejado, "YYYY-MM"
+  matchedAt       DateTime?
+  mismatch        Json? // discrepancias detectadas (si las hay)
+  fuente          String? // p.ej. "INEGI BIE"
+  updatedAt       DateTime  @updatedAt
+}
+
 enum TaxDeclarationType {
   IVA_MENSUAL
   ISR_PROVISIONAL
