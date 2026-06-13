@@ -1,0 +1,27 @@
+name: Recordatorio de declaraciones (entre semana)
+
+# Push agregado de acuses faltantes: un aviso por usuario suscrito mientras
+# falten declaraciones por capturar. Sólo entre semana para no fastidiar.
+#
+# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
+# NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
+
+on:
+  schedule:
+    - cron: "0 15 * * 1-5" # ~09:00/10:00 CT, lunes a viernes
+  workflow_dispatch: {}
+
+jobs:
+  nag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar recordatorio de declaraciones
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/declaraciones-nag" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
