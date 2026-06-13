@@ -460,7 +460,7 @@ export async function verifyAndImportSatSync(
         // they're missing, so a re-sync repairs CFDIs imported before we stored
         // the file / parsed the <cfdi:Impuestos> node.
         const existing = await prisma.invoice.findFirst({
-          where: { uuid: { equals: uuid, mode: "insensitive" } },
+          where: { companyId, uuid: { equals: uuid, mode: "insensitive" } },
           select: { id: true, rawXml: true, _count: { select: { taxes: true } } },
         });
         if (existing) {

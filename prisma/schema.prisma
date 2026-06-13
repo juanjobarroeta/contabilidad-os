@@ -511,7 +511,11 @@ model Invoice {
 
   // SAT stamping data (from PAC/Facturapi)
   status         InvoiceStatus @default(DRAFT)
-  uuid           String?       @unique // Folio fiscal
+  // Folio fiscal. Único POR EMPRESA, no global: un CFDI intercompañía (emisor y
+  // receptor ambos en el sistema, p.ej. un grupo) debe poder guardarse en ambas
+  // empresas — una como INGRESO y otra como EGRESO. La dedup de importación
+  // filtra por companyId. Ver @@unique([companyId, uuid]) abajo.
+  uuid           String? // Folio fiscal
   facturapiId    String? // Facturapi invoice ID
   xmlUrl         String?
   pdfUrl         String?
@@ -545,6 +549,10 @@ model Invoice {
 
   // Activos fijos registrados a partir de este CFDI (naturaleza = INVERSION).
   activosFijos ActivoFijo[]
+
+  // Único por empresa: permite que un CFDI intercompañía viva en las dos
+  // empresas (emisor + receptor) sin chocar, y evita duplicados dentro de una.
+  @@unique([companyId, uuid])
 }
 
 // ── Activo fijo / inversión — registro de depreciación (Art. 31/34/36 LISR) ──
