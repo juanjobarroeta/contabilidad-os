@@ -42,6 +42,7 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as {
     companyId?: string;
+    buscar?: string; // por razón social (contiene, sin distinguir mayúsculas)
     rfc?: string;
     ciec?: string;
   };
@@ -54,11 +55,16 @@ export async function POST(req: Request) {
     let rfc = body.rfc ?? "";
     let cred: CredInput | null = null;
 
-    if (body.companyId) {
-      const c = await prisma.company.findUnique({
-        where: { id: body.companyId },
-        select: { rfc: true, razonSocial: true, fielCer: true, fielKey: true, fielPassword: true },
-      });
+    if (body.companyId || body.buscar) {
+      const c = body.companyId
+        ? await prisma.company.findUnique({
+            where: { id: body.companyId },
+            select: { rfc: true, razonSocial: true, fielCer: true, fielKey: true, fielPassword: true },
+          })
+        : await prisma.company.findFirst({
+            where: { razonSocial: { contains: body.buscar!, mode: "insensitive" } },
+            select: { rfc: true, razonSocial: true, fielCer: true, fielKey: true, fielPassword: true },
+          });
       if (!c) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
       rfc = c.rfc;
       pasos.push({ paso: "empresa", razonSocial: c.razonSocial, rfc });
