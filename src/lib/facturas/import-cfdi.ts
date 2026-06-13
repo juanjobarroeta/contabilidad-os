@@ -48,7 +48,7 @@ export async function importCfdiFromXml(opts: {
 
   // cfdi.uuid ya viene en MAYÚSCULAS (parseCfdiXml lo canoniza); el match es
   // insensible a la caja para reconocer copias previas guardadas en minúsculas.
-  const existing = await prisma.invoice.findFirst({ where: { uuid: { equals: cfdi.uuid, mode: "insensitive" } }, select: { id: true } });
+  const existing = await prisma.invoice.findFirst({ where: { companyId, uuid: { equals: cfdi.uuid, mode: "insensitive" } }, select: { id: true } });
   if (existing) {
     return { ok: true, invoiceId: existing.id, uuid: cfdi.uuid, duplicate: true, message: "Este CFDI ya estaba registrado." };
   }
