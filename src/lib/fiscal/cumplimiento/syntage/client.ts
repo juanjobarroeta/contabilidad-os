@@ -98,11 +98,18 @@ export class SyntageClient {
     return asArray(r);
   }
 
-  /** Busca una entidad existente por RFC (para no duplicar). */
+  /**
+   * Busca una entidad existente por RFC (para no duplicar). Syntage expone el RFC
+   * en distintos campos (rfc/taxpayer…), así que se busca el RFC en cualquier
+   * parte del registro; el id se toma de `id` o del IRI `@id`.
+   */
   async findEntityByRfc(rfc: string): Promise<{ id: string } | null> {
     const list = await this.listEntities();
-    const m = list.find((e) => String(e.rfc ?? "").toUpperCase() === rfc.toUpperCase());
-    return m ? { id: String(m.id ?? "") } : null;
+    const target = rfc.trim().toUpperCase();
+    const m = list.find((e) => JSON.stringify(e).toUpperCase().includes(target));
+    if (!m) return null;
+    const id = String(m.id ?? iriId(m["@id"]));
+    return id ? { id } : null;
   }
 
   /** Crea la entidad o reutiliza la existente por RFC. Infiere el type por RFC. */
@@ -200,3 +207,7 @@ function asArray(r: unknown): Json[] {
   return [];
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Último segmento de un IRI JSON-LD, p.ej. "/entities/abc" → "abc". */
+function iriId(iri: unknown): string {
+  return typeof iri === "string" ? (iri.split("/").pop() ?? "") : "";
+}
