@@ -1,6 +1,6 @@
 // Verifica el parser y la revisión 69-B/EFOS. Run: npm run fiscal:efos-check
 
-import { parseEfosCsv, revisarEfos, type CfdiProveedor } from "../src/lib/fiscal/efos";
+import { parseEfosCsv, revisarEfos, revisarRfcs, type CfdiProveedor, type RfcEntrada } from "../src/lib/fiscal/efos";
 
 let fallos = 0;
 function check(nombre: string, cond: boolean, detalle?: string) {
@@ -48,6 +48,21 @@ check("proveedor limpio NO marcado", !h.some((x) => x.referencias.includes("D1")
 check("cita CFF 69-B", (def?.fundamento.articulo ?? "") === "69-B");
 check("definitivo ordenado antes que presunto", h[0].severidad === "error");
 check("lista vacía → sin hallazgos", revisarEfos(recibidos, new Map()).length === 0);
+
+console.log("revisarRfcs (propio + contrapartes)");
+const entradas: RfcEntrada[] = [
+  { rfc: "EFD010101AAA", rol: "PROPIO" }, // tu RFC es EFOS definitivo
+  { rfc: "EFP020202BBB", rol: "CONTRAPARTE", nombre: "Proveedor Presunto SA" },
+  { rfc: "EFD010101AAA", rol: "CONTRAPARTE" }, // duplicado del propio → no se repite
+  { rfc: "GOOD010101XXX", rol: "CONTRAPARTE", nombre: "Cliente Limpio" }, // limpio
+];
+const hr = revisarRfcs(entradas, lista);
+check("RFC propio definitivo → error", hr.some((x) => x.checkClave === "efos.propio.definitivo" && x.severidad === "error"));
+check("contraparte presunta → warn", hr.some((x) => x.checkClave === "efos.contraparte.presunto" && x.severidad === "warn"));
+check("dedup por RFC (no repite EFD…)", hr.filter((x) => x.referencias.includes("EFD010101AAA")).length === 1);
+check("RFC limpio NO marcado", !hr.some((x) => x.referencias.includes("GOOD010101XXX")));
+check("error ordenado antes que warn", hr[0].severidad === "error");
+check("sin entradas en lista → sin hallazgos", revisarRfcs([{ rfc: "GOOD010101XXX", rol: "PROPIO" }], lista).length === 0);
 
 console.log("");
 if (fallos === 0) {

@@ -1,0 +1,30 @@
+name: Screening 69-B/EFOS (diario)
+
+# Descarga el listado 69-B del SAT y coteja todas las empresas (RFC propio +
+# clientes/proveedores) contra la lista negra, persistiendo hallazgos. La lista
+# cambia con cada publicación del SAT, por eso se corre a diario.
+#
+# Requiere secretos del repo CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
+# Prerrequisito en el deploy: la tabla FiscalHallazgo debe existir.
+#
+# NOTE: GitHub solo corre `schedule:` desde la rama default (main).
+
+on:
+  schedule:
+    - cron: "0 14 * * *" # ~08:00 CT diario
+  workflow_dispatch: {}
+
+jobs:
+  screening:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar screening 69-B
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/efos-screening" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
