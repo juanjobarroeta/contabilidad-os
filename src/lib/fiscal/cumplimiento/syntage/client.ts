@@ -152,10 +152,13 @@ export class SyntageClient {
   // ── Extracciones ──────────────────────────────────────────────────────────────
   async createExtraction(args: {
     extractor: Extractor;
-    entity: string;
+    entity: string; // uuid o IRI; Syntage (JSON-LD) requiere IRI "/entities/{id}"
     options?: Json; // p.ej. { period: { from, to } }
   }): Promise<{ id: string; status: EstadoExtraccion }> {
-    const r = await this.request<Json>("POST", "/extractions", args as Json); // VERIFY body
+    const entity = args.entity.startsWith("/") ? args.entity : `/entities/${args.entity}`;
+    const body: Json = { extractor: args.extractor, entity };
+    if (args.options) body.options = args.options;
+    const r = await this.request<Json>("POST", "/extractions", body);
     return { id: String(r.id), status: r.status as EstadoExtraccion };
   }
 
