@@ -52,9 +52,14 @@ export default function DespachoCockpitPage() {
   const router = useRouter();
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
+  const [declFaltan, setDeclFaltan] = useState<{ total: number; empresas: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/despacho/cockpit").then((r) => (r.ok ? r.json() : null)).then(setData).finally(() => setLoading(false));
+    fetch("/api/declaraciones/cobertura")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setDeclFaltan({ total: d.total, empresas: d.empresasConFaltantes }))
+      .catch(() => {});
   }, []);
 
   function operar(id: string, destino: string) {
@@ -95,6 +100,17 @@ export default function DespachoCockpitPage() {
             Datos fiscales: {data.cobertura.faltantes > 0 && <b>{data.cobertura.faltantes} faltante(s)</b>}
             {data.cobertura.faltantes > 0 && data.cobertura.sinCotejar > 0 && " · "}
             {data.cobertura.sinCotejar > 0 && <b>{data.cobertura.sinCotejar} sin cotejar</b>} — afecta todos los RFC.
+          </span>
+          <ChevronR className="h-4 w-4 flex-none" />
+        </Link>
+      )}
+
+      {/* franja de declaraciones (acuses) por capturar */}
+      {declFaltan && declFaltan.total > 0 && (
+        <Link href="/declaraciones" className="mt-3 flex items-center gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink hover:opacity-90">
+          <FileWarning className="h-4 w-4 flex-none" />
+          <span className="flex-1">
+            Faltan <b>{declFaltan.total} acuse(s)</b> en <b>{declFaltan.empresas} empresa(s)</b> — súbelos para calcular saldos a favor, coeficiente y pagos provisionales.
           </span>
           <ChevronR className="h-4 w-4 flex-none" />
         </Link>
