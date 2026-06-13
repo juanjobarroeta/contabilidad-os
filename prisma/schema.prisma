@@ -202,6 +202,7 @@ model Company {
   payrollRuns       PayrollRun[]
   taxDeclarations   TaxDeclaration[]
   obligations       CompanyObligation[]
+  perdidasFiscales  PerdidaFiscal[]
   accountingEntries AccountingEntry[]
   accounts          ChartAccount[]
   accountingPeriods AccountingPeriod[]
@@ -1063,6 +1064,32 @@ model TaxDeclaration {
   acuseData Json?
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Pérdida fiscal pendiente de amortizar (Art. 57 LISR). Una por ejercicio de
+// origen y empresa. El saldo se guarda YA ACTUALIZADO por INPC hasta
+// `mesUltimaActualizacion`; la declaración anual la actualiza a junio y la aplica
+// FIFO contra la utilidad. Expira 10 ejercicios después del origen.
+model PerdidaFiscal {
+  id              String   @id @default(cuid())
+  companyId       String
+  ejercicioOrigen Int      // año en que se generó la pérdida
+  montoOriginal   Float    // pérdida nominal del ejercicio
+  // Saldo pendiente de amortizar, actualizado hasta `mesUltimaActualizacion`.
+  saldoActualizado       Float
+  mesUltimaActualizacion String // "YYYY-MM"
+  agotada                Boolean @default(false)
+  // Último ejercicio en que se aplicó (idempotencia del guardado de la anual).
+  ultimoEjercicioAplicado Int?
+  // "CALCULADA" (generada por la anual) | "IMPORTADA" (acuse/captura inicial).
+  origen    String   @default("CALCULADA")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, ejercicioOrigen])
+  @@index([companyId])
 }
 
 // Tracks which fiscal obligations each company has (derived from régimen or parsed from CSF)

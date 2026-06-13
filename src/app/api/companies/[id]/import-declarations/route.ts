@@ -36,6 +36,8 @@ interface AcuseAnual {
   isrCausado?: number | null;
   isrAPagar?: number | null;
   isrAFavor?: number | null;
+  /** Pérdidas fiscales pendientes de amortizar al cierre del ejercicio (Art. 57). */
+  perdidasPendientes?: number | null;
   lineaCaptura?: string | null;
   fechaPresentacion?: string | null;
 }
@@ -108,6 +110,29 @@ export async function POST(req: Request, { params }: Params) {
           data: {
             coeficienteUtilidad: a.coeficienteUtilidad,
             coeficienteAnio: (a.ejercicio ?? 0) + 1,
+          },
+        });
+      }
+
+      // Pérdidas pendientes del acuse → ledger Art. 57. Baseline importado: se
+      // modela como un solo registro del ejercicio, ya actualizado a su dic (no
+      // hay desglose por ejercicio de origen en el acuse). origen=IMPORTADA.
+      if (a.perdidasPendientes != null && a.perdidasPendientes > 0) {
+        await prisma.perdidaFiscal.upsert({
+          where: { companyId_ejercicioOrigen: { companyId, ejercicioOrigen: a.ejercicio! } },
+          create: {
+            companyId,
+            ejercicioOrigen: a.ejercicio!,
+            montoOriginal: a.perdidasPendientes,
+            saldoActualizado: a.perdidasPendientes,
+            mesUltimaActualizacion: `${a.ejercicio}-12`,
+            origen: "IMPORTADA",
+          },
+          update: {
+            montoOriginal: a.perdidasPendientes,
+            saldoActualizado: a.perdidasPendientes,
+            mesUltimaActualizacion: `${a.ejercicio}-12`,
+            origen: "IMPORTADA",
           },
         });
       }
