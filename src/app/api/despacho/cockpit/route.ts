@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { empresasAccesiblesIds } from "@/lib/authz";
 import { evaluarCoberturaFiscal } from "@/lib/fiscal/cobertura-datos";
+import { resumenObligacionesPorEmpresa } from "@/lib/obligaciones-resumen";
 
 // GET /api/despacho/cockpit
 // Panel del despacho: una fila por empresa accesible con el estado del periodo
@@ -66,6 +67,11 @@ export async function GET(req: Request) {
   const sinTimbrarBy = new Map(sinTimbrar.map((r) => [r.companyId, r._count.id]));
   const empleadosBy = new Map(empleados.map((r) => [r.companyId, r._count.id]));
 
+  // Obligaciones vencidas / por vencer del AÑO en curso, por empresa (mismo
+  // criterio que el calendario de Cumplimiento). Así el cockpit muestra QUÉ
+  // empresas están atrasadas, no sólo el estado de la declaración del periodo.
+  const obligBy = await resumenObligacionesPorEmpresa(companyIds, now.getFullYear(), now);
+
   const FILED = ["FILED", "PAID"];
   const vencido = now > vencimiento;
 
@@ -94,11 +100,15 @@ export async function GET(req: Request) {
       aPagar: algunaGuardada ? aPagar : null,
       nominaSinTimbrar: sinTimbrarBy.get(c.id) ?? 0,
       empleadosActivos: empleadosBy.get(c.id) ?? 0,
+      obligacionesVencidas: obligBy.get(c.id)?.vencidas ?? 0,
+      obligacionesPorVencer: obligBy.get(c.id)?.porVencer ?? 0,
     };
   });
 
   const totalAPagar = rows.reduce((s, r) => s + (r.aPagar ?? 0), 0);
   const conPendientes = rows.filter((r) => r.estadoDeclaracion !== "presentada").length;
+  const empresasConVencidas = rows.filter((r) => r.obligacionesVencidas > 0).length;
+  const totalVencidas = rows.reduce((s, r) => s + r.obligacionesVencidas, 0);
 
   return NextResponse.json({
     periodo,
@@ -109,6 +119,8 @@ export async function GET(req: Request) {
       empresas: rows.length,
       conPendientes,
       totalAPagar: Math.round(totalAPagar * 100) / 100,
+      empresasConVencidas,
+      totalVencidas,
     },
     // Franja global: frescura de los datos fiscales del país (no por empresa).
     cobertura: evaluarCoberturaFiscal(now).resumen,
