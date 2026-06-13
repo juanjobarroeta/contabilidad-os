@@ -35,6 +35,10 @@ model User {
   stripeSubscriptionId String?            @unique
   currentPeriodEnd     DateTime?
 
+  // Preferencias de notificaciones push, por categoría. Modelo opt-out: una
+  // categoría ausente o true = activada. Shape: { cfdis?: bool, declaraciones?: bool }.
+  notifPrefs Json?
+
   accounts            Account[]
   sessions            Session[]
   memberships         CompanyMember[]

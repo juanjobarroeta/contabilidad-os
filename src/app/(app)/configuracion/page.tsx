@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Users, CreditCard, UserCircle, Briefcase } from "lucide-react";
+import { Building2, Users, CreditCard, UserCircle, Briefcase, Bell } from "lucide-react";
 
 const SECTIONS = [
   {
@@ -31,6 +31,12 @@ const SECTIONS = [
     title: "Mi cuenta",
     description: "Nombre, correo y contraseña.",
     icon: UserCircle,
+  },
+  {
+    href: "/configuracion/notificaciones",
+    title: "Notificaciones",
+    description: "Activa el push y elige qué avisos recibir.",
+    icon: Bell,
   },
 ];
 
