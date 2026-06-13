@@ -49,3 +49,47 @@ export async function fetchInpcBanxico(): Promise<Map<string, number>> {
   if (out.size === 0) throw new Error("Banxico no devolvió datos del INPC");
   return out;
 }
+
+// ── Tipo de cambio FIX (sólo informativo) ────────────────────────────────────
+// Serie SF43718 = "Tipo de cambio Pesos por dólar E.U.A. ... FIX" (diaria). Es el
+// tipo de cambio que el SAT usa para convertir moneda extranjera (Art. 20 CFF, el
+// del día anterior). Por ahora SÓLO lo mostramos como dato de referencia; la
+// fluctuación cambiaria (Art. 8 LISR) se construirá cuando se necesite.
+const FIX_SERIE = process.env.BANXICO_FIX_SERIE || "SF43718";
+
+export const BANXICO_FIX_SERIE = FIX_SERIE;
+
+export interface TipoCambioFix {
+  /** "YYYY-MM-DD" del dato. */
+  fecha: string;
+  /** Pesos por dólar. */
+  valor: number;
+}
+
+/**
+ * Último FIX publicado por Banxico. Falla suave (devuelve null) porque es sólo
+ * informativo — no debe romper el tablero. Se cachea 6 h (data cache de Next)
+ * para no golpear el API de Banxico en cada carga.
+ */
+export async function fetchTipoCambioFix(): Promise<TipoCambioFix | null> {
+  const token = process.env.BANXICO_TOKEN;
+  if (!token) return null;
+  try {
+    const url = `https://www.banxico.org.mx/SieAPIRest/service/v1/series/${FIX_SERIE}/datos/oportuno?token=${encodeURIComponent(token)}`;
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 21600 }, // 6 h
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      bmx?: { series?: { datos?: { fecha?: string; dato?: string }[] }[] };
+    };
+    const d = json.bmx?.series?.[0]?.datos?.[0];
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(d?.fecha ?? "");
+    const valor = Number(d?.dato);
+    if (!m || !Number.isFinite(valor)) return null;
+    return { fecha: `${m[3]}-${m[2]}-${m[1]}`, valor };
+  } catch {
+    return null;
+  }
+}
