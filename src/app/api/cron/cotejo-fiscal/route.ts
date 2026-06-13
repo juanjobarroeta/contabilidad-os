@@ -5,9 +5,9 @@ import { cotejarInpc } from "@/lib/fiscal/cotejo";
 // POST (or GET) /api/cron/cotejo-fiscal
 //
 // Coteja los datos fiscales versionados contra su fuente oficial. Por ahora:
-// INPC vs INEGI (BIE). Marca el dataset verificado cuando los valores cargados
-// empatan, lo que sube "sin cotejar" → "al día" en la cobertura. Sin INEGI_TOKEN
-// se omite (no rompe nada).
+// INPC vs Banxico SIE (serie SP1). Marca el dataset verificado cuando los valores
+// cargados empatan, lo que sube "sin cotejar" → "al día" en la cobertura. Sin
+// BANXICO_TOKEN se omite (no rompe nada).
 //
 // Auth: CRON_SECRET (Bearer o x-cron-secret), igual que los otros crons.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,8 +27,8 @@ async function handle(req: Request) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!process.env.INEGI_TOKEN) {
-    return NextResponse.json({ ok: true, skipped: "INEGI_TOKEN no configurado" });
+  if (!process.env.BANXICO_TOKEN) {
+    return NextResponse.json({ ok: true, skipped: "BANXICO_TOKEN no configurado" });
   }
 
   const inpc = await cotejarInpc();
