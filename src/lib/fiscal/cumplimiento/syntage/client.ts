@@ -174,6 +174,24 @@ export class SyntageClient {
     return { id: String(r.id), status: r.status as EstadoExtraccion, raw: r };
   }
 
+  /** Último TaxComplianceCheck (opinión) de la entidad, o null. */
+  async getLatestTaxComplianceCheck(entityId: string): Promise<Json | null> {
+    const r = await this.request<Json>(
+      "GET",
+      `/entities/${entityId}/tax-compliance-checks?order%5BcreatedAt%5D=desc&itemsPerPage=1`,
+    );
+    return asArray(r)[0] ?? null;
+  }
+
+  /** Último TaxStatus (CSF) de la entidad, o null. */
+  async getLatestTaxStatus(entityId: string): Promise<Json | null> {
+    const r = await this.request<Json>(
+      "GET",
+      `/entities/${entityId}/tax-status?order%5BcreatedAt%5D=desc&itemsPerPage=1`,
+    );
+    return asArray(r)[0] ?? null;
+  }
+
   /** Sondea una extracción hasta que termina o falla. */
   async waitForExtraction(id: string, opts: { timeoutMs?: number; intervalMs?: number } = {}): Promise<Json> {
     const timeoutMs = opts.timeoutMs ?? 120_000;

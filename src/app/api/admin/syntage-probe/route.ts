@@ -107,23 +107,24 @@ export async function POST(req: Request) {
     await client.waitForCredentialValid(created.id);
     pasos.push({ paso: "credencial_valida" });
 
-    // 4) Extracciones.
+    // 4) Extracción (job) + 5) recurso de resultado (el dato vive aparte).
     const run = async (extractor: Extractor) => {
       const { id } = await client.createExtraction({ extractor, entity: entity.id });
       pasos.push({ paso: "extraccion", extractor, extractionId: id });
-      return client.waitForExtraction(id, { timeoutMs: 180_000 });
+      await client.waitForExtraction(id, { timeoutMs: 180_000 });
     };
-    const opinionRaw = await run("tax_compliance");
-    const csfRaw = await run("tax_status");
+    await run("tax_compliance");
+    const opinionRes = await client.getLatestTaxComplianceCheck(entity.id);
+    await run("tax_status");
+    const csfRes = await client.getLatestTaxStatus(entity.id);
 
-    // 5) Crudo + mapeado (para cotejar map.ts).
     return NextResponse.json({
       ok: true,
       rfc,
       entityId: entity.id,
       pasos,
-      opinion: { raw: opinionRaw, mapped: mapTaxCompliance(opinionRaw) },
-      csf: { raw: csfRaw, mapped: mapTaxStatus(csfRaw) },
+      opinion: { raw: opinionRes, mapped: opinionRes ? mapTaxCompliance(opinionRes) : null },
+      csf: { raw: csfRes, mapped: csfRes ? mapTaxStatus(csfRes) : null },
     });
   } catch (e) {
     const err = e as { message?: string; status?: number; body?: unknown };

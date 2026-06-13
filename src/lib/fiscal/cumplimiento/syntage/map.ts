@@ -1,11 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mapeo de las respuestas de Syntage a nuestros tipos de cumplimiento.
-//
-// ⚠️ VERIFY: las claves exactas del JSON de Syntage (tax_compliance / tax_status)
-// no están en la doc pública; aquí se leen de forma defensiva, aceptando varias
-// variantes. Al recibir la PRIMERA respuesta viva, ajusta estos accesos — es el
-// ÚNICO punto que requiere verificación. La mecánica (auth, extracción) ya está
-// confirmada en docs.
+// Mapeo de los RECURSOS de resultado de Syntage a nuestros tipos. Confirmado
+// contra el OpenAPI de Syntage y una respuesta viva:
+//   TaxComplianceCheck.result ∈ positive|negative|no_obligations|activity_suspended
+//   TaxStatus → rfc, taxRegimes[].code, obligations[].description, address.postalCode, status
+// OJO: estos son los recursos /tax-compliance-checks/{id} y /tax-status/{id},
+// NO el objeto Extraction (que es sólo el job).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { CsfResult, EstatusPadron, OpinionResult, ResultadoOpinion } from "../types";
@@ -13,23 +12,28 @@ import type { CsfResult, EstatusPadron, OpinionResult, ResultadoOpinion } from "
 type Json = Record<string, unknown>;
 
 const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
-const pick = (o: Json, ...keys: string[]): unknown => {
-  for (const k of keys) if (o[k] != null) return o[k];
+const fileRef = (f: unknown): string | undefined => {
+  if (typeof f === "string") return f;
+  if (f && typeof f === "object") return str((f as Json).resource) ?? str((f as Json)["@id"]);
   return undefined;
 };
-const arr = (v: unknown): string[] =>
-  Array.isArray(v) ? v.map((x) => (typeof x === "string" ? x : str((x as Json)?.descripcion) ?? str((x as Json)?.name) ?? "")).filter(Boolean) : [];
 
-function normResultado(v: unknown): ResultadoOpinion {
-  const s = (str(v) ?? "").toLowerCase();
-  if (/positiv/.test(s)) return "POSITIVA";
-  if (/negativ/.test(s)) return "NEGATIVA";
-  if (/no.?local|inscr/.test(s)) return "NO_LOCALIZADO";
-  if (/sin.?oblig/.test(s)) return "SIN_OBLIGACIONES";
-  return "ERROR";
+function mapResult(v: unknown): ResultadoOpinion {
+  switch (String(v)) {
+    case "positive":
+      return "POSITIVA";
+    case "negative":
+      return "NEGATIVA";
+    case "no_obligations":
+      return "SIN_OBLIGACIONES";
+    case "activity_suspended":
+      return "NO_LOCALIZADO"; // suspendido: sin opinión vigente
+    default:
+      return "ERROR";
+  }
 }
 
-function normEstatusPadron(v: unknown): EstatusPadron {
+function mapEstatus(v: unknown): EstatusPadron {
   const s = (str(v) ?? "").toUpperCase();
   if (s.includes("SUSP")) return "SUSPENDIDO";
   if (s.includes("CANCEL")) return "CANCELADO";
@@ -38,33 +42,35 @@ function normEstatusPadron(v: unknown): EstatusPadron {
   return "DESCONOCIDO";
 }
 
-/** tax_compliance → OpinionResult (SAT). */
-export function mapTaxCompliance(raw: Json, fetchedAt = new Date().toISOString()): OpinionResult {
-  const r = (pick(raw, "result", "data", "taxCompliance") as Json) ?? raw;
+/** Recurso TaxComplianceCheck → OpinionResult (SAT). */
+export function mapTaxCompliance(check: Json, fetchedAt = new Date().toISOString()): OpinionResult {
+  const folio = str(check.internalIdentifier);
   return {
     tipo: "SAT_OPINION",
-    resultado: normResultado(pick(r, "opinion", "result", "status", "opinionCumplimiento", "resultado")),
-    motivos: arr(pick(r, "obligations", "obligaciones", "motivos", "reasons")),
-    acuseUrl: str(pick(r, "file", "acuse", "pdf", "url")),
-    vigencia: str(pick(r, "validUntil", "vigencia", "expiresAt")),
+    resultado: mapResult(check.result),
+    // El detalle de la negativa vive en el PDF; conservamos el folio del SAT.
+    motivos: folio ? [`Folio SAT: ${folio}`] : [],
+    acuseUrl: fileRef(check.file),
+    vigencia: str(check.checkedAt),
     fetchedAt,
   };
 }
 
-/** tax_status → CsfResult (CSF). */
-export function mapTaxStatus(raw: Json, fetchedAt = new Date().toISOString()): CsfResult {
-  const r = (pick(raw, "result", "data", "taxStatus") as Json) ?? raw;
-  const dom = (pick(r, "domicilio", "address", "fiscalAddress") as Json) ?? {};
+/** Recurso TaxStatus → CsfResult (CSF). */
+export function mapTaxStatus(ts: Json, fetchedAt = new Date().toISOString()): CsfResult {
+  const address = (ts.address as Json) ?? {};
+  const regimes = Array.isArray(ts.taxRegimes) ? (ts.taxRegimes as Json[]) : [];
+  const obligations = Array.isArray(ts.obligations) ? (ts.obligations as Json[]) : [];
   return {
     tipo: "CSF",
     perfil: {
-      rfc: str(pick(r, "rfc", "taxId")) ?? "",
-      regimenes: arr(pick(r, "regimenes", "regimes", "taxRegimes")),
-      obligaciones: arr(pick(r, "obligaciones", "obligations")),
-      codigoPostal: str(pick(r, "codigoPostal", "postalCode")) ?? str(pick(dom, "codigoPostal", "postalCode")),
-      estatusPadron: normEstatusPadron(pick(r, "estatus", "status", "padronStatus")),
+      rfc: str(ts.rfc) ?? "",
+      regimenes: regimes.map((r) => String(r.code ?? "")).filter(Boolean),
+      obligaciones: obligations.map((o) => str(o.description) ?? "").filter(Boolean),
+      codigoPostal: str(address.postalCode),
+      estatusPadron: mapEstatus(ts.status),
     },
-    acuseUrl: str(pick(r, "file", "acuse", "pdf", "url")),
+    acuseUrl: fileRef(ts.file),
     fetchedAt,
   };
 }
