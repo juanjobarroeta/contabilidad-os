@@ -93,3 +93,27 @@ export async function screenAllCompaniesEfos(lista: ListaEfos) {
   }
   return { empresas: companies.length, rfcsEnLista: lista.size, errores, resultados };
 }
+
+/**
+ * Conjunto de RFCs de contraparte que el cotejo 69-B marcó como DEFINITIVO y
+ * siguen ABIERTOS para una empresa. Es la fuente que el motor de impuestos
+ * consume para EXCLUIR las deducciones/IVA acreditable improcedentes (Art. 69-B).
+ *
+ * Override de materialidad: si el contador marca el hallazgo como RESUELTO o
+ * IGNORADO (acreditó materialidad / se desvirtuó), el RFC sale del conjunto y
+ * sus deducciones vuelven a contar — sin tocar el motor. RFCs en MAYÚSCULAS.
+ */
+export async function efosRfcsBloqueados(companyId: string): Promise<Set<string>> {
+  const rows = await prisma.fiscalHallazgo.findMany({
+    where: { companyId, estado: "ABIERTO", checkClave: "efos.contraparte.definitivo" },
+    select: { referencias: true },
+  });
+  const bloqueados = new Set<string>();
+  for (const r of rows) {
+    for (const rfc of r.referencias) {
+      const norm = rfc.toUpperCase().trim();
+      if (norm) bloqueados.add(norm);
+    }
+  }
+  return bloqueados;
+}

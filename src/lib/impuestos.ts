@@ -6,6 +6,16 @@ import { calcularIsrArrendamientoMensual } from "./fiscal/isr-arrendamiento";
 import { calcularIsrPlataformas, normalizarActividadPlataforma, TASAS_PLATAFORMA } from "./fiscal/isr-plataformas";
 import { calcularActosDelPeriodo } from "./fiscal/iva";
 import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
+import { efosRfcsBloqueados } from "./fiscal/efos/service";
+
+/**
+ * Prisma `where` que EXCLUYE los CFDIs de egreso emitidos por un proveedor 69-B
+ * DEFINITIVO (deducción/IVA improcedente, Art. 69-B). Conserva los egresos sin
+ * customer (customerId null). Vacío cuando no hay RFCs bloqueados → sin efecto.
+ */
+function filtroEfos(bloqueados: Set<string>): Record<string, unknown> {
+  return bloqueados.size > 0 ? { NOT: { customer: { rfc: { in: [...bloqueados] } } } } : {};
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Monthly tax position (IVA + ISR provisional) computed from synced CFDIs.
@@ -68,8 +78,11 @@ function repIvaTrasladado(
 async function flujoEfectivoAcum(
   companyId: string,
   from: Date,
-  to: Date
+  to: Date,
+  /** RFCs 69-B definitivos a excluir de las deducciones (no de los ingresos). */
+  efosBloqueados: Set<string> = new Set()
 ): Promise<{ ingresosCobrados: number; deduccionesPagadas: number; isrRetenidoCobrado: number }> {
+  const efosWhere = filtroEfos(efosBloqueados);
   const [puIngreso, puEgreso, puIngresoIsrRet, repLinks] = await Promise.all([
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
@@ -79,9 +92,11 @@ async function flujoEfectivoAcum(
       // Deducciones inmediatas: excluye INVERSION (se deduce vía depreciación)
       // y SIN_EFECTOS (no deducible). Los null (legacy sin clasificar) se
       // conservan como gasto — corre el backfill de naturaleza para clasificarlos.
+      // También excluye proveedores 69-B definitivos (deducción improcedente).
       where: {
         companyId, tipo: "EGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to },
         OR: [{ naturaleza: null }, { naturaleza: { notIn: ["INVERSION", "SIN_EFECTOS"] } }],
+        ...efosWhere,
       },
       _sum: { subtotal: true },
     }),
@@ -110,12 +125,15 @@ async function flujoEfectivoAcum(
           subtotal: true,
           total: true,
           naturaleza: true,
+          customer: { select: { rfc: true } },
           taxes: { where: { tipo: "ISR", retencion: true }, select: { importe: true } },
         },
       })
     : [];
   const byUuid = new Map(parents.map((p) => [p.uuid!, p]));
   const EXCLUIDAS_DEDUCCION = new Set(["INVERSION", "SIN_EFECTOS"]);
+  const esEfosBloqueado = (rfc?: string | null) =>
+    efosBloqueados.size > 0 && !!rfc && efosBloqueados.has(rfc.toUpperCase().trim());
 
   let ppdIngreso = 0;
   let ppdEgreso = 0;
@@ -130,8 +148,11 @@ async function flujoEfectivoAcum(
       const parentIsrRet = p.taxes.reduce((s, t) => s + t.importe, 0);
       ppdIsrRetenido += parentIsrRet * fraccionPagada; // retención del ingreso cobrado
     } else if (p.tipo === "EGRESO") {
-      // INVERSION/SIN_EFECTOS no son deducción inmediata (igual que el PUE).
-      if (!EXCLUIDAS_DEDUCCION.has(p.naturaleza ?? "")) ppdEgreso += base;
+      // INVERSION/SIN_EFECTOS no son deducción inmediata (igual que el PUE);
+      // proveedor 69-B definitivo → deducción improcedente (Art. 69-B).
+      if (!EXCLUIDAS_DEDUCCION.has(p.naturaleza ?? "") && !esEfosBloqueado(p.customer?.rfc)) {
+        ppdEgreso += base;
+      }
     }
   }
 
@@ -195,6 +216,18 @@ export interface TaxPosition {
     /** Plataformas (625): actividad y etiqueta de la tasa aplicada; null en otros régimenes. */
     plataformaActividad?: { kind: string; label: string; asumida: boolean };
   };
+  /**
+   * Resumen 69-B: egresos del periodo EXCLUIDOS por provenir de un proveedor
+   * definitivo (Art. 69-B) — deducción/IVA improcedente, ya descontados arriba.
+   * null cuando no hay proveedores bloqueados. Cifras informativas (base bruta
+   * PUE/devengado, sin ajuste de proporción ni flujo-REP) para el papel de trabajo.
+   */
+  efos?: {
+    rfcsBloqueados: string[];
+    cfdisExcluidos: number;
+    subtotalExcluido: number;
+    ivaAcreditableExcluido: number;
+  } | null;
 }
 
 export type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO" | "PF_PLATAFORMAS";
@@ -227,6 +260,11 @@ export async function computeTaxPosition(
     taxes: true,
   } as const;
 
+  // Proveedores 69-B definitivos → sus egresos NO son deducibles ni dan IVA
+  // acreditable (Art. 69-B). Se excluyen de todas las consultas de egreso.
+  const efosBloqueados = await efosRfcsBloqueados(companyId);
+  const efosWhere = filtroEfos(efosBloqueados);
+
   const [
     facturasEmitidas,
     facturasEgresos,
@@ -245,7 +283,7 @@ export async function computeTaxPosition(
       include: invoiceInclude,
     }),
     prisma.invoice.findMany({
-      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
+      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to }, ...efosWhere },
       include: invoiceInclude,
     }),
     prisma.invoice.aggregate({
@@ -254,7 +292,7 @@ export async function computeTaxPosition(
       _count: { id: true },
     }),
     prisma.invoice.aggregate({
-      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
+      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo }, ...efosWhere },
       _sum: { subtotal: true },
     }),
     prisma.invoice.aggregate({
@@ -328,10 +366,12 @@ export async function computeTaxPosition(
   const repParents = repParentUuids.length
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, metodoPago: "PPD", status: "STAMPED" },
-        select: { uuid: true, tipo: true, total: true, totalImpuestos: true, taxes: true },
+        select: { uuid: true, tipo: true, total: true, totalImpuestos: true, taxes: true, customer: { select: { rfc: true } } },
       })
     : [];
   const repParentByUuid = new Map(repParents.map((p) => [p.uuid!, p]));
+  const esEfosBloqueado = (rfc?: string | null) =>
+    efosBloqueados.size > 0 && !!rfc && efosBloqueados.has(rfc.toUpperCase().trim());
 
   let ivaTrasladadoPPD = 0;
   let ivaAcreditablePPD = 0;
@@ -340,7 +380,8 @@ export async function computeTaxPosition(
     if (!parent) continue; // REP references a non-PPD or unknown invoice — skip
     const iva = repIvaTrasladado(link, parent);
     if (parent.tipo === "INGRESO") ivaTrasladadoPPD += iva;
-    else if (parent.tipo === "EGRESO") ivaAcreditablePPD += iva;
+    // EGRESO de proveedor 69-B definitivo → IVA no acreditable (Art. 69-B).
+    else if (parent.tipo === "EGRESO" && !esEfosBloqueado(parent.customer?.rfc)) ivaAcreditablePPD += iva;
   }
 
   // ── IVA (flujo de efectivo) ──────────────────────────────────────────────
@@ -391,7 +432,7 @@ export async function computeTaxPosition(
     // PF plataformas tecnológicas (625, Art. 113-A): tasa fija por actividad
     // sobre ingresos cobrados del mes (flujo, base-REP) − retenciones que las
     // plataformas efectuaron (del desglose del CFDI). Pago definitivo.
-    const mesFlujo = await flujoEfectivoAcum(companyId, from, to);
+    const mesFlujo = await flujoEfectivoAcum(companyId, from, to, efosBloqueados);
     const asumida = !company?.plataformaActividad;
     const actividad = normalizarActividadPlataforma(company?.plataformaActividad);
     const r = calcularIsrPlataformas({
@@ -465,7 +506,7 @@ export async function computeTaxPosition(
     // standalone (no acumulativo) sobre flujo — ingresos del mes efectivamente
     // cobrados (base-REP) − deducción ciega 35% (Art. 115) → tarifa mensual
     // Art. 96 − retención 10% de arrendatarios PM (Art. 116 último párrafo).
-    const mes = await flujoEfectivoAcum(companyId, from, to);
+    const mes = await flujoEfectivoAcum(companyId, from, to, efosBloqueados);
     const r = calcularIsrArrendamientoMensual({
       ejercicio: year,
       ingresosCobradosMes: mes.ingresosCobrados,
@@ -494,7 +535,7 @@ export async function computeTaxPosition(
   } else if (esPfActEmpresarial) {
     // PF con actividad empresarial (Art. 106): base en FLUJO DE EFECTIVO
     // (ingresos cobrados − deducciones pagadas, acumulado) × tarifa Art. 96.
-    const { ingresosCobrados, deduccionesPagadas, isrRetenidoCobrado } = await flujoEfectivoAcum(companyId, yearFrom, to);
+    const { ingresosCobrados, deduccionesPagadas, isrRetenidoCobrado } = await flujoEfectivoAcum(companyId, yearFrom, to, efosBloqueados);
     // Deducción de inversiones del periodo (Art. 106): depreciación proporcional
     // ene→mes del registro de activo fijo. Los CFDIs de inversión ya quedaron
     // EXCLUIDOS de deduccionesPagadas en flujoEfectivoAcum — aquí se suma su
@@ -600,10 +641,37 @@ export async function computeTaxPosition(
     };
   }
 
+  // ── Trail 69-B: cuánto se excluyó este periodo (informativo) ──────────────
+  let efos: TaxPosition["efos"] = null;
+  if (efosBloqueados.size > 0) {
+    const rfcs = [...efosBloqueados];
+    const [aggExcl, ivaExcl] = await Promise.all([
+      prisma.invoice.aggregate({
+        where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to }, customer: { rfc: { in: rfcs } } },
+        _sum: { subtotal: true },
+        _count: { id: true },
+      }),
+      prisma.invoiceTax.aggregate({
+        where: {
+          tipo: "IVA", retencion: false,
+          invoice: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to }, customer: { rfc: { in: rfcs } } },
+        },
+        _sum: { importe: true },
+      }),
+    ]);
+    efos = {
+      rfcsBloqueados: rfcs,
+      cfdisExcluidos: aggExcl._count.id,
+      subtotalExcluido: round2(aggExcl._sum.subtotal ?? 0),
+      ivaAcreditableExcluido: round2(ivaExcl._sum.importe ?? 0),
+    };
+  }
+
   return {
     periodo,
     month,
     year,
+    efos,
     iva: {
       trasladado: round2(ivaTrasladadoTotal),
       retenidoPorClientes: round2(ivaRetenidoPorClientes),
