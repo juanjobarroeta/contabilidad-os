@@ -12,3 +12,5 @@ export {
   type EntityResolver,
   type SyntageProviderOpts,
 } from "./provider";
+export { provisionCompany, provisionAllCompanies, type ProvisionResult } from "./provision";
+export { syncCompanyComplianceSyntage, syncAllCompaniesComplianceSyntage, type SyncResult } from "./sync";

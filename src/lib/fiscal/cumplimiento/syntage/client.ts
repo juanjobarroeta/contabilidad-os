@@ -135,6 +135,19 @@ export class SyntageClient {
     return { id: String(r.id), status: r.status as EstadoCredencial };
   }
 
+  async listCredentials(): Promise<Json[]> {
+    return asArray(await this.request<Json>("GET", "/credentials"));
+  }
+
+  /** Credencial VÁLIDA existente para un RFC, o null. */
+  async findValidCredentialForRfc(rfc: string): Promise<{ id: string } | null> {
+    const list = await this.listCredentials();
+    const m = list.find(
+      (c) => String(c.rfc ?? "").toUpperCase() === rfc.toUpperCase() && String(c.status) === "valid",
+    );
+    return m ? { id: String(m.id) } : null;
+  }
+
   async getCredential(id: string): Promise<{ id: string; status: EstadoCredencial; raw: Json }> {
     const r = await this.request<Json>("GET", `/credentials/${id}`);
     return { id: String(r.id), status: r.status as EstadoCredencial, raw: r };
