@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ShieldCheck, FileDown, AlertTriangle, Info, RefreshCw, FileText,
 } from "lucide-react";
@@ -223,13 +224,11 @@ function AcuseLink({ snapshotId, tieneAcuse }: { snapshotId: string; tieneAcuse:
     );
   }
   return (
-    <a
-      href={`/api/cumplimiento/acuse/${snapshotId}`}
-      target="_blank"
-      rel="noopener noreferrer"
+    <Link
+      href={`/opiniones/acuse/${snapshotId}`}
       className="inline-flex items-center gap-1.5 pt-1 text-[13px] font-semibold text-cos-brand-ink hover:underline"
     >
-      <FileDown className="h-3.5 w-3.5" /> Descargar acuse
-    </a>
+      <FileDown className="h-3.5 w-3.5" /> Ver acuse
+    </Link>
   );
 }
