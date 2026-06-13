@@ -29,10 +29,16 @@ export async function GET() {
         regimenFiscal: true,
         codigoPostal: true,
         isActive: true,
+        // El operador ve empresas de varios despachos: incluimos el nombre del
+        // despacho para que el selector las agrupe en vez de mezclarlas.
+        despachoId: true,
+        despacho: { select: { name: true } },
       },
-      orderBy: { razonSocial: "asc" },
+      orderBy: [{ despacho: { name: "asc" } }, { razonSocial: "asc" }],
     });
-    return NextResponse.json(all);
+    return NextResponse.json(
+      all.map(({ despacho, ...c }) => ({ ...c, despachoNombre: despacho?.name ?? null }))
+    );
   }
 
   // Two access paths, union'd and deduped:

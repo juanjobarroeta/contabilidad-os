@@ -8,6 +8,10 @@ interface Company {
   rfc: string;
   razonSocial: string;
   regimenFiscal: string;
+  // Sólo presente para operadores de plataforma (que ven varios despachos):
+  // permite agrupar el selector por despacho.
+  despachoId?: string | null;
+  despachoNombre?: string | null;
 }
 
 interface CompanyContextValue {
