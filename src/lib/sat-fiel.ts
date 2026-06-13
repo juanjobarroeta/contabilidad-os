@@ -42,8 +42,11 @@ export function parseCfdiXml(xml: string) {
     return new RegExp(`\\b${name}="([^"]+)"`).exec(tagMatch[0])?.[1] ?? null;
   };
 
-  // UUID from TimbreFiscalDigital
-  const uuid = attr("UUID");
+  // UUID from TimbreFiscalDigital. Normalizamos a MAYÚSCULAS: el folio fiscal
+  // es case-insensitive, pero distintas fuentes (PAC vs descarga SAT) lo traen
+  // con distinta caja. Si no canonizamos, el mismo CFDI se duplica y las
+  // cancelaciones no empatan. La forma canónica del SAT es mayúsculas.
+  const uuid = attr("UUID")?.toUpperCase() ?? null;
   const fecha = attr("Fecha");
   const tipo = attr("TipoDeComprobante"); // I, E, T, N, P
   const subtotal = parseFloat(attr("SubTotal") ?? "0");

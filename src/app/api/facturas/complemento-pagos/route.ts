@@ -242,7 +242,7 @@ export async function POST(req: Request) {
         subtotal: 0,
         total: paymentAmount,
         status: "STAMPED",
-        uuid: result.uuid ?? null,
+        uuid: result.uuid?.toUpperCase() ?? null, // folio fiscal canónico en MAYÚSCULAS
         facturapiId: result.id ?? null,
         customerId: parentInv.customerId,
         notas: invoiceId, // Link back to parent invoice

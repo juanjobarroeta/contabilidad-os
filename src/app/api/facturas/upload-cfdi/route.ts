@@ -85,9 +85,14 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "No se pudo leer el PDF. Sube el XML del CFDI." }, { status: 502 });
   }
+  // Folio fiscal canónico en MAYÚSCULAS (lo extrajo un LLM; puede venir en
+  // minúsculas) para no duplicar el CFDI ni romper el empate de cancelaciones.
+  if (p.uuid) p.uuid = p.uuid.toUpperCase();
 
   if (p.uuid) {
-    const dup = await prisma.invoice.findFirst({ where: { uuid: p.uuid }, select: { id: true } });
+    // p.uuid ya viene en MAYÚSCULAS (parseCfdiXml lo canoniza); match insensible
+    // a la caja para reconocer copias previas guardadas en minúsculas.
+    const dup = await prisma.invoice.findFirst({ where: { uuid: { equals: p.uuid, mode: "insensitive" } }, select: { id: true } });
     if (dup) return NextResponse.json({ ok: true, invoiceId: dup.id, duplicate: true, message: "Este CFDI ya estaba registrado." });
   }
 
