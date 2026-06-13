@@ -273,7 +273,12 @@ interface CoberturaDataset {
   ultimoCargado: string | null; ultimoEsperado: string; detalle: string;
 }
 function CoberturaFiscalCard() {
-  const [data, setData] = useState<{ datasets: CoberturaDataset[]; resumen: { faltantes: number; sinCotejar: number } } | null>(null);
+  const [data, setData] = useState<{
+    datasets: CoberturaDataset[];
+    resumen: { faltantes: number; sinCotejar: number };
+    inpcUltimo: { periodo: string; valor: number } | null;
+    tipoCambioFix: { fecha: string; valor: number } | null;
+  } | null>(null);
   useEffect(() => {
     fetch("/api/fiscal/cobertura").then((r) => (r.ok ? r.json() : null)).then(setData).catch(() => {});
   }, []);
@@ -304,6 +309,22 @@ function CoberturaFiscalCard() {
             </li>
           ))}
         </ul>
+      )}
+      {(data.inpcUltimo || data.tipoCambioFix) && (
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-cos-line pt-3 text-[12px] text-cos-ink-soft">
+          {data.inpcUltimo && (
+            <span>
+              INPC {data.inpcUltimo.periodo}: <b className="text-cos-ink">{data.inpcUltimo.valor.toFixed(3)}</b>
+            </span>
+          )}
+          {data.tipoCambioFix && (
+            <span>
+              FIX {data.tipoCambioFix.fecha}:{" "}
+              <b className="text-cos-ink">${data.tipoCambioFix.valor.toFixed(4)}</b>
+              <span className="text-cos-ink-soft"> /USD (Banxico)</span>
+            </span>
+          )}
+        </div>
       )}
     </Card>
   );
