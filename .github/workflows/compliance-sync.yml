@@ -1,0 +1,26 @@
+name: Compliance sync (Syntage → Hallazgos, diario)
+
+# Lee los últimos resultados de cumplimiento (opinión SAT + CSF) extraídos en
+# Syntage y los persiste (ComplianceSnapshot + FiscalHallazgo). Requiere
+# SYNTAGE_API_KEY en el deploy y CRON_SECRET/STAGING_URL en el repo.
+#
+# NOTE: GitHub solo corre schedule: desde la rama default (main).
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # ~07:00 CT diario
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync compliance
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/compliance-sync" -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
