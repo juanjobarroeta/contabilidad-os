@@ -2456,3 +2456,27 @@ model FiscalHallazgo {
   @@unique([companyId, dedupeKey])
   @@index([companyId, estado])
 }
+
+// Snapshots del monitoreo de cumplimiento (opinión SAT 32-D, opinión IMSS,
+// CSF). Standalone — solo companyId scalar, sin relación a Company — para ser
+// puramente aditivo. `contenidoHash` permite saltar snapshots sin cambios; los
+// Hallazgos derivados se persisten aparte (FiscalHallazgo).
+model ComplianceSnapshot {
+  id        String @id @default(cuid())
+  companyId String
+
+  tipo      String // "SAT_OPINION" | "IMSS_OPINION" | "CSF"
+  resultado String // opinión: POSITIVA/NEGATIVA/…  · CSF: estatus del padrón
+  motivos   String[] // obligaciones omitidas / motivos de negativa
+
+  perfil   Json? // CSF: { rfc, regimenes, obligaciones, codigoPostal, estatusPadron }
+  acuseUrl String? @db.Text // PDF/acuse de respaldo
+
+  contenidoHash String // para detección de cambios entre corridas
+  vigencia      DateTime?
+  fetchedAt     DateTime  @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, tipo, fetchedAt])
+}
