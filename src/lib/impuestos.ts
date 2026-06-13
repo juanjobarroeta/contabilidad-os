@@ -7,6 +7,7 @@ import { calcularIsrPlataformas, normalizarActividadPlataforma, TASAS_PLATAFORMA
 import { calcularActosDelPeriodo } from "./fiscal/iva";
 import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
 import { efosRfcsBloqueados } from "./fiscal/efos/service";
+import { perdidasDisponibles } from "./fiscal/perdidas";
 
 /**
  * Prisma `where` que EXCLUYE los CFDIs de egreso emitidos por un proveedor 69-B
@@ -277,6 +278,7 @@ export async function computeTaxPosition(
     company,
     repCobrosDelMes,
     annualDecl,
+    perdidasRecords,
   ] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
@@ -357,6 +359,10 @@ export async function computeTaxPosition(
       orderBy: { periodo: "desc" },
       select: { isrIngresos: true, isrBaseGravable: true },
     }),
+    // Pérdidas fiscales pendientes (Art. 57) — sólo las consume el provisional PF
+    // de actividad empresarial (Art. 106); el ledger lo cierra la anual, aquí es
+    // sólo lectura.
+    prisma.perdidaFiscal.findMany({ where: { companyId } }),
   ]);
 
   // Resolve the parent PPD invoices these REP payments settle: the parent's
@@ -541,11 +547,26 @@ export async function computeTaxPosition(
     // EXCLUIDOS de deduccionesPagadas en flujoEfectivoAcum — aquí se suma su
     // depreciación, sin doble conteo.
     const depreciacionPeriodo = await calcularDepreciacionRegistroPeriodo(companyId, year, month);
+    // Pérdidas fiscales pendientes (Art. 57), actualizadas, deducibles del
+    // provisional acumulado (Art. 106). El ledger lo cierra la anual; aquí sólo
+    // se restan de la base — sin mutar saldos.
+    const perdidasPendientes = perdidasDisponibles(
+      perdidasRecords.map((p) => ({
+        ejercicioOrigen: p.ejercicioOrigen,
+        montoOriginal: p.montoOriginal,
+        saldoActualizado: p.saldoActualizado,
+        mesUltimaActualizacion: p.mesUltimaActualizacion,
+        agotada: p.agotada,
+        ultimoEjercicioAplicado: p.ultimoEjercicioAplicado,
+      })),
+      year
+    ).total;
     const r = calcularIsrProvisionalPf({
       ejercicio: year,
       meses: month,
       ingresosCobradosAcum: ingresosCobrados,
       deduccionesPagadasAcum: round2(deduccionesPagadas + depreciacionPeriodo),
+      perdidasFiscales: perdidasPendientes,
       pagosProvisionalesAnteriores: isrPagadoAnterior,
       // ISR 10% retenido por personas morales (Art. 106), acreditado en flujo:
       // sólo la retención de ingresos efectivamente cobrados (ene→mes).

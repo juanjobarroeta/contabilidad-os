@@ -6,6 +6,7 @@ import { calcularDeclaracionAnual, type DeclaracionAnualInput } from "@/lib/decl
 import { sumIsrPagar } from "@/lib/isr-provisional";
 import { calcularDepreciacionRegistro } from "@/lib/fiscal/activos-registro";
 import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
+import { perdidasDisponibles, aplicarPerdidas, primeraActualizacion } from "@/lib/fiscal/perdidas";
 
 // GET /api/declaracion-anual?companyId=xxx&ejercicio=2025
 // Aggregates all data for the annual declaration and calculates the result.
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
     isrProvisionalesAgg,
     existingAnual,
     registroDepreciacion,
+    perdidasRecords,
   ] = await Promise.all([
     // Total CFDI ingresos for the year
     prisma.invoice.aggregate({
@@ -97,7 +99,23 @@ export async function GET(req: Request) {
     }),
     // Depreciación del registro de activo fijo (deducción de inversiones).
     calcularDepreciacionRegistro(companyId, ejercicio),
+    // Pérdidas fiscales pendientes de amortizar (Art. 57).
+    prisma.perdidaFiscal.findMany({ where: { companyId } }),
   ]);
+
+  // Pérdidas disponibles, actualizadas a junio del ejercicio (Art. 57). Alimentan
+  // el cálculo como default; el contador puede sobreescribir con ?perdidasAnteriores=.
+  const perdidasDisp = perdidasDisponibles(
+    perdidasRecords.map((p) => ({
+      ejercicioOrigen: p.ejercicioOrigen,
+      montoOriginal: p.montoOriginal,
+      saldoActualizado: p.saldoActualizado,
+      mesUltimaActualizacion: p.mesUltimaActualizacion,
+      agotada: p.agotada,
+      ultimoEjercicioAplicado: p.ultimoEjercicioAplicado,
+    })),
+    ejercicio
+  );
 
   const ingresosCfdis = ingresosAgg._sum.subtotal ?? 0;
   // Compras/deducciones inmediatas = todo EGRESO salvo INVERSION (se deduce vía
@@ -152,7 +170,10 @@ export async function GET(req: Request) {
     ptuPagado,
     ajusteInflacionAcumulable: parseFloat(searchParams.get("ajusteInflacionAcumulable") ?? "0"),
     ajusteInflacionDeducible: parseFloat(searchParams.get("ajusteInflacionDeducible") ?? "0"),
-    perdidasEjerciciosAnteriores: parseFloat(searchParams.get("perdidasAnteriores") ?? "0"),
+    // Default: pérdidas pendientes actualizadas del ledger (Art. 57); overridable.
+    perdidasEjerciciosAnteriores: searchParams.has("perdidasAnteriores")
+      ? parseFloat(searchParams.get("perdidasAnteriores") ?? "0")
+      : perdidasDisp.total,
     isrPagadoProvisionales: isrProvTotal,
     isrRetenidoPorTerceros: parseFloat(searchParams.get("isrRetenidoPorTerceros") ?? "0"),
   };
@@ -187,6 +208,14 @@ export async function GET(req: Request) {
       status: existingAnual.status,
       isHistorical: existingAnual.isHistorical,
     } : null,
+    // Amortización de pérdidas fiscales (Art. 57): pendientes actualizadas a
+    // junio del ejercicio. `algunaIncompleta` = faltó algún INPC (cae a nominal).
+    perdidasFiscales: {
+      disponible: perdidasDisp.total,
+      detalles: perdidasDisp.detalles,
+      algunaIncompleta: perdidasDisp.algunaIncompleta,
+      sobreescritoManual: searchParams.has("perdidasAnteriores"),
+    },
   });
 }
 
@@ -249,6 +278,68 @@ export async function POST(req: Request) {
         coeficienteUtilidad: result.coeficienteUtilidad,
         coeficienteAnio: ejercicio + 1, // applies to NEXT year's provisionales
       },
+    });
+  }
+
+  // ── Ledger de pérdidas fiscales (Art. 57) ─────────────────────────────────
+  // Idempotente por ejercicio: (1) amortiza FIFO contra la utilidad, tocando sólo
+  // las pérdidas aún no aplicadas en este ejercicio (guard ultimoEjercicioAplicado);
+  // (2) si el ejercicio cerró en pérdida, la registra con su primera actualización.
+  // Limitación v1: re-guardar el MISMO ejercicio no re-aplica (no doble-descuenta);
+  // si cambia la utilidad en un re-guardado, el saldo no se recalcula.
+  const utilidadOPerdida = typeof result?.utilidadOPerdidaFiscal === "number"
+    ? result.utilidadOPerdidaFiscal
+    : null;
+  if (utilidadOPerdida != null) {
+    const ejer = Number(ejercicio);
+    await prisma.$transaction(async (tx) => {
+      const records = await tx.perdidaFiscal.findMany({ where: { companyId } });
+      const aplicables = records.filter((r) => (r.ultimoEjercicioAplicado ?? 0) < ejer);
+      const ap = aplicarPerdidas(
+        aplicables.map((p) => ({
+          ejercicioOrigen: p.ejercicioOrigen,
+          montoOriginal: p.montoOriginal,
+          saldoActualizado: p.saldoActualizado,
+          mesUltimaActualizacion: p.mesUltimaActualizacion,
+          agotada: p.agotada,
+          ultimoEjercicioAplicado: p.ultimoEjercicioAplicado,
+        })),
+        Math.max(0, utilidadOPerdida),
+        ejer
+      );
+      for (const s of ap.saldosNuevos) {
+        await tx.perdidaFiscal.update({
+          where: { companyId_ejercicioOrigen: { companyId, ejercicioOrigen: s.ejercicioOrigen } },
+          data: {
+            saldoActualizado: s.saldoActualizado,
+            mesUltimaActualizacion: s.mesUltimaActualizacion,
+            agotada: s.agotada,
+            ultimoEjercicioAplicado: ejer,
+          },
+        });
+      }
+      // Pérdida generada este ejercicio → con primera actualización (jul→dic).
+      if (utilidadOPerdida < 0) {
+        const montoOriginal = Math.round(-utilidadOPerdida * 100) / 100;
+        const pa = primeraActualizacion(montoOriginal, ejer);
+        await tx.perdidaFiscal.upsert({
+          where: { companyId_ejercicioOrigen: { companyId, ejercicioOrigen: ejer } },
+          create: {
+            companyId,
+            ejercicioOrigen: ejer,
+            montoOriginal,
+            saldoActualizado: pa.saldoActualizado,
+            mesUltimaActualizacion: pa.mesUltimaActualizacion,
+            origen: "CALCULADA",
+          },
+          update: {
+            montoOriginal,
+            saldoActualizado: pa.saldoActualizado,
+            mesUltimaActualizacion: pa.mesUltimaActualizacion,
+            origen: "CALCULADA",
+          },
+        });
+      }
     });
   }
 
