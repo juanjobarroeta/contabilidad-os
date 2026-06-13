@@ -26,6 +26,7 @@ import {
   Menu,
   X,
   FileInput,
+  BadgeCheck,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -40,6 +41,7 @@ const NAV_ITEMS = [
   { href: "/impuestos/cierre", label: "Cierre mensual", icon: Lock },
   { href: "/declaraciones", label: "Declaraciones",   icon: FileInput },
   { href: "/cumplimiento", label: "Cumplimiento",    icon: ShieldCheck },
+  { href: "/opiniones",    label: "Opiniones SAT",   icon: BadgeCheck },
   { href: "/declaracion-anual", label: "Dec. Anual",  icon: ClipboardList },
   { href: "/activos",      label: "Activo fijo",     icon: Boxes },
   { href: "/contabilidad", label: "Contabilidad",    icon: BookOpen },
