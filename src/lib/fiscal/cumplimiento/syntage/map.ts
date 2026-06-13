@@ -12,9 +12,11 @@ import type { CsfResult, EstatusPadron, OpinionResult, ResultadoOpinion } from "
 type Json = Record<string, unknown>;
 
 const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+// Para descargar el PDF se usa la ruta del archivo (/files/{id}); por eso se
+// prefiere file["@id"] sobre file.resource (que apunta al recurso padre).
 const fileRef = (f: unknown): string | undefined => {
   if (typeof f === "string") return f;
-  if (f && typeof f === "object") return str((f as Json).resource) ?? str((f as Json)["@id"]);
+  if (f && typeof f === "object") return str((f as Json)["@id"]) ?? str((f as Json).resource);
   return undefined;
 };
 

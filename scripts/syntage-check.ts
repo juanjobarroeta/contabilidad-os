@@ -16,7 +16,8 @@ check("tipo SAT_OPINION", opPos.tipo === "SAT_OPINION");
 check("folio en motivos", /20NE1234567/.test(opPos.motivos[0] ?? ""));
 check("negative → NEGATIVA", mapTaxCompliance({ result: "negative" }).resultado === "NEGATIVA");
 check("no_obligations → SIN_OBLIGACIONES", mapTaxCompliance({ result: "no_obligations" }).resultado === "SIN_OBLIGACIONES");
-check("acuse desde file.resource", mapTaxCompliance({ result: "positive", file: { resource: "/tax-compliance-check/abc" } }).acuseUrl === "/tax-compliance-check/abc");
+check("acuse prefiere file.@id (/files/...)", mapTaxCompliance({ result: "positive", file: { "@id": "/files/f1", resource: "/tax-compliance-checks/x" } }).acuseUrl === "/files/f1");
+check("acuse cae a resource si no hay @id", mapTaxCompliance({ result: "positive", file: { resource: "/tax-compliance-checks/x" } }).acuseUrl === "/tax-compliance-checks/x");
 
 console.log("map TaxStatus → CsfResult");
 const csf = mapTaxStatus({
