@@ -28,18 +28,30 @@ export class SyntageComplianceProvider implements ComplianceProvider {
     this.resolveEntity = opts.resolveEntity;
   }
 
-  private async extraer(companyId: string, extractor: Extractor) {
-    const { entityId } = await this.resolveEntity(companyId);
+  /** Corre la extracción (job) y espera a que termine; el dato vive aparte. */
+  private async extraer(entityId: string, extractor: Extractor): Promise<void> {
     const { id } = await this.client.createExtraction({ extractor, entity: entityId });
-    return this.client.waitForExtraction(id);
+    await this.client.waitForExtraction(id);
   }
 
   async fetchSatOpinion(companyId: string): Promise<OpinionResult> {
-    return mapTaxCompliance(await this.extraer(companyId, "tax_compliance"));
+    const { entityId } = await this.resolveEntity(companyId);
+    await this.extraer(entityId, "tax_compliance");
+    const check = await this.client.getLatestTaxComplianceCheck(entityId);
+    if (!check) {
+      return { tipo: "SAT_OPINION", resultado: "ERROR", motivos: [], fetchedAt: new Date().toISOString() };
+    }
+    return mapTaxCompliance(check);
   }
 
   async fetchCsf(companyId: string): Promise<CsfResult> {
-    return mapTaxStatus(await this.extraer(companyId, "tax_status"));
+    const { entityId } = await this.resolveEntity(companyId);
+    await this.extraer(entityId, "tax_status");
+    const ts = await this.client.getLatestTaxStatus(entityId);
+    if (!ts) {
+      return { tipo: "CSF", perfil: { rfc: "", regimenes: [], obligaciones: [], estatusPadron: "DESCONOCIDO" }, fetchedAt: new Date().toISOString() };
+    }
+    return mapTaxStatus(ts);
   }
 
   /** Syntage no cubre IMSS; usar otro proveedor (p.ej. CS Facturación). */

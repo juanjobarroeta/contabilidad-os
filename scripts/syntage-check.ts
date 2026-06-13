@@ -9,30 +9,29 @@ function check(nombre: string, cond: boolean, detalle?: string) {
   console.log(`  ${cond ? "✓" : "✗"} ${nombre}${!cond && detalle ? ` — ${detalle}` : ""}`);
 }
 
-console.log("map tax_compliance → OpinionResult");
-const opPos = mapTaxCompliance({ result: { opinion: "Positiva" } });
-check("Positiva → POSITIVA", opPos.resultado === "POSITIVA");
+console.log("map TaxComplianceCheck → OpinionResult");
+const opPos = mapTaxCompliance({ result: "positive", internalIdentifier: "20NE1234567" });
+check("positive → POSITIVA", opPos.resultado === "POSITIVA");
 check("tipo SAT_OPINION", opPos.tipo === "SAT_OPINION");
-const opNeg = mapTaxCompliance({ opinion: "Negativa", obligaciones: ["ISR mayo 2026 omitida", "IVA abril 2026 omitida"] });
-check("Negativa → NEGATIVA", opNeg.resultado === "NEGATIVA");
-check("motivos mapeados", opNeg.motivos.length === 2 && /ISR mayo/.test(opNeg.motivos[0]));
-check("motivos como objetos {descripcion}", mapTaxCompliance({ opinion: "negativa", obligations: [{ descripcion: "X" }] }).motivos[0] === "X");
+check("folio en motivos", /20NE1234567/.test(opPos.motivos[0] ?? ""));
+check("negative → NEGATIVA", mapTaxCompliance({ result: "negative" }).resultado === "NEGATIVA");
+check("no_obligations → SIN_OBLIGACIONES", mapTaxCompliance({ result: "no_obligations" }).resultado === "SIN_OBLIGACIONES");
+check("acuse desde file.resource", mapTaxCompliance({ result: "positive", file: { resource: "/tax-compliance-check/abc" } }).acuseUrl === "/tax-compliance-check/abc");
 
-console.log("map tax_status → CsfResult");
+console.log("map TaxStatus → CsfResult");
 const csf = mapTaxStatus({
-  result: {
-    rfc: "ABC120101AAA",
-    regimenes: ["601", "626"],
-    obligaciones: ["ISR mensual", "IVA mensual"],
-    domicilio: { codigoPostal: "44100" },
-    estatus: "ACTIVO",
-  },
+  rfc: "ABC120101AAA",
+  taxRegimes: [{ code: 601, name: "General" }, { code: 626, name: "RESICO" }],
+  obligations: [{ description: "ISR mensual" }, { description: "Pago definitivo mensual de IVA." }],
+  address: { postalCode: "44100" },
+  status: "Activo",
 });
 check("rfc mapeado", csf.perfil.rfc === "ABC120101AAA");
-check("regímenes mapeados", csf.perfil.regimenes.length === 2);
-check("CP desde domicilio anidado", csf.perfil.codigoPostal === "44100");
-check("estatus ACTIVO", csf.perfil.estatusPadron === "ACTIVO");
-check("suspendido normalizado", mapTaxStatus({ rfc: "X", estatus: "Suspendido ante el RFC" }).perfil.estatusPadron === "SUSPENDIDO");
+check("regímenes desde taxRegimes[].code", csf.perfil.regimenes.join(",") === "601,626");
+check("obligaciones desde obligations[].description", csf.perfil.obligaciones.length === 2 && /IVA/.test(csf.perfil.obligaciones[1]));
+check("CP desde address.postalCode", csf.perfil.codigoPostal === "44100");
+check("status 'Activo' → ACTIVO", csf.perfil.estatusPadron === "ACTIVO");
+check("suspendido normalizado", mapTaxStatus({ rfc: "X", status: "Suspendido" }).perfil.estatusPadron === "SUSPENDIDO");
 
 console.log("auth en vivo (solo si SYNTAGE_API_KEY)");
 async function pruebaViva() {
