@@ -45,6 +45,7 @@ export async function POST(req: Request) {
     buscar?: string; // por razón social (contiene, sin distinguir mayúsculas)
     rfc?: string;
     ciec?: string;
+    soloLeer?: boolean; // solo lee los últimos resultados ya extraídos (rápido)
   };
   const pasos: unknown[] = [];
 
@@ -90,6 +91,30 @@ export async function POST(req: Request) {
       cred = { type: "ciec", password: body.ciec };
     } else {
       return NextResponse.json({ error: "Pasa { companyId } o { rfc, ciec }" }, { status: 400 });
+    }
+
+    // Modo solo-lectura: trae los últimos resultados ya extraídos (sin correr
+    // extracción nueva) — rápido, evita el timeout del proxy.
+    if (body.soloLeer) {
+      const ent = await client.findEntityByRfc(rfc);
+      if (!ent) {
+        return NextResponse.json(
+          { ok: false, pasos, error: "No hay entidad en Syntage para ese RFC; corre primero una extracción." },
+          { status: 404 },
+        );
+      }
+      const [opinionRes, csfRes] = await Promise.all([
+        client.getLatestTaxComplianceCheck(ent.id),
+        client.getLatestTaxStatus(ent.id),
+      ]);
+      return NextResponse.json({
+        ok: true,
+        modo: "soloLeer",
+        rfc,
+        entityId: ent.id,
+        opinion: { raw: opinionRes, mapped: opinionRes ? mapTaxCompliance(opinionRes) : null },
+        csf: { raw: csfRes, mapped: csfRes ? mapTaxStatus(csfRes) : null },
+      });
     }
 
     // 1) Entidad.
