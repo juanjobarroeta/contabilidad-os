@@ -6,12 +6,13 @@
 //
 // El indicador del INPC general (base 2ª quincena jul-2018 = 100) es 628194 en
 // el BIE; se puede sobreescribir con INEGI_INPC_INDICATOR por si INEGI lo cambia.
-// El área geográfica nacional suele ser "0700" pero algunas series usan "00" —
-// configurable con INEGI_GEO por si el 400 viene de ahí.
+// El área geográfica NACIONAL en el API es "00" (ej. oficial de INEGI:
+// .../INDICATOR/1002000001/es/00/false/...). "0700" devolvía "No se encontraron
+// resultados" (ErrorCode 100). Configurable con INEGI_GEO por si acaso.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BIE_INPC_INDICATOR = process.env.INEGI_INPC_INDICATOR || "628194";
-const GEO = process.env.INEGI_GEO || "0700";
+const GEO = process.env.INEGI_GEO || "00";
 
 /**
  * Descarga la serie del INPC desde INEGI BIE. Devuelve un mapa "YYYY-MM" → valor.
