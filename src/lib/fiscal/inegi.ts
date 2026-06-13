@@ -6,9 +6,12 @@
 //
 // El indicador del INPC general (base 2ª quincena jul-2018 = 100) es 628194 en
 // el BIE; se puede sobreescribir con INEGI_INPC_INDICATOR por si INEGI lo cambia.
+// El área geográfica nacional suele ser "0700" pero algunas series usan "00" —
+// configurable con INEGI_GEO por si el 400 viene de ahí.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BIE_INPC_INDICATOR = process.env.INEGI_INPC_INDICATOR || "628194";
+const GEO = process.env.INEGI_GEO || "0700";
 
 /**
  * Descarga la serie del INPC desde INEGI BIE. Devuelve un mapa "YYYY-MM" → valor.
@@ -18,14 +21,26 @@ export async function fetchInpcInegi(): Promise<Map<string, number>> {
   const token = process.env.INEGI_TOKEN;
   if (!token) throw new Error("INEGI_TOKEN no configurado");
 
-  // jsonxml / INDICATOR / es / 0700 (geografía nacional) / recientes=false (toda
-  // la serie) / BIE / 2.0 / token
+  // jsonxml / INDICATOR / es / {geo} / recientes=false (toda la serie) / BIE / 2.0 / token
   const url =
     `https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/INDICATOR/` +
-    `${BIE_INPC_INDICATOR}/es/0700/false/BIE/2.0/${token}?type=json`;
+    `${BIE_INPC_INDICATOR}/es/${GEO}/false/BIE/2.0/${token}?type=json`;
 
   const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`INEGI respondió ${res.status}`);
+  if (!res.ok) {
+    // El cuerpo del 400/4xx de INEGI dice EXACTAMENTE qué param está mal
+    // (indicador inexistente, área inválida, token, etc.) — lo incluimos para
+    // poder corregir vía INEGI_INPC_INDICATOR / INEGI_GEO sin adivinar.
+    let body = "";
+    try {
+      body = (await res.text()).slice(0, 300).replace(/\s+/g, " ").trim();
+    } catch {
+      /* ignore */
+    }
+    throw new Error(
+      `INEGI respondió ${res.status} (indicador=${BIE_INPC_INDICATOR}, geo=${GEO})${body ? ` — ${body}` : ""}`
+    );
+  }
   const json = (await res.json()) as {
     Series?: { OBSERVATIONS?: { TIME_PERIOD?: string; OBS_VALUE?: string }[] }[];
   };
