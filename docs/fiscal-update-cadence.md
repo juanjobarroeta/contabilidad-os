@@ -16,8 +16,8 @@ explains it and the cron strategy.
 
 | Cadencia | Fuentes | Acción |
 |---|---|---|
-| **Diaria** | Tipo de cambio DOF | Cron diario (pendiente de cablear) |
-| **Mensual** | INPC | Cron mensual (pendiente) — necesario para actualización por inflación |
+| **Diaria** | Tipo de cambio FIX (Banxico SF43718) | **Informativo (hecho)**: `fetchTipoCambioFix` en vivo + cache 6 h, mostrado en `/cumplimiento`. Sin fluctuación cambiaria aún |
+| **Mensual** | INPC (valores de INEGI; cotejo contra Banxico SP1) | **Cotejo auto (hecho)**: cron semanal `cotejo-fiscal` valida vs Banxico. Cargar meses nuevos al seed sigue manual |
 | **Anual** (dic-feb) | RMF, RFA, Tarifas ISR, UMA (1-feb), Salario mínimo (1-ene), **ISN por estado** | Revisión de cierre/apertura de ejercicio |
 | **Por publicación** (DOF) | LISR, LIVA, CFF, LIEPS, guías SAT, catálogos CFDI | Re-ingesta periódica detecta el cambio |
 
@@ -42,8 +42,11 @@ explains it and the cron strategy.
 2. **Recordatorio de cierre de ejercicio (anual)** — *pendiente*: un job que en
    dic-ene levante un aviso por cada fuente `anual` (`fuentesPorCadencia("anual")`)
    para verificar/actualizar tasas (ISN, tarifas, UMA, salario mínimo, RMF).
-3. **Factores externos (diaria/mensual)** — *pendiente*: crons para tipo de cambio
-   (DOF) e INPC (INEGI), que alimentan la actualización por inflación.
+3. **Factores externos (diaria/mensual)** — el **cotejo del INPC** corre semanal
+   (`cotejo-fiscal.yml`) contra **Banxico SIE serie SP1** (INEGI no expone el INPC
+   en su API de indicadores; sólo UMA). El **FIX** (Banxico `SF43718`) se lee en
+   vivo como dato informativo. Ambos usan `BANXICO_TOKEN`. *Pendiente*: cargar
+   automáticamente meses nuevos del INPC al seed; fluctuación cambiaria (Art. 8 LISR).
 
 > El backlog de fuentes identificadas pero aún no cableadas es
 > `fuentesPendientes()`. Conforme se cablean, cambian de `pendiente` a `activo`.

@@ -175,8 +175,10 @@ sobre-deducción.
   uso, tope al saldo por deducir, factor INPC (Art. 31). **INPC cargado** en
   `src/lib/fiscal/inpc.ts` (ene–ago 2016–2026 + ene–may 2026, incluye junio = numerador anual):
   `factorActualizacionDepreciacion` calcula INPC(últ. mes 1ª mitad) ÷ INPC(mes adq.) y el
-  registro muestra el factor; cae a nominal donde falta el índice. ⚠️ INPC `verificado: false`
-  (faltan sep–dic y cotejar contra INEGI).
+  registro muestra el factor; cae a nominal donde falta el índice. ✅ INPC **cotejado** contra
+  **Banxico SIE (serie SP1)** por cron semanal (ver §10); el flag estático `INPC_VERIFICADO`
+  queda en `false`, pero el cotejo promueve el dataset a "al día" en tiempo de ejecución. Aún
+  faltan sep–dic en el seed.
   Modelo `ActivoFijo` + API `/api/activos` (alta desde CFDI INVERSION o manual, lista con la
   depreciación calculada del ejercicio) y `/api/activos/[id]` (editar/baja/eliminar). Página
   `/activos` (registro + tabla de depreciación) y botón "Registrar como activo fijo" en el modal
@@ -200,8 +202,8 @@ sobre-deducción.
   padre; null/legacy se conserva como gasto) y la rama 612 suma la depreciación proporcional
   ene→mes (`calcularDepreciacionRegistroPeriodo`, vía nuevo `hastaMes` del motor). Sin doble
   conteo. Sólo afecta 612 (PM usa coeficiente; RESICO/plataformas/arrendamiento no deducen
-  compras). **El arco de deducibilidad queda cerrado** salvo Fase 3 y completar/cotejar INPC.
-  INPC cargado ene–ago 2016–2026 (faltan sep–dic + flip verificado). IVA acreditable del activo
+  compras). **El arco de deducibilidad queda cerrado** salvo Fase 3 y completar el INPC (sep–dic).
+  INPC cargado ene–ago 2016–2026; ya **cotejado automáticamente contra Banxico** (§10). IVA acreditable del activo
   es inmediato (flujo); sólo el ISR se difiere.
 - ⏳ **Fase 3 — costo de lo vendido (sólo PM que venden)**: método periódico (inv. inicial +
   compras − inv. final). No requiere tracker perpetuo por SKU. Diferido.
@@ -216,6 +218,19 @@ publicó y no lo tenemos" — p.ej. en julio detecta que falta el INPC de junio,
 no. El **cálculo nunca depende del reloj** (cae a nominal/verificado:false); esto es sólo la
 capa de monitoreo. API `GET /api/fiscal/cobertura` (`?asOf=` para simular) y tarjeta en
 `/cumplimiento`. Cada dataset expone su `cobertura*()` (último cargado + verificado).
+
+**Cotejo automático (INPC).** `src/lib/fiscal/cotejo.ts` + `cobertura-con-cotejo.ts`: el INPC
+cargado se coteja contra **Banxico SIE, serie SP1** (`src/lib/fiscal/banxico.ts`) — INEGI **no**
+expone el INPC en su API de Banco de Indicadores (sólo UMA), por eso usamos Banxico. Si todos los
+meses empatan (tol. 0.001) escribe `CotejoFiscal{ verificado, verifiedThrough }` y la capa
+`coberturaConCotejo` promueve el dataset de `sin_cotejar` → `al_dia`. Cron semanal
+`/api/cron/cotejo-fiscal` (workflow `cotejo-fiscal.yml`, lunes). **Requiere `BANXICO_TOKEN`** en
+el entorno de la app (Railway); sin él el cron se omite solo. El mismo token alimenta el **FIX
+informativo** (serie `SF43718`, `fetchTipoCambioFix`, falla suave + cache 6 h) que la API de
+cobertura devuelve como `tipoCambioFix` junto a `inpcUltimo`, y la tarjeta de `/cumplimiento`
+muestra como dato de referencia. **Sin lógica de fluctuación cambiaria todavía** (Art. 8 LISR —
+ganancia/pérdida como interés): cuando se necesite habría que agregar tabla histórica del FIX +
+cron diario + revaluación de saldos en USD.
 
 ## 11. Cockpit del despacho (multi-RFC, todas las obligaciones)
 
