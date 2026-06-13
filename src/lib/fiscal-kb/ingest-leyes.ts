@@ -7,13 +7,6 @@
 // entry into force is governed by each decreto's transitorios — good enough
 // to version texts; refine in Phase 2.
 
-// pdf-parse v2 exposes a class API; @types/pdf-parse targets v1, so we
-// require() and type the surface we use (same dodge as the CSF parser).
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { PDFParse } = require("pdf-parse") as {
-  PDFParse: new (opts: { data: Uint8Array }) => { getText(): Promise<{ text: string }> };
-};
-
 export interface LeyDescriptor {
   clave: string;
   titulo: string;
@@ -69,6 +62,14 @@ export async function fetchLey(clave: string): Promise<FetchedLey> {
   if (!res.ok) throw new Error(`Descarga falló (${res.status}) — ${descriptor.url}`);
   const buffer = new Uint8Array(await res.arrayBuffer());
 
+  // pdf-parse v2 exposes a class API; @types/pdf-parse targets v1, so we
+  // require() and type the surface we use. Lazy require INSIDE the function:
+  // pdf-parse → pdfjs touches DOMMatrix at load time and breaks Next.js'
+  // build-time page-data collection if imported at module scope.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PDFParse } = require("pdf-parse") as {
+    PDFParse: new (opts: { data: Uint8Array }) => { getText(): Promise<{ text: string }> };
+  };
   const parser = new PDFParse({ data: buffer });
   const { text } = await parser.getText();
   if (!text || text.length < 10_000) {
