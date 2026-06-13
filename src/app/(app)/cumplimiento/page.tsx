@@ -120,7 +120,10 @@ export default function CumplimientoPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Cumplimiento</h1>
-          <p className="mt-1.5 max-w-[60ch] text-[15px] text-cos-ink-soft">Tu calendario fiscal con el SAT — qué presentaste, qué falta y cuándo vence.</p>
+          <p className="mt-1.5 text-[14px] font-medium text-cos-brand-ink">
+            {activeCompany.razonSocial} · <span className="font-mono text-cos-ink-soft">{activeCompany.rfc}</span>
+          </p>
+          <p className="mt-1 max-w-[60ch] text-[15px] text-cos-ink-soft">Calendario fiscal de <strong>esta empresa</strong> con el SAT — qué presentaste, qué falta y cuándo vence. Cambia de empresa en el selector de arriba.</p>
         </div>
         <label className={`inline-flex cursor-pointer items-center gap-2 rounded-control border px-4 py-2 text-[14px] font-semibold transition-colors ${uploading ? "pointer-events-none border-cos-line bg-cos-paper text-cos-ink-faint" : "border-cos-line bg-white text-cos-ink hover:bg-cos-paper"}`}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}

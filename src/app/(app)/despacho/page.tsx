@@ -30,13 +30,15 @@ interface Row {
   aPagar: number | null;
   nominaSinTimbrar: number;
   empleadosActivos: number;
+  obligacionesVencidas: number;
+  obligacionesPorVencer: number;
 }
 interface Data {
   periodo: string;
   vencimiento: string;
   vencido: boolean;
   companies: Row[];
-  resumen: { empresas: number; conPendientes: number; totalAPagar: number };
+  resumen: { empresas: number; conPendientes: number; totalAPagar: number; empresasConVencidas: number; totalVencidas: number };
   cobertura: { alDia: number; faltantes: number; sinCotejar: number } | null;
 }
 
@@ -88,6 +90,7 @@ export default function DespachoCockpitPage() {
             <span>Periodo <b>{data.periodo}</b> · vence {formatDate(data.vencimiento)}</span>
             <span>A pagar: <b className="font-mono">{formatCurrency(data.resumen.totalAPagar)}</b></span>
             {data.resumen.conPendientes > 0 && <span className="text-cos-amber-ink"><b className="font-mono">{data.resumen.conPendientes}</b> con pendientes</span>}
+            {data.resumen.empresasConVencidas > 0 && <span className="text-cos-red-ink"><b className="font-mono">{data.resumen.empresasConVencidas}</b> con obligaciones vencidas</span>}
           </div>
         )}
       </div>
@@ -139,6 +142,14 @@ export default function DespachoCockpitPage() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-cos-ink">{r.razonSocial}</p>
                     <p className="font-mono text-[11px] text-cos-ink-faint">{r.rfc} · {r.regimenFiscal}</p>
+                    {r.obligacionesVencidas > 0 && (
+                      <button
+                        onClick={() => operar(r.id, "/cumplimiento")}
+                        className="mt-1 inline-flex items-center gap-1 rounded-full bg-cos-red-tint px-2 py-0.5 text-[11px] font-medium text-cos-red-ink hover:opacity-90"
+                      >
+                        <AlertTriangle className="h-3 w-3" /> {r.obligacionesVencidas} vencida{r.obligacionesVencidas === 1 ? "" : "s"}
+                      </button>
+                    )}
                   </td>
                   <td className="px-3 py-3">
                     <button
