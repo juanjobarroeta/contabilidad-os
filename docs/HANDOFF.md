@@ -267,6 +267,27 @@ hacer un wizard monolítico de 60.
   conciliación bancaria; reforzada para intercompañía). Pendiente confirmar: quién cobra a quién
   (comisiones) y backend de archivos (materialidad).
 
+## 14. Captura de declaraciones (acuses PDF) + nag de cobertura
+
+Objetivo: que el sistema **pida** los acuses de declaración faltantes y, al subirlos,
+guarde el **PDF completo** + los campos parseados para arrastrar saldos a favor,
+coeficiente de utilidad y pagos provisionales — sin teclear línea de captura ni montos.
+
+- ✅ **Detector** `src/lib/fiscal/cobertura-declaraciones.ts`: regla = año cerrado → anual
+  (cubre ISR mensual del año); IVA dic del año previo (no hay anual de IVA → arrastre de saldo);
+  año en curso → mensuales transcurridos. No re-pide lo ya capturado (incluye lo histórico).
+- ✅ **API**: `/api/declaraciones/cobertura` (GET, operador-aware) y `/api/declaraciones/save`
+  (POST: parsea con el extractor existente y guarda `TaxDeclaration` + `acusePdf` bytea).
+- ✅ **Pantalla** `/declaraciones` (checklist por empresa→periodo, subir PDF) + banner en el
+  cockpit + item en el sidebar. Reusa `/api/onboarding/parse-document` (ya clasifica ACUSE_*).
+- 🚩 **Almacenamiento PDF**: por ahora en Postgres (`TaxDeclaration.acusePdf Bytes?`).
+  **TODO (recordatorio del dueño): migrar a Cloudflare R2** (object storage) y dejar sólo la URL;
+  también sirve para materialidad (§13). Los acuses son chicos (<300 KB) así que la BD aguanta el
+  piloto, pero no es la solución final.
+- ⏳ **Pendiente**: (a) push agregado por despacho (entre semana, mientras falten); (b) quitar la
+  captura manual de línea/monto en `impuestos/detalle` y `cierre` (reemplazar por "subir acuse");
+  (c) colapsar el "calcula cuánto facturar" (pre-cierre) en un panel opcional.
+
 ## 8. Convenciones del repo
 
 - Next.js 15 App Router · Tailwind 3.4 (HSL vars shadcn) · Radix · lucide-react · Prisma/PostgreSQL · NextAuth.

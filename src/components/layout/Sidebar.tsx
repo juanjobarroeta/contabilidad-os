@@ -25,6 +25,7 @@ import {
   Boxes,
   Menu,
   X,
+  FileInput,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { href: "/nomina",       label: "Nómina",          icon: Users2 },
   { href: "/impuestos",    label: "Impuestos",       icon: Calculator },
   { href: "/impuestos/cierre", label: "Cierre mensual", icon: Lock },
+  { href: "/declaraciones", label: "Declaraciones",   icon: FileInput },
   { href: "/cumplimiento", label: "Cumplimiento",    icon: ShieldCheck },
   { href: "/declaracion-anual", label: "Dec. Anual",  icon: ClipboardList },
   { href: "/activos",      label: "Activo fijo",     icon: Boxes },

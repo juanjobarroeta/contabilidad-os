@@ -1028,6 +1028,13 @@ model TaxDeclaration {
   fechaPresentacion DateTime?
   fechaLimitePago   DateTime?
 
+  // Acuse PDF guardado completo. POR AHORA en la BD (bytea) — los acuses son
+  // chicos (~100-200KB). TODO: migrar a object storage (Cloudflare R2) y dejar
+  // sólo la URL; ver docs/HANDOFF.md. Reemplaza la captura manual de línea de
+  // captura/monto: subes el PDF, se parsea y se conserva el original.
+  acusePdf       Bytes?
+  acusePdfNombre String?
+
   // True when the declaration was imported as a historical baseline during
   // onboarding (from a SAT acuse PDF). These rows are treated normally by
   // the carryover logic (saldo a favor, ISR pagado anterior) but are
