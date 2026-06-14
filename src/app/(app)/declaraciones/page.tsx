@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { FileText, CheckCircle2, Loader2, UploadCloud, AlertCircle, Building2 } from "lucide-react";
+import { FileText, CheckCircle2, Loader2, UploadCloud, AlertCircle, Building2, Download } from "lucide-react";
 
 type Faltante = {
   companyId: string;
@@ -17,6 +17,13 @@ type EmpresaCobertura = {
   faltantes: Faltante[];
 };
 type Cobertura = { total: number; empresasConFaltantes: number; empresas: EmpresaCobertura[] };
+type Acuse = { id: string; tipo: string; periodo: string; fechaPresentacion: string | null; razonSocial: string; rfc: string };
+
+const TIPO_LABEL: Record<string, string> = {
+  DECLARACION_ANUAL: "Anual",
+  IVA_MENSUAL: "IVA",
+  ISR_PROVISIONAL: "ISR prov.",
+};
 
 const fileToBase64 = (f: File) =>
   new Promise<string>((resolve, reject) => {
@@ -28,6 +35,7 @@ const fileToBase64 = (f: File) =>
 
 export default function DeclaracionesPage() {
   const [data, setData] = useState<Cobertura | null>(null);
+  const [acuses, setAcuses] = useState<Acuse[]>([]);
   const [loading, setLoading] = useState(true);
   // estado por fila: "idle" | "subiendo" | "ok" | "error:<msg>"
   const [estado, setEstado] = useState<Record<string, string>>({});
@@ -37,8 +45,12 @@ export default function DeclaracionesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/declaraciones/cobertura");
-      setData(await r.json());
+      const [cob, acu] = await Promise.all([
+        fetch("/api/declaraciones/cobertura").then((r) => r.json()),
+        fetch("/api/declaraciones/acuses").then((r) => (r.ok ? r.json() : { acuses: [] })),
+      ]);
+      setData(cob);
+      setAcuses(acu.acuses ?? []);
     } finally {
       setLoading(false);
     }
@@ -166,6 +178,38 @@ export default function DeclaracionesPage() {
             <button onClick={load} className="text-[13px] text-cos-brand-ink hover:underline">
               Actualizar lista
             </button>
+          </div>
+        </div>
+      )}
+
+      {acuses.length > 0 && (
+        <div className="mt-8">
+          <div className="mb-2 flex items-center gap-2">
+            <Download className="h-4 w-4 text-cos-ink-faint" />
+            <h2 className="text-sm font-semibold text-cos-ink">Acuses disponibles</h2>
+            <span className="text-[12px] text-cos-ink-faint">PDF guardado · {acuses.length}</span>
+          </div>
+          <div className="overflow-hidden rounded-card border border-cos-line bg-white shadow-card">
+            <ul className="divide-y divide-cos-line">
+              {acuses.map((a) => (
+                <li key={a.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-cos-ink">
+                      <span className="font-medium">{TIPO_LABEL[a.tipo] ?? a.tipo}</span> · {a.periodo}
+                    </p>
+                    <p className="truncate text-[12px] text-cos-ink-faint">{a.razonSocial}</p>
+                  </div>
+                  <a
+                    href={`/api/declaraciones/acuse/${a.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-3 py-1.5 text-[13px] font-medium text-cos-ink hover:bg-cos-paper"
+                  >
+                    <Download className="h-3.5 w-3.5" /> PDF
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}

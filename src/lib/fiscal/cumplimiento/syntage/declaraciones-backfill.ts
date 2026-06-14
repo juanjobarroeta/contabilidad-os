@@ -107,10 +107,11 @@ export async function backfillDeclaracionesMensuales(
     if (!ref) continue;
 
     let acuse: AcuseMensual | null = null;
+    let pdf: Uint8Array<ArrayBuffer> | null = null;
     try {
       const { data } = await client.downloadAcuse(ref);
-      const base64 = Buffer.from(data).toString("base64");
-      const parsed = await parseSatDocument(base64, { companyId, subtipo: "declaraciones.backfill" });
+      pdf = new Uint8Array(data); // conservar el PDF para descarga posterior
+      const parsed = await parseSatDocument(Buffer.from(pdf).toString("base64"), { companyId, subtipo: "declaraciones.backfill" });
       acusesParseados++;
       if (parsed.type === "ACUSE_MENSUAL") acuse = parsed.acuseMensual;
     } catch {
@@ -119,6 +120,7 @@ export async function backfillDeclaracionesMensuales(
     if (!acuse) continue;
 
     const fecha = acuse.fechaPresentacion ? new Date(acuse.fechaPresentacion) : null;
+    const acusePdfNombre = `acuse-${periodo}.pdf`;
     const tieneDatosIva =
       acuse.ivaAPagar != null || acuse.ivaCausado != null || acuse.ivaAFavor != null || acuse.ivaAcreditable != null;
     const tieneDatosIsr = acuse.isrAPagar != null || acuse.isrIngresos != null;
@@ -129,6 +131,7 @@ export async function backfillDeclaracionesMensuales(
           companyId, tipo: "IVA_MENSUAL", periodo, status: "FILED", isHistorical: true,
           ivaTrasladadoCobrado: acuse.ivaCausado, ivaAcreditableGastado: acuse.ivaAcreditable,
           ivaPagar: acuse.ivaAPagar, ivaSaldoFavor: acuse.ivaAFavor,
+          ...(pdf ? { acusePdf: pdf, acusePdfNombre } : {}),
           lineaCaptura: acuse.lineaCaptura ?? null, fechaPresentacion: fecha,
         },
       });
@@ -142,6 +145,7 @@ export async function backfillDeclaracionesMensuales(
           isrIngresos: acuse.isrIngresos, isrPagar: acuse.isrAPagar,
           isrCoeficienteUtilidad: acuse.coeficienteUtilidadAplicado,
           lineaCaptura: acuse.lineaCaptura ?? null, fechaPresentacion: fecha,
+          ...(pdf ? { acusePdf: pdf, acusePdfNombre } : {}),
         },
       });
       have.add(`ISR_PROVISIONAL:${periodo}`);
