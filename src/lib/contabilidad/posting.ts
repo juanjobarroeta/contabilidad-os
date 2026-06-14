@@ -549,9 +549,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       create: { companyId, year, month, status: "DRAFT" },
     });
 
-    // Wipe prior entries for this period
+    // Wipe prior entries for this period — pero conserva el asiento de apertura
+    // (saldos iniciales) que pudiera caer en este periodo; re-postear CFDIs no
+    // debe borrar los saldos de arranque.
     await tx.accountingEntry.deleteMany({
-      where: { companyId, periodId: periodRow.id },
+      where: { companyId, periodId: periodRow.id, fuente: { not: "APERTURA" } },
     });
 
     // Insert new entries
@@ -604,7 +606,7 @@ export async function unpostMonth(companyId: string, year: number, month: number
       where: { companyId_year_month: { companyId, year, month } },
     });
     if (!period) return;
-    await tx.accountingEntry.deleteMany({ where: { periodId: period.id } });
+    await tx.accountingEntry.deleteMany({ where: { periodId: period.id, fuente: { not: "APERTURA" } } });
     await tx.accountingPeriod.update({
       where: { id: period.id },
       data: { status: "DRAFT", entriesCount: 0, totalCargos: 0, totalAbonos: 0, postedAt: null },

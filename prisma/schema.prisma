@@ -1328,6 +1328,7 @@ enum EntrySource {
   MANUAL
   CONSTRUCCION
   FLOTA
+  APERTURA // saldos iniciales / asiento de apertura (no se borra al re-postear el mes)
 }
 
 // ─── Module 6: Construction Project Management ───────────────────────────────
