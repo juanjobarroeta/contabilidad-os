@@ -1,0 +1,190 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// COE M5 — Pólizas del Periodo (PolizasPeriodo_1_3.xsd).
+//
+// Se entrega a solicitud del SAT (auditoría AF/FC, devolución DE, compensación
+// CO). Agrupa los asientos del periodo en pólizas; cada transacción CFDI lleva
+// su CompNal (UUID + RFC del tercero + monto). render* es PURO (validable contra
+// el XSD); generate* lee la base.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { prisma } from "../prisma";
+
+const VERSION = "1.3";
+const esc = (s: string | null | undefined): string =>
+  s == null ? "" : String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+const money = (n: number): string => n.toFixed(2);
+const mm = (m: number): string => String(m).padStart(2, "0");
+
+export type TipoSolicitud = "AF" | "FC" | "DE" | "CO";
+
+export interface CompNalInput {
+  uuid: string;
+  rfc: string;
+  montoTotal: number;
+}
+export interface TransaccionInput {
+  numCta: string;
+  desCta?: string;
+  concepto: string;
+  debe: number;
+  haber: number;
+  compNal?: CompNalInput;
+}
+export interface PolizaInput {
+  numUnIdenPol: string;
+  fecha: string; // YYYY-MM-DD
+  concepto: string;
+  transacciones: TransaccionInput[];
+}
+
+/** Render puro de Pólizas del Periodo. */
+export function renderPolizasXml(args: {
+  rfc: string;
+  year: number;
+  month: number;
+  tipoSolicitud: TipoSolicitud;
+  numOrden?: string | null;
+  numTramite?: string | null;
+  polizas: PolizaInput[];
+}): string {
+  // NumOrden aplica a AF/FC; NumTramite a DE/CO.
+  const ident =
+    (args.tipoSolicitud === "AF" || args.tipoSolicitud === "FC")
+      ? (args.numOrden ? ` NumOrden="${esc(args.numOrden)}"` : "")
+      : (args.numTramite ? ` NumTramite="${esc(args.numTramite)}"` : "");
+
+  const lines: string[] = [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<PLZ:Polizas xmlns:PLZ="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo" ` +
+      `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
+      `xsi:schemaLocation="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo/PolizasPeriodo_1_3.xsd" ` +
+      `Version="${VERSION}" RFC="${esc(args.rfc)}" Mes="${mm(args.month)}" Anio="${args.year}" TipoSolicitud="${args.tipoSolicitud}"${ident}>`,
+  ];
+  for (const p of args.polizas) {
+    lines.push(`  <PLZ:Poliza NumUnIdenPol="${esc(p.numUnIdenPol)}" Fecha="${esc(p.fecha)}" Concepto="${esc(p.concepto)}">`);
+    for (const t of p.transacciones) {
+      const desCta = t.desCta ? ` DesCta="${esc(t.desCta)}"` : "";
+      const open = `    <PLZ:Transaccion NumCta="${esc(t.numCta)}"${desCta} Concepto="${esc(t.concepto)}" Debe="${money(t.debe)}" Haber="${money(t.haber)}"`;
+      if (t.compNal) {
+        lines.push(`${open}>`);
+        lines.push(`      <PLZ:CompNal UUID_CFDI="${esc(t.compNal.uuid)}" RFC="${esc(t.compNal.rfc)}" MontoTotal="${money(t.compNal.montoTotal)}" />`);
+        lines.push(`    </PLZ:Transaccion>`);
+      } else {
+        lines.push(`${open} />`);
+      }
+    }
+    lines.push(`  </PLZ:Poliza>`);
+  }
+  lines.push(`</PLZ:Polizas>`);
+  return lines.join("\n");
+}
+
+export interface EntryForPoliza {
+  numCta: string;
+  desCta: string;
+  concepto: string;
+  tipo: "CARGO" | "ABONO";
+  monto: number;
+  fecha: string; // YYYY-MM-DD
+  referencia: string | null;
+  referenciaTipo: string | null;
+  fuente: string;
+  compNal?: CompNalInput;
+}
+
+/**
+ * Agrupa asientos en pólizas: una póliza por documento (referencia) o, sin
+ * referencia, por (fuente + fecha + concepto). NumUnIdenPol = consecutivo
+ * estable (ordenado por fecha y clave).
+ */
+export function agruparPolizas(entries: EntryForPoliza[]): PolizaInput[] {
+  const grupos = new Map<string, EntryForPoliza[]>();
+  for (const e of entries) {
+    const clave = e.referencia ? `${e.referenciaTipo}:${e.referencia}` : `${e.fuente}:${e.fecha}:${e.concepto}`;
+    const arr = grupos.get(clave) ?? [];
+    arr.push(e);
+    grupos.set(clave, arr);
+  }
+  const claves = [...grupos.keys()].sort((a, b) => {
+    const fa = grupos.get(a)![0].fecha;
+    const fb = grupos.get(b)![0].fecha;
+    return fa === fb ? a.localeCompare(b) : fa.localeCompare(fb);
+  });
+  return claves.map((clave, i) => {
+    const items = grupos.get(clave)!;
+    return {
+      numUnIdenPol: String(i + 1),
+      fecha: items[0].fecha,
+      concepto: items[0].concepto || "Asiento contable",
+      transacciones: items.map((e) => ({
+        numCta: e.numCta,
+        desCta: e.desCta,
+        concepto: e.concepto || "Movimiento",
+        debe: e.tipo === "CARGO" ? e.monto : 0,
+        haber: e.tipo === "ABONO" ? e.monto : 0,
+        compNal: e.compNal,
+      })),
+    };
+  });
+}
+
+export interface PolizasXmlOptions {
+  companyId: string;
+  year: number;
+  month: number;
+  tipoSolicitud: TipoSolicitud;
+  numOrden?: string | null;
+  numTramite?: string | null;
+}
+
+export async function generatePolizasXml(opts: PolizasXmlOptions): Promise<string> {
+  const company = await prisma.company.findUnique({ where: { id: opts.companyId }, select: { rfc: true } });
+  if (!company) throw new Error("Empresa no encontrada");
+
+  const entries = await prisma.accountingEntry.findMany({
+    where: { companyId: opts.companyId, year: opts.year, month: opts.month },
+    select: {
+      fecha: true, descripcion: true, monto: true, tipo: true, referencia: true, referenciaTipo: true, fuente: true,
+      chartAccount: { select: { cuentaSAT: true, subcuenta: true, nombre: true } },
+    },
+    orderBy: { fecha: "asc" },
+  });
+
+  // CompNal: resuelve los CFDIs referenciados (UUID → RFC del tercero + total).
+  const uuids = [...new Set(entries.filter((e) => e.referenciaTipo === "CFDI" && e.referencia).map((e) => e.referencia!))];
+  const invoices = uuids.length
+    ? await prisma.invoice.findMany({
+        where: { companyId: opts.companyId, uuid: { in: uuids } },
+        select: { uuid: true, total: true, customer: { select: { rfc: true } } },
+      })
+    : [];
+  const compNalPorUuid = new Map<string, CompNalInput>();
+  for (const inv of invoices) {
+    if (inv.uuid && inv.customer?.rfc) {
+      compNalPorUuid.set(inv.uuid, { uuid: inv.uuid, rfc: inv.customer.rfc, montoTotal: inv.total });
+    }
+  }
+
+  const forPoliza: EntryForPoliza[] = entries.map((e) => ({
+    numCta: e.chartAccount.subcuenta ?? e.chartAccount.cuentaSAT,
+    desCta: e.chartAccount.nombre,
+    concepto: e.descripcion,
+    tipo: e.tipo as "CARGO" | "ABONO",
+    monto: e.monto,
+    fecha: e.fecha.toISOString().slice(0, 10),
+    referencia: e.referencia,
+    referenciaTipo: e.referenciaTipo,
+    fuente: e.fuente,
+    compNal: e.referenciaTipo === "CFDI" && e.referencia ? compNalPorUuid.get(e.referencia) : undefined,
+  }));
+
+  return renderPolizasXml({
+    rfc: company.rfc,
+    year: opts.year,
+    month: opts.month,
+    tipoSolicitud: opts.tipoSolicitud,
+    numOrden: opts.numOrden,
+    numTramite: opts.numTramite,
+    polizas: agruparPolizas(forPoliza),
+  });
+}
