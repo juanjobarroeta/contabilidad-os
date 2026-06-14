@@ -1,0 +1,35 @@
+name: Declaraciones backfill (mensuales)
+
+# Rellena las declaraciones MENSUALES faltantes: descarga el acuse PDF de cada
+# tax-return mensual de Syntage y lo parsea con Claude para el desglose IVA/ISR.
+# Es COSTOSO (1 llamada a Claude por mes sin capturar), así que SÓLO se dispara
+# a mano (workflow_dispatch). Gap-fill + resumible: re-correr continúa donde quedó.
+#
+# Requiere los secrets STAGING_URL y CRON_SECRET (igual que los demás crons), y
+# que el deployment tenga SYNTAGE_API_KEY + ANTHROPIC_API_KEY configurados.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "Una sola empresa (companyId). Vacío = todas."
+        required: false
+        default: ""
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger declaraciones backfill
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          ENDPOINT="${URL}/api/cron/declaraciones-backfill"
+          if [ -n "${COMPANY_ID:-}" ]; then ENDPOINT="${ENDPOINT}?companyId=${COMPANY_ID}"; fi
+          curl -fsS --max-time 290 -X POST "$ENDPOINT" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          COMPANY_ID: ${{ github.event.inputs.companyId }}
