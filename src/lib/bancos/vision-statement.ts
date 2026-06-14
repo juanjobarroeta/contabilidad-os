@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ParsedTransaction } from "@/lib/bank-parser";
+import { meteredCreate } from "@/lib/costos/anthropic";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vision extraction of a bank statement from a PDF or image (estado de cuenta).
@@ -83,7 +84,7 @@ export async function extractStatementFromDocument(
       : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response: any = await anthropic.messages.create({
+  const response: any = await meteredCreate(anthropic, { subtipo: "bancos.vision_statement" }, {
     model: MODEL,
     max_tokens: 8000,
     system: SYSTEM_PROMPT,

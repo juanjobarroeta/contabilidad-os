@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import { buildWhatsappSystemPrompt } from "./system-prompt";
+import { meteredCreate } from "@/lib/costos/anthropic";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -59,7 +60,7 @@ export async function runWhatsappAgent(opts: {
   while (rounds < MAX_TOOL_ROUNDS) {
     let response;
     try {
-      response = await anthropic.messages.create({
+      response = await meteredCreate(anthropic, { companyId, subtipo: "whatsapp.agent" }, {
         model,
         max_tokens: MAX_TOKENS,
         system,
@@ -69,7 +70,7 @@ export async function runWhatsappAgent(opts: {
     } catch (err) {
       if (model !== MODEL_FALLBACK && err instanceof Anthropic.NotFoundError) {
         model = MODEL_FALLBACK;
-        response = await anthropic.messages.create({
+        response = await meteredCreate(anthropic, { companyId, subtipo: "whatsapp.agent" }, {
           model,
           max_tokens: MAX_TOKENS,
           system,

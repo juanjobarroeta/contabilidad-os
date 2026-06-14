@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { meteredCreate } from "@/lib/costos/anthropic";
 import { calcularImss } from "@/lib/nomina/imss";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,7 +111,7 @@ export async function POST(req: Request) {
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await anthropic.messages.create({
+    const response: any = await meteredCreate(anthropic, { companyId, subtipo: "nomina.sua" }, {
       model: "claude-sonnet-4-5",
       max_tokens: 4096,
       system: SYSTEM_PROMPT,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
+import { meteredCreate } from "@/lib/costos/anthropic";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/nomina/parse-employee-docs
@@ -133,7 +134,7 @@ export async function POST(req: Request) {
       : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await anthropic.messages.create({
+    const response: any = await meteredCreate(anthropic, { subtipo: "nomina.parse_empleado" }, {
       model: "claude-sonnet-4-5",
       max_tokens: 2048,
       system: SYSTEM_PROMPT,

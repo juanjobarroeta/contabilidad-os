@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
+import { meteredCreate } from "@/lib/costos/anthropic";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/bancos/parse-pdf
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
   let responseText = "";
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await anthropic.messages.create({
+    const response: any = await meteredCreate(anthropic, { subtipo: "bancos.parse_pdf" }, {
       model: "claude-sonnet-4-5",
       max_tokens: 8192, // Bank statements can be long
       system: SYSTEM_PROMPT,
