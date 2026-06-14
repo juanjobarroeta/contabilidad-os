@@ -239,6 +239,19 @@ export class SyntageClient {
     return asArray(r)[0] ?? null;
   }
 
+  /**
+   * Declaraciones (tax-returns) ya extraídas de la entidad, más recientes primero.
+   * Recurso unificado: `intervalUnit` ∈ "Anual" | "Mensual" | "RIF" distingue el
+   * tipo. Endpoint y campos confirmados en docs.syntage.com (tax-returns).
+   */
+  async getEntityTaxReturns(entityId: string): Promise<Json[]> {
+    const r = await this.request<Json>(
+      "GET",
+      `/entities/${entityId}/tax-returns?order%5BcreatedAt%5D=desc&itemsPerPage=200`,
+    );
+    return asArray(r);
+  }
+
   /** Sondea una extracción hasta que termina o falla. */
   async waitForExtraction(id: string, opts: { timeoutMs?: number; intervalMs?: number } = {}): Promise<Json> {
     const timeoutMs = opts.timeoutMs ?? 120_000;

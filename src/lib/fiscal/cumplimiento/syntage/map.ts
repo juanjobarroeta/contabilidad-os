@@ -58,6 +58,46 @@ export function mapTaxCompliance(check: Json, fetchedAt = new Date().toISOString
   };
 }
 
+const num = (v: unknown): number | null => {
+  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
+  return Number.isFinite(n) ? n : null;
+};
+
+/** Declaración anual derivada de un recurso TaxReturn de Syntage. */
+export interface DeclaracionAnualSyntage {
+  ejercicio: number;
+  /** Importe pagado (o a cargo si no hay pagado); null si la anual no arroja pago. */
+  isrPagar: number | null;
+  lineaCaptura?: string;
+  /** Fecha de presentación (ISO). */
+  fechaPresentacion?: string;
+  esComplementaria: boolean;
+}
+
+/**
+ * Recurso TaxReturn → declaración ANUAL. Sólo mapea `intervalUnit === "Anual"`;
+ * devuelve null para mensuales/RIF o si no se puede determinar el ejercicio.
+ * Las mensuales NO se mapean: el recurso trae un único `payment` agregado, sin
+ * desglose IVA/ISR, y nuestro modelo separa IVA_MENSUAL e ISR_PROVISIONAL con
+ * importes propios. Campos confirmados en docs.syntage.com (tax-returns):
+ * intervalUnit, fiscalYear/period, payment.{paidAmount,dueAmount}, captureLine,
+ * presentedAt, type.
+ */
+export function mapTaxReturnAnual(tr: Json): DeclaracionAnualSyntage | null {
+  if (String(tr.intervalUnit) !== "Anual") return null;
+  const ejercicio = num(tr.fiscalYear) ?? num(tr.period);
+  if (ejercicio == null) return null;
+  const payment = (tr.payment as Json) ?? {};
+  const tipo = String(tr.type ?? "");
+  return {
+    ejercicio,
+    isrPagar: num(payment.paidAmount) ?? num(payment.dueAmount),
+    lineaCaptura: str(tr.captureLine),
+    fechaPresentacion: str(tr.presentedAt),
+    esComplementaria: tipo.startsWith("Complementaria"),
+  };
+}
+
 /** Recurso TaxStatus → CsfResult (CSF). */
 export function mapTaxStatus(ts: Json, fetchedAt = new Date().toISOString()): CsfResult {
   const address = (ts.address as Json) ?? {};
