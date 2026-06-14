@@ -208,6 +208,7 @@ model Company {
   obligations       CompanyObligation[]
   perdidasFiscales  PerdidaFiscal[]
   costEvents        CostEvent[]
+  coeEnvios         CoeEnvio[]
   accountingEntries AccountingEntry[]
   accounts          ChartAccount[]
   accountingPeriods AccountingPeriod[]
@@ -1125,6 +1126,27 @@ model CostEvent {
   @@index([companyId, occurredAt])
   @@index([despachoId, occurredAt])
   @@index([occurredAt])
+}
+
+// Envíos de Contabilidad Electrónica (COE) por periodo. Guarda el hash del
+// contenido para decidir automáticamente N (normal) vs C (complementaria): si la
+// balanza cambia respecto al último envío, el siguiente es complementaria y lleva
+// FechaModBal. Un registro por (empresa, tipoDoc, periodo).
+model CoeEnvio {
+  id            String   @id @default(cuid())
+  companyId     String
+  tipoDoc       String // "BALANZA" | "CATALOGO"
+  periodo       String // "YYYY-MM" (o "YYYY-13" para el cierre)
+  contenidoHash String
+  tipoEnvio     String // "N" | "C"
+  fechaModBal   String? // "YYYY-MM-DD" cuando tipoEnvio = "C"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, tipoDoc, periodo])
+  @@index([companyId])
 }
 
 // Tracks which fiscal obligations each company has (derived from régimen or parsed from CSF)
