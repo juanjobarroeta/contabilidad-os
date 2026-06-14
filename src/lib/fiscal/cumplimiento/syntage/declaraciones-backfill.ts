@@ -110,7 +110,7 @@ export async function backfillDeclaracionesMensuales(
     try {
       const { data } = await client.downloadAcuse(ref);
       const base64 = Buffer.from(data).toString("base64");
-      const parsed = await parseSatDocument(base64);
+      const parsed = await parseSatDocument(base64, { companyId, subtipo: "declaraciones.backfill" });
       acusesParseados++;
       if (parsed.type === "ACUSE_MENSUAL") acuse = parsed.acuseMensual;
     } catch {

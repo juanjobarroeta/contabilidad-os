@@ -11,7 +11,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/crypto";
-import { SyntageClient } from "./client";
+import { recordSyntageExtraction } from "@/lib/costos/record";
+import { SyntageClient, type Extractor } from "./client";
 
 type Json = Record<string, unknown>;
 
@@ -68,12 +69,14 @@ async function provisionOne(
   // Dispara extracciones frescas sin esperar; el resultado se lee con el sync.
   // annual_tax_return puebla las declaraciones anuales históricas; monthly_tax_return
   // deja disponibles los acuses mensuales (PDF) para el backfill IVA/ISR.
-  await Promise.allSettled([
-    client.createExtraction({ extractor: "tax_compliance", entity: entityId }),
-    client.createExtraction({ extractor: "tax_status", entity: entityId }),
-    client.createExtraction({ extractor: "annual_tax_return", entity: entityId }),
-    client.createExtraction({ extractor: "monthly_tax_return", entity: entityId }),
-  ]);
+  const extractores: Extractor[] = ["tax_compliance", "tax_status", "annual_tax_return", "monthly_tax_return"];
+  const results = await Promise.allSettled(
+    extractores.map((extractor) => client.createExtraction({ extractor, entity: entityId })),
+  );
+  // Mide el costo sólo de las extracciones que sí se dispararon (fire-and-forget).
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") void recordSyntageExtraction(extractores[i], { companyId: c.id });
+  });
 
   return { companyId: c.id, rfc: c.rfc, entityId, credencial };
 }
