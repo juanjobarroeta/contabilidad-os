@@ -168,7 +168,7 @@ export default function DeclaracionAnualPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-4 gap-4 text-center">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-center sm:grid-cols-4">
               <Stat label="Ingresos" value={result.totalIngresos} />
               <Stat label="Deducciones" value={result.totalDeducciones} negative />
               <Stat label="Resultado fiscal" value={result.resultadoFiscal} />
@@ -297,9 +297,9 @@ export default function DeclaracionAnualPage() {
 
 function Stat({ label, value, negative, positive }: { label: string; value: number; negative?: boolean; positive?: boolean }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`text-lg font-bold font-mono ${negative ? "text-red-600" : positive ? "text-green-700" : ""}`}>
+      <p className={`font-mono text-sm font-bold tabular-nums break-words sm:text-base ${negative ? "text-red-600" : positive ? "text-green-700" : ""}`}>
         {formatCurrency(value)}
       </p>
     </div>
