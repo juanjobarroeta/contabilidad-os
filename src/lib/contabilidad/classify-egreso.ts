@@ -183,6 +183,7 @@ export const EXTRA_ACCOUNTS_FOR_CLASSIFICATION: Array<{
   nombre: string;
   tipo: "GASTO";
   nivel: number;
+  naturaleza?: "D" | "A";
 }> = [
   { cuentaSAT: "601", subcuenta: "601.15", nombre: "Combustibles", tipo: "GASTO", nivel: 3 },
   { cuentaSAT: "601", subcuenta: "601.16", nombre: "Lubricantes",  tipo: "GASTO", nivel: 3 },

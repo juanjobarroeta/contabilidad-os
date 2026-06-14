@@ -1192,6 +1192,9 @@ model ChartAccount {
   nombre    String
   tipo      AccountType // ACTIVO, PASIVO, CAPITAL, INGRESO, GASTO, COSTO
   nivel     Int         @default(1)
+  // Naturaleza COE: "D" (deudora) | "A" (acreedora). Null = derivar del tipo.
+  // Explícita para contra-cuentas (p.ej. depreciación acumulada = "A" en ACTIVO).
+  naturaleza String?
   isActive  Boolean     @default(true)
 
   company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
