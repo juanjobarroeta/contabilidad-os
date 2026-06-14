@@ -2,13 +2,17 @@ name: Declaraciones backfill (mensuales)
 
 # Rellena las declaraciones MENSUALES faltantes: descarga el acuse PDF de cada
 # tax-return mensual de Syntage y lo parsea con Claude para el desglose IVA/ISR.
-# Es COSTOSO (1 llamada a Claude por mes sin capturar), así que SÓLO se dispara
-# a mano (workflow_dispatch). Gap-fill + resumible: re-correr continúa donde quedó.
+# Gap-fill + resumible: cada corrida sólo descarga+parsea los meses que faltan
+# (las ya capturadas se saltan sin costo), así que el costo recurrente queda
+# acotado a ~1 mes nuevo por empresa. Corre mensual (día 22, tras el límite del
+# día 17) y también a mano (workflow_dispatch). Para apagarlo, quita el schedule.
 #
 # Requiere los secrets STAGING_URL y CRON_SECRET (igual que los demás crons), y
 # que el deployment tenga SYNTAGE_API_KEY + ANTHROPIC_API_KEY configurados.
 
 on:
+  schedule:
+    - cron: "0 14 22 * *" # día 22, ~08:00 CT — captura el mes recién declarado
   workflow_dispatch:
     inputs:
       companyId:
