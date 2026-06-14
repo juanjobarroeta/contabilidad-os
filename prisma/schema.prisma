@@ -1329,6 +1329,7 @@ enum EntrySource {
   CONSTRUCCION
   FLOTA
   APERTURA // saldos iniciales / asiento de apertura (no se borra al re-postear el mes)
+  CIERRE // asiento de cierre anual (mes 13) — cancela ingresos/costos/gastos a resultado
 }
 
 // ─── Module 6: Construction Project Management ───────────────────────────────
