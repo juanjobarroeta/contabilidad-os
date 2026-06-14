@@ -41,17 +41,22 @@ export default function PolizasPage() {
     tipoSolicitud: tipo,
     ...(usaOrden(tipo) ? { numOrden: folio } : { numTramite: folio }),
   });
-  const href = `/api/contabilidad/coe/polizas?${params.toString()}`;
+  const qs = params.toString();
+  const descargas = [
+    { label: "Pólizas del periodo", href: `/api/contabilidad/coe/polizas?${qs}` },
+    { label: "Auxiliar de cuentas", href: `/api/contabilidad/coe/aux-cuentas?${qs}` },
+    { label: "Auxiliar de folios", href: `/api/contabilidad/coe/aux-folios?${qs}` },
+  ];
 
   return (
     <div className="mx-auto max-w-[680px] px-4 py-6 sm:px-8 sm:py-8">
       <Link href="/contabilidad" className="inline-flex items-center gap-1 text-[13px] text-cos-ink-soft hover:text-cos-ink">
         <ChevronLeft className="h-4 w-4" /> Contabilidad
       </Link>
-      <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.03em] text-cos-ink">Pólizas del periodo</h1>
+      <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.03em] text-cos-ink">Pólizas y auxiliares</h1>
       <p className="mt-1 max-w-[60ch] text-[15px] text-cos-ink-soft">
-        XML de pólizas que el SAT solicita en una auditoría, devolución o compensación. Indica el tipo de
-        solicitud y su folio (orden o trámite).
+        XML que el SAT solicita en una auditoría, devolución o compensación: pólizas del periodo, auxiliar de
+        cuentas y auxiliar de folios. Indica el tipo de solicitud y su folio (orden o trámite).
       </p>
 
       <Card className="mt-5 rounded-card border-cos-line p-5 shadow-card">
@@ -95,17 +100,23 @@ export default function PolizasPage() {
           </span>
         </label>
 
-        <a
-          href={folioValido ? href : undefined}
-          aria-disabled={!folioValido}
-          className={`mt-5 inline-flex items-center gap-1.5 rounded-control px-4 py-2 text-[14px] font-semibold ${
-            folioValido
-              ? "bg-cos-jade text-white hover:opacity-90"
-              : "pointer-events-none bg-cos-slate-tint text-cos-ink-faint"
-          }`}
-        >
-          <FileDown className="h-4 w-4" /> Descargar pólizas XML
-        </a>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {descargas.map((d) => (
+            <a
+              key={d.label}
+              href={folioValido ? d.href : undefined}
+              aria-disabled={!folioValido}
+              className={`inline-flex items-center gap-1.5 rounded-control px-3 py-2 text-[13.5px] font-semibold ${
+                folioValido
+                  ? "bg-cos-jade text-white hover:opacity-90"
+                  : "pointer-events-none bg-cos-slate-tint text-cos-ink-faint"
+              }`}
+            >
+              <FileDown className="h-4 w-4" /> {d.label}
+            </a>
+          ))}
+        </div>
+        {!folioValido && <p className="mt-2 text-[12px] text-cos-ink-faint">Captura un folio válido para habilitar las descargas.</p>}
       </Card>
     </div>
   );
