@@ -12,7 +12,10 @@ export async function GET(req: Request) {
     const companyId = url.searchParams.get("companyId");
     const year = parseInt(url.searchParams.get("year") ?? "");
     const month = parseInt(url.searchParams.get("month") ?? "");
-    const tipoEnvio = (url.searchParams.get("tipo") as "N" | "C") ?? "N";
+    // tipo opcional: override manual N/C; si se omite, se decide automáticamente
+    // (complementaria si la balanza cambió desde el último envío).
+    const tipoParam = url.searchParams.get("tipo");
+    const tipoOverride = tipoParam === "N" || tipoParam === "C" ? tipoParam : undefined;
     if (!companyId || !year || !month) {
       return NextResponse.json({ error: "companyId, year, month requeridos" }, { status: 400 });
     }
@@ -25,7 +28,7 @@ export async function GET(req: Request) {
     });
     if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
-    const xml = await generateBalanzaXml({ companyId, year, month, tipoEnvio });
+    const { xml, tipoEnvio } = await generateBalanzaXml({ companyId, year, month, tipoEnvio: tipoOverride });
     const filename = `${company.rfc}${year}${String(month).padStart(2, "0")}B${tipoEnvio}.XML`;
 
     return new NextResponse(xml, {

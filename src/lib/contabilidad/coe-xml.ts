@@ -12,6 +12,7 @@
 import { prisma } from "../prisma";
 import { balanza } from "./posting";
 import { naturalezaPorTipo } from "./coe-saldos";
+import { hashBalanza, decidirEnvio } from "./coe-envio";
 
 const VERSION = "1.3";
 
@@ -110,14 +111,20 @@ export function renderBalanzaXml(args: {
   year: number;
   month: number;
   tipoEnvio?: "N" | "C";
+  /** Obligatoria (Anexo 24) cuando TipoEnvio = "C". Formato YYYY-MM-DD. */
+  fechaModBal?: string | null;
   cuentas: BalanzaCuentaInput[];
 }): string {
+  const tipoEnvio = args.tipoEnvio ?? "N";
+  // FechaModBal sólo aplica (y es obligatoria) en complementarias.
+  const fechaModBalAttr =
+    tipoEnvio === "C" && args.fechaModBal ? ` FechaModBal="${esc(args.fechaModBal)}"` : "";
   const lines: string[] = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<BCE:Balanza xmlns:BCE="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/BalanzaComprobacion" ` +
       `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
       `xsi:schemaLocation="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/BalanzaComprobacion http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/BalanzaComprobacion/BalanzaComprobacion_1_3.xsd" ` +
-      `Version="${VERSION}" RFC="${esc(args.rfc)}" Mes="${mm(args.month)}" Anio="${args.year}" TipoEnvio="${args.tipoEnvio ?? "N"}">`,
+      `Version="${VERSION}" RFC="${esc(args.rfc)}" Mes="${mm(args.month)}" Anio="${args.year}" TipoEnvio="${tipoEnvio}"${fechaModBalAttr}>`,
   ];
   for (const c of args.cuentas) {
     if (
@@ -137,25 +144,65 @@ export function renderBalanzaXml(args: {
   return lines.join("\n");
 }
 
-export type CoeBalXmlOptions = { companyId: string; year: number; month: number; tipoEnvio?: "N" | "C" };
+export type CoeBalXmlOptions = {
+  companyId: string;
+  year: number;
+  month: number;
+  /** Override manual; si se omite, se decide N/C automáticamente vs el último envío. */
+  tipoEnvio?: "N" | "C";
+  fechaModBal?: string | null;
+};
 
-export async function generateBalanzaXml(opts: CoeBalXmlOptions): Promise<string> {
+export interface BalanzaXmlResult {
+  xml: string;
+  tipoEnvio: "N" | "C";
+  fechaModBal: string | null;
+}
+
+export async function generateBalanzaXml(opts: CoeBalXmlOptions): Promise<BalanzaXmlResult> {
   const company = await prisma.company.findUnique({ where: { id: opts.companyId }, select: { rfc: true } });
   if (!company) throw new Error("Empresa no encontrada");
 
   const rows = await balanza(opts.companyId, opts.year, opts.month);
+  const cuentas = rows.map((r) => ({
+    numCta: r.subcuenta ?? r.cuentaSAT,
+    cargos: r.cargos,
+    abonos: r.abonos,
+    saldoInicial: r.saldoInicial,
+    saldoFinal: r.saldoFinal,
+  }));
 
-  return renderBalanzaXml({
+  const periodo = `${opts.year}-${mm(opts.month)}`;
+  const nuevoHash = hashBalanza(cuentas);
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  const previo = await prisma.coeEnvio.findUnique({
+    where: { companyId_tipoDoc_periodo: { companyId: opts.companyId, tipoDoc: "BALANZA", periodo } },
+  });
+
+  // Override manual del contador, o decisión automática N/C contra el último envío.
+  const decision = opts.tipoEnvio
+    ? { tipoEnvio: opts.tipoEnvio, fechaModBal: opts.tipoEnvio === "C" ? (opts.fechaModBal ?? hoy) : null }
+    : decidirEnvio(
+        previo ? { contenidoHash: previo.contenidoHash, tipoEnvio: previo.tipoEnvio, fechaModBal: previo.fechaModBal } : null,
+        nuevoHash,
+        hoy,
+      );
+
+  const xml = renderBalanzaXml({
     rfc: company.rfc,
     year: opts.year,
     month: opts.month,
-    tipoEnvio: opts.tipoEnvio,
-    cuentas: rows.map((r) => ({
-      numCta: r.subcuenta ?? r.cuentaSAT,
-      cargos: r.cargos,
-      abonos: r.abonos,
-      saldoInicial: r.saldoInicial,
-      saldoFinal: r.saldoFinal,
-    })),
+    tipoEnvio: decision.tipoEnvio,
+    fechaModBal: decision.fechaModBal,
+    cuentas,
   });
+
+  await prisma.coeEnvio.upsert({
+    where: { companyId_tipoDoc_periodo: { companyId: opts.companyId, tipoDoc: "BALANZA", periodo } },
+    create: { companyId: opts.companyId, tipoDoc: "BALANZA", periodo, contenidoHash: nuevoHash, tipoEnvio: decision.tipoEnvio, fechaModBal: decision.fechaModBal },
+    update: { contenidoHash: nuevoHash, tipoEnvio: decision.tipoEnvio, fechaModBal: decision.fechaModBal },
+  });
+
+  return { xml, tipoEnvio: decision.tipoEnvio, fechaModBal: decision.fechaModBal };
 }

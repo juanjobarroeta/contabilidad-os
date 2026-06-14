@@ -74,6 +74,21 @@ d("Balanza de Comprobación → BalanzaComprobacion_1_3.xsd", () => {
     expect(r.ok, r.err).toBe(true);
   });
 
+  it("complementaria (TipoEnvio=C + FechaModBal) valida contra el XSD", () => {
+    const xml = renderBalanzaXml({
+      rfc: "AAA010101AAA",
+      year: 2026,
+      month: 5,
+      tipoEnvio: "C",
+      fechaModBal: "2026-06-14",
+      cuentas: [{ numCta: "102.01", cargos: 50, abonos: 0, saldoInicial: 1000, saldoFinal: 1050 }],
+    });
+    expect(xml).toContain(`TipoEnvio="C"`);
+    expect(xml).toContain(`FechaModBal="2026-06-14"`);
+    const r = validate(xml, "BalanzaComprobacion_1_3.xsd");
+    expect(r.ok, r.err).toBe(true);
+  });
+
   it("el validador SÍ detecta XML inválido (RFC vacío)", () => {
     const xml = renderBalanzaXml({
       rfc: "", // RFC vacío → viola el patrón del XSD
