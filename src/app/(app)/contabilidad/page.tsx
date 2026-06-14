@@ -144,9 +144,17 @@ export default function ContabilidadPage() {
 
   return (
     <div className="mx-auto max-w-[1100px] px-6 py-7">
-      <div className="mb-6">
-        <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Contabilidad</h1>
-        <p className="mt-1.5 text-[15px] text-cos-ink-soft">{activeCompany.razonSocial}</p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Contabilidad</h1>
+          <p className="mt-1.5 text-[15px] text-cos-ink-soft">{activeCompany.razonSocial}</p>
+        </div>
+        <a
+          href="/contabilidad/apertura"
+          className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
+        >
+          Saldos iniciales
+        </a>
       </div>
 
       {error && (
