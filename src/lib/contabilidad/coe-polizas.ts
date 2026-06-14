@@ -93,27 +93,56 @@ export interface EntryForPoliza {
 }
 
 /**
+ * Clave de agrupación de una póliza: por documento (referencia) o, sin
+ * referencia, por fuente+fecha+concepto. Compartida por pólizas y auxiliares
+ * para que el NumUnIdenPol coincida entre reportes.
+ */
+export function clavePoliza(e: {
+  referencia: string | null;
+  referenciaTipo: string | null;
+  fuente: string;
+  fecha: string;
+  concepto: string;
+}): string {
+  return e.referencia ? `${e.referenciaTipo}:${e.referencia}` : `${e.fuente}:${e.fecha}:${e.concepto}`;
+}
+
+/** Mapa clave-de-póliza → NumUnIdenPol consecutivo (ordenado por fecha, luego clave). */
+export function numerarPolizas(
+  entries: { referencia: string | null; referenciaTipo: string | null; fuente: string; fecha: string; concepto: string }[],
+): Map<string, string> {
+  const primeraFecha = new Map<string, string>();
+  for (const e of entries) {
+    const k = clavePoliza(e);
+    if (!primeraFecha.has(k)) primeraFecha.set(k, e.fecha);
+  }
+  const claves = [...primeraFecha.keys()].sort((a, b) => {
+    const fa = primeraFecha.get(a)!;
+    const fb = primeraFecha.get(b)!;
+    return fa === fb ? a.localeCompare(b) : fa.localeCompare(fb);
+  });
+  return new Map(claves.map((k, i) => [k, String(i + 1)]));
+}
+
+/**
  * Agrupa asientos en pólizas: una póliza por documento (referencia) o, sin
  * referencia, por (fuente + fecha + concepto). NumUnIdenPol = consecutivo
  * estable (ordenado por fecha y clave).
  */
 export function agruparPolizas(entries: EntryForPoliza[]): PolizaInput[] {
+  const num = numerarPolizas(entries);
   const grupos = new Map<string, EntryForPoliza[]>();
   for (const e of entries) {
-    const clave = e.referencia ? `${e.referenciaTipo}:${e.referencia}` : `${e.fuente}:${e.fecha}:${e.concepto}`;
+    const clave = clavePoliza(e);
     const arr = grupos.get(clave) ?? [];
     arr.push(e);
     grupos.set(clave, arr);
   }
-  const claves = [...grupos.keys()].sort((a, b) => {
-    const fa = grupos.get(a)![0].fecha;
-    const fb = grupos.get(b)![0].fecha;
-    return fa === fb ? a.localeCompare(b) : fa.localeCompare(fb);
-  });
-  return claves.map((clave, i) => {
+  const claves = [...grupos.keys()].sort((a, b) => (num.get(a)! ).localeCompare(num.get(b)!, undefined, { numeric: true }));
+  return claves.map((clave) => {
     const items = grupos.get(clave)!;
     return {
-      numUnIdenPol: String(i + 1),
+      numUnIdenPol: num.get(clave)!,
       fecha: items[0].fecha,
       concepto: items[0].concepto || "Asiento contable",
       transacciones: items.map((e) => ({
