@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { persistComplianceResult } from "../persist";
 import { SyntageClient } from "./client";
 import { mapTaxCompliance, mapTaxStatus, mapTaxReturnAnual } from "./map";
+import { fileRefDe } from "./declaraciones-backfill";
 
 export interface SyncResult {
   companyId: string;
@@ -44,6 +45,18 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
       select: { id: true },
     });
     if (existing) continue; // no sobreescribir lo capturado/calculado
+
+    // Acuse PDF (sólo al crear, para que sea descargable). Best-effort.
+    let acusePdf: Uint8Array<ArrayBuffer> | null = null;
+    const ref = fileRefDe(tr as Record<string, unknown>);
+    if (ref) {
+      try {
+        acusePdf = new Uint8Array((await client.downloadAcuse(ref)).data);
+      } catch {
+        acusePdf = null;
+      }
+    }
+
     await prisma.taxDeclaration.create({
       data: {
         companyId,
@@ -54,6 +67,7 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
         isrPagar: anual.isrPagar,
         lineaCaptura: anual.lineaCaptura ?? null,
         fechaPresentacion: anual.fechaPresentacion ? new Date(anual.fechaPresentacion) : null,
+        ...(acusePdf ? { acusePdf, acusePdfNombre: `acuse-anual-${periodo}.pdf` } : {}),
       },
     });
     creadas++;
