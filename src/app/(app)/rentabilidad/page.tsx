@@ -93,6 +93,10 @@ export default function RentabilidadPage() {
   }
 
   const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+  const bajoAgua = (precio: number | null, costo: number) => precio != null && precio > 0 && costo > precio;
+  const empresasBajoAgua = data?.empresas.filter((e) => bajoAgua(e.precioMensualCentavos, e.costoCentavos)) ?? [];
+  const despBajoAgua = data?.despachos.filter((d) => bajoAgua(d.precioMensualCentavos, d.costoCentavos)) ?? [];
+  const nBajoAgua = empresasBajoAgua.length + despBajoAgua.length;
 
   return (
     <div className="mx-auto max-w-[1100px] px-4 py-6 sm:px-8 sm:py-8">
@@ -131,6 +135,18 @@ export default function RentabilidadPage() {
         </div>
       ) : data ? (
         <div className="mt-5 space-y-6">
+          {nBajoAgua > 0 && (
+            <div className="flex items-start gap-2 rounded-card bg-cos-red-tint px-4 py-3 text-[13px] text-cos-red-ink">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-semibold">{nBajoAgua} cliente{nBajoAgua === 1 ? "" : "s"} bajo agua este mes</p>
+                <p className="mt-0.5">
+                  El costo-por-servir supera el precio en:{" "}
+                  {[...empresasBajoAgua.map((e) => e.razonSocial), ...despBajoAgua.map((d) => d.name)].join(", ")}.
+                </p>
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap gap-3 text-[13px] text-cos-ink-soft">
             <span className="rounded-control bg-cos-slate-tint px-3 py-1.5">
               Costo total del mes: <b className="text-cos-ink">{fmtMxn(data.totalCostoCentavos)}</b>
