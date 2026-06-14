@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import Anthropic from "@anthropic-ai/sdk";
+import { recordLlmCost, type CostCtx } from "@/lib/costos/record";
 
 // Lazy: no instanciar al importar (así el módulo no exige ANTHROPIC_API_KEY en
 // import-time, p.ej. en tests que sólo usan los tipos/helpers).
@@ -200,10 +201,11 @@ export interface ParsedSatDocument {
  * a Claude. Lanza si Anthropic falla o si la respuesta no es JSON válido — el
  * llamador decide cómo degradar.
  */
-export async function parseSatDocument(base64: string): Promise<ParsedSatDocument> {
+export async function parseSatDocument(base64: string, cost?: CostCtx): Promise<ParsedSatDocument> {
+  const model = "claude-sonnet-4-5";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response: any = await anthropic().messages.create({
-    model: "claude-sonnet-4-5",
+    model,
     max_tokens: 3072,
     system: SYSTEM_PROMPT,
     messages: [
@@ -215,6 +217,11 @@ export async function parseSatDocument(base64: string): Promise<ParsedSatDocumen
         ],
       },
     ],
+  });
+  // Métrica de costo (fire-and-forget; no bloquea ni rompe el parseo).
+  void recordLlmCost(response?.model ?? model, response?.usage, {
+    ...cost,
+    subtipo: cost?.subtipo ?? "llm.parse_document",
   });
   const block = response.content.find((b: { type: string }) => b.type === "text");
   const cleaned = (block?.text ?? "")

@@ -180,6 +180,10 @@ model Company {
   coeficienteUtilidad Float? // Stored after user confirms/overrides auto-calculation
   coeficienteAnio     Int? // Which fiscal year this coeficiente applies to
 
+  // Precio mensual por empresa para análisis de rentabilidad (centavos MXN).
+  // Sólo unit economics; desacoplado del trial/subscription gating.
+  precioMensualCentavos Int?
+
   // Plataformas tecnológicas (régimen 625, Art. 113-A LISR): tipo de actividad
   // que define la tasa de retención. "transporte" (2.1%), "hospedaje" (4%) o
   // "servicios" = enajenación de bienes / prestación de servicios (1%).
@@ -203,6 +207,7 @@ model Company {
   taxDeclarations   TaxDeclaration[]
   obligations       CompanyObligation[]
   perdidasFiscales  PerdidaFiscal[]
+  costEvents        CostEvent[]
   accountingEntries AccountingEntry[]
   accounts          ChartAccount[]
   accountingPeriods AccountingPeriod[]
@@ -311,9 +316,14 @@ model Despacho {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Precio mensual del despacho para análisis de rentabilidad (centavos MXN).
+  // Sólo para unit economics; desacoplado del trial/subscription gating.
+  precioMensualCentavos Int?
+
   members   DespachoMember[]
   companies Company[]
   grupos    Grupo[]
+  costEvents CostEvent[]
 }
 
 // Grupo de empresas — sub-conjunto del despacho del mismo dueño que se factura
@@ -1090,6 +1100,31 @@ model PerdidaFiscal {
 
   @@unique([companyId, ejercicioOrigen])
   @@index([companyId])
+}
+
+// Costo-por-servir (unit economics). Un evento por operación que cuesta dinero:
+// llamada LLM (tokens) o extracción Syntage. Costo en MICRO-USD (entero); la
+// conversión a MXN se hace al mostrar con el FIX. companyId/despachoId nullables
+// y onDelete:SetNull para que el histórico de costo sobreviva a la baja de una
+// empresa. La rentabilidad por despacho se obtiene uniendo por companyId.
+model CostEvent {
+  id            String   @id @default(cuid())
+  despachoId    String?
+  companyId     String?
+  categoria     String // "LLM" | "SYNTAGE"
+  subtipo       String // "llm.parse_acuse" | "syntage.extraction.tax_status" | …
+  unidades      Float // tokens (LLM) o conteo (extracciones)
+  costoMicroUsd Int // costo estimado en micro-USD (USD × 1e6)
+  meta          Json?
+  occurredAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  company  Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  despacho Despacho? @relation(fields: [despachoId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, occurredAt])
+  @@index([despachoId, occurredAt])
+  @@index([occurredAt])
 }
 
 // Tracks which fiscal obligations each company has (derived from régimen or parsed from CSF)

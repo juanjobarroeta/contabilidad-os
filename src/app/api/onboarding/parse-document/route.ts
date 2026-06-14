@@ -133,7 +133,7 @@ export async function POST(req: Request) {
 
   let parsed: ParsedSatDocument;
   try {
-    parsed = await parseSatDocument(base64);
+    parsed = await parseSatDocument(base64, { subtipo: "onboarding.parse_document" });
   } catch (e) {
     console.error("[parse-document] parse error:", e);
     return NextResponse.json(
