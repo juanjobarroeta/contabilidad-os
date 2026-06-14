@@ -6,6 +6,7 @@ import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { recordLlmCost } from "@/lib/costos/record";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -110,9 +111,16 @@ export async function POST(req: Request) {
           let hasToolUse = false;
           const toolUseBlocks: Anthropic.ContentBlockParam[] = [];
           let currentToolUse: { id: string; name: string; input: string } | null = null;
+          // Métrica de costo: tokens de esta ronda (streaming → vienen en eventos).
+          let roundInput = 0;
+          let roundOutput = 0;
 
           for await (const event of response) {
-            if (event.type === "content_block_start") {
+            if (event.type === "message_start") {
+              roundInput = event.message.usage?.input_tokens ?? 0;
+            } else if (event.type === "message_delta") {
+              roundOutput = event.usage?.output_tokens ?? roundOutput;
+            } else if (event.type === "content_block_start") {
               if (event.content_block.type === "tool_use") {
                 hasToolUse = true;
                 currentToolUse = {
@@ -155,6 +163,12 @@ export async function POST(req: Request) {
               }
             }
           }
+
+          // Costo de la ronda (fire-and-forget; no rompe el stream).
+          void recordLlmCost(model, { input_tokens: roundInput, output_tokens: roundOutput }, {
+            companyId,
+            subtipo: "ai.chat",
+          });
 
           if (!hasToolUse) break;
 
