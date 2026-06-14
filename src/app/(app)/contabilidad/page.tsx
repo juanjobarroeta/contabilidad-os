@@ -183,6 +183,12 @@ export default function ContabilidadPage() {
           >
             Saldos iniciales
           </a>
+          <a
+            href="/contabilidad/polizas"
+            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
+          >
+            Pólizas
+          </a>
           <button
             onClick={handleCierre}
             disabled={cierreLoading}
