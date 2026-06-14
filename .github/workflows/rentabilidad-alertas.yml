@@ -1,0 +1,25 @@
+name: Rentabilidad — alerta bajo agua (mensual)
+
+# Avisa a los operadores de los clientes cuyo costo-por-servir superó su precio el
+# mes anterior. Corre a inicio de mes (mes anterior ya completo). Barato y rápido
+# (lecturas + push). Requiere los secrets STAGING_URL y CRON_SECRET.
+
+on:
+  schedule:
+    - cron: "0 14 2 * *" # día 2, ~08:00 CT — mes anterior completo
+  workflow_dispatch: {}
+
+jobs:
+  alertas:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger rentabilidad alertas
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS --max-time 110 -X POST "${URL}/api/cron/rentabilidad-alertas" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

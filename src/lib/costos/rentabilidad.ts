@@ -1,0 +1,125 @@
+// Cálculo de rentabilidad (unit economics) reutilizable: costo-por-servir del
+// mes vs precio mensual → margen, por empresa y con roll-up por despacho. Lo
+// consumen la API /rentabilidad, las alertas y el cron. Costo en CostEvent
+// (micro-USD) → centavos MXN con el FIX de Banxico.
+
+import { prisma } from "@/lib/prisma";
+import { microUsdACentavosMxn } from "./rates";
+import { fetchTipoCambioFix } from "@/lib/fiscal/banxico";
+
+export interface RentabilidadEmpresa {
+  companyId: string;
+  razonSocial: string;
+  rfc: string;
+  despachoId: string | null;
+  precioMensualCentavos: number | null;
+  costoCentavos: number;
+  eventos: number;
+  margenCentavos: number | null;
+  margenPct: number | null;
+}
+export interface RentabilidadDespacho {
+  despachoId: string;
+  name: string;
+  empresas: number;
+  precioMensualCentavos: number | null;
+  costoCentavos: number;
+  overheadCentavos: number;
+  margenCentavos: number | null;
+  margenPct: number | null;
+}
+export interface Rentabilidad {
+  periodo: string;
+  fixMxnPorUsd: number;
+  fixReal: boolean;
+  totalCostoCentavos: number;
+  empresas: RentabilidadEmpresa[];
+  despachos: RentabilidadDespacho[];
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** True si hay precio (> 0) y el costo lo excede → cliente "bajo agua". */
+export function esBajoAgua(precioMensualCentavos: number | null, costoCentavos: number): boolean {
+  return precioMensualCentavos != null && precioMensualCentavos > 0 && costoCentavos > precioMensualCentavos;
+}
+
+export async function computeRentabilidad(year: number, month: number): Promise<Rentabilidad> {
+  const from = new Date(year, month - 1, 1);
+  const to = new Date(year, month, 1);
+
+  const fix = (await fetchTipoCambioFix())?.valor ?? null;
+  const fixUsado = fix ?? 20; // fallback aproximado si Banxico no responde
+
+  const [companies, despachos, porEmpresa, overheadDespacho] = await Promise.all([
+    prisma.company.findMany({
+      where: { isActive: true },
+      select: { id: true, razonSocial: true, rfc: true, despachoId: true, precioMensualCentavos: true },
+      orderBy: { razonSocial: "asc" },
+    }),
+    prisma.despacho.findMany({ select: { id: true, name: true, precioMensualCentavos: true }, orderBy: { name: "asc" } }),
+    prisma.costEvent.groupBy({
+      by: ["companyId"],
+      where: { occurredAt: { gte: from, lt: to }, companyId: { not: null } },
+      _sum: { costoMicroUsd: true },
+      _count: { _all: true },
+    }),
+    prisma.costEvent.groupBy({
+      by: ["despachoId"],
+      where: { occurredAt: { gte: from, lt: to }, companyId: null, despachoId: { not: null } },
+      _sum: { costoMicroUsd: true },
+    }),
+  ]);
+
+  const microPorEmpresa = new Map(porEmpresa.map((g) => [g.companyId, { micro: g._sum.costoMicroUsd ?? 0, eventos: g._count._all }]));
+  const overheadMicroPorDespacho = new Map(overheadDespacho.map((g) => [g.despachoId, g._sum.costoMicroUsd ?? 0]));
+
+  const empresas: RentabilidadEmpresa[] = companies.map((c) => {
+    const agg = microPorEmpresa.get(c.id);
+    const costoCentavos = microUsdACentavosMxn(agg?.micro ?? 0, fixUsado);
+    const precio = c.precioMensualCentavos ?? null;
+    const margen = precio != null ? precio - costoCentavos : null;
+    return {
+      companyId: c.id,
+      razonSocial: c.razonSocial,
+      rfc: c.rfc,
+      despachoId: c.despachoId,
+      precioMensualCentavos: precio,
+      costoCentavos,
+      eventos: agg?.eventos ?? 0,
+      margenCentavos: margen,
+      margenPct: precio && precio > 0 && margen != null ? margen / precio : null,
+    };
+  });
+
+  const despachosOut: RentabilidadDespacho[] = despachos.map((d) => {
+    const empresasD = empresas.filter((e) => e.despachoId === d.id);
+    const costoEmpresas = empresasD.reduce((s, e) => s + e.costoCentavos, 0);
+    const overheadCentavos = microUsdACentavosMxn(overheadMicroPorDespacho.get(d.id) ?? 0, fixUsado);
+    const costoCentavos = costoEmpresas + overheadCentavos;
+    const precio = d.precioMensualCentavos ?? null;
+    const margen = precio != null ? precio - costoCentavos : null;
+    return {
+      despachoId: d.id,
+      name: d.name,
+      empresas: empresasD.length,
+      precioMensualCentavos: precio,
+      costoCentavos,
+      overheadCentavos,
+      margenCentavos: margen,
+      margenPct: precio && precio > 0 && margen != null ? margen / precio : null,
+    };
+  });
+
+  const totalCostoCentavos =
+    empresas.reduce((s, e) => s + e.costoCentavos, 0) + despachosOut.reduce((s, d) => s + d.overheadCentavos, 0);
+
+  return {
+    periodo: `${year}-${pad(month)}`,
+    fixMxnPorUsd: fixUsado,
+    fixReal: fix != null,
+    totalCostoCentavos,
+    empresas,
+    despachos: despachosOut,
+  };
+}
