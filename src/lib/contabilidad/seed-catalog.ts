@@ -1,6 +1,7 @@
 import { prisma } from "../prisma";
 import { SAT_STARTER_CATALOG } from "./catalog";
 import { EXTRA_ACCOUNTS_FOR_CLASSIFICATION } from "./classify-egreso";
+import { naturalezaPorTipo } from "./coe-saldos";
 
 /**
  * Seeds the SAT COE starter catalog for a company. Idempotent — uses
@@ -39,6 +40,7 @@ export async function seedChartOfAccounts(companyId: string) {
         nombre: acc.nombre,
         tipo: acc.tipo,
         nivel: acc.nivel,
+        naturaleza: acc.naturaleza ?? naturalezaPorTipo(acc.tipo),
       },
     });
     created++;

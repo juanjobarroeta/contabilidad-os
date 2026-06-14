@@ -17,6 +17,9 @@ export type CatalogAccount = {
   nombre: string;
   tipo: AccountType;
   nivel: number;
+  // Override de naturaleza COE ("D"|"A"); sólo para contra-cuentas. Si se omite
+  // se deriva del tipo (ACTIVO/GASTO/COSTO → D, resto → A).
+  naturaleza?: "D" | "A";
 };
 
 // Helper to mark special-purpose accounts the posting engine looks up by code.

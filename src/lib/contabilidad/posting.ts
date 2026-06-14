@@ -15,6 +15,7 @@
 import { prisma } from "../prisma";
 import { resolveAccount } from "./seed-catalog";
 import { COE_CODES } from "./catalog";
+import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { classifyInvoice } from "./classify-egreso";
 import type { Prisma, EntryType, EntrySource, AccountingPeriod } from "@prisma/client";
 
@@ -623,42 +624,73 @@ export type BalanzaRow = {
   nivel: number;
   cargos: number;
   abonos: number;
-  saldo: number; // signed per account type
+  saldo: number; // signed, period-only movement (kept for P&L / back-compat)
+  // Saldos acumulados CON SIGNO para la Balanza COE (Anexo 24):
+  saldoInicial: number; // acumulado de movimientos PREVIOS al periodo
+  saldoFinal: number; // saldoInicial + movimiento del periodo
 };
 
 /**
- * Balanza de comprobación for a given year+month (or period range).
- * Returns one row per ChartAccount with totals.
+ * Balanza de comprobación for a given year+month.
+ * Returns one row per ChartAccount with period movement (cargos/abonos/saldo)
+ * AND the COE opening/closing balances (saldoInicial/saldoFinal), which carry
+ * the cumulative balance from all prior periods so the balanza ties out.
  */
 export async function balanza(companyId: string, year: number, month: number): Promise<BalanzaRow[]> {
-  const accounts = await prisma.chartAccount.findMany({
-    where: { companyId, isActive: true },
-    include: {
-      entries: {
-        where: { year, month },
-        select: { tipo: true, monto: true },
-      },
-    },
-    orderBy: [{ cuentaSAT: "asc" }, { subcuenta: "asc" }],
-  });
+  const [accounts, periodG, priorG] = await Promise.all([
+    prisma.chartAccount.findMany({
+      where: { companyId, isActive: true },
+      select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true, tipo: true, nivel: true, naturaleza: true },
+      orderBy: [{ cuentaSAT: "asc" }, { subcuenta: "asc" }],
+    }),
+    prisma.accountingEntry.groupBy({
+      by: ["chartAccountId", "tipo"],
+      where: { companyId, year, month },
+      _sum: { monto: true },
+    }),
+    prisma.accountingEntry.groupBy({
+      by: ["chartAccountId", "tipo"],
+      // Todo lo anterior al periodo: años previos, o el mismo año en meses previos.
+      where: { companyId, OR: [{ year: { lt: year } }, { year, month: { lt: month } }] },
+      _sum: { monto: true },
+    }),
+  ]);
 
-  return accounts.map(acc => {
-    const cargos = acc.entries.filter(e => e.tipo === "CARGO").reduce((s, e) => s + e.monto, 0);
-    const abonos = acc.entries.filter(e => e.tipo === "ABONO").reduce((s, e) => s + e.monto, 0);
-    // Sign convention: ACTIVO/GASTO/COSTO natural debit → saldo = cargos - abonos
-    // PASIVO/CAPITAL/INGRESO natural credit → saldo = abonos - cargos
-    const naturalDebit = ["ACTIVO", "GASTO", "COSTO"].includes(acc.tipo);
-    const saldo = naturalDebit ? cargos - abonos : abonos - cargos;
+  const mov = (groups: typeof periodG) => {
+    const m = new Map<string, { cargo: number; abono: number }>();
+    for (const g of groups) {
+      const e = m.get(g.chartAccountId) ?? { cargo: 0, abono: 0 };
+      if (g.tipo === "CARGO") e.cargo += g._sum.monto ?? 0;
+      else if (g.tipo === "ABONO") e.abono += g._sum.monto ?? 0;
+      m.set(g.chartAccountId, e);
+    }
+    return m;
+  };
+  const periodo = mov(periodG);
+  const previo = mov(priorG);
 
+  return accounts.map((acc) => {
+    const p = periodo.get(acc.id) ?? { cargo: 0, abono: 0 };
+    const pre = previo.get(acc.id) ?? { cargo: 0, abono: 0 };
+    const naturaleza = (acc.naturaleza as "D" | "A" | null) ?? naturalezaPorTipo(acc.tipo);
+    const { saldoInicial, saldoFinal } = saldosCoe({
+      naturaleza,
+      priorCargos: pre.cargo,
+      priorAbonos: pre.abono,
+      cargos: p.cargo,
+      abonos: p.abono,
+    });
     return {
       cuentaSAT: acc.cuentaSAT,
       subcuenta: acc.subcuenta,
       nombre: acc.nombre,
       tipo: acc.tipo,
       nivel: acc.nivel,
-      cargos,
-      abonos,
-      saldo,
+      cargos: p.cargo,
+      abonos: p.abono,
+      saldo: naturaleza === "D" ? p.cargo - p.abono : p.abono - p.cargo,
+      saldoInicial,
+      saldoFinal,
     };
   });
 }

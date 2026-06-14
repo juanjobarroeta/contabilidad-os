@@ -11,6 +11,7 @@
 
 import { prisma } from "../prisma";
 import { balanza } from "./posting";
+import { naturalezaPorTipo } from "./coe-saldos";
 
 const VERSION_CAT = "1.3";
 const VERSION_BAL = "1.3";
@@ -45,10 +46,6 @@ function money(n: number): string {
 // - Natur:    D (deudora) o A (acreedora)
 //   Activo + Gasto + Costo = D
 //   Pasivo + Capital + Ingreso = A
-
-function naturaleza(tipo: string): "D" | "A" {
-  return ["ACTIVO", "GASTO", "COSTO"].includes(tipo) ? "D" : "A";
-}
 
 export type CoeCatXmlOptions = {
   companyId: string;
@@ -89,7 +86,7 @@ export async function generateCatalogoXml(opts: CoeCatXmlOptions): Promise<strin
       `NumCta="${esc(numCta)}" ` +
       `Desc="${esc(a.nombre)}" ` +
       `Nivel="${a.nivel}" ` +
-      `Natur="${naturaleza(a.tipo)}" />`
+      `Natur="${(a.naturaleza as "D" | "A" | null) ?? naturalezaPorTipo(a.tipo)}" />`
     );
   }
 
@@ -110,12 +107,13 @@ export async function generateCatalogoXml(opts: CoeCatXmlOptions): Promise<strin
 //   N = Normal
 //   C = Complementaria
 // En v1 emitimos siempre "N".
-// SaldoIni = saldo al inicio del periodo (mes)
-// SaldoFin = saldo al final del periodo
+// SaldoIni / SaldoFin = saldos acumulados (no sólo el movimiento del mes); el
+// arrastre desde periodos anteriores lo calcula balanza() vía saldosCoe(). Se
+// emiten como MAGNITUD no negativa — la naturaleza (CodAgrup) implica el signo.
 //
-// NOTA: En v1 no tenemos saldos iniciales por cuenta acumulados de meses
-// anteriores. Emitimos el XML con SaldoIni=0 para cuentas sin actividad
-// previa. Una vez que tengamos "cierre anual" podremos acarrear saldos.
+// Pendiente (M2): asiento de apertura / saldos iniciales para empresas que
+// migran a media vida; hoy el saldo inicial sale de los movimientos previos
+// registrados en el sistema.
 
 export type CoeBalXmlOptions = {
   companyId: string;
@@ -147,22 +145,23 @@ export async function generateBalanzaXml(opts: CoeBalXmlOptions): Promise<string
   );
 
   for (const r of rows) {
-    // Skip accounts with no activity AND no balance
-    if (Math.abs(r.cargos) < 0.01 && Math.abs(r.abonos) < 0.01 && Math.abs(r.saldo) < 0.01) {
+    // Incluye la cuenta si tuvo movimiento O si arrastra/queda saldo. (Una cuenta
+    // con saldo pero sin movimiento del mes debe aparecer igual.)
+    if (
+      Math.abs(r.cargos) < 0.01 && Math.abs(r.abonos) < 0.01 &&
+      Math.abs(r.saldoInicial) < 0.01 && Math.abs(r.saldoFinal) < 0.01
+    ) {
       continue;
     }
     const numCta = r.subcuenta ?? r.cuentaSAT;
-    const saldoIni = 0; // v1: no opening balance carryover
-    const debe = r.cargos;
-    const haber = r.abonos;
-    const saldoFin = r.saldo;
+    // SAT reporta MAGNITUDES no negativas; la naturaleza (CodAgrup) implica el signo.
     lines.push(
       `  <BCE:Ctas ` +
       `NumCta="${esc(numCta)}" ` +
-      `SaldoIni="${money(saldoIni)}" ` +
-      `Debe="${money(debe)}" ` +
-      `Haber="${money(haber)}" ` +
-      `SaldoFin="${money(saldoFin)}" />`
+      `SaldoIni="${money(Math.abs(r.saldoInicial))}" ` +
+      `Debe="${money(r.cargos)}" ` +
+      `Haber="${money(r.abonos)}" ` +
+      `SaldoFin="${money(Math.abs(r.saldoFinal))}" />`
     );
   }
 
