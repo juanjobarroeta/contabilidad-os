@@ -1,0 +1,253 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, Loader2, TrendingUp, AlertTriangle, Lock } from "lucide-react";
+import { Card } from "@/components/ui";
+
+interface EmpresaRow {
+  companyId: string;
+  razonSocial: string;
+  rfc: string;
+  despachoId: string | null;
+  precioMensualCentavos: number | null;
+  costoCentavos: number;
+  eventos: number;
+  margenCentavos: number | null;
+  margenPct: number | null;
+}
+interface DespachoRow {
+  despachoId: string;
+  name: string;
+  empresas: number;
+  precioMensualCentavos: number | null;
+  costoCentavos: number;
+  overheadCentavos: number;
+  margenCentavos: number | null;
+  margenPct: number | null;
+}
+interface Data {
+  periodo: string;
+  fixMxnPorUsd: number;
+  fixReal: boolean;
+  totalCostoCentavos: number;
+  empresas: EmpresaRow[];
+  despachos: DespachoRow[];
+}
+
+const fmtMxn = (centavos: number | null) =>
+  centavos == null
+    ? "—"
+    : (centavos / 100).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+const fmtPct = (p: number | null) => (p == null ? "—" : `${(p * 100).toFixed(0)}%`);
+
+export default function RentabilidadPage() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [data, setData] = useState<Data | null>(null);
+  const [denied, setDenied] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/rentabilidad?year=${year}&month=${month}`);
+      if (res.status === 403) {
+        setDenied(true);
+        return;
+      }
+      if (!res.ok) throw new Error();
+      setData(await res.json());
+    } catch {
+      setError("No se pudo cargar la rentabilidad.");
+    } finally {
+      setLoading(false);
+    }
+  }, [year, month]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function savePrecio(tipo: "company" | "despacho", id: string, pesos: string) {
+    const precioMensualCentavos = pesos.trim() === "" ? null : Math.round(Number(pesos) * 100);
+    if (precioMensualCentavos != null && (!Number.isFinite(precioMensualCentavos) || precioMensualCentavos < 0)) return;
+    await fetch("/api/rentabilidad/precio", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo, id, precioMensualCentavos }),
+    });
+    load();
+  }
+
+  if (denied) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-center px-4 py-24 text-center">
+        <Lock className="mb-3 h-9 w-9 text-cos-ink-faint" />
+        <p className="text-sm font-medium text-cos-ink">Herramienta de operador</p>
+        <p className="mt-1 text-xs text-cos-ink-soft">La rentabilidad por cliente sólo está disponible para el operador de plataforma.</p>
+      </div>
+    );
+  }
+
+  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+
+  return (
+    <div className="mx-auto max-w-[1100px] px-4 py-6 sm:px-8 sm:py-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">
+            <TrendingUp className="h-7 w-7 text-cos-brand-ink" /> Rentabilidad
+          </h1>
+          <p className="mt-1 max-w-[64ch] text-[15px] text-cos-ink-soft">
+            Costo-por-servir (LLM + Syntage) vs precio mensual, por empresa y despacho. El costo se acumula desde
+            que se activó la medición; los meses previos pueden verse bajos.
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <button onClick={() => { const d = new Date(year, month - 2, 1); setYear(d.getFullYear()); setMonth(d.getMonth() + 1); }}
+            aria-label="Mes anterior" className="grid h-8 w-8 place-items-center rounded-control border border-cos-line hover:bg-cos-paper">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="min-w-[150px] text-center text-[15px] font-semibold capitalize text-cos-ink">{monthLabel}</span>
+          <button onClick={() => { const d = new Date(year, month, 1); setYear(d.getFullYear()); setMonth(d.getMonth() + 1); }}
+            aria-label="Mes siguiente" className="grid h-8 w-8 place-items-center rounded-control border border-cos-line hover:bg-cos-paper">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4 flex items-center gap-2 rounded-control bg-cos-red-tint px-4 py-3 text-sm text-cos-red-ink">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+        </div>
+      )}
+
+      {loading && !data ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-cos-ink-faint">
+          <Loader2 className="h-5 w-5 animate-spin" /> Cargando…
+        </div>
+      ) : data ? (
+        <div className="mt-5 space-y-6">
+          <div className="flex flex-wrap gap-3 text-[13px] text-cos-ink-soft">
+            <span className="rounded-control bg-cos-slate-tint px-3 py-1.5">
+              Costo total del mes: <b className="text-cos-ink">{fmtMxn(data.totalCostoCentavos)}</b>
+            </span>
+            <span className="rounded-control bg-cos-slate-tint px-3 py-1.5">
+              FIX {data.fixMxnPorUsd.toFixed(4)} MXN/USD {data.fixReal ? "(Banxico)" : "(aprox.)"}
+            </span>
+          </div>
+
+          {/* Despacho roll-up */}
+          {data.despachos.length > 0 && (
+            <Card className="overflow-hidden rounded-card border-cos-line shadow-card">
+              <div className="border-b border-cos-line px-5 py-3 text-[13px] font-semibold uppercase tracking-[0.02em] text-cos-ink-faint">
+                Por despacho
+              </div>
+              <Tabla
+                filas={data.despachos.map((d) => ({
+                  id: d.despachoId, nombre: d.name, sub: `${d.empresas} empresa${d.empresas === 1 ? "" : "s"} · overhead ${fmtMxn(d.overheadCentavos)}`,
+                  costoCentavos: d.costoCentavos, precioMensualCentavos: d.precioMensualCentavos,
+                  margenCentavos: d.margenCentavos, margenPct: d.margenPct, tipo: "despacho" as const,
+                }))}
+                onSave={savePrecio}
+              />
+            </Card>
+          )}
+
+          {/* Por empresa */}
+          <Card className="overflow-hidden rounded-card border-cos-line shadow-card">
+            <div className="border-b border-cos-line px-5 py-3 text-[13px] font-semibold uppercase tracking-[0.02em] text-cos-ink-faint">
+              Por empresa
+            </div>
+            <Tabla
+              filas={data.empresas.map((e) => ({
+                id: e.companyId, nombre: e.razonSocial, sub: e.rfc,
+                costoCentavos: e.costoCentavos, precioMensualCentavos: e.precioMensualCentavos,
+                margenCentavos: e.margenCentavos, margenPct: e.margenPct, tipo: "company" as const,
+              }))}
+              onSave={savePrecio}
+            />
+          </Card>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface Fila {
+  id: string;
+  nombre: string;
+  sub: string;
+  costoCentavos: number;
+  precioMensualCentavos: number | null;
+  margenCentavos: number | null;
+  margenPct: number | null;
+  tipo: "company" | "despacho";
+}
+
+function Tabla({ filas, onSave }: { filas: Fila[]; onSave: (tipo: "company" | "despacho", id: string, pesos: string) => void }) {
+  return (
+    <div className="divide-y divide-cos-line">
+      <div className="hidden grid-cols-[1fr_130px_130px_130px_80px] gap-3 px-5 py-2 text-[11.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint sm:grid">
+        <span>Nombre</span>
+        <span className="text-right">Costo</span>
+        <span className="text-right">Precio / mes</span>
+        <span className="text-right">Margen</span>
+        <span className="text-right">%</span>
+      </div>
+      {filas.map((f) => (
+        <FilaRow key={f.id} f={f} onSave={onSave} />
+      ))}
+      {filas.length === 0 && <p className="px-5 py-6 text-center text-[13px] text-cos-ink-faint">Sin datos.</p>}
+    </div>
+  );
+}
+
+function FilaRow({ f, onSave }: { f: Fila; onSave: (tipo: "company" | "despacho", id: string, pesos: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(f.precioMensualCentavos != null ? String(f.precioMensualCentavos / 100) : "");
+  const underwater = f.margenCentavos != null && f.margenCentavos < 0;
+
+  function commit() {
+    setEditing(false);
+    const current = f.precioMensualCentavos != null ? String(f.precioMensualCentavos / 100) : "";
+    if (val !== current) onSave(f.tipo, f.id, val);
+  }
+
+  return (
+    <div className={`grid grid-cols-2 gap-3 px-5 py-3 sm:grid-cols-[1fr_130px_130px_130px_80px] sm:items-center ${underwater ? "bg-cos-red-tint" : ""}`}>
+      <div className="col-span-2 min-w-0 sm:col-span-1">
+        <p className="truncate text-[14px] font-medium text-cos-ink">{f.nombre}</p>
+        <p className="truncate font-mono text-[11.5px] text-cos-ink-faint">{f.sub}</p>
+      </div>
+      <div className="text-right text-[13.5px] text-cos-ink-soft">{fmtMxn(f.costoCentavos)}</div>
+      <div className="text-right">
+        {editing ? (
+          <input
+            autoFocus
+            type="number"
+            min="0"
+            step="1"
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+            placeholder="—"
+            className="w-[110px] rounded-control border border-cos-line px-2 py-1 text-right text-[13.5px] outline-none focus:border-cos-brand-ink"
+          />
+        ) : (
+          <button onClick={() => setEditing(true)} className="text-[13.5px] text-cos-ink underline decoration-dotted underline-offset-2 hover:text-cos-brand-ink">
+            {fmtMxn(f.precioMensualCentavos)}
+          </button>
+        )}
+      </div>
+      <div className={`text-right text-[13.5px] font-semibold ${f.margenCentavos == null ? "text-cos-ink-faint" : underwater ? "text-cos-red-ink" : "text-cos-jade-ink"}`}>
+        {fmtMxn(f.margenCentavos)}
+      </div>
+      <div className={`text-right text-[13px] ${underwater ? "text-cos-red-ink" : "text-cos-ink-soft"}`}>{fmtPct(f.margenPct)}</div>
+    </div>
+  );
+}
