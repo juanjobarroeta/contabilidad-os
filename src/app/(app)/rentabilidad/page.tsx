@@ -140,6 +140,8 @@ export default function RentabilidadPage() {
             </span>
           </div>
 
+          <TrendCard />
+
           {/* Despacho roll-up */}
           {data.despachos.length > 0 && (
             <Card className="overflow-hidden rounded-card border-cos-line shadow-card">
@@ -174,6 +176,49 @@ export default function RentabilidadPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+interface TrendPoint { periodo: string; llmCentavos: number; syntageCentavos: number; totalCentavos: number }
+
+function TrendCard() {
+  const [serie, setSerie] = useState<TrendPoint[] | null>(null);
+  useEffect(() => {
+    fetch("/api/rentabilidad/tendencia?meses=6")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setSerie(d?.serie ?? []))
+      .catch(() => setSerie([]));
+  }, []);
+  if (!serie || serie.length === 0) return null;
+  const max = Math.max(1, ...serie.map((p) => p.totalCentavos));
+
+  return (
+    <Card className="rounded-card border-cos-line p-5 shadow-card">
+      <div className="mb-1 flex items-center justify-between">
+        <h3 className="text-[14px] font-semibold text-cos-ink">Costo por mes (últimos 6)</h3>
+        <div className="flex items-center gap-3 text-[11.5px] text-cos-ink-soft">
+          <span className="flex items-center gap-1"><i className="inline-block h-2.5 w-2.5 rounded-sm bg-cos-brand-ink" /> LLM</span>
+          <span className="flex items-center gap-1"><i className="inline-block h-2.5 w-2.5 rounded-sm bg-cos-amber" /> Syntage</span>
+        </div>
+      </div>
+      <div className="mt-3 flex h-[140px] items-end gap-2">
+        {serie.map((p) => {
+          const llmH = (p.llmCentavos / max) * 100;
+          const synH = (p.syntageCentavos / max) * 100;
+          const mes = new Date(Number(p.periodo.slice(0, 4)), Number(p.periodo.slice(5, 7)) - 1, 1)
+            .toLocaleDateString("es-MX", { month: "short" });
+          return (
+            <div key={p.periodo} className="flex flex-1 flex-col items-center gap-1.5">
+              <div className="flex w-full flex-1 flex-col justify-end" title={`${p.periodo}: ${fmtMxn(p.totalCentavos)}`}>
+                <div className="w-full rounded-t-[3px] bg-cos-amber" style={{ height: `${synH}%` }} />
+                <div className={`w-full bg-cos-brand-ink ${synH > 0 ? "" : "rounded-t-[3px]"}`} style={{ height: `${llmH}%` }} />
+              </div>
+              <span className="text-[10.5px] capitalize text-cos-ink-faint">{mes}</span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
