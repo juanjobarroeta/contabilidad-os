@@ -70,6 +70,33 @@ export default function ContabilidadPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [posting, setPosting] = useState<string | null>(null);
+  const [info, setInfo] = useState("");
+  const [cierreLoading, setCierreLoading] = useState(false);
+
+  async function handleCierre() {
+    if (!activeCompany) return;
+    setCierreLoading(true);
+    setError("");
+    setInfo("");
+    try {
+      const res = await fetch("/api/contabilidad/cierre", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, year: selectedYear }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al generar el cierre");
+      const r = data.resultado as number;
+      setInfo(
+        `Cierre ${selectedYear} generado (mes 13): ${r >= 0 ? "utilidad" : "pérdida"} de $${Math.abs(r).toLocaleString("es-MX", { minimumFractionDigits: 2 })}.`,
+      );
+      await loadPeriods();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al generar el cierre");
+    } finally {
+      setCierreLoading(false);
+    }
+  }
 
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -149,13 +176,35 @@ export default function ContabilidadPage() {
           <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Contabilidad</h1>
           <p className="mt-1.5 text-[15px] text-cos-ink-soft">{activeCompany.razonSocial}</p>
         </div>
-        <a
-          href="/contabilidad/apertura"
-          className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
-        >
-          Saldos iniciales
-        </a>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href="/contabilidad/apertura"
+            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
+          >
+            Saldos iniciales
+          </a>
+          <button
+            onClick={handleCierre}
+            disabled={cierreLoading}
+            title={`Generar el asiento de cierre del ejercicio ${selectedYear} (mes 13)`}
+            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+          >
+            {cierreLoading ? "Generando…" : `Cierre ${selectedYear}`}
+          </button>
+          <a
+            href={`/api/contabilidad/coe/balanza?companyId=${activeCompany.id}&year=${selectedYear}&month=13`}
+            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
+            title="Descargar la balanza de cierre (mes 13)"
+          >
+            XML Balanza 13
+          </a>
+        </div>
       </div>
+      {info && (
+        <div className="mb-4 flex items-center gap-2 rounded-card bg-cos-jade-tint px-4 py-3 text-sm text-cos-jade-ink">
+          {info}
+        </div>
+      )}
 
       {error && (
         <div className={`flex items-center gap-2 rounded-card px-4 py-3 text-sm mb-4 ${
