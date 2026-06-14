@@ -66,9 +66,12 @@ async function provisionOne(
   }
 
   // Dispara extracciones frescas sin esperar; el resultado se lee con el sync.
+  // annual_tax_return puebla las declaraciones anuales históricas (cierra los
+  // faltantes de años cerrados en /declaraciones).
   await Promise.allSettled([
     client.createExtraction({ extractor: "tax_compliance", entity: entityId }),
     client.createExtraction({ extractor: "tax_status", entity: entityId }),
+    client.createExtraction({ extractor: "annual_tax_return", entity: entityId }),
   ]);
 
   return { companyId: c.id, rfc: c.rfc, entityId, credencial };
