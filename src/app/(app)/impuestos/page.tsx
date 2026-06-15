@@ -15,7 +15,7 @@ interface ImpuestosData {
   isr: {
     metodo: "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO" | "PF_PLATAFORMAS";
     ingresosDelMes: number; gastosDelMes: number; ingresosAcumulados: number;
-    coeficiente: number | null; coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
+    coeficiente: number | null; coeficienteFuente: "manual" | "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
     coeficienteSugerido?: number | null;
     coeficienteSugeridoFuente?: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno" | null;
     baseGravable: number | null; isrPagar: number | null;
@@ -139,6 +139,7 @@ export default function ImpuestosPage() {
     let base: string;
     if (d.isr.coeficienteFuente === "manual") base = `Coeficiente ${pct} · ajuste del contador`;
     else if (d.isr.coeficienteFuente === "declaracion_anual") base = `Coeficiente ${pct} · de tu declaración anual ${year - 1}`;
+    else if (d.isr.coeficienteFuente === "provisional_previo") base = `Coeficiente ${pct} · el que aplicaste en tus provisionales`;
     else if (d.isr.coeficienteFuente === "calculado") base = `Coeficiente ${pct} · estimado de tus CFDIs ${year - 1}`;
     else base = `Coeficiente ${pct}`;
     // Siempre comunica qué detecta el motor, aunque haya un ajuste manual: si
