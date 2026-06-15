@@ -22,6 +22,9 @@ interface DashboardData {
   taxThisMonth: {
     iva: number; isr: number | null; total: number; saldoAFavor: number;
     vence: string; venceFmt: string; diasRestantes: number; tarifaVerificada: boolean;
+    coeficiente?: number | null;
+    coeficienteSugerido?: number | null;
+    coeficienteSugeridoFuente?: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno" | null;
   };
   kpis: {
     ingresosDelMes: number; gastosDelMes: number; utilidadBruta: number;
@@ -250,6 +253,16 @@ export default function InicioPage() {
                   Tarifa ISR sin verificar contra Anexo 8 — cifra provisional.
                 </p>
               )}
+              {data.taxThisMonth.coeficienteSugerido != null &&
+                (data.taxThisMonth.coeficiente == null ||
+                  Math.abs(data.taxThisMonth.coeficienteSugerido - data.taxThisMonth.coeficiente) > 0.0005) && (
+                  <p className="mt-2 text-[12px] text-cos-amber-ink">
+                    Coeficiente sugerido {(data.taxThisMonth.coeficienteSugerido * 100).toFixed(2)}%
+                    {data.taxThisMonth.coeficiente != null &&
+                      ` (aplicas ${(data.taxThisMonth.coeficiente * 100).toFixed(2)}%)`}{" "}
+                    — <Link href="/impuestos" className="underline">ajústalo</Link>.
+                  </p>
+                )}
             </Card>
 
             <Card className="rounded-card border-cos-line p-5 shadow-card">
