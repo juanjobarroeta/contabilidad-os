@@ -36,7 +36,7 @@ interface IsrApiData {
   ingresosAcumulados: number;
   isrPagadoAnterior: number;
   coeficiente: number | null;
-  coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
+  coeficienteFuente: "manual" | "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
   /** Mejor coeficiente AUTO-detectado (anual → provisionales → CFDIs), aunque haya override manual. */
   coeficienteSugerido?: number | null;
   coeficienteSugeridoFuente?: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno" | null;
@@ -901,6 +901,15 @@ export default function ImpuestosPage() {
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   Coeficiente guardado manualmente. Se usará para todos los meses de {year}.
                   Edítalo arriba si necesitas corregirlo.
+                </div>
+              </div>
+            )}
+            {result.isr.coeficienteFuente === "provisional_previo" && (
+              <div className="px-5 pb-4">
+                <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  Es el coeficiente que ya aplicaste en tus pagos provisionales de {year} (tomado
+                  de un acuse del SAT). Edítalo arriba si tu declaración anual difiere.
                 </div>
               </div>
             )}

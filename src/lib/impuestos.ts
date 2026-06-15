@@ -195,7 +195,7 @@ export interface TaxPosition {
     ingresosAcumulados: number;
     isrPagadoAnterior: number;
     coeficiente: number | null;
-    coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
+    coeficienteFuente: "manual" | "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
     /** Mejor coeficiente auto-detectado (anual → provisional aplicado → calculado),
      * independiente del override manual — para sugerirlo en la UI. PM only. */
     coeficienteSugerido?: number | null;
@@ -637,14 +637,22 @@ export async function computeTaxPosition(
         : coeficienteCalculado != null ? "calculado"
         : "ninguno";
 
+    // El APLICADO sigue la misma prioridad que el sugerido (manual → anual →
+    // provisional aplicado → calculado), para que no diverjan. El coeficiente que
+    // YA se enteró en un provisional es muy superior al cálculo crudo de CFDIs
+    // (ingresos−egresos sobreestima la utilidad: la nómina y otras deducciones no
+    // siempre vienen como egreso CFDI), así que va por encima del calculado.
     let coeficiente: number | null;
-    let coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
+    let coeficienteFuente: "manual" | "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
     if (company?.coeficienteUtilidad != null && (company.coeficienteAnio === year || company.coeficienteAnio == null)) {
       coeficiente = company.coeficienteUtilidad;
       coeficienteFuente = "manual";
     } else if (coeficienteAnual !== null) {
       coeficiente = coeficienteAnual;
       coeficienteFuente = "declaracion_anual";
+    } else if (coeficienteDeclarado !== null) {
+      coeficiente = coeficienteDeclarado;
+      coeficienteFuente = "provisional_previo";
     } else if (coeficienteCalculado !== null) {
       coeficiente = coeficienteCalculado;
       coeficienteFuente = "calculado";
