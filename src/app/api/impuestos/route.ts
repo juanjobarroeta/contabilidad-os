@@ -188,6 +188,8 @@ export async function GET(req: Request) {
       isrPagadoAnterior: pos.isr.isrPagadoAnterior,
       coeficiente: pos.isr.coeficiente,
       coeficienteFuente: pos.isr.coeficienteFuente,
+      coeficienteSugerido: pos.isr.coeficienteSugerido ?? null,
+      coeficienteSugeridoFuente: pos.isr.coeficienteSugeridoFuente ?? null,
       coeficienteBase: pos.isr.coeficienteBase,
       baseGravable: pos.isr.baseGravable,
       tasa: pos.isr.tasa,

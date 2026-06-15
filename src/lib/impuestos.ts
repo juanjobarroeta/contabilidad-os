@@ -196,6 +196,10 @@ export interface TaxPosition {
     isrPagadoAnterior: number;
     coeficiente: number | null;
     coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
+    /** Mejor coeficiente auto-detectado (anual → provisional aplicado → calculado),
+     * independiente del override manual — para sugerirlo en la UI. PM only. */
+    coeficienteSugerido?: number | null;
+    coeficienteSugeridoFuente?: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
     /** How the auto coeficiente was derived (PM only); null for other régimenes. */
     coeficienteBase: { year: number; ingresos: number; utilidad: number; invoiceCount: number } | null;
     /** Base gravable: utilidad (×coef para PM, cobrado−deducciones para PF). */
@@ -608,6 +612,25 @@ export async function computeTaxPosition(
         ? annualDecl.isrBaseGravable / annualDecl.isrIngresos
         : null;
 
+    // Coeficiente que YA se aplicó en un pago provisional capturado (de un acuse
+    // del SAT). Corrobora el valor real usado; el más reciente disponible.
+    const coefProvRow = await prisma.taxDeclaration.findFirst({
+      where: { companyId, tipo: "ISR_PROVISIONAL", isrCoeficienteUtilidad: { not: null } },
+      orderBy: { periodo: "desc" },
+      select: { isrCoeficienteUtilidad: true },
+    });
+    const coeficienteDeclarado = coefProvRow?.isrCoeficienteUtilidad ?? null;
+
+    // Mejor valor AUTO-detectado, independiente de un override manual: anual
+    // (ley) → el aplicado en provisionales → calculado de CFDIs. Se sugiere en la
+    // UI aunque el contador tenga un ajuste manual, para que pueda adoptarlo.
+    const coeficienteSugerido = coeficienteAnual ?? coeficienteDeclarado ?? coeficienteCalculado;
+    const coeficienteSugeridoFuente: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno" =
+      coeficienteAnual != null ? "declaracion_anual"
+        : coeficienteDeclarado != null ? "provisional_previo"
+        : coeficienteCalculado != null ? "calculado"
+        : "ninguno";
+
     let coeficiente: number | null;
     let coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
     if (company?.coeficienteUtilidad != null && (company.coeficienteAnio === year || company.coeficienteAnio == null)) {
@@ -641,6 +664,8 @@ export async function computeTaxPosition(
       isrPagadoAnterior: round2(isrPagadoAnterior),
       coeficiente,
       coeficienteFuente,
+      coeficienteSugerido,
+      coeficienteSugeridoFuente,
       coeficienteBase:
         coeficienteFuente === "calculado"
           ? {

@@ -16,6 +16,8 @@ interface ImpuestosData {
     metodo: "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO" | "PF_PLATAFORMAS";
     ingresosDelMes: number; gastosDelMes: number; ingresosAcumulados: number;
     coeficiente: number | null; coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
+    coeficienteSugerido?: number | null;
+    coeficienteSugeridoFuente?: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno" | null;
     baseGravable: number | null; isrPagar: number | null;
     retencionesAcreditadas: number; saldoAFavor: number; tarifaVerificada: boolean;
   };
@@ -104,12 +106,26 @@ export default function ImpuestosPage() {
   const simOn = (parseFloat(addIng) || 0) > 0 || (parseFloat(addGas) || 0) > 0;
 
   const coefProvenance = (d: ImpuestosData) => {
-    if (d.isr.coeficiente == null) return "Falta tu declaración anual — sin coeficiente";
+    const sug = d.isr.coeficienteSugerido;
+    const sugLabel =
+      d.isr.coeficienteSugeridoFuente === "declaracion_anual" ? `de tu declaración anual ${year - 1}`
+        : d.isr.coeficienteSugeridoFuente === "provisional_previo" ? "el aplicado en tus provisionales"
+        : d.isr.coeficienteSugeridoFuente === "calculado" ? `estimado de tus CFDIs ${year - 1}`
+        : "";
+    const sugTxt = sug != null ? ` · sugerido ${(sug * 100).toFixed(2)}%${sugLabel ? ` (${sugLabel})` : ""}` : "";
+
+    if (d.isr.coeficiente == null) {
+      return sug != null ? `Sin coeficiente aplicado${sugTxt}` : "Falta tu declaración anual — sin coeficiente";
+    }
     const pct = `${(d.isr.coeficiente * 100).toFixed(2)}%`;
-    if (d.isr.coeficienteFuente === "manual") return `Coeficiente ${pct} · ajuste del contador`;
-    if (d.isr.coeficienteFuente === "declaracion_anual") return `Coeficiente ${pct} · de tu declaración anual ${year - 1}`;
-    if (d.isr.coeficienteFuente === "calculado") return `Coeficiente ${pct} · estimado de tus CFDIs ${year - 1}`;
-    return `Coeficiente ${pct}`;
+    let base: string;
+    if (d.isr.coeficienteFuente === "manual") base = `Coeficiente ${pct} · ajuste del contador`;
+    else if (d.isr.coeficienteFuente === "declaracion_anual") base = `Coeficiente ${pct} · de tu declaración anual ${year - 1}`;
+    else if (d.isr.coeficienteFuente === "calculado") base = `Coeficiente ${pct} · estimado de tus CFDIs ${year - 1}`;
+    else base = `Coeficiente ${pct}`;
+    // Muestra la sugerencia sólo cuando difiere del aplicado (p.ej. ajuste manual desactualizado).
+    const difiere = sug != null && Math.abs(sug - d.isr.coeficiente) > 0.0005;
+    return difiere ? `${base}${sugTxt}` : base;
   };
 
   return (
