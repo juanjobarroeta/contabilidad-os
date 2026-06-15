@@ -349,6 +349,10 @@ export async function GET(req: Request) {
       venceFmt: `${taxDue.getDate()} ${MES_ABBR[taxDue.getMonth()]} ${taxDue.getFullYear()}`,
       diasRestantes: Math.round((taxDue.getTime() - today.getTime()) / 86400000),
       tarifaVerificada: taxPosition.isr.tarifaVerificada,
+      // Coeficiente aplicado + sugerido (para avisar de un ajuste desactualizado).
+      coeficiente: taxPosition.isr.coeficiente,
+      coeficienteSugerido: taxPosition.isr.coeficienteSugerido ?? null,
+      coeficienteSugeridoFuente: taxPosition.isr.coeficienteSugeridoFuente ?? null,
     },
     kpis: {
       ingresosDelMes,

@@ -51,6 +51,7 @@ export default function ImpuestosPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [data, setData] = useState<ImpuestosData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [aplicandoCoef, setAplicandoCoef] = useState(false);
 
   const [addIng, setAddIng] = useState("");
   const [addGas, setAddGas] = useState("");
@@ -67,6 +68,21 @@ export default function ImpuestosPage() {
   }, [activeCompany, month, year]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  async function usarSugerido(coef: number) {
+    if (!activeCompany) return;
+    setAplicandoCoef(true);
+    try {
+      await fetch("/api/impuestos/coeficiente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, year, coeficiente: coef }),
+      });
+      await fetchData();
+    } finally {
+      setAplicandoCoef(false);
+    }
+  }
 
   // Debounced simulation against the real fiscal engine.
   const simSeq = useRef(0);
@@ -197,6 +213,17 @@ export default function ImpuestosPage() {
                   <Row label="× Coeficiente" valueText={data.isr.coeficiente != null ? `${(data.isr.coeficiente * 100).toFixed(2)}%` : "—"} />
                   <Row label="Anticipo a pagar" value={data.isr.isrPagar ?? 0} total />
                   <p className="mt-2 text-[12px] text-cos-ink-faint">{coefProvenance(data)}</p>
+                  {data.isr.coeficienteSugerido != null &&
+                    (data.isr.coeficiente == null ||
+                      Math.abs(data.isr.coeficienteSugerido - data.isr.coeficiente) > 0.0005) && (
+                      <button
+                        onClick={() => usarSugerido(data.isr.coeficienteSugerido!)}
+                        disabled={aplicandoCoef}
+                        className="mt-1.5 inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint disabled:opacity-50"
+                      >
+                        {aplicandoCoef ? "Aplicando…" : `Usar ${(data.isr.coeficienteSugerido * 100).toFixed(2)}%`}
+                      </button>
+                    )}
                 </>
               ) : (
                 <>
