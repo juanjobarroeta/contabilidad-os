@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { FileText, CheckCircle2, Loader2, UploadCloud, AlertCircle, Building2, Download } from "lucide-react";
 
 type Faltante = {
@@ -199,14 +200,12 @@ export default function DeclaracionesPage() {
                     </p>
                     <p className="truncate text-[12px] text-cos-ink-faint">{a.razonSocial}</p>
                   </div>
-                  <a
-                    href={`/api/declaraciones/acuse/${a.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <Link
+                    href={`/declaraciones/acuse/${a.id}`}
                     className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-3 py-1.5 text-[13px] font-medium text-cos-ink hover:bg-cos-paper"
                   >
                     <Download className="h-3.5 w-3.5" /> PDF
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
