@@ -36,7 +36,10 @@ interface IsrApiData {
   ingresosAcumulados: number;
   isrPagadoAnterior: number;
   coeficiente: number | null;
-  coeficienteFuente: "manual" | "calculado" | "ninguno";
+  coeficienteFuente: "manual" | "declaracion_anual" | "calculado" | "ninguno";
+  /** Mejor coeficiente AUTO-detectado (anual → provisionales → CFDIs), aunque haya override manual. */
+  coeficienteSugerido?: number | null;
+  coeficienteSugeridoFuente?: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno" | null;
   coeficienteBase: {
     year: number;
     ingresos: number;
@@ -830,6 +833,22 @@ export default function ImpuestosPage() {
                       <X className="h-3.5 w-3.5" />
                     </button>
                   )}
+                  {/* Toggler: adoptar el coeficiente que el sistema detecta (anual /
+                      provisionales / CFDIs) cuando difiere del que se está aplicando. */}
+                  {result.isr.coeficienteSugerido != null &&
+                    (coeficiente == null || Math.abs(result.isr.coeficienteSugerido - coeficiente) > 0.0005) && (
+                      <button
+                        onClick={() => { setCoeficiente(result.isr.coeficienteSugerido!); setCoeficienteEdited(true); }}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary/40 px-2 py-0.5 text-xs font-semibold text-primary hover:bg-primary/10"
+                        title={`Usar el coeficiente detectado por el sistema${
+                          result.isr.coeficienteSugeridoFuente === "declaracion_anual" ? ` (de tu declaración anual ${year - 1})`
+                            : result.isr.coeficienteSugeridoFuente === "provisional_previo" ? " (el aplicado en tus provisionales)"
+                            : result.isr.coeficienteSugeridoFuente === "calculado" ? ` (estimado de tus CFDIs ${year - 1})`
+                            : ""}`}
+                      >
+                        <Sparkles className="h-3 w-3" /> Usar {(result.isr.coeficienteSugerido * 100).toFixed(2)}%
+                      </button>
+                    )}
                 </div>
               </Row>
 

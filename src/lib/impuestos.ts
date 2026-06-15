@@ -542,9 +542,14 @@ export async function computeTaxPosition(
       saldoAFavor: 0,
       tarifaVerificada: r ? r.tarifaVerificada : false,
     };
-  } else if (esPfActEmpresarial) {
+  } else if (esPfActEmpresarial || esPf) {
     // PF con actividad empresarial (Art. 106): base en FLUJO DE EFECTIVO
     // (ingresos cobrados − deducciones pagadas, acumulado) × tarifa Art. 96.
+    //
+    // También es el cálculo POR DEFECTO de cualquier persona física que no caiga
+    // en un régimen más específico (plataformas/RESICO/arrendamiento): una PF NUNCA
+    // usa coeficiente de utilidad (eso es exclusivo de PM, Art. 14), así que jamás
+    // debe terminar en la rama PM_ART14 — usa la tarifa progresiva del Art. 106.
     const { ingresosCobrados, deduccionesPagadas, isrRetenidoCobrado } = await flujoEfectivoAcum(companyId, yearFrom, to, efosBloqueados);
     // Deducción de inversiones del periodo (Art. 106): depreciación proporcional
     // ene→mes del registro de activo fijo. Los CFDIs de inversión ya quedaron
@@ -598,8 +603,9 @@ export async function computeTaxPosition(
       tarifaVerificada: r ? r.tarifaVerificada : false,
     };
   } else {
-    // Persona moral general / RESICO PM / otros: Art. 14 (coeficiente × 30%
-    // sobre ingresos nominales acumulados).
+    // Persona MORAL general / RESICO PM / otros: Art. 14 (coeficiente × 30%
+    // sobre ingresos nominales acumulados). Sólo personas morales llegan aquí —
+    // cualquier persona física se resuelve arriba con tarifa/tasa (sin coeficiente).
     const prevIngresosTotal = prevYearIngresos._sum.subtotal ?? 0;
     const prevGastosTotal = prevYearEgresos._sum.subtotal ?? 0;
     const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
