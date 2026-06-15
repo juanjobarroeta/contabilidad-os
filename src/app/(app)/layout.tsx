@@ -5,6 +5,7 @@ import { CompanyProvider } from "@/components/layout/CompanyProvider";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { TrialBanner } from "@/components/layout/TrialBanner";
 import { getUserSubscriptionState } from "@/lib/subscription";
+import { isOperador } from "@/lib/authz";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { PushOptIn } from "@/components/pwa/PushOptIn";
 import { prisma } from "@/lib/prisma";
@@ -89,11 +90,12 @@ export default async function AppLayout({
   if (access === "restricted") redirect("/acceso-restringido");
 
   const subscription = await getUserSubscriptionState(session.user.id!);
+  const esOperador = await isOperador(session.user.id!);
 
   return (
     <CompanyProvider userId={session.user.id!}>
       <div className="flex h-screen bg-cos-paper">
-        <Sidebar user={session.user} />
+        <Sidebar user={session.user} esOperador={esOperador} />
         {/* pt-14 on mobile clears the fixed top bar; none on md+ */}
         <main className="flex-1 overflow-auto flex flex-col pt-14 md:pt-0">
           <TrialBanner state={subscription} />
