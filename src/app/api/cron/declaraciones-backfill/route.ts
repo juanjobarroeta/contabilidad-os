@@ -27,12 +27,16 @@ function authorized(req: Request): boolean {
 
 async function handle(req: Request) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const only = new URL(req.url).searchParams.get("companyId");
+  const sp = new URL(req.url).searchParams;
+  const only = sp.get("companyId");
+  // Chunk acotado por corrida (evita timeouts): default 10 acuses. ?max=0 = sin tope.
+  const maxParam = parseInt(sp.get("max") ?? "10");
+  const maxAcuses = Number.isFinite(maxParam) && maxParam > 0 ? maxParam : undefined;
   try {
     if (only) {
-      return NextResponse.json({ ok: true, ...(await backfillDeclaracionesMensuales(only)) });
+      return NextResponse.json({ ok: true, ...(await backfillDeclaracionesMensuales(only, undefined, { maxAcuses })) });
     }
-    return NextResponse.json({ ok: true, ...(await backfillAllDeclaracionesMensuales()) });
+    return NextResponse.json({ ok: true, ...(await backfillAllDeclaracionesMensuales({ maxAcuses })) });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },
