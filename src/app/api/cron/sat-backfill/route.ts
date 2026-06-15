@@ -77,17 +77,28 @@ async function handle(req: Request) {
 
   const startedAt = Date.now();
 
+  // Gap-driven selection: every FIEL company with a backfill order, NOT just the
+  // ones still flagged incomplete. We recompute the real outstanding gap below and
+  // trust that over the completed flag — so raising satBackfillYears (or any lost
+  // period) self-heals. nulls-first keeps not-yet-complete companies at the front
+  // so they always get worked before we spend the run gap-checking finished ones.
   const companies = await prisma.company.findMany({
     where: {
       isActive: true,
       autoSyncEnabled: true,
-      satBackfillCompletedAt: null,
       satBackfillYears: { gt: 0 },
       fielCer: { not: null },
       fielKey: { not: null },
       fielPassword: { not: null },
     },
-    select: { id: true, rfc: true, fechaInicioOperaciones: true, satBackfillYears: true },
+    select: {
+      id: true,
+      rfc: true,
+      fechaInicioOperaciones: true,
+      satBackfillYears: true,
+      satBackfillCompletedAt: true,
+    },
+    orderBy: { satBackfillCompletedAt: { sort: "asc", nulls: "first" } },
     take: MAX_COMPANIES_PER_RUN,
   });
 
@@ -106,6 +117,33 @@ async function handle(req: Request) {
       });
 
       const done = await finishedPeriods(company.id);
+
+      // Read the REAL outstanding gap and let it drive everything, overriding a
+      // stale completed flag in either direction.
+      const remainingBefore = allPeriods.filter((p) => !done.has(`${p.year}-${p.month}`)).length;
+      if (remainingBefore === 0) {
+        // Fully imported in range — make sure the flag reflects that and move on
+        // without spending any SAT quota.
+        if (!company.satBackfillCompletedAt) {
+          await prisma.company.update({
+            where: { id: company.id },
+            data: { satBackfillCompletedAt: new Date() },
+          });
+          companiesCompleted++;
+        }
+        perCompany.push({ rfc: company.rfc, touched: 0, remaining: 0, done: true });
+        continue;
+      }
+      // There is a gap. If the company was flagged complete (e.g. satBackfillYears
+      // was raised after it "finished"), reopen it so status/selection reflect the
+      // real outstanding work and the order keeps running until truly done.
+      if (company.satBackfillCompletedAt) {
+        await prisma.company.update({
+          where: { id: company.id },
+          data: { satBackfillCompletedAt: null },
+        });
+      }
+
       let newSubmits = 0;
       let touched = 0;
       let quotaHit = false;
