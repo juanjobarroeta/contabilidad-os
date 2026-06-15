@@ -28,6 +28,7 @@ import {
   FileInput,
   BadgeCheck,
   ScanSearch,
+  TrendingUp,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -56,9 +57,11 @@ const BOTTOM_NAV_ITEMS = [
 
 interface SidebarProps {
   user: { name?: string | null; email?: string | null };
+  /** Herramientas internas (p.ej. Rentabilidad) sólo para operador de plataforma. */
+  esOperador?: boolean;
 }
 
-export function Sidebar({ user }: SidebarProps) {
+export function Sidebar({ user, esOperador }: SidebarProps) {
   const pathname = usePathname();
   const { companies, activeCompany, setActiveCompany } = useCompany();
   const [companyOpen, setCompanyOpen] = useState(false);
@@ -212,6 +215,22 @@ export function Sidebar({ user }: SidebarProps) {
             {label}
           </Link>
         ))}
+
+        {/* Operador de plataforma: rentabilidad por cliente (oculto para los demás). */}
+        {esOperador && (
+          <Link
+            href="/rentabilidad"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+              pathname === "/rentabilidad"
+                ? "bg-cos-brand text-white"
+                : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
+            )}
+          >
+            <TrendingUp className="h-4 w-4 shrink-0" />
+            Rentabilidad
+          </Link>
+        )}
 
         {/* Divider */}
         <div className="pt-3 mt-3 border-t border-cos-line space-y-1">
