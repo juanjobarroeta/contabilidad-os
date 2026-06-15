@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Search, Plus, Download, X, Info, Loader2, AlertTriangle } from "lucide-react";
+import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Button } from "@/components/ui";
 
@@ -109,6 +109,7 @@ export default function FacturasPage() {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<Invoice | null>(null);
   const [toast, setToast] = useState("");
+  const [checkingCancel, setCheckingCancel] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!activeCompany) return;
@@ -129,7 +130,36 @@ export default function FacturasPage() {
 
   function showToast(m: string) {
     setToast(m);
-    setTimeout(() => setToast(""), 2800);
+    setTimeout(() => setToast(""), 4500);
+  }
+
+  // Pregunta al SAT (metadata) si alguna factura fue cancelada y marca las que sí.
+  // Ventana amplia (12 meses) para alcanzar cancelaciones que el cron (3 meses)
+  // no revisa. El SAT es asíncrono: puede requerir un segundo intento.
+  async function verificarCancelaciones() {
+    if (!activeCompany || checkingCancel) return;
+    setCheckingCancel(true);
+    try {
+      const res = await fetch("/api/sat/cancel-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error ?? "No se pudo verificar cancelaciones"); return; }
+      const partes: string[] = [
+        data.cancelled > 0 ? `${data.cancelled} cancelada(s) detectada(s)` : "ninguna cancelación nueva",
+      ];
+      if (data.periodsPending > 0) {
+        partes.push(`${data.periodsPending} periodo(s) aún los procesa el SAT — reintenta en unos minutos`);
+      }
+      showToast(`Revisé ${data.monthsBack} meses: ${partes.join(" · ")}`);
+      if (data.cancelled > 0) fetchData();
+    } catch {
+      showToast("No se pudo verificar cancelaciones");
+    } finally {
+      setCheckingCancel(false);
+    }
   }
 
   // Counts reflect the loaded set (so chips match the table).
@@ -168,6 +198,11 @@ export default function FacturasPage() {
           </p>
         </div>
         <div className="flex gap-2.5">
+          <Button variant="soft" size="md" onClick={verificarCancelaciones} disabled={checkingCancel}
+            title="Pregunta al SAT si alguna factura fue cancelada (últimos 12 meses)">
+            {checkingCancel ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+            {checkingCancel ? "Verificando…" : "Verificar cancelaciones"}
+          </Button>
           <a href={`/api/facturas/export?companyId=${activeCompany.id}`}>
             <Button variant="soft" size="md"><Download className="h-4 w-4" /> Excel</Button>
           </a>
