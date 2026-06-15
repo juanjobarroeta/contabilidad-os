@@ -131,7 +131,9 @@ export default function ImpuestosPage() {
     const sugTxt = sug != null ? ` · sugerido ${(sug * 100).toFixed(2)}%${sugLabel ? ` (${sugLabel})` : ""}` : "";
 
     if (d.isr.coeficiente == null) {
-      return sug != null ? `Sin coeficiente aplicado${sugTxt}` : "Falta tu declaración anual — sin coeficiente";
+      return sug != null
+        ? `Sin coeficiente aplicado${sugTxt}`
+        : `Sin coeficiente — el sistema no detecta uno (faltan tu declaración anual ${year - 1} o tus CFDIs ${year - 1})`;
     }
     const pct = `${(d.isr.coeficiente * 100).toFixed(2)}%`;
     let base: string;
@@ -139,9 +141,17 @@ export default function ImpuestosPage() {
     else if (d.isr.coeficienteFuente === "declaracion_anual") base = `Coeficiente ${pct} · de tu declaración anual ${year - 1}`;
     else if (d.isr.coeficienteFuente === "calculado") base = `Coeficiente ${pct} · estimado de tus CFDIs ${year - 1}`;
     else base = `Coeficiente ${pct}`;
-    // Muestra la sugerencia sólo cuando difiere del aplicado (p.ej. ajuste manual desactualizado).
+    // Siempre comunica qué detecta el motor, aunque haya un ajuste manual: si
+    // difiere lo sugiere; si coincide lo confirma; si no detecta nada, lo dice
+    // (así el contador sabe que faltan datos de 2025, no que el motor "calla").
     const difiere = sug != null && Math.abs(sug - d.isr.coeficiente) > 0.0005;
-    return difiere ? `${base}${sugTxt}` : base;
+    if (difiere) return `${base}${sugTxt}`;
+    if (d.isr.coeficienteFuente === "manual") {
+      return sug != null
+        ? `${base} · coincide con lo que detecta el sistema`
+        : `${base} · el sistema no detecta uno por su cuenta (faltan tu declaración anual ${year - 1} o tus CFDIs ${year - 1})`;
+    }
+    return base;
   };
 
   return (
