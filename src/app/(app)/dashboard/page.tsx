@@ -288,11 +288,35 @@ export default function InicioPage() {
                 </div>
                 <div className="flex flex-row items-baseline justify-between gap-2 min-[460px]:flex-col min-[460px]:items-start min-[460px]:justify-start min-[460px]:gap-1">
                   <span className="text-[12.5px] font-medium text-cos-ink-faint">Te queda</span>
-                  <Money value={data.kpis.utilidadBruta} size={19} sign />
-                  <span className="text-[12px] text-cos-ink-faint">antes de impuestos</span>
+                  {data.taxThisMonth.isr == null ? (
+                    <>
+                      <Money value={data.kpis.utilidadBruta} size={19} sign />
+                      <span className="text-[12px] text-cos-ink-faint">antes de impuestos</span>
+                    </>
+                  ) : (
+                    <>
+                      <Money value={data.kpis.utilidadBruta - data.taxThisMonth.isr} size={19} sign />
+                      <span className="text-[12px] text-cos-ink-faint">después de ISR</span>
+                    </>
+                  )}
                 </div>
               </div>
+              {/* Impuestos que genera la actividad de este mes (motor fiscal real). */}
+              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-cos-line-soft pt-3.5">
+                <span className="text-[12.5px] font-medium text-cos-ink-faint">Impuestos de este mes</span>
+                <span className="inline-flex items-baseline gap-1.5 text-[12.5px] text-cos-ink-soft">
+                  IVA <Money value={data.taxThisMonth.iva} size={14} weight={600} />
+                </span>
+                <span className="inline-flex items-baseline gap-1.5 text-[12.5px] text-cos-ink-soft">
+                  ISR{" "}
+                  {data.taxThisMonth.isr == null
+                    ? <span className="font-semibold text-cos-ink-faint">—</span>
+                    : <Money value={data.taxThisMonth.isr} size={14} weight={600} />}
+                </span>
+                <span className="ml-auto text-[12px] text-cos-ink-faint">se pagan el {data.taxThisMonth.venceFmt}</span>
+              </div>
             </Card>
+
           </div>
 
           {/* obligaciones */}
