@@ -25,6 +25,8 @@ export interface BackfillResult {
   mesesCreados: number;
   /** Acuses PDF enviados a Claude (costo). */
   acusesParseados: number;
+  /** True si se cortó por el tope de acuses de esta corrida (queda más por hacer). */
+  topeAlcanzado?: boolean;
   error?: string;
 }
 
@@ -63,6 +65,7 @@ export function fileRefDe(tr: Record<string, unknown>): string | null {
 export async function backfillDeclaracionesMensuales(
   companyId: string,
   client = new SyntageClient(),
+  opts: { maxAcuses?: number } = {},
 ): Promise<BackfillResult> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
@@ -91,6 +94,7 @@ export async function backfillDeclaracionesMensuales(
 
   let mesesCreados = 0;
   let acusesParseados = 0;
+  let topeAlcanzado = false;
 
   for (const trRaw of returns) {
     const tr = trRaw as Record<string, unknown>;
@@ -102,6 +106,13 @@ export async function backfillDeclaracionesMensuales(
     const needIva = tieneIVA && !have.has(`IVA_MENSUAL:${periodo}`);
     const needIsr = tieneISR && !have.has(`ISR_PROVISIONAL:${periodo}`);
     if (!needIva && !needIsr) continue; // ya capturado → sin costo de parseo
+
+    // Tope por corrida: cada invocación procesa un chunk acotado (evita timeouts);
+    // el resto queda para la siguiente corrida (gap-fill).
+    if (opts.maxAcuses != null && acusesParseados >= opts.maxAcuses) {
+      topeAlcanzado = true;
+      break;
+    }
 
     const ref = fileRefDe(tr);
     if (!ref) continue;
@@ -153,27 +164,44 @@ export async function backfillDeclaracionesMensuales(
     }
   }
 
-  return { companyId, rfc: company.rfc, mesesCreados, acusesParseados };
+  return { companyId, rfc: company.rfc, mesesCreados, acusesParseados, topeAlcanzado };
 }
 
-export async function backfillAllDeclaracionesMensuales(): Promise<{
+export async function backfillAllDeclaracionesMensuales(opts: { maxAcuses?: number } = {}): Promise<{
   empresas: number;
   errores: number;
+  acusesParseados: number;
+  mesesCreados: number;
+  /** True si se cortó por el tope: queda más por procesar (volver a llamar). */
+  topeAlcanzado: boolean;
   resultados: BackfillResult[];
 }> {
   const client = new SyntageClient();
   const companies = await prisma.company.findMany({ where: { isActive: true }, select: { id: true } });
   const resultados: BackfillResult[] = [];
   let errores = 0;
+  let acusesParseados = 0;
+  let mesesCreados = 0;
+  let topeAlcanzado = false;
+
   for (const c of companies) {
+    // Presupuesto restante de acuses para esta corrida (chunk acotado).
+    const restante = opts.maxAcuses != null ? opts.maxAcuses - acusesParseados : undefined;
+    if (restante != null && restante <= 0) {
+      topeAlcanzado = true;
+      break;
+    }
     try {
-      const r = await backfillDeclaracionesMensuales(c.id, client);
+      const r = await backfillDeclaracionesMensuales(c.id, client, restante != null ? { maxAcuses: restante } : {});
       if (r.error) errores++;
+      acusesParseados += r.acusesParseados;
+      mesesCreados += r.mesesCreados;
+      if (r.topeAlcanzado) topeAlcanzado = true;
       resultados.push(r);
     } catch (e) {
       errores++;
       resultados.push({ companyId: c.id, mesesCreados: 0, acusesParseados: 0, error: e instanceof Error ? e.message : String(e) });
     }
   }
-  return { empresas: companies.length, errores, resultados };
+  return { empresas: companies.length, errores, acusesParseados, mesesCreados, topeAlcanzado, resultados };
 }

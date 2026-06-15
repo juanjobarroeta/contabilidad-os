@@ -29,10 +29,17 @@ jobs:
           set -euo pipefail
           URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
           if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
-          ENDPOINT="${URL}/api/cron/declaraciones-backfill"
-          if [ -n "${COMPANY_ID:-}" ]; then ENDPOINT="${ENDPOINT}?companyId=${COMPANY_ID}"; fi
-          curl -fsS --max-time 290 -X POST "$ENDPOINT" \
-            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+          BASE="${URL}/api/cron/declaraciones-backfill?max=10"
+          if [ -n "${COMPANY_ID:-}" ]; then BASE="${BASE}&companyId=${COMPANY_ID}"; fi
+          # Cada llamada procesa un chunk acotado (≈1-2 min) para no exceder el
+          # timeout; repetimos hasta drenar (topeAlcanzado=false) o tope de vueltas.
+          for i in $(seq 1 80); do
+            RESP="$(curl -fsS --max-time 280 -X POST "$BASE" -H "x-cron-secret: ${CRON_SECRET}")"
+            echo "Vuelta $i: $(echo "$RESP" | jq -c '{topeAlcanzado, acusesParseados, mesesCreados, errores}' 2>/dev/null || echo "$RESP")"
+            MORE="$(echo "$RESP" | jq -r '.topeAlcanzado // false' 2>/dev/null || echo false)"
+            if [ "$MORE" != "true" ]; then echo "Backfill completo."; break; fi
+            sleep 3
+          done
         env:
           STAGING_URL: ${{ secrets.STAGING_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
