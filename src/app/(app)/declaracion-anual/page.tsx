@@ -117,6 +117,9 @@ export default function DeclaracionAnualPage() {
         <div>
           <h1 className="text-2xl font-bold">Declaración Anual</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{activeCompany.razonSocial}</p>
+          <a href="/declaraciones/historial" className="mt-1 inline-block text-[13px] text-primary hover:underline">
+            Ver declaraciones mensuales →
+          </a>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setEjercicio(e => e - 1)} className="px-3 py-1.5 border border-border rounded-md text-sm hover:bg-accent">←</button>

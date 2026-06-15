@@ -99,9 +99,15 @@ export default function DeclaracionesPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <FileText className="h-5 w-5 text-cos-brand" />
         <h1 className="text-xl font-bold text-cos-ink">Declaraciones por capturar</h1>
+        <Link
+          href="/declaraciones/historial"
+          className="ml-auto rounded-control border border-cos-line bg-white px-3 py-1.5 text-[13px] font-medium text-cos-ink hover:bg-cos-paper"
+        >
+          Ver presentadas
+        </Link>
       </div>
       <p className="mt-1 text-sm text-cos-ink-soft">
         Sube el <strong>acuse en PDF</strong> de cada declaración. Lo leemos y guardamos el
