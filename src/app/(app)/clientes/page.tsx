@@ -337,12 +337,14 @@ export default function ClientesPage() {
                 <input
                   type="text" name="rfc" value={form.rfc} onChange={handleChange}
                   placeholder="XAXX010101000" maxLength={13} required
-                  disabled={!!editingCliente}
+                  disabled={!!editingCliente?.facturapiId}
                   className="w-full px-3 py-2 border border-cos-line rounded-control text-sm font-mono focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand uppercase disabled:bg-cos-paper disabled:text-cos-ink-faint"
                 />
-                {editingCliente && (
-                  <p className="text-xs text-cos-ink-soft mt-1">El RFC no se puede modificar</p>
-                )}
+                {editingCliente?.facturapiId ? (
+                  <p className="text-xs text-cos-ink-soft mt-1">El RFC no se puede modificar (ya sincronizado con Facturapi)</p>
+                ) : editingCliente ? (
+                  <p className="text-xs text-cos-ink-soft mt-1">Corrígelo si está incompleto (debe tener homoclave completa: 12 o 13 caracteres).</p>
+                ) : null}
               </div>
 
               {/* Razón Social */}
