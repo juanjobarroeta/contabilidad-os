@@ -29,11 +29,37 @@ export async function PATCH(
   if (!customer) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await req.json();
-  const { razonSocial, regimenFiscal, email, phone, domicilio, codigoPostal } = body;
+  const { rfc, razonSocial, regimenFiscal, email, phone, domicilio, codigoPostal } = body;
 
   // Sync update to Facturapi if applicable
   const existing = await prisma.customer.findUnique({ where: { id } });
-  if (existing?.facturapiId) {
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: Record<string, any> = { razonSocial, regimenFiscal, email, phone, domicilio, codigoPostal };
+
+  // Permitir CORREGIR el RFC sólo si el cliente aún NO está sincronizado con
+  // Facturapi (una vez sincronizado, el RFC es su identidad y no debe cambiar).
+  // Caso real: un RFC importado incompleto (p.ej. gobierno con homoclave
+  // truncada) que Facturapi rechaza con "tax_id ... debe ser un RFC válido".
+  if (typeof rfc === "string" && rfc.trim() && rfc.trim().toUpperCase() !== existing.rfc) {
+    if (existing.facturapiId) {
+      return NextResponse.json(
+        { error: "No se puede cambiar el RFC de un cliente ya sincronizado con Facturapi" },
+        { status: 409 }
+      );
+    }
+    const nuevo = rfc.trim().toUpperCase();
+    if (!/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/.test(nuevo)) {
+      return NextResponse.json(
+        { error: "RFC inválido. Debe ser 12 caracteres (moral) o 13 (física), con homoclave completa." },
+        { status: 400 }
+      );
+    }
+    data.rfc = nuevo;
+  }
+
+  if (existing.facturapiId) {
     const company = await prisma.company.findUnique({
       where: { id: customer.companyId },
       select: { facturapiApiKey: true },
@@ -53,12 +79,14 @@ export async function PATCH(
     }
   }
 
-  const updated = await prisma.customer.update({
-    where: { id },
-    data: { razonSocial, regimenFiscal, email, phone, domicilio, codigoPostal },
-  });
-
-  return NextResponse.json(updated);
+  try {
+    const updated = await prisma.customer.update({ where: { id }, data });
+    return NextResponse.json(updated);
+  } catch {
+    // Most likely the unique (companyId, rfc) constraint — another customer
+    // already uses the corrected RFC.
+    return NextResponse.json({ error: "Ya existe un cliente con ese RFC" }, { status: 409 });
+  }
 }
 
 // POST /api/clientes/[id]/sync — push existing customer to Facturapi
