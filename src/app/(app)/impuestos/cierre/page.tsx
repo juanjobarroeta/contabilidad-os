@@ -48,6 +48,7 @@ interface CierreData {
     vencimiento: string; estado: Estado;
     lineaCaptura: string | null; acuseUrl: string | null; fechaPresentacion: string | null;
     acuseData: AcuseData | null;
+    declaracionId: string | null; acusePdfDisponible: boolean;
     calculado: boolean;
   };
   diot: {
@@ -305,7 +306,15 @@ export default function CierreMensualPage() {
                   <div>
                     <p className="font-medium text-green-800">Presentada {data.federal.fechaPresentacion ? `el ${formatDate(data.federal.fechaPresentacion)}` : ""}</p>
                     {data.federal.lineaCaptura && <p className="text-green-700 text-xs">Línea de captura: {data.federal.lineaCaptura}</p>}
-                    {data.federal.acuseUrl && <a href={data.federal.acuseUrl} target="_blank" rel="noreferrer" className="text-green-700 text-xs underline">Ver acuse</a>}
+                    <div className="flex items-center gap-3">
+                      {data.federal.acusePdfDisponible && data.federal.declaracionId && (
+                        <a href={`/api/declaraciones/acuse/${data.federal.declaracionId}`} target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-green-700 text-xs underline">
+                          <Download className="h-3 w-3" /> Descargar acuse (PDF)
+                        </a>
+                      )}
+                      {data.federal.acuseUrl && <a href={data.federal.acuseUrl} target="_blank" rel="noreferrer" className="text-green-700 text-xs underline">Ver acuse</a>}
+                    </div>
                   </div>
                   <button onClick={() => fileFederal(false)} disabled={savingFederal} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs hover:bg-white print:hidden">
                     {savingFederal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
@@ -319,12 +328,21 @@ export default function CierreMensualPage() {
                 <div className="rounded-md border border-dashed border-border p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> ¿Ya la presentaste? Sube el acuse (PDF)</p>
-                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs cursor-pointer hover:bg-accent">
-                      {acuseUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                      {acuseUploading ? "Leyendo…" : "Subir acuse"}
-                      <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={acuseUploading}
-                        onChange={e => { const f = e.target.files?.[0]; if (f) handleAcuseUpload(f); e.target.value = ""; }} />
-                    </label>
+                    <div className="flex items-center gap-2">
+                      {/* Si ya tenemos el acuse (lo trajo el backfill), permite descargarlo. */}
+                      {data.federal.acusePdfDisponible && data.federal.declaracionId && (
+                        <a href={`/api/declaraciones/acuse/${data.federal.declaracionId}`} target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs hover:bg-accent">
+                          <Download className="h-3.5 w-3.5" /> Descargar PDF
+                        </a>
+                      )}
+                      <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs cursor-pointer hover:bg-accent">
+                        {acuseUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                        {acuseUploading ? "Leyendo…" : "Subir acuse"}
+                        <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={acuseUploading}
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handleAcuseUpload(f); e.target.value = ""; }} />
+                      </label>
+                    </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-1">Extraemos línea de captura, fecha y los importes presentados, y los comparamos con lo calculado.</p>
                   {acuseError && <p className="text-xs text-red-600 mt-2">{acuseError}</p>}
@@ -333,9 +351,9 @@ export default function CierreMensualPage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <input value={federalLinea} onChange={e => setFederalLinea(e.target.value)} placeholder="Línea de captura"
-                    className="px-2.5 py-1.5 rounded-md border border-border text-sm" />
+                {/* La línea de captura se extrae del acuse al subirlo (o la trae el
+                    backfill) — no se captura a mano. Sólo la fecha y, opcional, una URL. */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input value={federalAcuse} onChange={e => setFederalAcuse(e.target.value)} placeholder="URL del acuse (opcional)"
                     className="px-2.5 py-1.5 rounded-md border border-border text-sm" />
                   <input type="date" value={federalFecha} onChange={e => setFederalFecha(e.target.value)}

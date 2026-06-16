@@ -81,8 +81,8 @@ export async function GET(req: Request) {
       prisma.taxDeclaration.findMany({
         where: { companyId, periodo, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR", "DIOT"] } },
         select: {
-          tipo: true, status: true, lineaCaptura: true, acuseUrl: true,
-          fechaPresentacion: true, fechaLimitePago: true, acuseData: true,
+          id: true, tipo: true, status: true, lineaCaptura: true, acuseUrl: true,
+          fechaPresentacion: true, fechaLimitePago: true, acuseData: true, acusePdfNombre: true,
         },
       }),
       nominaRetencionesMes(companyId, from, to),
@@ -208,6 +208,11 @@ export async function GET(req: Request) {
       acuseUrl: federalDecl?.acuseUrl ?? null,
       fechaPresentacion: federalDecl?.fechaPresentacion ?? null,
       acuseData: federalDecl?.acuseData ?? null,
+      // Acuse PDF guardado (lo trae el backfill de Syntage): id de la declaración
+      // para descargarlo y bandera de disponibilidad. acusePdfNombre y acusePdf se
+      // guardan juntos, así que el nombre es señal fiable de que el PDF existe.
+      declaracionId: federalDecl?.id ?? null,
+      acusePdfDisponible: !!federalDecl?.acusePdfNombre,
       // True once the figures have been persisted (so "marcar presentada" is safe).
       calculado: !!declOf("IVA_MENSUAL") || !!declOf("ISR_PROVISIONAL"),
     },
