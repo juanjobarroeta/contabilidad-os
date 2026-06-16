@@ -1922,6 +1922,7 @@ model SolicitudCompra {
 }
 
 enum SolicitudEstado {
+  BORRADOR
   PENDIENTE
   APROBADA
   RECHAZADA
