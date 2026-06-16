@@ -233,14 +233,18 @@ export default function ClientesPage() {
                 <th className="px-4 py-2.5 text-left font-medium">Razón Social</th>
                 <th className="hidden px-4 py-2.5 text-left font-medium md:table-cell">Régimen</th>
                 <th className="hidden px-4 py-2.5 text-left font-medium lg:table-cell">Correo</th>
-                <th className="px-4 py-2.5 text-center font-medium">Facturas</th>
-                <th className="px-4 py-2.5 text-left font-medium">Facturapi</th>
+                <th className="hidden px-4 py-2.5 text-center font-medium sm:table-cell">Facturas</th>
+                <th className="hidden px-4 py-2.5 text-left font-medium sm:table-cell">Facturapi</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody>
               {clientes.map((c) => (
-                <tr key={c.id} className="border-t border-cos-line transition-colors hover:bg-cos-paper/60">
+                <tr
+                  key={c.id}
+                  onClick={() => openEdit(c)}
+                  className="cursor-pointer border-t border-cos-line transition-colors hover:bg-cos-paper/60"
+                >
                   <td className="px-4 py-3 font-mono text-[12px] font-medium text-cos-ink">{c.rfc}</td>
                   <td className="px-4 py-3 font-medium text-cos-ink">{c.razonSocial}</td>
                   <td className="hidden px-4 py-3 md:table-cell">
@@ -254,13 +258,13 @@ export default function ClientesPage() {
                   <td className="hidden px-4 py-3 text-[12px] text-cos-ink-soft lg:table-cell">
                     {c.email ?? "—"}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="hidden px-4 py-3 text-center sm:table-cell">
                     <span className="inline-flex items-center gap-1 text-[12px] text-cos-ink-soft">
                       <FileText className="h-3.5 w-3.5" />
                       {c._count.invoices}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 sm:table-cell">
                     {c.facturapiId ? (
                       <span className="rounded-full bg-cos-jade-tint px-2 py-0.5 text-[12px] font-medium text-cos-jade-ink">
                         Sincronizado
@@ -275,9 +279,9 @@ export default function ClientesPage() {
                     <div className="flex items-center justify-end gap-1">
                       {!c.facturapiId && (
                         <button
-                          onClick={() => handleSync(c.id)}
+                          onClick={(e) => { e.stopPropagation(); handleSync(c.id); }}
                           disabled={syncingId === c.id}
-                          className="rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-brand-tint hover:text-cos-brand-ink"
+                          className="hidden rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-brand-tint hover:text-cos-brand-ink sm:inline-flex"
                           title="Sincronizar con Facturapi"
                         >
                           {syncingId === c.id
@@ -286,14 +290,14 @@ export default function ClientesPage() {
                         </button>
                       )}
                       <button
-                        onClick={() => openEdit(c)}
+                        onClick={(e) => { e.stopPropagation(); openEdit(c); }}
                         className="rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-paper hover:text-cos-ink"
                         title="Editar"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        onClick={() => { setDeleteId(c.id); setDeleteError(""); }}
+                        onClick={(e) => { e.stopPropagation(); setDeleteId(c.id); setDeleteError(""); }}
                         className="rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-red-tint hover:text-cos-red-ink"
                         title="Eliminar"
                       >
