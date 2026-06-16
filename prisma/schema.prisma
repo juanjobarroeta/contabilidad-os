@@ -1948,6 +1948,12 @@ model SolicitudPartida {
   presupuestoPartidaId String?
   presupuestoPartida   PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
 
+  // Adjudicación por concepto: qué cotización (de qué proveedor) ganó esta
+  // línea. Permite repartir una requisición entre varios proveedores (concepto
+  // A → proveedor X, concepto B → proveedor Y) y fanout a una OC por proveedor.
+  cotizacionGanadoraId String?
+  cotizacionGanadora   SolicitudCompraCotizacion? @relation("PartidaAdjudicada", fields: [cotizacionGanadoraId], references: [id], onDelete: SetNull)
+
   solicitud    SolicitudCompra              @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
   insumo       Insumo?                      @relation(fields: [insumoId], references: [id])
   cotizaciones SolicitudCotizacionPartida[]
@@ -1981,9 +1987,10 @@ model SolicitudCompraCotizacion {
   archivoName     String?
   createdAt       DateTime  @default(now())
 
-  solicitud SolicitudCompra              @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
-  supplier  Supplier?                    @relation(fields: [supplierId], references: [id])
-  partidas  SolicitudCotizacionPartida[]
+  solicitud           SolicitudCompra              @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  supplier            Supplier?                    @relation(fields: [supplierId], references: [id])
+  partidas            SolicitudCotizacionPartida[]
+  partidasAdjudicadas SolicitudPartida[]           @relation("PartidaAdjudicada")
 
   @@index([solicitudId, isSelected])
 }
