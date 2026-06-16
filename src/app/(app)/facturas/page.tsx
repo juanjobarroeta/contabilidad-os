@@ -77,7 +77,12 @@ function DownloadBtn({ id, format }: { id: string; format: "xml" | "pdf" }) {
     setLoading(true);
     try {
       const res = await fetch(`/api/facturas/${id}/download?format=${format}`);
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        let msg = "Error al descargar el archivo";
+        try { const j = await res.json(); if (j?.error) msg = j.error; } catch { /* keep default */ }
+        alert(msg);
+        return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
