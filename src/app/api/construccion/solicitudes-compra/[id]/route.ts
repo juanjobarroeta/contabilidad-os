@@ -182,3 +182,30 @@ export const PUT = withAuthz(
     }
   }
 );
+
+// DELETE — discard a draft. Only borradores can be deleted; a submitted
+// requisición is kept (cancel it through the normal flow instead).
+export const DELETE = withAuthz(
+  async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+    const { id } = await ctx.params;
+    const existing = await prisma.solicitudCompra.findUnique({
+      where: { id },
+      select: { id: true, companyId: true, estado: true },
+    });
+    if (!existing) throw new AuthzError(404, "Solicitud no encontrada");
+    await requireWriter(existing.companyId, req);
+    await requireModule(existing.companyId, "CONSTRUCCION");
+
+    if (existing.estado !== "BORRADOR") {
+      return NextResponse.json(
+        { error: "Solo se pueden eliminar borradores." },
+        { status: 409 }
+      );
+    }
+
+    // Cotizaciones cascade their line items; partidas cascade with the
+    // solicitud (onDelete: Cascade on the partida→solicitud relation).
+    await prisma.solicitudCompra.delete({ where: { id } });
+    return NextResponse.json({ deleted: id });
+  }
+);
