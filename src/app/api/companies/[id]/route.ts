@@ -8,6 +8,11 @@ import { parseCertExpiry } from "@/lib/fiel";
 
 type Params = { params: Promise<{ id: string }> };
 
+// CSD upload triggers Facturapi provisioning (create org → upload certificate →
+// renew live key), several sequential external calls. Give it room so it doesn't
+// time out into an empty response.
+export const maxDuration = 60;
+
 // GET /api/companies/[id]
 export async function GET(_req: Request, { params }: Params) {
   const session = await auth();
@@ -81,6 +86,7 @@ export async function PATCH(req: Request, { params }: Params) {
     nombreComercial, email, telefono, actividadEconomica,
   } = body;
 
+  try {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: Record<string, any> = {};
   // Encrypt credential material at rest (AES-256-GCM via lib/crypto).
@@ -137,4 +143,21 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   return NextResponse.json({ ok: true, facturapi });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error inesperado";
+    // The most common production cause: CREDENTIALS_ENCRYPTION_KEY missing or
+    // not a valid 32-byte base64 value, so encrypting the CSD/FIEL throws. Give
+    // an actionable message instead of an empty 500 (which the client showed as
+    // "Unexpected end of JSON input").
+    const esClave = /clave debe ser 32 bytes|CREDENTIALS_ENCRYPTION_KEY/i.test(msg);
+    console.error("[companies/PATCH] failed:", msg);
+    return NextResponse.json(
+      {
+        error: esClave
+          ? "La clave de cifrado del servidor (CREDENTIALS_ENCRYPTION_KEY) no es válida. Configúrala con un valor de 32 bytes en base64 y vuelve a intentar."
+          : `No se pudo guardar: ${msg}`,
+      },
+      { status: esClave ? 500 : 422 }
+    );
+  }
 }
