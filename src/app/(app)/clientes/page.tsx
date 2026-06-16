@@ -281,7 +281,7 @@ export default function ClientesPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleSync(c.id); }}
                           disabled={syncingId === c.id}
-                          className="hidden rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-brand-tint hover:text-cos-brand-ink sm:inline-flex"
+                          className="rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-brand-tint hover:text-cos-brand-ink"
                           title="Sincronizar con Facturapi"
                         >
                           {syncingId === c.id
