@@ -23,6 +23,18 @@ const invoiceItemSchema = z.object({
         })
       )
       .optional(),
+    // Impuestos locales (complemento implocal): e.g. la retención local "5 al
+    // millar" en contratos de gobierno. `type` es el nombre que aparece como
+    // ImpLocRetenido; `rate` es la tasa en fracción (0.005 = 0.50%).
+    local_taxes: z
+      .array(
+        z.object({
+          type: z.string(),
+          rate: z.number(),
+          withholding: z.boolean().default(false),
+        })
+      )
+      .optional(),
   }),
 });
 
