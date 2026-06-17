@@ -1,18 +1,25 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { requireUser, AuthzError, getEffectiveCompanyMembership } from "@/lib/authz";
 import { decryptSecret } from "@/lib/crypto";
 
 const FACTURAPI_BASE = "https://www.facturapi.io/v2";
 
 // GET /api/facturas/[id]/download?format=pdf|xml|zip
+// Accepts both NextAuth session (web UI) and Bearer token (cross-app callers
+// like FlotaGob, which proxies this to expose the CFDI PDF/XML).
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let userId: string;
+  try {
+    const u = await requireUser(req);
+    userId = u.id;
+  } catch (e) {
+    const status = e instanceof AuthzError ? e.status : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
+  }
 
   const { id } = await params;
   const { searchParams } = new URL(req.url);
@@ -30,7 +37,7 @@ export async function GET(
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
   // Verify membership
-  const member = await getEffectiveCompanyMembership(session.user.id, invoice.companyId);
+  const member = await getEffectiveCompanyMembership(userId, invoice.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   // SAT-synced invoices (Descarga Masiva) never went through Facturapi, so they
