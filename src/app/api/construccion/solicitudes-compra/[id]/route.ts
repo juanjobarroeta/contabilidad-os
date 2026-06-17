@@ -46,6 +46,7 @@ const putSchema = z.object({
       z.object({
         supplierId: z.string().min(1).nullable().optional(),
         supplierNombre: z.string().min(1).max(120),
+        tieneCredito: z.boolean().optional(),
         lineas: z
           .array(
             z.object({

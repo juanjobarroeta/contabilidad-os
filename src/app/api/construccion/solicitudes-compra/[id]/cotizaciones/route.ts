@@ -31,6 +31,7 @@ const lineSchema = z.object({
 const createSchema = z.object({
   supplierId: z.string().min(1).nullable().optional(),
   supplierNombre: z.string().min(1).max(120),
+  tieneCredito: z.boolean().optional(),
   fechaCotizacion: z.string().optional(),
   vigenciaHasta: z.string().nullable().optional(),
   moneda: z.string().max(3).optional(),
@@ -117,6 +118,7 @@ export const POST = withAuthz(
         solicitudId: id,
         supplierId: data.supplierId ?? null,
         supplierNombre: data.supplierNombre,
+        tieneCredito: data.tieneCredito ?? false,
         fechaCotizacion: data.fechaCotizacion ? new Date(data.fechaCotizacion) : new Date(),
         vigenciaHasta: data.vigenciaHasta ? new Date(data.vigenciaHasta) : null,
         total,
