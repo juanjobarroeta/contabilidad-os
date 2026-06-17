@@ -32,6 +32,10 @@ const invoiceItemSchema = z.object({
           type: z.string(),
           rate: z.number(),
           withholding: z.boolean().default(false),
+          // Optional explicit base. Lets a caller emit a single consolidated
+          // local retención (one RetencionesLocales node) by attaching it to one
+          // concept with base = the whole subtotal, instead of one node per item.
+          base: z.number().optional(),
         })
       )
       .optional(),
