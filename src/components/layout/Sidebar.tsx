@@ -29,6 +29,7 @@ import {
   BadgeCheck,
   ScanSearch,
   TrendingUp,
+  Wrench,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -229,6 +230,22 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
           >
             <TrendingUp className="h-4 w-4 shrink-0" />
             Rentabilidad
+          </Link>
+        )}
+
+        {/* Operador: herramientas internas (cross-check vs SAT, backfill de declaraciones). */}
+        {esOperador && (
+          <Link
+            href="/operador"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+              pathname === "/operador"
+                ? "bg-cos-brand text-white"
+                : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
+            )}
+          >
+            <Wrench className="h-4 w-4 shrink-0" />
+            Herramientas
           </Link>
         )}
 
