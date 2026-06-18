@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui";
 import { Loader2, Wrench, Lock, AlertTriangle, Search, DownloadCloud } from "lucide-react";
 
@@ -22,9 +22,20 @@ function prevPeriodo(): string {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+type CompanyOpt = { id: string; rfc: string; razonSocial: string; despachoNombre?: string | null };
+
 export default function OperadorPage() {
-  const [rfc, setRfc] = useState("");
+  const [companies, setCompanies] = useState<CompanyOpt[]>([]);
+  const [companyId, setCompanyId] = useState("");
   const [periodo, setPeriodo] = useState(prevPeriodo());
+
+  // Operador ve TODAS las empresas activas vía /api/companies.
+  useEffect(() => {
+    fetch("/api/companies")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => { if (Array.isArray(list)) setCompanies(list); })
+      .catch(() => {});
+  }, []);
   const [busy, setBusy] = useState<null | "check" | "backfill">(null);
   const [check, setCheck] = useState<any>(null);
   const [backfill, setBackfill] = useState<any>(null);
@@ -32,16 +43,16 @@ export default function OperadorPage() {
   const [denied, setDenied] = useState(false);
 
   async function call(kind: "check" | "backfill") {
-    if (!rfc.trim()) { setError("Escribe el RFC de la empresa"); return; }
+    if (!companyId) { setError("Selecciona una empresa"); return; }
     setBusy(kind); setError(""); setDenied(false);
     try {
       const res =
         kind === "check"
-          ? await fetch(`/api/operador/cross-check?rfc=${encodeURIComponent(rfc.trim())}&periodo=${periodo}`)
+          ? await fetch(`/api/operador/cross-check?companyId=${encodeURIComponent(companyId)}&periodo=${periodo}`)
           : await fetch(`/api/operador/declaraciones-backfill`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ rfc: rfc.trim(), year: parseInt(periodo.slice(0, 4)) }),
+              body: JSON.stringify({ companyId, year: parseInt(periodo.slice(0, 4)) }),
             });
       if (res.status === 403) { setDenied(true); return; }
       const data = await res.json();
@@ -76,13 +87,20 @@ export default function OperadorPage() {
       <Card className="mt-5 rounded-card border-cos-line p-5 shadow-card">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px]">
           <label className="text-[12.5px] font-medium text-cos-ink-soft">
-            RFC de la empresa
-            <input
-              value={rfc}
-              onChange={(e) => setRfc(e.target.value.toUpperCase())}
-              placeholder="CBA170606FQ8"
-              className="mt-1 w-full rounded-control border border-cos-line px-3 py-2 font-mono text-[14px] uppercase focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand"
-            />
+            Empresa
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[14px] focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand"
+            >
+              <option value="">Selecciona empresa…</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.razonSocial} — {c.rfc}
+                  {c.despachoNombre ? ` · ${c.despachoNombre}` : ""}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="text-[12.5px] font-medium text-cos-ink-soft">
             Periodo
