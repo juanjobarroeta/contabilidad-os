@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui";
-import { Loader2, Wrench, Lock, AlertTriangle, Search, DownloadCloud } from "lucide-react";
+import { Loader2, Wrench, Lock, AlertTriangle, Search, DownloadCloud, Upload } from "lucide-react";
 
 // Operador-only tools: reconcile the system's figures against the SAT filed
 // declaración (cross-check), and ingest a company's prior filed declaraciones
@@ -19,6 +19,15 @@ function prevPeriodo(): string {
   d.setDate(1);
   d.setMonth(d.getMonth() - 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -41,6 +50,33 @@ export default function OperadorPage() {
   const [backfill, setBackfill] = useState<any>(null);
   const [error, setError] = useState("");
   const [denied, setDenied] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState("");
+
+  async function uploadAcuses(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    if (!companyId) { setError("Selecciona una empresa"); return; }
+    setUploading(true); setError(""); setUploadMsg("");
+    const msgs: string[] = [];
+    try {
+      for (const f of Array.from(files)) {
+        const b64 = await fileToBase64(f);
+        const res = await fetch("/api/operador/ingest-acuse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId, pdfBase64: b64 }),
+        });
+        if (res.status === 403) { setDenied(true); return; }
+        const data = await res.json().catch(() => ({}));
+        msgs.push(res.ok ? (data.nota ?? `${data.periodo}: ${(data.creados ?? []).join(" + ") || "sin cambios"}`) : `${f.name}: ${data.error ?? "error"}`);
+      }
+      setUploadMsg(msgs.join("\n"));
+    } catch {
+      setError("No se pudieron subir los acuses");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function call(kind: "check" | "backfill") {
     if (!companyId) { setError("Selecciona una empresa"); return; }
@@ -137,6 +173,21 @@ export default function OperadorPage() {
             <AlertTriangle className="h-4 w-4" /> {error}
           </p>
         )}
+
+        {/* Fallback cuando Syntage no tiene historial: subir los acuses a mano. */}
+        <div className="mt-4 rounded-[12px] border border-dashed border-cos-line bg-cos-paper p-3.5">
+          <p className="text-[12.5px] font-medium text-cos-ink">¿Syntage sin datos? Sube los acuses (PDF)</p>
+          <p className="mt-0.5 text-[12px] text-cos-ink-soft">
+            Para la empresa seleccionada. Se lee el periodo del propio acuse y se guardan las cifras presentadas (gap-fill). Puedes subir varios meses a la vez.
+          </p>
+          <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-cos-line bg-white px-2.5 py-1.5 text-[13px] hover:bg-cos-paper">
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {uploading ? "Leyendo…" : "Subir acuse(s)"}
+            <input type="file" accept="application/pdf,.pdf" multiple className="hidden" disabled={uploading || !companyId}
+              onChange={(e) => { uploadAcuses(e.target.files); e.target.value = ""; }} />
+          </label>
+          {uploadMsg && <pre className="mt-2 whitespace-pre-wrap text-[12px] text-cos-ink-soft">{uploadMsg}</pre>}
+        </div>
       </Card>
 
       {/* Cross-check result */}
