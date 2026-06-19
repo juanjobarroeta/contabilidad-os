@@ -5,7 +5,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
-  CheckCircle2, AlertTriangle, ScanSearch, CalendarDays,
+  CheckCircle2, AlertTriangle, ScanSearch, CalendarDays, Sparkles,
 } from "lucide-react";
 
 // ── Types (mirror /api/impuestos/cierre and /api/papeles/iva) ──────────────────
@@ -30,7 +30,19 @@ interface CierreData {
 interface PapelRow { id: string; fecha: string; contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string; }
 interface PapelIva {
   trasladado: PapelRow[]; acreditable: PapelRow[];
-  totales: { trasladado: number; acreditable: number; ivaCargo: number; saldoFavorAnterior: number; ivaPagar: number; saldoFavorMes: number };
+  totales: {
+    trasladado: number; acreditable: number; retenidoPorClientes: number;
+    proporcionAcreditamiento: number; actosGravados: number; actosExentos: number; acreditableProcedente: number;
+    ivaCargo: number; saldoFavorAnterior: number; ivaPagar: number; saldoFavorMes: number;
+  };
+}
+interface PapelIsr {
+  regimen: { kind: string; label: string };
+  base: { prevYear: number; prevUtilidad: number; coeficienteCalculado: number | null; coeficiente: number | null; coeficienteFuente: "manual" | "calculado" | "ninguno" };
+  calculo: {
+    tipo: string; ingresosAcumulados?: number; coeficiente?: number | null; utilidadFiscal?: number | null;
+    tasa?: number; isrDelEjercicio?: number | null; isrPagadoAnterior?: number; isrDelMes?: number | null;
+  };
 }
 
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -70,10 +82,6 @@ export default function DeclaracionWorkspace() {
   const [acuseUploading, setAcuseUploading] = useState(false);
   const [acuseError, setAcuseError] = useState("");
 
-  // Papeles (lazy)
-  const [papel, setPapel] = useState<PapelIva | null>(null);
-  const [papelLoading, setPapelLoading] = useState(false);
-
   const load = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true); setError("");
@@ -83,23 +91,13 @@ export default function DeclaracionWorkspace() {
       const d: CierreData = await res.json();
       setData(d);
       setFecha(d.federal.fechaPresentacion ? d.federal.fechaPresentacion.substring(0, 10) : "");
-      setAcuseParsed(null); setAcuseError(""); setPapel(null);
+      setAcuseParsed(null); setAcuseError("");
     } catch {
       setError("No se pudo cargar la declaración del mes");
     } finally { setLoading(false); }
   }, [activeCompany, month, year]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Lazy-load the IVA working paper the first time the tab is opened for a period.
-  useEffect(() => {
-    if (tab !== "papeles" || !activeCompany || papel) return;
-    setPapelLoading(true);
-    fetch(`/api/papeles/iva?companyId=${activeCompany.id}&month=${month}&year=${year}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setPapel(d); })
-      .finally(() => setPapelLoading(false));
-  }, [tab, activeCompany, month, year, papel]);
 
   function shiftMonth(delta: number) {
     let m = month + delta, y = year;
@@ -186,7 +184,7 @@ export default function DeclaracionWorkspace() {
       ) : (
         <div className="mt-5">
           {tab === "resumen" && <Resumen data={data} />}
-          {tab === "papeles" && <Papeles papel={papel} loading={papelLoading} />}
+          {tab === "papeles" && <PapelesTab companyId={activeCompany.id} month={month} year={year} onChanged={load} />}
           {tab === "revision" && <Revision />}
           {tab === "presentar" && (
             <Presentar
@@ -259,21 +257,46 @@ function Resumen({ data }: { data: CierreData }) {
   );
 }
 
-function Papeles({ papel, loading }: { papel: PapelIva | null; loading: boolean }) {
+function PapelesTab({ companyId, month, year, onChanged }: { companyId: string; month: number; year: number; onChanged: () => void }) {
+  const [iva, setIva] = useState<PapelIva | null>(null);
+  const [isr, setIsr] = useState<PapelIsr | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [a, b] = await Promise.all([
+        fetch(`/api/papeles/iva?companyId=${companyId}&month=${month}&year=${year}`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/papeles/isr?companyId=${companyId}&month=${month}&year=${year}`).then((r) => (r.ok ? r.json() : null)),
+      ]);
+      setIva(a); setIsr(b);
+    } finally { setLoading(false); }
+  }, [companyId, month, year]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // After a persisted edit (coeficiente), refresh both the papel and the parent
+  // Resumen/Presentar so the total a pagar reflects the change.
+  const afterEdit = useCallback(async () => { await load(); onChanged(); }, [load, onChanged]);
+
   if (loading) return <Loading label="Cargando papeles…" className="py-12" />;
-  if (!papel) return <p className="py-8 text-[14px] text-cos-ink-faint">Sin papel de trabajo para este periodo.</p>;
-  const sec = (title: string, rows: PapelRow[]) => (
+  if (!iva) return <p className="py-8 text-[14px] text-cos-ink-faint">Sin papel de trabajo para este periodo.</p>;
+  const t = iva.totales;
+
+  const rowsCard = (title: string, sub: string, rows: PapelRow[]) => rows.length === 0 ? null : (
     <Card className="rounded-card border-cos-line p-5 shadow-card">
       <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">{title}</span>
+      <p className="mt-0.5 text-[12px] text-cos-ink-faint">{sub}</p>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full text-[13px]">
-          <thead className="text-[11px] uppercase text-cos-ink-faint"><tr><th className="py-1.5 text-left">Fecha</th><th className="text-left">Contraparte</th><th className="text-right">Subtotal</th><th className="text-right">IVA</th></tr></thead>
+          <thead className="text-[11px] uppercase text-cos-ink-faint"><tr><th className="py-1.5 text-left">Fecha</th><th className="text-left">Contraparte</th><th className="text-right">Subtotal</th><th className="text-right">Tasa</th><th className="text-right">IVA</th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-t border-cos-line-soft">
-                <td className="py-1.5">{r.fecha}</td>
-                <td className="max-w-[220px] truncate">{r.contraparte}</td>
+                <td className="py-1.5 whitespace-nowrap">{r.fecha}</td>
+                <td className="max-w-[240px] truncate" title={`${r.contraparte} · ${r.rfc}`}>{r.contraparte}</td>
                 <td className="text-right tabular-nums"><Money value={r.subtotal} size={13} /></td>
+                <td className="text-right tabular-nums text-cos-ink-faint">{r.tasa != null ? `${(r.tasa * 100).toFixed(0)}%` : "—"}</td>
                 <td className="text-right tabular-nums"><Money value={r.importe} size={13} /></td>
               </tr>
             ))}
@@ -282,18 +305,113 @@ function Papeles({ papel, loading }: { papel: PapelIva | null; loading: boolean 
       </div>
     </Card>
   );
+
   return (
     <div className="space-y-4">
-      <p className="text-[13px] text-cos-ink-soft">Edición en línea llega en la siguiente fase. Por ahora, el respaldo de cada cifra (sólo lectura).</p>
-      {sec("IVA trasladado (cobrado)", papel.trasladado)}
-      {sec("IVA acreditable (pagado)", papel.acreditable)}
+      {rowsCard("IVA trasladado (cobrado)", "IVA que cobraste a tus clientes", iva.trasladado)}
+      {rowsCard("IVA acreditable (pagado)", "IVA que pagaste a proveedores, acreditable contra el trasladado", iva.acreditable)}
+
+      {/* IVA determination */}
       <Card className="rounded-card border-cos-line p-5 shadow-card text-[14px]">
-        <div className="flex justify-between py-1"><span className="text-cos-ink-soft">IVA trasladado</span><Money value={papel.totales.trasladado} size={14} /></div>
-        <div className="flex justify-between py-1"><span className="text-cos-ink-soft">IVA acreditable</span><Money value={papel.totales.acreditable} size={14} /></div>
-        <div className="flex justify-between py-1"><span className="text-cos-ink-soft">Saldo a favor anterior</span><Money value={papel.totales.saldoFavorAnterior} size={14} /></div>
-        <div className="flex justify-between border-t border-cos-line-soft py-1.5 font-semibold"><span>IVA a pagar</span><Money value={papel.totales.ivaPagar} size={15} weight={700} /></div>
+        <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Determinación del IVA</span>
+        <dl className="mt-3 space-y-1">
+          <DetRow label="IVA trasladado (+)" value={t.trasladado} />
+          {t.retenidoPorClientes > 0 && <DetRow label="IVA retenido por clientes (−)" value={-t.retenidoPorClientes} />}
+          {t.proporcionAcreditamiento < 1 ? (
+            <>
+              <DetRow label="IVA acreditable bruto" value={t.acreditable} />
+              <DetRow label={`= Acreditable procedente (${(t.proporcionAcreditamiento * 100).toFixed(2)}%, Art. 5-V) (−)`} value={-t.acreditableProcedente} />
+            </>
+          ) : (
+            <DetRow label="IVA acreditable (−)" value={-t.acreditable} />
+          )}
+          <DetRow label="= IVA a cargo" value={t.ivaCargo} strong />
+          {t.saldoFavorAnterior > 0 && <DetRow label="Saldo a favor anterior (−)" value={-t.saldoFavorAnterior} />}
+          <div className="mt-1 border-t border-cos-line-soft pt-2">
+            {t.ivaPagar > 0
+              ? <DetRow label="= IVA a pagar" value={t.ivaPagar} strong big />
+              : <DetRow label="= Saldo a favor del mes" value={t.saldoFavorMes} strong big jade />}
+          </div>
+        </dl>
       </Card>
+
+      {/* ISR — coeficiente is the one editable, persisted lever here (Art. 14 / PM). */}
+      {isr && isr.calculo.tipo === "art14" && (
+        <CoeficienteCard companyId={companyId} year={year} isr={isr} onSaved={afterEdit} />
+      )}
     </div>
+  );
+}
+
+function DetRow({ label, value, strong, big, jade }: { label: string; value: number; strong?: boolean; big?: boolean; jade?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between ${strong ? "font-semibold" : ""} ${big ? "text-[15px]" : ""}`}>
+      <span className={strong ? "text-cos-ink" : "text-cos-ink-soft"}>{label}</span>
+      <span className={`tabular-nums ${jade ? "text-cos-jade-ink" : ""}`}><Money value={value} size={big ? 16 : 14} weight={strong ? 700 : 500} /></span>
+    </div>
+  );
+}
+
+function CoeficienteCard({ companyId, year, isr, onSaved }: { companyId: string; year: number; isr: PapelIsr; onSaved: () => void }) {
+  const current = isr.base.coeficiente;
+  const sugerido = isr.base.coeficienteCalculado;
+  const [val, setVal] = useState(current != null ? (current * 100).toFixed(4).replace(/0+$/, "").replace(/\.$/, "") : "");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function save(coefPct: number) {
+    const coeficiente = coefPct / 100;
+    if (!Number.isFinite(coeficiente) || coeficiente < 0 || coeficiente > 5) { setErr("Coeficiente fuera de rango"); return; }
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch("/api/impuestos/coeficiente", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, year, coeficiente }),
+      });
+      if (!res.ok) throw new Error();
+      onSaved();
+    } catch { setErr("No se pudo guardar el coeficiente"); }
+    finally { setSaving(false); }
+  }
+
+  const c = isr.calculo;
+  return (
+    <Card className="rounded-card border-cos-line p-5 shadow-card">
+      <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">ISR provisional — coeficiente de utilidad (Art. 14)</span>
+
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="text-[13px]">
+          <span className="mb-1 block text-cos-ink-soft">Coeficiente aplicado{isr.base.coeficienteFuente === "manual" ? " · ajuste del contador" : isr.base.coeficienteFuente === "calculado" ? ` · estimado de ${isr.base.prevYear}` : ""}</span>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number" step="0.0001" inputMode="decimal" value={val}
+              onChange={(e) => setVal(e.target.value)}
+              className="w-28 rounded-control border border-cos-line px-2.5 py-2 text-[14px] tabular-nums"
+              placeholder="0.0000"
+            />
+            <span className="text-cos-ink-faint">%</span>
+            <button onClick={() => save(parseFloat(val))} disabled={saving || val === ""} className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Guardar
+            </button>
+          </div>
+        </label>
+        {sugerido != null && Math.abs((sugerido * 100) - (parseFloat(val) || -1)) > 0.0001 && (
+          <button onClick={() => { const p = +(sugerido * 100).toFixed(4); setVal(String(p)); save(p); }} disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-3 py-2 text-[13px] hover:bg-cos-paper disabled:opacity-50">
+            <Sparkles className="h-3.5 w-3.5 text-cos-brand-ink" /> Usar sugerido {(sugerido * 100).toFixed(4)}%
+          </button>
+        )}
+      </div>
+      {err && <p className="mt-2 text-[12px] text-cos-red-ink">{err}</p>}
+
+      <dl className="mt-4 space-y-1 text-[14px]">
+        <DetRow label="Ingresos acumulados del ejercicio" value={c.ingresosAcumulados ?? 0} />
+        <DetRow label={`× Coeficiente (${c.coeficiente != null ? (c.coeficiente * 100).toFixed(4) + "%" : "—"})`} value={c.utilidadFiscal ?? 0} strong />
+        <DetRow label={`= ISR del ejercicio (tasa ${c.tasa != null ? (c.tasa * 100).toFixed(0) + "%" : "—"})`} value={c.isrDelEjercicio ?? 0} />
+        {(c.isrPagadoAnterior ?? 0) > 0 && <DetRow label="− ISR pagado en meses anteriores" value={-(c.isrPagadoAnterior ?? 0)} />}
+        <div className="mt-1 border-t border-cos-line-soft pt-2"><DetRow label="= ISR del mes" value={c.isrDelMes ?? 0} strong big /></div>
+      </dl>
+    </Card>
   );
 }
 
