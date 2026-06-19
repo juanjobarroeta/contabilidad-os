@@ -37,7 +37,7 @@ export async function GET(req: Request) {
 
   // Lecturas baratas (sin recomputar impuestos): declaraciones del periodo,
   // nómina sin timbrar y empleados activos — todo agregado.
-  const [decls, sinTimbrar, empleados] = await Promise.all([
+  const [decls, sinTimbrar, empleados, flags] = await Promise.all([
     prisma.taxDeclaration.findMany({
       where: {
         companyId: { in: companyIds },
@@ -56,6 +56,12 @@ export async function GET(req: Request) {
       where: { companyId: { in: companyIds }, isActive: true },
       _count: { id: true },
     }),
+    // Banderas abiertas del auditor por empresa (alimenta la pestaña Revisión).
+    prisma.fiscalHallazgo.groupBy({
+      by: ["companyId"],
+      where: { companyId: { in: companyIds }, estado: "ABIERTO" },
+      _count: { id: true },
+    }),
   ]);
 
   const declsBy = new Map<string, typeof decls>();
@@ -66,6 +72,7 @@ export async function GET(req: Request) {
   }
   const sinTimbrarBy = new Map(sinTimbrar.map((r) => [r.companyId, r._count.id]));
   const empleadosBy = new Map(empleados.map((r) => [r.companyId, r._count.id]));
+  const flagsBy = new Map(flags.map((r) => [r.companyId, r._count.id]));
 
   // Obligaciones vencidas / por vencer del AÑO en curso, por empresa (mismo
   // criterio que el calendario de Cumplimiento). Así el cockpit muestra QUÉ
@@ -100,6 +107,7 @@ export async function GET(req: Request) {
       aPagar: algunaGuardada ? aPagar : null,
       nominaSinTimbrar: sinTimbrarBy.get(c.id) ?? 0,
       empleadosActivos: empleadosBy.get(c.id) ?? 0,
+      flagsAbiertos: flagsBy.get(c.id) ?? 0,
       obligacionesVencidas: obligBy.get(c.id)?.vencidas ?? 0,
       obligacionesPorVencer: obligBy.get(c.id)?.porVencer ?? 0,
     };

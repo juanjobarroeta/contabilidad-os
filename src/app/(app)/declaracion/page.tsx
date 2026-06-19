@@ -97,6 +97,16 @@ export default function DeclaracionWorkspace() {
   }, [activeCompany]);
   useEffect(() => { loadFlags(); }, [loadFlags]);
 
+  // Honor deep-links from the Control Tower (?month=&year=&tab=). Read the URL
+  // directly to avoid forcing a Suspense boundary (useSearchParams).
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const m = parseInt(sp.get("month") ?? ""); if (m >= 1 && m <= 12) setMonth(m);
+    const y = parseInt(sp.get("year") ?? ""); if (y >= 2000 && y <= 2100) setYear(y);
+    const t = sp.get("tab");
+    if (t === "resumen" || t === "papeles" || t === "revision" || t === "presentar") setTab(t);
+  }, []);
+
   const load = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true); setError("");
