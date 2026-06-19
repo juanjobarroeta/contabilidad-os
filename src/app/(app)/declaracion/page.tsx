@@ -5,7 +5,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
-  CheckCircle2, AlertTriangle, CalendarDays, Sparkles, Printer,
+  CheckCircle2, AlertTriangle, CalendarDays, Sparkles, Printer, SlidersHorizontal, ChevronRight as ChevronR,
 } from "lucide-react";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
 
@@ -295,6 +295,14 @@ function Resumen({ data, companyId, month, year }: { data: CierreData; companyId
           <p className="mt-2 text-[14px] text-cos-ink">{data.diot.proveedores} proveedor(es) con IVA · vence {fmtFecha(data.diot.vencimiento)}</p>
         </Card>
       )}
+
+      {/* Expert depth: precierre, saldo a favor, REP y sincronización con el SAT. */}
+      <a href={`/impuestos/detalle?month=${month}&year=${year}`}
+        className="flex items-center gap-3 rounded-card border border-dashed border-cos-line bg-white px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
+        <SlidersHorizontal className="h-[18px] w-[18px] flex-none" />
+        <span className="flex-1">Cálculo a detalle — precierre, saldo a favor, complementos de pago y sincronizar con el SAT</span>
+        <ChevronR className="h-4 w-4 flex-none" />
+      </a>
 
       <Simulador companyId={companyId} month={month} year={year} />
     </div>

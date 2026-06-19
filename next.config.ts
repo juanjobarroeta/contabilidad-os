@@ -18,6 +18,17 @@ const nextConfig: NextConfig = {
     "jszip",
     "pdf-parse",
   ],
+  // The monthly tax flow now lives in the Declaración Workspace (/declaracion).
+  // The old summary and cierre pages are superseded by its Resumen/Presentar
+  // tabs, so they redirect in. The advanced calc (/impuestos/detalle) and the
+  // printable papeles (/impuestos/papeles) stay as depth tools, linked from the
+  // workspace.
+  async redirects() {
+    return [
+      { source: "/impuestos", destination: "/declaracion", permanent: false },
+      { source: "/impuestos/cierre", destination: "/declaracion?tab=presentar", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

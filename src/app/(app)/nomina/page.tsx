@@ -216,7 +216,7 @@ export default function NominaPage() {
             <CalendarDays className="mt-0.5 h-[18px] w-[18px] flex-none text-cos-ink-faint" />
             <span>
               El <b>ISR retenido</b> a los trabajadores se entera al SAT junto con la declaración del mes (vence el día 17).
-              El monto y su estado viven en <Link href="/impuestos" className="font-semibold text-cos-brand-ink hover:underline">Impuestos</Link>.
+              El monto y su estado viven en <Link href="/declaracion" className="font-semibold text-cos-brand-ink hover:underline">Impuestos</Link>.
             </span>
           </div>
 

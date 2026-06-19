@@ -21,7 +21,6 @@ import {
   Settings,
   ShieldCheck,
   ClipboardList,
-  Lock,
   Boxes,
   Menu,
   X,
@@ -30,7 +29,6 @@ import {
   ScanSearch,
   TrendingUp,
   Wrench,
-  FileSpreadsheet,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -41,9 +39,7 @@ const NAV_ITEMS = [
   { href: "/clientes",     label: "Clientes",        icon: Users },
   { href: "/bancos",       label: "Bancos",          icon: Landmark },
   { href: "/nomina",       label: "Nómina",          icon: Users2 },
-  { href: "/declaracion",  label: "Declaración del mes", icon: FileSpreadsheet },
-  { href: "/impuestos",    label: "Impuestos",       icon: Calculator },
-  { href: "/impuestos/cierre", label: "Cierre mensual", icon: Lock },
+  { href: "/declaracion",  label: "Declaración del mes", icon: Calculator },
   { href: "/declaraciones", label: "Declaraciones",   icon: FileInput },
   { href: "/cumplimiento", label: "Cumplimiento",    icon: ShieldCheck },
   { href: "/opiniones",    label: "Opiniones SAT",   icon: BadgeCheck },
@@ -76,7 +72,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   }, [pathname]);
 
   // Highlight only the most specific matching item, so a nested route (e.g.
-  // /impuestos/cierre) doesn't also light up its parent (/impuestos).
+  // /declaracion-anual) doesn't also light up a shorter-prefix sibling.
   const activeNavHref = [...NAV_ITEMS, ...BOTTOM_NAV_ITEMS]
     .filter(({ href }) => pathname === href || pathname.startsWith(href + "/"))
     .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
