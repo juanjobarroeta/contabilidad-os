@@ -45,7 +45,9 @@
     --red-ink: oklch(0.5 0.18 25);
     --ink: oklch(0.25 0.025 258);
     --ink-soft: oklch(0.46 0.02 258);
-    --ink-faint: oklch(0.62 0.015 258);
+    /* Darkened 0.62 → 0.53 to clear WCAG AA (4.5:1) for small caption/label
+       text on white; stays lighter than --ink-soft (0.46) so the hierarchy holds. */
+    --ink-faint: oklch(0.53 0.015 258);
     --line: oklch(0.91 0.006 258);
     --line-soft: oklch(0.955 0.004 258);
     --paper: oklch(0.975 0.004 250);
