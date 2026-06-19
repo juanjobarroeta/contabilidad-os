@@ -524,6 +524,9 @@ model Invoice {
   naturalezaRevision Boolean @default(false)
   /** True cuando el contador fijó la naturaleza a mano — no la sobrescribe el re-sync. */
   naturalezaManual  Boolean @default(false)
+  /** El contador excluyó este CFDI del acreditamiento de IVA (p. ej. PUE no pagado:
+   *  el IVA sólo es acreditable si se pagó, Art. 5-I LIVA). Default false = sin efecto. */
+  ivaNoAcreditable  Boolean @default(false)
 
   // SAT stamping data (from PAC/Facturapi)
   status         InvoiceStatus @default(DRAFT)

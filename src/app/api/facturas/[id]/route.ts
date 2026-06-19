@@ -136,7 +136,17 @@ export async function PATCH(
     naturaleza?: string;
     naturalezaManual?: boolean;
     naturalezaRevision?: boolean;
+    ivaNoAcreditable?: boolean;
   } = {};
+
+  // El contador excluye/incluye el CFDI del acreditamiento de IVA (p. ej. PUE no
+  // pagado: el IVA sólo es acreditable si se pagó, Art. 5-I LIVA).
+  if ("ivaNoAcreditable" in body) {
+    if (typeof body.ivaNoAcreditable !== "boolean") {
+      return NextResponse.json({ error: "ivaNoAcreditable inválido" }, { status: 400 });
+    }
+    data.ivaNoAcreditable = body.ivaNoAcreditable;
+  }
 
   // Override de naturaleza fiscal por el contador (GASTO/INVERSION/INVENTARIO/
   // SIN_EFECTOS). Marca naturalezaManual para que el re-sync no lo pise, y

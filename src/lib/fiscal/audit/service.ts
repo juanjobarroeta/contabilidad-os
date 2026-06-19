@@ -137,7 +137,7 @@ export async function cargarPueSinPago(
   const from = new Date(Date.UTC(ejercicio, 0, 1));
   const to = new Date(Date.UTC(ejercicio + 1, 0, 1));
   const egresos = await prisma.invoice.findMany({
-    where: { companyId, tipo: "EGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
+    where: { companyId, tipo: "EGRESO", status: "STAMPED", metodoPago: "PUE", ivaNoAcreditable: false, fecha: { gte: from, lt: to } },
     select: { id: true, total: true, taxes: { select: { tipo: true, importe: true, retencion: true } } },
   });
   if (egresos.length === 0) return { items: [], ejercicio };
