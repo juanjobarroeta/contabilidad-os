@@ -5,6 +5,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
 import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
+import { repIvaAcreditableDe } from "@/lib/impuestos";
 
 // GET /api/papeles/iva?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -83,10 +84,14 @@ export async function GET(req: Request) {
     // vuelve acreditable este mes (igual que el motor). parentUuid = UUID del CFDI pagado.
     prisma.pagoDoctoRelacionado.findMany({
       where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" } },
-      select: { parentUuid: true },
+      select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
     }),
   ]);
-  const ppdPagadosEnPeriodo = new Set(repCobros.map((r) => r.parentUuid));
+  // REP links liquidados en el periodo, agrupados por CFDI pagado (parentUuid).
+  const repLinksPorParent = new Map<string, { impPagado: number | null; ivaTrasladado: number | null; ivaDerivado: boolean }[]>();
+  for (const r of repCobros) {
+    repLinksPorParent.set(r.parentUuid, [...(repLinksPorParent.get(r.parentUuid) ?? []), r]);
+  }
 
   type InvoiceRelation = (typeof ingresos)[number];
 
@@ -129,6 +134,8 @@ export async function GET(req: Request) {
     excluidoAcreditamiento?: boolean;
     /** PPD sin complemento de pago (REP) en el periodo → aún no acreditable. */
     sinComplementoPago?: boolean;
+    /** PPD con complemento parcial → sólo se acredita el IVA del monto pagado. */
+    pagoParcial?: boolean;
   };
 
   const trasladado: Row[] = [];
@@ -174,6 +181,17 @@ export async function GET(req: Request) {
   for (const inv of egresos) {
     const { trasladado: t, retenido: r } = extractIva(inv);
     if (t > 0.005) {
+      // PPD sólo es acreditable cuando llega su complemento de pago (REP), y por
+      // el monto pagado (prorrateado) — exactamente como el motor. Sin REP en el
+      // mes: aún no acreditable. PUE: el IVA completo del CFDI.
+      const esPPD = inv.metodoPago === "PPD";
+      const links = inv.uuid ? repLinksPorParent.get(inv.uuid) : undefined;
+      const acreditadoPPD = esPPD && links
+        ? links.reduce((s, l) => s + repIvaAcreditableDe(l, { taxes: inv.taxes, totalImpuestos: inv.totalImpuestos, total: inv.total }), 0)
+        : 0;
+      // Con pago: el IVA prorrateado acreditable. Sin pago: mostramos el IVA
+      // completo (tachado, fuera del total) para que se vea lo pendiente.
+      const importe = esPPD ? (acreditadoPPD > 0.005 ? acreditadoPPD : t) : t;
       acreditable.push({
         id: inv.id,
         fecha: inv.fecha.toISOString().slice(0, 10),
@@ -184,12 +202,11 @@ export async function GET(req: Request) {
         rfc: inv.customer?.rfc ?? "—",
         subtotal: inv.subtotal,
         tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
-        importe: t,
+        importe,
         metodoPago: inv.metodoPago,
         excluidoAcreditamiento: inv.ivaNoAcreditable,
-        // PPD sólo es acreditable cuando llega su complemento de pago (REP) en
-        // el periodo — igual que el motor. Sin REP en el mes: aún no acreditable.
-        sinComplementoPago: inv.metodoPago === "PPD" && !!inv.uuid && !ppdPagadosEnPeriodo.has(inv.uuid),
+        sinComplementoPago: esPPD && acreditadoPPD <= 0.005,
+        pagoParcial: esPPD && acreditadoPPD > 0.005 && acreditadoPPD + 0.5 < t,
       });
     }
     if (r > 0.005) {
