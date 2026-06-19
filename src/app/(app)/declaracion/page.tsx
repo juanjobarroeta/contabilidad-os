@@ -5,7 +5,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
-  CheckCircle2, AlertTriangle, ScanSearch, CalendarDays, Sparkles,
+  CheckCircle2, AlertTriangle, CalendarDays, Sparkles,
 } from "lucide-react";
 
 // ── Types (mirror /api/impuestos/cierre and /api/papeles/iva) ──────────────────
@@ -35,6 +35,12 @@ interface PapelIva {
     proporcionAcreditamiento: number; actosGravados: number; actosExentos: number; acreditableProcedente: number;
     ivaCargo: number; saldoFavorAnterior: number; ivaPagar: number; saldoFavorMes: number;
   };
+}
+interface HallazgoDTO {
+  id: string; checkClave: string; categoria: string; severidad: string;
+  mensaje: string; sugerencia: string;
+  fundamento: { ley: string; articulo: string; fraccion: string | null };
+  referencias: string[]; estado: string;
 }
 interface PapelIsr {
   regimen: { kind: string; label: string };
@@ -81,6 +87,15 @@ export default function DeclaracionWorkspace() {
   const [acuseParsed, setAcuseParsed] = useState<AcuseMensualParsed | null>(null);
   const [acuseUploading, setAcuseUploading] = useState(false);
   const [acuseError, setAcuseError] = useState("");
+
+  // Auditor findings (company-wide) — drive the Revisión tab + its count badge.
+  const [flags, setFlags] = useState<HallazgoDTO[] | null>(null);
+  const loadFlags = useCallback(async () => {
+    if (!activeCompany) return;
+    const res = await fetch(`/api/hallazgos?companyId=${activeCompany.id}&estado=ABIERTO`);
+    if (res.ok) { const d = await res.json(); setFlags(d.hallazgos ?? []); }
+  }, [activeCompany]);
+  useEffect(() => { loadFlags(); }, [loadFlags]);
 
   const load = useCallback(async () => {
     if (!activeCompany) return;
@@ -170,11 +185,14 @@ export default function DeclaracionWorkspace() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`-mb-px border-b-2 px-3.5 py-2 text-[14px] font-medium transition-colors ${
+            className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3.5 py-2 text-[14px] font-medium transition-colors ${
               tab === t.id ? "border-cos-brand text-cos-brand-ink" : "border-transparent text-cos-ink-soft hover:text-cos-ink"
             }`}
           >
             {t.label}
+            {t.id === "revision" && flags && flags.length > 0 && (
+              <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-cos-red-tint px-1 text-[11px] font-semibold text-cos-red-ink">{flags.length}</span>
+            )}
           </button>
         ))}
       </div>
@@ -185,7 +203,14 @@ export default function DeclaracionWorkspace() {
         <div className="mt-5">
           {tab === "resumen" && <Resumen data={data} />}
           {tab === "papeles" && <PapelesTab companyId={activeCompany.id} month={month} year={year} onChanged={load} />}
-          {tab === "revision" && <Revision />}
+          {tab === "revision" && (
+            <RevisionTab
+              companyId={activeCompany.id}
+              fechaIso={`${year}-${String(month).padStart(2, "0")}-15`}
+              flags={flags}
+              onRefresh={loadFlags}
+            />
+          )}
           {tab === "presentar" && (
             <Presentar
               data={data} fecha={fecha} setFecha={setFecha} saving={saving}
@@ -415,15 +440,94 @@ function CoeficienteCard({ companyId, year, isr, onSaved }: { companyId: string;
   );
 }
 
-function Revision() {
+function RevisionTab({ companyId, fechaIso, flags, onRefresh }: { companyId: string; fechaIso: string; flags: HallazgoDTO[] | null; onRefresh: () => void }) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+
+  async function setEstado(id: string, estado: "RESUELTO" | "IGNORADO") {
+    setBusyId(id);
+    try {
+      const res = await fetch(`/api/hallazgos/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado }),
+      });
+      if (res.ok) onRefresh();
+    } finally { setBusyId(null); }
+  }
+
+  async function rerun() {
+    setRunning(true);
+    try {
+      await fetch("/api/hallazgos/run", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, fechaIso }),
+      });
+      onRefresh();
+    } finally { setRunning(false); }
+  }
+
+  const RerunBtn = (
+    <button onClick={rerun} disabled={running} className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-3 py-1.5 text-[13px] hover:bg-cos-paper disabled:opacity-50">
+      {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revisar de nuevo
+    </button>
+  );
+
+  if (flags === null) return <Loading label="Cargando revisión…" className="py-12" />;
+
+  if (flags.length === 0) {
+    return (
+      <Card className="rounded-card border-cos-line p-8 text-center shadow-card">
+        <CheckCircle2 className="mx-auto mb-3 h-9 w-9 text-cos-jade-ink opacity-80" />
+        <p className="text-[15px] font-semibold text-cos-ink">Todo en orden</p>
+        <p className="mx-auto mt-1.5 max-w-[52ch] text-[13.5px] text-cos-ink-soft">El auditor no encontró banderas abiertas para esta empresa.</p>
+        <div className="mt-4 flex justify-center">{RerunBtn}</div>
+      </Card>
+    );
+  }
+
+  // Most severe first: error → warn → info.
+  const order: Record<string, number> = { error: 0, warn: 1, info: 2 };
+  const sorted = [...flags].sort((a, b) => (order[a.severidad] ?? 9) - (order[b.severidad] ?? 9));
+
   return (
-    <Card className="rounded-card border-cos-line p-8 text-center shadow-card">
-      <ScanSearch className="mx-auto mb-3 h-9 w-9 text-cos-ink-faint opacity-60" />
-      <p className="text-[15px] font-semibold text-cos-ink">Revisión — próximamente</p>
-      <p className="mx-auto mt-1.5 max-w-[52ch] text-[13.5px] text-cos-ink-soft">
-        Aquí el “contador 24/7” marcará lo que falta o se ve mal (declaraciones previas, coeficiente,
-        cancelaciones, materialidad) con su acción de un clic. (Fase 3)
-      </p>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] text-cos-ink-soft">{flags.length} bandera(s) abierta(s). Revisa, resuelve o ignora — tu decisión sobrevive a las re-corridas del auditor.</p>
+        {RerunBtn}
+      </div>
+      {sorted.map((h) => <FlagCard key={h.id} h={h} busy={busyId === h.id} onResolve={() => setEstado(h.id, "RESUELTO")} onIgnore={() => setEstado(h.id, "IGNORADO")} />)}
+    </div>
+  );
+}
+
+function FlagCard({ h, busy, onResolve, onIgnore }: { h: HallazgoDTO; busy: boolean; onResolve: () => void; onIgnore: () => void }) {
+  const sev: Record<string, { dot: string; label: string }> = {
+    error: { dot: "bg-cos-red-ink", label: "text-cos-red-ink" },
+    warn: { dot: "bg-amber-500", label: "text-amber-700" },
+    info: { dot: "bg-cos-slate", label: "text-cos-ink-soft" },
+  };
+  const s = sev[h.severidad] ?? sev.info;
+  const fund = [h.fundamento.ley, h.fundamento.articulo, h.fundamento.fraccion].filter(Boolean).join(" ");
+  return (
+    <Card className="rounded-card border-cos-line p-4 shadow-card">
+      <div className="flex items-start gap-3">
+        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-medium text-cos-ink">{h.mensaje}</p>
+          {h.sugerencia && <p className="mt-1 text-[13px] text-cos-ink-soft">{h.sugerencia}</p>}
+          <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[11.5px] text-cos-ink-faint">
+            {fund && <span className="rounded bg-cos-paper px-1.5 py-0.5">{fund}</span>}
+            <span className="font-mono">{h.checkClave}</span>
+            {h.referencias.length > 0 && <span>· {h.referencias.length} CFDI(s)</span>}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button onClick={onResolve} disabled={busy} className="inline-flex items-center gap-1 rounded-control bg-cos-jade-tint px-2.5 py-1.5 text-[12.5px] font-medium text-cos-jade-ink hover:brightness-95 disabled:opacity-50">
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Resolver
+          </button>
+          <button onClick={onIgnore} disabled={busy} className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-paper disabled:opacity-50">Ignorar</button>
+        </div>
+      </div>
     </Card>
   );
 }
