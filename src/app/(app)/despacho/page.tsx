@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2, Users2, BadgeCheck, Clock4, AlertTriangle, FileWarning,
-  ChevronRight as ChevronR, CalendarDays, Database,
+  ChevronRight as ChevronR, CalendarDays, Database, ScanSearch,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Loading } from "@/components/ui";
@@ -32,6 +32,14 @@ interface Row {
   empleadosActivos: number;
   obligacionesVencidas: number;
   obligacionesPorVencer: number;
+  flagsAbiertos: number;
+}
+
+// Deep-link into the Declaración Workspace for a given periodo ("YYYY-MM"),
+// optionally landing on a specific tab.
+function declHref(periodo: string, tab?: "presentar" | "revision"): string {
+  const [y, m] = periodo.split("-");
+  return `/declaracion?month=${parseInt(m)}&year=${parseInt(y)}${tab ? `&tab=${tab}` : ""}`;
 }
 interface Data {
   periodo: string;
@@ -142,18 +150,29 @@ export default function DespachoCockpitPage() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-cos-ink">{r.razonSocial}</p>
                     <p className="font-mono text-[11px] text-cos-ink-faint">{r.rfc} · {r.regimenFiscal}</p>
-                    {r.obligacionesVencidas > 0 && (
-                      <button
-                        onClick={() => operar(r.id, "/cumplimiento")}
-                        className="mt-1 inline-flex items-center gap-1 rounded-full bg-cos-red-tint px-2 py-0.5 text-[11px] font-medium text-cos-red-ink hover:opacity-90"
-                      >
-                        <AlertTriangle className="h-3 w-3" /> {r.obligacionesVencidas} vencida{r.obligacionesVencidas === 1 ? "" : "s"}
-                      </button>
-                    )}
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {r.obligacionesVencidas > 0 && (
+                        <button
+                          onClick={() => operar(r.id, "/cumplimiento")}
+                          className="inline-flex items-center gap-1 rounded-full bg-cos-red-tint px-2 py-0.5 text-[11px] font-medium text-cos-red-ink hover:opacity-90"
+                        >
+                          <AlertTriangle className="h-3 w-3" /> {r.obligacionesVencidas} vencida{r.obligacionesVencidas === 1 ? "" : "s"}
+                        </button>
+                      )}
+                      {r.flagsAbiertos > 0 && (
+                        <button
+                          onClick={() => operar(r.id, declHref(r.periodo, "revision"))}
+                          className="inline-flex items-center gap-1 rounded-full bg-cos-amber-tint px-2 py-0.5 text-[11px] font-medium text-cos-amber-ink hover:opacity-90"
+                          title="Banderas del auditor por revisar"
+                        >
+                          <ScanSearch className="h-3 w-3" /> {r.flagsAbiertos} por revisar
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-3">
                     <button
-                      onClick={() => operar(r.id, "/impuestos/cierre")}
+                      onClick={() => operar(r.id, declHref(r.periodo, "presentar"))}
                       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium ${est.cls}`}
                     >
                       <Icon className="h-3.5 w-3.5" /> {est.label}
@@ -175,7 +194,7 @@ export default function DespachoCockpitPage() {
                   </td>
                   <td className="px-3 py-3 text-right">
                     <button
-                      onClick={() => operar(r.id, "/impuestos/cierre")}
+                      onClick={() => operar(r.id, declHref(r.periodo))}
                       className="inline-flex items-center gap-1 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep"
                     >
                       Operar <ChevronR className="h-3.5 w-3.5" />
