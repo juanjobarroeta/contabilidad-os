@@ -126,7 +126,7 @@ function IvaSection({ title, subtitle, rows }: { title: string; subtitle: string
         <p className="mt-0.5 text-[12px] text-cos-ink-soft">{subtitle}</p>
       </div>
       <div className="overflow-x-auto">
-      <table className="w-full text-[13px]">
+      <table className="w-full min-w-[680px] text-[13px]">
         <thead className={THEAD}>
           <tr>
             <th className="px-3 py-2 text-left font-medium">Fecha</th>
@@ -518,7 +518,7 @@ function RetSection({
         <p className="mt-0.5 text-[12px] text-cos-ink-soft">{subtitle}</p>
       </div>
       <div className="overflow-x-auto">
-      <table className="w-full text-[13px]">
+      <table className="w-full min-w-[680px] text-[13px]">
         <thead className={THEAD}>
           <tr>
             <th className="px-3 py-2 text-left font-medium">Fecha</th>
