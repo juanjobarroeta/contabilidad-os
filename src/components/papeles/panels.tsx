@@ -22,6 +22,7 @@ interface IvaRow {
   id: string; fecha: string; uuid: string | null; serie: string | null; folio: string | null;
   contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string;
   sinPagoConciliado?: boolean;
+  excluidoAcreditamiento?: boolean;
 }
 interface IvaData {
   periodo: string;
@@ -54,6 +55,18 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
 
   useEffect(() => { load(); }, [load]);
 
+  const [toggling, setToggling] = useState<string | null>(null);
+  async function toggleExcluir(id: string, next: boolean) {
+    setToggling(id);
+    try {
+      const res = await fetch(`/api/facturas/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ivaNoAcreditable: next }),
+      });
+      if (res.ok) await load();
+    } finally { setToggling(null); }
+  }
+
   if (loading) return <Loading />;
   if (!data) return <Empty />;
 
@@ -70,6 +83,8 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
         title="IVA acreditable (pagado)"
         subtitle="IVA que pagaste a tus proveedores, acreditable contra el trasladado"
         rows={data.acreditable}
+        onToggleExcluir={toggleExcluir}
+        toggling={toggling}
       />
       {data.reconciliacion?.activa && data.reconciliacion.cfdisPueSinPago > 0 && (
         <div className="flex items-start gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink">
@@ -129,9 +144,15 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
   );
 }
 
-function IvaSection({ title, subtitle, rows }: { title: string; subtitle: string; rows: IvaRow[] }) {
+function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling }: {
+  title: string; subtitle: string; rows: IvaRow[];
+  onToggleExcluir?: (id: string, next: boolean) => void; toggling?: string | null;
+}) {
   if (rows.length === 0) return null;
-  const total = rows.reduce((s, r) => s + r.importe, 0);
+  // Lo excluido del acreditamiento no suma al total (coincide con el motor).
+  const total = rows.filter((r) => !r.excluidoAcreditamiento).reduce((s, r) => s + r.importe, 0);
+  const excluidos = rows.filter((r) => r.excluidoAcreditamiento).length;
+  const acciones = !!onToggleExcluir;
   return (
     <div className={`${CARD} overflow-hidden`}>
       <div className="border-b border-cos-line px-4 py-3">
@@ -149,11 +170,12 @@ function IvaSection({ title, subtitle, rows }: { title: string; subtitle: string
             <th className="px-3 py-2 text-right font-medium">Subtotal</th>
             <th className="px-3 py-2 text-right font-medium">Tasa</th>
             <th className="px-3 py-2 text-right font-medium">IVA</th>
+            {acciones && <th className="px-3 py-2 text-right font-medium"></th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className="border-t border-cos-line-soft">
+            <tr key={r.id} className={`border-t border-cos-line-soft ${r.excluidoAcreditamiento ? "opacity-55" : ""}`}>
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-faint whitespace-nowrap">{formatDate(r.fecha)}</td>
               <td className="px-3 py-1.5 font-mono text-[12px]">{r.folio ? `${r.serie ?? ""}${r.folio}` : (r.uuid?.slice(0, 8) ?? "—")}</td>
               <td className="px-3 py-1.5 text-[12px]">
@@ -162,7 +184,9 @@ function IvaSection({ title, subtitle, rows }: { title: string; subtitle: string
               </td>
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-soft">
                 {r.metodoPago}
-                {r.sinPagoConciliado && (
+                {r.excluidoAcreditamiento ? (
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft">no acreditado</span>
+                ) : r.sinPagoConciliado && (
                   <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-amber-ink" title="PUE sin pago conciliado en banco — el IVA sólo es acreditable si se pagó (Art. 5-I LIVA)">
                     <AlertTriangle className="h-3 w-3" /> sin pago
                   </span>
@@ -170,12 +194,27 @@ function IvaSection({ title, subtitle, rows }: { title: string; subtitle: string
               </td>
               <td className="px-3 py-1.5 text-right"><Money value={r.subtotal} size={12} weight={500} /></td>
               <td className="px-3 py-1.5 text-right text-[12px] text-cos-ink-soft">{r.tasa != null ? (r.tasa * 100).toFixed(0) + "%" : "—"}</td>
-              <td className="px-3 py-1.5 text-right"><Money value={r.importe} size={12} weight={500} /></td>
+              <td className={`px-3 py-1.5 text-right ${r.excluidoAcreditamiento ? "line-through" : ""}`}><Money value={r.importe} size={12} weight={500} /></td>
+              {acciones && (
+                <td className="px-3 py-1.5 text-right">
+                  {(r.excluidoAcreditamiento || r.metodoPago === "PUE") && (
+                    <button
+                      onClick={() => onToggleExcluir!(r.id, !r.excluidoAcreditamiento)}
+                      disabled={toggling === r.id}
+                      className="rounded-control border border-cos-line px-2 py-1 text-[11px] font-medium hover:bg-cos-paper disabled:opacity-50"
+                    >
+                      {toggling === r.id ? "…" : r.excluidoAcreditamiento ? "Incluir" : "Excluir"}
+                    </button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
           <tr className="border-t-2 border-cos-line bg-cos-paper font-semibold">
-            <td colSpan={6} className="px-3 py-2 text-right text-[12px] text-cos-ink-soft">Total ({rows.length} facturas)</td>
-            <td className="px-3 py-2 text-right"><Money value={total} size={12} weight={700} /></td>
+            <td colSpan={6} className="px-3 py-2 text-right text-[12px] text-cos-ink-soft">
+              Total acreditable{excluidos > 0 ? ` (${excluidos} excluido${excluidos === 1 ? "" : "s"} del cálculo)` : ""}
+            </td>
+            <td className="px-3 py-2 text-right" colSpan={acciones ? 2 : 1}><Money value={total} size={12} weight={700} /></td>
           </tr>
         </tbody>
       </table>

@@ -118,6 +118,8 @@ export async function GET(req: Request) {
     metodoPago: string;
     /** PUE acreditable sin pago conciliado en banco (cash-basis, Art. 5-I LIVA). */
     sinPagoConciliado?: boolean;
+    /** El contador excluyó este CFDI del acreditamiento de IVA. */
+    excluidoAcreditamiento?: boolean;
   };
 
   const trasladado: Row[] = [];
@@ -175,6 +177,7 @@ export async function GET(req: Request) {
         tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
         importe: t,
         metodoPago: inv.metodoPago,
+        excluidoAcreditamiento: inv.ivaNoAcreditable,
       });
     }
     if (r > 0.005) {
@@ -196,7 +199,9 @@ export async function GET(req: Request) {
 
   const sum = (rs: Row[]) => rs.reduce((s, r) => s + r.importe, 0);
   const totalTrasladado = sum(trasladado);
-  const totalAcreditable = sum(acreditable);
+  // El IVA excluido del acreditamiento por el contador no entra al total (ni al
+  // cálculo) — igual que en el motor (computeTaxPosition).
+  const totalAcreditable = sum(acreditable.filter((r) => !r.excluidoAcreditamiento));
   const totalRetenidoClientes = sum(retenidoPorClientes);
   const totalRetenidoProv = sum(retenidoAProveedores);
 
@@ -221,7 +226,7 @@ export async function GET(req: Request) {
   let cfdisPueSinPago = 0;
   if (reconActiva) {
     const totalById = new Map(egresos.map((e) => [e.id, e.total]));
-    const pueRows = acreditable.filter((r) => r.metodoPago === "PUE");
+    const pueRows = acreditable.filter((r) => r.metodoPago === "PUE" && !r.excluidoAcreditamiento);
     const matched = await pagosConciliadosPorInvoice(pueRows.map((r) => r.id));
     for (const r of pueRows) {
       if (!pagadaCompleta(totalById.get(r.id) ?? 0, matched.get(r.id) ?? 0)) {
