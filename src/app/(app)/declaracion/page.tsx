@@ -5,8 +5,9 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
-  CheckCircle2, AlertTriangle, CalendarDays, Sparkles,
+  CheckCircle2, AlertTriangle, CalendarDays, Sparkles, Printer,
 } from "lucide-react";
+import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
 
 // ── Types (mirror /api/impuestos/cierre and /api/papeles/iva) ──────────────────
 type Estado = "FILED" | "PENDING" | "OVERDUE" | "UPCOMING";
@@ -26,15 +27,6 @@ interface CierreData {
     declaracionId: string | null; acusePdfDisponible: boolean; calculado: boolean;
   };
   diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null } | null;
-}
-interface PapelRow { id: string; fecha: string; contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string; }
-interface PapelIva {
-  trasladado: PapelRow[]; acreditable: PapelRow[];
-  totales: {
-    trasladado: number; acreditable: number; retenidoPorClientes: number;
-    proporcionAcreditamiento: number; actosGravados: number; actosExentos: number; acreditableProcedente: number;
-    ivaCargo: number; saldoFavorAnterior: number; ivaPagar: number; saldoFavorMes: number;
-  };
 }
 interface HallazgoDTO {
   id: string; checkClave: string; categoria: string; severidad: string;
@@ -398,96 +390,49 @@ function SimOut({ label, value, base, busy, highlight }: { label: string; value:
 }
 
 function PapelesTab({ companyId, month, year, onChanged }: { companyId: string; month: number; year: number; onChanged: () => void }) {
-  const [iva, setIva] = useState<PapelIva | null>(null);
+  const [sub, setSub] = useState<"iva" | "isr" | "retenciones">("iva");
   const [isr, setIsr] = useState<PapelIsr | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [a, b] = await Promise.all([
-        fetch(`/api/papeles/iva?companyId=${companyId}&month=${month}&year=${year}`).then((r) => (r.ok ? r.json() : null)),
-        fetch(`/api/papeles/isr?companyId=${companyId}&month=${month}&year=${year}`).then((r) => (r.ok ? r.json() : null)),
-      ]);
-      setIva(a); setIsr(b);
-    } finally { setLoading(false); }
-  }, [companyId, month, year]);
+  // Fetched only to drive the editable coeficiente (current/suggested + régimen).
+  // The read-only panels below fetch their own data.
+  useEffect(() => {
+    fetch(`/api/papeles/isr?companyId=${companyId}&month=${month}&year=${year}`)
+      .then((r) => (r.ok ? r.json() : null)).then(setIsr).catch(() => {});
+  }, [companyId, month, year, refreshKey]);
 
-  useEffect(() => { load(); }, [load]);
+  // After saving the coeficiente: remount the ISR panel (so its cálculo updates)
+  // and refresh the parent Resumen/Presentar so the total a pagar reflects it.
+  const afterEdit = useCallback(() => { setRefreshKey((k) => k + 1); onChanged(); }, [onChanged]);
 
-  // After a persisted edit (coeficiente), refresh both the papel and the parent
-  // Resumen/Presentar so the total a pagar reflects the change.
-  const afterEdit = useCallback(async () => { await load(); onChanged(); }, [load, onChanged]);
-
-  if (loading) return <Loading label="Cargando papeles…" className="py-12" />;
-  if (!iva) return <p className="py-8 text-[14px] text-cos-ink-faint">Sin papel de trabajo para este periodo.</p>;
-  const t = iva.totales;
-
-  const rowsCard = (title: string, sub: string, rows: PapelRow[]) => rows.length === 0 ? null : (
-    <Card className="rounded-card border-cos-line p-5 shadow-card">
-      <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">{title}</span>
-      <p className="mt-0.5 text-[12px] text-cos-ink-faint">{sub}</p>
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full text-[13px]">
-          <thead className="text-[11px] uppercase text-cos-ink-faint"><tr><th className="py-1.5 text-left">Fecha</th><th className="text-left">Contraparte</th><th className="text-right">Subtotal</th><th className="text-right">Tasa</th><th className="text-right">IVA</th></tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-cos-line-soft">
-                <td className="py-1.5 whitespace-nowrap">{r.fecha}</td>
-                <td className="max-w-[240px] truncate" title={`${r.contraparte} · ${r.rfc}`}>{r.contraparte}</td>
-                <td className="text-right tabular-nums"><Money value={r.subtotal} size={13} /></td>
-                <td className="text-right tabular-nums text-cos-ink-faint">{r.tasa != null ? `${(r.tasa * 100).toFixed(0)}%` : "—"}</td>
-                <td className="text-right tabular-nums"><Money value={r.importe} size={13} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-
+  const subTabs = [["iva", "IVA"], ["isr", "ISR provisional"], ["retenciones", "Retenciones"]] as const;
   return (
     <div className="space-y-4">
-      {rowsCard("IVA trasladado (cobrado)", "IVA que cobraste a tus clientes", iva.trasladado)}
-      {rowsCard("IVA acreditable (pagado)", "IVA que pagaste a proveedores, acreditable contra el trasladado", iva.acreditable)}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-control border border-cos-line p-0.5">
+          {subTabs.map(([id, label]) => (
+            <button key={id} onClick={() => setSub(id)}
+              className={`rounded-[7px] px-3 py-1.5 text-[13px] font-medium transition-colors ${sub === id ? "bg-cos-brand text-white" : "text-cos-ink-soft hover:text-cos-ink"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <a href={`/impuestos/papeles?tab=${sub}&month=${month}&year=${year}`} target="_blank" rel="noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-3 py-1.5 text-[13px] hover:bg-cos-paper">
+          <Printer className="h-3.5 w-3.5" /> Imprimir / versión completa
+        </a>
+      </div>
 
-      {/* IVA determination */}
-      <Card className="rounded-card border-cos-line p-5 shadow-card text-[14px]">
-        <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Determinación del IVA</span>
-        <dl className="mt-3 space-y-1">
-          <DetRow label="IVA trasladado (+)" value={t.trasladado} />
-          {t.retenidoPorClientes > 0 && <DetRow label="IVA retenido por clientes (−)" value={-t.retenidoPorClientes} />}
-          {t.proporcionAcreditamiento < 1 ? (
-            <>
-              <DetRow label="IVA acreditable bruto" value={t.acreditable} />
-              <DetRow label={`= Acreditable procedente (${(t.proporcionAcreditamiento * 100).toFixed(2)}%, Art. 5-V) (−)`} value={-t.acreditableProcedente} />
-            </>
-          ) : (
-            <DetRow label="IVA acreditable (−)" value={-t.acreditable} />
+      {sub === "iva" && <IvaPanel companyId={companyId} year={year} month={month} />}
+      {sub === "isr" && (
+        <div className="space-y-4">
+          {isr && isr.calculo.tipo === "art14" && (
+            <CoeficienteCard companyId={companyId} year={year} isr={isr} onSaved={afterEdit} />
           )}
-          <DetRow label="= IVA a cargo" value={t.ivaCargo} strong />
-          {t.saldoFavorAnterior > 0 && <DetRow label="Saldo a favor anterior (−)" value={-t.saldoFavorAnterior} />}
-          <div className="mt-1 border-t border-cos-line-soft pt-2">
-            {t.ivaPagar > 0
-              ? <DetRow label="= IVA a pagar" value={t.ivaPagar} strong big />
-              : <DetRow label="= Saldo a favor del mes" value={t.saldoFavorMes} strong big jade />}
-          </div>
-        </dl>
-      </Card>
-
-      {/* ISR — coeficiente is the one editable, persisted lever here (Art. 14 / PM). */}
-      {isr && isr.calculo.tipo === "art14" && (
-        <CoeficienteCard companyId={companyId} year={year} isr={isr} onSaved={afterEdit} />
+          <IsrPanel key={`isr-${refreshKey}`} companyId={companyId} year={year} month={month} />
+        </div>
       )}
-    </div>
-  );
-}
-
-function DetRow({ label, value, strong, big, jade }: { label: string; value: number; strong?: boolean; big?: boolean; jade?: boolean }) {
-  return (
-    <div className={`flex items-center justify-between ${strong ? "font-semibold" : ""} ${big ? "text-[15px]" : ""}`}>
-      <span className={strong ? "text-cos-ink" : "text-cos-ink-soft"}>{label}</span>
-      <span className={`tabular-nums ${jade ? "text-cos-jade-ink" : ""}`}><Money value={value} size={big ? 16 : 14} weight={strong ? 700 : 500} /></span>
+      {sub === "retenciones" && <RetencionesPanel companyId={companyId} year={year} month={month} />}
     </div>
   );
 }
@@ -514,10 +459,10 @@ function CoeficienteCard({ companyId, year, isr, onSaved }: { companyId: string;
     finally { setSaving(false); }
   }
 
-  const c = isr.calculo;
   return (
     <Card className="rounded-card border-cos-line p-5 shadow-card">
       <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">ISR provisional — coeficiente de utilidad (Art. 14)</span>
+      <p className="mt-1 text-[12px] text-cos-ink-faint">Ajusta el coeficiente y el cálculo de abajo se recalcula.</p>
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="text-[13px]">
@@ -543,14 +488,6 @@ function CoeficienteCard({ companyId, year, isr, onSaved }: { companyId: string;
         )}
       </div>
       {err && <p className="mt-2 text-[12px] text-cos-red-ink">{err}</p>}
-
-      <dl className="mt-4 space-y-1 text-[14px]">
-        <DetRow label="Ingresos acumulados del ejercicio" value={c.ingresosAcumulados ?? 0} />
-        <DetRow label={`× Coeficiente (${c.coeficiente != null ? (c.coeficiente * 100).toFixed(4) + "%" : "—"})`} value={c.utilidadFiscal ?? 0} strong />
-        <DetRow label={`= ISR del ejercicio (tasa ${c.tasa != null ? (c.tasa * 100).toFixed(0) + "%" : "—"})`} value={c.isrDelEjercicio ?? 0} />
-        {(c.isrPagadoAnterior ?? 0) > 0 && <DetRow label="− ISR pagado en meses anteriores" value={-(c.isrPagadoAnterior ?? 0)} />}
-        <div className="mt-1 border-t border-cos-line-soft pt-2"><DetRow label="= ISR del mes" value={c.isrDelMes ?? 0} strong big /></div>
-      </dl>
     </Card>
   );
 }
