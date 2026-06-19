@@ -22,6 +22,11 @@ import { meteredCreate } from "@/lib/costos/anthropic";
 // the UI that the file is processed by Claude before sending.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Node runtime for reliable binary multipart parsing (req.formData with a PDF),
+// matching the other upload routes. Avoids "espera multipart/form-data".
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY
 
 // SAT régimen catalog — subset we support + validation

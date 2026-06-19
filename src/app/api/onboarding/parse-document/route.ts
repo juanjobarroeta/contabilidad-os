@@ -7,6 +7,13 @@ import {
   type ParsedSatDocument,
 } from "@/lib/fiscal/acuse/parse";
 
+// Node runtime is required to parse a binary multipart body (req.formData with a
+// PDF file) reliably on the deployment — matching the other upload routes
+// (facturas/upload-cfdi, bancos/upload-pdf). Without it the request can be
+// rejected with "espera multipart/form-data". maxDuration covers the AI parse.
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/onboarding/parse-document
 //
