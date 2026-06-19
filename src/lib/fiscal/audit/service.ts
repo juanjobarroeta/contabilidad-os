@@ -15,7 +15,9 @@ import {
 } from "@/lib/fiscal/isn";
 import { auditar } from "./run";
 import { auditarPagosPue, type PueSinPago } from "./pue-pagos";
+import { auditarDeclaracionesFaltantes } from "./declaraciones-faltantes";
 import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
+import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
 import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
 
 /** Stable identity for a finding so re-runs upsert in place. */
@@ -168,11 +170,13 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
   const cfdis = await loadCompanyCfdis(companyId);
   const { empleados, fuente } = await cargarNominaParaIsn(companyId, fecha);
   const pue = await cargarPueSinPago(companyId, fecha);
+  const faltantes = await declaracionesFaltantesEmpresa(companyId);
 
   const hallazgos = [
     ...auditar(cfdis, ctx),
     ...auditarIsn(empleados, ctx, fuente),
     ...auditarPagosPue(pue.items, pue.ejercicio),
+    ...auditarDeclaracionesFaltantes(faltantes),
   ];
 
   const vigentes = new Set<string>();
