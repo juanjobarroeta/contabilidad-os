@@ -25,7 +25,7 @@ interface CierreData {
     lineaCaptura: string | null; acuseUrl: string | null; fechaPresentacion: string | null;
     declaracionId: string | null; acusePdfDisponible: boolean; calculado: boolean;
   };
-  diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado } | null;
+  diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null } | null;
 }
 interface PapelRow { id: string; fecha: string; contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string; }
 interface PapelIva {
@@ -87,6 +87,8 @@ export default function DeclaracionWorkspace() {
   const [acuseParsed, setAcuseParsed] = useState<AcuseMensualParsed | null>(null);
   const [acuseUploading, setAcuseUploading] = useState(false);
   const [acuseError, setAcuseError] = useState("");
+  const [diotAcuse, setDiotAcuse] = useState("");
+  const [savingDiot, setSavingDiot] = useState(false);
 
   // Auditor findings (company-wide) — drive the Revisión tab + its count badge.
   const [flags, setFlags] = useState<HallazgoDTO[] | null>(null);
@@ -116,6 +118,7 @@ export default function DeclaracionWorkspace() {
       const d: CierreData = await res.json();
       setData(d);
       setFecha(d.federal.fechaPresentacion ? d.federal.fechaPresentacion.substring(0, 10) : "");
+      setDiotAcuse(d.diot?.acuseUrl ?? "");
       setAcuseParsed(null); setAcuseError("");
     } catch {
       setError("No se pudo cargar la declaración del mes");
@@ -150,6 +153,16 @@ export default function DeclaracionWorkspace() {
       await load();
     } catch { setError("No se pudo guardar la declaración"); }
     finally { setSaving(false); }
+  }
+
+  async function fileDiot(filing: boolean) {
+    if (!activeCompany || !data) return;
+    setSavingDiot(true);
+    try {
+      await post({ action: filing ? "file-diot" : "unfile-diot", acuseUrl: diotAcuse || null });
+      await load();
+    } catch { setError("No se pudo guardar la DIOT"); }
+    finally { setSavingDiot(false); }
   }
 
   async function handleAcuseUpload(file: File) {
@@ -226,6 +239,8 @@ export default function DeclaracionWorkspace() {
               data={data} fecha={fecha} setFecha={setFecha} saving={saving}
               acuseParsed={acuseParsed} acuseUploading={acuseUploading} acuseError={acuseError}
               onUpload={handleAcuseUpload} onFile={fileFederal}
+              companyId={activeCompany.id} month={month} year={year}
+              diotAcuse={diotAcuse} setDiotAcuse={setDiotAcuse} savingDiot={savingDiot} onFileDiot={fileDiot}
             />
           )}
         </div>
@@ -634,12 +649,65 @@ function FlagCard({ h, busy, onResolve, onIgnore }: { h: HallazgoDTO; busy: bool
 
 function Presentar({
   data, fecha, setFecha, saving, acuseParsed, acuseUploading, acuseError, onUpload, onFile,
+  companyId, month, year, diotAcuse, setDiotAcuse, savingDiot, onFileDiot,
 }: {
   data: CierreData; fecha: string; setFecha: (s: string) => void; saving: boolean;
   acuseParsed: AcuseMensualParsed | null; acuseUploading: boolean; acuseError: string;
   onUpload: (f: File) => void; onFile: (filing: boolean) => void;
+  companyId: string; month: number; year: number;
+  diotAcuse: string; setDiotAcuse: (s: string) => void; savingDiot: boolean; onFileDiot: (filing: boolean) => void;
 }) {
   const f = data.federal;
+  return (
+    <div className="space-y-4">
+      <FederalPresentar
+        f={f} fecha={fecha} setFecha={setFecha} saving={saving}
+        acuseParsed={acuseParsed} acuseUploading={acuseUploading} acuseError={acuseError}
+        onUpload={onUpload} onFile={onFile}
+      />
+      {data.diot?.aplica && (
+        <Card className="rounded-card border-cos-line p-5 shadow-card">
+          <div className="flex items-center justify-between">
+            <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">DIOT</span>
+            <EstadoBadge estado={data.diot.estado} />
+          </div>
+          <p className="mt-2 text-[14px] text-cos-ink">{data.diot.proveedores} proveedor(es) con IVA · vence {fmtFecha(data.diot.vencimiento)}</p>
+          <a href={`/api/impuestos/diot?companyId=${companyId}&month=${month}&year=${year}&format=txt`}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-paper">
+            <Download className="h-3.5 w-3.5" /> Descargar archivo DIOT (.txt)
+          </a>
+          {data.diot.estado === "FILED" ? (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint p-3">
+              <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-jade-ink">
+                <CheckCircle2 className="h-4 w-4" /> Presentada {data.diot.fechaPresentacion ? `el ${fmtFecha(data.diot.fechaPresentacion)}` : ""}
+              </p>
+              <button onClick={() => onFileDiot(false)} disabled={savingDiot} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-white disabled:opacity-50">
+                {savingDiot ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+              </button>
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input value={diotAcuse} onChange={(e) => setDiotAcuse(e.target.value)} placeholder="URL del acuse (opcional)"
+                className="min-w-[200px] flex-1 rounded-control border border-cos-line px-2.5 py-2 text-[13px]" />
+              <button onClick={() => onFileDiot(true)} disabled={savingDiot}
+                className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+                {savingDiot ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Marcar presentada
+              </button>
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function FederalPresentar({
+  f, fecha, setFecha, saving, acuseParsed, acuseUploading, acuseError, onUpload, onFile,
+}: {
+  f: CierreData["federal"]; fecha: string; setFecha: (s: string) => void; saving: boolean;
+  acuseParsed: AcuseMensualParsed | null; acuseUploading: boolean; acuseError: string;
+  onUpload: (f: File) => void; onFile: (filing: boolean) => void;
+}) {
   if (f.estado === "FILED") {
     return (
       <Card className="rounded-card border-cos-line p-5 shadow-card">
