@@ -156,6 +156,8 @@ export async function GET(req: Request) {
         tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
         importe: t,
         metodoPago: inv.metodoPago,
+        // El contador marcó el ingreso como no cobrado → no se causa IVA aún.
+        excluidoAcreditamiento: inv.ivaNoCausado,
       });
     }
     if (r > 0.005) {
@@ -227,7 +229,8 @@ export async function GET(req: Request) {
   }
 
   const sum = (rs: Row[]) => rs.reduce((s, r) => s + r.importe, 0);
-  const totalTrasladado = sum(trasladado);
+  // Lo marcado como no cobrado (ivaNoCausado) no causa IVA aún — fuera del total.
+  const totalTrasladado = sum(trasladado.filter((r) => !r.excluidoAcreditamiento));
   // No entran al total (ni al cálculo) — igual que el motor: lo excluido por el
   // contador, ni el PPD que aún no tiene complemento de pago en el periodo.
   const totalAcreditable = sum(acreditable.filter((r) => !r.excluidoAcreditamiento && !r.sinComplementoPago));
