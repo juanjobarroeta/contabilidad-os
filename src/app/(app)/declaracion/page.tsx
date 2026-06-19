@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
+import { FaltantesUploader } from "@/components/declaraciones/FaltantesUploader";
 
 // ── Types (mirror /api/impuestos/cierre and /api/papeles/iva) ──────────────────
 type Estado = "FILED" | "PENDING" | "OVERDUE" | "UPCOMING";
@@ -29,7 +30,7 @@ interface CierreData {
   };
   diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null } | null;
 }
-interface AcuseFaltante { tipo: string; periodo: string; etiqueta: string; motivo: string; }
+interface AcuseFaltante { tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL"; periodo: string; etiqueta: string; motivo: string; }
 interface HallazgoDTO {
   id: string; checkClave: string; categoria: string; severidad: string;
   mensaje: string; sugerencia: string;
@@ -96,13 +97,12 @@ export default function DeclaracionWorkspace() {
   // Missing prior acuses for THIS company — gaps in the carry-forward chain
   // (saldo a favor, coeficiente, pagos provisionales) behind the numbers shown.
   const [faltantes, setFaltantes] = useState<AcuseFaltante[]>([]);
-  useEffect(() => {
+  const loadFaltantes = useCallback(async () => {
     if (!activeCompany) return;
-    fetch(`/api/declaraciones/cobertura?companyId=${activeCompany.id}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setFaltantes(d?.empresas?.[0]?.faltantes ?? []))
-      .catch(() => {});
+    const res = await fetch(`/api/declaraciones/cobertura?companyId=${activeCompany.id}`);
+    if (res.ok) { const d = await res.json(); setFaltantes(d?.empresas?.[0]?.faltantes ?? []); }
   }, [activeCompany]);
+  useEffect(() => { loadFaltantes(); }, [loadFaltantes]);
 
   // Honor deep-links from the Control Tower (?month=&year=&tab=). Read the URL
   // directly to avoid forcing a Suspense boundary (useSearchParams).
@@ -207,7 +207,11 @@ export default function DeclaracionWorkspace() {
         </div>
       </div>
 
-      <FaltantesBanner faltantes={faltantes} />
+      <FaltantesBanner
+        faltantes={faltantes}
+        empresa={{ companyId: activeCompany.id, rfc: activeCompany.rfc, razonSocial: activeCompany.razonSocial }}
+        onUploaded={() => { loadFaltantes(); load(); }}
+      />
 
       {/* Tabs */}
       <div role="tablist" aria-label="Secciones de la declaración" className="mt-5 flex gap-1 border-b border-cos-line">
@@ -261,20 +265,39 @@ export default function DeclaracionWorkspace() {
   );
 }
 
-function FaltantesBanner({ faltantes }: { faltantes: AcuseFaltante[] }) {
+function FaltantesBanner({ faltantes, empresa, onUploaded }: {
+  faltantes: AcuseFaltante[];
+  empresa: { companyId: string; rfc: string; razonSocial: string };
+  onUploaded: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
   if (faltantes.length === 0) return null;
   const muestra = faltantes.slice(0, 4).map((f) => f.etiqueta).join(" · ");
   return (
-    <Link href="/declaraciones"
-      className="mt-4 flex items-start gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink hover:opacity-90">
-      <FileWarning className="mt-0.5 h-4 w-4 flex-none" />
-      <span className="flex-1">
-        Faltan <b>{faltantes.length} acuse(s)</b> de esta empresa — sin ellos no podemos arrastrar bien
-        el saldo a favor, el coeficiente de utilidad ni los pagos provisionales. Los números de abajo pueden
-        estar incompletos. <span className="text-cos-amber-ink/80">{muestra}{faltantes.length > 4 ? "…" : ""}</span>
-      </span>
-      <span className="mt-0.5 inline-flex flex-none items-center gap-1 font-semibold">Capturar <ChevronR className="h-3.5 w-3.5" /></span>
-    </Link>
+    <div className="mt-4 rounded-card border border-cos-amber bg-cos-amber-tint">
+      <div className="flex items-start gap-2.5 px-4 py-3 text-[13px] text-cos-amber-ink">
+        <FileWarning className="mt-0.5 h-4 w-4 flex-none" />
+        <span className="flex-1">
+          Faltan <b>{faltantes.length} acuse(s)</b> de esta empresa — sin ellos no podemos arrastrar bien
+          el saldo a favor, el coeficiente de utilidad ni los pagos provisionales. Los números de abajo pueden
+          estar incompletos. <span className="text-cos-amber-ink/80">{muestra}{faltantes.length > 4 ? "…" : ""}</span>
+        </span>
+        <button onClick={() => setAbierto((v) => !v)}
+          className="mt-0.5 inline-flex flex-none items-center gap-1 font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-amber rounded">
+          {abierto ? "Ocultar" : "Capturar aquí"} <ChevronR className={`h-3.5 w-3.5 transition-transform ${abierto ? "rotate-90" : ""}`} />
+        </button>
+      </div>
+      {abierto && (
+        <div className="border-t border-cos-amber/40 p-3">
+          <FaltantesUploader
+            empresas={[{ companyId: empresa.companyId, rfc: empresa.rfc, razonSocial: empresa.razonSocial, faltantes: faltantes.map((f) => ({ ...f, companyId: empresa.companyId })) }]}
+            compact
+            onUploaded={onUploaded}
+          />
+          <Link href="/declaraciones" className="mt-2 inline-block text-[12px] font-medium text-cos-amber-ink hover:underline">Ver todas las empresas →</Link>
+        </div>
+      )}
+    </div>
   );
 }
 
