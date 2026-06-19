@@ -56,7 +56,7 @@ export async function GET(req: Request) {
   // Previous month's declaration for saldo a favor carryover
   const prevPeriodo = month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, "0")}`;
 
-  const [ingresos, egresos, prevDecl, company] = await Promise.all([
+  const [ingresos, egresos, prevDecl, company, repCobros] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
       include: { customer: { select: { razonSocial: true, rfc: true } }, taxes: true },
@@ -79,7 +79,14 @@ export async function GET(req: Request) {
       where: { id: companyId },
       select: { rfc: true, razonSocial: true },
     }),
+    // Complementos de pago (REP) liquidados en el periodo: definen qué PPD se
+    // vuelve acreditable este mes (igual que el motor). parentUuid = UUID del CFDI pagado.
+    prisma.pagoDoctoRelacionado.findMany({
+      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" } },
+      select: { parentUuid: true },
+    }),
   ]);
+  const ppdPagadosEnPeriodo = new Set(repCobros.map((r) => r.parentUuid));
 
   type InvoiceRelation = (typeof ingresos)[number];
 
@@ -120,6 +127,8 @@ export async function GET(req: Request) {
     sinPagoConciliado?: boolean;
     /** El contador excluyó este CFDI del acreditamiento de IVA. */
     excluidoAcreditamiento?: boolean;
+    /** PPD sin complemento de pago (REP) en el periodo → aún no acreditable. */
+    sinComplementoPago?: boolean;
   };
 
   const trasladado: Row[] = [];
@@ -178,6 +187,9 @@ export async function GET(req: Request) {
         importe: t,
         metodoPago: inv.metodoPago,
         excluidoAcreditamiento: inv.ivaNoAcreditable,
+        // PPD sólo es acreditable cuando llega su complemento de pago (REP) en
+        // el periodo — igual que el motor. Sin REP en el mes: aún no acreditable.
+        sinComplementoPago: inv.metodoPago === "PPD" && !!inv.uuid && !ppdPagadosEnPeriodo.has(inv.uuid),
       });
     }
     if (r > 0.005) {
@@ -199,9 +211,11 @@ export async function GET(req: Request) {
 
   const sum = (rs: Row[]) => rs.reduce((s, r) => s + r.importe, 0);
   const totalTrasladado = sum(trasladado);
-  // El IVA excluido del acreditamiento por el contador no entra al total (ni al
-  // cálculo) — igual que en el motor (computeTaxPosition).
-  const totalAcreditable = sum(acreditable.filter((r) => !r.excluidoAcreditamiento));
+  // No entran al total (ni al cálculo) — igual que el motor: lo excluido por el
+  // contador, ni el PPD que aún no tiene complemento de pago en el periodo.
+  const totalAcreditable = sum(acreditable.filter((r) => !r.excluidoAcreditamiento && !r.sinComplementoPago));
+  const ppdRows = acreditable.filter((r) => r.sinComplementoPago);
+  const ppdSinComplemento = { count: ppdRows.length, iva: +sum(ppdRows).toFixed(2) };
   const totalRetenidoClientes = sum(retenidoPorClientes);
   const totalRetenidoProv = sum(retenidoAProveedores);
 
@@ -263,6 +277,7 @@ export async function GET(req: Request) {
       ivaPueSinPago: +ivaPueSinPago.toFixed(2),
       cfdisPueSinPago,
     },
+    ppdSinComplemento,
   };
 
   if (format === "csv") {
