@@ -30,6 +30,7 @@ import {
   ScanSearch,
   TrendingUp,
   Wrench,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -40,6 +41,7 @@ const NAV_ITEMS = [
   { href: "/clientes",     label: "Clientes",        icon: Users },
   { href: "/bancos",       label: "Bancos",          icon: Landmark },
   { href: "/nomina",       label: "Nómina",          icon: Users2 },
+  { href: "/declaracion",  label: "Declaración del mes", icon: FileSpreadsheet },
   { href: "/impuestos",    label: "Impuestos",       icon: Calculator },
   { href: "/impuestos/cierre", label: "Cierre mensual", icon: Lock },
   { href: "/declaraciones", label: "Declaraciones",   icon: FileInput },
