@@ -189,6 +189,13 @@ export default function ImpuestosPage() {
   const [projIngresoAdicional, setProjIngresoAdicional] = useState("");
   const [projGastoAdicional, setProjGastoAdicional] = useState("");
 
+  // Honor the period from the Declaración Workspace deep-link (?month=&year=).
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const m = parseInt(sp.get("month") ?? ""); if (m >= 1 && m <= 12) setMonth(m);
+    const y = parseInt(sp.get("year") ?? ""); if (y >= 2000 && y <= 2100) setYear(y);
+  }, []);
+
   const [loading, setLoading]   = useState(false);
   const [saving, setSaving]     = useState(false);
   const [result, setResult]     = useState<ApiResult | null>(null);
