@@ -377,7 +377,7 @@ export async function computeTaxPosition(
   const repParents = repParentUuids.length
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, metodoPago: "PPD", status: "STAMPED" },
-        select: { uuid: true, tipo: true, total: true, totalImpuestos: true, taxes: true, ivaNoAcreditable: true, customer: { select: { rfc: true } } },
+        select: { uuid: true, tipo: true, total: true, totalImpuestos: true, taxes: true, ivaNoAcreditable: true, ivaNoCausado: true, customer: { select: { rfc: true } } },
       })
     : [];
   const repParentByUuid = new Map(repParents.map((p) => [p.uuid!, p]));
@@ -390,7 +390,7 @@ export async function computeTaxPosition(
     const parent = repParentByUuid.get(link.parentUuid);
     if (!parent) continue; // REP references a non-PPD or unknown invoice — skip
     const iva = repIvaTrasladado(link, parent);
-    if (parent.tipo === "INGRESO") ivaTrasladadoPPD += iva;
+    if (parent.tipo === "INGRESO" && !parent.ivaNoCausado) ivaTrasladadoPPD += iva;
     // EGRESO de proveedor 69-B definitivo → IVA no acreditable (Art. 69-B).
     // Igual si el contador lo excluyó del acreditamiento (p. ej. no pagado).
     else if (parent.tipo === "EGRESO" && !esEfosBloqueado(parent.customer?.rfc) && !parent.ivaNoAcreditable) ivaAcreditablePPD += iva;
@@ -398,7 +398,7 @@ export async function computeTaxPosition(
 
   // ── IVA (flujo de efectivo) ──────────────────────────────────────────────
   const ivaTrasladadoPUE = facturasEmitidas
-    .filter((inv) => inv.metodoPago === "PUE")
+    .filter((inv) => inv.metodoPago === "PUE" && !inv.ivaNoCausado)
     .reduce((s, inv) => s + ivaTrasladado(inv), 0);
   const ivaTrasladadoTotal = ivaTrasladadoPUE + ivaTrasladadoPPD;
 

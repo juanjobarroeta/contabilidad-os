@@ -59,12 +59,15 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
   useEffect(() => { load(); }, [load]);
 
   const [toggling, setToggling] = useState<string | null>(null);
-  async function toggleExcluir(id: string, next: boolean) {
+  // field = ivaNoAcreditable (gastos) | ivaNoCausado (ingresos) — IVA is
+  // cash-basis on both sides: an unpaid PUE expense isn't acreditable, and an
+  // uncollected PUE income isn't causado.
+  async function toggleExcluir(id: string, next: boolean, field: "ivaNoAcreditable" | "ivaNoCausado") {
     setToggling(id);
     try {
       const res = await fetch(`/api/facturas/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ivaNoAcreditable: next }),
+        body: JSON.stringify({ [field]: next }),
       });
       if (res.ok) await load();
     } finally { setToggling(null); }
@@ -81,12 +84,18 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
         title="IVA trasladado (cobrado)"
         subtitle="IVA que cobraste a tus clientes en este periodo"
         rows={data.trasladado}
+        totalLabel="Total trasladado"
+        excluidoLabel="no cobrado"
+        onToggleExcluir={(id, next) => toggleExcluir(id, next, "ivaNoCausado")}
+        toggling={toggling}
       />
       <IvaSection
         title="IVA acreditable (pagado)"
         subtitle="IVA que pagaste a tus proveedores, acreditable contra el trasladado"
         rows={data.acreditable}
-        onToggleExcluir={toggleExcluir}
+        totalLabel="Total acreditable"
+        excluidoLabel="no acreditado"
+        onToggleExcluir={(id, next) => toggleExcluir(id, next, "ivaNoAcreditable")}
         toggling={toggling}
       />
       {data.reconciliacion?.activa && data.reconciliacion.cfdisPueSinPago > 0 && (
@@ -115,6 +124,7 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
           title="IVA retenido por clientes"
           subtitle="IVA que tus clientes te retuvieron (disminuye el IVA a cargo)"
           rows={data.retenidoPorClientes}
+          totalLabel="Total retenido"
         />
       )}
       {data.retenidoAProveedores.length > 0 && (
@@ -122,6 +132,7 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
           title="IVA retenido a proveedores"
           subtitle="IVA que tú retuviste (pasivo a pagar al SAT en otra declaración)"
           rows={data.retenidoAProveedores}
+          totalLabel="Total retenido"
         />
       )}
 
@@ -157,9 +168,10 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
   );
 }
 
-function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling }: {
+function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLabel = "Total", excluidoLabel = "excluido" }: {
   title: string; subtitle: string; rows: IvaRow[];
   onToggleExcluir?: (id: string, next: boolean) => void; toggling?: string | null;
+  totalLabel?: string; excluidoLabel?: string;
 }) {
   if (rows.length === 0) return null;
   // Lo excluido del acreditamiento no suma al total (coincide con el motor).
@@ -199,7 +211,7 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling }: {
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-soft">
                 {r.metodoPago}
                 {r.excluidoAcreditamiento ? (
-                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft">no acreditado</span>
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft">{excluidoLabel}</span>
                 ) : r.sinComplementoPago ? (
                   <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft" title="PPD sin complemento de pago (REP) en el periodo — se acredita cuando llegue el pago">
                     sin complemento
@@ -234,7 +246,7 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling }: {
           ))}
           <tr className="border-t-2 border-cos-line bg-cos-paper font-semibold">
             <td colSpan={6} className="px-3 py-2 text-right text-[12px] text-cos-ink-soft">
-              Total acreditable{excluidos > 0 ? ` (${excluidos} excluido${excluidos === 1 ? "" : "s"} del cálculo)` : ""}
+              {totalLabel}{excluidos > 0 ? ` (${excluidos} excluido${excluidos === 1 ? "" : "s"} del cálculo)` : ""}
             </td>
             <td className="px-3 py-2 text-right" colSpan={acciones ? 2 : 1}><Money value={total} size={12} weight={700} /></td>
           </tr>

@@ -137,6 +137,7 @@ export async function PATCH(
     naturalezaManual?: boolean;
     naturalezaRevision?: boolean;
     ivaNoAcreditable?: boolean;
+    ivaNoCausado?: boolean;
   } = {};
 
   // El contador excluye/incluye el CFDI del acreditamiento de IVA (p. ej. PUE no
@@ -146,6 +147,15 @@ export async function PATCH(
       return NextResponse.json({ error: "ivaNoAcreditable inválido" }, { status: 400 });
     }
     data.ivaNoAcreditable = body.ivaNoAcreditable;
+  }
+
+  // El contador excluye/incluye el CFDI del IVA trasladado (p. ej. PUE no cobrado:
+  // el IVA se causa cuando se cobra, Art. 1-B/11/17 LIVA).
+  if ("ivaNoCausado" in body) {
+    if (typeof body.ivaNoCausado !== "boolean") {
+      return NextResponse.json({ error: "ivaNoCausado inválido" }, { status: 400 });
+    }
+    data.ivaNoCausado = body.ivaNoCausado;
   }
 
   // Override de naturaleza fiscal por el contador (GASTO/INVERSION/INVENTARIO/
