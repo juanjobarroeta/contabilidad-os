@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 import {
@@ -211,7 +211,7 @@ export default function DeclaracionWorkspace() {
         <Loading label="Cargando…" className="py-16" />
       ) : (
         <div className="mt-5">
-          {tab === "resumen" && <Resumen data={data} />}
+          {tab === "resumen" && <Resumen data={data} companyId={activeCompany.id} month={month} year={year} />}
           {tab === "papeles" && <PapelesTab companyId={activeCompany.id} month={month} year={year} onChanged={load} />}
           {tab === "revision" && (
             <RevisionTab
@@ -246,7 +246,7 @@ function EstadoBadge({ estado }: { estado: Estado }) {
   return <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${m.cls}`}>{m.label}</span>;
 }
 
-function Resumen({ data }: { data: CierreData }) {
+function Resumen({ data, companyId, month, year }: { data: CierreData; companyId: string; month: number; year: number }) {
   const f = data.federal;
   return (
     <div className="space-y-5">
@@ -287,6 +287,96 @@ function Resumen({ data }: { data: CierreData }) {
           </div>
           <p className="mt-2 text-[14px] text-cos-ink">{data.diot.proveedores} proveedor(es) con IVA · vence {fmtFecha(data.diot.vencimiento)}</p>
         </Card>
+      )}
+
+      <Simulador companyId={companyId} month={month} year={year} />
+    </div>
+  );
+}
+
+// "What if I bill one more ingreso/gasto?" — debounced against the real fiscal
+// engine (/api/impuestos/simular), ported from the old Impuestos page.
+function Simulador({ companyId, month, year }: { companyId: string; month: number; year: number }) {
+  const [addIng, setAddIng] = useState("");
+  const [addGas, setAddGas] = useState("");
+  const [sim, setSim] = useState<{ base: { iva: number; isr: number | null; total: number }; sim: { iva: number; isr: number | null; total: number } } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const seq = useRef(0);
+
+  useEffect(() => { setAddIng(""); setAddGas(""); setSim(null); }, [companyId, month, year]);
+
+  useEffect(() => {
+    const ai = parseFloat(addIng) || 0;
+    const ag = parseFloat(addGas) || 0;
+    if (ai <= 0 && ag <= 0) { setSim(null); setBusy(false); return; }
+    setBusy(true);
+    const s = ++seq.current;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/impuestos/simular?companyId=${companyId}&month=${month}&year=${year}&addIngreso=${ai}&addGasto=${ag}`);
+        const json = await res.json();
+        if (s === seq.current) setSim(json);
+      } finally { if (s === seq.current) setBusy(false); }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [addIng, addGas, companyId, month, year]);
+
+  const on = (parseFloat(addIng) || 0) > 0 || (parseFloat(addGas) || 0) > 0;
+  return (
+    <Card className="rounded-card border-cos-line p-5 shadow-card">
+      <div className="mb-4 flex items-start gap-3">
+        <span className="grid h-[30px] w-[30px] flex-none place-items-center rounded-[9px] bg-cos-brand text-white"><Sparkles className="h-4 w-4" /></span>
+        <div>
+          <h3 className="text-[17px] font-semibold text-cos-ink">Simula antes de facturar</h3>
+          <p className="mt-1 max-w-[54ch] text-[13.5px] text-cos-ink-soft">¿Qué pasa con tus impuestos si facturas un ingreso o un gasto más? Escribe un monto y míralo al instante — con tu cálculo real.</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+        <SimInput label="+ Ingreso (sin IVA)" value={addIng} onChange={setAddIng} />
+        <SimInput label="+ Gasto con factura (sin IVA)" value={addGas} onChange={setAddGas} />
+      </div>
+      {on ? (
+        <div className="mt-[18px] grid grid-cols-1 gap-3 border-t border-cos-line pt-[18px] sm:grid-cols-3">
+          <SimOut label="Nuevo IVA" value={sim?.sim.iva ?? null} base={sim?.base.iva ?? null} busy={busy} />
+          <SimOut label="Nuevo ISR" value={sim?.sim.isr ?? null} base={sim?.base.isr ?? null} busy={busy} />
+          <SimOut label="Nuevo total" value={sim?.sim.total ?? null} base={sim?.base.total ?? null} busy={busy} highlight />
+        </div>
+      ) : (
+        <p className="mt-4 text-[13.5px] text-cos-ink-faint">Escribe un monto arriba para ver el impacto.</p>
+      )}
+    </Card>
+  );
+}
+
+function SimInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex flex-col gap-2 text-[13px] font-medium text-cos-ink-soft">
+      <span>{label}</span>
+      <div className="flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3.5 focus-within:border-cos-brand focus-within:ring-[3px] focus-within:ring-cos-brand-tint">
+        <i className="font-mono not-italic text-cos-ink-faint">$</i>
+        <input type="number" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0.00" className="w-full border-0 bg-transparent py-3 font-mono text-[16px] text-cos-ink outline-none" />
+      </div>
+    </label>
+  );
+}
+
+function SimOut({ label, value, base, busy, highlight }: { label: string; value: number | null; base: number | null; busy: boolean; highlight?: boolean }) {
+  const peso = (n: number) => "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const delta = value != null && base != null ? value - base : null;
+  return (
+    <div className={`flex flex-col gap-1 rounded-[12px] p-3.5 ${highlight ? "bg-cos-brand-tint" : "bg-cos-paper"}`}>
+      <span className="text-[12px] font-medium text-cos-ink-faint">{label}</span>
+      {busy && value == null ? (
+        <Loader2 className="h-5 w-5 animate-spin text-cos-ink-faint" />
+      ) : value == null ? (
+        <span className="font-mono text-[20px] font-bold text-cos-ink-faint">—</span>
+      ) : (
+        <>
+          <Money value={value} size={20} weight={700} />
+          {delta != null && (Math.abs(delta) < 0.005
+            ? <span className="font-mono text-[12px] font-medium text-cos-ink-faint">sin cambio</span>
+            : <span className={`font-mono text-[12px] font-medium ${delta > 0 ? "text-cos-red-ink" : "text-cos-jade-ink"}`}>{delta > 0 ? "▲" : "▼"} {peso(delta)}</span>)}
+        </>
       )}
     </div>
   );
