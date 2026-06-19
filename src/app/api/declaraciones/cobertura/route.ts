@@ -8,15 +8,24 @@ import { declaracionesFaltantesEmpresa, type AcuseFaltante } from "@/lib/fiscal/
 // Acuses faltantes por empresa accesible — alimenta el banner y la pantalla de
 // captura (/declaraciones). Operador-aware: empresasAccesiblesIds ya abarca
 // todos los despachos para un operador de plataforma.
-export async function GET() {
+// Con ?companyId=xxx devuelve sólo esa empresa (lo usa el Workspace para avisar,
+// por empresa, qué acuses faltan para arrastrar saldos a favor y coeficiente).
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ids = await empresasAccesiblesIds(session.user.id);
   if (ids.length === 0) return NextResponse.json({ total: 0, empresas: [] });
 
+  const { searchParams } = new URL(req.url);
+  const onlyCompany = searchParams.get("companyId");
+  const scopedIds = onlyCompany
+    ? (ids.includes(onlyCompany) ? [onlyCompany] : [])
+    : ids;
+  if (scopedIds.length === 0) return NextResponse.json({ total: 0, empresasConFaltantes: 0, empresas: [] });
+
   const companies = await prisma.company.findMany({
-    where: { id: { in: ids }, isActive: true },
+    where: { id: { in: scopedIds }, isActive: true },
     select: { id: true, rfc: true, razonSocial: true },
     orderBy: { razonSocial: "asc" },
   });

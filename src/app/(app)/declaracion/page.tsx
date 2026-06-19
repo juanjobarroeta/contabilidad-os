@@ -5,8 +5,9 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
-  CheckCircle2, AlertTriangle, CalendarDays, Sparkles, Printer, SlidersHorizontal, ChevronRight as ChevronR,
+  CheckCircle2, AlertTriangle, CalendarDays, Sparkles, Printer, SlidersHorizontal, ChevronRight as ChevronR, FileWarning,
 } from "lucide-react";
+import Link from "next/link";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
 
 // ── Types (mirror /api/impuestos/cierre and /api/papeles/iva) ──────────────────
@@ -28,6 +29,7 @@ interface CierreData {
   };
   diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null } | null;
 }
+interface AcuseFaltante { tipo: string; periodo: string; etiqueta: string; motivo: string; }
 interface HallazgoDTO {
   id: string; checkClave: string; categoria: string; severidad: string;
   mensaje: string; sugerencia: string;
@@ -90,6 +92,17 @@ export default function DeclaracionWorkspace() {
     if (res.ok) { const d = await res.json(); setFlags(d.hallazgos ?? []); }
   }, [activeCompany]);
   useEffect(() => { loadFlags(); }, [loadFlags]);
+
+  // Missing prior acuses for THIS company — gaps in the carry-forward chain
+  // (saldo a favor, coeficiente, pagos provisionales) behind the numbers shown.
+  const [faltantes, setFaltantes] = useState<AcuseFaltante[]>([]);
+  useEffect(() => {
+    if (!activeCompany) return;
+    fetch(`/api/declaraciones/cobertura?companyId=${activeCompany.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setFaltantes(d?.empresas?.[0]?.faltantes ?? []))
+      .catch(() => {});
+  }, [activeCompany]);
 
   // Honor deep-links from the Control Tower (?month=&year=&tab=). Read the URL
   // directly to avoid forcing a Suspense boundary (useSearchParams).
@@ -194,6 +207,8 @@ export default function DeclaracionWorkspace() {
         </div>
       </div>
 
+      <FaltantesBanner faltantes={faltantes} />
+
       {/* Tabs */}
       <div className="mt-5 flex gap-1 border-b border-cos-line">
         {TABS.map((t) => (
@@ -239,6 +254,23 @@ export default function DeclaracionWorkspace() {
       )}
       {error && <p className="mt-4 flex items-center gap-1.5 text-[13px] text-cos-red-ink"><AlertTriangle className="h-4 w-4" /> {error}</p>}
     </div>
+  );
+}
+
+function FaltantesBanner({ faltantes }: { faltantes: AcuseFaltante[] }) {
+  if (faltantes.length === 0) return null;
+  const muestra = faltantes.slice(0, 4).map((f) => f.etiqueta).join(" · ");
+  return (
+    <Link href="/declaraciones"
+      className="mt-4 flex items-start gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink hover:opacity-90">
+      <FileWarning className="mt-0.5 h-4 w-4 flex-none" />
+      <span className="flex-1">
+        Faltan <b>{faltantes.length} acuse(s)</b> de esta empresa — sin ellos no podemos arrastrar bien
+        el saldo a favor, el coeficiente de utilidad ni los pagos provisionales. Los números de abajo pueden
+        estar incompletos. <span className="text-cos-amber-ink/80">{muestra}{faltantes.length > 4 ? "…" : ""}</span>
+      </span>
+      <span className="mt-0.5 inline-flex flex-none items-center gap-1 font-semibold">Capturar <ChevronR className="h-3.5 w-3.5" /></span>
+    </Link>
   );
 }
 
