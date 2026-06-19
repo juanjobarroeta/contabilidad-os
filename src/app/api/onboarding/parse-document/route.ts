@@ -122,8 +122,16 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const f = form.get("file");
     if (f instanceof File) file = f;
-  } catch {
-    return NextResponse.json({ error: "Formato inválido, espera multipart/form-data" }, { status: 400 });
+  } catch (e) {
+    // Surface WHY formData() failed: the Content-Type actually received and the
+    // underlying error. A correct client sends "multipart/form-data; boundary=…";
+    // anything else (or a proxy that altered the body) shows up here.
+    const contentType = req.headers.get("content-type") ?? "(sin Content-Type)";
+    console.error("[parse-document] req.formData() falló", { contentType, err: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json(
+      { error: `No se pudo leer el archivo subido (Content-Type: ${contentType}). Reintenta; si persiste, el PDF pudo exceder el límite del servidor.` },
+      { status: 400 }
+    );
   }
 
   if (!file) {
