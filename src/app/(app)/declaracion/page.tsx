@@ -71,6 +71,8 @@ export default function DeclaracionWorkspace() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [tab, setTab] = useState<Tab>("resumen");
+  // Roving focus for the tablist (APG keyboard pattern: ←/→/Home/End).
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const [data, setData] = useState<CierreData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -215,14 +217,28 @@ export default function DeclaracionWorkspace() {
 
       {/* Tabs */}
       <div role="tablist" aria-label="Secciones de la declaración" className="mt-5 flex gap-1 border-b border-cos-line">
-        {TABS.map((t) => (
+        {TABS.map((t, i) => (
           <button
             key={t.id}
             role="tab"
             id={`tab-${t.id}`}
+            ref={(el) => { tabRefs.current[i] = el; }}
             aria-selected={tab === t.id}
             aria-controls="tabpanel-declaracion"
+            tabIndex={tab === t.id ? 0 : -1}
             onClick={() => setTab(t.id)}
+            onKeyDown={(e) => {
+              const last = TABS.length - 1;
+              let next: number | null = null;
+              if (e.key === "ArrowRight") next = i === last ? 0 : i + 1;
+              else if (e.key === "ArrowLeft") next = i === 0 ? last : i - 1;
+              else if (e.key === "Home") next = 0;
+              else if (e.key === "End") next = last;
+              if (next === null) return;
+              e.preventDefault();
+              setTab(TABS[next].id);
+              tabRefs.current[next]?.focus();
+            }}
             className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3.5 py-2 text-[14px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-brand-tint ${
               tab === t.id ? "border-cos-brand text-cos-brand-ink" : "border-transparent text-cos-ink-soft hover:text-cos-ink"
             }`}
