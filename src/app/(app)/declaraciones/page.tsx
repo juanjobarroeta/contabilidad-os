@@ -110,9 +110,10 @@ export default function DeclaracionesPage() {
         </Link>
       </div>
       <p className="mt-1 text-sm text-cos-ink-soft">
-        Sube el <strong>acuse en PDF</strong> de cada declaración. Lo leemos y guardamos el
-        documento completo para calcular saldos a favor, coeficiente de utilidad y pagos
-        provisionales. No necesitas teclear línea de captura ni montos.
+        Sube el <strong>acuse en PDF</strong> de cada declaración — el que emite el SAT al
+        <strong> presentarla</strong>, <em>no</em> el recibo de pago ni la línea de captura. Lo leemos
+        y guardamos el documento completo para calcular saldos a favor, coeficiente de utilidad y
+        pagos provisionales. No necesitas teclear montos.
       </p>
 
       {loading ? (
@@ -162,7 +163,7 @@ export default function DeclaracionesPage() {
                         </span>
                       ) : (
                         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep">
-                          <UploadCloud className="h-3.5 w-3.5" /> Subir PDF
+                          <UploadCloud className="h-3.5 w-3.5" /> Subir acuse (PDF)
                           <input
                             type="file"
                             accept="application/pdf,.pdf"

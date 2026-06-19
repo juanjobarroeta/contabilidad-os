@@ -201,27 +201,31 @@ export default function DeclaracionWorkspace() {
           <p className="mt-1.5 text-[15px] text-cos-ink-soft">{activeCompany.razonSocial}</p>
         </div>
         <div className="flex items-center gap-2.5 font-semibold text-cos-ink">
-          <button onClick={() => shiftMonth(-1)} aria-label="Mes anterior" className="grid h-8 w-8 place-items-center rounded-control border border-cos-line hover:bg-cos-paper"><ChevronLeft className="h-4 w-4" /></button>
-          <span className="min-w-[120px] text-center">{MONTHS[month - 1]} {year}</span>
-          <button onClick={() => shiftMonth(1)} aria-label="Mes siguiente" className="grid h-8 w-8 place-items-center rounded-control border border-cos-line hover:bg-cos-paper"><ChevronRight className="h-4 w-4" /></button>
+          <button onClick={() => shiftMonth(-1)} aria-label="Mes anterior" className="grid h-8 w-8 place-items-center rounded-control border border-cos-line hover:bg-cos-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-brand-tint"><ChevronLeft className="h-4 w-4" /></button>
+          <span aria-live="polite" className="min-w-[120px] text-center">{MONTHS[month - 1]} {year}</span>
+          <button onClick={() => shiftMonth(1)} aria-label="Mes siguiente" className="grid h-8 w-8 place-items-center rounded-control border border-cos-line hover:bg-cos-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-brand-tint"><ChevronRight className="h-4 w-4" /></button>
         </div>
       </div>
 
       <FaltantesBanner faltantes={faltantes} />
 
       {/* Tabs */}
-      <div className="mt-5 flex gap-1 border-b border-cos-line">
+      <div role="tablist" aria-label="Secciones de la declaración" className="mt-5 flex gap-1 border-b border-cos-line">
         {TABS.map((t) => (
           <button
             key={t.id}
+            role="tab"
+            id={`tab-${t.id}`}
+            aria-selected={tab === t.id}
+            aria-controls="tabpanel-declaracion"
             onClick={() => setTab(t.id)}
-            className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3.5 py-2 text-[14px] font-medium transition-colors ${
+            className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3.5 py-2 text-[14px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-brand-tint ${
               tab === t.id ? "border-cos-brand text-cos-brand-ink" : "border-transparent text-cos-ink-soft hover:text-cos-ink"
             }`}
           >
             {t.label}
             {t.id === "revision" && flags && flags.length > 0 && (
-              <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-cos-red-tint px-1 text-[11px] font-semibold text-cos-red-ink">{flags.length}</span>
+              <span aria-label={`${flags.length} por revisar`} className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-cos-red-tint px-1 text-[11px] font-semibold text-cos-red-ink">{flags.length}</span>
             )}
           </button>
         ))}
@@ -230,7 +234,7 @@ export default function DeclaracionWorkspace() {
       {loading || !data ? (
         <Loading label="Cargando…" className="py-16" />
       ) : (
-        <div className="mt-5">
+        <div id="tabpanel-declaracion" role="tabpanel" aria-labelledby={`tab-${tab}`} className="mt-5">
           {tab === "resumen" && <Resumen data={data} companyId={activeCompany.id} month={month} year={year} />}
           {tab === "papeles" && <PapelesTab companyId={activeCompany.id} month={month} year={year} onChanged={load} />}
           {tab === "revision" && (
@@ -452,7 +456,7 @@ function PapelesTab({ companyId, month, year, onChanged }: { companyId: string; 
         <div className="inline-flex rounded-control border border-cos-line p-0.5">
           {subTabs.map(([id, label]) => (
             <button key={id} onClick={() => setSub(id)}
-              className={`rounded-[7px] px-3 py-1.5 text-[13px] font-medium transition-colors ${sub === id ? "bg-cos-brand text-white" : "text-cos-ink-soft hover:text-cos-ink"}`}>
+              className={`rounded-[7px] px-3 py-1.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-brand-tint ${sub === id ? "bg-cos-brand text-white" : "text-cos-ink-soft hover:text-cos-ink"}`}>
               {label}
             </button>
           ))}
