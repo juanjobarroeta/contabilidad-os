@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Money } from "@/components/ui";
-import { Download, Loader2, FileText } from "lucide-react";
+import { Download, Loader2, FileText, AlertTriangle } from "lucide-react";
 
 const CARD = "rounded-card border border-cos-line bg-white shadow-card print:border-2";
 const THEAD = "bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink-faint";
@@ -21,6 +21,7 @@ const THEAD = "bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink
 interface IvaRow {
   id: string; fecha: string; uuid: string | null; serie: string | null; folio: string | null;
   contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string;
+  sinPagoConciliado?: boolean;
 }
 interface IvaData {
   periodo: string;
@@ -34,6 +35,7 @@ interface IvaData {
     proporcionAcreditamiento: number; actosGravados: number; actosExentos: number; acreditableProcedente: number;
     ivaCargo: number; saldoFavorAnterior: number; ivaPagar: number; saldoFavorMes: number;
   };
+  reconciliacion?: { activa: boolean; ivaPueSinPago: number; cfdisPueSinPago: number };
 }
 
 export function IvaPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
@@ -69,6 +71,17 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
         subtitle="IVA que pagaste a tus proveedores, acreditable contra el trasladado"
         rows={data.acreditable}
       />
+      {data.reconciliacion?.activa && data.reconciliacion.cfdisPueSinPago > 0 && (
+        <div className="flex items-start gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+          <span>
+            <b>{data.reconciliacion.cfdisPueSinPago} CFDI(s) PUE</b> con IVA acreditable de{" "}
+            <b>{formatCurrency(data.reconciliacion.ivaPueSinPago)}</b> no aparecen pagados en el banco
+            (marcados ↓). El IVA sólo es acreditable si el gasto se pagó (Art. 5-I LIVA) — concilia el pago
+            en Bancos o exclúyelos del acreditamiento.
+          </span>
+        </div>
+      )}
       {data.retenidoPorClientes.length > 0 && (
         <IvaSection
           title="IVA retenido por clientes"
@@ -147,7 +160,14 @@ function IvaSection({ title, subtitle, rows }: { title: string; subtitle: string
                 <p className="max-w-[240px] truncate text-cos-ink">{r.contraparte}</p>
                 <p className="font-mono text-[10px] text-cos-ink-faint">{r.rfc}</p>
               </td>
-              <td className="px-3 py-1.5 text-[12px] text-cos-ink-soft">{r.metodoPago}</td>
+              <td className="px-3 py-1.5 text-[12px] text-cos-ink-soft">
+                {r.metodoPago}
+                {r.sinPagoConciliado && (
+                  <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-amber-ink" title="PUE sin pago conciliado en banco — el IVA sólo es acreditable si se pagó (Art. 5-I LIVA)">
+                    <AlertTriangle className="h-3 w-3" /> sin pago
+                  </span>
+                )}
+              </td>
               <td className="px-3 py-1.5 text-right"><Money value={r.subtotal} size={12} weight={500} /></td>
               <td className="px-3 py-1.5 text-right text-[12px] text-cos-ink-soft">{r.tasa != null ? (r.tasa * 100).toFixed(0) + "%" : "—"}</td>
               <td className="px-3 py-1.5 text-right"><Money value={r.importe} size={12} weight={500} /></td>

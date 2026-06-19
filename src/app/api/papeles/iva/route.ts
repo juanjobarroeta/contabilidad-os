@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
+import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
 
 // GET /api/papeles/iva?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -115,6 +116,8 @@ export async function GET(req: Request) {
     tasa: number | null;
     importe: number;
     metodoPago: string;
+    /** PUE acreditable sin pago conciliado en banco (cash-basis, Art. 5-I LIVA). */
+    sinPagoConciliado?: boolean;
   };
 
   const trasladado: Row[] = [];
@@ -210,6 +213,25 @@ export async function GET(req: Request) {
   const ivaPagar = cargoFinal > 0 ? cargoFinal : 0;
   const saldoFavorMes = cargoFinal < 0 ? -cargoFinal : 0;
 
+  // PUE acreditado sin pago conciliado (cash-basis, Art. 5-I LIVA). El motor
+  // asume el PUE pagado al emitirse; sólo si la empresa concilia banco podemos
+  // marcar los que no aparecen pagados. Si no concilia, no marcamos nada.
+  const reconActiva = await reconciliacionActiva(companyId);
+  let ivaPueSinPago = 0;
+  let cfdisPueSinPago = 0;
+  if (reconActiva) {
+    const totalById = new Map(egresos.map((e) => [e.id, e.total]));
+    const pueRows = acreditable.filter((r) => r.metodoPago === "PUE");
+    const matched = await pagosConciliadosPorInvoice(pueRows.map((r) => r.id));
+    for (const r of pueRows) {
+      if (!pagadaCompleta(totalById.get(r.id) ?? 0, matched.get(r.id) ?? 0)) {
+        r.sinPagoConciliado = true;
+        ivaPueSinPago += r.importe;
+        cfdisPueSinPago += 1;
+      }
+    }
+  }
+
   const payload = {
     periodo,
     company: company ? { rfc: company.rfc, razonSocial: company.razonSocial } : null,
@@ -230,6 +252,11 @@ export async function GET(req: Request) {
       saldoFavorAnterior,
       ivaPagar,
       saldoFavorMes,
+    },
+    reconciliacion: {
+      activa: reconActiva,
+      ivaPueSinPago: +ivaPueSinPago.toFixed(2),
+      cfdisPueSinPago,
     },
   };
 
