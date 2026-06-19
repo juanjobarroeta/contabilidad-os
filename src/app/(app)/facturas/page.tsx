@@ -267,7 +267,7 @@ export default function FacturasPage() {
 
       {/* table */}
       <Card className="mt-3 overflow-hidden rounded-card border-cos-line shadow-card">
-        <div className="grid grid-cols-[108px_1fr_130px] gap-3 border-b border-cos-line px-[18px] py-3.5 text-[12px] font-semibold uppercase tracking-[0.05em] text-cos-ink-faint max-[860px]:grid-cols-[90px_1fr_auto]">
+        <div className="grid grid-cols-[108px_minmax(0,1fr)_130px] gap-3 border-b border-cos-line px-[18px] py-3.5 text-[12px] font-semibold uppercase tracking-[0.05em] text-cos-ink-faint max-[860px]:grid-cols-[76px_minmax(0,1fr)_auto]">
           <span>Tipo</span>
           <span>Contraparte</span>
           <span className="text-right">Total</span>
@@ -289,7 +289,7 @@ export default function FacturasPage() {
               <button
                 key={inv.id}
                 onClick={() => setSel(inv)}
-                className="grid w-full grid-cols-[108px_1fr_130px] items-center gap-3 border-t border-cos-line-soft px-[18px] py-3.5 text-left first:border-t-0 hover:bg-cos-paper max-[860px]:grid-cols-[90px_1fr_auto]"
+                className="grid w-full grid-cols-[108px_minmax(0,1fr)_130px] items-center gap-3 border-t border-cos-line-soft px-[18px] py-3.5 text-left first:border-t-0 hover:bg-cos-paper max-[860px]:grid-cols-[76px_minmax(0,1fr)_auto]"
               >
                 <span>
                   <span className={`inline-block rounded-[7px] px-[9px] py-[3px] text-[12px] font-semibold ${meta.badge}`}>
@@ -298,7 +298,7 @@ export default function FacturasPage() {
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-[14.5px] font-medium text-cos-ink">{inv.customer?.razonSocial ?? "—"}</span>
-                  <span className="mt-0.5 block font-mono text-[12px] text-cos-ink-faint">{inv.customer?.rfc ?? "—"}</span>
+                  <span className="mt-0.5 block truncate font-mono text-[12px] text-cos-ink-faint">{inv.customer?.rfc ?? "—"}</span>
                 </span>
                 <span className="text-right">
                   {signed ? (
