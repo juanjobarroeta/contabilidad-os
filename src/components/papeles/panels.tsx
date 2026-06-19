@@ -23,6 +23,7 @@ interface IvaRow {
   contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string;
   sinPagoConciliado?: boolean;
   excluidoAcreditamiento?: boolean;
+  sinComplementoPago?: boolean;
 }
 interface IvaData {
   periodo: string;
@@ -37,6 +38,7 @@ interface IvaData {
     ivaCargo: number; saldoFavorAnterior: number; ivaPagar: number; saldoFavorMes: number;
   };
   reconciliacion?: { activa: boolean; ivaPueSinPago: number; cfdisPueSinPago: number };
+  ppdSinComplemento?: { count: number; iva: number };
 }
 
 export function IvaPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
@@ -97,6 +99,16 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
           </span>
         </div>
       )}
+      {data.ppdSinComplemento && data.ppdSinComplemento.count > 0 && (
+        <div className="flex items-start gap-2.5 rounded-card border border-cos-line bg-cos-paper px-4 py-3 text-[13px] text-cos-ink-soft">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-cos-ink-faint" />
+          <span>
+            <b>{data.ppdSinComplemento.count} CFDI(s) PPD</b> ({formatCurrency(data.ppdSinComplemento.iva)} de IVA) aún
+            sin complemento de pago — <b>no acreditables todavía</b> y excluidos del total; el IVA se acredita en el
+            mes en que se reciba su REP (igual que el cálculo).
+          </span>
+        </div>
+      )}
       {data.retenidoPorClientes.length > 0 && (
         <IvaSection
           title="IVA retenido por clientes"
@@ -150,8 +162,9 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling }: {
 }) {
   if (rows.length === 0) return null;
   // Lo excluido del acreditamiento no suma al total (coincide con el motor).
-  const total = rows.filter((r) => !r.excluidoAcreditamiento).reduce((s, r) => s + r.importe, 0);
-  const excluidos = rows.filter((r) => r.excluidoAcreditamiento).length;
+  const cuenta = (r: IvaRow) => !r.excluidoAcreditamiento && !r.sinComplementoPago;
+  const total = rows.filter(cuenta).reduce((s, r) => s + r.importe, 0);
+  const excluidos = rows.filter((r) => !cuenta(r)).length;
   const acciones = !!onToggleExcluir;
   return (
     <div className={`${CARD} overflow-hidden`}>
@@ -175,7 +188,7 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling }: {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className={`border-t border-cos-line-soft ${r.excluidoAcreditamiento ? "opacity-55" : ""}`}>
+            <tr key={r.id} className={`border-t border-cos-line-soft ${r.excluidoAcreditamiento || r.sinComplementoPago ? "opacity-55" : ""}`}>
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-faint whitespace-nowrap">{formatDate(r.fecha)}</td>
               <td className="px-3 py-1.5 font-mono text-[12px]">{r.folio ? `${r.serie ?? ""}${r.folio}` : (r.uuid?.slice(0, 8) ?? "—")}</td>
               <td className="px-3 py-1.5 text-[12px]">
@@ -186,6 +199,10 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling }: {
                 {r.metodoPago}
                 {r.excluidoAcreditamiento ? (
                   <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft">no acreditado</span>
+                ) : r.sinComplementoPago ? (
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft" title="PPD sin complemento de pago (REP) en el periodo — se acredita cuando llegue el pago">
+                    sin complemento
+                  </span>
                 ) : r.sinPagoConciliado && (
                   <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-amber-ink" title="PUE sin pago conciliado en banco — el IVA sólo es acreditable si se pagó (Art. 5-I LIVA)">
                     <AlertTriangle className="h-3 w-3" /> sin pago
@@ -194,7 +211,7 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling }: {
               </td>
               <td className="px-3 py-1.5 text-right"><Money value={r.subtotal} size={12} weight={500} /></td>
               <td className="px-3 py-1.5 text-right text-[12px] text-cos-ink-soft">{r.tasa != null ? (r.tasa * 100).toFixed(0) + "%" : "—"}</td>
-              <td className={`px-3 py-1.5 text-right ${r.excluidoAcreditamiento ? "line-through" : ""}`}><Money value={r.importe} size={12} weight={500} /></td>
+              <td className={`px-3 py-1.5 text-right ${r.excluidoAcreditamiento || r.sinComplementoPago ? "line-through" : ""}`}><Money value={r.importe} size={12} weight={500} /></td>
               {acciones && (
                 <td className="px-3 py-1.5 text-right">
                   {(r.excluidoAcreditamiento || r.metodoPago === "PUE") && (
