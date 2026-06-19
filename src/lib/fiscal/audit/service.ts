@@ -14,6 +14,8 @@ import {
   type FuenteBase,
 } from "@/lib/fiscal/isn";
 import { auditar } from "./run";
+import { auditarPagosPue, type PueSinPago } from "./pue-pagos";
+import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
 import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
 
 /** Stable identity for a finding so re-runs upsert in place. */
@@ -117,6 +119,42 @@ export interface AuditResult {
  * unchanged finding upserts in place (keeping its `estado`); a finding that no
  * longer fires is auto-resolved.
  */
+/**
+ * PUE EGRESO del ejercicio cuyo IVA se acreditó pero que no aparecen pagados en
+ * la conciliación bancaria. Gated: si la empresa no concilia banco no podemos
+ * juzgarlo → lista vacía (sin falsos positivos). Alcance = ejercicio de `fecha`
+ * (estable entre corridas del mismo año → el auto-resolver no genera ruido).
+ */
+export async function cargarPueSinPago(
+  companyId: string,
+  fechaIso: string
+): Promise<{ items: PueSinPago[]; ejercicio: number }> {
+  const ejercicio = parseInt(fechaIso.slice(0, 4), 10);
+  if (!(await reconciliacionActiva(companyId))) return { items: [], ejercicio };
+
+  const from = new Date(Date.UTC(ejercicio, 0, 1));
+  const to = new Date(Date.UTC(ejercicio + 1, 0, 1));
+  const egresos = await prisma.invoice.findMany({
+    where: { companyId, tipo: "EGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
+    select: { id: true, total: true, taxes: { select: { tipo: true, importe: true, retencion: true } } },
+  });
+  if (egresos.length === 0) return { items: [], ejercicio };
+
+  const matched = await pagosConciliadosPorInvoice(egresos.map((e) => e.id));
+  const items: PueSinPago[] = [];
+  for (const e of egresos) {
+    const iva = e.taxes
+      .filter((t) => t.tipo === "IVA" && !t.retencion)
+      .reduce((s, t) => s + t.importe, 0);
+    if (iva <= 0.005) continue; // sólo CFDIs que aportan IVA acreditable
+    const pagado = matched.get(e.id) ?? 0;
+    if (!pagadaCompleta(e.total, pagado)) {
+      items.push({ invoiceId: e.id, total: e.total, ivaAcreditable: iva });
+    }
+  }
+  return { items, ejercicio };
+}
+
 export async function runAuditForCompany(companyId: string, fechaIso?: string): Promise<AuditResult> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
@@ -129,10 +167,12 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
 
   const cfdis = await loadCompanyCfdis(companyId);
   const { empleados, fuente } = await cargarNominaParaIsn(companyId, fecha);
+  const pue = await cargarPueSinPago(companyId, fecha);
 
   const hallazgos = [
     ...auditar(cfdis, ctx),
     ...auditarIsn(empleados, ctx, fuente),
+    ...auditarPagosPue(pue.items, pue.ejercicio),
   ];
 
   const vigentes = new Set<string>();
