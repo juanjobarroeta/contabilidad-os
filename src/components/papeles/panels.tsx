@@ -24,6 +24,7 @@ interface IvaRow {
   sinPagoConciliado?: boolean;
   excluidoAcreditamiento?: boolean;
   sinComplementoPago?: boolean;
+  pagoParcial?: boolean;
 }
 interface IvaData {
   periodo: string;
@@ -202,6 +203,10 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling }: {
                 ) : r.sinComplementoPago ? (
                   <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft" title="PPD sin complemento de pago (REP) en el periodo — se acredita cuando llegue el pago">
                     sin complemento
+                  </span>
+                ) : r.pagoParcial ? (
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-brand-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-brand-ink" title="PPD con pago parcial — sólo se acredita el IVA del monto pagado en el periodo (prorrateado)">
+                    parcial
                   </span>
                 ) : r.sinPagoConciliado && (
                   <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-amber-ink" title="PUE sin pago conciliado en banco — el IVA sólo es acreditable si se pagó (Art. 5-I LIVA)">

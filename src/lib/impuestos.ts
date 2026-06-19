@@ -35,7 +35,7 @@ function filtroEfos(bloqueados: Set<string>): Record<string, unknown> {
 // utilidad (manual override → prior-year calculated → none).
 // ─────────────────────────────────────────────────────────────────────────────
 
-type InvoiceLike = {
+export type InvoiceLike = {
   taxes: { tipo: string; retencion: boolean; importe: number }[];
   totalImpuestos: number | null;
 };
@@ -46,6 +46,7 @@ function ivaTrasladado(inv: InvoiceLike): number {
     ? ivaTaxes.reduce((s, t) => s + t.importe, 0)
     : (inv.totalImpuestos ?? 0);
 }
+export { ivaTrasladado as ivaTrasladadoDe, repIvaTrasladado as repIvaAcreditableDe };
 
 /**
  * IVA of a single REP payment toward a parent invoice. Uses the firm
