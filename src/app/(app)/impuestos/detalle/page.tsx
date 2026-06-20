@@ -88,6 +88,11 @@ interface ApiResult {
   isPreliminar: boolean;
   iva: IvaApiData;
   isr: IsrApiData;
+  asimilados: {
+    recibos: { id: string; uuid: string | null; fecha: string; emisor: string; rfc: string; regimenLabel: string | null; ingreso: number; isrRetenido: number; esDelMes: boolean }[];
+    mes: { ingreso: number; isrRetenido: number };
+    anual: { ingreso: number; isrRetenido: number };
+  } | null;
   facturas: FacturaRow[];
   declaracionGuardada: {
     id: string;
@@ -1006,6 +1011,48 @@ export default function ImpuestosPage() {
             </div>
             )}
           </div>
+
+          {/* ── Asimilados a salarios (Art. 94) — se reconoce solo ── */}
+          {result.asimilados && (
+            <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-border flex items-center gap-2 flex-wrap">
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+                <h2 className="font-semibold text-sm">Asimilados a salarios</h2>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {result.asimilados.recibos.filter((r) => r.esDelMes).length} recibo(s) en {MONTHS[month - 1]}
+                </span>
+              </div>
+              <div className="px-5 py-4">
+                <Row label={`Ingresos del mes (${MONTHS[month - 1]})`} value={formatCurrency(result.asimilados.mes.ingreso)} accent="blue" />
+                <Row label="ISR retenido por el pagador (tu pago provisional)" value={formatCurrency(result.asimilados.mes.isrRetenido)} />
+                <Row label={`Ingresos acumulados ${year}`} value={formatCurrency(result.asimilados.anual.ingreso)} bold />
+                <Row label={`ISR retenido acumulado ${year} (acreditable en la anual)`} value={formatCurrency(result.asimilados.anual.isrRetenido)} accent="green" />
+
+                {result.asimilados.recibos.filter((r) => r.esDelMes).length > 0 && (
+                  <div className="mt-3 border-t border-border divide-y divide-border">
+                    {result.asimilados.recibos.filter((r) => r.esDelMes).map((r) => (
+                      <div key={r.id} className="flex items-center justify-between gap-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{r.emisor}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(r.fecha)} · {r.regimenLabel ?? "Asimilados"}</p>
+                        </div>
+                        <div className="text-right whitespace-nowrap">
+                          <p className="text-sm font-medium">{formatCurrency(r.ingreso)}</p>
+                          <p className="text-xs text-muted-foreground">ISR ret. {formatCurrency(r.isrRetenido)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Ingresos por asimilados a salarios (Art. 94 LISR): el pagador retiene y entera el ISR — esa
+                  retención es tu pago provisional, por eso <strong>no</strong> entra a la base de actividad
+                  empresarial de arriba. Se acredita en tu <strong>declaración anual</strong>.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* ── Facturas del período ── */}
           <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
