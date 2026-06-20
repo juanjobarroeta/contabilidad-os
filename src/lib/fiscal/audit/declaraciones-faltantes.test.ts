@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { auditarDeclaracionesFaltantes } from "./declaraciones-faltantes";
 import type { AcuseFaltante } from "@/lib/fiscal/cobertura-declaraciones";
 
-const f = (tipo: AcuseFaltante["tipo"], periodo: string, etiqueta: string): AcuseFaltante => ({
-  companyId: "c1", tipo, periodo, etiqueta, motivo: "x",
+const f = (tipo: AcuseFaltante["tipo"], periodo: string, etiqueta: string, critico = true): AcuseFaltante => ({
+  companyId: "c1", tipo, periodo, etiqueta, motivo: "x", critico,
 });
 
 describe("auditarDeclaracionesFaltantes", () => {
@@ -11,8 +11,17 @@ describe("auditarDeclaracionesFaltantes", () => {
     expect(auditarDeclaracionesFaltantes([])).toEqual([]);
   });
 
-  it("emite un hallazgo agregado con referencias estables por tipo:periodo", () => {
+  it("ignora faltantes no críticos (anuales históricas) — no dispara la alarma", () => {
     const out = auditarDeclaracionesFaltantes([
+      f("DECLARACION_ANUAL", "2021", "Declaración anual 2021", false),
+      f("DECLARACION_ANUAL", "2022", "Declaración anual 2022", false),
+    ]);
+    expect(out).toEqual([]);
+  });
+
+  it("emite un hallazgo sólo con los críticos, referencias estables por tipo:periodo", () => {
+    const out = auditarDeclaracionesFaltantes([
+      f("DECLARACION_ANUAL", "2022", "Declaración anual 2022", false), // histórico → ignorado
       f("DECLARACION_ANUAL", "2025", "Declaración anual 2025"),
       f("IVA_MENSUAL", "2026-03", "IVA marzo 2026"),
     ]);

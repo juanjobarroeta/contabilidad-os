@@ -30,7 +30,7 @@ interface CierreData {
   };
   diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null } | null;
 }
-interface AcuseFaltante { tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL"; periodo: string; etiqueta: string; motivo: string; }
+interface AcuseFaltante { tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL"; periodo: string; etiqueta: string; motivo: string; critico?: boolean; }
 interface HallazgoDTO {
   id: string; checkClave: string; categoria: string; severidad: string;
   mensaje: string; sugerencia: string;
@@ -288,21 +288,40 @@ function FaltantesBanner({ faltantes, empresa, onUploaded }: {
 }) {
   const [abierto, setAbierto] = useState(false);
   if (faltantes.length === 0) return null;
-  const muestra = faltantes.slice(0, 4).map((f) => f.etiqueta).join(" · ");
+  // Sólo los faltantes CRÍTICOS (anual del año previo, IVA dic previo, meses del
+  // año en curso) afectan el arrastre de este mes. Las anuales más viejas son
+  // históricas: no disparan la alarma de "números incompletos".
+  const criticos = faltantes.filter((f) => f.critico);
+  const hayCriticos = criticos.length > 0;
+  const muestra = (hayCriticos ? criticos : faltantes).slice(0, 4).map((f) => f.etiqueta).join(" · ");
+  const toggle = (
+    <button onClick={() => setAbierto((v) => !v)}
+      className="mt-0.5 inline-flex flex-none items-center gap-1 font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-amber rounded">
+      {abierto ? "Ocultar" : "Capturar aquí"} <ChevronR className={`h-3.5 w-3.5 transition-transform ${abierto ? "rotate-90" : ""}`} />
+    </button>
+  );
   return (
-    <div className="mt-4 rounded-card border border-cos-amber bg-cos-amber-tint">
-      <div className="flex items-start gap-2.5 px-4 py-3 text-[13px] text-cos-amber-ink">
-        <FileWarning className="mt-0.5 h-4 w-4 flex-none" />
-        <span className="flex-1">
-          Faltan <b>{faltantes.length} acuse(s)</b> de esta empresa — sin ellos no podemos arrastrar bien
-          el saldo a favor, el coeficiente de utilidad ni los pagos provisionales. Los números de abajo pueden
-          estar incompletos. <span className="text-cos-amber-ink/80">{muestra}{faltantes.length > 4 ? "…" : ""}</span>
-        </span>
-        <button onClick={() => setAbierto((v) => !v)}
-          className="mt-0.5 inline-flex flex-none items-center gap-1 font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-amber rounded">
-          {abierto ? "Ocultar" : "Capturar aquí"} <ChevronR className={`h-3.5 w-3.5 transition-transform ${abierto ? "rotate-90" : ""}`} />
-        </button>
-      </div>
+    <div className={`mt-4 rounded-card border ${hayCriticos ? "border-cos-amber bg-cos-amber-tint" : "border-cos-line bg-cos-paper"}`}>
+      {hayCriticos ? (
+        <div className="flex items-start gap-2.5 px-4 py-3 text-[13px] text-cos-amber-ink">
+          <FileWarning className="mt-0.5 h-4 w-4 flex-none" />
+          <span className="flex-1">
+            Faltan <b>{criticos.length} acuse(s)</b> de esta empresa — sin ellos no podemos arrastrar bien
+            el saldo a favor, el coeficiente de utilidad ni los pagos provisionales. Los números de abajo pueden
+            estar incompletos. <span className="text-cos-amber-ink/80">{muestra}{criticos.length > 4 ? "…" : ""}</span>
+          </span>
+          {toggle}
+        </div>
+      ) : (
+        <div className="flex items-start gap-2.5 px-4 py-3 text-[13px] text-cos-ink-soft">
+          <FileWarning className="mt-0.5 h-4 w-4 flex-none text-cos-ink-faint" />
+          <span className="flex-1">
+            Tienes <b>{faltantes.length} declaración(es) histórica(s)</b> sin capturar — <b>no afectan</b> el cálculo de
+            este mes; captúralas cuando puedas para el expediente. <span className="text-cos-ink-faint">{muestra}{faltantes.length > 4 ? "…" : ""}</span>
+          </span>
+          {toggle}
+        </div>
+      )}
       {abierto && (
         <div className="border-t border-cos-amber/40 p-3">
           <FaltantesUploader
