@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import {
-  createSandboxLink, listAccounts, listTransactions, isBelvoConfigured,
+  createSandboxLink, listAccounts, listTransactions, listInstitutions, isBelvoConfigured,
 } from "@/lib/belvo";
 
 export const runtime = "nodejs";
@@ -39,8 +39,36 @@ export async function POST(req: Request) {
   }
 
   try {
+    // 0. Resolver una institución de prueba VÁLIDA de este sandbox (los nombres
+    //    cambian por cuenta; no hardcodeamos). Preferimos un banco "retail".
+    const instituciones = await listInstitutions("MX");
+    const bancos = instituciones.filter((i) => i.type === "bank");
+    const elegida =
+      institution ||
+      bancos.find((i) => /retail/i.test(i.name))?.name ||
+      bancos[0]?.name;
+    if (!elegida) {
+      return NextResponse.json(
+        { error: "Este sandbox de Belvo no expone instituciones de tipo banco.", instituciones: instituciones.map((i) => i.name) },
+        { status: 502 }
+      );
+    }
+
     // 1. Crear link de prueba (sandbox).
-    const link = await createSandboxLink({ institution, username, password });
+    let link;
+    try {
+      link = await createSandboxLink({ institution: elegida, username, password });
+    } catch (e) {
+      // El nombre o las credenciales no aplican → devolvemos las opciones para elegir.
+      return NextResponse.json(
+        {
+          error: e instanceof Error ? e.message : "No se pudo crear el link de prueba",
+          institucionProbada: elegida,
+          bancosDisponibles: bancos.map((i) => i.name),
+        },
+        { status: 502 }
+      );
+    }
 
     // 2. Importar cuentas como BankAccount.
     const accounts = await listAccounts(link.id);
