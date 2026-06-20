@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { REGIMENES_ASIMILADOS, etiquetaRegimenNomina } from "@/lib/nomina/regimen";
 import type { TaxDeclarationType } from "@prisma/client";
 
 // GET /api/impuestos?companyId=xxx&month=4&year=2026
@@ -108,6 +109,48 @@ export async function GET(req: Request) {
     }),
   ]);
 
+  // ── Asimilados a salarios (Art. 94) — ingresos del receptor ────────────────
+  // Recibos de nómina RECIBIDOS de un tercero bajo régimen asimilados (05–11).
+  // Estos ingresos NO entran a la base de actividad empresarial: el retenedor
+  // retiene el ISR (que es el pago provisional del receptor) y se acredita en la
+  // declaración anual. Sólo se reconoce automáticamente — sin configurar nada.
+  const asimiladosRows = await prisma.invoice.findMany({
+    where: {
+      companyId,
+      tipo: "NOMINA",
+      status: "STAMPED",
+      regimenNomina: { in: REGIMENES_ASIMILADOS },
+      notas: { contains: "recib", mode: "insensitive" }, // recibidos = ingreso del receptor
+      fecha: { gte: yearFrom, lt: to },
+    },
+    select: {
+      id: true, uuid: true, fecha: true, subtotal: true,
+      isrRetenidoNomina: true, regimenNomina: true,
+      customer: { select: { razonSocial: true, rfc: true } },
+    },
+    orderBy: { fecha: "asc" },
+  });
+  const asimRecibos = asimiladosRows.map((r) => ({
+    id: r.id,
+    uuid: r.uuid,
+    fecha: r.fecha,
+    emisor: r.customer?.razonSocial ?? "—",
+    rfc: r.customer?.rfc ?? "—",
+    regimenLabel: etiquetaRegimenNomina(r.regimenNomina),
+    ingreso: r.subtotal,
+    isrRetenido: r.isrRetenidoNomina ?? 0,
+    esDelMes: new Date(r.fecha) >= from,
+  }));
+  const sumA = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) * 100) / 100;
+  const asimDelMes = asimRecibos.filter((r) => r.esDelMes);
+  const asimilados = asimRecibos.length > 0
+    ? {
+        recibos: asimRecibos,
+        mes:   { ingreso: sumA(asimDelMes.map((r) => r.ingreso)),   isrRetenido: sumA(asimDelMes.map((r) => r.isrRetenido)) },
+        anual: { ingreso: sumA(asimRecibos.map((r) => r.ingreso)), isrRetenido: sumA(asimRecibos.map((r) => r.isrRetenido)) },
+      }
+    : null;
+
   // ── Nómina retenciones ──────────────────────────────────────────────────
   const nominaIsrMes       = nominaThisMonth._sum.isrRetenido ?? 0;
   const nominaImssMes      = nominaThisMonth._sum.imssObrero ?? 0;
@@ -158,6 +201,8 @@ export async function GET(req: Request) {
       // Devengado (informational — all stamped CFDIs regardless of payment)
       devengado: pos.iva.devengado,
     },
+    // Asimilados a salarios recibidos (Art. 94) — null si la empresa no recibe.
+    asimilados,
     nomina: {
       isrRetenidoMes: nominaIsrMes,
       imssObreroMes: nominaImssMes,

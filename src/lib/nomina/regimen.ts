@@ -25,6 +25,9 @@ export const REGIMEN_NOMINA: Record<string, string> = {
 
 const ASIMILADOS = new Set(["05", "06", "07", "08", "09", "10", "11"]);
 
+/** Régimenes c_TipoRegimen que son asimilados a salarios (Art. 94 LISR). */
+export const REGIMENES_ASIMILADOS = ["05", "06", "07", "08", "09", "10", "11"];
+
 /** True si el régimen de nómina es alguno de los asimilados a salarios (Art. 94). */
 export function esAsimilado(regimen: string | null | undefined): boolean {
   return !!regimen && ASIMILADOS.has(regimen);
