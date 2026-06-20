@@ -44,7 +44,7 @@ export default function BancosPage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [filter, setFilter] = useState<Filter>("all");
   const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState<"" | "auto" | "upload" | "belvo">("");
+  const [busy, setBusy] = useState<"" | "auto" | "upload">("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [candLoading, setCandLoading] = useState(false);
@@ -86,28 +86,6 @@ export default function BancosPage() {
       const n = data.autoMatched ?? 0;
       showToast(n > 0 ? `${n} movimiento${n === 1 ? "" : "s"} conciliado${n === 1 ? "" : "s"} automáticamente` : "Sin coincidencias automáticas de alta confianza");
       await Promise.all([loadTxs(), loadAccounts()]);
-    } finally { setBusy(""); }
-  }
-
-  async function probarBelvo() {
-    if (!activeCompany) return;
-    setBusy("belvo");
-    try {
-      const res = await fetch("/api/bancos/belvo/sandbox-test", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: activeCompany.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const opts = data.bancosDisponibles?.length ? ` · bancos: ${data.bancosDisponibles.slice(0, 4).join(", ")}` : "";
-        showToast((data.error || "Error al conectar con Belvo") + opts);
-        if (data.bancosDisponibles) console.log("[belvo] instituciones disponibles:", data.bancosDisponibles);
-        return;
-      }
-      showToast(`Belvo sandbox: ${data.cuentas?.length ?? 0} cuenta(s), ${data.txCreated ?? 0} movimientos importados`);
-      await Promise.all([loadAccounts(), loadTxs()]);
-    } catch {
-      showToast("Error al conectar con Belvo");
     } finally { setBusy(""); }
   }
 
@@ -165,12 +143,6 @@ export default function BancosPage() {
           <Landmark className="mx-auto mb-3 h-10 w-10 text-cos-ink-faint opacity-40" />
           <p className="text-sm font-medium text-cos-ink">Sin cuentas bancarias</p>
           <Link href="/bancos/detalle" className="mt-2 inline-block text-[13px] font-semibold text-cos-brand-ink hover:underline">Agregar una cuenta →</Link>
-          <div className="mt-4">
-            <button onClick={probarBelvo} disabled={busy === "belvo"}
-              className="inline-flex items-center justify-center gap-2 rounded-control border border-cos-line bg-white px-4 py-2.5 text-[13.5px] font-semibold text-cos-ink hover:bg-cos-paper disabled:opacity-50">
-              {busy === "belvo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />} Conectar banco de prueba (Belvo sandbox)
-            </button>
-          </div>
         </Card>
       ) : (
         <>
@@ -213,10 +185,6 @@ export default function BancosPage() {
                 <button onClick={autoReconcile} disabled={!!busy}
                   className="flex flex-1 items-center justify-center gap-2 rounded-control bg-cos-brand px-4 py-2.5 text-[14px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
                   {busy === "auto" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Conciliar automáticamente
-                </button>
-                <button onClick={probarBelvo} disabled={!!busy} title="Importa movimientos de prueba desde Belvo (sandbox)"
-                  className="flex items-center justify-center gap-2 rounded-control border border-cos-line bg-white px-4 py-2.5 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper disabled:opacity-50">
-                  {busy === "belvo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />} Belvo (sandbox)
                 </button>
               </div>
             </Card>
