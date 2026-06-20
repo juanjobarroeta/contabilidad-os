@@ -40,16 +40,27 @@ export async function POST(req: Request) {
 
   try {
     // 0. Resolver una institución de prueba VÁLIDA de este sandbox (los nombres
-    //    cambian por cuenta; no hardcodeamos). Preferimos un banco "retail".
+    //    cambian por cuenta; no hardcodeamos). El `type` varía entre sandboxes
+    //    (algunos no marcan "bank"), así que NO filtramos por type: descartamos
+    //    sólo lo que claramente no es banco (fiscal/empleo) y preferimos retail.
     const instituciones = await listInstitutions("MX");
-    const bancos = instituciones.filter((i) => i.type === "bank");
+    const noBanco = /^(fiscal|employment|gig)/i;
+    const bancos = instituciones.filter(
+      (i) => !noBanco.test(i.type) && !noBanco.test(i.name)
+    );
+    const candidatas = bancos.length ? bancos : instituciones;
     const elegida =
       institution ||
-      bancos.find((i) => /retail/i.test(i.name))?.name ||
-      bancos[0]?.name;
+      candidatas.find((i) => /retail/i.test(i.name))?.name ||
+      candidatas.find((i) => i.type === "bank")?.name ||
+      candidatas[0]?.name;
     if (!elegida) {
       return NextResponse.json(
-        { error: "Este sandbox de Belvo no expone instituciones de tipo banco.", instituciones: instituciones.map((i) => i.name) },
+        {
+          error: "Este sandbox de Belvo no expone ninguna institución de prueba.",
+          institucionProbada: null,
+          bancosDisponibles: instituciones.map((i) => i.name),
+        },
         { status: 502 }
       );
     }
@@ -64,7 +75,7 @@ export async function POST(req: Request) {
         {
           error: e instanceof Error ? e.message : "No se pudo crear el link de prueba",
           institucionProbada: elegida,
-          bancosDisponibles: bancos.map((i) => i.name),
+          bancosDisponibles: instituciones.map((i) => i.name),
         },
         { status: 502 }
       );
