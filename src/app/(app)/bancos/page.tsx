@@ -98,7 +98,12 @@ export default function BancosPage() {
         body: JSON.stringify({ companyId: activeCompany.id }),
       });
       const data = await res.json();
-      if (!res.ok) { showToast(data.error || "Error al conectar con Belvo"); return; }
+      if (!res.ok) {
+        const opts = data.bancosDisponibles?.length ? ` · bancos: ${data.bancosDisponibles.slice(0, 4).join(", ")}` : "";
+        showToast((data.error || "Error al conectar con Belvo") + opts);
+        if (data.bancosDisponibles) console.log("[belvo] instituciones disponibles:", data.bancosDisponibles);
+        return;
+      }
       showToast(`Belvo sandbox: ${data.cuentas?.length ?? 0} cuenta(s), ${data.txCreated ?? 0} movimientos importados`);
       await Promise.all([loadAccounts(), loadTxs()]);
     } catch {
