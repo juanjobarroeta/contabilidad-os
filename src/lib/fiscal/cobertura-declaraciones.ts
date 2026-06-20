@@ -25,6 +25,14 @@ export interface AcuseFaltante {
   periodo: string;
   etiqueta: string;
   motivo: string;
+  /**
+   * True cuando el faltante afecta el arrastre del periodo en curso: la anual
+   * del ejercicio INMEDIATO anterior (coeficiente), el IVA de diciembre previo
+   * (saldo a favor) y los meses del año en curso. Las anuales más viejas son
+   * deseables para el histórico/auditoría pero NO afectan los cálculos del mes
+   * — por eso no deben disparar la alarma de "tus números están incompletos".
+   */
+  critico: boolean;
 }
 
 const MESES = [
@@ -89,6 +97,9 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
           periodo: String(y),
           etiqueta: `Declaración anual ${y}`,
           motivo: "Coeficiente de utilidad y saldo de ISR — cubre los mensuales de ISR de ese año.",
+          // Sólo la anual del ejercicio inmediato anterior define el coeficiente
+          // del año en curso; las más viejas son históricas (no críticas).
+          critico: y === curYear - 1,
         });
       }
     }
@@ -104,6 +115,7 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
         periodo: `${prev}-12`,
         etiqueta: `IVA diciembre ${prev}`,
         motivo: "El IVA no tiene anual — necesitamos el último mes para arrastrar el saldo a favor.",
+        critico: true,
       });
     }
   }
@@ -119,6 +131,7 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
         periodo: per,
         etiqueta: `ISR provisional ${MESES[m - 1]} ${curYear}`,
         motivo: "Pago provisional del año en curso (acreditable en la anual).",
+        critico: true,
       });
     }
     if (tieneIVA && !have.has(`IVA_MENSUAL:${per}`)) {
@@ -128,6 +141,7 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
         periodo: per,
         etiqueta: `IVA ${MESES[m - 1]} ${curYear}`,
         motivo: "IVA del año en curso (saldo a favor / a cargo).",
+        critico: true,
       });
     }
   }

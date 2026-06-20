@@ -10,18 +10,21 @@
 import type { Hallazgo } from "./types";
 import type { AcuseFaltante } from "@/lib/fiscal/cobertura-declaraciones";
 
-/** One aggregate Hallazgo for all missing declaraciones (empty → no finding). */
+/** One aggregate Hallazgo for the carryover-critical missing declaraciones
+ *  (empty → no finding). Older anuales are historical, not carryover-blocking,
+ *  so they don't raise a flag here — only on the capture screen. */
 export function auditarDeclaracionesFaltantes(faltantes: AcuseFaltante[]): Hallazgo[] {
-  if (faltantes.length === 0) return [];
-  const etiquetas = faltantes.map((f) => f.etiqueta);
+  const criticas = faltantes.filter((f) => f.critico);
+  if (criticas.length === 0) return [];
+  const etiquetas = criticas.map((f) => f.etiqueta);
   const muestra = etiquetas.slice(0, 8).join(", ") + (etiquetas.length > 8 ? "…" : "");
   return [
     {
       checkClave: "declaraciones.faltantes",
       severidad: "warn",
-      mensaje: `Faltan ${faltantes.length} declaración(es)/acuse(s) por capturar. Sin ellas el arrastre de saldo a favor de IVA, saldo a favor y pagos provisionales de ISR, y el coeficiente de utilidad queda incompleto — las cifras de este periodo pueden ser incorrectas.`,
+      mensaje: `Faltan ${criticas.length} declaración(es)/acuse(s) que afectan el arrastre del periodo. Sin ellas el saldo a favor de IVA, los pagos provisionales de ISR y el coeficiente de utilidad quedan incompletos — las cifras de este periodo pueden ser incorrectas.`,
       // Identidad estable por (tipo:periodo); cambia con el conjunto faltante.
-      referencias: faltantes.map((f) => `${f.tipo}:${f.periodo}`),
+      referencias: criticas.map((f) => `${f.tipo}:${f.periodo}`),
       fundamento: { ley: "LISR", articulo: "14" },
       sugerencia: `Captura los acuses en Declaraciones para completar el arrastre: ${muestra}.`,
     },
