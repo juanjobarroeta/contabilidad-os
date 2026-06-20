@@ -77,6 +77,33 @@ export async function getLink(linkId: string): Promise<BelvoLink> {
   return belvoFetch(`/api/links/${linkId}/`);
 }
 
+// ─── Sandbox: create a link without the Connect Widget ────────────────────────
+// SANDBOX ONLY. Creates a link directly against a Belvo test institution with
+// test credentials, so we can exercise the full accounts → transactions →
+// reconciliation flow before wiring the real Connect Widget. Production links
+// MUST come from the widget (real user consent) — this throws outside sandbox.
+//
+// Belvo MX sandbox test institution + users are shown in your Belvo dashboard;
+// the common retail one is "erebor_mx_retail" with user "bnk100" / "full".
+export async function createSandboxLink(opts?: {
+  institution?: string;
+  username?: string;
+  password?: string;
+}): Promise<BelvoLink> {
+  if ((process.env.BELVO_ENV ?? "sandbox") !== "sandbox") {
+    throw new Error("createSandboxLink sólo está permitido en BELVO_ENV=sandbox");
+  }
+  return belvoFetch("/api/links/", {
+    method: "POST",
+    body: JSON.stringify({
+      institution: opts?.institution ?? "erebor_mx_retail",
+      username: opts?.username ?? "bnk100",
+      password: opts?.password ?? "full",
+      access_mode: "single",
+    }),
+  });
+}
+
 // ─── Accounts ────────────────────────────────────────────────────────────────
 export interface BelvoAccount {
   id: string;
