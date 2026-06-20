@@ -17,6 +17,7 @@ import {
 import { interpretarCancelaciones, type SatMetadataRow } from "./sat-cancelaciones";
 import { clasificarCfdi } from "./fiscal/clasificar-cfdi";
 import { crearActivoDesdeCfdiSiAplica } from "./fiscal/auto-activo";
+import { backfillNominaRegimen } from "./nomina/backfill-regimen";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared, session-free SAT Descarga Masiva logic.
@@ -629,6 +630,13 @@ export async function verifyAndImportSatSync(
       }
     }
   }
+
+  // Reconocer régimen de nómina (asimilados, ISR retenido) en recibos ya
+  // importados que aún no lo tienen — re-parsea su rawXml. Idempotente y
+  // best-effort: así "Sincronizar CFDIs" deja todo reconocido sin pasos manuales.
+  await backfillNominaRegimen(companyId, { timeBudgetMs: 30_000 }).catch((e) =>
+    console.error("[sat-sync] backfillNominaRegimen falló:", e)
+  );
 
   // Persist the imported counts back to the SatSyncRequest rows we updated
   if (emitidosRequestId) {
