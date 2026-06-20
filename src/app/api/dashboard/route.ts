@@ -6,6 +6,7 @@ import { getObligacionesPorRegimen } from "@/lib/obligaciones";
 import { detectComplementosPendientes } from "@/lib/complementos";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { getAsimiladosResumen } from "@/lib/fiscal/asimilados";
 import { fielStatus } from "@/lib/fiel";
 
 // GET /api/dashboard?companyId=xxx
@@ -54,6 +55,7 @@ export async function GET(req: Request) {
     savedDeclaracion,
     company,
     taxPosition,
+    asimilados,
   ] = await Promise.all([
     // Ingresos this month
     prisma.invoice.aggregate({
@@ -120,6 +122,8 @@ export async function GET(req: Request) {
     // Real fiscal-engine position for this month (IVA flujo + régimen-aware ISR) —
     // the source of truth for "¿Cuánto debo?", not the rough ivaEstimado above.
     computeTaxPosition(companyId, year, month),
+    // Asimilados a salarios recibidos (Art. 94) — null si la empresa no recibe.
+    getAsimiladosResumen(companyId, year, month),
   ]);
 
   // ── 6-month trend ─────────────────────────────────────────────────────────
@@ -354,6 +358,11 @@ export async function GET(req: Request) {
       coeficienteSugerido: taxPosition.isr.coeficienteSugerido ?? null,
       coeficienteSugeridoFuente: taxPosition.isr.coeficienteSugeridoFuente ?? null,
     },
+    // Asimilados a salarios recibidos (Art. 94): ingreso + ISR retenido del mes y
+    // acumulado del año. null si la empresa no recibe asimilados.
+    asimilados: asimilados
+      ? { mes: asimilados.mes, anual: asimilados.anual }
+      : null,
     kpis: {
       ingresosDelMes,
       gastosDelMes,
