@@ -26,6 +26,10 @@ interface DashboardData {
     coeficienteSugerido?: number | null;
     coeficienteSugeridoFuente?: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno" | null;
   };
+  asimilados: {
+    mes: { ingreso: number; isrRetenido: number };
+    anual: { ingreso: number; isrRetenido: number };
+  } | null;
   kpis: {
     ingresosDelMes: number; gastosDelMes: number; utilidadBruta: number;
     facturasEmitidas: number; facturasRecibidas: number;
@@ -318,6 +322,30 @@ export default function InicioPage() {
             </Card>
 
           </div>
+
+          {/* asimilados a salarios — se reconoce solo, sólo si la empresa recibe */}
+          {data.asimilados && (
+            <Card className="rounded-card border-cos-line p-5 shadow-card">
+              <span className={LBL}>Asimilados a salarios</span>
+              <div className="mt-3.5 grid grid-cols-1 gap-3.5 min-[460px]:grid-cols-3">
+                <div>
+                  <p className="text-[12.5px] text-cos-ink-faint">Ingresos del mes</p>
+                  <Money value={data.asimilados.mes.ingreso} size={19} />
+                </div>
+                <div>
+                  <p className="text-[12.5px] text-cos-ink-faint">ISR retenido (pago provisional)</p>
+                  <Money value={data.asimilados.mes.isrRetenido} size={19} />
+                </div>
+                <div>
+                  <p className="text-[12.5px] text-cos-ink-faint">ISR retenido {data.periodo.year} (acreditable)</p>
+                  <Money value={data.asimilados.anual.isrRetenido} size={19} />
+                </div>
+              </div>
+              <p className="mt-3 text-[12.5px] text-cos-ink-faint">
+                Art. 94: el pagador retiene y entera el ISR — se acredita en tu declaración anual.
+              </p>
+            </Card>
+          )}
 
           {/* obligaciones */}
           <Card className="rounded-card border-cos-line p-5 shadow-card">

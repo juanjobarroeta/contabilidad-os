@@ -20,8 +20,14 @@ interface AcuseMensualParsed {
   isrIngresos: number | null; isrPagosAnteriores: number | null; isrAPagar: number | null;
   coeficienteUtilidadAplicado: number | null; lineaCaptura: string | null; fechaPresentacion: string | null;
 }
+interface AsimiladosResumen {
+  recibos: { id: string; uuid: string | null; fecha: string; emisor: string; rfc: string; regimenLabel: string | null; ingreso: number; isrRetenido: number; esDelMes: boolean }[];
+  mes: { ingreso: number; isrRetenido: number };
+  anual: { ingreso: number; isrRetenido: number };
+}
 interface CierreData {
   periodo: string; month: number; year: number;
+  asimilados: AsimiladosResumen | null;
   federal: {
     lineas: FederalLinea[]; totalAPagar: number; saldoFavorIva: number;
     vencimiento: string; estado: Estado;
@@ -387,6 +393,31 @@ function Resumen({ data, companyId, month, year }: { data: CierreData; companyId
             <EstadoBadge estado={data.diot.estado} />
           </div>
           <p className="mt-2 text-[14px] text-cos-ink">{data.diot.proveedores} proveedor(es) con IVA · vence {fmtFecha(data.diot.vencimiento)}</p>
+        </Card>
+      )}
+
+      {data.asimilados && (
+        <Card className="rounded-card border-cos-line p-5 shadow-card">
+          <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Asimilados a salarios</span>
+          <table className="mt-3 w-full text-[14px]">
+            <tbody>
+              <tr className="border-b border-cos-line-soft">
+                <td className="py-2 text-cos-ink-soft">Ingresos del mes</td>
+                <td className="py-2 text-right"><Money value={data.asimilados.mes.ingreso} size={15} weight={600} /></td>
+              </tr>
+              <tr className="border-b border-cos-line-soft">
+                <td className="py-2 text-cos-ink-soft">ISR retenido (tu pago provisional)</td>
+                <td className="py-2 text-right"><Money value={data.asimilados.mes.isrRetenido} size={15} weight={600} /></td>
+              </tr>
+              <tr className="text-cos-jade-ink">
+                <td className="py-2 text-[13px]">ISR retenido acumulado {year} (acreditable en la anual)</td>
+                <td className="py-2 text-right"><Money value={data.asimilados.anual.isrRetenido} size={14} weight={600} /></td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="mt-2 text-[12.5px] text-cos-ink-faint">
+            Art. 94: el pagador retiene y entera el ISR — no entra a tu base de actividad empresarial; se acredita en la declaración anual.
+          </p>
         </Card>
       )}
 

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { getAsimiladosResumen } from "@/lib/fiscal/asimilados";
 import { detectComplementosPendientes } from "@/lib/complementos";
 import { formatCurrency } from "@/lib/utils";
 import { calcularVencimiento, type ObligacionConfig } from "@/lib/obligaciones";
@@ -73,7 +74,7 @@ export async function GET(req: Request) {
   const from = new Date(year, month - 1, 1);
   const to = new Date(year, month, 1);
 
-  const [pos, complementos, obligaciones, declaraciones, nominaRet, egresosConIvaCount, cfdiCount, nominaRunsCount] =
+  const [pos, complementos, obligaciones, declaraciones, nominaRet, egresosConIvaCount, cfdiCount, nominaRunsCount, asimilados] =
     await Promise.all([
       computeTaxPosition(companyId, year, month),
       detectComplementosPendientes(companyId),
@@ -95,6 +96,7 @@ export async function GET(req: Request) {
       prisma.payrollRun.count({
         where: { companyId, fechaPago: { gte: from, lt: to } },
       }),
+      getAsimiladosResumen(companyId, year, month),
     ]);
 
   const has = (tipo: string) => obligaciones.some((o) => o.tipo === tipo);
@@ -208,6 +210,8 @@ export async function GET(req: Request) {
     periodo,
     month,
     year,
+    // Ingresos por asimilados a salarios recibidos (Art. 94); null si no hay.
+    asimilados,
     federal: {
       lineas: federalLineas,
       totalAPagar,
