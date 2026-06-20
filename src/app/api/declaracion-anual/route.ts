@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { calcularDeclaracionAnual, type DeclaracionAnualInput } from "@/lib/declaracion-anual";
+import { REGIMENES_ASIMILADOS } from "@/lib/nomina/regimen";
 import { sumIsrPagar } from "@/lib/isr-provisional";
 import { calcularDepreciacionRegistro } from "@/lib/fiscal/activos-registro";
 import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
@@ -52,6 +53,7 @@ export async function GET(req: Request) {
     existingAnual,
     registroDepreciacion,
     perdidasRecords,
+    asimiladosAgg,
   ] = await Promise.all([
     // Total CFDI ingresos for the year
     prisma.invoice.aggregate({
@@ -101,7 +103,21 @@ export async function GET(req: Request) {
     calcularDepreciacionRegistro(companyId, ejercicio),
     // Pérdidas fiscales pendientes de amortizar (Art. 57).
     prisma.perdidaFiscal.findMany({ where: { companyId } }),
+    // Asimilados a salarios recibidos (Art. 94): ingreso acumulable + ISR retenido
+    // acreditable. Reconciliación anual de lo que se mostró mes a mes.
+    prisma.invoice.aggregate({
+      where: {
+        companyId, tipo: "NOMINA", status: "STAMPED",
+        regimenNomina: { in: REGIMENES_ASIMILADOS },
+        notas: { contains: "recib", mode: "insensitive" },
+        fecha: { gte: yearStart, lte: yearEnd },
+      },
+      _sum: { subtotal: true, isrRetenidoNomina: true },
+    }),
   ]);
+
+  const ingresosAsimilados = asimiladosAgg._sum.subtotal ?? 0;
+  const isrRetenidoAsimilados = asimiladosAgg._sum.isrRetenidoNomina ?? 0;
 
   // Pérdidas disponibles, actualizadas a junio del ejercicio (Art. 57). Alimentan
   // el cálculo como default; el contador puede sobreescribir con ?perdidasAnteriores=.
@@ -157,6 +173,7 @@ export async function GET(req: Request) {
     regimenFiscal: company.regimenFiscal,
     ingresosPorCfdis: ingresosCfdis,
     otrosIngresos: parseFloat(searchParams.get("otrosIngresos") ?? "0"),
+    ingresosAsimilados,
     comprasPorCfdis: egresosCfdis,
     sueldosYSalarios: sueldos,
     cuotasImssPatronal: imssPatronal,
@@ -176,6 +193,7 @@ export async function GET(req: Request) {
       : perdidasDisp.total,
     isrPagadoProvisionales: isrProvTotal,
     isrRetenidoPorTerceros: parseFloat(searchParams.get("isrRetenidoPorTerceros") ?? "0"),
+    isrRetenidoAsimilados,
   };
 
   const result = calcularDeclaracionAnual(input);
@@ -188,6 +206,8 @@ export async function GET(req: Request) {
       ingresosCfdis: { count: "Facturas emitidas del ejercicio", monto: ingresosCfdis },
       egresosCfdis: { count: "Gastos deducibles (excl. inversión y sin efectos)", monto: egresosCfdis },
       sueldos: { count: "Nómina del ejercicio", monto: sueldos },
+      asimilados: { count: "Asimilados a salarios recibidos (Art. 94)", monto: ingresosAsimilados },
+      isrRetenidoAsimilados: { count: "ISR que te retuvieron por asimilados (acreditable)", monto: isrRetenidoAsimilados },
       imssPatronal: { monto: imssPatronal },
       ptu: { monto: ptuPagado },
       isrProvisionales: { monto: isrProvTotal },
