@@ -84,14 +84,27 @@ export async function GET(req: Request) {
     // vuelve acreditable este mes (igual que el motor). parentUuid = UUID del CFDI pagado.
     prisma.pagoDoctoRelacionado.findMany({
       where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" } },
-      select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
+      select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true, fechaPago: true },
     }),
   ]);
   // REP links liquidados en el periodo, agrupados por CFDI pagado (parentUuid).
-  const repLinksPorParent = new Map<string, { impPagado: number | null; ivaTrasladado: number | null; ivaDerivado: boolean }[]>();
+  type RepLink = { impPagado: number | null; ivaTrasladado: number | null; ivaDerivado: boolean; fechaPago: Date | null };
+  const repLinksPorParent = new Map<string, RepLink[]>();
   for (const r of repCobros) {
     repLinksPorParent.set(r.parentUuid, [...(repLinksPorParent.get(r.parentUuid) ?? []), r]);
   }
+  // Padres INGRESO (de cualquier mes) de los REP cobrados este periodo: su IVA
+  // se causa al COBRARSE (flujo), no en la fecha del CFDI — igual que el motor.
+  // Por eso el PPD ingreso se arma desde los complementos, no desde la lista por
+  // fecha (capta también lo cobrado este mes de facturas de meses anteriores).
+  const repParentUuids = [...new Set(repCobros.map((r) => r.parentUuid))];
+  const repIngresoParents = repParentUuids.length
+    ? await prisma.invoice.findMany({
+        where: { companyId, uuid: { in: repParentUuids }, tipo: "INGRESO", metodoPago: "PPD", status: "STAMPED" },
+        select: { id: true, uuid: true, serie: true, folio: true, total: true, totalImpuestos: true, taxes: true, ivaNoCausado: true, customer: { select: { razonSocial: true, rfc: true } } },
+      })
+    : [];
+  const repIngresoByUuid = new Map(repIngresoParents.map((p) => [p.uuid!, p]));
 
   type InvoiceRelation = (typeof ingresos)[number];
 
@@ -136,6 +149,8 @@ export async function GET(req: Request) {
     sinComplementoPago?: boolean;
     /** PPD con complemento parcial → sólo se acredita el IVA del monto pagado. */
     pagoParcial?: boolean;
+    /** Renglón de ingreso PPD armado desde el complemento de pago (REP) cobrado. */
+    esComplemento?: boolean;
   };
 
   const trasladado: Row[] = [];
@@ -143,7 +158,8 @@ export async function GET(req: Request) {
 
   for (const inv of ingresos) {
     const { trasladado: t, retenido: r } = extractIva(inv);
-    if (t > 0.005) {
+    // PUE causa al emitirse; PPD causa al cobrarse (se arma abajo desde los REP).
+    if (t > 0.005 && inv.metodoPago !== "PPD") {
       trasladado.push({
         id: inv.id,
         fecha: inv.fecha.toISOString().slice(0, 10),
@@ -176,6 +192,35 @@ export async function GET(req: Request) {
       });
     }
   }
+
+  // PPD ingreso cobrado este periodo (vía REP), por CFDI padre — prorrateado por
+  // lo cobrado, igual que el motor. Capta también lo cobrado de meses anteriores.
+  for (const [parentUuid, links] of repLinksPorParent) {
+    const parent = repIngresoByUuid.get(parentUuid);
+    if (!parent) continue; // el padre no es INGRESO PPD (será un egreso) → se ignora aquí
+    const iva = links.reduce(
+      (s, l) => s + repIvaAcreditableDe(l, { taxes: parent.taxes, totalImpuestos: parent.totalImpuestos, total: parent.total }),
+      0
+    );
+    if (iva <= 0.005) continue;
+    const ultimoPago = links.map((l) => l.fechaPago).filter(Boolean).sort().pop() ?? null;
+    trasladado.push({
+      id: `${parent.id}-rep`,
+      fecha: (ultimoPago ?? from).toISOString().slice(0, 10),
+      uuid: parent.uuid,
+      serie: parent.serie,
+      folio: parent.folio,
+      contraparte: parent.customer?.razonSocial ?? "—",
+      rfc: parent.customer?.rfc ?? "—",
+      subtotal: +(iva / 0.16).toFixed(2),
+      tasa: 0.16,
+      importe: iva,
+      metodoPago: "PPD",
+      esComplemento: true,
+      excluidoAcreditamiento: parent.ivaNoCausado,
+    });
+  }
+  trasladado.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   const acreditable: Row[] = [];
   const retenidoAProveedores: Row[] = [];
