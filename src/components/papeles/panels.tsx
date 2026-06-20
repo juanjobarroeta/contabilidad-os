@@ -25,6 +25,7 @@ interface IvaRow {
   excluidoAcreditamiento?: boolean;
   sinComplementoPago?: boolean;
   pagoParcial?: boolean;
+  esComplemento?: boolean;
 }
 interface IvaData {
   periodo: string;
@@ -210,6 +211,11 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
               </td>
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-soft">
                 {r.metodoPago}
+                {r.esComplemento && (
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-brand-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-brand-ink" title="Ingreso PPD causado al cobrarse — armado desde el complemento de pago (REP) de este periodo">
+                    cobrado (REP)
+                  </span>
+                )}
                 {r.excluidoAcreditamiento ? (
                   <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft">{excluidoLabel}</span>
                 ) : r.sinComplementoPago ? (
