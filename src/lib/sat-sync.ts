@@ -556,6 +556,11 @@ export async function verifyAndImportSatSync(
             usoCfdi: cfdi.usoCfdi ?? "G03",
             naturaleza: clasif.fuente === "no_aplica" ? null : clasif.naturaleza,
             naturalezaRevision: clasif.requiereRevision,
+            // Complemento de nómina (CFDI tipo "N"): régimen del receptor + ISR
+            // retenido — null para CFDIs que no son nómina.
+            regimenNomina: cfdi.nomina?.tipoRegimen ?? null,
+            tipoNomina: cfdi.nomina?.tipoNomina ?? null,
+            isrRetenidoNomina: cfdi.nomina?.isrRetenido ?? null,
             moneda: cfdi.moneda ?? "MXN",
             subtotal: cfdi.subtotal,
             total: cfdi.total,

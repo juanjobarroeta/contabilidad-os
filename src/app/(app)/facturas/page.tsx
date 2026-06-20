@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Button } from "@/components/ui";
+import { esAsimilado, etiquetaRegimenNomina } from "@/lib/nomina/regimen";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -21,6 +22,8 @@ interface Invoice {
   facturapiId: string | null;
   naturaleza: "GASTO" | "INVERSION" | "INVENTARIO" | "SIN_EFECTOS" | null;
   naturalezaRevision: boolean;
+  regimenNomina: string | null;
+  isrRetenidoNomina: number | null;
   customer: { razonSocial: string; rfc: string } | null;
 }
 
@@ -295,6 +298,9 @@ export default function FacturasPage() {
                   <span className={`inline-block rounded-[7px] px-[9px] py-[3px] text-[12px] font-semibold ${meta.badge}`}>
                     {meta.label}
                   </span>
+                  {k === "nomina" && esAsimilado(inv.regimenNomina) && (
+                    <span className="mt-1 block text-[11px] font-medium text-cos-ink-faint">Asimilados</span>
+                  )}
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-[14.5px] font-medium text-cos-ink">{inv.customer?.razonSocial ?? "—"}</span>
@@ -458,7 +464,9 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
         <div className="flex items-start justify-between">
           <div>
             <span className={`inline-block rounded-[7px] px-[9px] py-[3px] text-[12px] font-semibold ${meta.badge}`}>{meta.label}</span>
-            <span className="ml-2.5 text-[13px] text-cos-ink-soft">{meta.plain}</span>
+            <span className="ml-2.5 text-[13px] text-cos-ink-soft">
+              {(k === "nomina" && etiquetaRegimenNomina(inv.regimenNomina)) || meta.plain}
+            </span>
           </div>
           <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-control text-cos-ink-soft hover:bg-cos-paper">
             <X className="h-5 w-5" />

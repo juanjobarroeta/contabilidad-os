@@ -241,6 +241,45 @@ export function parseCfdiXml(xml: string) {
     }
   }
 
+  // ── Complemento de Nómina (CFDI tipo "N") ──────────────────────────────────
+  // El <nomina12:Nomina> trae el régimen del receptor y el ISR retenido por el
+  // patrón/retenedor — datos que el import antes descartaba. Para asimilados a
+  // salarios recibidos (régimen 05–11, Art. 94 LISR) el ISR retenido es
+  // acreditable del receptor y la percepción es ingreso por ese régimen.
+  let nomina: {
+    tipoNomina: string | null;
+    tipoRegimen: string | null;
+    totalPercepciones: number | null;
+    totalDeducciones: number | null;
+    totalOtrosPagos: number | null;
+    isrRetenido: number | null;
+  } | null = null;
+  if (tipo === "N") {
+    const nominaAttrs = /<(?:[a-zA-Z0-9]+:)?Nomina\b([^>]*)>/.exec(xml)?.[1] ?? "";
+    const nAttr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(nominaAttrs)?.[1] ?? null;
+    // El régimen vive en el Receptor del complemento (TipoRegimen), no en el
+    // cfdi:Receptor — lo buscamos por su atributo directamente.
+    const tipoRegimen =
+      /<(?:[a-zA-Z0-9]+:)?Receptor\b[^>]*\bTipoRegimen="([^"]*)"/.exec(xml)?.[1] ?? null;
+    // ISR retenido = suma de Deduccion TipoDeduccion="002".
+    let isrRetenido: number | null = null;
+    const dedRe = /<(?:[a-zA-Z0-9]+:)?Deduccion\b([^>]*?)\/?>/g;
+    let dmn: RegExpExecArray | null;
+    while ((dmn = dedRe.exec(xml)) !== null) {
+      const a = dmn[1];
+      const get = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(a)?.[1] ?? null;
+      if (get("TipoDeduccion") === "002") isrRetenido = (isrRetenido ?? 0) + (numOf(get("Importe")) ?? 0);
+    }
+    nomina = {
+      tipoNomina: nAttr("TipoNomina"),
+      tipoRegimen,
+      totalPercepciones: numOf(nAttr("TotalPercepciones")),
+      totalDeducciones: numOf(nAttr("TotalDeducciones")),
+      totalOtrosPagos: numOf(nAttr("TotalOtrosPagos")),
+      isrRetenido,
+    };
+  }
+
   return {
     uuid,
     fecha,
@@ -262,5 +301,6 @@ export function parseCfdiXml(xml: string) {
     items,
     taxes,
     doctosRelacionados,
+    nomina,
   };
 }
