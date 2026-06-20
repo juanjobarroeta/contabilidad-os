@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getFacturapiClient } from "@/lib/facturapi";
-import { parseFacturapiError } from "@/lib/facturapi-errors";
+import { getPacProvider } from "@/lib/pac";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 const VALID_MOTIVOS = ["01", "02", "03", "04"] as const;
@@ -59,23 +58,19 @@ export async function DELETE(
     return NextResponse.json({ error: "La factura ya está cancelada" }, { status: 409 });
   }
 
-  // Stamped CFDI → must cancel at SAT via Facturapi, with the motivo.
+  // Stamped CFDI → must cancel at SAT via the PAC, with the motivo.
   if (invoice.facturapiId && invoice.company.facturapiApiKey) {
-    try {
-      const fp = getFacturapiClient(invoice.company.facturapiApiKey);
-      // Facturapi params: { motive, substitution? }. Only confirmed if it
-      // returns without throwing and the status reflects cancellation.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (fp as any).invoices.cancel(invoice.facturapiId, {
-        motive: motivo,
-        ...(sustituyeUuid ? { substitution: sustituyeUuid } : {}),
-      });
-    } catch (e) {
-      const info = parseFacturapiError(e);
+    const out = await getPacProvider().cancelCfdi(
+      invoice.company.facturapiApiKey,
+      invoice.facturapiId,
+      motivo,
+      sustituyeUuid ?? undefined
+    );
+    if (!out.ok) {
       // DO NOT mark CANCELLED — the CFDI is still live at SAT.
       return NextResponse.json(
-        { error: `No se pudo cancelar ante el SAT: ${info.message}`, kind: info.kind },
-        { status: info.status }
+        { error: `No se pudo cancelar ante el SAT: ${out.message}`, kind: out.kind },
+        { status: out.status }
       );
     }
   } else if (invoice.status !== "STAMPED") {

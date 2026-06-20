@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getFacturapiClient } from "@/lib/facturapi";
-import { parseFacturapiError } from "@/lib/facturapi-errors";
+import { getPacProvider, type CfdiInput, type StampedCfdi } from "@/lib/pac";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Stamp (timbrar) a CFDI via Facturapi. Extracted from POST /api/facturas so it
@@ -69,16 +68,28 @@ function resolveGlobalInfo(rfc: string, globalInfo: StampInput["global"]): Stamp
   return globalInfo;
 }
 
-/** Persists a stamped Facturapi invoice as a local INGRESO Invoice + line items. */
+/** Maps the local StampInput to the provider-neutral CfdiInput. */
+function toCfdiInput(input: StampInput, customerRef: string, rfc: string): CfdiInput {
+  return {
+    customerRef,
+    paymentForm: input.formaPago,
+    paymentMethod: input.metodoPago,
+    use: input.usoCfdi,
+    items: input.items,
+    notes: input.notes,
+    global: resolveGlobalInfo(rfc, input.global),
+  };
+}
+
+/** Persists a stamped CFDI as a local INGRESO Invoice + line items. */
 async function persistStampedInvoice(
   input: StampInput,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fp: any
+  stamped: StampedCfdi
 ): Promise<StampResult> {
   const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes } = input;
   const computedSubtotal = items.reduce((s, it) => s + it.quantity * it.product.price, 0);
-  const total = fp.total ?? computedSubtotal;
-  const subtotal = typeof fp.subtotal === "number" && fp.subtotal > 0.01 ? fp.subtotal : computedSubtotal;
+  const total = stamped.total ?? computedSubtotal;
+  const subtotal = typeof stamped.subtotal === "number" && stamped.subtotal > 0.01 ? stamped.subtotal : computedSubtotal;
   const totalImpuestos = +(total - subtotal).toFixed(2);
 
   const invoice = await prisma.invoice.create({
@@ -98,8 +109,8 @@ async function persistStampedInvoice(
       // Canonizar a MAYÚSCULAS: Facturapi puede devolver el UUID en minúsculas
       // y la descarga del SAT lo trae en mayúsculas — guardarlos distinto
       // duplica el CFDI y rompe el empate de cancelaciones.
-      uuid: fp.uuid?.toUpperCase() ?? null,
-      facturapiId: fp.id,
+      uuid: stamped.uuid?.toUpperCase() ?? null,
+      facturapiId: stamped.pacId,
       items: {
         create: items.map((it) => ({
           cantidad: it.quantity,
@@ -115,11 +126,11 @@ async function persistStampedInvoice(
     },
   });
 
-  return { ok: true, invoiceId: invoice.id, uuid: fp.uuid, total, folio: fp.folio_number ?? null };
+  return { ok: true, invoiceId: invoice.id, uuid: stamped.uuid ?? "", total, folio: stamped.folio != null ? String(stamped.folio) : null };
 }
 
 export async function stampInvoice(input: StampInput): Promise<StampResult> {
-  const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes } = input;
+  const { companyId, customerId } = input;
 
   const notReady = await checkStampReadiness(companyId, customerId);
   if (notReady) return notReady;
@@ -129,26 +140,13 @@ export async function stampInvoice(input: StampInput): Promise<StampResult> {
     prisma.customer.findUnique({ where: { id: customerId }, select: { facturapiId: true, rfc: true } }),
   ]);
 
-  const facturapi = getFacturapiClient(company!.facturapiApiKey!);
-  const resolvedGlobal = resolveGlobalInfo(customer!.rfc, input.global);
-
-  let fp: Awaited<ReturnType<typeof facturapi.invoices.create>>;
-  try {
-    fp = await facturapi.invoices.create({
-      customer: customer!.facturapiId!,
-      payment_form: formaPago,
-      payment_method: metodoPago,
-      use: usoCfdi,
-      items: items.map((it) => ({ quantity: it.quantity, product: it.product })),
-      ...(notes && { pdf_custom_section: notes }),
-      ...(resolvedGlobal && { global: resolvedGlobal }),
-    });
-  } catch (e) {
-    const info = parseFacturapiError(e);
-    return { ok: false, status: info.status, error: info.message, needsReconfigure: info.needsReconfigure };
+  const cfdi = toCfdiInput(input, customer!.facturapiId!, customer!.rfc);
+  const out = await getPacProvider().createCfdi(company!.facturapiApiKey!, cfdi);
+  if (!out.ok) {
+    return { ok: false, status: out.status, error: out.message, needsReconfigure: out.needsReconfigure };
   }
 
-  return persistStampedInvoice(input, fp);
+  return persistStampedInvoice(input, out.data);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,7 +164,7 @@ export type DraftResult =
   | { ok: false; status: number; error: string; needsReconfigure?: boolean };
 
 export async function createDraftInvoice(input: StampInput): Promise<DraftResult> {
-  const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes } = input;
+  const { companyId, customerId } = input;
 
   const notReady = await checkStampReadiness(companyId, customerId);
   if (notReady && !notReady.ok) {
@@ -178,25 +176,12 @@ export async function createDraftInvoice(input: StampInput): Promise<DraftResult
     prisma.customer.findUnique({ where: { id: customerId }, select: { facturapiId: true, rfc: true } }),
   ]);
 
-  const facturapi = getFacturapiClient(company!.facturapiApiKey!);
-  const resolvedGlobal = resolveGlobalInfo(customer!.rfc, input.global);
-
-  try {
-    const fp = await facturapi.invoices.create({
-      customer: customer!.facturapiId!,
-      payment_form: formaPago,
-      payment_method: metodoPago,
-      use: usoCfdi,
-      items: items.map((it) => ({ quantity: it.quantity, product: it.product })),
-      status: "draft",
-      ...(notes && { pdf_custom_section: notes }),
-      ...(resolvedGlobal && { global: resolvedGlobal }),
-    });
-    return { ok: true, draftId: fp.id };
-  } catch (e) {
-    const info = parseFacturapiError(e);
-    return { ok: false, status: info.status, error: info.message, needsReconfigure: info.needsReconfigure };
+  const cfdi = toCfdiInput(input, customer!.facturapiId!, customer!.rfc);
+  const out = await getPacProvider().createDraft(company!.facturapiApiKey!, cfdi);
+  if (!out.ok) {
+    return { ok: false, status: out.status, error: out.message, needsReconfigure: out.needsReconfigure };
   }
+  return { ok: true, draftId: out.data.draftId };
 }
 
 export async function stampDraftFromPending(input: StampInput, draftId: string): Promise<StampResult> {
@@ -207,29 +192,21 @@ export async function stampDraftFromPending(input: StampInput, draftId: string):
   if (!company?.facturapiApiKey) {
     return { ok: false, status: 422, error: "La empresa ya no está lista para timbrar." };
   }
-  const facturapi = getFacturapiClient(company.facturapiApiKey);
 
-  let fp: Awaited<ReturnType<typeof facturapi.invoices.stampDraft>>;
-  try {
-    fp = await facturapi.invoices.stampDraft(draftId);
-  } catch (e) {
-    const info = parseFacturapiError(e);
-    return { ok: false, status: info.status, error: info.message, needsReconfigure: info.needsReconfigure };
+  const out = await getPacProvider().stampDraft(company.facturapiApiKey, draftId);
+  if (!out.ok) {
+    return { ok: false, status: out.status, error: out.message, needsReconfigure: out.needsReconfigure };
   }
 
-  return persistStampedInvoice(input, fp);
+  return persistStampedInvoice(input, out.data);
 }
 
 /** Best-effort delete of an unstamped draft (e.g. user cancelled). Never throws. */
 export async function discardDraft(companyId: string, draftId: string): Promise<void> {
-  try {
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { facturapiApiKey: true },
-    });
-    if (!company?.facturapiApiKey) return;
-    await getFacturapiClient(company.facturapiApiKey).invoices.cancel(draftId);
-  } catch (e) {
-    console.error("[whatsapp] failed to discard draft", e);
-  }
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { facturapiApiKey: true },
+  });
+  if (!company?.facturapiApiKey) return;
+  await getPacProvider().discardDraft(company.facturapiApiKey, draftId);
 }
