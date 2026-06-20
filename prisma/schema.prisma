@@ -531,6 +531,16 @@ model Invoice {
    *  el IVA se causa cuando se cobra, Art. 1-B/11/17 LIVA). Default false = sin efecto. */
   ivaNoCausado      Boolean @default(false)
 
+  // Nómina (CFDI tipo "N"): datos del complemento de nómina 1.2 que el import del
+  // SAT antes descartaba. regimenNomina = c_TipoRegimen del Receptor del
+  // complemento (02 = sueldos; 05–11 = asimilados a salarios, Art. 94 LISR).
+  // isrRetenidoNomina = ISR retenido por el retenedor (Deduccion TipoDeduccion
+  // "002"); para asimilados RECIBIDOS es ISR acreditable del receptor. Null si el
+  // CFDI no es nómina o se importó antes de parsear el complemento.
+  regimenNomina     String?
+  tipoNomina        String? // "O" ordinaria | "E" extraordinaria
+  isrRetenidoNomina Float?
+
   // SAT stamping data (from PAC/Facturapi)
   status         InvoiceStatus @default(DRAFT)
   // Folio fiscal. Único POR EMPRESA, no global: un CFDI intercompañía (emisor y
