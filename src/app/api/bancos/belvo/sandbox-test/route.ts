@@ -39,25 +39,27 @@ export async function POST(req: Request) {
   }
 
   try {
-    // 0. Resolver una institución de prueba VÁLIDA de este sandbox (los nombres
-    //    cambian por cuenta; no hardcodeamos). El `type` varía entre sandboxes
-    //    (algunos no marcan "bank"), así que NO filtramos por type: descartamos
-    //    sólo lo que claramente no es banco (fiscal/empleo) y preferimos retail.
+    // 0. Resolver una institución BANCARIA de prueba de este sandbox.
+    //    IMPORTANTE: Belvo NO ofrece agregación bancaria en México (sólo datos
+    //    fiscales/laborales y pagos); la agregación de cuentas/movimientos sólo
+    //    existe en Brasil. Por eso un sandbox MX típicamente sólo expone
+    //    instituciones tipo "fiscal" (SAT) y "employment" (IMSS), no bancos.
+    //    Detectamos el banco por type === "bank" (canónico) y, si no hay
+    //    ninguno, devolvemos un mensaje honesto en vez de intentar un conector
+    //    no-bancario con credenciales de banco.
     const instituciones = await listInstitutions("MX");
-    const noBanco = /^(fiscal|employment|gig)/i;
-    const bancos = instituciones.filter(
-      (i) => !noBanco.test(i.type) && !noBanco.test(i.name)
-    );
-    const candidatas = bancos.length ? bancos : instituciones;
+    const esBanco = (i: { type: string; name: string }) =>
+      i.type === "bank" && !/(fiscal|employment|gig)/i.test(i.name);
+    const bancos = instituciones.filter(esBanco);
     const elegida =
       institution ||
-      candidatas.find((i) => /retail/i.test(i.name))?.name ||
-      candidatas.find((i) => i.type === "bank")?.name ||
-      candidatas[0]?.name;
+      bancos.find((i) => /retail/i.test(i.name))?.name ||
+      bancos[0]?.name;
     if (!elegida) {
       return NextResponse.json(
         {
-          error: "Este sandbox de Belvo no expone ninguna institución de prueba.",
+          error:
+            "Belvo no ofrece agregación bancaria en México (sólo datos fiscales del SAT, datos laborales del IMSS y pagos). Para importar movimientos usa “Cargar estado de cuenta” o un agregador con cobertura MX (Finerio, Syncfy, Prometeo).",
           institucionProbada: null,
           bancosDisponibles: instituciones.map((i) => i.name),
         },
