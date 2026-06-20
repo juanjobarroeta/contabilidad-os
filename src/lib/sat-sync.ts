@@ -432,6 +432,11 @@ export async function verifyAndImportSatSync(
   }
 
   if (readyPackageIds.length === 0) {
+    // Aunque no haya CFDIs nuevos, reconcilia el régimen de nómina ya guardada
+    // (best-effort) — así un re-sync "vacío" no deja recibos sin reconocer.
+    await backfillNominaRegimen(companyId, { timeBudgetMs: 30_000 }).catch((e) =>
+      console.error("[sat-sync] backfillNominaRegimen (empty) falló:", e)
+    );
     return { ok: true, status: "empty", message: "No se encontraron CFDIs en este período" };
   }
 
@@ -462,11 +467,27 @@ export async function verifyAndImportSatSync(
         // the file / parsed the <cfdi:Impuestos> node.
         const existing = await prisma.invoice.findFirst({
           where: { companyId, uuid: { equals: uuid, mode: "insensitive" } },
-          select: { id: true, rawXml: true, _count: { select: { taxes: true } } },
+          select: { id: true, tipo: true, rawXml: true, regimenNomina: true, _count: { select: { taxes: true } } },
         });
         if (existing) {
           if (!existing.rawXml) {
             await prisma.invoice.update({ where: { id: existing.id }, data: { rawXml: xmlContent } });
+          }
+          // Repara el régimen/ISR retenido de nómina de filas importadas antes de
+          // parsear el complemento (incl. las que no tenían rawXml): así un re-sync
+          // del periodo las reconoce como asimilados sin pasos manuales.
+          if (existing.tipo === "NOMINA" && existing.regimenNomina == null) {
+            const parsed = parseCfdiXml(xmlContent);
+            if (parsed.nomina?.tipoRegimen) {
+              await prisma.invoice.update({
+                where: { id: existing.id },
+                data: {
+                  regimenNomina: parsed.nomina.tipoRegimen,
+                  tipoNomina: parsed.nomina.tipoNomina ?? null,
+                  isrRetenidoNomina: parsed.nomina.isrRetenido ?? null,
+                },
+              });
+            }
           }
           if (existing._count.taxes === 0) {
             const parsed = parseCfdiXml(xmlContent);
