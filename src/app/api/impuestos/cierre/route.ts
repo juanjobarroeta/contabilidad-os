@@ -127,6 +127,16 @@ export async function GET(req: Request) {
       tipoMonto: "enterar",
     });
   }
+  // IVA que retuvimos a proveedores (servicios, arrendamiento, fletes): se entera
+  // en la misma declaración mensual. Sólo aparece si efectivamente retuvimos.
+  if (pos.iva.retenidoAProveedores > 0.005) {
+    federalLineas.push({
+      tipo: "RETENCIONES_IVA",
+      descripcion: "IVA retenido a proveedores",
+      monto: pos.iva.retenidoAProveedores,
+      tipoMonto: "enterar",
+    });
+  }
 
   const totalAPagar = federalLineas
     .filter((l) => l.tipoMonto !== "favor")

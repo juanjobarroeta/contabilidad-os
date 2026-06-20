@@ -172,6 +172,8 @@ export interface TaxPosition {
   iva: {
     trasladado: number;
     retenidoPorClientes: number;
+    /** IVA que retuvimos a proveedores — pasivo a enterar (no reduce nuestro IVA). */
+    retenidoAProveedores: number;
     /** IVA acreditable PROCEDENTE (ya aplicada la proporción Art. 5-V) — la cifra que entra al cálculo. */
     acreditable: number;
     /** IVA acreditable antes de proporción (suma de los gastos del periodo). */
@@ -404,6 +406,12 @@ export async function computeTaxPosition(
 
   const ivaTrasladadoDevengado = facturasEmitidas.reduce((s, inv) => s + ivaTrasladado(inv), 0);
   const ivaRetenidoPorClientes = facturasEmitidas.reduce(
+    (sum, inv) => sum + inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion).reduce((s, t) => s + t.importe, 0),
+    0
+  );
+  // IVA que NOSOTROS retuvimos a proveedores (egresos): es un pasivo a ENTERAR
+  // al SAT, no reduce nuestro IVA — va como línea propia en la declaración.
+  const ivaRetenidoAProveedores = facturasEgresos.reduce(
     (sum, inv) => sum + inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion).reduce((s, t) => s + t.importe, 0),
     0
   );
@@ -737,6 +745,7 @@ export async function computeTaxPosition(
     iva: {
       trasladado: round2(ivaTrasladadoTotal),
       retenidoPorClientes: round2(ivaRetenidoPorClientes),
+      retenidoAProveedores: round2(ivaRetenidoAProveedores),
       acreditable: round2(ivaAcreditable),
       acreditableBruto: round2(ivaAcreditableBruto),
       proporcionAcreditamiento: actos.proporcion,
