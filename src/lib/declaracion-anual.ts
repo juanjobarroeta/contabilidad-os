@@ -14,6 +14,7 @@ export type DeclaracionAnualInput = {
   // ── Ingresos ──
   ingresosPorCfdis: number;         // Sum of CFDI ingresos (subtotal)
   otrosIngresos: number;            // Manual: intereses, ganancia cambiaria, etc.
+  ingresosAsimilados?: number;      // Asimilados a salarios recibidos (Art. 94) — acumulable PF
 
   // ── Deducciones ──
   comprasPorCfdis: number;          // Sum of CFDI egresos (subtotal)
@@ -34,6 +35,7 @@ export type DeclaracionAnualInput = {
   // ── Pagos provisionales ──
   isrPagadoProvisionales: number;      // Sum of monthly ISR provisional payments
   isrRetenidoPorTerceros: number;      // ISR retained by clients (Art. 106)
+  isrRetenidoAsimilados?: number;      // ISR retained by the asimilados payer (Art. 94) — acreditable
 
   // ── RESICO PF specific ──
   resicoPfIngresos?: number;           // For RESICO: total cobrado (not devengado)
@@ -66,6 +68,7 @@ export type DeclaracionAnualResult = {
     ingresos: {
       porCfdis: number;
       otros: number;
+      asimilados: number;
       ajusteInflacionAcumulable: number;
       total: number;
     };
@@ -118,8 +121,9 @@ export function calcularDeclaracionAnual(input: DeclaracionAnualInput): Declarac
   // ── Ingresos acumulables ──
   const ingresoCfdis = input.ingresosPorCfdis;
   const otrosIngresos = input.otrosIngresos;
+  const ingresosAsimilados = input.ingresosAsimilados ?? 0;
   const ajusteInflAcum = input.ajusteInflacionAcumulable;
-  const totalIngresos = r2(ingresoCfdis + otrosIngresos + ajusteInflAcum);
+  const totalIngresos = r2(ingresoCfdis + otrosIngresos + ingresosAsimilados + ajusteInflAcum);
 
   // ── Deducciones autorizadas ──
   const compras = input.comprasPorCfdis;
@@ -165,7 +169,7 @@ export function calcularDeclaracionAnual(input: DeclaracionAnualInput): Declarac
   }
 
   // ── ISR acreditable ──
-  const isrAcreditable = r2(input.isrPagadoProvisionales + input.isrRetenidoPorTerceros);
+  const isrAcreditable = r2(input.isrPagadoProvisionales + input.isrRetenidoPorTerceros + (input.isrRetenidoAsimilados ?? 0));
   const isrAPagar = r2(Math.max(0, isrDelEjercicio - isrAcreditable));
   const isrAFavor = r2(Math.max(0, isrAcreditable - isrDelEjercicio));
 
@@ -195,6 +199,7 @@ export function calcularDeclaracionAnual(input: DeclaracionAnualInput): Declarac
       ingresos: {
         porCfdis: ingresoCfdis,
         otros: otrosIngresos,
+        asimilados: ingresosAsimilados,
         ajusteInflacionAcumulable: ajusteInflAcum,
         total: totalIngresos,
       },

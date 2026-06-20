@@ -24,7 +24,7 @@ type DecResult = {
   isrAFavor: number;
   coeficienteUtilidad: number | null;
   desglose: {
-    ingresos: { porCfdis: number; otros: number; ajusteInflacionAcumulable: number; total: number };
+    ingresos: { porCfdis: number; otros: number; asimilados: number; ajusteInflacionAcumulable: number; total: number };
     deducciones: { compras: number; sueldos: number; cuotasImss: number; infonavitSar: number; depreciacion: number; ptu: number; ajusteInflacionDeducible: number; otras: number; total: number };
   };
   dataSources: Record<string, { monto: number; count?: string; sobreescritoManual?: boolean }>;
@@ -218,6 +218,7 @@ export default function DeclaracionAnualPage() {
           {/* Ingresos detail */}
           <Section title="Ingresos acumulables">
             <Row label="Ingresos por CFDIs emitidos" value={result.desglose.ingresos.porCfdis} />
+            {result.desglose.ingresos.asimilados > 0 && <Row label="Asimilados a salarios (Art. 94)" value={result.desglose.ingresos.asimilados} />}
             {result.desglose.ingresos.otros > 0 && <Row label="Otros ingresos" value={result.desglose.ingresos.otros} />}
             {result.desglose.ingresos.ajusteInflacionAcumulable > 0 && <Row label="Ajuste anual por inflación acumulable" value={result.desglose.ingresos.ajusteInflacionAcumulable} />}
             <TotalRow label="Total ingresos" value={result.desglose.ingresos.total} />
@@ -259,6 +260,9 @@ export default function DeclaracionAnualPage() {
             <Row label="Resultado fiscal" value={result.resultadoFiscal} bold />
             <Row label={`ISR del ejercicio (tasa ${(result.tasaIsr * 100).toFixed(result.tipoPersona === "PM" ? 0 : 2)}%)`} value={result.isrDelEjercicio} />
             <Row label="(-) ISR pagado en provisionales" value={-(result.dataSources.isrProvisionales?.monto ?? 0)} />
+            {(result.dataSources.isrRetenidoAsimilados?.monto ?? 0) > 0 && (
+              <Row label="(-) ISR que te retuvieron por asimilados" value={-(result.dataSources.isrRetenidoAsimilados?.monto ?? 0)} />
+            )}
             {parseFloat(overrides.isrRetenidoPorTerceros) > 0 && (
               <Row label="(-) ISR retenido por terceros" value={-parseFloat(overrides.isrRetenidoPorTerceros)} />
             )}
