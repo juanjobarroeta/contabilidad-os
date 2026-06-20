@@ -1024,9 +1024,9 @@ export default function ImpuestosPage() {
               </div>
               <div className="px-5 py-4">
                 <Row label={`Ingresos del mes (${MONTHS[month - 1]})`} value={formatCurrency(result.asimilados.mes.ingreso)} accent="blue" />
-                <Row label="ISR retenido por el pagador (tu pago provisional)" value={formatCurrency(result.asimilados.mes.isrRetenido)} />
+                <Row label="ISR que te retuvieron (pago provisional)" value={formatCurrency(result.asimilados.mes.isrRetenido)} />
                 <Row label={`Ingresos acumulados ${year}`} value={formatCurrency(result.asimilados.anual.ingreso)} bold />
-                <Row label={`ISR retenido acumulado ${year} (acreditable en la anual)`} value={formatCurrency(result.asimilados.anual.isrRetenido)} accent="green" />
+                <Row label={`ISR que te retuvieron en ${year} (acreditable en la anual)`} value={formatCurrency(result.asimilados.anual.isrRetenido)} accent="green" />
 
                 {result.asimilados.recibos.filter((r) => r.esDelMes).length > 0 && (
                   <div className="mt-3 border-t border-border divide-y divide-border">

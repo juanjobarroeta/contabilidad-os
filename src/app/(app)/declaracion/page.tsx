@@ -406,11 +406,11 @@ function Resumen({ data, companyId, month, year }: { data: CierreData; companyId
                 <td className="py-2 text-right"><Money value={data.asimilados.mes.ingreso} size={15} weight={600} /></td>
               </tr>
               <tr className="border-b border-cos-line-soft">
-                <td className="py-2 text-cos-ink-soft">ISR retenido (tu pago provisional)</td>
+                <td className="py-2 text-cos-ink-soft">ISR que te retuvieron (pago provisional)</td>
                 <td className="py-2 text-right"><Money value={data.asimilados.mes.isrRetenido} size={15} weight={600} /></td>
               </tr>
               <tr className="text-cos-jade-ink">
-                <td className="py-2 text-[13px]">ISR retenido acumulado {year} (acreditable en la anual)</td>
+                <td className="py-2 text-[13px]">ISR que te retuvieron en {year} (acreditable en la anual)</td>
                 <td className="py-2 text-right"><Money value={data.asimilados.anual.isrRetenido} size={14} weight={600} /></td>
               </tr>
             </tbody>

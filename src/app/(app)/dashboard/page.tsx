@@ -333,11 +333,11 @@ export default function InicioPage() {
                   <Money value={data.asimilados.mes.ingreso} size={19} />
                 </div>
                 <div>
-                  <p className="text-[12.5px] text-cos-ink-faint">ISR retenido (pago provisional)</p>
+                  <p className="text-[12.5px] text-cos-ink-faint">ISR que te retuvieron (pago provisional)</p>
                   <Money value={data.asimilados.mes.isrRetenido} size={19} />
                 </div>
                 <div>
-                  <p className="text-[12.5px] text-cos-ink-faint">ISR retenido {data.periodo.year} (acreditable)</p>
+                  <p className="text-[12.5px] text-cos-ink-faint">ISR que te retuvieron en {data.periodo.year} (acreditable)</p>
                   <Money value={data.asimilados.anual.isrRetenido} size={19} />
                 </div>
               </div>

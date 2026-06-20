@@ -597,8 +597,13 @@ export function RetencionesPanel({ companyId, year, month }: { companyId: string
         />
       )}
       {data.retencionesRecibidas.length === 0 && data.retencionesEfectuadas.length === 0 && (
-        <div className="rounded-card border border-dashed border-cos-line bg-white p-12 text-center text-[14px] text-cos-ink-faint">
-          Sin retenciones en este periodo.
+        <div className="rounded-card border border-dashed border-cos-line bg-white p-12 text-center">
+          <p className="text-[14px] text-cos-ink-faint">Sin retenciones en este periodo.</p>
+          <p className="mx-auto mt-2 max-w-[52ch] text-[12.5px] text-cos-ink-faint">
+            Aquí solo van las retenciones de ISR/IVA en CFDIs: las que te hacen tus clientes o las que tú
+            efectúas a proveedores. El ISR que te retienen por <strong>asimilados a salarios</strong> se
+            muestra aparte, en el Resumen — es tu pago provisional acreditable en la declaración anual.
+          </p>
         </div>
       )}
     </div>
