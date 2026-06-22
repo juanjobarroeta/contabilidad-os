@@ -152,9 +152,14 @@ export default function BancosPage() {
   useEffect(() => { loadTxs(); }, [loadTxs]);
 
   const selectionCount = selectedTxIds.size;
-  const selectionSum = txs
-    .filter((t) => selectedTxIds.has(t.id))
-    .reduce((s, t) => s + Math.abs(t.monto), 0);
+  // Neto firmado: un reembolso (cargo, monto negativo) resta del cobro. Así un
+  // sobrepago + su devolución concilian al total de la factura en vez de sumarse
+  // (5,800 cobrado − 800 devuelto = 5,000, no 6,600).
+  const selectionSum = Math.abs(
+    txs
+      .filter((t) => selectedTxIds.has(t.id))
+      .reduce((s, t) => s + t.monto, 0)
+  );
 
   function toggleTxSelection(id: string) {
     setSelectedTxIds((prev) => {

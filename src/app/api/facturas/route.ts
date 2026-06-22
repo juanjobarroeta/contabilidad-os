@@ -113,9 +113,10 @@ export async function GET(req: Request) {
   });
 
   const enriched = invoices.map((inv) => {
-    const matchedAmount = inv.bankTransactions.reduce(
-      (s, tx) => s + Math.abs(tx.monto),
-      0
+    // Neto firmado: un reembolso (cargo) resta de lo cobrado, así un sobrepago
+    // y su devolución dan el total exacto en vez de sobre-conciliar.
+    const matchedAmount = Math.abs(
+      inv.bankTransactions.reduce((s, tx) => s + tx.monto, 0)
     );
     const fullyMatched = matchedAmount >= inv.total - 0.01;
     // bankTransactions was only loaded to compute this — strip from payload.

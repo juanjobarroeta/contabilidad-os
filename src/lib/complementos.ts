@@ -215,7 +215,8 @@ export async function detectComplementosRecibidosPendientes(
   const pendientes: ComplementoRecibidoPendiente[] = [];
   for (const g of paid) {
     if (complementado.has(g.uuid!)) continue; // vendor already sent the REP
-    const totalPagado = g.bankTransactions.reduce((s, t) => s + Math.abs(t.monto), 0);
+    // Neto firmado: un reembolso (cargo) resta de lo pagado.
+    const totalPagado = Math.abs(g.bankTransactions.reduce((s, t) => s + t.monto, 0));
     const ultimoPago = g.bankTransactions.reduce((a, b) => (a.fecha > b.fecha ? a : b)).fecha;
     const fechaLimite = fechaLimiteComplemento(ultimoPago);
     const { urgencia, dias } = classify(fechaLimite, now);
