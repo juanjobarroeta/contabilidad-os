@@ -17,6 +17,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import * as XLSX from "xlsx";
 import { parseStatement, type ParsedTransaction } from "@/lib/bank-parser";
 
 export type ImportResult = {
@@ -113,14 +114,40 @@ export async function importBankStatement(opts: {
   companyId: string;
   fileContent: string;
   filename: string;
+  // "base64" cuando el archivo es binario (Excel .xlsx/.xls) y se envió
+  // codificado; "text" (default) para CSV/TXT/OFX enviados como texto.
+  encoding?: "text" | "base64";
 }): Promise<ImportResult> {
-  const { bankAccountId, companyId, fileContent, filename } = opts;
+  const { bankAccountId, companyId, fileContent, filename, encoding } = opts;
 
   if (!fileContent) {
     return { ok: false, imported: 0, skipped: 0, message: "Archivo vacío", error: "Archivo vacío" };
   }
 
-  const parseResult = parseStatement(fileContent, filename ?? "statement.csv");
+  // Excel (.xlsx/.xls/.xlsm): es binario, así que el front lo manda en base64.
+  // Lo convertimos a CSV con SheetJS y lo pasamos por el mismo parser (que ya
+  // detecta el encabezado aunque no esté en la primera fila).
+  let content = fileContent;
+  let parseName = filename ?? "statement.csv";
+  const esExcel = encoding === "base64" || /\.(xlsx|xls|xlsm)$/i.test(parseName);
+  if (esExcel) {
+    try {
+      const buf = Buffer.from(fileContent, "base64");
+      const wb = XLSX.read(buf, { type: "buffer" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      if (!ws) throw new Error("sin hojas");
+      content = XLSX.utils.sheet_to_csv(ws);
+      parseName = parseName.replace(/\.(xlsx|xls|xlsm)$/i, ".csv");
+    } catch {
+      return {
+        ok: false, imported: 0, skipped: 0,
+        message: "No se pudo leer el archivo de Excel. Verifica que sea un .xlsx válido.",
+        error: "Excel ilegible",
+      };
+    }
+  }
+
+  const parseResult = parseStatement(content, parseName);
 
   if (parseResult.transactions.length === 0) {
     return {

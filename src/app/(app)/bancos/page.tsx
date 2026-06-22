@@ -30,6 +30,17 @@ type Filter = "all" | "UNMATCHED" | "MATCHED";
 
 const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint";
 const CONF: Record<Candidate["confidence"], "jade" | "amber" | "slate"> = { alta: "jade", media: "amber", baja: "slate" };
+// Lee un archivo binario (Excel) como base64 sin el prefijo data: — robusto para
+// archivos grandes (no usa String.fromCharCode sobre todo el buffer).
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
 const fmtFecha = (iso: string) => {
   const M = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
   const d = new Date(iso);
@@ -94,10 +105,12 @@ export default function BancosPage() {
     if (!file || !selectedId) return;
     setBusy("upload");
     try {
-      const fileContent = await file.text();
+      // Excel (.xlsx/.xls/.xlsm) es binario: se envía en base64. CSV/TXT/OFX como texto.
+      const esExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
+      const fileContent = esExcel ? await fileToBase64(file) : await file.text();
       const res = await fetch(`/api/bancos/${selectedId}/upload`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileContent, filename: file.name }),
+        body: JSON.stringify({ fileContent, filename: file.name, encoding: esExcel ? "base64" : "text" }),
       });
       const data = await res.json();
       showToast(data.message ?? (data.ok ? `Importados ${data.imported}` : "No se pudo importar"));
@@ -180,7 +193,7 @@ export default function BancosPage() {
               <div className="flex flex-wrap gap-2.5">
                 <label className={"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-control border border-cos-line bg-white px-4 py-2.5 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper " + (busy ? "pointer-events-none opacity-50" : "")}>
                   {busy === "upload" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Cargar estado de cuenta
-                  <input type="file" accept=".csv,.txt,.ofx" className="hidden" onChange={onUpload} disabled={!!busy} />
+                  <input type="file" accept=".csv,.txt,.ofx,.xlsx,.xls,.xlsm" className="hidden" onChange={onUpload} disabled={!!busy} />
                 </label>
                 <button onClick={autoReconcile} disabled={!!busy}
                   className="flex flex-1 items-center justify-center gap-2 rounded-control bg-cos-brand px-4 py-2.5 text-[14px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">

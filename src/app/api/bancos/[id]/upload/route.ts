@@ -23,12 +23,13 @@ export async function POST(req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
-  const { fileContent, filename } = await req.json();
+  const { fileContent, filename, encoding } = await req.json();
   const result = await importBankStatement({
     bankAccountId,
     companyId: account.companyId,
     fileContent,
     filename,
+    encoding: encoding === "base64" ? "base64" : "text",
   });
 
   return NextResponse.json(result, { status: result.ok ? 200 : 422 });

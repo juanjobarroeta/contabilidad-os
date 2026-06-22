@@ -941,9 +941,19 @@ function UploadModal({ accountId, accountName, onClose, onImported }: {
       if (text.includes("\uFFFD")) {
         text = new TextDecoder("windows-1252").decode(buf);
       }
+      // Excel (.xlsx/.xls/.xlsm) es binario → base64 (el server lo convierte a CSV);
+      // CSV/TXT/OFX van como texto, con el fallback a windows-1252 de arriba.
+      const esExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
+      let fileContent = text;
+      if (esExcel) {
+        let bin = "";
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        fileContent = btoa(bin);
+      }
       const res  = await fetch(`/api/bancos/${accountId}/upload`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileContent: text, filename: file.name }),
+        body: JSON.stringify({ fileContent, filename: file.name, encoding: esExcel ? "base64" : "text" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al importar");
@@ -977,7 +987,7 @@ function UploadModal({ accountId, accountName, onClose, onImported }: {
           <Upload className="h-6 w-6 text-muted-foreground mb-2" />
           <p className="text-sm font-medium">{file ? file.name : "Selecciona un archivo"}</p>
           <p className="text-xs text-muted-foreground mt-0.5">CSV, TXT, XLS (BBVA RSM) u OFX/QFX — todos los bancos</p>
-          <input type="file" accept=".csv,.txt,.ofx,.qfx,.xls,.xml" className="hidden"
+          <input type="file" accept=".csv,.txt,.ofx,.qfx,.xls,.xlsx,.xlsm,.xml" className="hidden"
             onChange={e => { setFile(e.target.files?.[0] ?? null); setErr(""); setResult(null); }} />
         </label>
 
