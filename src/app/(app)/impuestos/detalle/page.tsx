@@ -758,9 +758,9 @@ export default function ImpuestosPage() {
 
           {/* ── Fiscal projection widget ── */}
           <ProjectionCard
-            ivaComputed={ivaComputed}
-            isrComputed={isrComputed}
-            coeficiente={coeficiente}
+            companyId={activeCompany.id}
+            month={month}
+            year={year}
             projIngresoAdicional={projIngresoAdicional}
             projGastoAdicional={projGastoAdicional}
             onIngresoChange={setProjIngresoAdicional}
@@ -1388,57 +1388,79 @@ export default function ImpuestosPage() {
 }
 
 // ── Projection card ─────────────────────────────────────────────────────────
-// Simulates the impact of an additional ingreso or gasto on the current
-// month's IVA and ISR. Pure frontend math — it recomputes from the already
-// displayed values so there's no extra API call.
+// Simulates the impact of an additional ingreso or gasto on the current month's
+// IVA and ISR. Delegates to /api/impuestos/simular so the ISR delta is computed
+// with the company's REAL régimen math — e.g. in PF Art. 106 a paid gasto reduces
+// the flujo base (ISR drops), while in PM Art. 14 it doesn't. Never a hardcoded
+// per-régimen assumption.
+interface SimResult {
+  base: { iva: number; isr: number | null; total: number };
+  sim: { iva: number; ivaSaldoFavor: number; isr: number | null; total: number };
+  metodo: string;
+  tarifaVerificada: boolean;
+}
+
+// Nota por régimen — cómo se mueve el ISR provisional con el delta.
+const SIM_NOTA: Record<string, string> = {
+  PM_ART14: "PM (Art. 14): el ingreso sube el provisional vía coeficiente; los gastos no lo reducen este mes (sólo el coeficiente del año siguiente).",
+  PF_ACT_EMPRESARIAL: "PF actividad empresarial (Art. 106): base de flujo — el ingreso cobrado la sube y el gasto pagado la reduce.",
+  RESICO_PF: "RESICO (Art. 113-E): el ISR es sobre ingresos cobrados; los gastos no lo reducen.",
+  PF_ARRENDAMIENTO: "Arrendamiento (Art. 115): la deducción es ciega (35%); un gasto adicional no cambia el ISR.",
+  PF_PLATAFORMAS: "Plataformas (Art. 113-A): el ISR es tasa fija sobre ingresos; los gastos no lo reducen.",
+};
+
 function ProjectionCard({
-  ivaComputed,
-  isrComputed,
-  coeficiente,
+  companyId,
+  month,
+  year,
   projIngresoAdicional,
   projGastoAdicional,
   onIngresoChange,
   onGastoChange,
 }: {
-  ivaComputed: { trasladado: number; retenidoPorClientes: number; acreditable: number; saldoFavorAnterior: number; pagar: number; saldoFavor: number } | null;
-  isrComputed: { utilidadFiscal: number; isrDelEjercicio: number; esteMes: number } | null;
-  coeficiente: number | null;
+  companyId: string;
+  month: number;
+  year: number;
   projIngresoAdicional: string;
   projGastoAdicional: string;
   onIngresoChange: (v: string) => void;
   onGastoChange: (v: string) => void;
 }) {
-  if (!ivaComputed) return null;
-
   const addIngreso = parseFloat(projIngresoAdicional) || 0;
   const addGasto = parseFloat(projGastoAdicional) || 0;
+  const hasProjection = addIngreso > 0 || addGasto > 0;
 
-  // Assume new ingreso has IVA 16% trasladado, new gasto has IVA 16% acreditable
+  const [sim, setSim] = useState<SimResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Debounced: re-run the real fiscal engine for the period with the deltas.
+  useEffect(() => {
+    if (!hasProjection) { setSim(null); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          companyId, month: String(month), year: String(year),
+          addIngreso: String(addIngreso), addGasto: String(addGasto),
+        });
+        const res = await fetch(`/api/impuestos/simular?${params}`);
+        const data = await res.json();
+        if (!cancelled) setSim(res.ok ? data : null);
+      } catch {
+        if (!cancelled) setSim(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [companyId, month, year, addIngreso, addGasto, hasProjection]);
+
   const ivaAddedTrasladado = addIngreso * 0.16;
   const ivaAddedAcreditable = addGasto * 0.16;
-
-  const newTrasladado = ivaComputed.trasladado + ivaAddedTrasladado;
-  const newAcreditable = ivaComputed.acreditable + ivaAddedAcreditable;
-
-  const newIvaCargo =
-    newTrasladado - ivaComputed.retenidoPorClientes - newAcreditable - ivaComputed.saldoFavorAnterior;
-  const newIvaPagar = newIvaCargo > 0 ? newIvaCargo : 0;
-  const newIvaSaldoFavor = newIvaCargo < 0 ? -newIvaCargo : 0;
-
-  // ISR: the Art. 14 LISR calc uses acumulado × coeficiente × 30%. Adding an
-  // ingreso increases acumulado directly. Adding a gasto does NOT reduce the
-  // calc (coeficiente is based on prior year) unless coeficiente itself
-  // accounted for it. We show both scenarios so contador knows the gap.
-  let newIsrEsteMes: number | null = null;
-  if (isrComputed && coeficiente != null) {
-    // Rough projection: delta = addIngreso × coeficiente × 0.30
-    const isrDelta = addIngreso * coeficiente * 0.30;
-    newIsrEsteMes = Math.max(0, isrComputed.esteMes + isrDelta);
-  }
-
-  const deltaIvaPagar = newIvaPagar - ivaComputed.pagar;
-  const deltaIsr = newIsrEsteMes != null && isrComputed ? newIsrEsteMes - isrComputed.esteMes : 0;
-  const hasProjection = addIngreso > 0 || addGasto > 0;
+  const deltaIva = sim ? sim.sim.iva - sim.base.iva : 0;
+  const deltaIsr = sim && sim.sim.isr != null && sim.base.isr != null ? sim.sim.isr - sim.base.isr : 0;
+  const deltaTotal = sim ? sim.sim.total - sim.base.total : 0;
 
   return (
     <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
@@ -1483,7 +1505,15 @@ function ProjectionCard({
           </div>
         </div>
 
-        {hasProjection ? (
+        {!hasProjection ? (
+          <p className="text-xs text-muted-foreground">
+            Escribe un monto arriba para ver el impacto en tu IVA e ISR del mes.
+          </p>
+        ) : loading || !sim ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calculando impacto…
+          </div>
+        ) : (
           <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-sm">
             <p className="font-semibold text-indigo-900 mb-3">Impacto proyectado:</p>
             <dl className="space-y-1.5 font-mono text-xs">
@@ -1497,47 +1527,53 @@ function ProjectionCard({
               </div>
               <div className="flex justify-between border-t border-indigo-200 pt-1.5 mt-1.5">
                 <dt className="text-indigo-900 font-semibold">IVA a pagar actual</dt>
-                <dd className="font-medium">{formatCurrency(ivaComputed.pagar)}</dd>
+                <dd className="font-medium">{formatCurrency(sim.base.iva)}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-indigo-900 font-semibold">IVA a pagar proyectado</dt>
-                <dd className={`font-bold ${deltaIvaPagar >= 0 ? "text-red-700" : "text-green-700"}`}>
-                  {formatCurrency(newIvaPagar)}
-                  <span className="ml-2 text-xs">({deltaIvaPagar >= 0 ? "+" : ""}{formatCurrency(deltaIvaPagar)})</span>
+                <dd className={`font-bold ${deltaIva >= 0 ? "text-red-700" : "text-green-700"}`}>
+                  {formatCurrency(sim.sim.iva)}
+                  <span className="ml-2 text-xs">({deltaIva >= 0 ? "+" : ""}{formatCurrency(deltaIva)})</span>
                 </dd>
               </div>
-              {newIvaSaldoFavor > 0 && (
+              {sim.sim.ivaSaldoFavor > 0 && (
                 <div className="flex justify-between text-green-700">
-                  <dt>Saldo a favor proyectado</dt>
-                  <dd className="font-semibold">{formatCurrency(newIvaSaldoFavor)}</dd>
+                  <dt>Saldo a favor de IVA proyectado</dt>
+                  <dd className="font-semibold">{formatCurrency(sim.sim.ivaSaldoFavor)}</dd>
                 </div>
               )}
-              {newIsrEsteMes != null && isrComputed && (
+              {sim.base.isr != null && sim.sim.isr != null && (
                 <>
                   <div className="flex justify-between border-t border-indigo-200 pt-1.5 mt-1.5">
                     <dt className="text-indigo-900 font-semibold">ISR provisional actual</dt>
-                    <dd className="font-medium">{formatCurrency(isrComputed.esteMes)}</dd>
+                    <dd className="font-medium">{formatCurrency(sim.base.isr)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-indigo-900 font-semibold">ISR provisional proyectado</dt>
                     <dd className={`font-bold ${deltaIsr >= 0 ? "text-red-700" : "text-green-700"}`}>
-                      {formatCurrency(newIsrEsteMes)}
+                      {formatCurrency(sim.sim.isr)}
                       <span className="ml-2 text-xs">({deltaIsr >= 0 ? "+" : ""}{formatCurrency(deltaIsr)})</span>
                     </dd>
                   </div>
                 </>
               )}
+              <div className="flex justify-between border-t border-indigo-200 pt-1.5 mt-1.5">
+                <dt className="text-indigo-900 font-semibold">Total actual</dt>
+                <dd className="font-medium">{formatCurrency(sim.base.total)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-indigo-900 font-semibold">Total proyectado</dt>
+                <dd className={`font-bold ${deltaTotal >= 0 ? "text-red-700" : "text-green-700"}`}>
+                  {formatCurrency(sim.sim.total)}
+                  <span className="ml-2 text-xs">({deltaTotal >= 0 ? "+" : ""}{formatCurrency(deltaTotal)})</span>
+                </dd>
+              </div>
             </dl>
             <p className="text-[10px] text-indigo-700 mt-3">
-              Asume IVA 16% en ambos conceptos. El ISR usa el coeficiente vigente sin considerar
-              deducciones adicionales — en el régimen PM Art. 14 LISR los gastos no reducen el provisional
-              directamente, solo el coeficiente del año siguiente.
+              Asume IVA 16% en ambos conceptos. ISR según tu régimen: {SIM_NOTA[sim.metodo] ?? "se recalcula con el método de tu régimen."}
+              {!sim.tarifaVerificada && " (tarifa ISR del ejercicio sin verificar)"}
             </p>
           </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Escribe un monto arriba para ver el impacto en tu IVA e ISR del mes.
-          </p>
         )}
       </div>
     </div>
