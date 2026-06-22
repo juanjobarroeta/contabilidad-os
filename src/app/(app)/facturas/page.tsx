@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck, FileText } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Button } from "@/components/ui";
 import { esAsimilado, etiquetaRegimenNomina } from "@/lib/nomina/regimen";
+import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -425,6 +426,7 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
   const [sustituye, setSustituye] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [repOpen, setRepOpen] = useState(false);
 
   // Only emitted-and-stamped CFDIs we own can be cancelled at the SAT.
   const canCancel = inv.status === "STAMPED" && inv.tipo === "INGRESO" && !!inv.facturapiId;
@@ -500,10 +502,19 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
           </div>
         </div>
 
-        <div className="mt-[18px] flex gap-2.5">
+        <button
+          onClick={() => setRepOpen(true)}
+          className="mt-[18px] flex w-full items-center justify-center gap-2 rounded-control bg-cos-brand px-4 py-2.5 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep"
+        >
+          <FileText className="h-4 w-4" /> Ver representación impresa
+        </button>
+
+        <div className="mt-2.5 flex gap-2.5">
           <DownloadBtn id={inv.id} format="xml" />
           <DownloadBtn id={inv.id} format="pdf" />
         </div>
+
+        {repOpen && <RepresentacionImpresa invoiceId={inv.id} onClose={() => setRepOpen(false)} />}
 
         {canCancel && !cancelOpen && (
           <button
