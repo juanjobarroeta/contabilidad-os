@@ -101,6 +101,12 @@ export default function BancosPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [candLoading, setCandLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
+  // Búsqueda manual de factura para el movimiento expandido (inline, antes era /detalle).
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualTipo, setManualTipo] = useState<"INGRESO" | "EGRESO" | "NOMINA">("EGRESO");
+  const [manualQuery, setManualQuery] = useState("");
+  const [manualResults, setManualResults] = useState<FacturaSearch[]>([]);
+  const [manualLoading, setManualLoading] = useState(false);
   const [toast, setToast] = useState("");
   // Modo selección + lote
   const [selectMode, setSelectMode] = useState(false);
@@ -133,6 +139,24 @@ export default function BancosPage() {
   useEffect(() => { loadTxs(); }, [loadTxs]);
   // Salir del modo selección al cambiar de cuenta/filtro.
   useEffect(() => { setPicked(new Set()); }, [selectedId, filter]);
+
+  // Búsqueda manual de facturas (debounced) para el movimiento expandido.
+  useEffect(() => {
+    if (!expandedId || !manualOpen || !activeCompany) return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setManualLoading(true);
+      try {
+        const params = new URLSearchParams({ companyId: activeCompany.id, tipo: manualTipo, take: "20", unmatchedOnly: "true" });
+        if (manualQuery.trim()) params.set("q", manualQuery.trim());
+        const res = await fetch(`/api/facturas?${params}`);
+        const data = await res.json();
+        if (!cancelled) setManualResults(Array.isArray(data) ? data : []);
+      } catch { if (!cancelled) setManualResults([]); }
+      finally { if (!cancelled) setManualLoading(false); }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [expandedId, manualOpen, manualTipo, manualQuery, activeCompany]);
 
   const account = accounts.find((a) => a.id === selectedId) ?? null;
 
@@ -168,6 +192,9 @@ export default function BancosPage() {
   async function expand(tx: BankTx) {
     if (expandedId === tx.id) { setExpandedId(null); return; }
     setExpandedId(tx.id); setCandidates([]); setCandLoading(true);
+    // Reset de la búsqueda manual; arranca con el tipo probable según el signo.
+    setManualOpen(false); setManualQuery(""); setManualResults([]);
+    setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
     try {
       const res = await fetch(`/api/bancos/${selectedId}/match?txId=${tx.id}`);
       const data = await res.json();
@@ -421,9 +448,46 @@ export default function BancosPage() {
                                 <span className="text-[13px] text-cos-ink-faint">Sin coincidencias automáticas.</span>
                               )}
 
-                              <Link href="/bancos/detalle" className="flex items-center gap-2 rounded-control border border-cos-line px-3 py-2.5 text-[13px] text-cos-ink-faint hover:border-cos-brand hover:text-cos-brand-ink">
-                                <Search className="h-[15px] w-[15px]" /> Buscar otra factura por cliente, folio o monto…
-                              </Link>
+                              <div className="rounded-control border border-cos-line">
+                                <button onClick={() => setManualOpen((o) => !o)}
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-[13px] text-cos-ink-faint hover:text-cos-brand-ink">
+                                  <Search className="h-[15px] w-[15px]" /> Buscar otra factura por cliente, folio o monto…
+                                  <ChevronDown className={"ml-auto h-3.5 w-3.5 transition-transform " + (manualOpen ? "rotate-180" : "")} />
+                                </button>
+                                {manualOpen && (
+                                  <div className="border-t border-cos-line-soft p-2.5">
+                                    <div className="mb-2 flex gap-1.5">
+                                      {(["INGRESO","EGRESO","NOMINA"] as const).map((t) => (
+                                        <button key={t} onClick={() => setManualTipo(t)}
+                                          className={"rounded-full px-2.5 py-1 text-[12px] font-medium " + (manualTipo === t ? "bg-cos-brand text-white" : "bg-cos-paper text-cos-ink-soft hover:bg-cos-line-soft")}>
+                                          {t === "INGRESO" ? "Ingresos" : t === "EGRESO" ? "Gastos" : "Nómina"}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <div className="flex items-center gap-2 rounded-control border border-cos-line px-2.5 py-1.5">
+                                      <Search className="h-4 w-4 text-cos-ink-faint" />
+                                      <input value={manualQuery} onChange={(e) => setManualQuery(e.target.value)} autoFocus
+                                        placeholder="Cliente, RFC, UUID, folio…"
+                                        className="w-full bg-transparent text-[13px] outline-none placeholder:text-cos-ink-faint" />
+                                    </div>
+                                    <div className="mt-2 max-h-[40vh] overflow-y-auto">
+                                      {manualLoading ? (
+                                        <div className="flex items-center gap-2 py-3 text-[12.5px] text-cos-ink-faint"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando…</div>
+                                      ) : manualResults.length === 0 ? (
+                                        <p className="py-3 text-center text-[12.5px] text-cos-ink-faint">Sin facturas por conciliar con ese criterio.</p>
+                                      ) : manualResults.map((f) => (
+                                        <div key={f.id} className="flex items-center justify-between gap-3 border-b border-cos-line-soft py-2 last:border-0">
+                                          <div className="min-w-0">
+                                            <p className="truncate text-[13px] font-medium text-cos-ink">{f.customer?.razonSocial ?? "—"}</p>
+                                            <p className="text-[11.5px] text-cos-ink-faint"><span className="font-mono">{f.customer?.rfc ?? "—"}</span>{f.folio ? ` · ${f.serie ?? ""}${f.folio}` : ""} · {fmtFecha(f.fecha)} · <Money value={f.total} size={11.5} muted /></p>
+                                          </div>
+                                          <button onClick={() => conciliar(m.id, f.id)} className="flex-none rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-cos-brand-deep">Conciliar</button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
 
                               <div className="flex items-center gap-3">
                                 <span className="h-px flex-1 bg-cos-line-soft" />
