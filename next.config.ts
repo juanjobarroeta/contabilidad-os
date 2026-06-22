@@ -27,6 +27,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/impuestos", destination: "/declaracion", permanent: false },
       { source: "/impuestos/cierre", destination: "/declaracion?tab=presentar", permanent: false },
+      // The Detalle view is now inlined into the unified /bancos page.
+      { source: "/bancos/detalle", destination: "/bancos", permanent: false },
     ];
   },
 };
