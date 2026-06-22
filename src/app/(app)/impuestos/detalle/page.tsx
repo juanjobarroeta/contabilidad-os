@@ -72,7 +72,7 @@ const ISR_METODO_LABEL: Record<IsrMetodo, string> = {
 interface FacturaRow {
   id: string;
   uuid: string | null;
-  tipo: "INGRESO" | "EGRESO";
+  tipo: "INGRESO" | "EGRESO" | "NOMINA";
   fecha: string;
   contraparte: string;
   rfc: string;
@@ -219,7 +219,7 @@ export default function ImpuestosPage() {
   const [coeficienteEdited, setCoeficienteEdited]   = useState(false);
 
   // Invoice filter
-  const [facturaFilter, setFacturaFilter] = useState<"all" | "INGRESO" | "EGRESO">("all");
+  const [facturaFilter, setFacturaFilter] = useState<"all" | "INGRESO" | "EGRESO" | "NOMINA">("all");
 
   // Acuse de recibo
   const [acuseUrl, setAcuseUrl]                     = useState("");
@@ -1061,14 +1061,14 @@ export default function ImpuestosPage() {
               <h2 className="font-semibold text-sm">Facturas de {MONTHS[month - 1]} {year}</h2>
               <span className="ml-auto text-xs text-muted-foreground">{result.facturas.length} factura(s)</span>
               <div className="flex gap-1">
-                {(["all","INGRESO","EGRESO"] as const).map(f => (
+                {(["all","INGRESO","EGRESO","NOMINA"] as const).map(f => (
                   <button key={f} onClick={() => setFacturaFilter(f)}
                     className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
                       facturaFilter === f
                         ? "bg-primary text-primary-foreground"
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}>
-                    {f === "all" ? "Todas" : f === "INGRESO" ? "Emitidas" : "Recibidas"}
+                    {f === "all" ? "Todas" : f === "INGRESO" ? "Emitidas" : f === "EGRESO" ? "Recibidas" : "Nómina"}
                   </button>
                 ))}
               </div>
@@ -1094,6 +1094,10 @@ export default function ImpuestosPage() {
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
                             <ArrowUpRight className="h-3 w-3" />Emitida
                           </span>
+                        ) : f.tipo === "NOMINA" ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                            <ArrowDownLeft className="h-3 w-3" />Nómina
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-orange-50 text-orange-700">
                             <ArrowDownLeft className="h-3 w-3" />Recibida
@@ -1107,8 +1111,8 @@ export default function ImpuestosPage() {
                       </td>
                       <td className="px-4 py-2.5 text-right text-xs">{formatCurrency(f.subtotal)}</td>
                       <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{formatCurrency(f.iva)}</td>
-                      <td className={`px-4 py-2.5 text-right text-xs font-semibold ${f.tipo === "INGRESO" ? "text-green-700" : "text-orange-700"}`}>
-                        {f.tipo === "EGRESO" ? "(" : ""}{formatCurrency(f.total)}{f.tipo === "EGRESO" ? ")" : ""}
+                      <td className={`px-4 py-2.5 text-right text-xs font-semibold ${f.tipo === "INGRESO" ? "text-green-700" : f.tipo === "NOMINA" ? "text-blue-700" : "text-orange-700"}`}>
+                        {f.tipo !== "INGRESO" ? "(" : ""}{formatCurrency(f.total)}{f.tipo !== "INGRESO" ? ")" : ""}
                       </td>
                     </tr>
                   ))}
