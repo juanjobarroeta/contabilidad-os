@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Money } from "@/components/ui";
-import { Download, Loader2, FileText, AlertTriangle } from "lucide-react";
+import { Download, Loader2, FileText, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 const CARD = "rounded-card border border-cos-line bg-white shadow-card print:border-2";
 const THEAD = "bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink-faint";
@@ -22,6 +22,7 @@ interface IvaRow {
   id: string; fecha: string; uuid: string | null; serie: string | null; folio: string | null;
   contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string;
   sinPagoConciliado?: boolean;
+  pagadaConciliada?: boolean;
   excluidoAcreditamiento?: boolean;
   sinComplementoPago?: boolean;
   pagoParcial?: boolean;
@@ -226,9 +227,13 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
                   <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-brand-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-brand-ink" title="PPD con pago parcial — sólo se acredita el IVA del monto pagado en el periodo (prorrateado)">
                     parcial
                   </span>
-                ) : r.sinPagoConciliado && (
+                ) : r.sinPagoConciliado ? (
                   <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-amber-ink" title="PUE sin pago conciliado en banco — el IVA sólo es acreditable si se pagó (Art. 5-I LIVA)">
                     <AlertTriangle className="h-3 w-3" /> sin pago
+                  </span>
+                ) : r.pagadaConciliada && (
+                  <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cos-jade-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-jade-ink" title="PUE con pago conciliado en banco — respaldado por un movimiento bancario">
+                    <CheckCircle2 className="h-3 w-3" /> pagada
                   </span>
                 )}
               </td>
