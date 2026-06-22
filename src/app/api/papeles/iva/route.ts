@@ -143,6 +143,8 @@ export async function GET(req: Request) {
     metodoPago: string;
     /** PUE acreditable sin pago conciliado en banco (cash-basis, Art. 5-I LIVA). */
     sinPagoConciliado?: boolean;
+    /** PUE acreditable con pago conciliado en banco (lo opuesto a sinPagoConciliado). */
+    pagadaConciliada?: boolean;
     /** El contador excluyó este CFDI del acreditamiento de IVA. */
     excluidoAcreditamiento?: boolean;
     /** PPD sin complemento de pago (REP) en el periodo → aún no acreditable. */
@@ -312,6 +314,11 @@ export async function GET(req: Request) {
         r.sinPagoConciliado = true;
         ivaPueSinPago += r.importe;
         cfdisPueSinPago += 1;
+      } else {
+        // Pago conciliado completo en banco → marca verde "pagada" (lo opuesto
+        // a "sin pago"), para que el contador vea de un vistazo qué PUE ya está
+        // respaldado por un movimiento bancario.
+        r.pagadaConciliada = true;
       }
     }
   }
