@@ -161,7 +161,8 @@ export async function GET(req: Request, { params }: Params) {
     const rfc = inv.customer?.rfc ?? "";
     if (rfc && tx.descripcion.toUpperCase().includes(rfc)) score += 25;
     const alreadyMatched = inv.bankTransactions.length > 0;
-    const matchedAmount = inv.bankTransactions.reduce((s, t) => s + Math.abs(t.monto), 0);
+    // Neto firmado: un reembolso (cargo) resta de lo cobrado.
+    const matchedAmount = Math.abs(inv.bankTransactions.reduce((s, t) => s + t.monto, 0));
     return {
       id:          inv.id,
       uuid:        inv.uuid,

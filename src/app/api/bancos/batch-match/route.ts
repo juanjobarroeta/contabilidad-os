@@ -54,7 +54,9 @@ export async function POST(req: Request) {
       data: { status: "MATCHED", invoiceId, notes: null },
     });
 
-    const sumMatched = txs.reduce((s, t) => s + Math.abs(t.monto), 0);
+    // Neto firmado: un reembolso (cargo) resta, de modo que un sobrepago y su
+    // devolución cubran exactamente el total en vez de sumarse.
+    const sumMatched = Math.abs(txs.reduce((s, t) => s + t.monto, 0));
 
     return NextResponse.json({
       ok: true,
