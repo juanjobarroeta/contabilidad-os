@@ -144,6 +144,32 @@ export async function GET(req: Request, { params }: Params) {
   });
 }
 
+// PATCH /api/bancos/[id]  — editar datos de la cuenta (banco, nombre, número, CLABE)
+export async function PATCH(req: Request, { params }: Params) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const account = await prisma.bankAccount.findUnique({ where: { id } });
+  if (!account) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
+
+  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
+  if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+
+  const { banco, nombre, numeroCuenta, clabe, moneda } = await req.json();
+  const updated = await prisma.bankAccount.update({
+    where: { id },
+    data: {
+      ...(banco !== undefined ? { banco } : {}),
+      ...(nombre !== undefined ? { nombre } : {}),
+      ...(numeroCuenta !== undefined ? { numeroCuenta } : {}),
+      ...(clabe !== undefined ? { clabe: clabe || null } : {}),
+      ...(moneda !== undefined ? { moneda } : {}),
+    },
+  });
+  return NextResponse.json(updated);
+}
+
 // DELETE /api/bancos/[id]
 export async function DELETE(_req: Request, { params }: Params) {
   const session = await auth();

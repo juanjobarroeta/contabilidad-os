@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
 import {
   Landmark, Upload, Sparkles, Loader2, Link2, Search, CheckCircle2,
   AlertTriangle, ChevronDown, Plus, CheckSquare, X, Building2, Users,
-  Banknote, Ban, ArrowLeftRight, SlidersHorizontal,
+  Banknote, Ban, ArrowLeftRight, SlidersHorizontal, Pencil, Trash2,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Chip } from "@/components/ui";
@@ -71,6 +70,7 @@ const TIPO_CHIPS: { f: Filter; t: string; k: keyof Counts }[] = [
   { f: "IGNORED", t: "Ignorados", k: "IGNORED" },
 ];
 
+const BANKS = ["BBVA","Banamex","Santander","Banorte","HSBC","Scotiabank","Afirme","Inbursa","BanBajío","Otro"];
 const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint";
 const CONF: Record<Candidate["confidence"], "jade" | "amber" | "slate"> = { alta: "jade", media: "amber", baja: "slate" };
 const fmtFecha = (iso: string) => {
@@ -112,6 +112,8 @@ export default function BancosPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bulkMatchOpen, setBulkMatchOpen] = useState(false);
+  // Modal de cuenta: null=cerrado · {account:null}=agregar · {account:X}=editar
+  const [accountModal, setAccountModal] = useState<{ account: BankAccount | null } | null>(null);
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2800); };
 
@@ -235,6 +237,13 @@ export default function BancosPage() {
     } finally { setActing(null); }
   }
 
+  async function eliminarCuenta(acc: BankAccount) {
+    if (!window.confirm(`¿Eliminar la cuenta ${acc.banco} ••${acc.numeroCuenta.slice(-4)}? También se borrarán sus movimientos.`)) return;
+    const res = await fetch(`/api/bancos/${acc.id}`, { method: "DELETE" });
+    if (res.ok) { showToast("Cuenta eliminada"); setSelectedId(null); await loadAccounts(); }
+    else showToast("No se pudo eliminar la cuenta");
+  }
+
   // ── Selección en lote ──────────────────────────────────────────────────────
   function togglePick(id: string) {
     setPicked((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -277,16 +286,16 @@ export default function BancosPage() {
           <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Bancos</h1>
           <p className="mt-1.5 max-w-[60ch] text-[15px] text-cos-ink-soft">Conectamos los movimientos de tu banco con tus facturas para que todo cuadre.</p>
         </div>
-        <Link href="/bancos/detalle" className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-4 py-2 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper">
+        <button onClick={() => setAccountModal({ account: null })} className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-4 py-2 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper">
           <Plus className="h-4 w-4" /> Agregar cuenta
-        </Link>
+        </button>
       </div>
 
       {accounts.length === 0 ? (
         <Card className="mt-5 rounded-card border-cos-line p-10 text-center shadow-card">
           <Landmark className="mx-auto mb-3 h-10 w-10 text-cos-ink-faint opacity-40" />
           <p className="text-sm font-medium text-cos-ink">Sin cuentas bancarias</p>
-          <Link href="/bancos/detalle" className="mt-2 inline-block text-[13px] font-semibold text-cos-brand-ink hover:underline">Agregar una cuenta →</Link>
+          <button onClick={() => setAccountModal({ account: null })} className="mt-2 inline-block text-[13px] font-semibold text-cos-brand-ink hover:underline">Agregar una cuenta →</button>
         </Card>
       ) : (
         <>
@@ -298,9 +307,9 @@ export default function BancosPage() {
                 {a.banco} <span className="font-mono text-[12px] opacity-80">••{a.numeroCuenta.slice(-4)}</span>
               </button>
             ))}
-            <Link href="/bancos/detalle" className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-cos-line bg-white px-3.5 py-2 text-[13.5px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint">
+            <button onClick={() => setAccountModal({ account: null })} className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-cos-line bg-white px-3.5 py-2 text-[13.5px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint">
               <Plus className="h-3.5 w-3.5" /> Agregar
-            </Link>
+            </button>
           </div>
 
           {/* account card */}
@@ -312,9 +321,15 @@ export default function BancosPage() {
                   <p className="text-[16px] font-semibold text-cos-ink">{account.banco}</p>
                   <p className="truncate text-[13px] text-cos-ink-soft">{account.titular ?? account.nombre} · <span className="font-mono">••••{account.numeroCuenta.slice(-4)}</span></p>
                 </div>
-                {account.stats.unmatched > 0
-                  ? <Chip status="sin_conciliar" label={`${account.stats.unmatched} por conciliar`} />
-                  : <Chip status="conciliado" label="Todo cuadrado" />}
+                <div className="flex flex-none items-center gap-1.5">
+                  {account.stats.unmatched > 0
+                    ? <Chip status="sin_conciliar" label={`${account.stats.unmatched} por conciliar`} />
+                    : <Chip status="conciliado" label="Todo cuadrado" />}
+                  <button onClick={() => setAccountModal({ account })} title="Editar cuenta"
+                    className="grid h-8 w-8 place-items-center rounded-control text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink"><Pencil className="h-[15px] w-[15px]" /></button>
+                  <button onClick={() => eliminarCuenta(account)} title="Eliminar cuenta"
+                    className="grid h-8 w-8 place-items-center rounded-control text-cos-ink-faint hover:bg-cos-red-tint hover:text-cos-red-ink"><Trash2 className="h-[15px] w-[15px]" /></button>
+                </div>
               </div>
               <div className="my-[18px] flex flex-col gap-1.5 border-y border-cos-line-soft py-4">
                 <span className={LBL}>Saldo en banco</span>
@@ -552,6 +567,15 @@ export default function BancosPage() {
         />
       )}
 
+      {accountModal && activeCompany && (
+        <AccountModal
+          companyId={activeCompany.id}
+          account={accountModal.account}
+          onClose={() => setAccountModal(null)}
+          onSaved={async () => { setAccountModal(null); await loadAccounts(); }}
+        />
+      )}
+
       {toast && <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-cos-ink px-5 py-3 text-sm font-medium text-white shadow-lg">{toast}</div>}
     </div>
   );
@@ -655,6 +679,112 @@ function BulkMatchModal({
             <button disabled={!picked || confirming} onClick={async () => { if (!picked) return; setConfirming(true); try { await onConfirm(picked.id); } finally { setConfirming(false); } }}
               className="rounded-control bg-cos-brand px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
               {confirming ? "Conciliando…" : "Conciliar"}
+            </button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── Modal: agregar / editar cuenta bancaria ─────────────────────────────────────
+function AccountModal({
+  companyId, account, onClose, onSaved,
+}: {
+  companyId: string;
+  account: BankAccount | null;
+  onClose: () => void;
+  onSaved: () => Promise<void> | void;
+}) {
+  const isEdit = !!account;
+  const [banco, setBanco] = useState(account?.banco ?? "BBVA");
+  const [nombre, setNombre] = useState(account?.nombre ?? "");
+  const [numeroCuenta, setNumeroCuenta] = useState(account?.numeroCuenta ?? "");
+  const [clabe, setClabe] = useState(account?.clabe ?? "");
+  const [moneda, setMoneda] = useState(account?.moneda ?? "MXN");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (!nombre.trim() || !numeroCuenta.trim()) {
+      setError("Nombre y número de cuenta son obligatorios.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const body = { banco, nombre: nombre.trim(), numeroCuenta: numeroCuenta.trim(), clabe: clabe.trim(), moneda };
+      const res = isEdit
+        ? await fetch(`/api/bancos/${account!.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        : await fetch(`/api/bancos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ...body }) });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.error ?? "No se pudo guardar la cuenta.");
+        return;
+      }
+      await onSaved();
+    } catch {
+      setError("No se pudo guardar la cuenta.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <Card className="w-full max-w-[480px] rounded-card border-cos-line p-5 shadow-card">
+        <div onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[16px] font-semibold text-cos-ink">{isEdit ? "Editar cuenta" : "Agregar cuenta"}</p>
+            <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-control text-cos-ink-soft hover:bg-cos-paper"><X className="h-5 w-5" /></button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <label className="block">
+              <span className="text-[12.5px] font-medium text-cos-ink-soft">Banco</span>
+              <select value={banco} onChange={(e) => setBanco(e.target.value)}
+                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] text-cos-ink outline-none focus:border-cos-brand">
+                {BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-[12.5px] font-medium text-cos-ink-soft">Nombre / alias de la cuenta</span>
+              <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Cuenta principal MXN"
+                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] text-cos-ink outline-none placeholder:text-cos-ink-faint focus:border-cos-brand" autoFocus />
+            </label>
+
+            <label className="block">
+              <span className="text-[12.5px] font-medium text-cos-ink-soft">Número de cuenta</span>
+              <input value={numeroCuenta} onChange={(e) => setNumeroCuenta(e.target.value)} placeholder="Ej. 0123456789"
+                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] font-mono text-cos-ink outline-none placeholder:text-cos-ink-faint focus:border-cos-brand" />
+            </label>
+
+            <label className="block">
+              <span className="text-[12.5px] font-medium text-cos-ink-soft">CLABE <span className="text-cos-ink-faint">(opcional)</span></span>
+              <input value={clabe} onChange={(e) => setClabe(e.target.value)} placeholder="18 dígitos"
+                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] font-mono text-cos-ink outline-none placeholder:text-cos-ink-faint focus:border-cos-brand" />
+            </label>
+
+            <label className="block">
+              <span className="text-[12.5px] font-medium text-cos-ink-soft">Moneda</span>
+              <select value={moneda} onChange={(e) => setMoneda(e.target.value)}
+                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] text-cos-ink outline-none focus:border-cos-brand">
+                <option value="MXN">MXN — Peso mexicano</option>
+                <option value="USD">USD — Dólar estadounidense</option>
+                <option value="EUR">EUR — Euro</option>
+              </select>
+            </label>
+          </div>
+
+          {error && <p className="mt-3 text-[12.5px] text-cos-red-ink">{error}</p>}
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={onClose} className="rounded-control border border-cos-line px-4 py-2 text-[13.5px] font-semibold text-cos-ink hover:bg-cos-paper">Cancelar</button>
+            <button disabled={saving} onClick={save}
+              className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isEdit ? "Guardar cambios" : "Agregar cuenta"}
             </button>
           </div>
         </div>
