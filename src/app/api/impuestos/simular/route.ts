@@ -46,6 +46,7 @@ export async function GET(req: Request) {
   const newIvaNeto =
     newTrasladado - newAcreditable - pos.iva.retenidoPorClientes - pos.iva.saldoFavorAnterior;
   const newIva = Math.max(0, r2(newIvaNeto));
+  const newIvaSaldoFavor = Math.max(0, r2(-newIvaNeto));
 
   // ── ISR: re-run the régimen's own method against the new bases ────────────
   let newIsr: number | null;
@@ -114,7 +115,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     base: { iva: pos.iva.pagar, isr: pos.isr.isrPagar, total: pos.iva.pagar + (pos.isr.isrPagar ?? 0) },
-    sim: { iva: newIva, isr: newIsr, total: newIva + (newIsr ?? 0) },
+    sim: { iva: newIva, ivaSaldoFavor: newIvaSaldoFavor, isr: newIsr, total: newIva + (newIsr ?? 0) },
     metodo: pos.isr.metodo,
     tarifaVerificada: pos.isr.tarifaVerificada,
   });
