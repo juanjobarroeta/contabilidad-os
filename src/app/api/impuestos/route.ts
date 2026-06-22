@@ -61,6 +61,7 @@ export async function GET(req: Request) {
     declaracionGuardada,
     retencionesGuardada,
     isrProvGuardada,
+    facturasNomina,
   ] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
@@ -107,6 +108,14 @@ export async function GET(req: Request) {
       where: { companyId, tipo: "ISR_PROVISIONAL", periodo },
       select: { id: true, status: true, isrPagar: true, isrCoeficienteUtilidad: true },
     }),
+    // CFDIs de nómina del mes (emitidos al timbrar la nómina) — para que aparezcan
+    // en la lista de facturas y se puedan conciliar en Bancos como los demás.
+    prisma.invoice.findMany({
+      where: { companyId, tipo: "NOMINA", status: "STAMPED", fecha: { gte: from, lt: to } },
+      select: { id: true, uuid: true, fecha: true, subtotal: true, total: true, totalImpuestos: true,
+        customer: { select: { razonSocial: true, rfc: true } } },
+      orderBy: { fecha: "asc" },
+    }),
   ]);
 
   // ── Asimilados a salarios (Art. 94) — ingresos del receptor ────────────────
@@ -123,7 +132,7 @@ export async function GET(req: Request) {
 
   // ── Build unified facturas list ───────────────────────────────────────────
   type InvoiceRow = typeof facturasEmitidas[number];
-  const toRow = (inv: InvoiceRow, tipo: "INGRESO" | "EGRESO") => ({
+  const toRow = (inv: InvoiceRow, tipo: "INGRESO" | "EGRESO" | "NOMINA") => ({
     id: inv.id,
     uuid: inv.uuid,
     tipo,
@@ -138,6 +147,7 @@ export async function GET(req: Request) {
   const facturas = [
     ...facturasEmitidas.map((inv) => toRow(inv, "INGRESO")),
     ...facturasEgresos.map((inv) => toRow(inv, "EGRESO")),
+    ...facturasNomina.map((inv) => toRow(inv, "NOMINA")),
   ].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 
   return NextResponse.json({
