@@ -71,7 +71,9 @@ const insumoSchema = z.object({
   clave: z.string().min(1),
   descripcion: z.string(),
   unidad: z.string(),
+  cantidad: z.number().finite().default(0),
   costoActual: z.number().finite(),
+  importe: z.number().finite().default(0),
   familia: z.string().nullable(),
   tipo: z.enum(["MATERIAL", "MANO_OBRA", "EQUIPO", "HERRAMIENTA", "BASICO"]),
 });
@@ -189,21 +191,19 @@ export const POST = withAuthz(
           conceptosCreated++;
         }
 
-        // ─── Step 2: Upsert Insumos from INSUMOS sheet ───────────────────────
+        // ─── Step 2: Upsert Insumos from INSUMOS sheet + create explosion rows ──
+        // Insumo catalog: upsert by (companyId, codigo) — update costoActual
+        // so reimports freshen the unit price without clobbering manual edits.
+        // PresupuestoInsumo: one row per insumo storing the project-total
+        // quantity from the explosion sheet; used as "planeado" baseline in
+        // Explosión vs Real when per-concepto APU data is not loaded.
         let insumosCreated = 0;
+        const insumoIdByClave = new Map<string, string>();
         if (parsed.insumos.length > 0) {
-          const existingInsumos = await tx.insumo.findMany({
-            where: {
-              companyId: proyecto.companyId,
-              codigo: { in: parsed.insumos.map((i) => i.clave) },
-            },
-            select: { codigo: true },
-          });
-          const have = new Set(existingInsumos.map((i) => i.codigo));
           for (const ins of parsed.insumos) {
-            if (have.has(ins.clave)) continue;
-            await tx.insumo.create({
-              data: {
+            const row = await tx.insumo.upsert({
+              where: { companyId_codigo: { companyId: proyecto.companyId, codigo: ins.clave } },
+              create: {
                 companyId: proyecto.companyId,
                 codigo: ins.clave,
                 descripcion: ins.descripcion || ins.clave,
@@ -211,7 +211,10 @@ export const POST = withAuthz(
                 tipo: ins.tipo,
                 costoActual: ins.costoActual,
               },
+              update: { costoActual: ins.costoActual },
+              select: { id: true, codigo: true },
             });
+            insumoIdByClave.set(ins.clave, row.id);
             insumosCreated++;
           }
         }
@@ -299,6 +302,23 @@ export const POST = withAuthz(
           });
         }
 
+        // ─── Step 3b: PresupuestoInsumo explosion rows ───────────────────────
+        if (insumoIdByClave.size > 0) {
+          for (const ins of parsed.insumos) {
+            const insumoId = insumoIdByClave.get(ins.clave);
+            if (!insumoId) continue;
+            await tx.presupuestoInsumo.create({
+              data: {
+                presupuestoId: presupuesto.id,
+                insumoId,
+                cantidad: ins.cantidad,
+                costoUnitario: ins.costoActual,
+                importe: ins.importe,
+              },
+            });
+          }
+        }
+
         // ─── Step 4: Recompute branch importes from children (server SOT) ────
         // Walk branches deepest-first so children's importes are final before
         // their parent rolls them up.
@@ -383,6 +403,7 @@ export const POST = withAuthz(
           branchCount: parsed.branches.length,
           conceptosCreated,
           insumosCreated,
+          presupuestoInsumosCreated: insumoIdByClave.size,
           total,
           templateId: bootstrap.templateId,
           templatePartidasCreated: bootstrap.partidasCreated,
