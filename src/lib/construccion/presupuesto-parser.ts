@@ -116,6 +116,23 @@ function toStr(v: unknown): string {
   return String(v).trim();
 }
 
+/**
+ * Gerardo's exports sometimes carry a leading blank spacer column, so the
+ * "Clave / Descripción / Unidad / Cantidad / …" table starts at column B
+ * instead of A. Both the PRESUPUESTO and INSUMOS sheets share this layout.
+ * Locate the real start column by finding the "Clave" header; default to 0.
+ * Every other column is read relative to this base.
+ */
+function findBaseCol(rows: unknown[][]): number {
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const row = rows[i] ?? [];
+    for (let c = 0; c < row.length; c++) {
+      if (toStr(row[c]).toLowerCase() === "clave") return c;
+    }
+  }
+  return 0;
+}
+
 // ─── PRESUPUESTO sheet ───────────────────────────────────────────────────────
 
 function parsePresupuestoSheet(
@@ -134,21 +151,24 @@ function parsePresupuestoSheet(
   // with diverging descriptions, warn — usually a Gerardo typo.
   const conceptoDescs = new Map<string, string>();
 
+  // Column base — tolerate a leading blank spacer column (data at col B).
+  const base = findBaseCol(rows);
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i] ?? [];
-    const claveRaw = toStr(row[0]);
+    const claveRaw = toStr(row[base]);
     if (!claveRaw) continue;
-    const desc = toStr(row[1]);
+    const desc = toStr(row[base + 1]);
 
     // Branch detection: dotted-numeric clave with no cantidad/PU.
     const isBranchShape = BRANCH_CODE_RE.test(claveRaw);
-    const cantidad = toNum(row[3]);
-    const precioUnitario = toNum(row[4]);
+    const cantidad = toNum(row[base + 3]);
+    const precioUnitario = toNum(row[base + 4]);
 
     if (isBranchShape && cantidad == null && precioUnitario == null) {
       const codigo = normalizeCaratulaCode(claveRaw); // tolerate "1.0"
       const nivel = depthOf(codigo);
-      const importeReportado = toNum(row[5]) ?? 0;
+      const importeReportado = toNum(row[base + 5]) ?? 0;
 
       // Reconcile the stack: pop ancestors that aren't prefixes of this code.
       // Prefix test is on the dotted-segment level: "1.1.3" is parent of "1.1.3.5"
@@ -187,7 +207,7 @@ function parsePresupuestoSheet(
       continue;
     }
 
-    const importe = toNum(row[5]) ?? cantidad * precioUnitario;
+    const importe = toNum(row[base + 5]) ?? cantidad * precioUnitario;
     const expected = cantidad * precioUnitario;
     if (Math.abs(importe - expected) > Math.max(0.05, expected * 0.001)) {
       warnings.push(
@@ -223,7 +243,7 @@ function parsePresupuestoSheet(
       parentCodigo: parent.codigo,
       conceptoClave: claveRaw,
       descripcion: prior ?? desc,
-      unidad: toStr(row[2]),
+      unidad: toStr(row[base + 2]),
       cantidad,
       precioUnitario,
       importe,
@@ -285,10 +305,13 @@ function parseInsumosSheet(
   const out: ParsedInsumo[] = [];
   let currentTipo: ParsedInsumo["tipo"] = "MATERIAL";
 
+  // Column base — tolerate a leading blank spacer column (data at col B).
+  const base = findBaseCol(rows);
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i] ?? [];
-    const clave = toStr(row[1]);   // col B
-    const desc  = toStr(row[2]);   // col C
+    const clave = toStr(row[base]);       // Clave (or section name)
+    const desc  = toStr(row[base + 1]);   // Descripción
 
     if (!clave) continue;
 
@@ -296,7 +319,7 @@ function parseInsumosSheet(
     if (/explosión|explosion|recursos/i.test(clave)) continue;
     if (/^clave$/i.test(clave)) continue;
 
-    // Section-header: col B has a word, col C is null/empty
+    // Section-header: clave col has a word, descripción col is null/empty
     if (!desc) {
       const low = clave.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
       if (low.startsWith("tipo:")) {
@@ -322,11 +345,11 @@ function parseInsumosSheet(
       continue;
     }
 
-    const unidad   = toStr(row[3]) || "pza";   // col D
-    const cantidad = toNum(row[4]) ?? 0;        // col E
-    const costo    = toNum(row[5]);             // col F
+    const unidad   = toStr(row[base + 2]) || "pza";   // Unidad
+    const cantidad = toNum(row[base + 3]) ?? 0;        // Cantidad
+    const costo    = toNum(row[base + 4]);             // Costo
     if (costo == null) continue;
-    const importe  = toNum(row[6]) ?? cantidad * costo; // col G
+    const importe  = toNum(row[base + 5]) ?? cantidad * costo; // Importe
 
     out.push({
       clave,

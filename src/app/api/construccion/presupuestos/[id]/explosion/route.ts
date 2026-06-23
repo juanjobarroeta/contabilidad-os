@@ -129,6 +129,38 @@ export const GET = withAuthz(
       }
     }
 
+    // Fallback: when the presupuesto has no APU-derived explosion (e.g. it was
+    // imported from an Excel whose only insumo data is the pre-computed
+    // "Explosión de Insumos" sheet), use the stored PresupuestoInsumo rows
+    // directly. These carry the project-total quantity + unit cost per insumo.
+    if (byInsumoId.size === 0) {
+      const stored = await prisma.presupuestoInsumo.findMany({
+        where: { presupuestoId: id },
+        select: {
+          cantidad: true,
+          costoUnitario: true,
+          importe: true,
+          insumo: {
+            select: { id: true, codigo: true, descripcion: true, tipo: true, unidad: true },
+          },
+        },
+      });
+      for (const row of stored) {
+        if (!row.insumo) continue;
+        byInsumoId.set(row.insumo.id, {
+          insumoId: row.insumo.id,
+          codigo: row.insumo.codigo,
+          descripcion: row.insumo.descripcion,
+          tipo: row.insumo.tipo,
+          unidad: row.insumo.unidad,
+          costoUnitario: row.costoUnitario,
+          cantidadTotal: round2(row.cantidad),
+          importeTotal: round2(row.importe),
+          usedInConceptos: new Set(),
+        });
+      }
+    }
+
     // Convert to array, grouped by tipo
     const explosion = [...byInsumoId.values()]
       .map((e) => ({
