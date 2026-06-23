@@ -222,14 +222,32 @@ export async function GET(req: Request) {
       excluidoAcreditamiento: parent.ivaNoCausado,
     });
   }
-  // Ingresos PPD emitidos en el periodo aún SIN cobro (sin REP este mes): su IVA
-  // se causa al cobrarse, no al emitir. Se muestran tenues y fuera del total para
-  // que no queden invisibles (espejo del "sin complemento" del lado acreditable).
-  // Si ya hay un REP de este CFDI en el mes, su renglón "cobrado (REP)" ya está
-  // arriba, así que no lo duplicamos aquí.
+  // Ingresos PPD emitidos en el periodo aún SIN cobro: su IVA se causa al
+  // cobrarse, no al emitir. Se muestran tenues y fuera del total para que no
+  // queden invisibles (espejo del "sin complemento" del lado acreditable).
+  // "Sin cobro" = sin NINGÚN REP hasta el fin del periodo: si ya se pagó (este
+  // mes o uno anterior) su IVA se reconoce en el mes del pago, no aquí — así un
+  // PPD pagado en otro mes no se marca falsamente como pendiente.
+  const ppdIngresoUuids = ingresos
+    .filter((i) => i.metodoPago === "PPD" && i.uuid)
+    .map((i) => i.uuid!);
+  const pagadosHastaPeriodo = ppdIngresoUuids.length
+    ? new Set(
+        (
+          await prisma.pagoDoctoRelacionado.findMany({
+            where: {
+              parentUuid: { in: ppdIngresoUuids },
+              fechaPago: { lt: to },
+              pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
+            },
+            select: { parentUuid: true },
+          })
+        ).map((r) => r.parentUuid)
+      )
+    : new Set<string>();
   for (const inv of ingresos) {
     if (inv.metodoPago !== "PPD") continue;
-    if (inv.uuid && repLinksPorParent.has(inv.uuid)) continue;
+    if (inv.uuid && pagadosHastaPeriodo.has(inv.uuid)) continue;
     const { trasladado: t } = extractIva(inv);
     if (t <= 0.005) continue;
     trasladado.push({
