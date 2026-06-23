@@ -467,7 +467,7 @@ export async function verifyAndImportSatSync(
         // the file / parsed the <cfdi:Impuestos> node.
         const existing = await prisma.invoice.findFirst({
           where: { companyId, uuid: { equals: uuid, mode: "insensitive" } },
-          select: { id: true, tipo: true, rawXml: true, regimenNomina: true, _count: { select: { taxes: true } } },
+          select: { id: true, tipo: true, rawXml: true, regimenNomina: true, _count: { select: { taxes: true, doctosRelacionados: true } } },
         });
         if (existing) {
           if (!existing.rawXml) {
@@ -494,6 +494,30 @@ export async function verifyAndImportSatSync(
             if (parsed.taxes.length > 0) {
               await prisma.invoiceTax.createMany({
                 data: parsed.taxes.map((t) => ({ invoiceId: existing.id, ...t })),
+              });
+            }
+          }
+          // Backfill de los links del complemento de pago (DoctoRelacionado) de un
+          // REP importado antes de que parseáramos el complemento (o si su creación
+          // falló). Sin estos links, el IVA del pago — que para PPD se causa al
+          // cobrarse — nunca se reconoce. Idempotente: sólo cuando no hay ninguno.
+          if (existing.tipo === "PAGO" && existing._count.doctosRelacionados === 0) {
+            const parsed = parseCfdiXml(xmlContent);
+            if (parsed.doctosRelacionados?.length) {
+              await prisma.pagoDoctoRelacionado.createMany({
+                data: parsed.doctosRelacionados.map((d) => ({
+                  pagoInvoiceId: existing.id,
+                  parentUuid: d.uuid,
+                  impPagado: d.impPagado,
+                  numParcialidad: d.numParcialidad != null ? Math.trunc(d.numParcialidad) : null,
+                  impSaldoAnterior: d.impSaldoAnterior,
+                  impSaldoInsoluto: d.impSaldoInsoluto,
+                  fechaPago: d.fechaPago ? new Date(d.fechaPago) : null,
+                  baseTraslado: d.baseTraslado,
+                  ivaTrasladado: d.ivaTrasladado,
+                  ivaDerivado: d.ivaDerivado,
+                })),
+                skipDuplicates: true,
               });
             }
           }
