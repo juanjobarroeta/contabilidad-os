@@ -222,6 +222,31 @@ export async function GET(req: Request) {
       excluidoAcreditamiento: parent.ivaNoCausado,
     });
   }
+  // Ingresos PPD emitidos en el periodo aún SIN cobro (sin REP este mes): su IVA
+  // se causa al cobrarse, no al emitir. Se muestran tenues y fuera del total para
+  // que no queden invisibles (espejo del "sin complemento" del lado acreditable).
+  // Si ya hay un REP de este CFDI en el mes, su renglón "cobrado (REP)" ya está
+  // arriba, así que no lo duplicamos aquí.
+  for (const inv of ingresos) {
+    if (inv.metodoPago !== "PPD") continue;
+    if (inv.uuid && repLinksPorParent.has(inv.uuid)) continue;
+    const { trasladado: t } = extractIva(inv);
+    if (t <= 0.005) continue;
+    trasladado.push({
+      id: `${inv.id}-pend`,
+      fecha: inv.fecha.toISOString().slice(0, 10),
+      uuid: inv.uuid,
+      serie: inv.serie,
+      folio: inv.folio,
+      contraparte: inv.customer?.razonSocial ?? "—",
+      rfc: inv.customer?.rfc ?? "—",
+      subtotal: inv.subtotal,
+      tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
+      importe: t,
+      metodoPago: "PPD",
+      sinComplementoPago: true,
+    });
+  }
   trasladado.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   const acreditable: Row[] = [];
@@ -277,7 +302,10 @@ export async function GET(req: Request) {
 
   const sum = (rs: Row[]) => rs.reduce((s, r) => s + r.importe, 0);
   // Lo marcado como no cobrado (ivaNoCausado) no causa IVA aún — fuera del total.
-  const totalTrasladado = sum(trasladado.filter((r) => !r.excluidoAcreditamiento));
+  // Tampoco el PPD ingreso aún sin cobrar (sin REP): su IVA se causa al cobrarse.
+  const totalTrasladado = sum(trasladado.filter((r) => !r.excluidoAcreditamiento && !r.sinComplementoPago));
+  const ppdIngRows = trasladado.filter((r) => r.sinComplementoPago);
+  const ppdIngresoPendiente = { count: ppdIngRows.length, iva: +sum(ppdIngRows).toFixed(2) };
   // No entran al total (ni al cálculo) — igual que el motor: lo excluido por el
   // contador, ni el PPD que aún no tiene complemento de pago en el periodo.
   const totalAcreditable = sum(acreditable.filter((r) => !r.excluidoAcreditamiento && !r.sinComplementoPago));
@@ -350,6 +378,7 @@ export async function GET(req: Request) {
       cfdisPueSinPago,
     },
     ppdSinComplemento,
+    ppdIngresoPendiente,
   };
 
   if (format === "csv") {

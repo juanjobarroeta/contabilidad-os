@@ -75,13 +75,16 @@ const FILTERS: { k: FilterKey; t: string }[] = [
 ];
 
 // ── XML / PDF download (reuses the existing per-invoice endpoint) ─────────────
-function DownloadBtn({ id, format }: { id: string; format: "xml" | "pdf" }) {
+function DownloadBtn({ id, format, onUnavailable }: { id: string; format: "xml" | "pdf"; onUnavailable?: () => void }) {
   const [loading, setLoading] = useState(false);
   async function go() {
     setLoading(true);
     try {
       const res = await fetch(`/api/facturas/${id}/download?format=${format}`);
       if (!res.ok) {
+        // Los CFDIs importados del SAT no tienen PDF del PAC. En vez de un error,
+        // abrimos la representación impresa (que se genera del XML y se imprime).
+        if (format === "pdf" && onUnavailable) { onUnavailable(); return; }
         let msg = "Error al descargar el archivo";
         try { const j = await res.json(); if (j?.error) msg = j.error; } catch { /* keep default */ }
         alert(msg);
@@ -511,7 +514,7 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
 
         <div className="mt-2.5 flex gap-2.5">
           <DownloadBtn id={inv.id} format="xml" />
-          <DownloadBtn id={inv.id} format="pdf" />
+          <DownloadBtn id={inv.id} format="pdf" onUnavailable={() => setRepOpen(true)} />
         </div>
 
         {repOpen && <RepresentacionImpresa invoiceId={inv.id} onClose={() => setRepOpen(false)} />}
