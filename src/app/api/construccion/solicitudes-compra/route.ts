@@ -2,13 +2,31 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { buildPartidasAndOffers } from "@/lib/construccion/requisicion-offers";
 
 const partidaSchema = z.object({
   insumoId: z.string().optional(),
   descripcion: z.string().min(1),
   unidad: z.string().max(20).nullable().optional(), // TON, PALLET, m3, kg, pza
   cantidad: z.number().positive(),
-  precioUnitario: z.number().nonnegative(),
+  precioUnitario: z.number().nonnegative().optional(),
+  presupuestoPartidaId: z.string().optional(),
+});
+
+// Inline supplier offers (one cotización each). Lines reference partidas by
+// their position in the partidas array.
+const offerSchema = z.object({
+  supplierId: z.string().min(1).nullable().optional(),
+  supplierNombre: z.string().min(1).max(120),
+  tieneCredito: z.boolean().optional(),
+  lineas: z
+    .array(
+      z.object({
+        partidaIndex: z.number().int().nonnegative(),
+        precioUnitario: z.number().nonnegative(),
+      })
+    )
+    .default([]),
 });
 
 const createSolicitudSchema = z.object({
@@ -20,7 +38,11 @@ const createSolicitudSchema = z.object({
   // Header fields matching the partner's Excel template:
   fechaEntrega: z.string().nullable().optional(), // ISO date string
   formaPago: z.enum(["CREDITO", "CONTADO"]).nullable().optional(),
+  // BORRADOR = draft (shared, not yet sent for authorization); default
+  // PENDIENTE keeps existing callers submitting straight to authorization.
+  estado: z.enum(["BORRADOR", "PENDIENTE"]).optional(),
   partidas: z.array(partidaSchema).min(1),
+  offers: z.array(offerSchema).optional(),
 });
 
 // GET /api/construccion/solicitudes-compra?companyId=xxx&estado=PENDIENTE
@@ -83,38 +105,33 @@ export const POST = withAuthz(async (req: Request) => {
     }
   }
 
-  // Compute total server-side — never trust the client
-  const partidasWithImporte = data.partidas.map((p) => ({
-    ...p,
-    importe: Number((p.cantidad * p.precioUnitario).toFixed(2)),
-  }));
-  const total = Number(
-    partidasWithImporte.reduce((acc, p) => acc + p.importe, 0).toFixed(2)
-  );
-
   try {
-    const solicitud = await prisma.solicitudCompra.create({
-      data: {
-        companyId: data.companyId,
-        folio: data.folio,
-        proyectoId: data.proyectoId,
-        supplierId: data.supplierId,
-        notas: data.notas,
-        fechaEntrega: data.fechaEntrega ? new Date(data.fechaEntrega) : null,
-        formaPago: data.formaPago ?? null,
-        total,
-        partidas: {
-          create: partidasWithImporte.map((p) => ({
-            insumoId: p.insumoId,
-            descripcion: p.descripcion,
-            unidad: p.unidad ?? null,
-            cantidad: p.cantidad,
-            precioUnitario: p.precioUnitario,
-            importe: p.importe,
-          })),
+    const solicitud = await prisma.$transaction(async (tx) => {
+      const header = await tx.solicitudCompra.create({
+        data: {
+          companyId: data.companyId,
+          folio: data.folio,
+          proyectoId: data.proyectoId,
+          supplierId: data.supplierId,
+          notas: data.notas,
+          fechaEntrega: data.fechaEntrega ? new Date(data.fechaEntrega) : null,
+          formaPago: data.formaPago ?? null,
+          estado: data.estado ?? "PENDIENTE",
+          total: 0,
         },
-      },
-      include: { partidas: true },
+      });
+      // Create partidas (in order) + any inline offers, then persist the total.
+      const { total } = await buildPartidasAndOffers(
+        tx,
+        header.id,
+        data.partidas,
+        data.offers ?? []
+      );
+      await tx.solicitudCompra.update({ where: { id: header.id }, data: { total } });
+      return tx.solicitudCompra.findUnique({
+        where: { id: header.id },
+        include: { partidas: true, cotizaciones: { include: { partidas: true } } },
+      });
     });
     return NextResponse.json(solicitud, { status: 201 });
   } catch (e: unknown) {

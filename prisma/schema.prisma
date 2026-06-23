@@ -1938,6 +1938,7 @@ model SolicitudCompra {
 }
 
 enum SolicitudEstado {
+  BORRADOR
   PENDIENTE
   APROBADA
   RECHAZADA
@@ -1996,6 +1997,9 @@ model SolicitudCompraCotizacion {
   moneda          String    @default("MXN")
   notas           String?
   isSelected      Boolean   @default(false)
+  // Forma de pago de esta oferta: precargada de las condiciones del proveedor
+  // (SupplierTerms) pero ajustable por oferta. true = a crédito, false = contado.
+  tieneCredito    Boolean   @default(false)
   // Scanned/uploaded quote — same dual-storage pattern as Gasto comprobantes.
   archivoUrl      String?
   archivoData     String?   @db.Text
