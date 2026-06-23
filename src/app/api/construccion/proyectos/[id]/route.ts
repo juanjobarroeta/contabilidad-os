@@ -4,6 +4,7 @@ import {
   AuthzError,
   requireMembership,
   requireModule,
+  requireWriter,
   withAuthz,
 } from "@/lib/authz";
 
@@ -187,5 +188,57 @@ export const GET = withAuthz(
     await requireModule(proyecto.companyId, "CONSTRUCCION");
 
     return NextResponse.json(proyecto);
+  }
+);
+
+/**
+ * DELETE /api/construccion/proyectos/:id?confirm=true
+ *
+ * Hard-deletes a proyecto and everything that hangs off it: presupuestos
+ * (+ partidas, insumos, versiones), estimaciones, programa, bitácora, pagos,
+ * unidades, cuadrillas, rayas, gastos, reembolsos and solicitudes de compra
+ * (+ cotizaciones). Linked fiscal documents (Invoice / BankTransaction) are
+ * NOT deleted — the FKs live on the construcción side, so those rows survive
+ * with their pointers cleared / orphaned.
+ *
+ * Requires `?confirm=true` as a guard against accidental calls. Writer + module
+ * gated. Intended for cleaning up mock / mis-imported projects.
+ *
+ * Most child relations cascade at the DB level; three (Gasto, ReembolsoSemanal,
+ * SolicitudCompra) do not, so we remove them explicitly first, in dependency
+ * order, inside one transaction.
+ */
+export const DELETE = withAuthz(
+  async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+    const { id } = await ctx.params;
+    const url = new URL(req.url);
+    if (url.searchParams.get("confirm") !== "true") {
+      return NextResponse.json(
+        { error: "Agrega ?confirm=true para eliminar el proyecto." },
+        { status: 400 }
+      );
+    }
+
+    const proyecto = await prisma.proyecto.findUnique({
+      where: { id },
+      select: { id: true, companyId: true, codigo: true, nombre: true },
+    });
+    if (!proyecto) throw new AuthzError(404, "Proyecto no encontrado");
+    await requireWriter(proyecto.companyId, req);
+    await requireModule(proyecto.companyId, "CONSTRUCCION");
+
+    await prisma.$transaction(async (tx) => {
+      // Non-cascading branches first (FK to proyecto has no ON DELETE CASCADE).
+      // Gastos before reembolsos (gasto.reembolso is SetNull either way).
+      await tx.gasto.deleteMany({ where: { proyectoId: id } });
+      await tx.reembolsoSemanal.deleteMany({ where: { proyectoId: id } });
+      // Solicitudes cascade their cotizaciones + partidas at the DB level.
+      await tx.solicitudCompra.deleteMany({ where: { proyectoId: id } });
+      // The rest (presupuestos, estimaciones, programa, bitácora, pagos,
+      // unidades, cuadrillas, rayas, template) cascade with the proyecto.
+      await tx.proyecto.delete({ where: { id } });
+    });
+
+    return NextResponse.json({ deleted: id, codigo: proyecto.codigo });
   }
 );
