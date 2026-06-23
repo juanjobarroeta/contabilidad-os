@@ -18,6 +18,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
+import { loadMatchPools, bestSuggestion } from "@/lib/construccion/cfdi-match";
 
 // SAT tipoComprobante shown as a label in the UI. Our Invoice.tipo encodes our
 // accounting direction; for I/E both sides see an "Ingreso" comprobante.
@@ -89,6 +90,15 @@ export const GET = withAuthz(async (req: Request) => {
     : [];
   const supplierByRfc = new Map(suppliers.map((s) => [s.rfc, s]));
 
+  // Persisted operational links (VINCULADA / IGNORADA) for these CFDIs.
+  const vinculos = await prisma.construccionCfdiVinculo.findMany({
+    where: { invoiceId: { in: invoices.map((i) => i.id) } },
+  });
+  const vinculoByInvoice = new Map(vinculos.map((v) => [v.invoiceId, v]));
+
+  // Match pools (loaded once) to suggest a target for un-linked CFDIs.
+  const pools = await loadMatchPools(companyId);
+
   const out = invoices.map((inv) => {
     const recibida = inv.tipo === "EGRESO";
     const cp = inv.customer;
@@ -97,19 +107,29 @@ export const GET = withAuthz(async (req: Request) => {
     const matchedAmount = Math.abs(inv.bankTransactions.reduce((s, t) => s + t.monto, 0));
     const paid = inv.total > 0 && matchedAmount >= inv.total - 0.01;
 
-    // Minimal match state until the operational link layer lands.
+    const vinculo = vinculoByInvoice.get(inv.id);
     let matchEstado = "SIN_VINCULAR";
     let link: { tipo: string; targetId: string; label: string } | null = null;
-    if (!recibida && inv.estimacion) {
-      matchEstado = "VINCULADA";
+    let suggestion = null as ReturnType<typeof bestSuggestion>;
+
+    if (vinculo?.estado === "IGNORADA") {
+      matchEstado = "IGNORADA";
+    } else if (vinculo?.estado === "VINCULADA" && vinculo.targetTipo && vinculo.targetId) {
+      matchEstado = paid ? "PAGADA" : "VINCULADA";
+      link = { tipo: vinculo.targetTipo, targetId: vinculo.targetId, label: vinculo.targetLabel ?? vinculo.targetTipo };
+    } else if (!recibida && inv.estimacion) {
+      // Emitida already stamped from an estimación → implicitly linked.
+      matchEstado = paid ? "PAGADA" : "VINCULADA";
       const codigo = inv.estimacion.proyecto?.codigo;
-      link = {
-        tipo: "ESTIMACION",
-        targetId: inv.estimacion.id,
-        label: `EST. ${inv.estimacion.numero}${codigo ? ` · ${codigo}` : ""}`,
-      };
+      link = { tipo: "ESTIMACION", targetId: inv.estimacion.id, label: `EST. ${inv.estimacion.numero}${codigo ? ` · ${codigo}` : ""}` };
     } else if (paid) {
       matchEstado = "PAGADA";
+    } else {
+      suggestion = bestSuggestion(
+        { total: inv.total, fecha: inv.fecha, recibida, emisorNombre: recibida ? cp?.razonSocial ?? null : null, supplierId: supplier?.id ?? null },
+        pools
+      );
+      if (suggestion) matchEstado = "SUGERIDA";
     }
 
     return {
@@ -136,7 +156,7 @@ export const GET = withAuthz(async (req: Request) => {
         : recibida && cp
           ? { razonSocial: cp.razonSocial }
           : null,
-      suggestion: null,
+      suggestion,
       link,
     };
   });
