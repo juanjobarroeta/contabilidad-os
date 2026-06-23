@@ -26,6 +26,10 @@ interface Invoice {
   regimenNomina: string | null;
   isrRetenidoNomina: number | null;
   customer: { razonSocial: string; rfc: string } | null;
+  // REP (tipo PAGO): montos reales del complemento (el comprobante trae 0).
+  pagoMonto?: number | null;
+  pagoIva?: number | null;
+  pagoFecha?: string | null;
 }
 
 const NATURALEZA_META: Record<string, { label: string; hint: string }> = {
@@ -493,17 +497,38 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
 
         {inv.tipo === "EGRESO" && <NaturalezaRow inv={inv} />}
 
-        <div className="mt-[18px] border-t border-cos-line-soft">
-          <div className="flex justify-between border-b border-cos-line-soft py-2.5 text-[14px] text-cos-ink-soft">
-            <span>Subtotal</span><Money value={inv.subtotal} size={15} weight={500} />
+        {k === "pago" ? (
+          // REP: el comprobante trae Total/IVA = 0; mostramos los montos reales
+          // del complemento (monto pagado + IVA trasladado) y la FECHA DE PAGO,
+          // que es la que causa el IVA (no la fecha de emisión del REP).
+          <div className="mt-[18px] border-t border-cos-line-soft">
+            <div className="flex justify-between border-b border-cos-line-soft py-2.5 text-[14px] text-cos-ink-soft">
+              <span>Monto del pago</span><Money value={inv.pagoMonto ?? 0} size={15} weight={500} />
+            </div>
+            <div className="flex justify-between border-b border-cos-line-soft py-2.5 text-[14px] text-cos-ink-soft">
+              <span>IVA trasladado del pago</span><Money value={inv.pagoIva ?? 0} size={15} weight={500} />
+            </div>
+            <div className="flex justify-between py-2.5 text-[14px] font-semibold text-cos-ink">
+              <span>Fecha de pago{inv.pagoFecha ? "" : " (en el complemento)"}</span>
+              <span>{inv.pagoFecha ? fmtFecha(inv.pagoFecha) : "—"}</span>
+            </div>
+            <p className="pb-1 text-[12px] text-cos-ink-faint">
+              El IVA de este pago se causa en el mes de la fecha de pago.
+            </p>
           </div>
-          <div className="flex justify-between border-b border-cos-line-soft py-2.5 text-[14px] text-cos-ink-soft">
-            <span>IVA / impuestos</span><Money value={inv.totalImpuestos} size={15} weight={500} />
+        ) : (
+          <div className="mt-[18px] border-t border-cos-line-soft">
+            <div className="flex justify-between border-b border-cos-line-soft py-2.5 text-[14px] text-cos-ink-soft">
+              <span>Subtotal</span><Money value={inv.subtotal} size={15} weight={500} />
+            </div>
+            <div className="flex justify-between border-b border-cos-line-soft py-2.5 text-[14px] text-cos-ink-soft">
+              <span>IVA / impuestos</span><Money value={inv.totalImpuestos} size={15} weight={500} />
+            </div>
+            <div className="flex justify-between py-2.5 text-[14px] font-semibold text-cos-ink">
+              <span>Total</span><Money value={inv.total} size={18} weight={700} />
+            </div>
           </div>
-          <div className="flex justify-between py-2.5 text-[14px] font-semibold text-cos-ink">
-            <span>Total</span><Money value={inv.total} size={18} weight={700} />
-          </div>
-        </div>
+        )}
 
         <button
           onClick={() => setRepOpen(true)}

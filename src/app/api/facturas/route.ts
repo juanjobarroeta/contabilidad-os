@@ -107,6 +107,10 @@ export async function GET(req: Request) {
         where: { status: "MATCHED" },
         select: { id: true, monto: true },
       },
+      // Para los REP (tipo PAGO) el comprobante trae Total/IVA = 0; los montos
+      // reales viven en el complemento. Los exponemos para que el detalle no
+      // muestre $0.00.
+      doctosRelacionados: { select: { impPagado: true, ivaTrasladado: true, fechaPago: true } },
     },
     orderBy: { fecha: "desc" },
     take: fetchTake,
@@ -119,10 +123,18 @@ export async function GET(req: Request) {
       inv.bankTransactions.reduce((s, tx) => s + tx.monto, 0)
     );
     const fullyMatched = matchedAmount >= inv.total - 0.01;
-    // bankTransactions was only loaded to compute this — strip from payload.
-    const { bankTransactions: _bts, ...rest } = inv;
-    void _bts;
-    return { ...rest, matchedAmount, fullyMatched };
+    // Totales del REP desde el complemento (monto pagado, IVA trasladado y la
+    // fecha de pago — que es la que causa el IVA, no la fecha del comprobante).
+    const esPago = inv.tipo === "PAGO";
+    const pagoMonto = esPago ? inv.doctosRelacionados.reduce((s, d) => s + (d.impPagado ?? 0), 0) : null;
+    const pagoIva = esPago ? inv.doctosRelacionados.reduce((s, d) => s + (d.ivaTrasladado ?? 0), 0) : null;
+    const pagoFecha = esPago
+      ? inv.doctosRelacionados.map((d) => d.fechaPago).filter(Boolean).sort()[0] ?? null
+      : null;
+    // bankTransactions / doctosRelacionados sólo se cargaron para derivar lo de arriba.
+    const { bankTransactions: _bts, doctosRelacionados: _dr, ...rest } = inv;
+    void _bts; void _dr;
+    return { ...rest, matchedAmount, fullyMatched, pagoMonto, pagoIva, pagoFecha };
   });
 
   const filtered = unmatchedOnly ? enriched.filter((i) => !i.fullyMatched) : enriched;
