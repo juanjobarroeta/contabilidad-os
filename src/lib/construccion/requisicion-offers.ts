@@ -25,6 +25,7 @@ export type DraftOfferInput = {
   supplierId?: string | null;
   supplierNombre: string;
   tieneCredito?: boolean;
+  diasEntrega?: number | null;
   lineas: { partidaIndex: number; precioUnitario: number }[];
 };
 
@@ -77,6 +78,7 @@ export async function buildPartidasAndOffers(
         supplierId: o.supplierId ?? null,
         supplierNombre: o.supplierNombre,
         tieneCredito: o.tieneCredito ?? false,
+        diasEntrega: o.diasEntrega ?? null,
         total: cotTotal,
         partidas: { create: lineas },
       },

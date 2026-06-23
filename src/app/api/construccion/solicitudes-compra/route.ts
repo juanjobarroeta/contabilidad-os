@@ -19,6 +19,7 @@ const offerSchema = z.object({
   supplierId: z.string().min(1).nullable().optional(),
   supplierNombre: z.string().min(1).max(120),
   tieneCredito: z.boolean().optional(),
+  diasEntrega: z.number().int().min(0).max(365).nullable().optional(),
   lineas: z
     .array(
       z.object({
@@ -46,10 +47,14 @@ const createSolicitudSchema = z.object({
 });
 
 // GET /api/construccion/solicitudes-compra?companyId=xxx&estado=PENDIENTE
+//   [&withCotizaciones=1]  → embeds partidas + cotizaciones (lines, credit,
+//   delivery, per-line award) so the "Compras por autorizar" dashboard can
+//   render the full supplier comparison without an N+1 of detail calls.
 export const GET = withAuthz(async (req: Request) => {
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
   const estado = searchParams.get("estado");
+  const withCotizaciones = searchParams.get("withCotizaciones") === "1";
   if (!companyId) {
     return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
   }
@@ -66,6 +71,32 @@ export const GET = withAuthz(async (req: Request) => {
       proyecto: { select: { id: true, codigo: true, nombre: true } },
       supplier: { select: { id: true, razonSocial: true, rfc: true } },
       _count: { select: { partidas: true, cotizaciones: true } },
+      ...(withCotizaciones
+        ? {
+            partidas: {
+              select: {
+                id: true,
+                descripcion: true,
+                unidad: true,
+                cantidad: true,
+                cotizacionGanadoraId: true,
+              },
+            },
+            cotizaciones: {
+              select: {
+                id: true,
+                supplierId: true,
+                supplierNombre: true,
+                tieneCredito: true,
+                diasEntrega: true,
+                total: true,
+                partidas: {
+                  select: { solicitudPartidaId: true, precioUnitario: true, importe: true },
+                },
+              },
+            },
+          }
+        : {}),
     },
     orderBy: { createdAt: "desc" },
   });

@@ -2047,6 +2047,10 @@ model SolicitudCompraCotizacion {
   // Forma de pago de esta oferta: precargada de las condiciones del proveedor
   // (SupplierTerms) pero ajustable por oferta. true = a crédito, false = contado.
   tieneCredito    Boolean   @default(false)
+  // Tiempo de entrega prometido por este proveedor (días hábiles). Cada
+  // proveedor cotiza su propio plazo, por eso vive en la cotización y no como
+  // una sola "fecha de entrega" en la requisición.
+  diasEntrega     Int?
   // Scanned/uploaded quote — same dual-storage pattern as Gasto comprobantes.
   archivoUrl      String?
   archivoData     String?   @db.Text
