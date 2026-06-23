@@ -42,6 +42,7 @@ interface IvaData {
   };
   reconciliacion?: { activa: boolean; ivaPueSinPago: number; cfdisPueSinPago: number };
   ppdSinComplemento?: { count: number; iva: number };
+  ppdIngresoPendiente?: { count: number; iva: number };
 }
 
 export function IvaPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
@@ -91,6 +92,16 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
         onToggleExcluir={(id, next) => toggleExcluir(id, next, "ivaNoCausado")}
         toggling={toggling}
       />
+      {data.ppdIngresoPendiente && data.ppdIngresoPendiente.count > 0 && (
+        <div className="flex items-start gap-2.5 rounded-card border border-cos-line bg-cos-paper px-4 py-3 text-[13px] text-cos-ink-soft">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-cos-ink-faint" />
+          <span>
+            <b>{data.ppdIngresoPendiente.count} factura(s) de ingreso PPD</b> ({formatCurrency(data.ppdIngresoPendiente.iva)} de IVA)
+            emitida(s) este mes <b>aún sin cobrar</b> — su IVA trasladado se causa en el mes en que las cobres (al recibir su
+            complemento de pago / REP), no al emitirlas. Por eso están tenues y fuera del total (igual que el cálculo).
+          </span>
+        </div>
+      )}
       <IvaSection
         title="IVA acreditable (pagado)"
         subtitle="IVA que pagaste a tus proveedores, acreditable contra el trasladado"
@@ -220,7 +231,7 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
                 {r.excluidoAcreditamiento ? (
                   <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft">{excluidoLabel}</span>
                 ) : r.sinComplementoPago ? (
-                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft" title="PPD sin complemento de pago (REP) en el periodo — se acredita cuando llegue el pago">
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft" title="PPD sin complemento de pago (REP) en el periodo — su IVA se reconoce cuando llegue el pago">
                     sin complemento
                   </span>
                 ) : r.pagoParcial ? (
