@@ -54,7 +54,9 @@ export type ParsedInsumo = {
   clave: string;
   descripcion: string;
   unidad: string;
-  costoActual: number;
+  cantidad: number;      // project-total quantity from the explosion sheet
+  costoActual: number;   // unit price
+  importe: number;       // cantidad × costoActual
   familia: string | null;
   tipo: "MATERIAL" | "MANO_OBRA" | "EQUIPO" | "HERRAMIENTA" | "BASICO";
 };
@@ -254,68 +256,109 @@ function parseCaratulaSheet(rows: unknown[][]): ParsedCaratula {
   return { titulo, subtotal, utilidad, total };
 }
 
-// ─── INSUMOS sheet ───────────────────────────────────────────────────────────
+// ─── INSUMOS / Explosión de Insumos sheet ─────────────────────────────────
+//
+// Column layout (Gerardo's template, "Explosión de recursos de presupuesto"):
+//   Col A (0): always blank
+//   Col B (1): Clave  (or section name: "Material", "Mano de Obra", …)
+//   Col C (2): Descripción  (null on section-header rows)
+//   Col D (3): Unidad
+//   Col E (4): Cantidad  (project-total quantity for this insumo)
+//   Col F (5): Costo    (unit price)
+//   Col G (6): Importe  (= Cantidad × Costo)
+//   Col H (7): Porcentaje (ignored)
+//
+// Section headers: col B has a category word, col C is null.
+// Recognised sections → InsumoTipo:
+//   "Material"     → MATERIAL
+//   "Mano de Obra" → MANO_OBRA
+//   "Herramienta"  → HERRAMIENTA
+//   "Equipo"       → EQUIPO
+//   "Contrato"     → BASICO  (subcontracted / assembled items)
+//   "Flete"        → BASICO  (freight)
+//   "Tipo: …"      → legacy format fallback
 
 function parseInsumosSheet(
   rows: unknown[][],
   warnings: string[]
 ): ParsedInsumo[] {
   const out: ParsedInsumo[] = [];
-
-  // The sheet has section headers like "Tipo: Materiales" — track current
-  // section as we walk so we can tag each insumo with the right tipo.
   let currentTipo: ParsedInsumo["tipo"] = "MATERIAL";
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i] ?? [];
-    const a = toStr(row[0]);
-    const b = toStr(row[1]);
+    const clave = toStr(row[1]);   // col B
+    const desc  = toStr(row[2]);   // col C
 
-    // Section header
-    if (a.toLowerCase().startsWith("tipo:")) {
-      const t = a.slice(5).trim().toLowerCase();
-      if (t.startsWith("material")) currentTipo = "MATERIAL";
-      else if (t.startsWith("mano")) currentTipo = "MANO_OBRA";
-      else if (t.startsWith("equipo") || t.startsWith("maquin")) currentTipo = "EQUIPO";
-      else if (t.startsWith("herr")) currentTipo = "HERRAMIENTA";
-      else if (t.startsWith("básic") || t.startsWith("basic")) currentTipo = "BASICO";
+    if (!clave) continue;
+
+    // Skip the title row and column-header row
+    if (/explosión|explosion|recursos/i.test(clave)) continue;
+    if (/^clave$/i.test(clave)) continue;
+
+    // Section-header: col B has a word, col C is null/empty
+    if (!desc) {
+      const low = clave.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      if (low.startsWith("tipo:")) {
+        // Legacy "Tipo: Material" format
+        const t = low.slice(5).trim();
+        if (t.startsWith("material")) currentTipo = "MATERIAL";
+        else if (t.startsWith("mano")) currentTipo = "MANO_OBRA";
+        else if (t.startsWith("equipo") || t.startsWith("maquin")) currentTipo = "EQUIPO";
+        else if (t.startsWith("herr")) currentTipo = "HERRAMIENTA";
+        else currentTipo = "BASICO";
+      } else if (low.startsWith("material")) {
+        currentTipo = "MATERIAL";
+      } else if (low.startsWith("mano")) {
+        currentTipo = "MANO_OBRA";
+      } else if (low.startsWith("equipo") || low.startsWith("maquin")) {
+        currentTipo = "EQUIPO";
+      } else if (low.startsWith("herr")) {
+        currentTipo = "HERRAMIENTA";
+      } else if (low.startsWith("contrato") || low.startsWith("flete") || low.startsWith("basic")) {
+        currentTipo = "BASICO";
+      }
+      // Either way it's a header row — don't emit a record
       continue;
     }
 
-    if (!a || !b) continue;
-    if (a === "Clave" || /clave/i.test(a)) continue; // header row
-
-    const unidad = toStr(row[2]);
-    const costoActual = toNum(row[4]);
-    if (costoActual == null) continue;
-    const familia = toStr(row[7]) || null;
+    const unidad   = toStr(row[3]) || "pza";   // col D
+    const cantidad = toNum(row[4]) ?? 0;        // col E
+    const costo    = toNum(row[5]);             // col F
+    if (costo == null) continue;
+    const importe  = toNum(row[6]) ?? cantidad * costo; // col G
 
     out.push({
-      clave: a,
-      descripcion: b,
-      unidad: unidad || "pza",
-      costoActual,
-      familia,
+      clave,
+      descripcion: desc,
+      unidad,
+      cantidad,
+      costoActual: costo,
+      importe,
+      familia: null,
       tipo: currentTipo,
     });
   }
 
-  // Detect duplicate claves with diverging costs — warn but keep first
+  // Deduplicate: keep first occurrence; warn on cost divergence
   const seen = new Map<string, number>();
   const deduped: ParsedInsumo[] = [];
   for (const ins of out) {
     if (seen.has(ins.clave)) {
-      const idx = seen.get(ins.clave)!;
-      const prior = deduped[idx];
+      const prior = deduped[seen.get(ins.clave)!];
       if (Math.abs(prior.costoActual - ins.costoActual) > 0.01) {
         warnings.push(
           `Insumo ${ins.clave}: costo distinto en la hoja INSUMOS (${prior.costoActual} vs ${ins.costoActual}), se conservó el primero.`
         );
       }
+      // Accumulate quantities across duplicate claves (e.g. same material in
+      // multiple sections of the sheet).
+      prior.cantidad += ins.cantidad;
+      prior.importe  += ins.importe;
       continue;
     }
     seen.set(ins.clave, deduped.length);
-    deduped.push(ins);
+    deduped.push({ ...ins });
   }
 
   return deduped;

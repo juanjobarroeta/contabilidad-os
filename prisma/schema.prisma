@@ -1592,10 +1592,11 @@ model Insumo {
   claveProdServ String?
   claveUnidad   String?
 
-  apuLineas APUInsumo[]
-  partidas  SolicitudPartida[]
-  gastos    Gasto[]
-  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  apuLineas          APUInsumo[]
+  partidas           SolicitudPartida[]
+  gastos             Gasto[]
+  presupuestoInsumos PresupuestoInsumo[]
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, codigo])
 }
@@ -1634,6 +1635,7 @@ model Presupuesto {
   partidas     PresupuestoPartida[]
   estimaciones Estimacion[]
   versiones    PresupuestoVersion[]
+  insumos      PresupuestoInsumo[]
 
   proyecto Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1650,6 +1652,26 @@ enum PresupuestoEstado {
   EN_EJECUCION
   CERRADO
   RECHAZADO // customer chose a different presupuesto in the same proyecto
+}
+
+// Per-project resource plan imported from the "Explosión de Insumos" sheet.
+// One row per insumo, storing the project-total quantity and unit cost snapshot.
+// Used as the "planeado" baseline in the Explosión vs Real view when per-concepto
+// APU data is not available.
+model PresupuestoInsumo {
+  id            String @id @default(cuid())
+  presupuestoId String
+  insumoId      String
+  cantidad      Float  // project-total quantity from the explosion sheet
+  costoUnitario Float  // unit price snapshot at import time
+  importe       Float  // cantidad × costoUnitario
+
+  presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  insumo      Insumo      @relation(fields: [insumoId], references: [id])
+
+  @@unique([presupuestoId, insumoId])
+  @@index([presupuestoId])
+  @@map("construccion_presupuesto_insumo")
 }
 
 model PresupuestoPartida {

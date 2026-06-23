@@ -135,8 +135,6 @@ export const GET = withAuthz(
             planeadoByInsumoId.get(line.insumoId) ??
             ({ planeadoCantidad: 0, partidaRefs: [] } as PlaneadoAgg);
           agg.planeadoCantidad += partidaQty * (line.cantidad ?? 0);
-          // Dedup partidaRefs so one partida appears once even if it
-          // consumes the same insumo twice.
           if (!agg.partidaRefs.find((r) => r.partidaId === p.id)) {
             agg.partidaRefs.push({
               partidaId: p.id,
@@ -146,6 +144,21 @@ export const GET = withAuthz(
             });
           }
           planeadoByInsumoId.set(line.insumoId, agg);
+        }
+      }
+
+      // Fallback: when no APU data exists for this presupuesto, use the
+      // PresupuestoInsumo explosion quantities imported from the INSUMOS sheet.
+      if (planeadoByInsumoId.size === 0) {
+        const explosionRows = await prisma.presupuestoInsumo.findMany({
+          where: { presupuestoId: basis.id },
+          select: { insumoId: true, cantidad: true },
+        });
+        for (const row of explosionRows) {
+          planeadoByInsumoId.set(row.insumoId, {
+            planeadoCantidad: row.cantidad,
+            partidaRefs: [],
+          });
         }
       }
     }
@@ -171,7 +184,7 @@ export const GET = withAuthz(
       });
     }
 
-    // ── Union of insumo ids from both sides; load metadata ────────────
+    // ── Union of insumo ids from planeado + real sides ───────────────
     const allIds = new Set<string>([
       ...planeadoByInsumoId.keys(),
       ...realByInsumoId.keys(),
