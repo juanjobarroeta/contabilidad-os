@@ -61,7 +61,7 @@ export const POST = withAuthz(
     const { id } = await ctx.params;
     const inv = await prisma.invoice.findUnique({
       where: { id },
-      select: { id: true, companyId: true },
+      select: { id: true, companyId: true, total: true },
     });
     if (!inv) throw new AuthzError(404, "CFDI no encontrado");
     await requireWriter(inv.companyId, req);
@@ -73,7 +73,12 @@ export const POST = withAuthz(
     }
     const { tipo, targetId } = parsed.data;
 
-    const label = await resolveTarget(tipo, targetId, inv.companyId);
+    const [label, targetTotal] = await Promise.all([
+      resolveTarget(tipo, targetId, inv.companyId),
+      tipo === "SOLICITUD"
+        ? prisma.solicitudCompra.findFirst({ where: { id: targetId, companyId: inv.companyId }, select: { total: true } }).then((s) => s?.total ?? null)
+        : Promise.resolve(null),
+    ]);
     if (!label) {
       return NextResponse.json({ error: "El destino no existe o no pertenece a esta empresa" }, { status: 422 });
     }
@@ -85,11 +90,19 @@ export const POST = withAuthz(
       update: data,
     });
 
+    const invoiceTotal = inv.total;
+    const costDelta =
+      targetTotal != null ? Math.round((invoiceTotal - targetTotal) * 100) / 100 : null;
+
     return NextResponse.json({
       ok: true,
       matchEstado: "VINCULADA",
       link: { tipo, targetId, label },
       vinculo,
+      // Cost propagation signal: compare CFDI total vs target amount.
+      invoiceTotal,
+      targetTotal,
+      costDelta,
     });
   }
 );
