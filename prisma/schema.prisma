@@ -582,9 +582,34 @@ model Invoice {
   // Activos fijos registrados a partir de este CFDI (naturaleza = INVERSION).
   activosFijos ActivoFijo[]
 
+  // Construcción: vínculo operativo (a requisición / gasto / estimación) +
+  // estado de conciliación manual. Datos del módulo, no fiscales.
+  construccionVinculo ConstruccionCfdiVinculo?
+
   // Único por empresa: permite que un CFDI intercompañía viva en las dos
   // empresas (emisor + receptor) sin chocar, y evita duplicados dentro de una.
   @@unique([companyId, uuid])
+}
+
+// Vínculo operativo de un CFDI con su requisición / gasto / estimación, más el
+// estado de conciliación manual (VINCULADA / IGNORADA). Es dato del módulo
+// construcción —el CFDI fiscal vive en Invoice— join 1:1 por invoiceId. Los
+// estados SUGERIDA / PAGADA / SIN_VINCULAR se derivan al leer; aquí sólo se
+// persiste lo que el usuario confirma.
+model ConstruccionCfdiVinculo {
+  id          String   @id @default(cuid())
+  invoiceId   String   @unique
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  companyId   String
+  estado      String // VINCULADA | IGNORADA
+  targetTipo  String? // SOLICITUD | GASTO | ESTIMACION | BANK_TX
+  targetId    String?
+  targetLabel String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([companyId])
+  @@map("construccion_cfdi_vinculo")
 }
 
 // ── Activo fijo / inversión — registro de depreciación (Art. 31/34/36 LISR) ──
