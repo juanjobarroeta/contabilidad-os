@@ -1,0 +1,28 @@
+name: Digest de Revisión (matutino, entre semana)
+
+# Un push por usuario suscrito con el resumen de hallazgos ABIERTOS del auditor
+# (Revisión). Corre después del fiscal-audit diario para avisar con datos frescos.
+# Sólo entre semana para no fastidiar.
+#
+# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
+# NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
+
+on:
+  schedule:
+    - cron: "0 14 * * 1-5" # ~08:00 CT, lunes a viernes (tras el fiscal-audit de las 10 UTC)
+  workflow_dispatch: {}
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar digest de Revisión
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/revision-digest" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
