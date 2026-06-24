@@ -34,9 +34,10 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { messages, companyId } = body as {
+  const { messages, companyId, conversationId } = body as {
     messages: Anthropic.MessageParam[];
     companyId: string;
+    conversationId?: string;
   };
 
   if (!companyId || !messages?.length) {
@@ -47,6 +48,34 @@ export async function POST(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) {
     return NextResponse.json({ error: "Sin acceso a esta empresa" }, { status: 403 });
+  }
+
+  // ── Persistencia de la conversación ─────────────────────────────────────────
+  // El último mensaje del cliente es el nuevo turno del usuario. Resolvemos (o
+  // creamos) la conversación antes de transmitir; al cerrar el turno guardamos el
+  // mensaje del usuario + la respuesta del asistente.
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const nuevoMensajeUsuario = typeof lastUser?.content === "string" ? lastUser.content : "";
+  const userId = session.user.id;
+
+  let convId = conversationId;
+  let convCreada = false;
+  if (convId) {
+    const conv = await prisma.chatConversation.findUnique({
+      where: { id: convId },
+      select: { userId: true, companyId: true, visibility: true },
+    });
+    if (!conv) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
+    const acceso = conv.userId === userId || (conv.visibility === "COMPANY" && conv.companyId === companyId);
+    if (!acceso) return NextResponse.json({ error: "Sin acceso a esta conversación" }, { status: 403 });
+  } else {
+    const title = nuevoMensajeUsuario.trim().slice(0, 60) || "Nueva conversación";
+    const created = await prisma.chatConversation.create({
+      data: { companyId, userId, title },
+      select: { id: true },
+    });
+    convId = created.id;
+    convCreada = true;
   }
 
   // Fetch company context for system prompt
@@ -75,6 +104,15 @@ export async function POST(req: Request) {
       const heartbeat = setInterval(() => {
         safeEnqueue(encoder.encode(": ping\n\n")); // SSE comment; clients ignore it
       }, HEARTBEAT_MS);
+
+      // Avísale al cliente qué conversación es (sobre todo si la acabamos de crear)
+      // para que la fije y la muestre en el historial.
+      safeEnqueue(
+        encoder.encode(`data: ${JSON.stringify({ type: "conversation", id: convId, nueva: convCreada })}\n\n`)
+      );
+
+      // Acumula la respuesta del asistente para persistirla al final.
+      let assistantText = "";
 
       try {
         let currentMessages = [...messages];
@@ -137,6 +175,7 @@ export async function POST(req: Request) {
               }
             } else if (event.type === "content_block_delta") {
               if (event.delta.type === "text_delta") {
+                assistantText += event.delta.text;
                 safeEnqueue(
                   encoder.encode(
                     `data: ${JSON.stringify({ type: "text", text: event.delta.text })}\n\n`
@@ -197,6 +236,23 @@ export async function POST(req: Request) {
           ];
 
           toolRounds++;
+        }
+
+        // Persistir el turno (mensaje del usuario + respuesta del asistente) y
+        // subir la conversación al tope del historial. Best-effort: si falla, no
+        // rompemos la respuesta que el usuario ya recibió.
+        try {
+          await prisma.chatMessage.createMany({
+            data: [
+              { conversationId: convId!, role: "user", content: nuevoMensajeUsuario, authorId: userId },
+              ...(assistantText.trim()
+                ? [{ conversationId: convId!, role: "assistant", content: assistantText, authorId: null }]
+                : []),
+            ],
+          });
+          await prisma.chatConversation.update({ where: { id: convId! }, data: { updatedAt: new Date() } });
+        } catch (e) {
+          console.error("[ai/chat] persistencia falló:", e);
         }
 
         safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
