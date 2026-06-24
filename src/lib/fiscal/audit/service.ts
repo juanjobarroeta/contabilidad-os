@@ -18,6 +18,7 @@ import { auditarPagosPue, type PueSinPago } from "./pue-pagos";
 import { auditarDeclaracionesFaltantes } from "./declaraciones-faltantes";
 import { cargarRepFechaPagoAnterior, auditarRepFechaPagoAnterior } from "./rep-fecha-pago";
 import { cargarPosiblesDuplicados, auditarDuplicados } from "./duplicados";
+import { cargarBancoDesactualizado, auditarBancoDesactualizado } from "./banco-movimientos";
 import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
 import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
@@ -175,6 +176,7 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
   const faltantes = await declaracionesFaltantesEmpresa(companyId);
   const repFechaAnterior = await cargarRepFechaPagoAnterior(companyId);
   const duplicados = await cargarPosiblesDuplicados(companyId);
+  const bancoDesactualizado = await cargarBancoDesactualizado(companyId, new Date(fecha));
 
   const hallazgos = [
     ...auditar(cfdis, ctx),
@@ -183,6 +185,7 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
     ...auditarDeclaracionesFaltantes(faltantes),
     ...auditarRepFechaPagoAnterior(repFechaAnterior),
     ...auditarDuplicados(duplicados),
+    ...auditarBancoDesactualizado(bancoDesactualizado),
   ];
 
   const vigentes = new Set<string>();
