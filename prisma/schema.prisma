@@ -829,6 +829,7 @@ model BankTransaction {
   gastoPagado           Gasto?
   reembolsoPagado       ReembolsoSemanal?
   solicitudCompraPagada SolicitudCompra?
+  adjudicacionPagada    SolicitudAdjudicacion? @relation("AdjudicacionPago")
   estimacionCobrada     Estimacion?
 }
 
@@ -1979,6 +1980,7 @@ model SolicitudCompra {
   bankTransaction BankTransaction?            @relation(fields: [bankTransactionId], references: [id])
   partidas        SolicitudPartida[]
   cotizaciones    SolicitudCompraCotizacion[]
+  adjudicaciones  SolicitudAdjudicacion[]
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
@@ -2062,8 +2064,38 @@ model SolicitudCompraCotizacion {
   supplier            Supplier?                    @relation(fields: [supplierId], references: [id])
   partidas            SolicitudCotizacionPartida[]
   partidasAdjudicadas SolicitudPartida[]           @relation("PartidaAdjudicada")
+  adjudicaciones      SolicitudAdjudicacion[]
 
   @@index([solicitudId, isSelected])
+}
+
+// Adjudicación por proveedor: cuando se autoriza una requisición, las líneas
+// ganadas se agrupan por proveedor en un "pagadero" independiente. Cada
+// proveedor se paga por separado (monto propio, condición de crédito y fecha de
+// entrega de su cotización). Es la unidad que ve tesorería en cuentas por pagar.
+model SolicitudAdjudicacion {
+  id                String    @id @default(cuid())
+  companyId         String // denormalizado para listar cuentas por pagar por empresa
+  solicitudId       String
+  cotizacionId      String // la cotización ganadora (origen de crédito/entrega)
+  supplierId        String? // null cuando el proveedor es texto libre
+  supplierNombre    String
+  tieneCredito      Boolean   @default(false)
+  diasEntrega       Int?
+  total             Float // Σ importe de las líneas adjudicadas a este proveedor
+  estado            String    @default("POR_PAGAR") // POR_PAGAR | PAGADA
+  pagadaAt          DateTime?
+  bankTransactionId String?   @unique
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  solicitud       SolicitudCompra           @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  cotizacion      SolicitudCompraCotizacion @relation(fields: [cotizacionId], references: [id])
+  bankTransaction BankTransaction?          @relation("AdjudicacionPago", fields: [bankTransactionId], references: [id])
+
+  @@index([solicitudId])
+  @@index([companyId, estado])
+  @@map("construccion_solicitud_adjudicacion")
 }
 
 model SolicitudCotizacionPartida {
