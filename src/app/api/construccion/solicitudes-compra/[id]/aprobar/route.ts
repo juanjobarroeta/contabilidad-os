@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireModule, requireWriter, withAuthz, AuthzError } from "@/lib/authz";
+import { generateAdjudicaciones } from "@/lib/construccion/adjudicaciones";
 
 // POST /api/construccion/solicitudes-compra/:id/aprobar
 export const POST = withAuthz(
@@ -25,13 +26,20 @@ export const POST = withAuthz(
       );
     }
 
-    const updated = await prisma.solicitudCompra.update({
-      where: { id },
-      data: {
-        estado: "APROBADA",
-        aprobadaPorId: user.id,
-        aprobadaAt: new Date(),
-      },
+    // Approve + fan the awarded lines out into one payable per supplier so
+    // tesorería can pay each separately. Atomic so we never approve without
+    // the payables (or vice-versa).
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.solicitudCompra.update({
+        where: { id },
+        data: {
+          estado: "APROBADA",
+          aprobadaPorId: user.id,
+          aprobadaAt: new Date(),
+        },
+      });
+      await generateAdjudicaciones(tx, id);
+      return u;
     });
 
     return NextResponse.json(updated);

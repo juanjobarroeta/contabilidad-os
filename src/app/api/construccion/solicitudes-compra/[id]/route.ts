@@ -97,6 +97,14 @@ export const GET = withAuthz(
             bankAccount: { select: { banco: true, nombre: true } },
           },
         },
+        adjudicaciones: {
+          include: {
+            bankTransaction: {
+              select: { id: true, fecha: true, monto: true, referencia: true, bankAccount: { select: { banco: true, nombre: true } } },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
     if (!sol) throw new AuthzError(404, "Solicitud no encontrada");
