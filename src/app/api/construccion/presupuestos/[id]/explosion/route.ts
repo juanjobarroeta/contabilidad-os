@@ -34,6 +34,7 @@ export const GET = withAuthz(
       select: {
         id: true,
         companyId: true,
+        proyectoId: true,
         nombre: true,
         montoTotal: true,
         partidas: {
@@ -181,16 +182,57 @@ export const GET = withAuthz(
         return a.codigo.localeCompare(b.codigo);
       });
 
+    // ── Comprado vs presupuestado ──────────────────────────────────────
+    // How much of each insumo has already been requested/committed across the
+    // project's requisiciones (PENDIENTE + APROBADA + PAGADA — drafts excluded).
+    // Lets the requisición default its quantity to what's still missing and the
+    // approval dashboard show spend against budget.
+    const insumoIds = explosion.map((e) => e.insumoId);
+    const compradoByInsumo = new Map<string, { cantidad: number; importe: number }>();
+    if (presupuesto.proyectoId && insumoIds.length > 0) {
+      const grouped = await prisma.solicitudPartida.groupBy({
+        by: ["insumoId"],
+        where: {
+          insumoId: { in: insumoIds },
+          solicitud: {
+            proyectoId: presupuesto.proyectoId,
+            estado: { in: ["PENDIENTE", "APROBADA", "PAGADA"] },
+          },
+        },
+        _sum: { cantidad: true, importe: true },
+      });
+      for (const g of grouped) {
+        if (!g.insumoId) continue;
+        compradoByInsumo.set(g.insumoId, {
+          cantidad: g._sum.cantidad ?? 0,
+          importe: g._sum.importe ?? 0,
+        });
+      }
+    }
+
+    const explosionTracked = explosion.map((e) => {
+      const c = compradoByInsumo.get(e.insumoId) ?? { cantidad: 0, importe: 0 };
+      return {
+        ...e,
+        compradoCantidad: round2(c.cantidad),
+        compradoImporte: round2(c.importe),
+        restanteCantidad: round2(Math.max(0, e.cantidadTotal - c.cantidad)),
+      };
+    });
+
     const totalMateriales = round2(
-      explosion.filter((e) => e.tipo === "MATERIAL").reduce((a, e) => a + e.importeTotal, 0)
+      explosionTracked.filter((e) => e.tipo === "MATERIAL").reduce((a, e) => a + e.importeTotal, 0)
     );
     const totalManoObra = round2(
-      explosion.filter((e) => e.tipo === "MANO_OBRA").reduce((a, e) => a + e.importeTotal, 0)
+      explosionTracked.filter((e) => e.tipo === "MANO_OBRA").reduce((a, e) => a + e.importeTotal, 0)
     );
     const totalEquipo = round2(
-      explosion
+      explosionTracked
         .filter((e) => ["EQUIPO", "HERRAMIENTA"].includes(e.tipo))
         .reduce((a, e) => a + e.importeTotal, 0)
+    );
+    const totalComprado = round2(
+      explosionTracked.reduce((a, e) => a + e.compradoImporte, 0)
     );
 
     return NextResponse.json({
@@ -202,9 +244,10 @@ export const GET = withAuthz(
         totalManoObra,
         totalEquipo,
         totalCostoDirecto: round2(totalMateriales + totalManoObra + totalEquipo),
-        insumoCount: explosion.length,
+        totalComprado,
+        insumoCount: explosionTracked.length,
       },
-      explosion,
+      explosion: explosionTracked,
     });
   }
 );

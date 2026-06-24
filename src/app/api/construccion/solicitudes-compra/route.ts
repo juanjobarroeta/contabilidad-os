@@ -76,6 +76,7 @@ export const GET = withAuthz(async (req: Request) => {
             partidas: {
               select: {
                 id: true,
+                insumoId: true,
                 descripcion: true,
                 unidad: true,
                 cantidad: true,
