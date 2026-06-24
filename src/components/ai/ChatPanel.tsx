@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { X, Send, Loader2, Sparkles, Wrench } from "lucide-react";
+import { Markdown } from "./Markdown";
 
 interface Message {
   role: "user" | "assistant";
@@ -289,7 +290,11 @@ export function ChatPanel() {
                     : "border border-cos-line bg-cos-paper text-cos-ink"
                 }`}
               >
-                <div className="whitespace-pre-wrap">{msg.content}</div>
+                {msg.role === "user" ? (
+                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                ) : (
+                  <Markdown>{msg.content}</Markdown>
+                )}
               </div>
             </div>
           ))}
