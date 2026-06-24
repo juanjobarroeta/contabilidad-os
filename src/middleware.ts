@@ -72,5 +72,6 @@ export const config = {
     "/api/auth/token",
     "/api/companies/:path*",
     "/api/construccion/:path*",
+    "/api/padel/:path*",
   ],
 };

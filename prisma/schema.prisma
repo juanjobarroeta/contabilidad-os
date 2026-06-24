@@ -256,6 +256,12 @@ model Company {
   // list captures the rest (common for personas físicas) so obligation and
   // annual-declaration logic can reason across all of them.
   regimenes CompanyRegimen[]
+
+  // PADEL module (only used when PADEL is enabled) — see "Module: Padel" below.
+  padelConfig      PadelClubConfig?
+  courts           Court[]
+  clubMembers      ClubMember[]
+  reservations     Reservation[]
 }
 
 model CompanyMember {
@@ -410,6 +416,7 @@ enum ModuloApp {
   CONSTRUCCION_CUADRILLAS
   FLOTA
   MARKETING
+  PADEL
 }
 
 // ─── Module 3: Invoicing / CFDI ───────────────────────────────────────────────
@@ -431,9 +438,10 @@ model Customer {
   // Facturapi customer ID
   facturapiId String?
 
-  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  invoices  Invoice[]
-  proyectos Proyecto[]
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoices    Invoice[]
+  proyectos   Proyecto[]
+  clubMembers ClubMember[]
 
   @@unique([companyId, rfc])
 }
@@ -831,6 +839,7 @@ model BankTransaction {
   solicitudCompraPagada SolicitudCompra?
   adjudicacionPagada    SolicitudAdjudicacion? @relation("AdjudicacionPago")
   estimacionCobrada     Estimacion?
+  reservacionCobrada    Reservation?
 }
 
 enum BankTransactionType {
@@ -1392,6 +1401,7 @@ enum EntrySource {
   MANUAL
   CONSTRUCCION
   FLOTA
+  PADEL
   APERTURA // saldos iniciales / asiento de apertura (no se borra al re-postear el mes)
   CIERRE // asiento de cierre anual (mes 13) — cancela ingresos/costos/gastos a resultado
 }
@@ -2697,4 +2707,161 @@ model ComplianceSnapshot {
   createdAt DateTime @default(now())
 
   @@index([companyId, tipo, fetchedAt])
+}
+
+// ─── Module: Padel — "The Club Padel & Academy Puebla" ───────────────────────
+//
+// Gated behind CompanyModule(modulo = PADEL). Satellite app "theclubpadel"
+// (React/Vite SPA) renders the UI; all data + auth + accounting live here in
+// the hub. Every table is scoped by companyId so cross-tenant reads are
+// impossible. Milestone 1 covers courts + reservations + Playtomic sync +
+// the court-rental money loop (see src/lib/accounting/postings.ts). Lessons,
+// shop/POS, sponsors and space rentals land in later milestones.
+
+/// Per-club configuration + Playtomic integration credentials. One row per
+/// Company that has the PADEL module. The Playtomic API key is encrypted at
+/// rest via lib/crypto (enc:v1:… envelope) — never stored or logged in plain.
+model PadelClubConfig {
+  id        String   @id @default(cuid())
+  companyId String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Playtomic Manager → Settings → Developer Tools (External API credentials).
+  playtomicTenantId String? // the club's tenant/venue id in Playtomic
+  playtomicApiKey   String? @db.Text // encrypted(api key)
+  playtomicEnabled  Boolean @default(false)
+  lastPlaytomicSyncAt DateTime?
+
+  // Default IVA rate applied to court rentals / academy fees (0.16 = 16%).
+  // 0 when the activity is exempt or the club bills IVA-incluido elsewhere.
+  ivaRate Float @default(0.16)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model Court {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombre     String // e.g. "Cancha 1", "Central"
+  superficie String? // e.g. "césped sintético", "cristal"
+  techada    Boolean @default(false) // indoor (techada) vs outdoor
+  activa     Boolean @default(true)
+
+  // Maps to the Playtomic "resource"/court id so synced bookings land on the
+  // right court. Null until the club links this court in Playtomic.
+  playtomicResourceId String?
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa])
+}
+
+/// A club member / customer who can log into the satellite to book courts.
+/// This is a B2C identity DISTINCT from the accounting `User`/`CompanyMember`
+/// (staff) — members have their own hashed password and a parallel token flow
+/// (POST /api/padel/auth/*, audience "theclubpadel:member"). Optionally linked
+/// to a fiscal `Customer` when the member requests CFDI invoicing.
+model ClubMember {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  email        String
+  passwordHash String
+  nombre       String
+  telefono     String?
+  activo       Boolean @default(true)
+
+  // Optional link to the fiscal Customer used when invoicing this member.
+  customerId String?
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  reservations Reservation[]
+
+  @@unique([companyId, email])
+  @@index([companyId, activo])
+}
+
+model Reservation {
+  id        String   @id @default(cuid())
+  companyId String
+  courtId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inicio DateTime
+  fin    DateTime
+
+  estado ReservationEstado @default(CONFIRMADA)
+  canal  ReservationCanal  @default(STAFF)
+
+  // Who booked it. A member booking sets clubMemberId; a staff booking sets
+  // bookedByUserId (the accounting User id, stored flat — no FK, mirrors the
+  // `aprobadoPor` pattern in the construccion module). clienteNombre captures
+  // walk-ins booked at the front desk without a member account.
+  clubMemberId   String?
+  bookedByUserId String?
+  clienteNombre  String?
+
+  // Playtomic two-way sync. Set when the booking originated in / was pushed to
+  // Playtomic. Unique per company so re-running the sync is idempotent
+  // (Postgres allows many NULLs in a unique index, so native-only bookings are
+  // unaffected).
+  playtomicBookingId String?
+
+  // Pricing + collection. precio is the total charged for the slot; subtotal/iva
+  // are filled when the slot is charged (see postCourtRentalRevenue).
+  precio    Float                  @default(0)
+  pagado    Boolean                @default(false)
+  formaPago ReservationFormaPago?
+  cobradoAt DateTime?
+
+  // Bank reconciliation when cobrado por transferencia/tarjeta.
+  bankTransactionId String? @unique
+
+  // Set when the pre-game push reminder has been sent, so the reminders cron
+  // never double-notifies a single reservation.
+  recordatorioEnviadoAt DateTime?
+
+  notas String?
+
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  court           Court                 @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  clubMember      ClubMember?           @relation(fields: [clubMemberId], references: [id], onDelete: SetNull)
+  bankTransaction BankTransaction?      @relation(fields: [bankTransactionId], references: [id])
+
+  @@unique([companyId, playtomicBookingId])
+  @@index([companyId, inicio])
+  @@index([courtId, inicio])
+  @@index([clubMemberId, inicio])
+}
+
+enum ReservationEstado {
+  PENDIENTE
+  CONFIRMADA
+  CANCELADA
+  COMPLETADA
+  NO_SHOW
+}
+
+enum ReservationCanal {
+  APP // booked by a member in the satellite
+  STAFF // booked at the front desk
+  PLAYTOMIC // imported from Playtomic
+}
+
+enum ReservationFormaPago {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+  CORTESIA
+  CUENTA // on account (cuenta por cobrar)
 }
