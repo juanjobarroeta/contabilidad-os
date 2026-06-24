@@ -4,11 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2, TrendingUp, AlertTriangle, Lock } from "lucide-react";
 import { Card } from "@/components/ui";
 
+type Plan = "ASISTENTE" | "AUTOMATIZADO" | "PRO" | "DESPACHO";
+const PLAN_LABELS: Record<Plan, string> = { ASISTENTE: "Asistente", AUTOMATIZADO: "Automatizado", PRO: "Pro", DESPACHO: "Despacho" };
+
 interface EmpresaRow {
   companyId: string;
   razonSocial: string;
   rfc: string;
   despachoId: string | null;
+  plan: Plan;
   precioMensualCentavos: number | null;
   costoCentavos: number;
   costoSyntageCentavos: number;
@@ -82,6 +86,15 @@ export default function RentabilidadPage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tipo, id, precioMensualCentavos }),
+    });
+    load();
+  }
+
+  async function savePlan(companyId: string, plan: string) {
+    await fetch("/api/rentabilidad/plan", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyId, plan }),
     });
     load();
   }
@@ -201,8 +214,10 @@ export default function RentabilidadPage() {
                 costoCentavos: e.costoCentavos, precioMensualCentavos: e.precioMensualCentavos,
                 margenCentavos: e.margenCentavos, margenPct: e.margenPct, tipo: "company" as const,
                 costoSyntageCentavos: e.costoSyntageCentavos, costoLlmCentavos: e.costoLlmCentavos,
+                plan: e.plan,
               }))}
               onSave={savePrecio}
+              onSavePlan={savePlan}
             />
           </Card>
         </div>
@@ -266,9 +281,14 @@ interface Fila {
   /** Desglose del costo (sólo empresas) — base de precios. */
   costoSyntageCentavos?: number;
   costoLlmCentavos?: number;
+  plan?: Plan;
 }
 
-function Tabla({ filas, onSave }: { filas: Fila[]; onSave: (tipo: "company" | "despacho", id: string, pesos: string) => void }) {
+function Tabla({ filas, onSave, onSavePlan }: {
+  filas: Fila[];
+  onSave: (tipo: "company" | "despacho", id: string, pesos: string) => void;
+  onSavePlan?: (companyId: string, plan: string) => void;
+}) {
   return (
     <div className="divide-y divide-cos-line">
       <div className="hidden grid-cols-[1fr_130px_130px_130px_80px] gap-3 px-5 py-2 text-[11.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint sm:grid">
@@ -279,14 +299,18 @@ function Tabla({ filas, onSave }: { filas: Fila[]; onSave: (tipo: "company" | "d
         <span className="text-right">%</span>
       </div>
       {filas.map((f) => (
-        <FilaRow key={f.id} f={f} onSave={onSave} />
+        <FilaRow key={f.id} f={f} onSave={onSave} onSavePlan={onSavePlan} />
       ))}
       {filas.length === 0 && <p className="px-5 py-6 text-center text-[13px] text-cos-ink-faint">Sin datos.</p>}
     </div>
   );
 }
 
-function FilaRow({ f, onSave }: { f: Fila; onSave: (tipo: "company" | "despacho", id: string, pesos: string) => void }) {
+function FilaRow({ f, onSave, onSavePlan }: {
+  f: Fila;
+  onSave: (tipo: "company" | "despacho", id: string, pesos: string) => void;
+  onSavePlan?: (companyId: string, plan: string) => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(f.precioMensualCentavos != null ? String(f.precioMensualCentavos / 100) : "");
   const underwater = f.margenCentavos != null && f.margenCentavos < 0;
@@ -302,6 +326,18 @@ function FilaRow({ f, onSave }: { f: Fila; onSave: (tipo: "company" | "despacho"
       <div className="col-span-2 min-w-0 sm:col-span-1">
         <p className="truncate text-[14px] font-medium text-cos-ink">{f.nombre}</p>
         <p className="truncate font-mono text-[11.5px] text-cos-ink-faint">{f.sub}</p>
+        {f.plan && onSavePlan && (
+          <select
+            value={f.plan}
+            onChange={(e) => onSavePlan(f.id, e.target.value)}
+            className="mt-1 rounded-control border border-cos-line bg-white px-1.5 py-0.5 text-[11.5px] text-cos-ink-soft outline-none focus:border-cos-brand-ink"
+            title="Plan/tier — define qué COGS se incurre (Syntage/banco/WhatsApp)"
+          >
+            {(Object.keys(PLAN_LABELS) as Plan[]).map((p) => (
+              <option key={p} value={p}>{PLAN_LABELS[p]}</option>
+            ))}
+          </select>
+        )}
       </div>
       <div className="text-right text-[13.5px] text-cos-ink-soft">
         {fmtMxn(f.costoCentavos)}

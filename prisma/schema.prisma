@@ -185,6 +185,13 @@ model Company {
   // Sólo unit economics; desacoplado del trial/subscription gating.
   precioMensualCentavos Int?
 
+  // Tier comercial — define qué se sirve y, sobre todo, qué COGS se incurre.
+  // ASISTENTE = CFDIs + IA (sin Syntage, COGS ~0). AUTOMATIZADO+ = incluye
+  // extracciones de Syntage (opinión/CSF/declaraciones). Lo usa el
+  // aprovisionamiento para NO gastar Syntage en empresas que no lo pagan.
+  // (Distinto del `plan` string de subscription/UI de arriba.)
+  tier CompanyPlan @default(AUTOMATIZADO)
+
   // Plataformas tecnológicas (régimen 625, Art. 113-A LISR): tipo de actividad
   // que define la tasa de retención. "transporte" (2.1%), "hospedaje" (4%) o
   // "servicios" = enajenación de bienes / prestación de servicios (1%).
@@ -2751,4 +2758,13 @@ model ChatMessage {
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+}
+
+// Plan/tier comercial de una empresa. El gating de COGS (Syntage, banco,
+// WhatsApp) se deriva de aquí — ver src/lib/planes.ts.
+enum CompanyPlan {
+  ASISTENTE    // CFDIs + IA (sin Syntage, sin banco, sin WhatsApp) — COGS ~0
+  AUTOMATIZADO // + Syntage: opinión/CSF/declaraciones (sin banco ni WhatsApp)
+  PRO          // + conciliación bancaria (Belvo) + WhatsApp (Twilio)
+  DESPACHO     // + revisión humana / SLA
 }

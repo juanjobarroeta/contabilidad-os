@@ -3,6 +3,7 @@
 // consumen la API /rentabilidad, las alertas y el cron. Costo en CostEvent
 // (micro-USD) → centavos MXN con el FIX de Banxico.
 
+import type { CompanyPlan } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { microUsdACentavosMxn } from "./rates";
 import { fetchTipoCambioFix } from "@/lib/fiscal/banxico";
@@ -12,6 +13,7 @@ export interface RentabilidadEmpresa {
   razonSocial: string;
   rfc: string;
   despachoId: string | null;
+  plan: CompanyPlan;
   precioMensualCentavos: number | null;
   costoCentavos: number;
   /** Desglose del costo-por-servir: datos (Syntage) vs IA (LLM). */
@@ -59,7 +61,7 @@ export async function computeRentabilidad(year: number, month: number): Promise<
   const [companies, despachos, porEmpresa, porEmpresaCategoria, overheadDespacho] = await Promise.all([
     prisma.company.findMany({
       where: { isActive: true },
-      select: { id: true, razonSocial: true, rfc: true, despachoId: true, precioMensualCentavos: true },
+      select: { id: true, razonSocial: true, rfc: true, despachoId: true, tier: true, precioMensualCentavos: true },
       orderBy: { razonSocial: "asc" },
     }),
     prisma.despacho.findMany({ select: { id: true, name: true, precioMensualCentavos: true }, orderBy: { name: "asc" } }),
@@ -104,6 +106,7 @@ export async function computeRentabilidad(year: number, month: number): Promise<
       razonSocial: c.razonSocial,
       rfc: c.rfc,
       despachoId: c.despachoId,
+      plan: c.tier,
       precioMensualCentavos: precio,
       costoCentavos,
       costoSyntageCentavos: microUsdACentavosMxn(cat.SYNTAGE, fixUsado),
