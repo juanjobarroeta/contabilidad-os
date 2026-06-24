@@ -49,6 +49,7 @@ model User {
   despachoMemberships DespachoMember[]
   // Verified WhatsApp numbers bound to this user (W0 channel).
   whatsappLinks       WhatsappLink[]
+  chatConversations   ChatConversation[]
 }
 
 enum SubscriptionStatus {
@@ -112,7 +113,7 @@ model Company {
   // Habilita la detección de operaciones intercompañía (Art. 69-B CFF) y las
   // funciones del piloto (comisiones, materialidad) por grupo.
   grupoId String?
-  grupo   Grupo? @relation(fields: [grupoId], references: [id], onDelete: SetNull)
+  grupo   Grupo?  @relation(fields: [grupoId], references: [id], onDelete: SetNull)
 
   // SAT / fiscal data
   rfc             String  @unique
@@ -251,6 +252,9 @@ model Company {
   // Activo fijo / inversiones — registro de depreciación (Art. 31/34 LISR)
   activosFijos ActivoFijo[]
 
+  // Conversaciones del asistente IA (chat persistente, por empresa)
+  chatConversations ChatConversation[]
+
   // All SAT régimenes this taxpayer is registered under. `regimenFiscal` above
   // remains the single "primary" (operative) régimen used by most flows; this
   // list captures the rest (common for personas físicas) so obligation and
@@ -321,9 +325,9 @@ model Despacho {
   // Sólo para unit economics; desacoplado del trial/subscription gating.
   precioMensualCentavos Int?
 
-  members   DespachoMember[]
-  companies Company[]
-  grupos    Grupo[]
+  members    DespachoMember[]
+  companies  Company[]
+  grupos     Grupo[]
   costEvents CostEvent[]
 }
 
@@ -519,17 +523,25 @@ model Invoice {
   // SIN_EFECTOS, derivada del usoCfdi al importar (ver lib/fiscal/clasificar-cfdi).
   // Decide CÓMO se deduce un EGRESO (gasto inmediato vs depreciación vs costo de
   // lo vendido). NO se consume aún en el cálculo de ISR — se prepara el dato.
-  naturaleza        String?
-  /** True cuando la clasificación necesita revisión del contador (señal no concluyente). */
+  naturaleza         String?
+  /**
+   * True cuando la clasificación necesita revisión del contador (señal no concluyente).
+   */
   naturalezaRevision Boolean @default(false)
-  /** True cuando el contador fijó la naturaleza a mano — no la sobrescribe el re-sync. */
-  naturalezaManual  Boolean @default(false)
-  /** El contador excluyó este CFDI del acreditamiento de IVA (p. ej. PUE no pagado:
-   *  el IVA sólo es acreditable si se pagó, Art. 5-I LIVA). Default false = sin efecto. */
-  ivaNoAcreditable  Boolean @default(false)
-  /** El contador excluyó este CFDI del IVA trasladado (p. ej. PUE no cobrado:
-   *  el IVA se causa cuando se cobra, Art. 1-B/11/17 LIVA). Default false = sin efecto. */
-  ivaNoCausado      Boolean @default(false)
+  /**
+   * True cuando el contador fijó la naturaleza a mano — no la sobrescribe el re-sync.
+   */
+  naturalezaManual   Boolean @default(false)
+  /**
+   * El contador excluyó este CFDI del acreditamiento de IVA (p. ej. PUE no pagado:
+   * el IVA sólo es acreditable si se pagó, Art. 5-I LIVA). Default false = sin efecto.
+   */
+  ivaNoAcreditable   Boolean @default(false)
+  /**
+   * El contador excluyó este CFDI del IVA trasladado (p. ej. PUE no cobrado:
+   * el IVA se causa cuando se cobra, Art. 1-B/11/17 LIVA). Default false = sin efecto.
+   */
+  ivaNoCausado       Boolean @default(false)
 
   // Nómina (CFDI tipo "N"): datos del complemento de nómina 1.2 que el import del
   // SAT antes descartaba. regimenNomina = c_TipoRegimen del Receptor del
@@ -627,7 +639,9 @@ model ActivoFijo {
   tipo             String // construccion|mobiliario|transporte|computo|herramental|comunicaciones|maquinaria|otro
   moi              Float // Monto Original de la Inversión (sin IVA)
   fechaAdquisicion DateTime
-  /** Mes en que inicia su utilización, si difiere de la adquisición (Art. 31). */
+  /**
+   * Mes en que inicia su utilización, si difiere de la adquisición (Art. 31).
+   */
   fechaInicioUso   DateTime?
   tasaAnual        Float // por ciento máximo Art. 34 aplicado (puede sobreescribirse)
 
@@ -636,7 +650,7 @@ model ActivoFijo {
   esElectricoHibrido Boolean @default(false)
 
   // Baja / enajenación
-  fechaBaja DateTime?
+  fechaBaja  DateTime?
   motivoBaja String?
 
   // True cuando lo creó el sync automáticamente desde un CFDI INVERSION (vs alta
@@ -821,10 +835,10 @@ model BankTransaction {
   belvoId       String? @unique // Belvo transaction ID (for dedup)
   belvoCategory String? // Belvo auto-category (e.g. "Bills & Utilities")
 
-  company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  bankAccount           BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  supplier              Supplier?         @relation(fields: [supplierId], references: [id])
-  invoice               Invoice?          @relation(fields: [invoiceId], references: [id])
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankAccount           BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  supplier              Supplier?              @relation(fields: [supplierId], references: [id])
+  invoice               Invoice?               @relation(fields: [invoiceId], references: [id])
   rayaPagada            RayaSemanal?
   gastoPagado           Gasto?
   reembolsoPagado       ReembolsoSemanal?
@@ -1124,20 +1138,20 @@ model TaxDeclaration {
 // `mesUltimaActualizacion`; la declaración anual la actualiza a junio y la aplica
 // FIFO contra la utilidad. Expira 10 ejercicios después del origen.
 model PerdidaFiscal {
-  id              String   @id @default(cuid())
-  companyId       String
-  ejercicioOrigen Int      // año en que se generó la pérdida
-  montoOriginal   Float    // pérdida nominal del ejercicio
+  id                      String   @id @default(cuid())
+  companyId               String
+  ejercicioOrigen         Int // año en que se generó la pérdida
+  montoOriginal           Float // pérdida nominal del ejercicio
   // Saldo pendiente de amortizar, actualizado hasta `mesUltimaActualizacion`.
-  saldoActualizado       Float
-  mesUltimaActualizacion String // "YYYY-MM"
-  agotada                Boolean @default(false)
+  saldoActualizado        Float
+  mesUltimaActualizacion  String // "YYYY-MM"
+  agotada                 Boolean  @default(false)
   // Último ejercicio en que se aplicó (idempotencia del guardado de la anual).
   ultimoEjercicioAplicado Int?
   // "CALCULADA" (generada por la anual) | "IMPORTADA" (acuse/captura inicial).
-  origen    String   @default("CALCULADA")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  origen                  String   @default("CALCULADA")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -1251,15 +1265,15 @@ model ChartAccount {
   createdAt DateTime @default(now())
 
   // SAT COE catalog
-  cuentaSAT String // e.g. "101"
-  subcuenta String? // e.g. "101.01"
-  nombre    String
-  tipo      AccountType // ACTIVO, PASIVO, CAPITAL, INGRESO, GASTO, COSTO
-  nivel     Int         @default(1)
+  cuentaSAT  String // e.g. "101"
+  subcuenta  String? // e.g. "101.01"
+  nombre     String
+  tipo       AccountType // ACTIVO, PASIVO, CAPITAL, INGRESO, GASTO, COSTO
+  nivel      Int         @default(1)
   // Naturaleza COE: "D" (deudora) | "A" (acreedora). Null = derivar del tipo.
   // Explícita para contra-cuentas (p.ej. depreciación acumulada = "A" en ACTIVO).
   naturaleza String?
-  isActive  Boolean     @default(true)
+  isActive   Boolean     @default(true)
 
   company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   entries AccountingEntry[]
@@ -1663,9 +1677,9 @@ model PresupuestoInsumo {
   id            String @id @default(cuid())
   presupuestoId String
   insumoId      String
-  cantidad      Float  // project-total quantity from the explosion sheet
-  costoUnitario Float  // unit price snapshot at import time
-  importe       Float  // cantidad × costoUnitario
+  cantidad      Float // project-total quantity from the explosion sheet
+  costoUnitario Float // unit price snapshot at import time
+  importe       Float // cantidad × costoUnitario
 
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
   insumo      Insumo      @relation(fields: [insumoId], references: [id])
@@ -2697,4 +2711,44 @@ model ComplianceSnapshot {
   createdAt DateTime @default(now())
 
   @@index([companyId, tipo, fetchedAt])
+}
+
+// ── Chat del asistente IA (persistencia + hilos) ──────────────────────────────
+// Visibilidad por conversación: PRIVATE = sólo el dueño; COMPANY = todo el equipo
+// de la empresa la ve (y puede continuarla) — tipo grupo de WhatsApp.
+enum ChatVisibility {
+  PRIVATE
+  COMPANY
+}
+
+model ChatConversation {
+  id         String         @id @default(cuid())
+  companyId  String
+  userId     String // dueño (creador)
+  title      String         @default("Nueva conversación")
+  visibility ChatVisibility @default(PRIVATE)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  archivedAt DateTime?
+
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([companyId, visibility, updatedAt])
+  @@index([userId, updatedAt])
+}
+
+model ChatMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String // "user" | "assistant"
+  content        String   @db.Text
+  // Autor del mensaje (para conversaciones compartidas). Null = asistente (IA).
+  authorId       String?
+  createdAt      DateTime @default(now())
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
