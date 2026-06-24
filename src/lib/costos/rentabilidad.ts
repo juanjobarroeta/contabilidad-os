@@ -14,6 +14,9 @@ export interface RentabilidadEmpresa {
   despachoId: string | null;
   precioMensualCentavos: number | null;
   costoCentavos: number;
+  /** Desglose del costo-por-servir: datos (Syntage) vs IA (LLM). */
+  costoSyntageCentavos: number;
+  costoLlmCentavos: number;
   eventos: number;
   margenCentavos: number | null;
   margenPct: number | null;
@@ -33,6 +36,8 @@ export interface Rentabilidad {
   fixMxnPorUsd: number;
   fixReal: boolean;
   totalCostoCentavos: number;
+  totalSyntageCentavos: number;
+  totalLlmCentavos: number;
   empresas: RentabilidadEmpresa[];
   despachos: RentabilidadDespacho[];
 }
@@ -51,7 +56,7 @@ export async function computeRentabilidad(year: number, month: number): Promise<
   const fix = (await fetchTipoCambioFix())?.valor ?? null;
   const fixUsado = fix ?? 20; // fallback aproximado si Banxico no responde
 
-  const [companies, despachos, porEmpresa, overheadDespacho] = await Promise.all([
+  const [companies, despachos, porEmpresa, porEmpresaCategoria, overheadDespacho] = await Promise.all([
     prisma.company.findMany({
       where: { isActive: true },
       select: { id: true, razonSocial: true, rfc: true, despachoId: true, precioMensualCentavos: true },
@@ -64,6 +69,12 @@ export async function computeRentabilidad(year: number, month: number): Promise<
       _sum: { costoMicroUsd: true },
       _count: { _all: true },
     }),
+    // Desglose por categoría (LLM vs SYNTAGE) por empresa — base de precios.
+    prisma.costEvent.groupBy({
+      by: ["companyId", "categoria"],
+      where: { occurredAt: { gte: from, lt: to }, companyId: { not: null } },
+      _sum: { costoMicroUsd: true },
+    }),
     prisma.costEvent.groupBy({
       by: ["despachoId"],
       where: { occurredAt: { gte: from, lt: to }, companyId: null, despachoId: { not: null } },
@@ -72,10 +83,19 @@ export async function computeRentabilidad(year: number, month: number): Promise<
   ]);
 
   const microPorEmpresa = new Map(porEmpresa.map((g) => [g.companyId, { micro: g._sum.costoMicroUsd ?? 0, eventos: g._count._all }]));
+  const catMicroPorEmpresa = new Map<string, { LLM: number; SYNTAGE: number }>();
+  for (const g of porEmpresaCategoria) {
+    if (!g.companyId) continue;
+    const cur = catMicroPorEmpresa.get(g.companyId) ?? { LLM: 0, SYNTAGE: 0 };
+    if (g.categoria === "LLM") cur.LLM += g._sum.costoMicroUsd ?? 0;
+    else if (g.categoria === "SYNTAGE") cur.SYNTAGE += g._sum.costoMicroUsd ?? 0;
+    catMicroPorEmpresa.set(g.companyId, cur);
+  }
   const overheadMicroPorDespacho = new Map(overheadDespacho.map((g) => [g.despachoId, g._sum.costoMicroUsd ?? 0]));
 
   const empresas: RentabilidadEmpresa[] = companies.map((c) => {
     const agg = microPorEmpresa.get(c.id);
+    const cat = catMicroPorEmpresa.get(c.id) ?? { LLM: 0, SYNTAGE: 0 };
     const costoCentavos = microUsdACentavosMxn(agg?.micro ?? 0, fixUsado);
     const precio = c.precioMensualCentavos ?? null;
     const margen = precio != null ? precio - costoCentavos : null;
@@ -86,6 +106,8 @@ export async function computeRentabilidad(year: number, month: number): Promise<
       despachoId: c.despachoId,
       precioMensualCentavos: precio,
       costoCentavos,
+      costoSyntageCentavos: microUsdACentavosMxn(cat.SYNTAGE, fixUsado),
+      costoLlmCentavos: microUsdACentavosMxn(cat.LLM, fixUsado),
       eventos: agg?.eventos ?? 0,
       margenCentavos: margen,
       margenPct: precio && precio > 0 && margen != null ? margen / precio : null,
@@ -119,6 +141,8 @@ export async function computeRentabilidad(year: number, month: number): Promise<
     fixMxnPorUsd: fixUsado,
     fixReal: fix != null,
     totalCostoCentavos,
+    totalSyntageCentavos: empresas.reduce((s, e) => s + e.costoSyntageCentavos, 0),
+    totalLlmCentavos: empresas.reduce((s, e) => s + e.costoLlmCentavos, 0),
     empresas,
     despachos: despachosOut,
   };
