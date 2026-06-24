@@ -11,6 +11,8 @@ interface EmpresaRow {
   despachoId: string | null;
   precioMensualCentavos: number | null;
   costoCentavos: number;
+  costoSyntageCentavos: number;
+  costoLlmCentavos: number;
   eventos: number;
   margenCentavos: number | null;
   margenPct: number | null;
@@ -30,6 +32,8 @@ interface Data {
   fixMxnPorUsd: number;
   fixReal: boolean;
   totalCostoCentavos: number;
+  totalSyntageCentavos: number;
+  totalLlmCentavos: number;
   empresas: EmpresaRow[];
   despachos: DespachoRow[];
 }
@@ -151,6 +155,17 @@ export default function RentabilidadPage() {
             <span className="rounded-control bg-cos-slate-tint px-3 py-1.5">
               Costo total del mes: <b className="text-cos-ink">{fmtMxn(data.totalCostoCentavos)}</b>
             </span>
+            <span className="rounded-control bg-cos-amber-tint px-3 py-1.5 text-cos-amber-ink">
+              Datos (Syntage): <b>{fmtMxn(data.totalSyntageCentavos)}</b>
+            </span>
+            <span className="rounded-control bg-cos-brand-tint px-3 py-1.5 text-cos-brand-ink">
+              IA (LLM): <b>{fmtMxn(data.totalLlmCentavos)}</b>
+            </span>
+            {data.empresas.length > 0 && (
+              <span className="rounded-control bg-cos-slate-tint px-3 py-1.5">
+                Costo prom./empresa: <b className="text-cos-ink">{fmtMxn(Math.round(data.totalCostoCentavos / data.empresas.length))}</b>
+              </span>
+            )}
             <span className="rounded-control bg-cos-slate-tint px-3 py-1.5">
               FIX {data.fixMxnPorUsd.toFixed(4)} MXN/USD {data.fixReal ? "(Banxico)" : "(aprox.)"}
             </span>
@@ -185,6 +200,7 @@ export default function RentabilidadPage() {
                 id: e.companyId, nombre: e.razonSocial, sub: e.rfc,
                 costoCentavos: e.costoCentavos, precioMensualCentavos: e.precioMensualCentavos,
                 margenCentavos: e.margenCentavos, margenPct: e.margenPct, tipo: "company" as const,
+                costoSyntageCentavos: e.costoSyntageCentavos, costoLlmCentavos: e.costoLlmCentavos,
               }))}
               onSave={savePrecio}
             />
@@ -247,6 +263,9 @@ interface Fila {
   margenCentavos: number | null;
   margenPct: number | null;
   tipo: "company" | "despacho";
+  /** Desglose del costo (sólo empresas) — base de precios. */
+  costoSyntageCentavos?: number;
+  costoLlmCentavos?: number;
 }
 
 function Tabla({ filas, onSave }: { filas: Fila[]; onSave: (tipo: "company" | "despacho", id: string, pesos: string) => void }) {
@@ -284,7 +303,16 @@ function FilaRow({ f, onSave }: { f: Fila; onSave: (tipo: "company" | "despacho"
         <p className="truncate text-[14px] font-medium text-cos-ink">{f.nombre}</p>
         <p className="truncate font-mono text-[11.5px] text-cos-ink-faint">{f.sub}</p>
       </div>
-      <div className="text-right text-[13.5px] text-cos-ink-soft">{fmtMxn(f.costoCentavos)}</div>
+      <div className="text-right text-[13.5px] text-cos-ink-soft">
+        {fmtMxn(f.costoCentavos)}
+        {(f.costoSyntageCentavos != null || f.costoLlmCentavos != null) && (f.costoCentavos > 0) && (
+          <div className="text-[11px] text-cos-ink-faint">
+            <span className="text-cos-amber-ink">Datos {fmtMxn(f.costoSyntageCentavos ?? 0)}</span>
+            {" · "}
+            <span className="text-cos-brand-ink">IA {fmtMxn(f.costoLlmCentavos ?? 0)}</span>
+          </div>
+        )}
+      </div>
       <div className="text-right">
         {editing ? (
           <input
