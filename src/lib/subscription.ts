@@ -1,6 +1,6 @@
 import type { SubscriptionStatus } from "@prisma/client";
 import { prisma } from "./prisma";
-import { AuthzError } from "./authz";
+import { AuthzError, isOperador } from "./authz";
 
 export type SubscriptionState = {
   status: SubscriptionStatus;
@@ -58,8 +58,7 @@ export async function getUserSubscriptionState(userId: string): Promise<Subscrip
  */
 export async function requireActiveSubscription(userId: string) {
   const state = await getUserSubscriptionState(userId);
-  if (!state.isActive) {
-    throw new AuthzError(402, "Tu prueba terminó. Activa tu suscripción para continuar.");
-  }
-  return state;
+  // El operador de plataforma nunca se bloquea (soporte/supervisión).
+  if (state.isActive || (await isOperador(userId))) return state;
+  throw new AuthzError(402, "Tu prueba terminó. Activa tu suscripción para continuar.");
 }
