@@ -56,6 +56,7 @@ export const GET = withAuthz(async (req: Request) => {
     supplierId: a.supplierId,
     supplierNombre: a.supplierNombre,
     tieneCredito: a.tieneCredito,
+    diasCredito: a.diasCredito,
     diasEntrega: a.diasEntrega,
     total: a.total,
     estado: a.estado,
