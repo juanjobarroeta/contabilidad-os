@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { facturapiPacProvider } from "./facturapi";
+import { swSapienPacProvider } from "./swsapien";
 import type { PacProvider } from "./types";
 
 export * from "./types";
@@ -14,7 +15,8 @@ export * from "./types";
 export function getPacProvider(): PacProvider {
   const which = (process.env.PAC_PROVIDER ?? "facturapi").toLowerCase();
   switch (which) {
-    // case "swsapien": return swSapienPacProvider;
+    case "swsapien":
+      return swSapienPacProvider;
     // case "facturama": return facturamaPacProvider;
     case "facturapi":
     default:
