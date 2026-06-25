@@ -19,6 +19,9 @@ interface EmpresaRow {
   costoLlmCentavos: number;
   costoFacturapiCentavos: number;
   timbresMes: number;
+  timbresIncluidos: number;
+  timbresExcedente: number;
+  cargoExcedenteCentavos: number;
   eventos: number;
   margenCentavos: number | null;
   margenPct: number | null;
@@ -221,6 +224,8 @@ export default function RentabilidadPage() {
                 margenCentavos: e.margenCentavos, margenPct: e.margenPct, tipo: "company" as const,
                 costoSyntageCentavos: e.costoSyntageCentavos, costoLlmCentavos: e.costoLlmCentavos,
                 costoFacturapiCentavos: e.costoFacturapiCentavos, timbresMes: e.timbresMes,
+                timbresIncluidos: e.timbresIncluidos, timbresExcedente: e.timbresExcedente,
+                cargoExcedenteCentavos: e.cargoExcedenteCentavos,
                 plan: e.plan,
               }))}
               onSave={savePrecio}
@@ -290,6 +295,9 @@ interface Fila {
   costoLlmCentavos?: number;
   costoFacturapiCentavos?: number;
   timbresMes?: number;
+  timbresIncluidos?: number;
+  timbresExcedente?: number;
+  cargoExcedenteCentavos?: number;
   plan?: Plan;
 }
 
@@ -357,7 +365,15 @@ function FilaRow({ f, onSave, onSavePlan }: {
             <span className="text-cos-brand-ink">IA {fmtMxn(f.costoLlmCentavos ?? 0)}</span>
             {" · "}
             <span className="text-cos-jade-ink">Timbrado {fmtMxn(f.costoFacturapiCentavos ?? 0)}</span>
-            {f.timbresMes ? <span className="text-cos-ink-faint"> ({f.timbresMes} timbres)</span> : null}
+            {f.timbresIncluidos != null ? (
+              <span className="text-cos-ink-faint">
+                {" "}({f.timbresMes ?? 0}/{f.timbresIncluidos} timbres
+                {f.timbresExcedente ? (
+                  <span className="text-cos-red-ink"> · excedente {f.timbresExcedente} → cobrar {fmtMxn(f.cargoExcedenteCentavos ?? 0)}</span>
+                ) : null}
+                )
+              </span>
+            ) : null}
           </div>
         )}
       </div>

@@ -7,6 +7,7 @@ import type { CompanyPlan } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { microUsdACentavosMxn } from "./rates";
 import { fetchTipoCambioFix } from "@/lib/fiscal/banxico";
+import { TIMBRES_INCLUIDOS, TIMBRE_EXCEDENTE_MXN, timbresExcedente } from "@/lib/planes";
 
 export interface RentabilidadEmpresa {
   companyId: string;
@@ -22,6 +23,12 @@ export interface RentabilidadEmpresa {
   costoFacturapiCentavos: number;
   /** Timbres consumidos en el periodo (facturas + nómina + REP). */
   timbresMes: number;
+  /** Timbres incluidos en el tier. */
+  timbresIncluidos: number;
+  /** Timbres por encima de la cuota. */
+  timbresExcedente: number;
+  /** Cargo sugerido al cliente por el excedente (centavos MXN). */
+  cargoExcedenteCentavos: number;
   eventos: number;
   margenCentavos: number | null;
   margenPct: number | null;
@@ -122,6 +129,9 @@ export async function computeRentabilidad(year: number, month: number): Promise<
       costoLlmCentavos: microUsdACentavosMxn(cat.LLM, fixUsado),
       costoFacturapiCentavos: microUsdACentavosMxn(cat.FACTURAPI, fixUsado),
       timbresMes: cat.timbres,
+      timbresIncluidos: TIMBRES_INCLUIDOS[c.tier],
+      timbresExcedente: timbresExcedente(c.tier, cat.timbres),
+      cargoExcedenteCentavos: Math.round(timbresExcedente(c.tier, cat.timbres) * TIMBRE_EXCEDENTE_MXN * 100),
       eventos: agg?.eventos ?? 0,
       margenCentavos: margen,
       margenPct: precio && precio > 0 && margen != null ? margen / precio : null,
