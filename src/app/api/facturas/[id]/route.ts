@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { resolvePacProvider } from "@/lib/pac";
+import { finkokCancelCfdi } from "@/lib/pac/finkok";
 
 const VALID_MOTIVOS = ["01", "02", "03", "04"] as const;
 
@@ -59,8 +61,29 @@ export async function DELETE(
     return NextResponse.json({ error: "La factura ya está cancelada" }, { status: 409 });
   }
 
-  // Stamped CFDI → must cancel at SAT via Facturapi, with the motivo.
-  if (invoice.facturapiId && invoice.company.facturapiApiKey) {
+  // PAC routing: Finkok-stamped CFDIs cancel through Finkok's WS, not Facturapi.
+  const provider = invoice.customerId
+    ? await resolvePacProvider(invoice.customerId)
+    : "facturapi";
+
+  if (provider === "finkok") {
+    if (!invoice.uuid) {
+      return NextResponse.json(
+        { error: "La factura no tiene UUID; no se puede cancelar ante el SAT." },
+        { status: 422 }
+      );
+    }
+    const res = await finkokCancelCfdi({
+      uuid: invoice.uuid,
+      motivo,
+      sustituyeUuid,
+      companyId: invoice.companyId,
+    });
+    if (!res.ok) {
+      return NextResponse.json({ error: res.error }, { status: res.status });
+    }
+  } else if (invoice.facturapiId && invoice.company.facturapiApiKey) {
+    // Stamped CFDI → must cancel at SAT via Facturapi, with the motivo.
     try {
       const fp = getFacturapiClient(invoice.company.facturapiApiKey);
       // Facturapi params: { motive, substitution? }. Only confirmed if it

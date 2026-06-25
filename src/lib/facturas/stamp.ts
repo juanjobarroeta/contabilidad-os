@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
+import { resolvePacProvider } from "@/lib/pac";
+import { finkokStampInvoice, finkokCreateDraft } from "@/lib/pac/finkok";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Stamp (timbrar) a CFDI via Facturapi. Extracted from POST /api/facturas so it
@@ -121,6 +123,12 @@ async function persistStampedInvoice(
 export async function stampInvoice(input: StampInput): Promise<StampResult> {
   const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes } = input;
 
+  // PAC routing: customers that require truncated taxes stamp through Finkok
+  // (we build + seal the XML). Everyone else uses the Facturapi path below.
+  if ((await resolvePacProvider(customerId)) === "finkok") {
+    return finkokStampInvoice(input);
+  }
+
   const notReady = await checkStampReadiness(companyId, customerId);
   if (notReady) return notReady;
 
@@ -168,6 +176,10 @@ export type DraftResult =
 export async function createDraftInvoice(input: StampInput): Promise<DraftResult> {
   const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes } = input;
 
+  if ((await resolvePacProvider(customerId)) === "finkok") {
+    return finkokCreateDraft(input);
+  }
+
   const notReady = await checkStampReadiness(companyId, customerId);
   if (notReady && !notReady.ok) {
     return { ok: false, status: notReady.status, error: notReady.error, needsReconfigure: notReady.needsReconfigure };
@@ -200,6 +212,12 @@ export async function createDraftInvoice(input: StampInput): Promise<DraftResult
 }
 
 export async function stampDraftFromPending(input: StampInput, draftId: string): Promise<StampResult> {
+  // Finkok has no server-side draft to promote — Phase 2 will build + seal +
+  // stamp directly from the confirmed input. (The borrador preview is local.)
+  if ((await resolvePacProvider(input.customerId)) === "finkok") {
+    return finkokStampInvoice(input);
+  }
+
   const company = await prisma.company.findUnique({
     where: { id: input.companyId },
     select: { facturapiApiKey: true },

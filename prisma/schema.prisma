@@ -431,6 +431,14 @@ model Customer {
   // Facturapi customer ID
   facturapiId String?
 
+  // Which PAC stamps this customer's CFDIs. Default "facturapi" (Facturapi
+  // computes + seals). Set to "finkok" for customers that require truncated
+  // (not rounded) taxes — e.g. Gobernación / Dirección Administrativa, whose
+  // portal rejects CFDIs whose IVA/retención differ by a cent from the
+  // prefactura. Finkok stamps a raw XML we seal in-house, so we control the
+  // exact tax amounts. See lib/pac/.
+  pacProvider String @default("facturapi")
+
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   invoices  Invoice[]
   proyectos Proyecto[]
