@@ -38,6 +38,17 @@ export interface CfdiLineItem {
 export interface CfdiInput {
   /** Referencia del receptor en el PAC (hoy: el customer id de Facturapi). */
   customerRef: string;
+  /**
+   * Datos completos del receptor en línea. Facturapi los ignora (usa
+   * customerRef contra su catálogo); los PACs sin catálogo (SW sapien, Finkok)
+   * los necesitan en el CFDI. Opcional para no romper llamadas existentes.
+   */
+  receptor?: {
+    rfc: string;
+    nombre: string;
+    regimenFiscal: string; // c_RegimenFiscal del receptor
+    domicilioFiscalCP: string; // CP fiscal del receptor
+  };
   paymentForm: string; // c_FormaPago
   paymentMethod: "PUE" | "PPD";
   use: string; // c_UsoCFDI

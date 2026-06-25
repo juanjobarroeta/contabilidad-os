@@ -24,6 +24,7 @@ import type {
   PacProvider,
   StampedCfdi,
 } from "./types";
+import { validarCfdiInput } from "./validacion";
 
 const SW_BASE = (process.env.SW_BASE_URL ?? "https://services.sw.com.mx").replace(/\/$/, "");
 
@@ -74,17 +75,18 @@ async function getToken(): Promise<string | null> {
 }
 
 // Mapea CfdiInput → plantilla JSON CFDI 4.0 de SW (emisión "issue").
-// SW pone al receptor en línea (no hay catálogo de clientes como Facturapi), por
-// eso para SW `customerRef` se interpreta como el RFC del receptor.
-// TODO(sw): el receptor completo (nombre, régimen, uso, CP) debe llegar aquí; hoy
-// la interfaz sólo trae customerRef → falta enriquecer CfdiInput o resolver el
-// Customer en el call site antes de activar SW.
+// SW pone al receptor en línea (no hay catálogo de clientes como Facturapi); ya
+// recibimos el receptor completo en input.receptor (lo arma el call site desde el
+// Customer). Si faltara, caemos a customerRef como RFC (degradado).
 function buildIssueTemplate(input: CfdiInput): Record<string, unknown> {
+  const r = input.receptor;
   return {
     Receptor: {
-      Rfc: input.customerRef, // TODO(sw): mapear a RFC real del receptor
+      Rfc: r?.rfc ?? input.customerRef,
+      Nombre: r?.nombre,
+      RegimenFiscalReceptor: r?.regimenFiscal,
+      DomicilioFiscalReceptor: r?.domicilioFiscalCP,
       UsoCFDI: input.use,
-      // TODO(sw): Nombre, DomicilioFiscalReceptor (CP), RegimenFiscalReceptor
     },
     FormaPago: input.paymentForm,
     MetodoPago: input.paymentMethod,
@@ -118,6 +120,12 @@ export const swSapienPacProvider: PacProvider = {
 
   async createCfdi(_apiKey, input): Promise<PacOutcome<StampedCfdi>> {
     if (!swConfigured()) return noConfigurado();
+    // Validación contra catálogos SAT ANTES de gastar el timbre (SW no valida
+    // como Facturapi; le damos el mismo cinturón de seguridad).
+    const errores = validarCfdiInput(input);
+    if (errores.length > 0) {
+      return fail(422, `CFDI inválido: ${errores.join(" ")}`, "validation");
+    }
     const token = await getToken();
     if (!token) return fail(401, "No se pudo autenticar con SW sapien.", "auth");
     try {
