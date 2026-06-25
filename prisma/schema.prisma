@@ -2070,6 +2070,10 @@ model SolicitudCompraCotizacion {
   // Forma de pago de esta oferta: precargada de las condiciones del proveedor
   // (SupplierTerms) pero ajustable por oferta. true = a crédito, false = contado.
   tieneCredito    Boolean   @default(false)
+  // Días de crédito ofrecidos (0/ null = contado). Precargado del proveedor
+  // guardado pero capturable a mano para proveedores de texto libre; alimenta
+  // la fecha de vencimiento en cuentas por pagar.
+  diasCredito     Int?
   // Tiempo de entrega prometido por este proveedor (días hábiles). Cada
   // proveedor cotiza su propio plazo, por eso vive en la cotización y no como
   // una sola "fecha de entrega" en la requisición.
@@ -2102,6 +2106,7 @@ model SolicitudAdjudicacion {
   supplierId        String? // null cuando el proveedor es texto libre
   supplierNombre    String
   tieneCredito      Boolean   @default(false)
+  diasCredito       Int? // días de crédito de la oferta ganadora → vencimiento
   diasEntrega       Int?
   total             Float // Σ importe de las líneas adjudicadas a este proveedor
   estado            String    @default("POR_PAGAR") // POR_PAGAR | PAGADA
