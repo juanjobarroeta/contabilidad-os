@@ -35,6 +35,19 @@ export function syntageExtractionMicroUsd(): number {
   return Math.round(SYNTAGE_EXTRACTION_USD * MICRO_USD);
 }
 
+/** Precio Facturapi por timbre, en MXN ($0.60 por CFDI/recibo). Es nativo en
+ *  pesos; el resto del sistema trabaja en micro-USD, así que convertimos con un
+ *  tipo de cambio de REFERENCIA fijo (no el FIX del día) para que el histórico
+ *  sea estable. El drift al mostrar es de centavos — irrelevante para un timbre.
+ *  La base mensual de Facturapi (~$299/mo, RFC emisores ilimitados) es un costo
+ *  fijo de plataforma, no por empresa, así que no entra aquí. */
+export const FACTURAPI_TIMBRE_MXN = 0.6;
+const MXN_POR_USD_REF = 20;
+
+export function facturapiTimbreMicroUsd(n = 1): number {
+  return Math.round((FACTURAPI_TIMBRE_MXN / MXN_POR_USD_REF) * MICRO_USD * n);
+}
+
 /** Convierte micro-USD → centavos MXN dado el tipo de cambio (pesos por USD). */
 export function microUsdACentavosMxn(microUsd: number, fixMxnPorUsd: number): number {
   return Math.round((microUsd / MICRO_USD) * fixMxnPorUsd * 100);

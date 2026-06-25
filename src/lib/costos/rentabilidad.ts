@@ -16,9 +16,12 @@ export interface RentabilidadEmpresa {
   plan: CompanyPlan;
   precioMensualCentavos: number | null;
   costoCentavos: number;
-  /** Desglose del costo-por-servir: datos (Syntage) vs IA (LLM). */
+  /** Desglose del costo-por-servir: datos (Syntage) vs IA (LLM) vs timbrado (Facturapi). */
   costoSyntageCentavos: number;
   costoLlmCentavos: number;
+  costoFacturapiCentavos: number;
+  /** Timbres consumidos en el periodo (facturas + nómina + REP). */
+  timbresMes: number;
   eventos: number;
   margenCentavos: number | null;
   margenPct: number | null;
@@ -40,6 +43,7 @@ export interface Rentabilidad {
   totalCostoCentavos: number;
   totalSyntageCentavos: number;
   totalLlmCentavos: number;
+  totalFacturapiCentavos: number;
   empresas: RentabilidadEmpresa[];
   despachos: RentabilidadDespacho[];
 }
@@ -71,11 +75,12 @@ export async function computeRentabilidad(year: number, month: number): Promise<
       _sum: { costoMicroUsd: true },
       _count: { _all: true },
     }),
-    // Desglose por categoría (LLM vs SYNTAGE) por empresa — base de precios.
+    // Desglose por categoría (LLM / SYNTAGE / FACTURAPI) por empresa — base de
+    // precios. unidades nos da, para FACTURAPI, el conteo de timbres.
     prisma.costEvent.groupBy({
       by: ["companyId", "categoria"],
       where: { occurredAt: { gte: from, lt: to }, companyId: { not: null } },
-      _sum: { costoMicroUsd: true },
+      _sum: { costoMicroUsd: true, unidades: true },
     }),
     prisma.costEvent.groupBy({
       by: ["despachoId"],
@@ -85,19 +90,23 @@ export async function computeRentabilidad(year: number, month: number): Promise<
   ]);
 
   const microPorEmpresa = new Map(porEmpresa.map((g) => [g.companyId, { micro: g._sum.costoMicroUsd ?? 0, eventos: g._count._all }]));
-  const catMicroPorEmpresa = new Map<string, { LLM: number; SYNTAGE: number }>();
+  const catMicroPorEmpresa = new Map<string, { LLM: number; SYNTAGE: number; FACTURAPI: number; timbres: number }>();
   for (const g of porEmpresaCategoria) {
     if (!g.companyId) continue;
-    const cur = catMicroPorEmpresa.get(g.companyId) ?? { LLM: 0, SYNTAGE: 0 };
+    const cur = catMicroPorEmpresa.get(g.companyId) ?? { LLM: 0, SYNTAGE: 0, FACTURAPI: 0, timbres: 0 };
     if (g.categoria === "LLM") cur.LLM += g._sum.costoMicroUsd ?? 0;
     else if (g.categoria === "SYNTAGE") cur.SYNTAGE += g._sum.costoMicroUsd ?? 0;
+    else if (g.categoria === "FACTURAPI") {
+      cur.FACTURAPI += g._sum.costoMicroUsd ?? 0;
+      cur.timbres += g._sum.unidades ?? 0;
+    }
     catMicroPorEmpresa.set(g.companyId, cur);
   }
   const overheadMicroPorDespacho = new Map(overheadDespacho.map((g) => [g.despachoId, g._sum.costoMicroUsd ?? 0]));
 
   const empresas: RentabilidadEmpresa[] = companies.map((c) => {
     const agg = microPorEmpresa.get(c.id);
-    const cat = catMicroPorEmpresa.get(c.id) ?? { LLM: 0, SYNTAGE: 0 };
+    const cat = catMicroPorEmpresa.get(c.id) ?? { LLM: 0, SYNTAGE: 0, FACTURAPI: 0, timbres: 0 };
     const costoCentavos = microUsdACentavosMxn(agg?.micro ?? 0, fixUsado);
     const precio = c.precioMensualCentavos ?? null;
     const margen = precio != null ? precio - costoCentavos : null;
@@ -111,6 +120,8 @@ export async function computeRentabilidad(year: number, month: number): Promise<
       costoCentavos,
       costoSyntageCentavos: microUsdACentavosMxn(cat.SYNTAGE, fixUsado),
       costoLlmCentavos: microUsdACentavosMxn(cat.LLM, fixUsado),
+      costoFacturapiCentavos: microUsdACentavosMxn(cat.FACTURAPI, fixUsado),
+      timbresMes: cat.timbres,
       eventos: agg?.eventos ?? 0,
       margenCentavos: margen,
       margenPct: precio && precio > 0 && margen != null ? margen / precio : null,
@@ -146,6 +157,7 @@ export async function computeRentabilidad(year: number, month: number): Promise<
     totalCostoCentavos,
     totalSyntageCentavos: empresas.reduce((s, e) => s + e.costoSyntageCentavos, 0),
     totalLlmCentavos: empresas.reduce((s, e) => s + e.costoLlmCentavos, 0),
+    totalFacturapiCentavos: empresas.reduce((s, e) => s + e.costoFacturapiCentavos, 0),
     empresas,
     despachos: despachosOut,
   };

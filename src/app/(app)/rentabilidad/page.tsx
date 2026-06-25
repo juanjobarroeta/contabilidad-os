@@ -17,6 +17,8 @@ interface EmpresaRow {
   costoCentavos: number;
   costoSyntageCentavos: number;
   costoLlmCentavos: number;
+  costoFacturapiCentavos: number;
+  timbresMes: number;
   eventos: number;
   margenCentavos: number | null;
   margenPct: number | null;
@@ -38,6 +40,7 @@ interface Data {
   totalCostoCentavos: number;
   totalSyntageCentavos: number;
   totalLlmCentavos: number;
+  totalFacturapiCentavos: number;
   empresas: EmpresaRow[];
   despachos: DespachoRow[];
 }
@@ -174,6 +177,9 @@ export default function RentabilidadPage() {
             <span className="rounded-control bg-cos-brand-tint px-3 py-1.5 text-cos-brand-ink">
               IA (LLM): <b>{fmtMxn(data.totalLlmCentavos)}</b>
             </span>
+            <span className="rounded-control bg-cos-jade-tint px-3 py-1.5 text-cos-jade-ink">
+              Timbrado (Facturapi): <b>{fmtMxn(data.totalFacturapiCentavos)}</b>
+            </span>
             {data.empresas.length > 0 && (
               <span className="rounded-control bg-cos-slate-tint px-3 py-1.5">
                 Costo prom./empresa: <b className="text-cos-ink">{fmtMxn(Math.round(data.totalCostoCentavos / data.empresas.length))}</b>
@@ -214,6 +220,7 @@ export default function RentabilidadPage() {
                 costoCentavos: e.costoCentavos, precioMensualCentavos: e.precioMensualCentavos,
                 margenCentavos: e.margenCentavos, margenPct: e.margenPct, tipo: "company" as const,
                 costoSyntageCentavos: e.costoSyntageCentavos, costoLlmCentavos: e.costoLlmCentavos,
+                costoFacturapiCentavos: e.costoFacturapiCentavos, timbresMes: e.timbresMes,
                 plan: e.plan,
               }))}
               onSave={savePrecio}
@@ -281,6 +288,8 @@ interface Fila {
   /** Desglose del costo (sólo empresas) — base de precios. */
   costoSyntageCentavos?: number;
   costoLlmCentavos?: number;
+  costoFacturapiCentavos?: number;
+  timbresMes?: number;
   plan?: Plan;
 }
 
@@ -341,11 +350,14 @@ function FilaRow({ f, onSave, onSavePlan }: {
       </div>
       <div className="text-right text-[13.5px] text-cos-ink-soft">
         {fmtMxn(f.costoCentavos)}
-        {(f.costoSyntageCentavos != null || f.costoLlmCentavos != null) && (f.costoCentavos > 0) && (
+        {(f.costoSyntageCentavos != null || f.costoLlmCentavos != null || f.costoFacturapiCentavos != null) && (f.costoCentavos > 0) && (
           <div className="text-[11px] text-cos-ink-faint">
             <span className="text-cos-amber-ink">Datos {fmtMxn(f.costoSyntageCentavos ?? 0)}</span>
             {" · "}
             <span className="text-cos-brand-ink">IA {fmtMxn(f.costoLlmCentavos ?? 0)}</span>
+            {" · "}
+            <span className="text-cos-jade-ink">Timbrado {fmtMxn(f.costoFacturapiCentavos ?? 0)}</span>
+            {f.timbresMes ? <span className="text-cos-ink-faint"> ({f.timbresMes} timbres)</span> : null}
           </div>
         )}
       </div>

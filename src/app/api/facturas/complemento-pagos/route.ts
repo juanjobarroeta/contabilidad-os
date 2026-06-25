@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { getFacturapiClient } from "@/lib/facturapi";
+import { recordTimbrado } from "@/lib/costos/record";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Complemento de Pagos (REP — Recibo Electrónico de Pago)
@@ -226,6 +227,8 @@ export async function POST(req: Request) {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result: any = await facturapi.invoices.create(payload);
+    // Costo del timbre del REP (fire-and-forget).
+    void recordTimbrado("pago", 1, { companyId, subtipo: "complemento_pagos" });
 
     // Persist the REP as an Invoice record
     await prisma.invoice.create({

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getPacProvider, type CfdiInput, type StampedCfdi } from "@/lib/pac";
+import { recordTimbrado } from "@/lib/costos/record";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Stamp (timbrar) a CFDI via Facturapi. Extracted from POST /api/facturas so it
@@ -125,6 +126,10 @@ async function persistStampedInvoice(
       },
     },
   });
+
+  // Costo del timbre (fire-and-forget). Chokepoint común de stampInvoice y
+  // stampDraftFromPending — cada uno consume un timbre al persistir.
+  void recordTimbrado("factura", 1, { companyId: input.companyId, subtipo: "facturas.stamp" });
 
   return { ok: true, invoiceId: invoice.id, uuid: stamped.uuid ?? "", total, folio: stamped.folio != null ? String(stamped.folio) : null };
 }
