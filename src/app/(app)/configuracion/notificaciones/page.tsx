@@ -103,19 +103,19 @@ export default function NotificacionesPage() {
   return (
     <div className="p-6 max-w-2xl">
       <h1 className="text-2xl font-bold">Notificaciones</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="mt-1 text-sm text-cos-ink-soft">
         Activa las notificaciones push y elige qué quieres recibir.
       </p>
 
       {/* Estado del dispositivo */}
-      <div className="mt-6 rounded-xl border border-border bg-white p-5">
+      <div className="mt-6 rounded-xl border border-cos-line bg-white p-5">
         <div className="flex items-center gap-3">
-          {estado === "on" ? <Bell className="h-5 w-5 text-cos-brand-ink" /> : <BellOff className="h-5 w-5 text-muted-foreground" />}
+          {estado === "on" ? <Bell className="h-5 w-5 text-cos-brand-ink" /> : <BellOff className="h-5 w-5 text-cos-ink-soft" />}
           <div className="flex-1">
-            <p className="font-semibold text-foreground">
+            <p className="font-semibold text-cos-ink">
               {estado === "on" ? "Activadas en este dispositivo" : "Desactivadas en este dispositivo"}
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-cos-ink-soft">
               {estado === "unsupported" && "Tu navegador no soporta push. En iPhone, instala la app a la pantalla de inicio (Compartir → Añadir a inicio) y ábrela desde ahí."}
               {estado === "denied" && "Bloqueaste las notificaciones. Habilítalas en los ajustes del navegador para este sitio."}
               {(estado === "off" || estado === "on" || estado === "working" || estado === "checking") &&
@@ -128,11 +128,11 @@ export default function NotificacionesPage() {
             </button>
           )}
           {estado === "on" && (
-            <button onClick={desactivar} className="rounded-control border border-border px-4 py-2 text-sm font-medium hover:bg-cos-paper">
+            <button onClick={desactivar} className="rounded-control border border-cos-line px-4 py-2 text-sm font-medium hover:bg-cos-paper">
               Desactivar
             </button>
           )}
-          {estado === "working" && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+          {estado === "working" && <Loader2 className="h-5 w-5 animate-spin text-cos-ink-soft" />}
         </div>
         {msg && (
           <p className="mt-3 flex items-center gap-1.5 text-sm text-cos-ink-soft">
@@ -147,9 +147,9 @@ export default function NotificacionesPage() {
       </div>
 
       {/* Categorías */}
-      <div className="mt-5 rounded-xl border border-border bg-white">
-        <div className="border-b border-border px-5 py-3">
-          <p className="font-semibold text-foreground">¿Qué quieres recibir?</p>
+      <div className="mt-5 rounded-xl border border-cos-line bg-white">
+        <div className="border-b border-cos-line px-5 py-3">
+          <p className="font-semibold text-cos-ink">¿Qué quieres recibir?</p>
         </div>
         <ul className="divide-y divide-border">
           {CATS.map((c) => {
@@ -157,8 +157,8 @@ export default function NotificacionesPage() {
             return (
               <li key={c.key} className="flex items-center gap-3 px-5 py-4">
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">{c.titulo}</p>
-                  <p className="text-xs text-muted-foreground">{c.desc}</p>
+                  <p className="text-sm font-medium text-cos-ink">{c.titulo}</p>
+                  <p className="text-xs text-cos-ink-soft">{c.desc}</p>
                 </div>
                 <button
                   role="switch"
@@ -173,7 +173,7 @@ export default function NotificacionesPage() {
           })}
         </ul>
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">
+      <p className="mt-3 text-xs text-cos-ink-soft">
         Las categorías aplican a todos tus dispositivos. El interruptor de arriba activa/desactiva sólo este.
       </p>
     </div>

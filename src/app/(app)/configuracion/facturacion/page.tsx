@@ -22,26 +22,26 @@ export default async function FacturacionPage() {
     <div className="p-6 max-w-3xl">
       <Link
         href="/configuracion"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4"
+        className="inline-flex items-center gap-1.5 text-sm text-cos-ink-soft hover:text-cos-ink mb-4"
       >
         <ArrowLeft className="h-4 w-4" /> Configuración
       </Link>
 
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Facturación</h1>
-        <p className="text-sm text-muted-foreground mt-1">Tu plan y estado de suscripción.</p>
+        <p className="text-sm text-cos-ink-soft mt-1">Tu plan y estado de suscripción.</p>
       </div>
 
-      <div className="bg-white border border-border rounded-xl p-6">
+      <div className="bg-white border border-cos-line rounded-xl p-6">
         <div className="flex items-start gap-4 mb-6">
-          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+          <div className="h-10 w-10 rounded-lg bg-cos-brand-tint text-cos-brand-ink flex items-center justify-center shrink-0">
             <CreditCard className="h-5 w-5" />
           </div>
           <div className="flex-1">
-            <p className="text-xs uppercase text-muted-foreground tracking-wide">Estado actual</p>
+            <p className="text-xs uppercase text-cos-ink-soft tracking-wide">Estado actual</p>
             <p className="text-xl font-bold mt-1">{STATUS_LABELS[state.status] ?? state.status}</p>
             {state.isTrialing && state.daysLeft !== null && (
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-sm text-cos-ink-soft mt-1">
                 Te {state.daysLeft === 1 ? "queda" : "quedan"} {state.daysLeft}{" "}
                 {state.daysLeft === 1 ? "día" : "días"} de prueba
               </p>
@@ -49,14 +49,14 @@ export default async function FacturacionPage() {
           </div>
         </div>
 
-        <div className="border-t border-border pt-5">
-          <p className="text-sm text-muted-foreground mb-3">
+        <div className="border-t border-cos-line pt-5">
+          <p className="text-sm text-cos-ink-soft mb-3">
             La integración con Stripe llega pronto. Por ahora, durante la prueba tienes acceso
             completo a todas las funciones.
           </p>
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4 text-sm">
-            <p className="font-semibold text-blue-900 mb-1">Precios planeados</p>
-            <ul className="text-blue-800 space-y-1 text-xs">
+          <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md p-4 text-sm">
+            <p className="font-semibold text-cos-brand-ink mb-1">Precios planeados</p>
+            <ul className="text-cos-brand-ink space-y-1 text-xs">
               <li>• <strong>Solo</strong> $499/mes — 1 RFC, persona física</li>
               <li>• <strong>Negocio</strong> $1,499/mes — 1 RFC PM, nómina, multi-usuario</li>
               <li>• <strong>+ RFC adicional</strong> $999/mes c/u</li>
