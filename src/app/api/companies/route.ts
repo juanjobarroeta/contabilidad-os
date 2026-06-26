@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireActiveSubscription } from "@/lib/subscription";
 import { AuthzError } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
+import { provisionCompany } from "@/lib/fiscal/cumplimiento/syntage/provision";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 import { encryptNullable } from "@/lib/crypto";
@@ -389,5 +390,17 @@ export async function POST(req: Request) {
   // surface a warning ("CSD missing", "Facturapi down", etc.).
   const facturapi = await provisionFacturapiOrg(company.id);
 
-  return NextResponse.json({ ...company, facturapi }, { status: 201 });
+  // If e.firma was provided at creation, kick a Syntage provision (force → full
+  // historic pull) immediately so the new client doesn't wait for the next cron.
+  // Best-effort: only triggers extractions (sync persists results later).
+  let syntage = null;
+  if (fielCer && fielKey && fielPassword) {
+    try {
+      syntage = await provisionCompany(company.id);
+    } catch (e) {
+      syntage = { error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  return NextResponse.json({ ...company, facturapi, syntage }, { status: 201 });
 }

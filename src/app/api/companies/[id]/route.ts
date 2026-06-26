@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
+import { provisionCompany } from "@/lib/fiscal/cumplimiento/syntage/provision";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
 import { parseCertExpiry } from "@/lib/fiel";
@@ -142,7 +143,21 @@ export async function PATCH(req: Request, { params }: Params) {
     facturapi = await provisionFacturapiOrg(companyId);
   }
 
-  return NextResponse.json({ ok: true, facturapi });
+  // If the e.firma just changed, kick a Syntage provision (force → full
+  // historic pull) right away instead of waiting for the next cron. Mirrors the
+  // CSD→Facturapi flow above. Best-effort: provisionOne only TRIGGERS extractions
+  // (no waiting for results), so it's a few quick calls; the compliance-sync cron
+  // persists the results later. Never fails the save.
+  let syntage = null;
+  if (data.fielCer || data.fielKey || data.fielPassword) {
+    try {
+      syntage = await provisionCompany(companyId);
+    } catch (e) {
+      syntage = { error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  return NextResponse.json({ ok: true, facturapi, syntage });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error inesperado";
     // The most common production cause: CREDENTIALS_ENCRYPTION_KEY missing or
