@@ -70,15 +70,26 @@ function resolveGlobalInfo(rfc: string, globalInfo: StampInput["global"]): Stamp
 }
 
 /** Maps the local StampInput to the provider-neutral CfdiInput. */
-function toCfdiInput(input: StampInput, customerRef: string, rfc: string): CfdiInput {
+function toCfdiInput(
+  input: StampInput,
+  customerRef: string,
+  customer: { rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string | null },
+): CfdiInput {
   return {
     customerRef,
+    // Receptor en línea para PACs sin catálogo (SW). Facturapi lo ignora.
+    receptor: {
+      rfc: customer.rfc,
+      nombre: customer.razonSocial,
+      regimenFiscal: customer.regimenFiscal,
+      domicilioFiscalCP: customer.codigoPostal ?? "",
+    },
     paymentForm: input.formaPago,
     paymentMethod: input.metodoPago,
     use: input.usoCfdi,
     items: input.items,
     notes: input.notes,
-    global: resolveGlobalInfo(rfc, input.global),
+    global: resolveGlobalInfo(customer.rfc, input.global),
   };
 }
 
@@ -142,10 +153,13 @@ export async function stampInvoice(input: StampInput): Promise<StampResult> {
 
   const [company, customer] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { facturapiApiKey: true } }),
-    prisma.customer.findUnique({ where: { id: customerId }, select: { facturapiId: true, rfc: true } }),
+    prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { facturapiId: true, rfc: true, razonSocial: true, regimenFiscal: true, codigoPostal: true },
+    }),
   ]);
 
-  const cfdi = toCfdiInput(input, customer!.facturapiId!, customer!.rfc);
+  const cfdi = toCfdiInput(input, customer!.facturapiId!, customer!);
   const out = await getPacProvider().createCfdi(company!.facturapiApiKey!, cfdi);
   if (!out.ok) {
     return { ok: false, status: out.status, error: out.message, needsReconfigure: out.needsReconfigure };
@@ -178,10 +192,13 @@ export async function createDraftInvoice(input: StampInput): Promise<DraftResult
 
   const [company, customer] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { facturapiApiKey: true } }),
-    prisma.customer.findUnique({ where: { id: customerId }, select: { facturapiId: true, rfc: true } }),
+    prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { facturapiId: true, rfc: true, razonSocial: true, regimenFiscal: true, codigoPostal: true },
+    }),
   ]);
 
-  const cfdi = toCfdiInput(input, customer!.facturapiId!, customer!.rfc);
+  const cfdi = toCfdiInput(input, customer!.facturapiId!, customer!);
   const out = await getPacProvider().createDraft(company!.facturapiApiKey!, cfdi);
   if (!out.ok) {
     return { ok: false, status: out.status, error: out.message, needsReconfigure: out.needsReconfigure };
