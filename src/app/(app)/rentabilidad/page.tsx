@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Loader2, TrendingUp, AlertTriangle, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Loader2, TrendingUp, AlertTriangle, Lock, CheckCircle2, XCircle } from "lucide-react";
 import { Card } from "@/components/ui";
 
 type Plan = "ASISTENTE" | "AUTOMATIZADO" | "PRO" | "DESPACHO";
@@ -47,6 +47,34 @@ interface Data {
   empresas: EmpresaRow[];
   despachos: DespachoRow[];
 }
+
+// ── Drill-down por empresa (coincide con /api/rentabilidad/empresa/[id]) ──────
+const EXTRACTOR_LABELS: Record<string, string> = {
+  tax_compliance: "Opinión de cumplimiento",
+  tax_status: "Constancia (CSF)",
+  annual_tax_return: "Declaración anual",
+  monthly_tax_return: "Declaraciones mensuales",
+};
+const DECL_LABELS: Record<string, string> = {
+  IVA_MENSUAL: "IVA mensual",
+  ISR_PROVISIONAL: "ISR provisional",
+  DECLARACION_ANUAL: "Anual",
+  DIOT: "DIOT",
+  RETENCIONES_ISR: "Retenciones ISR",
+  CERO: "En ceros",
+};
+interface CostoSubtipo { subtipo: string; categoria: string; eventos: number; unidades: number; costoCentavos: number; ultimoAt: string | null }
+interface CoberturaExtractor { extractor: string; ultimaAt: string | null; datoPresente: boolean }
+interface CoberturaCompliance { tipo: string; resultado: string | null; fetchedAt: string | null }
+interface CoberturaDeclaracion { tipo: string; total: number; periodos: string[] }
+interface EmpresaDetalle {
+  companyId: string; razonSocial: string; rfc: string; periodo: string;
+  totalCentavos: number; costos: CostoSubtipo[];
+  extracciones: CoberturaExtractor[]; compliance: CoberturaCompliance[]; declaraciones: CoberturaDeclaracion[];
+}
+
+const fmtFecha = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 const fmtMxn = (centavos: number | null) =>
   centavos == null
@@ -230,6 +258,8 @@ export default function RentabilidadPage() {
               }))}
               onSave={savePrecio}
               onSavePlan={savePlan}
+              year={year}
+              month={month}
             />
           </Card>
         </div>
@@ -301,10 +331,12 @@ interface Fila {
   plan?: Plan;
 }
 
-function Tabla({ filas, onSave, onSavePlan }: {
+function Tabla({ filas, onSave, onSavePlan, year, month }: {
   filas: Fila[];
   onSave: (tipo: "company" | "despacho", id: string, pesos: string) => void;
   onSavePlan?: (companyId: string, plan: string) => void;
+  year?: number;
+  month?: number;
 }) {
   return (
     <div className="divide-y divide-cos-line">
@@ -316,21 +348,25 @@ function Tabla({ filas, onSave, onSavePlan }: {
         <span className="text-right">%</span>
       </div>
       {filas.map((f) => (
-        <FilaRow key={f.id} f={f} onSave={onSave} onSavePlan={onSavePlan} />
+        <FilaRow key={f.id} f={f} onSave={onSave} onSavePlan={onSavePlan} year={year} month={month} />
       ))}
       {filas.length === 0 && <p className="px-5 py-6 text-center text-[13px] text-cos-ink-faint">Sin datos.</p>}
     </div>
   );
 }
 
-function FilaRow({ f, onSave, onSavePlan }: {
+function FilaRow({ f, onSave, onSavePlan, year, month }: {
   f: Fila;
   onSave: (tipo: "company" | "despacho", id: string, pesos: string) => void;
   onSavePlan?: (companyId: string, plan: string) => void;
+  year?: number;
+  month?: number;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(f.precioMensualCentavos != null ? String(f.precioMensualCentavos / 100) : "");
+  const [open, setOpen] = useState(false);
   const underwater = f.margenCentavos != null && f.margenCentavos < 0;
+  const expandable = f.tipo === "company" && year != null && month != null;
 
   function commit() {
     setEditing(false);
@@ -339,10 +375,22 @@ function FilaRow({ f, onSave, onSavePlan }: {
   }
 
   return (
+    <>
     <div className={`grid grid-cols-2 gap-3 px-5 py-3 sm:grid-cols-[1fr_130px_130px_130px_80px] sm:items-center ${underwater ? "bg-cos-red-tint" : ""}`}>
       <div className="col-span-2 min-w-0 sm:col-span-1">
-        <p className="truncate text-[14px] font-medium text-cos-ink">{f.nombre}</p>
-        <p className="truncate font-mono text-[11.5px] text-cos-ink-faint">{f.sub}</p>
+        <div className="flex items-center gap-1.5">
+          {expandable && (
+            <button
+              onClick={() => setOpen((o) => !o)}
+              aria-label={open ? "Ocultar detalle" : "Ver detalle"}
+              className="grid h-5 w-5 shrink-0 place-items-center rounded-control text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink"
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+            </button>
+          )}
+          <p className="truncate text-[14px] font-medium text-cos-ink">{f.nombre}</p>
+        </div>
+        <p className={`truncate font-mono text-[11.5px] text-cos-ink-faint ${expandable ? "pl-[26px]" : ""}`}>{f.sub}</p>
         {f.plan && onSavePlan && (
           <select
             value={f.plan}
@@ -401,6 +449,117 @@ function FilaRow({ f, onSave, onSavePlan }: {
         {fmtMxn(f.margenCentavos)}
       </div>
       <div className={`text-right text-[13px] ${underwater ? "text-cos-red-ink" : "text-cos-ink-soft"}`}>{fmtPct(f.margenPct)}</div>
+    </div>
+    {expandable && open && <EmpresaDetallePanel companyId={f.id} year={year!} month={month!} />}
+    </>
+  );
+}
+
+function EmpresaDetallePanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
+  const [data, setData] = useState<EmpresaDetalle | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancel = false;
+    setLoading(true);
+    setError(false);
+    fetch(`/api/rentabilidad/empresa/${companyId}?year=${year}&month=${month}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => { if (!cancel) setData(d); })
+      .catch(() => { if (!cancel) setError(true); })
+      .finally(() => { if (!cancel) setLoading(false); });
+    return () => { cancel = true; };
+  }, [companyId, year, month]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 bg-cos-paper px-5 py-4 text-[12.5px] text-cos-ink-faint">
+        <Loader2 className="h-4 w-4 animate-spin" /> Cargando detalle…
+      </div>
+    );
+  }
+  if (error || !data) {
+    return <div className="bg-cos-paper px-5 py-4 text-[12.5px] text-cos-red-ink">No se pudo cargar el detalle.</div>;
+  }
+
+  const sinDato = data.extracciones.filter((e) => !e.datoPresente);
+
+  return (
+    <div className="space-y-4 bg-cos-paper px-5 py-4">
+      {sinDato.length > 0 && (
+        <div className="flex items-start gap-2 rounded-control bg-cos-amber-tint px-3 py-2 text-[12px] text-cos-amber-ink">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Falta dato en: <b>{sinDato.map((e) => EXTRACTOR_LABELS[e.extractor] ?? e.extractor).join(", ")}</b>. Se
+            re-extraerá automáticamente (cadencia por presencia de dato).
+          </span>
+        </div>
+      )}
+
+      {/* Cobertura de datos */}
+      <div>
+        <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-[0.02em] text-cos-ink-faint">Cobertura de datos (estado actual)</p>
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          {data.extracciones.map((e) => (
+            <div key={e.extractor} className="flex items-center justify-between gap-2 rounded-control bg-white px-3 py-1.5 text-[12.5px]">
+              <span className="flex items-center gap-1.5 text-cos-ink-soft">
+                {e.datoPresente ? <CheckCircle2 className="h-3.5 w-3.5 text-cos-jade-ink" /> : <XCircle className="h-3.5 w-3.5 text-cos-red-ink" />}
+                {EXTRACTOR_LABELS[e.extractor] ?? e.extractor}
+              </span>
+              <span className="text-[11px] text-cos-ink-faint">últ. {fmtFecha(e.ultimaAt)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Compliance + declaraciones */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-control bg-white px-3 py-2.5">
+          <p className="mb-1.5 text-[11.5px] font-semibold text-cos-ink">Cumplimiento</p>
+          {data.compliance.map((c) => (
+            <div key={c.tipo} className="flex justify-between gap-2 py-0.5 text-[12px] text-cos-ink-soft">
+              <span>{c.tipo === "SAT_OPINION" ? "Opinión SAT" : c.tipo === "CSF" ? "Constancia (CSF)" : "Opinión IMSS"}</span>
+              <span className="text-cos-ink-faint">{c.resultado ?? "—"} · {fmtFecha(c.fetchedAt)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-control bg-white px-3 py-2.5">
+          <p className="mb-1.5 text-[11.5px] font-semibold text-cos-ink">Declaraciones persistidas</p>
+          {data.declaraciones.length === 0 ? (
+            <p className="py-0.5 text-[12px] text-cos-ink-faint">Ninguna.</p>
+          ) : (
+            data.declaraciones.map((d) => (
+              <div key={d.tipo} className="flex justify-between gap-2 py-0.5 text-[12px] text-cos-ink-soft">
+                <span>{DECL_LABELS[d.tipo] ?? d.tipo}</span>
+                <span className="text-cos-ink-faint">{d.total} · {d.periodos.slice(0, 3).join(", ")}{d.total > 3 ? "…" : ""}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Costo del mes por subtipo */}
+      <div>
+        <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-[0.02em] text-cos-ink-faint">
+          Costo del mes por concepto · total {fmtMxn(data.totalCentavos)}
+        </p>
+        {data.costos.length === 0 ? (
+          <p className="text-[12px] text-cos-ink-faint">Sin eventos de costo este mes.</p>
+        ) : (
+          <div className="overflow-hidden rounded-control bg-white">
+            {data.costos.map((c) => (
+              <div key={c.subtipo} className="flex items-center justify-between gap-2 border-b border-cos-line px-3 py-1.5 text-[12px] last:border-b-0">
+                <span className="truncate font-mono text-[11px] text-cos-ink-soft">{c.subtipo}</span>
+                <span className="flex shrink-0 items-center gap-3 text-cos-ink-faint">
+                  <span>{c.eventos}×</span>
+                  <span className="w-[80px] text-right font-medium text-cos-ink-soft">{fmtMxn(c.costoCentavos)}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

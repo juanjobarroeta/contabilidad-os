@@ -27,12 +27,23 @@ export const CADENCIA_DIAS: Record<ExtractorProvision, number> = {
   annual_tax_return: 90, // trimestral (capta la anual dentro del trimestre)
 };
 
+// Piso de reintento cuando FALTA el dato (no sólo la cadencia). Un disparo
+// previo medido en CostEvent no garantiza que el dato haya aterrizado (la
+// extracción es async, pudo fallar, o el sync resolvió otra entidad). En ese
+// caso re-disparamos aunque la cadencia diga "fresco" — pero respetando este
+// piso para no martillar a Syntage cada corrida (ni encarecer entidades que
+// genuinamente no tienen ese trámite, p.ej. un RFC nuevo sin anual cerrada).
+export const CADENCIA_REINTENTO_DIAS = 3;
+
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Qué extractores disparar para una empresa. Puro y testeable.
  * - `force` (onboarding / aprovisionamiento manual) → los 4.
  * - plan sin Syntage (ASISTENTE) → ninguno.
+ * - si el dato NO está presente (`datosPresentes[ex] === false`) → re-disparar
+ *   aunque la cadencia diga "fresco", respetando el piso de reintento. Esto
+ *   cura los huecos donde el CostEvent existe pero el dato nunca aterrizó.
  * - si no, sólo los que llevan ≥ su cadencia sin refrescarse (o nunca).
  */
 export function extractoresADisparar(opts: {
@@ -40,6 +51,8 @@ export function extractoresADisparar(opts: {
   ultimaPorExtractor: Partial<Record<ExtractorProvision, Date | null>>;
   ahora: Date;
   force?: boolean;
+  /** Si el dato derivado de cada extractor ya existe en la BD. Ausente = no se evalúa. */
+  datosPresentes?: Partial<Record<ExtractorProvision, boolean>>;
 }): ExtractorProvision[] {
   if (opts.force) return [...EXTRACTORES_PROVISION];
   if (!planIncluyeSyntage(opts.plan)) return [];
@@ -47,6 +60,8 @@ export function extractoresADisparar(opts: {
     const ultima = opts.ultimaPorExtractor[ex] ?? null;
     if (!ultima) return true; // nunca extraído
     const dias = (opts.ahora.getTime() - ultima.getTime()) / DIA_MS;
+    // Falta el dato pese a haberse disparado antes → reintentar tras el piso.
+    if (opts.datosPresentes?.[ex] === false) return dias >= CADENCIA_REINTENTO_DIAS;
     return dias >= CADENCIA_DIAS[ex];
   });
 }

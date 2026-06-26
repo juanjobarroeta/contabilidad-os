@@ -76,6 +76,36 @@ async function ultimasExtracciones(
   return out;
 }
 
+/**
+ * ¿Aterrizó el dato derivado de cada extractor? La cadencia se basa en CostEvent
+ * (¿disparamos/cobramos?), que NO garantiza que el dato exista (extracción async,
+ * fallo, o entidad mal resuelta en el sync). Esto deja que `extractoresADisparar`
+ * re-dispare lo que falta. Mapeo extractor → evidencia persistida:
+ *   tax_compliance    → ComplianceSnapshot SAT_OPINION
+ *   tax_status        → ComplianceSnapshot CSF
+ *   annual_tax_return → TaxDeclaration DECLARACION_ANUAL
+ *   monthly_tax_return→ TaxDeclaration IVA_MENSUAL | ISR_PROVISIONAL
+ */
+async function datosPresentes(
+  companyId: string,
+): Promise<Partial<Record<ExtractorProvision, boolean>>> {
+  const [opinion, csf, anual, mensual] = await Promise.all([
+    prisma.complianceSnapshot.findFirst({ where: { companyId, tipo: "SAT_OPINION" }, select: { id: true } }),
+    prisma.complianceSnapshot.findFirst({ where: { companyId, tipo: "CSF" }, select: { id: true } }),
+    prisma.taxDeclaration.findFirst({ where: { companyId, tipo: "DECLARACION_ANUAL" }, select: { id: true } }),
+    prisma.taxDeclaration.findFirst({
+      where: { companyId, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL"] } },
+      select: { id: true },
+    }),
+  ]);
+  return {
+    tax_compliance: !!opinion,
+    tax_status: !!csf,
+    annual_tax_return: !!anual,
+    monthly_tax_return: !!mensual,
+  };
+}
+
 async function provisionOne(
   client: SyntageClient,
   c: FielCompany,
@@ -91,9 +121,14 @@ async function provisionOne(
 
   // Decide QUÉ extraer antes de tocar a Syntage: por plan + cadencia. Si no hay
   // nada pendiente, no creamos entidad/credencial en vano (igual son idempotentes).
+  const [ultimaPorExtractor, presentes] = await Promise.all([
+    ultimasExtracciones(c.id),
+    datosPresentes(c.id),
+  ]);
   const pendientes = extractoresADisparar({
     plan: c.tier,
-    ultimaPorExtractor: await ultimasExtracciones(c.id),
+    ultimaPorExtractor,
+    datosPresentes: presentes,
     ahora: new Date(),
     force: opts?.force,
   });

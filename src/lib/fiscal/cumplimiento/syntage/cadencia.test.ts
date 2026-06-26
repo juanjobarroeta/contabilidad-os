@@ -46,4 +46,53 @@ describe("extractoresADisparar", () => {
     });
     expect(r.sort()).toEqual(["monthly_tax_return", "tax_compliance"]);
   });
+
+  it("re-dispara dato faltante aunque la cadencia diga fresco (pasado el piso)", () => {
+    const r = extractoresADisparar({
+      plan: "AUTOMATIZADO",
+      ultimaPorExtractor: {
+        tax_compliance: hace(1), // fresco por cadencia (7d)
+        tax_status: hace(5), // fresco por cadencia (30d)
+        monthly_tax_return: hace(5),
+        annual_tax_return: hace(5),
+      },
+      datosPresentes: {
+        tax_compliance: true,
+        tax_status: false, // CSF nunca aterrizó → reintentar
+        monthly_tax_return: true,
+        annual_tax_return: true,
+      },
+      ahora,
+    });
+    expect(r).toEqual(["tax_status"]);
+  });
+
+  it("dato faltante PERO disparado hace < piso → espera (no martillar)", () => {
+    const r = extractoresADisparar({
+      plan: "AUTOMATIZADO",
+      ultimaPorExtractor: {
+        tax_compliance: hace(1),
+        tax_status: hace(1), // < 3 (piso de reintento)
+        monthly_tax_return: hace(1),
+        annual_tax_return: hace(1),
+      },
+      datosPresentes: { tax_status: false },
+      ahora,
+    });
+    expect(r).toEqual([]);
+  });
+
+  it("sin datosPresentes se comporta como antes (sólo cadencia)", () => {
+    const r = extractoresADisparar({
+      plan: "AUTOMATIZADO",
+      ultimaPorExtractor: {
+        tax_compliance: hace(1), // fresco
+        tax_status: hace(40), // vencido por cadencia (30d)
+        monthly_tax_return: hace(1), // fresco
+        annual_tax_return: hace(1), // fresco
+      },
+      ahora,
+    });
+    expect(r).toEqual(["tax_status"]);
+  });
 });
