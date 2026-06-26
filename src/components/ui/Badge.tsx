@@ -6,12 +6,12 @@ import { cn } from "@/lib/utils";
 export type BadgeTone = "neutral" | "success" | "warning" | "danger" | "info" | "primary";
 
 const TONES: Record<BadgeTone, string> = {
-  neutral: "bg-gray-100 text-gray-700",
-  success: "bg-green-50 text-green-700",
-  warning: "bg-amber-50 text-amber-700",
-  danger: "bg-red-50 text-red-700",
-  info: "bg-blue-50 text-blue-700",
-  primary: "bg-primary text-primary-foreground",
+  neutral: "bg-cos-slate-tint text-cos-ink-soft",
+  success: "bg-cos-jade-tint text-cos-jade-ink",
+  warning: "bg-cos-amber-tint text-cos-amber-ink",
+  danger: "bg-cos-red-tint text-cos-red-ink",
+  info: "bg-cos-brand-tint text-cos-brand-ink",
+  primary: "bg-cos-brand text-white",
 };
 
 export function Badge({

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 /** Consistent inline loading row (was h-3.5/h-4/h-5 ad-hoc per page). */
 export function Loading({ label = "Cargando…", className }: { label?: string; className?: string }) {
   return (
-    <div className={cn("flex items-center justify-center gap-2 text-sm text-muted-foreground py-8", className)}>
+    <div className={cn("flex items-center justify-center gap-2 text-sm text-cos-ink-soft py-8", className)}>
       <Loader2 className="h-4 w-4 animate-spin" />
       {label}
     </div>
@@ -28,9 +28,9 @@ export function EmptyState({
 }) {
   return (
     <div className={cn("flex flex-col items-center text-center px-6 py-12", className)}>
-      {Icon && <Icon className="h-9 w-9 text-muted-foreground/40 mb-3" />}
-      <p className="text-sm font-medium">{title}</p>
-      {description && <p className="text-xs text-muted-foreground mt-1 max-w-sm">{description}</p>}
+      {Icon && <Icon className="h-9 w-9 text-cos-ink-faint mb-3" />}
+      <p className="text-sm font-medium text-cos-ink">{title}</p>
+      {description && <p className="text-xs text-cos-ink-soft mt-1 max-w-sm">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -38,10 +38,10 @@ export function EmptyState({
 
 type AlertTone = "success" | "danger" | "info" | "warning";
 const ALERT_TONES: Record<AlertTone, string> = {
-  success: "bg-green-50 border-green-200 text-green-800",
-  danger: "bg-red-50 border-red-200 text-red-700",
-  info: "bg-blue-50 border-blue-200 text-blue-800",
-  warning: "bg-amber-50 border-amber-200 text-amber-800",
+  success: "bg-cos-jade-tint border-cos-jade-ink/20 text-cos-jade-ink",
+  danger: "bg-cos-red-tint border-cos-red-ink/20 text-cos-red-ink",
+  info: "bg-cos-brand-tint border-cos-brand-ink/15 text-cos-brand-ink",
+  warning: "bg-cos-amber-tint border-cos-amber-ink/20 text-cos-amber-ink",
 };
 
 /** Consistent inline alert/banner (was styled slightly differently per page). */
