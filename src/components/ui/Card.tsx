@@ -1,12 +1,12 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-/** Standard panel: white, bordered, rounded-xl. Replaces the repeated
- *  `bg-white rounded-xl border border-border` across pages. */
+/** Standard panel: white, bordered, rounded. Replaces the repeated
+ *  bordered-panel classes across pages. */
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("bg-card text-card-foreground rounded-xl border border-border", className)}
+      className={cn("bg-white text-cos-ink rounded-card border border-cos-line", className)}
       {...props}
     />
   );
@@ -16,14 +16,14 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("px-5 py-4 border-b border-border flex items-center justify-between gap-2", className)}
+      className={cn("px-5 py-4 border-b border-cos-line flex items-center justify-between gap-2", className)}
       {...props}
     />
   );
 }
 
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn("font-semibold text-sm", className)} {...props} />;
+  return <h3 className={cn("font-semibold text-sm text-cos-ink", className)} {...props} />;
 }
 
 export function CardBody({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
