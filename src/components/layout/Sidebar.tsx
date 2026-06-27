@@ -26,8 +26,6 @@ import {
   Menu,
   X,
   FileInput,
-  BadgeCheck,
-  ScanSearch,
   TrendingUp,
   Wrench,
   type LucideIcon,
@@ -63,8 +61,6 @@ const SECTIONS: NavSection[] = [
       { href: "/activos", label: "Activo fijo", icon: Boxes },
       { href: "/contabilidad", label: "Contabilidad", icon: BookOpen },
       { href: "/cumplimiento", label: "Cumplimiento", icon: ShieldCheck },
-      { href: "/opiniones", label: "Opiniones SAT", icon: BadgeCheck },
-      { href: "/hallazgos", label: "Hallazgos", icon: ScanSearch },
     ],
   },
 ];

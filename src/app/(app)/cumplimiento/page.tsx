@@ -7,6 +7,7 @@ import {
   Loader2, RefreshCw, Upload, FileCheck, Info, CalendarDays,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { CumplimientoTabs } from "@/components/layout/CumplimientoTabs";
 import { Card, Chip, type ChipStatus } from "@/components/ui";
 
 // ── Types (mirrors /api/obligaciones) ─────────────────────────────────────────
@@ -116,6 +117,7 @@ export default function CumplimientoPage() {
 
   return (
     <div className="mx-auto max-w-[1000px] px-4 py-6 sm:px-8 sm:py-8">
+      <CumplimientoTabs />
       {/* header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
