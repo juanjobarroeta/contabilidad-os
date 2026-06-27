@@ -243,23 +243,23 @@ export default function NuevaFacturaPage() {
     return (
       <div className="p-8 flex items-center justify-center min-h-[60vh]">
         <div className="text-center max-w-sm">
-          <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-            <CheckCircle2 className="h-8 w-8 text-green-600" />
+          <div className="h-16 w-16 rounded-full bg-cos-jade-tint flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 className="h-8 w-8 text-cos-jade-ink" />
           </div>
           <h2 className="text-xl font-bold mb-2">¡Factura timbrada!</h2>
-          <p className="text-muted-foreground text-sm mb-6">
+          <p className="text-cos-ink-soft text-sm mb-6">
             El CFDI fue enviado al SAT exitosamente.
           </p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => router.push("/facturas")}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
+              className="bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep"
             >
               Ver facturas
             </button>
             <button
               onClick={() => { setSuccessId(null); setStep(1); setItems([newItem()]); setSelectedCliente(null); }}
-              className="px-4 py-2 rounded-md text-sm border border-border hover:bg-accent"
+              className="px-4 py-2 rounded-md text-sm border border-cos-line hover:bg-cos-paper"
             >
               Nueva factura
             </button>
@@ -273,10 +273,10 @@ export default function NuevaFacturaPage() {
     <div className="p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.push("/facturas")} className="text-muted-foreground hover:text-foreground text-sm">
+        <button onClick={() => router.push("/facturas")} className="text-cos-ink-soft hover:text-cos-ink text-sm">
           ← Facturas
         </button>
-        <span className="text-muted-foreground">/</span>
+        <span className="text-cos-ink-soft">/</span>
         <h1 className="text-xl font-bold">Nueva Factura CFDI 4.0</h1>
       </div>
 
@@ -285,72 +285,72 @@ export default function NuevaFacturaPage() {
         {STEPS.map((s, i) => (
           <div key={s.id} className="flex items-center gap-2">
             <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${
-              step > s.id ? "bg-green-500 text-white" :
-              step === s.id ? "bg-primary text-primary-foreground" :
-              "bg-gray-100 text-muted-foreground"
+              step > s.id ? "bg-cos-jade-tint0 text-white" :
+              step === s.id ? "bg-cos-brand text-white" :
+              "bg-cos-slate-tint text-cos-ink-soft"
             }`}>
               {step > s.id ? <CheckCircle2 className="h-4 w-4" /> : s.id}
             </div>
-            <span className={`text-sm ${step === s.id ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+            <span className={`text-sm ${step === s.id ? "font-medium text-cos-ink" : "text-cos-ink-soft"}`}>
               {s.label}
             </span>
-            {i < STEPS.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground mx-1" />}
+            {i < STEPS.length - 1 && <ChevronRight className="h-4 w-4 text-cos-ink-soft mx-1" />}
           </div>
         ))}
       </div>
 
-      <div className="bg-white border border-border rounded-xl shadow-sm">
+      <div className="bg-white border border-cos-line rounded-xl shadow-sm">
 
         {/* ── STEP 1: Receptor ── */}
         {step === 1 && (
           <div className="p-6 space-y-5">
-            <h2 className="font-semibold text-base border-b border-border pb-3">Datos del receptor</h2>
+            <h2 className="font-semibold text-base border-b border-cos-line pb-3">Datos del receptor</h2>
 
             {/* Cliente search */}
             <div>
               <label className="block text-sm font-medium mb-1.5">
-                Cliente receptor <span className="text-red-500">*</span>
+                Cliente receptor <span className="text-cos-red-ink">*</span>
               </label>
               <div className="relative mb-2">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-cos-ink-soft" />
                 <input
                   type="text" value={clienteSearch}
                   onChange={(e) => setClienteSearch(e.target.value)}
                   placeholder="Buscar cliente por RFC o Razón Social..."
-                  className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full pl-9 pr-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
 
               {selectedCliente && (
-                <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-md px-4 py-2.5 mb-2">
+                <div className="flex items-center justify-between bg-cos-brand/5 border border-cos-brand/20 rounded-md px-4 py-2.5 mb-2">
                   <div>
                     <p className="text-sm font-medium">{selectedCliente.razonSocial}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{selectedCliente.rfc} · Régimen {selectedCliente.regimenFiscal}</p>
+                    <p className="text-xs text-cos-ink-soft font-mono">{selectedCliente.rfc} · Régimen {selectedCliente.regimenFiscal}</p>
                     {!selectedCliente.facturapiId && (
-                      <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
+                      <p className="text-xs text-cos-amber-ink mt-0.5 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         Sin sincronizar con Facturapi — no se podrá timbrar
                       </p>
                     )}
                   </div>
-                  <button onClick={() => setSelectedCliente(null)} className="text-xs text-muted-foreground hover:text-foreground">
+                  <button onClick={() => setSelectedCliente(null)} className="text-xs text-cos-ink-soft hover:text-cos-ink">
                     Cambiar
                   </button>
                 </div>
               )}
 
               {!selectedCliente && clientes.length > 0 && (
-                <div className="border border-border rounded-md overflow-hidden max-h-48 overflow-y-auto">
+                <div className="border border-cos-line rounded-md overflow-hidden max-h-48 overflow-y-auto">
                   {clientes.map((c) => (
                     <button
                       key={c.id}
                       onClick={() => { setSelectedCliente(c); setClienteSearch(""); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-accent text-sm border-b border-border last:border-0 transition-colors"
+                      className="w-full text-left px-4 py-2.5 hover:bg-cos-paper text-sm border-b border-cos-line last:border-0 transition-colors"
                     >
                       <span className="font-medium">{c.razonSocial}</span>
-                      <span className="text-muted-foreground font-mono text-xs ml-2">{c.rfc}</span>
+                      <span className="text-cos-ink-soft font-mono text-xs ml-2">{c.rfc}</span>
                       {!c.facturapiId && (
-                        <span className="ml-2 text-xs text-amber-600">⚠ sin Facturapi</span>
+                        <span className="ml-2 text-xs text-cos-amber-ink">⚠ sin Facturapi</span>
                       )}
                     </button>
                   ))}
@@ -358,8 +358,8 @@ export default function NuevaFacturaPage() {
               )}
 
               {!selectedCliente && clientes.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No hay clientes. <a href="/clientes" className="text-primary underline">Agrega uno primero</a>.
+                <p className="text-sm text-cos-ink-soft">
+                  No hay clientes. <a href="/clientes" className="text-cos-brand-ink underline">Agrega uno primero</a>.
                 </p>
               )}
             </div>
@@ -367,16 +367,16 @@ export default function NuevaFacturaPage() {
             {/* Forma + Método de pago */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1.5">Forma de pago <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium mb-1.5">Forma de pago <span className="text-cos-red-ink">*</span></label>
                 <select value={formaPago} onChange={(e) => setFormaPago(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                   {FORMAS_PAGO.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Método de pago <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium mb-1.5">Método de pago <span className="text-cos-red-ink">*</span></label>
                 <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                   {METODOS_PAGO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
@@ -384,25 +384,25 @@ export default function NuevaFacturaPage() {
 
             {/* Uso CFDI */}
             <div>
-              <label className="block text-sm font-medium mb-1.5">Uso del CFDI <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium mb-1.5">Uso del CFDI <span className="text-cos-red-ink">*</span></label>
               <select value={usoCfdi} onChange={(e) => setUsoCfdi(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                 {USOS_CFDI.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
             </div>
 
             {/* Información Global — required for XAXX010101000 */}
             {isPublicoGeneral && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+              <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg p-4 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-blue-800">Información Global</span>
-                  <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">Requerido por SAT para Público en General</span>
+                  <span className="text-sm font-semibold text-cos-brand-ink">Información Global</span>
+                  <span className="text-xs bg-cos-brand-tint text-cos-brand-ink px-2 py-0.5 rounded-full">Requerido por SAT para Público en General</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium mb-1">Periodicidad</label>
                     <select value={globalPeriodicity} onChange={(e) => setGlobalPeriodicity(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                       <option value="day">Diario</option>
                       <option value="week">Semanal</option>
                       <option value="fortnight">Quincenal</option>
@@ -413,7 +413,7 @@ export default function NuevaFacturaPage() {
                   <div>
                     <label className="block text-xs font-medium mb-1">Mes / Período</label>
                     <select value={globalMonth} onChange={(e) => setGlobalMonth(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                       {globalPeriodicity === "two_months"
                         ? ["01","02","03","04","05","06"].map(m => (
                             <option key={m} value={m}>Bimestre {m}</option>
@@ -431,18 +431,18 @@ export default function NuevaFacturaPage() {
                     </select>
                   </div>
                 </div>
-                <p className="text-xs text-blue-700">Año: <strong>{globalYear}</strong></p>
+                <p className="text-xs text-cos-brand-ink">Año: <strong>{globalYear}</strong></p>
               </div>
             )}
 
             {/* Notas */}
             <div>
               <label className="block text-sm font-medium mb-1.5">
-                Notas <span className="text-muted-foreground font-normal text-xs">(opcional — aparece en el PDF)</span>
+                Notas <span className="text-cos-ink-soft font-normal text-xs">(opcional — aparece en el PDF)</span>
               </label>
               <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)}
                 placeholder="Información adicional para el receptor..."
-                className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
           </div>
@@ -451,16 +451,16 @@ export default function NuevaFacturaPage() {
         {/* ── STEP 2: Conceptos ── */}
         {step === 2 && (
           <div className="p-6">
-            <h2 className="font-semibold text-base border-b border-border pb-3 mb-5">Conceptos (partidas)</h2>
+            <h2 className="font-semibold text-base border-b border-cos-line pb-3 mb-5">Conceptos (partidas)</h2>
 
             <div className="space-y-4">
               {items.map((item, idx) => (
-                <div key={item.id} className="border border-border rounded-lg p-4 space-y-3 relative">
+                <div key={item.id} className="border border-cos-line rounded-lg p-4 space-y-3 relative">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-muted-foreground">Concepto {idx + 1}</span>
+                    <span className="text-xs font-medium text-cos-ink-soft">Concepto {idx + 1}</span>
                     {items.length > 1 && (
                       <button onClick={() => removeItem(item.id)}
-                        className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
+                        className="p-1 rounded hover:bg-cos-red-tint text-cos-ink-soft hover:text-cos-red-ink">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -468,18 +468,18 @@ export default function NuevaFacturaPage() {
 
                   {/* Description */}
                   <div>
-                    <label className="block text-xs font-medium mb-1">Descripción <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-medium mb-1">Descripción <span className="text-cos-red-ink">*</span></label>
                     <input type="text" value={item.description}
                       onChange={(e) => updateItem(item.id, "description", e.target.value)}
                       placeholder="Descripción del producto o servicio"
-                      className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                     />
                   </div>
 
                   {/* Clave SAT + Unidad — searchable pickers backed by Facturapi catalog */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium mb-1">Clave SAT <span className="text-red-500">*</span></label>
+                      <label className="block text-xs font-medium mb-1">Clave SAT <span className="text-cos-red-ink">*</span></label>
                       {activeCompany && (
                         <SatCodePicker
                           companyId={activeCompany.id}
@@ -492,7 +492,7 @@ export default function NuevaFacturaPage() {
                       )}
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Unidad <span className="text-red-500">*</span></label>
+                      <label className="block text-xs font-medium mb-1">Unidad <span className="text-cos-red-ink">*</span></label>
                       {activeCompany && (
                         <SatCodePicker
                           companyId={activeCompany.id}
@@ -512,24 +512,24 @@ export default function NuevaFacturaPage() {
                       <label className="block text-xs font-medium mb-1">Cantidad</label>
                       <input type="number" min="0.01" step="0.01" value={item.quantity}
                         onChange={(e) => updateItem(item.id, "quantity", parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Precio unitario</label>
                       <input type="number" min="0.01" step="0.01" value={item.price}
                         onChange={(e) => updateItem(item.id, "price", parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                       />
                     </div>
                     <div className="flex flex-col justify-end">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" checked={item.iva}
                           onChange={(e) => updateItem(item.id, "iva", e.target.checked)}
-                          className="rounded border-border" />
+                          className="rounded border-cos-line" />
                         <span className="text-xs font-medium">IVA 16%</span>
                       </label>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-cos-ink-soft mt-1">
                         Importe: <span className="font-medium">{formatCurrency(item.quantity * item.price)}</span>
                       </p>
                     </div>
@@ -539,20 +539,20 @@ export default function NuevaFacturaPage() {
             </div>
 
             <button onClick={() => setItems((p) => [...p, newItem()])}
-              className="mt-4 flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium">
+              className="mt-4 flex items-center gap-2 text-sm text-cos-brand-ink hover:text-cos-brand-ink/80 font-medium">
               <Plus className="h-4 w-4" />
               Agregar concepto
             </button>
 
             {/* Subtotals preview */}
-            <div className="mt-6 bg-gray-50 rounded-lg p-4 text-sm space-y-1.5 text-right">
-              <div className="flex justify-between text-muted-foreground">
+            <div className="mt-6 bg-cos-slate-tint rounded-lg p-4 text-sm space-y-1.5 text-right">
+              <div className="flex justify-between text-cos-ink-soft">
                 <span>Subtotal</span><span>{formatCurrency(subtotal)}</span>
               </div>
-              <div className="flex justify-between text-muted-foreground">
+              <div className="flex justify-between text-cos-ink-soft">
                 <span>IVA 16%</span><span>{formatCurrency(ivaTotal)}</span>
               </div>
-              <div className="flex justify-between font-semibold text-base pt-1 border-t border-border">
+              <div className="flex justify-between font-semibold text-base pt-1 border-t border-cos-line">
                 <span>Total</span><span>{formatCurrency(total)}</span>
               </div>
             </div>
@@ -562,50 +562,50 @@ export default function NuevaFacturaPage() {
         {/* ── STEP 3: Resumen + Timbrar ── */}
         {step === 3 && (
           <div className="p-6">
-            <h2 className="font-semibold text-base border-b border-border pb-3 mb-5">Resumen y timbrado</h2>
+            <h2 className="font-semibold text-base border-b border-cos-line pb-3 mb-5">Resumen y timbrado</h2>
 
             {/* Summary card */}
             <div className="space-y-4">
               {/* Receptor */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Receptor</p>
+              <div className="bg-cos-slate-tint rounded-lg p-4">
+                <p className="text-xs font-medium text-cos-ink-soft mb-2 uppercase tracking-wide">Receptor</p>
                 <p className="font-semibold">{selectedCliente?.razonSocial}</p>
-                <p className="text-sm text-muted-foreground font-mono">{selectedCliente?.rfc}</p>
+                <p className="text-sm text-cos-ink-soft font-mono">{selectedCliente?.rfc}</p>
               </div>
 
               {/* CFDI data */}
-              <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-3 gap-4 text-sm">
+              <div className="bg-cos-slate-tint rounded-lg p-4 grid grid-cols-3 gap-4 text-sm">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Forma de pago</p>
+                  <p className="text-xs text-cos-ink-soft mb-0.5">Forma de pago</p>
                   <p className="font-medium">{formaPago} – {FORMAS_PAGO.find(f => f.value === formaPago)?.label.split("–")[1]?.trim()}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Método de pago</p>
+                  <p className="text-xs text-cos-ink-soft mb-0.5">Método de pago</p>
                   <p className="font-medium">{metodoPago}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Uso CFDI</p>
+                  <p className="text-xs text-cos-ink-soft mb-0.5">Uso CFDI</p>
                   <p className="font-medium">{usoCfdi}</p>
                 </div>
               </div>
 
               {/* Items */}
-              <div className="border border-border rounded-lg overflow-hidden">
+              <div className="border border-cos-line rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-border">
-                      <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Descripción</th>
-                      <th className="text-right px-4 py-2 text-xs font-medium text-muted-foreground">Cant.</th>
-                      <th className="text-right px-4 py-2 text-xs font-medium text-muted-foreground">P. Unit.</th>
-                      <th className="text-right px-4 py-2 text-xs font-medium text-muted-foreground">Importe</th>
+                    <tr className="bg-cos-slate-tint border-b border-cos-line">
+                      <th className="text-left px-4 py-2 text-xs font-medium text-cos-ink-soft">Descripción</th>
+                      <th className="text-right px-4 py-2 text-xs font-medium text-cos-ink-soft">Cant.</th>
+                      <th className="text-right px-4 py-2 text-xs font-medium text-cos-ink-soft">P. Unit.</th>
+                      <th className="text-right px-4 py-2 text-xs font-medium text-cos-ink-soft">Importe</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((it) => (
-                      <tr key={it.id} className="border-b border-border last:border-0">
+                      <tr key={it.id} className="border-b border-cos-line last:border-0">
                         <td className="px-4 py-2.5">
                           <p className="font-medium">{it.description}</p>
-                          <p className="text-xs text-muted-foreground">{it.product_key} · {it.unit_key}{it.iva ? " · IVA 16%" : " · Sin IVA"}</p>
+                          <p className="text-xs text-cos-ink-soft">{it.product_key} · {it.unit_key}{it.iva ? " · IVA 16%" : " · Sin IVA"}</p>
                         </td>
                         <td className="px-4 py-2.5 text-right">{it.quantity}</td>
                         <td className="px-4 py-2.5 text-right">{formatCurrency(it.price)}</td>
@@ -617,21 +617,21 @@ export default function NuevaFacturaPage() {
               </div>
 
               {/* Totals */}
-              <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-1.5">
-                <div className="flex justify-between text-muted-foreground">
+              <div className="bg-cos-slate-tint rounded-lg p-4 text-sm space-y-1.5">
+                <div className="flex justify-between text-cos-ink-soft">
                   <span>Subtotal</span><span>{formatCurrency(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-muted-foreground">
+                <div className="flex justify-between text-cos-ink-soft">
                   <span>IVA 16%</span><span>{formatCurrency(ivaTotal)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-lg pt-1.5 border-t border-border">
+                <div className="flex justify-between font-bold text-lg pt-1.5 border-t border-cos-line">
                   <span>Total</span><span>{formatCurrency(total)}</span>
                 </div>
               </div>
 
               {/* Warning if no facturapi */}
               {selectedCliente && !selectedCliente.facturapiId && (
-                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+                <div className="flex items-start gap-3 bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg p-4 text-sm text-cos-amber-ink">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                   <div>
                     <p className="font-medium">Cliente sin Facturapi</p>
@@ -645,7 +645,7 @@ export default function NuevaFacturaPage() {
 
         {/* ── Error ── */}
         {submitError && (
-          <div className="mx-6 mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+          <div className="mx-6 mb-4 bg-cos-red-tint border border-cos-red-ink/20 rounded-lg px-4 py-3 text-sm text-cos-red-ink">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <div className="flex-1">
@@ -653,7 +653,7 @@ export default function NuevaFacturaPage() {
                 {needsReconfigure && (
                   <a
                     href="/empresa"
-                    className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium bg-red-600 text-white px-3 py-1.5 rounded hover:bg-red-700"
+                    className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium bg-cos-red-ink text-white px-3 py-1.5 rounded hover:opacity-90"
                   >
                     Reconfigurar Facturapi
                   </a>
@@ -664,10 +664,10 @@ export default function NuevaFacturaPage() {
         )}
 
         {/* ── Navigation ── */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-gray-50 rounded-b-xl">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-cos-line bg-cos-slate-tint rounded-b-xl">
           <button
             onClick={() => { setSubmitError(""); step > 1 ? setStep((s) => s - 1) : router.push("/facturas"); }}
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm border border-border hover:bg-accent"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm border border-cos-line hover:bg-cos-paper"
           >
             <ChevronLeft className="h-4 w-4" />
             {step === 1 ? "Cancelar" : "Atrás"}
@@ -675,12 +675,12 @@ export default function NuevaFacturaPage() {
 
           {step < 3 ? (
             <button onClick={handleNext}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 rounded-md text-sm font-medium hover:bg-primary/90">
+              className="flex items-center gap-2 bg-cos-brand text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
               Continuar <ChevronRight className="h-4 w-4" />
             </button>
           ) : (
             <button onClick={handleStamp} disabled={submitting}
-              className="flex items-center gap-2 bg-green-600 text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+              className="flex items-center gap-2 bg-cos-jade-ink text-white px-5 py-2 rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50">
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
               {submitting ? "Timbrando..." : "Timbrar CFDI"}
             </button>
