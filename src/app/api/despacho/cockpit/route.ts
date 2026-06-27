@@ -56,9 +56,11 @@ export async function GET(req: Request) {
       where: { companyId: { in: companyIds }, isActive: true },
       _count: { id: true },
     }),
-    // Banderas abiertas del auditor por empresa (alimenta la pestaña Revisión).
+    // Banderas/hallazgos abiertos del auditor por empresa Y severidad — un solo
+    // groupBy alimenta tanto la pestaña Revisión (total) como el rollup de
+    // cartera (conteo + peor severidad por empresa). Sin N+1.
     prisma.fiscalHallazgo.groupBy({
-      by: ["companyId"],
+      by: ["companyId", "severidad"],
       where: { companyId: { in: companyIds }, estado: "ABIERTO" },
       _count: { id: true },
     }),
@@ -72,7 +74,19 @@ export async function GET(req: Request) {
   }
   const sinTimbrarBy = new Map(sinTimbrar.map((r) => [r.companyId, r._count.id]));
   const empleadosBy = new Map(empleados.map((r) => [r.companyId, r._count.id]));
-  const flagsBy = new Map(flags.map((r) => [r.companyId, r._count.id]));
+
+  // Rollup de hallazgos abiertos por empresa: total y peor severidad. Derivado
+  // del groupBy [companyId, severidad] (una fila por combinación) sin más queries.
+  type Sev = "error" | "warn" | "info";
+  const SEV_RANK: Record<Sev, number> = { error: 3, warn: 2, info: 1 };
+  const hallazgosBy = new Map<string, { total: number; peor: Sev | null }>();
+  for (const f of flags) {
+    const cur = hallazgosBy.get(f.companyId) ?? { total: 0, peor: null };
+    cur.total += f._count.id;
+    const sev = f.severidad as Sev;
+    if (SEV_RANK[sev] && (cur.peor == null || SEV_RANK[sev] > SEV_RANK[cur.peor])) cur.peor = sev;
+    hallazgosBy.set(f.companyId, cur);
+  }
 
   // Obligaciones vencidas / por vencer del AÑO en curso, por empresa (mismo
   // criterio que el calendario de Cumplimiento). Así el cockpit muestra QUÉ
@@ -96,6 +110,7 @@ export async function GET(req: Request) {
     else estado = vencido ? "vencida" : "pendiente";
 
     const aPagar = Math.round(((iva?.ivaPagar ?? 0) + (isr?.isrPagar ?? 0)) * 100) / 100;
+    const hz = hallazgosBy.get(c.id) ?? { total: 0, peor: null };
 
     return {
       id: c.id,
@@ -107,7 +122,9 @@ export async function GET(req: Request) {
       aPagar: algunaGuardada ? aPagar : null,
       nominaSinTimbrar: sinTimbrarBy.get(c.id) ?? 0,
       empleadosActivos: empleadosBy.get(c.id) ?? 0,
-      flagsAbiertos: flagsBy.get(c.id) ?? 0,
+      flagsAbiertos: hz.total,
+      hallazgosAbiertos: hz.total,
+      peorSeveridad: hz.peor,
       obligacionesVencidas: obligBy.get(c.id)?.vencidas ?? 0,
       obligacionesPorVencer: obligBy.get(c.id)?.porVencer ?? 0,
     };
