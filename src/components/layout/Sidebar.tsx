@@ -17,6 +17,7 @@ import {
   ChevronDown,
   LogOut,
   Building2,
+  Briefcase,
   Plus,
   Settings,
   ShieldCheck,
@@ -29,30 +30,63 @@ import {
   ScanSearch,
   TrendingUp,
   Wrench,
+  type LucideIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const NAV_ITEMS = [
-  { href: "/dashboard",    label: "Inicio",          icon: LayoutDashboard },
-  { href: "/despacho",     label: "Despacho",        icon: Building2 },
-  { href: "/facturas",     label: "Facturas",        icon: FileText },
-  { href: "/clientes",     label: "Clientes",        icon: Users },
-  { href: "/bancos",       label: "Bancos",          icon: Landmark },
-  { href: "/nomina",       label: "Nómina",          icon: Users2 },
-  { href: "/declaracion",  label: "Declaración del mes", icon: Calculator },
-  { href: "/declaraciones", label: "Declaraciones",   icon: FileInput },
-  { href: "/cumplimiento", label: "Cumplimiento",    icon: ShieldCheck },
-  { href: "/opiniones",    label: "Opiniones SAT",   icon: BadgeCheck },
-  { href: "/hallazgos",    label: "Hallazgos",       icon: ScanSearch },
-  { href: "/declaracion-anual", label: "Dec. Anual",  icon: ClipboardList },
-  { href: "/activos",      label: "Activo fijo",     icon: Boxes },
-  { href: "/contabilidad", label: "Contabilidad",    icon: BookOpen },
+type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavSection = { label: string | null; items: NavItem[] };
+
+// Menú agrupado en secciones (rediseño de navegación). Las rutas no cambian:
+// cada destino sigue apuntando a su página actual; sólo se reorganizan bajo
+// encabezados ("Operación" / "Fiscal") para que se encuentren donde se esperan.
+const SECTIONS: NavSection[] = [
+  {
+    label: null,
+    items: [{ href: "/dashboard", label: "Inicio", icon: LayoutDashboard }],
+  },
+  {
+    label: "Operación",
+    items: [
+      { href: "/facturas", label: "Facturas", icon: FileText },
+      { href: "/clientes", label: "Clientes", icon: Users },
+      { href: "/bancos", label: "Bancos", icon: Landmark },
+      { href: "/nomina", label: "Nómina", icon: Users2 },
+    ],
+  },
+  {
+    label: "Fiscal",
+    items: [
+      { href: "/declaracion", label: "Declaración del mes", icon: Calculator },
+      { href: "/declaraciones", label: "Declaraciones", icon: FileInput },
+      { href: "/declaracion-anual", label: "Dec. Anual", icon: ClipboardList },
+      { href: "/activos", label: "Activo fijo", icon: Boxes },
+      { href: "/contabilidad", label: "Contabilidad", icon: BookOpen },
+      { href: "/cumplimiento", label: "Cumplimiento", icon: ShieldCheck },
+      { href: "/opiniones", label: "Opiniones SAT", icon: BadgeCheck },
+      { href: "/hallazgos", label: "Hallazgos", icon: ScanSearch },
+    ],
+  },
 ];
 
-const BOTTOM_NAV_ITEMS = [
+// Cartera (vista despacho) reutiliza la ruta /despacho; sólo aparece cuando el
+// usuario opera más de una empresa.
+const CARTERA: NavItem = { href: "/despacho", label: "Cartera", icon: Briefcase };
+
+const BOTTOM_NAV_ITEMS: NavItem[] = [
   { href: "/empresa", label: "Mi Empresa", icon: Building2 },
   { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
+
+const GRP_LBL =
+  "px-3 pt-4 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.13em] text-cos-ink-faint";
+
+function navLinkClass(active: boolean): string {
+  return cn(
+    "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+    active ? "bg-cos-brand text-white" : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
+  );
+}
 
 interface SidebarProps {
   user: { name?: string | null; email?: string | null };
@@ -66,6 +100,9 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   const [companyOpen, setCompanyOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Cartera sólo para despachos (más de una empresa).
+  const showCartera = companies.length > 1;
+
   // Close the mobile drawer on navigation.
   useEffect(() => {
     setMobileOpen(false);
@@ -73,18 +110,25 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
 
   // Highlight only the most specific matching item, so a nested route (e.g.
   // /declaracion-anual) doesn't also light up a shorter-prefix sibling.
-  const activeNavHref = [...NAV_ITEMS, ...BOTTOM_NAV_ITEMS]
-    .filter(({ href }) => pathname === href || pathname.startsWith(href + "/"))
-    .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
+  const allHrefs = [
+    ...SECTIONS.flatMap((s) => s.items.map((i) => i.href)),
+    CARTERA.href,
+    "/rentabilidad",
+    "/operador",
+    ...BOTTOM_NAV_ITEMS.map((i) => i.href),
+  ];
+  const activeNavHref = allHrefs
+    .filter((href) => pathname === href || pathname.startsWith(href + "/"))
+    .sort((a, b) => b.length - a.length)[0] ?? null;
 
   return (
     <>
       {/* Mobile top bar with hamburger (hidden on md+) */}
-      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-border flex items-center gap-3 px-4">
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-cos-line flex items-center gap-3 px-4">
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Abrir menú"
-          className="p-2 -ml-2 rounded-md hover:bg-accent"
+          className="p-2 -ml-2 rounded-md hover:bg-cos-paper"
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -105,7 +149,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
 
       <aside
         className={cn(
-          "bg-white border-r border-border flex flex-col h-full w-60 shrink-0",
+          "bg-white border-r border-cos-line flex flex-col h-full w-60 shrink-0",
           // Desktop: static in the flex row. Mobile: off-canvas drawer.
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:transition-transform",
           mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
@@ -120,27 +164,27 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
         <button
           onClick={() => setMobileOpen(false)}
           aria-label="Cerrar menú"
-          className="md:hidden p-1 rounded-md hover:bg-accent"
+          className="md:hidden p-1 rounded-md hover:bg-cos-paper"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
       {/* Company switcher */}
-      <div className="px-3 py-3 border-b border-border">
+      <div className="px-3 py-3 border-b border-cos-line">
         <button
           onClick={() => setCompanyOpen((o) => !o)}
-          className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-accent text-sm"
+          className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-cos-paper text-sm"
         >
-          <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Building2 className="h-4 w-4 text-cos-ink-soft shrink-0" />
           <span className="flex-1 text-left truncate font-medium">
             {activeCompany?.razonSocial ?? "Sin empresa"}
           </span>
-          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 text-cos-ink-soft" />
         </button>
 
         {companyOpen && (
-          <div className="mt-1 bg-white border border-border rounded-md shadow-sm overflow-hidden">
+          <div className="mt-1 bg-white border border-cos-line rounded-md shadow-sm overflow-hidden">
             <div className="max-h-72 overflow-y-auto">
               {(() => {
                 const renderCompany = (c: typeof companies[number]) => (
@@ -151,12 +195,12 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
                       setCompanyOpen(false);
                     }}
                     className={cn(
-                      "w-full text-left px-3 py-2 text-xs hover:bg-accent truncate",
-                      activeCompany?.id === c.id && "bg-accent font-medium"
+                      "w-full text-left px-3 py-2 text-xs hover:bg-cos-paper truncate",
+                      activeCompany?.id === c.id && "bg-cos-paper font-medium"
                     )}
                   >
                     <span className="block truncate">{c.razonSocial}</span>
-                    <span className="block text-muted-foreground">{c.rfc}</span>
+                    <span className="block text-cos-ink-soft">{c.rfc}</span>
                   </button>
                 );
 
@@ -177,7 +221,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
                 }
                 return Array.from(groups.entries()).map(([nombre, list]) => (
                   <div key={nombre}>
-                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-cos-paper sticky top-0">
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-cos-ink-soft bg-cos-paper sticky top-0">
                       {nombre}
                     </div>
                     {list.map(renderCompany)}
@@ -198,68 +242,60 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-              href === activeNavHref
-                ? "bg-cos-brand text-white"
-                : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
-            )}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            {label}
+      <nav className="flex-1 px-3 py-3 overflow-y-auto">
+        {/* Inicio + Cartera (sin encabezado) */}
+        <div className="space-y-1">
+          <Link href="/dashboard" className={navLinkClass("/dashboard" === activeNavHref)}>
+            <LayoutDashboard className="h-4 w-4 shrink-0" />
+            Inicio
           </Link>
+          {showCartera && (
+            <Link href={CARTERA.href} className={navLinkClass(CARTERA.href === activeNavHref)}>
+              <CARTERA.icon className="h-4 w-4 shrink-0" />
+              <span className="flex-1">{CARTERA.label}</span>
+              <span className="rounded-full bg-cos-brand-tint px-2 py-0.5 font-mono text-[10px] font-semibold text-cos-brand-ink">
+                {companies.length} RFC
+              </span>
+            </Link>
+          )}
+        </div>
+
+        {/* Secciones con encabezado (Operación / Fiscal) */}
+        {SECTIONS.filter((s) => s.label).map((section) => (
+          <div key={section.label}>
+            <p className={GRP_LBL}>{section.label}</p>
+            <div className="space-y-1">
+              {section.items.map(({ href, label, icon: Icon }) => (
+                <Link key={href} href={href} className={navLinkClass(href === activeNavHref)}>
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
         ))}
 
-        {/* Operador de plataforma: rentabilidad por cliente (oculto para los demás). */}
+        {/* Operador de plataforma: herramientas internas (ocultas para los demás). */}
         {esOperador && (
-          <Link
-            href="/rentabilidad"
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-              pathname === "/rentabilidad"
-                ? "bg-cos-brand text-white"
-                : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
-            )}
-          >
-            <TrendingUp className="h-4 w-4 shrink-0" />
-            Rentabilidad
-          </Link>
+          <div>
+            <p className={GRP_LBL}>Operador</p>
+            <div className="space-y-1">
+              <Link href="/rentabilidad" className={navLinkClass(pathname === "/rentabilidad")}>
+                <TrendingUp className="h-4 w-4 shrink-0" />
+                Rentabilidad
+              </Link>
+              <Link href="/operador" className={navLinkClass(pathname === "/operador")}>
+                <Wrench className="h-4 w-4 shrink-0" />
+                Herramientas
+              </Link>
+            </div>
+          </div>
         )}
 
-        {/* Operador: herramientas internas (cross-check vs SAT, backfill de declaraciones). */}
-        {esOperador && (
-          <Link
-            href="/operador"
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-              pathname === "/operador"
-                ? "bg-cos-brand text-white"
-                : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
-            )}
-          >
-            <Wrench className="h-4 w-4 shrink-0" />
-            Herramientas
-          </Link>
-        )}
-
-        {/* Divider */}
+        {/* Footer nav (separado) */}
         <div className="pt-3 mt-3 border-t border-cos-line space-y-1">
           {BOTTOM_NAV_ITEMS.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-                href === activeNavHref
-                  ? "bg-cos-brand text-white"
-                  : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
-              )}
-            >
+            <Link key={href} href={href} className={navLinkClass(href === activeNavHref)}>
               <Icon className="h-4 w-4 shrink-0" />
               {label}
             </Link>
@@ -268,21 +304,21 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
       </nav>
 
       {/* User */}
-      <div className="px-3 py-3 border-t border-border">
+      <div className="px-3 py-3 border-t border-cos-line">
         <div className="flex items-center gap-2 px-2 py-1 mb-1">
           <div className="h-7 w-7 rounded-full bg-cos-brand-tint flex items-center justify-center text-xs font-bold text-cos-brand-ink">
             {user.name?.[0] ?? user.email?.[0] ?? "U"}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium truncate">{user.name ?? user.email}</p>
+            <p className="text-xs font-medium truncate text-cos-ink">{user.name ?? user.email}</p>
             {user.name && (
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+              <p className="text-xs text-cos-ink-soft truncate">{user.email}</p>
             )}
           </div>
         </div>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
+          className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-cos-ink-soft hover:text-cos-ink rounded-md hover:bg-cos-paper transition-colors"
         >
           <LogOut className="h-3.5 w-3.5" />
           Cerrar sesión
