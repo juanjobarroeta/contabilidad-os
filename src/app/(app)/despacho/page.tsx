@@ -100,24 +100,47 @@ export default function DespachoCockpitPage() {
   // "Lo más urgente": la empresa de mayor prioridad con hallazgos abiertos.
   const urgente = rows.find((r) => r.hallazgosAbiertos > 0) ?? null;
 
+  // Briefing "Hoy": resumen del trabajo nocturno del auditor sobre la cartera.
+  const total = data?.resumen.empresas ?? 0;
+  const necesitaAtencion = (r: Row) =>
+    r.hallazgosAbiertos > 0 || r.obligacionesVencidas > 0 || r.estadoDeclaracion === "vencida";
+  const atencion = rows.filter(necesitaAtencion).length;
+  const alDia = Math.max(0, total - atencion);
+  const conErrores = rows.filter((r) => r.peorSeveridad === "error").length;
+  const conHallazgos = rows.filter((r) => r.hallazgosAbiertos > 0).length;
+  const conVencidas = data?.resumen.empresasConVencidas ?? 0;
+  const ahora = new Date();
+  const saludo = ahora.getHours() < 12 ? "Buenos días" : ahora.getHours() < 19 ? "Buenas tardes" : "Buenas noches";
+  const fechaLarga = ahora.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+
   return (
     <div className="mx-auto max-w-[1140px] px-6 py-7">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-[24px] font-bold tracking-[-0.02em] text-cos-ink">
-            <Building2 className="h-6 w-6 text-cos-ink-faint" /> Despacho
-          </h1>
-          <p className="mt-0.5 text-[14px] text-cos-ink-soft">
-            Todas tus empresas en un panel — qué urge declarar, cuánto se paga y qué falta timbrar.
-          </p>
-        </div>
+      {/* Briefing "Hoy" — el resumen de la revisión nocturna del auditor. */}
+      <div className="rounded-card border border-cos-line bg-white p-5 shadow-card">
+        <p className="text-[12.5px] font-medium text-cos-ink-faint">
+          {saludo} · <span className="capitalize">{fechaLarga}</span>
+        </p>
+        <h1 className="mt-1 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-cos-ink">
+          {!data ? (
+            "Despacho"
+          ) : atencion > 0 ? (
+            <>Revisé tus <span className="font-mono">{total}</span> empresas anoche — <span className="text-cos-amber-ink">{atencion} {atencion === 1 ? "necesita" : "necesitan"} tu atención</span> hoy.</>
+          ) : total > 0 ? (
+            <>Revisé tus <span className="font-mono">{total}</span> empresas anoche — <span className="text-cos-jade-ink">toda tu cartera al día</span>.</>
+          ) : (
+            "Despacho"
+          )}
+        </h1>
         {data && (
-          <div className="flex gap-5 text-[13px] text-cos-ink-soft">
-            <span className="inline-flex items-center gap-1.5"><Building2 className="h-4 w-4 text-cos-ink-faint" /> <b className="font-mono">{data.resumen.empresas}</b> empresas</span>
-            <span>Periodo <b>{data.periodo}</b> · vence {formatDate(data.vencimiento)}</span>
-            <span>A pagar: <b className="font-mono"><Money value={data.resumen.totalAPagar} /></b></span>
-            {data.resumen.conPendientes > 0 && <span className="text-cos-amber-ink"><b className="font-mono">{data.resumen.conPendientes}</b> con pendientes</span>}
-            {data.resumen.empresasConVencidas > 0 && <span className="text-cos-red-ink"><b className="font-mono">{data.resumen.empresasConVencidas}</b> con obligaciones vencidas</span>}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[12.5px]">
+            {conErrores > 0 && <span className="rounded-full bg-cos-red-tint px-2.5 py-1 font-medium text-cos-red-ink">{conErrores} con algo crítico</span>}
+            {conVencidas > 0 && <span className="rounded-full bg-cos-red-tint px-2.5 py-1 font-medium text-cos-red-ink">{conVencidas} con obligaciones vencidas</span>}
+            {conHallazgos > 0 && <span className="rounded-full bg-cos-amber-tint px-2.5 py-1 font-medium text-cos-amber-ink">{conHallazgos} con hallazgos por revisar</span>}
+            <span className="rounded-full bg-cos-jade-tint px-2.5 py-1 font-medium text-cos-jade-ink">{alDia} al día</span>
+            <span className="ml-auto text-cos-ink-soft">
+              Periodo <b>{data.periodo}</b> · vence {formatDate(data.vencimiento)} · a pagar{" "}
+              <b className="font-mono"><Money value={data.resumen.totalAPagar} /></b>
+            </span>
           </div>
         )}
       </div>
