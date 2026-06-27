@@ -14,7 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { tarifaMensualSueldos, subsidioEmpleo, aplicarTarifa } from "../fiscal/tarifas";
-import { UMA_MENSUAL, UMA_MENSUAL_2025 } from "./constants";
+import { UMA_MENSUAL, UMA_MENSUAL_2025, SALARIO_MINIMO_GENERAL, SALARIO_MINIMO_ZLFN } from "./constants";
 
 // Periodicidad → factor para convertir base del periodo a base mensual
 // (la tarifa está en mensual; convertimos primero, calculamos, luego dividimos
@@ -40,6 +40,8 @@ export type IsrCalcInput = {
   ejercicio?: number;
   /** Mes de la fecha de pago (1-12). Sólo afecta el subsidio de enero (transitorio). Default: mes actual. */
   mes?: number;
+  /** El trabajador labora en la Zona Libre de la Frontera Norte (salario mínimo mayor). Default: false. */
+  zonaFrontera?: boolean;
 };
 
 export type IsrCalcResult = {
@@ -47,6 +49,8 @@ export type IsrCalcResult = {
   isrSegunTarifa: number;
   subsidio: number;
   isrRetenido: number;
+  /** True si aplicó la exención por salario mínimo (LISR Art. 96): retención = 0. */
+  exentoSalarioMinimo: boolean;
   /** Ejercicio de la tabla efectivamente usada (puede ser anterior por roll-forward). */
   tarifaEjercicio: number;
   /**
@@ -81,6 +85,7 @@ export function calcularIsrRetenido(input: IsrCalcInput): IsrCalcResult {
       isrSegunTarifa: 0,
       subsidio: 0,
       isrRetenido: 0,
+      exentoSalarioMinimo: false,
       tarifaEjercicio: ejercicio,
       tarifaVerificada: false,
     };
@@ -103,7 +108,17 @@ export function calcularIsrRetenido(input: IsrCalcInput): IsrCalcResult {
         : r2(sub.pctUmaMensual * UMA_MENSUAL);
   }
 
-  const retencionMensual = Math.max(0, isrMensual - subsidioMensual);
+  // LISR Art. 96, último párrafo: NO se retiene a quien en el mes únicamente
+  // percibe el salario mínimo del área geográfica. El tope = salario mínimo del
+  // área elevado al mes (mismo factor 30.4 que la base mensual). Deriva del
+  // salario mínimo vigente (constante/env SALARIO_MINIMO_*), así que se actualiza
+  // solo al actualizar el salario mínimo — una sola fuente de verdad. Lo que
+  // exceda el tope (percepciones gravadas extra) sí grava normal.
+  const salarioMinimoDiario = input.zonaFrontera ? SALARIO_MINIMO_ZLFN : SALARIO_MINIMO_GENERAL;
+  const topeExento = salarioMinimoDiario * 30.4;
+  const exentoSalarioMinimo = baseMensual > 0 && baseMensual <= topeExento + 0.01; // +0.01: tolerancia FP en el borde
+
+  const retencionMensual = exentoSalarioMinimo ? 0 : Math.max(0, isrMensual - subsidioMensual);
 
   // Pro-rata back to the period
   const isrRetenido = r2(retencionMensual * factor);
@@ -113,6 +128,7 @@ export function calcularIsrRetenido(input: IsrCalcInput): IsrCalcResult {
     isrSegunTarifa: r2(isrMensual * factor),
     subsidio: r2(subsidioMensual * factor),
     isrRetenido,
+    exentoSalarioMinimo,
     tarifaEjercicio: t.tarifa.ejercicio,
     tarifaVerificada:
       t.vigente && t.tarifa.verificado && (subsidioMensual === 0 || (sub?.verificado ?? false)),
