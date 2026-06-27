@@ -19,6 +19,10 @@ import { auditarDeclaracionesFaltantes } from "./declaraciones-faltantes";
 import { cargarRepFechaPagoAnterior, auditarRepFechaPagoAnterior } from "./rep-fecha-pago";
 import { cargarPosiblesDuplicados, auditarDuplicados } from "./duplicados";
 import { cargarBancoDesactualizado, auditarBancoDesactualizado } from "./banco-movimientos";
+import { cargarIngresoNoFacturado, auditarIngresoNoFacturado } from "./ingreso-no-facturado";
+import { cargarCredencialesVigencia, auditarCredencialesVigencia } from "./credenciales-vigencia";
+import { cargarObligacionProxima, auditarObligacionProxima } from "./obligacion-proxima";
+import { cargarResicoLimite, auditarResicoLimite } from "./resico-limite";
 import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
 import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
@@ -176,7 +180,12 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
   const faltantes = await declaracionesFaltantesEmpresa(companyId);
   const repFechaAnterior = await cargarRepFechaPagoAnterior(companyId);
   const duplicados = await cargarPosiblesDuplicados(companyId);
-  const bancoDesactualizado = await cargarBancoDesactualizado(companyId, new Date(fecha));
+  const hoy = new Date(fecha);
+  const bancoDesactualizado = await cargarBancoDesactualizado(companyId, hoy);
+  const ingresoNoFacturado = await cargarIngresoNoFacturado(companyId, hoy);
+  const credenciales = await cargarCredencialesVigencia(companyId);
+  const obligacionProxima = await cargarObligacionProxima(companyId, hoy);
+  const resicoLimite = await cargarResicoLimite(companyId, hoy);
 
   const hallazgos = [
     ...auditar(cfdis, ctx),
@@ -186,6 +195,10 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
     ...auditarRepFechaPagoAnterior(repFechaAnterior),
     ...auditarDuplicados(duplicados),
     ...auditarBancoDesactualizado(bancoDesactualizado),
+    ...auditarIngresoNoFacturado(ingresoNoFacturado),
+    ...auditarCredencialesVigencia(credenciales, hoy),
+    ...auditarObligacionProxima(obligacionProxima, hoy),
+    ...auditarResicoLimite(resicoLimite),
   ];
 
   const vigentes = new Set<string>();
