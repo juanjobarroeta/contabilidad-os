@@ -17,7 +17,7 @@ import {
   ChevronRight as ChevronR, CalendarDays, Database, ScanSearch,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Loading } from "@/components/ui";
+import { Loading, Money } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface Row {
@@ -96,7 +96,7 @@ export default function DespachoCockpitPage() {
           <div className="flex gap-5 text-[13px] text-cos-ink-soft">
             <span className="inline-flex items-center gap-1.5"><Building2 className="h-4 w-4 text-cos-ink-faint" /> <b className="font-mono">{data.resumen.empresas}</b> empresas</span>
             <span>Periodo <b>{data.periodo}</b> · vence {formatDate(data.vencimiento)}</span>
-            <span>A pagar: <b className="font-mono">{formatCurrency(data.resumen.totalAPagar)}</b></span>
+            <span>A pagar: <b className="font-mono"><Money value={data.resumen.totalAPagar} /></b></span>
             {data.resumen.conPendientes > 0 && <span className="text-cos-amber-ink"><b className="font-mono">{data.resumen.conPendientes}</b> con pendientes</span>}
             {data.resumen.empresasConVencidas > 0 && <span className="text-cos-red-ink"><b className="font-mono">{data.resumen.empresasConVencidas}</b> con obligaciones vencidas</span>}
           </div>

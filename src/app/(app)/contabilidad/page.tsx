@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Money } from "@/components/ui";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -363,11 +364,11 @@ function PeriodsPanel({
                     </div>
                     <div className="flex justify-between">
                       <span>Cargos</span>
-                      <span className="font-medium text-cos-ink">{formatCurrency(period.totalCargos)}</span>
+                      <span className="font-medium text-cos-ink"><Money value={period.totalCargos} /></span>
                     </div>
                     <div className="flex justify-between">
                       <span>Abonos</span>
-                      <span className="font-medium text-cos-ink">{formatCurrency(period.totalAbonos)}</span>
+                      <span className="font-medium text-cos-ink"><Money value={period.totalAbonos} /></span>
                     </div>
                   </div>
                   <div className="flex gap-2 mb-2">
@@ -503,7 +504,7 @@ function BalanzaPanel({
                   <td className="px-4 py-2">{r.nombre}</td>
                   <td className="px-4 py-2 text-right font-mono text-xs">{r.cargos > 0 ? formatCurrency(r.cargos) : "—"}</td>
                   <td className="px-4 py-2 text-right font-mono text-xs">{r.abonos > 0 ? formatCurrency(r.abonos) : "—"}</td>
-                  <td className="px-4 py-2 text-right font-mono text-xs font-semibold">{formatCurrency(r.saldo)}</td>
+                  <td className="px-4 py-2 text-right font-mono text-xs font-semibold"><Money value={r.saldo} /></td>
                 </tr>
               ))}
             </tbody>
@@ -558,14 +559,14 @@ function EstadoResultadosPanel({
               <div className="flex items-center justify-between font-medium">
                 <span>Utilidad bruta</span>
                 <span className={data.utilidadBruta >= 0 ? "text-cos-jade-ink" : "text-cos-red-ink"}>
-                  {formatCurrency(data.utilidadBruta)}
+                  <Money value={data.utilidadBruta} />
                 </span>
               </div>
             )}
             <div className="flex items-center justify-between text-base font-bold">
               <span>Utilidad antes de impuestos</span>
               <span className={data.utilidadAntesImpuestos >= 0 ? "text-cos-jade-ink" : "text-cos-red-ink"}>
-                {formatCurrency(data.utilidadAntesImpuestos)}
+                <Money value={data.utilidadAntesImpuestos} />
               </span>
             </div>
           </div>
@@ -590,14 +591,14 @@ function Section({
         {rows.map((r) => (
           <div key={`${r.cuentaSAT}-${r.subcuenta}`} className="flex items-center justify-between text-sm">
             <span className="text-cos-ink-soft">{r.nombre}</span>
-            <span className="font-mono">{formatCurrency(r.monto)}</span>
+            <span className="font-mono"><Money value={r.monto} /></span>
           </div>
         ))}
       </div>
       <div className="flex items-center justify-between border-t border-cos-line mt-2 pt-2 font-medium">
         <span>Total {label.toLowerCase()}</span>
         <span className={`font-mono ${positive ? "text-cos-jade-ink" : "text-cos-red-ink"}`}>
-          {formatCurrency(total)}
+          <Money value={total} />
         </span>
       </div>
     </div>
@@ -681,10 +682,10 @@ function SaldosInterempresaPanel({ companyId }: { companyId: string }) {
             <tfoot>
               <tr className="bg-cos-paper font-semibold">
                 <td className="px-4 py-2.5" colSpan={2}>Total despacho</td>
-                <td className="px-4 py-2.5 text-right font-mono text-xs">{formatCurrency(totalOtorgados)}</td>
-                <td className="px-4 py-2.5 text-right font-mono text-xs">{formatCurrency(totalPorPagar)}</td>
+                <td className="px-4 py-2.5 text-right font-mono text-xs"><Money value={totalOtorgados} /></td>
+                <td className="px-4 py-2.5 text-right font-mono text-xs"><Money value={totalPorPagar} /></td>
                 <td className="px-4 py-2.5 text-right font-mono text-xs font-bold">
-                  {formatCurrency(totalOtorgados - totalPorPagar)}
+                  <Money value={totalOtorgados - totalPorPagar} />
                 </td>
               </tr>
             </tfoot>

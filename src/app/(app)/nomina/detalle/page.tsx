@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Money } from "@/components/ui";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
@@ -329,7 +330,7 @@ export default function NominaPage() {
                         </button>
                       </td>
                       <td className="px-4 py-3 text-xs">{e.puesto ?? "—"}{e.departamento && <p className="text-cos-ink-soft">{e.departamento}</p>}</td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(e.salarioDiario)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-xs"><Money value={e.salarioDiario} /></td>
                       <td className="px-4 py-3 text-xs">{PERIODICIDAD_LABEL[e.periodicidadPago] ?? e.periodicidadPago}</td>
                       <td className="px-4 py-3 text-xs text-cos-ink-soft">{formatDate(e.fechaIngreso)}</td>
                       <td className="px-4 py-3 text-right space-x-1.5">
@@ -387,8 +388,8 @@ export default function NominaPage() {
                         <p className="text-xs text-cos-ink-soft">{run.periodo}</p>
                         <div className="flex gap-4 mt-1 text-xs">
                           <span>Empleados: <strong>{run._count?.items ?? "—"}</strong></span>
-                          <span>Percepciones: <strong>{formatCurrency(run.totalPercepciones)}</strong></span>
-                          <span>Deducciones: <strong>{formatCurrency(run.totalDeducciones)}</strong></span>
+                          <span>Percepciones: <strong><Money value={run.totalPercepciones} /></strong></span>
+                          <span>Deducciones: <strong><Money value={run.totalDeducciones} /></strong></span>
                           <span>Neto: <strong className="text-cos-jade-ink">{formatCurrency(run.totalNeto)}</strong></span>
                         </div>
                       </div>
@@ -450,14 +451,14 @@ export default function NominaPage() {
                                       <span className="font-medium">{item.employee.nombre} {item.employee.apellidoPaterno}</span>
                                       <span className="text-cos-ink-soft ml-1.5 font-mono">{item.employee.rfc}</span>
                                     </td>
-                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.sueldoBase)}</td>
+                                    <td className="px-3 py-2 text-right font-mono"><Money value={item.sueldoBase} /></td>
                                     <td className="px-3 py-2 text-right font-mono">{item.isrRetenido > 0 ? formatCurrency(item.isrRetenido) : "—"}</td>
                                     <td className="px-3 py-2 text-right font-mono">{item.imssObrero > 0 ? formatCurrency(item.imssObrero) : "—"}</td>
                                     <td className="px-3 py-2 text-right font-mono text-cos-ink-soft">{item.imssPatronal > 0 ? formatCurrency(item.imssPatronal) : "—"}</td>
                                     <td className="px-3 py-2 text-right font-mono">{item.infonavit > 0 ? formatCurrency(item.infonavit) : "—"}</td>
                                     {run.tipo === "AGUINALDO" && <td className="px-3 py-2 text-right font-mono">{item.aguinaldo > 0 ? formatCurrency(item.aguinaldo) : "—"}</td>}
                                     {run.tipo === "PTU" && <td className="px-3 py-2 text-right font-mono">{item.ptu > 0 ? formatCurrency(item.ptu) : "—"}</td>}
-                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.totalPercepciones)}</td>
+                                    <td className="px-3 py-2 text-right font-mono"><Money value={item.totalPercepciones} /></td>
                                     <td className="px-3 py-2 text-right font-mono text-cos-red-ink">{formatCurrency(item.totalDeducciones)}</td>
                                     <td className="px-3 py-2 text-right font-mono font-bold text-cos-jade-ink">{formatCurrency(item.netoAPagar)}</td>
                                     <td className="px-3 py-2 text-center">
@@ -1248,7 +1249,7 @@ function Row({ label, value, bold, muted }: { label: string; value: number; bold
   return (
     <div className={`flex justify-between ${bold ? "font-semibold" : ""} ${muted ? "text-cos-ink-soft" : ""}`}>
       <span>{label}</span>
-      <span className="font-mono">{formatCurrency(value)}</span>
+      <span className="font-mono"><Money value={value} /></span>
     </div>
   );
 }
