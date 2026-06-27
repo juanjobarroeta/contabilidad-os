@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Boxes, Plus, Trash2, Info, X } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Loading } from "@/components/ui";
+import { Loading, Money } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const TIPO_LABEL: Record<string, string> = {
@@ -153,7 +153,7 @@ export default function ActivosPage() {
                       </p>
                     </td>
                     <td className="px-3 py-3 text-right font-mono">
-                      {formatCurrency(a.moi)}
+                      <Money value={a.moi} />
                       {a.depreciacion.topeAplicado && (
                         <p className="text-[11px] text-cos-amber-ink">deduc. {formatCurrency(a.depreciacion.moiDeducible)}</p>
                       )}
@@ -164,14 +164,14 @@ export default function ActivosPage() {
                     </td>
                     <td className="px-3 py-3 text-right font-mono">{a.depreciacion.mesesUsoEjercicio}</td>
                     <td className="px-3 py-3 text-right font-mono font-semibold">
-                      {formatCurrency(a.depreciacion.depreciacionEjercicio)}
+                      <Money value={a.depreciacion.depreciacionEjercicio} />
                       {!a.depreciacion.sinActualizar && (
                         <p className="text-[11px] font-normal text-cos-ink-faint">
                           INPC ×{a.depreciacion.factorActualizacion.toFixed(4)}
                         </p>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono text-cos-ink-soft">{formatCurrency(a.depreciacion.saldoPendiente)}</td>
+                    <td className="px-3 py-3 text-right font-mono text-cos-ink-soft"><Money value={a.depreciacion.saldoPendiente} /></td>
                     <td className="px-3 py-3 text-right">
                       <button onClick={() => eliminar(a.id)} className="text-cos-ink-faint hover:text-cos-red-ink" title="Eliminar">
                         <Trash2 className="h-4 w-4" />

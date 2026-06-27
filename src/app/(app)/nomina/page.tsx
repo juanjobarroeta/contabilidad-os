@@ -153,7 +153,7 @@ export default function NominaPage() {
             <div className="flex items-start gap-3 rounded-card border border-cos-amber bg-cos-amber-tint px-5 py-4">
               <AlertTriangle className="mt-0.5 h-[18px] w-[18px] flex-none text-cos-amber-ink" />
               <div className="text-[13.5px] leading-relaxed text-cos-amber-ink">
-                <b>{bajoMinimo.length} empleado{bajoMinimo.length > 1 ? "s" : ""} con salario diario por debajo del mínimo general 2026 ({formatCurrency(SALARIO_MINIMO_GENERAL)})</b>
+                <b>{bajoMinimo.length} empleado{bajoMinimo.length > 1 ? "s" : ""} con salario diario por debajo del mínimo general 2026 (<Money value={SALARIO_MINIMO_GENERAL} />)</b>
                 {" — "}
                 {bajoMinimo.slice(0, 3).map((e) => `${e.nombre} ${e.apellidoPaterno} (${formatCurrency(e.salarioDiario)})`).join(", ")}
                 {bajoMinimo.length > 3 ? ` y ${bajoMinimo.length - 3} más` : ""}.

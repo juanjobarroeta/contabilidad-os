@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { Money } from "@/components/ui";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
@@ -574,7 +575,7 @@ export default function ImpuestosPage() {
               </p>
               <p className="text-xs text-cos-red-ink mt-0.5">
                 {repPending.count} factura{repPending.count !== 1 ? "s" : ""} PPD con pago recibido en banco pero sin REP emitido.
-                Monto pendiente: <strong>{formatCurrency(repPending.monto)}</strong>.
+                Monto pendiente: <strong><Money value={repPending.monto} /></strong>.
                 SAT requiere el complemento para documentar la cobranza.
               </p>
               <details className="mt-2">
@@ -584,7 +585,7 @@ export default function ImpuestosPage() {
                     <div key={inv.id} className="flex items-center justify-between bg-white border border-cos-red-ink/20 rounded px-2.5 py-1.5 text-xs">
                       <span className="font-mono text-cos-ink-soft">{inv.serie ?? ""}{inv.folio ?? inv.uuid?.slice(-8)}</span>
                       <span className="flex-1 mx-3 truncate">{inv.customer}</span>
-                      <span className="font-mono">{formatCurrency(inv.pendingAmount)}</span>
+                      <span className="font-mono"><Money value={inv.pendingAmount} /></span>
                     </div>
                   ))}
                 </div>
@@ -739,9 +740,9 @@ export default function ImpuestosPage() {
               <div className="px-5 pb-4">
                 <div className="flex items-start gap-2 bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg px-3 py-2 text-xs text-cos-brand-ink">
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  Este mes facturaste actos exentos ({formatCurrency(result.iva.actosExentos)}) además de gravados
-                  ({formatCurrency(result.iva.actosGravados)}). Por Art. 5-V LIVA el IVA de los gastos sólo se acredita
-                  en la proporción gravados ÷ total; el resto ({formatCurrency(result.iva.acreditableBruto - result.iva.acreditable)})
+                  Este mes facturaste actos exentos (<Money value={result.iva.actosExentos} />) además de gravados
+                  (<Money value={result.iva.actosGravados} />). Por Art. 5-V LIVA el IVA de los gastos sólo se acredita
+                  en la proporción gravados ÷ total; el resto (<Money value={result.iva.acreditableBruto - result.iva.acreditable} />)
                   no es acreditable.
                 </div>
               </div>
@@ -898,8 +899,8 @@ export default function ImpuestosPage() {
                   <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   <span>
                     <strong>Calculado de tu ejercicio {result.isr.coeficienteBase.year}:</strong>{" "}
-                    {formatCurrency(result.isr.coeficienteBase.utilidad)} utilidad ÷{" "}
-                    {formatCurrency(result.isr.coeficienteBase.ingresos)} ingresos ={" "}
+                    <Money value={result.isr.coeficienteBase.utilidad} /> utilidad ÷{" "}
+                    <Money value={result.isr.coeficienteBase.ingresos} /> ingresos ={" "}
                     <strong>{coeficiente != null ? (coeficiente * 100).toFixed(4) : "—"}%</strong>
                     {" "}({result.isr.coeficienteBase.invoiceCount} CFDIs en el sistema).
                     Puedes ajustarlo si tu declaración anual difiere.
@@ -975,7 +976,7 @@ export default function ImpuestosPage() {
                     {result.isr.saldoAFavor > 0 && (
                       <div className="mt-2 flex items-start gap-2 bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-3 py-2 text-xs text-cos-jade-ink">
                         <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                        La retención acreditable excede el ISR del mes: <strong>{formatCurrency(result.isr.saldoAFavor)}</strong>{" "}
+                        La retención acreditable excede el ISR del mes: <strong><Money value={result.isr.saldoAFavor} /></strong>{" "}
                         se arrastra como saldo a favor al siguiente periodo. Guarda la declaración para que el arrastre aplique.
                       </div>
                     )}
@@ -1037,8 +1038,8 @@ export default function ImpuestosPage() {
                           <p className="text-xs text-cos-ink-soft">{formatDate(r.fecha)} · {r.regimenLabel ?? "Asimilados"}</p>
                         </div>
                         <div className="text-right whitespace-nowrap">
-                          <p className="text-sm font-medium">{formatCurrency(r.ingreso)}</p>
-                          <p className="text-xs text-cos-ink-soft">ISR ret. {formatCurrency(r.isrRetenido)}</p>
+                          <p className="text-sm font-medium"><Money value={r.ingreso} /></p>
+                          <p className="text-xs text-cos-ink-soft">ISR ret. <Money value={r.isrRetenido} /></p>
                         </div>
                       </div>
                     ))}
@@ -1109,10 +1110,10 @@ export default function ImpuestosPage() {
                         <p className="font-medium text-xs">{f.contraparte}</p>
                         <p className="text-xs text-cos-ink-soft">{f.rfc}</p>
                       </td>
-                      <td className="px-4 py-2.5 text-right text-xs">{formatCurrency(f.subtotal)}</td>
-                      <td className="px-4 py-2.5 text-right text-xs text-cos-ink-soft">{formatCurrency(f.iva)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs"><Money value={f.subtotal} /></td>
+                      <td className="px-4 py-2.5 text-right text-xs text-cos-ink-soft"><Money value={f.iva} /></td>
                       <td className={`px-4 py-2.5 text-right text-xs font-semibold ${f.tipo === "INGRESO" ? "text-cos-jade-ink" : f.tipo === "NOMINA" ? "text-cos-brand-ink" : "text-cos-amber-ink"}`}>
-                        {f.tipo !== "INGRESO" ? "(" : ""}{formatCurrency(f.total)}{f.tipo !== "INGRESO" ? ")" : ""}
+                        {f.tipo !== "INGRESO" ? "(" : ""}<Money value={f.total} />{f.tipo !== "INGRESO" ? ")" : ""}
                       </td>
                     </tr>
                   ))}
@@ -1523,53 +1524,53 @@ function ProjectionCard({
             <dl className="space-y-1.5 font-mono text-xs">
               <div className="flex justify-between">
                 <dt className="text-cos-brand-ink">IVA trasladado adicional</dt>
-                <dd className="font-medium">+{formatCurrency(ivaAddedTrasladado)}</dd>
+                <dd className="font-medium">+<Money value={ivaAddedTrasladado} /></dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-cos-brand-ink">IVA acreditable adicional</dt>
-                <dd className="font-medium">+{formatCurrency(ivaAddedAcreditable)}</dd>
+                <dd className="font-medium">+<Money value={ivaAddedAcreditable} /></dd>
               </div>
               <div className="flex justify-between border-t border-cos-brand-ink/15 pt-1.5 mt-1.5">
                 <dt className="text-cos-brand-ink font-semibold">IVA a pagar actual</dt>
-                <dd className="font-medium">{formatCurrency(sim.base.iva)}</dd>
+                <dd className="font-medium"><Money value={sim.base.iva} /></dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-cos-brand-ink font-semibold">IVA a pagar proyectado</dt>
                 <dd className={`font-bold ${deltaIva >= 0 ? "text-cos-red-ink" : "text-cos-jade-ink"}`}>
-                  {formatCurrency(sim.sim.iva)}
-                  <span className="ml-2 text-xs">({deltaIva >= 0 ? "+" : ""}{formatCurrency(deltaIva)})</span>
+                  <Money value={sim.sim.iva} />
+                  <span className="ml-2 text-xs">({deltaIva >= 0 ? "+" : ""}<Money value={deltaIva} />)</span>
                 </dd>
               </div>
               {sim.sim.ivaSaldoFavor > 0 && (
                 <div className="flex justify-between text-cos-jade-ink">
                   <dt>Saldo a favor de IVA proyectado</dt>
-                  <dd className="font-semibold">{formatCurrency(sim.sim.ivaSaldoFavor)}</dd>
+                  <dd className="font-semibold"><Money value={sim.sim.ivaSaldoFavor} /></dd>
                 </div>
               )}
               {sim.base.isr != null && sim.sim.isr != null && (
                 <>
                   <div className="flex justify-between border-t border-cos-brand-ink/15 pt-1.5 mt-1.5">
                     <dt className="text-cos-brand-ink font-semibold">ISR provisional actual</dt>
-                    <dd className="font-medium">{formatCurrency(sim.base.isr)}</dd>
+                    <dd className="font-medium"><Money value={sim.base.isr} /></dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-cos-brand-ink font-semibold">ISR provisional proyectado</dt>
                     <dd className={`font-bold ${deltaIsr >= 0 ? "text-cos-red-ink" : "text-cos-jade-ink"}`}>
-                      {formatCurrency(sim.sim.isr)}
-                      <span className="ml-2 text-xs">({deltaIsr >= 0 ? "+" : ""}{formatCurrency(deltaIsr)})</span>
+                      <Money value={sim.sim.isr} />
+                      <span className="ml-2 text-xs">({deltaIsr >= 0 ? "+" : ""}<Money value={deltaIsr} />)</span>
                     </dd>
                   </div>
                 </>
               )}
               <div className="flex justify-between border-t border-cos-brand-ink/15 pt-1.5 mt-1.5">
                 <dt className="text-cos-brand-ink font-semibold">Total actual</dt>
-                <dd className="font-medium">{formatCurrency(sim.base.total)}</dd>
+                <dd className="font-medium"><Money value={sim.base.total} /></dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-cos-brand-ink font-semibold">Total proyectado</dt>
                 <dd className={`font-bold ${deltaTotal >= 0 ? "text-cos-red-ink" : "text-cos-jade-ink"}`}>
-                  {formatCurrency(sim.sim.total)}
-                  <span className="ml-2 text-xs">({deltaTotal >= 0 ? "+" : ""}{formatCurrency(deltaTotal)})</span>
+                  <Money value={sim.sim.total} />
+                  <span className="ml-2 text-xs">({deltaTotal >= 0 ? "+" : ""}<Money value={deltaTotal} />)</span>
                 </dd>
               </div>
             </dl>

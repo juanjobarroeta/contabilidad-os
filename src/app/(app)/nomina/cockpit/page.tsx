@@ -15,7 +15,7 @@ import {
   ChevronLeft, ChevronRight as ChevronR, Settings2,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Loading } from "@/components/ui";
+import { Loading, Money } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface CockpitCompany {
@@ -103,7 +103,7 @@ export default function NominaCockpitPage() {
         <div className="flex gap-5 text-[13px] text-cos-ink-soft">
           <span className="inline-flex items-center gap-1.5"><Building2 className="h-4 w-4 text-cos-ink-faint" /> <b className="font-mono">{rows.length}</b> empresas</span>
           <span className="inline-flex items-center gap-1.5"><Users2 className="h-4 w-4 text-cos-ink-faint" /> <b className="font-mono">{totEmpleados}</b> empleados</span>
-          <span>Neto del mes: <b className="font-mono">{formatCurrency(totNetoMes)}</b></span>
+          <span>Neto del mes: <b className="font-mono"><Money value={totNetoMes} /></b></span>
           {conPendientes > 0 && (
             <span className="text-cos-amber-ink"><b className="font-mono">{conPendientes}</b> con pendientes</span>
           )}
@@ -148,7 +148,7 @@ export default function NominaCockpitPage() {
                     {c.ultimaCorrida ? (
                       <>
                         <p className="text-[13px] text-cos-ink">
-                          {TIPO_RUN_LABEL[c.ultimaCorrida.tipo] ?? c.ultimaCorrida.tipo} · {formatCurrency(c.ultimaCorrida.totalNeto)}
+                          {TIPO_RUN_LABEL[c.ultimaCorrida.tipo] ?? c.ultimaCorrida.tipo} · <Money value={c.ultimaCorrida.totalNeto} />
                         </p>
                         <p className="text-[11px] text-cos-ink-faint">pago {formatDate(c.ultimaCorrida.fechaPago)}</p>
                       </>

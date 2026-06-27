@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Money } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency } from "@/lib/utils";
@@ -530,7 +531,7 @@ export default function NuevaFacturaPage() {
                         <span className="text-xs font-medium">IVA 16%</span>
                       </label>
                       <p className="text-xs text-cos-ink-soft mt-1">
-                        Importe: <span className="font-medium">{formatCurrency(item.quantity * item.price)}</span>
+                        Importe: <span className="font-medium"><Money value={item.quantity * item.price} /></span>
                       </p>
                     </div>
                   </div>
@@ -547,13 +548,13 @@ export default function NuevaFacturaPage() {
             {/* Subtotals preview */}
             <div className="mt-6 bg-cos-slate-tint rounded-lg p-4 text-sm space-y-1.5 text-right">
               <div className="flex justify-between text-cos-ink-soft">
-                <span>Subtotal</span><span>{formatCurrency(subtotal)}</span>
+                <span>Subtotal</span><span><Money value={subtotal} /></span>
               </div>
               <div className="flex justify-between text-cos-ink-soft">
-                <span>IVA 16%</span><span>{formatCurrency(ivaTotal)}</span>
+                <span>IVA 16%</span><span><Money value={ivaTotal} /></span>
               </div>
               <div className="flex justify-between font-semibold text-base pt-1 border-t border-cos-line">
-                <span>Total</span><span>{formatCurrency(total)}</span>
+                <span>Total</span><span><Money value={total} /></span>
               </div>
             </div>
           </div>
@@ -608,8 +609,8 @@ export default function NuevaFacturaPage() {
                           <p className="text-xs text-cos-ink-soft">{it.product_key} · {it.unit_key}{it.iva ? " · IVA 16%" : " · Sin IVA"}</p>
                         </td>
                         <td className="px-4 py-2.5 text-right">{it.quantity}</td>
-                        <td className="px-4 py-2.5 text-right">{formatCurrency(it.price)}</td>
-                        <td className="px-4 py-2.5 text-right font-medium">{formatCurrency(it.quantity * it.price)}</td>
+                        <td className="px-4 py-2.5 text-right"><Money value={it.price} /></td>
+                        <td className="px-4 py-2.5 text-right font-medium"><Money value={it.quantity * it.price} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -619,13 +620,13 @@ export default function NuevaFacturaPage() {
               {/* Totals */}
               <div className="bg-cos-slate-tint rounded-lg p-4 text-sm space-y-1.5">
                 <div className="flex justify-between text-cos-ink-soft">
-                  <span>Subtotal</span><span>{formatCurrency(subtotal)}</span>
+                  <span>Subtotal</span><span><Money value={subtotal} /></span>
                 </div>
                 <div className="flex justify-between text-cos-ink-soft">
-                  <span>IVA 16%</span><span>{formatCurrency(ivaTotal)}</span>
+                  <span>IVA 16%</span><span><Money value={ivaTotal} /></span>
                 </div>
                 <div className="flex justify-between font-bold text-lg pt-1.5 border-t border-cos-line">
-                  <span>Total</span><span>{formatCurrency(total)}</span>
+                  <span>Total</span><span><Money value={total} /></span>
                 </div>
               </div>
 
