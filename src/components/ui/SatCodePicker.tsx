@@ -143,7 +143,7 @@ export function SatCodePicker({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Escribe para buscar…"
-                className="w-full pl-8 pr-3 py-1.5 border border-cos-line rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full pl-8 pr-3 py-1.5 border border-cos-line rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
               />
             </div>
           </div>

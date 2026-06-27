@@ -154,7 +154,7 @@ export function MembersPanel({
             {isOwner && (
               <button
                 onClick={() => handleRemove(m.user.id, m.user.name ?? m.user.email)}
-                className="text-cos-ink-soft hover:text-destructive p-1"
+                className="text-cos-ink-soft hover:text-cos-red-ink p-1"
                 title="Quitar"
               >
                 <Trash2 className="h-4 w-4" />
@@ -231,7 +231,7 @@ export function MembersPanel({
                 <p className="text-xs text-cos-ink-soft mt-1">{ROLE_DESCRIPTIONS[inviteRole]}</p>
               </div>
 
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && <p className="text-sm text-cos-red-ink">{error}</p>}
 
               {tempPassword && (
                 <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md p-3 text-sm">

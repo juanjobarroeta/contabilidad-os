@@ -108,20 +108,20 @@ export function WhatsappLinkCard() {
   }
 
   return (
-    <div className="bg-white border border-border rounded-xl p-6 mt-6">
+    <div className="bg-white border border-cos-line rounded-xl p-6 mt-6">
       <div className="flex items-start gap-4">
         <div className="h-12 w-12 rounded-full bg-green-100 text-green-700 flex items-center justify-center shrink-0">
           <MessageCircle className="h-6 w-6" />
         </div>
         <div className="flex-1">
           <h2 className="font-semibold">WhatsApp</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-sm text-cos-ink-soft mt-0.5">
             Vincula tu número para consultar tu contabilidad por WhatsApp. Aplica a todas tus empresas.
           </p>
 
           {/* Existing links */}
           {loading ? (
-            <div className="mt-4 text-sm text-muted-foreground flex items-center gap-2">
+            <div className="mt-4 text-sm text-cos-ink-soft flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
             </div>
           ) : links.length > 0 ? (
@@ -129,7 +129,7 @@ export function WhatsappLinkCard() {
               {links.map((l) => (
                 <li
                   key={l.id}
-                  className="flex items-center justify-between border border-border rounded-lg px-3 py-2 text-sm"
+                  className="flex items-center justify-between border border-cos-line rounded-lg px-3 py-2 text-sm"
                 >
                   <span className="font-mono">{l.phoneE164}</span>
                   {l.verifiedAt ? (
@@ -145,7 +145,7 @@ export function WhatsappLinkCard() {
           ) : null}
 
           {/* Add / verify flow */}
-          <div className="mt-4 border-t border-border pt-4">
+          <div className="mt-4 border-t border-cos-line pt-4">
             {phase === "idle" ? (
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
@@ -153,13 +153,13 @@ export function WhatsappLinkCard() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+52 55 1234 5678"
-                  className="flex-1 px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="flex-1 px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
                 <button
                   type="button"
                   onClick={startLink}
                   disabled={busy}
-                  className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep/90 disabled:opacity-50"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Enviar código
@@ -174,13 +174,13 @@ export function WhatsappLinkCard() {
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="6 dígitos"
-                  className="w-32 px-3 py-2 border border-border rounded-md text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-32 px-3 py-2 border border-cos-line rounded-md text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
                 <button
                   type="button"
                   onClick={verify}
                   disabled={busy}
-                  className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep/90 disabled:opacity-50"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Verificar
@@ -188,7 +188,7 @@ export function WhatsappLinkCard() {
                 <button
                   type="button"
                   onClick={reset}
-                  className="px-3 py-2 rounded-md text-sm text-muted-foreground border border-border hover:bg-accent"
+                  className="px-3 py-2 rounded-md text-sm text-cos-ink-soft border border-cos-line hover:bg-cos-paper"
                 >
                   Cancelar
                 </button>

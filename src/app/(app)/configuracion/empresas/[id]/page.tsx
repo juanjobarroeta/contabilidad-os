@@ -212,7 +212,7 @@ export default function EmpresaEditPage() {
   if (!company) {
     return (
       <div className="p-6">
-        <p className="text-destructive text-sm">{error || "Empresa no encontrada"}</p>
+        <p className="text-cos-red-ink text-sm">{error || "Empresa no encontrada"}</p>
         <Link href="/empresa" className="text-cos-brand-ink text-sm hover:underline mt-2 inline-block">
           ← Volver
         </Link>
@@ -257,14 +257,14 @@ export default function EmpresaEditPage() {
             <label className="block text-xs font-medium mb-1">Razón Social</label>
             <input
               type="text" value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)}
-              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1">Régimen Fiscal</label>
             <select
               value={regimenFiscal} onChange={(e) => setRegimenFiscal(e.target.value)}
-              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             >
               <option value="">Selecciona…</option>
               {REGIMENES.map((r) => (
@@ -276,42 +276,42 @@ export default function EmpresaEditPage() {
             <label className="block text-xs font-medium mb-1">Código Postal</label>
             <input
               type="text" value={codigoPostal} onChange={(e) => setCodigoPostal(e.target.value)}
-              maxLength={5} className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+              maxLength={5} className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
           </div>
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium mb-1">Domicilio Fiscal</label>
             <input
               type="text" value={domicilioFiscal} onChange={(e) => setDomicilioFiscal(e.target.value)}
-              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1">Nombre Comercial</label>
             <input
               type="text" value={nombreComercial} onChange={(e) => setNombreComercial(e.target.value)}
-              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1">Correo</label>
             <input
               type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1">Teléfono</label>
             <input
               type="text" value={telefono} onChange={(e) => setTelefono(e.target.value)}
-              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1">Actividad Económica</label>
             <input
               type="text" value={actividadEconomica} onChange={(e) => setActividadEconomica(e.target.value)}
-              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
           </div>
           <div>
@@ -319,7 +319,7 @@ export default function EmpresaEditPage() {
             <input
               type="text" value={registroPatronal} onChange={(e) => setRegistroPatronal(e.target.value.toUpperCase())}
               placeholder="E.g. E0818935102"
-              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
           </div>
         </div>
@@ -381,7 +381,7 @@ export default function EmpresaEditPage() {
               className="w-full px-3 py-2 border border-cos-line rounded-md text-sm"
             />
           </div>
-          {csdError && <p className="text-xs text-destructive">{csdError}</p>}
+          {csdError && <p className="text-xs text-cos-red-ink">{csdError}</p>}
           {csdSuccess && <p className="text-xs text-cos-jade-ink">{csdSuccess}</p>}
           <button
             onClick={handleCsdUpload}
@@ -435,7 +435,7 @@ export default function EmpresaEditPage() {
               type={showFielPw ? "text" : "password"}
               value={fielPassword} onChange={(e) => setFielPassword(e.target.value)}
               placeholder="Contraseña de la llave privada"
-              className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
             <button type="button" onClick={() => setShowFielPw((v) => !v)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-cos-ink-soft hover:text-cos-ink">
@@ -443,7 +443,7 @@ export default function EmpresaEditPage() {
             </button>
           </div>
         </div>
-        {fielError && <p className="text-xs text-destructive mt-2">{fielError}</p>}
+        {fielError && <p className="text-xs text-cos-red-ink mt-2">{fielError}</p>}
         {fielSuccess && <p className="text-xs text-cos-jade-ink mt-2">{fielSuccess}</p>}
         <button
           onClick={handleFielUpload}

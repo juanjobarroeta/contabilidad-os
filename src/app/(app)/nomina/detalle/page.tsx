@@ -822,7 +822,7 @@ function NewEmployeeModal({
             </div>
           </details>
 
-          {err && <p className="text-xs text-destructive">{err}</p>}
+          {err && <p className="text-xs text-cos-red-ink">{err}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
             <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
@@ -934,7 +934,7 @@ function EmitNominaModal({
             <p className="font-medium mb-1">Cómo se calcula</p>
             <p>ISR: tarifa Art. 96 LISR + subsidio al empleo. IMSS: cuotas reales escalonadas (EyM, IyV, retiro, cesantía, guarderías) según clase de riesgo. Infonavit se deduce si el empleado tiene crédito activo. Exporta a SUA desde la pestaña Corridas.</p>
           </div>
-          {err && <p className="text-xs text-destructive">{err}</p>}
+          {err && <p className="text-xs text-cos-red-ink">{err}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
             <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
@@ -1085,7 +1085,7 @@ function EditEmployeeModal({
             </div>
           </details>
 
-          {err && <p className="text-xs text-destructive">{err}</p>}
+          {err && <p className="text-xs text-cos-red-ink">{err}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
             <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
@@ -1181,7 +1181,7 @@ function BajaModal({
                   <p>Incluye 3 meses de indemnización + 20 días por año + prima de antigüedad, además del finiquito base.</p>
                 </div>
               )}
-              {err && <p className="text-xs text-destructive">{err}</p>}
+              {err && <p className="text-xs text-cos-red-ink">{err}</p>}
               <div className="flex gap-2">
                 <button onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
                 <button onClick={submit} disabled={saving}
@@ -1253,7 +1253,7 @@ function Row({ label, value, bold, muted }: { label: string; value: number; bold
   );
 }
 
-const inputCls = "w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30";
+const inputCls = "w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -1390,7 +1390,7 @@ function NewRunModal({
             </div>
           )}
 
-          {err && <p className="text-xs text-destructive">{err}</p>}
+          {err && <p className="text-xs text-cos-red-ink">{err}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
             <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
@@ -1492,7 +1492,7 @@ function NewIncidenciaModal({
           <Field label="Notas">
             <input value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} className={inputCls} placeholder="Opcional" />
           </Field>
-          {err && <p className="text-xs text-destructive">{err}</p>}
+          {err && <p className="text-xs text-cos-red-ink">{err}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
             <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">

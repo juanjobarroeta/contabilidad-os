@@ -15,7 +15,7 @@ type Variant =
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
-  // `primary` is the Contia brand blue (legacy --primary was already remapped to it).
+  // `primary` is the Contia brand blue.
   primary: "bg-cos-brand text-white hover:bg-cos-brand-deep",
   secondary: "bg-cos-slate-tint text-cos-ink hover:brightness-95",
   ghost: "hover:bg-cos-paper hover:text-cos-ink",
