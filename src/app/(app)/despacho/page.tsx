@@ -14,10 +14,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2, Users2, BadgeCheck, Clock4, AlertTriangle, FileWarning,
-  ChevronRight as ChevronR, CalendarDays, Database, ScanSearch,
+  ChevronRight as ChevronR, CalendarDays, Database, ScanSearch, ShieldAlert,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Loading, Money } from "@/components/ui";
+import { Card, Loading, Money } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface Row {
@@ -33,6 +33,16 @@ interface Row {
   obligacionesVencidas: number;
   obligacionesPorVencer: number;
   flagsAbiertos: number;
+  hallazgosAbiertos: number;
+  peorSeveridad: "error" | "warn" | "info" | null;
+}
+
+// Prioridad de cartera: empresas con hallazgos "error" primero, luego "warn",
+// luego por conteo. Empata con 0 para conservar el orden existente (por razón
+// social) vía sort estable.
+const SEV_RANK: Record<"error" | "warn" | "info", number> = { error: 3, warn: 2, info: 1 };
+function severityWeight(r: Row): number {
+  return r.hallazgosAbiertos > 0 && r.peorSeveridad ? SEV_RANK[r.peorSeveridad] : 0;
 }
 
 // Deep-link into the Declaración Workspace for a given periodo ("YYYY-MM"),
@@ -79,7 +89,16 @@ export default function DespachoCockpitPage() {
   }
 
   if (loading) return <Loading />;
-  const rows = data?.companies ?? [];
+  // Orden de triage: lo más en riesgo arriba (error → warn → conteo desc),
+  // y a igualdad de hallazgos se conserva el orden del servidor (estable).
+  const rows = [...(data?.companies ?? [])].sort((a, b) => {
+    const wa = severityWeight(a), wb = severityWeight(b);
+    if (wa !== wb) return wb - wa;
+    return b.hallazgosAbiertos - a.hallazgosAbiertos;
+  });
+
+  // "Lo más urgente": la empresa de mayor prioridad con hallazgos abiertos.
+  const urgente = rows.find((r) => r.hallazgosAbiertos > 0) ?? null;
 
   return (
     <div className="mx-auto max-w-[1140px] px-6 py-7">
@@ -102,6 +121,36 @@ export default function DespachoCockpitPage() {
           </div>
         )}
       </div>
+
+      {/* Lo más urgente — la empresa con la peor cartera de hallazgos abiertos */}
+      {urgente && (
+        <Card className={`mt-4 flex items-center gap-3 px-4 py-3.5 ${
+          urgente.peorSeveridad === "error" ? "border-cos-red bg-cos-red-tint"
+          : urgente.peorSeveridad === "warn" ? "border-cos-amber bg-cos-amber-tint"
+          : "border-cos-jade bg-cos-jade-tint"
+        }`}>
+          <ShieldAlert className={`h-5 w-5 flex-none ${
+            urgente.peorSeveridad === "error" ? "text-cos-red-ink"
+            : urgente.peorSeveridad === "warn" ? "text-cos-amber-ink"
+            : "text-cos-jade-ink"
+          }`} />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-cos-ink-faint">Lo más urgente</p>
+            <p className="truncate text-[14px] font-medium text-cos-ink">
+              <b>{urgente.razonSocial}</b> — {urgente.hallazgosAbiertos} hallazgo{urgente.hallazgosAbiertos === 1 ? "" : "s"} abierto{urgente.hallazgosAbiertos === 1 ? "" : "s"}
+              {urgente.peorSeveridad === "error" ? " (errores por resolver)"
+                : urgente.peorSeveridad === "warn" ? " (advertencias por revisar)"
+                : ""}.
+            </p>
+          </div>
+          <button
+            onClick={() => operar(urgente.id, "/hallazgos")}
+            className="inline-flex flex-none items-center gap-1 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep"
+          >
+            Ver hallazgos <ChevronR className="h-3.5 w-3.5" />
+          </button>
+        </Card>
+      )}
 
       {/* franja de cobertura de datos fiscales */}
       {data?.cobertura && (data.cobertura.faltantes > 0 || data.cobertura.sinCotejar > 0) && (
@@ -166,6 +215,19 @@ export default function DespachoCockpitPage() {
                           title="Banderas del auditor por revisar"
                         >
                           <ScanSearch className="h-3 w-3" /> {r.flagsAbiertos} por revisar
+                        </button>
+                      )}
+                      {r.hallazgosAbiertos > 0 && (
+                        <button
+                          onClick={() => operar(r.id, "/hallazgos")}
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium hover:opacity-90 ${
+                            r.peorSeveridad === "error" ? "bg-cos-red-tint text-cos-red-ink"
+                            : r.peorSeveridad === "warn" ? "bg-cos-amber-tint text-cos-amber-ink"
+                            : "bg-cos-jade-tint text-cos-jade-ink"
+                          }`}
+                          title="Hallazgos abiertos del auditor"
+                        >
+                          <ShieldAlert className="h-3 w-3" /> {r.hallazgosAbiertos} hallazgo{r.hallazgosAbiertos === 1 ? "" : "s"}
                         </button>
                       )}
                     </div>
