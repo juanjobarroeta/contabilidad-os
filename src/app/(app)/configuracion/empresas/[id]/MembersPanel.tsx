@@ -117,28 +117,28 @@ export function MembersPanel({
   }
 
   return (
-    <div className="bg-white border border-border rounded-xl overflow-hidden">
+    <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
       {/* Members list */}
       <div className="divide-y divide-border">
         {members.map((m) => (
           <div key={m.id} className="px-5 py-3 flex items-center gap-4">
-            <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
+            <div className="h-9 w-9 rounded-full bg-cos-brand-tint text-cos-brand-ink flex items-center justify-center text-sm font-semibold shrink-0">
               {(m.user.name ?? m.user.email)[0].toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm truncate">
                 {m.user.name ?? m.user.email}
                 {m.user.id === currentUserId && (
-                  <span className="ml-2 text-xs text-muted-foreground">(tú)</span>
+                  <span className="ml-2 text-xs text-cos-ink-soft">(tú)</span>
                 )}
               </p>
-              <p className="text-xs text-muted-foreground truncate">{m.user.email}</p>
+              <p className="text-xs text-cos-ink-soft truncate">{m.user.email}</p>
             </div>
             {isOwner ? (
               <select
                 value={m.role}
                 onChange={(e) => handleRoleChange(m.user.id, e.target.value as Role)}
-                className="text-xs border border-border rounded-md px-2 py-1 bg-white"
+                className="text-xs border border-cos-line rounded-md px-2 py-1 bg-white"
               >
                 {(["OWNER", "ADMIN", "ACCOUNTANT", "VIEWER"] as Role[]).map((r) => (
                   <option key={r} value={r}>
@@ -147,14 +147,14 @@ export function MembersPanel({
                 ))}
               </select>
             ) : (
-              <span className="text-xs px-2 py-1 rounded bg-gray-100 text-muted-foreground">
+              <span className="text-xs px-2 py-1 rounded bg-cos-slate-tint text-cos-ink-soft">
                 {ROLE_LABELS[m.role]}
               </span>
             )}
             {isOwner && (
               <button
                 onClick={() => handleRemove(m.user.id, m.user.name ?? m.user.email)}
-                className="text-muted-foreground hover:text-destructive p-1"
+                className="text-cos-ink-soft hover:text-destructive p-1"
                 title="Quitar"
               >
                 <Trash2 className="h-4 w-4" />
@@ -166,11 +166,11 @@ export function MembersPanel({
 
       {/* Invite */}
       {isOwner && (
-        <div className="border-t border-border bg-gray-50">
+        <div className="border-t border-cos-line bg-cos-paper">
           {!showInvite ? (
             <button
               onClick={() => setShowInvite(true)}
-              className="w-full px-5 py-3 flex items-center gap-2 text-sm text-primary hover:bg-accent/50 font-medium"
+              className="w-full px-5 py-3 flex items-center gap-2 text-sm text-cos-brand-ink hover:bg-cos-paper/50 font-medium"
             >
               <Plus className="h-4 w-4" /> Invitar miembro
             </button>
@@ -185,7 +185,7 @@ export function MembersPanel({
                     setError("");
                     setTempPassword(null);
                   }}
-                  className="text-muted-foreground hover:text-foreground"
+                  className="text-cos-ink-soft hover:text-cos-ink"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -200,7 +200,7 @@ export function MembersPanel({
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     placeholder="kata@ejemplo.com"
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white"
                   />
                 </div>
                 <div>
@@ -210,7 +210,7 @@ export function MembersPanel({
                     value={inviteName}
                     onChange={(e) => setInviteName(e.target.value)}
                     placeholder="Kata Cordero"
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white"
                   />
                 </div>
               </div>
@@ -220,7 +220,7 @@ export function MembersPanel({
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as Role)}
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white"
                 >
                   {(["OWNER", "ADMIN", "ACCOUNTANT", "VIEWER"] as Role[]).map((r) => (
                     <option key={r} value={r}>
@@ -228,23 +228,23 @@ export function MembersPanel({
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-muted-foreground mt-1">{ROLE_DESCRIPTIONS[inviteRole]}</p>
+                <p className="text-xs text-cos-ink-soft mt-1">{ROLE_DESCRIPTIONS[inviteRole]}</p>
               </div>
 
               {error && <p className="text-sm text-destructive">{error}</p>}
 
               {tempPassword && (
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm">
-                  <p className="font-medium text-blue-900 mb-1">Cuenta creada</p>
-                  <p className="text-blue-800 text-xs mb-2">
+                <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md p-3 text-sm">
+                  <p className="font-medium text-cos-brand-ink mb-1">Cuenta creada</p>
+                  <p className="text-cos-brand-ink text-xs mb-2">
                     Comparte estas credenciales con la persona invitada (por WhatsApp, etc.). No las verás de nuevo.
                   </p>
-                  <div className="flex items-center gap-2 bg-white border border-blue-200 rounded px-2 py-1.5 font-mono text-xs">
+                  <div className="flex items-center gap-2 bg-white border border-cos-brand-ink/15 rounded px-2 py-1.5 font-mono text-xs">
                     <span className="flex-1 truncate">{tempPassword}</span>
                     <button
                       type="button"
                       onClick={copyPassword}
-                      className="text-blue-600 hover:text-blue-800 shrink-0"
+                      className="text-cos-brand-ink hover:text-cos-brand-ink shrink-0"
                     >
                       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                     </button>
@@ -255,7 +255,7 @@ export function MembersPanel({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                className="w-full bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50"
               >
                 {loading ? "Invitando..." : "Invitar"}
               </button>
