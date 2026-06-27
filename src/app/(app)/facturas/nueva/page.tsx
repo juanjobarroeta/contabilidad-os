@@ -317,7 +317,7 @@ export default function NuevaFacturaPage() {
                   type="text" value={clienteSearch}
                   onChange={(e) => setClienteSearch(e.target.value)}
                   placeholder="Buscar cliente por RFC o Razón Social..."
-                  className="w-full pl-9 pr-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full pl-9 pr-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
               </div>
 
@@ -369,14 +369,14 @@ export default function NuevaFacturaPage() {
               <div>
                 <label className="block text-sm font-medium mb-1.5">Forma de pago <span className="text-cos-red-ink">*</span></label>
                 <select value={formaPago} onChange={(e) => setFormaPago(e.target.value)}
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
                   {FORMAS_PAGO.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Método de pago <span className="text-cos-red-ink">*</span></label>
                 <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
                   {METODOS_PAGO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
@@ -386,7 +386,7 @@ export default function NuevaFacturaPage() {
             <div>
               <label className="block text-sm font-medium mb-1.5">Uso del CFDI <span className="text-cos-red-ink">*</span></label>
               <select value={usoCfdi} onChange={(e) => setUsoCfdi(e.target.value)}
-                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
                 {USOS_CFDI.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
             </div>
@@ -402,7 +402,7 @@ export default function NuevaFacturaPage() {
                   <div>
                     <label className="block text-xs font-medium mb-1">Periodicidad</label>
                     <select value={globalPeriodicity} onChange={(e) => setGlobalPeriodicity(e.target.value)}
-                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
                       <option value="day">Diario</option>
                       <option value="week">Semanal</option>
                       <option value="fortnight">Quincenal</option>
@@ -413,7 +413,7 @@ export default function NuevaFacturaPage() {
                   <div>
                     <label className="block text-xs font-medium mb-1">Mes / Período</label>
                     <select value={globalMonth} onChange={(e) => setGlobalMonth(e.target.value)}
-                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
                       {globalPeriodicity === "two_months"
                         ? ["01","02","03","04","05","06"].map(m => (
                             <option key={m} value={m}>Bimestre {m}</option>
@@ -442,7 +442,7 @@ export default function NuevaFacturaPage() {
               </label>
               <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)}
                 placeholder="Información adicional para el receptor..."
-                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
               />
             </div>
           </div>
@@ -472,7 +472,7 @@ export default function NuevaFacturaPage() {
                     <input type="text" value={item.description}
                       onChange={(e) => updateItem(item.id, "description", e.target.value)}
                       placeholder="Descripción del producto o servicio"
-                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                     />
                   </div>
 
@@ -512,14 +512,14 @@ export default function NuevaFacturaPage() {
                       <label className="block text-xs font-medium mb-1">Cantidad</label>
                       <input type="number" min="0.01" step="0.01" value={item.quantity}
                         onChange={(e) => updateItem(item.id, "quantity", parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Precio unitario</label>
                       <input type="number" min="0.01" step="0.01" value={item.price}
                         onChange={(e) => updateItem(item.id, "price", parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                       />
                     </div>
                     <div className="flex flex-col justify-end">

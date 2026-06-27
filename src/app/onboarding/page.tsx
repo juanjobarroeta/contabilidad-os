@@ -518,7 +518,7 @@ function OnboardingPageInner() {
                       done
                         ? "bg-cos-jade-tint0 text-white"
                         : active
-                        ? "bg-cos-brand text-white ring-4 ring-primary/15"
+                        ? "bg-cos-brand text-white ring-4 ring-cos-brand/15"
                         : "bg-cos-slate-tint text-cos-ink-soft"
                     }`}
                   >
@@ -731,7 +731,7 @@ function OnboardingPageInner() {
                 <input
                   type="text" name="rfc" value={fiscal.rfc} onChange={handleFiscalChange}
                   placeholder="XAXX010101000" maxLength={13} required
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30 uppercase"
                 />
                 <p className="text-xs text-cos-ink-soft mt-1">12 caracteres personas morales · 13 personas físicas</p>
               </div>
@@ -740,7 +740,7 @@ function OnboardingPageInner() {
                 <input
                   type="text" name="razonSocial" value={fiscal.razonSocial} onChange={handleFiscalChange}
                   placeholder="Mi Empresa SA de CV" required
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
                 <p className="text-xs text-cos-ink-soft mt-1">Tal como aparece en la Constancia de Situación Fiscal</p>
               </div>
@@ -749,7 +749,7 @@ function OnboardingPageInner() {
                   <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-cos-red-ink">*</span></label>
                   <select
                     name="regimenFiscal" value={fiscal.regimenFiscal} onChange={handleFiscalChange} required
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white"
                   >
                     <option value="">Selecciona un régimen...</option>
                     {REGIMENES_FISCALES.map((r) => (
@@ -764,7 +764,7 @@ function OnboardingPageInner() {
                   <input
                     type="text" name="codigoPostal" value={fiscal.codigoPostal} onChange={handleFiscalChange}
                     placeholder="06600" maxLength={5} pattern="[0-9]{5}" required
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                 </div>
                 <div>
@@ -772,7 +772,7 @@ function OnboardingPageInner() {
                   <input
                     type="text" name="domicilioFiscal" value={fiscal.domicilioFiscal} onChange={handleFiscalChange}
                     placeholder="Calle, Número, Colonia"
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                 </div>
               </div>
@@ -952,7 +952,7 @@ function OnboardingPageInner() {
                 <input
                   type="text" name="nombreComercial" value={contacto.nombreComercial} onChange={handleContactoChange}
                   placeholder="Nombre que aparece en facturas y documentos"
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -961,7 +961,7 @@ function OnboardingPageInner() {
                   <input
                     type="email" name="email" value={contacto.email} onChange={handleContactoChange}
                     placeholder="contabilidad@empresa.com"
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                 </div>
                 <div>
@@ -969,7 +969,7 @@ function OnboardingPageInner() {
                   <input
                     type="tel" name="telefono" value={contacto.telefono} onChange={handleContactoChange}
                     placeholder="55 1234 5678"
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                 </div>
               </div>
@@ -978,7 +978,7 @@ function OnboardingPageInner() {
                 <input
                   type="text" name="actividadEconomica" value={contacto.actividadEconomica} onChange={handleContactoChange}
                   placeholder="ej. Servicios de consultoría empresarial"
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
               </div>
             </>
@@ -1022,7 +1022,7 @@ function OnboardingPageInner() {
                     value={csd.password}
                     onChange={(e) => setCsd((p) => ({ ...p, password: e.target.value }))}
                     placeholder="Contraseña de la llave privada"
-                    className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                   <button type="button" onClick={() => setShowCsdPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-cos-ink-soft hover:text-cos-ink">
@@ -1098,7 +1098,7 @@ function OnboardingPageInner() {
                     value={fiel.password}
                     onChange={(e) => setFiel((p) => ({ ...p, password: e.target.value }))}
                     placeholder="Contraseña de la llave privada"
-                    className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                   <button type="button" onClick={() => setShowFielPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-cos-ink-soft hover:text-cos-ink">

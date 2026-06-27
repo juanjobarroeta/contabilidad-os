@@ -64,33 +64,33 @@ export function InstallPrompt() {
   if (!show) return null;
 
   return (
-    <div className="fixed bottom-4 inset-x-4 z-[70] mx-auto max-w-md rounded-xl border border-border bg-white shadow-lg p-4">
+    <div className="fixed bottom-4 inset-x-4 z-[70] mx-auto max-w-md rounded-xl border border-cos-line bg-white shadow-lg p-4">
       <div className="flex items-start gap-3">
-        <div className="h-9 w-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-bold shrink-0">
+        <div className="h-9 w-9 rounded-lg bg-cos-brand text-white flex items-center justify-center font-bold shrink-0">
           C
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold">Instala ContabilidadOS</p>
           {iosHint ? (
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-cos-ink-soft mt-0.5">
               Toca <Share className="inline h-3 w-3" /> Compartir y luego{" "}
               <span className="whitespace-nowrap"><Plus className="inline h-3 w-3" /> Agregar a inicio</span>.
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-cos-ink-soft mt-0.5">
               Agrégala a tu pantalla de inicio para abrirla como app.
             </p>
           )}
           {!iosHint && (
             <button
               onClick={install}
-              className="mt-2 text-xs font-medium bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary/90"
+              className="mt-2 text-xs font-medium bg-cos-brand text-white px-3 py-1.5 rounded-md hover:bg-cos-brand-deep/90"
             >
               Instalar
             </button>
           )}
         </div>
-        <button onClick={dismiss} aria-label="Cerrar" className="p-1 rounded hover:bg-accent text-muted-foreground">
+        <button onClick={dismiss} aria-label="Cerrar" className="p-1 rounded hover:bg-cos-paper text-cos-ink-soft">
           <X className="h-4 w-4" />
         </button>
       </div>

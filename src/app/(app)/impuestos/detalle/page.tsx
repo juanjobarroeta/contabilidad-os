@@ -700,7 +700,7 @@ export default function ImpuestosPage() {
                         value={saldoFavorAnterior || ""}
                         placeholder="0.00"
                         onChange={e => { const n = parseFloat(e.target.value); setSaldoFavorAnterior(isNaN(n) ? 0 : n); }}
-                        className="w-28 text-right text-sm border border-cos-line rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-28 text-right text-sm border border-cos-line rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                       />
                       <button onClick={() => { setSaldoFavorAnterior(result.iva.saldoFavorAnterior); setSaldoFavorEdited(false); }}
                         className="text-cos-ink-soft hover:text-cos-ink" title="Restablecer">
@@ -836,7 +836,7 @@ export default function ImpuestosPage() {
                       setCoeficiente(isNaN(n) ? null : Math.min(1, Math.max(0, n)));
                       setCoeficienteEdited(true);
                     }}
-                    className="w-24 text-right text-sm border border-cos-line rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-24 text-right text-sm border border-cos-line rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                   />
                   {coeficienteEdited && (
                     <button
@@ -1246,7 +1246,7 @@ export default function ImpuestosPage() {
                       value={acuseUrl}
                       onChange={e => setAcuseUrl(e.target.value)}
                       placeholder="Ej. 2024010123456789"
-                      className="w-full text-sm border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full text-sm border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                     />
                     <p className="text-xs text-cos-ink-soft mt-0.5">Número de acuse que el SAT te asignó al presentar la declaración.</p>
                   </div>
@@ -1261,7 +1261,7 @@ export default function ImpuestosPage() {
                       value={lineaCaptura}
                       onChange={e => setLineaCaptura(e.target.value.replace(/\D/g, "").substring(0, 20))}
                       placeholder="18 dígitos"
-                      className="w-full text-sm font-mono border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary tracking-widest"
+                      className="w-full text-sm font-mono border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cos-brand tracking-widest"
                     />
                     <p className="text-xs text-cos-ink-soft mt-0.5">Código numérico para pagar en banco o portal bancario.</p>
                   </div>
@@ -1276,7 +1276,7 @@ export default function ImpuestosPage() {
                         type="date"
                         value={fechaPresentacion}
                         onChange={e => setFechaPresentacion(e.target.value)}
-                        className="w-full text-sm border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full text-sm border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                       />
                     </div>
                     <div>
@@ -1287,7 +1287,7 @@ export default function ImpuestosPage() {
                         type="date"
                         value={fechaLimitePago}
                         onChange={e => setFechaLimitePago(e.target.value)}
-                        className="w-full text-sm border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full text-sm border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                       />
                     </div>
                   </div>

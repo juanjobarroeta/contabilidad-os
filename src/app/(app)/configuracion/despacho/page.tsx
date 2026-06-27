@@ -247,7 +247,7 @@ export default function DespachoPage() {
               {isAdminOrOwner && (
                 <button
                   onClick={() => handleRemove(m.user.id, m.user.name ?? m.user.email)}
-                  className="text-cos-ink-soft hover:text-destructive p-1"
+                  className="text-cos-ink-soft hover:text-cos-red-ink p-1"
                   title="Quitar del despacho"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -390,7 +390,7 @@ function InviteModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
               </select>
               <p className="text-xs text-cos-ink-soft mt-1">{ROLE_DESCRIPTIONS[role]}</p>
             </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
+            {error && <p className="text-xs text-cos-red-ink">{error}</p>}
             <div className="flex gap-2 pt-2">
               <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
               <button

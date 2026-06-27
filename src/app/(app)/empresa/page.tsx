@@ -519,25 +519,25 @@ export default function EmpresaPage() {
                 <label className="block text-sm font-medium mb-1.5">RFC <span className="text-cos-red-ink">*</span></label>
                 <input type="text" name="rfc" value={addForm.rfc} onChange={handleAddChange}
                   placeholder="XAXX010101000" maxLength={13} required
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase" />
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30 uppercase" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Código Postal <span className="text-cos-red-ink">*</span></label>
                 <input type="text" name="codigoPostal" value={addForm.codigoPostal} onChange={handleAddChange}
                   placeholder="06600" maxLength={5} required
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30" />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5">Razón Social <span className="text-cos-red-ink">*</span></label>
               <input type="text" name="razonSocial" value={addForm.razonSocial} onChange={handleAddChange}
                 placeholder="Mi Empresa SA de CV" required
-                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-cos-red-ink">*</span></label>
               <select name="regimenFiscal" value={addForm.regimenFiscal} onChange={handleAddChange} required
-                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
                 <option value="">Selecciona...</option>
                 {REGIMENES_FISCALES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
@@ -548,7 +548,7 @@ export default function EmpresaPage() {
               <label className="block text-sm font-medium mb-1.5">Grupo <span className="text-cos-ink-soft">(opcional)</span></label>
               <div className="flex gap-2">
                 <select name="grupoId" value={addForm.grupoId} onChange={handleAddChange}
-                  className="flex-1 px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                  className="flex-1 px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
                   <option value="">Sin grupo</option>
                   {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
                 </select>
@@ -578,7 +578,7 @@ export default function EmpresaPage() {
         {companies.map((company) => (
           <div key={company.id}
             className={`bg-white border rounded-xl p-5 shadow-sm flex items-center justify-between transition-colors ${
-              activeCompany?.id === company.id ? "border-cos-brand ring-1 ring-primary/20" : "border-cos-line"
+              activeCompany?.id === company.id ? "border-cos-brand ring-1 ring-cos-brand/20" : "border-cos-line"
             }`}
           >
             <div className="flex items-center gap-4">
@@ -630,7 +630,7 @@ export default function EmpresaPage() {
               value={rpValue}
               onChange={(e) => setRpValue(e.target.value.toUpperCase())}
               placeholder="E.g. E0818935102"
-              className="flex-1 px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="flex-1 px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
             <button
               onClick={handleSaveRegistroPatronal}
@@ -642,7 +642,7 @@ export default function EmpresaPage() {
             </button>
           </div>
           {rpMessage && (
-            <p className={`text-xs mt-2 ${rpMessage.startsWith("✓") ? "text-cos-jade-ink" : "text-destructive"}`}>
+            <p className={`text-xs mt-2 ${rpMessage.startsWith("✓") ? "text-cos-jade-ink" : "text-cos-red-ink"}`}>
               {rpMessage}
             </p>
           )}
@@ -669,7 +669,7 @@ export default function EmpresaPage() {
           <select
             value={companyDetail?.plataformaActividad ?? "servicios"}
             onChange={(e) => handleSavePlataformaActividad(e.target.value)}
-            className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
           >
             <option value="transporte">Transporte de pasajeros / entrega de bienes — 2.1%</option>
             <option value="hospedaje">Servicios de hospedaje — 4%</option>
@@ -878,7 +878,7 @@ export default function EmpresaPage() {
                     </div>
 
                     {csdError && (
-                      <p className="text-xs text-destructive">{csdError}</p>
+                      <p className="text-xs text-cos-red-ink">{csdError}</p>
                     )}
                     {csdSuccess && (
                       <p className="text-xs text-cos-jade-ink">{csdSuccess}</p>
@@ -920,7 +920,7 @@ export default function EmpresaPage() {
                             value={manualKey}
                             onChange={(e) => setManualKey(e.target.value)}
                             placeholder="sk_live_... o sk_test_..."
-                            className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                           />
                           <button type="button" onClick={() => setShowKey((v) => !v)}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-cos-ink-soft">
@@ -932,7 +932,7 @@ export default function EmpresaPage() {
                         <label className="block text-xs font-medium mb-1">Org ID <span className="text-cos-ink-soft font-normal">(opcional)</span></label>
                         <input type="text" value={manualOrgId} onChange={(e) => setManualOrgId(e.target.value)}
                           placeholder="org_xxxxxxxxxxxxxxxxxx"
-                          className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                         />
                       </div>
                       <div className="flex gap-2">
@@ -1033,7 +1033,7 @@ export default function EmpresaPage() {
                   value={fielPassword}
                   onChange={(e) => setFielPassword(e.target.value)}
                   placeholder="Contraseña de la llave privada"
-                  className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
                 <button type="button" onClick={() => setShowFielPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-cos-ink-soft hover:text-cos-ink">
