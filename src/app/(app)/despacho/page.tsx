@@ -126,7 +126,7 @@ export default function DespachoCockpitPage() {
           ) : atencion > 0 ? (
             <>Revisé tus <span className="font-mono">{total}</span> empresas anoche — <span className="text-cos-amber-ink">{atencion} {atencion === 1 ? "necesita" : "necesitan"} tu atención</span> hoy.</>
           ) : total > 0 ? (
-            <>Revisé tus <span className="font-mono">{total}</span> empresas anoche — <span className="text-cos-jade-ink">todo al día 🎉</span></>
+            <>Revisé tus <span className="font-mono">{total}</span> empresas anoche — <span className="text-cos-jade-ink">toda tu cartera al día</span>.</>
           ) : (
             "Despacho"
           )}
