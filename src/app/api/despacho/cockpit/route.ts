@@ -61,7 +61,13 @@ export async function GET(req: Request) {
     // cartera (conteo + peor severidad por empresa). Sin N+1.
     prisma.fiscalHallazgo.groupBy({
       by: ["companyId", "severidad"],
-      where: { companyId: { in: companyIds }, estado: "ABIERTO" },
+      // Excluye los pospuestos (snooze) — igual que la lista y el digest, para que
+      // un hallazgo silenciado no infle el conteo de la cartera hasta que venza.
+      where: {
+        companyId: { in: companyIds },
+        estado: "ABIERTO",
+        OR: [{ posponerHasta: null }, { posponerHasta: { lte: new Date() } }],
+      },
       _count: { id: true },
     }),
   ]);
