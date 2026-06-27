@@ -72,10 +72,10 @@ const STATUS_RUN_LABEL: Record<string, string> = {
 };
 
 const STATUS_RUN_COLOR: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-600",
-  CALCULATED: "bg-blue-100 text-blue-700",
-  STAMPED: "bg-green-100 text-green-700",
-  PAID: "bg-green-100 text-green-700",
+  DRAFT: "bg-cos-slate-tint text-cos-ink-soft",
+  CALCULATED: "bg-cos-brand-tint text-cos-brand-ink",
+  STAMPED: "bg-cos-jade-tint text-cos-jade-ink",
+  PAID: "bg-cos-jade-tint text-cos-jade-ink",
 };
 
 const INCIDENCIA_LABEL: Record<string, string> = {
@@ -223,7 +223,7 @@ export default function NominaPage() {
   }
 
   if (!activeCompany) {
-    return <div className="p-8 text-muted-foreground text-sm">Selecciona una empresa para ver su nómina.</div>;
+    return <div className="p-8 text-cos-ink-soft text-sm">Selecciona una empresa para ver su nómina.</div>;
   }
 
   return (
@@ -231,31 +231,31 @@ export default function NominaPage() {
       <div className="flex items-start justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold">Nómina</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{activeCompany.razonSocial}</p>
+          <p className="text-sm text-cos-ink-soft mt-0.5">{activeCompany.razonSocial}</p>
         </div>
         <div className="flex items-center gap-2">
           {tab === "empleados" && (
-            <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90">
+            <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
               <Plus className="h-4 w-4" /> Nuevo empleado
             </button>
           )}
           {tab === "corridas" && (
             <>
-              <button onClick={() => setShowNewRun(true)} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90">
+              <button onClick={() => setShowNewRun(true)} className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
                 <Plus className="h-4 w-4" /> Nueva corrida
               </button>
               <a href={`/api/nomina/sua-export?companyId=${activeCompany.id}&bimestre=${Math.ceil((now.getMonth() + 1) / 2)}&year=${now.getFullYear()}`}
-                className="flex items-center gap-1.5 border border-border px-3 py-2 rounded-md text-xs hover:bg-accent" title="Exportar SUA">
+                className="flex items-center gap-1.5 border border-cos-line px-3 py-2 rounded-md text-xs hover:bg-cos-paper" title="Exportar SUA">
                 <Download className="h-3.5 w-3.5" /> SUA
               </a>
               <a href={`/api/nomina/imss-movimientos?companyId=${activeCompany.id}&format=idse&status=PENDING`}
-                className="flex items-center gap-1.5 border border-border px-3 py-2 rounded-md text-xs hover:bg-accent" title="Exportar IDSE">
+                className="flex items-center gap-1.5 border border-cos-line px-3 py-2 rounded-md text-xs hover:bg-cos-paper" title="Exportar IDSE">
                 <Shield className="h-3.5 w-3.5" /> IDSE
               </a>
             </>
           )}
           {tab === "incidencias" && (
-            <button onClick={() => setShowNewInc(true)} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90">
+            <button onClick={() => setShowNewInc(true)} className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
               <Plus className="h-4 w-4" /> Nueva incidencia
             </button>
           )}
@@ -263,7 +263,7 @@ export default function NominaPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border mb-5">
+      <div className="border-b border-cos-line mb-5">
         <div className="flex gap-1">
           {([
             ["empleados", "Empleados", Users2],
@@ -272,7 +272,7 @@ export default function NominaPage() {
           ] as const).map(([id, label, Icon]) => (
             <button key={id} onClick={() => setTab(id as TabId)}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                tab === id ? "border-cos-brand text-cos-brand-ink" : "border-transparent text-cos-ink-soft hover:text-cos-ink"
               }`}>
               <Icon className="h-4 w-4" /> {label}
             </button>
@@ -282,7 +282,7 @@ export default function NominaPage() {
 
       {error && (
         <div className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm mb-4 ${
-          error.startsWith("✓") ? "bg-green-50 border border-green-200 text-green-700" : "bg-red-50 border border-red-200 text-red-700"
+          error.startsWith("✓") ? "bg-cos-jade-tint border border-cos-jade-ink/20 text-cos-jade-ink" : "bg-cos-red-tint border border-cos-red-ink/20 text-cos-red-ink"
         }`}>
           {error.startsWith("✓") ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
           <span className="flex-1">{error}</span>
@@ -294,49 +294,49 @@ export default function NominaPage() {
       {tab === "empleados" && (
         <>
           {loading ? (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm py-12 justify-center">
+            <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-12 justify-center">
               <Loader2 className="h-5 w-5 animate-spin" /> Cargando empleados...
             </div>
           ) : employees.length === 0 ? (
-            <div className="bg-white border border-dashed border-border rounded-xl p-12 text-center">
-              <Users2 className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
+            <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+              <Users2 className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
               <p className="font-medium text-sm">Sin empleados</p>
-              <p className="text-xs text-muted-foreground mt-1">Agrega tu primer empleado para empezar.</p>
-              <button onClick={() => setShowAdd(true)} className="mt-4 inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90">
+              <p className="text-xs text-cos-ink-soft mt-1">Agrega tu primer empleado para empezar.</p>
+              <button onClick={() => setShowAdd(true)} className="mt-4 inline-flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
                 <Plus className="h-4 w-4" /> Nuevo empleado
               </button>
             </div>
           ) : (
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
+            <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-gray-50">
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Empleado</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Puesto</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">SBC / día</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Periodicidad</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Ingreso</th>
+                  <tr className="border-b border-cos-line bg-cos-slate-tint">
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Empleado</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Puesto</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">SBC / día</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Periodicidad</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Ingreso</th>
                     <th className="px-4 py-2.5"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {employees.map(e => (
-                    <tr key={e.id} className="border-b border-border last:border-0 hover:bg-gray-50/50">
+                    <tr key={e.id} className="border-b border-cos-line last:border-0 hover:bg-cos-slate-tint/50">
                       <td className="px-4 py-3">
-                        <button onClick={() => setEditFor(e)} className="text-left hover:text-primary transition-colors">
+                        <button onClick={() => setEditFor(e)} className="text-left hover:text-cos-brand-ink transition-colors">
                           <p className="font-medium">{e.nombre} {e.apellidoPaterno} {e.apellidoMaterno ?? ""}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{e.rfc}</p>
+                          <p className="text-xs text-cos-ink-soft font-mono">{e.rfc}</p>
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-xs">{e.puesto ?? "—"}{e.departamento && <p className="text-muted-foreground">{e.departamento}</p>}</td>
+                      <td className="px-4 py-3 text-xs">{e.puesto ?? "—"}{e.departamento && <p className="text-cos-ink-soft">{e.departamento}</p>}</td>
                       <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(e.salarioDiario)}</td>
                       <td className="px-4 py-3 text-xs">{PERIODICIDAD_LABEL[e.periodicidadPago] ?? e.periodicidadPago}</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(e.fechaIngreso)}</td>
+                      <td className="px-4 py-3 text-xs text-cos-ink-soft">{formatDate(e.fechaIngreso)}</td>
                       <td className="px-4 py-3 text-right space-x-1.5">
-                        <button onClick={() => setEmitFor(e)} className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary/90 inline-flex items-center gap-1.5">
+                        <button onClick={() => setEmitFor(e)} className="text-xs bg-cos-brand text-white px-3 py-1.5 rounded-md hover:bg-cos-brand-deep inline-flex items-center gap-1.5">
                           <Receipt className="h-3.5 w-3.5" /> Emitir recibo
                         </button>
-                        <button onClick={() => setBajaFor(e)} className="text-xs border border-red-200 text-red-600 px-2.5 py-1.5 rounded-md hover:bg-red-50 inline-flex items-center gap-1"
+                        <button onClick={() => setBajaFor(e)} className="text-xs border border-cos-red-ink/20 text-cos-red-ink px-2.5 py-1.5 rounded-md hover:bg-cos-red-tint inline-flex items-center gap-1"
                           title="Dar de baja">
                           <UserX className="h-3.5 w-3.5" />
                         </button>
@@ -354,117 +354,117 @@ export default function NominaPage() {
       {tab === "corridas" && (
         <>
           {runsLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm py-12 justify-center">
+            <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-12 justify-center">
               <Loader2 className="h-5 w-5 animate-spin" /> Cargando corridas...
             </div>
           ) : runs.length === 0 ? (
-            <div className="bg-white border border-dashed border-border rounded-xl p-12 text-center">
-              <Calendar className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
+            <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+              <Calendar className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
               <p className="font-medium text-sm">Sin corridas de nómina</p>
-              <p className="text-xs text-muted-foreground mt-1">Crea una corrida para calcular y timbrar la nómina de todos los empleados.</p>
+              <p className="text-xs text-cos-ink-soft mt-1">Crea una corrida para calcular y timbrar la nómina de todos los empleados.</p>
             </div>
           ) : (
             <div className="space-y-3">
               {runs.map(run => {
                 const isExpanded = expandedRunId === run.id;
                 return (
-                  <div key={run.id} className="bg-white border border-border rounded-xl overflow-hidden">
+                  <div key={run.id} className="bg-white border border-cos-line rounded-xl overflow-hidden">
                     {/* Run header — clickable to expand */}
-                    <div className="p-4 flex items-center gap-4 cursor-pointer hover:bg-gray-50/50" onClick={() => toggleRunDetail(run.id)}>
+                    <div className="p-4 flex items-center gap-4 cursor-pointer hover:bg-cos-slate-tint/50" onClick={() => toggleRunDetail(run.id)}>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold text-sm">{TIPO_RUN_LABEL[run.tipo] ?? run.tipo}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_RUN_COLOR[run.status] ?? "bg-gray-100"}`}>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_RUN_COLOR[run.status] ?? "bg-cos-slate-tint"}`}>
                             {STATUS_RUN_LABEL[run.status] ?? run.status}
                           </span>
                           {run.extraData && !!(run.extraData as Record<string, unknown>).stampingInProgress && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 flex items-center gap-1">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-cos-amber-tint text-cos-amber-ink flex items-center gap-1">
                               <Loader2 className="h-3 w-3 animate-spin" />
                               Timbrado {String((run.extraData as Record<string, unknown>).stampedCount ?? 0)}/{String(run._count?.items ?? "?")}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground">{run.periodo}</p>
+                        <p className="text-xs text-cos-ink-soft">{run.periodo}</p>
                         <div className="flex gap-4 mt-1 text-xs">
                           <span>Empleados: <strong>{run._count?.items ?? "—"}</strong></span>
                           <span>Percepciones: <strong>{formatCurrency(run.totalPercepciones)}</strong></span>
                           <span>Deducciones: <strong>{formatCurrency(run.totalDeducciones)}</strong></span>
-                          <span>Neto: <strong className="text-green-700">{formatCurrency(run.totalNeto)}</strong></span>
+                          <span>Neto: <strong className="text-cos-jade-ink">{formatCurrency(run.totalNeto)}</strong></span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
                         {run.status === "CALCULATED" && (
                           <button onClick={() => handleStamp(run.id)} disabled={stampingId === run.id}
-                            className="flex items-center gap-1.5 bg-green-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                            className="flex items-center gap-1.5 bg-cos-jade-ink text-white px-3 py-1.5 rounded-md text-xs font-medium hover:opacity-90 disabled:opacity-50">
                             {stampingId === run.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                             Timbrar todo
                           </button>
                         )}
                         {(run.status === "STAMPED" || run.status === "CALCULATED") && (
                           <a href={`/api/nomina/dispersion?runId=${run.id}`}
-                            className="flex items-center gap-1.5 border border-border px-3 py-1.5 rounded-md text-xs hover:bg-accent">
+                            className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper">
                             <ArrowLeftRight className="h-3.5 w-3.5" /> Dispersión
                           </a>
                         )}
                         {(run.status === "DRAFT" || run.status === "CALCULATED") && (
                           <button onClick={() => handleDeleteRun(run.id)}
-                            className="flex items-center gap-1 border border-red-200 text-red-600 px-2.5 py-1.5 rounded-md text-xs hover:bg-red-50"
+                            className="flex items-center gap-1 border border-cos-red-ink/20 text-cos-red-ink px-2.5 py-1.5 rounded-md text-xs hover:bg-cos-red-tint"
                             title="Eliminar corrida">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-cos-ink-soft" /> : <ChevronDown className="h-4 w-4 text-cos-ink-soft" />}
                       </div>
                     </div>
 
                     {/* Expanded detail table */}
                     {isExpanded && (
-                      <div className="border-t border-border">
+                      <div className="border-t border-cos-line">
                         {runItemsLoading ? (
-                          <div className="flex items-center gap-2 text-muted-foreground text-xs py-6 justify-center">
+                          <div className="flex items-center gap-2 text-cos-ink-soft text-xs py-6 justify-center">
                             <Loader2 className="h-4 w-4 animate-spin" /> Cargando desglose…
                           </div>
                         ) : (
                           <div className="overflow-x-auto">
                             <table className="w-full text-xs">
                               <thead>
-                                <tr className="bg-gray-50 border-b border-border">
-                                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Empleado</th>
-                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Sueldo</th>
-                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">ISR</th>
-                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">IMSS Obr.</th>
-                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">IMSS Pat.</th>
-                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Infonavit</th>
-                                  {run.tipo === "AGUINALDO" && <th className="text-right px-3 py-2 font-medium text-muted-foreground">Aguinaldo</th>}
-                                  {run.tipo === "PTU" && <th className="text-right px-3 py-2 font-medium text-muted-foreground">PTU</th>}
-                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Percepciones</th>
-                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Deducciones</th>
-                                  <th className="text-right px-3 py-2 font-medium text-muted-foreground font-bold">Neto</th>
-                                  <th className="text-center px-3 py-2 font-medium text-muted-foreground">CFDI</th>
+                                <tr className="bg-cos-slate-tint border-b border-cos-line">
+                                  <th className="text-left px-3 py-2 font-medium text-cos-ink-soft">Empleado</th>
+                                  <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Sueldo</th>
+                                  <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">ISR</th>
+                                  <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">IMSS Obr.</th>
+                                  <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">IMSS Pat.</th>
+                                  <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Infonavit</th>
+                                  {run.tipo === "AGUINALDO" && <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Aguinaldo</th>}
+                                  {run.tipo === "PTU" && <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">PTU</th>}
+                                  <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Percepciones</th>
+                                  <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Deducciones</th>
+                                  <th className="text-right px-3 py-2 font-medium text-cos-ink-soft font-bold">Neto</th>
+                                  <th className="text-center px-3 py-2 font-medium text-cos-ink-soft">CFDI</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {runItems.map(item => (
-                                  <tr key={item.id} className="border-b border-border last:border-0 hover:bg-gray-50/50">
+                                  <tr key={item.id} className="border-b border-cos-line last:border-0 hover:bg-cos-slate-tint/50">
                                     <td className="px-3 py-2">
                                       <span className="font-medium">{item.employee.nombre} {item.employee.apellidoPaterno}</span>
-                                      <span className="text-muted-foreground ml-1.5 font-mono">{item.employee.rfc}</span>
+                                      <span className="text-cos-ink-soft ml-1.5 font-mono">{item.employee.rfc}</span>
                                     </td>
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.sueldoBase)}</td>
                                     <td className="px-3 py-2 text-right font-mono">{item.isrRetenido > 0 ? formatCurrency(item.isrRetenido) : "—"}</td>
                                     <td className="px-3 py-2 text-right font-mono">{item.imssObrero > 0 ? formatCurrency(item.imssObrero) : "—"}</td>
-                                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.imssPatronal > 0 ? formatCurrency(item.imssPatronal) : "—"}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-cos-ink-soft">{item.imssPatronal > 0 ? formatCurrency(item.imssPatronal) : "—"}</td>
                                     <td className="px-3 py-2 text-right font-mono">{item.infonavit > 0 ? formatCurrency(item.infonavit) : "—"}</td>
                                     {run.tipo === "AGUINALDO" && <td className="px-3 py-2 text-right font-mono">{item.aguinaldo > 0 ? formatCurrency(item.aguinaldo) : "—"}</td>}
                                     {run.tipo === "PTU" && <td className="px-3 py-2 text-right font-mono">{item.ptu > 0 ? formatCurrency(item.ptu) : "—"}</td>}
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.totalPercepciones)}</td>
-                                    <td className="px-3 py-2 text-right font-mono text-red-600">{formatCurrency(item.totalDeducciones)}</td>
-                                    <td className="px-3 py-2 text-right font-mono font-bold text-green-700">{formatCurrency(item.netoAPagar)}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-cos-red-ink">{formatCurrency(item.totalDeducciones)}</td>
+                                    <td className="px-3 py-2 text-right font-mono font-bold text-cos-jade-ink">{formatCurrency(item.netoAPagar)}</td>
                                     <td className="px-3 py-2 text-center">
                                       {item.cfdiUuid ? (
-                                        <span className="text-green-600" title={item.cfdiUuid}>✓</span>
+                                        <span className="text-cos-jade-ink" title={item.cfdiUuid}>✓</span>
                                       ) : (
-                                        <span className="text-muted-foreground">—</span>
+                                        <span className="text-cos-ink-soft">—</span>
                                       )}
                                     </td>
                                   </tr>
@@ -472,18 +472,18 @@ export default function NominaPage() {
                               </tbody>
                               {runItems.length > 1 && (
                                 <tfoot>
-                                  <tr className="bg-gray-50 font-semibold">
+                                  <tr className="bg-cos-slate-tint font-semibold">
                                     <td className="px-3 py-2">Total ({runItems.length} empleados)</td>
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.sueldoBase, 0))}</td>
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.isrRetenido, 0))}</td>
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.imssObrero, 0))}</td>
-                                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatCurrency(runItems.reduce((s, i) => s + i.imssPatronal, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-cos-ink-soft">{formatCurrency(runItems.reduce((s, i) => s + i.imssPatronal, 0))}</td>
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.infonavit, 0))}</td>
                                     {run.tipo === "AGUINALDO" && <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.aguinaldo, 0))}</td>}
                                     {run.tipo === "PTU" && <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.ptu, 0))}</td>}
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.totalPercepciones, 0))}</td>
-                                    <td className="px-3 py-2 text-right font-mono text-red-600">{formatCurrency(runItems.reduce((s, i) => s + i.totalDeducciones, 0))}</td>
-                                    <td className="px-3 py-2 text-right font-mono font-bold text-green-700">{formatCurrency(runItems.reduce((s, i) => s + i.netoAPagar, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-cos-red-ink">{formatCurrency(runItems.reduce((s, i) => s + i.totalDeducciones, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono font-bold text-cos-jade-ink">{formatCurrency(runItems.reduce((s, i) => s + i.netoAPagar, 0))}</td>
                                     <td className="px-3 py-2 text-center text-xs">{runItems.filter(i => i.cfdiUuid).length}/{runItems.length}</td>
                                   </tr>
                                 </tfoot>
@@ -505,48 +505,48 @@ export default function NominaPage() {
       {tab === "incidencias" && (
         <>
           <div className="flex items-center gap-2 mb-4">
-            <label className="text-xs text-muted-foreground">Periodo:</label>
+            <label className="text-xs text-cos-ink-soft">Periodo:</label>
             <input type="month" value={incPeriodo} onChange={e => setIncPeriodo(e.target.value)}
-              className="text-sm border border-border rounded-md px-2 py-1.5 bg-white" />
+              className="text-sm border border-cos-line rounded-md px-2 py-1.5 bg-white" />
           </div>
           {incLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm py-12 justify-center">
+            <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-12 justify-center">
               <Loader2 className="h-5 w-5 animate-spin" /> Cargando...
             </div>
           ) : incidencias.length === 0 ? (
-            <div className="bg-white border border-dashed border-border rounded-xl p-12 text-center">
-              <ClipboardList className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
+            <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+              <ClipboardList className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
               <p className="font-medium text-sm">Sin incidencias en {incPeriodo}</p>
-              <p className="text-xs text-muted-foreground mt-1">Registra faltas, incapacidades, horas extra y permisos.</p>
+              <p className="text-xs text-cos-ink-soft mt-1">Registra faltas, incapacidades, horas extra y permisos.</p>
             </div>
           ) : (
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
+            <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-gray-50">
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Empleado</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Tipo</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Fecha</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Días</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Horas</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Notas</th>
+                  <tr className="border-b border-cos-line bg-cos-slate-tint">
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Empleado</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Tipo</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Fecha</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Días</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Horas</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Notas</th>
                   </tr>
                 </thead>
                 <tbody>
                   {incidencias.map(inc => (
-                    <tr key={inc.id} className="border-b border-border last:border-0 hover:bg-gray-50/50">
+                    <tr key={inc.id} className="border-b border-cos-line last:border-0 hover:bg-cos-slate-tint/50">
                       <td className="px-4 py-2.5">
                         <p className="text-xs font-medium">{inc.employee.nombre} {inc.employee.apellidoPaterno}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono">{inc.employee.rfc}</p>
+                        <p className="text-[10px] text-cos-ink-soft font-mono">{inc.employee.rfc}</p>
                       </td>
                       <td className="px-4 py-2.5 text-xs">{INCIDENCIA_LABEL[inc.tipo] ?? inc.tipo}</td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                      <td className="px-4 py-2.5 text-xs text-cos-ink-soft">
                         {formatDate(inc.fecha)}
                         {inc.fechaFin && <> — {formatDate(inc.fechaFin)}</>}
                       </td>
                       <td className="px-4 py-2.5 text-right text-xs font-mono">{inc.dias}</td>
                       <td className="px-4 py-2.5 text-right text-xs font-mono">{inc.horas ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground truncate max-w-[200px]">{inc.notas ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-xs text-cos-ink-soft truncate max-w-[200px]">{inc.notas ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -702,20 +702,20 @@ function NewEmployeeModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold">Nuevo empleado</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-3">
           {/* AI Upload Zone */}
-          <div className="bg-indigo-50/60 border border-indigo-200 rounded-lg p-3">
-            <label className="flex items-center gap-3 px-3 py-2.5 border-2 border-dashed border-indigo-300 rounded-md text-sm bg-white cursor-pointer hover:bg-indigo-50/50 transition-colors">
+          <div className="bg-cos-brand-tint/60 border border-cos-brand-ink/15 rounded-lg p-3">
+            <label className="flex items-center gap-3 px-3 py-2.5 border-2 border-dashed border-cos-brand-ink/15 rounded-md text-sm bg-white cursor-pointer hover:bg-cos-brand-tint/50 transition-colors">
               {aiParsing ? (
-                <Loader2 className="h-4 w-4 text-indigo-600 shrink-0 animate-spin" />
+                <Loader2 className="h-4 w-4 text-cos-brand-ink shrink-0 animate-spin" />
               ) : (
-                <Sparkles className="h-4 w-4 text-indigo-600 shrink-0" />
+                <Sparkles className="h-4 w-4 text-cos-brand-ink shrink-0" />
               )}
-              <span className="text-muted-foreground truncate flex-1 text-xs">
+              <span className="text-cos-ink-soft truncate flex-1 text-xs">
                 {aiParsing ? "Leyendo documentos…" : "Sube CURP, NSS, contrato, INE — llena automáticamente"}
               </span>
               <input
@@ -730,10 +730,10 @@ function NewEmployeeModal({
             {aiDocs.length > 0 && (
               <div className="mt-2 space-y-1">
                 {aiDocs.map((d, i) => (
-                  <div key={i} className="flex items-center gap-2 text-[10px] text-indigo-800">
+                  <div key={i} className="flex items-center gap-2 text-[10px] text-cos-brand-ink">
                     <FileText className="h-3 w-3" />
                     <span className="truncate">{d.name}</span>
-                    <span className="text-indigo-600 font-medium">{d.type}</span>
+                    <span className="text-cos-brand-ink font-medium">{d.type}</span>
                   </div>
                 ))}
               </div>
@@ -741,7 +741,7 @@ function NewEmployeeModal({
             {aiWarnings.length > 0 && (
               <div className="mt-2 space-y-0.5">
                 {aiWarnings.map((w, i) => (
-                  <p key={i} className="text-[10px] text-amber-700">⚠ {w}</p>
+                  <p key={i} className="text-[10px] text-cos-amber-ink">⚠ {w}</p>
                 ))}
               </div>
             )}
@@ -791,16 +791,16 @@ function NewEmployeeModal({
           </div>
 
           {/* Infonavit section */}
-          <details className="border border-border rounded-lg">
-            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-gray-50 flex items-center gap-2">
+          <details className="border border-cos-line rounded-lg">
+            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-cos-slate-tint flex items-center gap-2">
               <span>Infonavit</span>
               {form.descuentoInfonavit && (
-                <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                <span className="text-[10px] bg-cos-jade-tint text-cos-jade-ink px-1.5 py-0.5 rounded-full font-medium">
                   ${form.descuentoInfonavit}
                 </span>
               )}
             </summary>
-            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border">
+            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-cos-line">
               <div className="grid grid-cols-3 gap-2">
                 <Field label="N° crédito">
                   <input value={form.creditoInfonavit} onChange={e => set("creditoInfonavit", e.target.value)} className={inputCls} placeholder="Opcional" />
@@ -824,8 +824,8 @@ function NewEmployeeModal({
 
           {err && <p className="text-xs text-destructive">{err}</p>}
           <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>
-            <button type="submit" disabled={saving} className="flex-1 bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+            <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
+            <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar
             </button>
@@ -901,10 +901,10 @@ function EmitNominaModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 p-4 z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Emitir recibo de nómina</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-cos-ink-soft mt-0.5">
               {employee.nombre} {employee.apellidoPaterno}
             </p>
           </div>
@@ -930,14 +930,14 @@ function EmitNominaModal({
           <Field label="Sueldo bruto del periodo">
             <input type="number" min="0" step="0.01" value={form.sueldoBruto} onChange={e => set("sueldoBruto", e.target.value)} className={inputCls} />
           </Field>
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-xs text-blue-900">
+          <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md p-3 text-xs text-cos-brand-ink">
             <p className="font-medium mb-1">Cómo se calcula</p>
             <p>ISR: tarifa Art. 96 LISR + subsidio al empleo. IMSS: cuotas reales escalonadas (EyM, IyV, retiro, cesantía, guarderías) según clase de riesgo. Infonavit se deduce si el empleado tiene crédito activo. Exporta a SUA desde la pestaña Corridas.</p>
           </div>
           {err && <p className="text-xs text-destructive">{err}</p>}
           <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>
-            <button type="submit" disabled={saving} className="flex-1 bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+            <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
+            <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Timbrar nómina
             </button>
@@ -1014,10 +1014,10 @@ function EditEmployeeModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Editar empleado</h2>
-            <p className="text-xs text-muted-foreground font-mono">{employee.rfc} · NSS {employee.nss}</p>
+            <p className="text-xs text-cos-ink-soft font-mono">{employee.rfc} · NSS {employee.nss}</p>
           </div>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
         </div>
@@ -1032,7 +1032,7 @@ function EditEmployeeModal({
               <input required type="number" min="0" step="0.01" value={form.salarioDiario}
                 onChange={e => setForm(p => ({ ...p, salarioDiario: e.target.value }))} className={inputCls} />
               {parseFloat(form.salarioDiario) !== employee.salarioDiario && (
-                <label className="flex items-start gap-2 mt-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 cursor-pointer">
+                <label className="flex items-start gap-2 mt-1.5 text-[10px] text-cos-amber-ink bg-cos-amber-tint border border-cos-amber-ink/20 rounded px-2 py-1.5 cursor-pointer">
                   <input type="checkbox" checked={skipImss} onChange={e => setSkipImss(e.target.checked)} className="mt-0.5" />
                   <span>Es una corrección de datos, <strong>no generar</strong> movimiento IMSS</span>
                 </label>
@@ -1054,16 +1054,16 @@ function EditEmployeeModal({
           </div>
 
           {/* Infonavit */}
-          <details className="border border-border rounded-lg" open={!!form.descuentoInfonavit}>
-            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-gray-50 flex items-center gap-2">
+          <details className="border border-cos-line rounded-lg" open={!!form.descuentoInfonavit}>
+            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-cos-slate-tint flex items-center gap-2">
               <span>Infonavit</span>
               {form.descuentoInfonavit && (
-                <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                <span className="text-[10px] bg-cos-jade-tint text-cos-jade-ink px-1.5 py-0.5 rounded-full font-medium">
                   ${form.descuentoInfonavit}
                 </span>
               )}
             </summary>
-            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border">
+            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-cos-line">
               <div className="grid grid-cols-3 gap-2">
                 <Field label="N° crédito">
                   <input value={form.creditoInfonavit} onChange={e => setForm(p => ({ ...p, creditoInfonavit: e.target.value }))} className={inputCls} />
@@ -1087,8 +1087,8 @@ function EditEmployeeModal({
 
           {err && <p className="text-xs text-destructive">{err}</p>}
           <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>
-            <button type="submit" disabled={saving} className="flex-1 bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+            <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
+            <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar cambios
             </button>
@@ -1141,15 +1141,15 @@ function BajaModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <h2 className="font-semibold text-red-700">Dar de baja</h2>
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
+          <h2 className="font-semibold text-cos-red-ink">Dar de baja</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
         </div>
         <div className="p-5 space-y-4">
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm">
-            <p className="font-semibold text-red-900">{employee.nombre} {employee.apellidoPaterno}</p>
-            <p className="text-xs text-red-700 font-mono">{employee.rfc} · NSS {employee.nss}</p>
-            <p className="text-xs text-red-700 mt-0.5">Ingreso: {formatDate(employee.fechaIngreso)} · SBC: {formatCurrency(employee.salarioDiario)}/día</p>
+          <div className="bg-cos-red-tint border border-cos-red-ink/20 rounded-lg px-4 py-3 text-sm">
+            <p className="font-semibold text-cos-red-ink">{employee.nombre} {employee.apellidoPaterno}</p>
+            <p className="text-xs text-cos-red-ink font-mono">{employee.rfc} · NSS {employee.nss}</p>
+            <p className="text-xs text-cos-red-ink mt-0.5">Ingreso: {formatDate(employee.fechaIngreso)} · SBC: {formatCurrency(employee.salarioDiario)}/día</p>
           </div>
 
           {!result ? (
@@ -1157,7 +1157,7 @@ function BajaModal({
               <div>
                 <label className="block text-xs font-medium mb-1">Motivo de baja</label>
                 <select value={motivo} onChange={e => setMotivo(e.target.value as typeof motivo)}
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white">
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white">
                   <option value="VOLUNTARIA">Renuncia voluntaria</option>
                   <option value="JUSTIFICADA">Despido justificado (Art. 47 LFT)</option>
                   <option value="INJUSTIFICADA">Despido injustificado → Liquidación</option>
@@ -1167,25 +1167,25 @@ function BajaModal({
                 <div>
                   <label className="block text-xs font-medium mb-1">Fecha de baja</label>
                   <input type="date" value={fechaBaja} onChange={e => setFechaBaja(e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm" />
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1">Días de salario pendiente</label>
                   <input type="number" min="0" value={diasPendientes} onChange={e => setDiasPendientes(e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm" />
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm" />
                 </div>
               </div>
               {motivo === "INJUSTIFICADA" && (
-                <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800">
+                <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-md px-3 py-2 text-xs text-cos-amber-ink">
                   <p className="font-medium">Liquidación (Art. 50 LFT)</p>
                   <p>Incluye 3 meses de indemnización + 20 días por año + prima de antigüedad, además del finiquito base.</p>
                 </div>
               )}
               {err && <p className="text-xs text-destructive">{err}</p>}
               <div className="flex gap-2">
-                <button onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>
+                <button onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
                 <button onClick={submit} disabled={saving}
-                  className="flex-1 bg-red-600 text-white rounded-md py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  className="flex-1 bg-cos-red-ink text-white rounded-md py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                   Procesar baja
                 </button>
@@ -1193,37 +1193,37 @@ function BajaModal({
             </>
           ) : (
             <>
-              <div className="bg-green-50 border border-green-200 rounded-md px-4 py-3 text-sm text-green-800">
+              <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-md px-4 py-3 text-sm text-cos-jade-ink">
                 <p className="font-medium">✓ Baja procesada</p>
                 <p className="text-xs mt-0.5">{result.imssMovimiento}</p>
                 <p className="text-xs">Antigüedad: {result.aniosAntiguedad} año(s)</p>
               </div>
 
               {f && (
-                <div className="bg-white border border-border rounded-lg p-4 text-sm space-y-2">
-                  <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Cálculo de finiquito</p>
+                <div className="bg-white border border-cos-line rounded-lg p-4 text-sm space-y-2">
+                  <p className="font-semibold text-xs uppercase tracking-wide text-cos-ink-soft">Cálculo de finiquito</p>
                   <div className="space-y-1 text-xs">
                     {f.salariosPendientes > 0 && <Row label="Salarios pendientes" value={f.salariosPendientes} />}
                     <Row label="Aguinaldo proporcional" value={f.aguinaldoProporcional} />
                     <Row label="Vacaciones proporcionales" value={f.vacacionesProporcionales} />
                     <Row label="Prima vacacional" value={f.primaVacacional} />
-                    <div className="border-t border-border pt-1">
+                    <div className="border-t border-cos-line pt-1">
                       <Row label="Subtotal finiquito" value={f.subtotalFiniquito} bold />
                     </div>
                     {f.subtotalLiquidacion > 0 && (
                       <>
-                        <div className="border-t border-border pt-1 mt-1">
-                          <p className="font-medium text-red-700 mb-1">Liquidación</p>
+                        <div className="border-t border-cos-line pt-1 mt-1">
+                          <p className="font-medium text-cos-red-ink mb-1">Liquidación</p>
                           <Row label="Indemnización 3 meses" value={f.indemnizacion3Meses} />
                           <Row label="20 días por año" value={f.indemnizacion20Dias} />
                           <Row label="Prima de antigüedad" value={f.primaAntiguedad} />
                         </div>
-                        <div className="border-t border-border pt-1">
+                        <div className="border-t border-cos-line pt-1">
                           <Row label="Subtotal liquidación" value={f.subtotalLiquidacion} bold />
                         </div>
                       </>
                     )}
-                    <div className="border-t-2 border-border pt-2 mt-2">
+                    <div className="border-t-2 border-cos-line pt-2 mt-2">
                       <Row label="Total bruto" value={f.totalBruto} bold />
                       <Row label="Exento de ISR" value={f.totalExento} muted />
                       <Row label="Gravado" value={f.totalGravado} muted />
@@ -1233,7 +1233,7 @@ function BajaModal({
               )}
 
               <button onClick={() => onDone(`${employee.nombre} ${employee.apellidoPaterno} dado de baja`)}
-                className="w-full bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium">
+                className="w-full bg-cos-brand text-white rounded-md py-2 text-sm font-medium">
                 Cerrar
               </button>
             </>
@@ -1246,14 +1246,14 @@ function BajaModal({
 
 function Row({ label, value, bold, muted }: { label: string; value: number; bold?: boolean; muted?: boolean }) {
   return (
-    <div className={`flex justify-between ${bold ? "font-semibold" : ""} ${muted ? "text-muted-foreground" : ""}`}>
+    <div className={`flex justify-between ${bold ? "font-semibold" : ""} ${muted ? "text-cos-ink-soft" : ""}`}>
       <span>{label}</span>
       <span className="font-mono">{formatCurrency(value)}</span>
     </div>
   );
 }
 
-const inputCls = "w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30";
+const inputCls = "w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -1331,7 +1331,7 @@ function NewRunModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold">Nueva corrida de nómina</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
         </div>
@@ -1377,14 +1377,14 @@ function NewRunModal({
           )}
 
           {form.tipo === "AGUINALDO" && (
-            <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-xs text-blue-800">
+            <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md px-3 py-2 text-xs text-cos-brand-ink">
               <p className="font-medium">Aguinaldo</p>
               <p>Mínimo 15 días de salario (Art. 87 LFT). Proporcional si el empleado tiene menos de 1 año. Exento hasta 30 UMA.</p>
             </div>
           )}
 
           {form.tipo === "PTU" && (
-            <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-xs text-blue-800">
+            <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md px-3 py-2 text-xs text-cos-brand-ink">
               <p className="font-medium">PTU</p>
               <p>10% de la utilidad fiscal se reparte: 50% por días trabajados, 50% por salario. Exento hasta 15 UMA por empleado.</p>
             </div>
@@ -1392,8 +1392,8 @@ function NewRunModal({
 
           {err && <p className="text-xs text-destructive">{err}</p>}
           <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>
-            <button type="submit" disabled={saving} className="flex-1 bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+            <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
+            <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Calcular corrida
             </button>
@@ -1452,7 +1452,7 @@ function NewIncidenciaModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold">Nueva incidencia</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
         </div>
@@ -1494,8 +1494,8 @@ function NewIncidenciaModal({
           </Field>
           {err && <p className="text-xs text-destructive">{err}</p>}
           <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>
-            <button type="submit" disabled={saving} className="flex-1 bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+            <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
+            <button type="submit" disabled={saving} className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar
             </button>
