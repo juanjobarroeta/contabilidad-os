@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ScanSearch, AlertTriangle, AlertCircle, Info, CheckCircle2, EyeOff,
-  RotateCcw, Loader2, ScrollText, FileText,
+  RotateCcw, Loader2, ScrollText, FileText, ArrowRight,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { CumplimientoTabs } from "@/components/layout/CumplimientoTabs";
 import { Card, Badge, type BadgeTone } from "@/components/ui";
+import { ctaParaHallazgo } from "@/lib/hallazgos-cta";
 
 interface Hallazgo {
   id: string;
@@ -199,6 +201,7 @@ function HallazgoCard({
   const fundamento = [h.fundamento.ley, h.fundamento.articulo && `Art. ${h.fundamento.articulo}`, h.fundamento.fraccion && `Fr. ${h.fundamento.fraccion}`]
     .filter(Boolean)
     .join(" ");
+  const cta = h.estado === "ABIERTO" ? ctaParaHallazgo(h.checkClave) : null;
 
   return (
     <Card className="rounded-card border-cos-line p-4 shadow-card">
@@ -230,6 +233,14 @@ function HallazgoCard({
           <div className="mt-3 flex flex-wrap gap-2">
             {h.estado === "ABIERTO" ? (
               <>
+                {cta && (
+                  <Link
+                    href={cta.href}
+                    className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white transition-colors hover:bg-cos-brand-deep"
+                  >
+                    {cta.label} <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                )}
                 <ActionButton disabled={saving} onClick={() => onSetEstado(h.id, "RESUELTO")} icon={CheckCircle2} variant="primary">
                   Marcar resuelto
                 </ActionButton>
