@@ -8,7 +8,7 @@ import { formatCurrency } from "@/lib/utils";
 import { SatCodePicker } from "@/components/ui/SatCodePicker";
 import {
   ChevronRight, ChevronLeft, Plus, Trash2, Loader2,
-  CheckCircle2, Search, FileText, AlertCircle,
+  CheckCircle2, Search, FileText, AlertCircle, History, Sparkles,
 } from "lucide-react";
 
 // ── SAT Catalogs ────────────────────────────────────────────────────────────
@@ -66,6 +66,38 @@ interface LineItem {
   iva: boolean; // 16% IVA
 }
 
+// ── Invoicing suggestions (sugerencias) ──────────────────────────────────────
+
+interface ConceptoSugerido {
+  claveProdServ: string;
+  descripcion: string;
+  valorUnitario: number;
+  claveUnidad: string;
+  vecesUsado: number;
+  ultimoUso: string;
+}
+
+interface FacturaPreviaItem {
+  claveProdServ: string;
+  descripcion: string;
+  cantidad: number;
+  valorUnitario: number;
+  claveUnidad: string;
+}
+
+interface FacturaPrevia {
+  id: string;
+  folio: string | null;
+  fecha: string;
+  total: number;
+  items: FacturaPreviaItem[];
+}
+
+interface Sugerencias {
+  conceptos: ConceptoSugerido[];
+  facturasPrevias: FacturaPrevia[];
+}
+
 function newItem(): LineItem {
   return {
     id: Math.random().toString(36).slice(2),
@@ -114,6 +146,12 @@ export default function NuevaFacturaPage() {
   // Step 2
   const [items, setItems] = useState<LineItem[]>([newItem()]);
 
+  // Sugerencias de facturación (conceptos recientes + facturas anteriores)
+  const [sugerencias, setSugerencias] = useState<Sugerencias | null>(null);
+  const [showFacturasPrevias, setShowFacturasPrevias] = useState(false);
+  // Which line-item row currently has its concepto-autocomplete dropdown open.
+  const [conceptoOpenFor, setConceptoOpenFor] = useState<string | null>(null);
+
   const fetchClientes = useCallback(async () => {
     if (!activeCompany) return;
     const res = await fetch(
@@ -124,6 +162,58 @@ export default function NuevaFacturaPage() {
   }, [activeCompany, clienteSearch]);
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
+
+  // ── Sugerencias ─────────────────────────────────────────────────────────────
+  // Fetch concepto suggestions + recent invoices whenever the company or the
+  // selected customer changes. Additive: never blocks manual entry.
+  useEffect(() => {
+    if (!activeCompany) { setSugerencias(null); return; }
+    let cancelled = false;
+    const params = new URLSearchParams({ companyId: activeCompany.id });
+    if (selectedCliente) params.set("customerId", selectedCliente.id);
+    fetch(`/api/facturas/sugerencias?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: Sugerencias | null) => { if (!cancelled) setSugerencias(data); })
+      .catch(() => { if (!cancelled) setSugerencias(null); });
+    setShowFacturasPrevias(false);
+    return () => { cancelled = true; };
+  }, [activeCompany, selectedCliente]);
+
+  // Clone a past invoice's items into the form state (one-click prefill).
+  function prefillFromFactura(f: FacturaPrevia) {
+    if (f.items.length === 0) return;
+    setItems(
+      f.items.map((it) => ({
+        id: Math.random().toString(36).slice(2),
+        description: it.descripcion,
+        product_key: it.claveProdServ,
+        unit_key: it.claveUnidad || "E48",
+        quantity: it.cantidad || 1,
+        price: it.valorUnitario,
+        iva: true,
+      }))
+    );
+    setShowFacturasPrevias(false);
+    setSubmitError("");
+  }
+
+  // Fill a line item from a concepto suggestion (clave + descripción + precio + unidad).
+  function applyConcepto(itemId: string, c: ConceptoSugerido) {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              description: c.descripcion,
+              product_key: c.claveProdServ,
+              unit_key: c.claveUnidad || it.unit_key,
+              price: c.valorUnitario,
+            }
+          : it
+      )
+    );
+    setConceptoOpenFor(null);
+  }
 
   // ── Calculations ──────────────────────────────────────────────────────────
 
@@ -363,6 +453,50 @@ export default function NuevaFacturaPage() {
                   No hay clientes. <a href="/clientes" className="text-cos-brand-ink underline">Agrega uno primero</a>.
                 </p>
               )}
+
+              {/* Usar factura anterior — prefill conceptos from a past invoice */}
+              {selectedCliente && sugerencias && sugerencias.facturasPrevias.length > 0 && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowFacturasPrevias((v) => !v)}
+                    className="flex items-center gap-2 text-sm text-cos-brand-ink hover:text-cos-brand-ink/80 font-medium"
+                  >
+                    <History className="h-4 w-4" />
+                    Usar factura anterior
+                    <ChevronRight className={`h-4 w-4 transition-transform ${showFacturasPrevias ? "rotate-90" : ""}`} />
+                  </button>
+                  {showFacturasPrevias && (
+                    <div className="mt-2 border border-cos-line rounded-md overflow-hidden divide-y divide-cos-line">
+                      {sugerencias.facturasPrevias.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => prefillFromFactura(f)}
+                          className="w-full text-left px-4 py-2.5 hover:bg-cos-paper text-sm transition-colors flex items-center justify-between gap-3"
+                        >
+                          <div>
+                            <p className="font-medium">
+                              {f.folio ? `Folio ${f.folio}` : "Factura"}
+                              <span className="text-cos-ink-soft font-normal ml-2">
+                                {new Date(f.fecha).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
+                              </span>
+                            </p>
+                            <p className="text-xs text-cos-ink-soft">
+                              {f.items.length} concepto{f.items.length === 1 ? "" : "s"}
+                              {f.items[0] ? ` · ${f.items[0].descripcion}` : ""}
+                            </p>
+                          </div>
+                          <span className="text-sm font-medium shrink-0"><Money value={f.total} /></span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-cos-ink-soft mt-1.5">
+                    Copia los conceptos de una factura previa. Podrás editarlos en el siguiente paso.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Forma + Método de pago */}
@@ -467,14 +601,48 @@ export default function NuevaFacturaPage() {
                     )}
                   </div>
 
-                  {/* Description */}
-                  <div>
+                  {/* Description — with concepto autocomplete from past invoices */}
+                  <div className="relative">
                     <label className="block text-xs font-medium mb-1">Descripción <span className="text-cos-red-ink">*</span></label>
                     <input type="text" value={item.description}
-                      onChange={(e) => updateItem(item.id, "description", e.target.value)}
+                      onChange={(e) => { updateItem(item.id, "description", e.target.value); setConceptoOpenFor(item.id); }}
+                      onFocus={() => setConceptoOpenFor(item.id)}
+                      onBlur={() => setTimeout(() => setConceptoOpenFor((cur) => (cur === item.id ? null : cur)), 150)}
                       placeholder="Descripción del producto o servicio"
+                      autoComplete="off"
                       className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                     />
+                    {conceptoOpenFor === item.id && (() => {
+                      const q = item.description.trim().toLowerCase();
+                      const matches = (sugerencias?.conceptos ?? []).filter(
+                        (c) => !q || c.descripcion.toLowerCase().includes(q) || c.claveProdServ.includes(q)
+                      ).slice(0, 8);
+                      if (matches.length === 0) return null;
+                      return (
+                        <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-cos-line rounded-md shadow-lg max-h-56 overflow-y-auto divide-y divide-cos-line">
+                          <div className="px-3 py-1.5 text-xs text-cos-ink-soft flex items-center gap-1.5 bg-cos-slate-tint">
+                            <Sparkles className="h-3 w-3" /> Conceptos sugeridos
+                          </div>
+                          {matches.map((c) => (
+                            <button
+                              key={`${c.claveProdServ}-${c.descripcion}`}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => applyConcepto(item.id, c)}
+                              className="w-full text-left px-3 py-2 hover:bg-cos-paper text-sm transition-colors flex items-center justify-between gap-3"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-medium truncate">{c.descripcion}</p>
+                                <p className="text-xs text-cos-ink-soft font-mono">
+                                  {c.claveProdServ} · {c.claveUnidad} · {c.vecesUsado}×
+                                </p>
+                              </div>
+                              <span className="text-sm shrink-0">{formatCurrency(c.valorUnitario)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Clave SAT + Unidad — searchable pickers backed by Facturapi catalog */}
