@@ -46,7 +46,9 @@ export async function notifyHallazgosDigest(
     {
       title: `${total} cosa${total === 1 ? "" : "s"} por revisar hoy`,
       body: cuerpo,
-      url: "/hallazgos",
+      // Despacho (varias empresas) → al briefing "Hoy" de la cartera; usuario de
+      // una sola empresa → directo a sus hallazgos.
+      url: ids.length > 1 ? "/despacho" : "/hallazgos",
       tag: "revision-digest", // colapsa el aviso diario en uno
     },
     "revision"
