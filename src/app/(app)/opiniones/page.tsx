@@ -6,6 +6,7 @@ import {
   ShieldCheck, FileDown, AlertTriangle, Info, RefreshCw, FileText,
 } from "lucide-react";
 import { Card, Badge, type BadgeTone, PageContainer, PageHeader, Loading, EmptyState, Alert } from "@/components/ui";
+import { CumplimientoTabs } from "@/components/layout/CumplimientoTabs";
 
 // Mirrors the GET /api/cumplimiento response.
 interface CumplimientoEmpresa {
@@ -69,6 +70,7 @@ export default function OpinionesPage() {
 
   return (
     <PageContainer>
+      <CumplimientoTabs />
       <PageHeader
         title="Opiniones y constancias"
         subtitle="Opinión de cumplimiento (SAT 32-D) y Constancia de Situación Fiscal por empresa, con su acuse."

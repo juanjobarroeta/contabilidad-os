@@ -6,6 +6,7 @@ import {
   RotateCcw, Loader2, ScrollText, FileText,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { CumplimientoTabs } from "@/components/layout/CumplimientoTabs";
 import { Card, Badge, type BadgeTone } from "@/components/ui";
 
 interface Hallazgo {
@@ -108,6 +109,7 @@ export default function HallazgosPage() {
 
   return (
     <div className="mx-auto max-w-[1000px] px-4 py-6 sm:px-8 sm:py-8">
+      <CumplimientoTabs />
       <div>
         <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Hallazgos del auditor</h1>
         <p className="mt-1.5 text-[14px] font-medium text-cos-brand-ink">
