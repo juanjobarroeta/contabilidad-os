@@ -15,9 +15,14 @@ export async function notifyHallazgosDigest(
   const ids = await empresasAccesiblesIds(userId);
   if (ids.length === 0) return { notified: 0, total: 0, criticos: 0, empresas: 0 };
 
+  // Excluye los pospuestos (snooze): no deben empujar el digest hasta que venzan.
   const grupos = await prisma.fiscalHallazgo.groupBy({
     by: ["companyId", "severidad"],
-    where: { companyId: { in: ids }, estado: "ABIERTO" },
+    where: {
+      companyId: { in: ids },
+      estado: "ABIERTO",
+      OR: [{ posponerHasta: null }, { posponerHasta: { lte: new Date() } }],
+    },
     _count: true,
   });
 

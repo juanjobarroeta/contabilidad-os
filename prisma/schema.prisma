@@ -2691,6 +2691,11 @@ model FiscalHallazgo {
   // Ciclo de vida gestionado por el usuario/contador.
   estado String @default("ABIERTO") // "ABIERTO" | "RESUELTO" | "IGNORADO"
 
+  // Posponer ("snooze"): silencia el hallazgo (de la lista de Abiertos y del
+  // digest) hasta esta fecha; al vencer reaparece solo. Ortogonal a `estado`
+  // (sigue ABIERTO). null = no pospuesto.
+  posponerHasta DateTime?
+
   // Idempotencia de re-corridas del auditor.
   dedupeKey String
 
