@@ -78,7 +78,7 @@ export default function OpinionesPage() {
           <button
             onClick={load}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium hover:bg-cos-paper disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-sm font-medium hover:bg-cos-paper disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Actualizar
           </button>
@@ -199,7 +199,7 @@ function EmpresaCard({ e }: { e: CumplimientoEmpresa }) {
 
 function Section({ title, icon: Icon, children }: { title: string; icon: typeof ShieldCheck; children: React.ReactNode }) {
   return (
-    <div className="bg-white px-5 py-4">
+    <div className="bg-cos-card px-5 py-4">
       <p className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.02em] text-cos-ink-faint">
         <Icon className="h-3.5 w-3.5" /> {title}
       </p>

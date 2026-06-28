@@ -15,7 +15,7 @@ export default function AcuseViewerPage({ params }: { params: Promise<{ snapshot
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-cos-line bg-white px-3 py-2.5 sm:px-4">
+      <div className="flex items-center justify-between gap-2 border-b border-cos-line bg-cos-card px-3 py-2.5 sm:px-4">
         <Link
           href="/opiniones"
           className="inline-flex items-center gap-1 rounded-control px-2 py-1.5 text-sm font-medium text-cos-ink hover:bg-cos-paper"
@@ -26,7 +26,7 @@ export default function AcuseViewerPage({ params }: { params: Promise<{ snapshot
         <a
           href={src}
           download
-          className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-1.5 text-sm font-medium text-cos-ink hover:bg-cos-paper"
+          className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-sm font-medium text-cos-ink hover:bg-cos-paper"
         >
           <FileDown className="h-4 w-4" /> Descargar
         </a>

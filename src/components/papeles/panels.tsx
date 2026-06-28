@@ -14,7 +14,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { Money } from "@/components/ui";
 import { Download, Loader2, FileText, AlertTriangle, CheckCircle2, Sparkles, Check } from "lucide-react";
 
-const CARD = "rounded-card border border-cos-line bg-white shadow-card print:border-2";
+const CARD = "rounded-card border border-cos-line bg-cos-card shadow-card print:border-2";
 const THEAD = "bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink-faint";
 
 // ── IVA PANEL ────────────────────────────────────────────────────────────────
@@ -794,7 +794,7 @@ export function RetencionesPanel({ companyId, year, month }: { companyId: string
         />
       )}
       {data.retencionesRecibidas.length === 0 && data.retencionesEfectuadas.length === 0 && (
-        <div className="rounded-card border border-dashed border-cos-line bg-white p-12 text-center">
+        <div className="rounded-card border border-dashed border-cos-line bg-cos-card p-12 text-center">
           <p className="text-[14px] text-cos-ink-faint">Sin retenciones en este periodo.</p>
           <p className="mx-auto mt-2 max-w-[52ch] text-[12.5px] text-cos-ink-faint">
             Aquí solo van las retenciones de ISR/IVA en CFDIs: las que te hacen tus clientes o las que tú
@@ -869,7 +869,7 @@ function Loading() {
 }
 function Empty() {
   return (
-    <div className="rounded-card border border-dashed border-cos-line bg-white p-12 text-center text-[14px] text-cos-ink-faint">
+    <div className="rounded-card border border-dashed border-cos-line bg-cos-card p-12 text-center text-[14px] text-cos-ink-faint">
       Sin datos para este periodo.
     </div>
   );

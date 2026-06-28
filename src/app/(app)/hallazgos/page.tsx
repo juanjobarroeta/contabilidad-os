@@ -308,7 +308,7 @@ function ActionButton({
   const cls =
     variant === "primary"
       ? "border-transparent bg-cos-jade text-white hover:opacity-90"
-      : "border-cos-line bg-white text-cos-ink hover:bg-cos-paper";
+      : "border-cos-line bg-cos-card text-cos-ink hover:bg-cos-paper";
   return (
     <button
       onClick={onClick}
@@ -332,14 +332,14 @@ function PosponerMenu({ disabled, onPick }: { disabled: boolean; onPick: (t: "7d
       <button
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-1.5 text-[13px] font-semibold text-cos-ink transition-colors hover:bg-cos-paper disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-[13px] font-semibold text-cos-ink transition-colors hover:bg-cos-paper disabled:opacity-50"
       >
         <Clock className="h-3.5 w-3.5" /> Posponer <ChevronDown className="h-3.5 w-3.5" />
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
-          <div className="absolute left-0 z-20 mt-1 min-w-[150px] overflow-hidden rounded-control border border-cos-line bg-white py-1 shadow-card">
+          <div className="absolute left-0 z-20 mt-1 min-w-[150px] overflow-hidden rounded-control border border-cos-line bg-cos-card py-1 shadow-card">
             {opciones.map((o) => (
               <button
                 key={o.t}

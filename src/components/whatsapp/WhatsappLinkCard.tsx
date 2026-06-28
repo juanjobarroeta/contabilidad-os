@@ -108,7 +108,7 @@ export function WhatsappLinkCard() {
   }
 
   return (
-    <div className="bg-white border border-cos-line rounded-xl p-6 mt-6">
+    <div className="bg-cos-card border border-cos-line rounded-xl p-6 mt-6">
       <div className="flex items-start gap-4">
         <div className="h-12 w-12 rounded-full bg-green-100 text-green-700 flex items-center justify-center shrink-0">
           <MessageCircle className="h-6 w-6" />

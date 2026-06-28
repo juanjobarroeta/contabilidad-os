@@ -247,7 +247,7 @@ export default function EmpresaEditPage() {
       )}
 
       {/* ── Datos Generales ── */}
-      <section className="bg-white border border-cos-line rounded-xl shadow-sm p-5 mb-5">
+      <section className="bg-cos-card border border-cos-line rounded-xl shadow-sm p-5 mb-5">
         <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
           <Building2 className="h-4 w-4 text-cos-brand-ink" />
           Datos Generales
@@ -264,7 +264,7 @@ export default function EmpresaEditPage() {
             <label className="block text-xs font-medium mb-1">Régimen Fiscal</label>
             <select
               value={regimenFiscal} onChange={(e) => setRegimenFiscal(e.target.value)}
-              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-cos-card focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             >
               <option value="">Selecciona…</option>
               {REGIMENES.map((r) => (
@@ -341,7 +341,7 @@ export default function EmpresaEditPage() {
       </section>
 
       {/* ── CSD ── */}
-      <section className="bg-white border border-cos-line rounded-xl shadow-sm p-5 mb-5">
+      <section className="bg-cos-card border border-cos-line rounded-xl shadow-sm p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-sm flex items-center gap-2">
             <FileKey2 className="h-4 w-4 text-cos-brand-ink" />
@@ -395,7 +395,7 @@ export default function EmpresaEditPage() {
       </section>
 
       {/* ── FIEL ── */}
-      <section className="bg-white border border-cos-line rounded-xl shadow-sm p-5 mb-5">
+      <section className="bg-cos-card border border-cos-line rounded-xl shadow-sm p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-sm flex items-center gap-2">
             <Shield className="h-4 w-4 text-cos-amber-ink" />

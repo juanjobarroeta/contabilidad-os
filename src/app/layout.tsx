@@ -37,6 +37,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
+      <head>
+        {/* No-flash: fija data-theme antes de pintar (elección guardada → preferencia del SO). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('cos-theme');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
         {children}
         <ServiceWorkerRegister />

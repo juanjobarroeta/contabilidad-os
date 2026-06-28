@@ -127,7 +127,7 @@ export default function OperadorPage() {
             <select
               value={companyId}
               onChange={(e) => setCompanyId(e.target.value)}
-              className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[14px] focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand"
+              className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[14px] focus:border-cos-brand focus:outline-none focus:ring-1 focus:ring-cos-brand"
             >
               <option value="">Selecciona empresa…</option>
               {companies.map((c) => (
@@ -180,7 +180,7 @@ export default function OperadorPage() {
           <p className="mt-0.5 text-[12px] text-cos-ink-soft">
             Para la empresa seleccionada. Se lee el periodo del propio acuse y se guardan las cifras presentadas (gap-fill). Puedes subir varios meses a la vez.
           </p>
-          <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-cos-line bg-white px-2.5 py-1.5 text-[13px] hover:bg-cos-paper">
+          <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[13px] hover:bg-cos-paper">
             {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
             {uploading ? "Leyendo…" : "Subir acuse(s)"}
             <input type="file" accept="application/pdf,.pdf" multiple className="hidden" disabled={uploading || !companyId}

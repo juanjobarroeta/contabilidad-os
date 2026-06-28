@@ -390,7 +390,7 @@ export default function NuevaFacturaPage() {
         ))}
       </div>
 
-      <div className="bg-white border border-cos-line rounded-xl shadow-sm">
+      <div className="bg-cos-card border border-cos-line rounded-xl shadow-sm">
 
         {/* ── STEP 1: Receptor ── */}
         {step === 1 && (
@@ -504,14 +504,14 @@ export default function NuevaFacturaPage() {
               <div>
                 <label className="block text-sm font-medium mb-1.5">Forma de pago <span className="text-cos-red-ink">*</span></label>
                 <select value={formaPago} onChange={(e) => setFormaPago(e.target.value)}
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card">
                   {FORMAS_PAGO.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Método de pago <span className="text-cos-red-ink">*</span></label>
                 <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card">
                   {METODOS_PAGO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
@@ -521,7 +521,7 @@ export default function NuevaFacturaPage() {
             <div>
               <label className="block text-sm font-medium mb-1.5">Uso del CFDI <span className="text-cos-red-ink">*</span></label>
               <select value={usoCfdi} onChange={(e) => setUsoCfdi(e.target.value)}
-                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card">
                 {USOS_CFDI.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
             </div>
@@ -537,7 +537,7 @@ export default function NuevaFacturaPage() {
                   <div>
                     <label className="block text-xs font-medium mb-1">Periodicidad</label>
                     <select value={globalPeriodicity} onChange={(e) => setGlobalPeriodicity(e.target.value)}
-                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
+                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card">
                       <option value="day">Diario</option>
                       <option value="week">Semanal</option>
                       <option value="fortnight">Quincenal</option>
@@ -548,7 +548,7 @@ export default function NuevaFacturaPage() {
                   <div>
                     <label className="block text-xs font-medium mb-1">Mes / Período</label>
                     <select value={globalMonth} onChange={(e) => setGlobalMonth(e.target.value)}
-                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
+                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card">
                       {globalPeriodicity === "two_months"
                         ? ["01","02","03","04","05","06"].map(m => (
                             <option key={m} value={m}>Bimestre {m}</option>
@@ -619,7 +619,7 @@ export default function NuevaFacturaPage() {
                       ).slice(0, 8);
                       if (matches.length === 0) return null;
                       return (
-                        <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-cos-line rounded-md shadow-lg max-h-56 overflow-y-auto divide-y divide-cos-line">
+                        <div className="absolute z-20 left-0 right-0 mt-1 bg-cos-card border border-cos-line rounded-md shadow-lg max-h-56 overflow-y-auto divide-y divide-cos-line">
                           <div className="px-3 py-1.5 text-xs text-cos-ink-soft flex items-center gap-1.5 bg-cos-slate-tint">
                             <Sparkles className="h-3 w-3" /> Conceptos sugeridos
                           </div>

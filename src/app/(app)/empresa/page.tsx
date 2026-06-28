@@ -506,7 +506,7 @@ export default function EmpresaPage() {
 
       {/* Add Company Form */}
       {showAddForm && (
-        <div className="bg-white border border-cos-line rounded-xl p-6 mb-6 shadow-sm">
+        <div className="bg-cos-card border border-cos-line rounded-xl p-6 mb-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold">Agregar nueva empresa</h2>
             <button onClick={() => setShowAddForm(false)} className="p-1.5 rounded hover:bg-cos-paper text-cos-ink-soft">
@@ -537,7 +537,7 @@ export default function EmpresaPage() {
             <div>
               <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-cos-red-ink">*</span></label>
               <select name="regimenFiscal" value={addForm.regimenFiscal} onChange={handleAddChange} required
-                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card">
                 <option value="">Selecciona...</option>
                 {REGIMENES_FISCALES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
@@ -548,7 +548,7 @@ export default function EmpresaPage() {
               <label className="block text-sm font-medium mb-1.5">Grupo <span className="text-cos-ink-soft">(opcional)</span></label>
               <div className="flex gap-2">
                 <select name="grupoId" value={addForm.grupoId} onChange={handleAddChange}
-                  className="flex-1 px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
+                  className="flex-1 px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card">
                   <option value="">Sin grupo</option>
                   {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
                 </select>
@@ -577,7 +577,7 @@ export default function EmpresaPage() {
       <div className="space-y-3 mb-8">
         {companies.map((company) => (
           <div key={company.id}
-            className={`bg-white border rounded-xl p-5 shadow-sm flex items-center justify-between transition-colors ${
+            className={`bg-cos-card border rounded-xl p-5 shadow-sm flex items-center justify-between transition-colors ${
               activeCompany?.id === company.id ? "border-cos-brand ring-1 ring-cos-brand/20" : "border-cos-line"
             }`}
           >
@@ -614,7 +614,7 @@ export default function EmpresaPage() {
 
       {/* ── Nómina — Registro Patronal IMSS ── */}
       {activeCompany && (
-        <div className="bg-white border border-cos-line rounded-xl shadow-sm p-5 mb-5">
+        <div className="bg-cos-card border border-cos-line rounded-xl shadow-sm p-5 mb-5">
           <div className="flex items-start gap-3 mb-3">
             <div className="h-9 w-9 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
               <Building2 className="h-4 w-4 text-cos-brand-ink" />
@@ -656,7 +656,7 @@ export default function EmpresaPage() {
 
       {/* ── Plataformas tecnológicas (625) — tipo de actividad / tasa ── */}
       {activeCompany && companyDetail?.regimenFiscal === "625" && (
-        <div className="bg-white border border-cos-line rounded-xl shadow-sm p-5 mb-5">
+        <div className="bg-cos-card border border-cos-line rounded-xl shadow-sm p-5 mb-5">
           <div className="flex items-start gap-3 mb-3">
             <div className="h-9 w-9 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
               <Building2 className="h-4 w-4 text-cos-brand-ink" />
@@ -681,7 +681,7 @@ export default function EmpresaPage() {
       {/* ── Facturapi Setup + FIEL ── */}
       {activeCompany && (
         <>
-        <div className="bg-white border border-cos-line rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-cos-card border border-cos-line rounded-xl shadow-sm overflow-hidden">
           {/* Header */}
           <div className="px-6 py-4 border-b border-cos-line flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -967,7 +967,7 @@ export default function EmpresaPage() {
         </div>
 
         {/* ── e.firma / FIEL ── */}
-        <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+        <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-cos-amber-tint flex items-center justify-center shrink-0">
@@ -1066,7 +1066,7 @@ export default function EmpresaPage() {
           </div>
         </div>
         {/* ── Importar Declaraciones ── */}
-        <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden mt-5">
+        <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden mt-5">
           <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
@@ -1115,7 +1115,7 @@ export default function EmpresaPage() {
                   <div
                     key={d.id}
                     className={`flex items-center gap-3 px-3 py-2 rounded-md border text-sm ${
-                      d.type === "OTRO" ? "bg-cos-amber-tint border-cos-amber-ink/20" : "bg-white border-cos-line"
+                      d.type === "OTRO" ? "bg-cos-amber-tint border-cos-amber-ink/20" : "bg-cos-card border-cos-line"
                     }`}
                   >
                     <FileText className={`h-4 w-4 shrink-0 ${d.type === "OTRO" ? "text-cos-amber-ink" : "text-cos-brand-ink"}`} />
@@ -1178,7 +1178,7 @@ export default function EmpresaPage() {
                 <p className="text-xs font-medium text-cos-ink-soft mb-2">📄 Declaraciones importadas</p>
                 <div className="space-y-1">
                   {historicalDecs.map(d => (
-                    <div key={d.id} className="flex items-center justify-between text-xs bg-white border border-cos-line rounded px-3 py-1.5">
+                    <div key={d.id} className="flex items-center justify-between text-xs bg-cos-card border border-cos-line rounded px-3 py-1.5">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-medium">{d.periodo}</span>
                         <span className="text-cos-ink-soft">

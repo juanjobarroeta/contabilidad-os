@@ -22,7 +22,7 @@ const VARIANTS: Record<Variant, string> = {
   destructive: "bg-cos-red-ink text-white hover:opacity-90",
   outline: "border border-cos-line bg-transparent hover:bg-cos-paper",
   brand: "bg-cos-brand text-white hover:bg-cos-brand-deep",
-  soft: "bg-white border border-cos-line text-cos-ink hover:bg-cos-paper",
+  soft: "bg-cos-card border border-cos-line text-cos-ink hover:bg-cos-paper",
   ghostBrand: "bg-transparent text-cos-brand-ink hover:bg-cos-brand-tint",
 };
 

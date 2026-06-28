@@ -209,7 +209,7 @@ export default function ClientesPage() {
           Cargando clientes…
         </div>
       ) : clientes.length === 0 ? (
-        <div className="mt-5 flex flex-col items-center justify-center rounded-card border border-dashed border-cos-line bg-white py-16 text-center">
+        <div className="mt-5 flex flex-col items-center justify-center rounded-card border border-dashed border-cos-line bg-cos-card py-16 text-center">
           <Users className="mb-3 h-12 w-12 text-cos-ink-faint opacity-40" />
           <p className="text-[14px] font-semibold text-cos-ink">{search ? "Sin resultados" : "Sin clientes aún"}</p>
           <p className="mt-1 text-[13px] text-cos-ink-soft">
@@ -225,7 +225,7 @@ export default function ClientesPage() {
           )}
         </div>
       ) : (
-        <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-white shadow-card">
+        <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
           <table className="w-full text-sm">
             <thead className="bg-cos-paper text-[12px] uppercase tracking-[0.02em] text-cos-ink-faint">
               <tr>
@@ -315,7 +315,7 @@ export default function ClientesPage() {
       {/* ── Create / Edit Modal ── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-cos-line">
               <h2 className="text-base font-semibold">
                 {editingCliente ? "Editar cliente" : "Nuevo cliente"}
@@ -366,7 +366,7 @@ export default function ClientesPage() {
                 </label>
                 <select
                   name="regimenFiscal" value={form.regimenFiscal} onChange={handleChange} required
-                  className="w-full px-3 py-2 border border-cos-line rounded-control text-sm focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand bg-white"
+                  className="w-full px-3 py-2 border border-cos-line rounded-control text-sm focus:outline-none focus:ring-1 focus:ring-cos-brand focus:border-cos-brand bg-cos-card"
                 >
                   <option value="">Selecciona un régimen...</option>
                   {REGIMENES_FISCALES.map((r) => (
@@ -444,7 +444,7 @@ export default function ClientesPage() {
       {/* ── Delete Confirm Modal ── */}
       {deleteId && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+          <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center gap-3 mb-3">
               <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
                 <Trash2 className="h-5 w-5 text-red-600" />
