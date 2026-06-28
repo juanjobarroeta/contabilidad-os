@@ -212,6 +212,8 @@ export async function GET(req: Request) {
       baseGravable: pos.isr.baseGravable,
       tasa: pos.isr.tasa,
       utilidadFiscal: pos.isr.utilidadFiscal,
+      perdidaFiscalPendiente: pos.isr.perdidaFiscalPendiente ?? null,
+      perdidaFiscalAplicada: pos.isr.perdidaFiscalAplicada ?? null,
       isrDelEjercicio: pos.isr.isrDelEjercicio,
       isrPagar: pos.isr.isrPagar,
       retencionesAcreditadas: pos.isr.retencionesAcreditadas,

@@ -181,6 +181,10 @@ model Company {
   coeficienteUtilidad Float? // Stored after user confirms/overrides auto-calculation
   coeficienteAnio     Int? // Which fiscal year this coeficiente applies to
 
+  // ISR — Pérdidas fiscales de ejercicios anteriores pendientes de aplicar (Art. 14)
+  perdidaFiscalPendiente Float? // Monto ACTUALIZADO del remanente pendiente de amortizar
+  perdidaFiscalAnio      Int? // Ejercicio al que corresponde el remanente (última anual)
+
   // Precio mensual por empresa para análisis de rentabilidad (centavos MXN).
   // Sólo unit economics; desacoplado del trial/subscription gating.
   precioMensualCentavos Int?
