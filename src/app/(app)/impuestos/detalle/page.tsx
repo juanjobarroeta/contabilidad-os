@@ -51,6 +51,10 @@ interface IsrApiData {
   baseGravable: number | null;
   tasa: number | null;
   utilidadFiscal: number | null;
+  /** PM Art. 14: remanente de pérdidas fiscales pendiente de aplicar (actualizado). */
+  perdidaFiscalPendiente?: number | null;
+  /** PM Art. 14: pérdida fiscal efectivamente amortizada este periodo. */
+  perdidaFiscalAplicada?: number | null;
   isrDelEjercicio: number | null;
   isrPagar: number | null;
   /** ISR retenido acreditado contra el provisional/definitivo (10% PM Art. 106 PF; 1.25% Art. 113-J RESICO). */
@@ -218,6 +222,10 @@ export default function ImpuestosPage() {
   const [saldoFavorEdited, setSaldoFavorEdited]     = useState(false);
   const [coeficiente, setCoeficiente]               = useState<number | null>(null);
   const [coeficienteEdited, setCoeficienteEdited]   = useState(false);
+  // PM Art. 14: remanente de pérdidas fiscales pendiente de aplicar (actualizado).
+  const [perdidaPendiente, setPerdidaPendiente]     = useState<number | null>(null);
+  const [perdidaEdited, setPerdidaEdited]           = useState(false);
+  const [savingPerdida, setSavingPerdida]           = useState(false);
 
   // Invoice filter
   const [facturaFilter, setFacturaFilter] = useState<"all" | "INGRESO" | "EGRESO" | "NOMINA">("all");
@@ -258,19 +266,26 @@ export default function ImpuestosPage() {
     if (isr.metodo === "PM_ART14") {
       if (coeficiente === null || coeficiente === 0) return null;
       const utilidadFiscal   = isr.ingresosAcumulados * coeficiente;
-      const isrDelEjercicio  = utilidadFiscal * 0.30;
+      // Amortización de pérdidas fiscales de ejercicios anteriores (Art. 14):
+      // se restan de la utilidad fiscal antes de aplicar el 30%.
+      const perdidaAplicada  = perdidaPendiente != null && perdidaPendiente > 0
+        ? Math.min(perdidaPendiente, Math.max(0, utilidadFiscal))
+        : 0;
+      const baseGravable     = Math.max(0, utilidadFiscal - perdidaAplicada);
+      const isrDelEjercicio  = baseGravable * 0.30;
       const esteMes          = Math.max(0, isrDelEjercicio - isr.isrPagadoAnterior);
-      return { utilidadFiscal, isrDelEjercicio, esteMes, baseGravable: utilidadFiscal, tasa: 0.30 };
+      return { utilidadFiscal, perdidaAplicada, isrDelEjercicio, esteMes, baseGravable, tasa: 0.30 };
     }
     if (isr.isrPagar === null) return null;
     return {
       utilidadFiscal: isr.baseGravable ?? 0,
+      perdidaAplicada: 0,
       isrDelEjercicio: isr.isrDelEjercicio ?? isr.isrPagar,
       esteMes: isr.isrPagar,
       baseGravable: isr.baseGravable ?? 0,
       tasa: isr.tasa,
     };
-  }, [result, coeficiente]);
+  }, [result, coeficiente, perdidaPendiente]);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
   const calcular = useCallback(async () => {
@@ -316,6 +331,8 @@ export default function ImpuestosPage() {
       setSaldoFavorEdited(savedSaldo != null && savedSaldo !== data.iva.saldoFavorAnterior);
       setCoeficiente(savedCoef != null ? savedCoef : data.isr.coeficiente);
       setCoeficienteEdited(savedCoef != null && savedCoef !== data.isr.coeficiente);
+      setPerdidaPendiente(data.isr.perdidaFiscalPendiente ?? null);
+      setPerdidaEdited(false);
 
       // Restore acuse fields
       const saved = data.declaracionGuardada;
@@ -332,6 +349,26 @@ export default function ImpuestosPage() {
   }, [activeCompany, month, year, cutoffDate]);
 
   useEffect(() => { calcular(); }, [calcular]);
+
+  // ── Guardar remanente de pérdidas fiscales (PM Art. 14) ─────────────────────
+  const guardarPerdida = useCallback(async () => {
+    if (!activeCompany) return;
+    const monto = Math.max(0, perdidaPendiente ?? 0);
+    setSavingPerdida(true);
+    try {
+      const res = await fetch("/api/impuestos/perdida", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, year, perdida: monto }),
+      });
+      if (!res.ok) throw new Error();
+      setPerdidaEdited(false);
+      await calcular();
+    } catch {
+      setError("No se pudo guardar el remanente de pérdidas fiscales");
+    } finally {
+      setSavingPerdida(false);
+    }
+  }, [activeCompany, year, perdidaPendiente, calcular]);
 
   // ── Fetch SAT requests for the period ──────────────────────────────────────
   const loadSatRequests = useCallback(async () => {
@@ -865,9 +902,45 @@ export default function ImpuestosPage() {
                 </div>
               </Row>
 
+              {/* Pérdidas fiscales de ejercicios anteriores pendientes (Art. 14) */}
+              <Row label="Pérdidas fiscales pendientes (remanente actualizado)">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={perdidaPendiente != null && perdidaPendiente > 0 ? perdidaPendiente : ""}
+                    placeholder="0.00"
+                    onChange={e => {
+                      const n = parseFloat(e.target.value);
+                      setPerdidaPendiente(isNaN(n) ? null : Math.max(0, n));
+                      setPerdidaEdited(true);
+                    }}
+                    className="w-32 text-right text-sm border border-cos-line rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
+                  />
+                  {perdidaEdited && (
+                    <button
+                      onClick={guardarPerdida}
+                      disabled={savingPerdida}
+                      className="inline-flex items-center gap-1 rounded-md border border-cos-brand/40 px-2 py-0.5 text-xs font-semibold text-cos-brand-ink hover:bg-cos-brand-tint disabled:opacity-50"
+                    >
+                      {savingPerdida ? "Guardando…" : "Guardar"}
+                    </button>
+                  )}
+                </div>
+              </Row>
+
               {isrComputed ? (
                 <>
                   <Row label="= Utilidad fiscal estimada" value={formatCurrency(isrComputed.utilidadFiscal)} indent />
+                  {isrComputed.perdidaAplicada > 0 && (
+                    <Row
+                      label="− Pérdidas fiscales pendientes (aplicadas)"
+                      value={`(${formatCurrency(isrComputed.perdidaAplicada)})`}
+                      indent
+                    />
+                  )}
+                  {isrComputed.perdidaAplicada > 0 && (
+                    <Row label="= Base gravable" value={formatCurrency(isrComputed.baseGravable)} indent bold />
+                  )}
                   <Row label="× Tasa ISR (30%)" value="" indent />
                   <Row label="= ISR del ejercicio estimado" value={formatCurrency(isrComputed.isrDelEjercicio)} indent bold />
                   {result.isr.isrPagadoAnterior > 0 && (
@@ -926,6 +999,16 @@ export default function ImpuestosPage() {
                 </div>
               </div>
             )}
+            {/* Nota: remanente de pérdidas fiscales (Art. 14) */}
+            <div className="px-5 pb-4">
+              <div className="flex items-start gap-2 bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg px-3 py-2 text-xs text-cos-brand-ink">
+                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                Captura el remanente actualizado de pérdidas fiscales de ejercicios anteriores,
+                tomado de tu última declaración anual. Se amortiza contra la utilidad fiscal
+                estimada antes de aplicar la tasa del 30% (Art. 14 LISR) y se conserva para todos
+                los meses del ejercicio.
+              </div>
+            </div>
             </>
             ) : (
             /* ── PF actividad empresarial / RESICO PF — server-computed ── */

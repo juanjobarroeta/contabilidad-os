@@ -211,6 +211,10 @@ export interface TaxPosition {
     tasa: number | null;
     /** Art. 14 derived figures; null when no coeficiente/tarifa is available. */
     utilidadFiscal: number | null;
+    /** Remanente de pérdidas fiscales pendiente de aplicar (actualizado). PM Art.14; null en otros régimenes. */
+    perdidaFiscalPendiente?: number | null;
+    /** Pérdida fiscal efectivamente amortizada contra la utilidad este periodo. PM Art.14; null en otros régimenes. */
+    perdidaFiscalAplicada?: number | null;
     isrDelEjercicio: number | null;
     isrPagar: number | null;
     /** ISR retenido (Art. 106, 10% por PM) acreditado contra el provisional. 0 si no aplica al régimen. */
@@ -241,6 +245,34 @@ export interface TaxPosition {
 export type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO" | "PF_PLATAFORMAS";
 
 const ISR_TASA_PM = 0.3;
+
+/**
+ * Amortización de pérdidas fiscales de ejercicios anteriores (Art. 14 LISR) en
+ * pagos provisionales de Persona Moral. La pérdida pendiente (ACTUALIZADA, el
+ * remanente de la última declaración anual) se resta de la utilidad fiscal
+ * estimada antes de aplicar la tasa del 30%. Sólo aplica cuando el remanente es
+ * positivo y corresponde a un ejercicio ANTERIOR al que se calcula.
+ *
+ * Función pura (sin DB) para poder probar la matemática de forma aislada.
+ */
+export function aplicarPerdidaFiscalPM(params: {
+  utilidadFiscal: number;
+  perdidaPendiente: number | null;
+  perdidaAnio: number | null;
+  year: number;
+}): { perdidaAplicada: number; baseGravable: number } {
+  const { utilidadFiscal, perdidaPendiente, perdidaAnio, year } = params;
+  const aplicable =
+    perdidaPendiente != null &&
+    perdidaPendiente > 0 &&
+    (perdidaAnio == null || perdidaAnio < year);
+  if (!aplicable || utilidadFiscal <= 0) {
+    return { perdidaAplicada: 0, baseGravable: Math.max(0, round2(utilidadFiscal)) };
+  }
+  const perdidaAplicada = round2(Math.min(perdidaPendiente!, utilidadFiscal));
+  const baseGravable = Math.max(0, round2(utilidadFiscal - perdidaAplicada));
+  return { perdidaAplicada, baseGravable };
+}
 
 /**
  * Compute the monthly IVA + ISR position for a company from its CFDIs.
@@ -341,7 +373,7 @@ export async function computeTaxPosition(
     }),
     prisma.company.findUnique({
       where: { id: companyId },
-      select: { coeficienteUtilidad: true, coeficienteAnio: true, regimenFiscal: true, rfc: true, plataformaActividad: true },
+      select: { coeficienteUtilidad: true, coeficienteAnio: true, perdidaFiscalPendiente: true, perdidaFiscalAnio: true, regimenFiscal: true, rfc: true, plataformaActividad: true },
     }),
     // PPD IVA is on a REP (complemento de pago) basis: every payment whose
     // FechaPago falls in this month, across all REPs of this company. Direction
@@ -671,12 +703,28 @@ export async function computeTaxPosition(
       coeficienteFuente = "ninguno";
     }
 
+    // Pérdidas fiscales de ejercicios anteriores pendientes de aplicar (Art. 14):
+    // el remanente ACTUALIZADO se amortiza contra la utilidad fiscal estimada
+    // antes de aplicar la tasa del 30%.
+    const perdidaFiscalPendiente = company?.perdidaFiscalPendiente ?? null;
+    const perdidaFiscalAnio = company?.perdidaFiscalAnio ?? null;
+
     let utilidadFiscal: number | null = null;
+    let baseGravable: number | null = null;
+    let perdidaFiscalAplicada: number | null = null;
     let isrDelEjercicio: number | null = null;
     let isrPagar: number | null = null;
     if (coeficiente !== null && coeficiente > 0) {
       utilidadFiscal = round2(ingresosAcumulados * coeficiente);
-      isrDelEjercicio = round2(utilidadFiscal * ISR_TASA_PM);
+      const { perdidaAplicada, baseGravable: base } = aplicarPerdidaFiscalPM({
+        utilidadFiscal,
+        perdidaPendiente: perdidaFiscalPendiente,
+        perdidaAnio: perdidaFiscalAnio,
+        year,
+      });
+      perdidaFiscalAplicada = perdidaAplicada;
+      baseGravable = base;
+      isrDelEjercicio = round2(baseGravable * ISR_TASA_PM);
       isrPagar = Math.max(0, round2(isrDelEjercicio - isrPagadoAnterior));
     }
 
@@ -699,9 +747,11 @@ export async function computeTaxPosition(
               invoiceCount: prevYearIngresos._count.id,
             }
           : null,
-      baseGravable: utilidadFiscal,
+      baseGravable,
       tasa: ISR_TASA_PM,
       utilidadFiscal,
+      perdidaFiscalPendiente,
+      perdidaFiscalAplicada,
       isrDelEjercicio,
       isrPagar,
       retencionesAcreditadas: 0, // PM Art. 14 no acredita retención 10% PF
