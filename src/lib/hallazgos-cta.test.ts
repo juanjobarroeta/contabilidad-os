@@ -13,8 +13,8 @@ describe("ctaParaHallazgo", () => {
   });
 
   it("mapea obligación/declaraciones a su pantalla", () => {
-    expect(ctaParaHallazgo("obligacion.vencimiento.proximo")?.href).toBe("/declaracion");
-    expect(ctaParaHallazgo("declaraciones.faltantes")?.href).toBe("/declaraciones");
+    expect(ctaParaHallazgo("obligacion.vencimiento.proximo")?.href).toBe("/impuestos?tab=del-mes");
+    expect(ctaParaHallazgo("declaraciones.faltantes")?.href).toBe("/impuestos?tab=historial");
   });
 
   it("usa respaldo por prefijo para claves no listadas", () => {

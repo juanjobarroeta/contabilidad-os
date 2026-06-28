@@ -12,9 +12,9 @@ const MAP: Record<string, HallazgoCta> = {
   "banco.movimientos_desactualizados": { label: "Subir estado de cuenta", href: "/bancos" },
   "iva.pue.sin_pago": { label: "Revisar conciliación", href: "/bancos" },
   "cfdi.rep.fecha_pago_anterior_factura": { label: "Revisar conciliación", href: "/bancos" },
-  "declaraciones.faltantes": { label: "Ir a Declaraciones", href: "/declaraciones" },
-  "obligacion.vencimiento.proximo": { label: "Ir a la declaración del mes", href: "/declaracion" },
-  "resico.ingresos_limite": { label: "Ver impuestos", href: "/impuestos/detalle" },
+  "declaraciones.faltantes": { label: "Ir a Declaraciones", href: "/impuestos?tab=historial" },
+  "obligacion.vencimiento.proximo": { label: "Ir a la declaración del mes", href: "/impuestos?tab=del-mes" },
+  "resico.ingresos_limite": { label: "Ver impuestos", href: "/impuestos?tab=del-mes" },
   "csd.por_vencer": { label: "Actualizar credenciales", href: "/empresa" },
   "fiel.por_vencer": { label: "Actualizar credenciales", href: "/empresa" },
   "cumplimiento.sat_opinion.negativa": { label: "Ver opinión", href: "/opiniones" },
@@ -34,7 +34,7 @@ export function ctaParaHallazgo(checkClave: string): HallazgoCta | null {
   if (checkClave.startsWith("csd.") || checkClave.startsWith("fiel.")) return { label: "Actualizar credenciales", href: "/empresa" };
   if (checkClave.startsWith("cumplimiento.")) return { label: "Ver cumplimiento", href: "/cumplimiento" };
   if (checkClave.startsWith("declaracion") || checkClave.startsWith("obligacion")) {
-    return { label: "Ir a Declaraciones", href: "/declaraciones" };
+    return { label: "Ir a Declaraciones", href: "/impuestos?tab=historial" };
   }
   if (checkClave.startsWith("cfdi.") || checkClave.startsWith("deduccion.") || checkClave.startsWith("iva.")) {
     return { label: "Revisar facturas", href: "/facturas" };

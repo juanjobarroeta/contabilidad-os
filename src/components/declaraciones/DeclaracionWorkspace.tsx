@@ -5,7 +5,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
-  CheckCircle2, AlertTriangle, CalendarDays, Sparkles, Printer, SlidersHorizontal, ChevronRight as ChevronR, FileWarning,
+  CheckCircle2, AlertTriangle, CalendarDays, Sparkles, Printer, ChevronRight as ChevronR, FileWarning,
 } from "lucide-react";
 import Link from "next/link";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
@@ -71,7 +71,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "presentar", label: "Presentar" },
 ];
 
-export default function DeclaracionWorkspace() {
+export function DeclaracionWorkspace() {
   const { activeCompany } = useCompany();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -335,7 +335,7 @@ function FaltantesBanner({ faltantes, empresa, onUploaded }: {
             compact
             onUploaded={onUploaded}
           />
-          <Link href="/declaraciones" className="mt-2 inline-block text-[12px] font-medium text-cos-amber-ink hover:underline">Ver todas las empresas →</Link>
+          <Link href="/impuestos?tab=historial" className="mt-2 inline-block text-[12px] font-medium text-cos-amber-ink hover:underline">Ver todas las empresas →</Link>
         </div>
       )}
     </div>
@@ -420,14 +420,6 @@ function Resumen({ data, companyId, month, year }: { data: CierreData; companyId
           </p>
         </Card>
       )}
-
-      {/* Expert depth: precierre, saldo a favor, REP y sincronización con el SAT. */}
-      <a href={`/impuestos/detalle?month=${month}&year=${year}`}
-        className="flex items-center gap-3 rounded-card border border-dashed border-cos-line bg-white px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
-        <SlidersHorizontal className="h-[18px] w-[18px] flex-none" />
-        <span className="flex-1">Cálculo a detalle — precierre, saldo a favor, complementos de pago y sincronizar con el SAT</span>
-        <ChevronR className="h-4 w-4 flex-none" />
-      </a>
 
       <Simulador companyId={companyId} month={month} year={year} />
     </div>

@@ -45,11 +45,12 @@ function severityWeight(r: Row): number {
   return r.hallazgosAbiertos > 0 && r.peorSeveridad ? SEV_RANK[r.peorSeveridad] : 0;
 }
 
-// Deep-link into the Declaración Workspace for a given periodo ("YYYY-MM"),
-// optionally landing on a specific tab.
+// Deep-link al hub de Impuestos (pestaña "Del mes" = workspace de la declaración
+// del mes) para un periodo ("YYYY-MM"), opcionalmente abriendo una sub-pestaña
+// del workspace (presentar / revision).
 function declHref(periodo: string, tab?: "presentar" | "revision"): string {
   const [y, m] = periodo.split("-");
-  return `/declaracion?month=${parseInt(m)}&year=${parseInt(y)}${tab ? `&tab=${tab}` : ""}`;
+  return `/impuestos?month=${parseInt(m)}&year=${parseInt(y)}${tab ? `&tab=${tab}` : ""}`;
 }
 interface Data {
   periodo: string;
@@ -190,7 +191,7 @@ export default function DespachoCockpitPage() {
 
       {/* franja de declaraciones (acuses) por capturar */}
       {declFaltan && declFaltan.total > 0 && (
-        <Link href="/declaraciones" className="mt-3 flex items-center gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink hover:opacity-90">
+        <Link href="/impuestos?tab=historial" className="mt-3 flex items-center gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink hover:opacity-90">
           <FileWarning className="h-4 w-4 flex-none" />
           <span className="flex-1">
             Faltan <b>{declFaltan.total} acuse(s)</b> en <b>{declFaltan.empresas} empresa(s)</b> — súbelos para calcular saldos a favor, coeficiente y pagos provisionales.

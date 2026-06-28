@@ -14,7 +14,7 @@ export default function DeclaracionAcuseViewer({ params }: { params: Promise<{ i
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-2 border-b border-cos-line bg-white px-3 py-2.5 sm:px-4">
         <Link
-          href="/declaraciones"
+          href="/impuestos?tab=historial"
           className="inline-flex items-center gap-1 rounded-control px-2 py-1.5 text-sm font-medium text-cos-ink hover:bg-cos-paper"
         >
           <ChevronLeft className="h-4 w-4" /> Volver

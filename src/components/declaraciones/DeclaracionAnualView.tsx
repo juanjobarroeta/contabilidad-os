@@ -31,7 +31,7 @@ type DecResult = {
   existingDeclaration: { id: string; status: string } | null;
 };
 
-export default function DeclaracionAnualPage() {
+export function DeclaracionAnualView() {
   const { activeCompany } = useCompany();
   const [ejercicio, setEjercicio] = useState(new Date().getFullYear() - 1);
   const [loading, setLoading] = useState(false);
