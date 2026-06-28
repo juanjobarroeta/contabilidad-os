@@ -57,7 +57,7 @@ export async function GET(req: Request) {
   // Previous month's declaration for saldo a favor carryover
   const prevPeriodo = month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, "0")}`;
 
-  const [ingresos, egresos, prevDecl, company, repCobros] = await Promise.all([
+  const [ingresos, egresos, prevDecl, curDecl, company, repCobros] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
       include: { customer: { select: { razonSocial: true, rfc: true } }, taxes: true },
@@ -75,6 +75,13 @@ export async function GET(req: Request) {
         periodo: prevPeriodo,
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
+    }),
+    // Declaración del periodo actual: lleva el override manual del saldo a favor
+    // anterior (campo ivaSaldoFavorAnterior) que el contador captura en la
+    // pantalla de detalle. Misma fuente, misma persistencia — no se duplica.
+    prisma.taxDeclaration.findFirst({
+      where: { companyId, tipo: "IVA_MENSUAL", periodo },
+      select: { ivaSaldoFavorAnterior: true },
     }),
     prisma.company.findUnique({
       where: { id: companyId },
@@ -340,7 +347,13 @@ export async function GET(req: Request) {
 
   // IVA cargo = trasladado - retenidoPorClientes - acreditable procedente
   const ivaCargo = totalTrasladado - totalRetenidoClientes - acreditableProcedente;
-  const saldoFavorAnterior = prevDecl?.ivaSaldoFavor ?? 0;
+  // Saldo a favor anterior: por defecto se arrastra el saldo a favor que dejó la
+  // declaración del mes previo (ivaSaldoFavor). El contador puede ajustarlo a mano
+  // y ese override se guarda en ivaSaldoFavorAnterior de la declaración del periodo
+  // (misma fuente que la pantalla de detalle). Cuando existe el override, manda.
+  const saldoFavorAnteriorAuto = prevDecl?.ivaSaldoFavor ?? 0;
+  const saldoFavorAnteriorOverride = curDecl?.ivaSaldoFavorAnterior ?? null;
+  const saldoFavorAnterior = saldoFavorAnteriorOverride ?? saldoFavorAnteriorAuto;
   const cargoFinal = ivaCargo - saldoFavorAnterior;
   const ivaPagar = cargoFinal > 0 ? cargoFinal : 0;
   const saldoFavorMes = cargoFinal < 0 ? -cargoFinal : 0;
@@ -387,6 +400,13 @@ export async function GET(req: Request) {
       retenidoAProveedores: totalRetenidoProv,
       ivaCargo,
       saldoFavorAnterior,
+      // Valor automático arrastrado del mes anterior y override manual capturado
+      // (null si no hay) — el editor inline los necesita para mostrar la fuente y
+      // ofrecer "restablecer al automático".
+      saldoFavorAnteriorAuto,
+      saldoFavorAnteriorOverride,
+      saldoFavorAnteriorPeriodo: saldoFavorAnteriorAuto > 0 ? prevPeriodo : null,
+      saldoFavorAnteriorEsManual: saldoFavorAnteriorOverride != null,
       ivaPagar,
       saldoFavorMes,
     },

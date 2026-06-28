@@ -39,6 +39,10 @@ interface IvaData {
     trasladado: number; acreditable: number; retenidoPorClientes: number; retenidoAProveedores: number;
     proporcionAcreditamiento: number; actosGravados: number; actosExentos: number; acreditableProcedente: number;
     ivaCargo: number; saldoFavorAnterior: number; ivaPagar: number; saldoFavorMes: number;
+    saldoFavorAnteriorAuto: number;
+    saldoFavorAnteriorOverride: number | null;
+    saldoFavorAnteriorPeriodo: string | null;
+    saldoFavorAnteriorEsManual: boolean;
   };
   reconciliacion?: { activa: boolean; ivaPueSinPago: number; cfdisPueSinPago: number };
   ppdSinComplemento?: { count: number; iva: number };
@@ -60,6 +64,33 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
   }, [companyId, year, month]);
 
   useEffect(() => { load(); }, [load]);
+
+  const [savingSaldo, setSavingSaldo] = useState(false);
+  const [saldoError, setSaldoError] = useState<string | null>(null);
+
+  // Persiste el saldo a favor anterior de IVA como override manual del periodo
+  // (mismo campo ivaSaldoFavorAnterior que usa la pantalla de detalle) y recarga
+  // el papel para reflejarlo. saldoFavor = null restablece el valor automático.
+  const saveSaldoFavor = useCallback(async (saldoFavor: number | null) => {
+    setSavingSaldo(true);
+    setSaldoError(null);
+    try {
+      const res = await fetch("/api/impuestos/saldo-favor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, year, month, saldoFavor }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? "No se pudo guardar el saldo a favor");
+      }
+      await load();
+    } catch (e) {
+      setSaldoError(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setSavingSaldo(false);
+    }
+  }, [companyId, year, month, load]);
 
   const [toggling, setToggling] = useState<string | null>(null);
   // field = ivaNoAcreditable (gastos) | ivaNoCausado (ingresos) — IVA is
@@ -167,7 +198,12 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
             <Line label="IVA acreditable (−)" value={-data.totales.acreditable} />
           )}
           <Line label="= IVA a cargo" value={data.totales.ivaCargo} strong />
-          <Line label="Saldo a favor anterior (−)" value={-data.totales.saldoFavorAnterior} />
+          <SaldoFavorAnteriorLine
+            totales={data.totales}
+            saving={savingSaldo}
+            error={saldoError}
+            onSave={saveSaldoFavor}
+          />
           <div className="border-t border-cos-line-soft pt-2">
             {data.totales.ivaPagar > 0 ? (
               <Line label="= IVA A PAGAR" value={data.totales.ivaPagar} strong big colorClass="text-cos-red-ink" />
@@ -177,6 +213,124 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
           </div>
         </dl>
       </div>
+    </div>
+  );
+}
+
+// Etiqueta humana de un periodo "YYYY-MM" → "Marzo 2026".
+const MESES_LARGOS = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+function periodoLargo(periodo: string): string {
+  const [y, m] = periodo.split("-");
+  const mi = parseInt(m) - 1;
+  return mi >= 0 && mi < 12 ? `${MESES_LARGOS[mi]} ${y}` : periodo;
+}
+
+// Renglón editable del saldo a favor anterior dentro de la determinación del IVA.
+// Espeja el patrón de CoeficienteCard/PerdidaCard del panel de ISR: muestra la
+// fuente (automático del mes anterior vs. ajuste manual), permite editar el monto
+// con Guardar y ofrece restablecer al valor automático. Persiste vía
+// /api/impuestos/saldo-favor (mismo campo ivaSaldoFavorAnterior que la pantalla
+// de detalle) y, al guardar, recarga el papel para que la determinación se
+// actualice en vivo.
+function SaldoFavorAnteriorLine({
+  totales,
+  saving,
+  error,
+  onSave,
+}: {
+  totales: IvaData["totales"];
+  saving: boolean;
+  error: string | null;
+  onSave: (saldoFavor: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState("");
+
+  const aplicado = totales.saldoFavorAnterior;
+  const esManual = totales.saldoFavorAnteriorEsManual;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-cos-ink-soft">Saldo a favor anterior (−)</span>
+        {!editing ? (
+          <div className="flex items-center gap-2">
+            {esManual ? (
+              <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-cos-amber-tint text-cos-amber-ink">
+                Ajuste manual
+              </span>
+            ) : aplicado > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium bg-cos-jade-tint text-cos-jade-ink">
+                <Sparkles className="h-3 w-3" />
+                {totales.saldoFavorAnteriorPeriodo
+                  ? `Automático de ${periodoLargo(totales.saldoFavorAnteriorPeriodo)}`
+                  : "Automático"}
+              </span>
+            ) : null}
+            <Money value={-aplicado} size={14} weight={500} />
+            <button
+              onClick={() => {
+                setVal(aplicado > 0 ? aplicado.toFixed(2) : "");
+                setEditing(true);
+              }}
+              className="text-[12px] font-medium text-cos-brand-ink hover:underline"
+            >
+              Editar
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="inline-flex items-center gap-1">
+              <span className="text-cos-ink-soft">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={val}
+                placeholder="0.00"
+                onChange={(e) => setVal(e.target.value)}
+                className="w-32 rounded-md border border-cos-line px-2 py-1 text-right text-[13px] focus:outline-none focus:ring-1 focus:ring-cos-brand"
+              />
+            </div>
+            <button
+              onClick={() => {
+                const monto = parseFloat(val);
+                if (!Number.isFinite(monto) || monto < 0) return;
+                onSave(+monto.toFixed(2));
+                setEditing(false);
+              }}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded-md bg-cos-brand px-2.5 py-1 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+              Guardar
+            </button>
+            {esManual && (
+              <button
+                onClick={() => {
+                  onSave(null);
+                  setEditing(false);
+                }}
+                disabled={saving}
+                className="text-[12px] font-medium text-cos-ink-soft hover:text-cos-ink disabled:opacity-50"
+                title="Restablecer al saldo a favor automático del mes anterior"
+              >
+                Restablecer automático
+              </button>
+            )}
+            <button
+              onClick={() => setEditing(false)}
+              className="text-[12px] font-medium text-cos-ink-soft hover:text-cos-ink"
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
+      </div>
+      {error && <p className="text-right text-[12px] text-cos-red-ink">{error}</p>}
     </div>
   );
 }
