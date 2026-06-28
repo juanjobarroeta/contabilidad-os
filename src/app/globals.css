@@ -4,32 +4,10 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    /* --primary / --ring remapeados al azul de marca Contia (= --brand
-       oklch(0.55 0.16 258) ≈ hsl(215 64% 49%)). Así NO conviven dos azules:
-       cualquier bg-primary/ring-primary residual de shadcn rinde el de marca.
-       Retiro suave del tema legacy sin romper los primitivos que aún lo usan. */
-    --primary: 215 64% 49%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 215 64% 49%;
+    /* Radio base de shadcn — aún alimenta rounded-sm/md/lg en tailwind.config. */
     --radius: 0.5rem;
 
-    /* ── Contia redesign tokens (additive; OKLCH = source of truth) ─────────── */
+    /* ── Tokens Contia (OKLCH = fuente de verdad). Único sistema de color. ──── */
     --brand: oklch(0.55 0.16 258);
     --brand-deep: oklch(0.45 0.14 258);
     --brand-tint: oklch(0.965 0.018 258);
@@ -54,36 +32,13 @@
     --slate-tint: oklch(0.95 0.004 258);
     --shadow-card: 0 1px 2px oklch(0.4 0.05 258 / 0.04), 0 8px 24px -16px oklch(0.4 0.05 258 / 0.18);
   }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    /* dark: mismo azul de marca (= --brand) para no reintroducir un segundo azul */
-    --primary: 215 64% 49%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 215 64% 49%;
-  }
 }
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-cos-line;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-cos-paper text-cos-ink;
   }
 }

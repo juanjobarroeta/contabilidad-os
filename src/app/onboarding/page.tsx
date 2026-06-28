@@ -149,7 +149,7 @@ export default function OnboardingPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center text-muted-foreground text-sm">
+        <div className="min-h-screen flex items-center justify-center text-cos-ink-soft text-sm">
           <Loader2 className="h-4 w-4 animate-spin mr-2" /> Cargando…
         </div>
       }
@@ -483,23 +483,23 @@ function OnboardingPageInner() {
     n == null ? "—" : n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-sm border border-border w-full max-w-xl">
+    <div className="min-h-screen bg-cos-slate-tint flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-sm border border-cos-line w-full max-w-xl">
 
         {/* Header */}
-        <div className="px-8 pt-8 pb-6 border-b border-border">
+        <div className="px-8 pt-8 pb-6 border-b border-cos-line">
           {backHref && (
             <Link
               href={backHref}
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-3"
+              className="inline-flex items-center gap-1.5 text-xs text-cos-ink-soft hover:text-cos-ink mb-3"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Volver a Empresas
             </Link>
           )}
-          <h1 className="text-xl font-bold text-foreground mb-1">
+          <h1 className="text-xl font-bold text-cos-ink mb-1">
             {fromEmpresas ? "Agregar nueva empresa" : "Configura tu empresa"}
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-cos-ink-soft">
             {fromEmpresas
               ? "Se agregará a tu despacho automáticamente"
               : "Ingresa los datos fiscales del SAT"}
@@ -516,24 +516,24 @@ function OnboardingPageInner() {
                   <div
                     className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                       done
-                        ? "bg-green-500 text-white"
+                        ? "bg-cos-jade-tint0 text-white"
                         : active
-                        ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
-                        : "bg-gray-100 text-muted-foreground"
+                        ? "bg-cos-brand text-white ring-4 ring-cos-brand/15"
+                        : "bg-cos-slate-tint text-cos-ink-soft"
                     }`}
                   >
                     {done ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                   </div>
                   {i < STEPS.length - 1 && (
-                    <div className={`h-px flex-1 mx-1.5 ${done ? "bg-green-400" : "bg-gray-200"}`} />
+                    <div className={`h-px flex-1 mx-1.5 ${done ? "bg-cos-jade-ink" : "bg-cos-slate-tint"}`} />
                   )}
                 </div>
               );
             })}
           </div>
           <p className="text-xs text-center mt-3">
-            <span className="text-muted-foreground">Paso {step + 1} de {STEPS.length} · </span>
-            <span className="font-medium text-primary">{STEPS[step]?.label}</span>
+            <span className="text-cos-ink-soft">Paso {step + 1} de {STEPS.length} · </span>
+            <span className="font-medium text-cos-brand-ink">{STEPS[step]?.label}</span>
           </p>
         </div>
 
@@ -542,17 +542,17 @@ function OnboardingPageInner() {
           {/* ── STEP 0: Asistente IA (multi-documento) ── */}
           {step === 0 && (
             <>
-              <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-indigo-50 border border-indigo-200 rounded-lg p-5">
+              <div className="bg-gradient-to-br from-cos-brand via-cos-brand to-cos-brand border border-cos-brand-ink/15 rounded-lg p-5">
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="h-10 w-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                  <div className="h-10 w-10 rounded-lg bg-cos-brand text-white flex items-center justify-center shrink-0">
                     <Sparkles className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-indigo-900">Onboarding asistido con IA</h3>
-                    <p className="text-xs text-indigo-800 mt-0.5">
+                    <h3 className="font-semibold text-cos-brand-ink">Onboarding asistido con IA</h3>
+                    <p className="text-xs text-cos-brand-ink mt-0.5">
                       Sube todos los documentos relevantes en un solo paso. El asistente clasifica y extrae los datos automáticamente.
                     </p>
-                    <ul className="text-[11px] text-indigo-800 mt-2 space-y-0.5 list-disc list-inside">
+                    <ul className="text-[11px] text-cos-brand-ink mt-2 space-y-0.5 list-disc list-inside">
                       <li><strong>CSF</strong> (obligatorio) — datos fiscales base</li>
                       <li><strong>Tarjeta IMSS</strong> — registro patronal para nómina</li>
                       <li><strong>Acuse Anual</strong> — coeficiente de utilidad</li>
@@ -560,13 +560,13 @@ function OnboardingPageInner() {
                     </ul>
                   </div>
                 </div>
-                <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-indigo-300 rounded-md text-sm bg-white cursor-pointer hover:bg-indigo-50/50 transition-colors">
+                <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-cos-brand-ink/15 rounded-md text-sm bg-white cursor-pointer hover:bg-cos-brand-tint/50 transition-colors">
                   {aiParsing ? (
-                    <Loader2 className="h-4 w-4 text-indigo-600 shrink-0 animate-spin" />
+                    <Loader2 className="h-4 w-4 text-cos-brand-ink shrink-0 animate-spin" />
                   ) : (
-                    <Upload className="h-4 w-4 text-indigo-600 shrink-0" />
+                    <Upload className="h-4 w-4 text-cos-brand-ink shrink-0" />
                   )}
-                  <span className="truncate flex-1 text-muted-foreground">
+                  <span className="truncate flex-1 text-cos-ink-soft">
                     {aiParsing ? "Procesando documentos..." : "Agregar archivos PDF (puedes seleccionar varios)"}
                   </span>
                   <input
@@ -581,7 +581,7 @@ function OnboardingPageInner() {
                     }}
                   />
                 </label>
-                <p className="text-[10px] text-indigo-700 mt-2">
+                <p className="text-[10px] text-cos-brand-ink mt-2">
                   🔒 Los PDFs se procesan con Claude (Anthropic) y no se almacenan.
                 </p>
               </div>
@@ -594,18 +594,18 @@ function OnboardingPageInner() {
                       key={d.id}
                       className={`flex items-center gap-3 px-3 py-2.5 rounded-md border text-sm ${
                         d.type === "OTRO"
-                          ? "bg-amber-50 border-amber-200"
-                          : "bg-white border-border"
+                          ? "bg-cos-amber-tint border-cos-amber-ink/20"
+                          : "bg-white border-cos-line"
                       }`}
                     >
                       <FileText
                         className={`h-4 w-4 shrink-0 ${
-                          d.type === "OTRO" ? "text-amber-600" : "text-primary"
+                          d.type === "OTRO" ? "text-cos-amber-ink" : "text-cos-brand-ink"
                         }`}
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium truncate">{d.fileName}</p>
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-[10px] text-cos-ink-soft">
                           {DOC_LABEL[d.type]}
                           {d.type === "ACUSE_MENSUAL" && d.extracted.acuseMensual?.periodoMes && (
                             <> · {String(d.extracted.acuseMensual.periodoMes).padStart(2, "0")}/{d.extracted.acuseMensual.periodoAnio}</>
@@ -618,7 +618,7 @@ function OnboardingPageInner() {
                       <button
                         type="button"
                         onClick={() => removeParsedDoc(d.id)}
-                        className="p-1 rounded hover:bg-accent text-muted-foreground shrink-0"
+                        className="p-1 rounded hover:bg-cos-paper text-cos-ink-soft shrink-0"
                         title="Quitar"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -632,19 +632,19 @@ function OnboardingPageInner() {
                 <button
                   type="button"
                   onClick={applyAndContinue}
-                  className="w-full bg-indigo-600 text-white px-4 py-2.5 rounded-md text-sm font-medium hover:bg-indigo-700 flex items-center justify-center gap-2"
+                  className="w-full bg-cos-brand text-white px-4 py-2.5 rounded-md text-sm font-medium hover:bg-cos-brand-deep flex items-center justify-center gap-2"
                 >
                   <Sparkles className="h-4 w-4" />
                   Aplicar y continuar ({parsedDocs.length} {parsedDocs.length === 1 ? "documento" : "documentos"})
                 </button>
               )}
 
-              <div className="text-center text-xs text-muted-foreground">
+              <div className="text-center text-xs text-cos-ink-soft">
                 ¿No tienes los documentos a la mano?{" "}
                 <button
                   type="button"
                   onClick={skipAi}
-                  className="text-primary hover:underline font-medium"
+                  className="text-cos-brand-ink hover:underline font-medium"
                 >
                   Llénalo manualmente
                 </button>
@@ -654,7 +654,7 @@ function OnboardingPageInner() {
 
           {/* AI warnings banner — visible in step 1 after AI extraction */}
           {step === 1 && aiExtracted && (aiWarnings.length > 0 || aiConfidenceNotes) && (
-            <div className="bg-amber-50 border border-amber-200 rounded-md px-4 py-3 text-sm text-amber-900">
+            <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-md px-4 py-3 text-sm text-cos-amber-ink">
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 <div className="flex-1 space-y-1">
@@ -668,7 +668,7 @@ function OnboardingPageInner() {
             </div>
           )}
           {step === 1 && aiExtracted && aiWarnings.length === 0 && !aiConfidenceNotes && (
-            <div className="bg-green-50 border border-green-200 rounded-md px-4 py-3 text-sm text-green-800 flex items-center gap-2">
+            <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-md px-4 py-3 text-sm text-cos-jade-ink flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
               Datos extraídos del CSF. Revisa y corrige si es necesario.
             </div>
@@ -676,11 +676,11 @@ function OnboardingPageInner() {
 
           {/* Régimen confirmation — confirm ALL detected régimenes, mark the primary */}
           {step === 1 && detectedRegimenes.length >= 1 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm">
-              <p className="font-semibold text-blue-900 text-xs mb-1">
+            <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md p-3 text-sm">
+              <p className="font-semibold text-cos-brand-ink text-xs mb-1">
                 Detectamos {detectedRegimenes.length} {detectedRegimenes.length === 1 ? "régimen" : "regímenes"} en tu CSF
               </p>
-              <p className="text-[11px] text-blue-800/80 mb-2">
+              <p className="text-[11px] text-cos-brand-ink/80 mb-2">
                 Confirma cuáles aplican y marca el principal (el que usas para facturar). Generaremos las obligaciones de todos los incluidos.
               </p>
               <div className="space-y-1.5">
@@ -691,7 +691,7 @@ function OnboardingPageInner() {
                     <div
                       key={r.code}
                       className={`flex items-center gap-2 px-2.5 py-2 rounded border ${
-                        included ? "bg-white border-blue-300" : "bg-white/40 border-transparent opacity-60"
+                        included ? "bg-white border-cos-brand-ink/15" : "bg-white/40 border-transparent opacity-60"
                       }`}
                     >
                       <input
@@ -702,7 +702,7 @@ function OnboardingPageInner() {
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs"><span className="font-mono font-semibold">{r.code}</span> · {r.label}</p>
-                        {r.since && <p className="text-[10px] text-muted-foreground">Desde {r.since}</p>}
+                        {r.since && <p className="text-[10px] text-cos-ink-soft">Desde {r.since}</p>}
                       </div>
                       <button
                         type="button"
@@ -710,8 +710,8 @@ function OnboardingPageInner() {
                         onClick={() => setFiscal((p) => ({ ...p, regimenFiscal: r.code }))}
                         className={`text-[10px] px-2 py-1 rounded-full border shrink-0 transition-colors ${
                           isPrimary
-                            ? "bg-blue-600 text-white border-blue-600"
-                            : "bg-white text-blue-700 border-blue-300 hover:bg-blue-100 disabled:opacity-40"
+                            ? "bg-cos-brand text-white border-cos-brand-ink/15"
+                            : "bg-white text-cos-brand-ink border-cos-brand-ink/15 hover:bg-cos-brand-tint disabled:opacity-40"
                         }`}
                       >
                         {isPrimary ? "Principal ✓" : "Hacer principal"}
@@ -727,29 +727,29 @@ function OnboardingPageInner() {
           {step === 1 && (
             <>
               <div>
-                <label className="block text-sm font-medium mb-1.5">RFC <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium mb-1.5">RFC <span className="text-cos-red-ink">*</span></label>
                 <input
                   type="text" name="rfc" value={fiscal.rfc} onChange={handleFiscalChange}
                   placeholder="XAXX010101000" maxLength={13} required
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30 uppercase"
                 />
-                <p className="text-xs text-muted-foreground mt-1">12 caracteres personas morales · 13 personas físicas</p>
+                <p className="text-xs text-cos-ink-soft mt-1">12 caracteres personas morales · 13 personas físicas</p>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Razón Social <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium mb-1.5">Razón Social <span className="text-cos-red-ink">*</span></label>
                 <input
                   type="text" name="razonSocial" value={fiscal.razonSocial} onChange={handleFiscalChange}
                   placeholder="Mi Empresa SA de CV" required
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
-                <p className="text-xs text-muted-foreground mt-1">Tal como aparece en la Constancia de Situación Fiscal</p>
+                <p className="text-xs text-cos-ink-soft mt-1">Tal como aparece en la Constancia de Situación Fiscal</p>
               </div>
               {detectedRegimenes.length === 0 && (
                 <div>
-                  <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-cos-red-ink">*</span></label>
                   <select
                     name="regimenFiscal" value={fiscal.regimenFiscal} onChange={handleFiscalChange} required
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white"
                   >
                     <option value="">Selecciona un régimen...</option>
                     {REGIMENES_FISCALES.map((r) => (
@@ -760,19 +760,19 @@ function OnboardingPageInner() {
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1.5">Código Postal <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium mb-1.5">Código Postal <span className="text-cos-red-ink">*</span></label>
                   <input
                     type="text" name="codigoPostal" value={fiscal.codigoPostal} onChange={handleFiscalChange}
                     placeholder="06600" maxLength={5} pattern="[0-9]{5}" required
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1.5">Domicilio Fiscal <span className="text-muted-foreground font-normal text-xs">(opcional)</span></label>
+                  <label className="block text-sm font-medium mb-1.5">Domicilio Fiscal <span className="text-cos-ink-soft font-normal text-xs">(opcional)</span></label>
                   <input
                     type="text" name="domicilioFiscal" value={fiscal.domicilioFiscal} onChange={handleFiscalChange}
                     placeholder="Calle, Número, Colonia"
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                 </div>
               </div>
@@ -782,7 +782,7 @@ function OnboardingPageInner() {
           {/* ── STEP 2: Revisión (obligaciones + declaraciones) ── */}
           {step === 2 && (
             <>
-              <div className="bg-slate-50 border border-slate-200 rounded-md px-4 py-3 text-sm text-slate-700">
+              <div className="bg-cos-slate-tint border border-cos-line rounded-md px-4 py-3 text-sm text-cos-ink-soft">
                 Revisa lo que detectamos en tus documentos. Confirmamos los regímenes, las obligaciones de tu CSF y los datos de tus declaraciones.
               </div>
 
@@ -791,13 +791,13 @@ function OnboardingPageInner() {
                 <p className="text-sm font-semibold mb-2">Regímenes</p>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedRegimenes.length === 0 && (
-                    <span className="text-xs text-muted-foreground">{fiscal.regimenFiscal || "—"}</span>
+                    <span className="text-xs text-cos-ink-soft">{fiscal.regimenFiscal || "—"}</span>
                   )}
                   {selectedRegimenes.map((code) => {
                     const r = detectedRegimenes.find((x) => x.code === code);
                     return (
                       <span key={code} className={`text-xs px-2 py-1 rounded-full border ${
-                        fiscal.regimenFiscal === code ? "bg-blue-600 text-white border-blue-600" : "bg-white border-slate-300"
+                        fiscal.regimenFiscal === code ? "bg-cos-brand text-white border-cos-brand-ink/15" : "bg-white border-cos-line"
                       }`}>
                         {code}{r ? ` · ${r.label}` : ""}{fiscal.regimenFiscal === code ? " (principal)" : ""}
                       </span>
@@ -814,15 +814,15 @@ function OnboardingPageInner() {
                     <ul className="space-y-1.5">
                       {mappedObligaciones.map((o) => (
                         <li key={o.tipo} className="flex items-start gap-2 text-xs">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0 mt-0.5" />
+                          <CheckCircle2 className="h-3.5 w-3.5 text-cos-jade-ink shrink-0 mt-0.5" />
                           <span>
                             <span className="font-medium">{o.label}</span>
-                            <span className="text-muted-foreground"> — {o.descripcion}</span>
+                            <span className="text-cos-ink-soft"> — {o.descripcion}</span>
                           </span>
                         </li>
                       ))}
                     </ul>
-                    <p className="text-[10px] text-muted-foreground mt-2">
+                    <p className="text-[10px] text-cos-ink-soft mt-2">
                       Generaremos el calendario de estas obligaciones con sus fechas de vencimiento.
                     </p>
                   </>
@@ -830,13 +830,13 @@ function OnboardingPageInner() {
                   <ul className="space-y-1">
                     {csfObligaciones.map((o, i) => (
                       <li key={i} className="flex items-start gap-2 text-xs">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0 mt-0.5" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-cos-jade-ink shrink-0 mt-0.5" />
                         <span>{o}</span>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-xs text-muted-foreground">No se detectaron obligaciones en el CSF. Se generarán a partir de tus regímenes.</p>
+                  <p className="text-xs text-cos-ink-soft">No se detectaron obligaciones en el CSF. Se generarán a partir de tus regímenes.</p>
                 )}
               </div>
 
@@ -845,21 +845,21 @@ function OnboardingPageInner() {
                 <div>
                   <p className="text-sm font-semibold mb-2">Declaraciones cargadas</p>
                   {anualDocReview && (
-                    <div className="border border-slate-200 rounded-md p-3 mb-2 text-xs space-y-1">
+                    <div className="border border-cos-line rounded-md p-3 mb-2 text-xs space-y-1">
                       <p className="font-medium">Declaración anual {anualDocReview.ejercicio ?? ""}</p>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-muted-foreground">
-                        <span>Coeficiente de utilidad:</span><span className="text-foreground">{anualDocReview.coeficienteUtilidad ?? "—"}</span>
-                        <span>Utilidad fiscal:</span><span className="text-foreground">{money(anualDocReview.utilidadFiscal)}</span>
-                        <span>ISR a pagar:</span><span className="text-foreground">{money(anualDocReview.isrAPagar)}</span>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-cos-ink-soft">
+                        <span>Coeficiente de utilidad:</span><span className="text-cos-ink">{anualDocReview.coeficienteUtilidad ?? "—"}</span>
+                        <span>Utilidad fiscal:</span><span className="text-cos-ink">{money(anualDocReview.utilidadFiscal)}</span>
+                        <span>ISR a pagar:</span><span className="text-cos-ink">{money(anualDocReview.isrAPagar)}</span>
                       </div>
                     </div>
                   )}
                   {mensualesReview.map((m, i) => (
-                    <div key={i} className="border border-slate-200 rounded-md p-3 mb-2 text-xs space-y-1">
+                    <div key={i} className="border border-cos-line rounded-md p-3 mb-2 text-xs space-y-1">
                       <p className="font-medium">{m.tipoImpuesto ?? "Pago"} · {m.periodoMes ?? "?"}/{m.periodoAnio ?? "?"}</p>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-muted-foreground">
-                        <span>IVA a pagar:</span><span className="text-foreground">{money(m.ivaAPagar)}</span>
-                        <span>ISR a pagar:</span><span className="text-foreground">{money(m.isrAPagar)}</span>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-cos-ink-soft">
+                        <span>IVA a pagar:</span><span className="text-cos-ink">{money(m.ivaAPagar)}</span>
+                        <span>ISR a pagar:</span><span className="text-cos-ink">{money(m.isrAPagar)}</span>
                       </div>
                     </div>
                   ))}
@@ -871,7 +871,7 @@ function OnboardingPageInner() {
           {/* ── STEP 3: Sincronización SAT ── */}
           {step === 3 && (
             <>
-              <div className="bg-slate-50 border border-slate-200 rounded-md px-4 py-3 text-sm text-slate-700">
+              <div className="bg-cos-slate-tint border border-cos-line rounded-md px-4 py-3 text-sm text-cos-ink-soft">
                 ¿Qué tan atrás traemos tus CFDIs del SAT? Esto define la sincronización inicial; siempre se respeta tu fecha de inicio de operaciones.
               </div>
               <div className="space-y-2">
@@ -879,7 +879,7 @@ function OnboardingPageInner() {
                   <label
                     key={o.years}
                     className={`flex items-start gap-3 px-3 py-3 rounded-md cursor-pointer border ${
-                      satBackfillYears === o.years ? "bg-blue-50 border-blue-400 ring-1 ring-blue-400" : "border-border hover:bg-accent"
+                      satBackfillYears === o.years ? "bg-cos-brand-tint border-cos-brand-ink/15 ring-1 ring-cos-brand-ink/15" : "border-cos-line hover:bg-cos-paper"
                     }`}
                   >
                     <input
@@ -891,7 +891,7 @@ function OnboardingPageInner() {
                     />
                     <div>
                       <p className="text-sm font-medium">{o.label}</p>
-                      <p className="text-xs text-muted-foreground">{o.desc}</p>
+                      <p className="text-xs text-cos-ink-soft">{o.desc}</p>
                     </div>
                   </label>
                 ))}
@@ -902,7 +902,7 @@ function OnboardingPageInner() {
           {/* ── STEP 4: Plan ── */}
           {step === 4 && (
             <>
-              <div className="bg-emerald-50 border border-emerald-200 rounded-md px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
+              <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-md px-4 py-3 text-sm text-cos-jade-ink flex items-center gap-2">
                 <Sparkles className="h-4 w-4 shrink-0" />
                 Elige tu plan. Empiezas con una <strong>prueba gratis</strong> — no se cobra nada todavía.
               </div>
@@ -915,21 +915,21 @@ function OnboardingPageInner() {
                       type="button"
                       onClick={() => setPlan(p.id)}
                       className={`text-left rounded-lg border p-3 transition-colors relative ${
-                        selected ? "border-blue-500 ring-2 ring-blue-400 bg-blue-50/50" : "border-border hover:bg-accent"
+                        selected ? "border-cos-brand-ink/15 ring-2 ring-cos-brand-ink/15 bg-cos-brand-tint/50" : "border-cos-line hover:bg-cos-paper"
                       }`}
                     >
                       {p.highlight && (
-                        <span className="absolute -top-2 right-2 text-[9px] font-semibold bg-blue-600 text-white px-1.5 py-0.5 rounded-full">
+                        <span className="absolute -top-2 right-2 text-[9px] font-semibold bg-cos-brand text-white px-1.5 py-0.5 rounded-full">
                           POPULAR
                         </span>
                       )}
                       <p className="text-sm font-bold">{p.name}</p>
-                      <p className="text-lg font-bold">{p.price}<span className="text-xs font-normal text-muted-foreground"> MXN/mes</span></p>
-                      <p className="text-[11px] text-muted-foreground mb-2">{p.blurb}</p>
+                      <p className="text-lg font-bold">{p.price}<span className="text-xs font-normal text-cos-ink-soft"> MXN/mes</span></p>
+                      <p className="text-[11px] text-cos-ink-soft mb-2">{p.blurb}</p>
                       <ul className="space-y-0.5">
                         {p.features.map((f, i) => (
                           <li key={i} className="flex items-start gap-1 text-[11px]">
-                            <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0 mt-0.5" />
+                            <CheckCircle2 className="h-3 w-3 text-cos-jade-ink shrink-0 mt-0.5" />
                             <span>{f}</span>
                           </li>
                         ))}
@@ -938,7 +938,7 @@ function OnboardingPageInner() {
                   );
                 })}
               </div>
-              <p className="text-[11px] text-muted-foreground text-center">
+              <p className="text-[11px] text-cos-ink-soft text-center">
                 Sin tarjeta por ahora. Podrás cambiar de plan cuando activemos los pagos.
               </p>
             </>
@@ -948,11 +948,11 @@ function OnboardingPageInner() {
           {step === 5 && (
             <>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Nombre Comercial <span className="text-muted-foreground font-normal text-xs">(opcional)</span></label>
+                <label className="block text-sm font-medium mb-1.5">Nombre Comercial <span className="text-cos-ink-soft font-normal text-xs">(opcional)</span></label>
                 <input
                   type="text" name="nombreComercial" value={contacto.nombreComercial} onChange={handleContactoChange}
                   placeholder="Nombre que aparece en facturas y documentos"
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -961,7 +961,7 @@ function OnboardingPageInner() {
                   <input
                     type="email" name="email" value={contacto.email} onChange={handleContactoChange}
                     placeholder="contabilidad@empresa.com"
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                 </div>
                 <div>
@@ -969,16 +969,16 @@ function OnboardingPageInner() {
                   <input
                     type="tel" name="telefono" value={contacto.telefono} onChange={handleContactoChange}
                     placeholder="55 1234 5678"
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Actividad Económica <span className="text-muted-foreground font-normal text-xs">(opcional)</span></label>
+                <label className="block text-sm font-medium mb-1.5">Actividad Económica <span className="text-cos-ink-soft font-normal text-xs">(opcional)</span></label>
                 <input
                   type="text" name="actividadEconomica" value={contacto.actividadEconomica} onChange={handleContactoChange}
                   placeholder="ej. Servicios de consultoría empresarial"
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
               </div>
             </>
@@ -987,16 +987,16 @@ function OnboardingPageInner() {
           {/* ── STEP 6: CSD ── */}
           {step === 6 && (
             <>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+              <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg px-4 py-3 text-sm text-cos-brand-ink">
                 <p className="font-semibold mb-1">¿Qué es el CSD?</p>
                 <p>El Certificado de Sello Digital (CSD) es requerido para <strong>timbrar CFDIs</strong>. Lo emite el SAT y consta de un archivo <code>.cer</code>, un <code>.key</code> y una contraseña.</p>
-                <p className="mt-1 text-blue-600 text-xs">Puedes omitir este paso y configurarlo después desde Mi Empresa.</p>
+                <p className="mt-1 text-cos-brand-ink text-xs">Puedes omitir este paso y configurarlo después desde Mi Empresa.</p>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Certificado CSD <code className="text-xs bg-gray-100 px-1 rounded">.cer</code></label>
-                <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-border border-dashed rounded-md text-sm cursor-pointer hover:bg-gray-50 transition-colors">
-                  <Upload className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground truncate">
+                <label className="block text-sm font-medium mb-1.5">Certificado CSD <code className="text-xs bg-cos-slate-tint px-1 rounded">.cer</code></label>
+                <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-sm cursor-pointer hover:bg-cos-slate-tint transition-colors">
+                  <Upload className="h-4 w-4 text-cos-ink-soft shrink-0" />
+                  <span className="text-cos-ink-soft truncate">
                     {csd.cerFile ? csd.cerFile.name : "Seleccionar archivo .cer"}
                   </span>
                   <input type="file" accept=".cer" className="hidden"
@@ -1004,10 +1004,10 @@ function OnboardingPageInner() {
                 </label>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Llave privada CSD <code className="text-xs bg-gray-100 px-1 rounded">.key</code></label>
-                <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-border border-dashed rounded-md text-sm cursor-pointer hover:bg-gray-50 transition-colors">
-                  <Upload className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground truncate">
+                <label className="block text-sm font-medium mb-1.5">Llave privada CSD <code className="text-xs bg-cos-slate-tint px-1 rounded">.key</code></label>
+                <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-sm cursor-pointer hover:bg-cos-slate-tint transition-colors">
+                  <Upload className="h-4 w-4 text-cos-ink-soft shrink-0" />
+                  <span className="text-cos-ink-soft truncate">
                     {csd.keyFile ? csd.keyFile.name : "Seleccionar archivo .key"}
                   </span>
                   <input type="file" accept=".key" className="hidden"
@@ -1022,17 +1022,17 @@ function OnboardingPageInner() {
                     value={csd.password}
                     onChange={(e) => setCsd((p) => ({ ...p, password: e.target.value }))}
                     placeholder="Contraseña de la llave privada"
-                    className="w-full px-3 py-2 pr-10 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                   <button type="button" onClick={() => setShowCsdPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-cos-ink-soft hover:text-cos-ink">
                     {showCsdPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
 
               {/* Carta Manifiesto de Facturapi — forced acknowledgement */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+              <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-4 py-3 text-sm text-cos-amber-ink">
                 <p className="font-semibold mb-1">✍️ Carta Manifiesto (obligatoria para timbrar)</p>
                 <p className="text-xs">
                   Facturapi requiere que firmes la Carta Manifiesto con tu <strong>e.firma</strong> directamente en su portal seguro — no se pueden enviar las llaves desde nuestra app. Hazlo ahora para dejarlo listo.
@@ -1041,12 +1041,12 @@ function OnboardingPageInner() {
                   href="https://www.facturapi.io/manifiesto"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium bg-amber-600 text-white px-2.5 py-1.5 rounded hover:bg-amber-700"
+                  className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium bg-cos-amber-ink text-white px-2.5 py-1.5 rounded hover:opacity-90"
                 >
                   Firmar Carta Manifiesto en Facturapi
                   <ExternalLink className="h-3 w-3" />
                 </a>
-                <p className="text-[10px] text-amber-700 mt-1">Necesitarás tu .cer, .key y contraseña de la e.firma.</p>
+                <p className="text-[10px] text-cos-amber-ink mt-1">Necesitarás tu .cer, .key y contraseña de la e.firma.</p>
                 <label className="flex items-start gap-2 mt-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1063,16 +1063,16 @@ function OnboardingPageInner() {
           {/* ── STEP 7: e.firma / FIEL ── */}
           {step === 7 && (
             <>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+              <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-4 py-3 text-sm text-cos-amber-ink">
                 <p className="font-semibold mb-1">¿Qué es la e.firma / FIEL?</p>
                 <p>La Firma Electrónica Avanzada es requerida para <strong>presentar declaraciones fiscales</strong> ante el SAT (IVA, ISR, DIOT). También consta de un <code>.cer</code>, un <code>.key</code> y contraseña.</p>
-                <p className="mt-1 text-amber-600 text-xs">Puedes omitir este paso y configurarlo después desde Mi Empresa.</p>
+                <p className="mt-1 text-cos-amber-ink text-xs">Puedes omitir este paso y configurarlo después desde Mi Empresa.</p>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Certificado e.firma <code className="text-xs bg-gray-100 px-1 rounded">.cer</code></label>
-                <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-border border-dashed rounded-md text-sm cursor-pointer hover:bg-gray-50 transition-colors">
-                  <Upload className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground truncate">
+                <label className="block text-sm font-medium mb-1.5">Certificado e.firma <code className="text-xs bg-cos-slate-tint px-1 rounded">.cer</code></label>
+                <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-sm cursor-pointer hover:bg-cos-slate-tint transition-colors">
+                  <Upload className="h-4 w-4 text-cos-ink-soft shrink-0" />
+                  <span className="text-cos-ink-soft truncate">
                     {fiel.cerFile ? fiel.cerFile.name : "Seleccionar archivo .cer"}
                   </span>
                   <input type="file" accept=".cer" className="hidden"
@@ -1080,10 +1080,10 @@ function OnboardingPageInner() {
                 </label>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Llave privada e.firma <code className="text-xs bg-gray-100 px-1 rounded">.key</code></label>
-                <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-border border-dashed rounded-md text-sm cursor-pointer hover:bg-gray-50 transition-colors">
-                  <Upload className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground truncate">
+                <label className="block text-sm font-medium mb-1.5">Llave privada e.firma <code className="text-xs bg-cos-slate-tint px-1 rounded">.key</code></label>
+                <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-sm cursor-pointer hover:bg-cos-slate-tint transition-colors">
+                  <Upload className="h-4 w-4 text-cos-ink-soft shrink-0" />
+                  <span className="text-cos-ink-soft truncate">
                     {fiel.keyFile ? fiel.keyFile.name : "Seleccionar archivo .key"}
                   </span>
                   <input type="file" accept=".key" className="hidden"
@@ -1098,10 +1098,10 @@ function OnboardingPageInner() {
                     value={fiel.password}
                     onChange={(e) => setFiel((p) => ({ ...p, password: e.target.value }))}
                     placeholder="Contraseña de la llave privada"
-                    className="w-full px-3 py-2 pr-10 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                   />
                   <button type="button" onClick={() => setShowFielPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-cos-ink-soft hover:text-cos-ink">
                     {showFielPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
@@ -1111,7 +1111,7 @@ function OnboardingPageInner() {
 
           {/* Error */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-md px-4 py-3 text-sm text-red-700">
+            <div className="bg-cos-red-tint border border-cos-red-ink/20 rounded-md px-4 py-3 text-sm text-cos-red-ink">
               {error}
             </div>
           )}
@@ -1122,7 +1122,7 @@ function OnboardingPageInner() {
               <button
                 type="button"
                 onClick={() => { setError(""); setStep((s) => s - 1); }}
-                className="px-4 py-2.5 rounded-md text-sm font-medium border border-border hover:bg-accent transition-colors"
+                className="px-4 py-2.5 rounded-md text-sm font-medium border border-cos-line hover:bg-cos-paper transition-colors"
               >
                 Atrás
               </button>
@@ -1132,7 +1132,7 @@ function OnboardingPageInner() {
               <button
                 type="button"
                 onClick={nextStep}
-                className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 bg-cos-brand text-white px-4 py-2.5 rounded-md text-sm font-medium hover:bg-cos-brand-deep transition-colors"
               >
                 Continuar <ChevronRight className="h-4 w-4" />
               </button>
@@ -1141,7 +1141,7 @@ function OnboardingPageInner() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 bg-cos-brand text-white px-4 py-2.5 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50 transition-colors"
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 {loading ? "Creando empresa..." : "Finalizar configuración"}
@@ -1154,7 +1154,7 @@ function OnboardingPageInner() {
                 type="button"
                 onClick={() => step === LAST_STEP ? handleSubmit() : setStep((s) => s + 1)}
                 disabled={loading}
-                className="px-4 py-2.5 rounded-md text-sm text-muted-foreground border border-border hover:bg-accent transition-colors"
+                className="px-4 py-2.5 rounded-md text-sm text-cos-ink-soft border border-cos-line hover:bg-cos-paper transition-colors"
               >
                 Omitir
               </button>

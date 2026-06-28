@@ -120,37 +120,37 @@ export function SatCodePicker({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full px-3 py-2 border border-border rounded-md text-sm text-left bg-white hover:bg-gray-50 flex items-center gap-2"
+        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm text-left bg-white hover:bg-cos-slate-tint flex items-center gap-2"
       >
         {value ? (
           <span className="flex-1 truncate">
-            <span className="font-mono text-xs text-muted-foreground mr-2">{value}</span>
-            {valueLabel || <span className="text-muted-foreground">(seleccionado)</span>}
+            <span className="font-mono text-xs text-cos-ink-soft mr-2">{value}</span>
+            {valueLabel || <span className="text-cos-ink-soft">(seleccionado)</span>}
           </span>
         ) : (
-          <span className="flex-1 text-muted-foreground">{placeholder}</span>
+          <span className="flex-1 text-cos-ink-soft">{placeholder}</span>
         )}
-        <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <Search className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
       </button>
 
       {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-border rounded-md shadow-lg max-h-72 overflow-auto">
-          <div className="p-2 border-b border-border">
+        <div className="absolute z-20 mt-1 w-full bg-white border border-cos-line rounded-md shadow-lg max-h-72 overflow-auto">
+          <div className="p-2 border-b border-cos-line">
             <div className="relative">
-              <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-cos-ink-soft" />
               <input
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Escribe para buscar…"
-                className="w-full pl-8 pr-3 py-1.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full pl-8 pr-3 py-1.5 border border-cos-line rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
               />
             </div>
           </div>
 
           {showRecents && (
             <div>
-              <p className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Usados recientemente</p>
+              <p className="px-3 py-1.5 text-[10px] font-semibold text-cos-ink-soft uppercase tracking-wide">Usados recientemente</p>
               <ul>
                 {recent.map(r => (
                   <PickerRow key={r.key} r={r} selected={r.key === value} onPick={pick} />
@@ -162,11 +162,11 @@ export function SatCodePicker({
           {showResults && (
             <div>
               {loading ? (
-                <div className="px-3 py-4 text-xs text-muted-foreground flex items-center gap-2 justify-center">
+                <div className="px-3 py-4 text-xs text-cos-ink-soft flex items-center gap-2 justify-center">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando…
                 </div>
               ) : results.length === 0 ? (
-                <p className="px-3 py-4 text-xs text-muted-foreground text-center">Sin resultados</p>
+                <p className="px-3 py-4 text-xs text-cos-ink-soft text-center">Sin resultados</p>
               ) : (
                 <ul>
                   {results.map(r => (
@@ -178,7 +178,7 @@ export function SatCodePicker({
           )}
 
           {!showRecents && !showResults && (
-            <p className="px-3 py-4 text-xs text-muted-foreground text-center">
+            <p className="px-3 py-4 text-xs text-cos-ink-soft text-center">
               Escribe al menos 3 letras para buscar en el catálogo SAT
             </p>
           )}
@@ -196,11 +196,11 @@ function PickerRow({
       <button
         type="button"
         onClick={() => onPick(r)}
-        className={`w-full text-left px-3 py-2 hover:bg-accent flex items-start gap-2 ${selected ? "bg-blue-50" : ""}`}
+        className={`w-full text-left px-3 py-2 hover:bg-cos-paper flex items-start gap-2 ${selected ? "bg-cos-brand-tint" : ""}`}
       >
-        <span className="font-mono text-[11px] text-muted-foreground mt-0.5 shrink-0">{r.key}</span>
+        <span className="font-mono text-[11px] text-cos-ink-soft mt-0.5 shrink-0">{r.key}</span>
         <span className="flex-1 text-xs">{r.description}</span>
-        {selected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+        {selected && <Check className="h-3.5 w-3.5 text-cos-brand-ink shrink-0" />}
       </button>
     </li>
   );

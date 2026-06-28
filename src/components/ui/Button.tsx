@@ -15,13 +15,14 @@ type Variant =
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-primary text-primary-foreground hover:bg-primary/90",
-  secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-  ghost: "hover:bg-accent hover:text-accent-foreground",
-  destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-  outline: "border border-border bg-transparent hover:bg-accent",
+  // `primary` is the Contia brand blue.
+  primary: "bg-cos-brand text-white hover:bg-cos-brand-deep",
+  secondary: "bg-cos-slate-tint text-cos-ink hover:brightness-95",
+  ghost: "hover:bg-cos-paper hover:text-cos-ink",
+  destructive: "bg-cos-red-ink text-white hover:opacity-90",
+  outline: "border border-cos-line bg-transparent hover:bg-cos-paper",
   brand: "bg-cos-brand text-white hover:bg-cos-brand-deep",
-  soft: "bg-card border border-cos-line text-cos-ink hover:bg-cos-paper",
+  soft: "bg-white border border-cos-line text-cos-ink hover:bg-cos-paper",
   ghostBrand: "bg-transparent text-cos-brand-ink hover:bg-cos-brand-tint",
 };
 
@@ -37,7 +38,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   loading?: boolean;
 }
 
-/** Shared button. Replaces hand-rolled `bg-primary … rounded-md` across pages. */
+/** Shared button. Replaces hand-rolled button classes across pages. */
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "primary", size = "md", loading, disabled, children, ...props }, ref) => (
     <button
@@ -45,7 +46,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       disabled={disabled || loading}
       className={cn(
         "inline-flex items-center justify-center rounded-md font-medium transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-brand focus-visible:ring-offset-1",
         "disabled:opacity-50 disabled:pointer-events-none",
         VARIANTS[variant],
         SIZES[size],

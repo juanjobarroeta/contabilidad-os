@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ScanSearch, AlertTriangle, AlertCircle, Info, CheckCircle2, EyeOff,
-  RotateCcw, Loader2, ScrollText, FileText,
+  RotateCcw, Loader2, ScrollText, FileText, ArrowRight, Clock, ChevronDown,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { CumplimientoTabs } from "@/components/layout/CumplimientoTabs";
 import { Card, Badge, type BadgeTone } from "@/components/ui";
+import { ctaParaHallazgo } from "@/lib/hallazgos-cta";
 
 interface Hallazgo {
   id: string;
@@ -18,10 +21,12 @@ interface Hallazgo {
   fundamento: { ley: string; articulo: string; fraccion: string | null };
   referencias: string[];
   estado: string;
+  posponerHasta: string | null;
   createdAt: string;
   updatedAt: string;
 }
 type Estado = "ABIERTO" | "RESUELTO" | "IGNORADO";
+type Filtro = Estado | "POSPUESTO";
 
 const SEV: Record<string, { tone: BadgeTone; label: string; icon: typeof AlertTriangle; rank: number }> = {
   error: { tone: "danger", label: "Error", icon: AlertCircle, rank: 0 },
@@ -40,17 +45,21 @@ const CATEGORIA_LABEL: Record<string, string> = {
 };
 const catLabel = (c: string) => CATEGORIA_LABEL[c] ?? c.charAt(0).toUpperCase() + c.slice(1);
 
-const TABS: { key: Estado; label: string }[] = [
+const TABS: { key: Filtro; label: string }[] = [
   { key: "ABIERTO", label: "Abiertos" },
+  { key: "POSPUESTO", label: "Pospuestos" },
   { key: "RESUELTO", label: "Resueltos" },
   { key: "IGNORADO", label: "Ignorados" },
 ];
 
+const fmtFechaCorta = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) : "";
+
 export default function HallazgosPage() {
   const { activeCompany } = useCompany();
-  const [tab, setTab] = useState<Estado>("ABIERTO");
+  const [tab, setTab] = useState<Filtro>("ABIERTO");
   const [hallazgos, setHallazgos] = useState<Hallazgo[] | null>(null);
-  const [resumen, setResumen] = useState<Record<string, number>>({ ABIERTO: 0, RESUELTO: 0, IGNORADO: 0 });
+  const [resumen, setResumen] = useState<Record<string, number>>({ ABIERTO: 0, POSPUESTO: 0, RESUELTO: 0, IGNORADO: 0 });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
 
@@ -63,7 +72,7 @@ export default function HallazgosPage() {
       if (!res.ok) throw new Error();
       const data = await res.json();
       setHallazgos(data.hallazgos ?? []);
-      setResumen(data.resumen ?? { ABIERTO: 0, RESUELTO: 0, IGNORADO: 0 });
+      setResumen(data.resumen ?? { ABIERTO: 0, POSPUESTO: 0, RESUELTO: 0, IGNORADO: 0 });
     } catch {
       setError("No se pudieron cargar los hallazgos.");
       setHallazgos([]);
@@ -91,6 +100,23 @@ export default function HallazgosPage() {
     }
   }
 
+  async function posponer(id: string, token: "7d" | "30d" | "fin_de_mes") {
+    setSaving(id);
+    try {
+      const res = await fetch(`/api/hallazgos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ posponer: token }),
+      });
+      if (!res.ok) throw new Error();
+      await load();
+    } catch {
+      setError("No se pudo posponer el hallazgo.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
   if (!activeCompany) {
     return <div className="p-8 text-sm text-cos-ink-faint">Selecciona una empresa para ver sus hallazgos.</div>;
   }
@@ -108,6 +134,7 @@ export default function HallazgosPage() {
 
   return (
     <div className="mx-auto max-w-[1000px] px-4 py-6 sm:px-8 sm:py-8">
+      <CumplimientoTabs />
       <div>
         <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Hallazgos del auditor</h1>
         <p className="mt-1.5 text-[14px] font-medium text-cos-brand-ink">
@@ -153,7 +180,7 @@ export default function HallazgosPage() {
         <Card className="mt-5 rounded-card border-cos-line p-10 text-center shadow-card">
           <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-cos-jade-ink opacity-50" />
           <p className="text-sm font-medium text-cos-ink">
-            {tab === "ABIERTO" ? "Sin hallazgos abiertos" : tab === "RESUELTO" ? "Nada resuelto todavía" : "Nada ignorado"}
+            {tab === "ABIERTO" ? "Sin hallazgos abiertos" : tab === "POSPUESTO" ? "Nada pospuesto" : tab === "RESUELTO" ? "Nada resuelto todavía" : "Nada ignorado"}
           </p>
           <p className="mt-1 text-xs text-cos-ink-soft">
             {tab === "ABIERTO"
@@ -174,7 +201,7 @@ export default function HallazgosPage() {
               </div>
               <div className="space-y-2.5">
                 {items.map((h) => (
-                  <HallazgoCard key={h.id} h={h} saving={saving === h.id} onSetEstado={setEstado} />
+                  <HallazgoCard key={h.id} h={h} saving={saving === h.id} onSetEstado={setEstado} onPosponer={posponer} />
                 ))}
               </div>
             </div>
@@ -186,17 +213,20 @@ export default function HallazgosPage() {
 }
 
 function HallazgoCard({
-  h, saving, onSetEstado,
+  h, saving, onSetEstado, onPosponer,
 }: {
   h: Hallazgo;
   saving: boolean;
   onSetEstado: (id: string, estado: Estado) => void;
+  onPosponer: (id: string, token: "7d" | "30d" | "fin_de_mes") => void;
 }) {
   const sev = SEV[h.severidad] ?? SEV.info;
   const SevIcon = sev.icon;
   const fundamento = [h.fundamento.ley, h.fundamento.articulo && `Art. ${h.fundamento.articulo}`, h.fundamento.fraccion && `Fr. ${h.fundamento.fraccion}`]
     .filter(Boolean)
     .join(" ");
+  const snoozed = !!h.posponerHasta && new Date(h.posponerHasta) > new Date();
+  const cta = h.estado === "ABIERTO" && !snoozed ? ctaParaHallazgo(h.checkClave) : null;
 
   return (
     <Card className="rounded-card border-cos-line p-4 shadow-card">
@@ -225,12 +255,30 @@ function HallazgoCard({
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {h.estado === "ABIERTO" ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {snoozed ? (
               <>
+                <span className="inline-flex items-center gap-1.5 text-[12.5px] text-cos-ink-faint">
+                  <Clock className="h-3.5 w-3.5" /> Pospuesto hasta {fmtFechaCorta(h.posponerHasta)}
+                </span>
+                <ActionButton disabled={saving} onClick={() => onSetEstado(h.id, "ABIERTO")} icon={RotateCcw} variant="ghost">
+                  Reactivar
+                </ActionButton>
+              </>
+            ) : h.estado === "ABIERTO" ? (
+              <>
+                {cta && (
+                  <Link
+                    href={cta.href}
+                    className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white transition-colors hover:bg-cos-brand-deep"
+                  >
+                    {cta.label} <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                )}
                 <ActionButton disabled={saving} onClick={() => onSetEstado(h.id, "RESUELTO")} icon={CheckCircle2} variant="primary">
                   Marcar resuelto
                 </ActionButton>
+                <PosponerMenu disabled={saving} onPick={(t) => onPosponer(h.id, t)} />
                 <ActionButton disabled={saving} onClick={() => onSetEstado(h.id, "IGNORADO")} icon={EyeOff} variant="ghost">
                   Ignorar
                 </ActionButton>
@@ -269,5 +317,44 @@ function ActionButton({
     >
       <Icon className="h-3.5 w-3.5" /> {children}
     </button>
+  );
+}
+
+function PosponerMenu({ disabled, onPick }: { disabled: boolean; onPick: (t: "7d" | "30d" | "fin_de_mes") => void }) {
+  const [open, setOpen] = useState(false);
+  const opciones: { t: "7d" | "30d" | "fin_de_mes"; label: string }[] = [
+    { t: "7d", label: "7 días" },
+    { t: "30d", label: "30 días" },
+    { t: "fin_de_mes", label: "Fin de mes" },
+  ];
+  return (
+    <div className="relative">
+      <button
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-1.5 text-[13px] font-semibold text-cos-ink transition-colors hover:bg-cos-paper disabled:opacity-50"
+      >
+        <Clock className="h-3.5 w-3.5" /> Posponer <ChevronDown className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
+          <div className="absolute left-0 z-20 mt-1 min-w-[150px] overflow-hidden rounded-control border border-cos-line bg-white py-1 shadow-card">
+            {opciones.map((o) => (
+              <button
+                key={o.t}
+                onClick={() => {
+                  setOpen(false);
+                  onPick(o.t);
+                }}
+                className="block w-full px-3 py-1.5 text-left text-[13px] text-cos-ink hover:bg-cos-paper"
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }

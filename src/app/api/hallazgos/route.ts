@@ -9,7 +9,8 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 // contador vía PATCH /api/hallazgos/[id]; esas decisiones sobreviven a las
 // re-corridas del auditor y, en el caso 69-B, reactivan deducciones en el motor.
 
-const ESTADOS = ["ABIERTO", "RESUELTO", "IGNORADO"] as const;
+// "POSPUESTO" es un filtro virtual: estado ABIERTO con posponerHasta en el futuro.
+const FILTROS = ["ABIERTO", "POSPUESTO", "RESUELTO", "IGNORADO"] as const;
 
 export interface HallazgoDTO {
   id: string;
@@ -21,6 +22,7 @@ export interface HallazgoDTO {
   fundamento: { ley: string; articulo: string; fraccion: string | null };
   referencias: string[];
   estado: string;
+  posponerHasta: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,21 +39,34 @@ export async function GET(req: Request) {
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const estadoParam = searchParams.get("estado");
-  const estado = estadoParam && (ESTADOS as readonly string[]).includes(estadoParam) ? estadoParam : undefined;
+  const filtro = estadoParam && (FILTROS as readonly string[]).includes(estadoParam) ? estadoParam : undefined;
+
+  const now = new Date();
+  const noPospuesto = { OR: [{ posponerHasta: null }, { posponerHasta: { lte: now } }] };
+  const pospuesto = { estado: "ABIERTO", posponerHasta: { gt: now } };
+  // El filtro ABIERTO oculta los pospuestos (reaparecen al vencer); POSPUESTO los muestra.
+  const whereFiltro =
+    filtro === "ABIERTO"
+      ? { estado: "ABIERTO", ...noPospuesto }
+      : filtro === "POSPUESTO"
+        ? pospuesto
+        : filtro
+          ? { estado: filtro }
+          : {};
 
   const rows = await prisma.fiscalHallazgo.findMany({
-    where: { companyId, ...(estado ? { estado } : {}) },
+    where: { companyId, ...whereFiltro },
     orderBy: [{ severidad: "asc" }, { createdAt: "desc" }],
   });
 
-  // Conteo por estado para las pestañas (independiente del filtro aplicado).
-  const counts = await prisma.fiscalHallazgo.groupBy({
-    by: ["estado"],
-    where: { companyId },
-    _count: { _all: true },
-  });
-  const resumen = { ABIERTO: 0, RESUELTO: 0, IGNORADO: 0 } as Record<string, number>;
+  // Conteos para las pestañas. ABIERTO = activos (sin pospuestos); POSPUESTO aparte.
+  const [counts, pospuestos] = await Promise.all([
+    prisma.fiscalHallazgo.groupBy({ by: ["estado"], where: { companyId }, _count: { _all: true } }),
+    prisma.fiscalHallazgo.count({ where: { companyId, ...pospuesto } }),
+  ]);
+  const resumen = { ABIERTO: 0, POSPUESTO: pospuestos, RESUELTO: 0, IGNORADO: 0 } as Record<string, number>;
   for (const c of counts) resumen[c.estado] = c._count._all;
+  resumen.ABIERTO = Math.max(0, resumen.ABIERTO - pospuestos);
 
   const hallazgos: HallazgoDTO[] = rows.map((h) => ({
     id: h.id,
@@ -63,6 +78,7 @@ export async function GET(req: Request) {
     fundamento: { ley: h.fundamentoLey, articulo: h.fundamentoArticulo, fraccion: h.fundamentoFraccion },
     referencias: h.referencias,
     estado: h.estado,
+    posponerHasta: h.posponerHasta?.toISOString() ?? null,
     createdAt: h.createdAt.toISOString(),
     updatedAt: h.updatedAt.toISOString(),
   }));

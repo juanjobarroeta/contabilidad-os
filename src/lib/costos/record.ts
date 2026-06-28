@@ -7,7 +7,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { llmCostMicroUsd, syntageExtractionMicroUsd } from "./rates";
+import { llmCostMicroUsd, syntageExtractionMicroUsd, facturapiTimbreMicroUsd } from "./rates";
 
 export interface CostCtx {
   companyId?: string | null;
@@ -17,7 +17,7 @@ export interface CostCtx {
 }
 
 export async function recordCost(e: {
-  categoria: "LLM" | "SYNTAGE";
+  categoria: "LLM" | "SYNTAGE" | "FACTURAPI";
   subtipo: string;
   unidades: number;
   costoMicroUsd: number;
@@ -70,6 +70,27 @@ export async function recordSyntageExtraction(extractor: string, ctx?: CostCtx):
     subtipo: `syntage.extraction.${extractor}`,
     unidades: 1,
     costoMicroUsd: syntageExtractionMicroUsd(),
+    companyId: ctx?.companyId,
+    despachoId: ctx?.despachoId,
+  });
+}
+
+/**
+ * Registra el costo de timbre(s) de Facturapi. tipo: "factura" (CFDI de
+ * ingreso/egreso), "nomina" (recibo) o "pago" (REP). Fire-and-forget — nunca
+ * rompe el timbrado que está midiendo.
+ */
+export async function recordTimbrado(
+  tipo: "factura" | "nomina" | "pago",
+  n = 1,
+  ctx?: CostCtx,
+): Promise<void> {
+  if (n <= 0) return;
+  await recordCost({
+    categoria: "FACTURAPI",
+    subtipo: `facturapi.timbre.${tipo}`,
+    unidades: n,
+    costoMicroUsd: facturapiTimbreMicroUsd(n),
     companyId: ctx?.companyId,
     despachoId: ctx?.despachoId,
   });

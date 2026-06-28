@@ -14,10 +14,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2, Users2, BadgeCheck, Clock4, AlertTriangle, FileWarning,
-  ChevronRight as ChevronR, CalendarDays, Database, ScanSearch,
+  ChevronRight as ChevronR, CalendarDays, Database, ScanSearch, ShieldAlert,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Loading } from "@/components/ui";
+import { Card, Loading, Money } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface Row {
@@ -33,6 +33,16 @@ interface Row {
   obligacionesVencidas: number;
   obligacionesPorVencer: number;
   flagsAbiertos: number;
+  hallazgosAbiertos: number;
+  peorSeveridad: "error" | "warn" | "info" | null;
+}
+
+// Prioridad de cartera: empresas con hallazgos "error" primero, luego "warn",
+// luego por conteo. Empata con 0 para conservar el orden existente (por razón
+// social) vía sort estable.
+const SEV_RANK: Record<"error" | "warn" | "info", number> = { error: 3, warn: 2, info: 1 };
+function severityWeight(r: Row): number {
+  return r.hallazgosAbiertos > 0 && r.peorSeveridad ? SEV_RANK[r.peorSeveridad] : 0;
 }
 
 // Deep-link into the Declaración Workspace for a given periodo ("YYYY-MM"),
@@ -79,29 +89,91 @@ export default function DespachoCockpitPage() {
   }
 
   if (loading) return <Loading />;
-  const rows = data?.companies ?? [];
+  // Orden de triage: lo más en riesgo arriba (error → warn → conteo desc),
+  // y a igualdad de hallazgos se conserva el orden del servidor (estable).
+  const rows = [...(data?.companies ?? [])].sort((a, b) => {
+    const wa = severityWeight(a), wb = severityWeight(b);
+    if (wa !== wb) return wb - wa;
+    return b.hallazgosAbiertos - a.hallazgosAbiertos;
+  });
+
+  // "Lo más urgente": la empresa de mayor prioridad con hallazgos abiertos.
+  const urgente = rows.find((r) => r.hallazgosAbiertos > 0) ?? null;
+
+  // Briefing "Hoy": resumen del trabajo nocturno del auditor sobre la cartera.
+  const total = data?.resumen.empresas ?? 0;
+  const necesitaAtencion = (r: Row) =>
+    r.hallazgosAbiertos > 0 || r.obligacionesVencidas > 0 || r.estadoDeclaracion === "vencida";
+  const atencion = rows.filter(necesitaAtencion).length;
+  const alDia = Math.max(0, total - atencion);
+  const conErrores = rows.filter((r) => r.peorSeveridad === "error").length;
+  const conHallazgos = rows.filter((r) => r.hallazgosAbiertos > 0).length;
+  const conVencidas = data?.resumen.empresasConVencidas ?? 0;
+  const ahora = new Date();
+  const saludo = ahora.getHours() < 12 ? "Buenos días" : ahora.getHours() < 19 ? "Buenas tardes" : "Buenas noches";
+  const fechaLarga = ahora.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
 
   return (
     <div className="mx-auto max-w-[1140px] px-6 py-7">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-[24px] font-bold tracking-[-0.02em] text-cos-ink">
-            <Building2 className="h-6 w-6 text-cos-ink-faint" /> Despacho
-          </h1>
-          <p className="mt-0.5 text-[14px] text-cos-ink-soft">
-            Todas tus empresas en un panel — qué urge declarar, cuánto se paga y qué falta timbrar.
-          </p>
-        </div>
+      {/* Briefing "Hoy" — el resumen de la revisión nocturna del auditor. */}
+      <div className="rounded-card border border-cos-line bg-white p-5 shadow-card">
+        <p className="text-[12.5px] font-medium text-cos-ink-faint">
+          {saludo} · <span className="capitalize">{fechaLarga}</span>
+        </p>
+        <h1 className="mt-1 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-cos-ink">
+          {!data ? (
+            "Despacho"
+          ) : atencion > 0 ? (
+            <>Revisé tus <span className="font-mono">{total}</span> empresas anoche — <span className="text-cos-amber-ink">{atencion} {atencion === 1 ? "necesita" : "necesitan"} tu atención</span> hoy.</>
+          ) : total > 0 ? (
+            <>Revisé tus <span className="font-mono">{total}</span> empresas anoche — <span className="text-cos-jade-ink">toda tu cartera al día</span>.</>
+          ) : (
+            "Despacho"
+          )}
+        </h1>
         {data && (
-          <div className="flex gap-5 text-[13px] text-cos-ink-soft">
-            <span className="inline-flex items-center gap-1.5"><Building2 className="h-4 w-4 text-cos-ink-faint" /> <b className="font-mono">{data.resumen.empresas}</b> empresas</span>
-            <span>Periodo <b>{data.periodo}</b> · vence {formatDate(data.vencimiento)}</span>
-            <span>A pagar: <b className="font-mono">{formatCurrency(data.resumen.totalAPagar)}</b></span>
-            {data.resumen.conPendientes > 0 && <span className="text-cos-amber-ink"><b className="font-mono">{data.resumen.conPendientes}</b> con pendientes</span>}
-            {data.resumen.empresasConVencidas > 0 && <span className="text-cos-red-ink"><b className="font-mono">{data.resumen.empresasConVencidas}</b> con obligaciones vencidas</span>}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[12.5px]">
+            {conErrores > 0 && <span className="rounded-full bg-cos-red-tint px-2.5 py-1 font-medium text-cos-red-ink">{conErrores} con algo crítico</span>}
+            {conVencidas > 0 && <span className="rounded-full bg-cos-red-tint px-2.5 py-1 font-medium text-cos-red-ink">{conVencidas} con obligaciones vencidas</span>}
+            {conHallazgos > 0 && <span className="rounded-full bg-cos-amber-tint px-2.5 py-1 font-medium text-cos-amber-ink">{conHallazgos} con hallazgos por revisar</span>}
+            <span className="rounded-full bg-cos-jade-tint px-2.5 py-1 font-medium text-cos-jade-ink">{alDia} al día</span>
+            <span className="ml-auto text-cos-ink-soft">
+              Periodo <b>{data.periodo}</b> · vence {formatDate(data.vencimiento)} · a pagar{" "}
+              <b className="font-mono"><Money value={data.resumen.totalAPagar} /></b>
+            </span>
           </div>
         )}
       </div>
+
+      {/* Lo más urgente — la empresa con la peor cartera de hallazgos abiertos */}
+      {urgente && (
+        <Card className={`mt-4 flex items-center gap-3 px-4 py-3.5 ${
+          urgente.peorSeveridad === "error" ? "border-cos-red bg-cos-red-tint"
+          : urgente.peorSeveridad === "warn" ? "border-cos-amber bg-cos-amber-tint"
+          : "border-cos-jade bg-cos-jade-tint"
+        }`}>
+          <ShieldAlert className={`h-5 w-5 flex-none ${
+            urgente.peorSeveridad === "error" ? "text-cos-red-ink"
+            : urgente.peorSeveridad === "warn" ? "text-cos-amber-ink"
+            : "text-cos-jade-ink"
+          }`} />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-cos-ink-faint">Lo más urgente</p>
+            <p className="truncate text-[14px] font-medium text-cos-ink">
+              <b>{urgente.razonSocial}</b> — {urgente.hallazgosAbiertos} hallazgo{urgente.hallazgosAbiertos === 1 ? "" : "s"} abierto{urgente.hallazgosAbiertos === 1 ? "" : "s"}
+              {urgente.peorSeveridad === "error" ? " (errores por resolver)"
+                : urgente.peorSeveridad === "warn" ? " (advertencias por revisar)"
+                : ""}.
+            </p>
+          </div>
+          <button
+            onClick={() => operar(urgente.id, "/hallazgos")}
+            className="inline-flex flex-none items-center gap-1 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep"
+          >
+            Ver hallazgos <ChevronR className="h-3.5 w-3.5" />
+          </button>
+        </Card>
+      )}
 
       {/* franja de cobertura de datos fiscales */}
       {data?.cobertura && (data.cobertura.faltantes > 0 || data.cobertura.sinCotejar > 0) && (
@@ -166,6 +238,19 @@ export default function DespachoCockpitPage() {
                           title="Banderas del auditor por revisar"
                         >
                           <ScanSearch className="h-3 w-3" /> {r.flagsAbiertos} por revisar
+                        </button>
+                      )}
+                      {r.hallazgosAbiertos > 0 && (
+                        <button
+                          onClick={() => operar(r.id, "/hallazgos")}
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium hover:opacity-90 ${
+                            r.peorSeveridad === "error" ? "bg-cos-red-tint text-cos-red-ink"
+                            : r.peorSeveridad === "warn" ? "bg-cos-amber-tint text-cos-amber-ink"
+                            : "bg-cos-jade-tint text-cos-jade-ink"
+                          }`}
+                          title="Hallazgos abiertos del auditor"
+                        >
+                          <ShieldAlert className="h-3 w-3" /> {r.hallazgosAbiertos} hallazgo{r.hallazgosAbiertos === 1 ? "" : "s"}
                         </button>
                       )}
                     </div>

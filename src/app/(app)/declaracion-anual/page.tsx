@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { formatCurrency } from "@/lib/utils";
+import { Money } from "@/components/ui";
 import {
   Calculator, Loader2, CheckCircle2, AlertCircle, Save,
   FileText, TrendingUp, TrendingDown, Pencil, X,
@@ -108,29 +108,29 @@ export default function DeclaracionAnualPage() {
   }
 
   if (!activeCompany) {
-    return <div className="p-8 text-muted-foreground text-sm">Selecciona una empresa.</div>;
+    return <div className="p-8 text-sm text-cos-ink-soft">Selecciona una empresa.</div>;
   }
 
   return (
-    <div className="p-6 max-w-4xl">
-      <div className="flex items-start justify-between mb-6">
+    <div className="mx-auto max-w-[1000px] px-4 py-6 sm:px-8 sm:py-8">
+      <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Declaración Anual</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{activeCompany.razonSocial}</p>
-          <a href="/declaraciones/historial" className="mt-1 inline-block text-[13px] text-primary hover:underline">
+          <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Declaración Anual</h1>
+          <p className="mt-1 text-[15px] text-cos-ink-soft">{activeCompany.razonSocial}</p>
+          <a href="/declaraciones/historial" className="mt-1 inline-block text-[13px] text-cos-brand-ink hover:underline">
             Ver declaraciones mensuales →
           </a>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setEjercicio(e => e - 1)} className="px-3 py-1.5 border border-border rounded-md text-sm hover:bg-accent">←</button>
-          <span className="text-lg font-bold min-w-[60px] text-center">{ejercicio}</span>
-          <button onClick={() => setEjercicio(e => e + 1)} className="px-3 py-1.5 border border-border rounded-md text-sm hover:bg-accent">→</button>
+          <button onClick={() => setEjercicio(e => e - 1)} className="rounded-control border border-cos-line px-3 py-1.5 text-sm hover:bg-cos-paper">←</button>
+          <span className="min-w-[60px] text-center text-lg font-bold text-cos-ink">{ejercicio}</span>
+          <button onClick={() => setEjercicio(e => e + 1)} className="rounded-control border border-cos-line px-3 py-1.5 text-sm hover:bg-cos-paper">→</button>
         </div>
       </div>
 
       {error && (
-        <div className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm mb-4 ${
-          error.startsWith("✓") ? "bg-green-50 border border-green-200 text-green-700" : "bg-red-50 border border-red-200 text-red-700"
+        <div className={`mb-4 flex items-center gap-2 rounded-control px-4 py-3 text-sm ${
+          error.startsWith("✓") ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-red-tint text-cos-red-ink"
         }`}>
           {error.startsWith("✓") ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           <span className="flex-1">{error}</span>
@@ -139,32 +139,32 @@ export default function DeclaracionAnualPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center gap-2 text-muted-foreground text-sm py-12 justify-center">
+        <div className="flex items-center justify-center gap-2 py-12 text-sm text-cos-ink-soft">
           <Loader2 className="h-5 w-5 animate-spin" /> Calculando declaración anual...
         </div>
       ) : result && (
         <div className="space-y-5">
           {/* Header card */}
-          <div className="bg-white border border-border rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
+          <div className="rounded-card border border-cos-line bg-white p-5 shadow-card">
+            <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                  result.isrAPagar > 0 ? "bg-red-100" : "bg-green-100"
+                <div className={`flex h-10 w-10 items-center justify-center rounded-control ${
+                  result.isrAPagar > 0 ? "bg-cos-red-tint" : "bg-cos-jade-tint"
                 }`}>
                   {result.isrAPagar > 0
-                    ? <TrendingDown className="h-5 w-5 text-red-600" />
-                    : <TrendingUp className="h-5 w-5 text-green-600" />}
+                    ? <TrendingDown className="h-5 w-5 text-cos-red-ink" />
+                    : <TrendingUp className="h-5 w-5 text-cos-jade-ink" />}
                 </div>
                 <div>
-                  <p className="font-semibold">
+                  <p className="font-semibold text-cos-ink">
                     {result.tipoPersona === "PM" ? "Persona Moral" : "Persona Física"} — Ejercicio {ejercicio}
                   </p>
-                  <p className="text-xs text-muted-foreground">Régimen {result.company.regimenFiscal} · {result.company.rfc}</p>
+                  <p className="text-xs text-cos-ink-soft">Régimen {result.company.regimenFiscal} · {result.company.rfc}</p>
                 </div>
               </div>
               {result.existingDeclaration && (
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                  result.existingDeclaration.status === "FILED" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                  result.existingDeclaration.status === "FILED" ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-brand-tint text-cos-brand-ink"
                 }`}>
                   {result.existingDeclaration.status === "FILED" ? "Presentada" : "Calculada"}
                 </span>
@@ -182,14 +182,14 @@ export default function DeclaracionAnualPage() {
 
           {/* Toggle manual overrides */}
           <button onClick={() => setEditMode(!editMode)}
-            className="flex items-center gap-2 text-xs text-primary hover:underline">
+            className="flex items-center gap-2 text-xs text-cos-brand-ink hover:underline">
             <Pencil className="h-3.5 w-3.5" />
             {editMode ? "Ocultar ajustes manuales" : "Ajustes manuales (depreciación, inflación, pérdidas...)"}
           </button>
 
           {editMode && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <p className="text-xs font-medium text-amber-900 mb-3">Ajustes manuales — estos campos no se calculan automáticamente</p>
+            <div className="rounded-card border border-cos-amber-ink/20 bg-cos-amber-tint p-4">
+              <p className="mb-3 text-xs font-medium text-cos-amber-ink">Ajustes manuales — estos campos no se calculan automáticamente</p>
               <div className="grid grid-cols-2 gap-3">
                 {([
                   ["otrosIngresos", "Otros ingresos (intereses, ganancia cambiaria)"],
@@ -202,14 +202,14 @@ export default function DeclaracionAnualPage() {
                   ["isrRetenidoPorTerceros", "ISR retenido por terceros (clientes)"],
                 ] as const).map(([key, label]) => (
                   <div key={key}>
-                    <label className="block text-[10px] font-medium text-amber-900 mb-0.5">{label}</label>
+                    <label className="mb-0.5 block text-[10px] font-medium text-cos-amber-ink">{label}</label>
                     <input type="number" step="0.01" value={overrides[key]}
                       onChange={e => setOverrides(p => ({ ...p, [key]: e.target.value }))}
-                      className="w-full px-2 py-1.5 border border-amber-300 rounded text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/30" />
+                      className="w-full rounded-control border border-cos-amber-ink/30 bg-white px-2 py-1.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-cos-amber/30" />
                   </div>
                 ))}
               </div>
-              <button onClick={loadDeclaracion} className="mt-3 flex items-center gap-2 bg-amber-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-amber-700">
+              <button onClick={loadDeclaracion} className="mt-3 flex items-center gap-2 rounded-control bg-cos-amber-ink px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
                 <Calculator className="h-3.5 w-3.5" /> Recalcular
               </button>
             </div>
@@ -241,14 +241,14 @@ export default function DeclaracionAnualPage() {
             {result.desglose.deducciones.otras > 0 && <Row label="Otras deducciones" value={result.desglose.deducciones.otras} />}
             <TotalRow label="Total deducciones" value={result.desglose.deducciones.total} negative />
             {(result.dataSources.inversionesExcluidas?.monto ?? 0) > 0 && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Nota: {formatCurrency(result.dataSources.inversionesExcluidas.monto)} de CFDIs de inversión NO se deducen como
+              <p className="mt-2 text-[11px] text-cos-ink-soft">
+                Nota: {<Money value={result.dataSources.inversionesExcluidas.monto} className="text-[11px]" weight={400} />} de CFDIs de inversión NO se deducen como
                 compra — se deducen vía depreciación (Art. 31/34). Revisa el registro en Activo fijo.
               </p>
             )}
             {(result.dataSources.sinEfectosExcluidos?.monto ?? 0) > 0 && (
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {formatCurrency(result.dataSources.sinEfectosExcluidos.monto)} de CFDIs marcados “sin efectos fiscales” no son deducibles.
+              <p className="mt-1 text-[11px] text-cos-ink-soft">
+                {<Money value={result.dataSources.sinEfectosExcluidos.monto} className="text-[11px]" weight={400} />} de CFDIs marcados “sin efectos fiscales” no son deducibles.
               </p>
             )}
           </Section>
@@ -266,7 +266,7 @@ export default function DeclaracionAnualPage() {
             {parseFloat(overrides.isrRetenidoPorTerceros) > 0 && (
               <Row label="(-) ISR retenido por terceros" value={-parseFloat(overrides.isrRetenidoPorTerceros)} />
             )}
-            <div className="border-t-2 border-border pt-2 mt-2">
+            <div className="mt-2 border-t-2 border-cos-line pt-2">
               {result.isrAPagar > 0 ? (
                 <TotalRow label="ISR A PAGAR" value={result.isrAPagar} negative />
               ) : (
@@ -277,21 +277,21 @@ export default function DeclaracionAnualPage() {
 
           {/* Coeficiente */}
           {result.coeficienteUtilidad != null && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+            <div className="rounded-card border border-cos-brand-ink/15 bg-cos-brand-tint p-4 text-sm text-cos-brand-ink">
               <p className="font-semibold">Coeficiente de utilidad para {ejercicio + 1}: <span className="font-mono">{result.coeficienteUtilidad.toFixed(4)}</span></p>
-              <p className="text-xs mt-0.5">Se aplicará automáticamente en los pagos provisionales de ISR del próximo ejercicio (Art. 14 LISR).</p>
+              <p className="mt-0.5 text-xs">Se aplicará automáticamente en los pagos provisionales de ISR del próximo ejercicio (Art. 14 LISR).</p>
             </div>
           )}
 
           {/* Actions */}
           <div className="flex gap-3">
             <button onClick={() => handleSave("CALCULATED")} disabled={saving}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+              className="flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Guardar cálculo
             </button>
             <button onClick={() => handleSave("FILED")} disabled={saving}
-              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+              className="flex items-center gap-2 rounded-control bg-cos-jade-ink px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
               <FileText className="h-4 w-4" />
               Marcar como presentada
             </button>
@@ -305,18 +305,20 @@ export default function DeclaracionAnualPage() {
 function Stat({ label, value, negative, positive }: { label: string; value: number; negative?: boolean; positive?: boolean }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`font-mono text-sm font-bold tabular-nums break-words sm:text-base ${negative ? "text-red-600" : positive ? "text-green-700" : ""}`}>
-        {formatCurrency(value)}
-      </p>
+      <p className="text-xs text-cos-ink-soft">{label}</p>
+      <Money
+        value={value}
+        weight={700}
+        className={`block break-words text-sm sm:text-base ${negative ? "text-cos-red-ink" : positive ? "text-cos-jade-ink" : "text-cos-ink"}`}
+      />
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white border border-border rounded-xl p-5">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">{title}</h3>
+    <div className="rounded-card border border-cos-line bg-white p-5 shadow-card">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-cos-ink-soft">{title}</h3>
       <div className="space-y-1.5 text-sm">{children}</div>
     </div>
   );
@@ -324,20 +326,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Row({ label, value, bold, highlight }: { label: string; value: number; bold?: boolean; highlight?: boolean }) {
   return (
-    <div className={`flex justify-between ${bold ? "font-semibold" : ""} ${highlight ? "text-red-600" : ""}`}>
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono">{formatCurrency(value)}</span>
+    <div className={`flex justify-between ${bold ? "font-semibold" : ""}`}>
+      <span className="text-cos-ink-soft">{label}</span>
+      <Money value={value} weight={bold ? 600 : 400} className={highlight ? "text-cos-red-ink" : "text-cos-ink"} />
     </div>
   );
 }
 
 function TotalRow({ label, value, negative, positive }: { label: string; value: number; negative?: boolean; positive?: boolean }) {
   return (
-    <div className="flex justify-between font-bold border-t border-border pt-1.5 mt-1.5">
-      <span>{label}</span>
-      <span className={`font-mono ${negative ? "text-red-600" : positive ? "text-green-700" : ""}`}>
-        {formatCurrency(value)}
-      </span>
+    <div className="mt-1.5 flex justify-between border-t border-cos-line pt-1.5 font-bold">
+      <span className="text-cos-ink">{label}</span>
+      <Money value={value} weight={700} className={negative ? "text-cos-red-ink" : positive ? "text-cos-jade-ink" : "text-cos-ink"} />
     </div>
   );
 }

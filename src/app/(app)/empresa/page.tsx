@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { formatCurrency } from "@/lib/utils";
+import { Money } from "@/components/ui";
 import {
   Building2, Plus, Loader2, Pencil, CheckCircle2,
   Zap, Key, AlertCircle, Trash2, ExternalLink, Eye, EyeOff, X,
@@ -493,11 +493,11 @@ export default function EmpresaPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Mi Empresa</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Gestiona tus empresas y configuración fiscal</p>
+          <p className="text-sm text-cos-ink-soft mt-0.5">Gestiona tus empresas y configuración fiscal</p>
         </div>
         <a
           href="/onboarding?from=empresas&returnTo=/empresa"
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
+          className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep"
         >
           <Plus className="h-4 w-4" />
           Nueva empresa
@@ -506,38 +506,38 @@ export default function EmpresaPage() {
 
       {/* Add Company Form */}
       {showAddForm && (
-        <div className="bg-white border border-border rounded-xl p-6 mb-6 shadow-sm">
+        <div className="bg-white border border-cos-line rounded-xl p-6 mb-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold">Agregar nueva empresa</h2>
-            <button onClick={() => setShowAddForm(false)} className="p-1.5 rounded hover:bg-accent text-muted-foreground">
+            <button onClick={() => setShowAddForm(false)} className="p-1.5 rounded hover:bg-cos-paper text-cos-ink-soft">
               <X className="h-4 w-4" />
             </button>
           </div>
           <form onSubmit={handleAddSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1.5">RFC <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium mb-1.5">RFC <span className="text-cos-red-ink">*</span></label>
                 <input type="text" name="rfc" value={addForm.rfc} onChange={handleAddChange}
                   placeholder="XAXX010101000" maxLength={13} required
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 uppercase" />
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30 uppercase" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Código Postal <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium mb-1.5">Código Postal <span className="text-cos-red-ink">*</span></label>
                 <input type="text" name="codigoPostal" value={addForm.codigoPostal} onChange={handleAddChange}
                   placeholder="06600" maxLength={5} required
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5">Razón Social <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium mb-1.5">Razón Social <span className="text-cos-red-ink">*</span></label>
               <input type="text" name="razonSocial" value={addForm.razonSocial} onChange={handleAddChange}
                 placeholder="Mi Empresa SA de CV" required
-                className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30" />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-cos-red-ink">*</span></label>
               <select name="regimenFiscal" value={addForm.regimenFiscal} onChange={handleAddChange} required
-                className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
                 <option value="">Selecciona...</option>
                 {REGIMENES_FISCALES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
@@ -545,29 +545,29 @@ export default function EmpresaPage() {
             {/* Grupo (opcional): agrupa empresas del mismo dueño que se facturan
                 entre sí → habilita detección intercompañía (Art. 69-B) y comisiones. */}
             <div>
-              <label className="block text-sm font-medium mb-1.5">Grupo <span className="text-muted-foreground">(opcional)</span></label>
+              <label className="block text-sm font-medium mb-1.5">Grupo <span className="text-cos-ink-soft">(opcional)</span></label>
               <div className="flex gap-2">
                 <select name="grupoId" value={addForm.grupoId} onChange={handleAddChange}
-                  className="flex-1 px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                  className="flex-1 px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white">
                   <option value="">Sin grupo</option>
                   {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
                 </select>
                 <button type="button" onClick={crearGrupo}
-                  className="px-3 py-2 rounded-md text-sm border border-border hover:bg-accent whitespace-nowrap">+ Nuevo grupo</button>
+                  className="px-3 py-2 rounded-md text-sm border border-cos-line hover:bg-cos-paper whitespace-nowrap">+ Nuevo grupo</button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Empresas del mismo dueño que se facturan entre sí. Se usa para detectar operaciones intercompañía.</p>
+              <p className="text-xs text-cos-ink-soft mt-1">Empresas del mismo dueño que se facturan entre sí. Se usa para detectar operaciones intercompañía.</p>
             </div>
             {addError && (
-              <div className="bg-red-50 border border-red-200 rounded-md px-4 py-3 text-sm text-red-700">{addError}</div>
+              <div className="bg-cos-red-tint border border-cos-red-ink/20 rounded-md px-4 py-3 text-sm text-cos-red-ink">{addError}</div>
             )}
             <div className="flex gap-3">
               <button type="submit" disabled={addLoading}
-                className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+                className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50">
                 {addLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                 Crear empresa
               </button>
               <button type="button" onClick={() => setShowAddForm(false)}
-                className="px-4 py-2 rounded-md text-sm border border-border hover:bg-accent">Cancelar</button>
+                className="px-4 py-2 rounded-md text-sm border border-cos-line hover:bg-cos-paper">Cancelar</button>
             </div>
           </form>
         </div>
@@ -578,31 +578,31 @@ export default function EmpresaPage() {
         {companies.map((company) => (
           <div key={company.id}
             className={`bg-white border rounded-xl p-5 shadow-sm flex items-center justify-between transition-colors ${
-              activeCompany?.id === company.id ? "border-primary ring-1 ring-primary/20" : "border-border"
+              activeCompany?.id === company.id ? "border-cos-brand ring-1 ring-cos-brand/20" : "border-cos-line"
             }`}
           >
             <div className="flex items-center gap-4">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Building2 className="h-5 w-5 text-primary" />
+              <div className="h-10 w-10 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
+                <Building2 className="h-5 w-5 text-cos-brand-ink" />
               </div>
               <div>
                 <p className="font-semibold">{company.razonSocial}</p>
-                <p className="text-sm text-muted-foreground font-mono">{company.rfc}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Régimen {company.regimenFiscal}</p>
+                <p className="text-sm text-cos-ink-soft font-mono">{company.rfc}</p>
+                <p className="text-xs text-cos-ink-soft mt-0.5">Régimen {company.regimenFiscal}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {activeCompany?.id === company.id ? (
-                <span className="text-xs bg-primary/10 text-primary font-medium px-2.5 py-1 rounded-full">Activa</span>
+                <span className="text-xs bg-cos-brand-tint text-cos-brand-ink font-medium px-2.5 py-1 rounded-full">Activa</span>
               ) : (
                 <button onClick={() => setActiveCompany(company)}
-                  className="text-xs px-3 py-1.5 rounded-md border border-border hover:bg-accent text-muted-foreground transition-colors">
+                  className="text-xs px-3 py-1.5 rounded-md border border-cos-line hover:bg-cos-paper text-cos-ink-soft transition-colors">
                   Activar
                 </button>
               )}
               <a
                 href={`/configuracion/empresas/${company.id}`}
-                className="p-1.5 rounded-md hover:bg-accent text-muted-foreground"
+                className="p-1.5 rounded-md hover:bg-cos-paper text-cos-ink-soft"
                 title="Editar"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -614,14 +614,14 @@ export default function EmpresaPage() {
 
       {/* ── Nómina — Registro Patronal IMSS ── */}
       {activeCompany && (
-        <div className="bg-white border border-border rounded-xl shadow-sm p-5 mb-5">
+        <div className="bg-white border border-cos-line rounded-xl shadow-sm p-5 mb-5">
           <div className="flex items-start gap-3 mb-3">
-            <div className="h-9 w-9 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-              <Building2 className="h-4 w-4 text-indigo-600" />
+            <div className="h-9 w-9 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
+              <Building2 className="h-4 w-4 text-cos-brand-ink" />
             </div>
             <div>
               <h2 className="font-semibold text-sm">Registro Patronal IMSS</h2>
-              <p className="text-xs text-muted-foreground">Requerido para emitir CFDI de nómina. Aparece en tu Tarjeta de Identificación Patronal.</p>
+              <p className="text-xs text-cos-ink-soft">Requerido para emitir CFDI de nómina. Aparece en tu Tarjeta de Identificación Patronal.</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -630,25 +630,25 @@ export default function EmpresaPage() {
               value={rpValue}
               onChange={(e) => setRpValue(e.target.value.toUpperCase())}
               placeholder="E.g. E0818935102"
-              className="flex-1 px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="flex-1 px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
             />
             <button
               onClick={handleSaveRegistroPatronal}
               disabled={rpSaving}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+              className="bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50 flex items-center gap-2"
             >
               {rpSaving && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar
             </button>
           </div>
           {rpMessage && (
-            <p className={`text-xs mt-2 ${rpMessage.startsWith("✓") ? "text-green-700" : "text-destructive"}`}>
+            <p className={`text-xs mt-2 ${rpMessage.startsWith("✓") ? "text-cos-jade-ink" : "text-cos-red-ink"}`}>
               {rpMessage}
             </p>
           )}
           {companyDetail?.registroPatronal && !rpMessage && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Actual: <code className="font-mono text-foreground">{companyDetail.registroPatronal}</code>
+            <p className="text-xs text-cos-ink-soft mt-2">
+              Actual: <code className="font-mono text-cos-ink">{companyDetail.registroPatronal}</code>
             </p>
           )}
         </div>
@@ -656,20 +656,20 @@ export default function EmpresaPage() {
 
       {/* ── Plataformas tecnológicas (625) — tipo de actividad / tasa ── */}
       {activeCompany && companyDetail?.regimenFiscal === "625" && (
-        <div className="bg-white border border-border rounded-xl shadow-sm p-5 mb-5">
+        <div className="bg-white border border-cos-line rounded-xl shadow-sm p-5 mb-5">
           <div className="flex items-start gap-3 mb-3">
-            <div className="h-9 w-9 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-              <Building2 className="h-4 w-4 text-indigo-600" />
+            <div className="h-9 w-9 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
+              <Building2 className="h-4 w-4 text-cos-brand-ink" />
             </div>
             <div>
               <h2 className="font-semibold text-sm">Plataformas tecnológicas — tipo de actividad</h2>
-              <p className="text-xs text-muted-foreground">Define la tasa de retención de ISR (Art. 113-A LISR). Sin configurar, el cálculo asume servicios (1%).</p>
+              <p className="text-xs text-cos-ink-soft">Define la tasa de retención de ISR (Art. 113-A LISR). Sin configurar, el cálculo asume servicios (1%).</p>
             </div>
           </div>
           <select
             value={companyDetail?.plataformaActividad ?? "servicios"}
             onChange={(e) => handleSavePlataformaActividad(e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
           >
             <option value="transporte">Transporte de pasajeros / entrega de bienes — 2.1%</option>
             <option value="hospedaje">Servicios de hospedaje — 4%</option>
@@ -681,20 +681,20 @@ export default function EmpresaPage() {
       {/* ── Facturapi Setup + FIEL ── */}
       {activeCompany && (
         <>
-        <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-cos-line rounded-xl shadow-sm overflow-hidden">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-cos-line flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${isConnected ? "bg-green-100" : "bg-gray-100"}`}>
-                <Zap className={`h-4 w-4 ${isConnected ? "text-green-600" : "text-muted-foreground"}`} />
+              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${isConnected ? "bg-cos-jade-tint" : "bg-cos-slate-tint"}`}>
+                <Zap className={`h-4 w-4 ${isConnected ? "text-cos-jade-ink" : "text-cos-ink-soft"}`} />
               </div>
               <div>
                 <h2 className="font-semibold text-sm">Facturapi — Timbrado CFDI</h2>
-                <p className="text-xs text-muted-foreground">{activeCompany.razonSocial}</p>
+                <p className="text-xs text-cos-ink-soft">{activeCompany.razonSocial}</p>
               </div>
             </div>
             {isConnected && (
-              <span className="flex items-center gap-1.5 text-xs bg-green-100 text-green-700 font-medium px-2.5 py-1 rounded-full">
+              <span className="flex items-center gap-1.5 text-xs bg-cos-jade-tint text-cos-jade-ink font-medium px-2.5 py-1 rounded-full">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Conectado
               </span>
@@ -707,14 +707,14 @@ export default function EmpresaPage() {
               const needsManifiesto = fpStatus.pendingSteps?.some(s => s.type === "manifiesto");
               const needsCert = fpStatus.pendingSteps?.some(s => s.type === "certificate");
               return (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+                <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg p-4 text-sm">
                   <div className="flex items-start gap-3">
-                    <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                    <AlertCircle className="h-4 w-4 text-cos-amber-ink mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-amber-900 mb-1.5">
+                      <p className="font-semibold text-cos-amber-ink mb-1.5">
                         Pasos pendientes para activar el timbrado en producción:
                       </p>
-                      <ul className="list-disc list-inside space-y-1 text-amber-900 text-xs">
+                      <ul className="list-disc list-inside space-y-1 text-cos-amber-ink text-xs">
                         {fpStatus.pendingSteps?.map((s, i) => (
                           <li key={i}>
                             <strong>{s.type}</strong> — {s.description}
@@ -724,12 +724,12 @@ export default function EmpresaPage() {
 
                       <div className="mt-3 space-y-2">
                         {needsCert && (
-                          <p className="text-xs text-amber-800">
+                          <p className="text-xs text-cos-amber-ink">
                             📄 <strong>CSD:</strong> súbelo desde el formulario de abajo &ldquo;Sube tu CSD para activar el timbrado&rdquo;.
                           </p>
                         )}
                         {needsManifiesto && (
-                          <div className="text-xs text-amber-800">
+                          <div className="text-xs text-cos-amber-ink">
                             <p className="mb-1">
                               ✍️ <strong>Carta Manifiesto:</strong> Facturapi requiere firmarla con tu e.firma directamente en su portal seguro (no se pueden enviar las llaves desde nuestra app).
                             </p>
@@ -737,12 +737,12 @@ export default function EmpresaPage() {
                               href="https://www.facturapi.io/manifiesto"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 mt-1 text-xs font-medium bg-amber-600 text-white px-2.5 py-1.5 rounded hover:bg-amber-700"
+                              className="inline-flex items-center gap-1.5 mt-1 text-xs font-medium bg-cos-amber-tint text-white px-2.5 py-1.5 rounded hover:bg-cos-amber-tint"
                             >
                               Firmar Carta Manifiesto en Facturapi
                               <ExternalLink className="h-3 w-3" />
                             </a>
-                            <p className="text-[10px] text-amber-700 mt-1">
+                            <p className="text-[10px] text-cos-amber-ink mt-1">
                               Necesitarás tu .cer, .key y contraseña de la e.firma.
                             </p>
                           </div>
@@ -756,11 +756,11 @@ export default function EmpresaPage() {
 
             {/* Live Facturapi success badge */}
             {fpStatus && fpStatus.isProductionReady && (fpStatus.pendingSteps?.length ?? 0) === 0 && (
-              <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm flex items-center gap-2 text-green-800">
+              <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-4 py-3 text-sm flex items-center gap-2 text-cos-jade-ink">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 <span>
                   ✓ Organización lista para producción. Puedes timbrar CFDIs.
-                  {fpStatus.taxId && <span className="ml-2 font-mono text-xs text-green-700">RFC: {fpStatus.taxId}</span>}
+                  {fpStatus.taxId && <span className="ml-2 font-mono text-xs text-cos-jade-ink">RFC: {fpStatus.taxId}</span>}
                 </span>
               </div>
             )}
@@ -769,17 +769,17 @@ export default function EmpresaPage() {
             {isConnected ? (
               <div className="space-y-3">
                 {/* Org info */}
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm">
+                <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg p-4 text-sm">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1.5">
                       {companyDetail?.facturapiOrgId && (
                         <div>
-                          <span className="text-xs text-muted-foreground">Org ID</span>
+                          <span className="text-xs text-cos-ink-soft">Org ID</span>
                           <p className="font-mono text-xs">{companyDetail.facturapiOrgId}</p>
                         </div>
                       )}
                       <div>
-                        <span className="text-xs text-muted-foreground">API Key</span>
+                        <span className="text-xs text-cos-ink-soft">API Key</span>
                         <div className="flex items-center gap-2">
                           <p className="font-mono text-xs">
                             {showKey
@@ -787,24 +787,24 @@ export default function EmpresaPage() {
                               : companyDetail?.facturapiApiKey?.substring(0, 12) + "••••••••••••"}
                           </p>
                           <button onClick={() => setShowKey((v) => !v)}
-                            className="text-muted-foreground hover:text-foreground">
+                            className="text-cos-ink-soft hover:text-cos-ink">
                             {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                           </button>
                         </div>
                       </div>
                       <div>
-                        <span className="text-xs text-muted-foreground">CSD</span>
+                        <span className="text-xs text-cos-ink-soft">CSD</span>
                         <p className="text-xs font-medium">
                           {hasCsd ? (
-                            <span className="text-green-700">✓ Certificado guardado</span>
+                            <span className="text-cos-jade-ink">✓ Certificado guardado</span>
                           ) : (
-                            <span className="text-amber-600">⚠ Sin CSD — configúralo en el onboarding</span>
+                            <span className="text-cos-amber-ink">⚠ Sin CSD — configúralo en el onboarding</span>
                           )}
                         </p>
                       </div>
                     </div>
                     <a href="https://app.facturapi.io" target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-primary hover:underline shrink-0">
+                      className="flex items-center gap-1 text-xs text-cos-brand-ink hover:underline shrink-0">
                       Ver en Facturapi <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
@@ -812,36 +812,36 @@ export default function EmpresaPage() {
 
                 {/* Re-sync button */}
                 <button onClick={handleAutoSetup} disabled={fpLoading}
-                  className="flex items-center gap-2 text-sm px-4 py-2 border border-border rounded-md hover:bg-accent disabled:opacity-50">
+                  className="flex items-center gap-2 text-sm px-4 py-2 border border-cos-line rounded-md hover:bg-cos-paper disabled:opacity-50">
                   {fpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                   Re-sincronizar datos legales y CSD
                 </button>
 
                 {/* Disconnect */}
                 <button onClick={handleDisconnect} disabled={disconnectLoading}
-                  className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 px-4 py-2 rounded-md hover:bg-red-50 disabled:opacity-50">
+                  className="flex items-center gap-2 text-sm text-cos-red-ink hover:text-cos-red-ink px-4 py-2 rounded-md hover:bg-cos-red-tint disabled:opacity-50">
                   {disconnectLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   Desconectar Facturapi
                 </button>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg p-4 text-sm text-cos-brand-ink">
                   <p className="font-semibold mb-1">Para timbrar CFDIs necesitas Facturapi</p>
                   <p>Facturapi actúa como PAC (Proveedor Autorizado de Certificación) ante el SAT. La organización se provisiona automáticamente al crear la empresa. Si tu empresa fue creada antes de configurar Facturapi, usa el botón &ldquo;Configurar Facturapi&rdquo; abajo para reintentarlo.</p>
                 </div>
 
                 {/* Option 1: CSD upload (the only thing that actually unlocks timbrado) */}
-                <div className="border border-border rounded-lg p-4">
+                <div className="border border-cos-line rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <FileKey2 className="h-4 w-4 text-primary" />
+                    <FileKey2 className="h-4 w-4 text-cos-brand-ink" />
                     <h3 className="text-sm font-semibold">Opción 1 — Sube tu CSD para activar el timbrado</h3>
-                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">Recomendada</span>
+                    <span className="text-xs bg-cos-brand-tint text-cos-brand-ink px-2 py-0.5 rounded-full font-medium">Recomendada</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-3">
+                  <p className="text-xs text-cos-ink-soft mb-3">
                     El Certificado de Sello Digital (CSD) lo emite el SAT. Una vez subido, generamos automáticamente tu clave live en Facturapi y podrás timbrar CFDIs.
                     {companyDetail?.facturapiOrgId && (
-                      <span className="block mt-1 text-green-700">
+                      <span className="block mt-1 text-cos-jade-ink">
                         ✓ Organización en Facturapi ya creada · ID: <code className="font-mono">{companyDetail.facturapiOrgId}</code>
                       </span>
                     )}
@@ -850,18 +850,18 @@ export default function EmpresaPage() {
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-medium mb-1">Certificado <code className="text-xs">.cer</code></label>
-                      <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-md text-xs cursor-pointer hover:bg-gray-50">
-                        <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-muted-foreground truncate">{csdCerFile ? csdCerFile.name : "Seleccionar .cer"}</span>
+                      <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-cos-line rounded-md text-xs cursor-pointer hover:bg-cos-paper">
+                        <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
+                        <span className="text-cos-ink-soft truncate">{csdCerFile ? csdCerFile.name : "Seleccionar .cer"}</span>
                         <input type="file" accept=".cer" className="hidden"
                           onChange={(e) => setCsdCerFile(e.target.files?.[0] ?? null)} />
                       </label>
                     </div>
                     <div>
                       <label className="block text-xs font-medium mb-1">Llave privada <code className="text-xs">.key</code></label>
-                      <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-md text-xs cursor-pointer hover:bg-gray-50">
-                        <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-muted-foreground truncate">{csdKeyFile ? csdKeyFile.name : "Seleccionar .key"}</span>
+                      <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-cos-line rounded-md text-xs cursor-pointer hover:bg-cos-paper">
+                        <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
+                        <span className="text-cos-ink-soft truncate">{csdKeyFile ? csdKeyFile.name : "Seleccionar .key"}</span>
                         <input type="file" accept=".key" className="hidden"
                           onChange={(e) => setCsdKeyFile(e.target.files?.[0] ?? null)} />
                       </label>
@@ -873,21 +873,21 @@ export default function EmpresaPage() {
                         value={csdPassword}
                         onChange={(e) => setCsdPassword(e.target.value)}
                         placeholder="Contraseña de la llave privada"
-                        className="w-full px-3 py-2 border border-border rounded-md text-sm"
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm"
                       />
                     </div>
 
                     {csdError && (
-                      <p className="text-xs text-destructive">{csdError}</p>
+                      <p className="text-xs text-cos-red-ink">{csdError}</p>
                     )}
                     {csdSuccess && (
-                      <p className="text-xs text-green-700">{csdSuccess}</p>
+                      <p className="text-xs text-cos-jade-ink">{csdSuccess}</p>
                     )}
 
                     <button
                       onClick={handleCsdUpload}
                       disabled={csdSaving || !csdCerFile || !csdKeyFile || !csdPassword}
-                      className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                      className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50"
                     >
                       {csdSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileKey2 className="h-4 w-4" />}
                       {csdSaving ? "Subiendo..." : "Subir CSD y activar timbrado"}
@@ -896,53 +896,53 @@ export default function EmpresaPage() {
                 </div>
 
                 {/* Option 2: Manual */}
-                <div className="border border-border rounded-lg p-4">
+                <div className="border border-cos-line rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Key className="h-4 w-4 text-muted-foreground" />
+                    <Key className="h-4 w-4 text-cos-ink-soft" />
                     <h3 className="text-sm font-semibold">Opción 2 — Pegar clave manualmente</h3>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-3">
+                  <p className="text-xs text-cos-ink-soft mb-3">
                     Si ya tienes una organización en Facturapi, pega directamente su clave de API.
                   </p>
                   {!showManualKey ? (
                     <button onClick={() => setShowManualKey(true)}
-                      className="flex items-center gap-2 text-sm px-4 py-2 border border-border rounded-md hover:bg-accent">
+                      className="flex items-center gap-2 text-sm px-4 py-2 border border-cos-line rounded-md hover:bg-cos-paper">
                       <Key className="h-4 w-4" />
                       Ingresar clave manualmente
                     </button>
                   ) : (
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs font-medium mb-1">API Key de la organización <span className="text-red-500">*</span></label>
+                        <label className="block text-xs font-medium mb-1">API Key de la organización <span className="text-cos-red-ink">*</span></label>
                         <div className="relative">
                           <input
                             type={showKey ? "text" : "password"}
                             value={manualKey}
                             onChange={(e) => setManualKey(e.target.value)}
                             placeholder="sk_live_... o sk_test_..."
-                            className="w-full px-3 py-2 pr-10 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                           />
                           <button type="button" onClick={() => setShowKey((v) => !v)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-cos-ink-soft">
                             {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium mb-1">Org ID <span className="text-muted-foreground font-normal">(opcional)</span></label>
+                        <label className="block text-xs font-medium mb-1">Org ID <span className="text-cos-ink-soft font-normal">(opcional)</span></label>
                         <input type="text" value={manualOrgId} onChange={(e) => setManualOrgId(e.target.value)}
                           placeholder="org_xxxxxxxxxxxxxxxxxx"
-                          className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                         />
                       </div>
                       <div className="flex gap-2">
                         <button onClick={handleSaveManualKey} disabled={savingKey || !manualKey.trim()}
-                          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+                          className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50">
                           {savingKey && <Loader2 className="h-4 w-4 animate-spin" />}
                           Guardar
                         </button>
                         <button onClick={() => setShowManualKey(false)}
-                          className="px-4 py-2 rounded-md text-sm border border-border hover:bg-accent">Cancelar</button>
+                          className="px-4 py-2 rounded-md text-sm border border-cos-line hover:bg-cos-paper">Cancelar</button>
                       </div>
                     </div>
                   )}
@@ -952,13 +952,13 @@ export default function EmpresaPage() {
 
             {/* Feedback messages */}
             {fpSuccess && (
-              <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800">
+              <div className="flex items-start gap-3 bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-4 py-3 text-sm text-cos-jade-ink">
                 <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
                 {fpSuccess}
               </div>
             )}
             {fpError && (
-              <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+              <div className="flex items-start gap-3 bg-cos-red-tint border border-cos-red-ink/20 rounded-lg px-4 py-3 text-sm text-cos-red-ink">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 {fpError}
               </div>
@@ -967,18 +967,18 @@ export default function EmpresaPage() {
         </div>
 
         {/* ── e.firma / FIEL ── */}
-        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
-                <Shield className="h-5 w-5 text-amber-600" />
+              <div className="h-10 w-10 rounded-lg bg-cos-amber-tint flex items-center justify-center shrink-0">
+                <Shield className="h-5 w-5 text-cos-amber-ink" />
               </div>
               <div>
                 <h2 className="font-semibold text-sm">e.firma / FIEL</h2>
-                <p className="text-xs text-muted-foreground">Requerida para sincronizar CFDIs del SAT</p>
+                <p className="text-xs text-cos-ink-soft">Requerida para sincronizar CFDIs del SAT</p>
               </div>
             </div>
-            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${hasFiel ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${hasFiel ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-amber-tint text-cos-amber-ink"}`}>
               {hasFiel ? "✓ Configurada" : "Sin configurar"}
             </span>
           </div>
@@ -986,14 +986,14 @@ export default function EmpresaPage() {
           <div className="px-5 py-4 space-y-4">
             {hasFiel ? (
               <div className="space-y-3">
-                <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800">
+                <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-4 py-3 text-sm text-cos-jade-ink">
                   <p className="font-medium">e.firma almacenada de forma segura</p>
-                  <p className="text-xs mt-0.5 text-green-700">Usada para descargar CFDIs del SAT. Actualiza los archivos si tu e.firma expiró o cambió.</p>
+                  <p className="text-xs mt-0.5 text-cos-jade-ink">Usada para descargar CFDIs del SAT. Actualiza los archivos si tu e.firma expiró o cambió.</p>
                 </div>
-                <p className="text-xs text-muted-foreground">Para actualizar, sube los nuevos archivos:</p>
+                <p className="text-xs text-cos-ink-soft">Para actualizar, sube los nuevos archivos:</p>
               </div>
             ) : (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+              <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-4 py-3 text-sm text-cos-amber-ink">
                 <p className="font-medium mb-1">¿Qué es la e.firma?</p>
                 <p>La Firma Electrónica Avanzada (FIEL) te permite autenticarte ante el SAT para descargar todos tus CFDIs emitidos y recibidos — necesario para calcular IVA acreditable con precisión.</p>
               </div>
@@ -1002,10 +1002,10 @@ export default function EmpresaPage() {
             {/* Upload fields */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium mb-1.5">Certificado e.firma <code className="bg-gray-100 px-1 rounded">.cer</code></label>
-                <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-border border-dashed rounded-md text-xs cursor-pointer hover:bg-gray-50 transition-colors">
-                  <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground truncate">
+                <label className="block text-xs font-medium mb-1.5">Certificado e.firma <code className="bg-cos-slate-tint px-1 rounded">.cer</code></label>
+                <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-xs cursor-pointer hover:bg-cos-paper transition-colors">
+                  <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
+                  <span className="text-cos-ink-soft truncate">
                     {fielCerFile ? fielCerFile.name : "Seleccionar .cer"}
                   </span>
                   <input type="file" accept=".cer" className="hidden"
@@ -1013,10 +1013,10 @@ export default function EmpresaPage() {
                 </label>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5">Llave privada <code className="bg-gray-100 px-1 rounded">.key</code></label>
-                <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-border border-dashed rounded-md text-xs cursor-pointer hover:bg-gray-50 transition-colors">
-                  <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground truncate">
+                <label className="block text-xs font-medium mb-1.5">Llave privada <code className="bg-cos-slate-tint px-1 rounded">.key</code></label>
+                <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-xs cursor-pointer hover:bg-cos-paper transition-colors">
+                  <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
+                  <span className="text-cos-ink-soft truncate">
                     {fielKeyFile ? fielKeyFile.name : "Seleccionar .key"}
                   </span>
                   <input type="file" accept=".key" className="hidden"
@@ -1033,23 +1033,23 @@ export default function EmpresaPage() {
                   value={fielPassword}
                   onChange={(e) => setFielPassword(e.target.value)}
                   placeholder="Contraseña de la llave privada"
-                  className="w-full px-3 py-2 pr-10 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 pr-10 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                 />
                 <button type="button" onClick={() => setShowFielPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-cos-ink-soft hover:text-cos-ink">
                   {showFielPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
             {fielSuccess && (
-              <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
+              <div className="flex items-start gap-2 bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-3 py-2 text-sm text-cos-jade-ink">
                 <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
                 {fielSuccess}
               </div>
             )}
             {fielError && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+              <div className="flex items-start gap-2 bg-cos-red-tint border border-cos-red-ink/20 rounded-lg px-3 py-2 text-sm text-cos-red-ink">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 {fielError}
               </div>
@@ -1058,7 +1058,7 @@ export default function EmpresaPage() {
             <button
               onClick={handleFielUpload}
               disabled={fielSaving || !fielCerFile || !fielKeyFile || !fielPassword}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50 transition-colors"
             >
               {fielSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
               {hasFiel ? "Actualizar e.firma" : "Guardar e.firma"}
@@ -1066,33 +1066,33 @@ export default function EmpresaPage() {
           </div>
         </div>
         {/* ── Importar Declaraciones ── */}
-        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden mt-5">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden mt-5">
+          <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-                <Sparkles className="h-5 w-5 text-indigo-600" />
+              <div className="h-10 w-10 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
+                <Sparkles className="h-5 w-5 text-cos-brand-ink" />
               </div>
               <div>
                 <h2 className="font-semibold text-sm">Importar Declaraciones</h2>
-                <p className="text-xs text-muted-foreground">Sube acuses del SAT para cargar histórico de IVA e ISR</p>
+                <p className="text-xs text-cos-ink-soft">Sube acuses del SAT para cargar histórico de IVA e ISR</p>
               </div>
             </div>
           </div>
 
           <div className="px-5 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-cos-ink-soft">
               Sube los PDFs de tus <strong>acuses de declaración anual y/o mensual</strong> del SAT.
               El asistente los clasifica y extrae automáticamente los datos (IVA a favor, ISR, coeficiente de utilidad, etc.)
               para que el módulo de impuestos tenga la línea base correcta.
             </p>
 
-            <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-indigo-200 rounded-md text-sm bg-indigo-50/50 cursor-pointer hover:bg-indigo-50 transition-colors">
+            <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-cos-brand-ink/15 rounded-md text-sm bg-cos-brand-tint/50 cursor-pointer hover:bg-cos-brand-tint transition-colors">
               {importParsing ? (
-                <Loader2 className="h-4 w-4 text-indigo-600 shrink-0 animate-spin" />
+                <Loader2 className="h-4 w-4 text-cos-brand-ink shrink-0 animate-spin" />
               ) : (
-                <Upload className="h-4 w-4 text-indigo-600 shrink-0" />
+                <Upload className="h-4 w-4 text-cos-brand-ink shrink-0" />
               )}
-              <span className="text-muted-foreground truncate flex-1">
+              <span className="text-cos-ink-soft truncate flex-1">
                 {importParsing ? "Procesando…" : "Seleccionar acuses PDF (puedes elegir varios)"}
               </span>
               <input
@@ -1115,13 +1115,13 @@ export default function EmpresaPage() {
                   <div
                     key={d.id}
                     className={`flex items-center gap-3 px-3 py-2 rounded-md border text-sm ${
-                      d.type === "OTRO" ? "bg-amber-50 border-amber-200" : "bg-white border-border"
+                      d.type === "OTRO" ? "bg-cos-amber-tint border-cos-amber-ink/20" : "bg-white border-cos-line"
                     }`}
                   >
-                    <FileText className={`h-4 w-4 shrink-0 ${d.type === "OTRO" ? "text-amber-600" : "text-indigo-600"}`} />
+                    <FileText className={`h-4 w-4 shrink-0 ${d.type === "OTRO" ? "text-cos-amber-ink" : "text-cos-brand-ink"}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{d.fileName}</p>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[10px] text-cos-ink-soft">
                         {DOC_LABEL[d.type]}
                         {d.type === "ACUSE_MENSUAL" && d.extracted?.acuseMensual?.periodoMes && (
                           <> · {String(d.extracted.acuseMensual.periodoMes).padStart(2, "0")}/{d.extracted.acuseMensual.periodoAnio}</>
@@ -1137,7 +1137,7 @@ export default function EmpresaPage() {
                     <button
                       type="button"
                       onClick={() => removeImportDoc(d.id)}
-                      className="p-1 rounded hover:bg-accent text-muted-foreground shrink-0"
+                      className="p-1 rounded hover:bg-cos-paper text-cos-ink-soft shrink-0"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -1147,14 +1147,14 @@ export default function EmpresaPage() {
             )}
 
             {importError && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+              <div className="flex items-start gap-2 bg-cos-red-tint border border-cos-red-ink/20 rounded-lg px-3 py-2 text-sm text-cos-red-ink">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 <span className="text-xs">{importError}</span>
               </div>
             )}
 
             {importSuccess && (
-              <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
+              <div className="flex items-start gap-2 bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-3 py-2 text-sm text-cos-jade-ink">
                 <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
                 <span className="text-xs">{importSuccess}</span>
               </div>
@@ -1164,7 +1164,7 @@ export default function EmpresaPage() {
               <button
                 onClick={handleImportSave}
                 disabled={importSaving}
-                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50"
               >
                 {importSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {importSaving
@@ -1174,31 +1174,31 @@ export default function EmpresaPage() {
             )}
             {/* Historical declarations already imported */}
             {historicalDecs.length > 0 && (
-              <div className="border-t border-border pt-3 mt-1">
-                <p className="text-xs font-medium text-muted-foreground mb-2">📄 Declaraciones importadas</p>
+              <div className="border-t border-cos-line pt-3 mt-1">
+                <p className="text-xs font-medium text-cos-ink-soft mb-2">📄 Declaraciones importadas</p>
                 <div className="space-y-1">
                   {historicalDecs.map(d => (
-                    <div key={d.id} className="flex items-center justify-between text-xs bg-white border border-border rounded px-3 py-1.5">
+                    <div key={d.id} className="flex items-center justify-between text-xs bg-white border border-cos-line rounded px-3 py-1.5">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-medium">{d.periodo}</span>
-                        <span className="text-muted-foreground">
+                        <span className="text-cos-ink-soft">
                           {d.tipo === "DECLARACION_ANUAL" ? "Anual" : d.tipo === "IVA_MENSUAL" ? "IVA" : d.tipo === "ISR_PROVISIONAL" ? "ISR" : d.tipo}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 text-muted-foreground">
+                      <div className="flex items-center gap-3 text-cos-ink-soft">
                         {d.isrCoeficienteUtilidad != null && (
-                          <span>CU: <strong className="text-foreground">{d.isrCoeficienteUtilidad}</strong></span>
+                          <span>CU: <strong className="text-cos-ink">{d.isrCoeficienteUtilidad}</strong></span>
                         )}
                         {d.ivaPagar != null && d.ivaPagar > 0 && (
-                          <span>IVA: <strong className="text-red-600">{formatCurrency(d.ivaPagar)}</strong></span>
+                          <span>IVA: <Money value={d.ivaPagar} weight={700} className="text-cos-red-ink" /></span>
                         )}
                         {d.ivaSaldoFavor != null && d.ivaSaldoFavor > 0 && (
-                          <span>IVA favor: <strong className="text-green-700">{formatCurrency(d.ivaSaldoFavor)}</strong></span>
+                          <span>IVA favor: <Money value={d.ivaSaldoFavor} weight={700} className="text-cos-jade-ink" /></span>
                         )}
                         {d.isrPagar != null && d.isrPagar > 0 && (
-                          <span>ISR: <strong className="text-red-600">{formatCurrency(d.isrPagar)}</strong></span>
+                          <span>ISR: <Money value={d.isrPagar} weight={700} className="text-cos-red-ink" /></span>
                         )}
-                        <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium text-[10px]">Importado</span>
+                        <span className="px-1.5 py-0.5 rounded bg-cos-brand-tint text-cos-brand-ink font-medium text-[10px]">Importado</span>
                       </div>
                     </div>
                   ))}

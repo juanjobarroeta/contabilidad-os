@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { recordTimbrado } from "@/lib/costos/record";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { z } from "zod";
@@ -234,6 +235,8 @@ export async function POST(req: Request) {
       { status: info.status }
     );
   }
+  // Costo del timbre (fire-and-forget).
+  void recordTimbrado("factura", 1, { companyId, subtipo: "facturas.create" });
 
   // Compute totals.
   // The Facturapi SDK sometimes returns `subtotal: 0` when there are no taxes

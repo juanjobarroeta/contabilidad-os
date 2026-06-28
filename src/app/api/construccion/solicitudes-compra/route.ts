@@ -19,6 +19,7 @@ const offerSchema = z.object({
   supplierId: z.string().min(1).nullable().optional(),
   supplierNombre: z.string().min(1).max(120),
   tieneCredito: z.boolean().optional(),
+  diasCredito: z.number().int().min(0).max(365).nullable().optional(),
   diasEntrega: z.number().int().min(0).max(365).nullable().optional(),
   lineas: z
     .array(
@@ -89,6 +90,7 @@ export const GET = withAuthz(async (req: Request) => {
                 supplierId: true,
                 supplierNombre: true,
                 tieneCredito: true,
+                diasCredito: true,
                 diasEntrega: true,
                 total: true,
                 partidas: {

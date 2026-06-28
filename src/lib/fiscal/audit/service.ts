@@ -18,13 +18,20 @@ import { auditarPagosPue, type PueSinPago } from "./pue-pagos";
 import { auditarDeclaracionesFaltantes } from "./declaraciones-faltantes";
 import { cargarRepFechaPagoAnterior, auditarRepFechaPagoAnterior } from "./rep-fecha-pago";
 import { cargarPosiblesDuplicados, auditarDuplicados } from "./duplicados";
+import { cargarBancoDesactualizado, auditarBancoDesactualizado } from "./banco-movimientos";
+import { cargarIngresoNoFacturado, auditarIngresoNoFacturado } from "./ingreso-no-facturado";
+import { cargarCredencialesVigencia, auditarCredencialesVigencia } from "./credenciales-vigencia";
+import { cargarObligacionProxima, auditarObligacionProxima } from "./obligacion-proxima";
+import { cargarResicoLimite, auditarResicoLimite } from "./resico-limite";
 import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
 import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
 
-/** Stable identity for a finding so re-runs upsert in place. */
-export function dedupeKey(h: Pick<Hallazgo, "checkClave" | "referencias">): string {
-  return `${h.checkClave}|${[...h.referencias].sort().join(",")}`;
+/** Stable identity for a finding so re-runs upsert in place. Los checks agregados
+ *  fijan `dedupeRef` (identidad estable por empresa); el resto se identifica por
+ *  el conjunto de CFDIs referenciados. */
+export function dedupeKey(h: Pick<Hallazgo, "checkClave" | "referencias" | "dedupeRef">): string {
+  return `${h.checkClave}|${h.dedupeRef ?? [...h.referencias].sort().join(",")}`;
 }
 
 /**
@@ -175,6 +182,12 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
   const faltantes = await declaracionesFaltantesEmpresa(companyId);
   const repFechaAnterior = await cargarRepFechaPagoAnterior(companyId);
   const duplicados = await cargarPosiblesDuplicados(companyId);
+  const hoy = new Date(fecha);
+  const bancoDesactualizado = await cargarBancoDesactualizado(companyId, hoy);
+  const ingresoNoFacturado = await cargarIngresoNoFacturado(companyId, hoy);
+  const credenciales = await cargarCredencialesVigencia(companyId);
+  const obligacionProxima = await cargarObligacionProxima(companyId, hoy);
+  const resicoLimite = await cargarResicoLimite(companyId, hoy);
 
   const hallazgos = [
     ...auditar(cfdis, ctx),
@@ -183,6 +196,11 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
     ...auditarDeclaracionesFaltantes(faltantes),
     ...auditarRepFechaPagoAnterior(repFechaAnterior),
     ...auditarDuplicados(duplicados),
+    ...auditarBancoDesactualizado(bancoDesactualizado),
+    ...auditarIngresoNoFacturado(ingresoNoFacturado),
+    ...auditarCredencialesVigencia(credenciales, hoy),
+    ...auditarObligacionProxima(obligacionProxima, hoy),
+    ...auditarResicoLimite(resicoLimite),
   ];
 
   const vigentes = new Set<string>();

@@ -127,7 +127,7 @@ export default function DespachoPage() {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center gap-2 text-muted-foreground text-sm">
+      <div className="p-8 flex items-center gap-2 text-cos-ink-soft text-sm">
         <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
       </div>
     );
@@ -136,12 +136,12 @@ export default function DespachoPage() {
   if (!despacho) {
     return (
       <div className="p-6 max-w-3xl">
-        <Link href="/configuracion" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4">
+        <Link href="/configuracion" className="inline-flex items-center gap-1.5 text-sm text-cos-ink-soft hover:text-cos-ink mb-4">
           <ArrowLeft className="h-4 w-4" /> Configuración
         </Link>
-        <div className="bg-white border border-dashed border-border rounded-xl p-12 text-center">
-          <Users className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">No perteneces a ningún despacho.</p>
+        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+          <Users className="h-10 w-10 text-cos-ink-soft mx-auto mb-3" />
+          <p className="text-sm text-cos-ink-soft">No perteneces a ningún despacho.</p>
         </div>
       </div>
     );
@@ -149,12 +149,12 @@ export default function DespachoPage() {
 
   return (
     <div className="p-6 max-w-3xl">
-      <Link href="/configuracion" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4">
+      <Link href="/configuracion" className="inline-flex items-center gap-1.5 text-sm text-cos-ink-soft hover:text-cos-ink mb-4">
         <ArrowLeft className="h-4 w-4" /> Configuración
       </Link>
 
       {error && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4">
+        <div className="flex items-center gap-2 bg-cos-red-tint border border-cos-red-ink/20 text-cos-red-ink px-4 py-3 rounded-lg text-sm mb-4">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span className="flex-1">{error}</span>
           <button onClick={() => setError("")}><X className="h-3.5 w-3.5" /></button>
@@ -170,18 +170,18 @@ export default function DespachoPage() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               autoFocus
-              className="text-2xl font-bold border border-border rounded-md px-2 py-1 bg-white"
+              className="text-2xl font-bold border border-cos-line rounded-md px-2 py-1 bg-white"
             />
             <button
               onClick={handleSaveName}
               disabled={savingName}
-              className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
+              className="text-xs bg-cos-brand text-white px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
             >
               {savingName ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Guardar"}
             </button>
             <button
               onClick={() => { setEditingName(false); setNewName(despacho.name); }}
-              className="text-xs px-3 py-1.5 rounded-md border border-border"
+              className="text-xs px-3 py-1.5 rounded-md border border-cos-line"
             >
               Cancelar
             </button>
@@ -192,7 +192,7 @@ export default function DespachoPage() {
             {isAdminOrOwner && (
               <button
                 onClick={() => setEditingName(true)}
-                className="p-1.5 rounded-md hover:bg-accent text-muted-foreground"
+                className="p-1.5 rounded-md hover:bg-cos-paper text-cos-ink-soft"
                 title="Editar nombre"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -200,19 +200,19 @@ export default function DespachoPage() {
             )}
           </div>
         )}
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-cos-ink-soft mt-1">
           {despacho._count?.members ?? 0} miembro(s) · {despacho._count?.companies ?? 0} empresa(s)
         </p>
       </div>
 
       {/* Members */}
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+      <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold text-sm">Miembros del despacho</h2>
           {isAdminOrOwner && (
             <button
               onClick={() => setShowInvite(true)}
-              className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md font-medium hover:bg-primary/90"
+              className="flex items-center gap-1.5 text-xs bg-cos-brand text-white px-3 py-1.5 rounded-md font-medium hover:bg-cos-brand-deep"
             >
               <Plus className="h-3.5 w-3.5" /> Invitar / Crear usuario
             </button>
@@ -222,32 +222,32 @@ export default function DespachoPage() {
         <div className="divide-y divide-border">
           {members.map((m) => (
             <div key={m.id} className="px-5 py-3 flex items-center gap-4">
-              <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
+              <div className="h-9 w-9 rounded-full bg-cos-brand-tint text-cos-brand-ink flex items-center justify-center text-sm font-semibold shrink-0">
                 {(m.user.name ?? m.user.email)[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">{m.user.name ?? m.user.email}</p>
-                <p className="text-xs text-muted-foreground truncate">{m.user.email}</p>
+                <p className="text-xs text-cos-ink-soft truncate">{m.user.email}</p>
               </div>
               {isAdminOrOwner ? (
                 <select
                   value={m.role}
                   onChange={(e) => handleRoleChange(m.user.id, e.target.value as Role)}
-                  className="text-xs border border-border rounded-md px-2 py-1 bg-white"
+                  className="text-xs border border-cos-line rounded-md px-2 py-1 bg-white"
                 >
                   {(["OWNER", "ADMIN", "ACCOUNTANT"] as Role[]).map((r) => (
                     <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                   ))}
                 </select>
               ) : (
-                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-muted-foreground">
+                <span className="text-xs px-2 py-1 rounded bg-cos-slate-tint text-cos-ink-soft">
                   {ROLE_LABELS[m.role]}
                 </span>
               )}
               {isAdminOrOwner && (
                 <button
                   onClick={() => handleRemove(m.user.id, m.user.name ?? m.user.email)}
-                  className="text-muted-foreground hover:text-destructive p-1"
+                  className="text-cos-ink-soft hover:text-cos-red-ink p-1"
                   title="Quitar del despacho"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -317,14 +317,14 @@ function InviteModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 p-4 z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold">Invitar miembro al despacho</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
         </div>
 
         {tempPassword ? (
           <div className="p-5 space-y-4">
-            <div className="bg-green-50 border border-green-200 rounded-md p-3 text-sm text-green-900">
+            <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-md p-3 text-sm text-cos-jade-ink">
               <p className="font-medium mb-1">✓ Usuario creado y agregado al despacho</p>
               <p className="text-xs">
                 Comparte estas credenciales con la persona (por WhatsApp, etc.). No las verás de nuevo.
@@ -332,27 +332,27 @@ function InviteModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">Correo</label>
-              <div className="font-mono text-sm bg-gray-50 border border-border rounded-md px-3 py-2">{email}</div>
+              <div className="font-mono text-sm bg-cos-paper border border-cos-line rounded-md px-3 py-2">{email}</div>
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">Contraseña temporal</label>
-              <div className="flex items-center gap-2 bg-gray-50 border border-border rounded-md px-3 py-2 font-mono text-sm">
+              <div className="flex items-center gap-2 bg-cos-paper border border-cos-line rounded-md px-3 py-2 font-mono text-sm">
                 <span className="flex-1">{tempPassword}</span>
-                <button type="button" onClick={copyPassword} className="text-muted-foreground hover:text-foreground">
-                  {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                <button type="button" onClick={copyPassword} className="text-cos-ink-soft hover:text-cos-ink">
+                  {copied ? <Check className="h-4 w-4 text-cos-jade-ink" /> : <Copy className="h-4 w-4" />}
                 </button>
               </div>
             </div>
             <button
               onClick={onAdded}
-              className="w-full bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium hover:bg-primary/90"
+              className="w-full bg-cos-brand text-white rounded-md py-2 text-sm font-medium hover:bg-cos-brand-deep"
             >
               Listo
             </button>
           </div>
         ) : (
           <form onSubmit={submit} className="p-5 space-y-4">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-cos-ink-soft">
               Si el correo ya existe en ContabilidadOS, se invita al usuario existente.
               Si no, se crea una cuenta nueva con contraseña temporal.
             </p>
@@ -363,7 +363,7 @@ function InviteModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-sm"
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm"
                 placeholder="kata@ejemplo.com"
               />
             </div>
@@ -373,7 +373,7 @@ function InviteModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-sm"
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm"
                 placeholder="Kata Cordero"
               />
             </div>
@@ -382,21 +382,21 @@ function InviteModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as Role)}
-                className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white"
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white"
               >
                 {(["OWNER", "ADMIN", "ACCOUNTANT"] as Role[]).map((r) => (
                   <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                 ))}
               </select>
-              <p className="text-xs text-muted-foreground mt-1">{ROLE_DESCRIPTIONS[role]}</p>
+              <p className="text-xs text-cos-ink-soft mt-1">{ROLE_DESCRIPTIONS[role]}</p>
             </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
+            {error && <p className="text-xs text-cos-red-ink">{error}</p>}
             <div className="flex gap-2 pt-2">
-              <button type="button" onClick={onClose} className="flex-1 border border-border rounded-md py-2 text-sm">Cancelar</button>
+              <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-primary text-primary-foreground rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 Invitar / Crear

@@ -6,6 +6,7 @@
 
 import { prisma } from "../prisma";
 import { getFacturapiClient } from "../facturapi";
+import { recordTimbrado } from "../costos/record";
 import { calcularIsrRetenido } from "./isr";
 import { calcularImss } from "./imss";
 import { calcularInfonavit } from "./infonavit";
@@ -202,6 +203,8 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       error: e instanceof Error ? e.message : "Error de Facturapi al timbrar nómina",
     };
   }
+  // Costo del timbre de nómina (fire-and-forget; no rompe la emisión).
+  void recordTimbrado("nomina", 1, { companyId: company.id, subtipo: "nomina.emit" });
 
   // ── Persistir como Invoice ─────────────────────────────────────────────
   const invoice = await prisma.invoice.create({

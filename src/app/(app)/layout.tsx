@@ -5,6 +5,8 @@ import { CompanyProvider } from "@/components/layout/CompanyProvider";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { TrialBanner } from "@/components/layout/TrialBanner";
 import { getUserSubscriptionState } from "@/lib/subscription";
+import { accesoSuspendido } from "@/lib/billing/suspension";
+import { CuentaSuspendida } from "@/components/layout/CuentaSuspendida";
 import { isOperador } from "@/lib/authz";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { PushOptIn } from "@/components/pwa/PushOptIn";
@@ -91,6 +93,12 @@ export default async function AppLayout({
 
   const subscription = await getUserSubscriptionState(session.user.id!);
   const esOperador = await isOperador(session.user.id!);
+
+  // Suspensión por falta de pago (inerte hasta BILLING_SUSPENSION_ENABLED=true;
+  // nunca aplica al operador). Reemplaza la app por la pantalla de suspensión.
+  if (await accesoSuspendido(session.user.id!)) {
+    return <CuentaSuspendida />;
+  }
 
   return (
     <CompanyProvider userId={session.user.id!}>

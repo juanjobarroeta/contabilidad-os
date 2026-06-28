@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { Money } from "@/components/ui";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
@@ -132,12 +133,12 @@ const SAT_STATUS_LABELS: Record<string, string> = {
 };
 
 const SAT_STATUS_COLORS: Record<string, string> = {
-  PENDING:     "bg-gray-100 text-gray-700",
-  ACCEPTED:    "bg-blue-50 text-blue-700",
-  IN_PROGRESS: "bg-amber-50 text-amber-700",
-  FINISHED:    "bg-green-50 text-green-700",
-  FAILED:      "bg-red-50 text-red-700",
-  EXPIRED:     "bg-gray-100 text-gray-500",
+  PENDING:     "bg-cos-slate-tint text-cos-ink-soft",
+  ACCEPTED:    "bg-cos-brand-tint text-cos-brand-ink",
+  IN_PROGRESS: "bg-cos-amber-tint text-cos-amber-ink",
+  FINISHED:    "bg-cos-jade-tint text-cos-jade-ink",
+  FAILED:      "bg-cos-red-tint text-cos-red-ink",
+  EXPIRED:     "bg-cos-slate-tint text-cos-ink-soft",
 };
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
@@ -145,10 +146,10 @@ const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Borrador", CALCULATED: "Calculada", FILED: "Presentada", PAID: "Pagada",
 };
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-600",
-  CALCULATED: "bg-blue-100 text-blue-700",
-  FILED: "bg-yellow-100 text-yellow-700",
-  PAID: "bg-green-100 text-green-700",
+  DRAFT: "bg-cos-slate-tint text-cos-ink-soft",
+  CALCULATED: "bg-cos-brand-tint text-cos-brand-ink",
+  FILED: "bg-cos-amber-tint text-cos-amber-ink",
+  PAID: "bg-cos-jade-tint text-cos-jade-ink",
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -166,16 +167,16 @@ function Row({
   children?: React.ReactNode;
 }) {
   const valueClass =
-    accent === "green"  ? "text-green-700 font-semibold" :
-    accent === "red"    ? "text-red-700 font-semibold" :
-    accent === "blue"   ? "text-blue-700 font-semibold" :
-    accent === "purple" ? "text-purple-700 font-semibold" :
+    accent === "green"  ? "text-cos-jade-ink font-semibold" :
+    accent === "red"    ? "text-cos-red-ink font-semibold" :
+    accent === "blue"   ? "text-cos-brand-ink font-semibold" :
+    accent === "purple" ? "text-cos-brand-ink font-semibold" :
     bold                ? "font-semibold" :
-                          "text-muted-foreground";
+                          "text-cos-ink-soft";
 
   return (
-    <div className={`flex justify-between items-center py-1.5 ${bold ? "border-t border-border mt-1 pt-2.5" : ""} ${indent ? "pl-3" : ""}`}>
-      <span className={`text-sm ${bold ? "font-medium" : "text-muted-foreground"}`}>{label}</span>
+    <div className={`flex justify-between items-center py-1.5 ${bold ? "border-t border-cos-line mt-1 pt-2.5" : ""} ${indent ? "pl-3" : ""}`}>
+      <span className={`text-sm ${bold ? "font-medium" : "text-cos-ink-soft"}`}>{label}</span>
       {children ?? <span className={`text-sm ${valueClass}`}>{value}</span>}
     </div>
   );
@@ -481,7 +482,7 @@ export default function ImpuestosPage() {
   }, [result, facturaFilter]);
 
   if (!activeCompany) return (
-    <div className="p-8 text-muted-foreground text-sm">Selecciona una empresa para ver sus declaraciones.</div>
+    <div className="p-8 text-cos-ink-soft text-sm">Selecciona una empresa para ver sus declaraciones.</div>
   );
 
   return (
@@ -490,19 +491,19 @@ export default function ImpuestosPage() {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Declaraciones Fiscales</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{activeCompany.razonSocial}</p>
+          <p className="text-cos-ink-soft text-sm mt-0.5">{activeCompany.razonSocial}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a
             href={`/api/impuestos/diot?companyId=${activeCompany.id}&month=${month}&year=${year}&format=txt`}
-            className="flex items-center gap-2 border border-border px-3 py-2 rounded-md text-xs font-medium hover:bg-accent"
+            className="flex items-center gap-2 border border-cos-line px-3 py-2 rounded-md text-xs font-medium hover:bg-cos-paper"
             title="Descargar DIOT del periodo"
           >
             <FileText className="h-3.5 w-3.5" /> DIOT
           </a>
           <a
             href="/impuestos/papeles"
-            className="flex items-center gap-2 border border-border px-3 py-2 rounded-md text-xs font-medium hover:bg-accent"
+            className="flex items-center gap-2 border border-cos-line px-3 py-2 rounded-md text-xs font-medium hover:bg-cos-paper"
           >
             <FileText className="h-3.5 w-3.5" /> Papeles
           </a>
@@ -511,39 +512,39 @@ export default function ImpuestosPage() {
 
       {/* Period selector */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <button onClick={() => { prevMonth(); setCutoffDate(null); }} className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors">
+        <button onClick={() => { prevMonth(); setCutoffDate(null); }} className="p-1.5 rounded-md border border-cos-line hover:bg-cos-paper transition-colors">
           <ChevronLeft className="h-4 w-4" />
         </button>
         <span className="text-lg font-semibold min-w-[160px] text-center">{MONTHS[month - 1]} {year}</span>
-        <button onClick={() => { nextMonth(); setCutoffDate(null); }} className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors">
+        <button onClick={() => { nextMonth(); setCutoffDate(null); }} className="p-1.5 rounded-md border border-cos-line hover:bg-cos-paper transition-colors">
           <ChevronRight className="h-4 w-4" />
         </button>
         {savedStatus && (
-          <span className={`ml-3 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[savedStatus] ?? "bg-gray-100 text-gray-600"}`}>
+          <span className={`ml-3 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[savedStatus] ?? "bg-cos-slate-tint text-cos-ink-soft"}`}>
             {STATUS_LABELS[savedStatus] ?? savedStatus}
           </span>
         )}
         {isHistorical && (
-          <span className="ml-2 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+          <span className="ml-2 px-2.5 py-1 rounded-full text-xs font-medium bg-cos-brand-tint text-cos-brand-ink">
             📄 Importado del SAT
           </span>
         )}
 
         {/* Precierre cutoff picker */}
         <div className="ml-auto flex items-center gap-2">
-          <label className="text-xs text-muted-foreground">Precierre hasta:</label>
+          <label className="text-xs text-cos-ink-soft">Precierre hasta:</label>
           <input
             type="date"
             value={cutoffDate ?? ""}
             min={`${year}-${String(month).padStart(2, "0")}-01`}
             max={`${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`}
             onChange={(e) => setCutoffDate(e.target.value || null)}
-            className="text-xs border border-border rounded-md px-2 py-1.5 bg-white"
+            className="text-xs border border-cos-line rounded-md px-2 py-1.5 bg-white"
           />
           {cutoffDate && (
             <button
               onClick={() => setCutoffDate(null)}
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="text-xs text-cos-ink-soft hover:text-cos-ink"
               title="Limpiar cutoff (usar mes completo)"
             >
               ✕
@@ -554,7 +555,7 @@ export default function ImpuestosPage() {
 
       {/* Preliminar banner */}
       {result?.isPreliminar && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-900 mb-4">
+        <div className="flex items-center gap-2 bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-4 py-3 text-sm text-cos-amber-ink mb-4">
           <Info className="h-4 w-4 shrink-0" />
           <span className="flex-1">
             <strong>Cálculo preliminar</strong> — valores estimados con datos hasta el <strong>{cutoffDate}</strong>.
@@ -565,26 +566,26 @@ export default function ImpuestosPage() {
 
       {/* Precierre — Complementos de Pago pendientes */}
       {repPending.count > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
+        <div className="bg-cos-red-tint border border-cos-red-ink/20 rounded-lg px-4 py-3 mb-4">
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-cos-red-ink shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm font-semibold text-red-900">
+              <p className="text-sm font-semibold text-cos-red-ink">
                 Precierre: {repPending.count} complemento{repPending.count !== 1 ? "s" : ""} de pago pendiente{repPending.count !== 1 ? "s" : ""}
               </p>
-              <p className="text-xs text-red-700 mt-0.5">
+              <p className="text-xs text-cos-red-ink mt-0.5">
                 {repPending.count} factura{repPending.count !== 1 ? "s" : ""} PPD con pago recibido en banco pero sin REP emitido.
-                Monto pendiente: <strong>{formatCurrency(repPending.monto)}</strong>.
+                Monto pendiente: <strong><Money value={repPending.monto} /></strong>.
                 SAT requiere el complemento para documentar la cobranza.
               </p>
               <details className="mt-2">
-                <summary className="text-xs font-medium text-red-800 cursor-pointer hover:underline">Ver facturas</summary>
+                <summary className="text-xs font-medium text-cos-red-ink cursor-pointer hover:underline">Ver facturas</summary>
                 <div className="mt-2 space-y-1">
                   {repPending.invoices.map(inv => (
-                    <div key={inv.id} className="flex items-center justify-between bg-white border border-red-200 rounded px-2.5 py-1.5 text-xs">
-                      <span className="font-mono text-muted-foreground">{inv.serie ?? ""}{inv.folio ?? inv.uuid?.slice(-8)}</span>
+                    <div key={inv.id} className="flex items-center justify-between bg-white border border-cos-red-ink/20 rounded px-2.5 py-1.5 text-xs">
+                      <span className="font-mono text-cos-ink-soft">{inv.serie ?? ""}{inv.folio ?? inv.uuid?.slice(-8)}</span>
                       <span className="flex-1 mx-3 truncate">{inv.customer}</span>
-                      <span className="font-mono">{formatCurrency(inv.pendingAmount)}</span>
+                      <span className="font-mono"><Money value={inv.pendingAmount} /></span>
                     </div>
                   ))}
                 </div>
@@ -621,7 +622,7 @@ export default function ImpuestosPage() {
                     calcular();
                   }}
                   disabled={repEmitting}
-                  className="flex items-center gap-1.5 bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-red-700 disabled:opacity-50"
+                  className="flex items-center gap-1.5 bg-cos-red-ink text-white px-3 py-1.5 rounded-md text-xs font-medium hover:opacity-90 disabled:opacity-50"
                 >
                   {repEmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
                   Emitir {repPending.count} complemento{repPending.count !== 1 ? "s" : ""}
@@ -633,42 +634,42 @@ export default function ImpuestosPage() {
       )}
 
       {error && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-4">
+        <div className="flex items-center gap-2 bg-cos-red-tint border border-cos-red-ink/20 rounded-lg px-4 py-3 text-sm text-cos-red-ink mb-4">
           <AlertCircle className="h-4 w-4 shrink-0" />{error}
         </div>
       )}
 
       {loading ? (
-        <div className="flex items-center gap-2 text-muted-foreground text-sm py-12 justify-center">
+        <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-12 justify-center">
           <Loader2 className="h-5 w-5 animate-spin" />Calculando declaración...
         </div>
       ) : result && ivaComputed ? (
         <div className="space-y-5">
 
           {/* ── IVA Card ── */}
-          <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <Calculator className="h-4 w-4 text-blue-600" />
+                <div className="h-8 w-8 rounded-lg bg-cos-brand-tint flex items-center justify-center">
+                  <Calculator className="h-4 w-4 text-cos-brand-ink" />
                 </div>
                 <div>
                   <h2 className="font-semibold text-sm">IVA Mensual</h2>
-                  <p className="text-xs text-muted-foreground">Período {result.periodo}</p>
+                  <p className="text-xs text-cos-ink-soft">Período {result.periodo}</p>
                 </div>
               </div>
               {ivaComputed.pagar > 0 ? (
                 <div className="text-right">
-                  <p className="text-xs text-muted-foreground">A pagar</p>
-                  <p className="text-lg font-bold text-red-600">{formatCurrency(ivaComputed.pagar)}</p>
+                  <p className="text-xs text-cos-ink-soft">A pagar</p>
+                  <p className="text-lg font-bold text-cos-red-ink">{formatCurrency(ivaComputed.pagar)}</p>
                 </div>
               ) : ivaComputed.saldoFavor > 0 ? (
                 <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Saldo a favor</p>
-                  <p className="text-lg font-bold text-green-600">{formatCurrency(ivaComputed.saldoFavor)}</p>
+                  <p className="text-xs text-cos-ink-soft">Saldo a favor</p>
+                  <p className="text-lg font-bold text-cos-jade-ink">{formatCurrency(ivaComputed.saldoFavor)}</p>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">Sin movimiento</p>
+                <p className="text-sm text-cos-ink-soft">Sin movimiento</p>
               )}
             </div>
             <div className="px-5 py-4 space-y-0.5">
@@ -700,28 +701,28 @@ export default function ImpuestosPage() {
                         value={saldoFavorAnterior || ""}
                         placeholder="0.00"
                         onChange={e => { const n = parseFloat(e.target.value); setSaldoFavorAnterior(isNaN(n) ? 0 : n); }}
-                        className="w-28 text-right text-sm border border-border rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-28 text-right text-sm border border-cos-line rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                       />
                       <button onClick={() => { setSaldoFavorAnterior(result.iva.saldoFavorAnterior); setSaldoFavorEdited(false); }}
-                        className="text-muted-foreground hover:text-foreground" title="Restablecer">
+                        className="text-cos-ink-soft hover:text-cos-ink" title="Restablecer">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </>
                   ) : (
                     <div className="flex items-center gap-1.5">
                       {saldoFavorAnterior > 0 ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-cos-jade-tint text-cos-jade-ink">
                           <Sparkles className="h-3 w-3" />
                           {result.iva.saldoFavorAnteriorPeriodo
                             ? `Auto de ${periodLabel(result.iva.saldoFavorAnteriorPeriodo)}`
                             : "Automático"}
                         </span>
                       ) : null}
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm text-cos-ink-soft">
                         {saldoFavorAnterior > 0 ? `(${formatCurrency(saldoFavorAnterior)})` : formatCurrency(0)}
                       </span>
                       <button onClick={() => setSaldoFavorEdited(true)}
-                        className="text-muted-foreground hover:text-foreground ml-1" title="Ajustar">
+                        className="text-cos-ink-soft hover:text-cos-ink ml-1" title="Ajustar">
                         <Pencil className="h-3 w-3" />
                       </button>
                     </div>
@@ -737,18 +738,18 @@ export default function ImpuestosPage() {
             </div>
             {result.iva.proporcionAcreditamiento < 1 && (
               <div className="px-5 pb-4">
-                <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                <div className="flex items-start gap-2 bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg px-3 py-2 text-xs text-cos-brand-ink">
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  Este mes facturaste actos exentos ({formatCurrency(result.iva.actosExentos)}) además de gravados
-                  ({formatCurrency(result.iva.actosGravados)}). Por Art. 5-V LIVA el IVA de los gastos sólo se acredita
-                  en la proporción gravados ÷ total; el resto ({formatCurrency(result.iva.acreditableBruto - result.iva.acreditable)})
+                  Este mes facturaste actos exentos (<Money value={result.iva.actosExentos} />) además de gravados
+                  (<Money value={result.iva.actosGravados} />). Por Art. 5-V LIVA el IVA de los gastos sólo se acredita
+                  en la proporción gravados ÷ total; el resto (<Money value={result.iva.acreditableBruto - result.iva.acreditable} />)
                   no es acreditable.
                 </div>
               </div>
             )}
             {ivaComputed.acreditable === 0 && (
               <div className="px-5 pb-4">
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+                <div className="flex items-start gap-2 bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-3 py-2 text-xs text-cos-amber-ink">
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   El IVA acreditable se calculará automáticamente al importar facturas de proveedores desde el SAT.
                 </div>
@@ -768,24 +769,24 @@ export default function ImpuestosPage() {
           />
 
           {/* ── ISR Card ── */}
-          <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-purple-100 flex items-center justify-center">
-                  <TrendingUp className="h-4 w-4 text-purple-600" />
+                <div className="h-8 w-8 rounded-lg bg-cos-brand-tint flex items-center justify-center">
+                  <TrendingUp className="h-4 w-4 text-cos-brand-ink" />
                 </div>
                 <div>
                   <h2 className="font-semibold text-sm">
                     ISR {result.isr.metodo === "RESICO_PF" || result.isr.metodo === "PF_PLATAFORMAS" ? "Mensual" : "Provisional"}
                   </h2>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-cos-ink-soft">
                     {result.isr.metodo === "RESICO_PF" || result.isr.metodo === "PF_ARRENDAMIENTO" || result.isr.metodo === "PF_PLATAFORMAS"
                       ? MONTHS[month - 1]
                       : `Acumulado ${MONTHS[0]}–${MONTHS[month - 1]}`}{" "}
                     {year} · {ISR_METODO_LABEL[result.isr.metodo]}
                   </p>
                   {!result.isr.tarifaVerificada && (
-                    <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-0.5">
+                    <p className="text-[11px] text-cos-amber-ink flex items-center gap-1 mt-0.5">
                       <Info className="h-3 w-3" /> Tarifa sin verificar contra Anexo 8
                     </p>
                   )}
@@ -793,11 +794,11 @@ export default function ImpuestosPage() {
               </div>
               {isrComputed ? (
                 <div className="text-right">
-                  <p className="text-xs text-muted-foreground">A pagar este mes</p>
-                  <p className="text-lg font-bold text-purple-700">{formatCurrency(isrComputed.esteMes)}</p>
+                  <p className="text-xs text-cos-ink-soft">A pagar este mes</p>
+                  <p className="text-lg font-bold text-cos-brand-ink">{formatCurrency(isrComputed.esteMes)}</p>
                 </div>
               ) : (
-                <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md">
+                <span className="text-xs text-cos-amber-ink bg-cos-amber-tint border border-cos-amber-ink/20 px-2 py-1 rounded-md">
                   {result.isr.metodo === "PM_ART14" ? "Requiere coeficiente" : "Tarifa no disponible"}
                 </span>
               )}
@@ -818,8 +819,8 @@ export default function ImpuestosPage() {
                   {!coeficienteEdited && result.isr.coeficienteFuente !== "ninguno" && (
                     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
                       result.isr.coeficienteFuente === "calculado"
-                        ? "bg-green-50 text-green-700"
-                        : "bg-blue-50 text-blue-700"
+                        ? "bg-cos-jade-tint text-cos-jade-ink"
+                        : "bg-cos-brand-tint text-cos-brand-ink"
                     }`}>
                       <Sparkles className="h-3 w-3" />
                       {result.isr.coeficienteFuente === "calculado"
@@ -836,12 +837,12 @@ export default function ImpuestosPage() {
                       setCoeficiente(isNaN(n) ? null : Math.min(1, Math.max(0, n)));
                       setCoeficienteEdited(true);
                     }}
-                    className="w-24 text-right text-sm border border-border rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-24 text-right text-sm border border-cos-line rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                   />
                   {coeficienteEdited && (
                     <button
                       onClick={() => { setCoeficiente(result.isr.coeficiente); setCoeficienteEdited(false); }}
-                      className="text-muted-foreground hover:text-foreground" title="Restablecer calculado">
+                      className="text-cos-ink-soft hover:text-cos-ink" title="Restablecer calculado">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   )}
@@ -851,7 +852,7 @@ export default function ImpuestosPage() {
                     (coeficiente == null || Math.abs(result.isr.coeficienteSugerido - coeficiente) > 0.0005) && (
                       <button
                         onClick={() => { setCoeficiente(result.isr.coeficienteSugerido!); setCoeficienteEdited(true); }}
-                        className="inline-flex items-center gap-1 rounded-md border border-primary/40 px-2 py-0.5 text-xs font-semibold text-primary hover:bg-primary/10"
+                        className="inline-flex items-center gap-1 rounded-md border border-cos-brand/40 px-2 py-0.5 text-xs font-semibold text-cos-brand-ink hover:bg-cos-brand-tint"
                         title={`Usar el coeficiente detectado por el sistema${
                           result.isr.coeficienteSugeridoFuente === "declaracion_anual" ? ` (de tu declaración anual ${year - 1})`
                             : result.isr.coeficienteSugeridoFuente === "provisional_previo" ? " (el aplicado en tus provisionales)"
@@ -882,7 +883,7 @@ export default function ImpuestosPage() {
                   />
                 </>
               ) : (
-                <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+                <div className="mt-2 flex items-start gap-2 bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-3 py-2 text-xs text-cos-amber-ink">
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   {result.isr.coeficienteFuente === "ninguno"
                     ? `No hay CFDIs de ${result.isr.ingresosAcumulados === 0 ? "ningún año" : `${year - 1}`} en el sistema para calcular el coeficiente automáticamente. Ingresa tu coeficiente arriba.`
@@ -894,12 +895,12 @@ export default function ImpuestosPage() {
             {/* Coeficiente explanation */}
             {result.isr.coeficienteFuente === "calculado" && result.isr.coeficienteBase && (
               <div className="px-5 pb-4">
-                <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-700">
+                <div className="flex items-start gap-2 bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-3 py-2 text-xs text-cos-jade-ink">
                   <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   <span>
                     <strong>Calculado de tu ejercicio {result.isr.coeficienteBase.year}:</strong>{" "}
-                    {formatCurrency(result.isr.coeficienteBase.utilidad)} utilidad ÷{" "}
-                    {formatCurrency(result.isr.coeficienteBase.ingresos)} ingresos ={" "}
+                    <Money value={result.isr.coeficienteBase.utilidad} /> utilidad ÷{" "}
+                    <Money value={result.isr.coeficienteBase.ingresos} /> ingresos ={" "}
                     <strong>{coeficiente != null ? (coeficiente * 100).toFixed(4) : "—"}%</strong>
                     {" "}({result.isr.coeficienteBase.invoiceCount} CFDIs en el sistema).
                     Puedes ajustarlo si tu declaración anual difiere.
@@ -909,7 +910,7 @@ export default function ImpuestosPage() {
             )}
             {result.isr.coeficienteFuente === "manual" && (
               <div className="px-5 pb-4">
-                <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                <div className="flex items-start gap-2 bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg px-3 py-2 text-xs text-cos-brand-ink">
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   Coeficiente guardado manualmente. Se usará para todos los meses de {year}.
                   Edítalo arriba si necesitas corregirlo.
@@ -918,7 +919,7 @@ export default function ImpuestosPage() {
             )}
             {result.isr.coeficienteFuente === "provisional_previo" && (
               <div className="px-5 pb-4">
-                <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                <div className="flex items-start gap-2 bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg px-3 py-2 text-xs text-cos-brand-ink">
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   Es el coeficiente que ya aplicaste en tus pagos provisionales de {year} (tomado
                   de un acuse del SAT). Edítalo arriba si tu declaración anual difiere.
@@ -940,7 +941,7 @@ export default function ImpuestosPage() {
                     )}
                     <Row label="= ISR del mes (definitivo)" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
                     {result.isr.plataformaActividad?.asumida && (
-                      <p className="pt-2 text-[11px] text-amber-600">
+                      <p className="pt-2 text-[11px] text-cos-amber-ink">
                         Tasa asumida (servicios/enajenación, 1%). Si la actividad es transporte (2.1%) u hospedaje (4%), configúrala en la empresa.
                       </p>
                     )}
@@ -956,7 +957,7 @@ export default function ImpuestosPage() {
                       <Row label="− Retenciones 10% PM (Art. 116)" value={`(${formatCurrency(result.isr.retencionesAcreditadas)})`} />
                     )}
                     <Row label="= ISR del mes" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
-                    <p className="pt-2 text-[11px] text-muted-foreground">
+                    <p className="pt-2 text-[11px] text-cos-ink-soft">
                       Deducción opcional ciega (Art. 115, sin predial). Si convienen las deducciones comprobadas, ajusta manualmente.
                     </p>
                   </>
@@ -973,9 +974,9 @@ export default function ImpuestosPage() {
                     )}
                     <Row label="= ISR del mes" value={formatCurrency(isrComputed.esteMes)} bold accent="purple" />
                     {result.isr.saldoAFavor > 0 && (
-                      <div className="mt-2 flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-700">
+                      <div className="mt-2 flex items-start gap-2 bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-3 py-2 text-xs text-cos-jade-ink">
                         <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                        La retención acreditable excede el ISR del mes: <strong>{formatCurrency(result.isr.saldoAFavor)}</strong>{" "}
+                        La retención acreditable excede el ISR del mes: <strong><Money value={result.isr.saldoAFavor} /></strong>{" "}
                         se arrastra como saldo a favor al siguiente periodo. Guarda la declaración para que el arrastre aplique.
                       </div>
                     )}
@@ -1003,7 +1004,7 @@ export default function ImpuestosPage() {
                   </>
                 )
               ) : (
-                <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+                <div className="mt-2 flex items-start gap-2 bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-3 py-2 text-xs text-cos-amber-ink">
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   No hay tarifa ISR cargada para {year} en el módulo de tarifas. No es posible calcular el ISR de este régimen.
                 </div>
@@ -1014,11 +1015,11 @@ export default function ImpuestosPage() {
 
           {/* ── Asimilados a salarios (Art. 94) — se reconoce solo ── */}
           {result.asimilados && (
-            <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center gap-2 flex-wrap">
-                <Receipt className="h-4 w-4 text-muted-foreground" />
+            <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-cos-line flex items-center gap-2 flex-wrap">
+                <Receipt className="h-4 w-4 text-cos-ink-soft" />
                 <h2 className="font-semibold text-sm">Asimilados a salarios</h2>
-                <span className="ml-auto text-xs text-muted-foreground">
+                <span className="ml-auto text-xs text-cos-ink-soft">
                   {result.asimilados.recibos.filter((r) => r.esDelMes).length} recibo(s) en {MONTHS[month - 1]}
                 </span>
               </div>
@@ -1029,23 +1030,23 @@ export default function ImpuestosPage() {
                 <Row label={`ISR que te retuvieron en ${year} (acreditable en la anual)`} value={formatCurrency(result.asimilados.anual.isrRetenido)} accent="green" />
 
                 {result.asimilados.recibos.filter((r) => r.esDelMes).length > 0 && (
-                  <div className="mt-3 border-t border-border divide-y divide-border">
+                  <div className="mt-3 border-t border-cos-line divide-y divide-border">
                     {result.asimilados.recibos.filter((r) => r.esDelMes).map((r) => (
                       <div key={r.id} className="flex items-center justify-between gap-3 py-2">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{r.emisor}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(r.fecha)} · {r.regimenLabel ?? "Asimilados"}</p>
+                          <p className="text-xs text-cos-ink-soft">{formatDate(r.fecha)} · {r.regimenLabel ?? "Asimilados"}</p>
                         </div>
                         <div className="text-right whitespace-nowrap">
-                          <p className="text-sm font-medium">{formatCurrency(r.ingreso)}</p>
-                          <p className="text-xs text-muted-foreground">ISR ret. {formatCurrency(r.isrRetenido)}</p>
+                          <p className="text-sm font-medium"><Money value={r.ingreso} /></p>
+                          <p className="text-xs text-cos-ink-soft">ISR ret. <Money value={r.isrRetenido} /></p>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
 
-                <p className="mt-3 text-xs text-muted-foreground">
+                <p className="mt-3 text-xs text-cos-ink-soft">
                   Ingresos por asimilados a salarios (Art. 94 LISR): el pagador retiene y entera el ISR — esa
                   retención es tu pago provisional, por eso <strong>no</strong> entra a la base de actividad
                   empresarial de arriba. Se acredita en tu <strong>declaración anual</strong>.
@@ -1055,18 +1056,18 @@ export default function ImpuestosPage() {
           )}
 
           {/* ── Facturas del período ── */}
-          <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex items-center gap-2 flex-wrap">
-              <FileText className="h-4 w-4 text-muted-foreground" />
+          <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-cos-line flex items-center gap-2 flex-wrap">
+              <FileText className="h-4 w-4 text-cos-ink-soft" />
               <h2 className="font-semibold text-sm">Facturas de {MONTHS[month - 1]} {year}</h2>
-              <span className="ml-auto text-xs text-muted-foreground">{result.facturas.length} factura(s)</span>
+              <span className="ml-auto text-xs text-cos-ink-soft">{result.facturas.length} factura(s)</span>
               <div className="flex gap-1">
                 {(["all","INGRESO","EGRESO","NOMINA"] as const).map(f => (
                   <button key={f} onClick={() => setFacturaFilter(f)}
                     className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
                       facturaFilter === f
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        ? "bg-cos-brand text-white"
+                        : "bg-cos-slate-tint text-cos-ink-soft hover:bg-cos-slate-tint"
                     }`}>
                     {f === "all" ? "Todas" : f === "INGRESO" ? "Emitidas" : f === "EGRESO" ? "Recibidas" : "Nómina"}
                   </button>
@@ -1077,48 +1078,48 @@ export default function ImpuestosPage() {
             {filteredFacturas.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-gray-50">
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground w-20">Tipo</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Fecha</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Contraparte</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Subtotal</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">IVA</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Total</th>
+                  <tr className="border-b border-cos-line bg-cos-slate-tint">
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft w-20">Tipo</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Fecha</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Contraparte</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Subtotal</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">IVA</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredFacturas.map(f => (
-                    <tr key={f.id} className="border-b border-border last:border-0 hover:bg-gray-50/50">
+                    <tr key={f.id} className="border-b border-cos-line last:border-0 hover:bg-cos-slate-tint/50">
                       <td className="px-4 py-2.5">
                         {f.tipo === "INGRESO" ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-cos-jade-tint text-cos-jade-ink">
                             <ArrowUpRight className="h-3 w-3" />Emitida
                           </span>
                         ) : f.tipo === "NOMINA" ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-cos-brand-tint text-cos-brand-ink">
                             <ArrowDownLeft className="h-3 w-3" />Nómina
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-orange-50 text-orange-700">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-cos-amber-tint text-cos-amber-ink">
                             <ArrowDownLeft className="h-3 w-3" />Recibida
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">{formatDate(f.fecha)}</td>
+                      <td className="px-4 py-2.5 text-xs text-cos-ink-soft">{formatDate(f.fecha)}</td>
                       <td className="px-4 py-2.5">
                         <p className="font-medium text-xs">{f.contraparte}</p>
-                        <p className="text-xs text-muted-foreground">{f.rfc}</p>
+                        <p className="text-xs text-cos-ink-soft">{f.rfc}</p>
                       </td>
-                      <td className="px-4 py-2.5 text-right text-xs">{formatCurrency(f.subtotal)}</td>
-                      <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{formatCurrency(f.iva)}</td>
-                      <td className={`px-4 py-2.5 text-right text-xs font-semibold ${f.tipo === "INGRESO" ? "text-green-700" : f.tipo === "NOMINA" ? "text-blue-700" : "text-orange-700"}`}>
-                        {f.tipo !== "INGRESO" ? "(" : ""}{formatCurrency(f.total)}{f.tipo !== "INGRESO" ? ")" : ""}
+                      <td className="px-4 py-2.5 text-right text-xs"><Money value={f.subtotal} /></td>
+                      <td className="px-4 py-2.5 text-right text-xs text-cos-ink-soft"><Money value={f.iva} /></td>
+                      <td className={`px-4 py-2.5 text-right text-xs font-semibold ${f.tipo === "INGRESO" ? "text-cos-jade-ink" : f.tipo === "NOMINA" ? "text-cos-brand-ink" : "text-cos-amber-ink"}`}>
+                        {f.tipo !== "INGRESO" ? "(" : ""}<Money value={f.total} />{f.tipo !== "INGRESO" ? ")" : ""}
                       </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-50 border-t border-border">
+                  <tr className="bg-cos-slate-tint border-t border-cos-line">
                     <td colSpan={3} className="px-4 py-2.5 text-xs font-semibold">Totales ({filteredFacturas.length})</td>
                     <td className="px-4 py-2.5 text-right text-xs font-semibold">{formatCurrency(filteredFacturas.reduce((s,f) => s + f.subtotal, 0))}</td>
                     <td className="px-4 py-2.5 text-right text-xs font-semibold">{formatCurrency(filteredFacturas.reduce((s,f) => s + f.iva, 0))}</td>
@@ -1128,9 +1129,9 @@ export default function ImpuestosPage() {
               </table>
             ) : (
               <div className="p-10 text-center">
-                <TrendingDown className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
+                <TrendingDown className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
                 <p className="font-medium text-sm">Sin facturas en este período</p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-cos-ink-soft mt-1">
                   No hay CFDIs en {MONTHS[month - 1]} {year}
                 </p>
               </div>
@@ -1138,17 +1139,17 @@ export default function ImpuestosPage() {
           </div>
 
           {/* ── SAT Sync ── */}
-          <div className="bg-white rounded-xl border border-border shadow-sm p-5">
+          <div className="bg-white rounded-xl border border-cos-line shadow-sm p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="font-semibold text-sm">Sincronizar CFDIs del SAT</h3>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-cos-ink-soft mt-1">
                   Descarga tus facturas emitidas y recibidas directamente del SAT usando tu e.firma.
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button onClick={() => handleSatSync(false)} disabled={syncing}
-                  className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                  className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50 transition-colors">
                   {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   {syncing ? "Sincronizando..." : "Sincronizar CFDIs"}
                 </button>
@@ -1156,7 +1157,7 @@ export default function ImpuestosPage() {
                   onClick={() => handleSatSync(true)}
                   disabled={syncing}
                   title="Forzar nueva solicitud al SAT (ignora solicitudes pendientes)"
-                  className="text-xs px-2.5 py-2 rounded-md border border-border hover:bg-accent disabled:opacity-50 text-muted-foreground"
+                  className="text-xs px-2.5 py-2 rounded-md border border-cos-line hover:bg-cos-paper disabled:opacity-50 text-cos-ink-soft"
                 >
                   Forzar
                 </button>
@@ -1165,10 +1166,10 @@ export default function ImpuestosPage() {
             {(syncing || syncStatus) && (
               <div className={`mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-md ${
                 syncDone
-                  ? "bg-green-50 text-green-700 border border-green-200"
+                  ? "bg-cos-jade-tint text-cos-jade-ink border border-cos-jade-ink/20"
                   : syncing
-                  ? "bg-blue-50 text-blue-700 border border-blue-200"
-                  : "bg-gray-50 text-muted-foreground border border-border"
+                  ? "bg-cos-brand-tint text-cos-brand-ink border border-cos-brand-ink/15"
+                  : "bg-cos-slate-tint text-cos-ink-soft border border-cos-line"
               }`}>
                 {syncing && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
                 {syncDone && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
@@ -1179,34 +1180,34 @@ export default function ImpuestosPage() {
             {/* SAT request history for the period */}
             {satRequests.length > 0 && (
               <div className="mt-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                <p className="text-xs font-semibold text-cos-ink-soft uppercase tracking-wide mb-2">
                   Solicitudes con SAT (este período)
                 </p>
-                <div className="border border-border rounded-md divide-y divide-border overflow-hidden">
+                <div className="border border-cos-line rounded-md divide-y divide-border overflow-hidden">
                   {satRequests.map(r => {
                     const lv = r.lastVerifiedAt ? new Date(r.lastVerifiedAt) : null;
                     const lvStr = lv ? `${Math.max(0, Math.round((Date.now() - lv.getTime()) / 60000))} min` : null;
                     return (
                       <div key={r.id} className="px-3 py-2 flex items-center gap-3 text-xs">
-                        <span className="font-medium w-20 text-muted-foreground">
+                        <span className="font-medium w-20 text-cos-ink-soft">
                           {r.tipo === "EMITIDOS" ? "Emitidos" : "Recibidos"}
                         </span>
-                        <span className={`px-2 py-0.5 rounded font-medium ${SAT_STATUS_COLORS[r.status] ?? "bg-gray-100"}`}>
+                        <span className={`px-2 py-0.5 rounded font-medium ${SAT_STATUS_COLORS[r.status] ?? "bg-cos-slate-tint"}`}>
                           {SAT_STATUS_LABELS[r.status] ?? r.status}
                         </span>
-                        <span className="text-muted-foreground flex-1 truncate">
+                        <span className="text-cos-ink-soft flex-1 truncate">
                           {r.cfdisFound > 0 && `${r.cfdisFound} CFDIs`}
                           {r.imported > 0 && ` · ${r.imported} importados`}
                           {r.errorMessage && ` · ${r.errorMessage}`}
                         </span>
                         {lvStr && (
-                          <span className="text-muted-foreground text-[10px]">hace {lvStr}</span>
+                          <span className="text-cos-ink-soft text-[10px]">hace {lvStr}</span>
                         )}
                       </div>
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1.5">
+                <p className="text-[10px] text-cos-ink-soft mt-1.5">
                   Las solicitudes pendientes se reusan automáticamente. Si SAT te dio el código 5002, espera a que las solicitudes vencidas se procesen (1-3 hrs) — no necesitas hacer nada.
                 </p>
               </div>
@@ -1215,20 +1216,20 @@ export default function ImpuestosPage() {
 
           {/* ── Acuse de recibo / Línea de captura ── */}
           {(savedStatus === "FILED" || savedStatus === "PAID") && (
-            <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-green-100 flex items-center justify-center">
-                    <Receipt className="h-4 w-4 text-green-600" />
+                  <div className="h-8 w-8 rounded-lg bg-cos-jade-tint flex items-center justify-center">
+                    <Receipt className="h-4 w-4 text-cos-jade-ink" />
                   </div>
                   <div>
                     <h2 className="font-semibold text-sm">Acuse de recibo &amp; Línea de captura</h2>
-                    <p className="text-xs text-muted-foreground">Información del pago al SAT</p>
+                    <p className="text-xs text-cos-ink-soft">Información del pago al SAT</p>
                   </div>
                 </div>
                 {!acuseEditMode && (acuseUrl || lineaCaptura) && (
                   <button onClick={() => setAcuseEditMode(true)}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1 transition-colors">
+                    className="flex items-center gap-1.5 text-xs text-cos-ink-soft hover:text-cos-ink border border-cos-line rounded-md px-2.5 py-1 transition-colors">
                     <Pencil className="h-3 w-3" />Editar
                   </button>
                 )}
@@ -1238,7 +1239,7 @@ export default function ImpuestosPage() {
                 <div className="px-5 py-4 space-y-4">
                   {/* Folio / número de operación */}
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    <label className="block text-xs font-medium text-cos-ink-soft mb-1">
                       Número de operación / Folio SAT
                     </label>
                     <input
@@ -1246,14 +1247,14 @@ export default function ImpuestosPage() {
                       value={acuseUrl}
                       onChange={e => setAcuseUrl(e.target.value)}
                       placeholder="Ej. 2024010123456789"
-                      className="w-full text-sm border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full text-sm border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                     />
-                    <p className="text-xs text-muted-foreground mt-0.5">Número de acuse que el SAT te asignó al presentar la declaración.</p>
+                    <p className="text-xs text-cos-ink-soft mt-0.5">Número de acuse que el SAT te asignó al presentar la declaración.</p>
                   </div>
 
                   {/* Línea de captura */}
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+                    <label className="block text-xs font-medium text-cos-ink-soft mb-1 flex items-center gap-1.5">
                       <CreditCard className="h-3.5 w-3.5" />Línea de captura
                     </label>
                     <input
@@ -1261,46 +1262,46 @@ export default function ImpuestosPage() {
                       value={lineaCaptura}
                       onChange={e => setLineaCaptura(e.target.value.replace(/\D/g, "").substring(0, 20))}
                       placeholder="18 dígitos"
-                      className="w-full text-sm font-mono border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary tracking-widest"
+                      className="w-full text-sm font-mono border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cos-brand tracking-widest"
                     />
-                    <p className="text-xs text-muted-foreground mt-0.5">Código numérico para pagar en banco o portal bancario.</p>
+                    <p className="text-xs text-cos-ink-soft mt-0.5">Código numérico para pagar en banco o portal bancario.</p>
                   </div>
 
                   {/* Dates */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+                      <label className="block text-xs font-medium text-cos-ink-soft mb-1 flex items-center gap-1.5">
                         <Calendar className="h-3.5 w-3.5" />Fecha de presentación
                       </label>
                       <input
                         type="date"
                         value={fechaPresentacion}
                         onChange={e => setFechaPresentacion(e.target.value)}
-                        className="w-full text-sm border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full text-sm border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+                      <label className="block text-xs font-medium text-cos-ink-soft mb-1 flex items-center gap-1.5">
                         <Calendar className="h-3.5 w-3.5" />Fecha límite de pago
                       </label>
                       <input
                         type="date"
                         value={fechaLimitePago}
                         onChange={e => setFechaLimitePago(e.target.value)}
-                        className="w-full text-sm border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full text-sm border border-cos-line rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cos-brand"
                       />
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 pt-1">
                     <button onClick={handleGuardarAcuse} disabled={savingAcuse}
-                      className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-1.5 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                      className="flex items-center gap-2 bg-cos-brand text-white px-4 py-1.5 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50 transition-colors">
                       {savingAcuse ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                       Guardar acuse
                     </button>
                     {(acuseUrl || lineaCaptura) && (
                       <button onClick={() => setAcuseEditMode(false)}
-                        className="text-sm text-muted-foreground hover:text-foreground px-3 py-1.5 transition-colors">
+                        className="text-sm text-cos-ink-soft hover:text-cos-ink px-3 py-1.5 transition-colors">
                         Cancelar
                       </button>
                     )}
@@ -1310,21 +1311,21 @@ export default function ImpuestosPage() {
                 <div className="px-5 py-4 space-y-3">
                   {acuseUrl && (
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs text-muted-foreground">Número de operación</span>
+                      <span className="text-xs text-cos-ink-soft">Número de operación</span>
                       <span className="text-sm font-mono font-medium">{acuseUrl}</span>
                     </div>
                   )}
                   {lineaCaptura && (
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <span className="text-xs text-cos-ink-soft flex items-center gap-1">
                         <CreditCard className="h-3 w-3" />Línea de captura
                       </span>
                       <div className="text-right">
-                        <span className="text-sm font-mono font-bold tracking-widest text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                        <span className="text-sm font-mono font-bold tracking-widest text-cos-brand-ink bg-cos-brand-tint px-2 py-0.5 rounded">
                           {lineaCaptura}
                         </span>
                         {fechaLimitePago && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                          <p className="text-xs text-cos-ink-soft mt-0.5">
                             Vigente hasta {new Date(fechaLimitePago + "T12:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}
                           </p>
                         )}
@@ -1333,7 +1334,7 @@ export default function ImpuestosPage() {
                   )}
                   {fechaPresentacion && (
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs text-muted-foreground">Fecha de presentación</span>
+                      <span className="text-xs text-cos-ink-soft">Fecha de presentación</span>
                       <span className="text-sm">
                         {new Date(fechaPresentacion + "T12:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}
                       </span>
@@ -1341,21 +1342,21 @@ export default function ImpuestosPage() {
                   )}
                   {/* Link to SAT payment portal */}
                   {lineaCaptura && (
-                    <div className="pt-1 border-t border-border">
+                    <div className="pt-1 border-t border-cos-line">
                       <a
                         href="https://www.sat.gob.mx/tramites/liquidacion-de-impuestos-en-linea"
                         target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 hover:underline">
+                        className="inline-flex items-center gap-1.5 text-xs text-cos-brand-ink hover:text-cos-brand-ink hover:underline">
                         <ExternalLink className="h-3 w-3" />
                         Pagar en el portal SAT
                       </a>
-                      <span className="text-xs text-muted-foreground ml-3">o en cualquier banco con esta línea de captura</span>
+                      <span className="text-xs text-cos-ink-soft ml-3">o en cualquier banco con esta línea de captura</span>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="px-5 py-4">
-                  <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-3 text-xs text-blue-700">
+                  <div className="flex items-start gap-2 bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg px-3 py-3 text-xs text-cos-brand-ink">
                     <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                     <div>
                       <p className="font-medium mb-1">¿Ya presentaste tu declaración?</p>
@@ -1374,13 +1375,13 @@ export default function ImpuestosPage() {
           {/* ── Actions ── */}
           <div className="flex items-center gap-3 pb-2">
             <button onClick={() => handleGuardar("CALCULATED")} disabled={saving}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50 transition-colors">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Guardar declaración
             </button>
             <button onClick={() => handleGuardar("FILED")} disabled={saving}
-              className="flex items-center gap-2 border border-border px-4 py-2 rounded-md text-sm font-medium hover:bg-accent disabled:opacity-50 transition-colors">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper disabled:opacity-50 transition-colors">
+              <CheckCircle2 className="h-4 w-4 text-cos-jade-ink" />
               Marcar como presentada
             </button>
           </div>
@@ -1467,20 +1468,20 @@ function ProjectionCard({
   const deltaTotal = sim ? sim.sim.total - sim.base.total : 0;
 
   return (
-    <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-border flex items-center gap-2">
-        <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-          <Sparkles className="h-4 w-4 text-indigo-600" />
+    <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-cos-line flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-cos-brand-tint flex items-center justify-center">
+          <Sparkles className="h-4 w-4 text-cos-brand-ink" />
         </div>
         <div>
           <h2 className="font-semibold text-sm">Simulación fiscal</h2>
-          <p className="text-xs text-muted-foreground">Proyecta el impacto de ingresos o gastos adicionales</p>
+          <p className="text-xs text-cos-ink-soft">Proyecta el impacto de ingresos o gastos adicionales</p>
         </div>
       </div>
       <div className="p-5">
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-xs font-medium mb-1 text-muted-foreground">
+            <label className="block text-xs font-medium mb-1 text-cos-ink-soft">
               + Ingreso adicional (subtotal, sin IVA)
             </label>
             <input
@@ -1490,11 +1491,11 @@ function ProjectionCard({
               value={projIngresoAdicional}
               onChange={(e) => onIngresoChange(e.target.value)}
               placeholder="0.00"
-              className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1 text-muted-foreground">
+            <label className="block text-xs font-medium mb-1 text-cos-ink-soft">
               + Gasto adicional con CFDI (subtotal, sin IVA)
             </label>
             <input
@@ -1504,76 +1505,76 @@ function ProjectionCard({
               value={projGastoAdicional}
               onChange={(e) => onGastoChange(e.target.value)}
               placeholder="0.00"
-              className="w-full px-3 py-2 border border-border rounded-md text-sm font-mono"
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm font-mono"
             />
           </div>
         </div>
 
         {!hasProjection ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-cos-ink-soft">
             Escribe un monto arriba para ver el impacto en tu IVA e ISR del mes.
           </p>
         ) : loading || !sim ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs text-cos-ink-soft">
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calculando impacto…
           </div>
         ) : (
-          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-sm">
-            <p className="font-semibold text-indigo-900 mb-3">Impacto proyectado:</p>
+          <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg p-4 text-sm">
+            <p className="font-semibold text-cos-brand-ink mb-3">Impacto proyectado:</p>
             <dl className="space-y-1.5 font-mono text-xs">
               <div className="flex justify-between">
-                <dt className="text-indigo-700">IVA trasladado adicional</dt>
-                <dd className="font-medium">+{formatCurrency(ivaAddedTrasladado)}</dd>
+                <dt className="text-cos-brand-ink">IVA trasladado adicional</dt>
+                <dd className="font-medium">+<Money value={ivaAddedTrasladado} /></dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-indigo-700">IVA acreditable adicional</dt>
-                <dd className="font-medium">+{formatCurrency(ivaAddedAcreditable)}</dd>
+                <dt className="text-cos-brand-ink">IVA acreditable adicional</dt>
+                <dd className="font-medium">+<Money value={ivaAddedAcreditable} /></dd>
               </div>
-              <div className="flex justify-between border-t border-indigo-200 pt-1.5 mt-1.5">
-                <dt className="text-indigo-900 font-semibold">IVA a pagar actual</dt>
-                <dd className="font-medium">{formatCurrency(sim.base.iva)}</dd>
+              <div className="flex justify-between border-t border-cos-brand-ink/15 pt-1.5 mt-1.5">
+                <dt className="text-cos-brand-ink font-semibold">IVA a pagar actual</dt>
+                <dd className="font-medium"><Money value={sim.base.iva} /></dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-indigo-900 font-semibold">IVA a pagar proyectado</dt>
-                <dd className={`font-bold ${deltaIva >= 0 ? "text-red-700" : "text-green-700"}`}>
-                  {formatCurrency(sim.sim.iva)}
-                  <span className="ml-2 text-xs">({deltaIva >= 0 ? "+" : ""}{formatCurrency(deltaIva)})</span>
+                <dt className="text-cos-brand-ink font-semibold">IVA a pagar proyectado</dt>
+                <dd className={`font-bold ${deltaIva >= 0 ? "text-cos-red-ink" : "text-cos-jade-ink"}`}>
+                  <Money value={sim.sim.iva} />
+                  <span className="ml-2 text-xs">({deltaIva >= 0 ? "+" : ""}<Money value={deltaIva} />)</span>
                 </dd>
               </div>
               {sim.sim.ivaSaldoFavor > 0 && (
-                <div className="flex justify-between text-green-700">
+                <div className="flex justify-between text-cos-jade-ink">
                   <dt>Saldo a favor de IVA proyectado</dt>
-                  <dd className="font-semibold">{formatCurrency(sim.sim.ivaSaldoFavor)}</dd>
+                  <dd className="font-semibold"><Money value={sim.sim.ivaSaldoFavor} /></dd>
                 </div>
               )}
               {sim.base.isr != null && sim.sim.isr != null && (
                 <>
-                  <div className="flex justify-between border-t border-indigo-200 pt-1.5 mt-1.5">
-                    <dt className="text-indigo-900 font-semibold">ISR provisional actual</dt>
-                    <dd className="font-medium">{formatCurrency(sim.base.isr)}</dd>
+                  <div className="flex justify-between border-t border-cos-brand-ink/15 pt-1.5 mt-1.5">
+                    <dt className="text-cos-brand-ink font-semibold">ISR provisional actual</dt>
+                    <dd className="font-medium"><Money value={sim.base.isr} /></dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-indigo-900 font-semibold">ISR provisional proyectado</dt>
-                    <dd className={`font-bold ${deltaIsr >= 0 ? "text-red-700" : "text-green-700"}`}>
-                      {formatCurrency(sim.sim.isr)}
-                      <span className="ml-2 text-xs">({deltaIsr >= 0 ? "+" : ""}{formatCurrency(deltaIsr)})</span>
+                    <dt className="text-cos-brand-ink font-semibold">ISR provisional proyectado</dt>
+                    <dd className={`font-bold ${deltaIsr >= 0 ? "text-cos-red-ink" : "text-cos-jade-ink"}`}>
+                      <Money value={sim.sim.isr} />
+                      <span className="ml-2 text-xs">({deltaIsr >= 0 ? "+" : ""}<Money value={deltaIsr} />)</span>
                     </dd>
                   </div>
                 </>
               )}
-              <div className="flex justify-between border-t border-indigo-200 pt-1.5 mt-1.5">
-                <dt className="text-indigo-900 font-semibold">Total actual</dt>
-                <dd className="font-medium">{formatCurrency(sim.base.total)}</dd>
+              <div className="flex justify-between border-t border-cos-brand-ink/15 pt-1.5 mt-1.5">
+                <dt className="text-cos-brand-ink font-semibold">Total actual</dt>
+                <dd className="font-medium"><Money value={sim.base.total} /></dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-indigo-900 font-semibold">Total proyectado</dt>
-                <dd className={`font-bold ${deltaTotal >= 0 ? "text-red-700" : "text-green-700"}`}>
-                  {formatCurrency(sim.sim.total)}
-                  <span className="ml-2 text-xs">({deltaTotal >= 0 ? "+" : ""}{formatCurrency(deltaTotal)})</span>
+                <dt className="text-cos-brand-ink font-semibold">Total proyectado</dt>
+                <dd className={`font-bold ${deltaTotal >= 0 ? "text-cos-red-ink" : "text-cos-jade-ink"}`}>
+                  <Money value={sim.sim.total} />
+                  <span className="ml-2 text-xs">({deltaTotal >= 0 ? "+" : ""}<Money value={deltaTotal} />)</span>
                 </dd>
               </div>
             </dl>
-            <p className="text-[10px] text-indigo-700 mt-3">
+            <p className="text-[10px] text-cos-brand-ink mt-3">
               Asume IVA 16% en ambos conceptos. ISR según tu régimen: {SIM_NOTA[sim.metodo] ?? "se recalcula con el método de tu régimen."}
               {!sim.tarifaVerificada && " (tarifa ISR del ejercicio sin verificar)"}
             </p>
