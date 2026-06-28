@@ -83,7 +83,17 @@ export default function NominaCockpitPage() {
   }
 
   if (loading) return <Loading />;
-  const rows = data?.companies ?? [];
+  // Triage: las que necesitan acción primero (sin corrida → sin timbrar/setup →
+  // al corriente → sin empleados), para procesar la quincena de arriba a abajo.
+  const urgencia = (c: CockpitCompany): number => {
+    if (c.empleadosActivos === 0) return 0;
+    const label = estadoDe(c).label;
+    if (label === "Sin corrida este mes") return 4;
+    if (label.includes("sin timbrar") || label === "Setup incompleto") return 3;
+    if (label === "Al corriente") return 1;
+    return 2;
+  };
+  const rows = [...(data?.companies ?? [])].sort((a, b) => urgencia(b) - urgencia(a));
   const totEmpleados = rows.reduce((s, c) => s + c.empleadosActivos, 0);
   const totNetoMes = rows.reduce((s, c) => s + c.netoDelMes, 0);
   const conPendientes = rows.filter((c) => estadoDe(c).label !== "Al corriente" && c.empleadosActivos > 0).length;
