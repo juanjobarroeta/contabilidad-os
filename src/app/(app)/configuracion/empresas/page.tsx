@@ -51,7 +51,7 @@ export default async function EmpresasPage() {
       </div>
 
       {memberships.length === 0 ? (
-        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+        <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <Building2 className="h-10 w-10 text-cos-ink-soft mx-auto mb-3" />
           <p className="text-sm text-cos-ink-soft mb-4">Aún no tienes empresas configuradas.</p>
           <Link
@@ -62,7 +62,7 @@ export default async function EmpresasPage() {
           </Link>
         </div>
       ) : (
-        <div className="bg-white border border-cos-line rounded-xl divide-y divide-border overflow-hidden">
+        <div className="bg-cos-card border border-cos-line rounded-xl divide-y divide-border overflow-hidden">
           {memberships.map((m) => (
             <Link
               key={m.company.id}

@@ -145,7 +145,7 @@ export function FaltantesUploader({
         const items = agrupar(emp.companyId, emp.faltantes);
         if (items.length === 0) return null;
         return (
-          <div key={emp.companyId} className="overflow-hidden rounded-card border border-cos-line bg-white shadow-card">
+          <div key={emp.companyId} className="overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
             {!compact && (
               <div className="flex items-center gap-2 border-b border-cos-line bg-cos-paper px-4 py-2.5">
                 <Building2 className="h-4 w-4 text-cos-ink-faint" />

@@ -395,7 +395,7 @@ function FilaRow({ f, onSave, onSavePlan, year, month }: {
           <select
             value={f.plan}
             onChange={(e) => onSavePlan(f.id, e.target.value)}
-            className="mt-1 rounded-control border border-cos-line bg-white px-1.5 py-0.5 text-[11.5px] text-cos-ink-soft outline-none focus:border-cos-brand-ink"
+            className="mt-1 rounded-control border border-cos-line bg-cos-card px-1.5 py-0.5 text-[11.5px] text-cos-ink-soft outline-none focus:border-cos-brand-ink"
             title="Plan/tier — define qué COGS se incurre (Syntage/banco/WhatsApp)"
           >
             {(Object.keys(PLAN_LABELS) as Plan[]).map((p) => (
@@ -502,7 +502,7 @@ function EmpresaDetallePanel({ companyId, year, month }: { companyId: string; ye
         <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-[0.02em] text-cos-ink-faint">Cobertura de datos (estado actual)</p>
         <div className="grid gap-1.5 sm:grid-cols-2">
           {data.extracciones.map((e) => (
-            <div key={e.extractor} className="flex items-center justify-between gap-2 rounded-control bg-white px-3 py-1.5 text-[12.5px]">
+            <div key={e.extractor} className="flex items-center justify-between gap-2 rounded-control bg-cos-card px-3 py-1.5 text-[12.5px]">
               <span className="flex items-center gap-1.5 text-cos-ink-soft">
                 {e.datoPresente ? <CheckCircle2 className="h-3.5 w-3.5 text-cos-jade-ink" /> : <XCircle className="h-3.5 w-3.5 text-cos-red-ink" />}
                 {EXTRACTOR_LABELS[e.extractor] ?? e.extractor}
@@ -515,7 +515,7 @@ function EmpresaDetallePanel({ companyId, year, month }: { companyId: string; ye
 
       {/* Compliance + declaraciones */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-control bg-white px-3 py-2.5">
+        <div className="rounded-control bg-cos-card px-3 py-2.5">
           <p className="mb-1.5 text-[11.5px] font-semibold text-cos-ink">Cumplimiento</p>
           {data.compliance.map((c) => (
             <div key={c.tipo} className="flex justify-between gap-2 py-0.5 text-[12px] text-cos-ink-soft">
@@ -524,7 +524,7 @@ function EmpresaDetallePanel({ companyId, year, month }: { companyId: string; ye
             </div>
           ))}
         </div>
-        <div className="rounded-control bg-white px-3 py-2.5">
+        <div className="rounded-control bg-cos-card px-3 py-2.5">
           <p className="mb-1.5 text-[11.5px] font-semibold text-cos-ink">Declaraciones persistidas</p>
           {data.declaraciones.length === 0 ? (
             <p className="py-0.5 text-[12px] text-cos-ink-faint">Ninguna.</p>
@@ -547,7 +547,7 @@ function EmpresaDetallePanel({ companyId, year, month }: { companyId: string; ye
         {data.costos.length === 0 ? (
           <p className="text-[12px] text-cos-ink-faint">Sin eventos de costo este mes.</p>
         ) : (
-          <div className="overflow-hidden rounded-control bg-white">
+          <div className="overflow-hidden rounded-control bg-cos-card">
             {data.costos.map((c) => (
               <div key={c.subtipo} className="flex items-center justify-between gap-2 border-b border-cos-line px-3 py-1.5 text-[12px] last:border-b-0">
                 <span className="truncate font-mono text-[11px] text-cos-ink-soft">{c.subtipo}</span>

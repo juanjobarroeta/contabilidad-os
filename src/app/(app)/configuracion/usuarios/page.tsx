@@ -126,7 +126,7 @@ export default async function UsuariosPage() {
       </div>
 
       {users.length === 0 ? (
-        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+        <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <Users className="h-10 w-10 text-cos-ink-soft mx-auto mb-3" />
           <p className="text-sm text-cos-ink-soft">
             Aún no hay otros miembros. Invita a alguien desde{" "}
@@ -139,7 +139,7 @@ export default async function UsuariosPage() {
       ) : (
         <div className="space-y-3">
           {users.map((u) => (
-            <div key={u.user.id} className="bg-white border border-cos-line rounded-xl p-5">
+            <div key={u.user.id} className="bg-cos-card border border-cos-line rounded-xl p-5">
               <div className="flex items-start gap-4 mb-3">
                 <div className="h-10 w-10 rounded-full bg-cos-brand-tint text-cos-brand-ink flex items-center justify-center text-sm font-semibold shrink-0">
                   {(u.user.name ?? u.user.email)[0].toUpperCase()}

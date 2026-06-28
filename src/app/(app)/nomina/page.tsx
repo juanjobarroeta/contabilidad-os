@@ -143,7 +143,7 @@ export default function NominaPage() {
                   : "Aún no corres la nómina de este mes"}
               </span>
             </div>
-            <Link href="/nomina/detalle" className="inline-flex items-center gap-1.5 rounded-control bg-white px-4 py-2.5 text-[14px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
+            <Link href="/nomina/detalle" className="inline-flex items-center gap-1.5 rounded-control bg-cos-card px-4 py-2.5 text-[14px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
               Ver corridas <ChevronR className="h-[15px] w-[15px]" />
             </Link>
           </div>
@@ -212,7 +212,7 @@ export default function NominaPage() {
           </div>
 
           {/* recordatorio enteramiento */}
-          <div className="flex items-start gap-3 rounded-card border border-cos-line bg-white px-5 py-4 text-[13.5px] leading-relaxed text-cos-ink-soft">
+          <div className="flex items-start gap-3 rounded-card border border-cos-line bg-cos-card px-5 py-4 text-[13.5px] leading-relaxed text-cos-ink-soft">
             <CalendarDays className="mt-0.5 h-[18px] w-[18px] flex-none text-cos-ink-faint" />
             <span>
               El <b>ISR retenido</b> a los trabajadores se entera al SAT junto con la declaración del mes (vence el día 17).
@@ -222,7 +222,7 @@ export default function NominaPage() {
 
           {/* multi-RFC cockpit (despacho) */}
           {companies.length > 1 && (
-            <Link href="/nomina/cockpit" className="flex items-center gap-3 rounded-card border border-cos-line bg-white px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
+            <Link href="/nomina/cockpit" className="flex items-center gap-3 rounded-card border border-cos-line bg-cos-card px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
               <Building2 className="h-[18px] w-[18px] flex-none" />
               <span className="flex-1">
                 <b className="text-cos-ink">Cockpit multi-RFC</b> — la nómina de tus {companies.length} empresas en un solo panel
@@ -232,7 +232,7 @@ export default function NominaPage() {
           )}
 
           {/* expert depth: link to workspace */}
-          <Link href="/nomina/detalle" className="flex items-center gap-3 rounded-card border border-dashed border-cos-line bg-white px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
+          <Link href="/nomina/detalle" className="flex items-center gap-3 rounded-card border border-dashed border-cos-line bg-cos-card px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
             <SlidersHorizontal className="h-[18px] w-[18px] flex-none" />
             <span className="flex-1">Workspace de nómina — roster, corridas, incidencias, finiquitos, IMSS/SUA</span>
             <ChevronR className="h-4 w-4 flex-none" />

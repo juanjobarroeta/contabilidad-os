@@ -139,7 +139,7 @@ export default function DespachoPage() {
         <Link href="/configuracion" className="inline-flex items-center gap-1.5 text-sm text-cos-ink-soft hover:text-cos-ink mb-4">
           <ArrowLeft className="h-4 w-4" /> Configuración
         </Link>
-        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+        <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <Users className="h-10 w-10 text-cos-ink-soft mx-auto mb-3" />
           <p className="text-sm text-cos-ink-soft">No perteneces a ningún despacho.</p>
         </div>
@@ -170,7 +170,7 @@ export default function DespachoPage() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               autoFocus
-              className="text-2xl font-bold border border-cos-line rounded-md px-2 py-1 bg-white"
+              className="text-2xl font-bold border border-cos-line rounded-md px-2 py-1 bg-cos-card"
             />
             <button
               onClick={handleSaveName}
@@ -206,7 +206,7 @@ export default function DespachoPage() {
       </div>
 
       {/* Members */}
-      <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
+      <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold text-sm">Miembros del despacho</h2>
           {isAdminOrOwner && (
@@ -233,7 +233,7 @@ export default function DespachoPage() {
                 <select
                   value={m.role}
                   onChange={(e) => handleRoleChange(m.user.id, e.target.value as Role)}
-                  className="text-xs border border-cos-line rounded-md px-2 py-1 bg-white"
+                  className="text-xs border border-cos-line rounded-md px-2 py-1 bg-cos-card"
                 >
                   {(["OWNER", "ADMIN", "ACCOUNTANT"] as Role[]).map((r) => (
                     <option key={r} value={r}>{ROLE_LABELS[r]}</option>
@@ -316,7 +316,7 @@ function InviteModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-md">
         <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold">Invitar miembro al despacho</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
@@ -382,7 +382,7 @@ function InviteModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as Role)}
-                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white"
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-cos-card"
               >
                 {(["OWNER", "ADMIN", "ACCOUNTANT"] as Role[]).map((r) => (
                   <option key={r} value={r}>{ROLE_LABELS[r]}</option>

@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: ["selector", '[data-theme="dark"]'],
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -24,6 +25,8 @@ const config: Config = {
           ink: { DEFAULT: "var(--ink)", soft: "var(--ink-soft)", faint: "var(--ink-faint)" },
           line: { DEFAULT: "var(--line)", soft: "var(--line-soft)" },
           paper: "var(--paper)",
+          canvas: "var(--canvas)",
+          card: "var(--card)",
           slate: { tint: "var(--slate-tint)" },
         },
       },

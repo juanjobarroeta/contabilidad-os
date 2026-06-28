@@ -576,7 +576,7 @@ export default function ImpuestosPage() {
             min={`${year}-${String(month).padStart(2, "0")}-01`}
             max={`${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`}
             onChange={(e) => setCutoffDate(e.target.value || null)}
-            className="text-xs border border-cos-line rounded-md px-2 py-1.5 bg-white"
+            className="text-xs border border-cos-line rounded-md px-2 py-1.5 bg-cos-card"
           />
           {cutoffDate && (
             <button
@@ -619,7 +619,7 @@ export default function ImpuestosPage() {
                 <summary className="text-xs font-medium text-cos-red-ink cursor-pointer hover:underline">Ver facturas</summary>
                 <div className="mt-2 space-y-1">
                   {repPending.invoices.map(inv => (
-                    <div key={inv.id} className="flex items-center justify-between bg-white border border-cos-red-ink/20 rounded px-2.5 py-1.5 text-xs">
+                    <div key={inv.id} className="flex items-center justify-between bg-cos-card border border-cos-red-ink/20 rounded px-2.5 py-1.5 text-xs">
                       <span className="font-mono text-cos-ink-soft">{inv.serie ?? ""}{inv.folio ?? inv.uuid?.slice(-8)}</span>
                       <span className="flex-1 mx-3 truncate">{inv.customer}</span>
                       <span className="font-mono"><Money value={inv.pendingAmount} /></span>
@@ -684,7 +684,7 @@ export default function ImpuestosPage() {
         <div className="space-y-5">
 
           {/* ── IVA Card ── */}
-          <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+          <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-lg bg-cos-brand-tint flex items-center justify-center">
@@ -806,7 +806,7 @@ export default function ImpuestosPage() {
           />
 
           {/* ── ISR Card ── */}
-          <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+          <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-lg bg-cos-brand-tint flex items-center justify-center">
@@ -1098,7 +1098,7 @@ export default function ImpuestosPage() {
 
           {/* ── Asimilados a salarios (Art. 94) — se reconoce solo ── */}
           {result.asimilados && (
-            <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+            <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden">
               <div className="px-5 py-4 border-b border-cos-line flex items-center gap-2 flex-wrap">
                 <Receipt className="h-4 w-4 text-cos-ink-soft" />
                 <h2 className="font-semibold text-sm">Asimilados a salarios</h2>
@@ -1139,7 +1139,7 @@ export default function ImpuestosPage() {
           )}
 
           {/* ── Facturas del período ── */}
-          <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+          <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-cos-line flex items-center gap-2 flex-wrap">
               <FileText className="h-4 w-4 text-cos-ink-soft" />
               <h2 className="font-semibold text-sm">Facturas de {MONTHS[month - 1]} {year}</h2>
@@ -1222,7 +1222,7 @@ export default function ImpuestosPage() {
           </div>
 
           {/* ── SAT Sync ── */}
-          <div className="bg-white rounded-xl border border-cos-line shadow-sm p-5">
+          <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="font-semibold text-sm">Sincronizar CFDIs del SAT</h3>
@@ -1299,7 +1299,7 @@ export default function ImpuestosPage() {
 
           {/* ── Acuse de recibo / Línea de captura ── */}
           {(savedStatus === "FILED" || savedStatus === "PAID") && (
-            <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+            <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden">
               <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-lg bg-cos-jade-tint flex items-center justify-center">
@@ -1551,7 +1551,7 @@ function ProjectionCard({
   const deltaTotal = sim ? sim.sim.total - sim.base.total : 0;
 
   return (
-    <div className="bg-white rounded-xl border border-cos-line shadow-sm overflow-hidden">
+    <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-cos-line flex items-center gap-2">
         <div className="h-8 w-8 rounded-lg bg-cos-brand-tint flex items-center justify-center">
           <Sparkles className="h-4 w-4 text-cos-brand-ink" />

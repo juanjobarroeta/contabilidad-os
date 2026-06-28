@@ -88,7 +88,7 @@ export function PushOptIn() {
     <button
       onClick={enable}
       disabled={state === "enabling"}
-      className="fixed bottom-6 left-6 z-40 inline-flex items-center gap-2 rounded-control border border-cos-line bg-white px-4 py-2.5 text-[13.5px] font-semibold text-cos-ink shadow-card hover:bg-cos-paper disabled:opacity-60 max-md:bottom-20"
+      className="fixed bottom-6 left-6 z-40 inline-flex items-center gap-2 rounded-control border border-cos-line bg-cos-card px-4 py-2.5 text-[13.5px] font-semibold text-cos-ink shadow-card hover:bg-cos-paper disabled:opacity-60 max-md:bottom-20"
     >
       {state === "enabling" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4 text-cos-brand-ink" />}
       Activar notificaciones

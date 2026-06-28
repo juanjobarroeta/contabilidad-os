@@ -116,7 +116,7 @@ export default function DespachoCockpitPage() {
   return (
     <div className="mx-auto max-w-[1140px] px-6 py-7">
       {/* Briefing "Hoy" — el resumen de la revisión nocturna del auditor. */}
-      <div className="rounded-card border border-cos-line bg-white p-5 shadow-card">
+      <div className="rounded-card border border-cos-line bg-cos-card p-5 shadow-card">
         <p className="text-[12.5px] font-medium text-cos-ink-faint">
           {saludo} · <span className="capitalize">{fechaLarga}</span>
         </p>
@@ -199,7 +199,7 @@ export default function DespachoCockpitPage() {
         </Link>
       )}
 
-      <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-white shadow-card">
+      <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
         {/* Scroll horizontal en móvil: 5 columnas no caben en ~360px y el
             overflow-hidden del contenedor recortaba la columna Nómina. */}
         <div className="overflow-x-auto">
