@@ -43,15 +43,6 @@ interface HallazgoDTO {
   fundamento: { ley: string; articulo: string; fraccion: string | null };
   referencias: string[]; estado: string;
 }
-interface PapelIsr {
-  regimen: { kind: string; label: string };
-  base: { prevYear: number; prevUtilidad: number; coeficienteCalculado: number | null; coeficiente: number | null; coeficienteFuente: "manual" | "calculado" | "ninguno" };
-  calculo: {
-    tipo: string; ingresosAcumulados?: number; coeficiente?: number | null; utilidadFiscal?: number | null;
-    tasa?: number; isrDelEjercicio?: number | null; isrPagadoAnterior?: number; isrDelMes?: number | null;
-  };
-}
-
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const MES_ABBR = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 
@@ -524,19 +515,6 @@ function SimOut({ label, value, base, busy, highlight }: { label: string; value:
 
 function PapelesTab({ companyId, month, year, onChanged }: { companyId: string; month: number; year: number; onChanged: () => void }) {
   const [sub, setSub] = useState<"iva" | "isr" | "retenciones">("iva");
-  const [isr, setIsr] = useState<PapelIsr | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  // Fetched only to drive the editable coeficiente (current/suggested + régimen).
-  // The read-only panels below fetch their own data.
-  useEffect(() => {
-    fetch(`/api/papeles/isr?companyId=${companyId}&month=${month}&year=${year}`)
-      .then((r) => (r.ok ? r.json() : null)).then(setIsr).catch(() => {});
-  }, [companyId, month, year, refreshKey]);
-
-  // After saving the coeficiente: remount the ISR panel (so its cálculo updates)
-  // and refresh the parent Resumen/Presentar so the total a pagar reflects it.
-  const afterEdit = useCallback(() => { setRefreshKey((k) => k + 1); onChanged(); }, [onChanged]);
 
   const subTabs = [["iva", "IVA"], ["isr", "ISR provisional"], ["retenciones", "Retenciones"]] as const;
   return (
@@ -557,71 +535,11 @@ function PapelesTab({ companyId, month, year, onChanged }: { companyId: string; 
       </div>
 
       {sub === "iva" && <IvaPanel companyId={companyId} year={year} month={month} />}
-      {sub === "isr" && (
-        <div className="space-y-4">
-          {isr && isr.calculo.tipo === "art14" && (
-            <CoeficienteCard companyId={companyId} year={year} isr={isr} onSaved={afterEdit} />
-          )}
-          <IsrPanel key={`isr-${refreshKey}`} companyId={companyId} year={year} month={month} />
-        </div>
-      )}
+      {/* IsrPanel ya incluye el editor de coeficiente (con la fuente correcta del
+          motor); onCoefSaved refresca el total del padre (Resumen/Presentar). */}
+      {sub === "isr" && <IsrPanel companyId={companyId} year={year} month={month} onCoefSaved={onChanged} />}
       {sub === "retenciones" && <RetencionesPanel companyId={companyId} year={year} month={month} />}
     </div>
-  );
-}
-
-function CoeficienteCard({ companyId, year, isr, onSaved }: { companyId: string; year: number; isr: PapelIsr; onSaved: () => void }) {
-  const current = isr.base.coeficiente;
-  const sugerido = isr.base.coeficienteCalculado;
-  const [val, setVal] = useState(current != null ? (current * 100).toFixed(4).replace(/0+$/, "").replace(/\.$/, "") : "");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function save(coefPct: number) {
-    const coeficiente = coefPct / 100;
-    if (!Number.isFinite(coeficiente) || coeficiente < 0 || coeficiente > 5) { setErr("Coeficiente fuera de rango"); return; }
-    setSaving(true); setErr("");
-    try {
-      const res = await fetch("/api/impuestos/coeficiente", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId, year, coeficiente }),
-      });
-      if (!res.ok) throw new Error();
-      onSaved();
-    } catch { setErr("No se pudo guardar el coeficiente"); }
-    finally { setSaving(false); }
-  }
-
-  return (
-    <Card className="rounded-card border-cos-line p-5 shadow-card">
-      <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">ISR provisional — coeficiente de utilidad (Art. 14)</span>
-      <p className="mt-1 text-[12px] text-cos-ink-faint">Ajusta el coeficiente y el cálculo de abajo se recalcula.</p>
-
-      <div className="mt-3 flex flex-wrap items-end gap-3">
-        <label className="text-[13px]">
-          <span className="mb-1 block text-cos-ink-soft">Coeficiente aplicado{isr.base.coeficienteFuente === "manual" ? " · ajuste del contador" : isr.base.coeficienteFuente === "calculado" ? ` · estimado de ${isr.base.prevYear}` : ""}</span>
-          <div className="flex items-center gap-1.5">
-            <input
-              type="number" step="0.0001" inputMode="decimal" value={val}
-              onChange={(e) => setVal(e.target.value)}
-              className="w-28 rounded-control border border-cos-line px-2.5 py-2 text-[14px] tabular-nums"
-              placeholder="0.0000"
-            />
-            <span className="text-cos-ink-faint">%</span>
-            <button onClick={() => save(parseFloat(val))} disabled={saving || val === ""} className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Guardar
-            </button>
-          </div>
-        </label>
-        {sugerido != null && Math.abs((sugerido * 100) - (parseFloat(val) || -1)) > 0.0001 && (
-          <button onClick={() => { const p = +(sugerido * 100).toFixed(4); setVal(String(p)); save(p); }} disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-3 py-2 text-[13px] hover:bg-cos-paper disabled:opacity-50">
-            <Sparkles className="h-3.5 w-3.5 text-cos-brand-ink" /> Usar sugerido {(sugerido * 100).toFixed(4)}%
-          </button>
-        )}
-      </div>
-      {err && <p className="mt-2 text-[12px] text-cos-red-ink">{err}</p>}
-    </Card>
   );
 }
 

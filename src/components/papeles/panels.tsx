@@ -327,7 +327,7 @@ interface IsrData {
       };
 }
 
-export function IsrPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
+export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: string; year: number; month: number; onCoefSaved?: () => void }) {
   const [data, setData] = useState<IsrData | null>(null);
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -358,12 +358,13 @@ export function IsrPanel({ companyId, year, month }: { companyId: string; year: 
         throw new Error(j?.error ?? "No se pudo guardar el coeficiente");
       }
       setReloadKey((k) => k + 1);
+      onCoefSaved?.(); // refresca totales del padre (Resumen/Presentar)
     } catch (e) {
       setCoefError(e instanceof Error ? e.message : "Error al guardar");
     } finally {
       setSavingCoef(false);
     }
-  }, [companyId, year]);
+  }, [companyId, year, onCoefSaved]);
 
   if (loading) return <Loading />;
   if (!data) return <Empty />;
