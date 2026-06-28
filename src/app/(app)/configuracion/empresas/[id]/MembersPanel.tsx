@@ -117,7 +117,7 @@ export function MembersPanel({
   }
 
   return (
-    <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
+    <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
       {/* Members list */}
       <div className="divide-y divide-border">
         {members.map((m) => (
@@ -138,7 +138,7 @@ export function MembersPanel({
               <select
                 value={m.role}
                 onChange={(e) => handleRoleChange(m.user.id, e.target.value as Role)}
-                className="text-xs border border-cos-line rounded-md px-2 py-1 bg-white"
+                className="text-xs border border-cos-line rounded-md px-2 py-1 bg-cos-card"
               >
                 {(["OWNER", "ADMIN", "ACCOUNTANT", "VIEWER"] as Role[]).map((r) => (
                   <option key={r} value={r}>
@@ -200,7 +200,7 @@ export function MembersPanel({
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     placeholder="kata@ejemplo.com"
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-cos-card"
                   />
                 </div>
                 <div>
@@ -210,7 +210,7 @@ export function MembersPanel({
                     value={inviteName}
                     onChange={(e) => setInviteName(e.target.value)}
                     placeholder="Kata Cordero"
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-cos-card"
                   />
                 </div>
               </div>
@@ -220,7 +220,7 @@ export function MembersPanel({
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as Role)}
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white"
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-cos-card"
                 >
                   {(["OWNER", "ADMIN", "ACCOUNTANT", "VIEWER"] as Role[]).map((r) => (
                     <option key={r} value={r}>
@@ -239,7 +239,7 @@ export function MembersPanel({
                   <p className="text-cos-brand-ink text-xs mb-2">
                     Comparte estas credenciales con la persona invitada (por WhatsApp, etc.). No las verás de nuevo.
                   </p>
-                  <div className="flex items-center gap-2 bg-white border border-cos-brand-ink/15 rounded px-2 py-1.5 font-mono text-xs">
+                  <div className="flex items-center gap-2 bg-cos-card border border-cos-brand-ink/15 rounded px-2 py-1.5 font-mono text-xs">
                     <span className="flex-1 truncate">{tempPassword}</span>
                     <button
                       type="button"

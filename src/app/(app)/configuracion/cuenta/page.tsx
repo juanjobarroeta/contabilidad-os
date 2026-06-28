@@ -27,7 +27,7 @@ export default async function CuentaPage() {
         <h1 className="text-2xl font-bold">Mi cuenta</h1>
       </div>
 
-      <div className="bg-white border border-cos-line rounded-xl p-6">
+      <div className="bg-cos-card border border-cos-line rounded-xl p-6">
         <div className="flex items-start gap-4">
           <div className="h-12 w-12 rounded-full bg-cos-brand-tint text-cos-brand-ink flex items-center justify-center shrink-0">
             <UserCircle className="h-6 w-6" />

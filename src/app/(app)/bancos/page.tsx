@@ -286,7 +286,7 @@ export default function BancosPage() {
           <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Bancos</h1>
           <p className="mt-1.5 max-w-[60ch] text-[15px] text-cos-ink-soft">Conectamos los movimientos de tu banco con tus facturas para que todo cuadre.</p>
         </div>
-        <button onClick={() => setAccountModal({ account: null })} className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-4 py-2 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper">
+        <button onClick={() => setAccountModal({ account: null })} className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-4 py-2 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper">
           <Plus className="h-4 w-4" /> Agregar cuenta
         </button>
       </div>
@@ -303,11 +303,11 @@ export default function BancosPage() {
           <div className="mt-4 flex flex-wrap gap-2">
             {accounts.map((a) => (
               <button key={a.id} onClick={() => setSelectedId(a.id)}
-                className={"inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium " + (a.id === selectedId ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-white text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
+                className={"inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium " + (a.id === selectedId ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
                 {a.banco} <span className="font-mono text-[12px] opacity-80">••{a.numeroCuenta.slice(-4)}</span>
               </button>
             ))}
-            <button onClick={() => setAccountModal({ account: null })} className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-cos-line bg-white px-3.5 py-2 text-[13.5px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint">
+            <button onClick={() => setAccountModal({ account: null })} className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-cos-line bg-cos-card px-3.5 py-2 text-[13.5px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint">
               <Plus className="h-3.5 w-3.5" /> Agregar
             </button>
           </div>
@@ -338,7 +338,7 @@ export default function BancosPage() {
                   : <span className="font-mono text-[20px] text-cos-ink-faint">—</span>}
               </div>
               <div className="flex flex-wrap gap-2.5">
-                <label className={"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-control border border-cos-line bg-white px-4 py-2.5 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper " + (busy ? "pointer-events-none opacity-50" : "")}>
+                <label className={"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-control border border-cos-line bg-cos-card px-4 py-2.5 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper " + (busy ? "pointer-events-none opacity-50" : "")}>
                   {busy === "upload" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Cargar estado de cuenta
                   <input type="file" accept=".csv,.txt,.ofx,.xlsx,.xls,.xlsm" className="hidden" onChange={onUpload} disabled={!!busy} />
                 </label>
@@ -354,7 +354,7 @@ export default function BancosPage() {
           <div className="mt-5 flex flex-wrap items-center gap-2">
             {([["all","Todos"],["UNMATCHED","Sin conciliar"],["MATCHED","Conciliados"]] as [Filter,string][]).map(([k, t]) => (
               <button key={k} onClick={() => setFilter(k)}
-                className={"inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium " + (filter === k ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-white text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
+                className={"inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium " + (filter === k ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
                 {t} <span className="font-mono text-[12px] opacity-80">{k === "all" ? (counts.total ?? 0) : k === "UNMATCHED" ? (counts.UNMATCHED ?? 0) : (counts.MATCHED ?? 0)}</span>
               </button>
             ))}
@@ -376,7 +376,7 @@ export default function BancosPage() {
               <span className="mr-1 font-mono text-[11px] uppercase tracking-[0.08em] text-cos-ink-faint">Por tipo</span>
               {TIPO_CHIPS.map(({ f, t, k }) => (
                 <button key={f} onClick={() => setFilter(f)}
-                  className={"inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium " + (filter === f ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-white text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
+                  className={"inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium " + (filter === f ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
                   {t} <span className="font-mono text-[11px] opacity-70">{counts[k] ?? 0}</span>
                 </button>
               ))}
@@ -512,7 +512,7 @@ export default function BancosPage() {
                               <div className="flex flex-wrap gap-2">
                                 {CATEGORIAS.map(({ tag, label, icon: Icon }) => (
                                   <button key={label} onClick={() => categorizar(m.id, tag, label)} disabled={acting === m.id}
-                                    className={"inline-flex items-center gap-2 rounded-control border border-cos-line bg-white px-3 py-2 text-[13px] font-medium hover:border-cos-brand hover:bg-cos-brand-tint hover:text-cos-brand-ink disabled:opacity-50 " + (tag === null ? "text-cos-ink-faint" : "text-cos-ink-soft")}>
+                                    className={"inline-flex items-center gap-2 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13px] font-medium hover:border-cos-brand hover:bg-cos-brand-tint hover:text-cos-brand-ink disabled:opacity-50 " + (tag === null ? "text-cos-ink-faint" : "text-cos-ink-soft")}>
                                     <Icon className="h-[15px] w-[15px] opacity-70" /> {label}
                                   </button>
                                 ))}
@@ -743,7 +743,7 @@ function AccountModal({
             <label className="block">
               <span className="text-[12.5px] font-medium text-cos-ink-soft">Banco</span>
               <select value={banco} onChange={(e) => setBanco(e.target.value)}
-                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] text-cos-ink outline-none focus:border-cos-brand">
+                className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13.5px] text-cos-ink outline-none focus:border-cos-brand">
                 {BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
               </select>
             </label>
@@ -751,25 +751,25 @@ function AccountModal({
             <label className="block">
               <span className="text-[12.5px] font-medium text-cos-ink-soft">Nombre / alias de la cuenta</span>
               <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Cuenta principal MXN"
-                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] text-cos-ink outline-none placeholder:text-cos-ink-faint focus:border-cos-brand" autoFocus />
+                className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13.5px] text-cos-ink outline-none placeholder:text-cos-ink-faint focus:border-cos-brand" autoFocus />
             </label>
 
             <label className="block">
               <span className="text-[12.5px] font-medium text-cos-ink-soft">Número de cuenta</span>
               <input value={numeroCuenta} onChange={(e) => setNumeroCuenta(e.target.value)} placeholder="Ej. 0123456789"
-                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] font-mono text-cos-ink outline-none placeholder:text-cos-ink-faint focus:border-cos-brand" />
+                className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13.5px] font-mono text-cos-ink outline-none placeholder:text-cos-ink-faint focus:border-cos-brand" />
             </label>
 
             <label className="block">
               <span className="text-[12.5px] font-medium text-cos-ink-soft">CLABE <span className="text-cos-ink-faint">(opcional)</span></span>
               <input value={clabe} onChange={(e) => setClabe(e.target.value)} placeholder="18 dígitos"
-                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] font-mono text-cos-ink outline-none placeholder:text-cos-ink-faint focus:border-cos-brand" />
+                className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13.5px] font-mono text-cos-ink outline-none placeholder:text-cos-ink-faint focus:border-cos-brand" />
             </label>
 
             <label className="block">
               <span className="text-[12.5px] font-medium text-cos-ink-soft">Moneda</span>
               <select value={moneda} onChange={(e) => setMoneda(e.target.value)}
-                className="mt-1 w-full rounded-control border border-cos-line bg-white px-3 py-2 text-[13.5px] text-cos-ink outline-none focus:border-cos-brand">
+                className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13.5px] text-cos-ink outline-none focus:border-cos-brand">
                 <option value="MXN">MXN — Peso mexicano</option>
                 <option value="USD">USD — Dólar estadounidense</option>
                 <option value="EUR">EUR — Euro</option>

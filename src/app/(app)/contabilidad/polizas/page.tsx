@@ -69,7 +69,7 @@ export default function PolizasPage() {
           <label className="text-[13px]">
             <span className="mb-1 block font-medium text-cos-ink-soft">Mes</span>
             <select value={month} onChange={(e) => setMonth(Number(e.target.value))}
-              className="w-full rounded-control border border-cos-line bg-white px-2.5 py-1.5 outline-none focus:border-cos-brand-ink">
+              className="w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 outline-none focus:border-cos-brand-ink">
               {Array.from({ length: 13 }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>{m === 13 ? "13 (cierre)" : m}</option>
               ))}
@@ -80,7 +80,7 @@ export default function PolizasPage() {
         <label className="mt-4 block text-[13px]">
           <span className="mb-1 block font-medium text-cos-ink-soft">Tipo de solicitud</span>
           <select value={tipo} onChange={(e) => { setTipo(e.target.value as Tipo); setFolio(""); }}
-            className="w-full rounded-control border border-cos-line bg-white px-2.5 py-1.5 outline-none focus:border-cos-brand-ink">
+            className="w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 outline-none focus:border-cos-brand-ink">
             {TIPOS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </label>

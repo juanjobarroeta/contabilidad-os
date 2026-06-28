@@ -127,7 +127,7 @@ export default function CumplimientoPage() {
           </p>
           <p className="mt-1 max-w-[60ch] text-[15px] text-cos-ink-soft">Calendario fiscal de <strong>esta empresa</strong> con el SAT — qué presentaste, qué falta y cuándo vence. Cambia de empresa en el selector de arriba.</p>
         </div>
-        <label className={`inline-flex cursor-pointer items-center gap-2 rounded-control border px-4 py-2 text-[14px] font-semibold transition-colors ${uploading ? "pointer-events-none border-cos-line bg-cos-paper text-cos-ink-faint" : "border-cos-line bg-white text-cos-ink hover:bg-cos-paper"}`}>
+        <label className={`inline-flex cursor-pointer items-center gap-2 rounded-control border px-4 py-2 text-[14px] font-semibold transition-colors ${uploading ? "pointer-events-none border-cos-line bg-cos-paper text-cos-ink-faint" : "border-cos-line bg-cos-card text-cos-ink hover:bg-cos-paper"}`}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           {uploading ? "Procesando CSF…" : "Subir CSF"}
           <input type="file" accept=".pdf" className="hidden" onChange={handleCsfUpload} disabled={uploading} />
@@ -199,7 +199,7 @@ function SummaryCard({ label, count, tone, icon: Icon }: { label: string; count:
     red: "bg-cos-red-tint text-cos-red-ink",
     amber: "bg-cos-amber-tint text-cos-amber-ink",
     jade: "bg-cos-jade-tint text-cos-jade-ink",
-    neutral: "bg-white text-cos-ink-soft border border-cos-line",
+    neutral: "bg-cos-card text-cos-ink-soft border border-cos-line",
   }[tone];
   return (
     <div className={`rounded-card p-4 ${c}`}>

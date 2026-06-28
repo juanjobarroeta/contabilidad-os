@@ -108,7 +108,7 @@ export default function NotificacionesPage() {
       </p>
 
       {/* Estado del dispositivo */}
-      <div className="mt-6 rounded-xl border border-cos-line bg-white p-5">
+      <div className="mt-6 rounded-xl border border-cos-line bg-cos-card p-5">
         <div className="flex items-center gap-3">
           {estado === "on" ? <Bell className="h-5 w-5 text-cos-brand-ink" /> : <BellOff className="h-5 w-5 text-cos-ink-soft" />}
           <div className="flex-1">
@@ -147,7 +147,7 @@ export default function NotificacionesPage() {
       </div>
 
       {/* Categorías */}
-      <div className="mt-5 rounded-xl border border-cos-line bg-white">
+      <div className="mt-5 rounded-xl border border-cos-line bg-cos-card">
         <div className="border-b border-cos-line px-5 py-3">
           <p className="font-semibold text-cos-ink">¿Qué quieres recibir?</p>
         </div>

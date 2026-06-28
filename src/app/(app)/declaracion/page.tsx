@@ -423,7 +423,7 @@ function Resumen({ data, companyId, month, year }: { data: CierreData; companyId
 
       {/* Expert depth: precierre, saldo a favor, REP y sincronización con el SAT. */}
       <a href={`/impuestos/detalle?month=${month}&year=${year}`}
-        className="flex items-center gap-3 rounded-card border border-dashed border-cos-line bg-white px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
+        className="flex items-center gap-3 rounded-card border border-dashed border-cos-line bg-cos-card px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
         <SlidersHorizontal className="h-[18px] w-[18px] flex-none" />
         <span className="flex-1">Cálculo a detalle — precierre, saldo a favor, complementos de pago y sincronizar con el SAT</span>
         <ChevronR className="h-4 w-4 flex-none" />
@@ -492,7 +492,7 @@ function SimInput({ label, value, onChange }: { label: string; value: string; on
   return (
     <label className="flex flex-col gap-2 text-[13px] font-medium text-cos-ink-soft">
       <span>{label}</span>
-      <div className="flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3.5 focus-within:border-cos-brand focus-within:ring-[3px] focus-within:ring-cos-brand-tint">
+      <div className="flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3.5 focus-within:border-cos-brand focus-within:ring-[3px] focus-within:ring-cos-brand-tint">
         <i className="font-mono not-italic text-cos-ink-faint">$</i>
         <input type="number" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0.00" className="w-full border-0 bg-transparent py-3 font-mono text-[16px] text-cos-ink outline-none" />
       </div>
@@ -751,7 +751,7 @@ function Presentar({
               <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-jade-ink">
                 <CheckCircle2 className="h-4 w-4" /> Presentada {data.diot.fechaPresentacion ? `el ${fmtFecha(data.diot.fechaPresentacion)}` : ""}
               </p>
-              <button onClick={() => onFileDiot(false)} disabled={savingDiot} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-white disabled:opacity-50">
+              <button onClick={() => onFileDiot(false)} disabled={savingDiot} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-card disabled:opacity-50">
                 {savingDiot ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
               </button>
             </div>
@@ -791,7 +791,7 @@ function FederalPresentar({
               {f.acuseUrl && <a href={f.acuseUrl} target="_blank" rel="noreferrer" className="text-[12.5px] text-cos-jade-ink underline">Ver acuse</a>}
             </div>
           </div>
-          <button onClick={() => onFile(false)} disabled={saving} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-white">
+          <button onClick={() => onFile(false)} disabled={saving} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-card">
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
           </button>
         </div>

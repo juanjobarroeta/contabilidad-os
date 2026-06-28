@@ -120,7 +120,7 @@ export default function NominaCockpitPage() {
         </div>
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-white shadow-card">
+      <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
         <table className="w-full text-sm">
           <thead className="bg-cos-paper text-[12px] uppercase tracking-[0.02em] text-cos-ink-faint">
             <tr>

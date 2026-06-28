@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useCompany } from "./CompanyProvider";
 import { cn } from "@/lib/utils";
-import { BrandMark } from "@/components/ui";
+import { BrandMark, ThemeToggle } from "@/components/ui";
 import {
   LayoutDashboard,
   FileText,
@@ -120,7 +120,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   return (
     <>
       {/* Mobile top bar with hamburger (hidden on md+) */}
-      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-cos-line flex items-center gap-3 px-4">
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-cos-card border-b border-cos-line flex items-center gap-3 px-4">
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Abrir menú"
@@ -132,6 +132,9 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
           <BrandMark size={20} className="text-cos-brand" />
           Contabilidad<span className="text-cos-brand">OS</span>
         </span>
+        <div className="ml-auto">
+          <ThemeToggle />
+        </div>
       </div>
 
       {/* Backdrop (mobile only, when open) */}
@@ -145,7 +148,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
 
       <aside
         className={cn(
-          "bg-white border-r border-cos-line flex flex-col h-full w-60 shrink-0",
+          "bg-cos-card border-r border-cos-line flex flex-col h-full w-60 shrink-0",
           // Desktop: static in the flex row. Mobile: off-canvas drawer.
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:transition-transform",
           mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
@@ -157,13 +160,19 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
           <BrandMark size={24} className="text-cos-brand" />
           Contabilidad<span className="text-cos-brand">OS</span>
         </span>
-        <button
-          onClick={() => setMobileOpen(false)}
-          aria-label="Cerrar menú"
-          className="md:hidden p-1 rounded-md hover:bg-cos-paper"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Toggle de tema: en escritorio vive aquí; en móvil está en la barra superior. */}
+          <div className="max-md:hidden">
+            <ThemeToggle />
+          </div>
+          <button
+            onClick={() => setMobileOpen(false)}
+            aria-label="Cerrar menú"
+            className="md:hidden p-1 rounded-md hover:bg-cos-paper"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Company switcher */}
@@ -180,7 +189,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
         </button>
 
         {companyOpen && (
-          <div className="mt-1 bg-white border border-cos-line rounded-md shadow-sm overflow-hidden">
+          <div className="mt-1 bg-cos-card border border-cos-line rounded-md shadow-sm overflow-hidden">
             <div className="max-h-72 overflow-y-auto">
               {(() => {
                 const renderCompany = (c: typeof companies[number]) => (

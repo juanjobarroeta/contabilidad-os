@@ -44,7 +44,7 @@ export default function DeclaracionesPage() {
         <h1 className="text-xl font-bold text-cos-ink">Declaraciones por capturar</h1>
         <Link
           href="/declaraciones/historial"
-          className="ml-auto rounded-control border border-cos-line bg-white px-3 py-1.5 text-[13px] font-medium text-cos-ink hover:bg-cos-paper"
+          className="ml-auto rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-[13px] font-medium text-cos-ink hover:bg-cos-paper"
         >
           Ver presentadas
         </Link>
@@ -61,7 +61,7 @@ export default function DeclaracionesPage() {
           <Loader2 className="h-4 w-4 animate-spin" /> Revisando qué falta…
         </div>
       ) : !data || data.total === 0 ? (
-        <div className="mt-10 flex flex-col items-center gap-2 rounded-card border border-cos-line bg-white py-12 text-center">
+        <div className="mt-10 flex flex-col items-center gap-2 rounded-card border border-cos-line bg-cos-card py-12 text-center">
           <CheckCircle2 className="h-8 w-8 text-cos-green-ink" />
           <p className="font-medium text-cos-ink">Todo al día</p>
           <p className="text-sm text-cos-ink-faint">No hay acuses pendientes por capturar.</p>
@@ -84,7 +84,7 @@ export default function DeclaracionesPage() {
             <h2 className="text-sm font-semibold text-cos-ink">Acuses disponibles</h2>
             <span className="text-[12px] text-cos-ink-faint">PDF guardado · {acuses.length}</span>
           </div>
-          <div className="overflow-hidden rounded-card border border-cos-line bg-white shadow-card">
+          <div className="overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
             <ul className="divide-y divide-cos-line">
               {acuses.map((a) => (
                 <li key={a.id} className="flex items-center gap-3 px-4 py-2.5">

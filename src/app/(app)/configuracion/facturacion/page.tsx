@@ -32,7 +32,7 @@ export default async function FacturacionPage() {
         <p className="text-sm text-cos-ink-soft mt-1">Tu plan y estado de suscripción.</p>
       </div>
 
-      <div className="bg-white border border-cos-line rounded-xl p-6">
+      <div className="bg-cos-card border border-cos-line rounded-xl p-6">
         <div className="flex items-start gap-4 mb-6">
           <div className="h-10 w-10 rounded-lg bg-cos-brand-tint text-cos-brand-ink flex items-center justify-center shrink-0">
             <CreditCard className="h-5 w-5" />

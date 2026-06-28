@@ -55,7 +55,7 @@ export default function ConfiguracionPage() {
           <Link
             key={s.href}
             href={s.href}
-            className="group bg-white border border-cos-line rounded-xl p-5 hover:border-cos-brand/40 hover:shadow-sm transition-all"
+            className="group bg-cos-card border border-cos-line rounded-xl p-5 hover:border-cos-brand/40 hover:shadow-sm transition-all"
           >
             <div className="flex items-start gap-4">
               <div className="h-10 w-10 rounded-lg bg-cos-brand-tint text-cos-brand-ink flex items-center justify-center shrink-0">
