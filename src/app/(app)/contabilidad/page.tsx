@@ -6,8 +6,9 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency } from "@/lib/utils";
 import {
   Calendar, CheckCircle2, AlertCircle, Loader2, X,
-  RotateCcw, FileText, BookOpen, Download, ArrowLeftRight,
+  RotateCcw, FileText, BookOpen, Download, ArrowLeftRight, Boxes,
 } from "lucide-react";
+import { ActivoFijoView } from "@/components/contabilidad/ActivoFijoView";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type PeriodStatus = "DRAFT" | "POSTED" | "CLOSED";
@@ -62,11 +63,21 @@ interface SaldoRow {
   neto: number;
 }
 
-type TabId = "periods" | "balanza" | "estado" | "saldos";
+type TabId = "periods" | "balanza" | "estado" | "saldos" | "activo-fijo";
+
+const TAB_IDS: readonly TabId[] = ["periods", "balanza", "estado", "saldos", "activo-fijo"];
 
 export default function ContabilidadPage() {
   const { activeCompany } = useCompany();
   const [tab, setTab] = useState<TabId>("periods");
+
+  // Honor deep-links (?tab=). Read la URL directamente para no forzar un
+  // Suspense boundary (useSearchParams). La redirección de /activos llega aquí
+  // con ?tab=activo-fijo.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t && TAB_IDS.includes(t as TabId)) setTab(t as TabId);
+  }, []);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -232,6 +243,7 @@ export default function ContabilidadPage() {
             ["balanza", "Balanza de comprobación", BookOpen],
             ["estado",  "Estado de resultados", FileText],
             ["saldos",  "Saldos interempresa", ArrowLeftRight],
+            ["activo-fijo", "Activo fijo", Boxes],
           ] as const).map(([id, label, Icon]) => (
             <button
               key={id}
@@ -281,6 +293,10 @@ export default function ContabilidadPage() {
 
       {tab === "saldos" && (
         <SaldosInterempresaPanel companyId={activeCompany.id} />
+      )}
+
+      {tab === "activo-fijo" && (
+        <ActivoFijoView />
       )}
     </div>
   );

@@ -29,6 +29,8 @@ const nextConfig: NextConfig = {
       { source: "/impuestos/cierre", destination: "/declaracion?tab=presentar", permanent: false },
       // The Detalle view is now inlined into the unified /bancos page.
       { source: "/bancos/detalle", destination: "/bancos", permanent: false },
+      // Activo fijo now lives as a tab inside the Contabilidad hub.
+      { source: "/activos", destination: "/contabilidad?tab=activo-fijo", permanent: false },
     ];
   },
 };

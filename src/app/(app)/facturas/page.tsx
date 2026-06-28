@@ -357,7 +357,7 @@ function NaturalezaRow({ inv }: { inv: Invoice }) {
         body: JSON.stringify({ companyId: inv.companyId, invoiceId: inv.id }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Error");
-      setActivoMsg("✓ Registrado en activo fijo — revisa la tasa y el tope en /activos");
+      setActivoMsg("✓ Registrado en activo fijo — revisa la tasa y el tope en Contabilidad › Activo fijo");
     } catch (e) {
       setActivoMsg(e instanceof Error ? e.message : "Error");
     } finally {
