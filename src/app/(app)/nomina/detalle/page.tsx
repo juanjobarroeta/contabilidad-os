@@ -311,7 +311,7 @@ export default function NominaPage() {
               <Loader2 className="h-5 w-5 animate-spin" /> Cargando empleados...
             </div>
           ) : employees.length === 0 ? (
-            <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+            <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
               <Users2 className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
               <p className="font-medium text-sm">Sin empleados</p>
               <p className="text-xs text-cos-ink-soft mt-1">Agrega tu primer empleado para empezar.</p>
@@ -320,7 +320,7 @@ export default function NominaPage() {
               </button>
             </div>
           ) : (
-            <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
+            <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-cos-line bg-cos-slate-tint">
@@ -371,7 +371,7 @@ export default function NominaPage() {
               <Loader2 className="h-5 w-5 animate-spin" /> Cargando corridas...
             </div>
           ) : runs.length === 0 ? (
-            <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+            <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
               <Calendar className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
               <p className="font-medium text-sm">Sin corridas de nómina</p>
               <p className="text-xs text-cos-ink-soft mt-1">Crea una corrida para calcular y timbrar la nómina de todos los empleados.</p>
@@ -381,7 +381,7 @@ export default function NominaPage() {
               {runs.map(run => {
                 const isExpanded = expandedRunId === run.id;
                 return (
-                  <div key={run.id} className="bg-white border border-cos-line rounded-xl overflow-hidden">
+                  <div key={run.id} className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
                     {/* Run header — clickable to expand */}
                     <div className="p-4 flex items-center gap-4 cursor-pointer hover:bg-cos-slate-tint/50" onClick={() => toggleRunDetail(run.id)}>
                       <div className="flex-1 min-w-0">
@@ -534,20 +534,20 @@ export default function NominaPage() {
           <div className="flex items-center gap-2 mb-4">
             <label className="text-xs text-cos-ink-soft">Periodo:</label>
             <input type="month" value={incPeriodo} onChange={e => setIncPeriodo(e.target.value)}
-              className="text-sm border border-cos-line rounded-md px-2 py-1.5 bg-white" />
+              className="text-sm border border-cos-line rounded-md px-2 py-1.5 bg-cos-card" />
           </div>
           {incLoading ? (
             <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-12 justify-center">
               <Loader2 className="h-5 w-5 animate-spin" /> Cargando...
             </div>
           ) : incidencias.length === 0 ? (
-            <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+            <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
               <ClipboardList className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
               <p className="font-medium text-sm">Sin incidencias en {incPeriodo}</p>
               <p className="text-xs text-cos-ink-soft mt-1">Registra faltas, incapacidades, horas extra y permisos.</p>
             </div>
           ) : (
-            <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
+            <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-cos-line bg-cos-slate-tint">
@@ -728,7 +728,7 @@ function NewEmployeeModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-lg">
         <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold">Nuevo empleado</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
@@ -736,7 +736,7 @@ function NewEmployeeModal({
         <form onSubmit={submit} className="p-5 space-y-3">
           {/* AI Upload Zone */}
           <div className="bg-cos-brand-tint/60 border border-cos-brand-ink/15 rounded-lg p-3">
-            <label className="flex items-center gap-3 px-3 py-2.5 border-2 border-dashed border-cos-brand-ink/15 rounded-md text-sm bg-white cursor-pointer hover:bg-cos-brand-tint/50 transition-colors">
+            <label className="flex items-center gap-3 px-3 py-2.5 border-2 border-dashed border-cos-brand-ink/15 rounded-md text-sm bg-cos-card cursor-pointer hover:bg-cos-brand-tint/50 transition-colors">
               {aiParsing ? (
                 <Loader2 className="h-4 w-4 text-cos-brand-ink shrink-0 animate-spin" />
               ) : (
@@ -927,7 +927,7 @@ function EmitNominaModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-md">
         <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Emitir recibo de nómina</h2>
@@ -1040,7 +1040,7 @@ function EditEmployeeModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-lg">
         <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Editar empleado</h2>
@@ -1167,7 +1167,7 @@ function BajaModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-lg">
         <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold text-cos-red-ink">Dar de baja</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
@@ -1184,7 +1184,7 @@ function BajaModal({
               <div>
                 <label className="block text-xs font-medium mb-1">Motivo de baja</label>
                 <select value={motivo} onChange={e => setMotivo(e.target.value as typeof motivo)}
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-white">
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm bg-cos-card">
                   <option value="VOLUNTARIA">Renuncia voluntaria</option>
                   <option value="JUSTIFICADA">Despido justificado (Art. 47 LFT)</option>
                   <option value="INJUSTIFICADA">Despido injustificado → Liquidación</option>
@@ -1227,7 +1227,7 @@ function BajaModal({
               </div>
 
               {f && (
-                <div className="bg-white border border-cos-line rounded-lg p-4 text-sm space-y-2">
+                <div className="bg-cos-card border border-cos-line rounded-lg p-4 text-sm space-y-2">
                   <p className="font-semibold text-xs uppercase tracking-wide text-cos-ink-soft">Cálculo de finiquito</p>
                   <div className="space-y-1 text-xs">
                     {f.salariosPendientes > 0 && <Row label="Salarios pendientes" value={f.salariosPendientes} />}
@@ -1357,7 +1357,7 @@ function NewRunModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-md">
         <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold">Nueva corrida de nómina</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>
@@ -1478,7 +1478,7 @@ function NewIncidenciaModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-md">
         <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
           <h2 className="font-semibold">Nueva incidencia</h2>
           <button onClick={onClose}><X className="h-4 w-4" /></button>

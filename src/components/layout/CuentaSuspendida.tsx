@@ -6,7 +6,7 @@ import { Lock } from "lucide-react";
 export function CuentaSuspendida() {
   return (
     <div className="grid min-h-screen place-items-center bg-cos-paper px-6">
-      <div className="w-full max-w-md rounded-card border border-cos-line bg-white p-8 text-center shadow-card">
+      <div className="w-full max-w-md rounded-card border border-cos-line bg-cos-card p-8 text-center shadow-card">
         <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-cos-amber-tint text-cos-amber-ink">
           <Lock className="h-6 w-6" />
         </div>

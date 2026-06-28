@@ -191,13 +191,13 @@ export default function ContabilidadPage() {
         <div className="flex flex-wrap items-center gap-2">
           <a
             href="/contabilidad/apertura"
-            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
+            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
           >
             Saldos iniciales
           </a>
           <a
             href="/contabilidad/polizas"
-            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
+            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
           >
             Pólizas
           </a>
@@ -205,13 +205,13 @@ export default function ContabilidadPage() {
             onClick={handleCierre}
             disabled={cierreLoading}
             title={`Generar el asiento de cierre del ejercicio ${selectedYear} (mes 13)`}
-            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
           >
             {cierreLoading ? "Generando…" : `Cierre ${selectedYear}`}
           </button>
           <a
             href={`/api/contabilidad/coe/balanza?companyId=${activeCompany.id}&year=${selectedYear}&month=13`}
-            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-white px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
+            className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-sm font-medium text-cos-ink hover:bg-cos-paper"
             title="Descargar la balanza de cierre (mes 13)"
           >
             XML Balanza 13
@@ -355,7 +355,7 @@ function PeriodsPanel({
           return (
             <div
               key={month}
-              className={`bg-white border rounded-xl p-4 transition-colors ${
+              className={`bg-cos-card border rounded-xl p-4 transition-colors ${
                 isPosted ? "border-[oklch(0.66_0.12_168_/_0.35)] bg-cos-jade-tint" : "border-cos-line"
               }`}
             >
@@ -451,7 +451,7 @@ function PeriodPicker({
       <select
         value={month}
         onChange={(e) => onChange(year, parseInt(e.target.value))}
-        className="text-sm border border-cos-line rounded-md px-2 py-1.5 bg-white"
+        className="text-sm border border-cos-line rounded-md px-2 py-1.5 bg-cos-card"
       >
         {MESES.map((m, i) => (
           <option key={i} value={i + 1}>{m}</option>
@@ -461,7 +461,7 @@ function PeriodPicker({
         type="number"
         value={year}
         onChange={(e) => onChange(parseInt(e.target.value), month)}
-        className="w-24 text-sm border border-cos-line rounded-md px-2 py-1.5 bg-white"
+        className="w-24 text-sm border border-cos-line rounded-md px-2 py-1.5 bg-cos-card"
       />
     </div>
   );
@@ -496,13 +496,13 @@ function BalanzaPanel({
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
       ) : nonZero.length === 0 ? (
-        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+        <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <BookOpen className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
           <p className="text-sm text-cos-ink-soft">Sin movimientos para este periodo.</p>
           <p className="text-xs text-cos-ink-soft mt-1">Cierra el mes desde la pestaña &ldquo;Cierres mensuales&rdquo;.</p>
         </div>
       ) : (
-        <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
+        <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-cos-line bg-cos-paper">
@@ -558,12 +558,12 @@ function EstadoResultadosPanel({
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
       ) : !data || (data.ingresos.length === 0 && data.gastos.length === 0) ? (
-        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+        <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <FileText className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
           <p className="text-sm text-cos-ink-soft">Sin movimientos para este periodo.</p>
         </div>
       ) : (
-        <div className="bg-white border border-cos-line rounded-xl p-6 space-y-5 text-sm">
+        <div className="bg-cos-card border border-cos-line rounded-xl p-6 space-y-5 text-sm">
           <Section label="Ingresos" rows={data.ingresos} total={data.totalIngresos} positive />
           {data.costos.length > 0 && (
             <Section label="Costos" rows={data.costos} total={data.totalCostos} positive={false} />
@@ -656,7 +656,7 @@ function SaldosInterempresaPanel({ companyId }: { companyId: string }) {
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
       ) : !hasActivity ? (
-        <div className="bg-white border border-dashed border-cos-line rounded-xl p-12 text-center">
+        <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <ArrowLeftRight className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
           <p className="text-sm text-cos-ink-soft">Sin préstamos interempresa registrados.</p>
           <p className="text-xs text-cos-ink-soft mt-1">
@@ -665,7 +665,7 @@ function SaldosInterempresaPanel({ companyId }: { companyId: string }) {
           </p>
         </div>
       ) : (
-        <div className="bg-white border border-cos-line rounded-xl overflow-hidden">
+        <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-cos-line bg-cos-paper">

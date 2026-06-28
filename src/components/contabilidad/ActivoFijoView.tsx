@@ -94,7 +94,7 @@ export function ActivoFijoView() {
           <select
             value={ejercicio}
             onChange={(e) => setEjercicio(parseInt(e.target.value))}
-            className="rounded-control border border-cos-line bg-white px-3 py-2 text-[14px]"
+            className="rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[14px]"
           >
             {[0, 1, 2, 3].map((d) => {
               const y = new Date().getFullYear() - d;
@@ -113,7 +113,7 @@ export function ActivoFijoView() {
       {loading ? (
         <Loading />
       ) : !data || data.activos.length === 0 ? (
-        <div className="mt-6 rounded-card border border-dashed border-cos-line bg-white px-6 py-12 text-center text-[14px] text-cos-ink-soft">
+        <div className="mt-6 rounded-card border border-dashed border-cos-line bg-cos-card px-6 py-12 text-center text-[14px] text-cos-ink-soft">
           Sin activos en el registro. Da de alta uno, o desde una factura de inversión
           (naturaleza “Activo fijo”) usa <b>“Registrar como activo fijo”</b>.
         </div>
@@ -124,7 +124,7 @@ export function ActivoFijoView() {
             <span className="font-mono text-[20px] font-bold text-cos-brand-ink">{formatCurrency(data.totalDepreciacionEjercicio)}</span>
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-card border border-cos-line bg-white shadow-card">
+          <div className="mt-4 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
             <table className="w-full text-sm">
               <thead className="bg-cos-paper text-[12px] uppercase tracking-[0.02em] text-cos-ink-faint">
                 <tr>
@@ -183,7 +183,7 @@ export function ActivoFijoView() {
             </table>
           </div>
 
-          <div className="mt-3 flex items-start gap-2 rounded-card border border-cos-line bg-white px-4 py-3 text-[12.5px] text-cos-ink-soft">
+          <div className="mt-3 flex items-start gap-2 rounded-card border border-cos-line bg-cos-card px-4 py-3 text-[12.5px] text-cos-ink-soft">
             <Info className="mt-0.5 h-4 w-4 flex-none text-cos-ink-faint" />
             <span>
               Actualización por <b>INPC</b> (Art. 31) aplicada cuando el índice del periodo está cargado
@@ -243,7 +243,7 @@ function NuevoActivoModal({ companyId, onClose, onCreated }: { companyId: string
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
-      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} className="w-full max-w-md rounded-card bg-white p-6 shadow-xl">
+      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} className="w-full max-w-md rounded-card bg-cos-card p-6 shadow-card">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[18px] font-semibold text-cos-ink">Alta de activo fijo</h2>
           <button type="button" onClick={onClose}><X className="h-5 w-5 text-cos-ink-soft" /></button>

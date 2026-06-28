@@ -248,7 +248,7 @@ export default function FacturasPage() {
       </div>
 
       {/* search */}
-      <div className="mt-[18px] flex items-center gap-2.5 rounded-control border border-cos-line bg-white px-3.5 text-cos-ink-faint">
+      <div className="mt-[18px] flex items-center gap-2.5 rounded-control border border-cos-line bg-cos-card px-3.5 text-cos-ink-faint">
         <Search className="h-[18px] w-[18px]" />
         <input
           value={q}
@@ -268,7 +268,7 @@ export default function FacturasPage() {
               "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium transition-colors " +
               (filter === f.k
                 ? "border-cos-brand bg-cos-brand text-white"
-                : "border-cos-line bg-white text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")
+                : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")
             }
           >
             {f.t} <span className="font-mono text-[12px] opacity-80">{counts[f.k]}</span>
@@ -393,7 +393,7 @@ function NaturalezaRow({ inv }: { inv: Invoice }) {
           value={valor}
           disabled={saving}
           onChange={(e) => save(e.target.value)}
-          className="rounded-control border border-cos-line bg-white px-2 py-1 text-[13px] focus:outline-none focus:ring-1 focus:ring-cos-brand"
+          className="rounded-control border border-cos-line bg-cos-card px-2 py-1 text-[13px] focus:outline-none focus:ring-1 focus:ring-cos-brand"
         >
           <option value="GASTO">Gasto</option>
           <option value="INVERSION">Activo fijo</option>
@@ -467,7 +467,7 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[440px] rounded-[18px] bg-white p-6 shadow-[0_30px_60px_-20px_oklch(0.2_0.05_258_/_0.5)]"
+        className="w-full max-w-[440px] rounded-[18px] bg-cos-card p-6 shadow-[0_30px_60px_-20px_oklch(0.2_0.05_258_/_0.5)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
@@ -566,7 +566,7 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
               <select
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
-                className="mt-1 w-full rounded-control border border-cos-line bg-white px-2.5 py-2 text-[13.5px] text-cos-ink outline-none"
+                className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 text-[13.5px] text-cos-ink outline-none"
               >
                 <option value="02">02 — Comprobante con errores sin relación</option>
                 <option value="01">01 — Comprobante con errores con relación</option>
@@ -579,7 +579,7 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
                 value={sustituye}
                 onChange={(e) => setSustituye(e.target.value)}
                 placeholder="UUID que la sustituye"
-                className="mt-2 w-full rounded-control border border-cos-line bg-white px-2.5 py-2 font-mono text-[12.5px] text-cos-ink outline-none"
+                className="mt-2 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 font-mono text-[12.5px] text-cos-ink outline-none"
               />
             )}
             <div className="mt-3 flex gap-2.5">

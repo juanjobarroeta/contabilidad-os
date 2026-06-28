@@ -64,7 +64,7 @@ export function InstallPrompt() {
   if (!show) return null;
 
   return (
-    <div className="fixed bottom-4 inset-x-4 z-[70] mx-auto max-w-md rounded-xl border border-cos-line bg-white shadow-lg p-4">
+    <div className="fixed bottom-4 inset-x-4 z-[70] mx-auto max-w-md rounded-xl border border-cos-line bg-cos-card shadow-lg p-4">
       <div className="flex items-start gap-3">
         <div className="h-9 w-9 rounded-lg bg-cos-brand text-white flex items-center justify-center font-bold shrink-0">
           C

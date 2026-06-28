@@ -6,3 +6,4 @@ export { Chip, type ChipStatus } from "./Chip";
 export { BrandMark } from "./BrandMark";
 export { Loading, EmptyState, Alert } from "./feedback";
 export { PageContainer, PageHeader } from "./PageHeader";
+export { ThemeToggle } from "./ThemeToggle";

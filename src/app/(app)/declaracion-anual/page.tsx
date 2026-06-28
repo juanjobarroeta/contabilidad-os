@@ -145,7 +145,7 @@ export default function DeclaracionAnualPage() {
       ) : result && (
         <div className="space-y-5">
           {/* Header card */}
-          <div className="rounded-card border border-cos-line bg-white p-5 shadow-card">
+          <div className="rounded-card border border-cos-line bg-cos-card p-5 shadow-card">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-control ${
@@ -205,7 +205,7 @@ export default function DeclaracionAnualPage() {
                     <label className="mb-0.5 block text-[10px] font-medium text-cos-amber-ink">{label}</label>
                     <input type="number" step="0.01" value={overrides[key]}
                       onChange={e => setOverrides(p => ({ ...p, [key]: e.target.value }))}
-                      className="w-full rounded-control border border-cos-amber-ink/30 bg-white px-2 py-1.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-cos-amber/30" />
+                      className="w-full rounded-control border border-cos-amber-ink/30 bg-cos-card px-2 py-1.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-cos-amber/30" />
                   </div>
                 ))}
               </div>
@@ -317,7 +317,7 @@ function Stat({ label, value, negative, positive }: { label: string; value: numb
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-cos-line bg-white p-5 shadow-card">
+    <div className="rounded-card border border-cos-line bg-cos-card p-5 shadow-card">
       <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-cos-ink-soft">{title}</h3>
       <div className="space-y-1.5 text-sm">{children}</div>
     </div>

@@ -120,7 +120,7 @@ export function SatCodePicker({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm text-left bg-white hover:bg-cos-slate-tint flex items-center gap-2"
+        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm text-left bg-cos-card hover:bg-cos-slate-tint flex items-center gap-2"
       >
         {value ? (
           <span className="flex-1 truncate">
@@ -134,7 +134,7 @@ export function SatCodePicker({
       </button>
 
       {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-cos-line rounded-md shadow-lg max-h-72 overflow-auto">
+        <div className="absolute z-20 mt-1 w-full bg-cos-card border border-cos-line rounded-md shadow-lg max-h-72 overflow-auto">
           <div className="p-2 border-b border-cos-line">
             <div className="relative">
               <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-cos-ink-soft" />

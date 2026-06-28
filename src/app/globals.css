@@ -31,6 +31,47 @@
     --paper: oklch(0.975 0.004 250);
     --slate-tint: oklch(0.95 0.004 258);
     --shadow-card: 0 1px 2px oklch(0.4 0.05 258 / 0.04), 0 8px 24px -16px oklch(0.4 0.05 258 / 0.18);
+
+    /* Elevación: canvas (fondo del body) < card (tarjetas, blancas en claro). */
+    --canvas: oklch(0.985 0.004 250);
+    --card: #ffffff;
+  }
+
+  [data-theme="dark"] {
+    /* brand — más brillante para leerse en oscuro; texto blanco sigue pasando sobre brand sólido */
+    --brand: oklch(0.62 0.16 262);
+    --brand-deep: oklch(0.70 0.15 262); /* hover = más claro en oscuro */
+    --brand-tint: oklch(0.34 0.07 262); /* relleno profundo para chips/tabs/infoband */
+    --brand-ink: oklch(0.82 0.12 262); /* acento brillante sobre tint */
+
+    /* status — _tint = relleno translúcido profundo, _ink = acento brillante legible */
+    --jade: oklch(0.68 0.13 168);
+    --jade-tint: oklch(0.33 0.06 168);
+    --jade-ink: oklch(0.82 0.13 168);
+    --amber: oklch(0.80 0.13 78);
+    --amber-tint: oklch(0.35 0.06 65);
+    --amber-ink: oklch(0.86 0.13 80);
+    --red: oklch(0.64 0.20 25);
+    --red-tint: oklch(0.34 0.10 25);
+    --red-ink: oklch(0.83 0.15 25);
+
+    /* texto — casi-blanco hasta tenue, manteniendo WCAG AA sobre --canvas */
+    --ink: oklch(0.95 0.008 260);
+    --ink-soft: oklch(0.74 0.014 260);
+    --ink-faint: oklch(0.60 0.014 260);
+
+    /* estructura */
+    --line: oklch(0.34 0.012 260);
+    --line-soft: oklch(0.275 0.01 260);
+    --slate-tint: oklch(0.28 0.008 260);
+
+    /* SUPERFICIES — escalera de elevación: canvas (más profundo) < card < paper (hover) */
+    --canvas: oklch(0.165 0.012 262); /* fondo del body */
+    --card: oklch(0.215 0.014 261); /* tarjetas, sidebar, topbar */
+    --paper: oklch(0.255 0.012 260); /* hover / filas insertadas */
+
+    /* las sombras casi no se ven en oscuro — profundidad basada en negro */
+    --shadow-card: 0 1px 2px oklch(0 0 0 / 0.30), 0 18px 40px -30px oklch(0 0 0 / 0.70);
   }
 }
 
@@ -39,6 +80,6 @@
     @apply border-cos-line;
   }
   body {
-    @apply bg-cos-paper text-cos-ink;
+    @apply bg-cos-canvas text-cos-ink;
   }
 }

@@ -273,13 +273,13 @@ export function ChatPanel() {
       )}
 
       <div
-        className={`fixed right-0 top-0 z-50 flex h-dvh w-full flex-col border-l border-cos-line bg-white shadow-2xl transition-transform duration-300 sm:w-[440px] ${
+        className={`fixed right-0 top-0 z-50 flex h-dvh w-full flex-col border-l border-cos-line bg-cos-card shadow-2xl transition-transform duration-300 sm:w-[440px] ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
         style={vvBox ? { height: `${vvBox.height}px`, top: `${vvBox.top}px` } : undefined}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-cos-line bg-white px-3 py-3">
+        <div className="flex items-center justify-between border-b border-cos-line bg-cos-card px-3 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             {view === "history" ? (
               <button onClick={() => setView("chat")} className="rounded-control p-1.5 text-cos-ink-soft hover:bg-cos-paper" title="Volver">
@@ -425,7 +425,7 @@ export function ChatPanel() {
             </div>
 
             {/* Input */}
-            <div className="border-t border-cos-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+            <div className="border-t border-cos-line bg-cos-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
               <div className="flex items-end gap-2">
                 <textarea
                   ref={inputRef}
