@@ -32,6 +32,9 @@ export const GET = withAuthz(async (req: Request) => {
   const maxMonto = searchParams.get("maxMonto");
   const limit = Math.min(Number(searchParams.get("limit") ?? 50), 200);
   const onlyDebitos = searchParams.get("onlyDebitos") !== "false"; // default true
+  // count=1 → return just { count } (no rows). Used by the dashboard's
+  // "movimientos sin conciliar" pendiente, where only the badge matters.
+  const countOnly = searchParams.get("count") === "1";
 
   if (!companyId) {
     return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
@@ -50,6 +53,11 @@ export const GET = withAuthz(async (req: Request) => {
     if (minMonto) montoFilter.gte = Number(minMonto);
     if (maxMonto) montoFilter.lte = Number(maxMonto);
     where.monto = montoFilter;
+  }
+
+  if (countOnly) {
+    const count = await prisma.bankTransaction.count({ where });
+    return NextResponse.json({ count });
   }
 
   const txs = await prisma.bankTransaction.findMany({
