@@ -14,10 +14,16 @@ interface PayrollItemDetail {
   id: string;
   employeeId: string;
   sueldoBase: number;
+  horasExtra: number;
+  bonosPagoFijo: number;
+  bonosPagoVar: number;
+  vales: number;
+  otrasPercepciones: number;
   isrRetenido: number;
   imssObrero: number;
   imssPatronal: number;
   infonavit: number;
+  otrasDeducc: number;
   aguinaldo: number;
   primaVacacional: number;
   vacaciones: number;
@@ -27,6 +33,12 @@ interface PayrollItemDetail {
   netoAPagar: number;
   cfdiUuid: string | null;
   employee: { nombre: string; apellidoPaterno: string; rfc: string };
+}
+
+// Suma de percepciones extra (sobre el sueldo base): horas extra, bonos fijos y
+// variables, vales y otras. Es lo que convierte "ver un nombre" en "ver la nómina".
+function percepExtra(i: PayrollItemDetail): number {
+  return i.horasExtra + i.bonosPagoFijo + i.bonosPagoVar + i.vales + i.otrasPercepciones;
 }
 
 // ── PayrollRun types ─────────────────────────────────────────────────────────
@@ -432,6 +444,7 @@ export default function NominaPage() {
                                 <tr className="bg-cos-slate-tint border-b border-cos-line">
                                   <th className="text-left px-3 py-2 font-medium text-cos-ink-soft">Empleado</th>
                                   <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Sueldo</th>
+                                  <th className="text-right px-3 py-2 font-medium text-cos-ink-soft" title="Horas extra, bonos fijos y variables, vales y otras percepciones">Percep. extra</th>
                                   <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">ISR</th>
                                   <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">IMSS Obr.</th>
                                   <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">IMSS Pat.</th>
@@ -452,6 +465,18 @@ export default function NominaPage() {
                                       <span className="text-cos-ink-soft ml-1.5 font-mono">{item.employee.rfc}</span>
                                     </td>
                                     <td className="px-3 py-2 text-right font-mono"><Money value={item.sueldoBase} /></td>
+                                    <td className="px-3 py-2 text-right font-mono"
+                                      title={percepExtra(item) > 0
+                                        ? [
+                                            item.horasExtra > 0 && `Horas extra: ${formatCurrency(item.horasExtra)}`,
+                                            item.bonosPagoFijo > 0 && `Bonos fijos: ${formatCurrency(item.bonosPagoFijo)}`,
+                                            item.bonosPagoVar > 0 && `Bonos variables: ${formatCurrency(item.bonosPagoVar)}`,
+                                            item.vales > 0 && `Vales: ${formatCurrency(item.vales)}`,
+                                            item.otrasPercepciones > 0 && `Otras: ${formatCurrency(item.otrasPercepciones)}`,
+                                          ].filter(Boolean).join(" · ")
+                                        : undefined}>
+                                      {percepExtra(item) > 0 ? formatCurrency(percepExtra(item)) : "—"}
+                                    </td>
                                     <td className="px-3 py-2 text-right font-mono">{item.isrRetenido > 0 ? formatCurrency(item.isrRetenido) : "—"}</td>
                                     <td className="px-3 py-2 text-right font-mono">{item.imssObrero > 0 ? formatCurrency(item.imssObrero) : "—"}</td>
                                     <td className="px-3 py-2 text-right font-mono text-cos-ink-soft">{item.imssPatronal > 0 ? formatCurrency(item.imssPatronal) : "—"}</td>
@@ -476,6 +501,7 @@ export default function NominaPage() {
                                   <tr className="bg-cos-slate-tint font-semibold">
                                     <td className="px-3 py-2">Total ({runItems.length} empleados)</td>
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.sueldoBase, 0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + percepExtra(i), 0))}</td>
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.isrRetenido, 0))}</td>
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.imssObrero, 0))}</td>
                                     <td className="px-3 py-2 text-right font-mono text-cos-ink-soft">{formatCurrency(runItems.reduce((s, i) => s + i.imssPatronal, 0))}</td>
