@@ -88,35 +88,17 @@ export async function GET(req: Request) {
     }
   }
 
-  // Coeficiente de utilidad (Art. 14 LISR)
+  // Cifras históricas del ejercicio anterior (sólo informativas para el papel).
+  // El coeficiente crudo (ingresos−egresos)/ingresos se muestra como referencia,
+  // pero NO es el que se aplica ni el que se sugiere: ambos vienen del motor
+  // (computeTaxPosition) para no divergir de la pantalla de Impuestos.
   const prevIngresosTotal = prevYearIngresos._sum.subtotal ?? 0;
   const prevGastosTotal = prevYearGastos._sum.subtotal ?? 0;
   const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
   const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 
-  let coeficiente: number | null;
-  let coeficienteFuente: "manual" | "calculado" | "ninguno";
-  if (company?.coeficienteAnio === year && company?.coeficienteUtilidad != null) {
-    coeficiente = company.coeficienteUtilidad;
-    coeficienteFuente = "manual";
-  } else if (coeficienteCalculado != null) {
-    coeficiente = coeficienteCalculado;
-    coeficienteFuente = "calculado";
-  } else {
-    coeficiente = null;
-    coeficienteFuente = "ninguno";
-  }
-
   const ingresosAcumulados = monthlyTotals.reduce((s, m) => s + m.ingresos, 0);
-  const utilidadFiscal = coeficiente != null ? ingresosAcumulados * coeficiente : null;
   const TASA_ISR = 0.30;
-  const isrDelEjercicio = utilidadFiscal != null ? utilidadFiscal * TASA_ISR : null;
-
-  // Sum ISR already paid in prior months of this year (deduped per periodo across
-  // the dedicated ISR_PROVISIONAL rows and any legacy folded IVA_MENSUAL rows).
-  const isrPagadoAnterior = sumIsrPagar(prevDeclaraciones);
-  const isrDelMes =
-    isrDelEjercicio != null ? Math.max(0, isrDelEjercicio - isrPagadoAnterior) : null;
 
   const MONTHS_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -125,18 +107,32 @@ export async function GET(req: Request) {
   const resicoKind = detectResicoKind(company?.regimenFiscal ?? null, company?.rfc ?? null);
   const isResicoPf = resicoKind === "pf";
 
-  // PF act. empresarial (612, Art. 106), RESICO PF (Art. 113-E) y PF
-  // arrendamiento (606, Arts. 114-116) usan el motor real (computeTaxPosition)
-  // como única fuente de verdad — incluida la retención acreditada — para que
-  // el papel no diverja de la pantalla de Impuestos.
+  // El motor (computeTaxPosition) es la ÚNICA fuente de verdad del coeficiente y
+  // del cálculo del ISR para todos los regímenes:
+  //   · PF act. empresarial (612, Art. 106), RESICO PF (Art. 113-E), PF
+  //     arrendamiento (606, Arts. 114-116) y plataformas (625) — incluida la
+  //     retención acreditada.
+  //   · Persona Moral Art. 14 — el coeficiente APLICADO y el SUGERIDO siguen la
+  //     prioridad legal (manual → declaración anual → provisional capturado →
+  //     calculado de CFDIs) que define el motor, para que el papel no proponga
+  //     un coeficiente crudo equivocado.
   const esPf = (company?.rfc?.trim().length ?? 0) === 13;
   const esPfActEmpresarial = company?.regimenFiscal === "612" && esPf;
   const esPfArrendamiento = company?.regimenFiscal === "606" && esPf;
   const esPfPlataformas = company?.regimenFiscal === "625" && esPf;
-  const enginePos =
-    esPfActEmpresarial || esPfArrendamiento || esPfPlataformas || isResicoPf
-      ? await computeTaxPosition(companyId, year, month)
-      : null;
+  const enginePos = await computeTaxPosition(companyId, year, month);
+
+  // Coeficiente aplicado + sugerido tomados del motor (única fuente de verdad).
+  const coeficiente = enginePos.isr.coeficiente ?? null;
+  const coeficienteFuente = enginePos.isr.coeficienteFuente ?? "ninguno";
+  const coeficienteSugerido = enginePos.isr.coeficienteSugerido ?? null;
+  const coeficienteSugeridoFuente = enginePos.isr.coeficienteSugeridoFuente ?? "ninguno";
+
+  // Cifras del cálculo Art. 14 (PM) — también del motor para no recalcular.
+  const utilidadFiscal = enginePos.isr.utilidadFiscal ?? (coeficiente != null ? ingresosAcumulados * coeficiente : null);
+  const isrPagadoAnterior = enginePos.isr.isrPagadoAnterior ?? sumIsrPagar(prevDeclaraciones);
+  const isrDelEjercicio = enginePos.isr.isrDelEjercicio ?? null;
+  const isrDelMes = enginePos.isr.isrPagar ?? null;
 
   // For RESICO PF, ISR is on monthly ingresos (cobrados), not acumulado — tomado
   // del motor para coincidir con la pantalla. El rango/tasa de la tarifa se
@@ -179,6 +175,8 @@ export async function GET(req: Request) {
       coeficienteCalculado,
       coeficiente,
       coeficienteFuente,
+      coeficienteSugerido,
+      coeficienteSugeridoFuente,
     },
     acumulado: monthlyTotals.map((m) => ({
       mes: m.month,

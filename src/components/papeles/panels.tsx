@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Money } from "@/components/ui";
-import { Download, Loader2, FileText, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Download, Loader2, FileText, AlertTriangle, CheckCircle2, Sparkles, Check } from "lucide-react";
 
 const CARD = "rounded-card border border-cos-line bg-white shadow-card print:border-2";
 const THEAD = "bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink-faint";
@@ -287,7 +287,9 @@ interface IsrData {
   base: {
     prevYear: number; prevIngresosTotal: number; prevGastosTotal: number; prevUtilidad: number;
     coeficienteCalculado: number | null; coeficiente: number | null;
-    coeficienteFuente: "manual" | "calculado" | "ninguno";
+    coeficienteFuente: "manual" | "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
+    coeficienteSugerido: number | null;
+    coeficienteSugeridoFuente: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
   };
   acumulado: { mes: number; mesLabel: string; ingresos: number; facturas: number }[];
   calculo:
@@ -328,6 +330,9 @@ interface IsrData {
 export function IsrPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
   const [data, setData] = useState<IsrData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [savingCoef, setSavingCoef] = useState(false);
+  const [coefError, setCoefError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -335,7 +340,30 @@ export function IsrPanel({ companyId, year, month }: { companyId: string; year: 
       .then((r) => r.json())
       .then(setData)
       .finally(() => setLoading(false));
-  }, [companyId, year, month]);
+  }, [companyId, year, month, reloadKey]);
+
+  // Persiste el coeficiente como ajuste manual de la empresa (mismo endpoint que
+  // usa la pantalla de Impuestos) y recarga el papel para reflejarlo.
+  const saveCoeficiente = useCallback(async (coeficiente: number) => {
+    setSavingCoef(true);
+    setCoefError(null);
+    try {
+      const res = await fetch("/api/impuestos/coeficiente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, year, coeficiente }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? "No se pudo guardar el coeficiente");
+      }
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setCoefError(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setSavingCoef(false);
+    }
+  }, [companyId, year]);
 
   if (loading) return <Loading />;
   if (!data) return <Empty />;
@@ -487,29 +515,12 @@ export function IsrPanel({ companyId, year, month }: { companyId: string; year: 
         </>
       ) : (
         <>
-          <div className={`${CARD} p-5`}>
-            <h3 className="mb-3 text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Coeficiente de utilidad</h3>
-            <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-[14px]">
-              <div>
-                <dt className="text-[12px] text-cos-ink-faint">Ingresos {data.base.prevYear}</dt>
-                <dd><Money value={data.base.prevIngresosTotal} size={14} /></dd>
-              </div>
-              <div>
-                <dt className="text-[12px] text-cos-ink-faint">Gastos {data.base.prevYear}</dt>
-                <dd><Money value={data.base.prevGastosTotal} size={14} /></dd>
-              </div>
-              <div>
-                <dt className="text-[12px] text-cos-ink-faint">Utilidad {data.base.prevYear}</dt>
-                <dd><Money value={data.base.prevUtilidad} size={14} /></dd>
-              </div>
-              <div>
-                <dt className="text-[12px] text-cos-ink-faint">Coeficiente aplicado ({data.base.coeficienteFuente})</dt>
-                <dd className="font-mono text-[14px] font-medium text-cos-ink">
-                  {data.base.coeficiente != null ? (data.base.coeficiente * 100).toFixed(4) + "%" : "—"}
-                </dd>
-              </div>
-            </dl>
-          </div>
+          <CoeficienteCard
+            base={data.base}
+            saving={savingCoef}
+            error={coefError}
+            onSave={saveCoeficiente}
+          />
 
           <div className={`${CARD} overflow-hidden`}>
             <div className="border-b border-cos-line px-4 py-3">
@@ -556,6 +567,175 @@ export function IsrPanel({ companyId, year, month }: { companyId: string; year: 
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Etiqueta humana de la fuente del coeficiente (aplicado o sugerido). Deja claro
+// cuándo el valor es la cifra autoritativa de la declaración anual y cuándo sólo
+// es un estimado crudo de CFDIs.
+type CoefFuente = "manual" | "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
+
+function fuenteCoeficienteLabel(fuente: CoefFuente, prevYear: number): string {
+  switch (fuente) {
+    case "manual":
+      return "ajuste manual";
+    case "declaracion_anual":
+      return `de declaración anual ${prevYear}`;
+    case "provisional_previo":
+      return "de provisional capturado";
+    case "calculado":
+      return `calculado de CFDIs ${prevYear} (estimado)`;
+    default:
+      return "sin determinar";
+  }
+}
+
+// Solo el cálculo crudo de CFDIs es un estimado no autoritativo; el resto prov
+// de fuentes oficiales (anual, provisional capturado) o de un ajuste manual.
+function esFuenteEstimada(fuente: CoefFuente): boolean {
+  return fuente === "calculado";
+}
+
+function CoeficienteCard({
+  base,
+  saving,
+  error,
+  onSave,
+}: {
+  base: IsrData["base"];
+  saving: boolean;
+  error: string | null;
+  onSave: (coeficiente: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState("");
+
+  const aplicado = base.coeficiente;
+  const aplicadoFuente = base.coeficienteFuente;
+  const sugerido = base.coeficienteSugerido;
+  const sugeridoFuente = base.coeficienteSugeridoFuente;
+
+  // Sugerir adoptar el coeficiente detectado por el sistema sólo cuando difiere
+  // del aplicado (evita ofrecer un cambio que no mueve nada).
+  const ofrecerSugerido =
+    sugerido != null &&
+    (aplicado == null || Math.abs(sugerido - aplicado) > 0.0005);
+
+  const aplicadoEstimado = esFuenteEstimada(aplicadoFuente);
+
+  return (
+    <div className={`${CARD} p-5`}>
+      <h3 className="mb-3 text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Coeficiente de utilidad</h3>
+      <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-[14px]">
+        <div>
+          <dt className="text-[12px] text-cos-ink-faint">Ingresos {base.prevYear}</dt>
+          <dd><Money value={base.prevIngresosTotal} size={14} /></dd>
+        </div>
+        <div>
+          <dt className="text-[12px] text-cos-ink-faint">Gastos {base.prevYear}</dt>
+          <dd><Money value={base.prevGastosTotal} size={14} /></dd>
+        </div>
+        <div>
+          <dt className="text-[12px] text-cos-ink-faint">Utilidad {base.prevYear}</dt>
+          <dd><Money value={base.prevUtilidad} size={14} /></dd>
+        </div>
+        <div>
+          <dt className="text-[12px] text-cos-ink-faint">Coeficiente aplicado</dt>
+          <dd className="flex items-center gap-2">
+            <span className="font-mono text-[14px] font-medium text-cos-ink">
+              {aplicado != null ? (aplicado * 100).toFixed(4) + "%" : "—"}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                aplicadoEstimado ? "bg-cos-amber-tint text-cos-amber-ink" : "bg-cos-brand-tint text-cos-brand-ink"
+              }`}
+            >
+              {fuenteCoeficienteLabel(aplicadoFuente, base.prevYear)}
+            </span>
+          </dd>
+        </div>
+      </dl>
+
+      {aplicadoEstimado && (
+        <p className="mt-3 flex items-start gap-1.5 text-[12px] text-cos-amber-ink">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            El coeficiente aplicado es un estimado crudo de los CFDIs del ejercicio anterior
+            (ingresos − egresos). Verifica contra la utilidad fiscal de tu declaración anual
+            antes de enterar el pago provisional.
+          </span>
+        </p>
+      )}
+
+      {ofrecerSugerido && sugerido != null && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-card border border-cos-line-soft bg-cos-paper px-3 py-2 text-[13px]">
+          <Sparkles className="h-3.5 w-3.5 shrink-0 text-cos-brand-ink" />
+          <span className="text-cos-ink-soft">
+            Coeficiente sugerido{" "}
+            <strong className="font-mono text-cos-ink">{(sugerido * 100).toFixed(4)}%</strong>{" "}
+            <span className="text-cos-ink-faint">({fuenteCoeficienteLabel(sugeridoFuente, base.prevYear)})</span>
+          </span>
+          <button
+            onClick={() => onSave(+sugerido.toFixed(4))}
+            disabled={saving}
+            className="ml-auto inline-flex items-center gap-1 rounded-md border border-cos-brand/40 px-2 py-0.5 text-[12px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            Usar sugerido {(sugerido * 100).toFixed(2)}%
+          </button>
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px]">
+        {!editing ? (
+          <button
+            onClick={() => {
+              setVal(aplicado != null ? (aplicado * 100).toFixed(4) : "");
+              setEditing(true);
+            }}
+            className="text-[12px] font-medium text-cos-brand-ink hover:underline"
+          >
+            Editar manualmente
+          </button>
+        ) : (
+          <>
+            <div className="inline-flex items-center gap-1">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.0001"
+                value={val}
+                placeholder="0.0000"
+                onChange={(e) => setVal(e.target.value)}
+                className="w-28 rounded-md border border-cos-line px-2 py-1 text-right text-[13px] focus:outline-none focus:ring-1 focus:ring-cos-brand"
+              />
+              <span className="text-cos-ink-soft">%</span>
+            </div>
+            <button
+              onClick={() => {
+                const pct = parseFloat(val);
+                if (!Number.isFinite(pct) || pct < 0 || pct > 100) return;
+                onSave(+(pct / 100).toFixed(6));
+                setEditing(false);
+              }}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded-md bg-cos-brand px-2.5 py-1 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+              Guardar
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="text-[12px] font-medium text-cos-ink-soft hover:text-cos-ink"
+            >
+              Cancelar
+            </button>
+          </>
+        )}
+        {error && <span className="text-[12px] text-cos-red-ink">{error}</span>}
+      </div>
     </div>
   );
 }
