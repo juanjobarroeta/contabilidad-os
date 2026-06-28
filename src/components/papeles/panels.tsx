@@ -290,12 +290,14 @@ interface IsrData {
     coeficienteFuente: "manual" | "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
     coeficienteSugerido: number | null;
     coeficienteSugeridoFuente: "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
+    perdidaFiscalPendiente?: number | null;
   };
   acumulado: { mes: number; mesLabel: string; ingresos: number; facturas: number }[];
   calculo:
     | {
         tipo: "art14";
         ingresosAcumulados: number; coeficiente: number | null; utilidadFiscal: number | null;
+        baseGravable?: number | null; perdidaFiscalAplicada?: number | null;
         tasa: number; isrDelEjercicio: number | null; isrPagadoAnterior: number; isrDelMes: number | null;
       }
     | {
@@ -333,6 +335,8 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
   const [reloadKey, setReloadKey] = useState(0);
   const [savingCoef, setSavingCoef] = useState(false);
   const [coefError, setCoefError] = useState<string | null>(null);
+  const [savingPerdida, setSavingPerdida] = useState(false);
+  const [perdidaError, setPerdidaError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -365,6 +369,29 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
       setSavingCoef(false);
     }
   }, [companyId, year, onCoefSaved]);
+
+  // Persiste el remanente de pérdidas fiscales pendiente de aplicar (mismo
+  // endpoint que la pantalla de Impuestos) y recarga el papel para reflejarlo.
+  const savePerdida = useCallback(async (perdida: number) => {
+    setSavingPerdida(true);
+    setPerdidaError(null);
+    try {
+      const res = await fetch("/api/impuestos/perdida", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, year, perdida }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? "No se pudo guardar la pérdida");
+      }
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setPerdidaError(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setSavingPerdida(false);
+    }
+  }, [companyId, year]);
 
   if (loading) return <Loading />;
   if (!data) return <Empty />;
@@ -523,6 +550,13 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
             onSave={saveCoeficiente}
           />
 
+          <PerdidaCard
+            base={data.base}
+            saving={savingPerdida}
+            error={perdidaError}
+            onSave={savePerdida}
+          />
+
           <div className={`${CARD} overflow-hidden`}>
             <div className="border-b border-cos-line px-4 py-3">
               <h3 className="text-[14px] font-semibold text-cos-ink">Ingresos acumulados del ejercicio</h3>
@@ -558,6 +592,12 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
               <Line label="Ingresos acumulados del ejercicio" value={data.calculo.ingresosAcumulados} />
               <Line label={`× Coeficiente de utilidad (${data.calculo.coeficiente != null ? (data.calculo.coeficiente * 100).toFixed(4) + "%" : "—"})`} value={null} />
               <Line label="= Utilidad fiscal estimada" value={data.calculo.utilidadFiscal} strong />
+              {data.calculo.perdidaFiscalAplicada != null && data.calculo.perdidaFiscalAplicada > 0 && (
+                <>
+                  <Line label="− Pérdidas fiscales de ejercicios anteriores aplicadas" value={-data.calculo.perdidaFiscalAplicada} />
+                  <Line label="= Base gravable" value={data.calculo.baseGravable ?? null} strong />
+                </>
+              )}
               <Line label={`× Tasa ISR (${(data.calculo.tasa * 100).toFixed(0)}%)`} value={null} />
               <Line label="= ISR del ejercicio acumulado" value={data.calculo.isrDelEjercicio} strong />
               <Line label="− ISR pagado en meses anteriores" value={data.calculo.isrPagadoAnterior > 0 ? -data.calculo.isrPagadoAnterior : 0} />
@@ -719,6 +759,92 @@ function CoeficienteCard({
                 const pct = parseFloat(val);
                 if (!Number.isFinite(pct) || pct < 0 || pct > 100) return;
                 onSave(+(pct / 100).toFixed(6));
+                setEditing(false);
+              }}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded-md bg-cos-brand px-2.5 py-1 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+              Guardar
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="text-[12px] font-medium text-cos-ink-soft hover:text-cos-ink"
+            >
+              Cancelar
+            </button>
+          </>
+        )}
+        {error && <span className="text-[12px] text-cos-red-ink">{error}</span>}
+      </div>
+    </div>
+  );
+}
+
+// Remanente de pérdidas fiscales de ejercicios anteriores pendiente de aplicar.
+// Editable inline; persiste vía el mismo endpoint que la pantalla de Impuestos y
+// se amortiza contra la utilidad fiscal estimada antes de aplicar el 30%.
+function PerdidaCard({
+  base,
+  saving,
+  error,
+  onSave,
+}: {
+  base: IsrData["base"];
+  saving: boolean;
+  error: string | null;
+  onSave: (perdida: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState("");
+
+  const pendiente = base.perdidaFiscalPendiente ?? null;
+
+  return (
+    <div className={`${CARD} p-5`}>
+      <h3 className="mb-3 text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Pérdidas fiscales pendientes</h3>
+      <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-[14px]">
+        <div>
+          <dt className="text-[12px] text-cos-ink-faint">Pérdida pendiente de aplicar</dt>
+          <dd>{pendiente != null ? <Money value={pendiente} size={14} /> : <Dash />}</dd>
+        </div>
+      </dl>
+
+      <p className="mt-3 text-[12px] text-cos-ink-soft">
+        Remanente de pérdidas fiscales de ejercicios anteriores pendiente de aplicar (actualizado).
+        Se amortiza contra la utilidad fiscal estimada antes del 30%.
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px]">
+        {!editing ? (
+          <button
+            onClick={() => {
+              setVal(pendiente != null ? String(pendiente) : "");
+              setEditing(true);
+            }}
+            className="text-[12px] font-medium text-cos-brand-ink hover:underline"
+          >
+            Editar manualmente
+          </button>
+        ) : (
+          <>
+            <div className="inline-flex items-center gap-1">
+              <span className="text-cos-ink-soft">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={val}
+                placeholder="0.00"
+                onChange={(e) => setVal(e.target.value)}
+                className="w-36 rounded-md border border-cos-line px-2 py-1 text-right text-[13px] focus:outline-none focus:ring-1 focus:ring-cos-brand"
+              />
+            </div>
+            <button
+              onClick={() => {
+                const monto = parseFloat(val === "" ? "0" : val);
+                if (!Number.isFinite(monto) || monto < 0) return;
+                onSave(+monto.toFixed(2));
                 setEditing(false);
               }}
               disabled={saving}

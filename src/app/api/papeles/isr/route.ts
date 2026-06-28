@@ -177,6 +177,7 @@ export async function GET(req: Request) {
       coeficienteFuente,
       coeficienteSugerido,
       coeficienteSugeridoFuente,
+      perdidaFiscalPendiente: enginePos.isr.perdidaFiscalPendiente ?? null,
     },
     acumulado: monthlyTotals.map((m) => ({
       mes: m.month,
@@ -253,6 +254,8 @@ export async function GET(req: Request) {
           ingresosAcumulados,
           coeficiente,
           utilidadFiscal,
+          baseGravable: enginePos.isr.baseGravable ?? null,
+          perdidaFiscalAplicada: enginePos.isr.perdidaFiscalAplicada ?? null,
           tasa: TASA_ISR,
           isrDelEjercicio,
           isrPagadoAnterior,
