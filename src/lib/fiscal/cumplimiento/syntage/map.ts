@@ -98,6 +98,59 @@ export function mapTaxReturnAnual(tr: Json): DeclaracionAnualSyntage | null {
   };
 }
 
+/** Columnas de coeficiente/pérdida que se persisten en una DECLARACION_ANUAL a
+ *  partir del acuse parseado. */
+export interface CamposAnualAcuse {
+  /** Ingresos NOMINALES — denominador del coeficiente (Art. 14). */
+  isrIngresos: number | null;
+  /** Utilidad fiscal del ejercicio — numerador del coeficiente. */
+  isrBaseGravable: number | null;
+  /** Coeficiente de utilidad derivado (utilidad ÷ ingresos nominales), 4 decimales. */
+  isrCoeficienteUtilidad: number | null;
+  /** Remanente de pérdidas pendiente de aplicar a futuro (actualizado). */
+  isrPerdidaPendiente: number | null;
+}
+
+const round4 = (n: number) => Math.round(n * 10000) / 10000;
+
+/**
+ * Deriva, de un acuse ANUAL parseado, las columnas que alimentan el coeficiente
+ * de utilidad (Art. 14) y la amortización de pérdidas en los pagos provisionales
+ * de PM. Función pura (sin DB/IA) — toda la sutileza fiscal vive aquí:
+ *
+ *  · El coeficiente usa INGRESOS NOMINALES como denominador (no los acumulables,
+ *    que incluyen el ajuste anual por inflación) y la UTILIDAD FISCAL del
+ *    ejercicio como numerador (no el resultado fiscal). Sólo se escribe el par
+ *    ingresos/utilidad cuando ambos existen y la utilidad es > 0; en un ejercicio
+ *    con pérdida se dejan en null para que el motor use el último año con utilidad.
+ *  · La pérdida pendiente es el REMANENTE a aplicar a ejercicios futuros, no lo
+ *    aplicado este año.
+ */
+export function camposAnualDesdeAcuse(a: {
+  ingresosNominales: number | null;
+  utilidadFiscal: number | null;
+  perdidaFiscalRemanente: number | null;
+  perdidasPendientes: number | null;
+  coeficienteUtilidad: number | null;
+}): CamposAnualAcuse {
+  const ingresos = a.ingresosNominales;
+  const utilidad = a.utilidadFiscal;
+  const tieneCoef = ingresos != null && ingresos > 0 && utilidad != null && utilidad > 0;
+
+  const isrIngresos = tieneCoef ? ingresos : null;
+  const isrBaseGravable = tieneCoef ? utilidad : null;
+  const isrCoeficienteUtilidad = tieneCoef
+    ? round4(utilidad! / ingresos!)
+    : a.coeficienteUtilidad != null && a.coeficienteUtilidad > 0
+      ? round4(a.coeficienteUtilidad)
+      : null;
+
+  const remanente = a.perdidaFiscalRemanente ?? a.perdidasPendientes;
+  const isrPerdidaPendiente = remanente != null && remanente > 0 ? round4(remanente) : null;
+
+  return { isrIngresos, isrBaseGravable, isrCoeficienteUtilidad, isrPerdidaPendiente };
+}
+
 /** Recurso TaxStatus → CsfResult (CSF). */
 export function mapTaxStatus(ts: Json, fetchedAt = new Date().toISOString()): CsfResult {
   const address = (ts.address as Json) ?? {};

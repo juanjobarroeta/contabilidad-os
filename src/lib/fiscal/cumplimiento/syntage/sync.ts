@@ -9,8 +9,9 @@
 import { prisma } from "@/lib/prisma";
 import { persistComplianceResult } from "../persist";
 import { SyntageClient } from "./client";
-import { mapTaxCompliance, mapTaxStatus, mapTaxReturnAnual } from "./map";
+import { mapTaxCompliance, mapTaxStatus, mapTaxReturnAnual, camposAnualDesdeAcuse } from "./map";
 import { fileRefDe } from "./declaraciones-backfill";
+import { parseSatDocument } from "@/lib/fiscal/acuse/parse";
 
 export interface SyncResult {
   companyId: string;
@@ -33,6 +34,40 @@ export interface SyncResult {
  * importes propios; crear filas mensuales sin importe ocultaría la captura real
  * (subvaluando el arrastre de pagos provisionales).
  */
+/**
+ * Parsea el acuse ANUAL (PDF) con Claude y rellena en la DECLARACION_ANUAL las
+ * columnas del coeficiente de utilidad (ingresos nominales ÷ utilidad fiscal) y
+ * el remanente de pérdidas pendiente —que el motor usa como respaldo del valor
+ * manual de la empresa (computeTaxPosition)—. Best-effort y gap-fill: se llama
+ * sólo cuando esas columnas están vacías, así cada anual se parsea una vez (no
+ * en cada corrida del sync). No toca el campo manual de la empresa.
+ */
+async function enriquecerAnualDesdePdf(declId: string, companyId: string, pdf: Uint8Array): Promise<void> {
+  let parsed;
+  try {
+    parsed = await parseSatDocument(Buffer.from(pdf).toString("base64"), {
+      companyId,
+      subtipo: "declaraciones.anual.coeficiente",
+    });
+  } catch {
+    return; // si Claude falla, no rompemos el sync; se reintenta la próxima corrida
+  }
+  if (parsed.type !== "ACUSE_ANUAL" || !parsed.acuseAnual) return;
+  const c = camposAnualDesdeAcuse(parsed.acuseAnual);
+  if (c.isrIngresos == null && c.isrBaseGravable == null && c.isrCoeficienteUtilidad == null && c.isrPerdidaPendiente == null) {
+    return; // nada aprovechable extraído
+  }
+  await prisma.taxDeclaration.update({
+    where: { id: declId },
+    data: {
+      isrIngresos: c.isrIngresos,
+      isrBaseGravable: c.isrBaseGravable,
+      isrCoeficienteUtilidad: c.isrCoeficienteUtilidad,
+      isrPerdidaPendiente: c.isrPerdidaPendiente,
+    },
+  });
+}
+
 async function persistDeclaracionesAnuales(companyId: string, entityId: string, client: SyntageClient): Promise<number> {
   const returns = await client.getEntityTaxReturns(entityId);
   let creadas = 0;
@@ -42,9 +77,20 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
     const periodo = String(anual.ejercicio);
     const existing = await prisma.taxDeclaration.findFirst({
       where: { companyId, tipo: "DECLARACION_ANUAL", periodo },
-      select: { id: true },
+      select: { id: true, isrIngresos: true, isrCoeficienteUtilidad: true, isrPerdidaPendiente: true, acusePdf: true },
     });
-    if (existing) continue; // no sobreescribir lo capturado/calculado
+
+    if (existing) {
+      // Gap-fill: si la anual ya existe pero aún no se le extrajo el coeficiente
+      // ni la pérdida (y tenemos el PDF), parsearla una sola vez. No sobreescribe
+      // importes capturados/calculados.
+      const sinEnriquecer =
+        existing.isrIngresos == null && existing.isrCoeficienteUtilidad == null && existing.isrPerdidaPendiente == null;
+      if (sinEnriquecer && existing.acusePdf) {
+        await enriquecerAnualDesdePdf(existing.id, companyId, new Uint8Array(existing.acusePdf));
+      }
+      continue;
+    }
 
     // Acuse PDF (sólo al crear, para que sea descargable). Best-effort.
     let acusePdf: Uint8Array<ArrayBuffer> | null = null;
@@ -57,7 +103,7 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
       }
     }
 
-    await prisma.taxDeclaration.create({
+    const creada = await prisma.taxDeclaration.create({
       data: {
         companyId,
         tipo: "DECLARACION_ANUAL",
@@ -69,7 +115,9 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
         fechaPresentacion: anual.fechaPresentacion ? new Date(anual.fechaPresentacion) : null,
         ...(acusePdf ? { acusePdf, acusePdfNombre: `acuse-anual-${periodo}.pdf` } : {}),
       },
+      select: { id: true },
     });
+    if (acusePdf) await enriquecerAnualDesdePdf(creada.id, companyId, acusePdf);
     creadas++;
   }
   return creadas;

@@ -1107,6 +1107,11 @@ model TaxDeclaration {
   isrTasa                Float?
   isrPagar               Float?
   isrCoeficienteUtilidad Float? // Coeficiente asignado por el SAT del ejercicio anterior
+  // DECLARACION_ANUAL: remanente de pérdidas fiscales de ejercicios anteriores
+  // pendiente de aplicar a ejercicios FUTUROS (actualizado), extraído del acuse.
+  // Lo amortiza el pago provisional de PM (Art. 14) como respaldo del valor
+  // manual de la empresa — ver computeTaxPosition.
+  isrPerdidaPendiente    Float?
   // Saldo a favor de ISR generado en el periodo (RESICO PF: retención 1.25% de
   // PM, Art. 113-J, que excedió el ISR definitivo del mes). Se arrastra al
   // periodo siguiente dentro del mismo ejercicio — el excedente de diciembre se
