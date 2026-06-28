@@ -396,7 +396,7 @@ export async function computeTaxPosition(
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
       orderBy: { periodo: "desc" },
-      select: { isrIngresos: true, isrBaseGravable: true },
+      select: { isrIngresos: true, isrBaseGravable: true, isrPerdidaPendiente: true },
     }),
     // Pérdidas fiscales pendientes (Art. 57) — sólo las consume el provisional PF
     // de actividad empresarial (Art. 106); el ledger lo cierra la anual, aquí es
@@ -705,9 +705,17 @@ export async function computeTaxPosition(
 
     // Pérdidas fiscales de ejercicios anteriores pendientes de aplicar (Art. 14):
     // el remanente ACTUALIZADO se amortiza contra la utilidad fiscal estimada
-    // antes de aplicar la tasa del 30%.
-    const perdidaFiscalPendiente = company?.perdidaFiscalPendiente ?? null;
-    const perdidaFiscalAnio = company?.perdidaFiscalAnio ?? null;
+    // antes de aplicar la tasa del 30%. Prioridad (igual que el coeficiente): el
+    // valor manual de la empresa gana; si no hay, se usa el remanente extraído de
+    // la declaración anual del ejercicio anterior (isrPerdidaPendiente), que
+    // corresponde justo al año de los provisionales en curso.
+    const usaPerdidaManual = company?.perdidaFiscalPendiente != null;
+    const perdidaFiscalPendiente = usaPerdidaManual
+      ? company!.perdidaFiscalPendiente
+      : (annualDecl?.isrPerdidaPendiente ?? null);
+    const perdidaFiscalAnio = usaPerdidaManual
+      ? (company?.perdidaFiscalAnio ?? null)
+      : (annualDecl?.isrPerdidaPendiente != null ? prevYear : null);
 
     let utilidadFiscal: number | null = null;
     let baseGravable: number | null = null;

@@ -62,6 +62,10 @@ REGLAS CRÍTICAS:
 4. Devuelve los campos correspondientes al type detectado. Los demás quedan como null o arrays vacíos.
 5. Fechas en formato ISO YYYY-MM-DD. Montos como números (no strings, sin símbolos).
 6. Para CSF: en la sección "Regímenes" del documento los regímenes aparecen por su NOMBRE, no por su clave numérica. Detecta TODOS los que estén listados (pueden ser varios) y asigna a cada uno su clave de 3 dígitos usando el catálogo de abajo. Devuélvelos en "regimenes" como array de { code, label, since } donde "code" es la clave de 3 dígitos y "label" el nombre. Si hay más de uno, deja "regimenFiscal" (el principal) en null para que el usuario elija; NO inventes uno.
+7. Para ACUSE_ANUAL (declaración anual de Persona Moral), distingue con cuidado dos pares de cifras que suelen confundirse:
+   - "ingresosNominales" = el renglón "INGRESOS NOMINALES" (base para el coeficiente de utilidad del Art. 14). NO es lo mismo que "ingresosAcumulables" (= "TOTAL DE INGRESOS ACUMULABLES", que incluye el ajuste anual por inflación acumulable). Extrae AMBOS por separado; si sólo aparece uno, deja el otro en null.
+   - "utilidadFiscal" = "UTILIDAD FISCAL DEL EJERCICIO" (antes de restar pérdidas de ejercicios anteriores), NO el "RESULTADO FISCAL".
+   - "perdidaFiscalRemanente" = el "REMANENTE" de pérdidas fiscales de ejercicios anteriores que queda PENDIENTE de aplicar a ejercicios FUTUROS (la columna "Remanente" de la tabla de pérdidas, ya actualizada). NO es el monto aplicado en este ejercicio ni las "PÉRDIDAS FISCALES DE EJERCICIOS ANTERIORES" restadas este año. "perdidasPendientes" puede dejarse igual al remanente si el documento no las separa.
 
 CATÁLOGO DE RÉGIMENES (clave — nombre). Usa exactamente estas claves:
 ${REGIMEN_CATALOG}
@@ -106,10 +110,12 @@ SCHEMA DE RESPUESTA (devuelve exactamente estos campos, null cuando no apliquen)
     "ejercicio": number | null,
     "rfc": string | null,
     "tipo": "NORMAL" | "COMPLEMENTARIA" | null,
+    "ingresosNominales": number | null,
     "ingresosAcumulables": number | null,
     "deduccionesAutorizadas": number | null,
     "utilidadFiscal": number | null,
     "perdidasPendientes": number | null,
+    "perdidaFiscalRemanente": number | null,
     "resultadoFiscal": number | null,
     "isrCausado": number | null,
     "isrAcreditable": number | null,
@@ -187,11 +193,35 @@ export interface AcuseMensual {
   fechaPresentacion: string | null;
 }
 
+export interface AcuseAnual {
+  ejercicio: number | null;
+  rfc: string | null;
+  tipo: "NORMAL" | "COMPLEMENTARIA" | null;
+  /** "INGRESOS NOMINALES" — denominador del coeficiente de utilidad (Art. 14). */
+  ingresosNominales: number | null;
+  /** "TOTAL DE INGRESOS ACUMULABLES" (incluye ajuste anual por inflación). */
+  ingresosAcumulables: number | null;
+  deduccionesAutorizadas: number | null;
+  /** "UTILIDAD FISCAL DEL EJERCICIO" — numerador del coeficiente (Art. 14). */
+  utilidadFiscal: number | null;
+  perdidasPendientes: number | null;
+  /** "Remanente" de pérdidas pendiente de aplicar a ejercicios FUTUROS (actualizado). */
+  perdidaFiscalRemanente: number | null;
+  resultadoFiscal: number | null;
+  isrCausado: number | null;
+  isrAcreditable: number | null;
+  isrAPagar: number | null;
+  isrAFavor: number | null;
+  coeficienteUtilidad: number | null;
+  lineaCaptura: string | null;
+  fechaPresentacion: string | null;
+}
+
 export interface ParsedSatDocument {
   type: "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
   csf: CsfData | null;
   imss: Record<string, unknown> | null;
-  acuseAnual: Record<string, unknown> | null;
+  acuseAnual: AcuseAnual | null;
   acuseMensual: AcuseMensual | null;
   confidenceNotes: string | null;
 }
