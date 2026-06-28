@@ -37,3 +37,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local prisma engines (downloaded out-of-band in restricted sandboxes)
+/.engines

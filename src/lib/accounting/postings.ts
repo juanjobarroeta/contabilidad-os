@@ -37,6 +37,9 @@ const DEFAULT_ACCOUNTS: Array<{
   { cuentaSAT: "5101", nombre: "Costo de obra",         tipo: "COSTO"   },
   { cuentaSAT: "5102", nombre: "Mano de obra directa",  tipo: "COSTO"   },
   { cuentaSAT: "2103", nombre: "Anticipos de clientes", tipo: "PASIVO"  },
+  // Padel module accounts (auto-created on first use per company).
+  { cuentaSAT: "1100", nombre: "Caja",                  tipo: "ACTIVO"  },
+  { cuentaSAT: "4150", nombre: "Ingresos por renta de cancha", tipo: "INGRESO" },
 ];
 
 /**
@@ -333,5 +336,123 @@ export async function postAnticipoAmortizacion(
     referenciaTipo: "ANTICIPO_AMORTIZACION",
     cargo: { cuentaSAT: "2103" },
     abono: { cuentaSAT: "1103" },
+  });
+}
+
+// ─── Padel-specific postings ─────────────────────────────────────────────────
+//
+// Court-rental (and academy/shop in later milestones) revenue collected at the
+// front desk or via the member app. Account mapping by forma de pago:
+//   EFECTIVO       → DR 1100 Caja
+//   TRANSFERENCIA  → DR 1101 Bancos
+//   TARJETA        → DR 1101 Bancos
+//   CUENTA         → DR 1103 Cuentas por cobrar (on account)
+// Credit legs: CR 4150 Ingresos por renta de cancha (subtotal) + CR 2102 IVA
+// trasladado (iva, when > 0). CORTESIA (comp) posts nothing — the caller skips.
+
+export type PadelFormaPago = "EFECTIVO" | "TRANSFERENCIA" | "TARJETA" | "CUENTA";
+
+function cargoAccountForFormaPago(formaPago: PadelFormaPago): string {
+  switch (formaPago) {
+    case "EFECTIVO":
+      return "1100"; // Caja
+    case "TRANSFERENCIA":
+    case "TARJETA":
+      return "1101"; // Bancos
+    case "CUENTA":
+      return "1103"; // Cuentas por cobrar
+  }
+}
+
+/**
+ * Court-rental revenue collected.
+ *   DR <cargo by formaPago>   (= subtotal + iva)
+ *   CR 4150 Ingresos por renta de cancha   (= subtotal)
+ *   CR 2102 IVA trasladado                 (= iva, only when iva > 0)
+ *
+ * When iva is 0 this is a balanced 2-leg pair (via postBalancedEntry); when iva
+ * is present it's a 3-leg posting emitted directly (mirrors postEstimacionTimbrada).
+ */
+export async function postCourtRentalRevenue(
+  tx: Tx,
+  args: {
+    companyId: string;
+    reservationId: string;
+    descripcion: string; // e.g. "Renta Cancha 1 — 2026-06-24 18:00"
+    subtotal: number;
+    iva: number;
+    formaPago: PadelFormaPago;
+    fecha: Date;
+  }
+): Promise<void> {
+  const cargoSAT = cargoAccountForFormaPago(args.formaPago);
+
+  if (!(args.iva > 0)) {
+    await postBalancedEntry(tx, {
+      companyId: args.companyId,
+      fecha: args.fecha,
+      descripcion: args.descripcion,
+      monto: args.subtotal,
+      fuente: "PADEL",
+      referencia: args.reservationId,
+      referenciaTipo: "RESERVATION_CHARGE",
+      cargo: { cuentaSAT: cargoSAT },
+      abono: { cuentaSAT: "4150" },
+    });
+    return;
+  }
+
+  const total = args.subtotal + args.iva;
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
+
+  const [cargo, ingresos, iva] = await Promise.all([
+    getOrCreateAccount(tx, args.companyId, cargoSAT),
+    getOrCreateAccount(tx, args.companyId, "4150"),
+    getOrCreateAccount(tx, args.companyId, "2102"),
+  ]);
+
+  await tx.accountingEntry.createMany({
+    data: [
+      {
+        companyId: args.companyId,
+        chartAccountId: cargo.id,
+        fecha: args.fecha,
+        year,
+        month,
+        descripcion: args.descripcion,
+        referencia: args.reservationId,
+        referenciaTipo: "RESERVATION_CHARGE",
+        monto: total,
+        tipo: "CARGO",
+        fuente: "PADEL",
+      },
+      {
+        companyId: args.companyId,
+        chartAccountId: ingresos.id,
+        fecha: args.fecha,
+        year,
+        month,
+        descripcion: args.descripcion,
+        referencia: args.reservationId,
+        referenciaTipo: "RESERVATION_CHARGE",
+        monto: args.subtotal,
+        tipo: "ABONO",
+        fuente: "PADEL",
+      },
+      {
+        companyId: args.companyId,
+        chartAccountId: iva.id,
+        fecha: args.fecha,
+        year,
+        month,
+        descripcion: args.descripcion,
+        referencia: args.reservationId,
+        referenciaTipo: "RESERVATION_CHARGE",
+        monto: args.iva,
+        tipo: "ABONO",
+        fuente: "PADEL",
+      },
+    ],
   });
 }
