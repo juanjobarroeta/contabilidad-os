@@ -46,6 +46,13 @@ export interface Hallazgo {
   mensaje: string;
   /** ids de los CFDIs involucrados. */
   referencias: string[];
+  /**
+   * Identidad estable del hallazgo (override del dedupe). Por defecto la identidad
+   * se deriva de `referencias`; los checks AGREGADOS (un solo hallazgo por empresa
+   * que resume N CFDIs) fijan un `dedupeRef` constante para que el conteo cambie
+   * sin crear/cerrar el hallazgo —preservando posponer/resolver del usuario.
+   */
+  dedupeRef?: string;
   fundamento: Fundamento;
   sugerencia: string;
 }

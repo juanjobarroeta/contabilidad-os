@@ -27,9 +27,11 @@ import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
 import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
 
-/** Stable identity for a finding so re-runs upsert in place. */
-export function dedupeKey(h: Pick<Hallazgo, "checkClave" | "referencias">): string {
-  return `${h.checkClave}|${[...h.referencias].sort().join(",")}`;
+/** Stable identity for a finding so re-runs upsert in place. Los checks agregados
+ *  fijan `dedupeRef` (identidad estable por empresa); el resto se identifica por
+ *  el conjunto de CFDIs referenciados. */
+export function dedupeKey(h: Pick<Hallazgo, "checkClave" | "referencias" | "dedupeRef">): string {
+  return `${h.checkClave}|${h.dedupeRef ?? [...h.referencias].sort().join(",")}`;
 }
 
 /**

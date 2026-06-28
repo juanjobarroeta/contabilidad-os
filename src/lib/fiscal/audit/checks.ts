@@ -6,17 +6,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { getRule } from "../rules";
-import type { CfdiNormalizado, FiscalCheck, Hallazgo } from "./types";
+import type { CfdiNormalizado, FiscalCheck } from "./types";
 
 /** SAT c_FormaPago "01" = Efectivo. */
 const EFECTIVO = "01";
 
-/** Combustibles: ClaveProdServ familia 1510… o por descripción. */
+/** Combustibles: ClaveProdServ familia 1510… (señal confiable) o, en su defecto,
+ *  por descripción inequívoca. Se omiten "magna/premium" como texto suelto: son
+ *  grados de gasolina pero también aparecen fuera de combustible (falsos positivos);
+ *  el ClaveProdServ 1510 ya cubre la estación de servicio real. */
 function esCombustible(cfdi: CfdiNormalizado): boolean {
   const porClave = cfdi.items.some((i) => i.claveProdServ.startsWith("1510"));
   if (porClave) return true;
   return cfdi.items.some((i) =>
-    /gasolina|di[ée]sel|combustible|magna|premium/i.test(i.descripcion ?? ""),
+    /gasolina|di[ée]sel|combustible/i.test(i.descripcion ?? ""),
   );
 }
 
@@ -39,21 +42,26 @@ const combustibleEfectivo: FiscalCheck = {
       ctx,
     );
     if (!regla || regla.valor !== true) return [];
-    const hallazgos: Hallazgo[] = [];
-    for (const c of cfdis) {
-      if (c.direccion !== "RECIBIDA") continue;
-      if (c.formaPago !== EFECTIVO) continue;
-      if (!esCombustible(c)) continue;
-      hallazgos.push({
+    const afectados = cfdis.filter(
+      (c) => c.direccion === "RECIBIDA" && c.formaPago === EFECTIVO && esCombustible(c),
+    );
+    if (afectados.length === 0) return [];
+    const n = afectados.length;
+    const total = afectados.reduce((s, c) => s + c.total, 0);
+    return [
+      {
         checkClave: this.clave,
         severidad: this.severidad,
-        mensaje: `CFDI de combustible por ${fmt(c.total)} pagado en efectivo: no deducible (requiere medio electrónico).`,
-        referencias: [c.id],
+        mensaje:
+          n === 1
+            ? `CFDI de combustible por ${fmt(total)} pagado en efectivo: no deducible (requiere medio electrónico).`
+            : `${n} CFDIs de combustible pagados en efectivo por ${fmt(total)} en total: no deducibles (requieren medio electrónico).`,
+        referencias: afectados.map((c) => c.id),
+        dedupeRef: this.clave,
         fundamento: regla.fundamento,
         sugerencia: this.sugerencia,
-      });
-    }
-    return hallazgos;
+      },
+    ];
   },
 };
 
@@ -71,22 +79,30 @@ const efectivoSobreLimite: FiscalCheck = {
     const regla = getRule<number>("isr.deduccion.limite_efectivo", ctx);
     if (!regla) return [];
     const limite = regla.valor;
-    const hallazgos: Hallazgo[] = [];
-    for (const c of cfdis) {
-      if (c.direccion !== "RECIBIDA") continue;
-      if (c.formaPago !== EFECTIVO) continue;
-      if (c.total <= limite) continue;
-      if (esCombustible(c)) continue; // ya lo marca el check de combustible
-      hallazgos.push({
+    const afectados = cfdis.filter(
+      (c) =>
+        c.direccion === "RECIBIDA" &&
+        c.formaPago === EFECTIVO &&
+        c.total > limite &&
+        !esCombustible(c), // el combustible ya lo marca su propio check
+    );
+    if (afectados.length === 0) return [];
+    const n = afectados.length;
+    const total = afectados.reduce((s, c) => s + c.total, 0);
+    return [
+      {
         checkClave: this.clave,
         severidad: this.severidad,
-        mensaje: `Pago en efectivo por ${fmt(c.total)} excede el límite deducible de ${fmt(limite)}.`,
-        referencias: [c.id],
+        mensaje:
+          n === 1
+            ? `Pago en efectivo por ${fmt(total)} excede el límite deducible de ${fmt(limite)}.`
+            : `${n} pagos en efectivo por ${fmt(total)} en total exceden el límite deducible de ${fmt(limite)} por operación.`,
+        referencias: afectados.map((c) => c.id),
+        dedupeRef: this.clave,
         fundamento: regla.fundamento,
         sugerencia: this.sugerencia,
-      });
-    }
-    return hallazgos;
+      },
+    ];
   },
 };
 
@@ -104,24 +120,30 @@ const casaHabitacionConIva: FiscalCheck = {
   evaluar(cfdis, ctx) {
     const exenta = getRule<boolean>("iva.exencion.casa_habitacion", ctx);
     if (!exenta || exenta.valor !== true) return [];
-    const hallazgos: Hallazgo[] = [];
-    for (const c of cfdis) {
-      if (c.direccion !== "EMITIDA") continue;
-      if (!c.ivaTrasladado || c.ivaTrasladado <= 0) continue;
-      const esVivienda = c.items.some((i) =>
-        /casa habitaci|vivienda/i.test(i.descripcion ?? ""),
-      );
-      if (!esVivienda) continue;
-      hallazgos.push({
+    const afectados = cfdis.filter(
+      (c) =>
+        c.direccion === "EMITIDA" &&
+        !!c.ivaTrasladado &&
+        c.ivaTrasladado > 0 &&
+        c.items.some((i) => /casa habitaci|vivienda/i.test(i.descripcion ?? "")),
+    );
+    if (afectados.length === 0) return [];
+    const n = afectados.length;
+    const iva = afectados.reduce((s, c) => s + (c.ivaTrasladado ?? 0), 0);
+    return [
+      {
         checkClave: this.clave,
         severidad: this.severidad,
-        mensaje: `CFDI emitido de casa habitación con IVA trasladado de ${fmt(c.ivaTrasladado)}: la operación podría ser exenta.`,
-        referencias: [c.id],
+        mensaje:
+          n === 1
+            ? `CFDI emitido de casa habitación con IVA trasladado de ${fmt(iva)}: la operación podría ser exenta.`
+            : `${n} CFDIs emitidos de casa habitación con IVA trasladado por ${fmt(iva)} en total: la operación podría ser exenta.`,
+        referencias: afectados.map((c) => c.id),
+        dedupeRef: this.clave,
         fundamento: exenta.fundamento,
         sugerencia: this.sugerencia,
-      });
-    }
-    return hallazgos;
+      },
+    ];
   },
 };
 
@@ -138,21 +160,28 @@ const monedaExtranjeraSinTC: FiscalCheck = {
   sugerencia:
     "Captura el tipo de cambio del DOF (día anterior) en el CFDI; sin él, el monto en MXN queda mal valuado.",
   evaluar(cfdis) {
-    const hallazgos: Hallazgo[] = [];
-    for (const c of cfdis) {
+    const afectados = cfdis.filter((c) => {
       const moneda = (c.moneda ?? "MXN").toUpperCase();
-      if (moneda === "MXN" || moneda === "XXX") continue;
-      if (c.tipoCambio !== undefined && c.tipoCambio > 1) continue;
-      hallazgos.push({
+      if (moneda === "MXN" || moneda === "XXX") return false;
+      return !(c.tipoCambio !== undefined && c.tipoCambio > 1);
+    });
+    if (afectados.length === 0) return [];
+    const n = afectados.length;
+    const total = afectados.reduce((s, c) => s + c.total, 0);
+    return [
+      {
         checkClave: this.clave,
         severidad: this.severidad,
-        mensaje: `CFDI en ${moneda} por ${fmt(c.total)} sin tipo de cambio válido (TC = ${c.tipoCambio ?? "n/d"}).`,
-        referencias: [c.id],
+        mensaje:
+          n === 1
+            ? `CFDI en moneda extranjera por ${fmt(total)} sin tipo de cambio válido.`
+            : `${n} CFDIs en moneda extranjera por ${fmt(total)} en total sin tipo de cambio válido.`,
+        referencias: afectados.map((c) => c.id),
+        dedupeRef: this.clave,
         fundamento: this.fundamento,
         sugerencia: this.sugerencia,
-      });
-    }
-    return hallazgos;
+      },
+    ];
   },
 };
 
