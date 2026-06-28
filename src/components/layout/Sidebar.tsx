@@ -261,12 +261,18 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
           <div key={section.label}>
             <p className={GRP_LBL}>{section.label}</p>
             <div className="space-y-1">
-              {section.items.map(({ href, label, icon: Icon }) => (
-                <Link key={href} href={href} className={navLinkClass(href === activeNavHref)}>
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {label}
-                </Link>
-              ))}
+              {section.items.map(({ href, label, icon: Icon }) => {
+                // Para despachos (varias empresas), "Nómina" entra al cockpit
+                // multi-RFC (todas las empresas de un vistazo) en vez del
+                // workspace de una sola; un usuario de una empresa mantiene /nomina.
+                const efHref = href === "/nomina" && showCartera ? "/nomina/cockpit" : href;
+                return (
+                  <Link key={href} href={efHref} className={navLinkClass(href === activeNavHref)}>
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {label}
+                  </Link>
+                );
+              })}
             </div>
           </div>
         ))}
