@@ -25,8 +25,8 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 //  - Empresa sin corrida elegible para el periodo: se omite.
 //
 // Mismo layout de columnas que /api/nomina/dispersion MÁS una columna inicial
-// "Empresa" para que cada renglón sea atribuible. CLABE/Banco se mantienen
-// vacías (los datos bancarios del empleado aún no se capturan — no se inventan).
+// "Empresa" para que cada renglón sea atribuible. CLABE/Banco se toman del
+// empleado cuando están capturados; se dejan vacías si el empleado no los tiene.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
@@ -76,7 +76,7 @@ export async function GET(req: Request) {
             employee: {
               select: {
                 nombre: true, apellidoPaterno: true, apellidoMaterno: true,
-                rfc: true, numEmpleado: true,
+                rfc: true, numEmpleado: true, clabe: true, banco: true,
               },
             },
           },
@@ -97,9 +97,8 @@ export async function GET(req: Request) {
     for (const item of run.items) {
       const nombre = `${item.employee.apellidoPaterno} ${item.employee.apellidoMaterno ?? ""} ${item.employee.nombre}`.trim();
       const numEmp = item.employee.numEmpleado ?? item.employeeId.slice(-6);
-      // TODO: CLABE/Banco requieren campos bancarios en Employee (aún no existen).
-      const clabe = "";
-      const banco = "";
+      const clabe = item.employee.clabe ?? "";
+      const banco = item.employee.banco ?? "";
 
       lines.push([
         `"${empresa}"`,
@@ -107,7 +106,7 @@ export async function GET(req: Request) {
         `"${nombre}"`,
         item.employee.rfc,
         clabe,
-        banco,
+        `"${banco}"`,
         item.netoAPagar.toFixed(2),
         `"${concepto}"`,
         referencia,

@@ -7,7 +7,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 //
 // Generates a bank-compatible payment file (CSV) for SPEI batch transfers.
 // Compatible with BBVA, Banorte, Santander, Banamex standard CSV layouts.
-// Employee bank details would need to be stored — for now uses CLABE placeholder.
+// Los datos bancarios (CLABE/Banco) se toman del empleado cuando están capturados.
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
           employee: {
             select: {
               nombre: true, apellidoPaterno: true, apellidoMaterno: true,
-              rfc: true, numEmpleado: true,
+              rfc: true, numEmpleado: true, clabe: true, banco: true,
             },
           },
         },
@@ -48,9 +48,8 @@ export async function GET(req: Request) {
   const lines = run.items.map((item) => {
     const nombre = `${item.employee.apellidoPaterno} ${item.employee.apellidoMaterno ?? ""} ${item.employee.nombre}`.trim();
     const numEmp = item.employee.numEmpleado ?? item.employeeId.slice(-6);
-    // TODO: Add CLABE and banco to Employee model when ready
-    const clabe = ""; // Employee needs bancos field
-    const banco = "";
+    const clabe = item.employee.clabe ?? "";
+    const banco = item.employee.banco ?? "";
     const concepto = `Nomina ${run.periodo}`;
     const referencia = run.id.slice(-8);
 
@@ -59,7 +58,7 @@ export async function GET(req: Request) {
       `"${nombre}"`,
       item.employee.rfc,
       clabe,
-      banco,
+      `"${banco}"`,
       item.netoAPagar.toFixed(2),
       `"${concepto}"`,
       referencia,

@@ -911,6 +911,10 @@ model Employee {
   riesgoPuesto           String  @default("1") // 1=Class I, 2=II, 3=III, 4=IV, 5=V
   claveEntFed            String  @default("PUE") // Estado SAT code (PUE, JAL, CMX, etc.)
 
+  // Datos bancarios para dispersión SPEI (opcionales — empleados existentes no los tienen)
+  clabe String? // CLABE interbancaria de 18 dígitos
+  banco String? // Nombre del banco
+
   // INFONAVIT
   creditoInfonavit       String?
   tipoDescuentoInfonavit String? // "PCT_SBC" | "VSM" | "PESOS"
