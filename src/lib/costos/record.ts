@@ -17,7 +17,7 @@ export interface CostCtx {
 }
 
 export async function recordCost(e: {
-  categoria: "LLM" | "SYNTAGE" | "FACTURAPI";
+  categoria: "LLM" | "SYNTAGE" | "FACTURAPI" | "TWILIO";
   subtipo: string;
   unidades: number;
   costoMicroUsd: number;

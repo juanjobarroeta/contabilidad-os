@@ -48,6 +48,33 @@ export function facturapiTimbreMicroUsd(n = 1): number {
   return Math.round((FACTURAPI_TIMBRE_MXN / MXN_POR_USD_REF) * MICRO_USD * n);
 }
 
+/**
+ * Twilio WhatsApp por mensaje enviado (USD). Estimación all-in de una plantilla
+ * de utilidad (utility template): tarifa de conversación de WhatsApp + fee de
+ * Twilio. Las respuestas dentro de la ventana de servicio de 24h (freeform) son
+ * más baratas, pero estimamos de forma uniforme para no complicar la medición.
+ * Si se desea distinguir, `TWILIO_WHATSAPP_TEMPLATE_USD` cubre el envío proactivo
+ * con plantilla y `TWILIO_WHATSAPP_SESSION_USD` la respuesta dentro de ventana.
+ * Override por entorno con TWILIO_WHATSAPP_MESSAGE_USD (aplica a ambos si no se
+ * fijan los específicos). Ajusta a tu contrato real.
+ */
+export const TWILIO_WHATSAPP_MESSAGE_USD = Number(
+  process.env.TWILIO_WHATSAPP_MESSAGE_USD ?? 0.012,
+);
+export const TWILIO_WHATSAPP_TEMPLATE_USD = Number(
+  process.env.TWILIO_WHATSAPP_TEMPLATE_USD ?? TWILIO_WHATSAPP_MESSAGE_USD,
+);
+export const TWILIO_WHATSAPP_SESSION_USD = Number(
+  process.env.TWILIO_WHATSAPP_SESSION_USD ?? TWILIO_WHATSAPP_MESSAGE_USD,
+);
+
+/** Costo en micro-USD de un mensaje de WhatsApp. `kind` distingue una plantilla
+ *  proactiva (fuera de ventana) de una respuesta dentro de la ventana de servicio. */
+export function twilioWhatsappMicroUsd(kind: "template" | "session" = "template"): number {
+  const usd = kind === "session" ? TWILIO_WHATSAPP_SESSION_USD : TWILIO_WHATSAPP_TEMPLATE_USD;
+  return Math.round(usd * MICRO_USD);
+}
+
 /** Convierte micro-USD → centavos MXN dado el tipo de cambio (pesos por USD). */
 export function microUsdACentavosMxn(microUsd: number, fixMxnPorUsd: number): number {
   return Math.round((microUsd / MICRO_USD) * fixMxnPorUsd * 100);
