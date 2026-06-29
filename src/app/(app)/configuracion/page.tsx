@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Users, CreditCard, UserCircle, Briefcase, Bell } from "lucide-react";
+import { Building2, Users, CreditCard, UserCircle, Briefcase, Bell, MessageCircle } from "lucide-react";
 
 const SECTIONS = [
   {
@@ -37,6 +37,12 @@ const SECTIONS = [
     title: "Notificaciones",
     description: "Activa el push y elige qué avisos recibir.",
     icon: Bell,
+  },
+  {
+    href: "/configuracion/whatsapp",
+    title: "WhatsApp",
+    description: "Vincula tu número y consulta tu contabilidad por chat.",
+    icon: MessageCircle,
   },
 ];
 
