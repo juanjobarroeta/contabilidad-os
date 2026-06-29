@@ -161,6 +161,14 @@ export default function EmpresaPage() {
   const [importError, setImportError] = useState("");
   const [historicalDecs, setHistoricalDecs] = useState<{ id: string; tipo: string; periodo: string; status: string; isrPagar: number | null; ivaPagar: number | null; ivaSaldoFavor: number | null; isrCoeficienteUtilidad: number | null }[]>([]);
 
+  // Import Contabilidad Electrónica (Anexo 24)
+  const [ceCatalogoFile, setCeCatalogoFile] = useState<File | null>(null);
+  const [ceBalanzaFile, setCeBalanzaFile] = useState<File | null>(null);
+  const [ceUsar, setCeUsar] = useState<"final" | "inicial">("final");
+  const [ceSaving, setCeSaving] = useState(false);
+  const [ceSuccess, setCeSuccess] = useState("");
+  const [ceError, setCeError] = useState("");
+
   // Delete company
   const [disconnectLoading, setDisconnectLoading] = useState(false);
 
@@ -480,6 +488,52 @@ export default function EmpresaPage() {
       setImportError(err instanceof Error ? err.message : "Error inesperado");
     } finally {
       setImportSaving(false);
+    }
+  }
+
+  // ── Importar Contabilidad Electrónica (Anexo 24) ──
+  async function handleImportCe() {
+    if (!activeCompany) return;
+    if (!ceCatalogoFile && !ceBalanzaFile) {
+      setCeError("Sube el XML del catálogo de cuentas y/o de la balanza de comprobación.");
+      return;
+    }
+    setCeSaving(true);
+    setCeError("");
+    setCeSuccess("");
+    try {
+      const form = new FormData();
+      form.append("companyId", activeCompany.id);
+      if (ceCatalogoFile) form.append("catalogo", ceCatalogoFile);
+      if (ceBalanzaFile) form.append("balanza", ceBalanzaFile);
+      form.append("usar", ceUsar);
+      const res = await fetch("/api/contabilidad/import-ce", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "No se pudo importar la Contabilidad Electrónica");
+
+      const partes: string[] = [];
+      if (data.catalogo) {
+        partes.push(
+          `Catálogo: ${data.catalogo.creadas} cuenta(s) nueva(s), ${data.catalogo.actualizadas} actualizada(s).`,
+        );
+      }
+      if (data.balanza) {
+        partes.push(
+          `Saldos iniciales: ${data.balanza.entries} partida(s) por ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(data.balanza.totalCargos)}.`,
+        );
+        if (data.balanza.cuentasSinCatalogo?.length) {
+          partes.push(
+            `${data.balanza.cuentasSinCatalogo.length} cuenta(s) de la balanza no estaban en el catálogo y se omitieron.`,
+          );
+        }
+      }
+      setCeSuccess(partes.join(" "));
+      setCeCatalogoFile(null);
+      setCeBalanzaFile(null);
+    } catch (err) {
+      setCeError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setCeSaving(false);
     }
   }
 
@@ -1205,6 +1259,86 @@ export default function EmpresaPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* ── Importar Contabilidad Electrónica (Anexo 24) ── */}
+        <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden mt-5">
+          <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
+                <FileText className="h-5 w-5 text-cos-brand-ink" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-sm">Importar Contabilidad Electrónica</h2>
+                <p className="text-xs text-cos-ink-soft">Arranca el catálogo de cuentas y los saldos iniciales desde el SAT (Anexo 24)</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-xs text-cos-ink-soft">
+              Sube el XML del <strong>Catálogo de Cuentas</strong> y de la última <strong>Balanza de Comprobación</strong>
+              {" "}presentada al SAT. El catálogo crea el plan de cuentas de la empresa y la balanza genera los
+              {" "}<strong>saldos iniciales</strong> (asiento de apertura). Es lo que hace que tu balanza y balance
+              {" "}sean reales: los CFDIs por sí solos sólo dan el estado de resultados. Puedes descargar estos XML
+              {" "}del portal del SAT (Contabilidad Electrónica) o exportarlos de tu sistema contable anterior.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Catálogo de Cuentas <code className="bg-cos-slate-tint px-1 rounded">.xml</code></label>
+                <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-xs cursor-pointer hover:bg-cos-paper transition-colors">
+                  <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
+                  <span className="text-cos-ink-soft truncate">{ceCatalogoFile ? ceCatalogoFile.name : "Seleccionar catálogo"}</span>
+                  <input type="file" accept=".xml,text/xml,application/xml" className="hidden"
+                    onChange={(e) => setCeCatalogoFile(e.target.files?.[0] ?? null)} />
+                </label>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Balanza de Comprobación <code className="bg-cos-slate-tint px-1 rounded">.xml</code></label>
+                <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-xs cursor-pointer hover:bg-cos-paper transition-colors">
+                  <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
+                  <span className="text-cos-ink-soft truncate">{ceBalanzaFile ? ceBalanzaFile.name : "Seleccionar balanza"}</span>
+                  <input type="file" accept=".xml,text/xml,application/xml" className="hidden"
+                    onChange={(e) => setCeBalanzaFile(e.target.files?.[0] ?? null)} />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium mb-1.5">Base de los saldos iniciales</label>
+              <select
+                value={ceUsar}
+                onChange={(e) => setCeUsar(e.target.value === "inicial" ? "inicial" : "final")}
+                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card"
+              >
+                <option value="final">Saldo final de la balanza (arranque del mes siguiente)</option>
+                <option value="inicial">Saldo inicial de la balanza (arranque de ese mes)</option>
+              </select>
+            </div>
+
+            {ceError && (
+              <div className="flex items-start gap-2 bg-cos-red-tint border border-cos-red-ink/20 rounded-lg px-3 py-2 text-sm text-cos-red-ink">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span className="text-xs">{ceError}</span>
+              </div>
+            )}
+            {ceSuccess && (
+              <div className="flex items-start gap-2 bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-3 py-2 text-sm text-cos-jade-ink">
+                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                <span className="text-xs">{ceSuccess}</span>
+              </div>
+            )}
+
+            <button
+              onClick={handleImportCe}
+              disabled={ceSaving || (!ceCatalogoFile && !ceBalanzaFile)}
+              className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50"
+            >
+              {ceSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              {ceSaving ? "Importando…" : "Importar Contabilidad Electrónica"}
+            </button>
           </div>
         </div>
 
