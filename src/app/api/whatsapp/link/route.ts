@@ -59,10 +59,14 @@ export const POST = withAuthz(async (req: Request) => {
     const error =
       result.reason === "taken"
         ? "Ese número ya está vinculado a otra cuenta"
-        : "No se pudo enviar el código por WhatsApp";
+        : result.reason === "template_required"
+          ? "No pudimos enviar el código por WhatsApp todavía (falta configurar la plantilla de verificación). Escríbenos primero un mensaje por WhatsApp para abrir la conversación e inténtalo de nuevo, o contacta a soporte."
+          : "No se pudo enviar el código por WhatsApp";
     return NextResponse.json({ error }, { status });
   }
-  return NextResponse.json({ ok: true });
+  // Devolvemos la forma canónica (la que realmente guardamos y a la que enviamos
+  // el código) para que la UI la muestre y el usuario confirme que es su número.
+  return NextResponse.json({ ok: true, phone: normalizePhone(phone) });
 });
 
 /**

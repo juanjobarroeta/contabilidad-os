@@ -327,3 +327,25 @@ coeficiente de utilidad y pagos provisionales — sin teclear línea de captura 
   aplique el cambio (con el flag).
 - A futuro, si se quiere control fino sin riesgo de pérdida silenciosa, migrar a `prisma migrate`
   (archivos de migración revisados) en lugar de `db push`.
+
+## 15. WhatsApp — vinculación y plantilla OTP
+
+- **Vinculación (Ajustes → WhatsApp):** el usuario captura su número; enviamos un código de 6
+  dígitos por WhatsApp y lo confirma en la app. Sólo cuando el código es correcto se fija
+  `WhatsappLink.verifiedAt` — es lo ÚNICO que el canal de WhatsApp confía (el caller ID por sí
+  solo nunca autoriza). Tras enviar el código, la UI muestra el número canónico que registramos
+  (`+52 ## #### ####`) para que el usuario confirme que es el suyo antes de verificar.
+- **Normalización de número (`src/lib/whatsapp/identity.ts → normalizePhone`):** canonicaliza a
+  `+52##########`. Acepta `+521…`/`521…` (el "1" de móvil que entrega WhatsApp/Twilio),
+  `52…`, `+52…` y 10 dígitos pelones (se asume México). `resolveSender` busca con `phoneVariants`
+  (`+52…` y `+521…`) para tolerar enlaces guardados con cualquiera de las dos formas.
+- **Plantilla OTP (error 63016) — ACCIÓN PENDIENTE en Twilio/Railway:** WhatsApp/Meta bloquea los
+  mensajes freeform iniciados por el negocio (como el código OTP) fuera de la ventana de servicio
+  de 24h; Twilio lo reporta con **código 63016**. En ese caso `startLink` devuelve
+  `reason: "template_required"` y la UI pide al usuario escribir primero por WhatsApp (abre la
+  ventana de 24h) o contactar soporte.
+  - **Fix permanente:** registrar una plantilla de **autenticación (OTP)** en el Content Template
+    Builder de Twilio (categoría *Authentication*; el código va en la variable `{{1}}`), esperar la
+    aprobación de Meta, y fijar `TWILIO_OTP_TEMPLATE_SID` (el `HX…`) en las variables de entorno de
+    Railway. Con esa variable presente, `startLink` envía el OTP vía `sendWhatsappTemplate` (entregable
+    a números "fríos") en lugar del freeform.

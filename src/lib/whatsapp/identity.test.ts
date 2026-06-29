@@ -13,9 +13,25 @@ describe("normalizePhone", () => {
     expect(normalizePhone("whatsapp:+5215512345678".replace("whatsapp:", ""))).toBe("+525512345678");
   });
 
+  it("canonicaliza el móvil MX con '1' sin el '+': 521########## → +52##########", () => {
+    expect(normalizePhone("5215512345678")).toBe("+525512345678");
+  });
+
+  it("canonicaliza el nacional con lada 52 sin '+': 52########## → +52##########", () => {
+    expect(normalizePhone("525512345678")).toBe("+525512345678");
+  });
+
+  it("asume México para 10 dígitos pelones (capturados sin lada)", () => {
+    expect(normalizePhone("5512345678")).toBe("+525512345678");
+    expect(normalizePhone("55 1234 5678")).toBe("+525512345678");
+    expect(normalizePhone("(55) 1234-5678")).toBe("+525512345678");
+  });
+
   it("no toca números no-MX ni el 1 que no es prefijo de móvil MX", () => {
     expect(normalizePhone("+14155238886")).toBe("+14155238886"); // US
     expect(normalizePhone("+525512345678")).toBe("+525512345678"); // ya canónico
+    // 11 dígitos con '+' que no es MX: se respeta tal cual (no se asume México).
+    expect(normalizePhone("+14155238886")).toBe("+14155238886");
   });
 });
 
