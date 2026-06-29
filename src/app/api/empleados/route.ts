@@ -49,6 +49,13 @@ const createSchema = z.object({
   creditoInfonavit: z.string().optional(),
   tipoDescuentoInfonavit: z.enum(["PCT_SBC", "VSM", "PESOS"]).optional(),
   descuentoInfonavit: z.number().optional(),
+  clabe: z
+    .string()
+    .trim()
+    .regex(/^\d{18}$/, "La CLABE debe tener 18 dígitos numéricos")
+    .optional()
+    .or(z.literal("")),
+  banco: z.string().trim().optional().or(z.literal("")),
 });
 
 export async function POST(req: Request) {
@@ -91,6 +98,8 @@ export async function POST(req: Request) {
         creditoInfonavit: data.creditoInfonavit || null,
         tipoDescuentoInfonavit: data.tipoDescuentoInfonavit || null,
         descuentoInfonavit: data.descuentoInfonavit ?? null,
+        clabe: data.clabe || null,
+        banco: data.banco || null,
       },
     });
 
@@ -162,6 +171,16 @@ export async function PATCH(req: Request) {
         });
       }
     }
+
+    // Datos bancarios para dispersión SPEI
+    if (fields.clabe !== undefined) {
+      const clabe = fields.clabe?.trim() || "";
+      if (clabe && !/^\d{18}$/.test(clabe)) {
+        return NextResponse.json({ error: "La CLABE debe tener 18 dígitos numéricos" }, { status: 400 });
+      }
+      data.clabe = clabe || null;
+    }
+    if (fields.banco !== undefined) data.banco = fields.banco?.trim() || null;
 
     // Infonavit
     if (fields.creditoInfonavit !== undefined) data.creditoInfonavit = fields.creditoInfonavit?.trim() || null;

@@ -118,8 +118,13 @@ interface Employee {
   fechaIngreso: string;
   puesto: string | null;
   departamento: string | null;
+  clabe: string | null;
+  banco: string | null;
   isActive: boolean;
 }
+
+// Bancos comunes en México para dispersión SPEI (consistente con el módulo de Bancos).
+const BANCOS = ["BBVA", "Banamex", "Santander", "Banorte", "HSBC", "Scotiabank", "Afirme", "Inbursa", "BanBajío", "Otro"];
 
 const PERIODICIDAD_LABEL: Record<string, string> = {
   "01": "Diario",
@@ -639,6 +644,8 @@ function NewEmployeeModal({
     creditoInfonavit: "",
     tipoDescuentoInfonavit: "",
     descuentoInfonavit: "",
+    clabe: "",
+    banco: "",
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -688,6 +695,8 @@ function NewEmployeeModal({
           creditoInfonavit: e.creditoInfonavit?.trim() || prev.creditoInfonavit,
           tipoDescuentoInfonavit: e.tipoDescuentoInfonavit || prev.tipoDescuentoInfonavit,
           descuentoInfonavit: e.descuentoInfonavit ? String(e.descuentoInfonavit) : prev.descuentoInfonavit,
+          clabe: e.clabe?.trim() || prev.clabe,
+          banco: e.banco?.trim() || prev.banco,
         }));
       }
     } catch (e) {
@@ -815,6 +824,20 @@ function NewEmployeeModal({
           <div className="grid grid-cols-2 gap-3">
             <Field label="Puesto"><input value={form.puesto} onChange={e => set("puesto", e.target.value)} className={inputCls} /></Field>
             <Field label="Departamento"><input value={form.departamento} onChange={e => set("departamento", e.target.value)} className={inputCls} /></Field>
+          </div>
+
+          {/* Datos bancarios (dispersión SPEI) */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="CLABE interbancaria">
+              <input value={form.clabe} onChange={e => set("clabe", e.target.value.replace(/\D/g, "").slice(0, 18))}
+                className={inputCls} inputMode="numeric" placeholder="18 dígitos" maxLength={18} />
+            </Field>
+            <Field label="Banco">
+              <select value={form.banco} onChange={e => set("banco", e.target.value)} className={inputCls}>
+                <option value="">Sin especificar</option>
+                {BANCOS.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </Field>
           </div>
 
           {/* Infonavit section */}
@@ -990,6 +1013,8 @@ function EditEmployeeModal({
     creditoInfonavit: "",
     tipoDescuentoInfonavit: "",
     descuentoInfonavit: "",
+    clabe: employee.clabe ?? "",
+    banco: employee.banco ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -1025,6 +1050,8 @@ function EditEmployeeModal({
           creditoInfonavit: form.creditoInfonavit || null,
           tipoDescuentoInfonavit: form.tipoDescuentoInfonavit || null,
           descuentoInfonavit: form.descuentoInfonavit ? parseFloat(form.descuentoInfonavit) : null,
+          clabe: form.clabe || null,
+          banco: form.banco || null,
           skipImssMovimiento: skipImss,
         }),
       });
@@ -1078,6 +1105,21 @@ function EditEmployeeModal({
           <div className="grid grid-cols-2 gap-3">
             <Field label="Puesto"><input value={form.puesto} onChange={e => setForm(p => ({ ...p, puesto: e.target.value }))} className={inputCls} /></Field>
             <Field label="Departamento"><input value={form.departamento} onChange={e => setForm(p => ({ ...p, departamento: e.target.value }))} className={inputCls} /></Field>
+          </div>
+
+          {/* Datos bancarios (dispersión SPEI) */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="CLABE interbancaria">
+              <input value={form.clabe}
+                onChange={e => setForm(p => ({ ...p, clabe: e.target.value.replace(/\D/g, "").slice(0, 18) }))}
+                className={inputCls} inputMode="numeric" placeholder="18 dígitos" maxLength={18} />
+            </Field>
+            <Field label="Banco">
+              <select value={form.banco} onChange={e => setForm(p => ({ ...p, banco: e.target.value }))} className={inputCls}>
+                <option value="">Sin especificar</option>
+                {BANCOS.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </Field>
           </div>
 
           {/* Infonavit */}
