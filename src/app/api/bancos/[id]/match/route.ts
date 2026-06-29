@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { autoConciliarCuenta } from "@/lib/bancos/auto-conciliar";
 
 type Params = { params: Promise<{ id: string }> };
 
 // POST /api/bancos/[id]/match — run auto-matching engine
+// La lógica de auto-aplicación de alta confianza vive en
+// @/lib/bancos/auto-conciliar (reutilizada por el cron diario). El umbral y el
+// scoring son idénticos — esta ruta sólo añade la verificación de permisos.
 export async function POST(req: Request, { params }: Params) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -17,81 +21,9 @@ export async function POST(req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
-  const companyId = account.companyId;
-  const WINDOW_DAYS = 14;
-  const TOLERANCE  = 0.01; // 1%
+  const { matched: autoMatched, total } = await autoConciliarCuenta(bankAccountId);
 
-  const unmatched = await prisma.bankTransaction.findMany({
-    where: { bankAccountId, status: "UNMATCHED" },
-  });
-
-  let autoMatched = 0;
-
-  for (const tx of unmatched) {
-    const absAmount = Math.abs(tx.monto);
-    const isCreditTx = tx.monto > 0;
-
-    // CREDITs (money in) → match against INGRESO invoices (customers paying us)
-    // DEBITs  (money out) → match against EGRESO invoices  (us paying suppliers)
-    const invoiceType = isCreditTx ? "INGRESO" : "EGRESO";
-
-    const windowStart = new Date(tx.fecha.getTime() - WINDOW_DAYS * 86400000);
-    const windowEnd   = new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000);
-
-    const candidates = await prisma.invoice.findMany({
-      where: {
-        companyId,
-        tipo:   invoiceType,
-        status: "STAMPED",
-        fecha:  { gte: windowStart, lte: windowEnd },
-        total:  { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
-        // Not already matched to another bank transaction
-        bankTransactions: { none: { status: "MATCHED" } },
-      },
-      include: { customer: { select: { rfc: true, razonSocial: true } } },
-    });
-
-    if (candidates.length === 0) continue;
-
-    // Score each candidate
-    const scored = candidates.map(inv => {
-      let score = 0;
-      const diff = Math.abs(Math.abs(inv.total) - absAmount);
-      // Amount scoring
-      if (diff < 0.01)                           score += 100; // exact
-      else if (diff / absAmount < 0.005)          score += 70;  // <0.5%
-      else if (diff / absAmount < TOLERANCE)      score += 40;  // <1%
-      // Date proximity
-      const daysDiff = Math.abs(inv.fecha.getTime() - tx.fecha.getTime()) / 86400000;
-      if (daysDiff <= 1)  score += 30;
-      else if (daysDiff <= 3)  score += 20;
-      else if (daysDiff <= 7)  score += 10;
-      // RFC in description
-      const rfc = inv.customer?.rfc ?? "";
-      if (rfc && tx.descripcion.toUpperCase().includes(rfc)) score += 25;
-      return { inv, score };
-    });
-
-    scored.sort((a, b) => b.score - a.score);
-    const best = scored[0];
-
-    // Auto-apply only when confidence is very high AND unambiguous:
-    // - Score ≥ 130 (exact amount + date within 7d)
-    // - No other candidate within 20 points of the winner (avoids wrong match
-    //   when multiple invoices have the same amount)
-    const secondBest = scored[1];
-    const unambiguous = !secondBest || (best.score - secondBest.score) >= 20;
-
-    if (best.score >= 130 && unambiguous) {
-      await prisma.bankTransaction.update({
-        where: { id: tx.id },
-        data: { status: "MATCHED", invoiceId: best.inv.id },
-      });
-      autoMatched++;
-    }
-  }
-
-  return NextResponse.json({ ok: true, autoMatched, total: unmatched.length });
+  return NextResponse.json({ ok: true, autoMatched, total });
 }
 
 // GET /api/bancos/[id]/match?txId=xxx — get match candidates for a specific transaction

@@ -1,0 +1,35 @@
+name: Auto-conciliar bancos (daily)
+
+# Corre la auto-conciliación bancaria de alta confianza para cada empresa
+# activa. Pega a /api/cron/auto-conciliar, que es idempotente — sólo toca
+# transacciones UNMATCHED y nunca des-concilia, así que es seguro en cualquier
+# cadencia. Programado después de la sincronización SAT matutina para conciliar
+# contra CFDIs frescos. Es barato (sólo DB), así que diario está bien.
+#
+# Requiere los secretos del repo CRON_SECRET y STAGING_URL (igual que
+# sat-sync.yml). Si CRON_SECRET no está, el endpoint regresa 401.
+#
+# NOTE: GitHub only runs `schedule:` triggers from the DEFAULT branch (main).
+# Use the "Run workflow" button (workflow_dispatch) to trigger a run manually.
+
+on:
+  schedule:
+    - cron: "0 16 * * *" # ~10:00 CT (UTC-6), después de la sync SAT matutina
+  workflow_dispatch: {}
+
+jobs:
+  conciliar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger auto-conciliar
+        run: |
+          set -euo pipefail
+          # Strip whitespace from the URL secret and fail loudly (a trailing
+          # newline makes curl reject the URL, and `| tee` would mask it).
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/auto-conciliar" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
