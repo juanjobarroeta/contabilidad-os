@@ -70,11 +70,26 @@ export interface WhatsappLimites {
 const WHATSAPP_LIMITES: Record<CompanyPlan, WhatsappLimites> = {
   ASISTENTE: { dailyMsgsPerUser: 0, monthlyLlmUsd: 0 },
   AUTOMATIZADO: { dailyMsgsPerUser: 0, monthlyLlmUsd: 0 },
-  PRO: { dailyMsgsPerUser: 40, monthlyLlmUsd: 5 },
-  DESPACHO: { dailyMsgsPerUser: 60, monthlyLlmUsd: 25 },
+  PRO: { dailyMsgsPerUser: 80, monthlyLlmUsd: 10 },
+  DESPACHO: { dailyMsgsPerUser: 250, monthlyLlmUsd: 40 },
 };
 
 /** Topes de costo-seguridad del asistente de WhatsApp para un tier. */
 export function whatsappLimites(plan: CompanyPlan): WhatsappLimites {
   return WHATSAPP_LIMITES[plan];
+}
+
+/**
+ * Plan EFECTIVO para los topes de WhatsApp. Una empresa administrada por un
+ * DESPACHO hereda los topes de DESPACHO: el despacho es el cliente que paga y
+ * opera su cartera por WhatsApp, así que sus empresas deben ser consultables
+ * aunque cada empresa individual esté en un tier sin WhatsApp (p.ej. ASISTENTE).
+ * El presupuesto mensual por empresa sigue protegiendo el COGS empresa por
+ * empresa. Una empresa INDEPENDIENTE (sin despacho) usa su propio tier.
+ */
+export function effectiveWhatsappPlan(company: {
+  tier: CompanyPlan;
+  despachoId: string | null;
+}): CompanyPlan {
+  return company.despachoId ? "DESPACHO" : company.tier;
 }

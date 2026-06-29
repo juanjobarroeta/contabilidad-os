@@ -22,6 +22,7 @@ import {
 import { runWhatsappAgent, type WhatsappCompany } from "@/lib/whatsapp/agent";
 import { tryConfirmPendingAction, getPendingAction } from "@/lib/whatsapp/pending-action";
 import { checkWhatsappRateLimit } from "@/lib/whatsapp/rate-limit";
+import { effectiveWhatsappPlan } from "@/lib/planes";
 
 // Long-running Node server (Railway `next start`), NOT serverless — so the
 // background agent work kicked off after we respond keeps running to completion.
@@ -275,7 +276,7 @@ export async function POST(req: Request) {
   // ── 5. Load context fast, then hand the slow agent work to the background. ─
   const company = await prisma.company.findUnique({
     where: { id: activeCompanyId },
-    select: { rfc: true, razonSocial: true, regimenFiscal: true, codigoPostal: true, tier: true },
+    select: { rfc: true, razonSocial: true, regimenFiscal: true, codigoPostal: true, tier: true, despachoId: true },
   });
   if (!company) return reply("No encontré la empresa seleccionada.");
 
@@ -340,7 +341,10 @@ export async function POST(req: Request) {
     const decision = await checkWhatsappRateLimit({
       linkId: sender.linkId,
       companyId: activeCompanyId,
-      plan: company.tier,
+      // Una empresa de despacho hereda los topes de DESPACHO (el despacho es el
+      // operador que paga), no el tier individual de la empresa — que puede ser
+      // ASISTENTE (sin WhatsApp) y bloquearía al operador en la primera consulta.
+      plan: effectiveWhatsappPlan({ tier: company.tier, despachoId: company.despachoId }),
     });
     if (!decision.allowed) {
       return reply(decision.mensaje ?? "Alcanzaste tu límite de uso del asistente.");
