@@ -114,7 +114,6 @@ export default function ContabilidadPage() {
       if (!res.ok) throw new Error(data.error ?? "Error al actualizar los meses pendientes");
       const parts: string[] = [];
       parts.push(`${data.posted} mes(es) cerrado(s)`);
-      if (data.skippedManual > 0) parts.push(`${data.skippedManual} con ajustes manuales (se omitieron, ciérralos a mano)`);
       if (data.errors?.length > 0) parts.push(`${data.errors.length} con error`);
       setInfo(`Meses pendientes ${year}: ${parts.join(" · ")}.`);
       await loadPeriods();
