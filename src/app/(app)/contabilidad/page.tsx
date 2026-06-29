@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import {
   Calendar, CheckCircle2, AlertCircle, Loader2, X,
   RotateCcw, FileText, BookOpen, Download, ArrowLeftRight, Boxes,
+  Landmark, FileCheck2, Clock, ExternalLink,
 } from "lucide-react";
 import { ActivoFijoView } from "@/components/contabilidad/ActivoFijoView";
 
@@ -76,9 +77,9 @@ interface SaldoRow {
   neto: number;
 }
 
-type TabId = "periods" | "balanza" | "estado" | "saldos" | "activo-fijo";
+type TabId = "periods" | "coe" | "balanza" | "estado" | "saldos" | "activo-fijo";
 
-const TAB_IDS: readonly TabId[] = ["periods", "balanza", "estado", "saldos", "activo-fijo"];
+const TAB_IDS: readonly TabId[] = ["periods", "coe", "balanza", "estado", "saldos", "activo-fijo"];
 
 export default function ContabilidadPage() {
   const { activeCompany } = useCompany();
@@ -280,6 +281,7 @@ export default function ContabilidadPage() {
         <div className="flex gap-1">
           {([
             ["periods", "Cierres mensuales", Calendar],
+            ["coe", "Contabilidad Electrónica", Landmark],
             ["balanza", "Balanza de comprobación", BookOpen],
             ["estado",  "Estado de resultados", FileText],
             ["saldos",  "Saldos interempresa", ArrowLeftRight],
@@ -312,6 +314,16 @@ export default function ContabilidadPage() {
           onPostPending={handlePostPending}
           pendingLoading={pendingLoading}
           onSelect={(y, m) => { setSelectedYear(y); setSelectedMonth(m); setTab("balanza"); }}
+        />
+      )}
+
+      {tab === "coe" && (
+        <ContabilidadElectronicaPanel
+          companyId={activeCompany.id}
+          periods={periods}
+          year={selectedYear}
+          month={selectedMonth}
+          onChangePeriod={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }}
         />
       )}
 
@@ -519,6 +531,123 @@ function PeriodPicker({
         onChange={(e) => onChange(parseInt(e.target.value), month)}
         className="w-24 text-sm border border-cos-line rounded-md px-2 py-1.5 bg-cos-card"
       />
+    </div>
+  );
+}
+
+// ── Contabilidad Electrónica ───────────────────────────────────────────────────
+// Consolida los entregables que el SAT pide cada mes (Anexo 24), generados
+// AUTOMÁTICAMENTE desde la contabilidad viva de la empresa: catálogo de cuentas,
+// balanza de comprobación y pólizas. No hay ensamblado manual ni carga de XML:
+// el contador abre el periodo y los XML están listos para descargar.
+function ContabilidadElectronicaPanel({
+  companyId, periods, year, month, onChangePeriod,
+}: {
+  companyId: string;
+  periods: Period[];
+  year: number;
+  month: number;
+  onChangePeriod: (y: number, m: number) => void;
+}) {
+  const period = periods.find((p) => p.year === year && p.month === month);
+  const isPosted = period?.status === "POSTED" || period?.status === "CLOSED";
+
+  const qs = `companyId=${companyId}&year=${year}&month=${month}`;
+
+  const entregables: {
+    key: string;
+    label: string;
+    desc: string;
+    Icon: typeof BookOpen;
+    href?: string;
+    note?: string;
+  }[] = [
+    {
+      key: "catalogo",
+      label: "Catálogo de cuentas",
+      desc: "Estructura de cuentas con su código agrupador del SAT. Se genera desde tu catálogo.",
+      Icon: BookOpen,
+      href: `/api/contabilidad/coe/catalogo?${qs}`,
+    },
+    {
+      key: "balanza",
+      label: "Balanza de comprobación",
+      desc: "Saldos y movimientos del mes. Se genera desde tu balanza mensual (normal o complementaria automática).",
+      Icon: FileCheck2,
+      href: `/api/contabilidad/coe/balanza?${qs}`,
+    },
+    {
+      key: "polizas",
+      label: "Pólizas del periodo",
+      desc: "Pólizas con sus auxiliares. El SAT las solicita en auditoría, devolución o compensación; requiere el folio del requerimiento.",
+      Icon: FileText,
+      href: `/contabilidad/polizas`,
+      note: "requiere folio",
+    },
+  ];
+
+  return (
+    <div>
+      <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
+
+      {/* Estado de preparación del periodo */}
+      {isPosted ? (
+        <div className="mb-4 flex items-start gap-2 rounded-card border border-[oklch(0.66_0.12_168_/_0.28)] bg-cos-jade-tint px-4 py-3 text-sm text-cos-jade-ink">
+          <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            <span className="font-medium">Listo para el SAT</span> — generado de tu contabilidad.
+            Los XML reflejan los asientos cerrados de {MESES[month - 1]} {year}.
+          </span>
+        </div>
+      ) : (
+        <div className="mb-4 flex items-start gap-2 rounded-card border border-cos-line bg-cos-slate-tint px-4 py-3 text-sm text-cos-ink">
+          <Clock className="h-4 w-4 shrink-0 mt-0.5 text-cos-ink-soft" />
+          <span>
+            <span className="font-medium">Preliminar</span> — los XML se generan con un cálculo directo
+            de tus CFDIs y serán definitivos en cuanto cierres {MESES[month - 1]} {year} desde
+            &ldquo;Cierres mensuales&rdquo;.
+          </span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {entregables.map(({ key, label, desc, Icon, href, note }) => (
+          <div key={key} className="flex flex-col rounded-card border border-cos-line bg-cos-card p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-control bg-cos-slate-tint text-cos-ink-soft">
+                <Icon className="h-4 w-4" />
+              </span>
+              <p className="text-sm font-semibold text-cos-ink">{label}</p>
+            </div>
+            <p className="mb-4 flex-1 text-[13px] leading-snug text-cos-ink-soft">{desc}</p>
+            {key === "polizas" ? (
+              <a
+                href={href}
+                className="inline-flex items-center justify-center gap-1.5 rounded-control border border-cos-line bg-cos-paper px-3 py-2 text-[13px] font-medium text-cos-ink hover:bg-cos-slate-tint"
+              >
+                Abrir pólizas y auxiliares <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            ) : (
+              <a
+                href={href}
+                className="inline-flex items-center justify-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-medium text-white hover:bg-cos-brand-deep"
+              >
+                <Download className="h-3.5 w-3.5" /> Descargar XML
+              </a>
+            )}
+            {note && <p className="mt-2 text-[11px] text-cos-ink-faint">{note}</p>}
+          </div>
+        ))}
+      </div>
+
+      {/* Seguimiento: envío automático con e.firma (pendiente) */}
+      <div className="mt-4 flex items-start gap-2 rounded-card border border-dashed border-cos-line px-4 py-3 text-[13px] text-cos-ink-soft">
+        <Landmark className="h-4 w-4 shrink-0 mt-0.5 text-cos-ink-faint" />
+        <span>
+          El envío automático al SAT con tu e.firma está en camino. Por ahora descarga los XML y
+          cárgalos en el portal del SAT; pronto lo haremos por ti.
+        </span>
+      </div>
     </div>
   );
 }
