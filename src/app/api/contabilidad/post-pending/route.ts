@@ -16,8 +16,8 @@ const schema = z.object({
 // Cierra/actualiza en lote todos los meses con CFDIs que aún están en DRAFT
 // (o no existen como periodo). Usa postMonthIfDraft, que es CONSERVADOR:
 //   - nunca toca periodos POSTED/CLOSED
-//   - nunca postea un periodo que ya tenga asientos MANUAL (los preservaría el
-//     usuario re-posteando manualmente)
+//   - re-postea de forma NO destructiva: conserva APERTURA/MANUAL/CIERRE y las
+//     fuentes satélite, así que es seguro actualizar meses con ajustes manuales
 //   - sólo postea meses que tengan al menos un CFDI
 //
 // Si se pasa `year`, se limita a ese ejercicio; de lo contrario barre todos los
@@ -67,7 +67,6 @@ export async function POST(req: Request) {
       .sort((a, b) => a.year - b.year || a.month - b.month);
 
     let posted = 0;
-    let skippedManual = 0;
     let skippedPosted = 0;
     const errors: string[] = [];
 
@@ -75,7 +74,6 @@ export async function POST(req: Request) {
       try {
         const r = await postMonthIfDraft(companyId, p.year, p.month);
         if (r.posted) posted++;
-        else if (r.reason === "HAS_MANUAL_ENTRIES") skippedManual++;
         else if (r.reason === "ALREADY_POSTED") skippedPosted++;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "error";
@@ -86,7 +84,6 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       posted,
-      skippedManual,
       skippedPosted,
       errors,
     });

@@ -30,6 +30,43 @@ type EntryDraft = {
   fuente: EntrySource;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Fuentes que postMonth() REGENERA en cada re-posteo. Sólo estas se borran al
+// re-postear un mes; el resto (APERTURA, MANUAL, CONSTRUCCION, FLOTA, PADEL,
+// CIERRE) se PRESERVA porque lo capturan a mano el contador u otros módulos
+// satélite y postMonth nunca lo vuelve a generar.
+export const REGENERATED_SOURCES: readonly EntrySource[] = ["CFDI", "NOMINA", "BANCO"];
+
+export type EntrySummary = { entriesCount: number; totalCargos: number; totalAbonos: number };
+
+// Resume cargos/abonos/conteo sobre TODOS los asientos de un periodo (incluidos
+// los preservados), para que la balanza y los totales del periodo cuadren tras
+// un re-posteo no destructivo. Pura: sin acceso a DB, fácil de testear.
+export function summarizeEntries(
+  entries: ReadonlyArray<{ tipo: EntryType; monto: number }>
+): EntrySummary {
+  let totalCargos = 0;
+  let totalAbonos = 0;
+  for (const e of entries) {
+    if (e.tipo === "CARGO") totalCargos += e.monto;
+    else if (e.tipo === "ABONO") totalAbonos += e.monto;
+  }
+  return { entriesCount: entries.length, totalCargos, totalAbonos };
+}
+
+// Modela el re-posteo no destructivo: dado el conjunto de asientos existentes en
+// el periodo y los recién generados (sólo REGENERATED_SOURCES), devuelve los que
+// quedan tras un re-posteo: se borran los existentes con fuente regenerable y se
+// sustituyen por los nuevos; todo lo demás se conserva. Pura, para tests.
+export function simulateRepost<T extends { fuente: EntrySource }>(
+  existing: ReadonlyArray<T>,
+  regenerated: ReadonlyArray<T>
+): T[] {
+  const regen = new Set<EntrySource>(REGENERATED_SOURCES);
+  const preserved = existing.filter((e) => !regen.has(e.fuente));
+  return [...preserved, ...regenerated];
+}
+
 export type PostMonthResult = {
   period: AccountingPeriod;
   entriesCreated: number;
@@ -549,11 +586,13 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       create: { companyId, year, month, status: "DRAFT" },
     });
 
-    // Wipe prior entries for this period — pero conserva el asiento de apertura
-    // (saldos iniciales) que pudiera caer en este periodo; re-postear CFDIs no
-    // debe borrar los saldos de arranque.
+    // Borra SÓLO los asientos que este motor regenera (CFDI/NOMINA/BANCO).
+    // Se PRESERVA todo lo demás: APERTURA (saldos iniciales), MANUAL (ajustes
+    // del contador), CIERRE (asiento de cierre anual) y las fuentes satélite
+    // (CONSTRUCCION/FLOTA/PADEL, posteadas por otros módulos). postMonth nunca
+    // vuelve a generar esas fuentes, así que borrarlas destruiría datos.
     await tx.accountingEntry.deleteMany({
-      where: { companyId, periodId: periodRow.id, fuente: { not: "APERTURA" } },
+      where: { companyId, periodId: periodRow.id, fuente: { in: [...REGENERATED_SOURCES] } },
     });
 
     // Insert new entries
@@ -575,30 +614,55 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       await tx.accountingEntry.createMany({ data });
     }
 
+    // Recalcula los totales del periodo sobre TODOS los asientos que quedan
+    // (los recién insertados + los preservados: APERTURA/MANUAL/CIERRE/satélite),
+    // no sólo los que generó este motor. Así la balanza y el resumen del periodo
+    // cuadran incluyendo los ajustes manuales.
+    const grouped = await tx.accountingEntry.groupBy({
+      by: ["tipo"],
+      where: { companyId, periodId: periodRow.id },
+      _sum: { monto: true },
+      _count: { _all: true },
+    });
+    let periodCargos = 0;
+    let periodAbonos = 0;
+    let entriesCount = 0;
+    for (const g of grouped) {
+      entriesCount += g._count._all;
+      if (g.tipo === "CARGO") periodCargos += g._sum.monto ?? 0;
+      else if (g.tipo === "ABONO") periodAbonos += g._sum.monto ?? 0;
+    }
+
     // Update period status + summary
-    return tx.accountingPeriod.update({
+    const updated = await tx.accountingPeriod.update({
       where: { id: periodRow.id },
       data: {
         status: "POSTED",
         postedAt: new Date(),
-        entriesCount: drafts.length,
-        totalCargos,
-        totalAbonos,
+        entriesCount,
+        totalCargos: periodCargos,
+        totalAbonos: periodAbonos,
       },
     });
+    return { updated, periodCargos, periodAbonos, entriesCount };
   });
 
   return {
-    period,
+    period: period.updated,
     entriesCreated: drafts.length,
-    totalCargos,
-    totalAbonos,
+    totalCargos: period.periodCargos,
+    totalAbonos: period.periodAbonos,
     warnings,
   };
 }
 
 /**
- * Deletes all entries for a period and marks it DRAFT. Used for "reopen".
+ * Reabre un periodo: lo marca DRAFT y elimina SÓLO los asientos auto-generados
+ * (CFDI/NOMINA/BANCO). Se PRESERVAN APERTURA, MANUAL, CIERRE y las fuentes
+ * satélite (CONSTRUCCION/FLOTA/PADEL): reabrir un mes no debe destruir los
+ * saldos de arranque ni los ajustes capturados a mano. Los totales del periodo
+ * se recalculan sobre los asientos que quedan (no se ponen a cero, porque puede
+ * subsistir APERTURA/MANUAL).
  */
 export async function unpostMonth(companyId: string, year: number, month: number) {
   await prisma.$transaction(async (tx) => {
@@ -606,10 +670,28 @@ export async function unpostMonth(companyId: string, year: number, month: number
       where: { companyId_year_month: { companyId, year, month } },
     });
     if (!period) return;
-    await tx.accountingEntry.deleteMany({ where: { periodId: period.id, fuente: { not: "APERTURA" } } });
+    await tx.accountingEntry.deleteMany({
+      where: { companyId, periodId: period.id, fuente: { in: [...REGENERATED_SOURCES] } },
+    });
+
+    const grouped = await tx.accountingEntry.groupBy({
+      by: ["tipo"],
+      where: { companyId, periodId: period.id },
+      _sum: { monto: true },
+      _count: { _all: true },
+    });
+    let totalCargos = 0;
+    let totalAbonos = 0;
+    let entriesCount = 0;
+    for (const g of grouped) {
+      entriesCount += g._count._all;
+      if (g.tipo === "CARGO") totalCargos += g._sum.monto ?? 0;
+      else if (g.tipo === "ABONO") totalAbonos += g._sum.monto ?? 0;
+    }
+
     await tx.accountingPeriod.update({
       where: { id: period.id },
-      data: { status: "DRAFT", entriesCount: 0, totalCargos: 0, totalAbonos: 0, postedAt: null },
+      data: { status: "DRAFT", entriesCount, totalCargos, totalAbonos, postedAt: null },
     });
   });
 }
@@ -1133,19 +1215,18 @@ export async function estadoResultadosPreview(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTO-POST condicional — postea SÓLO si el periodo no existe o está en DRAFT
-// y NO tiene asientos manuales. Nunca re-postea un periodo POSTED/CLOSED.
+// AUTO-POST condicional — postea SÓLO si el periodo no existe o está en DRAFT.
+// Nunca re-postea un periodo POSTED/CLOSED.
 //
-// ⚠️ Ver STEP 0: postMonth() borra TODOS los asientos del periodo salvo
-// fuente=APERTURA, lo que incluye fuente=MANUAL. Por eso este helper rechaza
-// cualquier periodo que ya tenga asientos MANUAL: el auto-posteo silencioso
-// nunca debe destruir ajustes capturados a mano. El usuario debe re-postear
-// de forma explícita en esos casos.
+// Ahora que postMonth() es NO destructivo (sólo regenera CFDI/NOMINA/BANCO y
+// preserva APERTURA/MANUAL/CIERRE/satélite), es seguro auto-postear meses que ya
+// tengan asientos MANUAL: el re-posteo conserva esos ajustes. Por eso ya no se
+// rechazan los periodos con asientos manuales.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type PostMonthIfDraftResult =
   | { posted: true; result: PostMonthResult }
-  | { posted: false; reason: "ALREADY_POSTED" | "NO_CFDIS" | "HAS_MANUAL_ENTRIES" };
+  | { posted: false; reason: "ALREADY_POSTED" | "NO_CFDIS" };
 
 export async function postMonthIfDraft(
   companyId: string,
@@ -1157,21 +1238,9 @@ export async function postMonthIfDraft(
     select: { id: true, status: true },
   });
 
-  // Sólo periodos inexistentes o en DRAFT.
+  // Sólo periodos inexistentes o en DRAFT. Nunca POSTED/CLOSED.
   if (period && period.status !== "DRAFT") {
     return { posted: false, reason: "ALREADY_POSTED" };
-  }
-
-  // Salvaguarda crítica: si el periodo ya tiene asientos MANUAL (ajustes a
-  // mano), NO auto-posteamos para no destruirlos, porque postMonth() los
-  // borraría.
-  if (period) {
-    const manualCount = await prisma.accountingEntry.count({
-      where: { companyId, periodId: period.id, fuente: "MANUAL" },
-    });
-    if (manualCount > 0) {
-      return { posted: false, reason: "HAS_MANUAL_ENTRIES" };
-    }
   }
 
   // No tiene sentido postear un mes sin CFDIs (dejaría el periodo POSTED vacío).
