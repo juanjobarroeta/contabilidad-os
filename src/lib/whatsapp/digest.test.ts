@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatCarteraDigest } from "./digest";
+import { formatCarteraDigest, formatCarteraDigestSummaryLine } from "./digest";
 
 describe("formatCarteraDigest", () => {
   it("devuelve null cuando el usuario no tiene empresas", () => {
@@ -49,5 +49,32 @@ describe("formatCarteraDigest", () => {
     }));
     const txt = formatCarteraDigest(muchas)!;
     expect(txt).toMatch(/y \d+ empresas? más con pendientes\./);
+  });
+});
+
+describe("formatCarteraDigestSummaryLine (variable de plantilla)", () => {
+  it("es null sin empresas", () => {
+    expect(formatCarteraDigestSummaryLine([])).toBeNull();
+  });
+
+  it("NUNCA contiene saltos de línea ni tabs (requisito de variable de plantilla)", () => {
+    const linea = formatCarteraDigestSummaryLine([
+      { razonSocial: "A", hallazgos: 3, criticos: 1 },
+      { razonSocial: "B", hallazgos: 0, criticos: 0 },
+      { razonSocial: "C", hallazgos: 2, criticos: 0 },
+    ])!;
+    expect(linea).not.toMatch(/[\n\t]/);
+    expect(linea).toContain("2 empresas con pendientes");
+    expect(linea).toContain("1 con críticos");
+    expect(linea).toContain("1 al corriente");
+  });
+
+  it("caso todo al corriente en una sola línea", () => {
+    const linea = formatCarteraDigestSummaryLine([
+      { razonSocial: "A", hallazgos: 0, criticos: 0 },
+      { razonSocial: "B", hallazgos: 0, criticos: 0 },
+    ])!;
+    expect(linea).not.toMatch(/[\n\t]/);
+    expect(linea).toBe("2 empresas al corriente, sin hallazgos abiertos");
   });
 });
