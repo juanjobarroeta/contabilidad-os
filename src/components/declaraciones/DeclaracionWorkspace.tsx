@@ -5,7 +5,8 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
-  CheckCircle2, AlertTriangle, CalendarDays, Sparkles, Printer, SlidersHorizontal, ChevronRight as ChevronR, FileWarning,
+  CheckCircle2, AlertTriangle, CalendarDays, Printer, ChevronRight as ChevronR, FileWarning,
+  AlertCircle, FileText, RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
@@ -62,7 +63,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "presentar", label: "Presentar" },
 ];
 
-export default function DeclaracionWorkspace() {
+export function DeclaracionWorkspace() {
   const { activeCompany } = useCompany();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -252,7 +253,7 @@ export default function DeclaracionWorkspace() {
         <Loading label="Cargando…" className="py-16" />
       ) : (
         <div id="tabpanel-declaracion" role="tabpanel" aria-labelledby={`tab-${tab}`} className="mt-5">
-          {tab === "resumen" && <Resumen data={data} companyId={activeCompany.id} month={month} year={year} />}
+          {tab === "resumen" && <Resumen data={data} year={year} />}
           {tab === "papeles" && <PapelesTab companyId={activeCompany.id} month={month} year={year} onChanged={load} />}
           {tab === "revision" && (
             <RevisionTab
@@ -326,7 +327,7 @@ function FaltantesBanner({ faltantes, empresa, onUploaded }: {
             compact
             onUploaded={onUploaded}
           />
-          <Link href="/declaraciones" className="mt-2 inline-block text-[12px] font-medium text-cos-amber-ink hover:underline">Ver todas las empresas →</Link>
+          <Link href="/impuestos?tab=historial" className="mt-2 inline-block text-[12px] font-medium text-cos-amber-ink hover:underline">Ver todas las empresas →</Link>
         </div>
       )}
     </div>
@@ -344,7 +345,7 @@ function EstadoBadge({ estado }: { estado: Estado }) {
   return <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${m.cls}`}>{m.label}</span>;
 }
 
-function Resumen({ data, companyId, month, year }: { data: CierreData; companyId: string; month: number; year: number }) {
+function Resumen({ data, year }: { data: CierreData; year: number }) {
   const f = data.federal;
   return (
     <div className="space-y-5">
@@ -412,103 +413,6 @@ function Resumen({ data, companyId, month, year }: { data: CierreData; companyId
         </Card>
       )}
 
-      {/* Expert depth: precierre, saldo a favor, REP y sincronización con el SAT. */}
-      <a href={`/impuestos/detalle?month=${month}&year=${year}`}
-        className="flex items-center gap-3 rounded-card border border-dashed border-cos-line bg-cos-card px-5 py-4 text-[14px] text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink">
-        <SlidersHorizontal className="h-[18px] w-[18px] flex-none" />
-        <span className="flex-1">Cálculo a detalle — precierre, saldo a favor, complementos de pago y sincronizar con el SAT</span>
-        <ChevronR className="h-4 w-4 flex-none" />
-      </a>
-
-      <Simulador companyId={companyId} month={month} year={year} />
-    </div>
-  );
-}
-
-// "What if I bill one more ingreso/gasto?" — debounced against the real fiscal
-// engine (/api/impuestos/simular), ported from the old Impuestos page.
-function Simulador({ companyId, month, year }: { companyId: string; month: number; year: number }) {
-  const [addIng, setAddIng] = useState("");
-  const [addGas, setAddGas] = useState("");
-  const [sim, setSim] = useState<{ base: { iva: number; isr: number | null; total: number }; sim: { iva: number; isr: number | null; total: number } } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const seq = useRef(0);
-
-  useEffect(() => { setAddIng(""); setAddGas(""); setSim(null); }, [companyId, month, year]);
-
-  useEffect(() => {
-    const ai = parseFloat(addIng) || 0;
-    const ag = parseFloat(addGas) || 0;
-    if (ai <= 0 && ag <= 0) { setSim(null); setBusy(false); return; }
-    setBusy(true);
-    const s = ++seq.current;
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/impuestos/simular?companyId=${companyId}&month=${month}&year=${year}&addIngreso=${ai}&addGasto=${ag}`);
-        const json = await res.json();
-        if (s === seq.current) setSim(json);
-      } finally { if (s === seq.current) setBusy(false); }
-    }, 350);
-    return () => clearTimeout(t);
-  }, [addIng, addGas, companyId, month, year]);
-
-  const on = (parseFloat(addIng) || 0) > 0 || (parseFloat(addGas) || 0) > 0;
-  return (
-    <Card className="rounded-card border-cos-line p-5 shadow-card">
-      <div className="mb-4 flex items-start gap-3">
-        <span className="grid h-[30px] w-[30px] flex-none place-items-center rounded-[9px] bg-cos-brand text-white"><Sparkles className="h-4 w-4" /></span>
-        <div>
-          <h3 className="text-[17px] font-semibold text-cos-ink">Simula antes de facturar</h3>
-          <p className="mt-1 max-w-[54ch] text-[13.5px] text-cos-ink-soft">¿Qué pasa con tus impuestos si facturas un ingreso o un gasto más? Escribe un monto y míralo al instante — con tu cálculo real.</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-        <SimInput label="+ Ingreso (sin IVA)" value={addIng} onChange={setAddIng} />
-        <SimInput label="+ Gasto con factura (sin IVA)" value={addGas} onChange={setAddGas} />
-      </div>
-      {on ? (
-        <div className="mt-[18px] grid grid-cols-1 gap-3 border-t border-cos-line pt-[18px] sm:grid-cols-3">
-          <SimOut label="Nuevo IVA" value={sim?.sim.iva ?? null} base={sim?.base.iva ?? null} busy={busy} />
-          <SimOut label="Nuevo ISR" value={sim?.sim.isr ?? null} base={sim?.base.isr ?? null} busy={busy} />
-          <SimOut label="Nuevo total" value={sim?.sim.total ?? null} base={sim?.base.total ?? null} busy={busy} highlight />
-        </div>
-      ) : (
-        <p className="mt-4 text-[13.5px] text-cos-ink-faint">Escribe un monto arriba para ver el impacto.</p>
-      )}
-    </Card>
-  );
-}
-
-function SimInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <label className="flex flex-col gap-2 text-[13px] font-medium text-cos-ink-soft">
-      <span>{label}</span>
-      <div className="flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3.5 focus-within:border-cos-brand focus-within:ring-[3px] focus-within:ring-cos-brand-tint">
-        <i className="font-mono not-italic text-cos-ink-faint">$</i>
-        <input type="number" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0.00" className="w-full border-0 bg-transparent py-3 font-mono text-[16px] text-cos-ink outline-none" />
-      </div>
-    </label>
-  );
-}
-
-function SimOut({ label, value, base, busy, highlight }: { label: string; value: number | null; base: number | null; busy: boolean; highlight?: boolean }) {
-  const peso = (n: number) => "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const delta = value != null && base != null ? value - base : null;
-  return (
-    <div className={`flex flex-col gap-1 rounded-[12px] p-3.5 ${highlight ? "bg-cos-brand-tint" : "bg-cos-paper"}`}>
-      <span className="text-[12px] font-medium text-cos-ink-faint">{label}</span>
-      {busy && value == null ? (
-        <Loader2 className="h-5 w-5 animate-spin text-cos-ink-faint" />
-      ) : value == null ? (
-        <span className="font-mono text-[20px] font-bold text-cos-ink-faint">—</span>
-      ) : (
-        <>
-          <Money value={value} size={20} weight={700} />
-          {delta != null && (Math.abs(delta) < 0.005
-            ? <span className="font-mono text-[12px] font-medium text-cos-ink-faint">sin cambio</span>
-            : <span className={`font-mono text-[12px] font-medium ${delta > 0 ? "text-cos-red-ink" : "text-cos-jade-ink"}`}>{delta > 0 ? "▲" : "▼"} {peso(delta)}</span>)}
-        </>
-      )}
     </div>
   );
 }
@@ -648,6 +552,11 @@ function Presentar({
   const f = data.federal;
   return (
     <div className="space-y-4">
+      {/* Antes de presentar: emitir complementos de pago (REP) pendientes y
+          sincronizar los CFDIs del periodo con el SAT. Re-alojados del antiguo
+          /impuestos/detalle para no perder funcionalidad. */}
+      <RepComplementosCard companyId={companyId} />
+      <SatSyncCard companyId={companyId} month={month} year={year} />
       <FederalPresentar
         f={f} fecha={fecha} setFecha={setFecha} saving={saving}
         acuseParsed={acuseParsed} acuseUploading={acuseUploading} acuseError={acuseError}
@@ -749,6 +658,269 @@ function FederalPresentar({
       </button>
       {!f.calculado && !acuseParsed && (
         <p className="text-[12px] text-amber-600">Calcula la declaración (pestaña Resumen) o sube el acuse antes de marcarla presentada.</p>
+      )}
+    </Card>
+  );
+}
+
+// ── REP / complementos de pago ────────────────────────────────────────────────
+// Re-alojado del antiguo /impuestos/detalle. Detecta facturas PPD con pago en
+// banco pero sin complemento de pago (REP) emitido y permite emitirlos en lote
+// contra /api/facturas/complemento-pagos. Sin REP el SAT considera la cobranza
+// indocumentada, así que conviene resolverlo antes de presentar la declaración.
+interface RepInvoice { id: string; folio: string | null; serie: string | null; customer: string; pendingAmount: number; uuid: string | null }
+
+function RepComplementosCard({ companyId }: { companyId: string }) {
+  const [pending, setPending] = useState<{ count: number; monto: number; invoices: RepInvoice[] }>({ count: 0, monto: 0, invoices: [] });
+  const [emitting, setEmitting] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [msgOk, setMsgOk] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/facturas/complemento-pagos?companyId=${companyId}`);
+      if (!res.ok) return;
+      const repData = await res.json();
+      const needing = (repData.pendientes ?? []).filter((p: { needsRep: boolean }) => p.needsRep);
+      setPending({
+        count: needing.length,
+        monto: needing.reduce((s: number, p: { pendingAmount: number }) => s + p.pendingAmount, 0),
+        invoices: needing.map((p: { invoice: { id: string; folio: string | null; serie: string | null; uuid: string | null; customer: { razonSocial: string } | null }; pendingAmount: number }) => ({
+          id: p.invoice.id,
+          folio: p.invoice.folio,
+          serie: p.invoice.serie,
+          uuid: p.invoice.uuid,
+          customer: p.invoice.customer?.razonSocial ?? "—",
+          pendingAmount: p.pendingAmount,
+        })),
+      });
+    } catch { /* silent */ }
+  }, [companyId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function emitir() {
+    setEmitting(true);
+    setMsg("");
+    let emitted = 0;
+    const errors: string[] = [];
+    for (const inv of pending.invoices) {
+      try {
+        const res = await fetch("/api/facturas/complemento-pagos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId, invoiceId: inv.id, monto: inv.pendingAmount }),
+        });
+        if (res.ok) emitted++;
+        else errors.push(`${inv.customer}: ${(await res.json()).error ?? "Error"}`);
+      } catch { errors.push(inv.customer); }
+    }
+    setEmitting(false);
+    if (errors.length === 0) {
+      setMsgOk(true);
+      setMsg(`${emitted} complemento${emitted !== 1 ? "s" : ""} de pago emitido${emitted !== 1 ? "s" : ""}.`);
+    } else {
+      setMsgOk(false);
+      setMsg(`Emitidos ${emitted} de ${pending.invoices.length}. Errores: ${errors.slice(0, 3).join("; ")}`);
+    }
+    setPending({ count: 0, monto: 0, invoices: [] });
+  }
+
+  if (pending.count === 0) {
+    return msg ? (
+      <div className={`rounded-card border px-4 py-3 text-[13px] ${msgOk ? "border-cos-jade-ink/20 bg-cos-jade-tint text-cos-jade-ink" : "border-cos-red-ink/20 bg-cos-red-tint text-cos-red-ink"}`}>
+        <span className="inline-flex items-center gap-1.5">{msgOk ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}{msg}</span>
+      </div>
+    ) : null;
+  }
+
+  return (
+    <Card className="rounded-card border-cos-red-ink/20 bg-cos-red-tint p-4 shadow-card">
+      <div className="flex items-start gap-2.5">
+        <AlertCircle className="mt-0.5 h-5 w-5 flex-none text-cos-red-ink" />
+        <div className="flex-1">
+          <p className="text-[14px] font-semibold text-cos-red-ink">
+            {pending.count} complemento{pending.count !== 1 ? "s" : ""} de pago pendiente{pending.count !== 1 ? "s" : ""}
+          </p>
+          <p className="mt-0.5 text-[12.5px] text-cos-red-ink">
+            {pending.count} factura{pending.count !== 1 ? "s" : ""} PPD con pago recibido en banco pero sin REP emitido.
+            Monto pendiente: <strong><Money value={pending.monto} size={13} weight={600} /></strong>.
+            El SAT requiere el complemento para documentar la cobranza.
+          </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-[12.5px] font-medium text-cos-red-ink hover:underline">Ver facturas</summary>
+            <div className="mt-2 space-y-1">
+              {pending.invoices.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between gap-3 rounded border border-cos-red-ink/20 bg-cos-card px-2.5 py-1.5 text-[12px]">
+                  <span className="font-mono text-cos-ink-soft">{inv.serie ?? ""}{inv.folio ?? inv.uuid?.slice(-8)}</span>
+                  <span className="flex-1 truncate">{inv.customer}</span>
+                  <span className="font-mono"><Money value={inv.pendingAmount} size={12} weight={500} /></span>
+                </div>
+              ))}
+            </div>
+          </details>
+          <button onClick={emitir} disabled={emitting}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-control bg-cos-red-ink px-3 py-1.5 text-[12.5px] font-medium text-white hover:opacity-90 disabled:opacity-50">
+            {emitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+            Emitir {pending.count} complemento{pending.count !== 1 ? "s" : ""}
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ── Sincronización con el SAT ─────────────────────────────────────────────────
+// Re-alojado del antiguo /impuestos/detalle. Solicita los CFDIs emitidos y
+// recibidos del periodo al SAT (POST /api/sat/sync), espera los paquetes
+// (POST /api/sat/sync/verify) y muestra el historial de solicitudes del periodo
+// (GET /api/sat/sync/requests). Mismos endpoints y payloads que la vista previa.
+interface SatRequestRow {
+  id: string;
+  tipo: "EMITIDOS" | "RECIBIDOS";
+  status: "PENDING" | "ACCEPTED" | "IN_PROGRESS" | "FINISHED" | "FAILED" | "EXPIRED";
+  cfdisFound: number;
+  imported: number;
+  lastVerifiedAt: string | null;
+  errorMessage: string | null;
+}
+const SAT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pendiente", ACCEPTED: "Aceptada por SAT", IN_PROGRESS: "Procesando en SAT",
+  FINISHED: "Lista", FAILED: "Falló", EXPIRED: "Expiró",
+};
+const SAT_STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-cos-slate-tint text-cos-ink-soft",
+  ACCEPTED: "bg-cos-brand-tint text-cos-brand-ink",
+  IN_PROGRESS: "bg-cos-amber-tint text-cos-amber-ink",
+  FINISHED: "bg-cos-jade-tint text-cos-jade-ink",
+  FAILED: "bg-cos-red-tint text-cos-red-ink",
+  EXPIRED: "bg-cos-slate-tint text-cos-ink-soft",
+};
+
+function SatSyncCard({ companyId, month, year }: { companyId: string; month: number; year: number }) {
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("");
+  const [syncDone, setSyncDone] = useState(false);
+  const [requests, setRequests] = useState<SatRequestRow[]>([]);
+
+  const loadRequests = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/sat/sync/requests?companyId=${companyId}&year=${year}&month=${month}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setRequests(data.requests ?? []);
+    } catch { /* ignore */ }
+  }, [companyId, year, month]);
+
+  useEffect(() => { loadRequests(); }, [loadRequests]);
+
+  async function sync(force = false) {
+    setSyncing(true); setSyncDone(false);
+    setSyncStatus(force ? "Forzando nueva solicitud al SAT…" : "Autenticando con el SAT…");
+    try {
+      const reqRes = await fetch("/api/sat/sync", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, month, year, force }),
+      });
+      const reqData = await reqRes.json();
+      if (!reqRes.ok) throw new Error(reqData.error ?? "Error al solicitar CFDIs al SAT");
+      const { emitidosRequestId, recibidosRequestId } = reqData;
+      setSyncStatus("Solicitud enviada al SAT. Esperando paquetes…");
+
+      let attempts = 0;
+      const poll = async (): Promise<void> => {
+        if (attempts++ >= 24) {
+          setSyncStatus("El SAT tarda más de lo esperado. Intenta de nuevo en unos minutos.");
+          setSyncing(false); return;
+        }
+        const verRes = await fetch("/api/sat/sync/verify", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId, emitidosRequestId, recibidosRequestId, month, year }),
+        });
+        const verData = await verRes.json();
+        if (verData.status === "pending") {
+          setSyncStatus(verData.message ?? "Preparando paquetes…");
+          await new Promise((r) => setTimeout(r, 5000)); return poll();
+        }
+        if (verData.status === "empty") { setSyncStatus("No se encontraron CFDIs en este período."); setSyncDone(true); setSyncing(false); loadRequests(); return; }
+        if (verData.status === "done" || verData.status === "partial") { setSyncStatus(verData.message ?? "Listo."); setSyncDone(true); setSyncing(false); loadRequests(); return; }
+        throw new Error(verData.error ?? "Error en sincronización");
+      };
+      await poll();
+      loadRequests();
+    } catch (err) {
+      setSyncStatus(err instanceof Error ? err.message : "Error al sincronizar");
+      setSyncing(false);
+      loadRequests();
+    }
+  }
+
+  return (
+    <Card className="rounded-card border-cos-line p-5 shadow-card">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-[14px] font-semibold text-cos-ink">Sincronizar CFDIs del SAT</h3>
+          <p className="mt-1 text-[12.5px] text-cos-ink-soft">
+            Descarga tus facturas emitidas y recibidas directamente del SAT usando tu e.firma.
+          </p>
+        </div>
+        <div className="flex flex-none items-center gap-2">
+          <button onClick={() => sync(false)} disabled={syncing}
+            className="inline-flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-[13px] font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50">
+            {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {syncing ? "Sincronizando…" : "Sincronizar CFDIs"}
+          </button>
+          <button onClick={() => sync(true)} disabled={syncing}
+            title="Forzar nueva solicitud al SAT (ignora solicitudes pendientes)"
+            className="rounded-control border border-cos-line px-2.5 py-2 text-[12px] text-cos-ink-soft hover:bg-cos-paper disabled:opacity-50">
+            Forzar
+          </button>
+        </div>
+      </div>
+
+      {(syncing || syncStatus) && (
+        <div className={`mt-3 flex items-center gap-2 rounded-control px-3 py-2 text-[12.5px] ${
+          syncDone
+            ? "border border-cos-jade-ink/20 bg-cos-jade-tint text-cos-jade-ink"
+            : syncing
+            ? "border border-cos-brand-ink/15 bg-cos-brand-tint text-cos-brand-ink"
+            : "border border-cos-line bg-cos-slate-tint text-cos-ink-soft"
+        }`}>
+          {syncing && <Loader2 className="h-3.5 w-3.5 flex-none animate-spin" />}
+          {syncDone && <CheckCircle2 className="h-3.5 w-3.5 flex-none" />}
+          {syncStatus}
+        </div>
+      )}
+
+      {requests.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-ink-soft">
+            Solicitudes con SAT (este período)
+          </p>
+          <div className="divide-y divide-cos-line overflow-hidden rounded-control border border-cos-line">
+            {requests.map((r) => {
+              const lv = r.lastVerifiedAt ? new Date(r.lastVerifiedAt) : null;
+              const lvStr = lv ? `${Math.max(0, Math.round((Date.now() - lv.getTime()) / 60000))} min` : null;
+              return (
+                <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-[12px]">
+                  <span className="w-20 font-medium text-cos-ink-soft">{r.tipo === "EMITIDOS" ? "Emitidos" : "Recibidos"}</span>
+                  <span className={`rounded px-2 py-0.5 font-medium ${SAT_STATUS_COLORS[r.status] ?? "bg-cos-slate-tint"}`}>
+                    {SAT_STATUS_LABELS[r.status] ?? r.status}
+                  </span>
+                  <span className="flex-1 truncate text-cos-ink-soft">
+                    {r.cfdisFound > 0 && `${r.cfdisFound} CFDIs`}
+                    {r.imported > 0 && ` · ${r.imported} importados`}
+                    {r.errorMessage && ` · ${r.errorMessage}`}
+                  </span>
+                  {lvStr && <span className="text-[10px] text-cos-ink-soft">hace {lvStr}</span>}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[10px] text-cos-ink-soft">
+            Las solicitudes pendientes se reusan automáticamente. Si el SAT te dio el código 5002, espera a que las solicitudes vencidas se procesen (1-3 hrs) — no necesitas hacer nada.
+          </p>
+        </div>
       )}
     </Card>
   );

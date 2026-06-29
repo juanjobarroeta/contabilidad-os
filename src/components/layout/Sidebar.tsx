@@ -21,18 +21,15 @@ import {
   Plus,
   Settings,
   ShieldCheck,
-  ClipboardList,
-  Boxes,
   Menu,
   X,
-  FileInput,
   TrendingUp,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavItem = { href: string; label: string; icon: LucideIcon; badge?: string };
 type NavSection = { label: string | null; items: NavItem[] };
 
 // Menú agrupado en secciones (rediseño de navegación). Las rutas no cambian:
@@ -55,12 +52,9 @@ const SECTIONS: NavSection[] = [
   {
     label: "Fiscal",
     items: [
-      { href: "/declaracion", label: "Declaración del mes", icon: Calculator },
-      { href: "/declaraciones", label: "Declaraciones", icon: FileInput },
-      { href: "/declaracion-anual", label: "Dec. Anual", icon: ClipboardList },
-      { href: "/activos", label: "Activo fijo", icon: Boxes },
-      { href: "/contabilidad", label: "Contabilidad", icon: BookOpen },
-      { href: "/cumplimiento", label: "Cumplimiento", icon: ShieldCheck },
+      { href: "/impuestos", label: "Impuestos", icon: Calculator, badge: "3 tabs" },
+      { href: "/contabilidad", label: "Contabilidad", icon: BookOpen, badge: "2 tabs" },
+      { href: "/cumplimiento", label: "Cumplimiento", icon: ShieldCheck, badge: "3 tabs" },
     ],
   },
 ];
@@ -105,7 +99,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   }, [pathname]);
 
   // Highlight only the most specific matching item, so a nested route (e.g.
-  // /declaracion-anual) doesn't also light up a shorter-prefix sibling.
+  // /impuestos/papeles) doesn't also light up a shorter-prefix sibling.
   const allHrefs = [
     ...SECTIONS.flatMap((s) => s.items.map((i) => i.href)),
     CARTERA.href,
@@ -270,7 +264,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
           <div key={section.label}>
             <p className={GRP_LBL}>{section.label}</p>
             <div className="space-y-1">
-              {section.items.map(({ href, label, icon: Icon }) => {
+              {section.items.map(({ href, label, icon: Icon, badge }) => {
                 // Para despachos (varias empresas), "Nómina" entra al cockpit
                 // multi-RFC (todas las empresas de un vistazo) en vez del
                 // workspace de una sola; un usuario de una empresa mantiene /nomina.
@@ -278,7 +272,12 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
                 return (
                   <Link key={href} href={efHref} className={navLinkClass(href === activeNavHref)}>
                     <Icon className="h-4 w-4 shrink-0" />
-                    {label}
+                    <span className="flex-1">{label}</span>
+                    {badge && (
+                      <span className="rounded-full bg-cos-brand-tint px-2 py-0.5 font-mono text-[10px] font-semibold text-cos-brand-ink">
+                        {badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

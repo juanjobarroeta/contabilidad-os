@@ -30,7 +30,7 @@ export async function notifyDeclaracionesFaltantes(
     body:
       `${nEmp} empresa${nEmp === 1 ? "" : "s"} con declaraciones pendientes — ` +
       `súbelas para calcular saldos a favor, coeficiente y pagos provisionales.`,
-    url: "/declaraciones",
+    url: "/impuestos?tab=historial",
     tag: "declaraciones-nag", // colapsa avisos repetidos en uno
   }, "declaraciones");
   return { notified: r.sent, total, empresas: nEmp };

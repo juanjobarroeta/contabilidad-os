@@ -109,9 +109,9 @@ export default function CumplimientoPage() {
   function goToPeriodo(periodo: string) {
     if (periodo.includes("-") && !periodo.includes("-B")) {
       const [y, m] = periodo.split("-");
-      router.push(`/declaracion?month=${parseInt(m)}&year=${parseInt(y)}`);
+      router.push(`/impuestos?month=${parseInt(m)}&year=${parseInt(y)}`);
     } else {
-      router.push("/declaracion");
+      router.push("/impuestos?tab=del-mes");
     }
   }
 

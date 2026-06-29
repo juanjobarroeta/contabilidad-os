@@ -67,7 +67,7 @@ export default function HistorialDeclaracionesPage() {
 
   return (
     <div className="mx-auto max-w-[900px] px-4 py-6 sm:px-8 sm:py-8">
-      <Link href="/declaraciones" className="inline-flex items-center gap-1 text-[13px] text-cos-ink-soft hover:text-cos-ink">
+      <Link href="/impuestos?tab=historial" className="inline-flex items-center gap-1 text-[13px] text-cos-ink-soft hover:text-cos-ink">
         <ChevronLeft className="h-4 w-4" /> Declaraciones
       </Link>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-3">

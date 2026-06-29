@@ -18,15 +18,18 @@ const nextConfig: NextConfig = {
     "jszip",
     "pdf-parse",
   ],
-  // The monthly tax flow now lives in the Declaración Workspace (/declaracion).
-  // The old summary and cierre pages are superseded by its Resumen/Presentar
-  // tabs, so they redirect in. The advanced calc (/impuestos/detalle) and the
-  // printable papeles (/impuestos/papeles) stay as depth tools, linked from the
-  // workspace.
+  // El flujo fiscal mensual ahora vive en el hub de Impuestos (/impuestos), con
+  // pestañas Del mes / Historial / Anual. Las rutas antiguas redirigen a la
+  // pestaña correspondiente. Next.js conserva los query params (month/year) al
+  // redirigir, así que los enlaces profundos siguen funcionando. Los papeles
+  // imprimibles (/impuestos/papeles) se mantienen como herramienta de detalle.
   async redirects() {
     return [
-      { source: "/impuestos", destination: "/declaracion", permanent: false },
-      { source: "/impuestos/cierre", destination: "/declaracion?tab=presentar", permanent: false },
+      { source: "/declaracion", destination: "/impuestos?tab=del-mes", permanent: false },
+      { source: "/declaraciones", destination: "/impuestos?tab=historial", permanent: false },
+      { source: "/declaracion-anual", destination: "/impuestos?tab=anual", permanent: false },
+      { source: "/impuestos/detalle", destination: "/impuestos?tab=del-mes", permanent: false },
+      { source: "/impuestos/cierre", destination: "/impuestos?tab=del-mes", permanent: false },
       // The Detalle view is now inlined into the unified /bancos page.
       { source: "/bancos/detalle", destination: "/bancos", permanent: false },
       // Activo fijo now lives as a tab inside the Contabilidad hub.
