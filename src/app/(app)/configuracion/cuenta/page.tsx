@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ArrowLeft, UserCircle } from "lucide-react";
-import { WhatsappLinkCard } from "@/components/whatsapp/WhatsappLinkCard";
 
 export default async function CuentaPage() {
   const session = await auth();
@@ -45,8 +44,6 @@ export default async function CuentaPage() {
           Edición de perfil y cambio de contraseña próximamente.
         </p>
       </div>
-
-      <WhatsappLinkCard />
     </div>
   );
 }

@@ -2560,6 +2560,10 @@ model WhatsappLink {
   codeExpiresAt DateTime?
   attempts      Int       @default(0) // failed verify attempts → lockout
 
+  // Opt-in (despacho operators) to receive a daily portfolio digest over
+  // WhatsApp. Captured here; the digest cron is a separate future build.
+  digestOptIn Boolean @default(false)
+
   // Which company this number is currently "talking about". Set after the user
   // disambiguates; switchable mid-conversation. Null = ask again on next inbound.
   activeCompanyId String?
