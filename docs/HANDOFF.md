@@ -310,3 +310,20 @@ coeficiente de utilidad y pagos provisionales — sin teclear línea de captura 
 - Patrón redesign: **vista amigable** en la ruta + **workspace power-user** en `/<ruta>/detalle`.
 - Validación en sandbox: solo `tsc` (no `next build` — fetch de Geist bloqueado).
   Modelos nuevos: `npx prisma generate`. Lockfile: `npm install --package-lock-only`.
+
+## 9. Deploys (Railway) y cambios de esquema
+
+- El deploy sincroniza el esquema con `prisma db push` (no migraciones) en `railway.json`
+  → `preDeployCommand`. Lleva `--accept-data-loss` para que NO se bloquee ante cambios que
+  Prisma marca como "potencialmente destructivos" (p.ej. **agregar un `@unique`**, que casi
+  siempre es seguro). Sin el flag, esos cambios detienen el contenedor (`Error: Use the
+  --accept-data-loss flag`).
+- **Implicación:** como el push aplica el esquema tal cual, un cambio realmente destructivo
+  (renombrar/eliminar columna → Prisma lo ve como drop+add y pierde datos) se aplicaría en el
+  deploy. **Revisa el diff de `prisma/schema.prisma` en cada PR**; ese es el verdadero guardarraíl.
+- No corras el push "a mano" desde el shell de Railway para arreglar un deploy roto: ese shell
+  vive en el contenedor en ejecución (deploy viejo) y compara contra un `schema.prisma` anterior,
+  así que reporta "already in sync" sin aplicar nada. El fix correcto es que el propio deploy
+  aplique el cambio (con el flag).
+- A futuro, si se quiere control fino sin riesgo de pérdida silenciosa, migrar a `prisma migrate`
+  (archivos de migración revisados) en lugar de `db push`.
