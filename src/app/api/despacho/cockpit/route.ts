@@ -30,10 +30,30 @@ export async function GET(req: Request) {
 
   const companies = await prisma.company.findMany({
     where: { id: { in: ids }, isActive: true },
-    select: { id: true, rfc: true, razonSocial: true, regimenFiscal: true },
+    select: { id: true, rfc: true, razonSocial: true, regimenFiscal: true, lastAutoSyncAt: true },
     orderBy: { razonSocial: "asc" },
   });
   const companyIds = companies.map((c) => c.id);
+
+  // ── Señales de la "Diligencia" (checklist de mantenimiento, sólo lectura) ──
+  // Todas derivadas de estado ya existente — NO se recalcula ni recorre nada.
+  //  • cfdisAlDia        → frescura de la última sync SAT (lastAutoSyncAt ≤ 36h)
+  //  • bancoSinConciliar → # de BankTransaction UNMATCHED (no IGNORED) por empresa
+  //  • libroMesPosteado  → ¿el AccountingPeriod del periodo a declarar está POSTED?
+  const CFDI_FRESH_MS = 36 * 3600 * 1000; // ~36h
+  const [bancoPend, periodos] = await Promise.all([
+    prisma.bankTransaction.groupBy({
+      by: ["companyId"],
+      where: { companyId: { in: companyIds }, status: "UNMATCHED" },
+      _count: { id: true },
+    }),
+    prisma.accountingPeriod.findMany({
+      where: { companyId: { in: companyIds }, year, month },
+      select: { companyId: true, status: true },
+    }),
+  ]);
+  const bancoPendBy = new Map(bancoPend.map((r) => [r.companyId, r._count.id]));
+  const periodoBy = new Map(periodos.map((p) => [p.companyId, p.status]));
 
   // Lecturas baratas (sin recomputar impuestos): declaraciones del periodo,
   // nómina sin timbrar y empleados activos — todo agregado.
@@ -118,6 +138,12 @@ export async function GET(req: Request) {
     const aPagar = Math.round(((iva?.ivaPagar ?? 0) + (isr?.isrPagar ?? 0)) * 100) / 100;
     const hz = hallazgosBy.get(c.id) ?? { total: 0, peor: null };
 
+    // Diligencia (sólo lectura): qué mantiene al día el contador AI.
+    const cfdisAlDia =
+      c.lastAutoSyncAt != null && now.getTime() - c.lastAutoSyncAt.getTime() <= CFDI_FRESH_MS;
+    const bancoSinConciliar = bancoPendBy.get(c.id) ?? 0;
+    const libroMesPosteado = (periodoBy.get(c.id) ?? "DRAFT") !== "DRAFT";
+
     return {
       id: c.id,
       rfc: c.rfc,
@@ -133,6 +159,10 @@ export async function GET(req: Request) {
       peorSeveridad: hz.peor,
       obligacionesVencidas: obligBy.get(c.id)?.vencidas ?? 0,
       obligacionesPorVencer: obligBy.get(c.id)?.porVencer ?? 0,
+      // Diligencia (mantenimiento del contador AI, sólo lectura)
+      cfdisAlDia,
+      bancoSinConciliar,
+      libroMesPosteado,
     };
   });
 

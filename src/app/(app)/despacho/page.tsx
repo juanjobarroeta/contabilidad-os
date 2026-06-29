@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import {
   Building2, Users2, BadgeCheck, Clock4, AlertTriangle, FileWarning,
   ChevronRight as ChevronR, CalendarDays, Database, ScanSearch, ShieldAlert,
+  Check, CircleAlert, Landmark, BookCheck, Sparkles,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Loading, Money } from "@/components/ui";
@@ -35,6 +36,10 @@ interface Row {
   flagsAbiertos: number;
   hallazgosAbiertos: number;
   peorSeveridad: "error" | "warn" | "info" | null;
+  // Diligencia (mantenimiento del contador AI, sólo lectura)
+  cfdisAlDia: boolean;
+  bancoSinConciliar: number;
+  libroMesPosteado: boolean;
 }
 
 // Prioridad de cartera: empresas con hallazgos "error" primero, luego "warn",
@@ -67,6 +72,56 @@ const ESTADO: Record<Row["estadoDeclaracion"], { label: string; cls: string; ico
   pendiente: { label: "Por calcular", cls: "bg-cos-slate-tint text-cos-ink-soft", icon: Clock4 },
   vencida: { label: "Vencida", cls: "bg-cos-red-tint text-cos-red-ink", icon: AlertTriangle },
 };
+
+// Diligencia: mini-checklist de mantenimiento por empresa (sólo lectura).
+// Refleja lo que el contador AI mantiene al día — derivado de estado existente,
+// sin acciones destructivas ni recálculos. Verde = en orden, ámbar = por revisar.
+function DiligChip({ ok, icon: Icon, label, title }: {
+  ok: boolean; icon: typeof Check; label: string; title?: string;
+}) {
+  return (
+    <span
+      title={title ?? label}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+        ok ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-amber-tint text-cos-amber-ink"
+      }`}
+    >
+      <Icon className="h-3 w-3" /> {label}
+      {ok ? <Check className="h-3 w-3" /> : <CircleAlert className="h-3 w-3" />}
+    </span>
+  );
+}
+
+function DiligenciaChips({ r }: { r: Row }) {
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <DiligChip
+        ok={r.cfdisAlDia}
+        icon={Database}
+        label={r.cfdisAlDia ? "CFDIs al día" : "CFDIs por sincronizar"}
+        title="Frescura de la última sincronización con el SAT"
+      />
+      <DiligChip
+        ok={r.bancoSinConciliar === 0}
+        icon={Landmark}
+        label={r.bancoSinConciliar === 0 ? "Banco conciliado" : `Banco: ${r.bancoSinConciliar} sin conciliar`}
+        title="Movimientos bancarios pendientes de conciliar"
+      />
+      <DiligChip
+        ok={r.libroMesPosteado}
+        icon={BookCheck}
+        label={r.libroMesPosteado ? "Libro posteado" : "Libro preliminar"}
+        title="Estado de la póliza contable del periodo a declarar"
+      />
+      <DiligChip
+        ok={r.hallazgosAbiertos === 0}
+        icon={ShieldAlert}
+        label={r.hallazgosAbiertos === 0 ? "Sin hallazgos" : `${r.hallazgosAbiertos} hallazgo${r.hallazgosAbiertos === 1 ? "" : "s"}`}
+        title="Hallazgos abiertos del auditor"
+      />
+    </div>
+  );
+}
 
 export default function DespachoCockpitPage() {
   const { companies, setActiveCompany } = useCompany();
@@ -200,7 +255,13 @@ export default function DespachoCockpitPage() {
         </Link>
       )}
 
-      <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
+      {/* Diligencia: refuerza que el mantenimiento corre solo, por empresa. */}
+      <div className="mt-5 flex items-center gap-2 text-[12.5px] text-cos-ink-soft">
+        <Sparkles className="h-3.5 w-3.5 flex-none text-cos-brand-ink" />
+        <span>Tu contador AI mantiene esto al día: CFDIs sincronizados, banco conciliado y libros posteados — revisa la diligencia de cada empresa abajo.</span>
+      </div>
+
+      <div className="mt-2 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
         {/* Scroll horizontal en móvil: 5 columnas no caben en ~360px y el
             overflow-hidden del contenedor recortaba la columna Nómina. */}
         <div className="overflow-x-auto">
@@ -255,6 +316,7 @@ export default function DespachoCockpitPage() {
                         </button>
                       )}
                     </div>
+                    <DiligenciaChips r={r} />
                   </td>
                   <td className="px-3 py-3">
                     <button
