@@ -7,12 +7,12 @@
 // activa y entra al workspace).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2, Users2, AlertTriangle, BadgeCheck, Clock4, CircleDashed,
-  ChevronLeft, ChevronRight as ChevronR, Settings2,
+  ChevronLeft, ChevronRight as ChevronR, Settings2, Calculator, X, CheckCircle2, XCircle, MinusCircle,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Loading, Money } from "@/components/ui";
@@ -38,6 +38,27 @@ interface CockpitData {
   periodo: string;
   companies: CockpitCompany[];
 }
+
+// Resultado por empresa que devuelve POST /api/nomina/cockpit/batch-calcular.
+interface BatchResult {
+  companyId: string;
+  razonSocial: string;
+  runId?: string;
+  itemCount?: number;
+  totalNeto?: number;
+  skipped?: string;
+  error?: string;
+  warnings?: string[];
+}
+interface BatchResponse {
+  ok: boolean;
+  results: BatchResult[];
+  creados: number;
+  omitidos: number;
+  errores: number;
+}
+
+const TIPO_RUN_OPCIONES = ["ORDINARIA", "EXTRAORDINARIA", "AGUINALDO", "VACACIONES", "PTU"] as const;
 
 const TIPO_RUN_LABEL: Record<string, string> = {
   ORDINARIA: "Ordinaria",
@@ -68,12 +89,18 @@ export default function NominaCockpitPage() {
   const [data, setData] = useState<CockpitData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch("/api/nomina/cockpit")
+  // Estado del comando "Calcular quincena" en lote.
+  const [panelAbierto, setPanelAbierto] = useState(false);
+
+  const fetchCockpit = useCallback(() => {
+    return fetch("/api/nomina/cockpit")
       .then((r) => (r.ok ? r.json() : null))
-      .then(setData)
-      .finally(() => setLoading(false));
+      .then((d: CockpitData | null) => setData(d));
   }, []);
+
+  useEffect(() => {
+    fetchCockpit().finally(() => setLoading(false));
+  }, [fetchCockpit]);
 
   // Cambia la empresa activa del contexto y entra a su workspace de nómina.
   function operar(c: CockpitCompany, destino: "/nomina" | "/nomina/detalle") {
@@ -97,6 +124,11 @@ export default function NominaCockpitPage() {
   const totEmpleados = rows.reduce((s, c) => s + c.empleadosActivos, 0);
   const totNetoMes = rows.reduce((s, c) => s + c.netoDelMes, 0);
   const conPendientes = rows.filter((c) => estadoDe(c).label !== "Al corriente" && c.empleadosActivos > 0).length;
+  // Empresas que necesitan corrida este mes: con equipo, setup listo y sin
+  // corrida registrada del mes. Es el conjunto por defecto del comando en lote.
+  const necesitanCorrida = rows.filter(
+    (c) => c.empleadosActivos > 0 && c.setupCompleto && c.corridasDelMes === 0
+  );
 
   return (
     <div className="mx-auto max-w-[1100px] px-6 py-7">
@@ -110,6 +142,19 @@ export default function NominaCockpitPage() {
             Todas tus empresas en un panel — corre, timbra y detecta pendientes sin cambiar de contexto.
           </p>
         </div>
+        <button
+          onClick={() => setPanelAbierto(true)}
+          disabled={necesitanCorrida.length === 0}
+          className="inline-flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Calculator className="h-4 w-4" />
+          {necesitanCorrida.length > 0
+            ? `Calcular quincena de ${necesitanCorrida.length} empresa${necesitanCorrida.length === 1 ? "" : "s"}`
+            : "Calcular quincena"}
+        </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
         <div className="flex gap-5 text-[13px] text-cos-ink-soft">
           <span className="inline-flex items-center gap-1.5"><Building2 className="h-4 w-4 text-cos-ink-faint" /> <b className="font-mono">{rows.length}</b> empresas</span>
           <span className="inline-flex items-center gap-1.5"><Users2 className="h-4 w-4 text-cos-ink-faint" /> <b className="font-mono">{totEmpleados}</b> empleados</span>
@@ -196,6 +241,276 @@ export default function NominaCockpitPage() {
       <p className="mt-3 text-[12px] text-cos-ink-faint">
         "Al corriente" = corrida del mes registrada y todo timbrado. "Operar" cambia la empresa activa y abre su workspace.
       </p>
+
+      {panelAbierto && (
+        <BatchCalcularPanel
+          empresas={rows}
+          preseleccion={necesitanCorrida.map((c) => c.id)}
+          onClose={() => setPanelAbierto(false)}
+          onDone={fetchCockpit}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Comando "Calcular quincena" en lote. Sólo CREA + CALCULA corridas (reversible);
+// no timbra ni dispersa. Permite ajustar tipo, periodo, fecha de pago y días, y
+// elegir las empresas con casillas. Reporta por empresa: creada / omitida / error.
+// ─────────────────────────────────────────────────────────────────────────────
+function BatchCalcularPanel({
+  empresas,
+  preseleccion,
+  onClose,
+  onDone,
+}: {
+  empresas: CockpitCompany[];
+  preseleccion: string[];
+  onClose: () => void;
+  onDone: () => Promise<void> | void;
+}) {
+  // Quincena del mes en curso por defecto: 1–15 y pago el día 15.
+  const hoy = new Date();
+  const iso = (d: Date) => d.toISOString().split("T")[0];
+  const ini = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth(), 15);
+
+  const [tipo, setTipo] = useState<string>("ORDINARIA");
+  const [periodoInicio, setPeriodoInicio] = useState(iso(ini));
+  const [periodoFin, setPeriodoFin] = useState(iso(fin));
+  const [fechaPago, setFechaPago] = useState(iso(fin));
+  const [diasPagados, setDiasPagados] = useState(15);
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set(preseleccion));
+  const [enviando, setEnviando] = useState(false);
+  const [resultado, setResultado] = useState<BatchResponse | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Empresas elegibles para el lote (con equipo); se muestran con casilla.
+  const elegibles = useMemo(
+    () => empresas.filter((c) => c.empleadosActivos > 0),
+    [empresas]
+  );
+
+  const toggle = (id: string) =>
+    setSeleccion((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const totalWarnings = resultado
+    ? resultado.results.reduce((s, r) => s + (r.warnings?.length ?? 0), 0)
+    : 0;
+
+  async function enviar() {
+    setEnviando(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/nomina/cockpit/batch-calcular", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyIds: Array.from(seleccion),
+          tipo,
+          periodoInicio,
+          periodoFin,
+          fechaPago,
+          diasPagados: Number(diasPagados),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErrorMsg(json?.error ?? "No se pudo procesar el lote.");
+        return;
+      }
+      setResultado(json as BatchResponse);
+      await onDone();
+    } catch {
+      setErrorMsg("Error de red al procesar el lote.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-cos-ink/40 p-4 py-10">
+      <div className="w-full max-w-[680px] rounded-card border border-cos-line bg-cos-card shadow-card">
+        <div className="flex items-center justify-between border-b border-cos-line px-5 py-4">
+          <div>
+            <h2 className="text-[17px] font-bold tracking-[-0.01em] text-cos-ink">Calcular quincena en lote</h2>
+            <p className="mt-0.5 text-[12.5px] text-cos-ink-soft">
+              Crea y calcula la corrida (ISR, IMSS, INFONAVIT) de varias empresas. No timbra ni dispersa — es reversible.
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-control p-1 text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink" aria-label="Cerrar">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {!resultado ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 px-5 py-4 sm:grid-cols-3">
+              <label className="text-[12px] text-cos-ink-soft">
+                Tipo
+                <select
+                  value={tipo}
+                  onChange={(e) => setTipo(e.target.value)}
+                  className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[13px] text-cos-ink"
+                >
+                  {TIPO_RUN_OPCIONES.map((t) => (
+                    <option key={t} value={t}>{TIPO_RUN_LABEL[t] ?? t}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-[12px] text-cos-ink-soft">
+                Días pagados
+                <input
+                  type="number"
+                  min={1}
+                  value={diasPagados}
+                  onChange={(e) => setDiasPagados(Number(e.target.value))}
+                  className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[13px] text-cos-ink"
+                />
+              </label>
+              <label className="text-[12px] text-cos-ink-soft">
+                Fecha de pago
+                <input
+                  type="date"
+                  value={fechaPago}
+                  onChange={(e) => setFechaPago(e.target.value)}
+                  className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[13px] text-cos-ink"
+                />
+              </label>
+              <label className="text-[12px] text-cos-ink-soft">
+                Periodo inicio
+                <input
+                  type="date"
+                  value={periodoInicio}
+                  onChange={(e) => setPeriodoInicio(e.target.value)}
+                  className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[13px] text-cos-ink"
+                />
+              </label>
+              <label className="text-[12px] text-cos-ink-soft">
+                Periodo fin
+                <input
+                  type="date"
+                  value={periodoFin}
+                  onChange={(e) => setPeriodoFin(e.target.value)}
+                  className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[13px] text-cos-ink"
+                />
+              </label>
+            </div>
+
+            <div className="border-t border-cos-line px-5 py-3">
+              <div className="mb-2 flex items-center justify-between text-[12px] text-cos-ink-soft">
+                <span><b className="font-mono text-cos-ink">{seleccion.size}</b> de {elegibles.length} empresas seleccionadas</span>
+                <div className="flex gap-3">
+                  <button onClick={() => setSeleccion(new Set(elegibles.map((c) => c.id)))} className="text-cos-brand-ink hover:underline">Todas</button>
+                  <button onClick={() => setSeleccion(new Set())} className="text-cos-ink-faint hover:underline">Ninguna</button>
+                </div>
+              </div>
+              <div className="max-h-[240px] overflow-y-auto rounded-control border border-cos-line">
+                {elegibles.map((c) => {
+                  const yaTiene = c.corridasDelMes > 0;
+                  return (
+                    <label key={c.id} className="flex cursor-pointer items-center gap-2.5 border-b border-cos-line px-3 py-2 last:border-b-0 hover:bg-cos-paper/60">
+                      <input
+                        type="checkbox"
+                        checked={seleccion.has(c.id)}
+                        onChange={() => toggle(c.id)}
+                        className="h-4 w-4 accent-cos-brand"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] text-cos-ink">{c.razonSocial}</span>
+                        <span className="block font-mono text-[11px] text-cos-ink-faint">{c.rfc} · {c.empleadosActivos} empleados</span>
+                      </span>
+                      {!c.setupCompleto && (
+                        <span className="rounded-full bg-cos-amber-tint px-2 py-0.5 text-[11px] font-medium text-cos-amber-ink">Setup incompleto</span>
+                      )}
+                      {yaTiene && (
+                        <span className="rounded-full bg-cos-slate-tint px-2 py-0.5 text-[11px] font-medium text-cos-ink-faint">Ya tiene corrida</span>
+                      )}
+                    </label>
+                  );
+                })}
+                {elegibles.length === 0 && (
+                  <p className="px-3 py-6 text-center text-[12.5px] text-cos-ink-faint">No hay empresas con empleados activos.</p>
+                )}
+              </div>
+            </div>
+
+            {errorMsg && (
+              <p className="px-5 text-[12.5px] text-cos-red-ink">{errorMsg}</p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 border-t border-cos-line px-5 py-4">
+              <button onClick={onClose} className="rounded-control px-3 py-2 text-[13px] font-medium text-cos-ink-soft hover:bg-cos-paper">Cancelar</button>
+              <button
+                onClick={enviar}
+                disabled={enviando || seleccion.size === 0}
+                className="inline-flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Calculator className="h-4 w-4" />
+                {enviando ? "Calculando…" : `Calcular ${seleccion.size} empresa${seleccion.size === 1 ? "" : "s"}`}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="px-5 py-4">
+              <div className="flex flex-wrap gap-3 text-[13px]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-cos-jade-tint px-2.5 py-0.5 font-medium text-cos-jade-ink">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> {resultado.creados} creada{resultado.creados === 1 ? "" : "s"}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-cos-slate-tint px-2.5 py-0.5 font-medium text-cos-ink-faint">
+                  <MinusCircle className="h-3.5 w-3.5" /> {resultado.omitidos} omitida{resultado.omitidos === 1 ? "" : "s"}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-cos-red-tint px-2.5 py-0.5 font-medium text-cos-red-ink">
+                  <XCircle className="h-3.5 w-3.5" /> {resultado.errores} error{resultado.errores === 1 ? "" : "es"}
+                </span>
+                {totalWarnings > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-cos-amber-tint px-2.5 py-0.5 font-medium text-cos-amber-ink">
+                    <AlertTriangle className="h-3.5 w-3.5" /> {totalWarnings} advertencia{totalWarnings === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-3 max-h-[320px] overflow-y-auto rounded-control border border-cos-line">
+                {resultado.results.map((r) => (
+                  <div key={r.companyId} className="border-b border-cos-line px-3 py-2.5 last:border-b-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-cos-ink">{r.razonSocial}</span>
+                      {r.runId ? (
+                        <span className="inline-flex items-center gap-1 text-[12.5px] text-cos-jade-ink">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Creada · {r.itemCount} empleados · <Money value={r.totalNeto ?? 0} />
+                        </span>
+                      ) : r.skipped ? (
+                        <span className="inline-flex items-center gap-1 text-[12.5px] text-cos-ink-faint">
+                          <MinusCircle className="h-3.5 w-3.5" /> Omitida: {r.skipped}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[12.5px] text-cos-red-ink">
+                          <XCircle className="h-3.5 w-3.5" /> Error: {r.error}
+                        </span>
+                      )}
+                    </div>
+                    {r.warnings?.map((w, i) => (
+                      <p key={i} className="mt-1 flex items-start gap-1 text-[11.5px] text-cos-amber-ink">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {w}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-cos-line px-5 py-4">
+              <button onClick={onClose} className="rounded-control bg-cos-brand px-4 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep">Cerrar</button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
