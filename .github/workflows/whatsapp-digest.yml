@@ -1,0 +1,32 @@
+name: Resumen de cartera por WhatsApp (matutino, entre semana)
+
+# Envía el resumen diario de cartera por WhatsApp a cada usuario con la
+# preferencia activa (digestOptIn). No usa LLM (costo ~0). Corre entre semana
+# por la mañana, después de la sincronización SAT y el fiscal-audit, para que el
+# resumen refleje los hallazgos frescos del día.
+#
+# Entrega: fuera de la ventana de 24h, WhatsApp exige una plantilla aprobada
+# (TWILIO_DIGEST_TEMPLATE_SID en el deploy). Sin ella, el envío sólo llega a
+# usuarios que escribieron en las últimas 24h.
+#
+# NOTE: GitHub solo corre schedule: desde la rama default (main). Usa el botón
+# "Run workflow" (workflow_dispatch) para una corrida manual.
+
+on:
+  schedule:
+    - cron: "0 14 * * 1-5" # ~08:00 CT (UTC-6), entre semana
+  workflow_dispatch: {}
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar resumen de cartera por WhatsApp
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/whatsapp-digest" -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
