@@ -24,7 +24,19 @@ function generateCode(): string {
 
 export type StartLinkResult =
   | { ok: true }
-  | { ok: false; reason: "taken" | "send_failed" };
+  | { ok: false; reason: "taken" | "send_failed" | "template_required" };
+
+/**
+ * WhatsApp/Meta bloquea los mensajes freeform iniciados por el negocio (como el
+ * código OTP) fuera de la ventana de 24h y exige una plantilla de autenticación
+ * aprobada; Twilio lo reporta con el código de error 63016. Lo detectamos en el
+ * texto del error (postTwilioMessage adjunta el cuerpo de la respuesta, que
+ * incluye el `code`) para dar un mensaje accionable en vez de un "falló" genérico.
+ */
+function isTemplateRequiredError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.includes("63016");
+}
 
 /**
  * Starts (or restarts) linking `phone` to `userId`. Sends a fresh code.
@@ -69,7 +81,8 @@ export async function startLink(
         `Tu código de verificación de Contabilidad OS es: ${code}\nVence en 10 minutos. Si no lo solicitaste, ignora este mensaje.`
       );
     }
-  } catch {
+  } catch (e) {
+    if (isTemplateRequiredError(e)) return { ok: false, reason: "template_required" };
     return { ok: false, reason: "send_failed" };
   }
 

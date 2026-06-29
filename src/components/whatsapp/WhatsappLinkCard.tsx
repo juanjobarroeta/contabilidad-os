@@ -24,6 +24,12 @@ type LinkState = {
   digestOptIn: boolean;
 };
 
+/** Formats a MX E.164 (+52##########) as "+52 ## #### ####" for confirmation. */
+function formatE164(e164: string): string {
+  const mx = /^\+52(\d{2})(\d{4})(\d{4})$/.exec(e164);
+  return mx ? `+52 ${mx[1]} ${mx[2]} ${mx[3]}` : e164;
+}
+
 /** Masks a phone, keeping the country prefix and the last two digits. */
 function maskPhone(e164: string): string {
   const digits = e164.replace(/[^\d+]/g, "");
@@ -87,7 +93,13 @@ export function WhatsappLinkCard() {
         return;
       }
       setPhase("code_sent");
-      setInfo("Te enviamos un código por WhatsApp. Revisa tu teléfono.");
+      // Mostramos el número canónico que realmente registramos para que el usuario
+      // confirme que es el suyo antes de verificar (atrapa erratas al capturar).
+      setInfo(
+        data.phone
+          ? `Te enviamos un código por WhatsApp a ${formatE164(data.phone)}. Si no es tu número, cancela y captúralo de nuevo.`
+          : "Te enviamos un código por WhatsApp. Revisa tu teléfono."
+      );
     } catch {
       setError("Error de red. Inténtalo de nuevo.");
     } finally {

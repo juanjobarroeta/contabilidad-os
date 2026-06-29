@@ -22,16 +22,38 @@ export interface AccessibleCompany {
 }
 
 /**
- * Normalizes a phone to bare E.164 ("+" + digits), canonicalizando los móviles
- * mexicanos: WhatsApp/Twilio entregan el `From` de un móvil de México como
- * +521########## (el "1" de móvil después del 52), pero el usuario registra su
- * número como +52##########. Ese "1" no es parte del número marcable, así que lo
- * quitamos para que ambos lados coincidan en la búsqueda del enlace.
+ * Normalizes a phone to bare E.164 ("+" + digits), canonicalizando los números
+ * de México a la forma marcable +52##########:
+ *
+ *  - Limpia espacios, guiones y paréntesis.
+ *  - WhatsApp/Twilio entregan el `From` de un móvil de México como +521##########
+ *    (el "1" de móvil después del 52), pero el número marcable es +52##########.
+ *    Ese "1" no es parte del número, así que lo quitamos para que ambos lados
+ *    coincidan en la búsqueda del enlace. Aplica con y sin el "+":
+ *      +521##########  / 521##########  → +52##########
+ *  - Acepta el número nacional capturado por el usuario con varias formas y lo
+ *    lleva a la canónica:
+ *      +52##########   → se mantiene
+ *      52##########    → +52##########
+ *      ##########      (10 dígitos pelones) → se asume México → +52##########
+ *  - Sólo aplicamos supuestos de México cuando es inequívoco (10 dígitos pelones,
+ *    o empieza con 52/521). Cualquier otro número internacional se respeta tal
+ *    cual (sólo se le antepone el "+").
  */
 export function normalizePhone(raw: string): string {
   const trimmed = raw.trim().replace(/[\s\-()]/g, "");
-  const e164 = trimmed.startsWith("+") ? trimmed : `+${trimmed.replace(/^\+*/, "")}`;
-  return /^\+521\d{10}$/.test(e164) ? `+52${e164.slice(4)}` : e164;
+  const hadPlus = trimmed.startsWith("+");
+  const digits = trimmed.replace(/^\+*/, "").replace(/\D/g, "");
+
+  // Móvil MX con el "1" extra (con o sin "+"): 521########## → 52##########
+  if (/^521\d{10}$/.test(digits)) return `+52${digits.slice(3)}`;
+  // Nacional MX ya con lada 52: 52########## → +52##########
+  if (/^52\d{10}$/.test(digits)) return `+${digits}`;
+  // 10 dígitos pelones, sin "+": se asume México.
+  if (!hadPlus && /^\d{10}$/.test(digits)) return `+52${digits}`;
+
+  // Cualquier otro caso (internacional u otra longitud): bare E.164.
+  return `+${digits}`;
 }
 
 /**
