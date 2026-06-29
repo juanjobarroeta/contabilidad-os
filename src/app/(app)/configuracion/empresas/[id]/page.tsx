@@ -7,6 +7,7 @@ import {
   ArrowLeft, Building2, Loader2, CheckCircle2, AlertCircle,
   Upload, Eye, EyeOff, Shield, FileKey2, Save,
 } from "lucide-react";
+import { ClientInvitesPanel } from "./ClientInvitesPanel";
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -454,6 +455,9 @@ export default function EmpresaEditPage() {
           {hasFiel ? "Actualizar e.firma" : "Guardar e.firma"}
         </button>
       </section>
+
+      {/* Invitar cliente a esta empresa (solo admins del despacho dueño) */}
+      <ClientInvitesPanel companyId={id} />
     </div>
   );
 }
