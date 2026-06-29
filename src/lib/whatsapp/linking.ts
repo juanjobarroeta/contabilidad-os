@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsappMessage } from "./twilio";
+import { sendWhatsappMessage, sendWhatsappTemplate } from "./twilio";
 import { normalizePhone } from "./identity";
 
 /**
@@ -56,10 +56,19 @@ export async function startLink(
   });
 
   try {
-    await sendWhatsappMessage(
-      phoneE164,
-      `Tu código de verificación de Contabilidad OS es: ${code}\nVence en 10 minutos. Si no lo solicitaste, ignora este mensaje.`
-    );
+    // El código de verificación es un mensaje iniciado por el negocio. En
+    // producción WhatsApp exige una plantilla de autenticación (OTP) aprobada;
+    // el código va como variable "1". En sandbox/dev (sin plantilla configurada)
+    // caemos al envío freeform, que sólo funciona en la ventana de servicio/sandbox.
+    const otpTemplateSid = process.env.TWILIO_OTP_TEMPLATE_SID;
+    if (otpTemplateSid) {
+      await sendWhatsappTemplate(phoneE164, otpTemplateSid, { "1": code });
+    } else {
+      await sendWhatsappMessage(
+        phoneE164,
+        `Tu código de verificación de Contabilidad OS es: ${code}\nVence en 10 minutos. Si no lo solicitaste, ignora este mensaje.`
+      );
+    }
   } catch {
     return { ok: false, reason: "send_failed" };
   }

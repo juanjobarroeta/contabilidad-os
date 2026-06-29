@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { computeTaxPosition } from "./impuestos";
-import { sendWhatsappMessage } from "./whatsapp/twilio";
+import { sendWhatsappMessage, sendWhatsappTemplate } from "./whatsapp/twilio";
 import { formatCurrency } from "./utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -129,15 +129,39 @@ export async function notifyIvaChanges(
     // leave it so a future run retries when a number gets linked.
     if (recipients.length === 0) continue;
 
+    const periodo = periodoLabel(p.periodo);
+    const ivaActual = formatCurrency(current);
+    const ivaPrevio = formatCurrency(existing.ivaTrasladado);
+
     const body =
-      `💡 Llegó un complemento de pago que afecta tu IVA de ${periodoLabel(p.periodo)}. ` +
-      `Tu IVA trasladado ahora es ${formatCurrency(current)} ` +
-      `(antes ${formatCurrency(existing.ivaTrasladado)}). Revisa el cierre del mes.`;
+      `💡 Llegó un complemento de pago que afecta tu IVA de ${periodo}. ` +
+      `Tu IVA trasladado ahora es ${ivaActual} ` +
+      `(antes ${ivaPrevio}). Revisa el cierre del mes.`;
+
+    // Aviso proactivo iniciado por el negocio: fuera de la ventana de servicio de
+    // 24h WhatsApp exige una plantilla de utilidad aprobada. Si está configurada
+    // la usamos; si no, caemos a freeform (válido sólo en ventana/sandbox/dev).
+    //
+    // Orden de variables de la plantilla TWILIO_IVA_TEMPLATE_SID (construye la
+    // plantilla en el Content Template Builder con este mismo orden):
+    //   {{1}} = periodo (etiqueta del mes, p.ej. "marzo 2026")
+    //   {{2}} = IVA trasladado actual (ya formateado como moneda)
+    //   {{3}} = IVA trasladado previo (ya formateado como moneda)
+    const ivaTemplateSid = process.env.TWILIO_IVA_TEMPLATE_SID;
 
     let sent = false;
     for (const to of recipients) {
       try {
-        await sendWhatsappMessage(to, body);
+        if (ivaTemplateSid) {
+          await sendWhatsappTemplate(
+            to,
+            ivaTemplateSid,
+            { "1": periodo, "2": ivaActual, "3": ivaPrevio },
+            { companyId }
+          );
+        } else {
+          await sendWhatsappMessage(to, body, { companyId });
+        }
         sent = true;
       } catch (e) {
         console.error(`[iva-change-notify] send failed for ${companyId} ${p.periodo}:`, e);

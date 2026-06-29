@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import { recordCost } from "@/lib/costos/record";
+import { twilioWhatsappMicroUsd } from "@/lib/costos/rates";
 
 /**
  * Twilio WhatsApp provider — signature verification (inbound trust boundary)
@@ -105,17 +107,34 @@ export function verifyTwilioSignatureAny(
   return urls.some((u) => verifyTwilioSignature(u, params, signature));
 }
 
-/** Sends a WhatsApp message via Twilio REST. Returns the message SID. */
-export async function sendWhatsappMessage(
-  toE164: string,
-  body: string
-): Promise<string> {
+/**
+ * Registra (fire-and-forget) el costo de un mensaje de WhatsApp enviado. Se llama
+ * SÓLO tras un envío exitoso. Nunca lanza hacia el camino de envío: cualquier
+ * fallo al medir se traga aquí.
+ *
+ * `subtipo` esperado: "whatsapp.template" (plantilla proactiva, fuera de ventana)
+ * o "whatsapp.session" (respuesta dentro de la ventana de servicio de 24h).
+ */
+export function recordWhatsappCost(opts: {
+  companyId?: string | null;
+  subtipo: "whatsapp.template" | "whatsapp.session";
+}): void {
+  const kind = opts.subtipo === "whatsapp.session" ? "session" : "template";
+  void recordCost({
+    categoria: "TWILIO",
+    subtipo: opts.subtipo,
+    unidades: 1,
+    costoMicroUsd: twilioWhatsappMicroUsd(kind),
+    companyId: opts.companyId ?? null,
+  }).catch(() => {
+    // recordCost ya es fire-and-forget; este catch es por si acaso.
+  });
+}
+
+/** POST compartido al endpoint de Messages de Twilio. Devuelve el SID. */
+async function postTwilioMessage(form: URLSearchParams): Promise<string> {
   const sid = process.env.TWILIO_ACCOUNT_SID!;
   const token = process.env.TWILIO_AUTH_TOKEN!;
-  const from = process.env.TWILIO_WHATSAPP_FROM!;
-
-  const to = toE164.startsWith("whatsapp:") ? toE164 : `whatsapp:${toE164}`;
-  const form = new URLSearchParams({ From: from, To: to, Body: body });
 
   const res = await fetch(
     `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
@@ -136,6 +155,52 @@ export async function sendWhatsappMessage(
   }
   const json = (await res.json()) as { sid?: string };
   return json.sid ?? "";
+}
+
+/**
+ * Sends a freeform WhatsApp message via Twilio REST. Returns the message SID.
+ * Freeform sólo es entregable dentro de la ventana de servicio de 24h (o en el
+ * sandbox/dev). Para mensajes proactivos a números "fríos" usa
+ * `sendWhatsappTemplate`. Mide el envío como `whatsapp.session`.
+ */
+export async function sendWhatsappMessage(
+  toE164: string,
+  body: string,
+  costCtx?: { companyId?: string | null }
+): Promise<string> {
+  const from = process.env.TWILIO_WHATSAPP_FROM!;
+  const to = toE164.startsWith("whatsapp:") ? toE164 : `whatsapp:${toE164}`;
+  const form = new URLSearchParams({ From: from, To: to, Body: body });
+
+  const messageSid = await postTwilioMessage(form);
+  recordWhatsappCost({ companyId: costCtx?.companyId, subtipo: "whatsapp.session" });
+  return messageSid;
+}
+
+/**
+ * Sends a WhatsApp message using a pre-approved Content template (Twilio Content
+ * API). Required para mensajes proactivos fuera de la ventana de 24h, que es lo
+ * que WhatsApp exige para números "fríos". Usa `ContentSid` (HX...) del Content
+ * Template Builder y `ContentVariables` (JSON con el mapa de variables) en lugar
+ * de `Body`. Misma auth/From que el envío freeform. Devuelve el SID.
+ * Mide el envío como `whatsapp.template`.
+ */
+export async function sendWhatsappTemplate(
+  toE164: string,
+  contentSid: string,
+  variables?: Record<string, string>,
+  costCtx?: { companyId?: string | null }
+): Promise<string> {
+  const from = process.env.TWILIO_WHATSAPP_FROM!;
+  const to = toE164.startsWith("whatsapp:") ? toE164 : `whatsapp:${toE164}`;
+  const form = new URLSearchParams({ From: from, To: to, ContentSid: contentSid });
+  if (variables && Object.keys(variables).length > 0) {
+    form.set("ContentVariables", JSON.stringify(variables));
+  }
+
+  const messageSid = await postTwilioMessage(form);
+  recordWhatsappCost({ companyId: costCtx?.companyId, subtipo: "whatsapp.template" });
+  return messageSid;
 }
 
 /** Builds a minimal TwiML response so the webhook can reply in-band. */
