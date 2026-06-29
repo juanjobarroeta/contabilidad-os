@@ -7,9 +7,25 @@ import { formatCurrency } from "@/lib/utils";
 import {
   Calendar, CheckCircle2, AlertCircle, Loader2, X,
   RotateCcw, FileText, BookOpen, Download, ArrowLeftRight, Boxes,
-  Landmark, FileCheck2, Clock, ExternalLink,
+  Landmark, FileCheck2, Clock, ExternalLink, ShieldCheck, ArrowRight,
 } from "lucide-react";
 import { ActivoFijoView } from "@/components/contabilidad/ActivoFijoView";
+
+// ── Readiness CE (tipos espejo de /api/contabilidad/ce-readiness) ──────────────
+type ReadinessCheckEstado = "ok" | "warn" | "error";
+type ReadinessStatus = "lista" | "con_huecos" | "incompleta";
+interface ReadinessCheck {
+  clave: string;
+  estado: ReadinessCheckEstado;
+  titulo: string;
+  detalle: string;
+  cta?: { label: string; href: string };
+}
+interface ReadinessResult {
+  status: ReadinessStatus;
+  resumen: string;
+  checks: ReadinessCheck[];
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type PeriodStatus = "DRAFT" | "POSTED" | "CLOSED";
@@ -548,10 +564,28 @@ function ContabilidadElectronicaPanel({
   month: number;
   onChangePeriod: (y: number, m: number) => void;
 }) {
-  const period = periods.find((p) => p.year === year && p.month === month);
-  const isPosted = period?.status === "POSTED" || period?.status === "CLOSED";
-
   const qs = `companyId=${companyId}&year=${year}&month=${month}`;
+
+  // Readiness: ¿es confiable la CE de este periodo y qué falta si no?
+  const [readiness, setReadiness] = useState<ReadinessResult | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setReadinessLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/contabilidad/ce-readiness?${qs}`);
+        const data = await res.json();
+        if (!cancelled && res.ok) setReadiness(data as ReadinessResult);
+        else if (!cancelled) setReadiness(null);
+      } catch {
+        if (!cancelled) setReadiness(null);
+      } finally {
+        if (!cancelled) setReadinessLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [qs]);
 
   const entregables: {
     key: string;
@@ -589,25 +623,12 @@ function ContabilidadElectronicaPanel({
     <div>
       <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
 
-      {/* Estado de preparación del periodo */}
-      {isPosted ? (
-        <div className="mb-4 flex items-start gap-2 rounded-card border border-[oklch(0.66_0.12_168_/_0.28)] bg-cos-jade-tint px-4 py-3 text-sm text-cos-jade-ink">
-          <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-          <span>
-            <span className="font-medium">Listo para el SAT</span> — generado de tu contabilidad.
-            Los XML reflejan los asientos cerrados de {MESES[month - 1]} {year}.
-          </span>
-        </div>
-      ) : (
-        <div className="mb-4 flex items-start gap-2 rounded-card border border-cos-line bg-cos-slate-tint px-4 py-3 text-sm text-cos-ink">
-          <Clock className="h-4 w-4 shrink-0 mt-0.5 text-cos-ink-soft" />
-          <span>
-            <span className="font-medium">Preliminar</span> — los XML se generan con un cálculo directo
-            de tus CFDIs y serán definitivos en cuanto cierres {MESES[month - 1]} {year} desde
-            &ldquo;Cierres mensuales&rdquo;.
-          </span>
-        </div>
-      )}
+      {/* ¿Lista tu Contabilidad Electrónica? — readiness del periodo */}
+      <ReadinessCard
+        loading={readinessLoading}
+        readiness={readiness}
+        mesLabel={`${MESES[month - 1]} ${year}`}
+      />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {entregables.map(({ key, label, desc, Icon, href, note }) => (
@@ -646,6 +667,93 @@ function ContabilidadElectronicaPanel({
           El envío automático al SAT con tu e.firma está en camino. Por ahora descarga los XML y
           cárgalos en el portal del SAT; pronto lo haremos por ti.
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Tarjeta de readiness CE ─────────────────────────────────────────────────────
+// Resumen claro de si la CE del periodo es confiable y, si no, qué falta. Verde
+// = lista; ámbar = con huecos; rojo = incompleta. Lista los checks con su CTA.
+function ReadinessCard({
+  loading, readiness, mesLabel,
+}: { loading: boolean; readiness: ReadinessResult | null; mesLabel: string }) {
+  if (loading) {
+    return (
+      <div className="mb-4 flex items-center gap-2 rounded-card border border-cos-line bg-cos-card px-4 py-3 text-sm text-cos-ink-soft">
+        <Loader2 className="h-4 w-4 animate-spin" /> Revisando si tu Contabilidad Electrónica está lista…
+      </div>
+    );
+  }
+  if (!readiness) {
+    return (
+      <div className="mb-4 flex items-start gap-2 rounded-card border border-cos-line bg-cos-slate-tint px-4 py-3 text-sm text-cos-ink">
+        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-cos-ink-soft" />
+        <span>No se pudo evaluar el estado de preparación de la CE de {mesLabel}.</span>
+      </div>
+    );
+  }
+
+  const { status, resumen, checks } = readiness;
+
+  // Tema por estado global (sólo tokens cos-*).
+  const tema = {
+    lista: {
+      wrap: "border-[oklch(0.66_0.12_168_/_0.28)] bg-cos-jade-tint",
+      head: "text-cos-jade-ink",
+      Icon: ShieldCheck,
+      titulo: "Lista para el SAT",
+    },
+    con_huecos: {
+      wrap: "border-cos-amber bg-cos-amber-tint",
+      head: "text-cos-amber-ink",
+      Icon: AlertCircle,
+      titulo: "Casi lista",
+    },
+    incompleta: {
+      wrap: "border-[oklch(0.6_0.2_25_/_0.22)] bg-cos-red-tint",
+      head: "text-cos-red-ink",
+      Icon: AlertCircle,
+      titulo: "Incompleta",
+    },
+  }[status];
+
+  const iconoCheck: Record<ReadinessCheckEstado, React.ReactNode> = {
+    ok: <CheckCircle2 className="h-4 w-4 shrink-0 text-cos-jade-ink" />,
+    warn: <Clock className="h-4 w-4 shrink-0 text-cos-amber-ink" />,
+    error: <AlertCircle className="h-4 w-4 shrink-0 text-cos-red-ink" />,
+  };
+
+  return (
+    <div className={`mb-5 rounded-card border ${tema.wrap}`}>
+      <div className="flex items-start gap-2.5 px-4 py-3">
+        <tema.Icon className={`h-5 w-5 shrink-0 mt-0.5 ${tema.head}`} />
+        <div className="min-w-0">
+          <p className={`text-[15px] font-semibold ${tema.head}`}>{tema.titulo} — {mesLabel}</p>
+          <p className="mt-0.5 text-[13px] text-cos-ink-soft">{resumen}</p>
+        </div>
+      </div>
+
+      <div className="border-t border-cos-line-soft bg-cos-card/60 px-4 py-3">
+        <ul className="flex flex-col gap-2.5">
+          {checks.map((c) => (
+            <li key={c.clave} className="flex items-start gap-2.5">
+              {iconoCheck[c.estado]}
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-medium text-cos-ink">{c.titulo}</p>
+                <p className="text-[12.5px] leading-snug text-cos-ink-soft">{c.detalle}</p>
+              </div>
+              {c.cta && (
+                <a
+                  href={c.cta.href}
+                  className="inline-flex flex-none items-center gap-1 rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[12px] font-semibold text-cos-brand-ink hover:bg-cos-paper"
+                >
+                  {c.cta.label} <ArrowRight className="h-3 w-3" />
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
