@@ -261,6 +261,9 @@ model Company {
   // Despacho per-company scoping junction
   despachoMemberScopes DespachoMemberCompany[]
 
+  // Client invitations scoped to this company
+  invitations CompanyInvitation[]
+
   // WhatsApp channel (W0)
   whatsappLinks         WhatsappLink[]         @relation("WhatsappActiveCompany")
   whatsappConversations WhatsappConversation[]
@@ -350,10 +353,11 @@ model Despacho {
   // Sólo para unit economics; desacoplado del trial/subscription gating.
   precioMensualCentavos Int?
 
-  members    DespachoMember[]
-  companies  Company[]
-  grupos     Grupo[]
-  costEvents CostEvent[]
+  members     DespachoMember[]
+  companies   Company[]
+  grupos      Grupo[]
+  costEvents  CostEvent[]
+  invitations CompanyInvitation[]
 }
 
 // Grupo de empresas — sub-conjunto del despacho del mismo dueño que se factura
@@ -414,6 +418,52 @@ enum DespachoRole {
   OWNER
   ADMIN
   ACCOUNTANT
+}
+
+// ─── Client invitations (self-serve, scoped to ONE company) ─────────────────
+//
+// A despacho admin (OWNER/ADMIN of the despacho that OWNS the company) invites
+// a CLIENT — their customer — to access EXACTLY ONE company. Accepting the
+// invite creates a single CompanyMember row on that one company and NEVER a
+// DespachoMember, so the client can only ever read that one company and never
+// its despacho siblings.
+//
+// The token is delivered to the client out-of-band (link). Only its SHA-256
+// hash is stored, so a database leak can't be replayed into account takeover.
+// Single-use: status flips to ACCEPTED on first acceptance and the row is
+// thereafter inert (acceptance is idempotent — re-hitting a consumed invite
+// for the same email is a no-op success).
+model CompanyInvitation {
+  id              String                  @id @default(cuid())
+  companyId       String
+  despachoId      String
+  // Despacho member (user) who created the invite — audit trail.
+  invitedByUserId String
+  email           String // lower-cased target email
+  role            MemberRole              @default(VIEWER) // client role on the company
+  // SHA-256 hash of the raw token (hex). The raw token only ever leaves the
+  // server once, embedded in the accept link returned at creation time.
+  tokenHash       String                  @unique
+  status          CompanyInvitationStatus @default(PENDING)
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  // User that ultimately consumed the invite (set on accept).
+  acceptedUserId  String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  despacho Despacho @relation(fields: [despachoId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([despachoId])
+  @@index([email])
+}
+
+enum CompanyInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
 }
 
 // ─── Module gating (SaaS) ────────────────────────────────────────────────────
