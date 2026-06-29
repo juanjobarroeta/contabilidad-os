@@ -248,7 +248,7 @@ export default function InicioPage() {
                 <span className="inline-flex items-center gap-1.5 text-[13.5px] text-cos-ink-soft">
                   <CalendarDays className="h-[15px] w-[15px]" /> Vence el {data.taxThisMonth.venceFmt}
                 </span>
-                <Link href="/declaracion" className="inline-flex items-center gap-1 rounded-control px-2 py-1.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
+                <Link href="/impuestos?tab=del-mes" className="inline-flex items-center gap-1 rounded-control px-2 py-1.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
                   Ver detalle <ChevronRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
@@ -264,7 +264,7 @@ export default function InicioPage() {
                     Coeficiente sugerido {(data.taxThisMonth.coeficienteSugerido * 100).toFixed(2)}%
                     {data.taxThisMonth.coeficiente != null &&
                       ` (aplicas ${(data.taxThisMonth.coeficiente * 100).toFixed(2)}%)`}{" "}
-                    — <Link href="/declaracion" className="underline">ajústalo</Link>.
+                    — <Link href="/impuestos?tab=del-mes" className="underline">ajústalo</Link>.
                   </p>
                 )}
             </Card>
@@ -351,7 +351,7 @@ export default function InicioPage() {
           <Card className="rounded-card border-cos-line p-5 shadow-card">
             <div className="mb-3.5 flex items-start justify-between gap-3">
               <span className={LBL}>Próximos trámites con el SAT</span>
-              <Link href="/declaracion" className="rounded-control px-2 py-1.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
+              <Link href="/impuestos?tab=del-mes" className="rounded-control px-2 py-1.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
                 Ver todos
               </Link>
             </div>
@@ -398,7 +398,7 @@ export default function InicioPage() {
               <div className="flex h-[150px] items-center justify-center">
                 <div className="text-center">
                   <p className="text-sm text-cos-ink-soft">Sin facturas en los últimos 6 meses</p>
-                  <Link href="/declaracion" className="mt-1 inline-block text-xs text-cos-brand-ink hover:underline">
+                  <Link href="/impuestos?tab=del-mes" className="mt-1 inline-block text-xs text-cos-brand-ink hover:underline">
                     Importar CFDIs del SAT →
                   </Link>
                 </div>

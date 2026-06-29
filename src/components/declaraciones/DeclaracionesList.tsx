@@ -14,7 +14,7 @@ const TIPO_LABEL: Record<string, string> = {
   ISR_PROVISIONAL: "ISR prov.",
 };
 
-export default function DeclaracionesPage() {
+export function DeclaracionesList() {
   const [data, setData] = useState<Cobertura | null>(null);
   const [acuses, setAcuses] = useState<Acuse[]>([]);
   const [loading, setLoading] = useState(true);
