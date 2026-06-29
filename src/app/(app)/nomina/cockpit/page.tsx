@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import {
   Building2, Users2, AlertTriangle, BadgeCheck, Clock4, CircleDashed,
   ChevronLeft, ChevronRight as ChevronR, Settings2, Calculator, X, CheckCircle2, XCircle, MinusCircle,
+  Download,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Loading, Money } from "@/components/ui";
@@ -91,6 +92,8 @@ export default function NominaCockpitPage() {
 
   // Estado del comando "Calcular quincena" en lote.
   const [panelAbierto, setPanelAbierto] = useState(false);
+  // Estado del comando "Descargar dispersión" en lote.
+  const [dispersionAbierta, setDispersionAbierta] = useState(false);
 
   const fetchCockpit = useCallback(() => {
     return fetch("/api/nomina/cockpit")
@@ -129,6 +132,8 @@ export default function NominaCockpitPage() {
   const necesitanCorrida = rows.filter(
     (c) => c.empleadosActivos > 0 && c.setupCompleto && c.corridasDelMes === 0
   );
+  // Empresas con corrida registrada del mes: el conjunto dispersable por defecto.
+  const conCorrida = rows.filter((c) => c.corridasDelMes > 0);
 
   return (
     <div className="mx-auto max-w-[1100px] px-6 py-7">
@@ -142,16 +147,26 @@ export default function NominaCockpitPage() {
             Todas tus empresas en un panel — corre, timbra y detecta pendientes sin cambiar de contexto.
           </p>
         </div>
-        <button
-          onClick={() => setPanelAbierto(true)}
-          disabled={necesitanCorrida.length === 0}
-          className="inline-flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Calculator className="h-4 w-4" />
-          {necesitanCorrida.length > 0
-            ? `Calcular quincena de ${necesitanCorrida.length} empresa${necesitanCorrida.length === 1 ? "" : "s"}`
-            : "Calcular quincena"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setDispersionAbierta(true)}
+            disabled={conCorrida.length === 0}
+            className="inline-flex items-center gap-2 rounded-control border border-cos-line bg-cos-card px-4 py-2 text-[13.5px] font-semibold text-cos-ink hover:bg-cos-paper disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            Descargar dispersión
+          </button>
+          <button
+            onClick={() => setPanelAbierto(true)}
+            disabled={necesitanCorrida.length === 0}
+            className="inline-flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Calculator className="h-4 w-4" />
+            {necesitanCorrida.length > 0
+              ? `Calcular quincena de ${necesitanCorrida.length} empresa${necesitanCorrida.length === 1 ? "" : "s"}`
+              : "Calcular quincena"}
+          </button>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
@@ -250,6 +265,151 @@ export default function NominaCockpitPage() {
           onDone={fetchCockpit}
         />
       )}
+
+      {dispersionAbierta && (
+        <BatchDispersionPanel
+          empresas={rows}
+          preseleccion={conCorrida.map((c) => c.id)}
+          onClose={() => setDispersionAbierta(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Comando "Descargar dispersión" en lote. Genera UN solo CSV de dispersión SPEI
+// con todos los empleados de las empresas seleccionadas que tengan corrida
+// (CALCULATED/STAMPED) para la quincena indicada. Acción de sólo lectura: no
+// timbra, no ejecuta pagos, no cambia estado. Descarga directa vía GET.
+// ─────────────────────────────────────────────────────────────────────────────
+function BatchDispersionPanel({
+  empresas,
+  preseleccion,
+  onClose,
+}: {
+  empresas: CockpitCompany[];
+  preseleccion: string[];
+  onClose: () => void;
+}) {
+  // Quincena del mes en curso por defecto: 1–15 (misma convención que calcular).
+  const hoy = new Date();
+  const iso = (d: Date) => d.toISOString().split("T")[0];
+  const ini = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth(), 15);
+
+  const [periodoInicio, setPeriodoInicio] = useState(iso(ini));
+  const [periodoFin, setPeriodoFin] = useState(iso(fin));
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set(preseleccion));
+
+  // Empresas con corrida del mes: las que pueden tener dispersión.
+  const elegibles = useMemo(
+    () => empresas.filter((c) => c.corridasDelMes > 0),
+    [empresas]
+  );
+
+  const toggle = (id: string) =>
+    setSeleccion((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  function descargar() {
+    const params = new URLSearchParams({
+      companyIds: Array.from(seleccion).join(","),
+      periodoInicio,
+      periodoFin,
+    });
+    // Descarga directa: el endpoint responde con Content-Disposition attachment.
+    window.location.href = `/api/nomina/cockpit/batch-dispersion?${params.toString()}`;
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-cos-ink/40 p-4 py-10">
+      <div className="w-full max-w-[680px] rounded-card border border-cos-line bg-cos-card shadow-card">
+        <div className="flex items-center justify-between border-b border-cos-line px-5 py-4">
+          <div>
+            <h2 className="text-[17px] font-bold tracking-[-0.01em] text-cos-ink">Descargar dispersión en lote</h2>
+            <p className="mt-0.5 text-[12.5px] text-cos-ink-soft">
+              Un solo archivo CSV de dispersión SPEI con los empleados de varias empresas para la misma quincena. Sólo exporta — no timbra ni ejecuta pagos.
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-control p-1 text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink" aria-label="Cerrar">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 px-5 py-4">
+          <label className="text-[12px] text-cos-ink-soft">
+            Periodo inicio
+            <input
+              type="date"
+              value={periodoInicio}
+              onChange={(e) => setPeriodoInicio(e.target.value)}
+              className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[13px] text-cos-ink"
+            />
+          </label>
+          <label className="text-[12px] text-cos-ink-soft">
+            Periodo fin
+            <input
+              type="date"
+              value={periodoFin}
+              onChange={(e) => setPeriodoFin(e.target.value)}
+              className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[13px] text-cos-ink"
+            />
+          </label>
+        </div>
+
+        <div className="border-t border-cos-line px-5 py-3">
+          <div className="mb-2 flex items-center justify-between text-[12px] text-cos-ink-soft">
+            <span><b className="font-mono text-cos-ink">{seleccion.size}</b> de {elegibles.length} empresas seleccionadas</span>
+            <div className="flex gap-3">
+              <button onClick={() => setSeleccion(new Set(elegibles.map((c) => c.id)))} className="text-cos-brand-ink hover:underline">Todas</button>
+              <button onClick={() => setSeleccion(new Set())} className="text-cos-ink-faint hover:underline">Ninguna</button>
+            </div>
+          </div>
+          <div className="max-h-[240px] overflow-y-auto rounded-control border border-cos-line">
+            {elegibles.map((c) => (
+              <label key={c.id} className="flex cursor-pointer items-center gap-2.5 border-b border-cos-line px-3 py-2 last:border-b-0 hover:bg-cos-paper/60">
+                <input
+                  type="checkbox"
+                  checked={seleccion.has(c.id)}
+                  onChange={() => toggle(c.id)}
+                  className="h-4 w-4 accent-cos-brand"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] text-cos-ink">{c.razonSocial}</span>
+                  <span className="block font-mono text-[11px] text-cos-ink-faint">{c.rfc} · {c.empleadosActivos} empleados</span>
+                </span>
+                <span className="rounded-full bg-cos-slate-tint px-2 py-0.5 text-[11px] font-medium text-cos-ink-faint">
+                  {c.corridasDelMes} corrida{c.corridasDelMes === 1 ? "" : "s"}
+                </span>
+              </label>
+            ))}
+            {elegibles.length === 0 && (
+              <p className="px-3 py-6 text-center text-[12.5px] text-cos-ink-faint">No hay empresas con corrida este mes.</p>
+            )}
+          </div>
+          <p className="mt-2 text-[11.5px] text-cos-ink-faint">
+            Se incluye, por empresa, la corrida más reciente del periodo en estado calculado o timbrado. Las empresas sin corrida para ese periodo se omiten del archivo.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-cos-line px-5 py-4">
+          <button onClick={onClose} className="rounded-control px-3 py-2 text-[13px] font-medium text-cos-ink-soft hover:bg-cos-paper">Cancelar</button>
+          <button
+            onClick={descargar}
+            disabled={seleccion.size === 0}
+            className="inline-flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            Descargar {seleccion.size} empresa{seleccion.size === 1 ? "" : "s"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
