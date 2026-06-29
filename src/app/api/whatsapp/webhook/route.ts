@@ -19,7 +19,8 @@ import {
   type AccessibleCompany,
 } from "@/lib/whatsapp/identity";
 import { runWhatsappAgent, type WhatsappCompany } from "@/lib/whatsapp/agent";
-import { tryConfirmPendingAction } from "@/lib/whatsapp/pending-action";
+import { tryConfirmPendingAction, getPendingAction } from "@/lib/whatsapp/pending-action";
+import { checkWhatsappRateLimit } from "@/lib/whatsapp/rate-limit";
 
 // Long-running Node server (Railway `next start`), NOT serverless — so the
 // background agent work kicked off after we respond keeps running to completion.
@@ -255,7 +256,7 @@ export async function POST(req: Request) {
   // ── 5. Load context fast, then hand the slow agent work to the background. ─
   const company = await prisma.company.findUnique({
     where: { id: activeCompanyId },
-    select: { rfc: true, razonSocial: true, regimenFiscal: true, codigoPostal: true },
+    select: { rfc: true, razonSocial: true, regimenFiscal: true, codigoPostal: true, tier: true },
   });
   if (!company) return reply("No encontré la empresa seleccionada.");
 
@@ -303,6 +304,28 @@ export async function POST(req: Request) {
       history,
     });
     return ack();
+  }
+
+  // ── Cost-safety: per-user daily + per-company monthly caps. ───────────────
+  // Run BEFORE persisting the turn or calling the LLM. We must NOT block a
+  // pending 6-digit confirmation (or "cancelar"): those don't hit the agent and
+  // resolving a staged write shouldn't be held hostage by a volume cap. Normal
+  // agent turns ARE counted and limited. When over a cap we reply with a cheap
+  // STATIC message (no LLM) and stop.
+  const pending = await getPendingAction(conversation.id);
+  const isConfirmationReply =
+    pending != null &&
+    (/\b\d{6}\b/.test(body) || /^(cancelar|cancela|no)\b/i.test(body.trim()));
+
+  if (!isConfirmationReply) {
+    const decision = await checkWhatsappRateLimit({
+      linkId: sender.linkId,
+      companyId: activeCompanyId,
+      plan: company.tier,
+    });
+    if (!decision.allowed) {
+      return reply(decision.mensaje ?? "Alcanzaste tu límite de uso del asistente.");
+    }
   }
 
   // Persist the user message now (also dedups Twilio retries via providerSid).
