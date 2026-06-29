@@ -349,3 +349,11 @@ coeficiente de utilidad y pagos provisionales — sin teclear línea de captura 
     aprobación de Meta, y fijar `TWILIO_OTP_TEMPLATE_SID` (el `HX…`) en las variables de entorno de
     Railway. Con esa variable presente, `startLink` envía el OTP vía `sendWhatsappTemplate` (entregable
     a números "fríos") en lugar del freeform.
+- **Resumen diario de cartera (`src/lib/whatsapp/digest.ts`):** el toggle "Resumen diario de mi
+  cartera por WhatsApp" (Ajustes) sólo guarda `WhatsappLink.digestOptIn`; quien ENVÍA el mensaje
+  matutino es el cron `/api/cron/whatsapp-digest` (workflow `whatsapp-digest.yml`, ~08:00 CT entre
+  semana). Arma un resumen de hallazgos abiertos por empresa y lo manda. No usa LLM (costo ~0).
+  - **Entrega (mismo 63016 que el OTP):** el digest es iniciado por el negocio, así que fuera de la
+    ventana de 24h Meta exige plantilla. Es template-aware: si `TWILIO_DIGEST_TEMPLATE_SID` (categoría
+    *Utility*, cuerpo en `{{1}}`) está configurado, lo usa; si no, cae al freeform (sólo llega a quien
+    escribió en las últimas 24h). **Para entrega confiable, registrar esa plantilla y fijar la env.**
