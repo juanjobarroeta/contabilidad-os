@@ -71,6 +71,29 @@ export function formatCarteraDigest(empresas: ReadonlyArray<EmpresaResumen>): st
 }
 
 /**
+ * Resumen de UNA sola línea (sin saltos de línea) para la variable {{1}} de la
+ * plantilla de WhatsApp. Las plantillas NO admiten variables con saltos de línea
+ * ni tabs, así que el cuerpo multilínea va por el camino freeform y este resumen
+ * compacto por el camino plantilla. Devuelve null si no hay empresas.
+ */
+export function formatCarteraDigestSummaryLine(
+  empresas: ReadonlyArray<EmpresaResumen>
+): string | null {
+  if (empresas.length === 0) return null;
+  const conPendientes = empresas.filter((e) => e.hallazgos > 0);
+  const criticas = conPendientes.filter((e) => e.criticos > 0).length;
+  const alCorriente = empresas.length - conPendientes.length;
+
+  if (conPendientes.length === 0) {
+    const n = empresas.length;
+    return `${n} empresa${n === 1 ? "" : "s"} al corriente, sin hallazgos abiertos`;
+  }
+  const crit = criticas > 0 ? ` (${criticas} con críticos)` : "";
+  const cp = conPendientes.length;
+  return `${cp} empresa${cp === 1 ? "" : "s"} con pendientes${crit} y ${alCorriente} al corriente`;
+}
+
+/**
  * Calcula el resumen por empresa accesible del usuario (hallazgos ABIERTOS, sin
  * pospuestos vigentes). Mantiene el orden por razón social que da identity.
  */
@@ -104,17 +127,23 @@ export async function computeCarteraResumen(userId: string): Promise<EmpresaResu
 }
 
 /**
- * Envía el resumen a un número. Usa la plantilla si está configurada
- * (`TWILIO_DIGEST_TEMPLATE_SID`), si no cae al freeform (sólo entregable dentro
+ * Envía el resumen a un número. Si hay plantilla configurada
+ * (`TWILIO_DIGEST_TEMPLATE_SID`) la usa con el resumen de UNA línea en la
+ * variable {{1}} (las plantillas no admiten saltos de línea en variables); si
+ * no, cae al freeform con el cuerpo multilínea completo (sólo entregable dentro
  * de la ventana de 24h). Devuelve true si se envió, false si se omitió/falló.
  */
-export async function sendCarteraDigest(phoneE164: string, texto: string): Promise<boolean> {
+export async function sendCarteraDigest(
+  phoneE164: string,
+  textoCompleto: string,
+  resumenLinea: string
+): Promise<boolean> {
   const templateSid = process.env.TWILIO_DIGEST_TEMPLATE_SID;
   try {
     if (templateSid) {
-      await sendWhatsappTemplate(phoneE164, templateSid, { "1": texto });
+      await sendWhatsappTemplate(phoneE164, templateSid, { "1": resumenLinea });
     } else {
-      await sendWhatsappMessage(phoneE164, texto);
+      await sendWhatsappMessage(phoneE164, textoCompleto);
     }
     return true;
   } catch (e) {
@@ -151,11 +180,12 @@ export async function runWhatsappCarteraDigest(): Promise<DigestRunResult> {
     try {
       const resumen = await computeCarteraResumen(link.userId);
       const texto = formatCarteraDigest(resumen);
-      if (!texto) {
+      const linea = formatCarteraDigestSummaryLine(resumen);
+      if (!texto || !linea) {
         omitidos++;
         continue;
       }
-      const ok = await sendCarteraDigest(link.phoneE164, texto);
+      const ok = await sendCarteraDigest(link.phoneE164, texto, linea);
       ok ? enviados++ : omitidos++;
     } catch (e) {
       omitidos++;
