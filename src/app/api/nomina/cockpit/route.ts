@@ -65,10 +65,21 @@ export async function GET() {
       _sum: { totalNeto: true },
     }),
     // Corridas calculadas pero sin timbrar — el pendiente operativo típico.
-    prisma.payrollRun.groupBy({
-      by: ["companyId"],
+    // Se traen los ids + totales (no sólo el conteo) para que el cockpit pueda
+    // armar la SELECCIÓN EXPLÍCITA del timbrado en lote sin un segundo fetch:
+    // el timbrado emite CFDIs reales ante el SAT, así que la lista de corridas a
+    // timbrar se construye con ids concretos, no con un "timbrar todo".
+    prisma.payrollRun.findMany({
       where: { companyId: { in: companyIds }, status: "CALCULATED" },
-      _count: { id: true },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        companyId: true,
+        periodo: true,
+        tipo: true,
+        totalNeto: true,
+        _count: { select: { items: true } },
+      },
     }),
     // Última corrida por empresa: distinct + orderBy desc = primera de cada una.
     prisma.payrollRun.findMany({
@@ -91,8 +102,25 @@ export async function GET() {
   const equipoBy = byId(equipo);
   const bajoBy = byId(bajoMinimo);
   const mesBy = byId(mes);
-  const sinTimbrarBy = byId(sinTimbrar);
   const ultimaBy = byId(ultimas);
+
+  // Corridas CALCULATED agrupadas por empresa: la lista concreta de corridas
+  // timbrables (id, periodo, empleados, neto) que alimenta el timbrado en lote.
+  const sinTimbrarBy = new Map<
+    string,
+    { id: string; periodo: string; tipo: string; empleados: number; totalNeto: number }[]
+  >();
+  for (const run of sinTimbrar) {
+    const arr = sinTimbrarBy.get(run.companyId) ?? [];
+    arr.push({
+      id: run.id,
+      periodo: run.periodo,
+      tipo: run.tipo,
+      empleados: run._count.items,
+      totalNeto: run.totalNeto,
+    });
+    sinTimbrarBy.set(run.companyId, arr);
+  }
 
   const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -102,6 +130,7 @@ export async function GET() {
     companies: companies.map((c) => {
       const eq = equipoBy.get(c.id);
       const ult = ultimaBy.get(c.id);
+      const runsSinTimbrar = sinTimbrarBy.get(c.id) ?? [];
       return {
         id: c.id,
         rfc: c.rfc,
@@ -112,7 +141,13 @@ export async function GET() {
         bajoMinimo: bajoBy.get(c.id)?._count.id ?? 0,
         corridasDelMes: mesBy.get(c.id)?._count.id ?? 0,
         netoDelMes: r2(mesBy.get(c.id)?._sum.totalNeto ?? 0),
-        corridasSinTimbrar: sinTimbrarBy.get(c.id)?._count.id ?? 0,
+        corridasSinTimbrar: runsSinTimbrar.length,
+        // Lista explícita de corridas CALCULATED a timbrar (ids concretos +
+        // totales) para construir la selección del timbrado en lote.
+        runsSinTimbrar: runsSinTimbrar.map((r) => ({
+          ...r,
+          totalNeto: r2(r.totalNeto),
+        })),
         ultimaCorrida: ult
           ? {
               periodo: ult.periodo,

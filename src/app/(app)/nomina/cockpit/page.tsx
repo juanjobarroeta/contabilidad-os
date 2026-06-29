@@ -13,11 +13,21 @@ import { useRouter } from "next/navigation";
 import {
   Building2, Users2, AlertTriangle, BadgeCheck, Clock4, CircleDashed,
   ChevronLeft, ChevronRight as ChevronR, Settings2, Calculator, X, CheckCircle2, XCircle, MinusCircle,
-  Download,
+  Download, Stamp, ShieldAlert,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Loading, Money } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
+
+// Una corrida CALCULATED pendiente de timbrar (id concreto + totales), tal como
+// la entrega GET /api/nomina/cockpit para armar la selección del timbrado en lote.
+interface RunSinTimbrar {
+  id: string;
+  periodo: string;
+  tipo: string;
+  empleados: number;
+  totalNeto: number;
+}
 
 interface CockpitCompany {
   id: string;
@@ -30,6 +40,7 @@ interface CockpitCompany {
   corridasDelMes: number;
   netoDelMes: number;
   corridasSinTimbrar: number;
+  runsSinTimbrar: RunSinTimbrar[];
   ultimaCorrida: { periodo: string; tipo: string; status: string; fechaPago: string; totalNeto: number } | null;
   setupCompleto: boolean;
 }
@@ -57,6 +68,24 @@ interface BatchResponse {
   creados: number;
   omitidos: number;
   errores: number;
+}
+
+// Resultado por corrida que devuelve POST /api/nomina/cockpit/batch-timbrar.
+interface TimbrarResult {
+  runId: string;
+  companyId: string;
+  razonSocial: string;
+  stamped: number;
+  total: number;
+  skipped?: string;
+  errors?: string[];
+}
+interface TimbrarResponse {
+  ok: boolean;
+  results: TimbrarResult[];
+  totalStamped: number;
+  totalErrors: number;
+  runsTimbradas: number;
 }
 
 const TIPO_RUN_OPCIONES = ["ORDINARIA", "EXTRAORDINARIA", "AGUINALDO", "VACACIONES", "PTU"] as const;
@@ -94,6 +123,8 @@ export default function NominaCockpitPage() {
   const [panelAbierto, setPanelAbierto] = useState(false);
   // Estado del comando "Descargar dispersión" en lote.
   const [dispersionAbierta, setDispersionAbierta] = useState(false);
+  // Estado del comando "Timbrar" en lote (IRREVERSIBLE — emite CFDIs reales).
+  const [timbrarAbierto, setTimbrarAbierto] = useState(false);
 
   const fetchCockpit = useCallback(() => {
     return fetch("/api/nomina/cockpit")
@@ -134,6 +165,9 @@ export default function NominaCockpitPage() {
   );
   // Empresas con corrida registrada del mes: el conjunto dispersable por defecto.
   const conCorrida = rows.filter((c) => c.corridasDelMes > 0);
+  // Empresas con corridas CALCULATED pendientes de timbrar: el conjunto del
+  // timbrado en lote (acción irreversible — emite CFDIs reales ante el SAT).
+  const conSinTimbrar = rows.filter((c) => c.corridasSinTimbrar > 0);
 
   return (
     <div className="mx-auto max-w-[1100px] px-6 py-7">
@@ -155,6 +189,17 @@ export default function NominaCockpitPage() {
           >
             <Download className="h-4 w-4" />
             Descargar dispersión
+          </button>
+          <button
+            onClick={() => setTimbrarAbierto(true)}
+            disabled={conSinTimbrar.length === 0}
+            className="inline-flex items-center gap-2 rounded-control border border-cos-amber bg-cos-amber-tint px-4 py-2 text-[13.5px] font-semibold text-cos-amber-ink hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Emite CFDIs de nómina reales ante el SAT. Acción irreversible."
+          >
+            <Stamp className="h-4 w-4" />
+            {conSinTimbrar.length > 0
+              ? `Timbrar ${conSinTimbrar.length} empresa${conSinTimbrar.length === 1 ? "" : "s"}`
+              : "Timbrar"}
           </button>
           <button
             onClick={() => setPanelAbierto(true)}
@@ -271,6 +316,14 @@ export default function NominaCockpitPage() {
           empresas={rows}
           preseleccion={conCorrida.map((c) => c.id)}
           onClose={() => setDispersionAbierta(false)}
+        />
+      )}
+
+      {timbrarAbierto && (
+        <BatchTimbrarPanel
+          empresas={conSinTimbrar}
+          onClose={() => setTimbrarAbierto(false)}
+          onDone={fetchCockpit}
         />
       )}
     </div>
@@ -661,6 +714,244 @@ function BatchCalcularPanel({
                         <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {w}
                       </p>
                     ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-cos-line px-5 py-4">
+              <button onClick={onClose} className="rounded-control bg-cos-brand px-4 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep">Cerrar</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Comando "Timbrar" en lote. ACCIÓN IRREVERSIBLE: emite CFDIs de nómina REALES
+// ante el SAT (vía Facturapi) para todas las corridas CALCULATED seleccionadas.
+//
+// Guardarraíles deliberados (nunca un "timbrar todo" de un clic):
+//  - Selección EXPLÍCITA por empresa (casillas, todas marcadas por defecto). El
+//    cliente resuelve los runIds concretos de las empresas elegidas (de la data
+//    del cockpit) y los envía a /api/nomina/cockpit/batch-timbrar.
+//  - Aviso PROMINENTE (cos-amber/cos-red) de irreversibilidad + SAT.
+//  - Casilla de confirmación tipada con el conteo real (N corridas, M empleados)
+//    que DEBE marcarse antes de habilitar el botón Timbrar.
+// El endpoint vuelve a validar permisos y estado por corrida (idempotente).
+// ─────────────────────────────────────────────────────────────────────────────
+function BatchTimbrarPanel({
+  empresas,
+  onClose,
+  onDone,
+}: {
+  empresas: CockpitCompany[];
+  onClose: () => void;
+  onDone: () => Promise<void> | void;
+}) {
+  // Sólo empresas con corridas CALCULATED pendientes; todas marcadas por defecto.
+  const elegibles = useMemo(
+    () => empresas.filter((c) => c.runsSinTimbrar.length > 0),
+    [empresas]
+  );
+  const [seleccion, setSeleccion] = useState<Set<string>>(
+    () => new Set(elegibles.map((c) => c.id))
+  );
+  const [confirmado, setConfirmado] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [resultado, setResultado] = useState<TimbrarResponse | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const toggle = (id: string) =>
+    setSeleccion((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      // Cualquier cambio de selección invalida la confirmación previa.
+      setConfirmado(false);
+      return next;
+    });
+
+  // Corridas + empleados de las empresas seleccionadas (lo que se va a timbrar).
+  const seleccionadas = elegibles.filter((c) => seleccion.has(c.id));
+  const runIds = seleccionadas.flatMap((c) => c.runsSinTimbrar.map((r) => r.id));
+  const totalCorridas = runIds.length;
+  const totalEmpleados = seleccionadas.reduce(
+    (s, c) => s + c.runsSinTimbrar.reduce((t, r) => t + r.empleados, 0),
+    0
+  );
+
+  async function enviar() {
+    if (!confirmado || runIds.length === 0) return;
+    setEnviando(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/nomina/cockpit/batch-timbrar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runIds }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErrorMsg(json?.error ?? "No se pudo timbrar el lote.");
+        return;
+      }
+      setResultado(json as TimbrarResponse);
+      await onDone();
+    } catch {
+      setErrorMsg("Error de red al timbrar el lote.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-cos-ink/40 p-4 py-10">
+      <div className="w-full max-w-[680px] rounded-card border border-cos-line bg-cos-card shadow-card">
+        <div className="flex items-center justify-between border-b border-cos-line px-5 py-4">
+          <div>
+            <h2 className="text-[17px] font-bold tracking-[-0.01em] text-cos-ink">Timbrar nómina en lote</h2>
+            <p className="mt-0.5 text-[12.5px] text-cos-ink-soft">
+              Emite los CFDIs de nómina de las corridas calculadas seleccionadas. Selecciona las empresas y confirma — es irreversible.
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-control p-1 text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink" aria-label="Cerrar">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {!resultado ? (
+          <>
+            {/* Aviso PROMINENTE de irreversibilidad. */}
+            <div className="mx-5 mt-4 rounded-control border border-cos-red bg-cos-red-tint px-4 py-3">
+              <p className="flex items-start gap-2 text-[13px] font-semibold text-cos-red-ink">
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                Esto emite CFDIs de nómina reales ante el SAT. Es irreversible.
+              </p>
+              <p className="mt-1 pl-6 text-[12px] text-cos-red-ink/90">
+                Cada CFDI timbrado queda registrado ante el SAT; cancelarlo después requiere el proceso formal de cancelación. Revisa las empresas antes de continuar.
+              </p>
+            </div>
+
+            <div className="border-t border-cos-line px-5 py-3">
+              <div className="mb-2 flex items-center justify-between text-[12px] text-cos-ink-soft">
+                <span><b className="font-mono text-cos-ink">{seleccion.size}</b> de {elegibles.length} empresas seleccionadas</span>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setSeleccion(new Set(elegibles.map((c) => c.id))); setConfirmado(false); }}
+                    className="text-cos-brand-ink hover:underline"
+                  >Todas</button>
+                  <button
+                    onClick={() => { setSeleccion(new Set()); setConfirmado(false); }}
+                    className="text-cos-ink-faint hover:underline"
+                  >Ninguna</button>
+                </div>
+              </div>
+              <div className="max-h-[260px] overflow-y-auto rounded-control border border-cos-line">
+                {elegibles.map((c) => {
+                  const empleados = c.runsSinTimbrar.reduce((t, r) => t + r.empleados, 0);
+                  const neto = c.runsSinTimbrar.reduce((t, r) => t + r.totalNeto, 0);
+                  return (
+                    <label key={c.id} className="flex cursor-pointer items-center gap-2.5 border-b border-cos-line px-3 py-2 last:border-b-0 hover:bg-cos-paper/60">
+                      <input
+                        type="checkbox"
+                        checked={seleccion.has(c.id)}
+                        onChange={() => toggle(c.id)}
+                        className="h-4 w-4 accent-cos-brand"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] text-cos-ink">{c.razonSocial}</span>
+                        <span className="block font-mono text-[11px] text-cos-ink-faint">{c.rfc} · {empleados} empleados · <Money value={neto} /></span>
+                      </span>
+                      <span className="rounded-full bg-cos-amber-tint px-2 py-0.5 text-[11px] font-medium text-cos-amber-ink">
+                        {c.runsSinTimbrar.length} corrida{c.runsSinTimbrar.length === 1 ? "" : "s"}
+                      </span>
+                    </label>
+                  );
+                })}
+                {elegibles.length === 0 && (
+                  <p className="px-3 py-6 text-center text-[12.5px] text-cos-ink-faint">No hay corridas calculadas pendientes de timbrar.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Confirmación tipada con el conteo real — requisito para habilitar. */}
+            <div className="px-5 pb-1">
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-control border border-cos-amber bg-cos-amber-tint px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={confirmado}
+                  disabled={totalCorridas === 0}
+                  onChange={(e) => setConfirmado(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-cos-amber-ink disabled:opacity-50"
+                />
+                <span className="text-[12.5px] font-medium text-cos-amber-ink">
+                  Entiendo que se timbrarán <b className="font-mono">{totalCorridas}</b> corrida{totalCorridas === 1 ? "" : "s"} (<b className="font-mono">{totalEmpleados}</b> empleado{totalEmpleados === 1 ? "" : "s"}) de forma irreversible.
+                </span>
+              </label>
+            </div>
+
+            {errorMsg && (
+              <p className="px-5 pt-2 text-[12.5px] text-cos-red-ink">{errorMsg}</p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 border-t border-cos-line px-5 py-4">
+              <button onClick={onClose} className="rounded-control px-3 py-2 text-[13px] font-medium text-cos-ink-soft hover:bg-cos-paper">Cancelar</button>
+              <button
+                onClick={enviar}
+                disabled={enviando || !confirmado || totalCorridas === 0}
+                className="inline-flex items-center gap-2 rounded-control bg-cos-red px-4 py-2 text-[13px] font-semibold text-white hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Stamp className="h-4 w-4" />
+                {enviando ? "Timbrando…" : `Timbrar ${totalCorridas} corrida${totalCorridas === 1 ? "" : "s"}`}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="px-5 py-4">
+              <div className="flex flex-wrap gap-3 text-[13px]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-cos-jade-tint px-2.5 py-0.5 font-medium text-cos-jade-ink">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> {resultado.runsTimbradas} corrida{resultado.runsTimbradas === 1 ? "" : "s"} timbrada{resultado.runsTimbradas === 1 ? "" : "s"}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-cos-slate-tint px-2.5 py-0.5 font-medium text-cos-ink-faint">
+                  <Stamp className="h-3.5 w-3.5" /> {resultado.totalStamped} CFDI{resultado.totalStamped === 1 ? "" : "s"}
+                </span>
+                {resultado.totalErrors > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-cos-red-tint px-2.5 py-0.5 font-medium text-cos-red-ink">
+                    <XCircle className="h-3.5 w-3.5" /> {resultado.totalErrors} error{resultado.totalErrors === 1 ? "" : "es"}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-3 max-h-[320px] overflow-y-auto rounded-control border border-cos-line">
+                {resultado.results.map((r) => (
+                  <div key={r.runId} className="border-b border-cos-line px-3 py-2.5 last:border-b-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-cos-ink">{r.razonSocial}</span>
+                      {r.skipped ? (
+                        <span className="inline-flex items-center gap-1 text-[12.5px] text-cos-ink-faint">
+                          <MinusCircle className="h-3.5 w-3.5" /> Omitida: {r.skipped}
+                        </span>
+                      ) : r.errors && r.errors.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-[12.5px] text-cos-red-ink">
+                          <XCircle className="h-3.5 w-3.5" /> {r.stamped}/{r.total} · {r.errors.length} error{r.errors.length === 1 ? "" : "es"}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[12.5px] text-cos-jade-ink">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Timbrada · {r.stamped}/{r.total} CFDIs
+                        </span>
+                      )}
+                    </div>
+                    {r.errors?.slice(0, 5).map((e, i) => (
+                      <p key={i} className="mt-1 flex items-start gap-1 text-[11.5px] text-cos-red-ink">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {e}
+                      </p>
+                    ))}
+                    {r.errors && r.errors.length > 5 && (
+                      <p className="mt-1 pl-4 text-[11.5px] text-cos-ink-faint">…y {r.errors.length - 5} más</p>
+                    )}
                   </div>
                 ))}
               </div>
