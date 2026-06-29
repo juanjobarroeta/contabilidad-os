@@ -47,6 +47,8 @@ interface FielCompany {
   fielCer: string;
   fielKey: string;
   fielPassword: string;
+  /** Si null, aún no se ha arrancado la Contabilidad Electrónica (apertura única). */
+  ceBootstrapAt: Date | null;
 }
 
 const FIEL_SELECT = {
@@ -57,6 +59,7 @@ const FIEL_SELECT = {
   fielCer: true,
   fielKey: true,
   fielPassword: true,
+  ceBootstrapAt: true,
 } as const;
 
 /** Última extracción exitosa de cada fuente Syntage (del ledger de costos). */
@@ -132,7 +135,20 @@ async function provisionOne(
     ahora: new Date(),
     force: opts?.force,
   });
-  if (pendientes.length === 0) {
+
+  // Arranque ÚNICO de la Contabilidad Electrónica (apertura): si esta empresa
+  // aún no se ha bootstrapeado (`ceBootstrapAt == null`) y el plan incluye
+  // Syntage (o es manual/force), disparamos TAMBIÉN el extractor
+  // `electronic_accounting` —una sola vez— junto con la cadencia. NO está en el
+  // mapa recurrente de cadencia.ts a propósito (no debe re-extraerse cada
+  // ciclo). El sync cosechará el resultado e importará catálogo + balanza, y
+  // sólo entonces fijará `ceBootstrapAt`, evitando re-importar la balanza del
+  // SAT como apertura sobre el libro vivo.
+  const arrancarCE = c.ceBootstrapAt == null && (planIncluyeSyntage(c.tier) || !!opts?.force);
+
+  // Si no hay extracciones de cadencia pendientes NI arranque de CE, no creamos
+  // entidad/credencial en vano (igual son idempotentes).
+  if (pendientes.length === 0 && !arrancarCE) {
     return { companyId: c.id, rfc: c.rfc, skipped: true };
   }
 
@@ -159,6 +175,18 @@ async function provisionOne(
   results.forEach((r, i) => {
     if (r.status === "fulfilled") void recordSyntageExtraction(pendientes[i], { companyId: c.id });
   });
+
+  // Arranque de CE (best-effort, una sola vez). El registro se lee/importa en el
+  // sync; el costo se mide como CostEvent igual que las demás extracciones.
+  if (arrancarCE) {
+    try {
+      await client.createExtraction({ extractor: "electronic_accounting", entity: entityId });
+      void recordSyntageExtraction("electronic_accounting", { companyId: c.id });
+    } catch {
+      // No rompemos el aprovisionamiento si el disparo de CE falla; el sync
+      // reintentará en una corrida posterior (ceBootstrapAt sigue null).
+    }
+  }
 
   return { companyId: c.id, rfc: c.rfc, entityId, credencial };
 }

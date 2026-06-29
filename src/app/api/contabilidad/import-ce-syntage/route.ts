@@ -65,6 +65,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // Importación forzada (botón manual): marca/refresca el arranque único de la
+    // Contabilidad Electrónica para que el sync automático NO vuelva a importar
+    // la balanza del SAT como apertura sobre el libro vivo.
+    await prisma.company.update({
+      where: { id: companyId },
+      data: { ceBootstrapAt: new Date() },
+    });
+
     return NextResponse.json({ ok: true, ...res });
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });

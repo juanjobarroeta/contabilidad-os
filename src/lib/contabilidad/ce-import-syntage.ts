@@ -66,9 +66,84 @@ function fileRefDe(rec: Json): string | null {
 }
 
 /**
- * Importa la Contabilidad Electrónica de una empresa directamente desde Syntage.
- * Idempotente, best-effort y gateado por plan (AUTOMATIZADO+). Registra el costo
- * del disparo. Reutiliza por completo los parsers/importadores de #289.
+ * LEE de Syntage los registros de Contabilidad Electrónica ya extraídos
+ * (`electronic-accounting-records`) e importa el catálogo + la ÚLTIMA balanza
+ * SIN DISPARAR una nueva extracción. Es la mitad "lectura + importación" del
+ * flujo: la usa el arranque automático del sync (que NO debe re-disparar, sólo
+ * cosechar lo que el provision ya pidió) y también la ruta manual tras disparar.
+ *
+ * Idempotente, best-effort y gateado por plan (AUTOMATIZADO+). Si Syntage aún no
+ * tiene registros (extracción async pendiente), devuelve catálogo/balanza nulos
+ * sin romper, para que un sync posterior reintente. No reimplementa parseo ni
+ * aritmética contable: reutiliza por completo importarCatalogo / importarBalanza.
+ */
+export async function leerEImportarContabilidadElectronicaSyntage(
+  companyId: string,
+  client = new SyntageClient(),
+): Promise<ImportarCeSyntageResult> {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { rfc: true, tier: true },
+  });
+  if (!company) return { companyId, extraccionDisparada: false, catalogo: null, balanza: null, error: "Empresa no encontrada" };
+
+  // Gating por plan: misma regla que el resto de extracciones Syntage.
+  if (!planIncluyeSyntage(company.tier)) {
+    return { companyId, rfc: company.rfc, extraccionDisparada: false, catalogo: null, balanza: null, skipped: true };
+  }
+
+  const entity = await client.findEntityByRfc(company.rfc);
+  if (!entity) {
+    return { companyId, rfc: company.rfc, extraccionDisparada: false, catalogo: null, balanza: null, error: "Sin entidad en Syntage para ese RFC" };
+  }
+
+  // Lee los registros ya extraídos y separa catálogo (CT) vs balanza (B).
+  const records = await client.getEntityElectronicAccounting(entity.id);
+  const catalogos = records.filter((r) => String(r.fileType ?? "") === "CT");
+  const balanzas = records.filter((r) => String(r.fileType ?? "") === "B");
+
+  // Catálogo primero (la balanza necesita el catálogo para resolver naturalezas).
+  let catalogo: ImportarCeSyntageResult["catalogo"] = null;
+  if (catalogos.length > 0) {
+    const rec = catalogos.reduce(masReciente);
+    const ref = fileRefDe(rec);
+    if (ref) {
+      const xml = await client.downloadFileText(ref);
+      catalogo = await importarCatalogo(companyId, xml);
+    }
+  }
+
+  // ÚLTIMA balanza → saldos de apertura (usar "final" por defecto, como la ruta
+  // manual: el SaldoFin del último mes presentado = apertura del siguiente).
+  let balanza: ImportarCeSyntageResult["balanza"] = null;
+  let balanzaPeriodo: { anio: number; mes: number } | null = null;
+  if (balanzas.length > 0) {
+    const rec = balanzas.reduce(masReciente);
+    const ref = fileRefDe(rec);
+    if (ref) {
+      const xml = await client.downloadFileText(ref);
+      balanza = await importarBalanza(companyId, xml, { usar: "final" });
+      balanzaPeriodo = periodoDe(rec);
+    }
+  }
+
+  return {
+    companyId,
+    rfc: company.rfc,
+    extraccionDisparada: false,
+    catalogo,
+    balanza,
+    balanzaPeriodo,
+  };
+}
+
+/**
+ * Importa la Contabilidad Electrónica de una empresa directamente desde Syntage,
+ * DISPARANDO primero la extracción del periodo (refresco/force) y leyendo +
+ * importando enseguida lo que ya esté disponible. La usa el botón manual ("Traer
+ * de Syntage automáticamente"). Idempotente, best-effort y gateado por plan.
+ * Registra el costo del disparo. Delega la lectura+importación en
+ * `leerEImportarContabilidadElectronicaSyntage` (sin reimplementarla).
  */
 export async function importarContabilidadElectronicaSyntage(
   companyId: string,
@@ -91,9 +166,9 @@ export async function importarContabilidadElectronicaSyntage(
     return { companyId, rfc: company.rfc, extraccionDisparada: false, catalogo: null, balanza: null, error: "Sin entidad en Syntage para ese RFC" };
   }
 
-  // 1) Dispara la extracción del periodo (refresca registros). El resultado es
-  //    async; igualmente leemos enseguida lo que YA esté disponible. Si el
-  //    disparo falla (cuota/credencial), seguimos en modo lectura.
+  // Dispara la extracción del periodo (refresca registros). El resultado es
+  // async; igualmente leemos enseguida lo que YA esté disponible. Si el disparo
+  // falla (cuota/credencial), seguimos en modo lectura.
   let extraccionDisparada = false;
   try {
     await client.createExtraction({
@@ -107,42 +182,7 @@ export async function importarContabilidadElectronicaSyntage(
     extraccionDisparada = false;
   }
 
-  // 2) Lee los registros ya extraídos y separa catálogo (CT) vs balanza (B).
-  const records = await client.getEntityElectronicAccounting(entity.id);
-  const catalogos = records.filter((r) => String(r.fileType ?? "") === "CT");
-  const balanzas = records.filter((r) => String(r.fileType ?? "") === "B");
-
-  // 3) Catálogo primero (la balanza necesita el catálogo para resolver naturalezas).
-  let catalogo: ImportarCeSyntageResult["catalogo"] = null;
-  if (catalogos.length > 0) {
-    const rec = catalogos.reduce(masReciente);
-    const ref = fileRefDe(rec);
-    if (ref) {
-      const xml = await client.downloadFileText(ref);
-      catalogo = await importarCatalogo(companyId, xml);
-    }
-  }
-
-  // 4) ÚLTIMA balanza → saldos de apertura (usar "final" por defecto, como la
-  //    ruta manual: el SaldoFin del último mes presentado = apertura del siguiente).
-  let balanza: ImportarCeSyntageResult["balanza"] = null;
-  let balanzaPeriodo: { anio: number; mes: number } | null = null;
-  if (balanzas.length > 0) {
-    const rec = balanzas.reduce(masReciente);
-    const ref = fileRefDe(rec);
-    if (ref) {
-      const xml = await client.downloadFileText(ref);
-      balanza = await importarBalanza(companyId, xml, { usar: "final" });
-      balanzaPeriodo = periodoDe(rec);
-    }
-  }
-
-  return {
-    companyId,
-    rfc: company.rfc,
-    extraccionDisparada,
-    catalogo,
-    balanza,
-    balanzaPeriodo,
-  };
+  // Lectura + importación (reutilizada). Conservamos el estado del disparo.
+  const importado = await leerEImportarContabilidadElectronicaSyntage(companyId, client);
+  return { ...importado, extraccionDisparada };
 }
