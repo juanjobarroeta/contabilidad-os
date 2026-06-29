@@ -47,6 +47,19 @@ interface EstadoResultados {
   totalGastos: number;
   utilidadBruta: number;
   utilidadAntesImpuestos: number;
+  preliminar?: boolean;
+}
+
+function PreliminarBanner() {
+  return (
+    <div className="mb-4 flex items-start gap-2 rounded-card border border-cos-line bg-cos-slate-tint px-4 py-3 text-sm text-cos-ink">
+      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-cos-ink-soft" />
+      <span>
+        <span className="font-medium">Preliminar</span> — el mes aún no se ha cerrado.
+        Cálculo directo de tus CFDIs; cierra el mes para generar las pólizas.
+      </span>
+    </div>
+  );
 }
 
 const MESES = [
@@ -84,6 +97,33 @@ export default function ContabilidadPage() {
   const [posting, setPosting] = useState<string | null>(null);
   const [info, setInfo] = useState("");
   const [cierreLoading, setCierreLoading] = useState(false);
+  const [pendingLoading, setPendingLoading] = useState(false);
+
+  async function handlePostPending(year: number) {
+    if (!activeCompany) return;
+    setPendingLoading(true);
+    setError("");
+    setInfo("");
+    try {
+      const res = await fetch("/api/contabilidad/post-pending", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, year }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al actualizar los meses pendientes");
+      const parts: string[] = [];
+      parts.push(`${data.posted} mes(es) cerrado(s)`);
+      if (data.skippedManual > 0) parts.push(`${data.skippedManual} con ajustes manuales (se omitieron, ciérralos a mano)`);
+      if (data.errors?.length > 0) parts.push(`${data.errors.length} con error`);
+      setInfo(`Meses pendientes ${year}: ${parts.join(" · ")}.`);
+      await loadPeriods();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al actualizar los meses pendientes");
+    } finally {
+      setPendingLoading(false);
+    }
+  }
 
   async function handleCierre() {
     if (!activeCompany) return;
@@ -269,6 +309,8 @@ export default function ContabilidadPage() {
           currentYear={now.getFullYear()}
           onPost={handlePost}
           onUnpost={handleUnpost}
+          onPostPending={handlePostPending}
+          pendingLoading={pendingLoading}
           onSelect={(y, m) => { setSelectedYear(y); setSelectedMonth(m); setTab("balanza"); }}
         />
       )}
@@ -303,7 +345,7 @@ export default function ContabilidadPage() {
 }
 
 function PeriodsPanel({
-  companyId, loading, periods, posting, currentYear, onPost, onUnpost, onSelect,
+  companyId, loading, periods, posting, currentYear, onPost, onUnpost, onPostPending, pendingLoading, onSelect,
 }: {
   companyId: string;
   loading: boolean;
@@ -312,6 +354,8 @@ function PeriodsPanel({
   currentYear: number;
   onPost: (year: number, month: number) => void;
   onUnpost: (year: number, month: number) => void;
+  onPostPending: (year: number) => void;
+  pendingLoading: boolean;
   onSelect: (year: number, month: number) => void;
 }) {
   const [year, setYear] = useState(currentYear);
@@ -342,6 +386,18 @@ function PeriodsPanel({
           className="text-sm px-3 py-1.5 border border-cos-line rounded-md hover:bg-cos-paper"
         >
           →
+        </button>
+        <button
+          onClick={() => onPostPending(year)}
+          disabled={pendingLoading}
+          title="Cierra/actualiza los meses con CFDIs que aún están en borrador. No toca meses ya cerrados ni los que tengan ajustes manuales."
+          className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-sm font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+        >
+          {pendingLoading ? (
+            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Actualizando…</>
+          ) : (
+            "Cerrar/actualizar meses pendientes"
+          )}
         </button>
       </div>
 
@@ -472,6 +528,7 @@ function BalanzaPanel({
 }: { companyId: string; year: number; month: number; onChangePeriod: (y: number, m: number) => void }) {
   const [rows, setRows] = useState<BalanzaRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [preliminar, setPreliminar] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -481,6 +538,7 @@ function BalanzaPanel({
       );
       const data = await res.json();
       setRows(data.rows ?? []);
+      setPreliminar(Boolean(data.preliminar));
       setLoading(false);
     })();
   }, [companyId, year, month]);
@@ -490,6 +548,8 @@ function BalanzaPanel({
   return (
     <div>
       <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
+
+      {!loading && preliminar && nonZero.length > 0 && <PreliminarBanner />}
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-cos-ink-soft py-8 justify-center">
@@ -553,11 +613,13 @@ function EstadoResultadosPanel({
     <div>
       <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
 
+      {!loading && data?.preliminar && (data.ingresos.length > 0 || data.gastos.length > 0 || data.costos.length > 0) && <PreliminarBanner />}
+
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-cos-ink-soft py-8 justify-center">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
-      ) : !data || (data.ingresos.length === 0 && data.gastos.length === 0) ? (
+      ) : !data || (data.ingresos.length === 0 && data.gastos.length === 0 && data.costos.length === 0) ? (
         <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <FileText className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
           <p className="text-sm text-cos-ink-soft">Sin movimientos para este periodo.</p>

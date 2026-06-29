@@ -697,6 +697,171 @@ export async function balanza(companyId: string, year: number, month: number): P
   });
 }
 
+/**
+ * Balanza PRELIMINAR para un periodo aún no cerrado. Reconstruye en memoria los
+ * asientos derivados de CFDIs (INGRESO / NOMINA / EGRESO) con las MISMAS reglas
+ * de partida doble que postMonth, SIN persistir nada y SIN consumir movimientos
+ * bancarios (que requieren conciliación y harían fallar el cierre). Los saldos
+ * iniciales sí provienen del ledger real (periodos previos ya posteados), para
+ * que la balanza preliminar arranque del saldo correcto.
+ *
+ * Es best-effort: si el catálogo no está sembrado devuelve filas vacías.
+ */
+export async function balanzaPreview(
+  companyId: string,
+  year: number,
+  month: number
+): Promise<BalanzaRow[]> {
+  const { start, end } = monthRange(year, month);
+
+  // Movimiento por cuenta (chartAccountId → cargos/abonos) construido en memoria.
+  const movByAccount = new Map<string, { cargo: number; abono: number }>();
+  const addMov = (chartAccountId: string, tipo: EntryType, monto: number) => {
+    const e = movByAccount.get(chartAccountId) ?? { cargo: 0, abono: 0 };
+    if (tipo === "CARGO") e.cargo += monto;
+    else e.abono += monto;
+    movByAccount.set(chartAccountId, e);
+  };
+
+  // Cuentas fijas. Si el catálogo no está sembrado, devolvemos balanza base.
+  let accClientes: Awaited<ReturnType<typeof resolveAccount>>;
+  let accProveedores: Awaited<ReturnType<typeof resolveAccount>>;
+  let accIvaTrasladado: Awaited<ReturnType<typeof resolveAccount>>;
+  let accIvaAcreditable: Awaited<ReturnType<typeof resolveAccount>>;
+  let accVentas: Awaited<ReturnType<typeof resolveAccount>>;
+  let accSueldos: Awaited<ReturnType<typeof resolveAccount>>;
+  let accIsrPagadoTerceros: Awaited<ReturnType<typeof resolveAccount>>;
+  let accIsrRetenidoHonorarios: Awaited<ReturnType<typeof resolveAccount>>;
+  try {
+    [
+      accClientes,
+      accProveedores,
+      accIvaTrasladado,
+      accIvaAcreditable,
+      accVentas,
+      accSueldos,
+      accIsrPagadoTerceros,
+      accIsrRetenidoHonorarios,
+    ] = await Promise.all([
+      resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
+      resolveAccount(companyId, COE_CODES.PROVEEDORES),
+      resolveAccount(companyId, COE_CODES.IVA_TRASLADADO),
+      resolveAccount(companyId, COE_CODES.IVA_ACREDITABLE),
+      resolveAccount(companyId, COE_CODES.VENTAS_GENERAL),
+      resolveAccount(companyId, COE_CODES.SUELDOS_SALARIOS),
+      resolveAccount(companyId, COE_CODES.ISR_PAGADO_TERCEROS),
+      resolveAccount(companyId, COE_CODES.ISR_RETENIDO_HONORARIOS),
+    ]);
+  } catch {
+    return balanza(companyId, year, month);
+  }
+
+  // ── INGRESO (mismas reglas que postMonth) ────────────────────────────────
+  const ingresos = await prisma.invoice.findMany({
+    where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
+    select: { subtotal: true, total: true },
+  });
+  for (const inv of ingresos) {
+    const delta = inv.total - inv.subtotal;
+    addMov(accClientes.id, "CARGO", inv.total);
+    addMov(accVentas.id, "ABONO", inv.subtotal);
+    if (delta > 0.005) addMov(accIvaTrasladado.id, "ABONO", delta);
+    else if (delta < -0.005) addMov(accIsrPagadoTerceros.id, "CARGO", -delta);
+  }
+
+  // ── NOMINA ────────────────────────────────────────────────────────────────
+  const nominas = await prisma.invoice.findMany({
+    where: { companyId, tipo: "NOMINA", status: "STAMPED", fecha: { gte: start, lt: end } },
+    select: { subtotal: true, total: true },
+  });
+  for (const inv of nominas) {
+    const delta = inv.total - inv.subtotal;
+    addMov(accSueldos.id, "CARGO", inv.subtotal);
+    if (delta < -0.005) addMov(accIsrRetenidoHonorarios.id, "ABONO", -delta);
+    else if (delta > 0.005) addMov(accSueldos.id, "CARGO", delta);
+    addMov(accProveedores.id, "ABONO", inv.total);
+  }
+
+  // ── EGRESO ────────────────────────────────────────────────────────────────
+  const egresos = await prisma.invoice.findMany({
+    where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
+    include: { items: { select: { claveProdServ: true, importe: true } } },
+  });
+  const accCache = new Map<string, string | null>();
+  async function resolveCachedSafe(code: string): Promise<string | null> {
+    if (accCache.has(code)) return accCache.get(code) ?? null;
+    try {
+      const acc = await resolveAccount(companyId, code);
+      accCache.set(code, acc.id);
+      return acc.id;
+    } catch {
+      accCache.set(code, null);
+      return null;
+    }
+  }
+  for (const inv of egresos) {
+    const delta = inv.total - inv.subtotal;
+    const classification = inv.overrideCuenta
+      ? { cuenta: inv.overrideCuenta }
+      : classifyInvoice(
+          inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
+        );
+    const gastoId = await resolveCachedSafe(classification.cuenta);
+    if (!gastoId) continue;
+    addMov(gastoId, "CARGO", inv.subtotal);
+    if (delta > 0.005) addMov(accIvaAcreditable.id, "CARGO", delta);
+    else if (delta < -0.005) addMov(accIsrRetenidoHonorarios.id, "ABONO", -delta);
+    addMov(accProveedores.id, "ABONO", inv.total);
+  }
+
+  // Saldos iniciales del ledger real (periodos previos ya posteados).
+  const [accounts, priorG] = await Promise.all([
+    prisma.chartAccount.findMany({
+      where: { companyId, isActive: true },
+      select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true, tipo: true, nivel: true, naturaleza: true },
+      orderBy: [{ cuentaSAT: "asc" }, { subcuenta: "asc" }],
+    }),
+    prisma.accountingEntry.groupBy({
+      by: ["chartAccountId", "tipo"],
+      where: { companyId, OR: [{ year: { lt: year } }, { year, month: { lt: month } }] },
+      _sum: { monto: true },
+    }),
+  ]);
+
+  const previo = new Map<string, { cargo: number; abono: number }>();
+  for (const g of priorG) {
+    const e = previo.get(g.chartAccountId) ?? { cargo: 0, abono: 0 };
+    if (g.tipo === "CARGO") e.cargo += g._sum.monto ?? 0;
+    else if (g.tipo === "ABONO") e.abono += g._sum.monto ?? 0;
+    previo.set(g.chartAccountId, e);
+  }
+
+  return accounts.map((acc) => {
+    const p = movByAccount.get(acc.id) ?? { cargo: 0, abono: 0 };
+    const pre = previo.get(acc.id) ?? { cargo: 0, abono: 0 };
+    const naturaleza = (acc.naturaleza as "D" | "A" | null) ?? naturalezaPorTipo(acc.tipo);
+    const { saldoInicial, saldoFinal } = saldosCoe({
+      naturaleza,
+      priorCargos: pre.cargo,
+      priorAbonos: pre.abono,
+      cargos: p.cargo,
+      abonos: p.abono,
+    });
+    return {
+      cuentaSAT: acc.cuentaSAT,
+      subcuenta: acc.subcuenta,
+      nombre: acc.nombre,
+      tipo: acc.tipo,
+      nivel: acc.nivel,
+      cargos: p.cargo,
+      abonos: p.abono,
+      saldo: naturaleza === "D" ? p.cargo - p.abono : p.abono - p.cargo,
+      saldoInicial,
+      saldoFinal,
+    };
+  });
+}
+
 export type EstadoResultadosRow = {
   seccion: "INGRESOS" | "COSTOS" | "GASTOS";
   cuentaSAT: string;
@@ -761,4 +926,268 @@ export async function estadoResultados(
     utilidadBruta,
     utilidadAntesImpuestos,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PREVIEW (preliminar) — Estado de resultados directo de los CFDIs, SIN crear
+// AccountingEntry. Se usa cuando el periodo aún no se ha cerrado (POSTED) para
+// que el usuario vea cifras en lugar de "Sin movimientos".
+//
+// Reutiliza EXACTAMENTE la misma clasificación CFDI→cuenta que el motor de
+// posteo (classifyInvoice / overrideCuenta) y la misma cuenta de ingresos
+// (Ventas) y de sueldos (Sueldos y salarios), y agrupa por el `tipo`
+// (INGRESO / COSTO / GASTO) de la cuenta destino, igual que estadoResultados().
+//
+// IMPORTANTE: no escribe nada en el ledger. Es seguro de llamar siempre.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Acumulador puro (sin DB) del estado de resultados preliminar. Separado para
+ * poder testearlo sin tocar Prisma. Cada aporte trae el `tipo` de la cuenta
+ * destino (resuelto fuera) y el monto neto (subtotal, sin impuestos).
+ */
+export type PreviewContribution = {
+  tipo: string; // ChartAccount.tipo (INGRESO | COSTO | GASTO | …)
+  cuentaSAT: string;
+  subcuenta: string | null;
+  nombre: string;
+  monto: number;
+};
+
+export function buildEstadoResultadosPreview(
+  contributions: PreviewContribution[]
+): EstadoResultados {
+  // Agrupa por (cuentaSAT, subcuenta) sumando montos, igual que la balanza
+  // colapsa por cuenta.
+  const byKey = new Map<string, EstadoResultadosRow & { tipo: string }>();
+  for (const c of contributions) {
+    const key = `${c.cuentaSAT}|${c.subcuenta ?? ""}`;
+    const seccion =
+      c.tipo === "INGRESO" ? "INGRESOS" : c.tipo === "COSTO" ? "COSTOS" : "GASTOS";
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.monto += c.monto;
+    } else {
+      byKey.set(key, {
+        tipo: c.tipo,
+        seccion,
+        cuentaSAT: c.cuentaSAT,
+        subcuenta: c.subcuenta,
+        nombre: c.nombre,
+        monto: c.monto,
+      });
+    }
+  }
+
+  const ingresos: EstadoResultadosRow[] = [];
+  const costos: EstadoResultadosRow[] = [];
+  const gastos: EstadoResultadosRow[] = [];
+
+  for (const r of byKey.values()) {
+    if (Math.abs(r.monto) < 0.01) continue;
+    const row: EstadoResultadosRow = {
+      seccion: r.seccion,
+      cuentaSAT: r.cuentaSAT,
+      subcuenta: r.subcuenta,
+      nombre: r.nombre,
+      monto: r.monto,
+    };
+    if (r.tipo === "INGRESO") ingresos.push(row);
+    else if (r.tipo === "COSTO") costos.push(row);
+    else gastos.push(row);
+  }
+
+  const sortByCuenta = (a: EstadoResultadosRow, b: EstadoResultadosRow) =>
+    (a.subcuenta ?? a.cuentaSAT).localeCompare(b.subcuenta ?? b.cuentaSAT);
+  ingresos.sort(sortByCuenta);
+  costos.sort(sortByCuenta);
+  gastos.sort(sortByCuenta);
+
+  const totalIngresos = ingresos.reduce((s, r) => s + r.monto, 0);
+  const totalCostos = costos.reduce((s, r) => s + r.monto, 0);
+  const totalGastos = gastos.reduce((s, r) => s + r.monto, 0);
+  const utilidadBruta = totalIngresos - totalCostos;
+  const utilidadAntesImpuestos = utilidadBruta - totalGastos;
+
+  return {
+    ingresos,
+    costos,
+    gastos,
+    totalIngresos,
+    totalCostos,
+    totalGastos,
+    utilidadBruta,
+    utilidadAntesImpuestos,
+  };
+}
+
+/**
+ * Estado de resultados PRELIMINAR para un periodo aún no cerrado. Calcula
+ * ingresos/costos/gastos directamente de los CFDIs STAMPED del periodo,
+ * reutilizando la clasificación del motor de posteo. NO crea AccountingEntry.
+ *
+ * Cobertura (consistente con postMonth):
+ *   - INGRESO: subtotal a Ventas (cuenta de ingresos)
+ *   - EGRESO:  subtotal a la cuenta de gasto clasificada (override o auto)
+ *   - NOMINA:  subtotal a Sueldos y salarios (gasto)
+ * Los impuestos (IVA, retenciones) no afectan el estado de resultados, así que
+ * no se incluyen — igual que estadoResultados() los excluye por su `tipo`.
+ */
+export async function estadoResultadosPreview(
+  companyId: string,
+  year: number,
+  month: number
+): Promise<EstadoResultados> {
+  const { start, end } = monthRange(year, month);
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { id: true },
+  });
+  if (!company) throw new Error("Empresa no encontrada");
+
+  const contributions: PreviewContribution[] = [];
+
+  // Resolver cuentas fijas una sola vez (Ventas, Sueldos). Si el catálogo no
+  // está sembrado, fallamos suave devolviendo un preview vacío.
+  let accVentas: Awaited<ReturnType<typeof resolveAccount>>;
+  let accSueldos: Awaited<ReturnType<typeof resolveAccount>>;
+  try {
+    [accVentas, accSueldos] = await Promise.all([
+      resolveAccount(companyId, COE_CODES.VENTAS_GENERAL),
+      resolveAccount(companyId, COE_CODES.SUELDOS_SALARIOS),
+    ]);
+  } catch {
+    return buildEstadoResultadosPreview([]);
+  }
+
+  // ── INGRESO → Ventas (subtotal) ──────────────────────────────────────────
+  const ingresos = await prisma.invoice.findMany({
+    where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
+    select: { subtotal: true },
+  });
+  for (const inv of ingresos) {
+    contributions.push({
+      tipo: accVentas.tipo,
+      cuentaSAT: accVentas.cuentaSAT,
+      subcuenta: accVentas.subcuenta,
+      nombre: accVentas.nombre,
+      monto: inv.subtotal,
+    });
+  }
+
+  // ── NOMINA → Sueldos y salarios (subtotal = percepciones brutas) ─────────
+  const nominas = await prisma.invoice.findMany({
+    where: { companyId, tipo: "NOMINA", status: "STAMPED", fecha: { gte: start, lt: end } },
+    select: { subtotal: true },
+  });
+  for (const inv of nominas) {
+    contributions.push({
+      tipo: accSueldos.tipo,
+      cuentaSAT: accSueldos.cuentaSAT,
+      subcuenta: accSueldos.subcuenta,
+      nombre: accSueldos.nombre,
+      monto: inv.subtotal,
+    });
+  }
+
+  // ── EGRESO → cuenta de gasto clasificada (subtotal) ──────────────────────
+  const egresos = await prisma.invoice.findMany({
+    where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
+    include: { items: { select: { claveProdServ: true, importe: true } } },
+  });
+
+  // Cache de cuentas resueltas; omite (best-effort) egresos cuya clasificación
+  // apunte a una cuenta inexistente, sin abortar todo el preview.
+  const accCache = new Map<string, Awaited<ReturnType<typeof resolveAccount>> | null>();
+  async function resolveCachedSafe(code: string) {
+    if (accCache.has(code)) return accCache.get(code) ?? null;
+    try {
+      const acc = await resolveAccount(companyId, code);
+      accCache.set(code, acc);
+      return acc;
+    } catch {
+      accCache.set(code, null);
+      return null;
+    }
+  }
+
+  for (const inv of egresos) {
+    const classification = inv.overrideCuenta
+      ? { cuenta: inv.overrideCuenta }
+      : classifyInvoice(
+          inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
+        );
+    const acc = await resolveCachedSafe(classification.cuenta);
+    if (!acc) continue;
+    contributions.push({
+      tipo: acc.tipo,
+      cuentaSAT: acc.cuentaSAT,
+      subcuenta: acc.subcuenta,
+      nombre: acc.nombre,
+      monto: inv.subtotal,
+    });
+  }
+
+  return buildEstadoResultadosPreview(contributions);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTO-POST condicional — postea SÓLO si el periodo no existe o está en DRAFT
+// y NO tiene asientos manuales. Nunca re-postea un periodo POSTED/CLOSED.
+//
+// ⚠️ Ver STEP 0: postMonth() borra TODOS los asientos del periodo salvo
+// fuente=APERTURA, lo que incluye fuente=MANUAL. Por eso este helper rechaza
+// cualquier periodo que ya tenga asientos MANUAL: el auto-posteo silencioso
+// nunca debe destruir ajustes capturados a mano. El usuario debe re-postear
+// de forma explícita en esos casos.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type PostMonthIfDraftResult =
+  | { posted: true; result: PostMonthResult }
+  | { posted: false; reason: "ALREADY_POSTED" | "NO_CFDIS" | "HAS_MANUAL_ENTRIES" };
+
+export async function postMonthIfDraft(
+  companyId: string,
+  year: number,
+  month: number
+): Promise<PostMonthIfDraftResult> {
+  const period = await prisma.accountingPeriod.findUnique({
+    where: { companyId_year_month: { companyId, year, month } },
+    select: { id: true, status: true },
+  });
+
+  // Sólo periodos inexistentes o en DRAFT.
+  if (period && period.status !== "DRAFT") {
+    return { posted: false, reason: "ALREADY_POSTED" };
+  }
+
+  // Salvaguarda crítica: si el periodo ya tiene asientos MANUAL (ajustes a
+  // mano), NO auto-posteamos para no destruirlos, porque postMonth() los
+  // borraría.
+  if (period) {
+    const manualCount = await prisma.accountingEntry.count({
+      where: { companyId, periodId: period.id, fuente: "MANUAL" },
+    });
+    if (manualCount > 0) {
+      return { posted: false, reason: "HAS_MANUAL_ENTRIES" };
+    }
+  }
+
+  // No tiene sentido postear un mes sin CFDIs (dejaría el periodo POSTED vacío).
+  const { start, end } = monthRange(year, month);
+  const cfdiCount = await prisma.invoice.count({
+    where: {
+      companyId,
+      status: "STAMPED",
+      tipo: { in: ["INGRESO", "EGRESO", "NOMINA"] },
+      fecha: { gte: start, lt: end },
+    },
+  });
+  if (cfdiCount === 0) {
+    return { posted: false, reason: "NO_CFDIS" };
+  }
+
+  const result = await postMonth({ companyId, year, month });
+  return { posted: true, result };
 }
