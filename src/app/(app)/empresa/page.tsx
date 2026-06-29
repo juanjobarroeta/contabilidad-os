@@ -168,6 +168,7 @@ export default function EmpresaPage() {
   const [ceSaving, setCeSaving] = useState(false);
   const [ceSuccess, setCeSuccess] = useState("");
   const [ceError, setCeError] = useState("");
+  const [ceSyntageSaving, setCeSyntageSaving] = useState(false);
 
   // Delete company
   const [disconnectLoading, setDisconnectLoading] = useState(false);
@@ -534,6 +535,45 @@ export default function EmpresaPage() {
       setCeError(err instanceof Error ? err.message : "Error inesperado");
     } finally {
       setCeSaving(false);
+    }
+  }
+
+  // ── Traer la Contabilidad Electrónica automáticamente desde Syntage ──
+  async function handleImportCeSyntage() {
+    if (!activeCompany) return;
+    setCeSyntageSaving(true);
+    setCeError("");
+    setCeSuccess("");
+    try {
+      const res = await fetch("/api/contabilidad/import-ce-syntage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "No se pudo traer la Contabilidad Electrónica de Syntage");
+
+      const partes: string[] = [];
+      if (data.catalogo) {
+        partes.push(
+          `Catálogo: ${data.catalogo.creadas} cuenta(s) nueva(s), ${data.catalogo.actualizadas} actualizada(s).`,
+        );
+      }
+      if (data.balanza) {
+        partes.push(
+          `Saldos iniciales: ${data.balanza.entries} partida(s) por ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(data.balanza.totalCargos)}.`,
+        );
+        if (data.balanza.cuentasSinCatalogo?.length) {
+          partes.push(
+            `${data.balanza.cuentasSinCatalogo.length} cuenta(s) de la balanza no estaban en el catálogo y se omitieron.`,
+          );
+        }
+      }
+      setCeSuccess(partes.length ? partes.join(" ") : "Contabilidad Electrónica importada desde Syntage.");
+    } catch (err) {
+      setCeError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setCeSyntageSaving(false);
     }
   }
 
@@ -1331,14 +1371,29 @@ export default function EmpresaPage() {
               </div>
             )}
 
-            <button
-              onClick={handleImportCe}
-              disabled={ceSaving || (!ceCatalogoFile && !ceBalanzaFile)}
-              className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50"
-            >
-              {ceSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              {ceSaving ? "Importando…" : "Importar Contabilidad Electrónica"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleImportCeSyntage}
+                disabled={ceSyntageSaving || ceSaving}
+                className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50"
+              >
+                {ceSyntageSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {ceSyntageSaving ? "Trayendo de Syntage…" : "Traer de Syntage automáticamente"}
+              </button>
+              <button
+                onClick={handleImportCe}
+                disabled={ceSaving || ceSyntageSaving || (!ceCatalogoFile && !ceBalanzaFile)}
+                className="flex items-center gap-2 bg-cos-card border border-cos-line text-cos-ink px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper disabled:opacity-50"
+              >
+                {ceSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                {ceSaving ? "Importando…" : "Importar XML manualmente"}
+              </button>
+            </div>
+            <p className="text-xs text-cos-ink-soft">
+              <strong>Traer de Syntage automáticamente</strong> descarga del SAT el catálogo y la última balanza con la
+              {" "}e.firma ya conectada (sin subir archivos). Requiere plan Automatizado o superior. La subida manual de
+              {" "}XML queda como alternativa.
+            </p>
           </div>
         </div>
 

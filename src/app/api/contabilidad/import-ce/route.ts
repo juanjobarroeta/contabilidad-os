@@ -19,9 +19,9 @@ export const maxDuration = 60;
 // balanza crea los saldos iniciales (asiento de apertura, fuente=APERTURA, vía
 // postApertura — idempotente, no toca asientos CFDI/NOMINA/BANCO/MANUAL).
 //
-// Nota: hoy es una ruta de SUBIDA manual. El auto-fetch desde Syntage queda como
-// seguimiento con flag (Syntage no expone hoy un extractor de Contabilidad
-// Electrónica / catálogo / balanza / pólizas).
+// Nota: ésta es la ruta de SUBIDA MANUAL (fallback). El auto-fetch desde Syntage
+// (extractor `electronic_accounting`) vive en /api/contabilidad/import-ce-syntage
+// y reutiliza los mismos importadores (importarCatalogo / importarBalanza).
 export async function POST(req: Request) {
   try {
     let companyId = "";

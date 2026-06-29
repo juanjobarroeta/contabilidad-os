@@ -156,6 +156,14 @@ model Company {
   // imported). Lets the throttled backfill cron skip finished companies.
   satBackfillCompletedAt DateTime?
 
+  // Marca el momento en que se importó por ÚNICA vez la Contabilidad Electrónica
+  // (Anexo 24) desde Syntage como apertura del ejercicio (catálogo + balanza). El
+  // arranque automático es irrepetible: una vez fijado, el sync NUNCA vuelve a
+  // importar la balanza del SAT como apertura (sobreescribiría el libro vivo). El
+  // botón manual ("Traer de Syntage automáticamente") es el único forzado de
+  // re-importación y puede re-fijar esta marca.
+  ceBootstrapAt DateTime?
+
   // Selected subscription plan (UI/trial only for now — no billing yet):
   // "BASICO" | "PROFESIONAL" | "DESPACHO".
   plan String?

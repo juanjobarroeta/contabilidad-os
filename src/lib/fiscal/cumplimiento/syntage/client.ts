@@ -6,7 +6,8 @@
 //   • Extracción async: POST /extractions {extractor, entity, options} → status
 //     pending→running→finished/failed; GET /extractions/{id} para sondear.
 //   • Extractores: tax_compliance (opinión), tax_status (CSF), annual_tax_return,
-//     monthly_tax_return, invoice, tax_retention, …
+//     monthly_tax_return, invoice, tax_retention, electronic_accounting
+//     (Contabilidad Electrónica: catálogo de cuentas / balanza / pólizas), …
 // Las claves exactas del RESULTADO (positiva/negativa, campos de la CSF) se
 // mapean en map.ts y están marcadas // VERIFY hasta cotejar una respuesta viva.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,7 +18,8 @@ export type Extractor =
   | "annual_tax_return"
   | "monthly_tax_return"
   | "invoice"
-  | "tax_retention";
+  | "tax_retention"
+  | "electronic_accounting";
 
 export type EstadoCredencial =
   | "waiting"
@@ -250,6 +252,33 @@ export class SyntageClient {
       `/entities/${entityId}/tax-returns?order%5BcreatedAt%5D=desc&itemsPerPage=200`,
     );
     return asArray(r);
+  }
+
+  /**
+   * Registros de Contabilidad Electrónica (Anexo 24) ya extraídos de la entidad,
+   * más recientes primero. Cada registro trae `year`/`month`, `fileType`
+   * ("CT" = catálogo de cuentas, "B" = balanza, "PL" = pólizas) y un arreglo
+   * `files` con los XML del SAT (mimeType text/xml). Endpoint y forma confirmados
+   * en docs.syntage.com (electronic-accounting-records). El XML descargable es el
+   * `catalogocuentas` / `BCE` que parsean parseCatalogoCuentas / parseBalanza.
+   */
+  async getEntityElectronicAccounting(entityId: string): Promise<Json[]> {
+    const r = await this.request<Json>(
+      "GET",
+      `/entities/${entityId}/electronic-accounting-records?order%5BcreatedAt%5D=desc&itemsPerPage=200`,
+    );
+    return asArray(r);
+  }
+
+  /**
+   * Descarga los bytes de un archivo de Syntage a partir de su referencia
+   * (`/files/{id}`, `/files/{id}/download` o un IRI de recurso con `file`).
+   * Reutiliza la mecánica de downloadAcuse pero sin asumir PDF: aquí el contenido
+   * es el XML del SAT (text/xml). Devuelve el texto decodificado UTF-8.
+   */
+  async downloadFileText(ref: string): Promise<string> {
+    const { data } = await this.downloadAcuse(ref);
+    return new TextDecoder("utf-8").decode(new Uint8Array(data));
   }
 
   /** Sondea una extracción hasta que termina o falla. */

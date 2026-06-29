@@ -7,11 +7,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { planIncluyeSyntage } from "@/lib/planes";
 import { persistComplianceResult } from "../persist";
 import { SyntageClient } from "./client";
 import { mapTaxCompliance, mapTaxStatus, mapTaxReturnAnual, camposAnualDesdeAcuse } from "./map";
 import { fileRefDe } from "./declaraciones-backfill";
 import { parseSatDocument } from "@/lib/fiscal/acuse/parse";
+import { leerEImportarContabilidadElectronicaSyntage } from "@/lib/contabilidad/ce-import-syntage";
 
 export interface SyncResult {
   companyId: string;
@@ -20,6 +22,12 @@ export interface SyncResult {
   csf?: { changed: boolean; hallazgos: number } | null;
   /** Declaraciones anuales históricas creadas a partir de los tax-returns. */
   declaracionesAnuales?: { creadas: number } | null;
+  /**
+   * Arranque ÚNICO de la Contabilidad Electrónica (apertura). `importado` indica
+   * si en esta corrida se importó catálogo o balanza y se fijó `ceBootstrapAt`.
+   * Ausente (null) si la empresa ya estaba arrancada o no aplica.
+   */
+  ceBootstrap?: { importado: boolean } | null;
   error?: string;
 }
 
@@ -127,7 +135,10 @@ export async function syncCompanyComplianceSyntage(
   companyId: string,
   client = new SyntageClient(),
 ): Promise<SyncResult> {
-  const company = await prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } });
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { rfc: true, tier: true, ceBootstrapAt: true },
+  });
   if (!company) return { companyId, error: "Empresa no encontrada" };
 
   const entity = await client.findEntityByRfc(company.rfc);
@@ -152,12 +163,42 @@ export async function syncCompanyComplianceSyntage(
     declaracionesAnuales = null;
   }
 
+  // Arranque ÚNICO de la Contabilidad Electrónica (apertura). Sólo si:
+  //   - el plan incluye Syntage, y
+  //   - aún no se ha arrancado (`ceBootstrapAt == null`).
+  // Lee+importa SIN re-disparar (el provision ya disparó `electronic_accounting`).
+  // Fija `ceBootstrapAt` SÓLO si de verdad importó catálogo y/o balanza; si aún
+  // no hay registros (extracción async pendiente), deja la marca null para que un
+  // sync posterior reintente. Una vez fijada, NUNCA se vuelve a importar la
+  // balanza del SAT como apertura (sobreescribiría el libro vivo). Aislado en
+  // try/catch para no romper la sincronización de opinión/CSF.
+  let ceBootstrap: { importado: boolean } | null = null;
+  if (company.ceBootstrapAt == null && planIncluyeSyntage(company.tier)) {
+    try {
+      const ce = await leerEImportarContabilidadElectronicaSyntage(companyId, client);
+      const importadas =
+        (ce.catalogo?.total ?? 0) > 0 || (ce.balanza?.entries ?? 0) > 0;
+      if (importadas) {
+        await prisma.company.update({
+          where: { id: companyId },
+          data: { ceBootstrapAt: new Date() },
+        });
+        ceBootstrap = { importado: true };
+      } else {
+        ceBootstrap = { importado: false };
+      }
+    } catch {
+      ceBootstrap = null;
+    }
+  }
+
   return {
     companyId,
     rfc: company.rfc,
     opinion: opinion && { changed: opinion.changed, hallazgos: opinion.hallazgos },
     csf: csf && { changed: csf.changed, hallazgos: csf.hallazgos },
     declaracionesAnuales,
+    ceBootstrap,
   };
 }
 
