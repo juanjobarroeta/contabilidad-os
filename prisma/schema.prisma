@@ -850,9 +850,10 @@ model BankTransaction {
   notes      String?
 
   // Source
-  source        String  @default("UPLOAD") // UPLOAD or BELVO
+  source        String  @default("UPLOAD") // UPLOAD or BELVO or PADEL
   belvoId       String? @unique // Belvo transaction ID (for dedup)
   belvoCategory String? // Belvo auto-category (e.g. "Bills & Utilities")
+  externalRef   String? @unique // idempotency key for external app ingest (e.g. PADEL payment id)
 
   company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankAccount           BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
