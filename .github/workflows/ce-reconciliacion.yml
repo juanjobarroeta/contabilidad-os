@@ -1,0 +1,30 @@
+name: Conciliación CE mensual (SAT vs libro, mensual)
+
+# Compara la balanza (BCE) que el SAT tiene en Syntage contra la balanza del
+# libro vivo, para el mes cerrado anterior, y levanta Hallazgos por las
+# diferencias. SÓLO LECTURA — nunca escribe en el ledger. Requiere
+# SYNTAGE_API_KEY en el deploy y CRON_SECRET/STAGING_URL en el repo.
+#
+# Corre el día 5 de cada mes (cuando la balanza del mes anterior ya está
+# presentada/disponible en Syntage).
+#
+# NOTE: GitHub solo corre schedule: desde la rama default (main).
+
+on:
+  schedule:
+    - cron: "0 13 5 * *" # ~07:00 CT el día 5 de cada mes
+  workflow_dispatch: {}
+
+jobs:
+  reconciliar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reconciliar Contabilidad Electrónica
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/ce-reconciliacion" -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
