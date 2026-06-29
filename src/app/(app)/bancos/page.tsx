@@ -394,7 +394,7 @@ export default function BancosPage() {
               const ignored = m.status === "IGNORED";
               const isPicked = picked.has(m.id);
               return (
-                <Card key={m.id} className={"rounded-card p-4 shadow-card " + (matched ? "border-[oklch(0.85_0.04_168)] bg-[oklch(0.99_0.006_168)]" : "border-cos-line")}>
+                <Card key={m.id} className={"rounded-card p-4 shadow-card " + (matched ? "border-cos-jade-tint bg-cos-jade-tint/40" : "border-cos-line")}>
                   <div className="flex items-start gap-3">
                     {selectMode && (
                       <button onClick={() => togglePick(m.id)} className="mt-1 flex-none">
@@ -418,7 +418,7 @@ export default function BancosPage() {
                       </div>
 
                       {matched && m.invoice && (
-                        <div className="mt-3 flex items-center gap-1.5 border-t border-dashed border-[oklch(0.85_0.04_168)] pt-3 text-[13px] text-cos-jade-ink">
+                        <div className="mt-3 flex items-center gap-1.5 border-t border-dashed border-cos-jade-tint pt-3 text-[13px] text-cos-jade-ink">
                           <Link2 className="h-[15px] w-[15px]" /> Conciliado con <b>{m.invoice.customer?.razonSocial ?? "factura"}</b>
                         </div>
                       )}

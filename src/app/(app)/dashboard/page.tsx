@@ -425,7 +425,7 @@ export default function InicioPage() {
           {/* ask AI */}
           <button
             onClick={askAi}
-            className="flex w-full items-center gap-3.5 rounded-card border border-dashed border-[oklch(0.55_0.16_258_/_0.35)] bg-cos-brand-tint px-[18px] py-[15px] text-left text-[14px] text-cos-brand-ink hover:bg-[oklch(0.95_0.03_258)]"
+            className="flex w-full items-center gap-3.5 rounded-card border border-dashed border-cos-brand/35 bg-cos-brand-tint px-[18px] py-[15px] text-left text-[14px] text-cos-brand-ink hover:border-cos-brand"
           >
             <span className="grid h-[34px] w-[34px] flex-none place-items-center rounded-[10px] bg-cos-brand text-white">
               <Sparkles className="h-[18px] w-[18px]" />
