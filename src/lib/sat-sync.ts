@@ -443,6 +443,9 @@ export async function verifyAndImportSatSync(
   // Download and import all ready packages
   let imported = 0;
   let skipped = 0;
+  // Periodos (year-month) que recibieron CFDIs nuevos — para auto-postear los
+  // que aún estén en borrador al terminar la importación.
+  const affectedPeriods = new Set<string>();
 
   for (const packageId of readyPackageIds) {
     const tipo = typeMap.get(packageId) ?? "recibidos";
@@ -672,6 +675,11 @@ export async function verifyAndImportSatSync(
           });
         }
         imported++;
+        // Sólo los tipos que el motor de posteo consume disparan auto-cierre.
+        if (invoiceType === "INGRESO" || invoiceType === "EGRESO" || invoiceType === "NOMINA") {
+          const f = new Date(cfdi.fecha);
+          affectedPeriods.add(`${f.getUTCFullYear()}-${f.getUTCMonth() + 1}`);
+        }
       }
     }
   }
@@ -682,6 +690,21 @@ export async function verifyAndImportSatSync(
   await backfillNominaRegimen(companyId, { timeBudgetMs: 30_000 }).catch((e) =>
     console.error("[sat-sync] backfillNominaRegimen falló:", e)
   );
+
+  // Auto-cierre conservador: por cada periodo que recibió CFDIs nuevos, postea
+  // el mes SÓLO si aún está en borrador y NO tiene asientos manuales. Nunca
+  // toca meses ya cerrados ni destruye ajustes capturados a mano (lo garantiza
+  // postMonthIfDraft). Best-effort: cualquier error se loguea y no bloquea el
+  // resultado del sync.
+  if (affectedPeriods.size > 0) {
+    const { postMonthIfDraft } = await import("./contabilidad/posting");
+    for (const key of affectedPeriods) {
+      const [y, m] = key.split("-").map(Number);
+      await postMonthIfDraft(companyId, y, m).catch((e) =>
+        console.error(`[sat-sync] auto-cierre ${key} falló:`, e)
+      );
+    }
+  }
 
   // Persist the imported counts back to the SatSyncRequest rows we updated
   if (emitidosRequestId) {
