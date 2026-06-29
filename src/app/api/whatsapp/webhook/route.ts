@@ -16,6 +16,7 @@ import {
   listAccessibleCompanies,
   userCanAccessCompany,
   setActiveCompany,
+  phoneVariants,
   type AccessibleCompany,
 } from "@/lib/whatsapp/identity";
 import { runWhatsappAgent, type WhatsappCompany } from "@/lib/whatsapp/agent";
@@ -213,6 +214,24 @@ export async function POST(req: Request) {
   // ── 3. Identity: verified link only. ──────────────────────────────────────
   const sender = await resolveSender(phone);
   if (!sender) {
+    // Diagnóstico operativo: la ruta normal no registra nada, así que un reporte
+    // de "no vinculado" era imposible de depurar. Aquí distinguimos las causas
+    // (sin enlace / enlace sin verificar / número guardado distinto) registrando
+    // el número entrante vs. las variantes buscadas. Sólo metadatos del propio
+    // remitente; útil además para confirmar que el webhook llega a este deploy.
+    const variants = phoneVariants(phone);
+    const anyLink = await prisma.whatsappLink.findFirst({
+      where: { phoneE164: { in: variants } },
+      select: { phoneE164: true, verifiedAt: true },
+    });
+    console.warn("[whatsapp] inbound sin sender", {
+      from,
+      phone,
+      variants,
+      encontrado: !!anyLink,
+      verificado: !!anyLink?.verifiedAt,
+      almacenado: anyLink?.phoneE164 ?? null,
+    });
     return reply(
       "Hola 👋 Este número no está vinculado a una cuenta de Contabilidad OS. " +
         "Entra a la aplicación y vincula tu WhatsApp desde Ajustes para poder ayudarte."
