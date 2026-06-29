@@ -73,13 +73,20 @@ export async function resolveSender(
   phoneE164: string
 ): Promise<ResolvedSender | null> {
   // Busca por cualquiera de las variantes (+52 / +521) para tolerar enlaces
-  // guardados antes de canonicalizar. `phoneE164` es único, así que findFirst
-  // sobre el `in` devuelve a lo más uno.
+  // guardados antes de canonicalizar.
+  //
+  // IMPORTANTE: filtramos `verifiedAt: { not: null }` EN LA CONSULTA, no después.
+  // Un número puede tener más de una fila por las variantes (p.ej. una verificada
+  // +52########## y una vieja sin verificar +521##########); si sólo trajéramos
+  // "la primera" y luego revisáramos `verifiedAt`, una fila stale sin verificar
+  // podía opacar a la verificada y devolver null ("no vinculado") aunque el
+  // usuario SÍ estuviera vinculado. Pedir sólo verificadas evita ese shadowing.
   const link = await prisma.whatsappLink.findFirst({
-    where: { phoneE164: { in: phoneVariants(phoneE164) } },
-    select: { id: true, userId: true, verifiedAt: true, activeCompanyId: true },
+    where: { phoneE164: { in: phoneVariants(phoneE164) }, verifiedAt: { not: null } },
+    orderBy: { verifiedAt: "desc" },
+    select: { id: true, userId: true, activeCompanyId: true },
   });
-  if (!link || !link.verifiedAt) return null;
+  if (!link) return null;
   return {
     userId: link.userId,
     linkId: link.id,
