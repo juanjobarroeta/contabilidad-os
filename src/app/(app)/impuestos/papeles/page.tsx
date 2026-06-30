@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { ArrowLeft, Printer, FileText, Calculator, BookOpen } from "lucide-react";
+import { ArrowLeft, Printer, FileText, Calculator, BookOpen, ShieldCheck } from "lucide-react";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
+import { VerificacionSatPanel } from "@/components/papeles/VerificacionSatPanel";
 
-type TabId = "iva" | "isr" | "retenciones";
+type TabId = "iva" | "isr" | "retenciones" | "verificacion";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -25,7 +26,7 @@ export default function PapelesPage() {
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get("tab");
-    if (t === "iva" || t === "isr" || t === "retenciones") setTab(t);
+    if (t === "iva" || t === "isr" || t === "retenciones" || t === "verificacion") setTab(t);
     const m = parseInt(sp.get("month") ?? "");
     if (m >= 1 && m <= 12) setMonth(m);
     const y = parseInt(sp.get("year") ?? "");
@@ -91,6 +92,7 @@ export default function PapelesPage() {
               ["iva", "IVA", Calculator],
               ["isr", "ISR Provisional", FileText],
               ["retenciones", "Retenciones", BookOpen],
+              ["verificacion", "Verificación SAT", ShieldCheck],
             ] as const).map(([id, label, Icon]) => (
               <button
                 key={id}
@@ -111,6 +113,7 @@ export default function PapelesPage() {
       {tab === "iva" && <IvaPanel companyId={activeCompany.id} year={year} month={month} />}
       {tab === "isr" && <IsrPanel companyId={activeCompany.id} year={year} month={month} />}
       {tab === "retenciones" && <RetencionesPanel companyId={activeCompany.id} year={year} month={month} />}
+      {tab === "verificacion" && <VerificacionSatPanel companyId={activeCompany.id} year={year} month={month} />}
     </div>
   );
 }
