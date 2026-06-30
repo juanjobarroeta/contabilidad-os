@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
-import {
-  reconciliarTodasCEEmpresas,
-  reconciliarCEEmpresa,
-  periodoMesAnterior,
-} from "@/lib/contabilidad/ce-reconciliacion";
+import { periodoMesAnterior } from "@/lib/contabilidad/ce-reconciliacion";
+import { notificarCEEmpresa, notificarCETodas } from "@/lib/notify-ce";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/ce-reconciliacion   [?companyId=<id>] [?periodo=YYYY-MM]
 //
-// Conciliación MENSUAL de Contabilidad Electrónica (SÓLO LECTURA): compara la
-// balanza (BCE) que el SAT tiene en Syntage contra la balanza que generamos del
-// libro vivo, para el mes cerrado anterior, en cada empresa con plan Syntage y
-// ya arrancada (ceBootstrapAt != null). Levanta/actualiza/resuelve un Hallazgo
-// por empresa+periodo. NUNCA escribe en el ledger.
+// Cierre MENSUAL de Contabilidad Electrónica (presentación ASISTIDA, SÓLO
+// LECTURA del ledger): para el mes cerrado anterior, en cada empresa con plan
+// Syntage y ya arrancada (ceBootstrapAt != null):
+//   1. ASEGURA los XML del Anexo 24 (catálogo + balanza) desde el libro vivo
+//      — sólo se generan, NUNCA se envían al SAT.
+//   2. CONCILIA la balanza del SAT (Syntage) contra la nuestra y levanta/
+//      actualiza/resuelve el Hallazgo por empresa+periodo (reutiliza
+//      reconciliarCEEmpresa).
+//   3. EMPUJA un push a quienes operan la empresa: "lista para presentar"
+//      (cuadra) o "no cuadra en N cuentas — revísala antes de presentar".
+// No hay API de envío al SAT: se genera + guía, jamás se auto-presenta.
 //
 // Auth: secreto compartido en CRON_SECRET (Authorization: Bearer <secret> o
 // x-cron-secret: <secret>).
@@ -40,9 +43,9 @@ async function handle(req: Request) {
 
   try {
     if (only) {
-      return NextResponse.json({ ok: true, ...(await reconciliarCEEmpresa(only, periodo)) });
+      return NextResponse.json({ ok: true, ...(await notificarCEEmpresa(only, periodo)) });
     }
-    return NextResponse.json({ ok: true, ...(await reconciliarTodasCEEmpresas(periodo)) });
+    return NextResponse.json({ ok: true, ...(await notificarCETodas(periodo)) });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },

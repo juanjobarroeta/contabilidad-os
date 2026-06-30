@@ -5,6 +5,10 @@ import {
   parsePeriodo,
   periodoMesAnterior,
   mensajeHallazgo,
+  periodoLargo,
+  cuentasQueNoCuadran,
+  nudgeCEPresentacion,
+  CE_DEEP_LINK,
   type CuentaBalanza,
 } from "./ce-reconciliacion";
 
@@ -155,5 +159,70 @@ describe("parsePeriodo / periodoMesAnterior", () => {
   it("calcula el mes cerrado anterior, cruzando año", () => {
     expect(periodoMesAnterior(new Date(Date.UTC(2026, 5, 15)))).toBe("2026-05"); // junio → mayo
     expect(periodoMesAnterior(new Date(Date.UTC(2026, 0, 10)))).toBe("2025-12"); // enero → dic año previo
+  });
+});
+
+describe("periodoLargo", () => {
+  it("formatea YYYY-MM a 'mes de año'", () => {
+    expect(periodoLargo("2026-05")).toBe("mayo de 2026");
+    expect(periodoLargo("2025-01")).toBe("enero de 2025");
+    expect(periodoLargo("2024-12")).toBe("diciembre de 2024");
+  });
+  it("devuelve el crudo si el formato o el mes es inválido", () => {
+    expect(periodoLargo("2026/05")).toBe("2026/05");
+    expect(periodoLargo("2026-13")).toBe("2026-13");
+  });
+});
+
+describe("cuentasQueNoCuadran — cuentas DISTINTAS divergentes", () => {
+  it("cero cuando la conciliación está limpia", () => {
+    const diff = compararBalanzas({ periodo: "2026-05", sat: [cta("100", 1)], libro: [cta("100", 1)] });
+    expect(cuentasQueNoCuadran(diff)).toBe(0);
+  });
+  it("una cuenta con varias magnitudes en discrepancia cuenta una sola vez", () => {
+    const sat = [cta("500.01", 0, 5000, 5000)];
+    const libro = [cta("500.01", 0, 4000, 3000)]; // DEBE y HABER divergen
+    const diff = compararBalanzas({ periodo: "2026-05", sat, libro });
+    expect(diff.discrepancias.length).toBe(2);
+    expect(cuentasQueNoCuadran(diff)).toBe(1);
+  });
+  it("suma cuentas con discrepancia + faltantes en ambos lados, sin duplicar", () => {
+    const sat = [cta("100", 50), cta("205.01", 3000)];
+    const libro = [cta("100", 40), cta("601.84", 1200)]; // 100 diverge; 205.01 falta en libro; 601.84 falta en SAT
+    const diff = compararBalanzas({ periodo: "2026-05", sat, libro });
+    expect(cuentasQueNoCuadran(diff)).toBe(3);
+  });
+});
+
+describe("nudgeCEPresentacion — composición del push de presentación asistida", () => {
+  it("cuadra → 'lista para presentar' con deep link", () => {
+    const diff = compararBalanzas({ periodo: "2026-05", sat: [cta("100", 1)], libro: [cta("100", 1)] });
+    const n = nudgeCEPresentacion(diff);
+    expect(n.title).toBe("Tu Contabilidad Electrónica de mayo de 2026 está lista para presentar");
+    expect(n.body).toContain("Cuadra con la balanza del SAT");
+    expect(n.url).toBe(CE_DEEP_LINK);
+    expect(n.tag).toBe("ce-presentar-2026-05");
+  });
+
+  it("no cuadra → 'no cuadra con el SAT en N cuentas — revísala antes de presentar'", () => {
+    const sat = [cta("100", 50), cta("205.01", 3000)];
+    const libro = [cta("100", 40), cta("601.84", 1200)];
+    const diff = compararBalanzas({ periodo: "2026-05", sat, libro });
+    const n = nudgeCEPresentacion(diff);
+    expect(n.title).toContain("no cuadra con el SAT");
+    expect(n.title).toContain("mayo de 2026");
+    expect(n.body).toContain("3 cuentas");
+    expect(n.body).toContain("revísala antes de presentar");
+    expect(n.url).toBe(CE_DEEP_LINK);
+  });
+
+  it("singulariza '1 cuenta' cuando sólo diverge una", () => {
+    const sat = [cta("100", 50)];
+    const libro = [cta("100", 40)];
+    const diff = compararBalanzas({ periodo: "2026-03", sat, libro });
+    const n = nudgeCEPresentacion(diff);
+    expect(n.body).toContain("1 cuenta —");
+    expect(n.body).not.toContain("1 cuentas");
+    expect(n.tag).toBe("ce-presentar-2026-03");
   });
 });
