@@ -8,7 +8,9 @@ import {
   Plus, Users2, Loader2, X, AlertCircle, CheckCircle2, Receipt,
   Upload, Sparkles, FileText, Play, Download, Calendar, ClipboardList,
   ArrowLeftRight, Shield, ChevronDown, ChevronUp, UserX, Trash2,
+  Wand2,
 } from "lucide-react";
+import { RosterImport } from "./RosterImport";
 
 interface PayrollItemDetail {
   id: string;
@@ -147,6 +149,7 @@ export default function NominaPage() {
   const [emitFor, setEmitFor] = useState<Employee | null>(null);
   const [editFor, setEditFor] = useState<Employee | null>(null);
   const [bajaFor, setBajaFor] = useState<Employee | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   // Corridas state
   const [runs, setRuns] = useState<PayrollRun[]>([]);
@@ -253,9 +256,14 @@ export default function NominaPage() {
         </div>
         <div className="flex items-center gap-2">
           {tab === "empleados" && (
-            <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
-              <Plus className="h-4 w-4" /> Nuevo empleado
-            </button>
+            <>
+              <button onClick={() => setShowImport(true)} className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper" title="Reconstruir el equipo desde tus recibos de nómina">
+                <Wand2 className="h-4 w-4" /> Importar desde recibos
+              </button>
+              <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
+                <Plus className="h-4 w-4" /> Nuevo empleado
+              </button>
+            </>
           )}
           {tab === "corridas" && (
             <>
@@ -319,10 +327,15 @@ export default function NominaPage() {
             <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
               <Users2 className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
               <p className="font-medium text-sm">Sin empleados</p>
-              <p className="text-xs text-cos-ink-soft mt-1">Agrega tu primer empleado para empezar.</p>
-              <button onClick={() => setShowAdd(true)} className="mt-4 inline-flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
-                <Plus className="h-4 w-4" /> Nuevo empleado
-              </button>
+              <p className="text-xs text-cos-ink-soft mt-1">Reconstruye tu equipo desde los recibos de nómina que ya timbraste, o agrégalo manualmente.</p>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
+                  <Wand2 className="h-4 w-4" /> Importar desde recibos de nómina
+                </button>
+                <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper">
+                  <Plus className="h-4 w-4" /> Nuevo empleado
+                </button>
+              </div>
             </div>
           ) : (
             <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
@@ -589,6 +602,17 @@ export default function NominaPage() {
       )}
 
       {/* ── Modals ── */}
+      {showImport && activeCompany && (
+        <RosterImport
+          companyId={activeCompany.id}
+          onClose={() => setShowImport(false)}
+          onImported={(creados) => {
+            setShowImport(false);
+            loadEmployees();
+            setError(`✓ Se importaron ${creados} empleado${creados === 1 ? "" : "s"} desde tus recibos de nómina.`);
+          }}
+        />
+      )}
       {showAdd && activeCompany && (
         <NewEmployeeModal companyId={activeCompany.id} onClose={() => setShowAdd(false)}
           onCreated={() => { setShowAdd(false); loadEmployees(); }} />
