@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { ArrowLeft, Printer, FileText, Calculator, BookOpen } from "lucide-react";
+import { ArrowLeft, Printer, FileText, Calculator, BookOpen, ShieldCheck } from "lucide-react";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
+import { VerificacionSatPanel } from "@/components/papeles/VerificacionSatPanel";
 
-type TabId = "iva" | "isr" | "retenciones";
+type TabId = "iva" | "isr" | "retenciones" | "verificacion";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -19,6 +20,17 @@ export default function PapelesPage() {
   const [tab, setTab] = useState<TabId>("iva");
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  // "Verificación SAT" es una herramienta INTERNA del operador (auditar el motor),
+  // no para el contador/cliente: la pestaña sólo se muestra al operador. El
+  // endpoint además está gated server-side, así que esconderla no es la seguridad.
+  const [esOperador, setEsOperador] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setEsOperador(Boolean(d?.esOperador)))
+      .catch(() => {});
+  }, []);
 
   // Honor deep-links from the cierre workspace (?tab=&month=&year=). Read from
   // the URL directly to avoid forcing a Suspense boundary (useSearchParams).
@@ -91,6 +103,8 @@ export default function PapelesPage() {
               ["iva", "IVA", Calculator],
               ["isr", "ISR Provisional", FileText],
               ["retenciones", "Retenciones", BookOpen],
+              // Sólo operador: herramienta interna de verificación contra el SAT.
+              ...(esOperador ? [["verificacion", "Verificación SAT", ShieldCheck]] as const : []),
             ] as const).map(([id, label, Icon]) => (
               <button
                 key={id}
@@ -111,6 +125,7 @@ export default function PapelesPage() {
       {tab === "iva" && <IvaPanel companyId={activeCompany.id} year={year} month={month} />}
       {tab === "isr" && <IsrPanel companyId={activeCompany.id} year={year} month={month} />}
       {tab === "retenciones" && <RetencionesPanel companyId={activeCompany.id} year={year} month={month} />}
+      {tab === "verificacion" && esOperador && <VerificacionSatPanel companyId={activeCompany.id} year={year} month={month} />}
     </div>
   );
 }
