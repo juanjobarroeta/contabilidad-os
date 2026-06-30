@@ -254,6 +254,77 @@ export function mensajeHallazgo(diff: DiffBalanzas): string {
   return detalle ? `${cabecera}\n\n${detalle}` : cabecera;
 }
 
+// ── Nudge de presentación (composición PURA del push) ─────────────────────────
+//
+// Tras conciliar, empujamos al usuario un aviso de "presentación asistida": la CE
+// del mes está LISTA para presentar (cuadra con el SAT) o NO CUADRA y debe
+// revisarse antes de presentar. NUNCA se envía nada al SAT: sólo se genera+guía.
+
+/** Nombres largos de mes (1-12) para los textos del nudge. */
+const MESES_LARGO = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+] as const;
+
+/** "2026-05" → "mayo de 2026". Tolera periodos fuera de rango devolviendo el crudo. */
+export function periodoLargo(periodo: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(periodo.trim());
+  if (!m) return periodo;
+  const mes = Number(m[2]);
+  if (mes < 1 || mes > 12) return periodo;
+  return `${MESES_LARGO[mes - 1]} de ${m[1]}`;
+}
+
+/**
+ * Cuántas cuentas DISTINTAS divergen entre el SAT y el libro (saldo distinto o
+ * presentes en un solo lado). Una cuenta con varias magnitudes en discrepancia
+ * cuenta una sola vez: es el número que ve el usuario en el nudge.
+ */
+export function cuentasQueNoCuadran(diff: DiffBalanzas): number {
+  const claves = new Set<string>();
+  for (const d of diff.discrepancias) claves.add(d.cuenta);
+  for (const c of diff.faltantesEnLibro) claves.add(c.cuenta);
+  for (const c of diff.faltantesEnSat) claves.add(c.cuenta);
+  return claves.size;
+}
+
+export interface NudgeCE {
+  title: string;
+  body: string;
+  /** Deep link a la pestaña de Contabilidad Electrónica (descargar/presentar). */
+  url: string;
+  tag: string;
+}
+
+/** Deep link a la CE del periodo (pestaña con catálogo + balanza descargables). */
+export const CE_DEEP_LINK = "/contabilidad?tab=coe";
+
+/**
+ * Compone (PURO) el nudge de presentación a partir del diff de conciliación.
+ *   • Limpio  → "lista para presentar" + deep link a descargar/presentar.
+ *   • Diverge → "no cuadra con el SAT en N cuentas — revísala antes de presentar".
+ * El `tag` colapsa el aviso por periodo (un solo nudge por mes y dispositivo).
+ */
+export function nudgeCEPresentacion(diff: DiffBalanzas): NudgeCE {
+  const mes = periodoLargo(diff.periodo);
+  const tag = `ce-presentar-${diff.periodo}`;
+  if (diffEstaLimpio(diff)) {
+    return {
+      title: `Tu Contabilidad Electrónica de ${mes} está lista para presentar`,
+      body: "Cuadra con la balanza del SAT. Toca para descargar los XML (catálogo y balanza) y presentarla.",
+      url: CE_DEEP_LINK,
+      tag,
+    };
+  }
+  const n = cuentasQueNoCuadran(diff);
+  return {
+    title: `La Contabilidad Electrónica de ${mes} no cuadra con el SAT`,
+    body: `No cuadra en ${n} cuenta${n === 1 ? "" : "s"} — revísala antes de presentar. Toca para ver el detalle.`,
+    url: CE_DEEP_LINK,
+    tag,
+  };
+}
+
 // ── Lectura de la BCE del SAT (Syntage) para un periodo concreto ──────────────
 
 /** Año/mes de un registro de Contabilidad Electrónica de Syntage. */
