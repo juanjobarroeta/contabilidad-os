@@ -271,35 +271,35 @@ export default function InicioPage() {
 
             <Card className="rounded-card border-cos-line p-5 shadow-card">
               <span className={LBL}>Tu mes en números</span>
-              <div className="mt-3.5 grid grid-cols-1 gap-3.5 min-[460px]:grid-cols-3">
-                <div className="flex flex-row items-baseline justify-between gap-2 min-[460px]:flex-col min-[460px]:items-start min-[460px]:justify-start min-[460px]:gap-1">
+              <div className="mt-3.5 grid grid-cols-1 gap-3.5 min-[768px]:grid-cols-3">
+                <div className="flex flex-row items-baseline justify-between gap-2 min-[768px]:flex-col min-[768px]:items-start min-[768px]:justify-start min-[768px]:gap-1">
                   <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-medium text-cos-ink-faint">
                     <ArrowUpRight className="h-3.5 w-3.5" /> Te pagaron
                   </span>
-                  <Money value={data.kpis.ingresosDelMes} size={19} />
+                  <Money value={data.kpis.ingresosDelMes} size={16} />
                   <span className="text-[12px] text-cos-ink-faint">
                     {data.kpis.facturasEmitidas} factura{data.kpis.facturasEmitidas === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div className="flex flex-row items-baseline justify-between gap-2 min-[460px]:flex-col min-[460px]:items-start min-[460px]:justify-start min-[460px]:gap-1">
+                <div className="flex flex-row items-baseline justify-between gap-2 min-[768px]:flex-col min-[768px]:items-start min-[768px]:justify-start min-[768px]:gap-1">
                   <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-medium text-cos-ink-faint">
                     <ArrowDownLeft className="h-3.5 w-3.5" /> Gastaste
                   </span>
-                  <Money value={data.kpis.gastosDelMes} size={19} />
+                  <Money value={data.kpis.gastosDelMes} size={16} />
                   <span className="text-[12px] text-cos-ink-faint">
                     {data.kpis.facturasRecibidas} factura{data.kpis.facturasRecibidas === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div className="flex flex-row items-baseline justify-between gap-2 min-[460px]:flex-col min-[460px]:items-start min-[460px]:justify-start min-[460px]:gap-1">
+                <div className="flex flex-row items-baseline justify-between gap-2 min-[768px]:flex-col min-[768px]:items-start min-[768px]:justify-start min-[768px]:gap-1">
                   <span className="text-[12.5px] font-medium text-cos-ink-faint">Te queda</span>
                   {data.taxThisMonth.isr == null ? (
                     <>
-                      <Money value={data.kpis.utilidadBruta} size={19} sign />
+                      <Money value={data.kpis.utilidadBruta} size={16} sign />
                       <span className="text-[12px] text-cos-ink-faint">antes de impuestos</span>
                     </>
                   ) : (
                     <>
-                      <Money value={data.kpis.utilidadBruta - data.taxThisMonth.isr} size={19} sign />
+                      <Money value={data.kpis.utilidadBruta - data.taxThisMonth.isr} size={16} sign />
                       <span className="text-[12px] text-cos-ink-faint">después de ISR</span>
                     </>
                   )}
@@ -327,18 +327,18 @@ export default function InicioPage() {
           {data.asimilados && (
             <Card className="rounded-card border-cos-line p-5 shadow-card">
               <span className={LBL}>Asimilados a salarios</span>
-              <div className="mt-3.5 grid grid-cols-1 gap-3.5 min-[460px]:grid-cols-3">
+              <div className="mt-3.5 grid grid-cols-1 gap-3.5 min-[768px]:grid-cols-3">
                 <div>
                   <p className="text-[12.5px] text-cos-ink-faint">Ingresos del mes</p>
-                  <Money value={data.asimilados.mes.ingreso} size={19} />
+                  <Money value={data.asimilados.mes.ingreso} size={16} />
                 </div>
                 <div>
                   <p className="text-[12.5px] text-cos-ink-faint">ISR que te retuvieron (pago provisional)</p>
-                  <Money value={data.asimilados.mes.isrRetenido} size={19} />
+                  <Money value={data.asimilados.mes.isrRetenido} size={16} />
                 </div>
                 <div>
                   <p className="text-[12.5px] text-cos-ink-faint">ISR que te retuvieron en {data.periodo.year} (acreditable)</p>
-                  <Money value={data.asimilados.anual.isrRetenido} size={19} />
+                  <Money value={data.asimilados.anual.isrRetenido} size={16} />
                 </div>
               </div>
               <p className="mt-3 text-[12.5px] text-cos-ink-faint">
