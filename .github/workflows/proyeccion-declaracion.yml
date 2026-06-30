@@ -1,0 +1,29 @@
+name: Proyección de declaración (T-7 / T-3)
+
+# Nudge proactivo de proyección de la declaración mensual: empuja las cifras
+# estimadas (IVA/ISR) del periodo en juego a 7 y a 3 días del día 17, con
+# deep-link para revisar y aprobar. Cada empresa sólo dispara en sus marcas
+# exactas, así que correrlo a diario entre semana no spamea.
+#
+# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
+# NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
+
+on:
+  schedule:
+    - cron: "0 15 * * 1-5" # ~09:00/10:00 CT, lunes a viernes
+  workflow_dispatch: {}
+
+jobs:
+  proyeccion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar proyección de declaración
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/proyeccion-declaracion" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
