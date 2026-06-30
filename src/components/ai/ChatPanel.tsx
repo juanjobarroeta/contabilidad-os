@@ -2,12 +2,19 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { X, Send, Loader2, Sparkles, Wrench, Plus, MessagesSquare, Lock, Users, Trash2, ArrowLeft } from "lucide-react";
+import { X, Send, Loader2, Sparkles, Wrench, Plus, MessagesSquare, Lock, Users, Trash2, ArrowLeft, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Markdown } from "./Markdown";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+}
+// Acción reversible PROPUESTA por el asistente, a la espera del tap de Confirmar.
+interface PendingAction {
+  type: string;
+  summary: string;
+  token: string;
+  expiresAt: number;
 }
 type Visibility = "PRIVATE" | "COMPANY";
 interface ConvSummary {
@@ -33,6 +40,9 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  // Acción reversible propuesta + estado del tap de confirmación.
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [confirming, setConfirming] = useState(false);
   // Conversación actual + historial.
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<Visibility>("PRIVATE");
@@ -55,6 +65,7 @@ export function ChatPanel() {
     setConversationId(null);
     setVisibility("PRIVATE");
     setIsMine(true);
+    setPendingAction(null);
     setView("chat");
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
@@ -70,6 +81,7 @@ export function ChatPanel() {
       setConversationId(data.id);
       setVisibility(data.visibility);
       setIsMine(!!data.mine);
+      setPendingAction(null);
     } finally {
       setIsLoading(false);
     }
@@ -151,12 +163,23 @@ export function ChatPanel() {
     };
   }, [isOpen]);
 
-  // Abrir desde cualquier parte vía `cos:ask-ai`.
+  // Abrir desde cualquier parte vía `cos:ask-ai`. Si el evento trae `detail.seed`,
+  // arrancamos una conversación nueva con ese texto pre-cargado en el input (p.ej.
+  // "Resolver con el asistente" desde un pendiente), para que el asistente ya
+  // conozca la tarea. `detail.send` lo envía automáticamente.
   useEffect(() => {
-    const open = () => setIsOpen(true);
+    const open = (e: Event) => {
+      setIsOpen(true);
+      const detail = (e as CustomEvent<{ seed?: string; send?: boolean }>).detail;
+      if (detail?.seed) {
+        newChat();
+        setInput(detail.seed);
+        setTimeout(() => inputRef.current?.focus(), 60);
+      }
+    };
     window.addEventListener("cos:ask-ai", open);
     return () => window.removeEventListener("cos:ask-ai", open);
-  }, []);
+  }, [newChat]);
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() || isLoading || !activeCompany) return;
@@ -167,6 +190,8 @@ export function ChatPanel() {
     setInput("");
     setIsLoading(true);
     setActiveTool(null);
+    // Un nuevo turno invalida cualquier propuesta anterior aún en pantalla.
+    setPendingAction(null);
 
     try {
       const apiMessages = newMessages.map((m) => ({ role: m.role, content: m.content }));
@@ -189,10 +214,12 @@ export function ChatPanel() {
       let buffer = "";
       let nuevaConv = false;
 
-      const handle = (data: { type: string; text?: string; tool?: string; error?: string; id?: string; nueva?: boolean }) => {
+      const handle = (data: { type: string; text?: string; tool?: string; error?: string; id?: string; nueva?: boolean; action?: PendingAction }) => {
         if (data.type === "conversation") {
           if (data.id) setConversationId(data.id);
           if (data.nueva) nuevaConv = true;
+        } else if (data.type === "pending_action") {
+          if (data.action) setPendingAction(data.action);
         } else if (data.type === "text") {
           assistantText += data.text ?? "";
           setMessages((prev) => {
@@ -244,6 +271,43 @@ export function ChatPanel() {
     }
   };
 
+  // El TAP de Confirmar: ejecuta la acción reversible staged (POST /api/ai/confirm).
+  // El backend re-valida sesión, membresía (rechaza VIEWER), TTL, token e
+  // idempotencia. El asistente NUNCA llega aquí: el tap es la confirmación.
+  const confirmAction = useCallback(async () => {
+    if (!pendingAction || !conversationId || confirming) return;
+    setConfirming(true);
+    try {
+      const res = await fetch("/api/ai/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, token: pendingAction.token }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const ok = res.ok && data.ok;
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: ok
+            ? `Listo. ${data.message ?? "Acción realizada."}`
+            : `No se pudo completar: ${data.error ?? "Inténtalo de nuevo."}`,
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", content: "No se pudo completar la acción. Inténtalo de nuevo." }]);
+    } finally {
+      setPendingAction(null);
+      setConfirming(false);
+    }
+  }, [pendingAction, conversationId, confirming]);
+
+  const cancelAction = useCallback(() => {
+    // Sólo descartamos la tarjeta en el cliente; el staged caduca solo por TTL y
+    // un nuevo turno lo invalida. No ejecuta nada.
+    setPendingAction(null);
+  }, []);
+
   const TOOL_LABELS: Record<string, string> = {
     query_invoices: "Consultando facturas",
     query_bank_transactions: "Revisando transacciones",
@@ -255,6 +319,11 @@ export function ChatPanel() {
     categorize_transaction: "Clasificando transacción",
     suggest_reconciliation_match: "Buscando coincidencias",
     analyze_anomalies: "Analizando anomalías",
+    proponer_conciliacion: "Preparando conciliación",
+    proponer_categorizacion: "Preparando categorización",
+    proponer_resolver_hallazgo: "Preparando resolución",
+    proponer_posponer_hallazgo: "Preparando posposición",
+    proponer_marcar_pendiente: "Preparando cambio",
   };
 
   if (!activeCompany) return null;
@@ -408,6 +477,39 @@ export function ChatPanel() {
                   <div className="flex items-center gap-2 rounded-2xl bg-cos-amber-tint px-4 py-2.5 text-sm text-cos-amber-ink">
                     <Wrench className="h-4 w-4 animate-spin" />
                     <span>{TOOL_LABELS[activeTool] || activeTool}...</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Tarjeta de confirmación: el asistente PROPUSO una acción reversible.
+                  El tap de "Confirmar" es lo único que la ejecuta. */}
+              {pendingAction && !isLoading && (
+                <div className="mb-3">
+                  <div className="rounded-card border border-cos-brand/40 bg-cos-brand-tint/60 p-3.5">
+                    <div className="flex items-center gap-1.5 text-[12px] font-semibold text-cos-brand-ink">
+                      <ShieldCheck className="h-4 w-4" /> Confirmación requerida
+                    </div>
+                    <p className="mt-1.5 text-[13.5px] leading-relaxed text-cos-ink">{pendingAction.summary}</p>
+                    <p className="mt-1 text-[11.5px] text-cos-ink-faint">
+                      Nada se ejecuta hasta que toques Confirmar. Esta acción es reversible.
+                    </p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        onClick={confirmAction}
+                        disabled={confirming}
+                        className="inline-flex items-center gap-1.5 rounded-control bg-cos-jade px-3.5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                        Confirmar
+                      </button>
+                      <button
+                        onClick={cancelAction}
+                        disabled={confirming}
+                        className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3.5 py-2 text-[13px] font-semibold text-cos-ink transition-colors hover:bg-cos-paper disabled:opacity-50"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

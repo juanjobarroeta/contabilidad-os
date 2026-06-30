@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Loader2,
   Building2,
+  Sparkles,
 } from "lucide-react";
 import { Card, Badge, EmptyState, type BadgeTone } from "@/components/ui";
 
@@ -46,6 +47,16 @@ const CATEGORIA_LABEL: Record<string, string> = {
 
 const fmtFecha = (iso: string) =>
   new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+
+// Abre el asistente con el contexto del pendiente pre-cargado, para que ya
+// conozca la tarea y pueda proponer un arreglo reversible (con confirmación).
+function resolverConAsistente(n: Notificacion) {
+  const seed =
+    `Ayúdame a resolver este pendiente (id: ${n.id}): "${n.titulo}".` +
+    (n.cuerpo ? ` Detalle: ${n.cuerpo}` : "") +
+    " Si hay un arreglo reversible, propónmelo para confirmarlo.";
+  window.dispatchEvent(new CustomEvent("cos:ask-ai", { detail: { seed } }));
+}
 
 export default function PendientesPage() {
   const [items, setItems] = useState<Notificacion[] | null>(null);
@@ -201,6 +212,14 @@ function PendienteCard({
                 >
                   Abrir <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
+                <ActionButton
+                  disabled={saving}
+                  onClick={() => resolverConAsistente(n)}
+                  icon={Sparkles}
+                  variant="ghost"
+                >
+                  Resolver con el asistente
+                </ActionButton>
                 <ActionButton
                   disabled={saving}
                   onClick={() => onPatch(n.id, { estado: "HECHO" })}

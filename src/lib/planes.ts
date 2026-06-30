@@ -93,3 +93,20 @@ export function effectiveWhatsappPlan(company: {
 }): CompanyPlan {
   return company.despachoId ? "DESPACHO" : company.tier;
 }
+
+// ── Tope de COSTO-SEGURIDAD del asistente DENTRO de la app ────────────────────
+// El chat in-app está incluido en TODOS los tiers (la IA es parte del producto),
+// pero igual lo metemos en presupuesto mensual de LLM por empresa para acotar el
+// COGS ante un uso abusivo. Es un tope de COSTO, no de precio. Subtipo medido en
+// CostEvent: "ai.chat".
+const CHAT_LLM_USD_MENSUAL: Record<CompanyPlan, number> = {
+  ASISTENTE: 8,
+  AUTOMATIZADO: 15,
+  PRO: 30,
+  DESPACHO: 80,
+};
+
+/** Presupuesto mensual de LLM (USD) por empresa para el chat in-app, por tier. */
+export function chatLlmUsdMensual(plan: CompanyPlan): number {
+  return CHAT_LLM_USD_MENSUAL[plan];
+}

@@ -7,6 +7,8 @@ import { executeToolCall } from "@/lib/ai/tool-executor";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { recordLlmCost } from "@/lib/costos/record";
+import { checkChatBudget } from "@/lib/ai/budget";
+import { getChatPendingAction } from "@/lib/ai/pending-action";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -49,6 +51,29 @@ export async function POST(req: Request) {
   if (!member) {
     return NextResponse.json({ error: "Sin acceso a esta empresa" }, { status: 403 });
   }
+
+  // Cost gate: presupuesto mensual de LLM del chat in-app por empresa (mismo
+  // patrón que el agente de WhatsApp; subtipo "ai.chat" en CostEvent).
+  const companyPlan = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { tier: true, despachoId: true },
+  });
+  if (!companyPlan) {
+    return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+  }
+  const budget = await checkChatBudget({
+    companyId,
+    tier: companyPlan.tier,
+    despachoId: companyPlan.despachoId,
+  });
+  if (!budget.allowed) {
+    return NextResponse.json({ error: budget.mensaje }, { status: 429 });
+  }
+
+  // Sólo roles con permiso de escritura pueden STAGEAR acciones reversibles. A un
+  // VIEWER ni siquiera le exponemos las herramientas "proponer_*".
+  const canWrite = member.role !== "VIEWER";
+  const availableTools = canWrite ? tools : tools.filter((t) => !t.name.startsWith("proponer_"));
 
   // ── Persistencia de la conversación ─────────────────────────────────────────
   // El último mensaje del cliente es el nuevo turno del usuario. Resolvemos (o
@@ -126,7 +151,7 @@ export async function POST(req: Request) {
               model,
               max_tokens: 4096,
               system: systemPrompt,
-              tools,
+              tools: availableTools,
               messages: currentMessages,
               stream: true,
             });
@@ -137,7 +162,7 @@ export async function POST(req: Request) {
                 model,
                 max_tokens: 4096,
                 system: systemPrompt,
-                tools,
+                tools: availableTools,
                 messages: currentMessages,
                 stream: true,
               });
@@ -218,7 +243,11 @@ export async function POST(req: Request) {
               const result = await executeToolCall(
                 block.name,
                 block.input as Record<string, unknown>,
-                companyId
+                companyId,
+                // inApp habilita las herramientas "proponer_*" (tarjeta Confirmar).
+                // Sólo roles con permiso de escritura pueden STAGEAR (VIEWER no);
+                // el confirm endpoint re-valida igualmente.
+                { conversationId: convId!, inApp: canWrite }
               );
               toolResults.push({
                 type: "tool_result",
@@ -236,6 +265,24 @@ export async function POST(req: Request) {
           ];
 
           toolRounds++;
+        }
+
+        // Si el asistente STAGEÓ una acción reversible en este turno, avísale al
+        // cliente para que pinte la tarjeta Confirmar / Cancelar (el tap ejecuta).
+        try {
+          const pa = await getChatPendingAction(convId!);
+          if (pa) {
+            safeEnqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: "pending_action",
+                  action: { type: pa.type, summary: pa.summary, token: pa.token, expiresAt: pa.expiresAt },
+                })}\n\n`,
+              ),
+            );
+          }
+        } catch {
+          /* no rompemos el turno por no poder pintar la tarjeta */
         }
 
         // Persistir el turno (mensaje del usuario + respuesta del asistente) y
