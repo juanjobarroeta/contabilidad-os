@@ -8,6 +8,7 @@ import {
   periodoLargo,
   cuentasQueNoCuadran,
   nudgeCEPresentacion,
+  construirNudgeCEAgregado,
   CE_DEEP_LINK,
   type CuentaBalanza,
 } from "./ce-reconciliacion";
@@ -224,5 +225,43 @@ describe("nudgeCEPresentacion — composición del push de presentación asistid
     expect(n.body).toContain("1 cuenta —");
     expect(n.body).not.toContain("1 cuentas");
     expect(n.tag).toBe("ce-presentar-2026-03");
+  });
+});
+
+describe("construirNudgeCEAgregado (un push por usuario, no por empresa)", () => {
+  it("null cuando no hay empresas", () => {
+    expect(construirNudgeCEAgregado("2026-05", [])).toBeNull();
+  });
+
+  it("una sola empresa → mensaje específico con su nombre", () => {
+    const lista = construirNudgeCEAgregado("2026-05", [{ razonSocial: "ACME", cuadra: true, cuentasNoCuadran: 0 }])!;
+    expect(lista.body).toContain("ACME");
+    expect(lista.title).toContain("lista para presentar");
+    expect(lista.url).toBe(CE_DEEP_LINK);
+
+    const rev = construirNudgeCEAgregado("2026-05", [{ razonSocial: "ACME", cuadra: false, cuentasNoCuadran: 3 }])!;
+    expect(rev.title).toContain("no cuadra");
+    expect(rev.body).toContain("3 cuentas");
+  });
+
+  it("varias empresas → UN solo push agregado (listas + por revisar con nombres)", () => {
+    const n = construirNudgeCEAgregado("2026-05", [
+      { razonSocial: "A", cuadra: true, cuentasNoCuadran: 0 },
+      { razonSocial: "B", cuadra: true, cuentasNoCuadran: 0 },
+      { razonSocial: "Zionx", cuadra: false, cuentasNoCuadran: 2 },
+    ])!;
+    expect(n.body).toContain("2 listas para presentar");
+    expect(n.body).toContain("1 por revisar");
+    expect(n.body).toContain("Zionx");
+    expect(n.url).toBe("/despacho"); // cartera, no una sola empresa
+  });
+
+  it("trunca la lista de por-revisar a 3 nombres", () => {
+    const n = construirNudgeCEAgregado(
+      "2026-05",
+      ["A", "B", "C", "D"].map((razonSocial) => ({ razonSocial, cuadra: false, cuentasNoCuadran: 1 })),
+    )!;
+    expect(n.body).toContain("4 por revisar");
+    expect(n.body).toContain("…");
   });
 });

@@ -325,6 +325,60 @@ export function nudgeCEPresentacion(diff: DiffBalanzas): NudgeCE {
   };
 }
 
+/** Estado de la CE de una empresa para el nudge agregado por usuario. */
+export interface CEEmpresaEstado {
+  razonSocial: string;
+  cuadra: boolean;
+  cuentasNoCuadran: number;
+}
+
+/**
+ * Compone (PURO) UN SOLO nudge de CE para un usuario con varias empresas, para no
+ * mandar un push por empresa (un despacho con 7 empresas recibiría 7 avisos). Con
+ * una sola empresa da el mensaje específico; con varias, agrega: cuántas están
+ * listas y cuáles hay que revisar. null si la lista viene vacía.
+ */
+export function construirNudgeCEAgregado(
+  periodo: string,
+  estados: ReadonlyArray<CEEmpresaEstado>,
+): NudgeCE | null {
+  if (estados.length === 0) return null;
+  const mes = periodoLargo(periodo);
+  const tag = `ce-presentar-${periodo}`;
+
+  if (estados.length === 1) {
+    const e = estados[0];
+    return e.cuadra
+      ? {
+          title: `Tu Contabilidad Electrónica de ${mes} está lista para presentar`,
+          body: `${e.razonSocial}: cuadra con la balanza del SAT. Toca para descargar los XML y presentarla.`,
+          url: CE_DEEP_LINK,
+          tag,
+        }
+      : {
+          title: `La Contabilidad Electrónica de ${mes} no cuadra con el SAT`,
+          body: `${e.razonSocial}: no cuadra en ${e.cuentasNoCuadran} cuenta${e.cuentasNoCuadran === 1 ? "" : "s"} — revísala antes de presentar.`,
+          url: CE_DEEP_LINK,
+          tag,
+        };
+  }
+
+  const listas = estados.filter((e) => e.cuadra);
+  const revisar = estados.filter((e) => !e.cuadra);
+  const partes: string[] = [];
+  if (listas.length > 0) partes.push(`${listas.length} lista${listas.length === 1 ? "" : "s"} para presentar`);
+  if (revisar.length > 0) {
+    const nombres = revisar.slice(0, 3).map((e) => e.razonSocial).join(", ");
+    partes.push(`${revisar.length} por revisar (no cuadran con el SAT): ${nombres}${revisar.length > 3 ? "…" : ""}`);
+  }
+  return {
+    title: `Contabilidad Electrónica de ${mes}`,
+    body: `${partes.join("; ")}.`,
+    url: "/despacho",
+    tag,
+  };
+}
+
 // ── Lectura de la BCE del SAT (Syntage) para un periodo concreto ──────────────
 
 /** Año/mes de un registro de Contabilidad Electrónica de Syntage. */
