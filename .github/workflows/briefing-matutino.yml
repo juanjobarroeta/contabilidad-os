@@ -1,0 +1,29 @@
+name: Briefing matutino (push del contador AI, entre semana)
+
+# Envía a cada usuario con suscripción push un resumen priorizado de su cartera
+# (vencimientos próximos, hallazgos críticos, pendientes) + un recordatorio para
+# subir el estado de cuenta. No usa LLM (costo ~0). Corre entre semana por la
+# mañana, después de la sincronización SAT y el fiscal-audit, para reflejar los
+# hallazgos frescos del día.
+#
+# NOTE: GitHub solo corre schedule: desde la rama default (main). Usa el botón
+# "Run workflow" (workflow_dispatch) para una corrida manual.
+
+on:
+  schedule:
+    - cron: "5 14 * * 1-5" # ~08:00 CT (UTC-6), entre semana, tras la sync matutina
+  workflow_dispatch: {}
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar briefing matutino
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/briefing-matutino" -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
