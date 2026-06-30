@@ -3057,6 +3057,12 @@ model ChatConversation {
   updatedAt  DateTime       @updatedAt
   archivedAt DateTime?
 
+  // Acción reversible PROPUESTA por el asistente y PENDIENTE de confirmación
+  // humana (el usuario toca "Confirmar"). El modelo nunca ejecuta directo: sólo
+  // STAGEA aquí (resumen + payload + TTL de un solo uso). Ver
+  // src/lib/ai/pending-action.ts. null = sin acción pendiente.
+  pendingAction Json?
+
   company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages ChatMessage[]

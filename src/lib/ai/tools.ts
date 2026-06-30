@@ -274,4 +274,94 @@ export const tools: Anthropic.Tool[] = [
       required: ["query"],
     },
   },
+  // ── Herramientas de PROPUESTA (acciones reversibles) ───────────────────────
+  // Estas herramientas NO ejecutan nada: STAGEAN una propuesta sobre la
+  // conversación y devuelven un resumen legible + un token. El usuario debe tocar
+  // "Confirmar" en la tarjeta para que se ejecute. NUNCA afirmes que ya se hizo:
+  // sólo ocurre cuando el usuario toca Confirmar.
+  {
+    name: "proponer_conciliacion",
+    description:
+      "Propone aplicar una conciliación entre un movimiento bancario y una factura (CFDI), y la deja PENDIENTE de confirmación. NO concilia: stagea la propuesta y devuelve un resumen + token; el usuario debe tocar Confirmar. Necesitas transaction_id e invoice_id (obténlos de list_unmatched_transactions o suggest_reconciliation_match). Tras llamarla, resume el match y dile al usuario que toque Confirmar para aplicarlo.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        transaction_id: { type: "string", description: "ID del movimiento bancario" },
+        invoice_id: { type: "string", description: "ID de la factura a conciliar" },
+      },
+      required: ["transaction_id", "invoice_id"],
+    },
+  },
+  {
+    name: "proponer_categorizacion",
+    description:
+      "Propone categorizar un movimiento bancario SIN CFDI (comisión, impuesto, nómina sin CFDI, traspaso, intereses, renta o no deducible) registrándolo en el libro mayor, y lo deja PENDIENTE de confirmación. NO escribe nada: stagea la propuesta y devuelve un resumen + token; el usuario debe tocar Confirmar. Elige la 'familia' correcta según la naturaleza del concepto. Tras llamarla, explica brevemente por qué esa cuenta y pide al usuario tocar Confirmar.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        transaction_id: { type: "string", description: "ID del movimiento bancario sin CFDI" },
+        familia: {
+          type: "string",
+          enum: [
+            "COMISION",
+            "TAX_PAYMENT",
+            "PAYROLL_NO_CFDI",
+            "INTERNAL_TRANSFER",
+            "FINANCIAL_INCOME",
+            "RENT",
+            "NON_DEDUCTIBLE",
+          ],
+          description:
+            "Familia contable: COMISION (comisiones bancarias), TAX_PAYMENT (impuestos/derechos), PAYROLL_NO_CFDI (nómina sin CFDI), INTERNAL_TRANSFER (traspaso entre cuentas propias), FINANCIAL_INCOME (intereses/rendimientos), RENT (renta), NON_DEDUCTIBLE (gasto no deducible).",
+        },
+      },
+      required: ["transaction_id", "familia"],
+    },
+  },
+  {
+    name: "proponer_resolver_hallazgo",
+    description:
+      "Propone marcar un hallazgo del auditor fiscal como RESUELTO, y lo deja PENDIENTE de confirmación. NO lo resuelve: stagea la propuesta y devuelve un resumen + token; el usuario debe tocar Confirmar. Úsala cuando el usuario diga que ya atendió un hallazgo. Necesitas el hallazgo_id.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        hallazgo_id: { type: "string", description: "ID del hallazgo fiscal" },
+      },
+      required: ["hallazgo_id"],
+    },
+  },
+  {
+    name: "proponer_posponer_hallazgo",
+    description:
+      "Propone posponer (snooze) un hallazgo del auditor fiscal hasta una fecha, y lo deja PENDIENTE de confirmación. NO lo pospone: stagea la propuesta y devuelve un resumen + token; el usuario debe tocar Confirmar.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        hallazgo_id: { type: "string", description: "ID del hallazgo fiscal" },
+        plazo: {
+          type: "string",
+          enum: ["7d", "30d", "fin_de_mes"],
+          description: "Cuánto posponer: 7 días, 30 días, o hasta fin de mes.",
+        },
+      },
+      required: ["hallazgo_id", "plazo"],
+    },
+  },
+  {
+    name: "proponer_marcar_pendiente",
+    description:
+      "Propone marcar un pendiente del inbox como HECHO o posponerlo, y lo deja PENDIENTE de confirmación. NO cambia nada: stagea la propuesta y devuelve un resumen + token; el usuario debe tocar Confirmar. Útil cuando trabajas un pendiente que el usuario abrió 'con el asistente' y ya lo atendieron.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        pendiente_id: { type: "string", description: "ID del pendiente (NotificationItem)" },
+        accion: {
+          type: "string",
+          enum: ["hecho", "posponer"],
+          description: "hecho = marcar atendido; posponer = posponer 7 días.",
+        },
+      },
+      required: ["pendiente_id", "accion"],
+    },
+  },
 ];

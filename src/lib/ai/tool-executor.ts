@@ -10,11 +10,21 @@ import { previewTimbrar } from "@/lib/facturas/preview-timbrar";
 import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
 import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
+import { stageChatPendingAction } from "@/lib/ai/pending-action";
+import type { FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 
 type ToolInput = Record<string, unknown>;
 
-/** Extra context for write tools (e.g. which WhatsApp conversation staged it). */
-export type ToolContext = { conversationId?: string };
+/**
+ * Extra context for write/propose tools.
+ *  - conversationId: which conversation a proposal is staged on (WhatsApp or chat).
+ *  - inApp: true for the in-app AI chat. The reversible "proponer_*" tools only
+ *    work in-app (the chat renders the Confirm/Cancel card); they refuse over
+ *    WhatsApp (which has its own preview_/code flow).
+ */
+export type ToolContext = { conversationId?: string; inApp?: boolean };
+
+const MXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
 export async function executeToolCall(
   toolName: string,
@@ -31,6 +41,16 @@ export async function executeToolCall(
       );
     case "preview_conciliacion":
       return previewConciliacion(input, companyId, context.conversationId);
+    case "proponer_conciliacion":
+      return proponerConciliacion(input, companyId, context);
+    case "proponer_categorizacion":
+      return proponerCategorizacion(input, companyId, context);
+    case "proponer_resolver_hallazgo":
+      return proponerResolverHallazgo(input, companyId, context);
+    case "proponer_posponer_hallazgo":
+      return proponerPosponerHallazgo(input, companyId, context);
+    case "proponer_marcar_pendiente":
+      return proponerMarcarPendiente(input, companyId, context);
     case "query_invoices":
       return queryInvoices(input, companyId);
     case "query_bank_transactions":
@@ -88,6 +108,175 @@ export async function executeToolCall(
     default:
       return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });
   }
+}
+
+// ─── Herramientas de PROPUESTA (acciones reversibles, in-app) ────────────────
+// Cada una STAGEA una propuesta sobre la conversación del chat y devuelve un
+// resumen + token. NO ejecutan: la ejecución ocurre cuando el usuario toca
+// "Confirmar" (POST /api/ai/confirm). Sólo operan en el chat in-app.
+
+/** Respuesta estándar de una propuesta exitosa para el modelo. */
+function propuestaStaged(summary: string, token: string) {
+  return JSON.stringify({
+    staged: true,
+    summary,
+    confirm_token: token,
+    instruccion_para_el_asistente:
+      "Resume al usuario EXACTAMENTE lo que pasará y dile que toque el botón Confirmar de la tarjeta. " +
+      "NO digas que ya se hizo: sólo ocurre cuando el usuario toca Confirmar. No repitas el token.",
+  });
+}
+
+function requiereInApp(context: ToolContext): string | null {
+  if (!context.inApp || !context.conversationId) {
+    return JSON.stringify({
+      error: "Las propuestas con confirmación sólo están disponibles en el asistente dentro de la app.",
+    });
+  }
+  return null;
+}
+
+const FAMILIA_LABEL: Record<FamiliaConcepto, string> = {
+  COMISION: "Comisiones bancarias",
+  TAX_PAYMENT: "Impuestos y derechos",
+  PAYROLL_NO_CFDI: "Nómina sin CFDI",
+  INTERNAL_TRANSFER: "Traspaso entre cuentas propias",
+  FINANCIAL_INCOME: "Intereses / rendimientos",
+  RENT: "Renta / arrendamiento",
+  NON_DEDUCTIBLE: "Gasto no deducible",
+};
+
+async function proponerConciliacion(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const txId = String(input.transaction_id ?? "");
+  const invoiceId = String(input.invoice_id ?? "");
+  if (!txId || !invoiceId) return JSON.stringify({ error: "Faltan transaction_id e invoice_id." });
+
+  const tx = await prisma.bankTransaction.findFirst({
+    where: { id: txId, companyId },
+    select: { fecha: true, descripcion: true, monto: true, status: true, invoiceId: true },
+  });
+  if (!tx) return JSON.stringify({ error: "Movimiento no encontrado." });
+  if (tx.invoiceId) return JSON.stringify({ error: "El movimiento ya está conciliado." });
+
+  const inv = await prisma.invoice.findFirst({
+    where: { id: invoiceId, companyId },
+    select: { total: true, fecha: true, customer: { select: { razonSocial: true } } },
+  });
+  if (!inv) return JSON.stringify({ error: "Factura no encontrada para esta empresa." });
+
+  const montoMatch = Math.abs(tx.monto).toFixed(2) === inv.total.toFixed(2);
+  const summary =
+    `Conciliar el movimiento del ${tx.fecha.toISOString().slice(0, 10)} ` +
+    `(${tx.descripcion}, ${MXN(tx.monto)}) con la factura de ` +
+    `${inv.customer?.razonSocial ?? "—"} (${MXN(inv.total)}). ` +
+    (montoMatch ? "Los montos coinciden." : "Atención: los montos NO coinciden exactamente.");
+
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "conciliar",
+    payload: { txId, invoiceId },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+async function proponerCategorizacion(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const txId = String(input.transaction_id ?? "");
+  const familia = String(input.familia ?? "") as FamiliaConcepto;
+  if (!txId || !FAMILIA_LABEL[familia]) {
+    return JSON.stringify({ error: "Falta transaction_id o la familia es inválida." });
+  }
+
+  const tx = await prisma.bankTransaction.findFirst({
+    where: { id: txId, companyId },
+    select: { fecha: true, descripcion: true, monto: true, invoiceId: true },
+  });
+  if (!tx) return JSON.stringify({ error: "Movimiento no encontrado." });
+  if (tx.invoiceId) return JSON.stringify({ error: "El movimiento ya está conciliado con un CFDI." });
+
+  const summary =
+    `Categorizar el movimiento del ${tx.fecha.toISOString().slice(0, 10)} ` +
+    `(${tx.descripcion}, ${MXN(tx.monto)}) como "${FAMILIA_LABEL[familia]}" y registrar su asiento ` +
+    `en el libro mayor.`;
+
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "categorizacion",
+    payload: { txId, familia },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+async function proponerResolverHallazgo(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const hallazgoId = String(input.hallazgo_id ?? "");
+  if (!hallazgoId) return JSON.stringify({ error: "Falta hallazgo_id." });
+
+  const h = await prisma.fiscalHallazgo.findFirst({
+    where: { id: hallazgoId, companyId },
+    select: { mensaje: true, estado: true },
+  });
+  if (!h) return JSON.stringify({ error: "Hallazgo no encontrado." });
+  if (h.estado === "RESUELTO") return JSON.stringify({ error: "El hallazgo ya está resuelto." });
+
+  const summary = `Marcar como RESUELTO el hallazgo: "${h.mensaje.slice(0, 160)}".`;
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "resolver_hallazgo",
+    payload: { hallazgoId },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+async function proponerPosponerHallazgo(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const hallazgoId = String(input.hallazgo_id ?? "");
+  const plazo = String(input.plazo ?? "");
+  if (!hallazgoId || !["7d", "30d", "fin_de_mes"].includes(plazo)) {
+    return JSON.stringify({ error: "Falta hallazgo_id o el plazo es inválido." });
+  }
+
+  const h = await prisma.fiscalHallazgo.findFirst({
+    where: { id: hallazgoId, companyId },
+    select: { mensaje: true },
+  });
+  if (!h) return JSON.stringify({ error: "Hallazgo no encontrado." });
+
+  const plazoLabel = plazo === "7d" ? "7 días" : plazo === "30d" ? "30 días" : "fin de mes";
+  const summary = `Posponer ${plazoLabel} el hallazgo: "${h.mensaje.slice(0, 160)}".`;
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "posponer_hallazgo",
+    payload: { hallazgoId, token: plazo as "7d" | "30d" | "fin_de_mes" },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+async function proponerMarcarPendiente(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const itemId = String(input.pendiente_id ?? "");
+  const accion = String(input.accion ?? "");
+  if (!itemId || !["hecho", "posponer"].includes(accion)) {
+    return JSON.stringify({ error: "Falta pendiente_id o la acción es inválida." });
+  }
+
+  const item = await prisma.notificationItem.findFirst({
+    where: { id: itemId, companyId },
+    select: { titulo: true, estado: true },
+  });
+  if (!item) return JSON.stringify({ error: "Pendiente no encontrado para esta empresa." });
+
+  const summary =
+    accion === "hecho"
+      ? `Marcar como HECHO el pendiente: "${item.titulo}".`
+      : `Posponer 7 días el pendiente: "${item.titulo}".`;
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "marcar_pendiente",
+    payload: { itemId, accion: accion as "hecho" | "posponer" },
+  });
+  return propuestaStaged(summary, pa.token);
 }
 
 // ─── query_invoices ──────────────────────────────────────────────────────────
