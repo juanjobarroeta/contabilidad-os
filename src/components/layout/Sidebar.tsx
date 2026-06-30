@@ -25,6 +25,7 @@ import {
   X,
   TrendingUp,
   Wrench,
+  Inbox,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -89,6 +90,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   const { companies, activeCompany, setActiveCompany } = useCompany();
   const [companyOpen, setCompanyOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendientesNuevos, setPendientesNuevos] = useState(0);
 
   // Cartera sólo para despachos (más de una empresa).
   const showCartera = companies.length > 1;
@@ -98,11 +100,27 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
     setMobileOpen(false);
   }, [pathname]);
 
+  // Conteo de pendientes NUEVO para el badge del menú. Se refresca al navegar
+  // (p.ej. al volver de /pendientes tras atender alguno).
+  useEffect(() => {
+    let activo = true;
+    fetch("/api/notificaciones?estado=NUEVO")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (activo && d) setPendientesNuevos(d.noLeidos ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      activo = false;
+    };
+  }, [pathname]);
+
   // Highlight only the most specific matching item, so a nested route (e.g.
   // /impuestos/papeles) doesn't also light up a shorter-prefix sibling.
   const allHrefs = [
     ...SECTIONS.flatMap((s) => s.items.map((i) => i.href)),
     CARTERA.href,
+    "/pendientes",
     "/rentabilidad",
     "/operador",
     ...BOTTOM_NAV_ITEMS.map((i) => i.href),
@@ -247,6 +265,15 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
           <Link href="/dashboard" className={navLinkClass("/dashboard" === activeNavHref)}>
             <LayoutDashboard className="h-4 w-4 shrink-0" />
             Inicio
+          </Link>
+          <Link href="/pendientes" className={navLinkClass("/pendientes" === activeNavHref)}>
+            <Inbox className="h-4 w-4 shrink-0" />
+            <span className="flex-1">Pendientes</span>
+            {pendientesNuevos > 0 && (
+              <span className="rounded-full bg-cos-brand px-2 py-0.5 font-mono text-[10px] font-semibold text-white">
+                {pendientesNuevos}
+              </span>
+            )}
           </Link>
           {showCartera && (
             <Link href={CARTERA.href} className={navLinkClass(CARTERA.href === activeNavHref)}>

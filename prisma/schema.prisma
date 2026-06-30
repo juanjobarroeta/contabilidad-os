@@ -2808,6 +2808,56 @@ model FiscalHallazgo {
   @@index([companyId, estado])
 }
 
+// Estado del ciclo de vida de un pendiente del inbox unificado. NUEVO al crearse
+// (y al re-dispararse una alerta que el usuario ya había visto); VISTO al abrir
+// el deep-link; HECHO al marcarlo atendido; POSPUESTO mientras `posponerHasta`
+// no venza.
+enum EstadoPendiente {
+  NUEVO
+  VISTO
+  HECHO
+  POSPUESTO
+}
+
+// Inbox unificado de "Pendientes" — cada notificación proactiva que hoy sólo se
+// empuja por web-push se PERSISTE también aquí, para que el usuario pueda darle
+// seguimiento (leer / hecho / posponer) cross-empresa, con deep-link. El push y
+// el inbox son el MISMO registro: la idempotencia es por (recipientUserId,
+// dedupeKey), reusando el `tag` de colapso del push como llave.
+//
+// Standalone — `recipientUserId` y `companyId` son escalares (sin relación), para
+// ser puramente aditivo. `companyId` es null en pendientes a nivel cartera (p.ej.
+// el briefing matutino, que agrega varias empresas).
+model NotificationItem {
+  id              String  @id @default(cuid())
+  recipientUserId String
+  companyId       String? // null = pendiente a nivel cartera (sin empresa única)
+
+  categoria String // briefing | estado_cuenta | nomina | proyeccion | ce | otro
+  severidad String // info | warn | error
+  titulo    String
+  cuerpo    String @db.Text
+  url       String @db.Text // deep link
+
+  // Idempotencia: reusa el `tag` de colapso del push. Un re-disparo actualiza el
+  // mismo registro en vez de crear uno nuevo.
+  dedupeKey String
+
+  estado        EstadoPendiente @default(NUEVO)
+  // Posponer ("snooze"): silencia el pendiente hasta esta fecha; al vencer
+  // reaparece como pendiente. null = no pospuesto.
+  posponerHasta DateTime?
+  leidoAt       DateTime?
+  hechoAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([recipientUserId, dedupeKey])
+  @@index([recipientUserId])
+  @@index([recipientUserId, estado])
+}
+
 // Snapshots del monitoreo de cumplimiento (opinión SAT 32-D, opinión IMSS,
 // CSF). Standalone — solo companyId scalar, sin relación a Company — para ser
 // puramente aditivo. `contenidoHash` permite saltar snapshots sin cambios; los

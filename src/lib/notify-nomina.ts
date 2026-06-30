@@ -1,4 +1,4 @@
-import { sendPushToUser } from "./push";
+import { registrarYNotificar } from "./notificaciones";
 import { empresasAccesiblesIds } from "./authz";
 import { prisma } from "./prisma";
 import {
@@ -83,7 +83,7 @@ export async function notifyNominaRecordatorio(
   if (ids.length === 0) return { notified: 0, empresas: 0 };
 
   // Empresas cuya nómina vence mañana, con su cadencia.
-  const debidas: Array<{ nombre: string; cadencia: CadenciaNomina }> = [];
+  const debidas: Array<{ id: string; nombre: string; cadencia: CadenciaNomina }> = [];
   for (const id of ids) {
     const cadencia = await cadenciaEfectivaEmpresa(id);
     if (!nominaVenceManana(cadencia, hoy).vence) continue;
@@ -92,7 +92,7 @@ export async function notifyNominaRecordatorio(
       select: { razonSocial: true, nombreComercial: true },
     });
     if (!c) continue;
-    debidas.push({ nombre: c.nombreComercial || c.razonSocial, cadencia });
+    debidas.push({ id, nombre: c.nombreComercial || c.razonSocial, cadencia });
   }
 
   if (debidas.length === 0) return { notified: 0, empresas: 0 };
@@ -112,15 +112,17 @@ export async function notifyNominaRecordatorio(
       ". Revisa y timbra cada corrida.";
   }
 
-  const r = await sendPushToUser(
-    userId,
-    {
-      title,
-      body,
-      url: DEEP_LINK_TIMBRAR,
-      tag: "nomina-recordatorio", // colapsa avisos repetidos del día en uno
-    },
-    "sistema"
-  );
-  return { notified: r.sent, empresas: debidas.length };
+  // companyId sólo cuando es una sola empresa; agregado = nivel cartera (null).
+  const r = await registrarYNotificar({
+    recipientUserId: userId,
+    companyId: debidas.length === 1 ? debidas[0].id : null,
+    categoria: "nomina",
+    severidad: "warn",
+    titulo: title,
+    cuerpo: body,
+    url: DEEP_LINK_TIMBRAR,
+    dedupeKey: "nomina-recordatorio", // colapsa avisos repetidos del día en uno
+    categoriaPush: "sistema",
+  });
+  return { notified: r.pushSent ? 1 : 0, empresas: debidas.length };
 }
