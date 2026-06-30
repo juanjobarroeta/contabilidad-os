@@ -19,6 +19,7 @@
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
 import { parseStatement, type ParsedTransaction } from "@/lib/bank-parser";
+import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
 
 export type ImportResult = {
   ok: boolean;
@@ -104,6 +105,20 @@ export async function persistTransactions(opts: {
       },
     });
     imported++;
+  }
+
+  // Conciliación event-driven: en cuanto entra un estado de cuenta (subida CSV,
+  // PDF/visión, o WhatsApp) corremos la auto-conciliación bancaria de alta
+  // confianza para la empresa de inmediato, sin esperar al cron diario. Sólo
+  // tiene sentido si realmente importamos movimientos nuevos. Idempotente —
+  // sólo toca transacciones UNMATCHED. Best-effort: una falla aquí nunca rompe
+  // la importación.
+  if (imported > 0) {
+    try {
+      await autoConciliarEmpresa(companyId);
+    } catch (e) {
+      console.error(`[bancos/import] auto-conciliar tras importar falló para ${companyId}:`, e);
+    }
   }
 
   return { imported, skipped };

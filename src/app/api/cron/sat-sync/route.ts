@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
 import { notifyIvaChanges } from "@/lib/iva-change-notify";
 import { notifyNewInvoices } from "@/lib/notify-new-invoices";
+import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-sync
@@ -87,6 +88,7 @@ async function handle(req: Request) {
   let totalImported = 0;
   let totalSubmitted = 0;
   let totalNotified = 0;
+  let totalConciliated = 0;
   const errors: Array<{ companyId: string; rfc: string; error: string }> = [];
 
   for (const company of companies) {
@@ -150,6 +152,17 @@ async function handle(req: Request) {
         } catch (e) {
           console.error(`[cron/sat-sync] push notify failed for ${company.id}:`, e);
         }
+
+        // Conciliación event-driven: con CFDIs frescos recién importados, corre
+        // la auto-conciliación bancaria de alta confianza para esta empresa de
+        // inmediato (no esperar al cron diario). Idempotente — sólo toca
+        // transacciones UNMATCHED. Best-effort: nunca rompe el sync.
+        try {
+          const conc = await autoConciliarEmpresa(company.id);
+          totalConciliated += conc.matched;
+        } catch (e) {
+          console.error(`[cron/sat-sync] auto-conciliar failed for ${company.id}:`, e);
+        }
       }
     } catch (e) {
       console.error(`[cron/sat-sync] company ${company.id} failed:`, e);
@@ -169,6 +182,7 @@ async function handle(req: Request) {
     submitted: totalSubmitted,
     imported: totalImported,
     notified: totalNotified,
+    conciliated: totalConciliated,
     errors,
     elapsedMs: Date.now() - startedAt,
   };

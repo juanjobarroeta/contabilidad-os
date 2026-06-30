@@ -1,7 +1,17 @@
-name: SAT incremental sync (2x daily)
+name: SAT incremental sync (3x weekdays)
 
 # Ongoing incremental CFDI sync — current month + previous couple of months,
 # to catch late-arriving recibidos. Separate from the historical backfill.
+#
+# /api/cron/sat-sync es a la vez la sincronización de CFDIs y, por su ventana
+# de reúso de 24h (REUSE_WINDOW_HOURS), es seguro correrla varias veces al día:
+# no genera nuevas solicitudes al SAT (reusa la del día) — sólo levanta los
+# paquetes que el SAT ya terminó de preparar. Cada corrida importa CFDIs más
+# frescos y dispara la conciliación bancaria event-driven por empresa. Por eso
+# NO hace falta un endpoint "CFDI-only" aparte: este mismo es la fuente única.
+#
+# Cadencia: ~07:00, ~13:00 y ~18:00 CT en días hábiles (L-V). Minutos fuera del
+# :00 para no caer en el pico de schedulers de GitHub. CT = UTC-6.
 #
 # Requires repo secrets CRON_SECRET and STAGING_URL (see sat-backfill.yml).
 #
@@ -9,7 +19,12 @@ name: SAT incremental sync (2x daily)
 
 on:
   schedule:
-    - cron: "0 8,20 * * *" # ~02:00 and 14:00 CT (UTC-6)
+    # 07:07 CT = 13:07 UTC
+    - cron: "7 13 * * 1-5"
+    # 13:07 CT = 19:07 UTC
+    - cron: "7 19 * * 1-5"
+    # 18:07 CT = 00:07 UTC del día siguiente (por eso 2-6: mar-sáb UTC = lun-vie CT)
+    - cron: "7 0 * * 2-6"
   workflow_dispatch: {}
 
 jobs:
