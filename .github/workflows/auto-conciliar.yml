@@ -6,6 +6,10 @@ name: Auto-conciliar bancos (daily)
 # cadencia. Programado después de la sincronización SAT matutina para conciliar
 # contra CFDIs frescos. Es barato (sólo DB), así que diario está bien.
 #
+# Tras conciliar, el mismo endpoint corre el detector de movimientos SIN CFDI
+# (cruce de dos vías: banco-sin-CFDI y CFDI-sin-banco) y levanta/resuelve
+# Hallazgos idempotentes. SÓLO LECTURA — no escribe en el ledger.
+#
 # Requiere los secretos del repo CRON_SECRET y STAGING_URL (igual que
 # sat-sync.yml). Si CRON_SECRET no está, el endpoint regresa 401.
 #
