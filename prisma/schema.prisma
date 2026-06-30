@@ -213,6 +213,12 @@ model Company {
   // Nómina — IMSS registro patronal (required for CFDI nómina emisor block)
   registroPatronal String? // e.g. "A7025105103"
 
+  // Cadencia de nómina de la empresa — gobierna el recordatorio proactivo T-1
+  // (avisar "mañana toca timbrar"). Default QUINCENAL (lo más común en MX); el
+  // cron infiere la real desde la periodicidad de los empleados / corridas
+  // pasadas cuando puede. No bloquea ni dispara timbrado: sólo recuerda.
+  periodicidadNomina PeriodicidadNomina @default(QUINCENAL)
+
   isActive Boolean @default(true)
 
   // Relations
@@ -1122,6 +1128,16 @@ model PayrollItem {
 
   payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
   employee   Employee   @relation(fields: [employeeId], references: [id])
+}
+
+// Cadencia con la que la empresa paga (y timbra) su nómina ordinaria.
+// SEMANAL = paga viernes (recordatorio el jueves). QUINCENAL = paga el 15 y
+// el último día del mes (recordatorio el 14 y la víspera del fin de mes).
+// MENSUAL = paga el último día del mes (recordatorio la víspera).
+enum PeriodicidadNomina {
+  SEMANAL
+  QUINCENAL
+  MENSUAL
 }
 
 enum PayrollRunType {
