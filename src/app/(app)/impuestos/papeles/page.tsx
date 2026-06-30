@@ -20,13 +20,24 @@ export default function PapelesPage() {
   const [tab, setTab] = useState<TabId>("iva");
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  // "Verificación SAT" es una herramienta INTERNA del operador (auditar el motor),
+  // no para el contador/cliente: la pestaña sólo se muestra al operador. El
+  // endpoint además está gated server-side, así que esconderla no es la seguridad.
+  const [esOperador, setEsOperador] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setEsOperador(Boolean(d?.esOperador)))
+      .catch(() => {});
+  }, []);
 
   // Honor deep-links from the cierre workspace (?tab=&month=&year=). Read from
   // the URL directly to avoid forcing a Suspense boundary (useSearchParams).
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get("tab");
-    if (t === "iva" || t === "isr" || t === "retenciones" || t === "verificacion") setTab(t);
+    if (t === "iva" || t === "isr" || t === "retenciones") setTab(t);
     const m = parseInt(sp.get("month") ?? "");
     if (m >= 1 && m <= 12) setMonth(m);
     const y = parseInt(sp.get("year") ?? "");
@@ -92,7 +103,8 @@ export default function PapelesPage() {
               ["iva", "IVA", Calculator],
               ["isr", "ISR Provisional", FileText],
               ["retenciones", "Retenciones", BookOpen],
-              ["verificacion", "Verificación SAT", ShieldCheck],
+              // Sólo operador: herramienta interna de verificación contra el SAT.
+              ...(esOperador ? [["verificacion", "Verificación SAT", ShieldCheck]] as const : []),
             ] as const).map(([id, label, Icon]) => (
               <button
                 key={id}
@@ -113,7 +125,7 @@ export default function PapelesPage() {
       {tab === "iva" && <IvaPanel companyId={activeCompany.id} year={year} month={month} />}
       {tab === "isr" && <IsrPanel companyId={activeCompany.id} year={year} month={month} />}
       {tab === "retenciones" && <RetencionesPanel companyId={activeCompany.id} year={year} month={month} />}
-      {tab === "verificacion" && <VerificacionSatPanel companyId={activeCompany.id} year={year} month={month} />}
+      {tab === "verificacion" && esOperador && <VerificacionSatPanel companyId={activeCompany.id} year={year} month={month} />}
     </div>
   );
 }

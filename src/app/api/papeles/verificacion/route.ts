@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, isOperador } from "@/lib/authz";
 import { verificarContraSat } from "@/lib/fiscal/verificacion-sat";
 
 // GET /api/papeles/verificacion?companyId=xxx&year=2026&month=5
@@ -8,9 +8,16 @@ import { verificarContraSat } from "@/lib/fiscal/verificacion-sat";
 // Verificación contra el SAT (fire test): compara la balanza del libro, el IVA y
 // el ISR del periodo contra lo presentado/registrado en el SAT, y dictamina
 // coincide / diverge / incompleto. Sólo lectura del libro.
+//
+// HERRAMIENTA INTERNA (operador de plataforma): es para auditar el propio motor,
+// no para el contador/cliente. Gated como el cross-check del operador.
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!(await isOperador(session.user.id))) {
+    return NextResponse.json({ error: "Solo operador" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
