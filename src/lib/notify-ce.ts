@@ -1,4 +1,5 @@
-import { sendPushToCompany, sendPushToUser } from "./push";
+import { sendPushToCompany } from "./push";
+import { registrarYNotificar } from "./notificaciones";
 import { prisma } from "./prisma";
 import { empresasAccesiblesIds } from "./authz";
 import { planIncluyeSyntage } from "./planes";
@@ -185,12 +186,20 @@ export async function notificarCETodas(
       if (estados.length === 0) continue;
       const nudge = construirNudgeCEAgregado(periodo, estados);
       if (!nudge) continue;
-      const push = await sendPushToUser(
-        userId,
-        { title: nudge.title, body: nudge.body, url: nudge.url, tag: nudge.tag },
-        "declaraciones",
-      );
-      notificados += push.sent;
+      // Si alguna empresa no cuadra, es algo a revisar (warn); si todas cuadran,
+      // es informativo. Pendiente a nivel cartera: sin companyId único.
+      const hayPorRevisar = estados.some((e) => !e.cuadra);
+      const r = await registrarYNotificar({
+        recipientUserId: userId,
+        categoria: "ce",
+        severidad: hayPorRevisar ? "warn" : "info",
+        titulo: nudge.title,
+        cuerpo: nudge.body,
+        url: nudge.url,
+        dedupeKey: nudge.tag,
+        categoriaPush: "declaraciones",
+      });
+      if (r.pushSent) notificados += 1;
     } catch {
       // no romper el lote por un usuario
     }

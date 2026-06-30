@@ -10,7 +10,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { empresasAccesiblesIds } from "@/lib/authz";
-import { sendPushToUser } from "@/lib/push";
+import { registrarYNotificar } from "@/lib/notificaciones";
 import {
   construirBriefing,
   construirRecordatorioEstadoCuenta,
@@ -93,12 +93,31 @@ export async function enviarBriefingUsuario(
   let briefing = false;
   let recordatorio = false;
   if (brief) {
-    const r = await sendPushToUser(userId, { ...brief, tag: "briefing-matutino" }, "revision");
-    briefing = r.sent > 0;
+    // Pendiente a nivel cartera (agrega varias empresas): sin companyId único.
+    const r = await registrarYNotificar({
+      recipientUserId: userId,
+      categoria: "briefing",
+      severidad: "info",
+      titulo: brief.title,
+      cuerpo: brief.body,
+      url: brief.url,
+      dedupeKey: "briefing-matutino",
+      categoriaPush: "revision",
+    });
+    briefing = r.pushSent;
   }
   if (rec) {
-    const r = await sendPushToUser(userId, { ...rec, tag: "estado-cuenta" }, "revision");
-    recordatorio = r.sent > 0;
+    const r = await registrarYNotificar({
+      recipientUserId: userId,
+      categoria: "estado_cuenta",
+      severidad: "warn",
+      titulo: rec.title,
+      cuerpo: rec.body,
+      url: rec.url,
+      dedupeKey: "estado-cuenta",
+      categoriaPush: "revision",
+    });
+    recordatorio = r.pushSent;
   }
   return { briefing, recordatorio };
 }

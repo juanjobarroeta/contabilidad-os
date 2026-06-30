@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { sendPushToUser } from "./push";
+import { registrarYNotificar } from "./notificaciones";
 import { empresasAccesiblesIds } from "./authz";
 import { computeTaxPosition } from "./impuestos";
 import {
@@ -149,17 +149,21 @@ export async function notifyProyeccionDeclaracion(
   // Deep-link a los papeles de trabajo del periodo de la empresa más urgente.
   const url = `/impuestos/papeles?tab=iva&month=${top.month}&year=${top.year}`;
 
-  const r = await sendPushToUser(
-    userId,
-    {
-      title: titulo,
-      body: cuerpo,
-      url,
-      // Colapsa avisos repetidos del mismo periodo/marca en uno solo.
-      tag: `proyeccion-${top.year}-${String(top.month).padStart(2, "0")}-t${top.marca}`,
-    },
-    "declaraciones",
-  );
+  // Colapsa avisos repetidos del mismo periodo/marca en uno solo.
+  const dedupeKey = `proyeccion-${top.year}-${String(top.month).padStart(2, "0")}-t${top.marca}`;
 
-  return { notified: r.sent, empresasEnMarca: enMarca.length };
+  const r = await registrarYNotificar({
+    recipientUserId: userId,
+    // La empresa más urgente referenciada por el deep-link.
+    companyId: top.companyId,
+    categoria: "proyeccion",
+    severidad: "warn",
+    titulo,
+    cuerpo,
+    url,
+    dedupeKey,
+    categoriaPush: "declaraciones",
+  });
+
+  return { notified: r.pushSent ? 1 : 0, empresasEnMarca: enMarca.length };
 }
