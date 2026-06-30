@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
+import { detectarMovimientosSinCfdi, periodoMesActual } from "@/lib/bancos/movimientos-sin-cfdi";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/auto-conciliar
@@ -10,10 +11,16 @@ import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
 // (mismo umbral que el botón de conciliar). Idempotente — sólo toca
 // transacciones UNMATCHED; nunca des-concilia. Barato (DB-only).
 //
+// Tras conciliar, corre el detector de movimientos SIN CFDI (cruce de dos vías:
+// banco-sin-CFDI y CFDI-sin-banco) sobre los datos recién conciliados, y
+// levanta/resuelve Hallazgos idempotentes (dos dedupeKeys por empresa+periodo).
+// SÓLO LECTURA — no escribe en el ledger ni des-concilia.
+//
 // Auth: secreto compartido en CRON_SECRET, pasado como
 //   Authorization: Bearer <secret>   o   x-cron-secret: <secret>
 //
 // Query opcional: ?companyId=<id> para conciliar una sola empresa.
+//   ?periodo=YYYY-MM para el cruce sin-CFDI (por defecto el mes en curso).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const dynamic = "force-dynamic";
@@ -35,6 +42,7 @@ async function handle(req: Request) {
 
   const url = new URL(req.url);
   const only = url.searchParams.get("companyId");
+  const periodo = url.searchParams.get("periodo") ?? periodoMesActual();
 
   const companies = only
     ? [{ id: only }]
@@ -43,11 +51,26 @@ async function handle(req: Request) {
   const resultados = [];
   let errores = 0;
   let totalMatched = 0;
+  let sinCfdiHallazgos = 0;
+  let sinCfdiResueltos = 0;
   for (const c of companies) {
     try {
       const res = await autoConciliarEmpresa(c.id);
       totalMatched += res.matched;
-      resultados.push({ companyId: c.id, ...res });
+      // Tras conciliar, cruzar banco↔CFDI en ambos sentidos sobre los datos
+      // recién conciliados. Best-effort: un error aquí no debe tirar el cron.
+      let sinCfdi: { abierto: boolean; resuelto: boolean; error?: string };
+      try {
+        const det = await detectarMovimientosSinCfdi(c.id, periodo);
+        const abierto = det.bancoHallazgoAbierto || det.cfdiHallazgoAbierto;
+        const resuelto = det.bancoHallazgoResuelto || det.cfdiHallazgoResuelto;
+        if (abierto) sinCfdiHallazgos++;
+        if (resuelto) sinCfdiResueltos++;
+        sinCfdi = { abierto, resuelto };
+      } catch (e) {
+        sinCfdi = { abierto: false, resuelto: false, error: e instanceof Error ? e.message : String(e) };
+      }
+      resultados.push({ companyId: c.id, ...res, sinCfdi });
     } catch (e) {
       errores++;
       resultados.push({ companyId: c.id, error: e instanceof Error ? e.message : String(e) });
@@ -58,6 +81,9 @@ async function handle(req: Request) {
     ok: true,
     companies: companies.length,
     totalMatched,
+    periodo,
+    sinCfdiHallazgos,
+    sinCfdiResueltos,
     errores,
     resultados,
   });
