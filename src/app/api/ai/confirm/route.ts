@@ -77,7 +77,7 @@ export async function POST(req: Request) {
   // dispare dos veces (los execute* son además idempotentes).
   await clearChatPendingAction(conversationId);
 
-  const result = await executeChatPendingAction(pa!);
+  const result = await executeChatPendingAction(pa!, userId);
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 409 });
   }

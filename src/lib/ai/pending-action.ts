@@ -170,9 +170,14 @@ export type ExecuteResult = { ok: true; message: string } | { ok: false; error: 
  * Ejecuta la acción ya confirmada. Cada rama REUSA la operación existente y es
  * IDEMPOTENTE + re-validada (rechaza si el estado cambió o ya se hizo). El
  * companyId aquí es el de la acción staged, ya re-verificado contra la membresía
- * en el endpoint de confirm.
+ * en el endpoint de confirm. `confirmingUserId` es quien tocó "Confirmar": se usa
+ * para las acciones cuyo alcance es POR USUARIO (los pendientes/bandeja), no por
+ * empresa — así no se puede marcar el pendiente de otro usuario de la misma empresa.
  */
-export async function executeChatPendingAction(pa: ChatPendingAction): Promise<ExecuteResult> {
+export async function executeChatPendingAction(
+  pa: ChatPendingAction,
+  confirmingUserId: string,
+): Promise<ExecuteResult> {
   switch (pa.type) {
     case "conciliar": {
       // Reusa reconcileTransaction (mismo apply que stagePendingConciliar/preview).
@@ -243,11 +248,12 @@ export async function executeChatPendingAction(pa: ChatPendingAction): Promise<E
     }
 
     case "marcar_pendiente": {
-      // Reusa la misma mutación que /api/notificaciones/[id]. companyId NO basta:
-      // el inbox es por usuario; re-validamos por companyId del item (la autz de
-      // membresía la hizo el endpoint).
+      // Reusa la misma mutación que /api/notificaciones/[id]. El inbox es POR
+      // USUARIO: acotamos al recipientUserId del que confirma (NO sólo companyId),
+      // igual que el endpoint directo — así nadie marca el pendiente de otro
+      // usuario de la misma empresa.
       const item = await prisma.notificationItem.findFirst({
-        where: { id: pa.payload.itemId, companyId: pa.companyId },
+        where: { id: pa.payload.itemId, recipientUserId: confirmingUserId },
         select: { estado: true },
       });
       if (!item) return { ok: false, error: "El pendiente ya no existe." };
