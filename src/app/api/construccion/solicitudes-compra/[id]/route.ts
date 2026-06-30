@@ -126,11 +126,14 @@ export const PUT = withAuthz(
     await requireWriter(existing.companyId, req);
     await requireModule(existing.companyId, "CONSTRUCCION");
 
-    // Only drafts can be rebuilt wholesale — a submitted requisición may have
-    // approvals / payments / awards we must not silently drop.
-    if (existing.estado !== "BORRADOR") {
+    // Un-authorized requisiciones (BORRADOR draft + PENDIENTE awaiting
+    // authorization) can be rebuilt wholesale: no adjudicaciones/payments exist
+    // yet, so adding a supplier, re-pricing or editing conceptos is safe. Once
+    // APROBADA/PAGADA the per-supplier adjudicaciones and payments must not be
+    // silently dropped.
+    if (existing.estado !== "BORRADOR" && existing.estado !== "PENDIENTE") {
       return NextResponse.json(
-        { error: "Solo se pueden editar borradores. Esta requisición ya fue enviada." },
+        { error: "Solo se pueden editar requisiciones no autorizadas (borrador o pendiente)." },
         { status: 409 }
       );
     }
@@ -194,8 +197,9 @@ export const PUT = withAuthz(
   }
 );
 
-// DELETE — discard a draft. Only borradores can be deleted; a submitted
-// requisición is kept (cancel it through the normal flow instead).
+// DELETE — discard an un-authorized requisición (BORRADOR or PENDIENTE).
+// Authorized ones (APROBADA/PAGADA) are kept: they carry adjudicaciones and
+// possibly payments, and should be cancelled through the normal flow instead.
 export const DELETE = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
     const { id } = await ctx.params;
@@ -207,15 +211,15 @@ export const DELETE = withAuthz(
     await requireWriter(existing.companyId, req);
     await requireModule(existing.companyId, "CONSTRUCCION");
 
-    if (existing.estado !== "BORRADOR") {
+    if (existing.estado !== "BORRADOR" && existing.estado !== "PENDIENTE") {
       return NextResponse.json(
-        { error: "Solo se pueden eliminar borradores." },
+        { error: "Solo se pueden eliminar requisiciones no autorizadas (borrador o pendiente)." },
         { status: 409 }
       );
     }
 
-    // Cotizaciones cascade their line items; partidas cascade with the
-    // solicitud (onDelete: Cascade on the partida→solicitud relation).
+    // Cotizaciones cascade their line items; partidas + any adjudicaciones
+    // cascade with the solicitud (onDelete: Cascade). PENDIENTE has none yet.
     await prisma.solicitudCompra.delete({ where: { id } });
     return NextResponse.json({ deleted: id });
   }
