@@ -1,0 +1,29 @@
+name: Recordatorio de nómina T-1 (entre semana)
+
+# Push proactivo el día ANTES de que toque pagar/timbrar la nómina: semanal el
+# jueves, quincenal el 14 y la víspera de fin de mes, mensual la víspera. La
+# lógica T-1 decide si toca hoy según la cadencia de cada empresa, así que es
+# seguro correrlo cada mañana hábil. NO dispara timbrado (acción humana).
+#
+# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que declaraciones-nag.yml).
+# NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
+
+on:
+  schedule:
+    - cron: "0 14 * * 1-5" # ~08:00/09:00 CT, lunes a viernes
+  workflow_dispatch: {}
+
+jobs:
+  recordatorio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar recordatorio de nómina
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/nomina-recordatorio" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
