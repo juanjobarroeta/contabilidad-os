@@ -34,7 +34,7 @@ function withCors(res: NextResponse, origin: string | null): NextResponse {
     res.headers.set("Vary", "Origin");
     res.headers.set(
       "Access-Control-Allow-Methods",
-      "GET,POST,PATCH,DELETE,OPTIONS"
+      "GET,POST,PUT,PATCH,DELETE,OPTIONS"
     );
     res.headers.set(
       "Access-Control-Allow-Headers",
