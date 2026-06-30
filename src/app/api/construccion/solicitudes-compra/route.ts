@@ -72,6 +72,10 @@ export const GET = withAuthz(async (req: Request) => {
       proyecto: { select: { id: true, codigo: true, nombre: true } },
       supplier: { select: { id: true, razonSocial: true, rfc: true } },
       _count: { select: { partidas: true, cotizaciones: true } },
+      // Lightweight cotización totals so the list can show an estimated value
+      // (cheapest oferta) before adjudication, when solicitud.total is still 0.
+      // Overridden by the full cotizaciones select when withCotizaciones=1.
+      cotizaciones: { select: { total: true } },
       ...(withCotizaciones
         ? {
             partidas: {
