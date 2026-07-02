@@ -1,27 +1,40 @@
 /**
  * POST /api/construccion/adjudicaciones/:id/pagar
  *
- * Pay ONE supplier's slice of a requisición. Mirrors the requisición-level
- * /pagar but scoped to a single adjudicación:
- *   POR_PAGAR adjudicación → BankTransaction (DEBITO) + ledger pair (5101/1101)
- *   ─────────────────────────────────────────────────────────────────────────
- *     • adjudicación.estado → PAGADA, bankTransactionId set
- *     • parent solicitud flips to PAGADA only once every supplier is paid
+ * Registra el pago de UNA adjudicación (un proveedor de una requisición).
  *
- * Body: { bankAccountId, fecha?, referencia? }
+ * IMPORTANTE — nueva semántica: registrar el pago NO toca la cuenta bancaria.
+ * El estado de cuenta es fuente de verdad única del CSV importado; aquí sólo
+ * guardamos el comprobante (SPEI) y marcamos la adjudicación como PAGADA
+ * (por conciliar). El asiento contable y el empate con el movimiento bancario
+ * real ocurren en la conciliación, no aquí.
+ *
+ *   POR_PAGAR → PAGADA (pagadaAt, comprobante, referencia)
+ *     • NO crea BankTransaction
+ *     • NO postea ledger (se postea al conciliar contra el movimiento real)
+ *     • el requisición padre pasa a PAGADA cuando todos los proveedores
+ *       tienen el pago registrado
+ *
+ * Body: { fecha?, referencia?, comprobante?: { data, mime, name } }
  */
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireModule, requireWriter, withAuthz, AuthzError } from "@/lib/authz";
-import { postSolicitudCompraPaid } from "@/lib/accounting/postings";
 import { refreshSolicitudPagoEstado } from "@/lib/construccion/adjudicaciones";
 
 const pagarSchema = z.object({
-  bankAccountId: z.string().min(1),
   fecha: z.string().datetime().optional(),
-  referencia: z.string().optional(),
+  referencia: z.string().max(120).optional(),
+  comprobante: z
+    .object({
+      data: z.string().min(1),
+      mime: z.string().max(120).optional(),
+      name: z.string().max(200).optional(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const POST = withAuthz(
@@ -33,70 +46,43 @@ export const POST = withAuthz(
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
-    const { bankAccountId, referencia } = parsed.data;
+    const { referencia, comprobante } = parsed.data;
     const fecha = parsed.data.fecha ? new Date(parsed.data.fecha) : new Date();
 
     const adj = await prisma.solicitudAdjudicacion.findUnique({
       where: { id },
-      include: {
-        solicitud: { select: { id: true, folio: true, proyecto: { select: { codigo: true } } } },
-      },
+      select: { id: true, companyId: true, estado: true, solicitudId: true },
     });
     if (!adj) throw new AuthzError(404, "Adjudicación no encontrada");
 
     await requireWriter(adj.companyId, req);
     await requireModule(adj.companyId, "CONSTRUCCION");
 
-    if (adj.estado === "PAGADA" || adj.bankTransactionId) {
+    if (adj.estado !== "POR_PAGAR") {
       return NextResponse.json(
-        { error: "Esta adjudicación ya está pagada" },
+        { error: "Esta adjudicación ya tiene el pago registrado" },
         { status: 409 }
       );
     }
 
-    const bankAccount = await prisma.bankAccount.findUnique({
-      where: { id: bankAccountId },
-      select: { id: true, companyId: true },
-    });
-    if (!bankAccount || bankAccount.companyId !== adj.companyId) {
-      return NextResponse.json({ error: "Cuenta bancaria inválida" }, { status: 400 });
-    }
-
     const result = await prisma.$transaction(async (tx) => {
-      const bankTx = await tx.bankTransaction.create({
+      const updated = await tx.solicitudAdjudicacion.update({
+        where: { id: adj.id },
         data: {
-          companyId: adj.companyId,
-          bankAccountId: bankAccount.id,
-          fecha,
-          descripcion: `Pago ${adj.supplierNombre} — solicitud ${adj.solicitud.folio}`,
-          referencia: referencia ?? adj.solicitud.folio,
-          monto: -Math.abs(adj.total),
-          tipo: "DEBITO",
-          status: "MATCHED",
-          supplierId: adj.supplierId ?? undefined,
-          source: "UPLOAD",
-          notes: `Generado por construccion: adjudicación ${adj.id}`,
+          estado: "PAGADA",
+          pagadaAt: fecha,
+          referenciaPago: referencia ?? null,
+          comprobanteData: comprobante?.data ?? null,
+          comprobanteMime: comprobante?.mime ?? null,
+          comprobanteName: comprobante?.name ?? null,
         },
       });
 
-      await postSolicitudCompraPaid(tx, {
-        companyId: adj.companyId,
-        solicitudId: adj.solicitudId,
-        folio: `${adj.solicitud.folio} · ${adj.supplierNombre}`,
-        monto: adj.total,
-        fecha,
-        proyectoCodigo: adj.solicitud.proyecto?.codigo,
-      });
-
-      const updated = await tx.solicitudAdjudicacion.update({
-        where: { id: adj.id },
-        data: { estado: "PAGADA", pagadaAt: fecha, bankTransactionId: bankTx.id },
-      });
-
-      // Flip the parent requisición to PAGADA once all suppliers are paid.
+      // El requisición padre pasa a PAGADA cuando todos los proveedores tienen
+      // el pago registrado (aún por conciliar).
       await refreshSolicitudPagoEstado(tx, adj.solicitudId, fecha);
 
-      return { adjudicacion: updated, bankTransactionId: bankTx.id };
+      return { adjudicacion: updated };
     });
 
     return NextResponse.json(result);

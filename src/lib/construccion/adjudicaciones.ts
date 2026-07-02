@@ -97,7 +97,10 @@ export async function refreshSolicitudPagoEstado(
     where: { solicitudId },
     select: { estado: true },
   });
-  if (adjs.length > 0 && adjs.every((a) => a.estado === "PAGADA")) {
+  // "Pagado" for the parent = pago registrado (PAGADA) o ya conciliado
+  // (CONCILIADA); ambos cuentan como que el proveedor ya no está por pagar.
+  const pagado = (e: string) => e === "PAGADA" || e === "CONCILIADA";
+  if (adjs.length > 0 && adjs.every((a) => pagado(a.estado))) {
     await tx.solicitudCompra.update({
       where: { id: solicitudId },
       data: { estado: "PAGADA", pagadaAt: fecha },

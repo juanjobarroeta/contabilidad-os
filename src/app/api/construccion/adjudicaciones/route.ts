@@ -62,6 +62,9 @@ export const GET = withAuthz(async (req: Request) => {
     estado: a.estado,
     createdAt: a.createdAt,
     pagadaAt: a.pagadaAt,
+    conciliadaAt: a.conciliadaAt,
+    referenciaPago: a.referenciaPago,
+    comprobanteName: a.comprobanteName,
     bankTransaction: a.bankTransaction,
   }));
 
