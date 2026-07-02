@@ -36,6 +36,19 @@ export async function GET(req: Request) {
   const userId = session.user.id;
 
   const { searchParams } = new URL(req.url);
+
+  // Lookup puntual por dedupeKey: lo usa el handler global que abre el chat
+  // sembrado tras el tap de una notificación. Sólo del usuario en sesión.
+  const dedupeKey = searchParams.get("dedupeKey");
+  if (dedupeKey) {
+    const item = await prisma.notificationItem.findUnique({
+      where: { recipientUserId_dedupeKey: { recipientUserId: userId, dedupeKey } },
+      select: { id: true, titulo: true, cuerpo: true, url: true, categoria: true },
+    });
+    if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json(item);
+  }
+
   const estadoParam = searchParams.get("estado");
   const filtro =
     estadoParam && (ESTADOS as readonly string[]).includes(estadoParam)
