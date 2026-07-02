@@ -2207,9 +2207,20 @@ model SolicitudAdjudicacion {
   diasCredito       Int? // días de crédito de la oferta ganadora → vencimiento
   diasEntrega       Int?
   total             Float // Σ importe de las líneas adjudicadas a este proveedor
-  estado            String    @default("POR_PAGAR") // POR_PAGAR | PAGADA
-  pagadaAt          DateTime?
-  bankTransactionId String?   @unique
+  // POR_PAGAR → PAGADA (pago registrado con comprobante, por conciliar) →
+  // CONCILIADA (empatada con un movimiento bancario importado = pago real).
+  // Registrar el pago NO crea un movimiento bancario: el estado de cuenta se
+  // llena sólo con el CSV importado y la conciliación lo empata después.
+  estado            String    @default("POR_PAGAR") // POR_PAGAR | PAGADA | CONCILIADA
+  pagadaAt          DateTime? // cuándo se registró el pago (comprobante)
+  conciliadaAt      DateTime? // cuándo se empató con el movimiento bancario real
+  referenciaPago    String? // referencia/folio SPEI capturado al registrar el pago
+  // Comprobante de pago (SPEI/transferencia) — mismo patrón dual que las
+  // cotizaciones. Se sube al registrar el pago, antes de conciliar.
+  comprobanteData   String?   @db.Text
+  comprobanteMime   String?
+  comprobanteName   String?
+  bankTransactionId String?   @unique // se fija al conciliar, no al pagar
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
