@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { sendPushToUser, type NotifCategoria } from "./push";
+import { conParametroAsk } from "./notif-ask";
 import type { EstadoPendiente } from "@prisma/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,6 +71,13 @@ export interface RegistrarYNotificarInput {
   dedupeKey: string;
   /** Categoría de preferencia del push (opt-out por usuario). */
   categoriaPush?: NotifCategoria;
+  /**
+   * Si al abrir la notificación (push o inbox) el asistente debe abrirse ya
+   * sembrado con el contexto de este pendiente. Por defecto `true`: se adjunta
+   * `?ask=<dedupeKey>` a la URL (del item y del push) para que el handler global
+   * lo detecte al aterrizar. Pásalo `false` para un deep-link sin chat.
+   */
+  abrirChat?: boolean;
 }
 
 export interface RegistrarYNotificarResult {
@@ -101,7 +109,12 @@ export async function registrarYNotificar(
     url,
     dedupeKey,
     categoriaPush,
+    abrirChat = true,
   } = input;
+
+  // El puntero `?ask=<dedupeKey>` viaja en la MISMA URL del item y del push, de
+  // modo que cualquier tap (inbox o notificación) siembra el chat al aterrizar.
+  const urlFinal = abrirChat ? conParametroAsk(url, dedupeKey) : url;
 
   const existente = await prisma.notificationItem.findUnique({
     where: { recipientUserId_dedupeKey: { recipientUserId, dedupeKey } },
@@ -118,7 +131,7 @@ export async function registrarYNotificar(
         severidad,
         titulo,
         cuerpo,
-        url,
+        url: urlFinal,
         dedupeKey,
         estado: "NUEVO",
       },
@@ -138,7 +151,7 @@ export async function registrarYNotificar(
         severidad,
         titulo,
         cuerpo,
-        url,
+        url: urlFinal,
         estado: nuevoEstado,
         ...(limpiarSnooze ? { posponerHasta: null } : {}),
       },
@@ -149,7 +162,7 @@ export async function registrarYNotificar(
 
   const push = await sendPushToUser(
     recipientUserId,
-    { title: titulo, body: cuerpo, url, tag: dedupeKey },
+    { title: titulo, body: cuerpo, url: urlFinal, tag: dedupeKey },
     categoriaPush,
   );
 

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { CompanyProvider } from "@/components/layout/CompanyProvider";
 import { ChatPanel } from "@/components/ai/ChatPanel";
+import { AbrirChatDesdeNotif } from "@/components/ai/AbrirChatDesdeNotif";
 import { TrialBanner } from "@/components/layout/TrialBanner";
 import { getUserSubscriptionState } from "@/lib/subscription";
 import { accesoSuspendido } from "@/lib/billing/suspension";
@@ -110,6 +111,7 @@ export default async function AppLayout({
           <div className="flex-1 overflow-auto">{children}</div>
         </main>
         <ChatPanel />
+        <AbrirChatDesdeNotif />
         <InstallPrompt />
         <PushOptIn />
       </div>
