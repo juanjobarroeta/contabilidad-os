@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 
 // GET /api/clientes?companyId=xxx&search=xxx
+// Autz: sesión web O token de servicio (Authorization: Bearer <jwt>), para que
+// apps satélite (p.ej. theclubpadel) puedan sincronizar clientes sin la UI.
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json([], { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json([], { status: e.status });
+    throw e;
+  }
 
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
@@ -16,7 +22,7 @@ export async function GET(req: Request) {
   if (!companyId) return NextResponse.json([], { status: 400 });
 
   // Verify membership
-  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
+  const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member) return NextResponse.json([], { status: 403 });
 
   const clientes = await prisma.customer.findMany({
@@ -41,9 +47,16 @@ export async function GET(req: Request) {
 }
 
 // POST /api/clientes
+// Autz: sesión web O token de servicio (Bearer). Crea el Customer y lo sincroniza
+// con Facturapi (si la empresa tiene API key). Idempotente por (companyId, rfc).
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    const status = e instanceof AuthzError ? e.status : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
+  }
 
   const body = await req.json();
   const { companyId, rfc, razonSocial, regimenFiscal, email, phone, domicilio, codigoPostal } = body;
@@ -53,7 +66,7 @@ export async function POST(req: Request) {
   }
 
   // Verify membership
-  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
+  const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // Check duplicate RFC
