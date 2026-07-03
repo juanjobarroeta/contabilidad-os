@@ -199,6 +199,19 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "query_declaracion_checklist",
+    description:
+      "Genera el checklist de la declaración mensual de la empresa: qué está listo y qué falta para declarar un periodo. Cubre la sincronización de CFDIs con el SAT, la cadena de declaraciones de meses anteriores, la conciliación bancaria del mes, los complementos de pago (REP) por emitir y los que deben los proveedores, el IVA e ISR calculados del periodo, la DIOT, la nómina timbrada y la fecha límite (día 17 del mes siguiente) con los días restantes. Úsala cuando pregunten '¿qué necesito para mi declaración?', '¿qué me falta para declarar mayo?' o si ya pueden presentar. Si no se dan mes/año, usa el último mes vencido (el anterior al actual), que es el que se declara.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        year: { type: "number", description: "Año del periodo a declarar, e.g. 2026. Default: el del mes anterior al actual." },
+        month: { type: "number", description: "Mes 1-12 del periodo a declarar. Default: el mes anterior al actual." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "query_complementos_pendientes",
     description:
       "Detecta facturas PPD (pago en parcialidades o diferido) que recibieron pago pero a las que aún les falta emitir el Complemento de Pago (REP). Incluye la fecha límite legal (día 5 del mes siguiente al pago) y la urgencia (VENCIDO / POR_VENCER / EN_TIEMPO). Úsala cuando pregunten por complementos de pago, REP, o qué les falta timbrar.",
