@@ -195,6 +195,10 @@ export interface TaxPosition {
     perdidaFiscalPendiente?: number | null;
     /** Pérdida fiscal efectivamente amortizada contra la utilidad este periodo. PM Art.14; null en otros régimenes. */
     perdidaFiscalAplicada?: number | null;
+    /** PTU pagada en el ejercicio en curso (suma de PayrollItem.ptu de las corridas de nómina del año, al cierre del periodo). PM Art.14; null en otros régimenes. */
+    ptuPagadaEjercicio?: number | null;
+    /** PTU disminuida de la utilidad fiscal este periodo — octavos acumulados mayo–diciembre, capada a la utilidad (Art. 14, fracc. II, segundo párrafo LISR). PM Art.14; null en otros régimenes. */
+    ptuDisminuida?: number | null;
     isrDelEjercicio: number | null;
     isrPagar: number | null;
     /** ISR retenido (Art. 106, 10% por PM) acreditado contra el provisional. 0 si no aplica al régimen. */
@@ -260,6 +264,35 @@ export function aplicarPerdidaFiscalPM(params: {
   const perdidaAplicada = round2(Math.min(perdidaPendiente!, utilidadFiscal));
   const baseGravable = Math.max(0, round2(utilidadFiscal - perdidaAplicada));
   return { perdidaAplicada, baseGravable };
+}
+
+/**
+ * PTU pagada en el ejercicio disminuible del pago provisional (Art. 14,
+ * fracc. II, segundo párrafo LISR, en relación con el Art. 9): el monto de la
+ * PTU PAGADA en el mismo ejercicio se disminuye de la utilidad fiscal
+ * estimada, por partes iguales, en los pagos provisionales de MAYO a
+ * DICIEMBRE, de manera ACUMULATIVA — mayo 1/8, junio 2/8, …, diciembre 8/8.
+ * Enero–abril no disminuyen nada. La disminución ocurre ANTES de amortizar
+ * pérdidas fiscales de ejercicios anteriores (la propia fracc. II ordena
+ * restar la pérdida a la utilidad fiscal ya disminuida con la PTU).
+ *
+ * Devuelve el monto acumulado disminuible en el mes (no capado a la utilidad —
+ * el tope a cero de la base lo aplica el llamador, pues el excedente no genera
+ * base negativa ni saldo alguno).
+ *
+ * Función pura (sin DB) para poder probar los octavos de forma aislada.
+ */
+export function ptuDisminuiblePM(params: {
+  /** PTU total pagada en el ejercicio en curso (Art. 9, penúltimo párrafo). */
+  ptuPagadaEjercicio: number | null;
+  /** Mes del pago provisional (1–12). */
+  month: number;
+}): number {
+  const { ptuPagadaEjercicio, month } = params;
+  if (ptuPagadaEjercicio == null || ptuPagadaEjercicio <= 0) return 0;
+  if (month < 5) return 0;
+  const octavos = Math.min(month - 4, 8); // mayo=1 … diciembre=8
+  return round2((ptuPagadaEjercicio * octavos) / 8);
 }
 
 /** Campos de una DECLARACION_ANUAL guardada que alimentan el coeficiente. */
@@ -827,12 +860,31 @@ export async function computeTaxPosition(
 
     // Coeficiente que YA se aplicó en un pago provisional capturado (de un acuse
     // del SAT). Corrobora el valor real usado; el más reciente disponible.
-    const coefProvRow = await prisma.taxDeclaration.findFirst({
-      where: { companyId, tipo: "ISR_PROVISIONAL", isrCoeficienteUtilidad: { not: null } },
-      orderBy: { periodo: "desc" },
-      select: { isrCoeficienteUtilidad: true },
-    });
+    const [coefProvRow, ptuNominaAgg] = await Promise.all([
+      prisma.taxDeclaration.findFirst({
+        where: { companyId, tipo: "ISR_PROVISIONAL", isrCoeficienteUtilidad: { not: null } },
+        orderBy: { periodo: "desc" },
+        select: { isrCoeficienteUtilidad: true },
+      }),
+      // PTU pagada en el EJERCICIO EN CURSO (Art. 14, fracc. II, segundo párrafo
+      // LISR): suma de PayrollItem.ptu de las corridas de nómina del año con
+      // fecha de pago hasta el cierre del periodo — la misma fuente que usa la
+      // declaración anual (las corridas tipo PTU escriben la percepción SAT 003
+      // en la columna ptu). Sólo la PTU ya PAGADA al cierre del mes se
+      // disminuye; la PTU pagada fuera del módulo de nómina no se detecta.
+      prisma.payrollItem.aggregate({
+        where: {
+          payrollRun: {
+            companyId,
+            status: { in: ["CALCULATED", "STAMPED", "PAID"] },
+            fechaPago: { gte: yearFrom, lt: to },
+          },
+        },
+        _sum: { ptu: true },
+      }),
+    ]);
     const coeficienteDeclarado = coefProvRow?.isrCoeficienteUtilidad ?? null;
+    const ptuPagadaEjercicio = round2(ptuNominaAgg._sum.ptu ?? 0);
 
     // Mejor valor AUTO-detectado, independiente de un override manual: anual
     // (ley) → el aplicado en provisionales → calculado de CFDIs. Se sugiere en la
@@ -888,13 +940,21 @@ export async function computeTaxPosition(
 
     let utilidadFiscal: number | null = null;
     let baseGravable: number | null = null;
+    let ptuDisminuida: number | null = null;
     let perdidaFiscalAplicada: number | null = null;
     let isrDelEjercicio: number | null = null;
     let isrPagar: number | null = null;
     if (coeficiente !== null && coeficiente > 0) {
       utilidadFiscal = round2(ingresosAcumulados * coeficiente);
+      // PTU pagada en el ejercicio disminuida en octavos acumulados de mayo a
+      // diciembre (Art. 14, fracc. II, segundo párrafo LISR) — ANTES de
+      // amortizar pérdidas fiscales de ejercicios anteriores. El excedente no
+      // genera base negativa: la utilidad tras PTU tiene piso en cero.
+      const ptuOctavos = ptuDisminuiblePM({ ptuPagadaEjercicio, month });
+      ptuDisminuida = round2(Math.min(ptuOctavos, Math.max(0, utilidadFiscal)));
+      const utilidadTrasPtu = Math.max(0, round2(utilidadFiscal - ptuOctavos));
       const { perdidaAplicada, baseGravable: base } = aplicarPerdidaFiscalPM({
-        utilidadFiscal,
+        utilidadFiscal: utilidadTrasPtu,
         perdidaPendiente: perdidaFiscalPendiente,
         perdidaAnio: perdidaFiscalAnio,
         year,
@@ -929,6 +989,8 @@ export async function computeTaxPosition(
       utilidadFiscal,
       perdidaFiscalPendiente,
       perdidaFiscalAplicada,
+      ptuPagadaEjercicio,
+      ptuDisminuida,
       isrDelEjercicio,
       isrPagar,
       retencionesAcreditadas: 0, // PM Art. 14 no acredita retención 10% PF

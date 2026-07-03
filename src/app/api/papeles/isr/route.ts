@@ -255,6 +255,10 @@ export async function GET(req: Request) {
           coeficiente,
           utilidadFiscal,
           baseGravable: enginePos.isr.baseGravable ?? null,
+          // PTU pagada en el ejercicio disminuida en octavos may–dic, ANTES de
+          // pérdidas (Art. 14, fracc. II, segundo párrafo LISR).
+          ptuPagadaEjercicio: enginePos.isr.ptuPagadaEjercicio ?? null,
+          ptuDisminuida: enginePos.isr.ptuDisminuida ?? null,
           perdidaFiscalAplicada: enginePos.isr.perdidaFiscalAplicada ?? null,
           tasa: TASA_ISR,
           isrDelEjercicio,
@@ -346,6 +350,20 @@ export async function GET(req: Request) {
       rows.push(["Cálculo ISR", "Ingresos acumulados", "", ingresosAcumulados.toFixed(2)]);
       rows.push(["Cálculo ISR", "× Coeficiente", "", coeficiente != null ? (coeficiente * 100).toFixed(4) + "%" : "—"]);
       rows.push(["Cálculo ISR", "= Utilidad fiscal estimada", "", utilidadFiscal != null ? utilidadFiscal.toFixed(2) : "—"]);
+      // PTU pagada en el ejercicio, disminuida en octavos acumulados de mayo a
+      // diciembre ANTES de amortizar pérdidas (Art. 14, fracc. II LISR); luego
+      // pérdidas fiscales pendientes. Renglones sólo cuando hubo disminución.
+      const csvPtu = enginePos.isr.ptuDisminuida ?? 0;
+      const csvPerdida = enginePos.isr.perdidaFiscalAplicada ?? 0;
+      if (csvPtu > 0) {
+        rows.push(["Cálculo ISR", "− PTU pagada en el ejercicio (octavos mayo–diciembre, Art. 14 fracc. II)", "", csvPtu.toFixed(2)]);
+      }
+      if (csvPerdida > 0) {
+        rows.push(["Cálculo ISR", "− Pérdidas fiscales de ejercicios anteriores aplicadas", "", csvPerdida.toFixed(2)]);
+      }
+      if (csvPtu > 0 || csvPerdida > 0) {
+        rows.push(["Cálculo ISR", "= Base gravable", "", enginePos.isr.baseGravable != null ? enginePos.isr.baseGravable.toFixed(2) : "—"]);
+      }
       rows.push(["Cálculo ISR", "× Tasa ISR", "", (TASA_ISR * 100).toFixed(0) + "%"]);
       rows.push(["Cálculo ISR", "= ISR del ejercicio acumulado", "", isrDelEjercicio != null ? isrDelEjercicio.toFixed(2) : "—"]);
       rows.push(["Cálculo ISR", "− ISR pagado en meses anteriores", "", isrPagadoAnterior.toFixed(2)]);
