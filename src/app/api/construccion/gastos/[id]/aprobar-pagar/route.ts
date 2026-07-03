@@ -45,6 +45,11 @@ const bodySchema = z.object({
   fecha: z.string().optional(),
   referencia: z.string().max(80).nullable().optional(),
   pagoComprobanteUrl: z.string().max(1000).nullable().optional(),
+  // Comprobante de pago directo (base64) — mismo patrón dual que el comprobante
+  // del gasto. Lo manda cuentas por pagar al registrar el pago.
+  pagoComprobanteData: z.string().nullable().optional(),
+  pagoComprobanteMime: z.string().max(80).nullable().optional(),
+  pagoComprobanteName: z.string().max(200).nullable().optional(),
 });
 
 export const POST = withAuthz(
@@ -162,6 +167,9 @@ export const POST = withAuthz(
           aprobadoPor: userId ?? null,
           aprobadoAt: new Date(),
           pagoComprobanteUrl: parsed.data.pagoComprobanteUrl ?? undefined,
+          pagoComprobanteData: parsed.data.pagoComprobanteData ?? undefined,
+          pagoComprobanteMime: parsed.data.pagoComprobanteMime ?? undefined,
+          pagoComprobanteName: parsed.data.pagoComprobanteName ?? undefined,
         },
         include: {
           bankAccount: true,
