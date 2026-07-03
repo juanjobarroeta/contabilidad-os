@@ -13,6 +13,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { checkInvoiceMatchGuard } from "@/lib/conciliacion";
+import { registrarBitacora } from "@/lib/audit";
 
 const bodySchema = z.object({ invoiceId: z.string().min(1) });
 
@@ -42,7 +44,18 @@ export const POST = withAuthz(
 
     const invoice = await prisma.invoice.findUnique({
       where: { id: parsed.data.invoiceId },
-      select: { id: true, companyId: true, status: true, tipo: true },
+      select: {
+        id: true,
+        companyId: true,
+        status: true,
+        tipo: true,
+        metodoPago: true,
+        total: true,
+        bankTransactions: {
+          where: { status: "MATCHED" },
+          select: { id: true, fecha: true, monto: true },
+        },
+      },
     });
     if (!invoice || invoice.companyId !== tx.companyId) {
       return NextResponse.json({ error: "CFDI inválido" }, { status: 400 });
@@ -62,6 +75,14 @@ export const POST = withAuthz(
       );
     }
 
+    // Guardia compartida (misma regla que el PATCH cookie-auth): una PUE ya
+    // conciliada no admite un segundo movimiento; en PPD el acumulado de
+    // parcialidades no puede exceder el total (tolerancia 1%).
+    const guard = checkInvoiceMatchGuard(invoice, invoice.bankTransactions, tx);
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.error }, { status: 409 });
+    }
+
     const updated = await prisma.bankTransaction.update({
       where: { id: tx.id },
       data: { status: "MATCHED", invoiceId: invoice.id },
@@ -71,6 +92,14 @@ export const POST = withAuthz(
         invoiceId: true,
         invoice: { select: { id: true, uuid: true, serie: true, folio: true, total: true } },
       },
+    });
+    registrarBitacora({
+      companyId: tx.companyId,
+      accion: "conciliacion.match",
+      entidad: "BankTransaction",
+      entidadId: tx.id,
+      detalle: { monto: tx.monto, invoiceId: invoice.id, via: "bearer-construccion" },
+      req,
     });
     return NextResponse.json(updated);
   }

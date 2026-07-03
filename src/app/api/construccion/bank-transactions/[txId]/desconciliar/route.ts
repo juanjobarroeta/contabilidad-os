@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { registrarBitacora } from "@/lib/audit";
 
 export const POST = withAuthz(
   async (req: Request, ctx: { params: Promise<{ txId: string }> }) => {
@@ -52,6 +53,14 @@ export const POST = withAuthz(
       where: { id: tx.id },
       data: { status: "UNMATCHED", invoiceId: null },
       select: { id: true, status: true, invoiceId: true },
+    });
+    registrarBitacora({
+      companyId: tx.companyId,
+      accion: "conciliacion.unmatch",
+      entidad: "BankTransaction",
+      entidadId: tx.id,
+      detalle: { invoiceId: tx.invoiceId, via: "bearer-construccion" },
+      req,
     });
     return NextResponse.json(updated);
   }
