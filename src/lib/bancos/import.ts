@@ -7,9 +7,12 @@
  * identical from both surfaces.
  *
  * Dedup key: (bankAccountId, fecha day, monto, descripcion, referencia).
- * Same rule contabilidad-os has used since the bancos module shipped —
- * tweaking it here would shift dedup behaviour for old uploads, so be
- * careful.
+ * Same KEY contabilidad-os has used since the bancos module shipped.
+ * Counting rule (ver src/lib/bancos/dedup.ts): por clave, si el archivo trae
+ * F ocurrencias y la BD ya tiene D (antes de esta subida), se importan
+ * max(0, F − D) y las D primeras se omiten como posibles duplicados. Así,
+ * dos cargos idénticos el mismo día dentro de un archivo se importan ambos,
+ * y re-subir el mismo archivo sigue siendo un no-op.
  *
  * Auto-categorize on import: bank fees, SAT payments, and internal
  * transfers go straight to IGNORED with a notes tag, so the UNMATCHED
@@ -18,13 +21,19 @@
 
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
-import { parseStatement, type ParsedTransaction } from "@/lib/bank-parser";
+import { parseStatement, type ParsedTransaction, type RowDescartada } from "@/lib/bank-parser";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
+import { claveDeDuplicado, planImportacion } from "@/lib/bancos/dedup";
 
 export type ImportResult = {
   ok: boolean;
   imported: number;
+  /** Alias histórico de posiblesDuplicados (lo consumen bartiz y WhatsApp). */
   skipped: number;
+  /** Filas omitidas por coincidir con movimientos ya existentes en la BD. */
+  posiblesDuplicados: number;
+  /** Filas del archivo que el parser no pudo convertir en movimientos. */
+  descartadas: RowDescartada[];
   format?: string;
   detectedBank?: string | null;
   warnings?: string[];
@@ -48,23 +57,42 @@ export async function persistTransactions(opts: {
   let imported = 0;
   let skipped = 0;
 
+  // Regla de conteo por clave (día + monto + descripción + referencia):
+  // D = movimientos que YA existían en la BD para esa clave (medido ANTES de
+  // insertar nada de este archivo — por eso se cachea el conteo la primera
+  // vez que vemos la clave, para que nuestras propias inserciones no lo
+  // inflen), F = ocurrencias en el archivo. Se importan max(0, F − D) y las
+  // D primeras ocurrencias se omiten como posibles duplicados. Ver
+  // src/lib/bancos/dedup.ts para la justificación (dos cargos idénticos el
+  // mismo día son casi siempre transacciones reales distintas).
+  const conteoEnBD = new Map<string, number>();
+  const claves: string[] = [];
   for (const tx of transactions) {
-    const fechaStart = new Date(tx.fecha);
-    fechaStart.setHours(0, 0, 0, 0);
-    const fechaEnd = new Date(tx.fecha);
-    fechaEnd.setHours(23, 59, 59, 999);
+    const clave = claveDeDuplicado(tx);
+    claves.push(clave);
+    if (!conteoEnBD.has(clave)) {
+      const fechaStart = new Date(tx.fecha);
+      fechaStart.setHours(0, 0, 0, 0);
+      const fechaEnd = new Date(tx.fecha);
+      fechaEnd.setHours(23, 59, 59, 999);
+      const d = await prisma.bankTransaction.count({
+        where: {
+          bankAccountId,
+          fecha: { gte: fechaStart, lte: fechaEnd },
+          monto: tx.monto,
+          descripcion: tx.descripcion,
+          referencia: tx.referencia ?? null,
+        },
+      });
+      conteoEnBD.set(clave, d);
+    }
+  }
+  const plan = planImportacion(claves, (clave) => conteoEnBD.get(clave) ?? 0);
 
-    const exists = await prisma.bankTransaction.findFirst({
-      where: {
-        bankAccountId,
-        fecha: { gte: fechaStart, lte: fechaEnd },
-        monto: tx.monto,
-        descripcion: tx.descripcion,
-        referencia: tx.referencia ?? null,
-      },
-    });
+  for (let i = 0; i < transactions.length; i++) {
+    const tx = transactions[i];
 
-    if (exists) { skipped++; continue; }
+    if (!plan[i]) { skipped++; continue; }
 
     const desc = tx.descripcion;
     const isBankFee = /comisi[oó]n|iva\s+comisi/i.test(desc);
@@ -136,7 +164,7 @@ export async function importBankStatement(opts: {
   const { bankAccountId, companyId, fileContent, filename, encoding } = opts;
 
   if (!fileContent) {
-    return { ok: false, imported: 0, skipped: 0, message: "Archivo vacío", error: "Archivo vacío" };
+    return { ok: false, imported: 0, skipped: 0, posiblesDuplicados: 0, descartadas: [], message: "Archivo vacío", error: "Archivo vacío" };
   }
 
   // Excel (.xlsx/.xls/.xlsm): binario, el front lo manda en base64.
@@ -166,7 +194,7 @@ export async function importBankStatement(opts: {
         parseName = parseName.replace(/\.(xlsx|xls|xlsm)$/i, ".csv");
       } catch {
         return {
-          ok: false, imported: 0, skipped: 0,
+          ok: false, imported: 0, skipped: 0, posiblesDuplicados: 0, descartadas: [],
           message: "No se pudo leer el archivo de Excel. Verifica que sea un .xlsx válido.",
           error: "Excel ilegible",
         };
@@ -181,6 +209,8 @@ export async function importBankStatement(opts: {
       ok: false,
       imported: 0,
       skipped: 0,
+      posiblesDuplicados: 0,
+      descartadas: parseResult.descartadas,
       warnings: parseResult.warnings,
       message: "No se encontraron transacciones en el archivo.",
       error: "No se encontraron transacciones en el archivo.",
@@ -194,13 +224,19 @@ export async function importBankStatement(opts: {
     source: "UPLOAD",
   });
 
+  const descartadas = parseResult.descartadas;
   return {
     ok: true,
     imported,
     skipped,
+    posiblesDuplicados: skipped,
+    descartadas,
     format: parseResult.format,
     detectedBank: parseResult.detectedBank,
     warnings: parseResult.warnings,
-    message: `${imported} movimiento(s) importados${skipped > 0 ? `, ${skipped} ya existían` : ""}.`,
+    message:
+      `${imported} movimiento(s) importados` +
+      `${skipped > 0 ? `, ${skipped} omitido(s) por parecer duplicados de movimientos ya existentes` : ""}` +
+      `${descartadas.length > 0 ? `, ${descartadas.length} fila(s) descartadas` : ""}.`,
   };
 }

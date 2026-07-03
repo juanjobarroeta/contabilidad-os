@@ -10,11 +10,15 @@
  *   { fileContent: string, filename: string }
  *
  * Returns:
- *   { ok, imported, skipped, format, detectedBank, warnings, message }
+ *   { ok, imported, skipped, posiblesDuplicados, descartadas: {fila, motivo}[],
+ *     format, detectedBank, warnings, message }
  *
- * Dedup: re-importing the same statement file is idempotent — rows
- * matching (bankAccountId + same day fecha + same monto + same
- * descripcion + same referencia) are skipped, fresh ones get inserted.
+ * Dedup: re-importing the same statement file is idempotent — per key
+ * (bankAccountId + same day fecha + same monto + same descripcion + same
+ * referencia), if the file has F occurrences and the DB already has D,
+ * max(0, F − D) get inserted and the rest are skipped as posibles
+ * duplicados (ver src/lib/bancos/dedup.ts). Rows the parser could not
+ * read are reported in `descartadas`, never dropped silently.
  */
 
 import { NextResponse } from "next/server";

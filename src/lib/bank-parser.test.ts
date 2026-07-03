@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseStatement } from "./bank-parser";
+import { parseStatement, parseMXNumber } from "./bank-parser";
 
 // Fixture representativo de un export .xls de BBVA ("RSM" / Banca Net Cash):
 // NO es Excel binario, es SpreadsheetML 2003 (XML). Reproduce lo esencial:
@@ -69,5 +69,134 @@ describe("parseStatement — BBVA SpreadsheetML (.xls que es XML)", () => {
   it("combina Referencia + Referencia Ampliada", () => {
     expect(res.transactions[0].referencia).toContain("0000789161");
     expect(res.transactions[0].referencia).toContain("PAGO FACTURA");
+  });
+
+  it("no descarta ninguna fila con datos válidos", () => {
+    expect(res.descartadas).toEqual([]);
+  });
+});
+
+// ── OFX: montos con separador de miles / coma decimal ────────────────────────
+// Regresión: parseOFX hacía amtStr.replace(",", ".") a ciegas, con lo que
+// "1,234.56" (miles) se convertía en "1.234.56" → parseFloat → 1.234. El
+// banco es la fuente de verdad: un monto mal leído es pérdida de datos.
+function ofxConMontos(montos: string[]): string {
+  const bloques = montos.map((m, i) => `<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20260615
+<TRNAMT>${m}
+<FITID>FIT${i + 1}
+<MEMO>MOVIMIENTO ${i + 1}
+</STMTTRN>`).join("\n");
+  return `OFXHEADER:100
+DATA:OFXSGML
+<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKTRANLIST>
+${bloques}
+</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+}
+
+describe("parseStatement — OFX montos", () => {
+  it("1,234.56 (separador de miles americano) → 1234.56", () => {
+    const res = parseStatement(ofxConMontos(["1,234.56"]), "estado.ofx");
+    expect(res.format).toBe("ofx");
+    expect(res.transactions).toHaveLength(1);
+    expect(res.transactions[0].monto).toBeCloseTo(1234.56, 2);
+  });
+
+  it("-1234.56 (negativo simple) → -1234.56", () => {
+    const res = parseStatement(ofxConMontos(["-1234.56"]), "estado.ofx");
+    expect(res.transactions[0].monto).toBeCloseTo(-1234.56, 2);
+  });
+
+  it("1234,56 (coma decimal europea) → 1234.56", () => {
+    const res = parseStatement(ofxConMontos(["1234,56"]), "estado.ofx");
+    expect(res.transactions[0].monto).toBeCloseTo(1234.56, 2);
+  });
+
+  it("1234.56 (punto decimal simple) → 1234.56", () => {
+    const res = parseStatement(ofxConMontos(["1234.56"]), "estado.ofx");
+    expect(res.transactions[0].monto).toBeCloseTo(1234.56, 2);
+  });
+
+  it("los cuatro formatos en un mismo archivo, sin perder filas", () => {
+    const res = parseStatement(ofxConMontos(["1,234.56", "-1234.56", "1234,56", "1234.56"]), "estado.ofx");
+    expect(res.transactions).toHaveLength(4);
+    expect(res.transactions.map(t => t.monto)).toEqual([1234.56, -1234.56, 1234.56, 1234.56]);
+    expect(res.descartadas).toEqual([]);
+  });
+
+  it("fecha ilegible en un bloque → descartada con el valor crudo, sin tumbar el resto", () => {
+    const contenido = ofxConMontos(["100.00", "200.00"]).replace("<DTPOSTED>20260615\n<TRNAMT>200.00", "<DTPOSTED>XXXX\n<TRNAMT>200.00");
+    const res = parseStatement(contenido, "estado.ofx");
+    expect(res.transactions).toHaveLength(1);
+    expect(res.descartadas).toHaveLength(1);
+    expect(res.descartadas[0].fila).toBe(2);
+    expect(res.descartadas[0].motivo).toContain("XXXX");
+  });
+});
+
+describe("parseMXNumber", () => {
+  it("maneja miles y decimales en ambos estilos", () => {
+    expect(parseMXNumber("1,234.56")).toBeCloseTo(1234.56, 2);
+    expect(parseMXNumber("-1234.56")).toBeCloseTo(-1234.56, 2);
+    expect(parseMXNumber("1234,56")).toBeCloseTo(1234.56, 2);
+    expect(parseMXNumber("1234.56")).toBeCloseTo(1234.56, 2);
+    expect(parseMXNumber("1.234.567,89")).toBeCloseTo(1234567.89, 2);
+    expect(parseMXNumber("$1,234,567.89")).toBeCloseTo(1234567.89, 2);
+  });
+});
+
+// ── CSV: acumulación de motivos de descarte (nada se pierde en silencio) ─────
+describe("parseStatement — CSV filas descartadas", () => {
+  it("una fila con fecha ilegible → 1 descartada con el valor crudo y su número de fila", () => {
+    const csv = [
+      "Fecha,Descripcion,Monto",
+      "30/06/2026,PAGO PROVEEDOR,-1500.00",
+      "15/06/26,CARGO RARO,-200.00", // año de 2 dígitos: el parser no lo acepta
+      "01/07/2026,DEPOSITO CLIENTE,3200.50",
+    ].join("\n");
+    const res = parseStatement(csv, "estado.csv");
+    expect(res.format).toBe("csv");
+    expect(res.transactions).toHaveLength(2);
+    expect(res.descartadas).toHaveLength(1);
+    expect(res.descartadas[0].fila).toBe(3); // línea 3 del archivo (1-based)
+    expect(res.descartadas[0].motivo).toContain("fecha inválida");
+    expect(res.descartadas[0].motivo).toContain("15/06/26");
+  });
+
+  it("monto ilegible → descartada con el valor crudo", () => {
+    const csv = [
+      "Fecha,Descripcion,Monto",
+      "30/06/2026,PAGO PROVEEDOR,abc",
+      "01/07/2026,DEPOSITO CLIENTE,3200.50",
+    ].join("\n");
+    const res = parseStatement(csv, "estado.csv");
+    expect(res.transactions).toHaveLength(1);
+    expect(res.descartadas).toHaveLength(1);
+    expect(res.descartadas[0].fila).toBe(2);
+    expect(res.descartadas[0].motivo).toContain("monto inválido");
+    expect(res.descartadas[0].motivo).toContain("abc");
+  });
+
+  it("archivo limpio → descartadas vacío", () => {
+    const csv = [
+      "Fecha,Descripcion,Monto",
+      "30/06/2026,PAGO PROVEEDOR,-1500.00",
+      "01/07/2026,DEPOSITO CLIENTE,3200.50",
+    ].join("\n");
+    const res = parseStatement(csv, "estado.csv");
+    expect(res.transactions).toHaveLength(2);
+    expect(res.descartadas).toEqual([]);
+  });
+
+  it("dos filas idénticas dentro del archivo se conservan ambas (el dedup es en la importación, no en el parseo)", () => {
+    const csv = [
+      "Fecha,Descripcion,Monto",
+      "30/06/2026,UBER TRIP,-450.50",
+      "30/06/2026,UBER TRIP,-450.50",
+    ].join("\n");
+    const res = parseStatement(csv, "estado.csv");
+    expect(res.transactions).toHaveLength(2);
+    expect(res.descartadas).toEqual([]);
   });
 });
