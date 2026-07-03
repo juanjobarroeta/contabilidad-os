@@ -67,6 +67,8 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     salarioBaseCotizacion: sdi,
     diasPagados: input.diasPagados,
     riesgoPuesto: employee.riesgoPuesto,
+    // Columna del ejercicio para la CEAV patronal progresiva (DOF 16-dic-2020).
+    ejercicio: input.fechaPago.getFullYear(),
   });
   const imssObrero = imssCalc.obrero.total;
   const imssPatronal = imssCalc.patronal.total;

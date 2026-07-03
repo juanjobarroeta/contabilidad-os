@@ -6,14 +6,24 @@ import {
   TOPE_SBC_25_UMA,
   TRES_UMA,
   UMA_DIARIO,
+  UMA_EJERCICIO,
   IMSS_RAMOS,
   RIESGO_TRABAJO_PRIMAS,
+  ceavPatronalRate,
 } from "./constants";
 
 export type ImssCalcInput = {
   salarioBaseCotizacion: number; // SBC diario
   diasPagados: number;
   riesgoPuesto: string; // "1"–"5"
+  /**
+   * Ejercicio (año de la fecha de pago). Selecciona la columna de la tabla
+   * progresiva de CEAV patronal (Art. Segundo Transitorio, DOF 16-dic-2020).
+   * Default: UMA_EJERCICIO — el año de los valores UMA/SM cargados en
+   * constants, que es también el que usan los demás ramos (cuota fija,
+   * excedente 3 UMA y tope 25 UMA siempre se calculan con la UMA vigente).
+   */
+  ejercicio?: number;
 };
 
 export type ImssDesglose = {
@@ -40,6 +50,7 @@ function r2(n: number): number {
 
 export function calcularImss(input: ImssCalcInput): ImssCalcResult {
   const { diasPagados, riesgoPuesto } = input;
+  const ejercicio = input.ejercicio ?? UMA_EJERCICIO;
 
   // Cap SBC at 25 UMA
   const sbcDiario = Math.min(input.salarioBaseCotizacion, TOPE_SBC_25_UMA);
@@ -113,8 +124,14 @@ export function calcularImss(input: ImssCalcInput): ImssCalcResult {
         patronal.retiro = patronalMonto;
         break;
       case "Cesantía y Vejez":
+        // Obrera: fija en 1.125% (Art. 168 fracc. II LSS — la reforma 2020 no
+        // la modificó).
         obrero.cesantiaVejez = obreroMonto;
-        patronal.cesantiaVejez = patronalMonto;
+        // Patronal: PROGRESIVA por SBC desde 2023 (Art. 168 fracc. II LSS
+        // reformado DOF 16-dic-2020; incremento gradual 2023-2030 conforme al
+        // Art. Segundo Transitorio). El `ramo.patronal` fijo de constants es
+        // sólo el piso de la banda ≤ 1 SM y NO debe aplicarse parejo.
+        patronal.cesantiaVejez = r2(sbcPeriodo * ceavPatronalRate(sbcDiario, ejercicio));
         break;
       case "Guarderías":
         obrero.guarderias = obreroMonto;

@@ -187,6 +187,8 @@ export async function POST(req: Request) {
       salarioBaseCotizacion: sdi,
       diasPagados: dias,
       riesgoPuesto: ourEmp.riesgoPuesto,
+      // Columna del ejercicio para la CEAV patronal progresiva (DOF 16-dic-2020).
+      ejercicio: year || undefined,
     });
 
     let hasDiff = false;

@@ -179,6 +179,8 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     salarioBaseCotizacion: sdi,
     diasPagados,
     riesgoPuesto: employee.riesgoPuesto,
+    // Columna del ejercicio para la CEAV patronal progresiva (DOF 16-dic-2020).
+    ejercicio: input.ejercicio,
   });
   if (tipo === "ORDINARIA" && imssCalc.obrero.total > 0) {
     deducciones.push({
