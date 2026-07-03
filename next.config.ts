@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
     "luxon",
     "jszip",
     "pdf-parse",
+    // Sentry se carga nativo (usa hooks de require para instrumentar).
+    "@sentry/node",
   ],
   // El flujo fiscal mensual ahora vive en el hub de Impuestos (/impuestos), con
   // pestañas Del mes / Historial / Anual. Las rutas antiguas redirigen a la
