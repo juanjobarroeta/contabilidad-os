@@ -8,6 +8,7 @@ import { calcularActosDelPeriodo } from "./fiscal/iva";
 import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
 import { efosRfcsBloqueados } from "./fiscal/efos/service";
 import { perdidasDisponibles } from "./fiscal/perdidas";
+import { ivaTrasladadoDe, repIvaTrasladadoDe } from "./fiscal/iva-flujo";
 
 /**
  * Prisma `where` que EXCLUYE los CFDIs de egreso emitidos por un proveedor 69-B
@@ -35,34 +36,13 @@ function filtroEfos(bloqueados: Set<string>): Record<string, unknown> {
 // utilidad (manual override → prior-year calculated → none).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type InvoiceLike = {
-  taxes: { tipo: string; retencion: boolean; importe: number }[];
-  totalImpuestos: number | null;
-};
-
-function ivaTrasladado(inv: InvoiceLike): number {
-  const ivaTaxes = inv.taxes.filter((t) => t.tipo === "IVA" && !t.retencion);
-  return ivaTaxes.length > 0
-    ? ivaTaxes.reduce((s, t) => s + t.importe, 0)
-    : (inv.totalImpuestos ?? 0);
-}
-export { ivaTrasladado as ivaTrasladadoDe, repIvaTrasladado as repIvaAcreditableDe };
-
-/**
- * IVA of a single REP payment toward a parent invoice. Uses the firm
- * payment-level IVA from complemento 2.0 when present; otherwise (legacy 1.0
- * or 2.0 without desglose) prorates the parent invoice's IVA by the fraction
- * paid in this REP.
- */
-function repIvaTrasladado(
-  link: { impPagado: number | null; ivaTrasladado: number | null; ivaDerivado: boolean },
-  parent: InvoiceLike & { total: number }
-): number {
-  if (link.ivaTrasladado != null && !link.ivaDerivado) return link.ivaTrasladado;
-  const parentIva = ivaTrasladado(parent);
-  if (parent.total <= 0 || link.impPagado == null) return 0;
-  return parentIva * (link.impPagado / parent.total);
-}
+// Helpers puros de flujo (IVA trasladado por factura y por pago de REP) —
+// extraídos a src/lib/fiscal/iva-flujo.ts para compartirlos con la DIOT.
+// Se re-exportan con sus nombres históricos para no romper a los llamadores.
+export type { InvoiceLike } from "./fiscal/iva-flujo";
+export { ivaTrasladadoDe, repIvaTrasladadoDe as repIvaAcreditableDe } from "./fiscal/iva-flujo";
+const ivaTrasladado = ivaTrasladadoDe;
+const repIvaTrasladado = repIvaTrasladadoDe;
 
 /**
  * Cumulative income actually collected and deductions actually paid in
