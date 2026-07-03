@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 import { stampPayrollRun } from "@/lib/nomina/payroll-run";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +76,10 @@ export async function POST(req: Request) {
   if (ids.length === 0) {
     return NextResponse.json({ error: "runIds requerido" }, { status: 400 });
   }
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
+  const gate = await gateEscritura(userId);
+  if (gate) return gate;
 
   // Cargar las corridas una sola vez (estado + empresa) para validar antes de timbrar.
   const runs = await prisma.payrollRun.findMany({

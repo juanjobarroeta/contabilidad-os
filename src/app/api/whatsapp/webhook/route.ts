@@ -23,6 +23,7 @@ import { runWhatsappAgent, type WhatsappCompany } from "@/lib/whatsapp/agent";
 import { tryConfirmPendingAction, getPendingAction } from "@/lib/whatsapp/pending-action";
 import { checkWhatsappRateLimit } from "@/lib/whatsapp/rate-limit";
 import { effectiveWhatsappPlan } from "@/lib/planes";
+import { decideEscrituraUsuario } from "@/lib/subscription";
 
 // Long-running Node server (Railway `next start`), NOT serverless — so the
 // background agent work kicked off after we respond keeps running to completion.
@@ -237,6 +238,18 @@ export async function POST(req: Request) {
     return reply(
       "Hola 👋 Este número no está vinculado a una cuenta de Contabilidad OS. " +
         "Entra a la aplicación y vincula tu WhatsApp desde Ajustes para poder ayudarte."
+    );
+  }
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED): con la
+  // suscripción vencida/cancelada NO se procesa el mensaje; se contesta cómo
+  // reactivar. PAST_DUE (gracia) sigue pasando.
+  const decision = await decideEscrituraUsuario(sender.userId);
+  if (!decision.permitido) {
+    return reply(
+      "Tu suscripción de Contabilidad OS no está activa, por lo que el asistente " +
+        "de WhatsApp está pausado. Para reactivarlo, inicia sesión en la aplicación " +
+        "y activa tu suscripción desde Configuración. Quedamos atentos para ayudarte."
     );
   }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 import { importBankStatement } from "@/lib/bancos/import";
 
 type Params = { params: Promise<{ id: string }> };
@@ -22,6 +23,10 @@ export async function POST(req: Request, { params }: Params) {
 
   const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
+  const gate = await gateEscritura(session.user.id);
+  if (gate) return gate;
 
   const { fileContent, filename, encoding } = await req.json();
   const result = await importBankStatement({

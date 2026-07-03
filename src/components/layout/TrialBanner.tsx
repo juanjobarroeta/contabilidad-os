@@ -1,6 +1,15 @@
 import type { SubscriptionState } from "@/lib/subscription";
 
-export function TrialBanner({ state }: { state: SubscriptionState }) {
+// `enforcement` = SUBSCRIPTION_ENFORCEMENT_ENABLED (lo pasa el layout). Con el
+// gating apagado NO afirmamos "modo solo lectura" — nada lo aplica todavía;
+// con el gating encendido las escrituras sí devuelven 402 y el texto es veraz.
+export function TrialBanner({
+  state,
+  enforcement = false,
+}: {
+  state: SubscriptionState;
+  enforcement?: boolean;
+}) {
   if (state.status === "ACTIVE") return null;
 
   if (state.isTrialing && state.daysLeft !== null) {
@@ -31,13 +40,15 @@ export function TrialBanner({ state }: { state: SubscriptionState }) {
     return (
       <div className="px-4 py-2 text-sm flex items-center justify-between border-b bg-red-50 border-red-200 text-red-900">
         <span>
-          Tu prueba terminó. La cuenta está en modo solo lectura hasta que actives una suscripción.
+          {enforcement
+            ? "Tu prueba terminó. La cuenta está en modo solo lectura hasta que actives una suscripción."
+            : "Tu prueba terminó. Muy pronto habilitaremos la activación en línea; mientras tanto puedes seguir usando tu cuenta o contactarnos para activar tu suscripción."}
         </span>
         <a
           href="/configuracion/facturacion"
           className="font-medium underline hover:no-underline"
         >
-          Activar ahora
+          {enforcement ? "Activar ahora" : "Ver opciones"}
         </a>
       </div>
     );

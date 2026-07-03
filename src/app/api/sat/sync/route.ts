@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 import { submitSatSync } from "@/lib/sat-sync";
 
 // POST /api/sat/sync
@@ -26,6 +27,11 @@ export async function POST(req: Request) {
   // Verify membership
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED): la
+  // descarga masiva consume cuota del SAT y escribe CFDIs en la cuenta.
+  const gate = await gateEscritura(session.user.id);
+  if (gate) return gate;
 
   const result = await submitSatSync(companyId, year, month, !!force);
 

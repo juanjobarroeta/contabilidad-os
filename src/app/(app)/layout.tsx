@@ -5,7 +5,7 @@ import { CompanyProvider } from "@/components/layout/CompanyProvider";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { AbrirChatDesdeNotif } from "@/components/ai/AbrirChatDesdeNotif";
 import { TrialBanner } from "@/components/layout/TrialBanner";
-import { getUserSubscriptionState } from "@/lib/subscription";
+import { enforcementHabilitado, getUserSubscriptionState } from "@/lib/subscription";
 import { accesoSuspendido } from "@/lib/billing/suspension";
 import { CuentaSuspendida } from "@/components/layout/CuentaSuspendida";
 import { isOperador } from "@/lib/authz";
@@ -107,7 +107,7 @@ export default async function AppLayout({
         <Sidebar user={session.user} esOperador={esOperador} />
         {/* pt-14 on mobile clears the fixed top bar; none on md+ */}
         <main className="flex-1 overflow-auto flex flex-col pt-14 md:pt-0">
-          <TrialBanner state={subscription} />
+          <TrialBanner state={subscription} enforcement={enforcementHabilitado()} />
           <div className="flex-1 overflow-auto">{children}</div>
         </main>
         <ChatPanel />
