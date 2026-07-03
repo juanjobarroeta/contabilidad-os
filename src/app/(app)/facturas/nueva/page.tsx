@@ -273,6 +273,11 @@ export default function NuevaFacturaPage() {
     if (!activeCompany || !selectedCliente) return;
     setSubmitting(true);
     setSubmitError("");
+    // Llave de idempotencia: una nueva por intento de envío. El botón
+    // deshabilitado evita el doble clic; la llave evita que UN clic se procese
+    // dos veces en el servidor (no se timbra un segundo CFDI ni se consume
+    // otro timbre si el request se duplica en la red).
+    const idempotencyKey = crypto.randomUUID();
     try {
       const payload = {
         companyId: activeCompany.id,
@@ -305,7 +310,10 @@ export default function NuevaFacturaPage() {
 
       const res = await fetch("/api/facturas", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
         body: JSON.stringify(payload),
       });
 

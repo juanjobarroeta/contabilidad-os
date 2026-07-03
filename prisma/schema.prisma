@@ -664,6 +664,14 @@ model Invoice {
   // Provenance: which product module created this invoice. NULL = generic/manual.
   origenModulo ModuloApp?
 
+  // Llave de idempotencia para el timbrado vía POST /api/facturas: el cliente
+  // manda una llave única por intento (header Idempotency-Key) y la ruta
+  // RESERVA la llave creando esta fila ANTES de llamar al PAC — un segundo
+  // request con la misma llave choca con @@unique([companyId, idempotencyKey])
+  // y no consume otro timbre. NULL para importaciones y llamadores externos
+  // que no mandan llave (Postgres permite múltiples NULL en el unique).
+  idempotencyKey String?
+
   company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer           Customer?              @relation(fields: [customerId], references: [id])
   items              InvoiceItem[]
@@ -684,6 +692,13 @@ model Invoice {
   // Único por empresa: permite que un CFDI intercompañía viva en las dos
   // empresas (emisor + receptor) sin chocar, y evita duplicados dentro de una.
   @@unique([companyId, uuid])
+  // Reserva de idempotencia al timbrar (ver campo idempotencyKey arriba).
+  @@unique([companyId, idempotencyKey])
+  // Listados por empresa ordenados/filtrados por fecha (GET /api/facturas).
+  @@index([companyId, fecha])
+  // Forma dominante de agregados fiscales: igualdad en companyId+tipo+status
+  // y rango sobre fecha (dashboard, impuestos.computeTaxPosition, auto-conciliar).
+  @@index([companyId, tipo, status, fecha])
 }
 
 // Vínculo operativo de un CFDI con su requisición / gasto / estimación, más el
@@ -930,6 +945,13 @@ model BankTransaction {
   adjudicacionPagada    SolicitudAdjudicacion? @relation("AdjudicacionPago")
   estimacionCobrada     Estimacion?
   reservacionCobrada    Reservation?
+
+  // Conciliación: los flujos calientes filtran por cuenta + status
+  // (auto-conciliar UNMATCHED, groupBy de status en /api/bancos).
+  @@index([bankAccountId, status])
+  // Consultas por empresa con rango de fechas (reportes/listados) y el
+  // conteo de pendientes por empresa (cockpit de despacho usa el prefijo).
+  @@index([companyId, fecha])
 }
 
 enum BankTransactionType {
