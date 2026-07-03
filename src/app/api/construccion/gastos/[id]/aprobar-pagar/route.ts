@@ -34,17 +34,22 @@ import {
 } from "@/lib/authz";
 
 const bodySchema = z.object({
-  // Two mutually-exclusive paths for recording the payment:
-  //   A) bankTransactionId — Katia picks an existing tx Juan already
-  //      imported (e.g. from Santander CSV / Belvo). System just links.
-  //      Preferred — matches reconciliation with contabilidad-os.
-  //   B) fecha + referencia — fallback where a new BT is created from
-  //      scratch. Used when the tx isn't yet imported (cash-paid, for
-  //      example).
+  // Two paths for recording the payment:
+  //   A) bankTransactionId — link an EXISTING imported movement (CSV/Belvo).
+  //      Preferred — this IS the reconciliation.
+  //   B) sin bankTransactionId — sólo se registra el pago (fecha/referencia/
+  //      comprobante) SIN crear movimiento bancario. El banco es fuente de
+  //      verdad del CSV importado; el empate llega en la conciliación.
+  //      (Antes este camino creaba un BankTransaction sintético.)
   bankTransactionId: z.string().min(1).optional(),
   fecha: z.string().optional(),
   referencia: z.string().max(80).nullable().optional(),
   pagoComprobanteUrl: z.string().max(1000).nullable().optional(),
+  // Comprobante de pago directo (base64) — mismo patrón dual que el comprobante
+  // del gasto. Lo manda cuentas por pagar al registrar el pago.
+  pagoComprobanteData: z.string().nullable().optional(),
+  pagoComprobanteMime: z.string().max(80).nullable().optional(),
+  pagoComprobanteName: z.string().max(200).nullable().optional(),
 });
 
 export const POST = withAuthz(
@@ -109,8 +114,6 @@ export const POST = withAuthz(
     const user = await requireUser(req).catch(() => null);
     const userId = user?.id ?? null;
 
-    const desc = `Gasto ${gasto.beneficiarioNombre} — ${gasto.proyecto.codigo} — ${gasto.descripcion.slice(0, 80)}`;
-
     const result = await prisma.$transaction(async (tx) => {
       // Double-check under transaction to avoid race
       const fresh = await tx.gasto.findUnique({
@@ -121,7 +124,7 @@ export const POST = withAuthz(
         throw new AuthzError(409, "El gasto ya fue pagado");
       }
 
-      let bankTx;
+      let bankTx = null;
       if (parsed.data.bankTransactionId) {
         // Link existing BankTransaction — validate same company, still
         // unmatched and not already linked to another gasto.
@@ -149,35 +152,24 @@ export const POST = withAuthz(
           where: { id: existing.id },
           data: { status: "MATCHED" },
         });
-      } else {
-        // Manual-fallback path: no existing bank tx was picked, so we
-        // create a synthetic one. Tagged source="MANUAL" so admins can
-        // tell it didn't come from a CSV import. The preferred path is
-        // always to import the CSV first and pick the matching tx.
-        bankTx = await tx.bankTransaction.create({
-          data: {
-            companyId: gasto.companyId,
-            bankAccountId: gasto.bankAccountId,
-            fecha: parsed.data.fecha ? new Date(parsed.data.fecha) : new Date(),
-            descripcion: desc,
-            referencia: parsed.data.referencia ?? null,
-            monto: -Math.abs(gasto.importe),
-            tipo: "DEBITO",
-            status: "MATCHED",
-            source: "MANUAL",
-          },
-        });
       }
+      // Sin bankTransactionId: sólo registramos el pago. NO se crea movimiento
+      // bancario — el estado de cuenta se llena con el CSV importado y el
+      // empate ocurre en la conciliación.
 
+      const pagadoAt = parsed.data.fecha ? new Date(parsed.data.fecha) : new Date();
       const updated = await tx.gasto.update({
         where: { id },
         data: {
           estado: "PAGADO",
-          bankTransactionId: bankTx.id,
-          pagadoAt: new Date(),
+          bankTransactionId: bankTx?.id ?? null,
+          pagadoAt,
           aprobadoPor: userId ?? null,
           aprobadoAt: new Date(),
           pagoComprobanteUrl: parsed.data.pagoComprobanteUrl ?? undefined,
+          pagoComprobanteData: parsed.data.pagoComprobanteData ?? undefined,
+          pagoComprobanteMime: parsed.data.pagoComprobanteMime ?? undefined,
+          pagoComprobanteName: parsed.data.pagoComprobanteName ?? undefined,
         },
         include: {
           bankAccount: true,

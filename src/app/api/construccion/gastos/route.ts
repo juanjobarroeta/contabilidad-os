@@ -30,7 +30,9 @@ import {
 
 const createSchema = z.object({
   proyectoId: z.string().min(1),
-  bankAccountId: z.string().min(1),
+  // Opcional: la cuenta real se determina en la conciliación (CFDI ↔ movimiento
+  // importado). Se sigue aceptando para caja chica / datos históricos.
+  bankAccountId: z.string().min(1).nullable().optional(),
   beneficiarioNombre: z.string().min(1).max(200),
   descripcion: z.string().min(1).max(500),
   importe: z.number().positive(),
@@ -106,13 +108,17 @@ export const POST = withAuthz(async (req: Request) => {
   await requireWriter(proyecto.companyId, req);
   await requireModule(proyecto.companyId, "CONSTRUCCION");
 
-  // Validate bank account belongs to same company
-  const account = await prisma.bankAccount.findUnique({
-    where: { id: parsed.data.bankAccountId },
-    select: { id: true, companyId: true, tipo: true },
-  });
-  if (!account || account.companyId !== proyecto.companyId) {
-    return NextResponse.json({ error: "BankAccount inválido" }, { status: 400 });
+  // Validate bank account belongs to same company (only when provided — the
+  // account is optional now; conciliación resolves the real one later).
+  let account: { id: string; companyId: string; tipo: string } | null = null;
+  if (parsed.data.bankAccountId) {
+    account = await prisma.bankAccount.findUnique({
+      where: { id: parsed.data.bankAccountId },
+      select: { id: true, companyId: true, tipo: true },
+    });
+    if (!account || account.companyId !== proyecto.companyId) {
+      return NextResponse.json({ error: "BankAccount inválido" }, { status: 400 });
+    }
   }
 
   // If insumo/partida provided, validate they belong to the same company
@@ -139,13 +145,13 @@ export const POST = withAuthz(async (req: Request) => {
   const caja =
     parsed.data.caja !== undefined
       ? parsed.data.caja
-      : account.tipo === "CAJA";
+      : account?.tipo === "CAJA";
 
   const created = await prisma.gasto.create({
     data: {
       companyId: proyecto.companyId,
       proyectoId: parsed.data.proyectoId,
-      bankAccountId: parsed.data.bankAccountId,
+      bankAccountId: parsed.data.bankAccountId ?? null,
       beneficiarioNombre: parsed.data.beneficiarioNombre,
       descripcion: parsed.data.descripcion,
       importe: parsed.data.importe,
