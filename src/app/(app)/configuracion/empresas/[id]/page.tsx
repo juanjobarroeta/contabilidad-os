@@ -36,6 +36,8 @@ type CompanyDetail = {
   csdKey: string | null;
   fielCer: string | null;
   fielKey: string | null;
+  fielVigencia: string | null;
+  fielEstado?: "ok" | "por_vencer" | "vencida" | "sin_fiel";
 };
 
 const REGIMENES = [
@@ -118,6 +120,22 @@ export default function EmpresaEditPage() {
 
   const hasCsd = !!(company?.csdCer);
   const hasFiel = !!(company?.fielCer);
+  // Vigencia de la e.firma: "Configurada" ya no basta — un certificado vencido
+  // detiene la sincronización con el SAT aunque los archivos estén cargados.
+  const fielEstado = hasFiel ? (company?.fielEstado ?? "ok") : "sin_fiel";
+  const fielVigenciaFmt = company?.fielVigencia
+    ? new Date(company.fielVigencia).toLocaleDateString("es-MX", {
+        day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Mexico_City",
+      })
+    : null;
+  const fielBadge =
+    fielEstado === "vencida"
+      ? { clase: "bg-cos-red-tint text-cos-red-ink", texto: fielVigenciaFmt ? `Vencida el ${fielVigenciaFmt} — renueva tu e.firma en el SAT` : "Vencida — renueva tu e.firma en el SAT" }
+      : fielEstado === "por_vencer"
+        ? { clase: "bg-cos-amber-tint text-cos-amber-ink", texto: fielVigenciaFmt ? `Vence el ${fielVigenciaFmt}` : "Por vencer" }
+        : fielEstado === "ok"
+          ? { clase: "bg-cos-jade-tint text-cos-jade-ink", texto: fielVigenciaFmt ? `Vigente hasta ${fielVigenciaFmt}` : "✓ Configurada" }
+          : { clase: "bg-cos-amber-tint text-cos-amber-ink", texto: "Sin configurar" };
 
   async function handleSaveGeneral() {
     setGeneralSaving(true);
@@ -402,8 +420,8 @@ export default function EmpresaEditPage() {
             <Shield className="h-4 w-4 text-cos-amber-ink" />
             e.firma / FIEL
           </h2>
-          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${hasFiel ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-amber-tint text-cos-amber-ink"}`}>
-            {hasFiel ? "✓ Configurada" : "Sin configurar"}
+          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${fielBadge.clase}`}>
+            {fielBadge.texto}
           </span>
         </div>
         <p className="text-xs text-cos-ink-soft mb-3">

@@ -1,4 +1,5 @@
 import { Fiel } from "@nodecfdi/sat-ws-descarga-masiva";
+import { Certificate } from "@nodecfdi/credentials/node";
 import { prisma } from "./prisma";
 import { decryptSecret } from "./crypto";
 
@@ -31,6 +32,57 @@ export async function getFielForCompany(companyId: string): Promise<Fiel> {
   }
 
   return fiel;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vigencia de la e.firma. Una FIEL vencida rompe la descarga masiva EN SILENCIO
+// (Fiel.isValid() → false y el cron sólo acumula el error), así que exponemos
+// las fechas del certificado para poder avisar ANTES y explicar DESPUÉS.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FielVigencia {
+  /** ¿El certificado está vigente HOY? (false también si no se pudo parsear) */
+  valida: boolean;
+  validoDesde?: Date;
+  validoHasta?: Date;
+  rfc?: string;
+}
+
+/**
+ * Vigencia de un certificado .cer (PEM, DER o DER base64 — el formato en que se
+ * almacena tras descifrar). PURA y sin excepciones: cualquier error de parseo
+ * devuelve `{ valida: false }`.
+ */
+export function parseFielVigencia(cerContents: string): FielVigencia {
+  try {
+    const cert = new Certificate(cerContents);
+    return {
+      valida: cert.validOn(),
+      validoDesde: cert.validFrom(),
+      validoHasta: cert.validTo(),
+      rfc: cert.rfc() || undefined,
+    };
+  } catch {
+    return { valida: false };
+  }
+}
+
+/**
+ * Vigencia de la FIEL almacenada de una empresa. Nunca lanza: `null` si la
+ * empresa no existe o no tiene .cer; `{ valida: false }` si no se pudo parsear
+ * (cifrado corrupto, clave de cifrado ausente, certificado ilegible).
+ */
+export async function getFielVigenciaForCompany(companyId: string): Promise<FielVigencia | null> {
+  try {
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { fielCer: true },
+    });
+    if (!company?.fielCer) return null;
+    return parseFielVigencia(decryptSecret(company.fielCer));
+  } catch {
+    return { valida: false };
+  }
 }
 
 /** Parse key fields from a CFDI XML string */
