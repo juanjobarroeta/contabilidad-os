@@ -48,10 +48,15 @@ async function categoriaHabilitada(userId: string, categoria?: NotifCategoria): 
 }
 
 /**
- * Usuarios con acceso a una empresa (para notificar a TODOS los que la operan):
- * miembros directos (CompanyMember) ∪ miembros del despacho dueño (respetando
- * el scoping por empresa) ∪ operadores de plataforma. Antes sólo se notificaba
- * a CompanyMember, dejando fuera a contadores del despacho y al operador.
+ * Usuarios a notificar por una empresa: miembros directos (CompanyMember) ∪
+ * miembros del despacho dueño (respetando el scoping por empresa).
+ *
+ * Operadores de plataforma: ya NO entran de forma incondicional (antes CADA
+ * operador recibía un push por CADA notificación de CADA empresa — puro spam).
+ * Un operador sólo entra si optó explícitamente por el "firehose" con
+ * `notifPrefs.operadorTodasLasEmpresas === true` (opt-IN, default OFF — a
+ * diferencia de las categorías, que son opt-out). Un operador que además es
+ * miembro directo o del despacho sigue recibiendo por esa vía, como cualquiera.
  */
 export async function usuariosConAccesoACompany(companyId: string): Promise<string[]> {
   const ids = new Set<string>();
@@ -59,27 +64,28 @@ export async function usuariosConAccesoACompany(companyId: string): Promise<stri
   const [company, direct, operadores] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { despachoId: true } }),
     prisma.companyMember.findMany({ where: { companyId }, select: { userId: true } }),
-    prisma.user.findMany({ where: { esOperador: true }, select: { id: true } }),
+    prisma.user.findMany({ where: { esOperador: true }, select: { id: true, notifPrefs: true } }),
   ]);
   direct.forEach((m) => ids.add(m.userId));
-  operadores.forEach((o) => ids.add(o.id));
+  for (const o of operadores) {
+    const prefs = (o.notifPrefs ?? {}) as Record<string, boolean>;
+    if (prefs.operadorTodasLasEmpresas === true) ids.add(o.id);
+  }
 
   if (company?.despachoId) {
+    // Un solo query (antes era N+1: count + findFirst por miembro): entra el
+    // miembro sin scoping (ve todas las del despacho) o con scope a ESTA empresa.
     const dms = await prisma.despachoMember.findMany({
-      where: { despachoId: company.despachoId },
-      select: { id: true, userId: true },
+      where: {
+        despachoId: company.despachoId,
+        OR: [
+          { companyScopes: { none: {} } },
+          { companyScopes: { some: { companyId } } },
+        ],
+      },
+      select: { userId: true },
     });
-    for (const dm of dms) {
-      const scopeCount = await prisma.despachoMemberCompany.count({ where: { despachoMemberId: dm.id } });
-      if (scopeCount === 0) {
-        ids.add(dm.userId); // sin scoping = ve todas las del despacho
-      } else {
-        const has = await prisma.despachoMemberCompany.findFirst({
-          where: { despachoMemberId: dm.id, companyId },
-        });
-        if (has) ids.add(dm.userId);
-      }
-    }
+    dms.forEach((dm) => ids.add(dm.userId));
   }
   return [...ids];
 }
@@ -114,7 +120,7 @@ export async function sendPushToUser(
   return { sent, configured: true };
 }
 
-/** Send a push to everyone with access to a company (members + despacho + operadores). */
+/** Send a push a quienes operan la empresa (miembros + despacho; operadores sólo con opt-in). */
 export async function sendPushToCompany(
   companyId: string,
   payload: PushPayload,

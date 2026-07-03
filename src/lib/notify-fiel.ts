@@ -7,13 +7,14 @@ import { usuariosConAccesoACompany } from "./push";
 //
 // Una FIEL vencida detiene la descarga masiva de CFDIs SIN que nadie se entere:
 // el cron sat-sync acumula el error, responde 200 y `lastAutoSyncAt` deja de
-// avanzar. Estos avisos hacen visible el problema a TODOS los que operan la
-// empresa (miembros + despacho + operadores), persistidos en el inbox de
+// avanzar. Estos avisos hacen visible el problema a quienes operan la empresa
+// (miembros + despacho; operadores sólo con opt-in), persistidos en el inbox de
 // Pendientes con push. La idempotencia es por (usuario, dedupeKey):
 //
-//   - fiel-invalida:<companyId>            — mientras siga rota, un re-disparo
-//     de algo VISTO vuelve a NUEVO (state machine de notificaciones); HECHO y
-//     POSPUESTO vigente se respetan, así que no hay spam.
+//   - fiel-invalida:<companyId>            — el push sale al CREAR el item; los
+//     re-disparos del cron con el mismo texto ya no re-empujan ni flippean
+//     VISTO→NUEVO (ver `decidirNotificacion`); HECHO y POSPUESTO vigente se
+//     respetan, así que no hay spam.
 //   - fiel-por-vencer:<companyId>:<YYYY-MM> — un recordatorio por mes mientras
 //     se acerque el vencimiento.
 //

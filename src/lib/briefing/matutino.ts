@@ -10,7 +10,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { empresasAccesiblesIds } from "@/lib/authz";
-import { registrarYNotificar } from "@/lib/notificaciones";
+import { registrarYNotificar, fechaLocalMx } from "@/lib/notificaciones";
 import {
   construirBriefing,
   construirRecordatorioEstadoCuenta,
@@ -90,6 +90,13 @@ export async function enviarBriefingUsuario(
   const brief = construirBriefing(empresas);
   const rec = construirRecordatorioEstadoCuenta(empresasConEstadoCuentaVencido(empresas));
 
+  // Digest DIARIO intencional: el dedupeKey va fechado (día local de México) y
+  // el push se reserva a la creación (`pushSoloAlCrear`). Así el briefing empuja
+  // EXACTAMENTE una vez al día aunque el contenido no cambie entre días (con la
+  // clave estática de antes, la regla "sin novedad → sin push" lo silenciaría),
+  // y un re-corrido del cron el mismo día sólo refresca el item, sin re-push.
+  const dia = fechaLocalMx(hoy);
+
   let briefing = false;
   let recordatorio = false;
   if (brief) {
@@ -101,8 +108,9 @@ export async function enviarBriefingUsuario(
       titulo: brief.title,
       cuerpo: brief.body,
       url: brief.url,
-      dedupeKey: "briefing-matutino",
+      dedupeKey: `briefing-matutino:${dia}`,
       categoriaPush: "revision",
+      pushSoloAlCrear: true,
     });
     briefing = r.pushSent;
   }
@@ -114,8 +122,9 @@ export async function enviarBriefingUsuario(
       titulo: rec.title,
       cuerpo: rec.body,
       url: rec.url,
-      dedupeKey: "estado-cuenta",
+      dedupeKey: `estado-cuenta:${dia}`,
       categoriaPush: "revision",
+      pushSoloAlCrear: true,
     });
     recordatorio = r.pushSent;
   }
