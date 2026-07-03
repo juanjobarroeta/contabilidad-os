@@ -111,6 +111,18 @@ export default function SignupPage() {
             >
               {loading ? "Creando cuenta..." : "Empezar prueba gratis"}
             </button>
+
+            <p className="text-xs text-cos-ink-soft text-center">
+              Al crear tu cuenta aceptas los{" "}
+              <Link href="/legal/terminos" className="text-cos-brand-ink hover:underline">
+                Términos y Condiciones
+              </Link>{" "}
+              y el{" "}
+              <Link href="/legal/aviso-de-privacidad" className="text-cos-brand-ink hover:underline">
+                Aviso de Privacidad
+              </Link>
+              .
+            </p>
           </form>
 
           <p className="text-sm text-cos-ink-soft mt-6 text-center">
@@ -120,6 +132,16 @@ export default function SignupPage() {
             </Link>
           </p>
         </div>
+
+        <p className="text-xs text-cos-ink-faint mt-4 text-center">
+          <Link href="/legal/aviso-de-privacidad" className="hover:text-cos-brand-ink hover:underline">
+            Aviso de Privacidad
+          </Link>
+          {" · "}
+          <Link href="/legal/terminos" className="hover:text-cos-brand-ink hover:underline">
+            Términos y Condiciones
+          </Link>
+        </p>
       </div>
     </div>
   );
