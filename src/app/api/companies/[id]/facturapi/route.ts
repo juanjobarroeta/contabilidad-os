@@ -60,10 +60,22 @@ export async function PATCH(req: Request, { params }: Params) {
   const { apiKey, orgId } = await req.json();
   if (!apiKey) return NextResponse.json({ error: "apiKey requerido" }, { status: 400 });
 
+  // Encrypt before persisting. In production encryptSecret throws if
+  // CREDENTIALS_ENCRYPTION_KEY is missing/invalid (never store plaintext) —
+  // surface that as a clean 500 instead of an unhandled crash.
+  let apiKeyCifrada: string;
+  try {
+    apiKeyCifrada = encryptSecret(apiKey);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error de cifrado";
+    console.error("[facturapi/PATCH] cifrado de la API key falló:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+
   await prisma.company.update({
     where: { id: companyId },
     data: {
-      facturapiApiKey: encryptSecret(apiKey), // encrypted at rest
+      facturapiApiKey: apiKeyCifrada, // encrypted at rest
       ...(orgId ? { facturapiOrgId: orgId } : {}),
     },
   });

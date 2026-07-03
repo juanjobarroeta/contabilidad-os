@@ -72,12 +72,34 @@ export function decryptWithKey(stored: string, key: Buffer): string {
 }
 
 /**
- * Encrypt a secret for storage. If no key is configured we fall back to storing
- * plaintext (so dev still works) but warn loudly — production MUST set the key.
+ * Encrypt a secret for storage.
+ *
+ * - Production: CREDENTIALS_ENCRYPTION_KEY is REQUIRED. If it's missing or
+ *   invalid we THROW instead of writing plaintext — a secret must never be
+ *   stored sin cifrar in production. Callers surface the error as a 500 with
+ *   the Spanish message.
+ * - Development: without a key we fall back to plaintext (so local dev works)
+ *   but warn loudly. An invalid key still throws (config typo — fix it).
  */
 export function encryptSecret(plaintext: string): string {
-  const key = getKey();
+  const isProduction = process.env.NODE_ENV === "production";
+  let key: Buffer | null;
+  try {
+    key = getKey();
+  } catch (e) {
+    if (isProduction) {
+      throw new Error(
+        "CREDENTIALS_ENCRYPTION_KEY no es válida (debe ser 32 bytes en base64; genera una con: openssl rand -base64 32). El secreto no fue guardado."
+      );
+    }
+    throw e; // desarrollo: la clave existe pero es inválida — superficie el error de configuración
+  }
   if (!key) {
+    if (isProduction) {
+      throw new Error(
+        "CREDENTIALS_ENCRYPTION_KEY es obligatoria en producción: el secreto no fue guardado para no almacenarlo en texto claro. Configura la variable (32 bytes en base64; genera una con: openssl rand -base64 32) y vuelve a intentar."
+      );
+    }
     console.warn(
       "[crypto] CREDENTIALS_ENCRYPTION_KEY not set — storing secret WITHOUT encryption. Set it in production."
     );

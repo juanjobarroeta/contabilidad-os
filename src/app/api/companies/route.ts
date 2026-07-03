@@ -249,6 +249,29 @@ export async function POST(req: Request) {
   }
   const regimenCreate = [...regimenByCode.values()];
 
+  // Encrypt credential material before persisting. In production
+  // encryptSecret/encryptNullable throw if CREDENTIALS_ENCRYPTION_KEY is
+  // missing/invalid (never store plaintext) — surface that as a clean 500
+  // instead of an unhandled crash.
+  let credencialesCifradas: {
+    csdCer?: string; csdKey?: string; csdPassword?: string;
+    fielCer?: string; fielKey?: string; fielPassword?: string;
+  };
+  try {
+    credencialesCifradas = {
+      csdCer: encryptNullable(csdCer),
+      csdKey: encryptNullable(csdKey),
+      csdPassword: encryptNullable(csdPassword),
+      fielCer: encryptNullable(fielCer),
+      fielKey: encryptNullable(fielKey),
+      fielPassword: encryptNullable(fielPassword),
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error de cifrado";
+    console.error("[companies/POST] cifrado de credenciales falló:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+
   const company = await prisma.company.create({
     data: {
       rfc: rfc.toUpperCase(),
@@ -260,12 +283,7 @@ export async function POST(req: Request) {
       email,
       telefono,
       actividadEconomica,
-      csdCer: encryptNullable(csdCer),
-      csdKey: encryptNullable(csdKey),
-      csdPassword: encryptNullable(csdPassword),
-      fielCer: encryptNullable(fielCer),
-      fielKey: encryptNullable(fielKey),
-      fielPassword: encryptNullable(fielPassword),
+      ...credencialesCifradas,
       fielVigencia: fielCer ? parseCertExpiry(fielCer) : undefined, // e.firma expiry
 
       fechaInicioOperaciones: fechaInicioOperaciones ?? undefined,
