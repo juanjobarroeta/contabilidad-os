@@ -53,7 +53,7 @@ async function categoriaHabilitada(userId: string, categoria?: NotifCategoria): 
  * el scoping por empresa) ∪ operadores de plataforma. Antes sólo se notificaba
  * a CompanyMember, dejando fuera a contadores del despacho y al operador.
  */
-async function usuariosConAccesoACompany(companyId: string): Promise<string[]> {
+export async function usuariosConAccesoACompany(companyId: string): Promise<string[]> {
   const ids = new Set<string>();
 
   const [company, direct, operadores] = await Promise.all([

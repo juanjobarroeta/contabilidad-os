@@ -59,6 +59,8 @@ interface CompanyDetail {
   csdKey?: string;
   fielCer?: string;
   fielKey?: string;
+  fielVigencia?: string | null;
+  fielEstado?: "ok" | "por_vencer" | "vencida" | "sin_fiel";
   registroPatronal?: string | null;
   plataformaActividad?: string | null;
 }
@@ -580,6 +582,22 @@ export default function EmpresaPage() {
   const isConnected = !!(companyDetail?.facturapiApiKey);
   const hasCsd = !!(companyDetail?.csdCer && companyDetail?.csdKey);
   const hasFiel = !!(companyDetail?.fielCer && companyDetail?.fielKey);
+  // Vigencia de la e.firma: "Configurada" ya no basta — un certificado vencido
+  // detiene la sincronización con el SAT aunque los archivos estén cargados.
+  const fielEstado = hasFiel ? (companyDetail?.fielEstado ?? "ok") : "sin_fiel";
+  const fielVigenciaFmt = companyDetail?.fielVigencia
+    ? new Date(companyDetail.fielVigencia).toLocaleDateString("es-MX", {
+        day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Mexico_City",
+      })
+    : null;
+  const fielBadge =
+    fielEstado === "vencida"
+      ? { clase: "bg-cos-red-tint text-cos-red-ink", texto: fielVigenciaFmt ? `Vencida el ${fielVigenciaFmt}` : "Vencida" }
+      : fielEstado === "por_vencer"
+        ? { clase: "bg-cos-amber-tint text-cos-amber-ink", texto: fielVigenciaFmt ? `Vence el ${fielVigenciaFmt}` : "Por vencer" }
+        : fielEstado === "ok"
+          ? { clase: "bg-cos-jade-tint text-cos-jade-ink", texto: fielVigenciaFmt ? `Vigente hasta ${fielVigenciaFmt}` : "✓ Configurada" }
+          : { clase: "bg-cos-amber-tint text-cos-amber-ink", texto: "Sin configurar" };
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -1072,18 +1090,30 @@ export default function EmpresaPage() {
                 <p className="text-xs text-cos-ink-soft">Requerida para sincronizar CFDIs del SAT</p>
               </div>
             </div>
-            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${hasFiel ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-amber-tint text-cos-amber-ink"}`}>
-              {hasFiel ? "✓ Configurada" : "Sin configurar"}
+            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${fielBadge.clase}`}>
+              {fielBadge.texto}
             </span>
           </div>
 
           <div className="px-5 py-4 space-y-4">
             {hasFiel ? (
               <div className="space-y-3">
-                <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-4 py-3 text-sm text-cos-jade-ink">
-                  <p className="font-medium">e.firma almacenada de forma segura</p>
-                  <p className="text-xs mt-0.5 text-cos-jade-ink">Usada para descargar CFDIs del SAT. Actualiza los archivos si tu e.firma expiró o cambió.</p>
-                </div>
+                {fielEstado === "vencida" ? (
+                  <div className="bg-cos-red-tint border border-cos-red-ink/20 rounded-lg px-4 py-3 text-sm text-cos-red-ink">
+                    <p className="font-medium">e.firma vencida{fielVigenciaFmt ? ` el ${fielVigenciaFmt}` : ""} — la sincronización con el SAT está detenida</p>
+                    <p className="text-xs mt-0.5">Renueva tu e.firma en el SAT y vuelve a subir los archivos .cer y .key para reanudar la descarga de CFDIs.</p>
+                  </div>
+                ) : fielEstado === "por_vencer" ? (
+                  <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-4 py-3 text-sm text-cos-amber-ink">
+                    <p className="font-medium">Tu e.firma vence{fielVigenciaFmt ? ` el ${fielVigenciaFmt}` : " pronto"}</p>
+                    <p className="text-xs mt-0.5">Renuévala en el SAT y actualiza los archivos .cer y .key para que la sincronización de CFDIs no se interrumpa.</p>
+                  </div>
+                ) : (
+                  <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-4 py-3 text-sm text-cos-jade-ink">
+                    <p className="font-medium">e.firma almacenada de forma segura</p>
+                    <p className="text-xs mt-0.5 text-cos-jade-ink">Usada para descargar CFDIs del SAT. Actualiza los archivos si tu e.firma expiró o cambió.</p>
+                  </div>
+                )}
                 <p className="text-xs text-cos-ink-soft">Para actualizar, sube los nuevos archivos:</p>
               </div>
             ) : (

@@ -5,7 +5,7 @@ import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { provisionCompany } from "@/lib/fiscal/cumplimiento/syntage/provision";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
-import { parseCertExpiry } from "@/lib/fiel";
+import { fielStatus, parseCertExpiry } from "@/lib/fiel";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -54,6 +54,10 @@ export async function GET(_req: Request, { params }: Params) {
 
   if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Vigencia efectiva de la e.firma: usa fielVigencia guardada o parsea el .cer
+  // en vivo (empresas cargadas antes de que existiera el campo — sin backfill).
+  const fiel = fielStatus({ fielCer: company.fielCer, fielVigencia: company.fielVigencia });
+
   // Mask the actual cert content for security — just signal presence
   return NextResponse.json({
     ...company,
@@ -61,6 +65,8 @@ export async function GET(_req: Request, { params }: Params) {
     csdKey: company.csdKey ? "[stored]" : null,
     fielCer: company.fielCer ? "[stored]" : null,
     fielKey: company.fielKey ? "[stored]" : null,
+    fielVigencia: fiel.vigencia, // ISO o null
+    fielEstado: fiel.estado, // "ok" | "por_vencer" | "vencida" | "sin_fiel"
   });
 }
 

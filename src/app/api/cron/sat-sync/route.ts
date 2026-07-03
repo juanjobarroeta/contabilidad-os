@@ -4,6 +4,8 @@ import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
 import { notifyIvaChanges } from "@/lib/iva-change-notify";
 import { notifyNewInvoices } from "@/lib/notify-new-invoices";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
+import { fielStatus } from "@/lib/fiel";
+import { notificarFielInvalida, notificarFielPorVencer } from "@/lib/notify-fiel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-sync
@@ -79,7 +81,7 @@ async function handle(req: Request) {
       fielKey: { not: null },
       fielPassword: { not: null },
     },
-    select: { id: true, rfc: true, fechaInicioOperaciones: true },
+    select: { id: true, rfc: true, fechaInicioOperaciones: true, fielCer: true, fielVigencia: true },
   });
 
   const periods = periodsToSync(monthsBack);
@@ -89,14 +91,35 @@ async function handle(req: Request) {
   let totalSubmitted = 0;
   let totalNotified = 0;
   let totalConciliated = 0;
+  let fielAvisos = 0;
   const errors: Array<{ companyId: string; rfc: string; error: string }> = [];
+
+  // Mensaje lanzado por getFielForCompany cuando Fiel.isValid() es false. Sólo
+  // ese caso amerita aviso al usuario — los errores transitorios del SAT no.
+  const FIEL_INVALIDA_RE = /FIEL inválida o expirada/;
 
   for (const company of companies) {
     let companyTouched = false;
+    // Aviso "fiel-invalida" a lo más UNA vez por empresa por corrida (la FIEL
+    // rota falla igual en cada periodo; el upsert por dedupeKey ya deduplica
+    // entre corridas, esto sólo evita 3 pushes en la misma).
+    let fielInvalidaAvisada = false;
     // Mark the start so we can detect which CFDIs this run newly imported
     // (Invoice.createdAt >= companyRunStart) for the push digest below.
     const companyRunStart = new Date();
     try {
+      // Aviso preventivo: FIEL por vencer (≤30 días). Best-effort — nunca debe
+      // impedir el sync, que puede seguir funcionando mientras esté vigente.
+      try {
+        const fiel = fielStatus({ fielCer: company.fielCer, fielVigencia: company.fielVigencia });
+        if (fiel.estado === "por_vencer" && fiel.vigencia) {
+          const r = await notificarFielPorVencer(company.id, new Date(fiel.vigencia));
+          fielAvisos += r.notificados;
+        }
+      } catch (e) {
+        console.error(`[cron/sat-sync] aviso fiel-por-vencer ${company.id} falló:`, e);
+      }
+
       for (const { year, month } of periods) {
         // Skip periods that end before the company started operating.
         if (company.fechaInicioOperaciones) {
@@ -109,6 +132,17 @@ async function handle(req: Request) {
           // Period not complete yet (400) is expected/benign — skip quietly.
           if (submitted.status !== 400) {
             errors.push({ companyId: company.id, rfc: company.rfc, error: submitted.error });
+            // FIEL vencida/inválida: el sync de ESTA empresa está muerto hasta
+            // que renueven la e.firma — avisar a quienes la operan (una vez).
+            if (!fielInvalidaAvisada && FIEL_INVALIDA_RE.test(submitted.error)) {
+              fielInvalidaAvisada = true;
+              try {
+                const r = await notificarFielInvalida(company.id);
+                fielAvisos += r.notificados;
+              } catch (e) {
+                console.error(`[cron/sat-sync] aviso fiel-invalida ${company.id} falló:`, e);
+              }
+            }
           }
           continue;
         }
@@ -166,11 +200,18 @@ async function handle(req: Request) {
       }
     } catch (e) {
       console.error(`[cron/sat-sync] company ${company.id} failed:`, e);
-      errors.push({
-        companyId: company.id,
-        rfc: company.rfc,
-        error: e instanceof Error ? e.message : String(e),
-      });
+      const message = e instanceof Error ? e.message : String(e);
+      errors.push({ companyId: company.id, rfc: company.rfc, error: message });
+      // Mismo aviso si el error de FIEL escapó como excepción de otra llamada.
+      if (!fielInvalidaAvisada && FIEL_INVALIDA_RE.test(message)) {
+        fielInvalidaAvisada = true;
+        try {
+          const r = await notificarFielInvalida(company.id);
+          fielAvisos += r.notificados;
+        } catch (err) {
+          console.error(`[cron/sat-sync] aviso fiel-invalida ${company.id} falló:`, err);
+        }
+      }
     }
   }
 
@@ -183,6 +224,7 @@ async function handle(req: Request) {
     imported: totalImported,
     notified: totalNotified,
     conciliated: totalConciliated,
+    fielAvisos,
     errors,
     elapsedMs: Date.now() - startedAt,
   };
