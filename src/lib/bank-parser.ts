@@ -11,11 +11,22 @@ export interface ParsedTransaction {
   saldo?: number;
 }
 
+/** Fila del archivo que NO se convirtió en transacción, con el motivo.
+ *  `fila` es 1-based: línea del archivo (CSV), fila de la tabla (XLS/XML)
+ *  o número de bloque STMTTRN (OFX). El banco es la fuente de verdad, así
+ *  que nunca descartamos filas en silencio: todo lo omitido se reporta. */
+export interface RowDescartada {
+  fila: number;
+  motivo: string;
+}
+
 export interface ParseResult {
   transactions: ParsedTransaction[];
   format: "csv" | "ofx" | "spreadsheetml";
   detectedBank?: string;
   warnings: string[];
+  /** Filas con contenido que se omitieron (fecha/monto ilegibles, etc.). */
+  descartadas: RowDescartada[];
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -48,33 +59,50 @@ export function parseStatement(content: string, filename: string): ParseResult {
 function parseOFX(content: string): ParseResult {
   const warnings: string[] = [];
   const transactions: ParsedTransaction[] = [];
+  const descartadas: RowDescartada[] = [];
 
   // Handle both SGML (old OFX) and XML (new OFX) formats
   const trnRegex = /<STMTTRN>([\s\S]*?)(?:<\/STMTTRN>|(?=<STMTTRN>)|$)/gi;
   let match: RegExpExecArray | null;
+  let fila = 0; // número de bloque <STMTTRN> (1-based)
 
   // eslint-disable-next-line no-cond-assign
   while ((match = trnRegex.exec(content)) !== null) {
+    fila++;
     const block = match[1];
     const amtStr  = extractOFXTag(block, "TRNAMT");
     const dateStr = extractOFXTag(block, "DTPOSTED");
     const memo    = extractOFXTag(block, "MEMO") ?? extractOFXTag(block, "NAME") ?? "";
     const fitid   = extractOFXTag(block, "FITID");
 
-    if (!amtStr || !dateStr) continue;
+    if (!amtStr) { descartadas.push({ fila, motivo: "monto ausente (sin TRNAMT)" }); continue; }
+    if (!dateStr) { descartadas.push({ fila, motivo: "fecha ausente (sin DTPOSTED)" }); continue; }
 
     const fecha = parseOFXDate(dateStr);
-    if (!fecha) { warnings.push(`Fecha inválida: ${dateStr}`); continue; }
+    if (!fecha) {
+      warnings.push(`Fecha inválida: ${dateStr}`);
+      descartadas.push({ fila, motivo: `fecha inválida: ${dateStr}` });
+      continue;
+    }
+
+    // OJO: TRNAMT puede venir con coma decimal (1234,56) O con separador de
+    // miles (1,234.56). Un replace(",", ".") ciego rompía los miles
+    // (1,234.56 → 1.234). Usamos el mismo parser robusto que el CSV.
+    const monto = parseMXNumber(amtStr);
+    if (isNaN(monto)) {
+      descartadas.push({ fila, motivo: `monto inválido: ${amtStr}` });
+      continue;
+    }
 
     transactions.push({
       fecha,
       descripcion: memo.trim(),
-      monto: parseFloat(amtStr.replace(",", ".")),
+      monto,
       referencia: fitid ?? undefined,
     });
   }
 
-  return { transactions, format: "ofx", warnings };
+  return { transactions, format: "ofx", warnings, descartadas };
 }
 
 function extractOFXTag(block: string, tag: string): string | null {
@@ -92,6 +120,7 @@ function parseOFXDate(s: string): Date | null {
 // ── CSV parser ────────────────────────────────────────────────────────────────
 function parseCSV(content: string): ParseResult {
   const warnings: string[] = [];
+  const descartadas: RowDescartada[] = [];
 
   // 1. Detect separator (scan multiple lines — header may not be on line 1)
   const sep = detectSeparator(content);
@@ -101,14 +130,14 @@ function parseCSV(content: string): ParseResult {
     .map(row => row.map(cell => cell.trim().replace(/^["']|["']$/g, "")));
 
   if (rows.length < 2) {
-    return { transactions: [], format: "csv", warnings: ["El archivo no tiene suficientes filas"] };
+    return { transactions: [], format: "csv", warnings: ["El archivo no tiene suficientes filas"], descartadas };
   }
 
   // 2.5 — Banco del Bajío has no header row. First row is "Saldo Inicial",
   // subsequent rows are: cuenta, fecha, id1, referencia, descripcion, num,
   // cargo, abono, saldo, id2. Detect by "Saldo Inicial" in row 0.
   if (rows[0]?.some(c => c.toLowerCase().includes("saldo inicial"))) {
-    return parseBajio(rows, warnings);
+    return parseBajio(rows, warnings, descartadas);
   }
 
   // 3. Find the header row (scan up to 25 rows — Banamex has 16 summary lines)
@@ -139,27 +168,41 @@ function parseCSV(content: string): ParseResult {
 
   if (dateCol < 0) {
     warnings.push("No se encontró columna de fecha. Verifica el formato del archivo.");
-    return { transactions: [], format: "csv", warnings, detectedBank };
+    return { transactions: [], format: "csv", warnings, detectedBank, descartadas };
   }
   if (amountCol < 0 && (debitCol < 0 || creditCol < 0)) {
     warnings.push("No se encontró columna de monto. Verifica el formato del archivo.");
-    return { transactions: [], format: "csv", warnings, detectedBank };
+    return { transactions: [], format: "csv", warnings, detectedBank, descartadas };
   }
 
   // 5. Parse data rows
   const transactions: ParsedTransaction[] = [];
   const dataRows = rows.slice(headerIdx + 1);
 
-  for (const row of dataRows) {
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i];
+    const fila = headerIdx + i + 2; // línea 1-based en el archivo
     if (row.every(c => !c)) continue; // blank row
 
-    const fecha = parseDateMX(row[dateCol] ?? "");
-    if (!fecha) continue;
+    const rawFecha = (row[dateCol] ?? "").trim();
+    const fecha = parseDateMX(rawFecha);
+    if (!fecha) {
+      // Nunca en silencio: la fila tenía contenido pero la fecha no se entendió
+      // (o es una fila de resumen/pie sin fecha). El usuario decide.
+      descartadas.push({
+        fila,
+        motivo: rawFecha ? `fecha inválida: ${rawFecha}` : "fecha vacía",
+      });
+      continue;
+    }
 
     let monto: number;
+    let rawMonto: string;
     if (amountCol >= 0) {
-      monto = parseMXNumber(row[amountCol] ?? "");
+      rawMonto = row[amountCol] ?? "";
+      monto = parseMXNumber(rawMonto);
     } else {
+      rawMonto = `cargo="${row[debitCol] ?? ""}" abono="${row[creditCol] ?? ""}"`;
       const credit = parseMXNumber(row[creditCol] ?? "");
       const debit  = parseMXNumber(row[debitCol] ?? "");
       // NaN means empty cell (e.g. "-" or blank) — treat as 0
@@ -169,7 +212,14 @@ function parseCSV(content: string): ParseResult {
       monto = creditVal !== 0 ? Math.abs(creditVal) : -Math.abs(debitVal);
     }
 
-    if (isNaN(monto) || monto === 0) continue;
+    if (isNaN(monto)) {
+      descartadas.push({ fila, motivo: `monto inválido: ${rawMonto}` });
+      continue;
+    }
+    if (monto === 0) {
+      descartadas.push({ fila, motivo: `monto en cero o vacío: ${rawMonto}` });
+      continue;
+    }
 
     // Extract description
     let desc = descCol >= 0 ? (row[descCol] ?? "") : row.join(" ");
@@ -191,25 +241,37 @@ function parseCSV(content: string): ParseResult {
     });
   }
 
-  return { transactions, format: "csv", detectedBank, warnings };
+  return { transactions, format: "csv", detectedBank, warnings, descartadas };
 }
 
 // ── Banco del Bajío (no header row, fixed columns) ───────────────────────────
-function parseBajio(rows: string[][], warnings: string[]): ParseResult {
+function parseBajio(rows: string[][], warnings: string[], descartadas: RowDescartada[]): ParseResult {
   const transactions: ParsedTransaction[] = [];
   // Skip row 0 (Saldo Inicial). Layout per row:
   //   0=cuenta 1=fecha 2=id1 3=referencia 4=descripcion 5=num 6=cargo 7=abono 8=saldo 9=id2
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
+    const fila = i + 1; // línea 1-based en el archivo
     if (!row || row.every(c => !c)) continue;
 
-    const fecha = parseDateMX(row[1] ?? "");
-    if (!fecha) continue;
+    const rawFecha = (row[1] ?? "").trim();
+    const fecha = parseDateMX(rawFecha);
+    if (!fecha) {
+      descartadas.push({ fila, motivo: rawFecha ? `fecha inválida: ${rawFecha}` : "fecha vacía" });
+      continue;
+    }
 
     const cargo = parseMXNumber(row[6] ?? "");
     const abono = parseMXNumber(row[7] ?? "");
-    const monto = abono !== 0 ? Math.abs(abono) : -Math.abs(cargo);
-    if (monto === 0) continue;
+    if (isNaN(cargo) && isNaN(abono)) {
+      descartadas.push({ fila, motivo: `monto inválido: cargo="${row[6] ?? ""}" abono="${row[7] ?? ""}"` });
+      continue;
+    }
+    const monto = (!isNaN(abono) && abono !== 0) ? Math.abs(abono) : -Math.abs(isNaN(cargo) ? 0 : cargo);
+    if (monto === 0) {
+      descartadas.push({ fila, motivo: `monto en cero o vacío: cargo="${row[6] ?? ""}" abono="${row[7] ?? ""}"` });
+      continue;
+    }
 
     transactions.push({
       fecha,
@@ -225,6 +287,7 @@ function parseBajio(rows: string[][], warnings: string[]): ParseResult {
     format: "csv",
     detectedBank: "Banco del Bajío",
     warnings,
+    descartadas,
   };
 }
 
@@ -233,6 +296,7 @@ function parseBajio(rows: string[][], warnings: string[]): ParseResult {
 function parseSpreadsheetML(content: string): ParseResult {
   const warnings: string[] = [];
   const transactions: ParsedTransaction[] = [];
+  const descartadas: RowDescartada[] = [];
 
   // Detect bank from author/company metadata
   let detectedBank: string | undefined;
@@ -274,7 +338,7 @@ function parseSpreadsheetML(content: string): ParseResult {
   }
 
   if (rows.length < 2) {
-    return { transactions: [], format: "spreadsheetml", warnings: ["Archivo XLS sin filas suficientes"], detectedBank };
+    return { transactions: [], format: "spreadsheetml", warnings: ["Archivo XLS sin filas suficientes"], detectedBank, descartadas };
   }
 
   // Find header row — look for "Fecha" + amount keyword
@@ -289,7 +353,7 @@ function parseSpreadsheetML(content: string): ParseResult {
   }
 
   if (headerIdx < 0) {
-    return { transactions: [], format: "spreadsheetml", warnings: ["No se encontró fila de encabezados"], detectedBank };
+    return { transactions: [], format: "spreadsheetml", warnings: ["No se encontró fila de encabezados"], detectedBank, descartadas };
   }
 
   const headers = rows[headerIdx].map(h =>
@@ -305,19 +369,29 @@ function parseSpreadsheetML(content: string): ParseResult {
   const refCol     = detectCol(headers, ["referencia", "folio"]);
 
   if (dateCol < 0) {
-    return { transactions: [], format: "spreadsheetml", warnings: ["Sin columna de fecha"], detectedBank };
+    return { transactions: [], format: "spreadsheetml", warnings: ["Sin columna de fecha"], detectedBank, descartadas };
   }
 
-  for (const row of rows.slice(headerIdx + 1)) {
+  const dataRowsML = rows.slice(headerIdx + 1);
+  for (let i = 0; i < dataRowsML.length; i++) {
+    const row = dataRowsML[i];
+    const fila = headerIdx + i + 2; // fila 1-based en la tabla
     if (row.every(c => !c)) continue;
 
-    const fecha = parseDateMX(row[dateCol] ?? "");
-    if (!fecha) continue;
+    const rawFecha = (row[dateCol] ?? "").trim();
+    const fecha = parseDateMX(rawFecha);
+    if (!fecha) {
+      descartadas.push({ fila, motivo: rawFecha ? `fecha inválida: ${rawFecha}` : "fecha vacía" });
+      continue;
+    }
 
     let monto: number;
+    let rawMonto: string;
     if (amountCol >= 0) {
-      monto = parseMXNumber(row[amountCol] ?? "");
+      rawMonto = row[amountCol] ?? "";
+      monto = parseMXNumber(rawMonto);
     } else {
+      rawMonto = `cargo="${row[debitCol] ?? ""}" abono="${row[creditCol] ?? ""}"`;
       const credit = parseMXNumber(row[creditCol] ?? "");
       const debit  = parseMXNumber(row[debitCol] ?? "");
       const creditVal = isNaN(credit) ? 0 : credit;
@@ -325,7 +399,14 @@ function parseSpreadsheetML(content: string): ParseResult {
       monto = creditVal !== 0 ? Math.abs(creditVal) : -Math.abs(debitVal);
     }
 
-    if (isNaN(monto) || monto === 0) continue;
+    if (isNaN(monto)) {
+      descartadas.push({ fila, motivo: `monto inválido: ${rawMonto}` });
+      continue;
+    }
+    if (monto === 0) {
+      descartadas.push({ fila, motivo: `monto en cero o vacío: ${rawMonto}` });
+      continue;
+    }
 
     const desc = (descCol >= 0 ? (row[descCol] ?? "") : row.join(" ")).replace(/\s+/g, " ").trim();
     let ref = refCol >= 0 ? row[refCol] : undefined;
@@ -345,7 +426,7 @@ function parseSpreadsheetML(content: string): ParseResult {
     });
   }
 
-  return { transactions, format: "spreadsheetml", detectedBank, warnings };
+  return { transactions, format: "spreadsheetml", detectedBank, warnings, descartadas };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -425,8 +506,10 @@ function parseDateMX(s: string): Date | null {
   return null;
 }
 
-/** Parse Mexican number format: 1,234,567.89 or 1.234.567,89 */
-function parseMXNumber(s: string): number {
+/** Parse Mexican number format: 1,234,567.89 or 1.234.567,89.
+ *  También lo usa el parser OFX (TRNAMT admite coma decimal Y hay bancos
+ *  que emiten separador de miles); exportado para pruebas. */
+export function parseMXNumber(s: string): number {
   const clean = s.replace(/\s/g, "").replace(/[$MXN]/gi, "");
   if (!clean) return 0;
   // Detect comma-as-decimal (European style): 1.234,56

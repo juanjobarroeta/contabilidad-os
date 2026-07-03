@@ -103,9 +103,14 @@ export async function POST(req: Request, { params }: Params) {
     ok: true,
     imported,
     skipped,
+    // El extractor de PDF no reporta filas descartadas por renglón (el gate
+    // de saldos de arriba cubre la pérdida); exponemos la misma forma que
+    // /api/bancos/[id]/upload para que el front trate ambas igual.
+    posiblesDuplicados: skipped,
+    descartadas: [],
     detectedBank: extraction.banco,
     balanceCheck: extraction.balanceCheck,
     warnings: extraction.warnings,
-    message: `${imported} movimiento(s) importados${skipped > 0 ? `, ${skipped} ya existían` : ""}.`,
+    message: `${imported} movimiento(s) importados${skipped > 0 ? `, ${skipped} omitido(s) por parecer duplicados` : ""}.`,
   });
 }

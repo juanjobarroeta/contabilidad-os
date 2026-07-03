@@ -114,6 +114,14 @@ export default function BancosPage() {
   const [bulkMatchOpen, setBulkMatchOpen] = useState(false);
   // Modal de cuenta: null=cerrado · {account:null}=agregar · {account:X}=editar
   const [accountModal, setAccountModal] = useState<{ account: BankAccount | null } | null>(null);
+  // Resumen de la última importación cuando hubo filas descartadas o posibles
+  // duplicados: el CSV del banco es la fuente de verdad, así que nada se
+  // omite en silencio — se muestra qué se descartó y por qué.
+  const [importReport, setImportReport] = useState<{
+    imported: number;
+    posiblesDuplicados: number;
+    descartadas: { fila: number; motivo: string }[];
+  } | null>(null);
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2800); };
 
@@ -187,6 +195,13 @@ export default function BancosPage() {
       });
       const data = await res.json();
       showToast(data.message ?? (data.ok ? `Importados ${data.imported}` : "No se pudo importar"));
+      const descartadas: { fila: number; motivo: string }[] = data.descartadas ?? [];
+      const posiblesDuplicados: number = data.posiblesDuplicados ?? 0;
+      setImportReport(
+        descartadas.length > 0 || posiblesDuplicados > 0
+          ? { imported: data.imported ?? 0, posiblesDuplicados, descartadas }
+          : null
+      );
       await Promise.all([loadTxs(), loadAccounts()]);
     } finally { setBusy(""); e.target.value = ""; }
   }
@@ -302,7 +317,7 @@ export default function BancosPage() {
           {/* account selector */}
           <div className="mt-4 flex flex-wrap gap-2">
             {accounts.map((a) => (
-              <button key={a.id} onClick={() => setSelectedId(a.id)}
+              <button key={a.id} onClick={() => { setSelectedId(a.id); setImportReport(null); }}
                 className={"inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium " + (a.id === selectedId ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
                 {a.banco} <span className="font-mono text-[12px] opacity-80">••{a.numeroCuenta.slice(-4)}</span>
               </button>
@@ -348,6 +363,49 @@ export default function BancosPage() {
                 </button>
               </div>
             </Card>
+          )}
+
+          {/* Resumen de importación: filas descartadas y posibles duplicados.
+              El estado de cuenta es la fuente de verdad — nunca se omite nada
+              en silencio, aquí se explica cada fila que no entró. */}
+          {importReport && (
+            <div className="mt-4 rounded-card border border-cos-amber-ink/20 bg-cos-amber-tint p-4 text-[13.5px] text-cos-amber-ink">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">
+                    Se importaron {importReport.imported} movimiento{importReport.imported === 1 ? "" : "s"}.
+                    {importReport.descartadas.length > 0 && (
+                      <> {importReport.descartadas.length} fila{importReport.descartadas.length === 1 ? " se descartó" : "s se descartaron"} (ver detalle).</>
+                    )}
+                    {importReport.posiblesDuplicados > 0 && (
+                      <> {importReport.posiblesDuplicados} se omit{importReport.posiblesDuplicados === 1 ? "ió" : "ieron"} por parecer duplicado{importReport.posiblesDuplicados === 1 ? "" : "s"} de movimientos ya existentes.</>
+                    )}
+                  </p>
+                  {importReport.descartadas.length > 0 && (
+                    <details className="mt-1.5">
+                      <summary className="cursor-pointer font-medium underline decoration-dotted underline-offset-2">
+                        Ver detalle de las filas descartadas
+                      </summary>
+                      <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto font-mono text-[12.5px]">
+                        {importReport.descartadas.map((d, i) => (
+                          <li key={i}>Fila {d.fila}: {d.motivo}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                  {importReport.posiblesDuplicados > 0 && (
+                    <p className="mt-1.5 text-[12.5px] opacity-80">
+                      Si vuelves a subir el mismo archivo, los movimientos que ya estaban registrados se omiten para no duplicarlos.
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => setImportReport(null)} title="Cerrar aviso"
+                  className="grid h-7 w-7 flex-none place-items-center rounded-control hover:bg-cos-amber-ink/10">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
           )}
 
           {/* filter bar */}
