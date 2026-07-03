@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server";
 import { backfillNominaRegimen } from "@/lib/nomina/backfill-regimen";
+import {
+  importarNominaHistorica,
+  importarNominaHistoricaTodas,
+} from "@/lib/nomina/historia-import";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/nomina-backfill
 //
-// Rellena los datos del complemento de nómina (regimenNomina, tipoNomina,
-// isrRetenidoNomina) de los CFDIs tipo NOMINA ya importados, re-parseando el
-// rawXml guardado. La lógica vive en lib/nomina/backfill-regimen (compartida con
-// el sync del SAT, que la corre automáticamente al terminar). Este endpoint la
-// expone para un disparo manual/cron. Soporta ?companyId= para acotar.
+// Dos pasos idempotentes sobre los CFDIs tipo NOMINA ya importados:
+//   1. Rellena los datos del complemento (regimenNomina, tipoNomina,
+//      isrRetenidoNomina) re-parseando el rawXml guardado (backfill-regimen,
+//      compartido con el sync del SAT que lo corre al terminar).
+//   2. Importa el HISTÓRICO de nómina: agrupa los recibos timbrados aún no
+//      vinculados a un PayrollRun en corridas por periodo (origen "SAT",
+//      sólo lectura). Dedup por folio fiscal — re-ejecutar nunca duplica.
 //
-// Auth: CRON_SECRET (Bearer o x-cron-secret), igual que los otros crons.
+// Soporta ?companyId= para acotar a una empresa. Auth: CRON_SECRET (Bearer o
+// x-cron-secret), igual que los otros crons.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const dynamic = "force-dynamic";
@@ -32,9 +39,12 @@ async function handle(req: Request) {
   const companyId = url.searchParams.get("companyId") ?? undefined;
   const startedAt = Date.now();
 
-  const result = await backfillNominaRegimen(companyId);
+  const regimen = await backfillNominaRegimen(companyId, { timeBudgetMs: 120_000 });
+  const historia = companyId
+    ? await importarNominaHistorica(companyId)
+    : await importarNominaHistoricaTodas({ timeBudgetMs: 120_000 });
 
-  const summary = { ok: true, ...result, elapsedMs: Date.now() - startedAt };
+  const summary = { ok: true, regimen, historia, elapsedMs: Date.now() - startedAt };
   console.log("[cron/nomina-backfill] done:", JSON.stringify(summary));
   return NextResponse.json(summary);
 }

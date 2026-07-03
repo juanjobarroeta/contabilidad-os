@@ -261,8 +261,12 @@ export interface DeteccionRosterResult {
   };
 }
 
-/** Deriva nombre de pila / apellidos de un nombre completo "NOMBRE AP AM". */
-function partirNombre(nombre: string | null): {
+/**
+ * Deriva nombre de pila / apellidos de un nombre completo "NOMBRE AP AM".
+ * Exportada para reutilizarla en la importación del histórico de nómina
+ * (lib/nomina/historia-import), que crea empleados con la misma heurística.
+ */
+export function partirNombre(nombre: string | null): {
   nombrePila: string;
   apellidoPaterno: string;
   apellidoMaterno: string | null;

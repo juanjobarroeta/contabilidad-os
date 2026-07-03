@@ -18,6 +18,7 @@ import { interpretarCancelaciones, type SatMetadataRow } from "./sat-cancelacion
 import { clasificarCfdi } from "./fiscal/clasificar-cfdi";
 import { crearActivoDesdeCfdiSiAplica } from "./fiscal/auto-activo";
 import { backfillNominaRegimen } from "./nomina/backfill-regimen";
+import { importarNominaHistorica } from "./nomina/historia-import";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared, session-free SAT Descarga Masiva logic.
@@ -437,6 +438,11 @@ export async function verifyAndImportSatSync(
     await backfillNominaRegimen(companyId, { timeBudgetMs: 30_000 }).catch((e) =>
       console.error("[sat-sync] backfillNominaRegimen (empty) falló:", e)
     );
+    // Histórico de nómina: recibos timbrados de syncs anteriores que aún no
+    // viven como PayrollRun (dedup por folio fiscal — idempotente).
+    await importarNominaHistorica(companyId).catch((e) =>
+      console.error("[sat-sync] importarNominaHistorica (empty) falló:", e)
+    );
     return { ok: true, status: "empty", message: "No se encontraron CFDIs en este período" };
   }
 
@@ -689,6 +695,13 @@ export async function verifyAndImportSatSync(
   // best-effort: así "Sincronizar CFDIs" deja todo reconocido sin pasos manuales.
   await backfillNominaRegimen(companyId, { timeBudgetMs: 30_000 }).catch((e) =>
     console.error("[sat-sync] backfillNominaRegimen falló:", e)
+  );
+
+  // Histórico de nómina: convierte los recibos timbrados recién importados en
+  // corridas PayrollRun/PayrollItem de sólo lectura (origen "SAT"). Idempotente
+  // por folio fiscal y best-effort: un fallo no bloquea el sync.
+  await importarNominaHistorica(companyId).catch((e) =>
+    console.error("[sat-sync] importarNominaHistorica falló:", e)
   );
 
   // Auto-cierre conservador: por cada periodo que recibió CFDIs nuevos, postea
