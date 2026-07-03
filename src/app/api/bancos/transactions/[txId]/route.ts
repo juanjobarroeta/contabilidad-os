@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { checkInvoiceMatchGuard } from "@/lib/conciliacion";
 
 type Params = { params: Promise<{ txId: string }> };
 
@@ -115,6 +116,23 @@ export async function PATCH(req: Request, { params }: Params) {
       }
       // Legacy invoice path
       if (!invoiceId) return NextResponse.json({ error: "invoiceId / gastoId / reembolsoId / rayaId / solicitudCompraId requerido para conciliar" }, { status: 400 });
+      // Guard: PUE ya conciliada con otro movimiento → 409; PPD permite
+      // parcialidades pero el acumulado no debe exceder el total (ver
+      // checkInvoiceMatchGuard en lib/conciliacion).
+      const inv = await prisma.invoice.findFirst({
+        where: { id: invoiceId, companyId: tx.companyId },
+        select: {
+          metodoPago: true,
+          total: true,
+          bankTransactions: {
+            where: { status: "MATCHED" },
+            select: { id: true, fecha: true, monto: true },
+          },
+        },
+      });
+      if (!inv) return NextResponse.json({ error: "Factura inválida" }, { status: 400 });
+      const guard = checkInvoiceMatchGuard(inv, inv.bankTransactions, { id: txId, monto: tx.monto });
+      if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: 409 });
       await clearConstruccionLinks();
       await prisma.bankTransaction.update({
         where: { id: txId },
