@@ -210,6 +210,9 @@ export async function GET(req: Request) {
     periodo,
     month,
     year,
+    // Avisos del motor: cadena de arrastre rota (mes con CFDIs y sin declaración
+    // guardada → saldo a favor de IVA / pagos provisionales de ISR en cero).
+    advertencias: pos.advertencias,
     // Ingresos por asimilados a salarios recibidos (Art. 94); null si no hay.
     asimilados,
     federal: {

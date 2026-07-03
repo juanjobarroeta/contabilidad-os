@@ -28,6 +28,9 @@ interface AsimiladosResumen {
 }
 interface CierreData {
   periodo: string; month: number; year: number;
+  // Avisos del motor de impuestos: cadena de arrastre rota (mes con CFDIs sin
+  // declaración guardada → saldo a favor de IVA / pagos provisionales en cero).
+  advertencias?: string[];
   asimilados: AsimiladosResumen | null;
   federal: {
     lineas: FederalLinea[]; totalAPagar: number; saldoFavorIva: number;
@@ -349,6 +352,18 @@ function Resumen({ data, year }: { data: CierreData; year: number }) {
   const f = data.federal;
   return (
     <div className="space-y-5">
+      {(data.advertencias?.length ?? 0) > 0 && (
+        <div className="rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3" role="alert">
+          <div className="flex items-start gap-2.5 text-[13px] text-cos-amber-ink">
+            <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+            <div className="flex-1 space-y-1.5">
+              {data.advertencias!.map((a, i) => (
+                <p key={i}>{a}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-card bg-gradient-to-br from-cos-brand to-cos-brand-deep px-6 py-6 text-white shadow-[0_16px_36px_-20px_var(--brand)]">
         <div>
           <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-white/75">Total a pagar</span>

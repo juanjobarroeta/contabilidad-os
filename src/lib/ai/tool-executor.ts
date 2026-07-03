@@ -83,7 +83,19 @@ export async function executeToolCall(
       const now = new Date();
       const year = typeof input.year === "number" ? input.year : now.getFullYear();
       const month = typeof input.month === "number" ? input.month : now.getMonth() + 1;
-      return JSON.stringify(await computeTaxPosition(companyId, year, month));
+      const pos = await computeTaxPosition(companyId, year, month);
+      // Cadena de arrastre rota (mes con CFDIs sin declaración guardada): el
+      // usuario de WhatsApp/chat DEBE enterarse — las cifras pueden estar
+      // sobrestimadas por tomar en cero el saldo a favor / pagos provisionales.
+      return JSON.stringify(
+        pos.advertencias.length > 0
+          ? {
+              ...pos,
+              instruccion_para_el_asistente:
+                "Comunica al usuario TODAS las 'advertencias' tal cual, antes de las cifras: los montos pueden estar sobrestimados por falta de declaraciones guardadas.",
+            }
+          : pos
+      );
     }
     // Knowledge base de legislación fiscal — company-independent (es ley, no
     // datos de la empresa), por eso ignora companyId.
