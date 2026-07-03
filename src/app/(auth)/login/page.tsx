@@ -24,7 +24,11 @@ export default function LoginPage() {
     });
 
     if (res?.error) {
-      setError("Correo o contraseña incorrectos");
+      setError(
+        res.code === "rate_limit"
+          ? "Demasiados intentos. Intenta de nuevo más tarde."
+          : "Correo o contraseña incorrectos"
+      );
       setLoading(false);
     } else {
       router.push("/dashboard");

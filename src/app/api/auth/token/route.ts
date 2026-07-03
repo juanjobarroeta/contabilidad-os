@@ -26,13 +26,36 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { signApiToken } from "@/lib/api-token";
 import { effectiveModules } from "@/lib/module-access";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
   email: z.string().email().transform((s) => s.toLowerCase().trim()),
   password: z.string().min(1),
 });
 
+const WINDOW_MS = 15 * 60 * 1000;
+
+function tooManyAttempts(retryAfterSeconds?: number) {
+  return NextResponse.json(
+    { error: "Demasiados intentos. Intenta de nuevo más tarde." },
+    {
+      status: 429,
+      headers: { "Retry-After": String(retryAfterSeconds ?? 60) },
+    }
+  );
+}
+
 export async function POST(req: Request) {
+  // Límite por IP contra credential stuffing. La respuesta 429 es uniforme
+  // (no revela si el correo existe), igual que el 401 de credenciales.
+  const ipLimit = checkRateLimit(`token:ip:${getClientIp(req)}`, {
+    limit: 10,
+    windowMs: WINDOW_MS,
+  });
+  if (!ipLimit.ok) {
+    return tooManyAttempts(ipLimit.retryAfterSeconds);
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -49,6 +72,16 @@ export async function POST(req: Request) {
   }
 
   const { email, password } = parsed.data;
+
+  // Límite por correo (normalizado): se aplica exista o no la cuenta, para
+  // no filtrar información por diferencia de comportamiento.
+  const emailLimit = checkRateLimit(`token:email:${email}`, {
+    limit: 5,
+    windowMs: WINDOW_MS,
+  });
+  if (!emailLimit.ok) {
+    return tooManyAttempts(emailLimit.retryAfterSeconds);
+  }
 
   const user = await prisma.user.findUnique({
     where: { email },

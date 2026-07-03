@@ -18,6 +18,7 @@ import { prisma } from "@/lib/prisma";
 import { signClubMemberToken } from "@/lib/api-token";
 import { withAuthz } from "@/lib/authz";
 import { requireClubModule } from "@/lib/club-authz";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
   companyId: z.string().min(1),
@@ -25,13 +26,44 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const WINDOW_MS = 15 * 60 * 1000;
+
+function tooManyAttempts(retryAfterSeconds?: number) {
+  return NextResponse.json(
+    { error: "Demasiados intentos. Intenta de nuevo más tarde." },
+    {
+      status: 429,
+      headers: { "Retry-After": String(retryAfterSeconds ?? 60) },
+    }
+  );
+}
+
 export const POST = withAuthz(async (req: Request) => {
+  // Límite por IP contra credential stuffing. La respuesta 429 es uniforme
+  // (no revela si el correo existe), igual que el 401 de credenciales.
+  const ipLimit = checkRateLimit(`padel-token:ip:${getClientIp(req)}`, {
+    limit: 10,
+    windowMs: WINDOW_MS,
+  });
+  if (!ipLimit.ok) {
+    return tooManyAttempts(ipLimit.retryAfterSeconds);
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Credenciales inválidas" }, { status: 400 });
   }
   const { companyId, email, password } = parsed.data;
+
+  // Límite por correo (normalizado), independiente del club solicitado.
+  const emailLimit = checkRateLimit(`padel-token:email:${email}`, {
+    limit: 5,
+    windowMs: WINDOW_MS,
+  });
+  if (!emailLimit.ok) {
+    return tooManyAttempts(emailLimit.retryAfterSeconds);
+  }
 
   await requireClubModule(companyId);
 

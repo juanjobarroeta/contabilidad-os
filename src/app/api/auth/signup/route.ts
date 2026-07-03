@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const signupSchema = z.object({
   name: z.string().trim().min(1, "Nombre requerido").max(120),
@@ -11,7 +12,28 @@ const signupSchema = z.object({
 
 const TRIAL_DAYS = 15;
 
+const HOUR_MS = 60 * 60 * 1000;
+
+function tooManyAttempts(retryAfterSeconds?: number) {
+  return NextResponse.json(
+    { error: "Demasiados intentos. Intenta de nuevo más tarde." },
+    {
+      status: 429,
+      headers: { "Retry-After": String(retryAfterSeconds ?? 60) },
+    }
+  );
+}
+
 export async function POST(req: Request) {
+  // Límite por IP: frena la creación masiva de cuentas de prueba.
+  const ipLimit = checkRateLimit(`signup:ip:${getClientIp(req)}`, {
+    limit: 5,
+    windowMs: HOUR_MS,
+  });
+  if (!ipLimit.ok) {
+    return tooManyAttempts(ipLimit.retryAfterSeconds);
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -26,6 +48,15 @@ export async function POST(req: Request) {
   }
 
   const { name, email, password } = parsed.data;
+
+  // Límite por correo (ya normalizado a minúsculas por el esquema).
+  const emailLimit = checkRateLimit(`signup:email:${email}`, {
+    limit: 3,
+    windowMs: HOUR_MS,
+  });
+  if (!emailLimit.ok) {
+    return tooManyAttempts(emailLimit.retryAfterSeconds);
+  }
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
