@@ -9,6 +9,7 @@ import {
   mintInviteToken,
 } from "@/lib/invitations";
 import { requireDespachoAdminForCompany } from "@/lib/invitations-server";
+import { registrarBitacora } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -112,6 +113,18 @@ export async function POST(req: Request, { params }: Params) {
         expiresAt: true,
         createdAt: true,
       },
+    });
+
+    // Bitácora de seguridad: invitación creada (fire-and-forget). Nunca se
+    // registra el token del enlace, sólo metadatos.
+    registrarBitacora({
+      companyId,
+      userId,
+      accion: "invitacion.crear",
+      entidad: "CompanyInvitation",
+      entidadId: invite.id,
+      detalle: { email, rol: role },
+      req,
     });
 
     return NextResponse.json(

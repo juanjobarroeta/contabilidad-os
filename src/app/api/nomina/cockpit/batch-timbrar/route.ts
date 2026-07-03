@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { stampPayrollRun } from "@/lib/nomina/payroll-run";
+import { registrarBitacora } from "@/lib/audit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/nomina/cockpit/batch-timbrar — TIMBRA en LOTE varias corridas de
@@ -57,6 +58,7 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
+  const actorEmail = session.user.email ?? null;
 
   let body: unknown;
   try {
@@ -134,6 +136,27 @@ export async function POST(req: Request) {
       // Reutiliza la lógica de timbrado por corrida: idempotente (salta items ya
       // timbrados), concurrencia 5 interna, pasa la corrida a STAMPED si completa.
       const result = await stampPayrollRun(runId);
+
+      // Bitácora de seguridad: timbrado en lote, una fila por corrida que
+      // efectivamente timbró CFDIs (fire-and-forget).
+      if (result.stamped > 0) {
+        registrarBitacora({
+          companyId: run.companyId,
+          userId,
+          actorEmail,
+          accion: "nomina.timbrar",
+          entidad: "PayrollRun",
+          entidadId: runId,
+          detalle: {
+            stamped: result.stamped,
+            total: result.total,
+            errores: result.errors.length,
+            lote: true,
+          },
+          req,
+        });
+      }
+
       return {
         ...base,
         stamped: result.stamped,

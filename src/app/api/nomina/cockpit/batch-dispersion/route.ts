@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
+import { registrarBitacora } from "@/lib/audit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/nomina/cockpit/batch-dispersion — archivo de dispersión SPEI en LOTE
@@ -121,6 +122,24 @@ export async function GET(req: Request) {
         referencia,
       ].join(","));
     }
+
+    // Bitácora de seguridad: una fila por empresa incluida en el archivo
+    // (el export en lote también ES un evento). Fire-and-forget.
+    registrarBitacora({
+      companyId: run.companyId,
+      userId,
+      actorEmail: session.user.email ?? null,
+      accion: "nomina.dispersion-export",
+      entidad: "PayrollRun",
+      entidadId: run.id,
+      detalle: {
+        periodo: run.periodo,
+        empresaRfc: run.company.rfc,
+        empleados: run.items.length,
+        lote: true,
+      },
+      req,
+    });
   }
 
   const csv = [header, ...lines].join("\r\n");

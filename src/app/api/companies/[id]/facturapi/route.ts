@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
+import { registrarBitacora } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -78,6 +79,18 @@ export async function PATCH(req: Request, { params }: Params) {
       facturapiApiKey: apiKeyCifrada, // encrypted at rest
       ...(orgId ? { facturapiOrgId: orgId } : {}),
     },
+  });
+
+  // Bitácora de seguridad: se registra QUE cambió la llave, jamás su valor.
+  registrarBitacora({
+    companyId,
+    userId: session.user.id,
+    actorEmail: session.user.email ?? null,
+    accion: "credenciales.actualizar",
+    entidad: "Company",
+    entidadId: companyId,
+    detalle: { tipos: ["facturapi-api-key"], orgId: orgId ?? null },
+    req,
   });
 
   // Never echo the key back in the response.

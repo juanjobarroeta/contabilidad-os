@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AuthzError, requireWriter } from "@/lib/authz";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import { emitNominaCfdi } from "@/lib/nomina/emit-nomina";
+import { registrarBitacora } from "@/lib/audit";
 
 const bodySchema = z.object({
   companyId: z.string().min(1),
@@ -46,6 +47,23 @@ export async function POST(req: Request) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 422 });
     }
+
+    // Bitácora de seguridad: CFDI de nómina emitido (fire-and-forget).
+    registrarBitacora({
+      companyId,
+      userId: user.id,
+      actorEmail: user.email,
+      accion: "nomina.timbrar",
+      entidad: "Employee",
+      entidadId: employeeId,
+      detalle: {
+        uuid: result.uuid ?? null,
+        periodoInicio,
+        periodoFin,
+        diasPagados,
+      },
+      req,
+    });
 
     return NextResponse.json(result, { status: 201 });
   } catch (e) {

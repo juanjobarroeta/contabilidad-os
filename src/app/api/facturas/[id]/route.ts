@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getPacProvider } from "@/lib/pac";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { registrarBitacora } from "@/lib/audit";
 
 const VALID_MOTIVOS = ["01", "02", "03", "04"] as const;
 
@@ -92,6 +93,24 @@ export async function DELETE(
       cancelSustituyeUuid: sustituyeUuid ?? null,
     },
   });
+
+  // Bitácora de seguridad: cancelación de CFDI (fire-and-forget).
+  registrarBitacora({
+    companyId: invoice.companyId,
+    userId: session.user.id,
+    actorEmail: session.user.email ?? null,
+    accion: "factura.cancelar",
+    entidad: "Invoice",
+    entidadId: invoice.id,
+    detalle: {
+      uuid: invoice.uuid,
+      total: invoice.total,
+      motivo,
+      sustituyeUuid: sustituyeUuid ?? null,
+    },
+    req,
+  });
+
   return NextResponse.json(updated);
 }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkInviteAcceptable, hashInviteToken } from "@/lib/invitations";
+import { registrarBitacora } from "@/lib/audit";
 
 type Params = { params: Promise<{ token: string }> };
 
@@ -54,7 +55,7 @@ export async function GET(_req: Request, { params }: Params) {
 // in as the invited email. Creates a CompanyMember scoped to EXACTLY ONE company
 // with the invite's client role, and NEVER a DespachoMember (so the client can
 // never see sibling companies). Idempotent: a second accept is a no-op success.
-export async function POST(_req: Request, { params }: Params) {
+export async function POST(req: Request, { params }: Params) {
   const { token } = await params;
 
   const session = await auth();
@@ -98,7 +99,7 @@ export async function POST(_req: Request, { params }: Params) {
 
   // Consume atomically. We re-check status inside the transaction's update
   // (status: "PENDING") so two concurrent accepts can't both create a member.
-  await prisma.$transaction(async (tx) => {
+  const consumida = await prisma.$transaction(async (tx) => {
     const consumed = await tx.companyInvitation.updateMany({
       where: { id: live.id, status: "PENDING" },
       data: {
@@ -109,7 +110,7 @@ export async function POST(_req: Request, { params }: Params) {
     });
     // Lost the race — another request already accepted. Nothing more to do;
     // the membership was created by the winner.
-    if (consumed.count === 0) return;
+    if (consumed.count === 0) return false;
 
     // Create the single-company membership if it doesn't already exist.
     // IMPORTANT: only a CompanyMember — never a DespachoMember.
@@ -118,6 +119,20 @@ export async function POST(_req: Request, { params }: Params) {
       create: { userId, companyId: live.companyId, role: live.role },
       update: {}, // keep an existing (possibly higher) role untouched
     });
+    return true;
+  });
+
+  // Bitácora de seguridad: invitación aceptada (fire-and-forget). Sólo la
+  // petición que GANÓ la carrera registra; nunca se guarda el token.
+  if (consumida) registrarBitacora({
+    companyId: live.companyId,
+    userId,
+    actorEmail: userEmail,
+    accion: "invitacion.aceptar",
+    entidad: "CompanyInvitation",
+    entidadId: live.id,
+    detalle: { rol: live.role },
+    req,
   });
 
   return NextResponse.json({ ok: true, companyId: live.companyId });
