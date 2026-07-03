@@ -85,11 +85,29 @@ export async function GET(req: Request) {
   const q = searchParams.get("q")?.trim();
   const tipo = searchParams.get("tipo");
   const take = Math.min(parseInt(searchParams.get("take") ?? "50"), 200);
+  // Offset pagination for API consumers that walk the full list (e.g.
+  // FlotaGob's invoice sync). Backward compatible: defaults to 0.
+  const skip = Math.max(0, parseInt(searchParams.get("skip") ?? "0") || 0);
+  const customerId = searchParams.get("customerId")?.trim() || null;
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
   const unmatchedOnly = searchParams.get("unmatchedOnly") === "true";
 
   const where: import("@prisma/client").Prisma.InvoiceWhereInput = { companyId };
   if (tipo && ["INGRESO", "EGRESO", "TRASLADO", "NOMINA", "PAGO"].includes(tipo)) {
     where.tipo = tipo as "INGRESO" | "EGRESO" | "TRASLADO" | "NOMINA" | "PAGO";
+  }
+  if (customerId) where.customerId = customerId;
+  // Optional fecha window (ISO dates); invalid values are ignored.
+  const fromDate = fromParam ? new Date(fromParam) : null;
+  const toDate = toParam ? new Date(toParam) : null;
+  const validFrom = fromDate && !isNaN(fromDate.getTime()) ? fromDate : null;
+  const validTo = toDate && !isNaN(toDate.getTime()) ? toDate : null;
+  if (validFrom || validTo) {
+    where.fecha = {
+      ...(validFrom ? { gte: validFrom } : {}),
+      ...(validTo ? { lte: validTo } : {}),
+    };
   }
   if (q) {
     where.OR = [
@@ -120,6 +138,7 @@ export async function GET(req: Request) {
       doctosRelacionados: { select: { impPagado: true, ivaTrasladado: true, fechaPago: true } },
     },
     orderBy: { fecha: "desc" },
+    skip,
     take: fetchTake,
   });
 
