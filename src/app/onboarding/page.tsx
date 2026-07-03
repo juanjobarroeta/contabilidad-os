@@ -101,7 +101,9 @@ const STEPS = [
 
 const LAST_STEP = 7;
 
-// 3-tier plan cards — UI/trial only for now (no billing). Prices MXN/mes.
+// 3-tier plan cards. Precios de lista MXN/mes (decisión 2026-07); el cobro
+// real usa los objetos Price de Stripe (STRIPE_PRICE_*) — mantener ambos en
+// sincronía al cambiar precios. Anual: 10 meses (se crea como Price aparte).
 const PLANS = [
   {
     id: "BASICO",
@@ -113,17 +115,17 @@ const PLANS = [
   {
     id: "PROFESIONAL",
     name: "Profesional",
-    price: "$999",
+    price: "$1,299",
     blurb: "Para tu negocio",
-    features: ["Todo lo de Básico", "WhatsApp + alertas", "Conciliación bancaria", "Complementos de pago"],
+    features: ["Todo lo de Básico", "Asistente IA + WhatsApp", "Conciliación bancaria", "Complementos de pago"],
     highlight: true,
   },
   {
     id: "DESPACHO",
     name: "Despacho",
-    price: "$399",
-    blurb: "por empresa · contadores",
-    features: ["Multiempresa", "Todo lo Profesional", "Gestión de clientes"],
+    price: "$299",
+    blurb: "por empresa · mínimo 10",
+    features: ["Multiempresa", "Todo lo Profesional", "Gestión de clientes", "50+ empresas: $199 c/u"],
   },
 ];
 
