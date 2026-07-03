@@ -76,7 +76,7 @@ export const GET = withAuthz(async (req: Request) => {
       },
       // Show what it's currently matched to (if anything) so Katia sees
       // she's not stealing a tx that belongs to an invoice.
-      invoice: { select: { id: true, folio: true } },
+      invoice: { select: { id: true, uuid: true, serie: true, folio: true, total: true } },
       rayaPagada: { select: { id: true } },
       gastoPagado: { select: { id: true, beneficiarioNombre: true, importe: true } },
       reembolsoPagado: { select: { id: true, semanaInicio: true, semanaFin: true } },
