@@ -91,6 +91,16 @@ export default function LoginPage() {
             </Link>
           </p>
         </div>
+
+        <p className="text-xs text-cos-ink-faint mt-4 text-center">
+          <Link href="/legal/aviso-de-privacidad" className="hover:text-cos-brand-ink hover:underline">
+            Aviso de Privacidad
+          </Link>
+          {" · "}
+          <Link href="/legal/terminos" className="hover:text-cos-brand-ink hover:underline">
+            Términos y Condiciones
+          </Link>
+        </p>
       </div>
     </div>
   );
