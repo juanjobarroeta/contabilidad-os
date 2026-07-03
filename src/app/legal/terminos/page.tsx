@@ -8,22 +8,22 @@ export const metadata: Metadata = {
 };
 
 /**
- * Términos y condiciones de uso de la Plataforma. Los textos marcados
- * «[COMPLETAR: …]» son datos comerciales o del responsable que el titular de
- * la operación debe llenar antes de publicar en producción.
+ * Términos y condiciones de uso de la Plataforma. Datos del responsable y
+ * condiciones comerciales llenados el 2026-07-03 (persona física; actualizar
+ * cuando la operación migre a una sociedad).
  */
 export default function TerminosPage() {
   return (
     <>
       <h1>Términos y Condiciones</h1>
       <p className="text-cos-ink-faint">
-        Última actualización: «[COMPLETAR: fecha]»
+        Última actualización: 3 de julio de 2026
       </p>
 
       <p>
         Los presentes términos y condiciones (los «Términos») regulan el
         acceso y uso de la plataforma ContabilidadOS (la «Plataforma»),
-        operada por «[COMPLETAR: razón social]» (el «Proveedor»). Al crear una
+        operada por Juan José Barroeta Huerta (el «Proveedor»). Al crear una
         cuenta o utilizar la Plataforma, usted (el «Usuario») acepta quedar
         obligado por estos Términos. Si no está de acuerdo con ellos, deberá
         abstenerse de utilizar la Plataforma.
@@ -99,11 +99,13 @@ export default function TerminosPage() {
         <li>
           Concluido el periodo de prueba, el uso de la Plataforma requiere la
           contratación de un plan de pago conforme a los precios y condiciones
-          vigentes: «[COMPLETAR: planes, precios y condiciones de pago]».
+          vigentes: plan Básico $499 MXN/mes por empresa; plan Profesional $1,299 MXN/mes por empresa; plan Despacho $299 MXN/mes por empresa administrada (mínimo diez empresas; cincuenta o más, $199 MXN por empresa). Precios más IVA cuando aplique; el Proveedor puede modificarlos con aviso previo de treinta días naturales.
         </li>
         <li>
-          Facturación y renovaciones: «[COMPLETAR: periodicidad de cobro,
-          política de renovación y de reembolsos]».
+          Facturación y renovaciones: cobro mensual por adelantado con
+          renovación automática hasta su cancelación; la cancelación surte
+          efecto al final del período pagado; no se otorgan reembolsos por
+          períodos parciales.
         </li>
         <li>
           El Proveedor podrá modificar los precios de los planes, notificando
@@ -153,7 +155,7 @@ export default function TerminosPage() {
         de estos Términos, falta de pago o uso indebido de la Plataforma,
         notificándolo al correo registrado. A la terminación, el Usuario podrá
         solicitar la exportación de su información dentro del plazo de
-        «[COMPLETAR: plazo de exportación de datos tras la terminación]»;
+        treinta días naturales;
         transcurrido dicho plazo, la información podrá ser eliminada, salvo
         aquella que deba conservarse por obligación legal.
       </p>
@@ -173,7 +175,7 @@ export default function TerminosPage() {
         Estos Términos se rigen por las leyes de los Estados Unidos Mexicanos.
         Para la interpretación y cumplimiento de los mismos, las partes se
         someten a la jurisdicción de los tribunales competentes de
-        «[COMPLETAR: ciudad]», renunciando a cualquier otro fuero que pudiera
+        la ciudad de Puebla, Puebla, renunciando a cualquier otro fuero que pudiera
         corresponderles por razón de su domicilio presente o futuro.
       </p>
 

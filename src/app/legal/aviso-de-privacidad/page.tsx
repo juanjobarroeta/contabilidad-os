@@ -9,15 +9,15 @@ export const metadata: Metadata = {
 
 /**
  * Aviso de privacidad integral conforme a los artículos 15 a 17 de la LFPDPPP.
- * Los textos marcados «[COMPLETAR: …]» son datos del responsable que el
- * titular de la operación debe llenar antes de publicar en producción.
+ * Datos del responsable llenados el 2026-07-03 (persona física; actualizar
+ * cuando la operación migre a una sociedad).
  */
 export default function AvisoDePrivacidadPage() {
   return (
     <>
       <h1>Aviso de Privacidad</h1>
       <p className="text-cos-ink-faint">
-        Última actualización: «[COMPLETAR: fecha]»
+        Última actualización: 3 de julio de 2026
       </p>
 
       <p>
@@ -31,11 +31,11 @@ export default function AvisoDePrivacidadPage() {
 
       <h2>1. Identidad y domicilio del responsable</h2>
       <p>
-        «[COMPLETAR: razón social]» (en adelante, el «Responsable»), con
-        domicilio en «[COMPLETAR: domicilio]», es responsable del tratamiento
+        Juan José Barroeta Huerta (en adelante, el «Responsable»), con
+        domicilio en Boulevard Atlixcáyotl 400B, Emiliano Zapata, San Andrés Cholula, Puebla, C.P. 72810, México, es responsable del tratamiento
         de sus datos personales conforme a este aviso. Para cualquier tema
         relacionado con la protección de sus datos personales puede
-        contactarnos en el correo electrónico «[COMPLETAR: correo]».
+        contactarnos en el correo electrónico juanjobarroeta@live.com.mx.
       </p>
 
       <h2>2. Datos personales que recabamos</h2>
@@ -124,7 +124,7 @@ export default function AvisoDePrivacidadPage() {
       <p>
         Si usted no desea que sus datos personales sean tratados para las
         finalidades secundarias, puede manifestar su negativa en cualquier
-        momento enviando un correo a «[COMPLETAR: correo]». La negativa al
+        momento enviando un correo a juanjobarroeta@live.com.mx. La negativa al
         tratamiento para finalidades secundarias no será motivo para negarle
         el servicio.
       </p>
@@ -188,7 +188,7 @@ export default function AvisoDePrivacidadPage() {
       </p>
       <p>
         Para ejercer cualquiera de los derechos ARCO, envíe una solicitud al
-        correo «[COMPLETAR: correo]» indicando: (i) su nombre y un medio para
+        correo juanjobarroeta@live.com.mx indicando: (i) su nombre y un medio para
         comunicarle la respuesta; (ii) los documentos que acrediten su
         identidad o, en su caso, la representación legal del titular; (iii) la
         descripción clara y precisa de los datos respecto de los que busca
@@ -202,7 +202,7 @@ export default function AvisoDePrivacidadPage() {
         Usted puede revocar en cualquier momento el consentimiento que nos
         haya otorgado para el tratamiento de sus datos personales, así como
         solicitar la limitación de su uso o divulgación, mediante solicitud al
-        correo «[COMPLETAR: correo]». Tome en cuenta que la revocación puede
+        correo juanjobarroeta@live.com.mx. Tome en cuenta que la revocación puede
         implicar que no podamos seguir prestándole el servicio, y que ciertos
         tratamientos deberán continuar mientras subsistan obligaciones legales
         que lo exijan.
