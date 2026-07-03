@@ -145,6 +145,11 @@ async function persistStampedInvoice(
   return { ok: true, invoiceId: invoice.id, uuid: stamped.uuid ?? "", total, folio: stamped.folio != null ? String(stamped.folio) : null };
 }
 
+// NOTA (idempotencia): este flujo NO acepta llave de idempotencia — persiste
+// la Invoice sólo DESPUÉS de timbrar, así que una reserva pre-timbrado (como
+// la de POST /api/facturas con Idempotency-Key) requeriría reestructurar
+// también el flujo de borradores de WhatsApp. Si un llamador necesita
+// protección contra dobles envíos, que dedupe antes de llamar aquí.
 export async function stampInvoice(input: StampInput): Promise<StampResult> {
   const { companyId, customerId } = input;
 

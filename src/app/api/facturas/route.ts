@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { recordTimbrado } from "@/lib/costos/record";
 import { getFacturapiClient } from "@/lib/facturapi";
@@ -51,6 +52,9 @@ const createInvoiceSchema = z.object({
   usoCfdi: z.string(),
   items: z.array(invoiceItemSchema),
   notes: z.string().optional(),
+  // Llave de idempotencia (alternativa al header Idempotency-Key). Única por
+  // empresa: reintentos con la misma llave NO timbran un segundo CFDI.
+  idempotencyKey: z.string().min(1).max(200).optional(),
   global: z.object({
     periodicity: z.enum(["day", "week", "fortnight", "month", "two_months"]),
     months: z.string(),
@@ -162,6 +166,11 @@ export async function POST(req: Request) {
 
   const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes, global: globalInfo } = parsed.data;
 
+  // Llave de idempotencia: header Idempotency-Key (preferido) o campo del body.
+  // Sin llave (llamadores externos/API) el flujo es exactamente el de siempre.
+  const idempotencyKey =
+    req.headers.get("idempotency-key")?.trim() || parsed.data.idempotencyKey?.trim() || null;
+
   // Verify membership with at least ACCOUNTANT role
   const membership = await getEffectiveCompanyMembership(userId, companyId);
   if (!membership || membership.role === "VIEWER") {
@@ -204,6 +213,62 @@ export async function POST(req: Request) {
 
   console.log("[facturas] isPublicoGeneral:", isPublicoGeneral, "global:", resolvedGlobal);
 
+  // Subtotal desde los items del request (fuente de verdad; ver nota abajo
+  // sobre el subtotal de Facturapi). Se necesita ya para la reserva.
+  const computedSubtotal = items.reduce(
+    (s, it) => s + it.quantity * it.product.price,
+    0
+  );
+
+  // ── Idempotencia: RESERVAR la llave ANTES de timbrar ───────────────────────
+  // Creamos una fila DRAFT con la llave antes de llamar al PAC. Si otro request
+  // ya la reservó, el create truena con P2002 en @@unique([companyId,
+  // idempotencyKey]) y devolvemos la factura existente (200 si ya se timbró,
+  // 409 si sigue en proceso) — nunca se consume un segundo timbre.
+  // Si el timbrado falla, borramos la reserva para que el reintento funcione.
+  // Nota: si el proceso muere ENTRE la reserva y el timbrado/borrado (crash,
+  // deploy), queda una fila DRAFT huérfana que responde 409 para esa llave;
+  // como el UI genera una llave nueva por clic, el usuario simplemente vuelve
+  // a intentar. Borrar la fila DRAFT a mano la libera.
+  let reservedInvoiceId: string | null = null;
+  if (idempotencyKey) {
+    try {
+      const reserved = await prisma.invoice.create({
+        data: {
+          companyId,
+          customerId,
+          tipo: "INGRESO",
+          fecha: new Date(),
+          formaPago,
+          metodoPago,
+          usoCfdi,
+          subtotal: computedSubtotal,
+          total: computedSubtotal,
+          notas: notes,
+          status: "DRAFT",
+          idempotencyKey,
+        },
+      });
+      reservedInvoiceId = reserved.id;
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        const existing = await prisma.invoice.findUnique({
+          where: { companyId_idempotencyKey: { companyId, idempotencyKey } },
+          include: { items: true, customer: true },
+        });
+        if (existing && existing.status !== "DRAFT") {
+          // Replay de un request ya completado: misma respuesta, sin re-timbrar.
+          return NextResponse.json(existing, { status: 200 });
+        }
+        return NextResponse.json(
+          { error: "La factura ya se está procesando" },
+          { status: 409 }
+        );
+      }
+      throw e;
+    }
+  }
+
   // Create invoice in Facturapi — wrap in try/catch so SDK errors become
   // structured 422s instead of opaque 500s. Also detects a dead/unauthorized
   // key so we can tell the user to re-provision Facturapi.
@@ -223,6 +288,13 @@ export async function POST(req: Request) {
       ...(resolvedGlobal && { global: resolvedGlobal }),
     });
   } catch (e) {
+    // El timbrado falló: liberar la reserva de idempotencia para que un
+    // reintento (misma llave u otra) pueda volver a timbrar.
+    if (reservedInvoiceId) {
+      await prisma.invoice
+        .delete({ where: { id: reservedInvoiceId } })
+        .catch((delErr) => console.error("[facturas] No se pudo liberar la reserva:", delErr));
+    }
     const info = parseFacturapiError(e);
     console.error("[facturas] Facturapi error:", info);
     return NextResponse.json(
@@ -241,13 +313,10 @@ export async function POST(req: Request) {
   // Compute totals.
   // The Facturapi SDK sometimes returns `subtotal: 0` when there are no taxes
   // (e.g. water sales exempt from IVA), which would corrupt our DB row.
-  // Always trust the request items as the source of truth for subtotal,
-  // and compute totalImpuestos as the residual from Facturapi's authoritative
-  // total (which already accounts for retenciones, descuentos, etc.).
-  const computedSubtotal = items.reduce(
-    (s, it) => s + it.quantity * it.product.price,
-    0
-  );
+  // Always trust the request items as the source of truth for subtotal
+  // (computedSubtotal, calculado arriba), and compute totalImpuestos as the
+  // residual from Facturapi's authoritative total (which already accounts for
+  // retenciones, descuentos, etc.).
   const total = facturapiInvoice.total ?? computedSubtotal;
   // Trust Facturapi's subtotal only if it's meaningfully > 0
   const subtotal =
@@ -256,36 +325,47 @@ export async function POST(req: Request) {
       : computedSubtotal;
   const totalImpuestos = +(total - subtotal).toFixed(2);
 
-  // Persist to DB
-  const invoice = await prisma.invoice.create({
-    data: {
-      companyId,
-      customerId,
-      tipo: "INGRESO",
-      fecha: new Date(),
-      formaPago,
-      metodoPago,
-      usoCfdi,
-      subtotal,
-      total,
-      totalImpuestos,
-      notas: notes,
-      status: "STAMPED",
-      uuid: facturapiInvoice.uuid?.toUpperCase() ?? null, // folio fiscal canónico en MAYÚSCULAS
-      facturapiId: facturapiInvoice.id,
-      items: {
-        create: items.map((item) => ({
-          cantidad: item.quantity,
-          claveUnidad: item.product.unit_key ?? "E48",
-          claveProdServ: item.product.product_key,
-          descripcion: item.product.description,
-          valorUnitario: item.product.price,
-          importe: item.quantity * item.product.price,
-        })),
-      },
+  // Persist to DB: los datos comunes a ambos caminos (reserva vs directo).
+  const stampedData = {
+    subtotal,
+    total,
+    totalImpuestos,
+    status: "STAMPED" as const,
+    uuid: facturapiInvoice.uuid?.toUpperCase() ?? null, // folio fiscal canónico en MAYÚSCULAS
+    facturapiId: facturapiInvoice.id,
+    items: {
+      create: items.map((item) => ({
+        cantidad: item.quantity,
+        claveUnidad: item.product.unit_key ?? "E48",
+        claveProdServ: item.product.product_key,
+        descripcion: item.product.description,
+        valorUnitario: item.product.price,
+        importe: item.quantity * item.product.price,
+      })),
     },
-    include: { items: true, customer: true },
-  });
+  };
+
+  // Con reserva: promover la fila DRAFT a STAMPED. Sin llave: crear como siempre.
+  const invoice = reservedInvoiceId
+    ? await prisma.invoice.update({
+        where: { id: reservedInvoiceId },
+        data: stampedData,
+        include: { items: true, customer: true },
+      })
+    : await prisma.invoice.create({
+        data: {
+          companyId,
+          customerId,
+          tipo: "INGRESO",
+          fecha: new Date(),
+          formaPago,
+          metodoPago,
+          usoCfdi,
+          notas: notes,
+          ...stampedData,
+        },
+        include: { items: true, customer: true },
+      });
 
   return NextResponse.json(invoice, { status: 201 });
 }
