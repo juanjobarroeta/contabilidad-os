@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 
 // GET /api/nomina/dispersion?runId=xxx
 //
@@ -43,6 +44,12 @@ export async function GET(req: Request) {
   if (member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos para exportar la dispersión" }, { status: 403 });
   }
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED). Aunque es
+  // un GET, el archivo SPEI es el ENTREGABLE monetizable de la nómina: se trata
+  // como export de valor, no como lectura pasiva.
+  const gate = await gateEscritura(session.user.id);
+  if (gate) return gate;
 
   if (!["CALCULATED", "STAMPED", "PAID"].includes(run.status)) {
     return NextResponse.json({ error: "La corrida debe estar calculada o timbrada" }, { status: 400 });

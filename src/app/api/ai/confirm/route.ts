@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 import {
   getChatPendingAction,
   clearChatPendingAction,
@@ -50,6 +51,11 @@ export async function POST(req: Request) {
   if (member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos para ejecutar acciones" }, { status: 403 });
   }
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED): este
+  // endpoint EJECUTA la escritura staged, así que se gatea igual que el chat.
+  const gate = await gateEscritura(userId);
+  if (gate) return gate;
 
   const pa = await getChatPendingAction(conversationId);
   const decision = decideConfirm(pa, body.token, Date.now());

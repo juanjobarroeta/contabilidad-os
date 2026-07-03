@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 
 // GET /api/clientes?companyId=xxx&search=xxx
 // Autz: sesión web O token de servicio (Authorization: Bearer <jwt>), para que
@@ -68,6 +69,10 @@ export async function POST(req: Request) {
   // Verify membership
   const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
+  const gate = await gateEscritura(user.id);
+  if (gate) return gate;
 
   // Check duplicate RFC
   const existing = await prisma.customer.findUnique({

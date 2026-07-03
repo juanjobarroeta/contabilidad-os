@@ -6,6 +6,7 @@ import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 import { recordLlmCost } from "@/lib/costos/record";
 import { checkChatBudget } from "@/lib/ai/budget";
 import { getChatPendingAction } from "@/lib/ai/pending-action";
@@ -51,6 +52,11 @@ export async function POST(req: Request) {
   if (!member) {
     return NextResponse.json({ error: "Sin acceso a esta empresa" }, { status: 403 });
   }
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED): con la
+  // prueba vencida el chat responde 402 con mensaje en español para la UI.
+  const gate = await gateEscritura(session.user.id);
+  if (gate) return gate;
 
   // Cost gate: presupuesto mensual de LLM del chat in-app por empresa (mismo
   // patrón que el agente de WhatsApp; subtipo "ai.chat" en CostEvent).

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/nomina/cockpit/batch-dispersion — archivo de dispersión SPEI en LOTE
@@ -50,6 +51,12 @@ export async function GET(req: Request) {
   if (isNaN(inicio.getTime()) || isNaN(fin.getTime())) {
     return NextResponse.json({ error: "Periodo inválido" }, { status: 400 });
   }
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED). Aunque es
+  // un GET, el archivo SPEI es el ENTREGABLE monetizable de la nómina: se trata
+  // como export de valor, no como lectura pasiva.
+  const gate = await gateEscritura(userId);
+  if (gate) return gate;
   // Misma clave de periodo que createPayrollRun/batch-calcular.
   const periodoKey = `${inicio.toISOString().split("T")[0]}/${fin.toISOString().split("T")[0]}`;
 

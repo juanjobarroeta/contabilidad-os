@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 
 async function getMember(userId: string, customerId: string) {
   const customer = await prisma.customer.findUnique({
@@ -27,6 +28,10 @@ export async function PATCH(
   const { id } = await params;
   const customer = await getMember(session.user.id, id);
   if (!customer) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
+  const gate = await gateEscritura(session.user.id);
+  if (gate) return gate;
 
   const body = await req.json();
   const { rfc, razonSocial, regimenFiscal, email, phone, domicilio, codigoPostal } = body;

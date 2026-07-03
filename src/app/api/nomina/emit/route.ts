@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AuthzError, requireWriter } from "@/lib/authz";
+import { assertPuedeEscribir } from "@/lib/subscription";
 import { emitNominaCfdi } from "@/lib/nomina/emit-nomina";
 
 const bodySchema = z.object({
@@ -27,7 +28,10 @@ export async function POST(req: Request) {
     }
     const { companyId, employeeId, periodoInicio, periodoFin, diasPagados, fechaPago, sueldoBruto } = parsed.data;
 
-    await requireWriter(companyId);
+    const { user } = await requireWriter(companyId);
+    // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED); el 402
+    // fluye por el catch de AuthzError de abajo.
+    await assertPuedeEscribir(user.id);
 
     const result = await emitNominaCfdi({
       companyId,

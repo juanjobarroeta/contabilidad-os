@@ -6,6 +6,7 @@ import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { z } from "zod";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 
 const invoiceItemSchema = z.object({
   quantity: z.number().positive(),
@@ -176,6 +177,10 @@ export async function POST(req: Request) {
   if (!membership || membership.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
+  const gate = await gateEscritura(userId);
+  if (gate) return gate;
 
   // Get company + customer
   const [company, customer] = await Promise.all([

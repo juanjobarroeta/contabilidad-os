@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 
 // POST /api/declaraciones/save
 //
@@ -61,6 +62,10 @@ export async function POST(req: Request) {
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
+  const gate = await gateEscritura(session.user.id);
+  if (gate) return gate;
 
   const a = body.acuse ?? {};
   const fecha = a.fechaPresentacion ? new Date(a.fechaPresentacion) : null;

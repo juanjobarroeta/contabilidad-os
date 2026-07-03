@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { gateEscritura } from "@/lib/subscription";
 import { listTransactions, listAccounts, isBelvoConfigured, type BelvoTransaction } from "@/lib/belvo";
 
 // POST /api/bancos/belvo/sync
@@ -39,6 +40,10 @@ export async function POST(req: Request) {
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
+
+  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
+  const gate = await gateEscritura(session.user.id);
+  if (gate) return gate;
 
   // Default to current month
   const now = new Date();
