@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
 import { FaltantesUploader } from "@/components/declaraciones/FaltantesUploader";
+import { ChecklistDelMes } from "@/components/declaraciones/ChecklistDelMes";
 
 // ── Types (mirror /api/impuestos/cierre and /api/papeles/iva) ──────────────────
 type Estado = "FILED" | "PENDING" | "OVERDUE" | "UPCOMING";
@@ -256,7 +257,7 @@ export function DeclaracionWorkspace() {
         <Loading label="Cargando…" className="py-16" />
       ) : (
         <div id="tabpanel-declaracion" role="tabpanel" aria-labelledby={`tab-${tab}`} className="mt-5">
-          {tab === "resumen" && <Resumen data={data} year={year} />}
+          {tab === "resumen" && <Resumen data={data} year={year} companyId={activeCompany.id} month={month} />}
           {tab === "papeles" && <PapelesTab companyId={activeCompany.id} month={month} year={year} onChanged={load} />}
           {tab === "revision" && (
             <RevisionTab
@@ -348,7 +349,7 @@ function EstadoBadge({ estado }: { estado: Estado }) {
   return <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${m.cls}`}>{m.label}</span>;
 }
 
-function Resumen({ data, year }: { data: CierreData; year: number }) {
+function Resumen({ data, year, companyId, month }: { data: CierreData; year: number; companyId: string; month: number }) {
   const f = data.federal;
   return (
     <div className="space-y-5">
@@ -372,6 +373,9 @@ function Resumen({ data, year }: { data: CierreData; year: number }) {
         </div>
         <EstadoBadge estado={f.estado} />
       </div>
+
+      {/* Checklist accionable del periodo: qué falta para poder declarar. */}
+      <ChecklistDelMes companyId={companyId} month={month} year={year} />
 
       <Card className="rounded-card border-cos-line p-5 shadow-card">
         <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Declaración federal</span>

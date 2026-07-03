@@ -4,6 +4,7 @@ import {
   detectComplementosRecibidosPendientes,
 } from "@/lib/complementos";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { checklistDeclaracion } from "@/lib/fiscal/checklist-declaracion";
 import { getSatSyncStatus } from "@/lib/sat-status";
 import { signFileToken, publicBaseUrl } from "@/lib/facturas/file-token";
 import { previewTimbrar } from "@/lib/facturas/preview-timbrar";
@@ -71,6 +72,20 @@ export async function executeToolCall(
       return suggestReconciliationMatch(input, companyId);
     case "analyze_anomalies":
       return analyzeAnomalies(input, companyId);
+    case "query_declaracion_checklist": {
+      // El periodo que se declara es, por defecto, el mes VENCIDO (anterior al
+      // actual): en junio se declara mayo. El modelo puede pedir otro periodo.
+      const now = new Date();
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const year = typeof input.year === "number" ? input.year : prev.getFullYear();
+      const month = typeof input.month === "number" ? input.month : prev.getMonth() + 1;
+      const checklist = await checklistDeclaracion(companyId, year, month);
+      return JSON.stringify({
+        ...checklist,
+        instruccion_para_el_asistente:
+          "Presenta el checklist en el orden dado: primero los puntos en 'atencion' y 'pendiente' con su 'detalle' textual, y después confirma brevemente lo que está 'listo' (omite los 'no-aplica'). Menciona siempre la fecha límite y los días restantes, o que ya venció. No inventes montos ni conteos: usa los del checklist.",
+      });
+    }
     case "query_complementos_pendientes":
       return JSON.stringify(await detectComplementosPendientes(companyId));
     case "query_complementos_recibidos_pendientes":
