@@ -181,7 +181,11 @@ export async function executeChatPendingAction(
   switch (pa.type) {
     case "conciliar": {
       // Reusa reconcileTransaction (mismo apply que stagePendingConciliar/preview).
-      // Re-valida que el movimiento siga sin conciliar.
+      // Re-valida que el movimiento siga sin conciliar. El lado FACTURA también
+      // se re-valida, dentro de reconcileTransaction (checkInvoiceMatchGuard):
+      // si desde la propuesta la factura PUE ya se concilió con otro movimiento,
+      // o el acumulado PPD excedería el total, regresa { ok:false, error } y la
+      // confirmación falla con el mismo mensaje amable que los demás casos stale.
       const tx = await prisma.bankTransaction.findFirst({
         where: { id: pa.payload.txId, companyId: pa.companyId },
         select: { status: true, invoiceId: true },

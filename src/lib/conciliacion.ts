@@ -140,6 +140,69 @@ export type ReconcileResult =
   | { ok: true; uuid: string | null; cliente: string }
   | { ok: false; error: string };
 
+// ── Guard: una factura no debe quedar conciliada de más ──────────────────────
+//
+// Regla de negocio (aplicada en TODOS los caminos de escritura — PATCH manual,
+// reconcileTransaction para WhatsApp/AI y el executor de acciones pendientes):
+//   - PUE (pago en una sola exhibición): una factura ↔ UN movimiento bancario.
+//     Un segundo match se rechaza.
+//   - PPD (pago en parcialidades): varios movimientos son VÁLIDOS, pero el
+//     acumulado (previos + nuevo) no debe exceder el total de la factura más
+//     una tolerancia del 1% (redondeos).
+// Los montos se comparan en valor absoluto y en las unidades en que están
+// almacenados (misma convención que el scoring de candidatos: no se convierte
+// moneda; Invoice.total y BankTransaction.monto se comparan directo).
+
+/** Tolerancia sobre el total de la factura para el acumulado PPD (1%). */
+export const PPD_ACUMULADO_TOLERANCIA = 0.01;
+
+export type MatchGuardResult = { ok: true } | { ok: false; error: string };
+
+function fmtMonto(n: number): string {
+  return `$${Math.abs(n).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Decisión PURA: ¿puede conciliarse `newTx` con esta factura, dado lo ya
+ * conciliado? No toca la base de datos — el caller aporta la factura y sus
+ * movimientos ya MATCHED. Re-conciliar el MISMO movimiento es idempotente.
+ */
+export function checkInvoiceMatchGuard(
+  invoice: { metodoPago: string; total: number },
+  matchedTxs: { id: string; fecha: Date; monto: number }[],
+  newTx: { id: string; monto: number },
+): MatchGuardResult {
+  const previos = matchedTxs.filter((t) => t.id !== newTx.id);
+  if (previos.length === 0) return { ok: true };
+
+  if (invoice.metodoPago !== "PPD") {
+    // PUE: ya existe un movimiento conciliado → rechazar el segundo.
+    const prev = previos[0];
+    return {
+      ok: false,
+      error:
+        `La factura ya está conciliada con otro movimiento bancario ` +
+        `(${prev.fecha.toISOString().slice(0, 10)}, ${fmtMonto(prev.monto)}). ` +
+        `Una factura PUE sólo puede conciliarse con un movimiento; ` +
+        `desvincule el movimiento anterior si desea corregir la conciliación.`,
+    };
+  }
+
+  // PPD: permitir parcialidades mientras el acumulado no exceda el total.
+  const acumulado = previos.reduce((s, t) => s + Math.abs(t.monto), 0) + Math.abs(newTx.monto);
+  const limite = Math.abs(invoice.total) * (1 + PPD_ACUMULADO_TOLERANCIA);
+  if (acumulado > limite) {
+    return {
+      ok: false,
+      error:
+        `El monto acumulado de los movimientos conciliados con esta factura PPD ` +
+        `(${fmtMonto(acumulado)}, incluyendo este movimiento) excedería el total ` +
+        `de la factura (${fmtMonto(invoice.total)}). Revise las parcialidades ya conciliadas.`,
+    };
+  }
+  return { ok: true };
+}
+
 /** Persist a match: BankTransaction → Invoice (status MATCHED). */
 export async function reconcileTransaction(
   txId: string,
@@ -147,14 +210,30 @@ export async function reconcileTransaction(
   companyId: string
 ): Promise<ReconcileResult> {
   const [tx, inv] = await Promise.all([
-    prisma.bankTransaction.findFirst({ where: { id: txId, companyId }, select: { id: true } }),
+    prisma.bankTransaction.findFirst({
+      where: { id: txId, companyId },
+      select: { id: true, monto: true },
+    }),
     prisma.invoice.findFirst({
       where: { id: invoiceId, companyId },
-      select: { id: true, uuid: true, customer: { select: { razonSocial: true } } },
+      select: {
+        id: true,
+        uuid: true,
+        metodoPago: true,
+        total: true,
+        customer: { select: { razonSocial: true } },
+        bankTransactions: {
+          where: { status: "MATCHED" },
+          select: { id: true, fecha: true, monto: true },
+        },
+      },
     }),
   ]);
   if (!tx) return { ok: false, error: "Movimiento no encontrado." };
   if (!inv) return { ok: false, error: "Factura no encontrada." };
+
+  const guard = checkInvoiceMatchGuard(inv, inv.bankTransactions, tx);
+  if (!guard.ok) return { ok: false, error: guard.error };
 
   await prisma.bankTransaction.update({
     where: { id: txId },
