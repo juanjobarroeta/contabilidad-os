@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
-import { checkInvoiceMatchGuard } from "@/lib/conciliacion";
+import { checkInvoiceMatchGuard, mergePagosConciliados } from "@/lib/conciliacion";
 import { registrarBitacora } from "@/lib/audit";
 
 const bodySchema = z.object({ invoiceId: z.string().min(1) });
@@ -55,6 +55,13 @@ export const POST = withAuthz(
           where: { status: "MATCHED" },
           select: { id: true, fecha: true, monto: true },
         },
+        conciliacionDetalles: {
+          select: {
+            bankTransactionId: true,
+            montoAsignado: true,
+            bankTransaction: { select: { fecha: true, monto: true } },
+          },
+        },
       },
     });
     if (!invoice || invoice.companyId !== tx.companyId) {
@@ -77,8 +84,13 @@ export const POST = withAuthz(
 
     // Guardia compartida (misma regla que el PATCH cookie-auth): una PUE ya
     // conciliada no admite un segundo movimiento; en PPD el acumulado de
-    // parcialidades no puede exceder el total (tolerancia 1%).
-    const guard = checkInvoiceMatchGuard(invoice, invoice.bankTransactions, tx);
+    // parcialidades no puede exceder el total (tolerancia 1%). Los pagos
+    // previos incluyen porciones asignadas (conciliación múltiple).
+    const guard = checkInvoiceMatchGuard(
+      invoice,
+      mergePagosConciliados(invoice.bankTransactions, invoice.conciliacionDetalles),
+      tx
+    );
     if (!guard.ok) {
       return NextResponse.json({ error: guard.error }, { status: 409 });
     }

@@ -188,10 +188,14 @@ export async function executeChatPendingAction(
       // confirmación falla con el mismo mensaje amable que los demás casos stale.
       const tx = await prisma.bankTransaction.findFirst({
         where: { id: pa.payload.txId, companyId: pa.companyId },
-        select: { status: true, invoiceId: true },
+        select: {
+          status: true,
+          invoiceId: true,
+          conciliacionDetalles: { select: { id: true }, take: 1 },
+        },
       });
       if (!tx) return { ok: false, error: "El movimiento ya no existe." };
-      if (tx.invoiceId) {
+      if (tx.invoiceId || tx.conciliacionDetalles.length > 0) {
         return { ok: false, error: "El movimiento ya está conciliado; nada que hacer." };
       }
       const r = await reconcileTransaction(pa.payload.txId, pa.payload.invoiceId, pa.companyId);

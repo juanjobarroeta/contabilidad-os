@@ -49,17 +49,35 @@ export const POST = withAuthz(
       );
     }
 
-    const updated = await prisma.bankTransaction.update({
-      where: { id: tx.id },
-      data: { status: "UNMATCHED", invoiceId: null },
-      select: { id: true, status: true, invoiceId: true },
+    // Conciliación uno-a-varios: al desvincular también se eliminan las
+    // porciones asignadas (se registran en bitácora antes de borrarlas).
+    const detallesPrevios = await prisma.conciliacionDetalle.findMany({
+      where: { bankTransactionId: tx.id },
+      select: { invoiceId: true, montoAsignado: true },
     });
+    const [, updated] = await prisma.$transaction([
+      prisma.conciliacionDetalle.deleteMany({ where: { bankTransactionId: tx.id } }),
+      prisma.bankTransaction.update({
+        where: { id: tx.id },
+        data: { status: "UNMATCHED", invoiceId: null },
+        select: { id: true, status: true, invoiceId: true },
+      }),
+    ]);
     registrarBitacora({
       companyId: tx.companyId,
       accion: "conciliacion.unmatch",
       entidad: "BankTransaction",
       entidadId: tx.id,
-      detalle: { invoiceId: tx.invoiceId, via: "bearer-construccion" },
+      detalle: {
+        invoiceId: tx.invoiceId,
+        via: "bearer-construccion",
+        ...(detallesPrevios.length > 0
+          ? {
+              facturas: detallesPrevios.length,
+              asignaciones: detallesPrevios.map((d) => ({ invoiceId: d.invoiceId, monto: d.montoAsignado })),
+            }
+          : {}),
+      },
       req,
     });
     return NextResponse.json(updated);

@@ -62,6 +62,17 @@ export async function GET(req: Request, { params }: Params) {
         invoice: {
           select: { id: true, uuid: true, total: true, fecha: true, customer: { select: { razonSocial: true } } },
         },
+        // Conciliación uno-a-varios: porciones asignadas a varias facturas
+        // (la UI muestra "Conciliado con N facturas" con este detalle).
+        conciliacionDetalles: {
+          select: {
+            id: true,
+            montoAsignado: true,
+            invoice: {
+              select: { id: true, uuid: true, folio: true, serie: true, total: true, customer: { select: { razonSocial: true } } },
+            },
+          },
+        },
         // Include construcción-side links so the bancos UI can show
         // "↳ Gasto / Reembolso / Raya" descriptors next to txs that
         // bartiz already linked.

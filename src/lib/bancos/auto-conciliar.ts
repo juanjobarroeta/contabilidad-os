@@ -83,8 +83,10 @@ export async function autoConciliarCuenta(accountId: string): Promise<{ matched:
         status: "STAMPED",
         fecha: { gte: windowStart, lte: windowEnd },
         total: { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
-        // Que no esté ya conciliada con otra transacción bancaria
+        // Que no esté ya conciliada con otra transacción bancaria: ni por el
+        // vínculo legado 1:1 ni por porciones asignadas (ConciliacionDetalle).
         bankTransactions: { none: { status: "MATCHED" } },
+        conciliacionDetalles: { none: {} },
       },
       include: { customer: { select: { rfc: true, razonSocial: true } } },
     });

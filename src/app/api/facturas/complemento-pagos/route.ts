@@ -54,22 +54,48 @@ export async function GET(req: Request) {
   // For each PPD invoice, find matched bank transactions (payments received)
   const ppdIds = ppdInvoices.map(i => i.id);
 
-  const matchedPayments = await prisma.bankTransaction.findMany({
-    where: {
-      companyId,
-      invoiceId: { in: ppdIds },
-      status: "MATCHED",
-      monto: { gt: 0 }, // credits = payments received
-    },
-    select: {
-      id: true,
-      invoiceId: true,
-      fecha: true,
-      monto: true,
-      descripcion: true,
-      referencia: true,
-    },
-  });
+  const [legacyPayments, detalleAsignaciones] = await Promise.all([
+    prisma.bankTransaction.findMany({
+      where: {
+        companyId,
+        invoiceId: { in: ppdIds },
+        status: "MATCHED",
+        monto: { gt: 0 }, // credits = payments received
+      },
+      select: {
+        id: true,
+        invoiceId: true,
+        fecha: true,
+        monto: true,
+        descripcion: true,
+        referencia: true,
+      },
+    }),
+    // Conciliación uno-a-varios: la porción asignada a cada factura cuenta
+    // como pago recibido (el movimiento deja invoiceId en NULL — sin doble conteo).
+    prisma.conciliacionDetalle.findMany({
+      where: {
+        invoiceId: { in: ppdIds },
+        bankTransaction: { companyId, status: "MATCHED", monto: { gt: 0 } },
+      },
+      select: {
+        invoiceId: true,
+        montoAsignado: true,
+        bankTransaction: { select: { id: true, fecha: true, descripcion: true, referencia: true } },
+      },
+    }),
+  ]);
+  const matchedPayments = [
+    ...legacyPayments,
+    ...detalleAsignaciones.map((d) => ({
+      id: d.bankTransaction.id,
+      invoiceId: d.invoiceId as string | null,
+      fecha: d.bankTransaction.fecha,
+      monto: d.montoAsignado,
+      descripcion: d.bankTransaction.descripcion,
+      referencia: d.bankTransaction.referencia,
+    })),
+  ];
 
   // Find existing REP CFDIs (tipo PAGO) that reference these invoices
   const existingReps = await prisma.invoice.findMany({

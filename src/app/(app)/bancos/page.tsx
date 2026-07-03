@@ -22,7 +22,14 @@ interface BankTx {
   notes?: string | null;
   invoiceId?: string | null;
   invoice?: { id: string; uuid?: string; total: number; customer?: { razonSocial: string } } | null;
+  // Conciliación uno-a-varios: porciones asignadas a varias facturas.
+  conciliacionDetalles?: {
+    id: string; montoAsignado: number;
+    invoice: { id: string; uuid?: string | null; folio?: string | null; serie?: string | null; total: number; customer?: { razonSocial: string } | null };
+  }[];
 }
+// Línea de la charola de selección múltiple: factura elegida + monto asignado editable.
+interface SeleccionFactura { id: string; label: string; total: number; monto: string }
 interface Candidate {
   id: string; uuid?: string; fecha: string; total: number; cliente: string; rfc: string;
   score: number; confidence: "alta" | "media" | "baja"; folio?: string;
@@ -107,6 +114,9 @@ export default function BancosPage() {
   const [manualQuery, setManualQuery] = useState("");
   const [manualResults, setManualResults] = useState<FacturaSearch[]>([]);
   const [manualLoading, setManualLoading] = useState(false);
+  // Selección múltiple de facturas para el movimiento expandido (charola).
+  const [multiSel, setMultiSel] = useState<SeleccionFactura[]>([]);
+  const [multiBusy, setMultiBusy] = useState(false);
   const [toast, setToast] = useState("");
   // Modo selección + lote
   const [selectMode, setSelectMode] = useState(false);
@@ -207,8 +217,8 @@ export default function BancosPage() {
   }
 
   async function expand(tx: BankTx) {
-    if (expandedId === tx.id) { setExpandedId(null); return; }
-    setExpandedId(tx.id); setCandidates([]); setCandLoading(true);
+    if (expandedId === tx.id) { setExpandedId(null); setMultiSel([]); return; }
+    setExpandedId(tx.id); setCandidates([]); setCandLoading(true); setMultiSel([]);
     // Reset de la búsqueda manual; arranca con el tipo probable según el signo.
     setManualOpen(false); setManualQuery(""); setManualResults([]);
     setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
@@ -224,8 +234,58 @@ export default function BancosPage() {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "match", invoiceId }),
     });
-    if (res.ok) { showToast("Movimiento conciliado"); setExpandedId(null); await Promise.all([loadTxs(), loadAccounts()]); }
+    if (res.ok) { showToast("Movimiento conciliado"); setExpandedId(null); setMultiSel([]); await Promise.all([loadTxs(), loadAccounts()]); }
     else showToast("No se pudo conciliar");
+  }
+
+  // ── Conciliación múltiple: un movimiento ↔ varias facturas ─────────────────
+  function toggleMultiSel(f: { id: string; label: string; total: number }) {
+    setMultiSel((prev) =>
+      prev.some((s) => s.id === f.id)
+        ? prev.filter((s) => s.id !== f.id)
+        : [...prev, { id: f.id, label: f.label, total: f.total, monto: f.total.toFixed(2) }]
+    );
+  }
+
+  function setMultiMonto(id: string, monto: string) {
+    setMultiSel((prev) => prev.map((s) => (s.id === id ? { ...s, monto } : s)));
+  }
+
+  async function conciliarMultiple(txId: string) {
+    const asignaciones = multiSel.map((s) => ({ invoiceId: s.id, monto: Number(s.monto) }));
+    if (asignaciones.some((a) => !Number.isFinite(a.monto) || a.monto <= 0)) {
+      showToast("Revise los montos asignados: deben ser mayores a cero");
+      return;
+    }
+    setMultiBusy(true);
+    try {
+      const res = await fetch(`/api/bancos/transactions/${txId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "match-multiple", asignaciones }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast(data?.advertencia?.mensaje
+          ? `Conciliado con ${asignaciones.length} facturas. ${data.advertencia.mensaje}`
+          : `Conciliado con ${asignaciones.length} facturas`);
+        setExpandedId(null); setMultiSel([]);
+        await Promise.all([loadTxs(), loadAccounts()]);
+      } else {
+        showToast(data?.error ?? "No se pudo conciliar");
+      }
+    } finally { setMultiBusy(false); }
+  }
+
+  async function desconciliar(txId: string) {
+    setActing(txId);
+    try {
+      const res = await fetch(`/api/bancos/transactions/${txId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unmatch" }),
+      });
+      if (res.ok) { showToast("Movimiento desconciliado"); await Promise.all([loadTxs(), loadAccounts()]); }
+      else showToast("No se pudo desconciliar");
+    } finally { setActing(null); }
   }
 
   // Categorizar sin factura (o ignorar): PATCH ignore + tag en notes.
@@ -481,6 +541,32 @@ export default function BancosPage() {
                         </div>
                       )}
 
+                      {/* Conciliación uno-a-varios: lista de facturas con su porción asignada. */}
+                      {matched && !m.invoice && (m.conciliacionDetalles?.length ?? 0) > 0 && (
+                        <div className="mt-3 border-t border-dashed border-cos-jade-tint pt-3">
+                          <div className="flex items-center gap-1.5 text-[13px] text-cos-jade-ink">
+                            <Link2 className="h-[15px] w-[15px]" /> Conciliado con <b>{m.conciliacionDetalles!.length} facturas</b>
+                          </div>
+                          <ul className="mt-2 flex flex-col gap-1">
+                            {m.conciliacionDetalles!.map((d) => (
+                              <li key={d.id} className="flex items-center justify-between gap-3 text-[12.5px] text-cos-ink-soft">
+                                <span className="truncate">
+                                  {d.invoice.customer?.razonSocial ?? "—"}
+                                  {d.invoice.folio ? ` · ${d.invoice.serie ?? ""}${d.invoice.folio}` : ""}
+                                </span>
+                                <Money value={d.montoAsignado} size={12.5} muted />
+                              </li>
+                            ))}
+                          </ul>
+                          {!selectMode && (
+                            <button onClick={() => desconciliar(m.id)} disabled={acting === m.id}
+                              className="mt-2 text-[13px] font-semibold text-cos-red-ink hover:underline disabled:opacity-50">
+                              {acting === m.id ? "…" : "Desconciliar"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                       {ignored && !selectMode && (
                         <div className="mt-3 border-t border-dashed border-cos-line pt-3">
                           <button onClick={() => reabrir(m.id)} disabled={acting === m.id}
@@ -511,6 +597,10 @@ export default function BancosPage() {
                                         </div>
                                         <div className="flex flex-none items-center gap-2">
                                           <Chip tone={CONF[c.confidence]} label={c.confidence} />
+                                          <button onClick={() => toggleMultiSel({ id: c.id, label: c.cliente, total: c.total })}
+                                            className={"rounded-control border px-3 py-1.5 text-[13px] font-semibold " + (multiSel.some((s) => s.id === c.id) ? "border-cos-brand bg-cos-brand-tint text-cos-brand-ink" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
+                                            {multiSel.some((s) => s.id === c.id) ? "Quitar" : "Agregar"}
+                                          </button>
                                           <button onClick={() => conciliar(m.id, c.id)} className="rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep">Conciliar</button>
                                         </div>
                                       </div>
@@ -520,6 +610,64 @@ export default function BancosPage() {
                               ) : (
                                 <span className="text-[13px] text-cos-ink-faint">Sin coincidencias automáticas.</span>
                               )}
+
+                              {/* Charola de conciliación múltiple: facturas agregadas, monto asignado
+                                  editable por línea y suma contra el monto del movimiento. */}
+                              {multiSel.length > 0 && (() => {
+                                const seleccionado = multiSel.reduce((s, x) => s + (Number(x.monto) || 0), 0);
+                                const restante = Math.abs(m.monto) - seleccionado;
+                                const excede = seleccionado > Math.abs(m.monto) * 1.01;
+                                const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+                                return (
+                                  <div className="rounded-control border border-cos-brand bg-cos-brand-tint/40 p-3">
+                                    <p className="text-[12.5px] font-semibold text-cos-ink">
+                                      Conciliación múltiple · {multiSel.length} factura{multiSel.length === 1 ? "" : "s"} seleccionada{multiSel.length === 1 ? "" : "s"}
+                                    </p>
+                                    <div className="mt-2 flex flex-col gap-1.5">
+                                      {multiSel.map((s) => (
+                                        <div key={s.id} className="flex items-center gap-2">
+                                          <span className="min-w-0 flex-1 truncate text-[13px] text-cos-ink">{s.label}</span>
+                                          <input type="number" step="0.01" min="0" value={s.monto}
+                                            onChange={(e) => setMultiMonto(s.id, e.target.value)}
+                                            aria-label={`Monto asignado a ${s.label}`}
+                                            className="w-[120px] rounded-control border border-cos-line bg-cos-card px-2 py-1 text-right font-mono text-[12.5px] text-cos-ink outline-none focus:border-cos-brand" />
+                                          <button onClick={() => toggleMultiSel(s)} title="Quitar de la selección"
+                                            className="grid h-6 w-6 flex-none place-items-center rounded-control text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink">
+                                            <X className="h-3.5 w-3.5" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="mt-2 flex flex-col gap-0.5 border-t border-dashed border-cos-line pt-2 text-[12.5px]">
+                                      <div className="flex justify-between">
+                                        <span className="text-cos-ink-soft">Suma asignada</span>
+                                        <span className={"font-mono font-semibold " + (excede ? "text-cos-red-ink" : "text-cos-ink")}>{fmt(seleccionado)}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-cos-ink-soft">Monto del movimiento</span>
+                                        <span className="font-mono text-cos-ink">{fmt(Math.abs(m.monto))}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-cos-ink-soft">Restante</span>
+                                        <span className={"font-mono " + (excede ? "text-cos-red-ink" : "text-cos-ink")}>{fmt(restante)}</span>
+                                      </div>
+                                    </div>
+                                    {excede && (
+                                      <p className="mt-1.5 text-[12px] text-cos-red-ink">La suma asignada excede el monto del movimiento.</p>
+                                    )}
+                                    {!excede && restante > Math.abs(m.monto) * 0.01 && (
+                                      <p className="mt-1.5 text-[12px] text-cos-amber-ink">La diferencia quedará sin asignar; se registrará una advertencia.</p>
+                                    )}
+                                    <button onClick={() => conciliarMultiple(m.id)} disabled={multiBusy || multiSel.length < 2 || excede}
+                                      className="mt-2.5 w-full rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+                                      {multiBusy ? "Conciliando…" : `Conciliar ${multiSel.length} facturas`}
+                                    </button>
+                                    {multiSel.length < 2 && (
+                                      <p className="mt-1 text-center text-[11.5px] text-cos-ink-faint">Agregue al menos dos facturas; para una sola utilice «Conciliar».</p>
+                                    )}
+                                  </div>
+                                );
+                              })()}
 
                               <div className="rounded-control border border-cos-line">
                                 <button onClick={() => setManualOpen((o) => !o)}
@@ -554,7 +702,13 @@ export default function BancosPage() {
                                             <p className="truncate text-[13px] font-medium text-cos-ink">{f.customer?.razonSocial ?? "—"}</p>
                                             <p className="text-[11.5px] text-cos-ink-faint"><span className="font-mono">{f.customer?.rfc ?? "—"}</span>{f.folio ? ` · ${f.serie ?? ""}${f.folio}` : ""} · {fmtFecha(f.fecha)} · <Money value={f.total} size={11.5} muted /></p>
                                           </div>
-                                          <button onClick={() => conciliar(m.id, f.id)} className="flex-none rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-cos-brand-deep">Conciliar</button>
+                                          <div className="flex flex-none items-center gap-1.5">
+                                            <button onClick={() => toggleMultiSel({ id: f.id, label: f.customer?.razonSocial ?? "Factura", total: f.total })}
+                                              className={"rounded-control border px-3 py-1.5 text-[12.5px] font-semibold " + (multiSel.some((s) => s.id === f.id) ? "border-cos-brand bg-cos-brand-tint text-cos-brand-ink" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
+                                              {multiSel.some((s) => s.id === f.id) ? "Quitar" : "Agregar"}
+                                            </button>
+                                            <button onClick={() => conciliar(m.id, f.id)} className="rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-cos-brand-deep">Conciliar</button>
+                                          </div>
                                         </div>
                                       ))}
                                     </div>

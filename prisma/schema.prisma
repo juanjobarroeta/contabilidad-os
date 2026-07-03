@@ -677,6 +677,8 @@ model Invoice {
   items              InvoiceItem[]
   taxes              InvoiceTax[]
   bankTransactions   BankTransaction[]
+  // Conciliación uno-a-varios: porciones de movimientos asignadas a esta factura.
+  conciliacionDetalles ConciliacionDetalle[]
   estimacion         Estimacion?
   // When this invoice is a complemento de pago (tipo=PAGO), the parent
   // invoice UUIDs it pays off (parsed from <pago:DoctoRelacionado>).
@@ -945,6 +947,8 @@ model BankTransaction {
   adjudicacionPagada    SolicitudAdjudicacion? @relation("AdjudicacionPago")
   estimacionCobrada     Estimacion?
   reservacionCobrada    Reservation?
+  // Conciliación uno-a-varios: asignaciones por factura (ver ConciliacionDetalle).
+  conciliacionDetalles  ConciliacionDetalle[]
 
   // Conciliación: los flujos calientes filtran por cuenta + status
   // (auto-conciliar UNMATCHED, groupBy de status en /api/bancos).
@@ -963,6 +967,28 @@ enum ReconciliationStatus {
   UNMATCHED
   MATCHED
   IGNORED
+}
+
+// Conciliación uno-a-varios: un movimiento bancario (p. ej. una transferencia
+// que paga varias facturas mensuales de un cliente) se reparte entre varias
+// facturas con un monto asignado por factura. El vínculo legado 1:1
+// (BankTransaction.invoiceId) sigue vigente para los matches sencillos; los
+// matches múltiples dejan invoiceId en NULL y viven aquí. Aditivo: prod usa
+// `prisma db push`, nada existente cambia.
+model ConciliacionDetalle {
+  id                String   @id @default(cuid())
+  bankTransactionId String
+  invoiceId         String
+  montoAsignado     Float // porción (valor absoluto) del movimiento asignada a esta factura
+  createdAt         DateTime @default(now())
+
+  bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+  invoice         Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  // Un movimiento no asigna dos veces a la misma factura.
+  @@unique([bankTransactionId, invoiceId])
+  // Acumulado de cobros por factura (guard PUE/PPD, complementos, candidatos).
+  @@index([invoiceId])
 }
 
 // ─── Module 2: Nómina & IMSS ──────────────────────────────────────────────────

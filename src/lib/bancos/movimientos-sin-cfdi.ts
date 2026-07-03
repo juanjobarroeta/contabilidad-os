@@ -303,6 +303,8 @@ export async function detectarMovimientosSinCfdi(
         total: true,
         uuid: true,
         bankTransactions: { where: { status: "MATCHED" }, select: { id: true }, take: 1 },
+        // Conciliación uno-a-varios: una porción asignada también respalda el CFDI.
+        conciliacionDetalles: { select: { id: true }, take: 1 },
       },
     }),
   ]);
@@ -318,7 +320,7 @@ export async function detectarMovimientosSinCfdi(
       fecha: c.fecha,
       total: c.total,
       uuid: c.uuid,
-      tieneMovimientoConciliado: c.bankTransactions.length > 0,
+      tieneMovimientoConciliado: c.bankTransactions.length > 0 || c.conciliacionDetalles.length > 0,
     })),
   });
 
