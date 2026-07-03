@@ -3133,3 +3133,31 @@ enum CompanyPlan {
   PRO // + conciliación bancaria (Belvo) + WhatsApp (Twilio)
   DESPACHO // + revisión humana / SLA
 }
+
+// Bitácora de seguridad (append-only). Registra eventos sensibles: timbrado y
+// cancelación de CFDI, dispersión de nómina, cambios de credenciales (FIEL/CSD/
+// llave de Facturapi), altas/bajas de miembros, acciones confirmadas del
+// asistente de IA y bajas de empresa/cuenta.
+//
+// DELIBERADAMENTE sin relación (FK) hacia Company ni User: la bitácora debe
+// SOBREVIVIR a la eliminación de la empresa o de la cuenta. Un onDelete:
+// Cascade borraría el rastro justo cuando más importa (baja de empresa), y un
+// FK con Restrict impediría la baja. companyId/userId son columnas planas.
+//
+// `detalle` es SOLO metadatos (RFC, total, uuid, motivo...). NUNCA guardar
+// secretos: contraseñas, llaves privadas, .key/.cer, tokens ni API keys.
+model AuditLog {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  companyId  String? // sin FK a propósito — ver comentario del modelo
+  userId     String? // sin FK a propósito — ver comentario del modelo
+  actorEmail String?
+  accion     String // kebab-case corto, p. ej. "factura.timbrar"
+  entidad    String? // nombre del modelo afectado, p. ej. "Invoice"
+  entidadId  String?
+  detalle    Json? // sólo metadatos, nunca secretos
+  ip         String?
+
+  @@index([companyId, createdAt])
+  @@index([accion, createdAt])
+}

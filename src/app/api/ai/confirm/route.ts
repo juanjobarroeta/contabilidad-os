@@ -9,6 +9,7 @@ import {
   executeChatPendingAction,
   decideConfirm,
 } from "@/lib/ai/pending-action";
+import { registrarBitacora } from "@/lib/audit";
 
 // POST /api/ai/confirm
 //   body { conversationId, token? }
@@ -87,5 +88,23 @@ export async function POST(req: Request) {
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 409 });
   }
+
+  // Bitácora de seguridad: acción del asistente confirmada por un humano y
+  // ejecutada (fire-and-forget). Se registra el tipo y los ids objetivo.
+  registrarBitacora({
+    companyId: conv.companyId,
+    userId,
+    actorEmail: session.user.email ?? null,
+    accion: "ai.confirmar",
+    entidad: "ChatConversation",
+    entidadId: conversationId,
+    detalle: {
+      tipo: pa!.type,
+      objetivo: pa!.payload,
+      resumen: pa!.summary,
+    },
+    req,
+  });
+
   return NextResponse.json({ ok: true, message: result.message });
 }

@@ -8,6 +8,7 @@ import {
   Upload, Eye, EyeOff, Shield, FileKey2, Save,
 } from "lucide-react";
 import { ClientInvitesPanel } from "./ClientInvitesPanel";
+import { BitacoraPanel } from "./BitacoraPanel";
 import { ZonaPeligroEmpresa } from "./ZonaPeligroEmpresa";
 
 function fileToBase64(file: File): Promise<string> {
@@ -477,6 +478,9 @@ export default function EmpresaEditPage() {
 
       {/* Invitar cliente a esta empresa (solo admins del despacho dueño) */}
       <ClientInvitesPanel companyId={id} />
+
+      {/* Bitácora de seguridad — registro inmutable (solo OWNER/ADMIN) */}
+      <BitacoraPanel companyId={id} />
 
       {/* Zona de peligro — baja definitiva (solo OWNER directo) */}
       <ZonaPeligroEmpresa companyId={id} rfc={company.rfc} />

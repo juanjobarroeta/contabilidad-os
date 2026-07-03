@@ -6,6 +6,7 @@ import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { z } from "zod";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { registrarBitacora } from "@/lib/audit";
 import { gateEscritura } from "@/lib/subscription";
 
 const invoiceItemSchema = z.object({
@@ -151,9 +152,11 @@ export async function GET(req: Request) {
 // POST /api/facturas — emit CFDI via Facturapi
 export async function POST(req: Request) {
   let userId: string;
+  let userEmail: string | null = null;
   try {
     const user = await requireUser(req);
     userId = user.id;
+    userEmail = user.email;
   } catch (e) {
     const status = e instanceof AuthzError ? e.status : 401;
     return NextResponse.json({ error: "Unauthorized" }, { status });
@@ -371,6 +374,22 @@ export async function POST(req: Request) {
         },
         include: { items: true, customer: true },
       });
+
+  // Bitácora de seguridad: timbrado exitoso (fire-and-forget).
+  registrarBitacora({
+    companyId,
+    userId,
+    actorEmail: userEmail,
+    accion: "factura.timbrar",
+    entidad: "Invoice",
+    entidadId: invoice.id,
+    detalle: {
+      uuid: invoice.uuid,
+      total: invoice.total,
+      clienteRfc: customer.rfc,
+    },
+    req,
+  });
 
   return NextResponse.json(invoice, { status: 201 });
 }

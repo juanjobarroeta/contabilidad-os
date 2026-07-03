@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireOwner } from "@/lib/authz";
+import { registrarBitacora } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string; userId: string }> };
 
@@ -39,6 +40,18 @@ export async function PATCH(req: Request, { params }: Params) {
       data: { role: parsed.data.role },
     });
 
+    // Bitácora de seguridad: cambio de rol (fire-and-forget).
+    registrarBitacora({
+      companyId,
+      userId: actor.id,
+      actorEmail: actor.email,
+      accion: "miembros.cambiar-rol",
+      entidad: "CompanyMember",
+      entidadId: updated.id,
+      detalle: { miembroUserId: userId, nuevoRol: updated.role },
+      req,
+    });
+
     return NextResponse.json({ id: updated.id, role: updated.role });
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
@@ -47,7 +60,7 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 // DELETE /api/companies/[id]/members/[userId] — remove member
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
   try {
     const { id: companyId, userId } = await params;
     const { user: actor } = await requireOwner(companyId);
@@ -75,6 +88,18 @@ export async function DELETE(_req: Request, { params }: Params) {
 
     await prisma.companyMember.delete({
       where: { userId_companyId: { userId, companyId } },
+    });
+
+    // Bitácora de seguridad: baja de miembro (fire-and-forget).
+    registrarBitacora({
+      companyId,
+      userId: actor.id,
+      actorEmail: actor.email,
+      accion: "miembros.eliminar",
+      entidad: "CompanyMember",
+      entidadId: target.id,
+      detalle: { miembroUserId: userId, rolAnterior: target.role },
+      req,
     });
 
     return NextResponse.json({ ok: true });

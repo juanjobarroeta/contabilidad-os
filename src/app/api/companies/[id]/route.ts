@@ -7,6 +7,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
 import { fielStatus, parseCertExpiry } from "@/lib/fiel";
 import { borrarCredencialesEmpresa, borrarEmpresaDefinitivo } from "@/lib/empresas/baja";
+import { registrarBitacora } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -145,6 +146,24 @@ export async function PATCH(req: Request, { params }: Params) {
 
   await prisma.company.update({ where: { id: companyId }, data });
 
+  // Bitácora de seguridad: cambio de credenciales fiscales. Se registra QUÉ
+  // tipo cambió (fiel/csd), NUNCA los valores ni contraseñas.
+  const credencialesCambiadas: string[] = [];
+  if (data.fielCer || data.fielKey || data.fielPassword) credencialesCambiadas.push("fiel");
+  if (data.csdCer || data.csdKey || data.csdPassword) credencialesCambiadas.push("csd");
+  if (credencialesCambiadas.length > 0) {
+    registrarBitacora({
+      companyId,
+      userId: session.user.id,
+      actorEmail: session.user.email ?? null,
+      accion: "credenciales.actualizar",
+      entidad: "Company",
+      entidadId: companyId,
+      detalle: { tipos: credencialesCambiadas },
+      req,
+    });
+  }
+
   // If the CSD just changed, re-run Facturapi provisioning so the org gets
   // the certificate uploaded and a live key issued.
   let facturapi = null;
@@ -262,6 +281,20 @@ export async function DELETE(req: Request, { params }: Params) {
     // Fase 2 — borrado total en una transacción (todo-o-nada).
     await borrarEmpresaDefinitivo(companyId);
     console.warn(`[baja-empresa] completada ${JSON.stringify(auditoria)}`);
+
+    // Bitácora de seguridad: la fila SOBREVIVE al borrado porque AuditLog no
+    // tiene FK a Company (companyId es columna plana a propósito).
+    registrarBitacora({
+      companyId,
+      userId: session.user.id,
+      actorEmail: session.user.email ?? null,
+      accion: "empresa.baja",
+      entidad: "Company",
+      entidadId: companyId,
+      detalle: { rfc: company.rfc, razonSocial: company.razonSocial },
+      req,
+    });
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

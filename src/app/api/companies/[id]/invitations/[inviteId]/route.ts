@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthzError } from "@/lib/authz";
 import { requireDespachoAdminForCompany } from "@/lib/invitations-server";
+import { registrarBitacora } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string; inviteId: string }> };
 
@@ -12,7 +13,7 @@ type Params = { params: Promise<{ id: string; inviteId: string }> };
 export async function DELETE(req: Request, { params }: Params) {
   try {
     const { id: companyId, inviteId } = await params;
-    await requireDespachoAdminForCompany(companyId, req);
+    const { userId } = await requireDespachoAdminForCompany(companyId, req);
 
     const invite = await prisma.companyInvitation.findUnique({
       where: { id: inviteId },
@@ -30,6 +31,16 @@ export async function DELETE(req: Request, { params }: Params) {
       await prisma.companyInvitation.update({
         where: { id: inviteId },
         data: { status: "REVOKED" },
+      });
+
+      // Bitácora de seguridad: invitación revocada (fire-and-forget).
+      registrarBitacora({
+        companyId,
+        userId,
+        accion: "invitacion.revocar",
+        entidad: "CompanyInvitation",
+        entidadId: inviteId,
+        req,
       });
     }
     return NextResponse.json({ ok: true });

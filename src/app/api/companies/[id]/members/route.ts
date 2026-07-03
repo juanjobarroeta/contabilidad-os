@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireOwner, getEffectiveCompanyMembership } from "@/lib/authz";
 import type { MemberRole } from "@prisma/client";
+import { registrarBitacora } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -56,7 +57,7 @@ function randomPassword(): string {
 export async function POST(req: Request, { params }: Params) {
   try {
     const { id: companyId } = await params;
-    await requireOwner(companyId);
+    const { user: actor } = await requireOwner(companyId);
 
     const body = await req.json().catch(() => null);
     const parsed = addMemberSchema.safeParse(body);
@@ -97,6 +98,18 @@ export async function POST(req: Request, { params }: Params) {
 
     const membership = await prisma.companyMember.create({
       data: { userId: user.id, companyId, role: role as MemberRole },
+    });
+
+    // Bitácora de seguridad: alta de miembro (fire-and-forget).
+    registrarBitacora({
+      companyId,
+      userId: actor.id,
+      actorEmail: actor.email,
+      accion: "miembros.agregar",
+      entidad: "CompanyMember",
+      entidadId: membership.id,
+      detalle: { miembroEmail: user.email, miembroUserId: user.id, rol: membership.role },
+      req,
     });
 
     return NextResponse.json(

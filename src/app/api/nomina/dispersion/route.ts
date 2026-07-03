@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
+import { registrarBitacora } from "@/lib/audit";
 
 // GET /api/nomina/dispersion?runId=xxx
 //
@@ -79,6 +80,23 @@ export async function GET(req: Request) {
 
   const csv = [header, ...lines].join("\r\n");
   const filename = `Dispersion_${run.company.rfc}_${run.periodo.replace(/\//g, "_")}.csv`;
+
+  // Bitácora de seguridad: exportar la dispersión ES un evento (el archivo
+  // expone CLABE/RFC/neto de toda la plantilla). Fire-and-forget.
+  registrarBitacora({
+    companyId: run.companyId,
+    userId: session.user.id,
+    actorEmail: session.user.email ?? null,
+    accion: "nomina.dispersion-export",
+    entidad: "PayrollRun",
+    entidadId: run.id,
+    detalle: {
+      periodo: run.periodo,
+      empresaRfc: run.company.rfc,
+      empleados: run.items.length,
+    },
+    req,
+  });
 
   return new Response(csv, {
     headers: {

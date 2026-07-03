@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { checkInvoiceMatchGuard } from "@/lib/conciliacion";
+import { registrarBitacora } from "@/lib/audit";
 
 type Params = { params: Promise<{ txId: string }> };
 
@@ -161,6 +162,32 @@ export async function PATCH(req: Request, { params }: Params) {
       break;
     default:
       return NextResponse.json({ error: `Acción desconocida: ${action}` }, { status: 400 });
+  }
+
+  // Bitácora de seguridad: conciliación manual (fire-and-forget). Sólo
+  // match/unmatch — ignore/unignore no mueven dinero ni vínculos fiscales.
+  if (action === "match" || action === "unmatch") {
+    registrarBitacora({
+      companyId: tx.companyId,
+      userId: session.user.id,
+      actorEmail: session.user.email ?? null,
+      accion: action === "match" ? "conciliacion.match" : "conciliacion.unmatch",
+      entidad: "BankTransaction",
+      entidadId: txId,
+      detalle: {
+        monto: tx.monto,
+        ...(action === "match"
+          ? {
+              invoiceId: invoiceId ?? null,
+              gastoId: gastoId ?? null,
+              reembolsoId: reembolsoId ?? null,
+              rayaId: rayaId ?? null,
+              solicitudCompraId: solicitudCompraId ?? null,
+            }
+          : {}),
+      },
+      req,
+    });
   }
 
   const updated = await prisma.bankTransaction.findUnique({

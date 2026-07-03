@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isOperador } from "@/lib/authz";
 import { enforcementHabilitado, getUserSubscriptionState } from "@/lib/subscription";
+import { registrarBitacora } from "@/lib/audit";
 
 // GET /api/me — datos ligeros del usuario para la UI (p.ej. mostrar herramientas
 // internas sólo al operador de plataforma) + estado EFECTIVO de la suscripción
@@ -45,7 +46,7 @@ export async function GET() {
 // él envió, sesiones/cuentas OAuth (cascada) y la fila User.
 //
 // Respuesta: 204 — el cliente debe cerrar la sesión (signOut) al recibirla.
-export async function DELETE() {
+export async function DELETE(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
@@ -113,6 +114,18 @@ export async function DELETE() {
   ]);
 
   console.warn(`[baja-cuenta] completada ${JSON.stringify(auditoria)}`);
+
+  // Bitácora de seguridad: la fila SOBREVIVE al borrado porque AuditLog no
+  // tiene FK a User (userId es columna plana a propósito).
+  registrarBitacora({
+    userId,
+    actorEmail: auditoria.email,
+    accion: "cuenta.baja",
+    entidad: "User",
+    entidadId: userId,
+    req,
+  });
+
   // 204: el cliente cierra sesión (signOut) al recibir la respuesta.
   return new NextResponse(null, { status: 204 });
 }
