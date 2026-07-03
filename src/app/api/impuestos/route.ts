@@ -158,6 +158,9 @@ export async function GET(req: Request) {
     isPreliminar,
     // Egresos excluidos por proveedor 69-B definitivo (Art. 69-B); null si no hay.
     efos: pos.efos ?? null,
+    // Avisos de cadena de arrastre rota (meses con actividad sin declaración
+    // guardada) — directos del motor, listos para mostrar.
+    advertencias: pos.advertencias,
     iva: {
       // Flujo de efectivo, base-REP (what SAT actually expects) — from the engine.
       trasladado: pos.iva.trasladado,

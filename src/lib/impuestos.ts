@@ -220,6 +220,14 @@ export interface TaxPosition {
     subtotalExcluido: number;
     ivaAcreditableExcluido: number;
   } | null;
+  /**
+   * Avisos de integridad de la cadena de arrastre (español formal, listos para
+   * mostrar). El motor lee el saldo a favor de IVA (Art. 6 LIVA) y los pagos
+   * provisionales de ISR (Art. 14 LISR) de las declaraciones GUARDADAS de meses
+   * anteriores: si un mes con actividad nunca se guardó, esos arrastres valen 0
+   * en silencio y el IVA/ISR del periodo se sobrestima. Vacío = cadena íntegra.
+   */
+  advertencias: string[];
 }
 
 export type IsrMetodo = "PM_ART14" | "PF_ACT_EMPRESARIAL" | "RESICO_PF" | "PF_ARRENDAMIENTO" | "PF_PLATAFORMAS";
@@ -252,6 +260,180 @@ export function aplicarPerdidaFiscalPM(params: {
   const perdidaAplicada = round2(Math.min(perdidaPendiente!, utilidadFiscal));
   const baseGravable = Math.max(0, round2(utilidadFiscal - perdidaAplicada));
   return { perdidaAplicada, baseGravable };
+}
+
+/** Campos de una DECLARACION_ANUAL guardada que alimentan el coeficiente. */
+export type AnualParaCoeficiente = {
+  periodo: string;
+  isrIngresos: number | null;
+  isrDeducciones: number | null;
+  isrBaseGravable: number | null;
+  isrCoeficienteUtilidad: number | null;
+};
+
+const round4 = (n: number) => Math.round(n * 10000) / 10000;
+
+/**
+ * Coeficiente de utilidad derivado de UNA declaración anual guardada (Art. 14,
+ * fracc. I LISR). La ley lo define como UTILIDAD FISCAL ÷ ingresos nominales —
+ * ANTES de amortizar pérdidas fiscales de ejercicios anteriores (y sin restar
+ * la PTU pagada, Art. 9 penúltimo párrafo) — así que dividir el RESULTADO
+ * fiscal entre los ingresos lo subestimaría. Prioridad:
+ *
+ *  1. `isrCoeficienteUtilidad` guardado: tanto la anual calculada in-app
+ *     (declaracion-anual.ts, utilidadOPerdida ÷ ingresos) como el acuse
+ *     sincronizado (syntage/map.ts, utilidad fiscal ÷ ingresos nominales) lo
+ *     persisten ya calculado sobre la utilidad PRE-pérdidas.
+ *  2. Reconstrucción: utilidad fiscal = isrIngresos − isrDeducciones (la fila
+ *     de la anual in-app guarda totalIngresos/totalDeducciones; su resta es la
+ *     utilidad antes de pérdidas).
+ *  3. Último recurso (filas legacy sin deducciones): isrBaseGravable ÷
+ *     isrIngresos. En filas provenientes de acuse, isrBaseGravable ES la
+ *     utilidad fiscal (correcto); en filas de la anual in-app es el resultado
+ *     fiscal (post-pérdidas) y puede subestimar — sólo se usa a falta de todo
+ *     lo demás, mejor un coeficiente conservador que ninguno.
+ *
+ * Un ejercicio con utilidad ≤ 0 NO produce coeficiente (→ null): el Art. 14
+ * ordena usar el último ejercicio de 12 meses CON utilidad fiscal, hasta 5
+ * ejercicios atrás (ver coeficienteAnualConHistorial). Se calcula hasta el
+ * diezmilésimo (Art. 14, fracc. I, último párrafo).
+ *
+ * Función pura (sin DB) para poder probar la derivación de forma aislada.
+ */
+export function coeficienteDesdeAnual(row: AnualParaCoeficiente | null | undefined): number | null {
+  if (!row) return null;
+  if (row.isrCoeficienteUtilidad != null && row.isrCoeficienteUtilidad > 0) {
+    return round4(row.isrCoeficienteUtilidad);
+  }
+  if (row.isrIngresos == null || row.isrIngresos <= 0) return null;
+  if (row.isrDeducciones != null) {
+    const utilidadFiscal = row.isrIngresos - row.isrDeducciones;
+    return utilidadFiscal > 0 ? round4(utilidadFiscal / row.isrIngresos) : null;
+  }
+  if (row.isrBaseGravable != null && row.isrBaseGravable > 0) {
+    return round4(row.isrBaseGravable / row.isrIngresos);
+  }
+  return null;
+}
+
+/**
+ * Coeficiente de utilidad con la regla de arrastre del Art. 14, fracc. I,
+ * segundo párrafo LISR: cuando en el último ejercicio de 12 meses no resulta
+ * coeficiente (pérdida o datos insuficientes), se aplica el del ÚLTIMO
+ * ejercicio de 12 meses por el que se tenga coeficiente, sin que ese ejercicio
+ * sea anterior en más de CINCO años a aquél por el que se pagan provisionales.
+ *
+ * `rows` son las anuales guardadas disponibles (cualquier orden); se recorre
+ * de `prevYear` hacia atrás hasta `prevYear − 4` (5 ejercicios candidatos) y
+ * gana el primero que produzca coeficiente. Limitación del modelo de datos:
+ * sólo consideramos anuales efectivamente capturadas/sincronizadas — un
+ * ejercicio sin fila guardada simplemente no aporta coeficiente.
+ */
+export function coeficienteAnualConHistorial(
+  rows: AnualParaCoeficiente[],
+  prevYear: number
+): { coeficiente: number; ejercicio: number } | null {
+  for (let ejercicio = prevYear; ejercicio > prevYear - 5; ejercicio--) {
+    // El periodo de las anuales varía de formato ("2024", "2024-13", …): se
+    // empata por prefijo del año y, si hubiera varias filas, gana la de periodo
+    // mayor (la más específica/reciente).
+    const candidatas = rows
+      .filter((r) => r.periodo.startsWith(String(ejercicio)))
+      .sort((a, b) => (a.periodo < b.periodo ? 1 : -1));
+    for (const row of candidatas) {
+      const coeficiente = coeficienteDesdeAnual(row);
+      if (coeficiente != null) return { coeficiente, ejercicio };
+    }
+  }
+  return null;
+}
+
+const MESES_ES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+function nombrePeriodo(periodo: string): string {
+  const [y, m] = periodo.split("-").map(Number);
+  return `${MESES_ES[m - 1]} de ${y}`;
+}
+
+/**
+ * Avisos cuando la cadena de declaraciones guardadas está rota. El motor toma
+ * el saldo a favor de IVA del mes anterior (Art. 6 LIVA — SÍ cruza ejercicios,
+ * diciembre alimenta enero) y los pagos provisionales de ISR del ejercicio
+ * (Art. 14 LISR — se reinician en enero) de las filas GUARDADAS
+ * (CALCULATED/FILED/PAID): un mes con actividad sin declaración guardada hace
+ * que esos arrastres valgan 0 en silencio y el periodo actual se sobrestime.
+ *
+ * Reglas:
+ *  (a) El mes inmediato anterior tiene CFDI timbrados pero no declaración
+ *      guardada → aviso de IVA + ISR (en enero, sólo IVA: el ISR del ejercicio
+ *      empieza de cero, pero el saldo a favor de diciembre sí se arrastra).
+ *  (b) Meses anteriores del MISMO ejercicio (antes del inmediato) con actividad
+ *      y sin declaración → aviso de ISR listando los meses (acotado).
+ *
+ * Los meses previos a la primera factura de la empresa nunca aparecen en
+ * `mesesConActividad`, así que no generan avisos por construcción.
+ *
+ * Función pura (sin DB) para poder probar la decisión de forma aislada.
+ * Los periodos usan el formato "YYYY-MM".
+ */
+export function advertenciasCadenaDeclaraciones(params: {
+  year: number;
+  month: number;
+  /** Periodos anteriores con al menos un CFDI timbrado (ene→mes−1 del ejercicio; dic anterior cuando month=1). */
+  mesesConActividad: ReadonlySet<string>;
+  /** Periodos con declaración guardada (IVA_MENSUAL o ISR_PROVISIONAL en CALCULATED/FILED/PAID). */
+  mesesConDeclaracion: ReadonlySet<string>;
+}): string[] {
+  const { year, month, mesesConActividad, mesesConDeclaracion } = params;
+  const advertencias: string[] = [];
+  const pad = (m: number) => String(m).padStart(2, "0");
+  const prevPeriodo = month === 1 ? `${year - 1}-12` : `${year}-${pad(month - 1)}`;
+
+  // (a) Mes inmediato anterior: rompe el arrastre de IVA (y de ISR dentro del ejercicio).
+  if (mesesConActividad.has(prevPeriodo) && !mesesConDeclaracion.has(prevPeriodo)) {
+    if (month === 1) {
+      // Enero: el saldo a favor de IVA de diciembre SÍ se arrastra (Art. 6
+      // LIVA, el acreditamiento no se pierde al cambiar de ejercicio); el ISR
+      // provisional del ejercicio empieza de cero, sin implicación.
+      advertencias.push(
+        `El mes anterior (${nombrePeriodo(prevPeriodo)}) tiene CFDI timbrados pero no cuenta con una declaración guardada (calculada o presentada). ` +
+          `El saldo a favor de IVA de ese periodo —que sí se arrastra entre ejercicios (Art. 6 LIVA)— se está tomando como cero, ` +
+          `por lo que el IVA a pagar de este periodo puede estar sobrestimado. Capture o calcule la declaración de ${nombrePeriodo(prevPeriodo)} antes de confiar en estas cifras.`
+      );
+    } else {
+      advertencias.push(
+        `El mes anterior (${nombrePeriodo(prevPeriodo)}) tiene CFDI timbrados pero no cuenta con una declaración guardada (calculada o presentada). ` +
+          `El saldo a favor de IVA (Art. 6 LIVA) y los pagos provisionales de ISR acreditables (Art. 14 LISR) de ese periodo se están tomando como cero, ` +
+          `por lo que el IVA y el ISR a pagar de este periodo pueden estar sobrestimados. Capture o calcule la declaración de ${nombrePeriodo(prevPeriodo)} antes de confiar en estas cifras.`
+      );
+    }
+  }
+
+  // (b) ISR acumulativo (Art. 14): cualquier mes anterior del ejercicio sin
+  // declaración guardada subestima "pagos provisionales efectuados con
+  // anterioridad". El mes inmediato ya quedó cubierto por (a).
+  if (month > 2) {
+    const faltantes: string[] = [];
+    for (let m = 1; m <= month - 2; m++) {
+      const p = `${year}-${pad(m)}`;
+      if (mesesConActividad.has(p) && !mesesConDeclaracion.has(p)) faltantes.push(p);
+    }
+    if (faltantes.length > 0) {
+      const MAX_LISTA = 5;
+      const lista =
+        faltantes.slice(0, MAX_LISTA).map(nombrePeriodo).join(", ") +
+        (faltantes.length > MAX_LISTA ? ` y ${faltantes.length - MAX_LISTA} mes(es) más` : "");
+      advertencias.push(
+        `Hay meses del ejercicio con CFDI timbrados y sin declaración guardada: ${lista}. ` +
+          `Los pagos provisionales de ISR efectuados con anterioridad (Art. 14 LISR) pueden estar subestimados y, en consecuencia, el ISR a pagar de este periodo sobrestimado.`
+      );
+    }
+  }
+
+  return advertencias;
 }
 
 /**
@@ -296,7 +478,7 @@ export async function computeTaxPosition(
     prevIsrDeclaracion,
     company,
     repCobrosDelMes,
-    annualDecl,
+    annualDecls,
     perdidasRecords,
   ] = await Promise.all([
     prisma.invoice.findMany({
@@ -365,18 +547,20 @@ export async function computeTaxPosition(
       },
       select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
     }),
-    // Coeficiente autoritativo: declaración anual del ejercicio anterior
-    // (utilidad fiscal ÷ ingresos). El periodo de las anuales varía de formato,
-    // así que se busca por prefijo del año.
-    prisma.taxDeclaration.findFirst({
+    // Coeficiente autoritativo: declaraciones anuales guardadas de los últimos
+    // 5 ejercicios (Art. 14, fracc. I LISR — si el último ejercicio no arroja
+    // coeficiente, se usa el del último ejercicio CON utilidad, hasta 5 años
+    // atrás). El periodo de las anuales varía de formato, así que se busca por
+    // prefijo del año.
+    prisma.taxDeclaration.findMany({
       where: {
         companyId,
         tipo: "DECLARACION_ANUAL",
-        periodo: { startsWith: String(prevYear) },
+        OR: Array.from({ length: 5 }, (_, i) => ({ periodo: { startsWith: String(prevYear - i) } })),
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
       orderBy: { periodo: "desc" },
-      select: { isrIngresos: true, isrBaseGravable: true, isrPerdidaPendiente: true },
+      select: { periodo: true, isrIngresos: true, isrDeducciones: true, isrBaseGravable: true, isrCoeficienteUtilidad: true, isrPerdidaPendiente: true },
     }),
     // Pérdidas fiscales pendientes (Art. 57) — sólo las consume el provisional PF
     // de actividad empresarial (Art. 106); el ledger lo cierra la anual, aquí es
@@ -633,12 +817,13 @@ export async function computeTaxPosition(
     const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
     const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 
-    // Coeficiente del ejercicio anterior tomado de la declaración anual
-    // (utilidad fiscal ÷ ingresos) — la fuente autoritativa por ley (Art. 14).
-    const coeficienteAnual =
-      annualDecl?.isrIngresos != null && annualDecl.isrIngresos > 0 && annualDecl.isrBaseGravable != null
-        ? annualDecl.isrBaseGravable / annualDecl.isrIngresos
-        : null;
+    // Coeficiente tomado de las declaraciones anuales guardadas — la fuente
+    // autoritativa por ley (Art. 14, fracc. I LISR: UTILIDAD FISCAL ÷ ingresos
+    // nominales, ANTES de amortizar pérdidas; dividir el resultado fiscal
+    // subestimaría el provisional). Si el ejercicio inmediato anterior no
+    // arroja coeficiente (pérdida), se usa el del último ejercicio con
+    // utilidad, hasta 5 años atrás (fracc. I, segundo párrafo).
+    const coeficienteAnual = coeficienteAnualConHistorial(annualDecls, prevYear)?.coeficiente ?? null;
 
     // Coeficiente que YA se aplicó en un pago provisional capturado (de un acuse
     // del SAT). Corrobora el valor real usado; el más reciente disponible.
@@ -689,13 +874,17 @@ export async function computeTaxPosition(
     // valor manual de la empresa gana; si no hay, se usa el remanente extraído de
     // la declaración anual del ejercicio anterior (isrPerdidaPendiente), que
     // corresponde justo al año de los provisionales en curso.
+    // El remanente de pérdidas viene EXCLUSIVAMENTE de la anual del ejercicio
+    // inmediato anterior (es el saldo actualizado que aplica a este año) — no
+    // de las anuales más viejas que el lookback del coeficiente sí considera.
+    const annualDeclPrev = annualDecls.find((r) => r.periodo.startsWith(String(prevYear))) ?? null;
     const usaPerdidaManual = company?.perdidaFiscalPendiente != null;
     const perdidaFiscalPendiente = usaPerdidaManual
       ? company!.perdidaFiscalPendiente
-      : (annualDecl?.isrPerdidaPendiente ?? null);
+      : (annualDeclPrev?.isrPerdidaPendiente ?? null);
     const perdidaFiscalAnio = usaPerdidaManual
       ? (company?.perdidaFiscalAnio ?? null)
-      : (annualDecl?.isrPerdidaPendiente != null ? prevYear : null);
+      : (annualDeclPrev?.isrPerdidaPendiente != null ? prevYear : null);
 
     let utilidadFiscal: number | null = null;
     let baseGravable: number | null = null;
@@ -775,11 +964,39 @@ export async function computeTaxPosition(
     };
   }
 
+  // ── Avisos de cadena de arrastre rota ──────────────────────────────────────
+  // saldoFavorAnterior (IVA, Art. 6 LIVA) e isrPagadoAnterior (Art. 14 LISR)
+  // provienen de declaraciones GUARDADAS: si un mes con actividad nunca se
+  // guardó, valen 0 en silencio y este periodo se sobrestima. Meses candidatos:
+  // ene→mes−1 del ejercicio; en enero, sólo diciembre anterior (la cadena de
+  // IVA sí cruza ejercicios; el ISR del ejercicio empieza de cero).
+  const periodosCandidatos =
+    month === 1
+      ? [prevPeriodo]
+      : Array.from({ length: month - 1 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+  const actividadPorPeriodo = await Promise.all(
+    periodosCandidatos.map(async (p) => {
+      const [py, pm] = p.split("-").map(Number);
+      const alguna = await prisma.invoice.findFirst({
+        where: { companyId, status: "STAMPED", fecha: { gte: new Date(py, pm - 1, 1), lt: new Date(py, pm, 1) } },
+        select: { id: true },
+      });
+      return alguna ? p : null;
+    })
+  );
+  const mesesConActividad = new Set(actividadPorPeriodo.filter((p): p is string => p !== null));
+  // Declaraciones guardadas: las del ejercicio (IVA_MENSUAL/ISR_PROVISIONAL ya
+  // consultadas arriba) más el mes anterior cuando cruza de ejercicio (enero).
+  const mesesConDeclaracion = new Set(declaracionesPrevias.map((d) => d.periodo));
+  if (prevDeclaracion || prevIsrDeclaracion) mesesConDeclaracion.add(prevPeriodo);
+  const advertencias = advertenciasCadenaDeclaraciones({ year, month, mesesConActividad, mesesConDeclaracion });
+
   return {
     periodo,
     month,
     year,
     efos,
+    advertencias,
     iva: {
       trasladado: round2(ivaTrasladadoTotal),
       retenidoPorClientes: round2(ivaRetenidoPorClientes),
