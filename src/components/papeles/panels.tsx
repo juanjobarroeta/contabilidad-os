@@ -452,6 +452,7 @@ interface IsrData {
         tipo: "art14";
         ingresosAcumulados: number; coeficiente: number | null; utilidadFiscal: number | null;
         baseGravable?: number | null; perdidaFiscalAplicada?: number | null;
+        ptuPagadaEjercicio?: number | null; ptuDisminuida?: number | null;
         tasa: number; isrDelEjercicio: number | null; isrPagadoAnterior: number; isrDelMes: number | null;
       }
     | {
@@ -746,11 +747,16 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
               <Line label="Ingresos acumulados del ejercicio" value={data.calculo.ingresosAcumulados} />
               <Line label={`× Coeficiente de utilidad (${data.calculo.coeficiente != null ? (data.calculo.coeficiente * 100).toFixed(4) + "%" : "—"})`} value={null} />
               <Line label="= Utilidad fiscal estimada" value={data.calculo.utilidadFiscal} strong />
+              {/* PTU pagada en el ejercicio: octavos acumulados mayo–diciembre,
+                  ANTES de pérdidas (Art. 14, fracc. II, segundo párrafo LISR). */}
+              {data.calculo.ptuDisminuida != null && data.calculo.ptuDisminuida > 0 && (
+                <Line label="− PTU pagada en el ejercicio (octavos mayo–diciembre)" value={-data.calculo.ptuDisminuida} />
+              )}
               {data.calculo.perdidaFiscalAplicada != null && data.calculo.perdidaFiscalAplicada > 0 && (
-                <>
-                  <Line label="− Pérdidas fiscales de ejercicios anteriores aplicadas" value={-data.calculo.perdidaFiscalAplicada} />
-                  <Line label="= Base gravable" value={data.calculo.baseGravable ?? null} strong />
-                </>
+                <Line label="− Pérdidas fiscales de ejercicios anteriores aplicadas" value={-data.calculo.perdidaFiscalAplicada} />
+              )}
+              {((data.calculo.ptuDisminuida ?? 0) > 0 || (data.calculo.perdidaFiscalAplicada ?? 0) > 0) && (
+                <Line label="= Base gravable" value={data.calculo.baseGravable ?? null} strong />
               )}
               <Line label={`× Tasa ISR (${(data.calculo.tasa * 100).toFixed(0)}%)`} value={null} />
               <Line label="= ISR del ejercicio acumulado" value={data.calculo.isrDelEjercicio} strong />

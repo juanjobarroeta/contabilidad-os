@@ -217,6 +217,9 @@ export async function GET(req: Request) {
       utilidadFiscal: pos.isr.utilidadFiscal,
       perdidaFiscalPendiente: pos.isr.perdidaFiscalPendiente ?? null,
       perdidaFiscalAplicada: pos.isr.perdidaFiscalAplicada ?? null,
+      // PTU pagada en el ejercicio disminuida en octavos may–dic (Art. 14, fracc. II LISR) — PM Art. 14.
+      ptuPagadaEjercicio: pos.isr.ptuPagadaEjercicio ?? null,
+      ptuDisminuida: pos.isr.ptuDisminuida ?? null,
       isrDelEjercicio: pos.isr.isrDelEjercicio,
       isrPagar: pos.isr.isrPagar,
       retencionesAcreditadas: pos.isr.retencionesAcreditadas,

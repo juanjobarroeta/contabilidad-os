@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   aplicarPerdidaFiscalPM,
+  ptuDisminuiblePM,
   coeficienteDesdeAnual,
   coeficienteAnualConHistorial,
   advertenciasCadenaDeclaraciones,
@@ -80,6 +81,78 @@ describe("aplicarPerdidaFiscalPM", () => {
     const r = aplicarPerdidaFiscalPM({
       utilidadFiscal: 0,
       perdidaPendiente: 50_000,
+      perdidaAnio: 2025,
+      year: 2026,
+    });
+    expect(r.perdidaAplicada).toBe(0);
+    expect(r.baseGravable).toBe(0);
+  });
+});
+
+// PTU pagada en el ejercicio disminuible del provisional PM (Art. 14, fracc.
+// II, segundo párrafo LISR): por partes iguales en mayo–diciembre, de manera
+// acumulativa — mayo 1/8, junio 2/8, …, diciembre 8/8. Enero–abril: nada.
+describe("ptuDisminuiblePM", () => {
+  const PTU = 80_000;
+
+  it("enero–abril no disminuyen PTU", () => {
+    for (const month of [1, 2, 3, 4]) {
+      expect(ptuDisminuiblePM({ ptuPagadaEjercicio: PTU, month })).toBe(0);
+    }
+  });
+
+  it("mayo disminuye 1/8 acumulado", () => {
+    expect(ptuDisminuiblePM({ ptuPagadaEjercicio: PTU, month: 5 })).toBe(10_000);
+  });
+
+  it("agosto disminuye 4/8 acumulados", () => {
+    expect(ptuDisminuiblePM({ ptuPagadaEjercicio: PTU, month: 8 })).toBe(40_000);
+  });
+
+  it("diciembre disminuye 8/8 — la PTU completa", () => {
+    expect(ptuDisminuiblePM({ ptuPagadaEjercicio: PTU, month: 12 })).toBe(80_000);
+  });
+
+  it("PTU nula, cero o negativa → 0", () => {
+    expect(ptuDisminuiblePM({ ptuPagadaEjercicio: null, month: 8 })).toBe(0);
+    expect(ptuDisminuiblePM({ ptuPagadaEjercicio: 0, month: 8 })).toBe(0);
+    expect(ptuDisminuiblePM({ ptuPagadaEjercicio: -5_000, month: 8 })).toBe(0);
+  });
+
+  it("octavos no exactos se redondean a centavos", () => {
+    // 100 000/8 = 12 500 exacto; usar un monto con residuo: 1 000.01
+    expect(ptuDisminuiblePM({ ptuPagadaEjercicio: 1_000.01, month: 5 })).toBe(125.0);
+    expect(ptuDisminuiblePM({ ptuPagadaEjercicio: 1_000.01, month: 12 })).toBe(1_000.01);
+  });
+
+  // Orden del Art. 14, fracc. II: utilidad fiscal − PTU (octavos) primero, y a
+  // ESE resultado se le amortiza la pérdida fiscal pendiente. La base nunca es
+  // negativa: el excedente de PTU/pérdida sólo lleva la base a cero.
+  it("la PTU se disminuye ANTES de las pérdidas fiscales", () => {
+    const utilidadFiscal = 100_000;
+    const ptu = ptuDisminuiblePM({ ptuPagadaEjercicio: 80_000, month: 8 }); // 40 000
+    const utilidadTrasPtu = Math.max(0, utilidadFiscal - ptu); // 60 000
+    // La pérdida de 70 000 sólo puede amortizar los 60 000 restantes — si se
+    // aplicara antes de la PTU (100 000 − 70 000 = 30 000), la PTU de 40 000
+    // taparía todo y se perdería el orden legal.
+    const r = aplicarPerdidaFiscalPM({
+      utilidadFiscal: utilidadTrasPtu,
+      perdidaPendiente: 70_000,
+      perdidaAnio: 2025,
+      year: 2026,
+    });
+    expect(r.perdidaAplicada).toBe(60_000);
+    expect(r.baseGravable).toBe(0);
+  });
+
+  it("PTU mayor que la utilidad → base cero, nunca negativa", () => {
+    const utilidadFiscal = 30_000;
+    const ptu = ptuDisminuiblePM({ ptuPagadaEjercicio: 80_000, month: 12 }); // 80 000
+    const utilidadTrasPtu = Math.max(0, utilidadFiscal - ptu);
+    expect(utilidadTrasPtu).toBe(0);
+    const r = aplicarPerdidaFiscalPM({
+      utilidadFiscal: utilidadTrasPtu,
+      perdidaPendiente: 10_000,
       perdidaAnio: 2025,
       year: 2026,
     });
