@@ -1,19 +1,43 @@
 import { prisma } from "./prisma";
-import { sendPushToCompany } from "./push";
+import { usuariosConAccesoACompany } from "./push";
+import { registrarYNotificar, fechaLocalMx, inicioDelDiaMx } from "./notificaciones";
 
 const fmt = (n: number) =>
   "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /**
- * Push a digest of CFDIs newly imported for `companyId` since `since` —
- * "facturas emitidas / recibidas". One per-sync summary (not one per invoice),
- * so a busy sync doesn't spam. No-ops if nothing new (or push isn't configured).
- * Only counts INGRESO (emitidas) / EGRESO (recibidas); nómina/REP are excluded.
+ * Aviso de CFDIs recién importados para `companyId` — "facturas emitidas /
+ * recibidas". Pasa por la capa de dedup del inbox (`registrarYNotificar`) con
+ * dedupeKey `cfdi-nuevos:<companyId>:<YYYY-MM-DD>` (día local de México) y
+ * `pushSoloAlCrear`, lo que da A LO MÁS UN PUSH AL DÍA por empresa y usuario:
+ *
+ *   - El primer sync del día que importa algo CREA el item → push.
+ *   - Los syncs siguientes del mismo día sólo ACTUALIZAN el conteo acumulado
+ *     del día en el inbox, en silencio (sin re-push). Antes se re-empujaba en
+ *     cada corrida del cron (hasta 3 pushes/día por importaciones rutinarias).
+ *
+ * El cuerpo acumula: se recalculan los totales de TODO el día (no sólo de esta
+ * corrida), así el item del inbox siempre muestra el conteo del día completo.
+ * `since` (inicio de la corrida) sigue siendo el guard de no-op: si ESTA corrida
+ * no importó nada, no se toca nada. Sólo cuenta INGRESO (emitidas) / EGRESO
+ * (recibidas); nómina/REP se excluyen. Best-effort: no truena el cron.
  */
-export async function notifyNewInvoices(companyId: string, since: Date): Promise<{ notified: number }> {
+export async function notifyNewInvoices(
+  companyId: string,
+  since: Date,
+  now: Date = new Date(),
+): Promise<{ notified: number }> {
+  // Guard: ¿esta corrida importó algo? Si no, silencio total (ni escritura).
+  const importadasEstaCorrida = await prisma.invoice.count({
+    where: { companyId, createdAt: { gte: since }, tipo: { in: ["INGRESO", "EGRESO"] } },
+  });
+  if (importadasEstaCorrida === 0) return { notified: 0 };
+
+  // Totales acumulados de TODO el día (México), para que el item del inbox
+  // refleje el día completo aunque haya varios syncs.
   const grouped = await prisma.invoice.groupBy({
     by: ["tipo"],
-    where: { companyId, createdAt: { gte: since }, tipo: { in: ["INGRESO", "EGRESO"] } },
+    where: { companyId, createdAt: { gte: inicioDelDiaMx(now) }, tipo: { in: ["INGRESO", "EGRESO"] } },
     _count: { _all: true },
     _sum: { total: true },
   });
@@ -35,11 +59,30 @@ export async function notifyNewInvoices(companyId: string, since: Date): Promise
     select: { razonSocial: true },
   });
 
-  const r = await sendPushToCompany(companyId, {
-    title: `${total} factura${total === 1 ? "" : "s"} nueva${total === 1 ? "" : "s"}`,
-    body: `${company?.razonSocial ? company.razonSocial + " — " : ""}${parts.join(" · ")}`,
-    url: "/facturas",
-    tag: `sync-${companyId}`,
-  }, "cfdis");
-  return { notified: r.sent };
+  const titulo = `${total} factura${total === 1 ? "" : "s"} nueva${total === 1 ? "" : "s"} hoy`;
+  const cuerpo = `${company?.razonSocial ? company.razonSocial + " — " : ""}${parts.join(" · ")}`;
+  const dedupeKey = `cfdi-nuevos:${companyId}:${fechaLocalMx(now)}`;
+
+  const userIds = await usuariosConAccesoACompany(companyId);
+  let notified = 0;
+  for (const userId of userIds) {
+    try {
+      const r = await registrarYNotificar({
+        recipientUserId: userId,
+        companyId,
+        categoria: "otro",
+        severidad: "info",
+        titulo,
+        cuerpo,
+        url: "/facturas",
+        dedupeKey,
+        categoriaPush: "cfdis",
+        pushSoloAlCrear: true, // tope diario: sólo el primer sync del día empuja
+      });
+      if (r.pushSent) notified++;
+    } catch (e) {
+      console.error(`[notify-new-invoices] aviso a ${userId} falló:`, e);
+    }
+  }
+  return { notified };
 }

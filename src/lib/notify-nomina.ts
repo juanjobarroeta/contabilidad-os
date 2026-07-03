@@ -1,4 +1,4 @@
-import { registrarYNotificar } from "./notificaciones";
+import { registrarYNotificar, fechaLocalMx } from "./notificaciones";
 import { empresasAccesiblesIds } from "./authz";
 import { prisma } from "./prisma";
 import {
@@ -121,8 +121,12 @@ export async function notifyNominaRecordatorio(
     titulo: title,
     cuerpo: body,
     url: DEEP_LINK_TIMBRAR,
-    dedupeKey: "nomina-recordatorio", // colapsa avisos repetidos del día en uno
+    // Clave fechada + pushSoloAlCrear = un push por día de aviso: los re-corridos
+    // del cron el mismo día colapsan en silencio, y el T-1 de la siguiente
+    // quincena (otro día, mismo texto) sí vuelve a empujar.
+    dedupeKey: `nomina-recordatorio:${fechaLocalMx(hoy)}`,
     categoriaPush: "sistema",
+    pushSoloAlCrear: true,
   });
   return { notified: r.pushSent ? 1 : 0, empresas: debidas.length };
 }

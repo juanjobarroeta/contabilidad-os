@@ -40,9 +40,12 @@ export async function PUT(req: Request) {
     if (typeof body[c] === "boolean") current[c] = body[c] as boolean;
   }
 
+  // Merge sobre lo guardado: preserva llaves fuera de este endpoint (p.ej. el
+  // opt-in de operador `operadorTodasLasEmpresas`) en vez de pisarlas.
+  const merged = { ...((u?.notifPrefs ?? {}) as Record<string, boolean>), ...current };
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { notifPrefs: current },
+    data: { notifPrefs: merged },
   });
   return NextResponse.json(current);
 }

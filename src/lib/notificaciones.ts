@@ -25,6 +25,25 @@ export type CategoriaPendiente =
 
 export type SeveridadPendiente = "info" | "warn" | "error";
 
+const TZ_MX = "America/Mexico_City";
+
+/**
+ * Fecha local de México `YYYY-MM-DD`, para dedupeKeys fechados (p.ej.
+ * `briefing-matutino:2026-07-03`). Un dedupeKey fechado + `pushSoloAlCrear`
+ * garantiza "a lo más un push al día" por usuario.
+ */
+export function fechaLocalMx(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ_MX }).format(now);
+}
+
+/**
+ * Instante UTC de la medianoche de HOY en México, para acotar consultas "de hoy"
+ * (p.ej. CFDIs importados hoy). CDMX es UTC-6 fijo desde 2022 (sin DST).
+ */
+export function inicioDelDiaMx(now: Date = new Date()): Date {
+  return new Date(`${fechaLocalMx(now)}T00:00:00-06:00`);
+}
+
 /**
  * Decisión PURA del estado al re-disparar una alerta ya existente. Testeable sin
  * DB. `actual` es el estado guardado; `posponerHasta` su snooze (o null); `now`
@@ -35,6 +54,10 @@ export type SeveridadPendiente = "info" | "warn" | "error";
  *   - POSPUESTO vigente → POSPUESTO (no molestar todavía)
  *   - HECHO            → HECHO   (atendido: no re-molestar)
  *   - NUEVO            → NUEVO   (sigue pendiente)
+ *
+ * OJO: esta es la transición "cruda". La decisión completa (¿se aplica el flip
+ * VISTO→NUEVO? ¿sale push?) vive en `decidirNotificacion`, que sólo flippea
+ * VISTO→NUEVO cuando el contenido realmente cambió.
  */
 export function siguienteEstado(
   actual: EstadoPendiente,
@@ -59,6 +82,95 @@ export function siguienteEstado(
   }
 }
 
+/** Snapshot mínimo del item guardado, para decidir un re-disparo. */
+export interface ItemExistenteSnapshot {
+  estado: EstadoPendiente;
+  posponerHasta: Date | null;
+  titulo: string;
+  cuerpo: string;
+}
+
+/** Qué hacer ante un disparo (creación o re-disparo). Decisión PURA, testeable. */
+export interface DecisionNotificacion {
+  /** No existía el (usuario, dedupeKey): hay que crear el item. */
+  crear: boolean;
+  /** Estado resultante del item. */
+  estado: EstadoPendiente;
+  /** Hay que escribir la fila (contenido y/o estado cambian). `false` = silencio total. */
+  actualizar: boolean;
+  /** Limpiar un snooze vencido para que no quede colgando. */
+  limpiarSnooze: boolean;
+  /** Enviar el web-push. */
+  push: boolean;
+}
+
+/**
+ * Decisión PURA de qué hacer ante un disparo de alerta. Reglas de push — el push
+ * sale SOLO en transiciones reales, nunca en re-disparos sin novedad (un cron
+ * 3×/día no debe re-empujar la misma alerta tres veces):
+ *
+ *   1. Item nuevo (no existía)            → crear + PUSH (siempre, incluso con
+ *      `pushSoloAlCrear`).
+ *   2. Re-disparo con contenido IDÉNTICO (mismo titulo+cuerpo) y estado
+ *      NUEVO/VISTO                        → silencio total: NO push y NO se
+ *      flippea VISTO→NUEVO (leerlo debe "pegarse" si no hay nada nuevo).
+ *   3. Re-disparo con contenido NUEVO y estado NUEVO/VISTO → hay novedad real:
+ *      refrescar el inbox, volver a NUEVO y PUSH (salvo `pushSoloAlCrear`).
+ *   4. HECHO                              → se respeta SIEMPRE: nunca revive ni
+ *      empuja (semántica actual de `siguienteEstado` preservada). Si el
+ *      contenido cambió, sólo se refresca para que el inbox no muestre datos
+ *      viejos.
+ *   5. POSPUESTO vigente                  → no molestar; sólo refrescar
+ *      contenido si cambió.
+ *   6. POSPUESTO vencido                  → transición real POSPUESTO→NUEVO
+ *      ("recuérdamelo después" venció): reaparece y PUSH aunque el contenido
+ *      sea idéntico — es la promesa del snooze (salvo `pushSoloAlCrear`).
+ *
+ * `pushSoloAlCrear` reserva el push EXCLUSIVAMENTE a la creación del item: los
+ * re-disparos siguen actualizando el inbox (estado y contenido) pero en
+ * silencio. Combinado con un dedupeKey fechado (`...:<YYYY-MM-DD>`) da "a lo
+ * más un push al día": el primer disparo del día crea y empuja; los siguientes
+ * del mismo día sólo acumulan en el inbox.
+ */
+export function decidirNotificacion(
+  existente: ItemExistenteSnapshot | null,
+  entrante: { titulo: string; cuerpo: string },
+  now: Date,
+  opts: { pushSoloAlCrear?: boolean } = {},
+): DecisionNotificacion {
+  // Regla 1: creación — siempre empuja.
+  if (!existente) {
+    return { crear: true, estado: "NUEVO", actualizar: true, limpiarSnooze: false, push: true };
+  }
+
+  const contenidoCambio =
+    existente.titulo !== entrante.titulo || existente.cuerpo !== entrante.cuerpo;
+  const pushSiPermitido = !opts.pushSoloAlCrear;
+
+  // Regla 4: HECHO nunca revive ni empuja; el contenido sí se refresca.
+  if (existente.estado === "HECHO") {
+    return { crear: false, estado: "HECHO", actualizar: contenidoCambio, limpiarSnooze: false, push: false };
+  }
+
+  if (existente.estado === "POSPUESTO") {
+    const vigente = siguienteEstado(existente.estado, existente.posponerHasta, now) === "POSPUESTO";
+    // Regla 5: snooze vigente — no molestar.
+    if (vigente) {
+      return { crear: false, estado: "POSPUESTO", actualizar: contenidoCambio, limpiarSnooze: false, push: false };
+    }
+    // Regla 6: snooze vencido — reaparece y empuja aunque no haya novedad.
+    return { crear: false, estado: "NUEVO", actualizar: true, limpiarSnooze: true, push: pushSiPermitido };
+  }
+
+  // Regla 2: NUEVO/VISTO sin novedad — silencio total (sin flip VISTO→NUEVO).
+  if (!contenidoCambio) {
+    return { crear: false, estado: existente.estado, actualizar: false, limpiarSnooze: false, push: false };
+  }
+
+  // Regla 3: NUEVO/VISTO con novedad real — vuelve a NUEVO y empuja.
+  return { crear: false, estado: "NUEVO", actualizar: true, limpiarSnooze: false, push: pushSiPermitido };
+}
+
 export interface RegistrarYNotificarInput {
   recipientUserId: string;
   companyId?: string | null;
@@ -78,6 +190,12 @@ export interface RegistrarYNotificarInput {
    * lo detecte al aterrizar. Pásalo `false` para un deep-link sin chat.
    */
   abrirChat?: boolean;
+  /**
+   * Reserva el push EXCLUSIVAMENTE a la creación del item: los re-disparos
+   * actualizan el inbox en silencio. Combinado con un dedupeKey fechado
+   * (`...:<YYYY-MM-DD>`) da "a lo más un push al día". Ver `decidirNotificacion`.
+   */
+  pushSoloAlCrear?: boolean;
 }
 
 export interface RegistrarYNotificarResult {
@@ -86,12 +204,16 @@ export interface RegistrarYNotificarResult {
 }
 
 /**
- * Registra (upsert) el pendiente en el inbox y empuja el push correspondiente.
+ * Registra (upsert) el pendiente en el inbox y empuja el push SOLO en
+ * transiciones reales (ver reglas en `decidirNotificacion`):
  *
- *   - Crea (estado NUEVO) si no existe el (recipientUserId, dedupeKey).
- *   - Si existe, refresca titulo/cuerpo/url/severidad y recalcula el estado con
- *     `siguienteEstado` (un re-disparo de algo VISTO o de un POSPUESTO vencido
- *     vuelve a NUEVO; HECHO o POSPUESTO vigente se respetan: no molestar).
+ *   - Crea (estado NUEVO) si no existe el (recipientUserId, dedupeKey) → push.
+ *   - Re-disparo sin novedad (mismo titulo+cuerpo, estado NUEVO/VISTO) →
+ *     silencio total: sin push, sin escritura y sin flip VISTO→NUEVO.
+ *   - Re-disparo con contenido nuevo → refresca el inbox, vuelve a NUEVO y
+ *     empuja (salvo `pushSoloAlCrear`).
+ *   - HECHO se respeta siempre; POSPUESTO vigente no molesta; POSPUESTO vencido
+ *     reaparece con push.
  *
  * Devuelve el id del item y si el push salió a al menos un dispositivo.
  */
@@ -110,6 +232,7 @@ export async function registrarYNotificar(
     dedupeKey,
     categoriaPush,
     abrirChat = true,
+    pushSoloAlCrear = false,
   } = input;
 
   // El puntero `?ask=<dedupeKey>` viaja en la MISMA URL del item y del push, de
@@ -118,11 +241,13 @@ export async function registrarYNotificar(
 
   const existente = await prisma.notificationItem.findUnique({
     where: { recipientUserId_dedupeKey: { recipientUserId, dedupeKey } },
-    select: { id: true, estado: true, posponerHasta: true },
+    select: { id: true, estado: true, posponerHasta: true, titulo: true, cuerpo: true },
   });
 
+  const decision = decidirNotificacion(existente, { titulo, cuerpo }, now, { pushSoloAlCrear });
+
   let itemId: string;
-  if (!existente) {
+  if (decision.crear || !existente) {
     const creado = await prisma.notificationItem.create({
       data: {
         recipientUserId,
@@ -139,26 +264,25 @@ export async function registrarYNotificar(
     });
     itemId = creado.id;
   } else {
-    const nuevoEstado = siguienteEstado(existente.estado, existente.posponerHasta, now);
-    // Si vuelve a NUEVO, limpiamos el snooze vencido para que no quede colgando.
-    const limpiarSnooze =
-      existente.estado === "POSPUESTO" && nuevoEstado === "NUEVO";
-    const actualizado = await prisma.notificationItem.update({
-      where: { id: existente.id },
-      data: {
-        companyId,
-        categoria,
-        severidad,
-        titulo,
-        cuerpo,
-        url: urlFinal,
-        estado: nuevoEstado,
-        ...(limpiarSnooze ? { posponerHasta: null } : {}),
-      },
-      select: { id: true },
-    });
-    itemId = actualizado.id;
+    itemId = existente.id;
+    if (decision.actualizar) {
+      await prisma.notificationItem.update({
+        where: { id: itemId },
+        data: {
+          companyId,
+          categoria,
+          severidad,
+          titulo,
+          cuerpo,
+          url: urlFinal,
+          estado: decision.estado,
+          ...(decision.limpiarSnooze ? { posponerHasta: null } : {}),
+        },
+      });
+    }
   }
+
+  if (!decision.push) return { itemId, pushSent: false };
 
   const push = await sendPushToUser(
     recipientUserId,
