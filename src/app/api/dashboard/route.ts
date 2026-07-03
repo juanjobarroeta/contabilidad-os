@@ -8,6 +8,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { getAsimiladosResumen } from "@/lib/fiscal/asimilados";
 import { fielStatus } from "@/lib/fiel";
+import { computeEstadoDatos } from "@/lib/estado-datos";
 
 // GET /api/dashboard?companyId=xxx
 export async function GET(req: Request) {
@@ -56,6 +57,8 @@ export async function GET(req: Request) {
     company,
     taxPosition,
     asimilados,
+    invoiceCount,
+    satRequests,
   ] = await Promise.all([
     // Ingresos this month
     prisma.invoice.aggregate({
@@ -124,6 +127,16 @@ export async function GET(req: Request) {
     computeTaxPosition(companyId, year, month),
     // Asimilados a salarios recibidos (Art. 94) — null si la empresa no recibe.
     getAsimiladosResumen(companyId, year, month),
+    // ¿Hay al menos una factura? (take: 1 → conteo barato de existencia)
+    prisma.invoice.count({ where: { companyId }, take: 1 }),
+    // Solicitudes de descarga al SAT (acotado) para derivar estadoDatos.
+    // Solo lectura: este GET nunca dispara una sincronización.
+    prisma.satSyncRequest.findMany({
+      where: { companyId, tipo: { in: ["EMITIDOS", "RECIBIDOS"] } },
+      select: { status: true, year: true, month: true },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    }),
   ]);
 
   // ── 6-month trend ─────────────────────────────────────────────────────────
@@ -341,9 +354,18 @@ export async function GET(req: Request) {
   const isrPagarMes = taxPosition.isr.isrPagar;
   const totalPagarMes = taxPosition.iva.pagar + (isrPagarMes ?? 0);
 
+  // ── Estado de datos ("¿por qué está vacío mi tablero?") ───────────────────
+  const estadoDatos = computeEstadoDatos({
+    invoiceCount,
+    fielOk: !!fiel && fiel.estado !== "sin_fiel",
+    requests: satRequests,
+    ultimaSincronizacion: company?.lastAutoSyncAt ?? null,
+  });
+
   return NextResponse.json({
     periodo: { year, month },
     fiel,
+    estadoDatos,
     taxThisMonth: {
       iva: taxPosition.iva.pagar,
       isr: isrPagarMes,
