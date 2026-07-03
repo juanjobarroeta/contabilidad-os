@@ -8,6 +8,7 @@ import {
   type PpdParentEgreso,
 } from "@/lib/fiscal/iva-flujo";
 import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
+import { archivoDiot2025, archivoDiotLegacy } from "@/lib/fiscal/diot";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/impuestos/diot?companyId=xxx&month=4&year=2026
@@ -16,6 +17,10 @@ import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 // Generates two things:
 //   1. JSON response with supplier-level IVA breakdown (for the UI)
 //   2. When format=txt, returns the SAT batch upload file (.txt)
+//      - Por defecto: layout DIOT 2025 (nueva plataforma, 54 campos, montos
+//        en pesos enteros) — ver src/lib/fiscal/diot.ts y docs/DIOT-2025.md.
+//      - ?layout=legacy: layout DEM anterior (15 campos), sólo por
+//        compatibilidad/depuración — el SAT ya no lo acepta.
 //
 // Base de FLUJO DE EFECTIVO (Art. 32 fracc. VIII y Art. 1-B LIVA): la DIOT
 // reporta el IVA EFECTIVAMENTE PAGADO a cada proveedor en el mes, no el
@@ -28,11 +33,7 @@ import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 // La suma de ivaAcreditable del mes cuadra con iva.acreditableBruto del motor
 // (el motor después aplica la proporción del Art. 5-V, que es global).
 //
-// SAT DIOT format (pipe-delimited):
-// 04|RFC|RAZON_SOCIAL|PAIS|||IVA_16|0|0|IVA_RETENIDO|0|0|0|0|0|0
 // TipoTercero: 04=Nacional, 05=Extranjero, 15=Global (sin RFC)
-// NOTA: este es el layout LEGACY de carga batch. El nuevo layout DIOT 2025
-// del SAT es una tarea pendiente aparte — este cambio sólo corrige las cifras.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
@@ -44,6 +45,7 @@ export async function GET(req: Request) {
   const month = parseInt(searchParams.get("month") ?? "");
   const year = parseInt(searchParams.get("year") ?? "");
   const format = searchParams.get("format"); // "txt" for SAT file
+  const layout = searchParams.get("layout"); // "legacy" = layout DEM anterior
 
   if (!companyId || isNaN(month) || isNaN(year)) {
     return NextResponse.json({ error: "companyId, month y year requeridos" }, { status: 400 });
@@ -225,43 +227,13 @@ export async function GET(req: Request) {
     proveedores: rows.length,
   };
 
-  // SAT TXT format (layout legacy de carga batch — el layout DIOT 2025 es una
-  // tarea pendiente aparte; aquí sólo se corrigen las cifras a base de flujo).
+  // SAT TXT — por defecto el layout DIOT 2025 de la nueva plataforma (54
+  // campos, pesos enteros); ?layout=legacy conserva el layout DEM anterior de
+  // 15 campos. Misma agregación de flujo en ambos: sólo cambia la
+  // serialización (src/lib/fiscal/diot.ts, spec en docs/DIOT-2025.md).
   if (format === "txt") {
-    const lines = rows.map(r => {
-      const g16 = Math.round(r.valorActosGravados16 * 100) / 100;
-      const iva16 = Math.round(r.ivaTrasladadoPagado16 * 100) / 100;
-      const g0 = Math.round(r.valorActosGravados0 * 100) / 100;
-      const ex = Math.round(r.valorActosExentos * 100) / 100;
-      const noAcred = Math.round(r.ivaNoAcreditable * 100) / 100;
-      const ret = Math.round(r.ivaRetenido * 100) / 100;
-
-      // SAT DIOT format: 15 pipe-delimited fields
-      // TipoTercero|RFC|RazonSocial|PaisResidencia|Nacionalidad|
-      // ValorActosGravados16|ValorActosGravados15|ValorActosGravados0|
-      // ValorActosExentos|IVARetenido|IVATrasladado|
-      // ValorActosGravadosIEPS|ValorActosExentosIEPS|
-      // IVANoAcreditable|ValorActosNoObjeto
-      return [
-        r.tipoTercero,
-        r.rfc,
-        r.razonSocial.substring(0, 300),
-        "", // país
-        "", // nacionalidad
-        g16.toFixed(2),  // gravados 16% (base pagada)
-        "0",             // gravados 15% (obsoleto)
-        g0.toFixed(2),   // gravados 0% (base pagada, ≠ exentos)
-        ex.toFixed(2),   // exentos (sin traslado de IVA o TipoFactor=Exento)
-        ret.toFixed(2),  // IVA retenido
-        iva16.toFixed(2), // IVA trasladado (acreditable, efectivamente pagado)
-        "0",             // IEPS gravados
-        "0",             // IEPS exentos
-        noAcred.toFixed(2), // IVA no acreditable (bandera manual / 69-B)
-        "0",             // no objeto
-      ].join("|");
-    });
-
-    const content = lines.join("\r\n");
+    const content =
+      layout === "legacy" ? archivoDiotLegacy(rows) : archivoDiot2025(rows);
     const periodo = `${year}${String(month).padStart(2, "0")}`;
     const filename = `DIOT_${periodo}.txt`;
 
