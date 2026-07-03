@@ -33,8 +33,8 @@ export interface TarifaVersionada {
 }
 
 // ── Tarifa ANUAL ISR personas físicas (Art. 152 LISR) ────────────────────────
-// 2024 values. Identical to the table currently inlined in declaracion-anual.ts
-// — TODO: make that module import from here so there is a single source of truth.
+// Única fuente de la tarifa anual PF: declaracion-anual.ts la consume vía
+// tarifaAnualPF(ejercicio) — no debe volver a incrustarse en otro módulo.
 const TARIFA_ANUAL_PF: TarifaVersionada[] = [
   {
     ejercicio: 2024,

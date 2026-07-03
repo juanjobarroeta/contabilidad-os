@@ -6,6 +6,8 @@
 //
 // This is a pure calculation module — no DB calls. The API route feeds it data.
 
+import { tarifaAnualPF, aplicarTarifa } from "@/lib/fiscal/tarifas";
+
 export type DeclaracionAnualInput = {
   ejercicio: number;
   tipoPersona: "PM" | "PF";
@@ -87,6 +89,10 @@ export type DeclaracionAnualResult = {
 };
 
 // ── RESICO PF tarifa anual (Art. 113-E) ──────────────────────────────────────
+// Las tasas y los rangos de esta tabla están fijados en la propia LISR (Art.
+// 113-E, reforma DOF 12-nov-2021, vigente desde 2022) y NO se actualizan por
+// inflación vía Anexo 8 RMF, así que no requieren versionado por ejercicio
+// (a diferencia de las tarifas de los Arts. 96/152).
 const RESICO_PF_TASA = [
   { hasta: 300000,   tasa: 0.01 },
   { hasta: 600000,   tasa: 0.011 },
@@ -97,19 +103,12 @@ const RESICO_PF_TASA = [
 ];
 
 // ── PF General tarifa anual (Art. 152 LISR) ──────────────────────────────────
-const TARIFA_ANUAL_PF = [
-  { limiteInf: 0.01,      limiteSup: 8952.49,     cuotaFija: 0,         tasa: 0.0192 },
-  { limiteInf: 8952.50,   limiteSup: 75984.55,    cuotaFija: 171.88,    tasa: 0.0640 },
-  { limiteInf: 75984.56,  limiteSup: 133536.07,   cuotaFija: 4461.94,   tasa: 0.1088 },
-  { limiteInf: 133536.08, limiteSup: 155229.80,   cuotaFija: 10723.55,  tasa: 0.16 },
-  { limiteInf: 155229.81, limiteSup: 185852.57,   cuotaFija: 14194.54,  tasa: 0.1792 },
-  { limiteInf: 185852.58, limiteSup: 374837.88,   cuotaFija: 19682.13,  tasa: 0.2136 },
-  { limiteInf: 374837.89, limiteSup: 590795.99,   cuotaFija: 60049.40,  tasa: 0.2352 },
-  { limiteInf: 590796.00, limiteSup: 1127926.84,  cuotaFija: 110842.74, tasa: 0.30 },
-  { limiteInf: 1127926.85,limiteSup: 1503902.46,  cuotaFija: 271981.99, tasa: 0.32 },
-  { limiteInf: 1503902.47,limiteSup: 4511707.37,  cuotaFija: 392294.17, tasa: 0.34 },
-  { limiteInf: 4511707.38,limiteSup: Infinity,    cuotaFija: 1414947.85,tasa: 0.35 },
-];
+// La tarifa vive versionada por ejercicio en src/lib/fiscal/tarifas.ts (fuente
+// única, con vigencia y bandera `verificado`); aquí sólo se selecciona la del
+// ejercicio declarado vía tarifaAnualPF(ejercicio). El Art. 152, último
+// párrafo, LISR obliga a actualizar la tarifa cuando la inflación acumulada
+// supera 10% (última actualización: Anexo 8 RMF 2026, DOF 28-dic-2025), por lo
+// que usar una tabla fija sería incorrecto para ejercicios distintos.
 
 function r2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -160,11 +159,21 @@ export function calcularDeclaracionAnual(input: DeclaracionAnualInput): Declarac
     tasaIsr = bracket.tasa;
     isrDelEjercicio = r2(ingresos * bracket.tasa);
   } else {
-    // PF General: progressive tariff (Art. 152 LISR)
-    const bracket = TARIFA_ANUAL_PF.find(b => resultadoFiscal >= b.limiteInf && resultadoFiscal <= b.limiteSup)
-      ?? TARIFA_ANUAL_PF[TARIFA_ANUAL_PF.length - 1];
-    const excedente = resultadoFiscal - bracket.limiteInf;
-    isrDelEjercicio = r2(bracket.cuotaFija + excedente * bracket.tasa);
+    // PF General: tarifa progresiva del ejercicio declarado (Art. 152 LISR),
+    // tomada del módulo versionado de tarifas. tarifaAnualPF resuelve el
+    // ejercicio exacto o, en su defecto, la tabla más reciente anterior
+    // (roll-forward: la tarifa sigue vigente hasta que el SAT publica la
+    // actualización, p.ej. 2025 usa la de 2024). Si no existe ninguna tabla
+    // aplicable (ejercicios previos a las cargadas) devuelve null: fallamos
+    // ruidosamente en vez de calcular ISR con una tarifa de otro año.
+    const tarifa = tarifaAnualPF(ejercicio);
+    if (!tarifa) {
+      throw new Error(
+        `Sin tarifa anual ISR PF (Art. 152 LISR) para el ejercicio ${ejercicio}: ` +
+          "no hay tabla aplicable en src/lib/fiscal/tarifas.ts."
+      );
+    }
+    isrDelEjercicio = r2(aplicarTarifa(resultadoFiscal, tarifa.filas));
     tasaIsr = resultadoFiscal > 0 ? r2(isrDelEjercicio / resultadoFiscal) : 0;
   }
 
