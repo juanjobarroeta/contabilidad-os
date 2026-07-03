@@ -41,6 +41,8 @@ interface PayrollRun {
   totalPercepciones: number;
   totalDeducciones: number;
   totalNeto: number;
+  /** "APP" = creada en la app; "SAT" = importada del histórico timbrado. */
+  origen?: string;
   createdAt: string;
   _count?: { items: number };
 }
@@ -103,6 +105,13 @@ export default function NominaPage() {
   const now = new Date();
   const mesActual = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
   const lastRun = runs[0] ?? null; // API ordena desc por creación
+
+  // Onboarding: historial reconstruido desde los CFDIs timbrados del SAT. El
+  // aviso se muestra mientras la empresa aún no crea corridas propias — al
+  // correr su primera nómina en la app, desaparece solo.
+  const runsSat = runs.filter((r) => r.origen === "SAT");
+  const soloHistorialSat = runsSat.length > 0 && runsSat.length === runs.length;
+  const recibosImportados = runsSat.reduce((s, r) => s + (r._count?.items ?? 0), 0);
   const runsDelMes = runs.filter((r) => {
     const f = new Date(r.fechaPago);
     return f.getFullYear() === now.getFullYear() && f.getMonth() === now.getMonth();
@@ -147,6 +156,18 @@ export default function NominaPage() {
               Ver corridas <ChevronR className="h-[15px] w-[15px]" />
             </Link>
           </div>
+
+          {/* onboarding: historial importado del SAT */}
+          {soloHistorialSat && (
+            <div className="flex items-start gap-3 rounded-card border border-cos-line bg-cos-card px-5 py-4">
+              <BadgeCheck className="mt-0.5 h-[18px] w-[18px] flex-none text-cos-jade-ink" />
+              <div className="text-[13.5px] leading-relaxed text-cos-ink-soft">
+                <b className="text-cos-ink">Encontramos {recibosImportados} recibo{recibosImportados === 1 ? "" : "s"} de nómina timbrado{recibosImportados === 1 ? "" : "s"} en el SAT</b> — tu historial se importó automáticamente
+                ({runsSat.length} corrida{runsSat.length === 1 ? "" : "s"}).
+                {" "}Para correr tu siguiente nómina, usa <Link href="/nomina/detalle" className="font-semibold text-cos-brand-ink hover:underline">Iniciar desde la quincena anterior</Link> en el workspace.
+              </div>
+            </div>
+          )}
 
           {/* alerta: salarios bajo el mínimo */}
           {bajoMinimo.length > 0 && (

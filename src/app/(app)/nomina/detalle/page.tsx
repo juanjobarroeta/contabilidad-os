@@ -8,7 +8,7 @@ import {
   Plus, Users2, Loader2, X, AlertCircle, CheckCircle2, Receipt,
   Upload, Sparkles, FileText, Play, Download, Calendar, ClipboardList,
   ArrowLeftRight, Shield, ChevronDown, ChevronUp, UserX, Trash2,
-  Wand2,
+  Wand2, History,
 } from "lucide-react";
 import { RosterImport } from "./RosterImport";
 
@@ -54,8 +54,24 @@ interface PayrollRun {
   totalDeducciones: number;
   totalNeto: number;
   extraData: Record<string, unknown> | null;
+  /** "APP" = creada en la app; "SAT" = importada del histórico timbrado (sólo lectura). */
+  origen?: string;
   createdAt: string;
   _count?: { items: number };
+}
+
+/** Respuesta de GET /api/nomina/run/prefill — insumos de la siguiente corrida. */
+interface RunPrefill {
+  basadoEnRunId: string;
+  basadoEnPeriodo: string;
+  tipo: string;
+  periodicidad: string;
+  periodoInicio: string;
+  periodoFin: string;
+  fechaPago: string;
+  diasPagados: number;
+  employeeIds: string[];
+  omitidosPorBaja: number;
 }
 
 interface Incidencia {
@@ -155,6 +171,8 @@ export default function NominaPage() {
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const [showNewRun, setShowNewRun] = useState(false);
+  const [runPrefill, setRunPrefill] = useState<RunPrefill | null>(null);
+  const [prefillLoading, setPrefillLoading] = useState(false);
   const [stampingId, setStampingId] = useState<string | null>(null);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [runItems, setRunItems] = useState<PayrollItemDetail[]>([]);
@@ -227,6 +245,23 @@ export default function NominaPage() {
     } catch { setError("Error al eliminar"); }
   }
 
+  // "Iniciar desde la quincena anterior": pide al servidor los insumos de la
+  // siguiente corrida (periodo avanzado + empleados de la anterior) y abre el
+  // modal prellenado. El cálculo de ISR/IMSS lo rehace el motor al crear.
+  async function handlePrefillRun() {
+    if (!activeCompany) return;
+    setPrefillLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/nomina/run/prefill?companyId=${activeCompany.id}`);
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "No se pudo prellenar la corrida"); return; }
+      setRunPrefill(data);
+      setShowNewRun(true);
+    } catch { setError("No se pudo prellenar la corrida"); }
+    finally { setPrefillLoading(false); }
+  }
+
   async function handleStamp(runId: string) {
     setStampingId(runId);
     setError("");
@@ -267,7 +302,13 @@ export default function NominaPage() {
           )}
           {tab === "corridas" && (
             <>
-              <button onClick={() => setShowNewRun(true)} className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
+              <button onClick={handlePrefillRun} disabled={prefillLoading}
+                className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper disabled:opacity-50"
+                title="Prellena la siguiente corrida con los empleados y el periodo que sigue a la corrida ordinaria más reciente">
+                {prefillLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
+                Iniciar desde la quincena anterior
+              </button>
+              <button onClick={() => { setRunPrefill(null); setShowNewRun(true); }} className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
                 <Plus className="h-4 w-4" /> Nueva corrida
               </button>
               <a href={`/api/nomina/sua-export?companyId=${activeCompany.id}&bimestre=${Math.ceil((now.getMonth() + 1) / 2)}&year=${now.getFullYear()}`}
@@ -408,6 +449,12 @@ export default function NominaPage() {
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_RUN_COLOR[run.status] ?? "bg-cos-slate-tint"}`}>
                             {STATUS_RUN_LABEL[run.status] ?? run.status}
                           </span>
+                          {run.origen === "SAT" && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-cos-slate-tint text-cos-ink-soft"
+                              title="Reconstruida desde tus recibos de nómina timbrados en el SAT — histórico de sólo lectura">
+                              Importada del SAT
+                            </span>
+                          )}
                           {run.extraData && !!(run.extraData as Record<string, unknown>).stampingInProgress && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-cos-amber-tint text-cos-amber-ink flex items-center gap-1">
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -431,7 +478,9 @@ export default function NominaPage() {
                             Timbrar todo
                           </button>
                         )}
-                        {(run.status === "STAMPED" || run.status === "CALCULATED") && (
+                        {/* Las corridas importadas del SAT ya se pagaron en su momento —
+                            sin re-timbrado ni dispersión (histórico de sólo lectura). */}
+                        {(run.status === "STAMPED" || run.status === "CALCULATED") && run.origen !== "SAT" && (
                           <a href={`/api/nomina/dispersion?runId=${run.id}`}
                             className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper">
                             <ArrowLeftRight className="h-3.5 w-3.5" /> Dispersión
@@ -622,9 +671,11 @@ export default function NominaPage() {
           onClose={() => setEmitFor(null)} onEmitted={(msg) => { setEmitFor(null); setError(`✓ ${msg}`); }} />
       )}
       {showNewRun && activeCompany && (
-        <NewRunModal companyId={activeCompany.id} onClose={() => setShowNewRun(false)}
+        <NewRunModal companyId={activeCompany.id} initial={runPrefill}
+          onClose={() => { setShowNewRun(false); setRunPrefill(null); }}
           onCreated={(warnings) => {
             setShowNewRun(false);
+            setRunPrefill(null);
             loadRuns();
             setError(
               warnings && warnings.length > 0
@@ -1359,8 +1410,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ── New Payroll Run Modal ──────────────────────────────────────────────────
 function NewRunModal({
-  companyId, onClose, onCreated,
-}: { companyId: string; onClose: () => void; onCreated: (warnings?: string[]) => void }) {
+  companyId, initial, onClose, onCreated,
+}: { companyId: string; initial?: RunPrefill | null; onClose: () => void; onCreated: (warnings?: string[]) => void }) {
   const today = new Date();
   const isFirstHalf = today.getDate() <= 15;
   const pInicio = isFirstHalf
@@ -1371,11 +1422,11 @@ function NewRunModal({
     : new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
   const [form, setForm] = useState({
-    tipo: "ORDINARIA",
-    periodoInicio: pInicio.toISOString().slice(0, 10),
-    periodoFin: pFin.toISOString().slice(0, 10),
-    fechaPago: today.toISOString().slice(0, 10),
-    diasPagados: "15",
+    tipo: initial?.tipo ?? "ORDINARIA",
+    periodoInicio: initial?.periodoInicio ?? pInicio.toISOString().slice(0, 10),
+    periodoFin: initial?.periodoFin ?? pFin.toISOString().slice(0, 10),
+    fechaPago: initial?.fechaPago ?? today.toISOString().slice(0, 10),
+    diasPagados: initial ? String(initial.diasPagados) : "15",
     // Extraordinary fields
     diasAguinaldo: "15",
     utilidadFiscalGravable: "",
@@ -1396,6 +1447,9 @@ function NewRunModal({
         fechaPago: form.fechaPago,
         diasPagados: parseInt(form.diasPagados),
       };
+      // Prefill desde la corrida anterior: misma plantilla de empleados. El
+      // motor recalcula ISR/IMSS con los datos vigentes — nada se copia ciego.
+      if (initial?.employeeIds?.length) body.employeeIds = initial.employeeIds;
       if (form.tipo === "AGUINALDO") {
         body.diasAguinaldo = parseInt(form.diasAguinaldo);
         body.fechaCorte = `${today.getFullYear()}-12-31`;
@@ -1429,6 +1483,16 @@ function NewRunModal({
           <button onClick={onClose}><X className="h-4 w-4" /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-3">
+          {initial && (
+            <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md px-3 py-2 text-xs text-cos-brand-ink">
+              <p className="font-medium">Prellenada desde la corrida anterior ({initial.basadoEnPeriodo})</p>
+              <p>
+                Se copian los {initial.employeeIds.length} empleado{initial.employeeIds.length === 1 ? "" : "s"} y el periodo avanza una {initial.periodicidad === "SEMANAL" ? "semana" : initial.periodicidad === "MENSUAL" ? "mensualidad" : "quincena"}.
+                {initial.omitidosPorBaja > 0 ? ` Se omitieron ${initial.omitidosPorBaja} por baja.` : ""}
+                {" "}El ISR, IMSS e INFONAVIT se recalculan con los datos vigentes; las incidencias (faltas, horas extra) no se copian.
+              </p>
+            </div>
+          )}
           <Field label="Tipo de corrida">
             <select value={form.tipo} onChange={e => setForm(p => ({ ...p, tipo: e.target.value }))} className={inputCls}>
               <option value="ORDINARIA">Ordinaria (quincenal/mensual)</option>

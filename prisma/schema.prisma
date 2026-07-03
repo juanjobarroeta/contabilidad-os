@@ -1110,6 +1110,12 @@ model PayrollRun {
   // { diasAguinaldo, fechaCorte } for AGUINALDO)
   extraData Json?
 
+  // Procedencia de la corrida. "APP" = creada y calculada en la app (flujo
+  // normal). "SAT" = reconstruida desde los CFDIs de nómina ya timbrados que
+  // trajo la sincronización con el SAT (histórico de sólo lectura: no se
+  // re-timbra ni se dispersa). Columna ADITIVA — prod usa `prisma db push`.
+  origen String @default("APP")
+
   company Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   items   PayrollItem[]
 }
