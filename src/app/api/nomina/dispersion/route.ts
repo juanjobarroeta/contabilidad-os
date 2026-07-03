@@ -38,6 +38,11 @@ export async function GET(req: Request) {
 
   const member = await getEffectiveCompanyMembership(session.user.id, run.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+  // El archivo de dispersión expone CLABE, banco, RFC y neto de todos los
+  // empleados: sólo roles con permiso de escritura pueden exportarlo.
+  if (member.role === "VIEWER") {
+    return NextResponse.json({ error: "Sin permisos para exportar la dispersión" }, { status: 403 });
+  }
 
   if (!["CALCULATED", "STAMPED", "PAID"].includes(run.status)) {
     return NextResponse.json({ error: "La corrida debe estar calculada o timbrada" }, { status: 400 });

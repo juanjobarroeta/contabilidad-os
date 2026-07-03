@@ -30,6 +30,11 @@ export async function GET(req: Request) {
 
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+  // El archivo SUA expone NSS, CURP, RFC y SDI de todos los empleados:
+  // sólo roles con permiso de escritura pueden exportarlo.
+  if (member.role === "VIEWER") {
+    return NextResponse.json({ error: "Sin permisos para exportar el archivo SUA" }, { status: 403 });
+  }
 
   const company = await prisma.company.findUnique({
     where: { id: companyId },
