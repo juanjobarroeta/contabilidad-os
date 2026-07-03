@@ -228,6 +228,29 @@ cuenta**, which the parser doesn't handle. New work = an extraction stage in fro
 **fallback** for banks/users not on open banking. Statement images are high-sensitivity:
 don't persist raw images past extraction.
 
+### 5c. Nómina — from calculator to payroll system of record
+
+Nómina is a first-class pillar, not an accessory: it feeds ISR retenciones,
+IMSS/SUA, PTU (Art. 14 eighths in provisionales), and it's a top reason SMBs
+pay for software at all. Ladder:
+
+1. **Historic import (onboarding magic)** — stamped NOMINA CFDIs from the SAT
+   sync populate PayrollRun/PayrollItem as read-only SAT-origin history, deduped
+   by uuid against app-emitted runs. A company that onboards sees its payroll
+   past without capturing anything. *(In progress.)*
+2. **Recurring quincenas** — "iniciar desde la quincena anterior": prefill
+   roster/salaries/recurring concepts, advance the period, recalculate taxes
+   through calc-nomina (never copy computed taxes). *(In progress.)*
+3. **Incidencias flow** — faltas, horas extra, incapacidades, vacaciones as a
+   quick capture step between prefill and stamp; finiquitos/liquidaciones with
+   the Art. 50/162 calculators already in `nomina/finiquito.ts`.
+4. **Cumplimiento loop** — SUA/IDSE reconciliation (export exists; deepen
+   variances view), CEAV progressive table already correct 2023-2030, annual
+   declaración informativa tie-ins, ISN estatal awareness.
+5. **WhatsApp surface** — "¿cuánto de nómina este mes?", pre-stamp reminder
+   T-1 (exists), one-tap "timbrar quincena" once Tier-3 actions land (never
+   auto-stamp: human confirms, always).
+
 ---
 
 ## 6. Economics
