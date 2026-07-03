@@ -166,9 +166,12 @@ export async function aprobarSugerencia(
   txId: string,
   familia: FamiliaConcepto,
 ): Promise<AprobarResult> {
-  const tx = await prisma.bankTransaction.findUnique({ where: { id: txId } });
+  const tx = await prisma.bankTransaction.findUnique({
+    where: { id: txId },
+    include: { conciliacionDetalles: { select: { id: true }, take: 1 } },
+  });
   if (!tx) return { ok: false, error: "Movimiento no encontrado", status: 404 };
-  if (tx.invoiceId) {
+  if (tx.invoiceId || tx.conciliacionDetalles.length > 0) {
     return { ok: false, error: "El movimiento ya está conciliado con un CFDI", status: 409 };
   }
 

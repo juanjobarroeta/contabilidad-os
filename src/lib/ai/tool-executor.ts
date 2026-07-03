@@ -182,10 +182,19 @@ async function proponerConciliacion(input: ToolInput, companyId: string, context
 
   const tx = await prisma.bankTransaction.findFirst({
     where: { id: txId, companyId },
-    select: { fecha: true, descripcion: true, monto: true, status: true, invoiceId: true },
+    select: {
+      fecha: true,
+      descripcion: true,
+      monto: true,
+      status: true,
+      invoiceId: true,
+      conciliacionDetalles: { select: { id: true }, take: 1 },
+    },
   });
   if (!tx) return JSON.stringify({ error: "Movimiento no encontrado." });
-  if (tx.invoiceId) return JSON.stringify({ error: "El movimiento ya está conciliado." });
+  if (tx.invoiceId || tx.conciliacionDetalles.length > 0) {
+    return JSON.stringify({ error: "El movimiento ya está conciliado." });
+  }
 
   const inv = await prisma.invoice.findFirst({
     where: { id: invoiceId, companyId },
@@ -218,10 +227,18 @@ async function proponerCategorizacion(input: ToolInput, companyId: string, conte
 
   const tx = await prisma.bankTransaction.findFirst({
     where: { id: txId, companyId },
-    select: { fecha: true, descripcion: true, monto: true, invoiceId: true },
+    select: {
+      fecha: true,
+      descripcion: true,
+      monto: true,
+      invoiceId: true,
+      conciliacionDetalles: { select: { id: true }, take: 1 },
+    },
   });
   if (!tx) return JSON.stringify({ error: "Movimiento no encontrado." });
-  if (tx.invoiceId) return JSON.stringify({ error: "El movimiento ya está conciliado con un CFDI." });
+  if (tx.invoiceId || tx.conciliacionDetalles.length > 0) {
+    return JSON.stringify({ error: "El movimiento ya está conciliado con un CFDI." });
+  }
 
   const summary =
     `Categorizar el movimiento del ${tx.fecha.toISOString().slice(0, 10)} ` +

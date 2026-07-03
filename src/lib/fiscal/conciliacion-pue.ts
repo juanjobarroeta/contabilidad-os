@@ -21,19 +21,32 @@ export async function reconciliacionActiva(companyId: string): Promise<boolean> 
   return n > 0;
 }
 
-/** Suma (en valor absoluto) de los movimientos bancarios MATCHED por invoiceId. */
+/** Suma (en valor absoluto) de lo conciliado por invoiceId: movimientos
+ *  bancarios MATCHED con vínculo legado 1:1 + porciones asignadas vía
+ *  ConciliacionDetalle (un movimiento que paga varias facturas deja
+ *  invoiceId en NULL, así que no hay doble conteo). */
 export async function pagosConciliadosPorInvoice(
   invoiceIds: string[]
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (invoiceIds.length === 0) return out;
-  const grouped = await prisma.bankTransaction.groupBy({
-    by: ["invoiceId"],
-    where: { invoiceId: { in: invoiceIds }, status: "MATCHED" },
-    _sum: { monto: true },
-  });
+  const [grouped, detalles] = await Promise.all([
+    prisma.bankTransaction.groupBy({
+      by: ["invoiceId"],
+      where: { invoiceId: { in: invoiceIds }, status: "MATCHED" },
+      _sum: { monto: true },
+    }),
+    prisma.conciliacionDetalle.groupBy({
+      by: ["invoiceId"],
+      where: { invoiceId: { in: invoiceIds }, bankTransaction: { status: "MATCHED" } },
+      _sum: { montoAsignado: true },
+    }),
+  ]);
   for (const g of grouped) {
     if (g.invoiceId) out.set(g.invoiceId, Math.abs(g._sum.monto ?? 0));
+  }
+  for (const d of detalles) {
+    out.set(d.invoiceId, (out.get(d.invoiceId) ?? 0) + Math.abs(d._sum.montoAsignado ?? 0));
   }
   return out;
 }

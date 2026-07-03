@@ -104,16 +104,39 @@ export async function detectComplementosPendientes(
 
   const ppdIds = ppdInvoices.map((i) => i.id);
 
-  const [matchedPayments, existingReps] = await Promise.all([
+  const [matchedPayments, detalleAsignaciones, existingReps] = await Promise.all([
     prisma.bankTransaction.findMany({
       where: { companyId, invoiceId: { in: ppdIds }, status: "MATCHED", monto: { gt: 0 } },
       select: { invoiceId: true, fecha: true, monto: true },
+    }),
+    // Conciliación uno-a-varios: la porción asignada a cada factura cuenta como
+    // pago recibido (el movimiento deja invoiceId en NULL, no hay doble conteo).
+    prisma.conciliacionDetalle.findMany({
+      where: {
+        invoiceId: { in: ppdIds },
+        bankTransaction: { companyId, status: "MATCHED", monto: { gt: 0 } },
+      },
+      select: { invoiceId: true, montoAsignado: true, bankTransaction: { select: { fecha: true } } },
     }),
     prisma.invoice.findMany({
       where: { companyId, tipo: "PAGO", status: "STAMPED", notas: { in: ppdIds } },
       select: { notas: true, total: true },
     }),
   ]);
+
+  // Pagos unificados por factura: movimientos legados 1:1 + porciones asignadas.
+  const pagosPorFactura = new Map<string, { fecha: Date; monto: number }[]>();
+  for (const p of matchedPayments) {
+    if (!p.invoiceId) continue;
+    const arr = pagosPorFactura.get(p.invoiceId) ?? [];
+    arr.push({ fecha: p.fecha, monto: p.monto });
+    pagosPorFactura.set(p.invoiceId, arr);
+  }
+  for (const d of detalleAsignaciones) {
+    const arr = pagosPorFactura.get(d.invoiceId) ?? [];
+    arr.push({ fecha: d.bankTransaction.fecha, monto: d.montoAsignado });
+    pagosPorFactura.set(d.invoiceId, arr);
+  }
 
   const repTotalByParent = new Map<string, number>();
   for (const rep of existingReps) {
@@ -122,7 +145,7 @@ export async function detectComplementosPendientes(
 
   const pendientes: ComplementoPendiente[] = [];
   for (const inv of ppdInvoices) {
-    const payments = matchedPayments.filter((p) => p.invoiceId === inv.id);
+    const payments = pagosPorFactura.get(inv.id) ?? [];
     if (payments.length === 0) continue;
 
     const totalPagado = payments.reduce((s, p) => s + p.monto, 0);
@@ -193,10 +216,17 @@ export async function detectComplementosRecibidosPendientes(
         where: { status: "MATCHED", monto: { lt: 0 } }, // outgoing = payments made
         select: { fecha: true, monto: true },
       },
+      // Conciliación uno-a-varios: porciones de retiros asignadas a este gasto.
+      conciliacionDetalles: {
+        where: { bankTransaction: { status: "MATCHED", monto: { lt: 0 } } },
+        select: { montoAsignado: true, bankTransaction: { select: { fecha: true } } },
+      },
     },
   });
 
-  const paid = ppdGastos.filter((g) => g.bankTransactions.length > 0 && g.uuid);
+  const paid = ppdGastos.filter(
+    (g) => (g.bankTransactions.length > 0 || g.conciliacionDetalles.length > 0) && g.uuid
+  );
   if (paid.length === 0) {
     return { pendientes: [], stats: { totalPendientes: 0, vencidos: 0, porVencer: 0 } };
   }
@@ -215,9 +245,16 @@ export async function detectComplementosRecibidosPendientes(
   const pendientes: ComplementoRecibidoPendiente[] = [];
   for (const g of paid) {
     if (complementado.has(g.uuid!)) continue; // vendor already sent the REP
-    // Neto firmado: un reembolso (cargo) resta de lo pagado.
-    const totalPagado = Math.abs(g.bankTransactions.reduce((s, t) => s + t.monto, 0));
-    const ultimoPago = g.bankTransactions.reduce((a, b) => (a.fecha > b.fecha ? a : b)).fecha;
+    // Neto firmado: un reembolso (cargo) resta de lo pagado. Las porciones
+    // asignadas (conciliación múltiple) suman por su monto asignado.
+    const totalPagado =
+      Math.abs(g.bankTransactions.reduce((s, t) => s + t.monto, 0)) +
+      g.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+    const fechasPago = [
+      ...g.bankTransactions.map((t) => t.fecha),
+      ...g.conciliacionDetalles.map((d) => d.bankTransaction.fecha),
+    ];
+    const ultimoPago = fechasPago.reduce((a, b) => (a > b ? a : b));
     const fechaLimite = fechaLimiteComplemento(ultimoPago);
     const { urgencia, dias } = classify(fechaLimite, now);
     pendientes.push({

@@ -132,6 +132,8 @@ export async function GET(req: Request) {
         where: { status: "MATCHED" },
         select: { id: true, monto: true },
       },
+      // Conciliación uno-a-varios: porciones asignadas a esta factura.
+      conciliacionDetalles: { select: { montoAsignado: true } },
       // Para los REP (tipo PAGO) el comprobante trae Total/IVA = 0; los montos
       // reales viven en el complemento. Los exponemos para que el detalle no
       // muestre $0.00.
@@ -144,10 +146,11 @@ export async function GET(req: Request) {
 
   const enriched = invoices.map((inv) => {
     // Neto firmado: un reembolso (cargo) resta de lo cobrado, así un sobrepago
-    // y su devolución dan el total exacto en vez de sobre-conciliar.
-    const matchedAmount = Math.abs(
-      inv.bankTransactions.reduce((s, tx) => s + tx.monto, 0)
-    );
+    // y su devolución dan el total exacto en vez de sobre-conciliar. Las
+    // porciones asignadas (conciliación múltiple) suman por su monto asignado.
+    const matchedAmount =
+      Math.abs(inv.bankTransactions.reduce((s, tx) => s + tx.monto, 0)) +
+      inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
     const fullyMatched = matchedAmount >= inv.total - 0.01;
     // Totales del REP desde el complemento (monto pagado, IVA trasladado y la
     // fecha de pago — que es la que causa el IVA, no la fecha del comprobante).
@@ -157,9 +160,10 @@ export async function GET(req: Request) {
     const pagoFecha = esPago
       ? inv.doctosRelacionados.map((d) => d.fechaPago).filter(Boolean).sort()[0] ?? null
       : null;
-    // bankTransactions / doctosRelacionados sólo se cargaron para derivar lo de arriba.
-    const { bankTransactions: _bts, doctosRelacionados: _dr, ...rest } = inv;
-    void _bts; void _dr;
+    // bankTransactions / conciliacionDetalles / doctosRelacionados sólo se
+    // cargaron para derivar lo de arriba.
+    const { bankTransactions: _bts, conciliacionDetalles: _cd, doctosRelacionados: _dr, ...rest } = inv;
+    void _bts; void _cd; void _dr;
     return { ...rest, matchedAmount, fullyMatched, pagoMonto, pagoIva, pagoFecha };
   });
 

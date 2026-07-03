@@ -52,10 +52,14 @@ export const GET = withAuthz(
         status: "STAMPED",
         fecha: { gte: windowStart, lte: windowEnd },
         total: { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
-        // Ya conciliadas a otro movimiento quedan fuera — salvo PPD, que puede
-        // pagarse con varios movimientos parciales.
+        // Ya conciliadas a otro movimiento quedan fuera — por el vínculo legado
+        // 1:1 o por porciones asignadas (ConciliacionDetalle) — salvo PPD, que
+        // puede pagarse con varios movimientos parciales.
         OR: [
-          { bankTransactions: { none: { status: "MATCHED" } } },
+          {
+            bankTransactions: { none: { status: "MATCHED" } },
+            conciliacionDetalles: { none: {} },
+          },
           { metodoPago: "PPD" },
         ],
       },
@@ -73,13 +77,16 @@ export const GET = withAuthz(
           where: { status: "MATCHED" },
           select: { id: true, monto: true },
         },
+        conciliacionDetalles: { select: { montoAsignado: true } },
       },
       take: 100,
     });
 
     const candidates = invoices
       .map((inv) => {
-        const matchedAmount = inv.bankTransactions.reduce((s, b) => s + Math.abs(b.monto), 0);
+        const matchedAmount =
+          inv.bankTransactions.reduce((s, b) => s + Math.abs(b.monto), 0) +
+          inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
         return {
           id: inv.id,
           uuid: inv.uuid,
@@ -91,7 +98,7 @@ export const GET = withAuthz(
           formaPago: inv.formaPago,
           rfc: inv.customer?.rfc ?? null,
           nombre: inv.customer?.razonSocial ?? null,
-          alreadyMatched: inv.bankTransactions.length > 0,
+          alreadyMatched: inv.bankTransactions.length > 0 || inv.conciliacionDetalles.length > 0,
           matchedAmount,
           remainingBalance: Math.max(0, inv.total - matchedAmount),
           score: scoreCandidate(

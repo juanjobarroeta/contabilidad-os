@@ -61,11 +61,15 @@ export async function GET(req: Request, { params }: Params) {
         lte: new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000),
       },
       total: { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
-      // Exclude PUE invoices already matched to another bank tx.
+      // Exclude PUE invoices already matched to another bank tx — either via
+      // the legacy 1:1 link or via assigned portions (ConciliacionDetalle).
       // Keep PPD invoices visible — they can have multiple partial payments.
       OR: [
         { metodoPago: "PPD" },
-        { bankTransactions: { none: { status: "MATCHED" } } },
+        {
+          bankTransactions: { none: { status: "MATCHED" } },
+          conciliacionDetalles: { none: {} },
+        },
       ],
     },
     include: {
@@ -74,6 +78,7 @@ export async function GET(req: Request, { params }: Params) {
         where: { status: "MATCHED" },
         select: { id: true, fecha: true, monto: true },
       },
+      conciliacionDetalles: { select: { montoAsignado: true } },
     },
     orderBy: { fecha: "desc" },
     take: 10,
@@ -92,9 +97,12 @@ export async function GET(req: Request, { params }: Params) {
     else if (daysDiff <= 7)  score += 10;
     const rfc = inv.customer?.rfc ?? "";
     if (rfc && tx.descripcion.toUpperCase().includes(rfc)) score += 25;
-    const alreadyMatched = inv.bankTransactions.length > 0;
-    // Neto firmado: un reembolso (cargo) resta de lo cobrado.
-    const matchedAmount = Math.abs(inv.bankTransactions.reduce((s, t) => s + t.monto, 0));
+    const alreadyMatched = inv.bankTransactions.length > 0 || inv.conciliacionDetalles.length > 0;
+    // Neto firmado: un reembolso (cargo) resta de lo cobrado. Las porciones
+    // asignadas (conciliación múltiple) suman por su monto asignado.
+    const matchedAmount =
+      Math.abs(inv.bankTransactions.reduce((s, t) => s + t.monto, 0)) +
+      inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
     return {
       id:          inv.id,
       uuid:        inv.uuid,

@@ -73,6 +73,8 @@ export const GET = withAuthz(async (req: Request) => {
         },
       },
       bankTransactions: { where: { status: "MATCHED" }, select: { monto: true } },
+      // Conciliación uno-a-varios: porciones asignadas a este CFDI.
+      conciliacionDetalles: { select: { montoAsignado: true } },
     },
     orderBy: { fecha: "desc" },
     take: 300,
@@ -104,7 +106,9 @@ export const GET = withAuthz(async (req: Request) => {
     const cp = inv.customer;
     const supplier = recibida && cp?.rfc ? supplierByRfc.get(cp.rfc) ?? null : null;
 
-    const matchedAmount = Math.abs(inv.bankTransactions.reduce((s, t) => s + t.monto, 0));
+    const matchedAmount =
+      Math.abs(inv.bankTransactions.reduce((s, t) => s + t.monto, 0)) +
+      inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
     const paid = inv.total > 0 && matchedAmount >= inv.total - 0.01;
 
     const vinculo = vinculoByInvoice.get(inv.id);

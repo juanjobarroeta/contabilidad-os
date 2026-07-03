@@ -420,6 +420,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       companyId,
       fecha: { gte: start, lt: end },
     },
+    include: {
+      // Conciliación uno-a-varios: un movimiento MATCHED sin invoiceId puede
+      // estar conciliado con varias facturas vía ConciliacionDetalle — su
+      // póliza de liquidación es la misma que la del match 1:1.
+      conciliacionDetalles: { select: { id: true }, take: 1 },
+    },
   });
 
   // Strict mode: refuse to close the month if any bank tx is still UNMATCHED.
@@ -460,8 +466,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       continue; // not posted
     }
 
-    if (tx.status === "MATCHED" && tx.invoiceId) {
-      // Settles the clientes/proveedores account that the CFDI originally hit
+    if (tx.status === "MATCHED" && (tx.invoiceId || tx.conciliacionDetalles.length > 0)) {
+      // Settles the clientes/proveedores account that the CFDI originally hit.
+      // Aplica igual al match 1:1 (invoiceId) que a la conciliación
+      // uno-a-varios (ConciliacionDetalle): la cuenta de liquidación no
+      // depende de qué factura(s), sólo del sentido del movimiento.
       if (isCredit) {
         // Cobro de factura: debit bank, credit clientes
         drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "CARGO" });

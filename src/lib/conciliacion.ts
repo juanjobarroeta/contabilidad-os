@@ -50,7 +50,15 @@ export async function scoreCandidates(txId: string, companyId: string): Promise<
         lte: new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000),
       },
       total: { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
-      OR: [{ metodoPago: "PPD" }, { bankTransactions: { none: { status: "MATCHED" } } }],
+      // PUE ya cobrada no es candidata: ni por vínculo legado 1:1 ni por
+      // porciones asignadas (conciliación múltiple, ConciliacionDetalle).
+      OR: [
+        { metodoPago: "PPD" },
+        {
+          bankTransactions: { none: { status: "MATCHED" } },
+          conciliacionDetalles: { none: {} },
+        },
+      ],
     },
     include: { customer: { select: { rfc: true, razonSocial: true } } },
     orderBy: { fecha: "desc" },
@@ -144,11 +152,16 @@ export type ReconcileResult =
 //
 // Regla de negocio (aplicada en TODOS los caminos de escritura — PATCH manual,
 // reconcileTransaction para WhatsApp/AI y el executor de acciones pendientes):
-//   - PUE (pago en una sola exhibición): una factura ↔ UN movimiento bancario.
-//     Un segundo match se rechaza.
-//   - PPD (pago en parcialidades): varios movimientos son VÁLIDOS, pero el
+//   - PUE (pago en una sola exhibición): una factura ↔ UN evento de pago.
+//     Un segundo match se rechaza. El pago puede ser una PORCIÓN de un
+//     movimiento que cubre varias facturas (montoAsignado): sigue siendo
+//     «una sola exhibición», pero entonces la porción debe cubrir el total
+//     de la factura (±1%).
+//   - PPD (pago en parcialidades): varios pagos son VÁLIDOS, pero el
 //     acumulado (previos + nuevo) no debe exceder el total de la factura más
-//     una tolerancia del 1% (redondeos).
+//     una tolerancia del 1% (redondeos). Cada pago cuenta por su porción
+//     asignada si la tiene, o por el movimiento completo si es un match
+//     legado 1:1.
 // Los montos se comparan en valor absoluto y en las unidades en que están
 // almacenados (misma convención que el scoring de candidatos: no se convierte
 // moneda; Invoice.total y BankTransaction.monto se comparan directo).
@@ -158,39 +171,103 @@ export const PPD_ACUMULADO_TOLERANCIA = 0.01;
 
 export type MatchGuardResult = { ok: true } | { ok: false; error: string };
 
+/**
+ * Un pago ya aplicado a la factura: un movimiento MATCHED completo (legado,
+ * sin montoAsignado) o una porción asignada vía ConciliacionDetalle.
+ */
+export interface PagoConciliado {
+  id: string;
+  fecha: Date;
+  monto: number;
+  /** Porción del movimiento asignada a la factura; ausente = movimiento completo. */
+  montoAsignado?: number;
+}
+
 function fmtMonto(n: number): string {
   return `$${Math.abs(n).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Monto con el que un pago cuenta para la factura (porción asignada o movimiento completo). */
+function montoEfectivo(t: { monto: number; montoAsignado?: number }): number {
+  return t.montoAsignado !== undefined ? Math.abs(t.montoAsignado) : Math.abs(t.monto);
+}
+
 /**
- * Decisión PURA: ¿puede conciliarse `newTx` con esta factura, dado lo ya
- * conciliado? No toca la base de datos — el caller aporta la factura y sus
- * movimientos ya MATCHED. Re-conciliar el MISMO movimiento es idempotente.
+ * Une, para el guard, los movimientos MATCHED legados (vínculo 1:1) con las
+ * porciones asignadas vía ConciliacionDetalle. Si un mismo movimiento aparece
+ * en ambos lados (no debería), la porción asignada gana.
+ */
+export function mergePagosConciliados(
+  matchedTxs: { id: string; fecha: Date; monto: number }[],
+  detalles: { bankTransactionId: string; montoAsignado: number; bankTransaction: { fecha: Date; monto: number } }[],
+): PagoConciliado[] {
+  const porId = new Map<string, PagoConciliado>();
+  for (const t of matchedTxs) porId.set(t.id, { id: t.id, fecha: t.fecha, monto: t.monto });
+  for (const d of detalles) {
+    porId.set(d.bankTransactionId, {
+      id: d.bankTransactionId,
+      fecha: d.bankTransaction.fecha,
+      monto: d.bankTransaction.monto,
+      montoAsignado: d.montoAsignado,
+    });
+  }
+  return [...porId.values()];
+}
+
+/**
+ * Decisión PURA: ¿puede conciliarse el pago `newTx` con esta factura, dado lo
+ * ya conciliado? No toca la base de datos — el caller aporta la factura y sus
+ * pagos previos (movimientos MATCHED legados + porciones asignadas; ver
+ * mergePagosConciliados). Re-conciliar el MISMO movimiento es idempotente.
+ * `newTx.montoAsignado` indica una conciliación múltiple: sólo esa porción
+ * del movimiento se aplica a la factura.
  */
 export function checkInvoiceMatchGuard(
   invoice: { metodoPago: string; total: number },
-  matchedTxs: { id: string; fecha: Date; monto: number }[],
-  newTx: { id: string; monto: number },
+  matchedTxs: PagoConciliado[],
+  newTx: { id: string; monto: number; montoAsignado?: number },
 ): MatchGuardResult {
   const previos = matchedTxs.filter((t) => t.id !== newTx.id);
-  if (previos.length === 0) return { ok: true };
+  const total = Math.abs(invoice.total);
 
   if (invoice.metodoPago !== "PPD") {
-    // PUE: ya existe un movimiento conciliado → rechazar el segundo.
-    const prev = previos[0];
-    return {
-      ok: false,
-      error:
-        `La factura ya está conciliada con otro movimiento bancario ` +
-        `(${prev.fecha.toISOString().slice(0, 10)}, ${fmtMonto(prev.monto)}). ` +
-        `Una factura PUE sólo puede conciliarse con un movimiento; ` +
-        `desvincule el movimiento anterior si desea corregir la conciliación.`,
-    };
+    if (previos.length > 0) {
+      // PUE: ya existe un pago aplicado → rechazar el segundo.
+      const prev = previos[0];
+      return {
+        ok: false,
+        error:
+          `La factura ya está conciliada con otro movimiento bancario ` +
+          `(${prev.fecha.toISOString().slice(0, 10)}, ${fmtMonto(montoEfectivo(prev))}). ` +
+          `Una factura PUE sólo puede conciliarse con un movimiento; ` +
+          `desvincule el movimiento anterior si desea corregir la conciliación.`,
+      };
+    }
+    // Porción asignada (conciliación múltiple): PUE es «una sola exhibición»,
+    // así que la porción debe cubrir el total de la factura (±1%). Pagarla
+    // junto con otras facturas en una misma transferencia es válido; lo que
+    // sigue prohibido es un segundo pago encima (caso anterior).
+    if (newTx.montoAsignado !== undefined) {
+      const asignado = Math.abs(newTx.montoAsignado);
+      if (Math.abs(asignado - total) > total * PPD_ACUMULADO_TOLERANCIA) {
+        return {
+          ok: false,
+          error:
+            `El monto asignado (${fmtMonto(asignado)}) no coincide con el total de la ` +
+            `factura PUE (${fmtMonto(total)}). Una factura PUE se paga en una sola ` +
+            `exhibición: la porción asignada debe cubrir el total (tolerancia 1%).`,
+        };
+      }
+    }
+    return { ok: true };
   }
 
   // PPD: permitir parcialidades mientras el acumulado no exceda el total.
-  const acumulado = previos.reduce((s, t) => s + Math.abs(t.monto), 0) + Math.abs(newTx.monto);
-  const limite = Math.abs(invoice.total) * (1 + PPD_ACUMULADO_TOLERANCIA);
+  // Sin porción asignada y sin pagos previos se conserva el comportamiento
+  // legado (el primer match 1:1 no valida monto contra total).
+  if (previos.length === 0 && newTx.montoAsignado === undefined) return { ok: true };
+  const acumulado = previos.reduce((s, t) => s + montoEfectivo(t), 0) + montoEfectivo(newTx);
+  const limite = total * (1 + PPD_ACUMULADO_TOLERANCIA);
   if (acumulado > limite) {
     return {
       ok: false,
@@ -201,6 +278,55 @@ export function checkInvoiceMatchGuard(
     };
   }
   return { ok: true };
+}
+
+// ── Conciliación múltiple: Σ de montos asignados vs monto del movimiento ─────
+
+export type AdvertenciaSumaAsignada = {
+  codigo: "SUMA_MENOR_AL_MOVIMIENTO";
+  mensaje: string;
+  montoMovimiento: number;
+  sumaAsignada: number;
+};
+
+export type SumaAsignadaResult =
+  | { ok: true; advertencia: AdvertenciaSumaAsignada | null }
+  | { ok: false; error: string };
+
+/**
+ * Decisión PURA para conciliación múltiple: la suma de los montos asignados
+ * no puede exceder el monto del movimiento (tolerancia 1%); quedar por debajo
+ * se permite pero con advertencia (p. ej. comisión descontada o cobro parcial)
+ * para que la UI/bitácora lo muestren.
+ */
+export function checkSumaAsignada(
+  montoMovimiento: number,
+  asignaciones: { monto: number }[],
+): SumaAsignadaResult {
+  const suma = asignaciones.reduce((s, a) => s + Math.abs(a.monto), 0);
+  const absMonto = Math.abs(montoMovimiento);
+  if (suma > absMonto * (1 + PPD_ACUMULADO_TOLERANCIA)) {
+    return {
+      ok: false,
+      error:
+        `La suma de los montos asignados (${fmtMonto(suma)}) excede el monto ` +
+        `del movimiento (${fmtMonto(absMonto)}).`,
+    };
+  }
+  if (suma < absMonto * (1 - PPD_ACUMULADO_TOLERANCIA)) {
+    return {
+      ok: true,
+      advertencia: {
+        codigo: "SUMA_MENOR_AL_MOVIMIENTO",
+        mensaje:
+          `La suma asignada (${fmtMonto(suma)}) es menor al monto del movimiento ` +
+          `(${fmtMonto(absMonto)}); la diferencia quedó sin asignar.`,
+        montoMovimiento: absMonto,
+        sumaAsignada: suma,
+      },
+    };
+  }
+  return { ok: true, advertencia: null };
 }
 
 /** Persist a match: BankTransaction → Invoice (status MATCHED). */
@@ -226,13 +352,21 @@ export async function reconcileTransaction(
           where: { status: "MATCHED" },
           select: { id: true, fecha: true, monto: true },
         },
+        conciliacionDetalles: {
+          select: {
+            bankTransactionId: true,
+            montoAsignado: true,
+            bankTransaction: { select: { fecha: true, monto: true } },
+          },
+        },
       },
     }),
   ]);
   if (!tx) return { ok: false, error: "Movimiento no encontrado." };
   if (!inv) return { ok: false, error: "Factura no encontrada." };
 
-  const guard = checkInvoiceMatchGuard(inv, inv.bankTransactions, tx);
+  const pagosPrevios = mergePagosConciliados(inv.bankTransactions, inv.conciliacionDetalles);
+  const guard = checkInvoiceMatchGuard(inv, pagosPrevios, tx);
   if (!guard.ok) return { ok: false, error: guard.error };
 
   await prisma.bankTransaction.update({
