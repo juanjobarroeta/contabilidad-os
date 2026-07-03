@@ -20,8 +20,9 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 // endpoint de dispersión por corrida), se incluyen todos sus PayrollItems.
 //
 // Reglas de omisión (no abortan el archivo completo):
-//  - Sin acceso de lectura a la empresa: se omite (misma comprobación de
-//    membresía que batch-calcular).
+//  - Sin permiso de escritura en la empresa (VIEWER o sin acceso): se omite
+//    (misma regla que batch-calcular/batch-timbrar — el archivo expone CLABE,
+//    banco, RFC y neto de los empleados).
 //  - Empresa sin corrida elegible para el periodo: se omite.
 //
 // Mismo layout de columnas que /api/nomina/dispersion MÁS una columna inicial
@@ -62,9 +63,10 @@ export async function GET(req: Request) {
   const lines: string[] = [];
 
   for (const companyId of ids) {
-    // AUTZ por empresa: misma comprobación que batch-calcular. Sin acceso → omitir.
+    // AUTZ por empresa: misma regla que batch-calcular/batch-timbrar.
+    // VIEWER o sin acceso → omitir (datos bancarios sensibles).
     const member = await getEffectiveCompanyMembership(userId, companyId);
-    if (!member) continue;
+    if (!member || member.role === "VIEWER") continue;
 
     // Corrida más reciente no-DRAFT para ese periodo.
     const run = await prisma.payrollRun.findFirst({
