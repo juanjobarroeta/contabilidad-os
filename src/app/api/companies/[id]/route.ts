@@ -6,13 +6,16 @@ import { provisionCompany } from "@/lib/fiscal/cumplimiento/syntage/provision";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
 import { fielStatus, parseCertExpiry } from "@/lib/fiel";
+import { borrarCredencialesEmpresa, borrarEmpresaDefinitivo } from "@/lib/empresas/baja";
 
 type Params = { params: Promise<{ id: string }> };
 
 // CSD upload triggers Facturapi provisioning (create org → upload certificate →
 // renew live key), several sequential external calls. Give it room so it doesn't
-// time out into an empty response.
-export const maxDuration = 60;
+// time out into an empty response. The DELETE (baja definitiva) runs a single
+// transaction with a 120 s budget over years of CFDIs — give it the same room
+// where the platform allows it.
+export const maxDuration = 150;
 
 // GET /api/companies/[id]
 export async function GET(_req: Request, { params }: Params) {
@@ -179,6 +182,98 @@ export async function PATCH(req: Request, { params }: Params) {
           : `No se pudo guardar: ${msg}`,
       },
       { status: esClave ? 500 : 422 }
+    );
+  }
+}
+
+// DELETE /api/companies/[id] — baja definitiva de la empresa (LFPDPPP,
+// derecho de cancelación). Borra la empresa y TODOS sus datos dependientes.
+//
+// Regla de autorización (deliberadamente MÁS estricta que requireOwner):
+// sólo un usuario con fila CompanyMember DIRECTA y role = OWNER en ESTA
+// empresa puede darla de baja. NO basta:
+//   - el acceso implícito por despacho (getEffectiveCompanyMembership lo
+//     topa en ADMIN de todos modos — un despacho nunca es dueño de los
+//     datos de su cliente), ni
+//   - el flag esOperador (soporte de plataforma): un operador no es el
+//     titular de los datos y no puede ejercer la cancelación por él.
+//
+// Confirmación: el body debe traer el RFC exacto de la empresa (confirmRfc).
+export async function DELETE(req: Request, { params }: Params) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { id: companyId } = await params;
+
+  // Membresía DIRECTA con role OWNER — sin acceso implícito por despacho ni operador.
+  const direct = await prisma.companyMember.findUnique({
+    where: { userId_companyId: { userId: session.user.id, companyId } },
+    select: { role: true },
+  });
+  if (!direct || direct.role !== "OWNER") {
+    return NextResponse.json(
+      {
+        error:
+          "Solo el propietario (OWNER directo) de la empresa puede darla de baja definitivamente.",
+      },
+      { status: 403 }
+    );
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { rfc: true, razonSocial: true },
+  });
+  if (!company) {
+    return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const confirmRfc =
+    typeof body?.confirmRfc === "string" ? body.confirmRfc.trim().toUpperCase() : "";
+  if (!confirmRfc || confirmRfc !== company.rfc.trim().toUpperCase()) {
+    return NextResponse.json(
+      {
+        error:
+          "El RFC de confirmación no coincide con el RFC de la empresa. Escríbelo exactamente para confirmar la baja.",
+      },
+      { status: 400 }
+    );
+  }
+
+  // Registro estructurado de auditoría (aún no existe tabla de auditoría).
+  const auditoria = {
+    userId: session.user.id,
+    email: session.user.email ?? null,
+    companyId,
+    rfc: company.rfc,
+    razonSocial: company.razonSocial,
+    timestamp: new Date().toISOString(),
+  };
+  console.warn(`[baja-empresa] solicitada ${JSON.stringify(auditoria)}`);
+
+  try {
+    // Fase 1 — PRIMERA acción del flujo: matar credenciales (FIEL/CSD/llaves
+    // de Facturapi y Playtomic). Aunque la fase 2 falle, los secretos ya no existen.
+    await borrarCredencialesEmpresa(companyId);
+    console.warn(`[baja-empresa] credenciales eliminadas ${JSON.stringify(auditoria)}`);
+
+    // Fase 2 — borrado total en una transacción (todo-o-nada).
+    await borrarEmpresaDefinitivo(companyId);
+    console.warn(`[baja-empresa] completada ${JSON.stringify(auditoria)}`);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(
+      `[baja-empresa] fallo ${JSON.stringify({ ...auditoria, error: msg })}`
+    );
+    return NextResponse.json(
+      {
+        error:
+          "No se pudo completar la baja. Las credenciales (e.firma/CSD) ya fueron eliminadas y la empresa quedó desactivada; intenta la baja de nuevo en unos minutos.",
+      },
+      { status: 500 }
     );
   }
 }
