@@ -2212,6 +2212,8 @@ model SolicitudAdjudicacion {
   // Registrar el pago NO crea un movimiento bancario: el estado de cuenta se
   // llena sólo con el CSV importado y la conciliación lo empata después.
   estado            String    @default("POR_PAGAR") // POR_PAGAR | PAGADA | CONCILIADA
+  // Cuándo admin la mandó a tesorería para pago (workflow de cuentas por pagar).
+  enviadaTesoreriaAt DateTime?
   pagadaAt          DateTime? // cuándo se registró el pago (comprobante)
   conciliadaAt      DateTime? // cuándo se empató con el movimiento bancario real
   referenciaPago    String? // referencia/folio SPEI capturado al registrar el pago
@@ -2466,7 +2468,10 @@ model Gasto {
   id            String   @id @default(cuid())
   companyId     String
   proyectoId    String
-  bankAccountId String // which account paid (main cuenta or caja chica)
+  // Cuenta que pagó. Opcional: la cuenta real se determina en la conciliación
+  // (CFDI ↔ movimiento importado), no al capturar el gasto. Se conserva para
+  // datos históricos y para caja chica.
+  bankAccountId String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -2526,6 +2531,8 @@ model Gasto {
   // Populated on /aprobar-pagar
   bankTransactionId String?   @unique
   pagadoAt          DateTime?
+  // Cuándo admin lo mandó a tesorería para pago (workflow de cuentas por pagar).
+  enviadaTesoreriaAt DateTime?
 
   // Katia's approval audit
   aprobadoPor String? // User id
@@ -2535,7 +2542,7 @@ model Gasto {
 
   company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   proyecto           Proyecto            @relation(fields: [proyectoId], references: [id])
-  bankAccount        BankAccount         @relation(fields: [bankAccountId], references: [id])
+  bankAccount        BankAccount?        @relation(fields: [bankAccountId], references: [id])
   presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
   insumo             Insumo?             @relation(fields: [insumoId], references: [id])
   bankTransaction    BankTransaction?    @relation(fields: [bankTransactionId], references: [id])

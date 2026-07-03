@@ -61,6 +61,7 @@ export const GET = withAuthz(async (req: Request) => {
     total: a.total,
     estado: a.estado,
     createdAt: a.createdAt,
+    enviadaTesoreriaAt: a.enviadaTesoreriaAt,
     pagadaAt: a.pagadaAt,
     conciliadaAt: a.conciliadaAt,
     referenciaPago: a.referenciaPago,
