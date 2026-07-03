@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertTriangle, Clock, CheckCircle2, CalendarDays,
   ArrowUpRight, ArrowDownLeft, ChevronRight, Sparkles, ShieldQuestion,
+  Loader2, KeyRound, SearchX,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Chip, type ChipStatus, Alert, Loading } from "@/components/ui";
@@ -16,9 +17,19 @@ interface UpcomingOb {
   dueDate: string; dueDateFmt: string; periodo: string;
   daysUntil: number; status: "OVERDUE" | "SOON" | "UPCOMING"; filed: boolean;
 }
+interface EstadoDatos {
+  tieneFacturas: boolean;
+  fielConfigurada: boolean;
+  sincronizando: boolean;
+  sinResultados: boolean;
+  periodosPendientes?: number;
+  periodosTotales?: number;
+  ultimaSincronizacion?: string;
+}
 interface DashboardData {
   periodo: { year: number; month: number };
   fiel: { estado: "ok" | "por_vencer" | "vencida" | "sin_fiel"; vigencia: string | null; diasRestantes: number | null } | null;
+  estadoDatos?: EstadoDatos;
   taxThisMonth: {
     iva: number; isr: number | null; total: number; saldoAFavor: number;
     vence: string; venceFmt: string; diasRestantes: number; tarifaVerificada: boolean;
@@ -88,6 +99,123 @@ function MiniBars({ trend }: { trend: TrendPoint[] }) {
   );
 }
 
+// ── Estado de datos: tarjeta "tablero vacío" tras el onboarding ───────────────
+// Explica por qué no hay cifras todavía: descarga del SAT en curso, e.firma
+// pendiente de configurar, o descarga terminada sin CFDIs encontrados.
+function fmtUltimaSync(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString("es-MX", {
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function EstadoDatosCard({ estado }: { estado: EstadoDatos }) {
+  if (estado.tieneFacturas) return null;
+
+  // Sin e.firma no hay descarga automática posible: nudge hacia /empresa.
+  if (!estado.fielConfigurada) {
+    return (
+      <div className="flex items-start gap-4 rounded-card bg-cos-amber-tint px-6 py-[22px]">
+        <div className="grid h-12 w-12 flex-none place-items-center rounded-[14px] bg-cos-amber text-white">
+          <KeyRound className="h-[26px] w-[26px]" strokeWidth={2.2} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[21px] font-semibold tracking-[-0.02em] text-cos-amber-ink">
+            Falta tu e.firma para traer tus facturas
+          </h2>
+          <p className="mt-1 text-[14.5px] leading-snug text-cos-amber-ink opacity-90">
+            Sin la e.firma (FIEL) no podemos descargar tus CFDI del SAT automáticamente,
+            por eso el tablero está en ceros. Configúrala una sola vez y nosotros nos
+            encargamos del resto.
+          </p>
+          <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Link
+              href="/empresa"
+              className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3.5 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep"
+            >
+              Configurar e.firma <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+            <span className="text-[12.5px] text-cos-amber-ink opacity-80">
+              Mientras tanto, puedes subir tus estados de cuenta en{" "}
+              <Link href="/bancos" className="font-semibold underline">Bancos</Link>.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Descarga en curso: progreso por períodos + última sincronización.
+  if (estado.sincronizando) {
+    const totales = estado.periodosTotales ?? 0;
+    const pendientes = estado.periodosPendientes ?? 0;
+    const completados = Math.max(totales - pendientes, 0);
+    const ultima = fmtUltimaSync(estado.ultimaSincronizacion);
+    return (
+      <div className="flex items-start gap-4 rounded-card bg-cos-brand-tint px-6 py-[22px]">
+        <div className="grid h-12 w-12 flex-none place-items-center rounded-[14px] bg-cos-brand text-white">
+          <Loader2 className="h-[26px] w-[26px] animate-spin" strokeWidth={2.2} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[21px] font-semibold tracking-[-0.02em] text-cos-brand-ink">
+            Estamos descargando tus CFDI del SAT
+          </h2>
+          <p className="mt-1 text-[14.5px] leading-snug text-cos-brand-ink opacity-90">
+            La descarga puede tardar desde unos minutos hasta varias horas — depende de
+            los tiempos del SAT. Puedes seguir usando la plataforma; el tablero se irá
+            llenando conforme lleguen tus facturas.
+          </p>
+          {totales > 0 && (
+            <div className="mt-3.5">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/70">
+                <div
+                  className="h-full rounded-full bg-cos-brand transition-all duration-700"
+                  style={{ width: `${Math.round((completados / totales) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+          <p className="mt-2 text-[12.5px] text-cos-brand-ink opacity-75">
+            {totales > 0 && `${completados} de ${totales} períodos descargados`}
+            {totales > 0 && ultima && " · "}
+            {ultima && `Última actualización: ${ultima}`}
+            {(totales > 0 || ultima) && " · "}
+            Esta página se actualiza sola cada minuto.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Descarga terminada sin CFDIs: no girar para siempre — explicar y dar salidas.
+  if (estado.sinResultados) {
+    return (
+      <div className="flex items-start gap-4 rounded-card border border-cos-line bg-white px-6 py-[22px] shadow-card">
+        <div className="grid h-12 w-12 flex-none place-items-center rounded-[14px] bg-cos-slate-tint text-cos-ink-soft">
+          <SearchX className="h-[26px] w-[26px]" strokeWidth={2.2} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[21px] font-semibold tracking-[-0.02em] text-cos-ink">
+            No encontramos CFDI en el SAT
+          </h2>
+          <p className="mt-1 text-[14.5px] leading-snug text-cos-ink-soft">
+            La descarga terminó, pero el SAT no devolvió facturas para los períodos
+            consultados. Si tu empresa es de reciente creación, esto es normal — el
+            tablero se llenará conforme factures. También puedes revisar los períodos en{" "}
+            <Link href="/impuestos?tab=del-mes" className="font-semibold text-cos-brand-ink underline">Impuestos</Link>{" "}
+            o subir tus estados de cuenta en{" "}
+            <Link href="/bancos" className="font-semibold text-cos-brand-ink underline">Bancos</Link>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ── Hero status band ──────────────────────────────────────────────────────────
 function HeroBand({ obligaciones }: { obligaciones: UpcomingOb[] }) {
   const vencidas = obligaciones.filter((o) => !o.filed && o.status === "OVERDUE").length;
@@ -150,22 +278,36 @@ export default function InicioPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchDashboard = useCallback(async () => {
+  const fetchDashboard = useCallback(async (silent = false) => {
     if (!activeCompany) return;
-    setLoading(true);
-    setError("");
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const res = await fetch(`/api/dashboard?companyId=${activeCompany.id}`);
       if (!res.ok) throw new Error();
       setData(await res.json());
     } catch {
-      setError("No se pudo cargar el inicio");
+      // En refrescos silenciosos no pisamos la vista con un error transitorio.
+      if (!silent) setError("No se pudo cargar el inicio");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [activeCompany]);
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+
+  // Mientras el SAT descarga los CFDI de una empresa recién creada, refrescamos
+  // en silencio cada 60 s. Se detiene solo: al llegar facturas, al terminar la
+  // descarga o al desmontar la página.
+  const descargando =
+    !!data?.estadoDatos && !data.estadoDatos.tieneFacturas && data.estadoDatos.sincronizando;
+  useEffect(() => {
+    if (!descargando) return;
+    const id = setInterval(() => fetchDashboard(true), 60_000);
+    return () => clearInterval(id);
+  }, [descargando, fetchDashboard]);
 
   if (companyLoading) return <div className="p-8 text-sm text-cos-ink-faint">Cargando…</div>;
 
@@ -211,6 +353,7 @@ export default function InicioPage() {
         <Loading label="Cargando datos…" className="py-16" />
       ) : (
         <div className="space-y-5">
+          {data.estadoDatos && <EstadoDatosCard estado={data.estadoDatos} />}
           {data.fiel && (data.fiel.estado === "vencida" || data.fiel.estado === "por_vencer") && (
             <div className={`flex items-center gap-3 rounded-card px-5 py-3.5 text-[14px] ${data.fiel.estado === "vencida" ? "bg-cos-red-tint text-cos-red-ink" : "bg-cos-amber-tint text-cos-amber-ink"}`}>
               <AlertTriangle className="h-5 w-5 flex-none" />

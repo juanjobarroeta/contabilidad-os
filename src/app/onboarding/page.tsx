@@ -1160,6 +1160,14 @@ function OnboardingPageInner() {
               </button>
             )}
           </div>
+
+          {/* Handoff al dashboard: fijar expectativa de la descarga del SAT */}
+          {loading && fiel.cerFile && (
+            <p className="text-center text-[12.5px] leading-snug text-cos-ink-soft">
+              La descarga de tus CFDI del SAT comienza en este momento; el tablero se irá
+              llenando progresivamente (puede tardar desde minutos hasta horas).
+            </p>
+          )}
         </div>
       </div>
     </div>
