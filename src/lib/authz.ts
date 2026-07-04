@@ -13,6 +13,12 @@ export type AuthUser = {
   id: string;
   email: string | null;
   name: string | null;
+  /**
+   * Scopes del access token (separados por espacio), sólo cuando la petición
+   * llegó con un bearer emitido con scope. Sesiones web y tokens sin scope
+   * (incluidos los legados de 7 días) lo dejan undefined = acceso total.
+   */
+  scope?: string;
 };
 
 /**
@@ -40,6 +46,7 @@ export async function requireUser(req?: Request): Promise<AuthUser> {
           id: payload.sub,
           email: payload.email || null,
           name: payload.name,
+          ...(payload.scope ? { scope: payload.scope } : {}),
         };
       } catch {
         throw new AuthzError(401, "Token inválido o expirado");
@@ -55,6 +62,27 @@ export async function requireUser(req?: Request): Promise<AuthUser> {
     email: session.user.email ?? null,
     name: session.user.name ?? null,
   };
+}
+
+/**
+ * Enforcement suave de scopes por satélite. Sólo aplica cuando el access
+ * token trae claim `scope` (lanzamiento gradual): un token SIN scope —
+ * sesiones web, tokens legados de 7 días o emisión sin `scope` en el body —
+ * conserva el acceso total de siempre. Con scope presente, la ruta exige que
+ * incluya el requerido o lanza 403.
+ *
+ * Uso (una línea tras requireUser/requireMembership):
+ *   requireScope(user, "facturas");
+ */
+export function requireScope(user: AuthUser, scope: string): void {
+  if (!user.scope) return; // sin claim de scope = acceso total (compatibilidad)
+  const scopes = user.scope.split(/\s+/).filter(Boolean);
+  if (!scopes.includes(scope)) {
+    throw new AuthzError(
+      403,
+      `El token no tiene el alcance «${scope}» requerido para esta operación`
+    );
+  }
 }
 
 /**

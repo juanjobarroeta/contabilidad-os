@@ -1,18 +1,38 @@
 /**
- * Bearer JWT auth for cross-origin API clients (construccion-admin, future
+ * Bearer JWT auth for cross-origin API clients (construccion-admin, padel,
  * fleet-maintenance, marketing-zionx, etc.). Runs in parallel to NextAuth's
  * session cookie flow used by the contabilidad-os web UI.
  *
  * The auth secret is shared with NextAuth (NEXTAUTH_SECRET / AUTH_SECRET) so
- * there's a single key to rotate. Tokens are HS256-signed JWTs with a short-
- * ish expiry; we validate issuer + audience to refuse re-use across products.
+ * there's a single key to rotate. Tokens are HS256-signed JWTs with a short
+ * expiry; we validate issuer + audience to refuse re-use across products.
+ *
+ * TOKEN LIFECYCLE (desde julio 2026):
+ *   - Access token: 1 hora, con `jti` y `scope` opcional. Se renueva con el
+ *     refresh token opaco (30 días, rotatorio) — ver src/lib/api-refresh-token.ts
+ *     y POST /api/auth/token/refresh.
+ *   - Tokens legados de 7 días: siguen VERIFICANDO hasta expirar de forma
+ *     natural (mismo issuer/audience/secreto — nada que hacer aquí). Su
+ *     EMISIÓN sólo queda disponible con LEGACY_API_TOKENS_ENABLED="true" y
+ *     body { legacy: true }; ver POST /api/auth/token.
+ *
+ * DECISIÓN — sin denylist de `jti` para access tokens: con TTL de 1 hora, la
+ * ventana de exposición de un access token filtrado es acotada; revocar el
+ * refresh token (GET/DELETE /api/me/tokens) corta el acceso en menos de una
+ * hora. Mantener una denylist consultada en CADA request costaría un viaje a
+ * BD por verificación para cubrir esa misma hora. La palanca de emergencia
+ * sigue siendo rotar AUTH_SECRET, que invalida TODOS los JWT al instante.
  */
 
 import { SignJWT, jwtVerify } from "jose";
+import { randomUUID } from "node:crypto";
 
 const ISSUER = "contabilidad-os";
 const AUDIENCE = "contabilidad-os:api";
-const DEFAULT_EXPIRY = "7d";
+/** Vigencia de los access tokens del flujo con refresh. */
+export const ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60; // 1 hora
+/** Vigencia legada (emisión sólo con LEGACY_API_TOKENS_ENABLED="true"). */
+const LEGACY_EXPIRY = "7d";
 
 function getSecretKey(): Uint8Array {
   const raw =
@@ -31,26 +51,65 @@ export type ApiTokenPayload = {
   sub: string;      // user id
   email: string;
   name: string | null;
+  /** Identificador único del token (sólo en access tokens del flujo nuevo). */
+  jti?: string;
+  /** Scopes separados por espacio ("clientes facturas nomina"). Ausente = acceso total. */
+  scope?: string;
 };
 
+/** True si la emisión de tokens legados de 7 días está habilitada por env. */
+export function legacyApiTokensEnabled(): boolean {
+  return process.env.LEGACY_API_TOKENS_ENABLED === "true";
+}
+
 /**
- * Signs a 7-day bearer token for the given user.
+ * Signs a 1-hour access token for the given user, with a unique `jti` and an
+ * optional space-separated `scope` claim. Pair it with a refresh token
+ * (src/lib/api-refresh-token.ts) so clients can renew without re-sending
+ * credentials.
  */
-export async function signApiToken(payload: ApiTokenPayload): Promise<string> {
+export async function signApiToken(
+  payload: ApiTokenPayload,
+  opts?: { scope?: string | null }
+): Promise<string> {
+  const scope = opts?.scope?.trim();
+  return new SignJWT({
+    email: payload.email,
+    name: payload.name,
+    ...(scope ? { scope } : {}),
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(payload.sub)
+    .setJti(randomUUID())
+    .setIssuedAt()
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCE)
+    .setExpirationTime(`${ACCESS_TOKEN_EXPIRY_SECONDS}s`)
+    .sign(getSecretKey());
+}
+
+/**
+ * Signs a LEGACY 7-day bearer token (no jti, no scope) — the pre-refresh-flow
+ * shape. Issuance is gated behind LEGACY_API_TOKENS_ENABLED="true"; existing
+ * legacy tokens keep verifying regardless (same issuer/audience/secret).
+ */
+export async function signLegacyApiToken(payload: ApiTokenPayload): Promise<string> {
   return new SignJWT({ email: payload.email, name: payload.name })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.sub)
     .setIssuedAt()
     .setIssuer(ISSUER)
     .setAudience(AUDIENCE)
-    .setExpirationTime(DEFAULT_EXPIRY)
+    .setExpirationTime(LEGACY_EXPIRY)
     .sign(getSecretKey());
 }
 
 /**
  * Verifies a bearer token and returns the payload, or throws.
  * Used by the authz layer when it sees an `Authorization: Bearer <token>`
- * header on an incoming request.
+ * header on an incoming request. Accepts BOTH new short-lived access tokens
+ * (with jti/scope) and legacy 7-day tokens (without) — back-compat is load-
+ * bearing here: live satellites still hold legacy tokens.
  */
 export async function verifyApiToken(token: string): Promise<ApiTokenPayload> {
   const { payload } = await jwtVerify(token, getSecretKey(), {
@@ -62,6 +121,10 @@ export async function verifyApiToken(token: string): Promise<ApiTokenPayload> {
     sub: payload.sub,
     email: (payload.email as string) ?? "",
     name: (payload.name as string | null) ?? null,
+    ...(typeof payload.jti === "string" ? { jti: payload.jti } : {}),
+    ...(typeof payload.scope === "string" && payload.scope
+      ? { scope: payload.scope }
+      : {}),
   };
 }
 
@@ -110,7 +173,9 @@ export async function signClubMemberToken(
     .setIssuedAt()
     .setIssuer(ISSUER)
     .setAudience(MEMBER_AUDIENCE)
-    .setExpirationTime(DEFAULT_EXPIRY)
+    // Los tokens de socios del club conservan los 7 días de siempre — el flujo
+    // access+refresh aplica sólo a la audiencia staff/API.
+    .setExpirationTime(LEGACY_EXPIRY)
     .sign(getSecretKey());
 }
 

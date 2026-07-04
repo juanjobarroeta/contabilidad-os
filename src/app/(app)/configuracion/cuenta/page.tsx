@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ArrowLeft, UserCircle } from "lucide-react";
 import { EliminarCuenta } from "./EliminarCuenta";
+import { TokensApi } from "./TokensApi";
 
 export default async function CuentaPage() {
   const session = await auth();
@@ -45,6 +46,9 @@ export default async function CuentaPage() {
           Edición de perfil y cambio de contraseña próximamente.
         </p>
       </div>
+
+      {/* Accesos de API activos (tokens de satélites) con revocación */}
+      <TokensApi />
 
       {/* Zona de peligro — baja definitiva de la cuenta (LFPDPPP) */}
       {user?.email && <EliminarCuenta email={user.email} />}

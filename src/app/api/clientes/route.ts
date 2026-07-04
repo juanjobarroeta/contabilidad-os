@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
-import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireScope, requireUser, AuthzError } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 
 // GET /api/clientes?companyId=xxx&search=xxx
@@ -11,6 +11,7 @@ export async function GET(req: Request) {
   let user;
   try {
     user = await requireUser(req);
+    requireScope(user, "clientes"); // sólo aplica a tokens emitidos con scope
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json([], { status: e.status });
     throw e;
@@ -54,9 +55,11 @@ export async function POST(req: Request) {
   let user;
   try {
     user = await requireUser(req);
+    requireScope(user, "clientes"); // sólo aplica a tokens emitidos con scope
   } catch (e) {
     const status = e instanceof AuthzError ? e.status : 401;
-    return NextResponse.json({ error: "Unauthorized" }, { status });
+    const error = e instanceof AuthzError ? e.message : "Unauthorized";
+    return NextResponse.json({ error }, { status });
   }
 
   const body = await req.json();
