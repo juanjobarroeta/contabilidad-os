@@ -84,10 +84,15 @@ export default function ImssPagosCard({ companyId }: { companyId: string }) {
 
   const m = estado.mensual;
   const todoPagado = m.pagada && (estado.bimestral == null || estado.bimestral.pagada);
+  // Hay corridas del mes pero ninguna timbrada: el estimado sale en $0 porque
+  // sólo cuenta la nómina timbrada — mostramos un estado explicativo en vez de
+  // renglones en ceros con el botón activo.
+  const sinTimbrar = estado.nomina.corridasDelMes > 0 && estado.nomina.timbradasDelMes === 0;
+  const mesLabel = `${MESES[estado.month - 1]} de ${estado.year}`;
 
   return (
     <Card className="rounded-card border-cos-line p-5 shadow-card">
-      <div className="mb-2.5 flex items-center justify-between">
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <span className="rounded-full bg-cos-brand-tint px-2.5 py-1 text-[13px] font-semibold text-cos-brand-ink">
           Cuotas IMSS (SIPARE)
         </span>
@@ -124,6 +129,8 @@ export default function ImssPagosCard({ companyId }: { companyId: string }) {
           { label: "IMSS obrero (retenido)", value: m.estimado.imssObrero },
           { label: "IMSS patronal (incluye RCV)", value: m.estimado.imssPatronal },
         ]}
+        sinTimbrar={sinTimbrar}
+        mesLabel={mesLabel}
         onSaved={load}
       />
 
@@ -140,6 +147,8 @@ export default function ImssPagosCard({ companyId }: { companyId: string }) {
             renglones={[
               { label: "Amortizaciones Infonavit retenidas", value: estado.bimestral.estimado.infonavit },
             ]}
+            sinTimbrar={sinTimbrar}
+            mesLabel={mesLabel}
             onSaved={load}
           />
         </div>
@@ -166,6 +175,8 @@ function BloqueRegistro({
   bloque,
   estimadoTotal,
   renglones,
+  sinTimbrar,
+  mesLabel,
   onSaved,
 }: {
   companyId: string;
@@ -176,14 +187,23 @@ function BloqueRegistro({
   bloque: BloquePago;
   estimadoTotal: number;
   renglones: Array<{ label: string; value: number }>;
+  sinTimbrar: boolean;
+  mesLabel: string;
   onSaved: () => void;
 }) {
   const decl = bloque.declaracion;
-  const [monto, setMonto] = useState(String(decl?.monto ?? estimadoTotal));
+  // Prellena con el estimado sólo cuando es mayor a cero — un "0" suelto en el
+  // spinner confunde más de lo que ayuda.
+  const montoInicial = decl?.monto ?? (estimadoTotal > 0 ? estimadoTotal : null);
+  const [monto, setMonto] = useState(montoInicial != null ? String(montoInicial) : "");
   const [lineaCaptura, setLineaCaptura] = useState(decl?.lineaCaptura ?? "");
   const [fecha, setFecha] = useState(decl?.fechaPresentacion?.slice(0, 10) ?? hoyIso());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Estado "sin timbrar": el registrar queda colapsado tras un enlace — el
+  // usuario aún puede pagar con base en el SUA si así lo decide.
+  const estimadoPendiente = sinTimbrar && estimadoTotal === 0 && !bloque.pagada && !decl;
+  const [mostrarForm, setMostrarForm] = useState(false);
 
   async function registrar() {
     setSaving(true);
@@ -224,16 +244,28 @@ function BloqueRegistro({
           </span>
         )}
       </div>
-      {renglones.map((r) => (
-        <div key={r.label} className="flex items-center justify-between py-0.5">
-          <span className="text-[13px] text-cos-ink-soft">{r.label}</span>
-          <span className="font-mono text-[13.5px] text-cos-ink">{formatCurrency(r.value)}</span>
-        </div>
-      ))}
-      <div className="flex items-center justify-between border-t border-cos-line py-1">
-        <span className="text-[13px] font-semibold text-cos-ink">Total estimado</span>
-        <span className="font-mono text-[14px] font-bold text-cos-ink">{formatCurrency(estimadoTotal)}</span>
-      </div>
+      {estimadoPendiente ? (
+        <p className="py-0.5 text-[13px] leading-relaxed text-cos-ink-soft">
+          La nómina de {mesLabel} está calculada pero sin timbrar — el estimado se calcula al
+          timbrar. Timbra en{" "}
+          <a href="/nomina?tab=corridas" className="font-medium text-cos-brand-ink underline underline-offset-2">
+            Corridas
+          </a>.
+        </p>
+      ) : (
+        <>
+          {renglones.map((r) => (
+            <div key={r.label} className="flex items-center justify-between gap-2 py-0.5">
+              <span className="min-w-0 text-[13px] text-cos-ink-soft">{r.label}</span>
+              <span className="whitespace-nowrap font-mono text-[13.5px] text-cos-ink">{formatCurrency(r.value)}</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between gap-2 border-t border-cos-line py-1">
+            <span className="text-[13px] font-semibold text-cos-ink">Total estimado</span>
+            <span className="whitespace-nowrap font-mono text-[14px] font-bold text-cos-ink">{formatCurrency(estimadoTotal)}</span>
+          </div>
+        </>
+      )}
 
       {bloque.pagada && decl ? (
         <p className="mt-1.5 text-[12.5px] text-cos-ink-soft">
@@ -241,36 +273,52 @@ function BloqueRegistro({
           {decl.fechaPresentacion ? ` el ${fmtFecha(decl.fechaPresentacion.slice(0, 10))}` : ""}
           {decl.lineaCaptura ? ` · línea de captura ${decl.lineaCaptura}` : ""}.
         </p>
+      ) : estimadoPendiente && !mostrarForm ? (
+        <button
+          onClick={() => setMostrarForm(true)}
+          className="mt-1.5 text-[12.5px] font-medium text-cos-brand-ink underline underline-offset-2 hover:opacity-80"
+        >
+          Registrar pago de todos modos
+        </button>
       ) : (
         <div className="mt-2.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="0.01"
-              value={monto}
-              onChange={(e) => setMonto(e.target.value)}
-              aria-label="Monto pagado"
-              className="w-[130px] rounded-control border border-cos-line px-2.5 py-2 font-mono text-[13px]"
-            />
-            <input
-              value={lineaCaptura}
-              onChange={(e) => setLineaCaptura(e.target.value)}
-              placeholder="Línea de captura SIPARE (opcional)"
-              className="min-w-[180px] flex-1 rounded-control border border-cos-line px-2.5 py-2 text-[13px]"
-            />
-            <input
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              aria-label="Fecha de pago"
-              className="rounded-control border border-cos-line px-2.5 py-2 text-[13px]"
-            />
+          {/* En móvil los campos se apilan a lo ancho; en sm+ vuelven a una fila. */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+            <label className="flex flex-col gap-1 text-[12px] font-medium text-cos-ink-soft sm:w-[130px]">
+              Monto pagado
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={monto}
+                onChange={(e) => setMonto(e.target.value)}
+                placeholder="0.00"
+                className="w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 font-mono text-[13px] text-cos-ink"
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1 text-[12px] font-medium text-cos-ink-soft sm:min-w-[180px] sm:flex-1">
+              Línea de captura (opcional)
+              <input
+                value={lineaCaptura}
+                onChange={(e) => setLineaCaptura(e.target.value)}
+                placeholder="Línea de captura SIPARE"
+                className="w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 text-[13px] text-cos-ink"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-[12px] font-medium text-cos-ink-soft">
+              Fecha de pago
+              <input
+                type="date"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+                className="w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 text-[13px] text-cos-ink"
+              />
+            </label>
             <button
               onClick={registrar}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
               Registrar pago

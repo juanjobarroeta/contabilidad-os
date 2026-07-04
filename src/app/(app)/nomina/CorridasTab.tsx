@@ -29,6 +29,20 @@ import {
   AguinaldoRunModal, PtuRunModal,
 } from "./RunModals";
 
+// Fecha corta de periodo para móvil: "2026-07-01/2026-07-15" → "1–15 jul 2026".
+// Si el formato no es el esperado, regresa la cadena original.
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function fmtPeriodoCorto(periodo: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})\/(\d{4})-(\d{2})-(\d{2})$/.exec(periodo);
+  if (!m) return periodo;
+  const [, y1, m1, d1, y2, m2, d2] = m;
+  const dia1 = parseInt(d1), dia2 = parseInt(d2);
+  const mes1 = MESES_CORTOS[parseInt(m1) - 1], mes2 = MESES_CORTOS[parseInt(m2) - 1];
+  if (y1 === y2 && m1 === m2) return `${dia1}–${dia2} ${mes1} ${y1}`;
+  if (y1 === y2) return `${dia1} ${mes1} – ${dia2} ${mes2} ${y1}`;
+  return `${dia1} ${mes1} ${y1} – ${dia2} ${mes2} ${y2}`;
+}
+
 export default function CorridasTab() {
   const { activeCompany } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -179,7 +193,7 @@ export default function CorridasTab() {
   }
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className="p-4 sm:p-6 max-w-5xl">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold">Corridas de nómina</h1>
@@ -212,7 +226,7 @@ export default function CorridasTab() {
                 {especialMenuOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setEspecialMenuOpen(false)} />
-                    <div className="absolute right-0 mt-1 z-20 bg-cos-card border border-cos-line rounded-lg shadow-lg w-72 overflow-hidden">
+                    <div className="absolute right-0 mt-1 z-20 bg-cos-card border border-cos-line rounded-lg shadow-lg w-72 max-w-[calc(100vw-2rem)] overflow-hidden">
                       <button onClick={() => { setEspecialMenuOpen(false); setShowAguinaldo(true); }}
                         className={`w-full text-left px-4 py-3 hover:bg-cos-paper flex items-start gap-3 ${temporadaAguinaldo ? "bg-cos-amber-tint/40" : ""}`}>
                         <Gift className="h-4 w-4 mt-0.5 shrink-0 text-cos-ink-soft" />
@@ -280,10 +294,11 @@ export default function CorridasTab() {
             : 0;
           return (
             <div key={run.id} className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
-              {/* Run header — clickable to expand */}
-              <div className="p-4 flex items-center gap-4 cursor-pointer hover:bg-cos-slate-tint/50" onClick={() => toggleRunDetail(run.id)}>
+              {/* Run header — clickable to expand. En móvil se apila: info arriba,
+                  botones con wrap abajo; en sm+ vuelve a ser una sola fila. */}
+              <div className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 cursor-pointer hover:bg-cos-slate-tint/50" onClick={() => toggleRunDetail(run.id)}>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
                     <span className="font-semibold text-sm">{TIPO_RUN_LABEL[run.tipo] ?? run.tipo}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_RUN_COLOR[run.status] ?? "bg-cos-slate-tint"}`}>
                       {STATUS_RUN_LABEL[run.status] ?? run.status}
@@ -307,15 +322,15 @@ export default function CorridasTab() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-cos-ink-soft">{run.periodo}</p>
-                  <div className="flex gap-4 mt-1 text-xs">
+                  <p className="text-xs text-cos-ink-soft whitespace-nowrap" title={run.periodo}>{fmtPeriodoCorto(run.periodo)}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-xs">
                     <span>Empleados: <strong>{run._count?.items ?? "—"}</strong></span>
                     <span>Percepciones: <strong><Money value={run.totalPercepciones} /></strong></span>
                     <span>Deducciones: <strong><Money value={run.totalDeducciones} /></strong></span>
                     <span>Neto: <strong className="text-cos-jade-ink">{formatCurrency(run.totalNeto)}</strong></span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                <div className="flex flex-wrap items-center gap-2 sm:shrink-0" onClick={e => e.stopPropagation()}>
                   {puedeCapturar && (
                     <button onClick={() => handleRecalc(run.id)} disabled={recalcId === run.id}
                       className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper disabled:opacity-50"
@@ -486,7 +501,7 @@ export default function CorridasTab() {
             </h2>
             <p className="text-xs text-cos-ink-soft mt-0.5">Faltas, incapacidades, horas extra, permisos, bonos y descuentos por mes.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs text-cos-ink-soft">Periodo:</label>
             <input type="month" value={incPeriodo} onChange={e => setIncPeriodo(e.target.value)}
               className="text-sm border border-cos-line rounded-md px-2 py-1.5 bg-cos-card" />
@@ -507,6 +522,7 @@ export default function CorridasTab() {
         </div>
       ) : (
         <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-cos-line bg-cos-slate-tint">
@@ -543,6 +559,7 @@ export default function CorridasTab() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
       </div>
