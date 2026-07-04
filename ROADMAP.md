@@ -6,6 +6,72 @@
 
 ---
 
+## Estado y cola de ejecución — actualizado 2026-07-04
+
+> Resumen ejecutivo tras el sprint de go-live (PRs #325–#371). Esta sección es
+> la fuente de verdad de "qué falta"; las secciones históricas de abajo
+> conservan el detalle de diseño.
+
+### Hecho (julio 2026)
+
+- **Go-live hardening completo**: cifrado obligatorio en prod, rate limiting de
+  auth, idempotencia de timbrado, guardias de conciliación (incl. 1-a-varios
+  con asignación por montos), bitácora de auditoría append-only, baja de
+  empresa/cuenta (LFPDPPP), aviso de privacidad y términos con datos reales,
+  Sentry + validación de entorno al boot, `next build` en CI, runbook de
+  operaciones.
+- **Correctitud fiscal**: DIOT 2025 (54 campos) sobre flujo de efectivo,
+  tarifa anual PF por ejercicio, coeficiente Art. 14 sobre utilidad fiscal +
+  lookback 5 ejercicios, PTU en octavos (Art. 14), IMSS CEAV progresiva
+  2023-2030, advertencias de cadena de arrastre rota.
+- **Negocio**: Stripe en vivo (Básico $499 / Profesional $1,299 / Despacho
+  $299 por empresa), gating real tras bandera, checklist del mes (UI/API/IA),
+  dashboard "descargando tus CFDI", **apertura fiscal** (punto de partida con
+  procedencia por dato y confirmación firmada).
+- **Nómina (pilar 5c) — completo salvo entrega de recibos**: histórico desde
+  CFDIs del SAT, validación en paralelo, prefill de quincena, incidencias con
+  recálculo, timbrado fiel (ordinaria y extraordinaria TipoNomina=E), hub con
+  pestañas + expediente del empleado con acumulados, ajuste anual Art. 97,
+  aguinaldo/PTU de un toque, cuotas IMSS/SIPARE con recordatorio.
+- **Satélites**: bearer para clientes/facturas/nómina (padel, bartiz, FlotaGob,
+  ZionX); conciliación bearer con las mismas guardias.
+
+### Cola de ejecución (en orden)
+
+1. **Seguridad de tokens satélite** — hoy son JWT de usuario completo, 7 días,
+   sin revocación, y ya pueden timbrar facturas Y nómina. TTL corto + refresh +
+   `jti`/denylist + scope por satélite. *(Subió de prioridad con #364.)*
+2. **W3 — Intake de documentos por WhatsApp** (spec 5b abajo): estado de
+   cuenta foto/PDF → visión → gate de balance → BankTransaction. El único
+   paso manual grande que queda en el ciclo mensual.
+3. **Tier 3 — Capa de seguridad para acciones** (spec §4): step-up confirm;
+   primer caso "emitir complemento de un toque"; luego "timbrar quincena"
+   desde WhatsApp.
+4. **Billing fase 2**: sync de cantidad por empresa para Despacho (quantity en
+   Stripe), precios anuales (10 meses), mínimo de 10 empresas.
+5. **`prisma migrate` baseline** — camino documentado en docs/OPERACIONES.md;
+   requiere ventana tranquila y acceso a prod.
+6. **Entrega de recibos de nómina** — bloqueado por decisión de proveedor de
+   email (recomendado: Resend). Incluye enviar CFDI/PDF al empleado.
+7. **Conciliación conversacional** (W3 segunda mitad) — el backend multi-match
+   ya existe; falta la superficie en chat.
+8. **Menores acumulados**: método opcional Art. 174 RLISR para extraordinarias;
+   fase 2 del ajuste anual (aplicar al recibo de diciembre + persistir "presentará
+   por su cuenta"); tabla `PagoComplemento` (5a gap 1); export total de datos;
+   throttle de IA por usuario; Float→Decimal en dinero (nuevo código primero);
+   país/ID fiscal de proveedores extranjeros (DIOT); locking de crons;
+   UX de vinculación WhatsApp sin plantilla OTP.
+
+### Manual (dueño, no código)
+
+- Verificar el checkout en vivo → encender `SUBSCRIPTION_ENFORCEMENT_ENABLED`.
+- `SENTRY_DSN` en Railway; prueba de restauración de respaldos (runbook);
+  verificación Meta Business (desbloquea OTP + digests proactivos);
+  `AUTH_SECRET` junto a `NEXTAUTH_SECRET`.
+- INPC de junio 2026 vía PR cuando INEGI publique (~10 jul).
+
+---
+
 ## WhatsApp capability map — what a contador should handle
 
 > North star: a contador runs their whole month from WhatsApp — asks anything,
@@ -20,9 +86,9 @@
 - Complementos de pago pendientes — ambas direcciones. ✅
 - Anomalías / riesgos de deducción. ✅
 - Estado de sincronización SAT ("¿ya bajaron mis 5 años?"). ✅ (`query_sat_sync_status`)
-- Conciliación: qué movimientos faltan por conciliar. ⏳
+- Conciliación: qué movimientos faltan por conciliar. ✅ (checklist del mes)
 
-**Tier 2 — Documents (inbound)** — 🔜
+**Tier 2 — Documents (inbound)** — 🔜 *(siguiente gran bloque — cola #2)*
 - Estado de cuenta (PDF/foto) → parsear (vision + balance-check) → conciliar.
 - CFDI / ticket suelto → registrar.
 - Voice notes → transcribir → tratar como texto.
@@ -116,7 +182,7 @@ party; contador gets a separate "manage clients" view.
 
 ## 3. Execution ladder
 
-### W0 — Channel + identity + read-only Q&A (Pillar A) — *backend built; pending DB push + settings UI + live test*
+### W0 — Channel + identity + read-only Q&A (Pillar A) — ✅ en producción
 - `POST /api/whatsapp/webhook` (Twilio), **verify `X-Twilio-Signature`** on every request.
 - **New tables:** `WhatsappLink` (phoneE164, userId, verifiedAt, activeCompanyId),
   `WhatsappConversation`, `WhatsappMessage` (history + `pendingAction` slot for later).
@@ -128,13 +194,13 @@ party; contador gets a separate "manage clients" view.
   prompt (no markdown tables), MXN formatting, explicit "read-only for now."
 - **Gated on staging** (webhook needs a public HTTPS URL — staging is the test bed).
 
-### W1 — Daily digest + alerts (Pillar B)
+### W1 — Daily digest + alerts (Pillar B) — ✅ en producción (briefing, digests, dedupe)
 - Scheduler (sibling to `/api/cron/sat-sync`) → detectors → **notifications/dedup table**
   → one batched daily digest (not per-event spam — economics + UX agree).
 - First detectors: new CFDI received, **complemento needed** (§5a), IVA/ISR estimate,
   tax-calendar deadlines.
 
-### W2 — Guidance (Pillar E)
+### W2 — Guidance (Pillar E) — ✅ checklist del mes + KB fiscal (profundizar vigencia pendiente)
 - Declaración checklists + "what's missing" + estimates. Smarter Q&A, no writes.
   Can ship early — it's low risk.
 - **Fiscal knowledge base (agente fiscal)** — RAG over Mexican tax sources (leyes
@@ -142,10 +208,10 @@ party; contador gets a separate "manage clients" view.
   instead of relying on hardcoded prompt prose. Design doc:
   `docs/FISCAL-KNOWLEDGE-BASE.md`. The hard part is vigencia (temporal versioning).
 
-### W3 — Document intake + reconciliation (Pillars C, D)
+### W3 — Document intake + reconciliation (Pillars C, D) — 🔜 cola #2 y #7
 - Bank-statement-via-WhatsApp (§5b) and conversational reconciliation.
 
-### W4+ — Actions (Pillar F)
+### W4+ — Actions (Pillar F) — 🔒 cola #3 (capa de seguridad primero)
 - One-tap complemento emission, then broader writes — each behind the safety layer.
 
 ---
@@ -237,17 +303,17 @@ pay for software at all. Ladder:
 1. **Historic import (onboarding magic)** — stamped NOMINA CFDIs from the SAT
    sync populate PayrollRun/PayrollItem as read-only SAT-origin history, deduped
    by uuid against app-emitted runs. A company that onboards sees its payroll
-   past without capturing anything. *(In progress.)*
+   past without capturing anything. *(✅ #360.)*
 2. **Recurring quincenas** — "iniciar desde la quincena anterior": prefill
    roster/salaries/recurring concepts, advance the period, recalculate taxes
-   through calc-nomina (never copy computed taxes). *(In progress.)*
-3. **Incidencias flow** — faltas, horas extra, incapacidades, vacaciones as a
+   through calc-nomina (never copy computed taxes). *(✅ #360.)*
+3. ✅ (#367) **Incidencias flow** — faltas, horas extra, incapacidades, vacaciones as a
    quick capture step between prefill and stamp; finiquitos/liquidaciones with
    the Art. 50/162 calculators already in `nomina/finiquito.ts`.
-4. **Cumplimiento loop** — SUA/IDSE reconciliation (export exists; deepen
+4. ✅ parcial (#368 SIPARE, #370 ajuste anual; variances EMA/EBA pendiente) **Cumplimiento loop** — SUA/IDSE reconciliation (export exists; deepen
    variances view), CEAV progressive table already correct 2023-2030, annual
    declaración informativa tie-ins, ISN estatal awareness.
-5. **WhatsApp surface** — "¿cuánto de nómina este mes?", pre-stamp reminder
+5. 🔒 (espera Tier 3) **WhatsApp surface** — "¿cuánto de nómina este mes?", pre-stamp reminder
    T-1 (exists), one-tap "timbrar quincena" once Tier-3 actions land (never
    auto-stamp: human confirms, always).
 
