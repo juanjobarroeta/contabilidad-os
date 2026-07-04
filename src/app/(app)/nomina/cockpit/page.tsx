@@ -137,7 +137,7 @@ export default function NominaCockpitPage() {
   }, [fetchCockpit]);
 
   // Cambia la empresa activa del contexto y entra a su workspace de nómina.
-  function operar(c: CockpitCompany, destino: "/nomina" | "/nomina/detalle") {
+  function operar(c: CockpitCompany, destino: "/nomina" | "/nomina?tab=corridas") {
     const found = companies.find((x) => x.id === c.id);
     if (found) setActiveCompany(found);
     router.push(destino);
@@ -278,7 +278,7 @@ export default function NominaCockpitPage() {
                   </td>
                   <td className="px-3 py-3 text-right">
                     <button
-                      onClick={() => operar(c, "/nomina/detalle")}
+                      onClick={() => operar(c, "/nomina?tab=corridas")}
                       className="inline-flex items-center gap-1 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep"
                     >
                       Operar <ChevronR className="h-3.5 w-3.5" />
