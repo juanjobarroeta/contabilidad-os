@@ -9,7 +9,7 @@ import { notifyNominaRecordatorio } from "@/lib/notify-nomina";
 // (semanal → jueves; quincenal → 14 y víspera de fin de mes; mensual → víspera),
 // un solo push por usuario suscrito que resume sus empresas con nómina debida.
 // NO dispara timbrado: el timbrado es una acción HUMANA de un toque. Esto sólo
-// recuerda y deep-linkea al flujo (/nomina/detalle).
+// recuerda y deep-linkea al flujo (/nomina?tab=corridas).
 //
 // Pensado para correr cada mañana entre semana. La lógica T-1 decide si toca
 // hoy según la cadencia de cada empresa, así que es seguro correrlo a diario.

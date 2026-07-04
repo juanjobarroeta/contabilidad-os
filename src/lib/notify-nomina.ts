@@ -15,11 +15,12 @@ import {
 // "Mañana toca timbrar la nómina [semanal/quincenal] de [empresa]."
 //
 // El timbrado sigue siendo una acción HUMANA de un toque: el push sólo recuerda
-// y abre el flujo (/nomina/detalle). Nunca dispara timbrado automático.
+// y abre el flujo (pestaña Corridas del hub /nomina). Nunca dispara timbrado
+// automático.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// El flujo de timbrado vive en el workspace de nómina (botón "Timbrar todo").
-const DEEP_LINK_TIMBRAR = "/nomina/detalle";
+// El flujo de timbrado vive en la pestaña Corridas del hub (botón "Timbrar todo").
+const DEEP_LINK_TIMBRAR = "/nomina?tab=corridas";
 
 /**
  * Resuelve la cadencia efectiva de una empresa. Usa la guardada en

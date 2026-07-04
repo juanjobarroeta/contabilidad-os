@@ -144,6 +144,14 @@ export default function FacturasPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Deep-link ?q= — p. ej. el expediente del empleado enlaza el CFDI del
+  // recibo por UUID (/facturas?q=<uuid>). Se lee directo de la URL para no
+  // forzar un limite de Suspense (useSearchParams).
+  useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("q");
+    if (initial) setQ(initial);
+  }, []);
+
   function showToast(m: string) {
     setToast(m);
     setTimeout(() => setToast(""), 4500);

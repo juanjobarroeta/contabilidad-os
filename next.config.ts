@@ -36,6 +36,10 @@ const nextConfig: NextConfig = {
       { source: "/bancos/detalle", destination: "/bancos", permanent: false },
       // Activo fijo now lives as a tab inside the Contabilidad hub.
       { source: "/activos", destination: "/contabilidad?tab=activo-fijo", permanent: false },
+      // El workspace de nómina ahora es la pestaña Corridas del hub /nomina
+      // (Resumen / Corridas / Empleados / Cumplimiento). El cockpit multi-RFC
+      // (/nomina/cockpit) sigue siendo página propia.
+      { source: "/nomina/detalle", destination: "/nomina?tab=corridas", permanent: false },
     ];
   },
 };

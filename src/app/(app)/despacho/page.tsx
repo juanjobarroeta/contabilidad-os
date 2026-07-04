@@ -331,7 +331,7 @@ export default function DespachoCockpitPage() {
                   </td>
                   <td className="px-3 py-3 text-right">
                     {r.nominaSinTimbrar > 0 ? (
-                      <button onClick={() => operar(r.id, "/nomina/detalle")} className="inline-flex items-center gap-1 text-[12px] font-medium text-cos-amber-ink">
+                      <button onClick={() => operar(r.id, "/nomina?tab=corridas")} className="inline-flex items-center gap-1 text-[12px] font-medium text-cos-amber-ink">
                         <FileWarning className="h-3.5 w-3.5" /> {r.nominaSinTimbrar} sin timbrar
                       </button>
                     ) : (
