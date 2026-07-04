@@ -29,7 +29,10 @@ export async function POST(req: Request) {
     }
     const { companyId, employeeId, periodoInicio, periodoFin, diasPagados, fechaPago, sueldoBruto } = parsed.data;
 
-    const { user } = await requireWriter(companyId);
+    // Pass `req` so bearer-token (satellite/M2M) callers are accepted, not just
+    // the NextAuth web session — lets ZionX mirror payroll into CFDI de nómina.
+    // Membership (requireWriter) still enforces multi-tenancy.
+    const { user } = await requireWriter(companyId, req);
     // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED); el 402
     // fluye por el catch de AuthzError de abajo.
     await assertPuedeEscribir(user.id);
