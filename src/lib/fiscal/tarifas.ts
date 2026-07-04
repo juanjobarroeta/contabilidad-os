@@ -187,7 +187,9 @@ const SUBSIDIO_EMPLEO: SubsidioEmpleoVersionado[] = [
   {
     // pct 13.8% confirmado por los considerandos del decreto DOF 31-dic-2025
     // ("se actualiza el porcentaje de 13.8% ... a 15.02%"); tope = 1.2 × salario
-    // mínimo 2025 ($278.80) × 30.4 = 10,170.62 ≈ 10,171.
+    // mínimo 2025 ($278.80) × 30.4 = 10,170.62 ≈ 10,171. Transitorio SEGUNDO
+    // (DOF 31-dic-2024): en enero 2025 se aplica 14.39% sobre la UMA vigente en
+    // enero (la de 2024) — mismo monto en pesos, cotejado contra el texto DOF.
     ejercicio: 2025,
     vigenciaDesde: "2025-01-01",
     vigenciaHasta: "2025-12-31",
@@ -195,6 +197,7 @@ const SUBSIDIO_EMPLEO: SubsidioEmpleoVersionado[] = [
     verificado: true,
     pctUmaMensual: 0.138,
     topeIngresoMensual: 10171.0,
+    pctUmaMensualEnero: 0.1439,
   },
   {
     // 15.02% × UMA mensual ≈ $536.22; tope = 1.2 × salario mínimo 2026
