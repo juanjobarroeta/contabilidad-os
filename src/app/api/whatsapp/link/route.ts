@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
 import { requireUser, withAuthz } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { startLink } from "@/lib/whatsapp/linking";
+import { startLink, generateLinkCode, waMeLink, businessNumberE164 } from "@/lib/whatsapp/linking";
 import { twilioConfigured } from "@/lib/whatsapp/twilio";
 import { listAccessibleCompanies, normalizePhone } from "@/lib/whatsapp/identity";
+
+/**
+ * ¿Está configurada la plantilla de OTP? Si lo está, seguimos usando el flujo
+ * legado (el negocio envía el código). Si NO (caso actual, pre-verificación de
+ * Meta), el flujo por defecto es el deep-link: el usuario nos envía el código.
+ */
+function otpTemplateConfigured(): boolean {
+  return Boolean(process.env.TWILIO_OTP_TEMPLATE_SID);
+}
 
 export const runtime = "nodejs";
 
@@ -33,12 +42,22 @@ export const GET = withAuthz(async (req: Request) => {
   return NextResponse.json({
     links,
     available: twilioConfigured(),
+    // Cuando NO hay plantilla de OTP configurada, la app usa el flujo deep-link
+    // (el usuario envía el código). La UI se adapta según esta bandera.
+    templateFlow: otpTemplateConfigured(),
     companyCount: companies.length,
     digestOptIn: verified?.digestOptIn ?? false,
   });
 });
 
-/** POST { phone } — start linking: sends a 6-digit code over WhatsApp. */
+/**
+ * POST — inicia la vinculación.
+ *   - Deep-link (por defecto, sin plantilla): genera un código de 6 dígitos que
+ *     el usuario ENVÍA al número del negocio. Devuelve el código, el número y el
+ *     enlace wa.me. No requiere teléfono (es desconocido hasta que el usuario
+ *     escribe). Abre la ventana de 24h sin plantilla ni verificación de Meta.
+ *   - OTP (legado, con plantilla): { phone } → envía el código al número.
+ */
 export const POST = withAuthz(async (req: Request) => {
   if (!twilioConfigured()) {
     return NextResponse.json(
@@ -48,7 +67,23 @@ export const POST = withAuthz(async (req: Request) => {
   }
 
   const user = await requireUser(req);
-  const { phone } = (await req.json()) as { phone?: string };
+
+  // Flujo deep-link (por defecto mientras no haya plantilla de OTP aprobada).
+  if (!otpTemplateConfigured()) {
+    const { code, expiresAt } = await generateLinkCode(user.id);
+    const from = process.env.TWILIO_WHATSAPP_FROM!;
+    return NextResponse.json({
+      ok: true,
+      mode: "deeplink",
+      code,
+      expiresAt,
+      businessNumber: businessNumberE164(from),
+      waMeUrl: waMeLink(from, code),
+    });
+  }
+
+  // Flujo OTP (legado): requiere el teléfono.
+  const { phone } = (await req.json().catch(() => ({}))) as { phone?: string };
   if (!phone) {
     return NextResponse.json({ error: "phone es requerido" }, { status: 400 });
   }
@@ -66,7 +101,7 @@ export const POST = withAuthz(async (req: Request) => {
   }
   // Devolvemos la forma canónica (la que realmente guardamos y a la que enviamos
   // el código) para que la UI la muestre y el usuario confirme que es su número.
-  return NextResponse.json({ ok: true, phone: normalizePhone(phone) });
+  return NextResponse.json({ ok: true, mode: "otp", phone: normalizePhone(phone) });
 });
 
 /**
