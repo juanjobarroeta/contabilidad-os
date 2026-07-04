@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
+import ValidacionCalculo from "./ValidacionCalculo";
 import { Building2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 // Server constant — en cliente aplica el default (el override por env sólo
@@ -168,6 +169,9 @@ export default function NominaPage() {
               </div>
             </div>
           )}
+
+          {/* nómina en paralelo: recalculamos el histórico timbrado con nuestras tablas */}
+          {runsSat.length > 0 && <ValidacionCalculo companyId={activeCompany.id} />}
 
           {/* alerta: salarios bajo el mínimo */}
           {bajoMinimo.length > 0 && (

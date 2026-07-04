@@ -302,6 +302,23 @@ export const CEAV_REFERENCIAS: Record<number, { umaDiaria: number; salarioMinimo
   2026: { umaDiaria: UMA_DIARIO, salarioMinimoDiario: SALARIO_MINIMO_GENERAL },
 };
 
+/**
+ * UMA diaria VIGENTE en un ejercicio (histórica para 2023-2025 vía
+ * CEAV_REFERENCIAS; la env-overridable para el ejercicio cargado). Devuelve
+ * null cuando el ejercicio no está versionado — el llamador decide si puede
+ * calcular con otro año (respuesta corta: no; ver nómina en paralelo).
+ */
+export function umaDiariaDelEjercicio(ejercicio: number): number | null {
+  if (ejercicio === UMA_EJERCICIO) return UMA_DIARIO;
+  return CEAV_REFERENCIAS[ejercicio]?.umaDiaria ?? null;
+}
+
+/** Salario mínimo GENERAL diario vigente en un ejercicio; null si no versionado. */
+export function salarioMinimoGeneralDelEjercicio(ejercicio: number): number | null {
+  if (ejercicio === SALARIO_MINIMO_EJERCICIO) return SALARIO_MINIMO_GENERAL;
+  return CEAV_REFERENCIAS[ejercicio]?.salarioMinimoDiario ?? null;
+}
+
 /** Tolerancia para que un SBC construido como múltiplo exacto de UMA (p.ej. 1.50 × UMA) no brinque de banda por flotantes. */
 const CEAV_UMA_EPS = 1e-9;
 
