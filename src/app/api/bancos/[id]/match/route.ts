@@ -3,6 +3,15 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { autoConciliarCuenta } from "@/lib/bancos/auto-conciliar";
+import {
+  TIPOS_IMPUESTO_CONCILIABLES,
+  confianzaImpuesto,
+  etiquetaImpuesto,
+  filtrarCandidatosImpuesto,
+  montoEsperadoDeclaracion,
+  periodosRecientes,
+  scoreCandidatoImpuesto,
+} from "@/lib/conciliacion-impuestos";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -121,5 +130,64 @@ export async function GET(req: Request, { params }: Params) {
     };
   }).sort((a, b) => b.score - a.score);
 
-  return NextResponse.json({ transaction: tx, candidates: scored });
+  // ── Pagos de impuestos pendientes ──────────────────────────────────────────
+  // Sólo para egresos: declaraciones no pagadas (SIPARE / línea de captura) de
+  // periodos recientes (ventana acotada), aún sin movimiento vinculado. El
+  // scoring (monto/fecha límite) y el filtro son puros — ver
+  // lib/conciliacion-impuestos. Un tap en «Conciliar» llama al PATCH con
+  // action "match-impuesto".
+  let impuestos: Array<{
+    id: string;
+    tipo: string;
+    periodo: string;
+    etiqueta: string;
+    montoEsperado: number | null;
+    fechaLimitePago: Date | null;
+    score: number;
+    confidence: "alta" | "media" | "baja";
+  }> = [];
+  if (tx.monto < 0) {
+    const decls = await prisma.taxDeclaration.findMany({
+      where: {
+        companyId,
+        tipo: { in: [...TIPOS_IMPUESTO_CONCILIABLES] },
+        periodo: { in: periodosRecientes(tx.fecha) },
+        status: { not: "PAID" },
+        // v1: una declaración ↔ un movimiento; las ya vinculadas no son candidatas.
+        bankTransactions: { none: { status: "MATCHED" } },
+      },
+      select: {
+        id: true,
+        tipo: true,
+        periodo: true,
+        status: true,
+        ivaPagar: true,
+        isrPagar: true,
+        retencionesIsr: true,
+        imssCuotas: true,
+        fechaLimitePago: true,
+      },
+    });
+    impuestos = filtrarCandidatosImpuesto(decls)
+      .map((d) => {
+        const montoEsperado = montoEsperadoDeclaracion(d);
+        const score = scoreCandidatoImpuesto(
+          { montoEsperado, fechaLimitePago: d.fechaLimitePago },
+          { monto: tx.monto, fecha: tx.fecha }
+        );
+        return {
+          id: d.id,
+          tipo: d.tipo,
+          periodo: d.periodo,
+          etiqueta: etiquetaImpuesto(d.tipo, d.periodo),
+          montoEsperado,
+          fechaLimitePago: d.fechaLimitePago,
+          score,
+          confidence: confianzaImpuesto(score),
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
+  return NextResponse.json({ transaction: tx, candidates: scored, impuestos });
 }

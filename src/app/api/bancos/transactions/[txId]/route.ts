@@ -8,6 +8,12 @@ import {
   mergePagosConciliados,
   type AdvertenciaSumaAsignada,
 } from "@/lib/conciliacion";
+import {
+  campoMontoPorTipo,
+  checkImpuestoMatchGuard,
+  esTipoImpuestoConciliable,
+  statusTrasDesconciliar,
+} from "@/lib/conciliacion-impuestos";
 import { registrarBitacora } from "@/lib/audit";
 
 type Params = { params: Promise<{ txId: string }> };
@@ -23,6 +29,12 @@ type Params = { params: Promise<{ txId: string }> };
  *   { action: "match", solicitudCompraId }      ← link to OC / Requisición
  *   { action: "match-multiple", asignaciones: [{ invoiceId, monto }, …] }
  *                                                ← un movimiento ↔ varias facturas
+ *   { action: "match-impuesto", taxDeclarationId }
+ *                                                ← el egreso paga una declaración
+ *                                                  (SIPARE / línea de captura):
+ *                                                  movimiento → MATCHED y
+ *                                                  declaración → PAID en una
+ *                                                  sola transacción
  *   { action: "unmatch" }
  *   { action: "ignore", notes? }
  *   { action: "unignore" }
@@ -42,6 +54,11 @@ export async function PATCH(req: Request, { params }: Params) {
       reembolsoPagado: { select: { id: true } },
       rayaPagada: { select: { id: true } },
       solicitudCompraPagada: { select: { id: true } },
+      // Para revertir la declaración pagada al desconciliar/ignorar (los
+      // campos de acuse deciden a qué estatus regresa — ver statusTrasDesconciliar).
+      taxDeclaration: {
+        select: { id: true, tipo: true, periodo: true, status: true, acuseUrl: true, acusePdfNombre: true, lineaCaptura: true },
+      },
     },
   });
   if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
@@ -49,7 +66,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(session.user.id, tx.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
-  const { action, invoiceId, gastoId, reembolsoId, rayaId, solicitudCompraId, notes, asignaciones } = await req.json();
+  const { action, invoiceId, gastoId, reembolsoId, rayaId, solicitudCompraId, taxDeclarationId, notes, asignaciones } = await req.json();
 
   // Aviso (no bloqueante) para conciliación múltiple: la suma asignada quedó
   // por debajo del movimiento más allá de la tolerancia. Se devuelve en la
@@ -279,6 +296,69 @@ export async function PATCH(req: Request, { params }: Params) {
       detalleBitacora = { facturas: parsed.length, asignaciones: parsed, ...(advertencia ? { advertencia } : {}) };
       break;
     }
+    case "match-impuesto": {
+      // El egreso paga una declaración (SIPARE / línea de captura). Efecto en
+      // UNA transacción: movimiento → MATCHED + taxDeclarationId; declaración →
+      // PAID, fecha de pago = fecha del movimiento si estaba vacía y monto del
+      // tipo actualizado a lo realmente cargado por el banco (espeja el
+      // «Registrar pago» manual). v1: una declaración ↔ un movimiento.
+      if (!taxDeclarationId || typeof taxDeclarationId !== "string") {
+        return NextResponse.json({ error: "taxDeclarationId requerido para conciliar un pago de impuestos" }, { status: 400 });
+      }
+      const decl = await prisma.taxDeclaration.findFirst({
+        where: { id: taxDeclarationId, companyId: tx.companyId },
+        select: {
+          id: true,
+          tipo: true,
+          periodo: true,
+          status: true,
+          ivaPagar: true,
+          isrPagar: true,
+          retencionesIsr: true,
+          imssCuotas: true,
+          fechaPresentacion: true,
+          bankTransactions: { where: { status: "MATCHED" }, select: { id: true } },
+        },
+      });
+      if (!decl) return NextResponse.json({ error: "Declaración inválida" }, { status: 400 });
+      const guardImpuesto = checkImpuestoMatchGuard(decl, decl.bankTransactions, {
+        id: txId,
+        monto: tx.monto,
+        status: tx.status,
+      });
+      if (!guardImpuesto.ok) {
+        return NextResponse.json({ error: guardImpuesto.error }, { status: guardImpuesto.status });
+      }
+      // esTipoImpuestoConciliable ya lo garantizó el guard; el narrowing es para TS.
+      if (!esTipoImpuestoConciliable(decl.tipo)) {
+        return NextResponse.json({ error: "Tipo de declaración no conciliable" }, { status: 422 });
+      }
+      const montoPagado = Math.round(Math.abs(tx.monto) * 100) / 100;
+      await prisma.$transaction([
+        prisma.bankTransaction.update({
+          where: { id: txId },
+          data: { status: "MATCHED", invoiceId: null, taxDeclarationId: decl.id, notes: notes ?? null },
+        }),
+        prisma.taxDeclaration.update({
+          where: { id: decl.id },
+          data: {
+            status: "PAID",
+            [campoMontoPorTipo(decl.tipo)]: montoPagado,
+            // Fecha de pago/presentación = fecha del movimiento sólo si estaba vacía.
+            ...(decl.fechaPresentacion == null ? { fechaPresentacion: tx.fecha } : {}),
+          },
+        }),
+      ]);
+      detalleBitacora = {
+        taxDeclarationId: decl.id,
+        tipoDeclaracion: decl.tipo,
+        periodo: decl.periodo,
+        statusPrevio: decl.status,
+        montoEsperado: guardImpuesto.montoEsperado,
+        montoPagado,
+      };
+      break;
+    }
     case "unmatch": {
       await clearConstruccionLinks();
       // Al desvincular también se eliminan las porciones de conciliación
@@ -293,25 +373,59 @@ export async function PATCH(req: Request, { params }: Params) {
           asignaciones: detallesPrevios.map((d) => ({ invoiceId: d.invoiceId, monto: d.montoAsignado })),
         };
       }
+      // Si el movimiento pagaba una declaración, ésta regresa a su estatus
+      // anterior sin guardar nada extra (regla determinista por evidencia):
+      // PAID → FILED si hay acuse/línea de captura, si no → CALCULATED.
+      // Ver statusTrasDesconciliar en lib/conciliacion-impuestos.
+      const revertDecl: ReturnType<typeof prisma.taxDeclaration.update>[] = [];
+      if (tx.taxDeclaration && tx.taxDeclaration.status === "PAID") {
+        const statusRevert = statusTrasDesconciliar(tx.taxDeclaration);
+        revertDecl.push(
+          prisma.taxDeclaration.update({
+            where: { id: tx.taxDeclaration.id },
+            data: { status: statusRevert },
+          })
+        );
+        detalleBitacora = {
+          ...(detalleBitacora ?? {}),
+          taxDeclarationId: tx.taxDeclaration.id,
+          tipoDeclaracion: tx.taxDeclaration.tipo,
+          periodo: tx.taxDeclaration.periodo,
+          statusRevertido: statusRevert,
+        };
+      }
       await prisma.$transaction([
         prisma.conciliacionDetalle.deleteMany({ where: { bankTransactionId: txId } }),
         prisma.bankTransaction.update({
           where: { id: txId },
-          data: { status: "UNMATCHED", invoiceId: null, notes: null },
+          data: { status: "UNMATCHED", invoiceId: null, taxDeclarationId: null, notes: null },
         }),
+        ...revertDecl,
       ]);
       break;
     }
-    case "ignore":
-      // Ignorar también limpia cualquier vínculo con facturas (legado y múltiple).
+    case "ignore": {
+      // Ignorar también limpia cualquier vínculo con facturas (legado y
+      // múltiple) y con declaraciones de impuestos (misma reversa que unmatch).
+      const revertDeclIgnore: ReturnType<typeof prisma.taxDeclaration.update>[] = [];
+      if (tx.taxDeclaration && tx.taxDeclaration.status === "PAID") {
+        revertDeclIgnore.push(
+          prisma.taxDeclaration.update({
+            where: { id: tx.taxDeclaration.id },
+            data: { status: statusTrasDesconciliar(tx.taxDeclaration) },
+          })
+        );
+      }
       await prisma.$transaction([
         prisma.conciliacionDetalle.deleteMany({ where: { bankTransactionId: txId } }),
         prisma.bankTransaction.update({
           where: { id: txId },
-          data: { status: "IGNORED", invoiceId: null, notes: notes ?? null },
+          data: { status: "IGNORED", invoiceId: null, taxDeclarationId: null, notes: notes ?? null },
         }),
+        ...revertDeclIgnore,
       ]);
       break;
+    }
     case "unignore":
       await prisma.bankTransaction.update({
         where: { id: txId },
@@ -323,14 +437,19 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   // Bitácora de seguridad: conciliación manual (fire-and-forget). Sólo
-  // match/match-multiple/unmatch — ignore/unignore no mueven dinero ni
-  // vínculos fiscales.
-  if (action === "match" || action === "match-multiple" || action === "unmatch") {
+  // match/match-multiple/match-impuesto/unmatch — ignore/unignore no mueven
+  // dinero ni vínculos fiscales.
+  if (action === "match" || action === "match-multiple" || action === "match-impuesto" || action === "unmatch") {
     registrarBitacora({
       companyId: tx.companyId,
       userId: session.user.id,
       actorEmail: session.user.email ?? null,
-      accion: action === "unmatch" ? "conciliacion.unmatch" : "conciliacion.match",
+      accion:
+        action === "unmatch"
+          ? "conciliacion.unmatch"
+          : action === "match-impuesto"
+            ? "conciliacion.match-impuesto"
+            : "conciliacion.match",
       entidad: "BankTransaction",
       entidadId: txId,
       detalle: {
@@ -354,6 +473,9 @@ export async function PATCH(req: Request, { params }: Params) {
     where: { id: txId },
     include: {
       invoice: { select: { id: true, uuid: true, total: true, customer: { select: { razonSocial: true } } } },
+      taxDeclaration: {
+        select: { id: true, tipo: true, periodo: true, status: true, fechaLimitePago: true },
+      },
       conciliacionDetalles: {
         select: {
           id: true,
