@@ -48,22 +48,61 @@ export const PLAN_A_TIER: Record<PlanFacturable, CompanyPlan> = {
   DESPACHO: "DESPACHO",
 };
 
-// Variable de entorno con el Price ID de Stripe para cada plan. PROFESIONAL usa
-// STRIPE_PRICE_PRO (nombre corto en el entorno; "PROFESIONAL" en UI/onboarding).
-const PRICE_ENV_VAR: Record<PlanFacturable, string> = {
-  BASICO: "STRIPE_PRICE_BASICO",
-  PROFESIONAL: "STRIPE_PRICE_PRO",
-  DESPACHO: "STRIPE_PRICE_DESPACHO",
+// Intervalo de cobro. Cada intervalo tiene su propio objeto Price en Stripe:
+// el anual se crea con monto = 10 meses del mensual («2 meses gratis»).
+export const INTERVALOS_FACTURABLES = ["mensual", "anual"] as const;
+export type IntervaloFacturable = (typeof INTERVALOS_FACTURABLES)[number];
+
+/**
+ * Parsea el intervalo del body del checkout. Ausente (undefined/null) →
+ * "mensual" (default); cualquier otro valor no reconocido → null (400).
+ */
+export function parseIntervaloFacturable(v: unknown): IntervaloFacturable | null {
+  if (v === undefined || v === null) return "mensual";
+  return typeof v === "string" && (INTERVALOS_FACTURABLES as readonly string[]).includes(v)
+    ? (v as IntervaloFacturable)
+    : null;
+}
+
+// Variable de entorno con el Price ID de Stripe para cada plan × intervalo.
+// PROFESIONAL usa STRIPE_PRICE_PRO (nombre corto en el entorno; "PROFESIONAL"
+// en UI/onboarding). Los anuales llevan el sufijo _ANUAL (ver .env.example).
+const PRICE_ENV_VAR: Record<IntervaloFacturable, Record<PlanFacturable, string>> = {
+  mensual: {
+    BASICO: "STRIPE_PRICE_BASICO",
+    PROFESIONAL: "STRIPE_PRICE_PRO",
+    DESPACHO: "STRIPE_PRICE_DESPACHO",
+  },
+  anual: {
+    BASICO: "STRIPE_PRICE_BASICO_ANUAL",
+    PROFESIONAL: "STRIPE_PRICE_PRO_ANUAL",
+    DESPACHO: "STRIPE_PRICE_DESPACHO_ANUAL",
+  },
 };
 
 /**
- * Resuelve el Price ID de Stripe para un plan desde el entorno.
- * Null si la variable no está definida (Stripe sin configurar para ese plan).
+ * Resuelve el Price ID de Stripe para un plan e intervalo desde el entorno.
+ * Null si la variable no está definida (Stripe sin configurar para esa
+ * combinación — p. ej. anual aún no creado).
  */
 export function priceIdForPlan(
   plan: PlanFacturable,
+  intervalo: IntervaloFacturable = "mensual",
   env: Record<string, string | undefined> = process.env,
 ): string | null {
-  const v = env[PRICE_ENV_VAR[plan]];
+  const v = env[PRICE_ENV_VAR[intervalo][plan]];
   return v && v.trim() !== "" ? v.trim() : null;
+}
+
+/**
+ * Price IDs configurados del plan DESPACHO (mensual y anual). Sirve para
+ * reconocer el item per-unit dentro de una suscripción de Stripe al
+ * sincronizar la cantidad (ver sync-cantidad-despacho.ts).
+ */
+export function despachoPriceIds(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  return INTERVALOS_FACTURABLES.map((i) => priceIdForPlan("DESPACHO", i, env)).filter(
+    (p): p is string => p !== null,
+  );
 }

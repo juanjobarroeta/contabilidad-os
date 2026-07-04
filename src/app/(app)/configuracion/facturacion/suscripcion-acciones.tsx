@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
+import { cantidadDespacho, DESPACHO_MINIMO_EMPRESAS } from "@/lib/billing/cantidad-despacho";
 
 // Acciones de suscripción (Checkout y Billing Portal de Stripe). Los montos no
 // se muestran aquí: los define el objeto Price en Stripe y se ven al confirmar.
@@ -12,17 +13,27 @@ const PLANES = [
 ] as const;
 
 type PlanId = (typeof PLANES)[number]["id"];
+type Intervalo = "mensual" | "anual";
+
+const INTERVALOS: Array<{ id: Intervalo; etiqueta: string }> = [
+  { id: "mensual", etiqueta: "Mensual" },
+  { id: "anual", etiqueta: "Anual · 2 meses gratis" },
+];
 
 export function SuscripcionAcciones({
   configurado,
   tieneCliente,
+  empresasActivas,
 }: {
   /** ¿Stripe está configurado en el servidor? */
   configurado: boolean;
   /** ¿El usuario ya tiene cliente de Stripe (puede abrir el portal)? */
   tieneCliente: boolean;
+  /** Empresas activas facturables del usuario (para la cantidad de DESPACHO). */
+  empresasActivas: number;
 }) {
   const [plan, setPlan] = useState<PlanId>("PROFESIONAL");
+  const [intervalo, setIntervalo] = useState<Intervalo>("mensual");
   const [cargando, setCargando] = useState<"checkout" | "portal" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +53,7 @@ export function SuscripcionAcciones({
       const res = await fetch(`/api/billing/${destino}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: destino === "checkout" ? JSON.stringify({ plan }) : undefined,
+        body: destino === "checkout" ? JSON.stringify({ plan, intervalo }) : undefined,
       });
       const data = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
       if (res.ok && data?.url) {
@@ -58,6 +69,28 @@ export function SuscripcionAcciones({
 
   return (
     <div>
+      <div
+        className="inline-flex rounded-lg border border-cos-line bg-cos-card p-1 mb-4"
+        role="group"
+        aria-label="Intervalo de cobro"
+      >
+        {INTERVALOS.map((i) => (
+          <button
+            key={i.id}
+            type="button"
+            onClick={() => setIntervalo(i.id)}
+            aria-pressed={intervalo === i.id}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
+              intervalo === i.id
+                ? "bg-cos-brand-tint text-cos-brand-ink"
+                : "text-cos-ink-soft hover:text-cos-ink"
+            }`}
+          >
+            {i.etiqueta}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         {PLANES.map((p) => (
           <button
@@ -80,12 +113,20 @@ export function SuscripcionAcciones({
               )}
             </p>
             <p className="text-xs text-cos-ink-soft mt-1">{p.blurb}</p>
+            {p.id === "DESPACHO" && (
+              <p className="text-xs text-cos-ink-soft mt-2">
+                Se cobra por empresa administrada (mínimo {DESPACHO_MINIMO_EMPRESAS}): actualmente{" "}
+                {empresasActivas} {empresasActivas === 1 ? "empresa" : "empresas"} → cantidad{" "}
+                {cantidadDespacho(empresasActivas)}.
+              </p>
+            )}
           </button>
         ))}
       </div>
 
       <p className="text-xs text-cos-ink-faint mb-4">
         El precio y la moneda se muestran al confirmar el pago en Stripe.
+        {intervalo === "anual" && " El plan anual equivale a 10 meses: 2 meses gratis."}
       </p>
 
       {error && (

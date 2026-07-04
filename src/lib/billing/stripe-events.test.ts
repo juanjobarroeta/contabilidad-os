@@ -187,6 +187,42 @@ describe("applyStripeEvent — customer.subscription.updated", () => {
     expect(users[0].subscriptionStatus).toBe("ACTIVE");
   });
 
+  it("cambio de cantidad (seats DESPACHO) sigue mapeando status y periodo", async () => {
+    // La sincronización de cantidad (sync-cantidad-despacho.ts) dispara un
+    // customer.subscription.updated cuyo items.data trae quantity y price.
+    // El webhook debe seguir mapeando el status y leer current_period_end de
+    // los items sin tropezar con los campos extra.
+    const { repo, users, planesAplicados } = fakeRepo([
+      { id: "user_1", stripeCustomerId: "cus_1", stripeSubscriptionId: "sub_1", subscriptionStatus: "PAST_DUE" },
+    ]);
+    const epoch = 1_770_000_000;
+
+    const r = await applyStripeEvent(
+      evento("customer.subscription.updated", {
+        id: "sub_1",
+        customer: "cus_1",
+        status: "active",
+        items: {
+          data: [
+            {
+              id: "si_1",
+              quantity: 14,
+              price: { id: "price_despacho_789" },
+              current_period_end: epoch,
+            },
+          ],
+        },
+      }),
+      repo,
+    );
+
+    expect(r.handled).toBe(true);
+    expect(users[0].subscriptionStatus).toBe("ACTIVE");
+    expect(users[0].currentPeriodEnd).toEqual(new Date(epoch * 1000));
+    // El evento de cantidad NO re-aplica planes a empresas (eso sólo pasa en checkout).
+    expect(planesAplicados).toEqual([]);
+  });
+
   it("suscripción desconocida → no manejado", async () => {
     const { repo } = fakeRepo([]);
     const r = await applyStripeEvent(

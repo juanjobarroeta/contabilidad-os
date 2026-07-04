@@ -8,6 +8,7 @@ import { encryptSecret } from "@/lib/crypto";
 import { fielStatus, parseCertExpiry } from "@/lib/fiel";
 import { borrarCredencialesEmpresa, borrarEmpresaDefinitivo } from "@/lib/empresas/baja";
 import { registrarBitacora } from "@/lib/audit";
+import { sincronizarCantidadDespacho } from "@/lib/billing/sync-cantidad-despacho";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -294,6 +295,11 @@ export async function DELETE(req: Request, { params }: Params) {
       detalle: { rfc: company.rfc, razonSocial: company.razonSocial },
       req,
     });
+
+    // Si el titular paga plan DESPACHO (per-unit por empresa, mínimo 10) en
+    // Stripe, baja la cantidad de su suscripción tras la baja. Fire-and-forget:
+    // nunca lanza ni bloquea (loguea y registra bitácora "billing.quantity-sync").
+    void sincronizarCantidadDespacho(session.user.id, "empresa.baja");
 
     return NextResponse.json({ ok: true });
   } catch (e) {
