@@ -9,7 +9,7 @@
 //   15 UMA).
 
 import { describe, it, expect } from "vitest";
-import { calcularHorasExtra, calcularPrimaVacacionalPorDias } from "./prestaciones";
+import { calcularAguinaldo, calcularHorasExtra, calcularPrimaVacacionalPorDias } from "./prestaciones";
 
 describe("calcularHorasExtra — Art. 93 fracc. I LISR / LFT Arts. 66-68", () => {
   it("trabajador de salario mínimo: dobles dentro del límite 100% exentas", () => {
@@ -123,5 +123,95 @@ describe("calcularPrimaVacacionalPorDias — Art. 80 LFT / Art. 93 fracc. XIV LI
     expect(r.monto).toBe(1500); // 6 × 500 × 0.50
     expect(r.exenta).toBe(1500);
     expect(r.gravada).toBe(0);
+  });
+});
+
+// ─── Pruebas doradas: aguinaldo (Art. 87 LFT / Art. 93 fracc. XIV LISR) ──────
+// Mínimo 15 días de salario; proporcional a los días trabajados del ejercicio
+// para quien no cumplió el año (divisor 365); exención de 30 UMA diarias
+// (2026: 30 × 117.31 = $3,519.30).
+
+describe("calcularAguinaldo — Art. 87 LFT / exención 30 UMA", () => {
+  it("año completo con los 15 días mínimos de ley", () => {
+    const r = calcularAguinaldo({
+      salarioDiario: 400,
+      fechaIngreso: new Date("2020-01-15"),
+      fechaCorte: new Date("2026-12-31"),
+    });
+    expect(r.diasTrabajadosEjercicio).toBe(365);
+    expect(r.diasCorrespondientes).toBe(15);
+    expect(r.montoTotal).toBe(6000); // 400 × 15
+    expect(r.montoExento).toBe(3519.3); // 30 × 117.31
+    expect(r.montoGravado).toBe(2480.7);
+  });
+
+  it("alta a mitad de año (1-jul): proporcional 184/365", () => {
+    const r = calcularAguinaldo({
+      salarioDiario: 400,
+      fechaIngreso: new Date("2026-07-01"),
+      fechaCorte: new Date("2026-12-31"),
+    });
+    expect(r.diasTrabajadosEjercicio).toBe(184); // 1-jul a 31-dic inclusive
+    expect(r.diasCorrespondientes).toBe(7.56); // 184/365 × 15
+    expect(r.montoTotal).toBe(3024); // 7.56 × 400
+    expect(r.montoExento).toBe(3024); // por debajo de 30 UMA: todo exento
+    expect(r.montoGravado).toBe(0);
+  });
+
+  it("empresa que da 30 días de aguinaldo (superior al mínimo)", () => {
+    const r = calcularAguinaldo({
+      salarioDiario: 400,
+      fechaIngreso: new Date("2019-03-01"),
+      fechaCorte: new Date("2026-12-31"),
+      diasAguinaldo: 30,
+    });
+    expect(r.diasCorrespondientes).toBe(30);
+    expect(r.montoTotal).toBe(12000);
+    expect(r.montoExento).toBe(3519.3);
+    expect(r.montoGravado).toBe(8480.7);
+  });
+
+  it("frontera de la exención de 30 UMA ($3,519.30 en 2026)", () => {
+    // 234.62 × 15 = 3,519.30 exacto → gravado 0.
+    const justo = calcularAguinaldo({
+      salarioDiario: 234.62,
+      fechaIngreso: new Date("2020-01-01"),
+      fechaCorte: new Date("2026-12-31"),
+    });
+    expect(justo.montoTotal).toBe(3519.3);
+    expect(justo.montoGravado).toBe(0);
+    // 235 × 15 = 3,525 → grava sólo el excedente de 5.70.
+    const excede = calcularAguinaldo({
+      salarioDiario: 235,
+      fechaIngreso: new Date("2020-01-01"),
+      fechaCorte: new Date("2026-12-31"),
+    });
+    expect(excede.montoTotal).toBe(3525);
+    expect(excede.montoExento).toBe(3519.3);
+    expect(excede.montoGravado).toBe(5.7);
+  });
+
+  it("monto ajustado a mano (vista previa): sustituye la fórmula pero la exención se recalcula", () => {
+    const r = calcularAguinaldo({
+      salarioDiario: 400,
+      fechaIngreso: new Date("2020-01-15"),
+      fechaCorte: new Date("2026-12-31"),
+      montoOverride: 10000,
+    });
+    expect(r.montoTotal).toBe(10000);
+    expect(r.montoExento).toBe(3519.3); // nunca se captura a mano
+    expect(r.montoGravado).toBe(6480.7);
+    expect(r.diasCorrespondientes).toBe(15); // informativo, sigue reportándose
+  });
+
+  it("acepta la UMA del ejercicio de pago (histórica) para la exención", () => {
+    const r = calcularAguinaldo({
+      salarioDiario: 400,
+      fechaIngreso: new Date("2020-01-15"),
+      fechaCorte: new Date("2025-12-31"),
+      umaDiaria: 113.14, // UMA 2025
+    });
+    expect(r.montoExento).toBe(3394.2); // 30 × 113.14
+    expect(r.montoGravado).toBe(2605.8);
   });
 });

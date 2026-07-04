@@ -68,6 +68,82 @@ export interface RunPrefill {
   omitidosPorBaja: number;
 }
 
+// ── Corridas especiales (aguinaldo / PTU de un toque) ───────────────────────
+// Espejos cliente de los tipos de src/lib/nomina/corridas-especiales.ts (el
+// módulo servidor importa prisma y no puede entrar al bundle del cliente).
+
+export interface AguinaldoPreviewRow {
+  employeeId: string;
+  nombre: string;
+  apellidoPaterno: string;
+  rfc: string;
+  salarioDiario: number;
+  fechaIngreso: string;
+  diasTrabajadosEjercicio: number;
+  diasCorrespondientes: number;
+  montoTotal: number;
+  montoExento: number;
+  montoGravado: number;
+  isr: number;
+  neto: number;
+}
+
+export interface AguinaldoPreview {
+  ejercicio: number;
+  diasAguinaldo: number;
+  fechaPago: string;
+  umaDiaria: number;
+  topeExento: number;
+  rows: AguinaldoPreviewRow[];
+  tarifaWarning: string | null;
+}
+
+export interface PtuPreviewRow {
+  employeeId: string;
+  nombre: string;
+  apellidoPaterno: string;
+  rfc: string;
+  salarioDiario: number;
+  fechaIngreso: string;
+  diasTrabajados: number;
+  salarioDevengado: number;
+  fuenteSalario: "RECIBOS" | "ESTIMADO";
+  promedioPtu3Anios: number | null;
+  porDias: number;
+  porSalario: number;
+  brutoSinTope: number;
+  topeIndividual: number;
+  topado: boolean;
+  montoTotal: number;
+  montoExento: number;
+  montoGravado: number;
+  isr: number;
+  neto: number;
+}
+
+export interface PtuPreviewExcluido {
+  employeeId: string;
+  nombre: string;
+  apellidoPaterno: string;
+  rfc: string;
+  diasTrabajados: number;
+  motivo: string;
+  manual: boolean;
+}
+
+export interface PtuPreview {
+  ejercicio: number;
+  montoTotal: number;
+  fechaPago: string;
+  umaDiaria: number;
+  topeExento: number;
+  rows: PtuPreviewRow[];
+  excluidos: PtuPreviewExcluido[];
+  totalAsignado: number;
+  remanentePorTopes: number;
+  tarifaWarning: string | null;
+}
+
 export interface Incidencia {
   id: string;
   tipo: string;

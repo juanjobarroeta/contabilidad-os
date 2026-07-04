@@ -7,13 +7,14 @@
 // Extraídos SIN CAMBIOS del antiguo workspace /nomina/detalle.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from "react";
-import { Loader2, X, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Loader2, X, Trash2, RefreshCw } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Field, inputCls,
   INCIDENCIA_LABEL, INCIDENCIA_CON_DIAS, INCIDENCIA_CON_MONTO, RAMO_IMSS_LABEL,
   type Employee, type PayrollItemDetail, type RunIncidencia, type RunPrefill,
+  type AguinaldoPreview, type PtuPreview,
 } from "./workspace-shared";
 
 // ── New Payroll Run Modal ──────────────────────────────────────────────────
@@ -504,6 +505,496 @@ export function RunIncidenciasModal({
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Corridas especiales de un toque: Aguinaldo ───────────────────────────────
+// Vista previa por empleado (proporcionalidad LFT Art. 87 por fecha de alta,
+// exención de 30 UMA e ISR estimados con el motor) con montos ajustables antes
+// de crear. Los ajustes viajan como overrides al POST y el motor recalcula
+// exención e ISR al crear — nunca se capturan impuestos a mano.
+export function AguinaldoRunModal({
+  companyId, onClose, onCreated,
+}: { companyId: string; onClose: () => void; onCreated: (warnings?: string[]) => void }) {
+  const anioActual = new Date().getFullYear();
+  const [form, setForm] = useState({
+    ejercicio: String(anioActual),
+    diasAguinaldo: "15",
+    fechaPago: `${anioActual}-12-15`,
+  });
+  const [preview, setPreview] = useState<AguinaldoPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  // Ajustes manuales de monto por empleado (string del input) y exclusiones.
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [excluidos, setExcluidos] = useState<Set<string>>(new Set());
+
+  const cargar = useCallback(async (f: { ejercicio: string; diasAguinaldo: string; fechaPago: string }) => {
+    setLoading(true);
+    setErr("");
+    try {
+      const qs = new URLSearchParams({
+        companyId,
+        ejercicio: f.ejercicio,
+        diasAguinaldo: f.diasAguinaldo,
+        fechaPago: f.fechaPago,
+      });
+      const res = await fetch(`/api/nomina/run/aguinaldo?${qs}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al calcular la vista previa");
+      setPreview(data);
+      setOverrides({});
+      setExcluidos(new Set());
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error al calcular la vista previa");
+    } finally {
+      setLoading(false);
+    }
+  }, [companyId]);
+
+  useEffect(() => {
+    cargar({ ejercicio: String(anioActual), diasAguinaldo: "15", fechaPago: `${anioActual}-12-15` });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function setEjercicio(v: string) {
+    setForm(p => ({ ...p, ejercicio: v, fechaPago: /^\d{4}$/.test(v) ? `${v}-12-15` : p.fechaPago }));
+  }
+
+  const incluidas = preview?.rows.filter(r => !excluidos.has(r.employeeId)) ?? [];
+  const montoDe = (employeeId: string, base: number) => {
+    const o = overrides[employeeId];
+    if (o === undefined || o === "") return base;
+    const n = parseFloat(o);
+    return Number.isFinite(n) && n >= 0 ? n : base;
+  };
+  const totalMontos = incluidas.reduce((s, r) => s + montoDe(r.employeeId, r.montoTotal), 0);
+
+  async function crear() {
+    if (!preview) return;
+    setSaving(true);
+    setErr("");
+    try {
+      const items = incluidas.map(r => {
+        const o = overrides[r.employeeId];
+        const ajustado = o !== undefined && o !== "" && Number.isFinite(parseFloat(o)) && parseFloat(o) >= 0;
+        return { employeeId: r.employeeId, ...(ajustado ? { monto: parseFloat(o) } : {}) };
+      });
+      const res = await fetch("/api/nomina/run/aguinaldo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          ejercicio: parseInt(form.ejercicio),
+          diasAguinaldo: parseFloat(form.diasAguinaldo),
+          fechaPago: form.fechaPago,
+          items,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al crear la corrida");
+      onCreated([data.tarifaWarning, data.salarioMinimoWarning].filter(Boolean) as string[]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error al crear la corrida");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-8 p-4 z-50 overflow-auto">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-4xl">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">Corrida especial — Aguinaldo</h2>
+            <p className="text-xs text-cos-ink-soft mt-0.5">
+              Mínimo 15 días de salario, pagadero antes del 20 de diciembre (Art. 87 LFT). Exento hasta 30 UMA (Art. 93 fracc. XIV LISR).
+            </p>
+          </div>
+          <button onClick={onClose}><X className="h-4 w-4" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+            <Field label="Ejercicio">
+              <input type="number" min="2000" max="2100" value={form.ejercicio}
+                onChange={e => setEjercicio(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Días de aguinaldo (mínimo 15 LFT)">
+              <input type="number" min="15" step="0.5" value={form.diasAguinaldo}
+                onChange={e => setForm(p => ({ ...p, diasAguinaldo: e.target.value }))} className={inputCls} />
+            </Field>
+            <Field label="Fecha de pago">
+              <input type="date" value={form.fechaPago}
+                onChange={e => setForm(p => ({ ...p, fechaPago: e.target.value }))} className={inputCls} />
+            </Field>
+            <button onClick={() => cargar(form)} disabled={loading}
+              className="flex items-center justify-center gap-2 border border-cos-line rounded-md py-2 text-sm hover:bg-cos-paper disabled:opacity-50">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Recalcular vista previa
+            </button>
+          </div>
+
+          {err && <p className="text-xs text-cos-red-ink">{err}</p>}
+          {preview?.tarifaWarning && <p className="text-xs text-cos-amber-ink">{preview.tarifaWarning}</p>}
+
+          {loading && !preview ? (
+            <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-8 justify-center">
+              <Loader2 className="h-5 w-5 animate-spin" /> Calculando aguinaldo por empleado…
+            </div>
+          ) : preview && (
+            <>
+              <div className="border border-cos-line rounded-lg overflow-x-auto max-h-[45vh] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-cos-slate-tint">
+                    <tr className="border-b border-cos-line">
+                      <th className="text-center px-2 py-2 font-medium text-cos-ink-soft" title="Incluir en la corrida">✓</th>
+                      <th className="text-left px-3 py-2 font-medium text-cos-ink-soft">Empleado</th>
+                      <th className="text-left px-3 py-2 font-medium text-cos-ink-soft">Alta</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft" title="Días trabajados del ejercicio (tope 365)">Días trab.</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft" title="Días de aguinaldo proporcionales: días trabajados / 365 × días de aguinaldo">Días agu.</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft" title="Monto ajustable — la exención y el ISR se recalculan al crear">Monto</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Exento</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Gravado</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">ISR</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Neto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.rows.map(r => {
+                      const excluido = excluidos.has(r.employeeId);
+                      const ajustado = overrides[r.employeeId] !== undefined && overrides[r.employeeId] !== "";
+                      return (
+                        <tr key={r.employeeId} className={`border-b border-cos-line last:border-0 ${excluido ? "opacity-40" : ""}`}>
+                          <td className="px-2 py-1.5 text-center">
+                            <input type="checkbox" checked={!excluido}
+                              onChange={() => setExcluidos(prev => {
+                                const next = new Set(prev);
+                                if (next.has(r.employeeId)) next.delete(r.employeeId); else next.add(r.employeeId);
+                                return next;
+                              })} />
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <span className="font-medium">{r.nombre} {r.apellidoPaterno}</span>
+                            <span className="text-cos-ink-soft ml-1.5 font-mono">{r.rfc}</span>
+                          </td>
+                          <td className="px-3 py-1.5 text-cos-ink-soft">{r.fechaIngreso}</td>
+                          <td className="px-3 py-1.5 text-right font-mono">{r.diasTrabajadosEjercicio}</td>
+                          <td className="px-3 py-1.5 text-right font-mono">{r.diasCorrespondientes}</td>
+                          <td className="px-3 py-1.5 text-right">
+                            <input type="number" min="0" step="0.01" disabled={excluido}
+                              value={overrides[r.employeeId] ?? String(r.montoTotal)}
+                              onChange={e => setOverrides(p => ({ ...p, [r.employeeId]: e.target.value }))}
+                              className="w-24 text-right font-mono border border-cos-line rounded px-1.5 py-0.5 bg-cos-card" />
+                          </td>
+                          <td className={`px-3 py-1.5 text-right font-mono ${ajustado ? "text-cos-ink-soft line-through" : ""}`}>{formatCurrency(r.montoExento)}</td>
+                          <td className={`px-3 py-1.5 text-right font-mono ${ajustado ? "text-cos-ink-soft line-through" : ""}`}>{formatCurrency(r.montoGravado)}</td>
+                          <td className={`px-3 py-1.5 text-right font-mono ${ajustado ? "text-cos-ink-soft line-through" : ""}`}>{r.isr > 0 ? formatCurrency(r.isr) : "—"}</td>
+                          <td className={`px-3 py-1.5 text-right font-mono font-semibold ${ajustado ? "text-cos-ink-soft line-through" : "text-cos-jade-ink"}`}>{formatCurrency(r.neto)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-cos-slate-tint font-semibold">
+                      <td className="px-2 py-2" />
+                      <td className="px-3 py-2">Total ({incluidas.length} empleado{incluidas.length === 1 ? "" : "s"})</td>
+                      <td colSpan={3} />
+                      <td className="px-3 py-2 text-right font-mono">{formatCurrency(totalMontos)}</td>
+                      <td colSpan={4} className="px-3 py-2 text-right text-cos-ink-soft font-normal">
+                        Exención por empleado: hasta {formatCurrency(preview.topeExento)} (30 UMA)
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p className="text-[11px] text-cos-ink-soft">
+                Los montos ajustados a mano se muestran tachados en exento/gravado/ISR: el motor los recalcula al crear la
+                corrida (la exención de 30 UMA y la tarifa del Art. 96 LISR nunca se capturan manualmente). La corrida queda
+                CALCULADA y sigue el flujo normal de revisión y timbrado (CFDI de nómina extraordinaria).
+              </p>
+            </>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
+            <button onClick={crear} disabled={saving || loading || !preview || incluidas.length === 0}
+              className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Crear corrida de aguinaldo
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Corridas especiales de un toque: PTU ─────────────────────────────────────
+// Reparto del monto capturado (Art. 123 LFT: mitad por días, mitad por
+// salarios devengados) con tope individual del Art. 127 fracc. VIII (3 meses
+// de salario o promedio de PTU de 3 años, lo más favorable) y exclusión
+// automática de < 60 días (fracc. VII). Directores/administradores generales
+// se excluyen manualmente (fracc. I) — al excluir se refresca el reparto.
+export function PtuRunModal({
+  companyId, onClose, onCreated,
+}: { companyId: string; onClose: () => void; onCreated: (warnings?: string[]) => void }) {
+  const anioActual = new Date().getFullYear();
+  const [form, setForm] = useState({
+    ejercicio: String(anioActual - 1),
+    montoTotal: "",
+    fechaPago: `${anioActual}-05-30`,
+  });
+  const [preview, setPreview] = useState<PtuPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [excluirManual, setExcluirManual] = useState<Set<string>>(new Set());
+
+  const cargar = useCallback(async (f: { ejercicio: string; montoTotal: string; fechaPago: string }, excluir: Set<string>) => {
+    if (!f.montoTotal || parseFloat(f.montoTotal) <= 0) {
+      setErr("Captura el monto total de PTU a repartir (renglón de la declaración anual).");
+      return;
+    }
+    setLoading(true);
+    setErr("");
+    try {
+      const qs = new URLSearchParams({
+        companyId,
+        ejercicio: f.ejercicio,
+        montoTotal: f.montoTotal,
+        fechaPago: f.fechaPago,
+        excluir: [...excluir].join(","),
+      });
+      const res = await fetch(`/api/nomina/run/ptu?${qs}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al calcular el reparto");
+      setPreview(data);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error al calcular el reparto");
+    } finally {
+      setLoading(false);
+    }
+  }, [companyId]);
+
+  function setEjercicio(v: string) {
+    setForm(p => ({
+      ...p,
+      ejercicio: v,
+      fechaPago: /^\d{4}$/.test(v) ? `${parseInt(v) + 1}-05-30` : p.fechaPago,
+    }));
+  }
+
+  function toggleExclusion(employeeId: string) {
+    const next = new Set(excluirManual);
+    if (next.has(employeeId)) next.delete(employeeId); else next.add(employeeId);
+    setExcluirManual(next);
+    setOverrides(p => {
+      const q = { ...p };
+      delete q[employeeId];
+      return q;
+    });
+    cargar(form, next); // el reparto se redistribuye en el servidor
+  }
+
+  const montoDe = (employeeId: string, base: number) => {
+    const o = overrides[employeeId];
+    if (o === undefined || o === "") return base;
+    const n = parseFloat(o);
+    return Number.isFinite(n) && n >= 0 ? n : base;
+  };
+  const totalMontos = preview?.rows.reduce((s, r) => s + montoDe(r.employeeId, r.montoTotal), 0) ?? 0;
+
+  async function crear() {
+    if (!preview) return;
+    setSaving(true);
+    setErr("");
+    try {
+      const items = preview.rows.map(r => {
+        const o = overrides[r.employeeId];
+        const ajustado = o !== undefined && o !== "" && Number.isFinite(parseFloat(o)) && parseFloat(o) >= 0;
+        return { employeeId: r.employeeId, ...(ajustado ? { monto: parseFloat(o) } : {}) };
+      });
+      const res = await fetch("/api/nomina/run/ptu", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          ejercicio: parseInt(form.ejercicio),
+          montoTotal: parseFloat(form.montoTotal),
+          fechaPago: form.fechaPago,
+          items,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al crear la corrida");
+      onCreated([data.tarifaWarning].filter(Boolean) as string[]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error al crear la corrida");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-8 p-4 z-50 overflow-auto">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-5xl">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">Corrida especial — PTU (reparto de utilidades)</h2>
+            <p className="text-xs text-cos-ink-soft mt-0.5">
+              Mitad por días trabajados y mitad por salarios devengados (Art. 123 LFT); tope individual de 3 meses de salario o
+              promedio de PTU de 3 años, lo más favorable (Art. 127 fracc. VIII). Exento hasta 15 UMA (Art. 93 fracc. XIV LISR).
+            </p>
+          </div>
+          <button onClick={onClose}><X className="h-4 w-4" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+            <Field label="Ejercicio de la utilidad">
+              <input type="number" min="2000" max="2100" value={form.ejercicio}
+                onChange={e => setEjercicio(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Monto total a repartir (MXN)">
+              <input type="number" min="0.01" step="0.01" value={form.montoTotal} placeholder="PTU de la declaración anual"
+                onChange={e => setForm(p => ({ ...p, montoTotal: e.target.value }))} className={inputCls} required />
+            </Field>
+            <Field label="Fecha de pago (Art. 122 LFT)">
+              <input type="date" value={form.fechaPago}
+                onChange={e => setForm(p => ({ ...p, fechaPago: e.target.value }))} className={inputCls} />
+            </Field>
+            <button onClick={() => cargar(form, excluirManual)} disabled={loading}
+              className="flex items-center justify-center gap-2 border border-cos-line rounded-md py-2 text-sm hover:bg-cos-paper disabled:opacity-50">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Calcular reparto
+            </button>
+          </div>
+
+          <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md px-3 py-2 text-xs text-cos-brand-ink">
+            <p>
+              Los directores, administradores y gerentes generales no participan en el reparto (Art. 127 fracc. I LFT) — el
+              expediente no tiene esa bandera, así que exclúyelos manualmente con la casilla de cada renglón. Los empleados con
+              menos de 60 días trabajados en el ejercicio se excluyen automáticamente (fracc. VII). El excedente que se pierde
+              por los topes individuales no se redistribuye.
+            </p>
+          </div>
+
+          {err && <p className="text-xs text-cos-red-ink">{err}</p>}
+          {preview?.tarifaWarning && <p className="text-xs text-cos-amber-ink">{preview.tarifaWarning}</p>}
+
+          {preview && (
+            <>
+              <div className="border border-cos-line rounded-lg overflow-x-auto max-h-[42vh] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-cos-slate-tint">
+                    <tr className="border-b border-cos-line">
+                      <th className="text-center px-2 py-2 font-medium text-cos-ink-soft" title="Incluir en el reparto">✓</th>
+                      <th className="text-left px-3 py-2 font-medium text-cos-ink-soft">Empleado</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft" title="Días trabajados en el ejercicio">Días</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft" title="Sueldo base devengado en el ejercicio (recibos app + SAT; estimado si no hay recibos)">Sal. devengado</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Por días</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Por salarios</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft" title="Tope individual: max(3 meses de salario, promedio PTU 3 años) — Art. 127 fracc. VIII LFT">Tope</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft" title="Monto ajustable — la exención y el ISR se recalculan al crear">Monto</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Exento</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">ISR</th>
+                      <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Neto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.rows.map(r => {
+                      const ajustado = overrides[r.employeeId] !== undefined && overrides[r.employeeId] !== "";
+                      return (
+                        <tr key={r.employeeId} className="border-b border-cos-line last:border-0">
+                          <td className="px-2 py-1.5 text-center">
+                            <input type="checkbox" checked onChange={() => toggleExclusion(r.employeeId)} />
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <span className="font-medium">{r.nombre} {r.apellidoPaterno}</span>
+                            <span className="text-cos-ink-soft ml-1.5 font-mono">{r.rfc}</span>
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono">{r.diasTrabajados}</td>
+                          <td className="px-3 py-1.5 text-right font-mono"
+                            title={r.fuenteSalario === "RECIBOS" ? "Suma de sueldo base de los recibos del ejercicio" : "Estimado: salario diario × días (sin recibos del ejercicio)"}>
+                            {formatCurrency(r.salarioDevengado)}{r.fuenteSalario === "ESTIMADO" && <span className="text-cos-amber-ink ml-0.5">*</span>}
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono">{formatCurrency(r.porDias)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono">{formatCurrency(r.porSalario)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono text-cos-ink-soft"
+                            title={r.promedioPtu3Anios != null ? `Promedio PTU 3 años: ${formatCurrency(r.promedioPtu3Anios)}` : "Sin historial de PTU: rige el tope de 3 meses de salario"}>
+                            {formatCurrency(r.topeIndividual)}{r.topado && <span className="text-cos-amber-ink ml-0.5" title={`Topado — bruto sin tope: ${formatCurrency(r.brutoSinTope)}`}>▼</span>}
+                          </td>
+                          <td className="px-3 py-1.5 text-right">
+                            <input type="number" min="0" step="0.01"
+                              value={overrides[r.employeeId] ?? String(r.montoTotal)}
+                              onChange={e => setOverrides(p => ({ ...p, [r.employeeId]: e.target.value }))}
+                              className="w-24 text-right font-mono border border-cos-line rounded px-1.5 py-0.5 bg-cos-card" />
+                          </td>
+                          <td className={`px-3 py-1.5 text-right font-mono ${ajustado ? "text-cos-ink-soft line-through" : ""}`}>{formatCurrency(r.montoExento)}</td>
+                          <td className={`px-3 py-1.5 text-right font-mono ${ajustado ? "text-cos-ink-soft line-through" : ""}`}>{r.isr > 0 ? formatCurrency(r.isr) : "—"}</td>
+                          <td className={`px-3 py-1.5 text-right font-mono font-semibold ${ajustado ? "text-cos-ink-soft line-through" : "text-cos-jade-ink"}`}>{formatCurrency(r.neto)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-cos-slate-tint font-semibold">
+                      <td className="px-2 py-2" />
+                      <td className="px-3 py-2">Total ({preview.rows.length} empleado{preview.rows.length === 1 ? "" : "s"})</td>
+                      <td colSpan={5} className="px-3 py-2 text-right text-cos-ink-soft font-normal">
+                        {preview.remanentePorTopes > 0 && <>Remanente por topes (no se redistribuye): {formatCurrency(preview.remanentePorTopes)}</>}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">{formatCurrency(totalMontos)}</td>
+                      <td colSpan={3} className="px-3 py-2 text-right text-cos-ink-soft font-normal">
+                        Exención por empleado: hasta {formatCurrency(preview.topeExento)} (15 UMA)
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {preview.excluidos.length > 0 && (
+                <div className="border border-cos-line rounded-lg px-3 py-2">
+                  <p className="text-xs font-medium mb-1">Excluidos del reparto</p>
+                  <ul className="space-y-0.5">
+                    {preview.excluidos.map(e => (
+                      <li key={e.employeeId} className="text-[11px] text-cos-ink-soft flex items-center gap-2">
+                        <span className="font-medium text-cos-ink">{e.nombre} {e.apellidoPaterno}</span>
+                        <span>({e.diasTrabajados} días)</span>
+                        <span>— {e.motivo}</span>
+                        {e.manual && (
+                          <button onClick={() => toggleExclusion(e.employeeId)} className="text-cos-brand-ink underline">
+                            Incluir de nuevo
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <p className="text-[11px] text-cos-ink-soft">
+                Al excluir con la casilla, el reparto se redistribuye entre los demás. Los montos ajustados a mano se muestran
+                tachados en exento/ISR: el motor los recalcula al crear (exención de 15 UMA y tarifa del Art. 96 LISR). La
+                corrida queda CALCULADA y sigue el flujo normal de revisión y timbrado (CFDI de nómina extraordinaria).
+                {" "}El tope del promedio de PTU de 3 años sólo aplica cuando existen corridas PTU previas (propias o importadas
+                del SAT); sin historial rige el tope de 3 meses de salario.
+              </p>
+            </>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
+            <button onClick={crear} disabled={saving || loading || !preview || preview.rows.length === 0}
+              className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Crear corrida de PTU
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -15,7 +15,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Plus, Loader2, X, AlertCircle, CheckCircle2, Play, Calendar, ClipboardList,
-  ArrowLeftRight, ChevronDown, ChevronUp, Trash2, History, RefreshCw,
+  ArrowLeftRight, ChevronDown, ChevronUp, Trash2, History, RefreshCw, Gift, Coins, Sparkles,
 } from "lucide-react";
 import {
   TIPO_RUN_LABEL, STATUS_RUN_LABEL, STATUS_RUN_COLOR,
@@ -24,7 +24,10 @@ import {
   type Employee, type PayrollRun, type PayrollItemDetail,
   type RunPrefill, type Incidencia, type RunIncidencia,
 } from "./workspace-shared";
-import { NewRunModal, NewIncidenciaModal, RunIncidenciasModal } from "./RunModals";
+import {
+  NewRunModal, NewIncidenciaModal, RunIncidenciasModal,
+  AguinaldoRunModal, PtuRunModal,
+} from "./RunModals";
 
 export default function CorridasTab() {
   const { activeCompany } = useCompany();
@@ -35,6 +38,10 @@ export default function CorridasTab() {
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const [showNewRun, setShowNewRun] = useState(false);
+  // Corridas especiales de un toque: menú + modal de aguinaldo / PTU.
+  const [especialMenuOpen, setEspecialMenuOpen] = useState(false);
+  const [showAguinaldo, setShowAguinaldo] = useState(false);
+  const [showPtu, setShowPtu] = useState(false);
   const [runPrefill, setRunPrefill] = useState<RunPrefill | null>(null);
   const [prefillLoading, setPrefillLoading] = useState(false);
   const [stampingId, setStampingId] = useState<string | null>(null);
@@ -185,6 +192,55 @@ export default function CorridasTab() {
             {prefillLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
             Iniciar desde la quincena anterior
           </button>
+          {/* Corrida especial: aguinaldo (temporada nov-dic, Art. 87 LFT) y
+              PTU (temporada abr-jun, Arts. 117-127 LFT) de un toque. */}
+          {(() => {
+            const mes = new Date().getMonth() + 1; // 1-12
+            const temporadaAguinaldo = mes === 11 || mes === 12;
+            const temporadaPtu = mes >= 4 && mes <= 6;
+            return (
+              <div className="relative">
+                <button onClick={() => setEspecialMenuOpen(o => !o)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border ${
+                    temporadaAguinaldo || temporadaPtu
+                      ? "border-cos-amber-ink/30 bg-cos-amber-tint text-cos-amber-ink hover:opacity-90"
+                      : "border-cos-line hover:bg-cos-paper"
+                  }`}
+                  title="Corridas de aguinaldo y PTU de un toque, con vista previa por empleado">
+                  <Sparkles className="h-4 w-4" /> Corrida especial <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {especialMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setEspecialMenuOpen(false)} />
+                    <div className="absolute right-0 mt-1 z-20 bg-cos-card border border-cos-line rounded-lg shadow-lg w-72 overflow-hidden">
+                      <button onClick={() => { setEspecialMenuOpen(false); setShowAguinaldo(true); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-cos-paper flex items-start gap-3 ${temporadaAguinaldo ? "bg-cos-amber-tint/40" : ""}`}>
+                        <Gift className="h-4 w-4 mt-0.5 shrink-0 text-cos-ink-soft" />
+                        <span>
+                          <span className="block text-sm font-medium">
+                            Aguinaldo
+                            {temporadaAguinaldo && <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] bg-cos-amber-tint text-cos-amber-ink font-medium">Temporada</span>}
+                          </span>
+                          <span className="block text-xs text-cos-ink-soft mt-0.5">Mínimo 15 días de salario, antes del 20-dic (Art. 87 LFT)</span>
+                        </span>
+                      </button>
+                      <button onClick={() => { setEspecialMenuOpen(false); setShowPtu(true); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-cos-paper flex items-start gap-3 border-t border-cos-line ${temporadaPtu ? "bg-cos-amber-tint/40" : ""}`}>
+                        <Coins className="h-4 w-4 mt-0.5 shrink-0 text-cos-ink-soft" />
+                        <span>
+                          <span className="block text-sm font-medium">
+                            PTU (reparto de utilidades)
+                            {temporadaPtu && <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] bg-cos-amber-tint text-cos-amber-ink font-medium">Temporada</span>}
+                          </span>
+                          <span className="block text-xs text-cos-ink-soft mt-0.5">Mitad por días, mitad por salarios (Arts. 117-127 LFT)</span>
+                        </span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
           <button onClick={() => { setRunPrefill(null); setShowNewRun(true); }} className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
             <Plus className="h-4 w-4" /> Nueva corrida
           </button>
@@ -503,6 +559,32 @@ export default function CorridasTab() {
               warnings && warnings.length > 0
                 ? `✓ Corrida creada — ⚠️ ${warnings.join(" · ")}`
                 : "✓ Corrida creada y calculada"
+            );
+          }} />
+      )}
+      {showAguinaldo && activeCompany && (
+        <AguinaldoRunModal companyId={activeCompany.id}
+          onClose={() => setShowAguinaldo(false)}
+          onCreated={(warnings) => {
+            setShowAguinaldo(false);
+            loadRuns();
+            setError(
+              warnings && warnings.length > 0
+                ? `✓ Corrida de aguinaldo creada — ⚠️ ${warnings.join(" · ")}`
+                : "✓ Corrida de aguinaldo creada y calculada"
+            );
+          }} />
+      )}
+      {showPtu && activeCompany && (
+        <PtuRunModal companyId={activeCompany.id}
+          onClose={() => setShowPtu(false)}
+          onCreated={(warnings) => {
+            setShowPtu(false);
+            loadRuns();
+            setError(
+              warnings && warnings.length > 0
+                ? `✓ Corrida de PTU creada — ⚠️ ${warnings.join(" · ")}`
+                : "✓ Corrida de PTU creada y calculada"
             );
           }} />
       )}
