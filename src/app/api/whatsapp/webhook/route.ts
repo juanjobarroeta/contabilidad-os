@@ -20,6 +20,8 @@ import {
   type AccessibleCompany,
 } from "@/lib/whatsapp/identity";
 import { runWhatsappAgent, type WhatsappCompany } from "@/lib/whatsapp/agent";
+import { parseLinkCode, redeemLinkCode } from "@/lib/whatsapp/linking";
+import { registrarBitacora } from "@/lib/audit";
 import { tryConfirmPendingAction, getPendingAction } from "@/lib/whatsapp/pending-action";
 import { checkWhatsappRateLimit } from "@/lib/whatsapp/rate-limit";
 import { effectiveWhatsappPlan } from "@/lib/planes";
@@ -68,6 +70,45 @@ function parseSelection(
 }
 
 const SWITCH_RE = /\b(cambiar|cambia(r)?\s+(de\s+)?empresa|otra\s+empresa)\b/i;
+
+/**
+ * Canjea un código de vinculación (deep-link) enviado por un número AÚN no
+ * vinculado y arma la respuesta de confirmación. Si la cuenta tiene exactamente
+ * una empresa, la deja activa; si tiene varias, confirma y pregunta cuál activar
+ * (mismo menú que el resto del flujo). Bitácora: sólo metadatos (últimos 4 del
+ * teléfono). Devuelve el texto a responder, o null si el código no es válido.
+ */
+async function tryRedeemLinkCode(code: string, phone: string): Promise<string | null> {
+  const result = await redeemLinkCode(code, phone);
+  if (!result.ok) return null;
+
+  registrarBitacora({
+    accion: "whatsapp.vincular",
+    userId: result.userId,
+    entidad: "WhatsappLink",
+    entidadId: result.linkId,
+    detalle: { phoneLast4: phone.slice(-4) },
+  });
+
+  const companies = await listAccessibleCompanies(result.userId);
+  if (companies.length === 0) {
+    return (
+      "Listo, vinculé este WhatsApp con tu cuenta de Contabilidad OS. Aún no " +
+      "tienes empresas activas asignadas; en cuanto tengas una, podré ayudarte."
+    );
+  }
+  if (companies.length === 1) {
+    await setActiveCompany(result.linkId, companies[0].id);
+    return (
+      `Listo, vinculé este WhatsApp con tu cuenta de ${companies[0].razonSocial}. ` +
+      "Ya puedes preguntarme sobre tu contabilidad."
+    );
+  }
+  return (
+    "Listo, vinculé este WhatsApp con tu cuenta de Contabilidad OS.\n\n" +
+    menuText(companies)
+  );
+}
 
 /**
  * The slow part: run the read-only agent and deliver the answer via the Twilio
@@ -233,6 +274,34 @@ export async function POST(req: Request) {
 
   // ── 3. Identity: verified link only. ──────────────────────────────────────
   const sender = await resolveSender(phone);
+
+  // Vinculación deep-link: el mensaje viene de un número sin enlace verificado y
+  // trae un código («Vincular 123456» o los 6 dígitos pelones). Lo canjeamos aquí
+  // — es el ÚNICO caso en que un desconocido obtiene una respuesta útil. Un código
+  // pelón de un número YA vinculado NO se toca aquí: ése es la confirmación de una
+  // escritura pendiente (más abajo), no un intento de vincular.
+  if (!sender) {
+    const linkAttempt = parseLinkCode(body);
+    if (linkAttempt) {
+      const confirmation = await tryRedeemLinkCode(linkAttempt.code, phone);
+      if (confirmation) return reply(confirmation);
+      return reply(
+        "Ese código no es válido o expiró. Genera uno nuevo en la app " +
+          "(Configuración → Vincular WhatsApp)."
+      );
+    }
+  } else {
+    // Número YA vinculado que manda un «Vincular …» explícito: sólo un aviso
+    // amable. (El código pelón se deja pasar: es confirmación de escritura.)
+    const linkAttempt = parseLinkCode(body);
+    if (linkAttempt?.explicit) {
+      return reply(
+        "Este número ya está vinculado a tu cuenta de Contabilidad OS. " +
+          "No necesitas volver a vincularlo; pregúntame lo que necesites."
+      );
+    }
+  }
+
   if (!sender) {
     // Diagnóstico operativo: la ruta normal no registra nada, así que un reporte
     // de "no vinculado" era imposible de depurar. Aquí distinguimos las causas

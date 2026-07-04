@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Chip, type ChipStatus, Alert, Loading } from "@/components/ui";
+import { WhatsappNudge } from "@/components/whatsapp/WhatsappNudge";
 
 // ── Types (mirrors /api/dashboard) ───────────────────────────────────────────
 interface TrendPoint { label: string; periodo: string; ingresos: number; gastos: number }
@@ -388,6 +389,7 @@ export default function InicioPage() {
         <div className="space-y-5">
           {data.estadoDatos && <EstadoDatosCard estado={data.estadoDatos} />}
           {data.apertura?.nudge && <AperturaNudgeCard />}
+          <WhatsappNudge />
           {data.fiel && (data.fiel.estado === "vencida" || data.fiel.estado === "por_vencer") && (
             <div className={`flex items-center gap-3 rounded-card px-5 py-3.5 text-[14px] ${data.fiel.estado === "vencida" ? "bg-cos-red-tint text-cos-red-ink" : "bg-cos-amber-tint text-cos-amber-ink"}`}>
               <AlertTriangle className="h-5 w-5 flex-none" />

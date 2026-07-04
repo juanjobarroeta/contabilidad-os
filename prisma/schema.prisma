@@ -49,6 +49,9 @@ model User {
   despachoMemberships DespachoMember[]
   // Verified WhatsApp numbers bound to this user (W0 channel).
   whatsappLinks       WhatsappLink[]
+  // Pending link codes (deep-link flow): the user sends the code TO the business
+  // number from WhatsApp to bind their number — no phone known at creation time.
+  whatsappLinkCodes   WhatsappLinkCode[]
   chatConversations   ChatConversation[]
   // Refresh tokens de la API de satélites (flujo access corto + refresh rotatorio).
   apiRefreshTokens    ApiRefreshToken[]
@@ -2762,6 +2765,30 @@ model WhatsappLink {
 
   conversations WhatsappConversation[]
 
+  @@index([userId])
+}
+
+// Pending link code for the deep-link (user-initiated) vinculación flow.
+//
+// El usuario genera un código de 6 dígitos en la app y lo ENVÍA al número del
+// negocio por WhatsApp (mensaje iniciado por el usuario → abre la ventana de 24h,
+// sin plantilla ni verificación de Meta). El teléfono es DESCONOCIDO al crear el
+// código: sólo se conoce cuando llega el mensaje entrante. Por eso el código se
+// ata al userId, no al teléfono. De un solo uso (`usedAt`) y con TTL (`expiresAt`,
+// ~15 min). El código es un bearer token efímero y de bajo valor: sólo vincula el
+// número que lo envía a la cuenta ya autenticada que lo generó.
+model WhatsappLinkCode {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  code   String // 6 dígitos; se busca por él al llegar el mensaje entrante
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  usedAt    DateTime? // sellado al canjearse → un solo uso
+
+  @@index([code])
   @@index([userId])
 }
 

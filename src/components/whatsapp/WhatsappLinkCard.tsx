@@ -20,8 +20,17 @@ type WhatsappLink = {
 type LinkState = {
   links: WhatsappLink[];
   available: boolean;
+  // false = flujo deep-link (el usuario nos envía el código); true = flujo OTP
+  // legado (el negocio le envía el código y lo teclea de vuelta).
+  templateFlow: boolean;
   companyCount: number;
   digestOptIn: boolean;
+};
+
+type DeepLink = {
+  code: string;
+  waMeUrl: string;
+  businessNumber: string;
 };
 
 /** Formats a MX E.164 (+52##########) as "+52 ## #### ####" for confirmation. */
@@ -50,6 +59,7 @@ export function WhatsappLinkCard() {
   const [phase, setPhase] = useState<"idle" | "code_sent">("idle");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [deeplink, setDeeplink] = useState<DeepLink | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -72,6 +82,45 @@ export function WhatsappLinkCard() {
 
   const verifiedLink = state?.links.find((l) => l.verifiedAt) ?? null;
   const isDespacho = (state?.companyCount ?? 0) > 1;
+
+  // Deep-link: mientras haya un código generado y aún no verificado, sondeamos el
+  // estado cada 5s para reflejar «Vinculado» en cuanto el usuario mande el código
+  // por WhatsApp. Se detiene al verificarse o al desmontar.
+  useEffect(() => {
+    if (!deeplink || verifiedLink) return;
+    const id = setInterval(() => {
+      void loadState();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [deeplink, verifiedLink]);
+
+  // Deep-link: genera un código que el usuario ENVÍA al número del negocio.
+  async function generateDeepLink() {
+    setError("");
+    setInfo("");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/whatsapp/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "No se pudo generar el código.");
+        return;
+      }
+      setDeeplink({
+        code: data.code,
+        waMeUrl: data.waMeUrl,
+        businessNumber: data.businessNumber,
+      });
+    } catch {
+      setError("Error de red. Inténtalo de nuevo.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function startLink() {
     setError("");
@@ -194,6 +243,7 @@ export function WhatsappLinkCard() {
   function reset() {
     setPhase("idle");
     setCode("");
+    setDeeplink(null);
     setError("");
     setInfo("");
   }
@@ -241,8 +291,8 @@ export function WhatsappLinkCard() {
                     <Unlink className="h-3.5 w-3.5" /> Desvincular
                   </button>
                 </div>
-              ) : (
-                /* Flujo de vinculación (idle / código enviado) */
+              ) : state?.templateFlow ? (
+                /* Flujo OTP legado (el negocio envía el código): idle / enviado */
                 <div className="mt-4 border-t border-cos-line pt-4">
                   {phase === "idle" ? (
                     <div className="flex flex-col gap-2 sm:flex-row">
@@ -291,6 +341,72 @@ export function WhatsappLinkCard() {
                       >
                         Cancelar
                       </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Flujo deep-link (por defecto): el usuario nos envía el código. */
+                <div className="mt-4 border-t border-cos-line pt-4">
+                  {!deeplink ? (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-sm text-cos-ink-soft">
+                        Genera un código y envíalo por WhatsApp al asistente. Con eso
+                        vinculamos este número a tu cuenta.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={generateDeepLink}
+                        disabled={busy || !state?.available}
+                        className="inline-flex w-fit items-center justify-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                      >
+                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Generar código para vincular
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-4">
+                      <div className="rounded-control border border-cos-line bg-cos-paper px-4 py-3">
+                        <p className="text-xs text-cos-ink-soft">Tu código</p>
+                        <p className="mt-0.5 font-mono text-3xl font-bold tracking-[0.3em] text-cos-ink">
+                          {deeplink.code}
+                        </p>
+                      </div>
+
+                      <a
+                        href={deeplink.waMeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex w-fit items-center justify-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep"
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        Abrir WhatsApp para vincular
+                      </a>
+
+                      <p className="text-sm text-cos-ink-soft">
+                        Toca el botón (o manda un WhatsApp al número{" "}
+                        <span className="font-mono text-cos-ink">
+                          {deeplink.businessNumber}
+                        </span>{" "}
+                        con el texto:{" "}
+                        <span className="font-mono text-cos-ink">
+                          Vincular {deeplink.code}
+                        </span>
+                        ). Te confirmaré aquí y por WhatsApp.
+                      </p>
+
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex items-center gap-1.5 text-xs text-cos-ink-soft">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Esperando tu
+                          mensaje…
+                        </span>
+                        <button
+                          type="button"
+                          onClick={reset}
+                          className="rounded-control border border-cos-line px-3 py-1.5 text-xs text-cos-ink-soft hover:bg-cos-paper"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
