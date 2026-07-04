@@ -82,10 +82,11 @@
   body {
     @apply bg-cos-canvas text-cos-ink;
   }
-  /* Los controles nativos no heredan fondo ni color: sin clases bg-*/text-*
-     explícitas el UA pinta fondo blanco — ilegible en modo oscuro (p. ej. los
-     inputs de salario del importador de nómina). Base: fondo transparente y
-     color heredado; las utilidades bg-*/text-* siguen ganando donde existan. */
+  /* Los controles nativos no heredan fondo ni color: sin clases de fondo o
+     texto explícitas el UA pinta fondo blanco — ilegible en modo oscuro
+     (p. ej. los inputs de salario del importador de nómina). Base: fondo
+     transparente y color heredado; las utilidades de fondo y texto siguen
+     ganando donde existan. */
   input,
   select,
   textarea {
