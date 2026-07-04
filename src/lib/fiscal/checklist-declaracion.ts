@@ -58,6 +58,8 @@ export interface ChecklistInputs {
   hoy: Date;
   /** Vencimiento de la declaración (ver fechaLimiteDeclaracion). */
   fechaLimite: Date;
+  /** Apertura fiscal (punto de partida) revisada y confirmada por el contador. */
+  aperturaConfirmada: boolean;
   /** Descarga del SAT del periodo terminada (SatSyncRequest FINISHED) por dirección. */
   satEmitidosCompleto: boolean;
   satRecibidosCompleto: boolean;
@@ -118,6 +120,19 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
   const items: ChecklistItem[] = [];
   const linkMes = `/impuestos?tab=presentar&month=${i.month}&year=${i.year}`;
   const linkPapeles = `/impuestos?tab=papeles&month=${i.month}&year=${i.year}`;
+
+  // 0. Apertura fiscal confirmada — va PRIMERO: un punto de partida erróneo
+  // (saldo a favor inicial, pérdidas, coeficiente, obligaciones) se hereda a
+  // TODOS los meses siguientes, así que se revisa antes que cualquier otra cosa.
+  items.push({
+    clave: "apertura",
+    titulo: "Punto de partida fiscal",
+    estado: i.aperturaConfirmada ? "listo" : "atencion",
+    detalle: i.aperturaConfirmada
+      ? "El punto de partida fiscal (saldo a favor inicial, pérdidas por amortizar, coeficiente y obligaciones) está revisado y confirmado."
+      : "El punto de partida fiscal aún no está confirmado. Revisa el saldo a favor de IVA inicial, las pérdidas por amortizar, el coeficiente de utilidad y las obligaciones: un error en el arranque se arrastra a todos los meses.",
+    accionUrl: "/empresa/apertura",
+  });
 
   // 1. Sincronización SAT del periodo (emitidos Y recibidos terminados).
   const satCompleto = i.satEmitidosCompleto && i.satRecibidosCompleto;
@@ -307,6 +322,7 @@ export async function checklistDeclaracion(
     declRows,
     empleadosActivos,
     corridasNomina,
+    companyRow,
   ] = await Promise.all([
     // La MISMA llamada que alimenta la página de impuestos y el asistente —
     // incluye las advertencias de cadena de declaraciones rota.
@@ -336,6 +352,10 @@ export async function checklistDeclaracion(
     prisma.payrollRun.findMany({
       where: { companyId, fechaPago: { gte: from, lt: to } },
       select: { status: true },
+    }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { aperturaConfirmadaAt: true },
     }),
   ]);
 
@@ -368,6 +388,7 @@ export async function checklistDeclaracion(
     month,
     hoy,
     fechaLimite,
+    aperturaConfirmada: companyRow?.aperturaConfirmadaAt != null,
     satEmitidosCompleto: tiposFinished.has("EMITIDOS"),
     satRecibidosCompleto: tiposFinished.has("RECIBIDOS"),
     advertenciasCadena: pos.advertencias,

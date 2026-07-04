@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Money } from "@/components/ui";
+import Link from "next/link";
 import {
   Building2, Plus, Loader2, Pencil, CheckCircle2,
   Zap, Key, AlertCircle, Trash2, ExternalLink, Eye, EyeOff, X,
-  Shield, Upload, FileKey2, FileText, Sparkles,
+  Shield, Upload, FileKey2, FileText, Sparkles, ClipboardCheck, ChevronRight,
 } from "lucide-react";
 
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
@@ -1189,6 +1190,30 @@ export default function EmpresaPage() {
             </button>
           </div>
         </div>
+        {/* ── Apertura fiscal ── */}
+        <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden mt-5">
+          <div className="px-5 py-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-10 w-10 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
+                <ClipboardCheck className="h-5 w-5 text-cos-brand-ink" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-semibold text-sm">Apertura fiscal</h2>
+                <p className="text-xs text-cos-ink-soft">
+                  Revisa y confirma el punto de partida: saldo a favor de IVA inicial, pérdidas por
+                  amortizar, coeficiente de utilidad y obligaciones — con la fuente de cada dato.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/empresa/apertura"
+              className="inline-flex items-center gap-1 rounded-control bg-cos-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-cos-brand-deep whitespace-nowrap shrink-0"
+            >
+              Revisar <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+
         {/* ── Importar Declaraciones ── */}
         <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden mt-5">
           <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">

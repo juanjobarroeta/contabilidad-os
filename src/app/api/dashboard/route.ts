@@ -362,10 +362,24 @@ export async function GET(req: Request) {
     ultimaSincronizacion: company?.lastAutoSyncAt ?? null,
   });
 
+  // ── Apertura fiscal: nudge de revisión del punto de partida ───────────────
+  // Se sugiere confirmar cuando ya hay CON QUÉ revisar (e.firma configurada y
+  // descarga histórica terminada) y aún no se ha confirmado.
+  const aperturaConfirmada = company?.aperturaConfirmadaAt != null;
+  const apertura = {
+    confirmada: aperturaConfirmada,
+    nudge:
+      !aperturaConfirmada &&
+      !!fiel &&
+      fiel.estado !== "sin_fiel" &&
+      company?.satBackfillCompletedAt != null,
+  };
+
   return NextResponse.json({
     periodo: { year, month },
     fiel,
     estadoDatos,
+    apertura,
     taxThisMonth: {
       iva: taxPosition.iva.pagar,
       isr: isrPagarMes,
