@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { stampDraftFromPending, discardDraft, type StampInput, type StampResult } from "@/lib/facturas/stamp";
 import { reconcileTransaction } from "@/lib/conciliacion";
+import { resolverPendingImportEstado, type PendingImportEstado } from "@/lib/whatsapp/estado-cuenta";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WhatsApp write-action confirmation gate.
@@ -34,13 +35,22 @@ export type PendingAction =
       payload: { txId: string; invoiceId: string };
       preview: string;
       companyId: string;
-    };
+    }
+  // Estado de cuenta recibido por WhatsApp a la espera de que el usuario elija
+  // la cuenta bancaria destino (respuesta numerada, no código de 6 dígitos).
+  // El payload cachea las filas PARSEADAS, nunca el archivo crudo.
+  | PendingImportEstado;
 
 function genCode(): string {
   return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
-async function stage(conversationId: string, action: PendingAction): Promise<{ code: string }> {
+// Sólo las acciones con código de confirmación pasan por aquí; el pendiente
+// de importación de estado de cuenta se escenifica en estado-cuenta.ts.
+async function stage(
+  conversationId: string,
+  action: Extract<PendingAction, { code: string }>
+): Promise<{ code: string }> {
   await prisma.whatsappConversation.update({
     where: { id: conversationId },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,6 +112,13 @@ export async function tryConfirmPendingAction(
 ): Promise<string | null> {
   const pa = await getPendingAction(conversationId);
   if (!pa) return null;
+
+  // Selección de cuenta para un estado de cuenta recibido por WhatsApp: se
+  // confirma con un NÚMERO de la lista (no con código de 6 dígitos). La
+  // lógica vive junto al resto del flujo en estado-cuenta.ts.
+  if (pa.type === "importar_estado") {
+    return resolverPendingImportEstado(conversationId, pa, body);
+  }
 
   const accionLabel = pa.type === "conciliar" ? "conciliación" : "factura";
 
