@@ -1,5 +1,6 @@
 import { prisma } from "../prisma";
 import { calcularVencimiento } from "../obligaciones";
+import { elegirMovimientoSugerido, VENTANA_DIAS_SUGERENCIA } from "../conciliacion-impuestos";
 import type { DeclarationStatus } from "@prisma/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -160,6 +161,20 @@ export interface ImssDeclRow {
   acuseUrl: string | null;
 }
 
+/**
+ * Movimiento bancario sugerido como pago de la obligación: el mejor egreso
+ * UNMATCHED dentro de ±3 días de la fecha límite y ±1% del monto objetivo
+ * (cifra registrada o estimado). SÓLO sugerencia — los pagos de impuestos son
+ * de alto riesgo y nunca se auto-concilian; la tarjeta lo muestra y el usuario
+ * decide (PATCH match-impuesto).
+ */
+export interface MovimientoSugeridoImss {
+  id: string;
+  fecha: string; // ISO date "YYYY-MM-DD"
+  descripcion: string;
+  monto: number;
+}
+
 export interface EstadoImssMensual {
   periodo: string;
   fechaLimite: string; // ISO date "YYYY-MM-DD"
@@ -169,6 +184,7 @@ export interface EstadoImssMensual {
   declaracion: ImssDeclRow | null;
   presentada: boolean;
   pagada: boolean;
+  movimientoSugerido: MovimientoSugeridoImss | null;
 }
 
 export interface EstadoImssBimestral {
@@ -183,6 +199,7 @@ export interface EstadoImssBimestral {
   declaracion: ImssDeclRow | null;
   presentada: boolean;
   pagada: boolean;
+  movimientoSugerido: MovimientoSugeridoImss | null;
 }
 
 export interface EstadoPagosImss {
@@ -232,6 +249,34 @@ const DECL_SELECT = {
   fechaLimitePago: true,
   acuseUrl: true,
 } as const;
+
+/**
+ * Mejor egreso UNMATCHED como sugerencia de pago (±3 días de la fecha límite,
+ * ±1% del objetivo). La decisión es pura (elegirMovimientoSugerido); aquí sólo
+ * se acota la consulta. Null cuando no hay objetivo (>0) o nada califica.
+ */
+async function movimientoSugeridoPara(
+  companyId: string,
+  objetivo: number | null | undefined,
+  fechaLimite: Date
+): Promise<MovimientoSugeridoImss | null> {
+  if (objetivo == null || !isFinite(objetivo) || objetivo <= 0) return null;
+  const desde = new Date(fechaLimite.getTime() - (VENTANA_DIAS_SUGERENCIA + 1) * 86_400_000);
+  const hasta = new Date(fechaLimite.getTime() + (VENTANA_DIAS_SUGERENCIA + 1) * 86_400_000);
+  const movimientos = await prisma.bankTransaction.findMany({
+    where: { companyId, status: "UNMATCHED", monto: { lt: 0 }, fecha: { gte: desde, lte: hasta } },
+    select: { id: true, fecha: true, descripcion: true, monto: true, status: true },
+    take: 100,
+  });
+  const mejor = elegirMovimientoSugerido(objetivo, fechaLimite, movimientos);
+  if (!mejor) return null;
+  return {
+    id: mejor.id,
+    fecha: mejor.fecha.toISOString().slice(0, 10),
+    descripcion: mejor.descripcion,
+    monto: mejor.monto,
+  };
+}
 
 /**
  * Estado del ciclo de pago IMSS de la empresa para un mes: estimado mensual +
@@ -290,6 +335,14 @@ export async function estadoPagosImss(
   });
   const diasMensual = diasPara(mensualPeriodo.fechaLimite, hoy);
 
+  // Sugerencia de conciliación (sólo si el pago sigue pendiente): la cifra
+  // registrada (SUA) manda sobre el estimado de nómina.
+  const pagadaMensual = declMensual != null && PAGADA.includes(declMensual.status);
+  const objetivoMensual = declMensual?.imssCuotas ?? mensualPeriodo.estimado.total;
+  const sugeridoMensual = pagadaMensual
+    ? null
+    : await movimientoSugeridoPara(companyId, objetivoMensual, mensualPeriodo.fechaLimite);
+
   const mensual: EstadoImssMensual = {
     periodo,
     fechaLimite: mensualPeriodo.fechaLimite.toISOString().slice(0, 10),
@@ -298,13 +351,19 @@ export async function estadoPagosImss(
     estimado: mensualPeriodo.estimado,
     declaracion: toDeclRow(declMensual),
     presentada: declMensual != null && PRESENTADA.includes(declMensual.status),
-    pagada: declMensual != null && PAGADA.includes(declMensual.status),
+    pagada: pagadaMensual,
+    movimientoSugerido: sugeridoMensual,
   };
 
   let bimestral: EstadoImssBimestral | null = null;
   if (bim.cierraBimestre) {
     const estimadoBim = estimadoImssBimestral([{ infonavit: sumsBimestre?._sum.infonavit ?? 0 }]);
     const diasBim = diasPara(bim.fechaLimite, hoy);
+    const pagadaBim = declBimestral != null && PAGADA.includes(declBimestral.status);
+    const objetivoBim = declBimestral?.imssCuotas ?? estimadoBim.total;
+    const sugeridoBim = pagadaBim
+      ? null
+      : await movimientoSugeridoPara(companyId, objetivoBim, bim.fechaLimite);
     bimestral = {
       bimestre: bim.bimestre,
       periodo: bim.periodo,
@@ -316,7 +375,8 @@ export async function estadoPagosImss(
       estimado: estimadoBim,
       declaracion: toDeclRow(declBimestral),
       presentada: declBimestral != null && PRESENTADA.includes(declBimestral.status),
-      pagada: declBimestral != null && PAGADA.includes(declBimestral.status),
+      pagada: pagadaBim,
+      movimientoSugerido: sugeridoBim,
     };
   }
 

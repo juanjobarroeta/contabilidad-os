@@ -62,6 +62,11 @@ export async function GET(req: Request, { params }: Params) {
         invoice: {
           select: { id: true, uuid: true, total: true, fecha: true, customer: { select: { razonSocial: true } } },
         },
+        // Pago de impuestos conciliado: la UI muestra «Pago de impuestos:
+        // {etiqueta del periodo/tipo}» con opción de desconciliar.
+        taxDeclaration: {
+          select: { id: true, tipo: true, periodo: true, status: true, fechaLimitePago: true },
+        },
         // Conciliación uno-a-varios: porciones asignadas a varias facturas
         // (la UI muestra "Conciliado con N facturas" con este detalle).
         conciliacionDetalles: {

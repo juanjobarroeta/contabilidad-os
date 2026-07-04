@@ -936,6 +936,10 @@ model BankTransaction {
   invoiceId  String?
   supplierId String?
   notes      String?
+  // Conciliación de pagos de impuestos: el movimiento (egreso) que pagó una
+  // línea de captura SIPARE o de una declaración federal. v1: un movimiento
+  // paga UNA declaración y viceversa (el segundo intento se rechaza con 409).
+  taxDeclarationId String?
 
   // Source
   source        String  @default("UPLOAD") // UPLOAD or BELVO or PADEL
@@ -947,6 +951,7 @@ model BankTransaction {
   bankAccount           BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   supplier              Supplier?              @relation(fields: [supplierId], references: [id])
   invoice               Invoice?               @relation(fields: [invoiceId], references: [id])
+  taxDeclaration        TaxDeclaration?        @relation(fields: [taxDeclarationId], references: [id])
   rayaPagada            RayaSemanal?
   gastoPagado           Gasto?
   reembolsoPagado       ReembolsoSemanal?
@@ -963,6 +968,9 @@ model BankTransaction {
   // Consultas por empresa con rango de fechas (reportes/listados) y el
   // conteo de pendientes por empresa (cockpit de despacho usa el prefijo).
   @@index([companyId, fecha])
+  // Conciliación de impuestos: «¿qué movimiento pagó esta declaración?»
+  // (guard de segundo movimiento y detalle en la respuesta del PATCH).
+  @@index([taxDeclarationId])
 }
 
 enum BankTransactionType {
@@ -1314,6 +1322,10 @@ model TaxDeclaration {
   acuseData Json?
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Conciliación bancaria del pago (SIPARE/línea de captura). En la práctica
+  // v1 es 0 o 1 movimiento MATCHED (un segundo intento se rechaza con 409);
+  // la lista existe porque la FK vive del lado del movimiento.
+  bankTransactions BankTransaction[]
 }
 
 // Pérdida fiscal pendiente de amortizar (Art. 57 LISR). Una por ejercicio de

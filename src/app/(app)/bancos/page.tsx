@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Chip } from "@/components/ui";
+import { etiquetaImpuesto } from "@/lib/conciliacion-impuestos";
 
 // ── Types (mirror /api/bancos) ────────────────────────────────────────────────
 interface BankAccount {
@@ -22,6 +23,8 @@ interface BankTx {
   notes?: string | null;
   invoiceId?: string | null;
   invoice?: { id: string; uuid?: string; total: number; customer?: { razonSocial: string } } | null;
+  // Pago de impuestos conciliado (SIPARE / línea de captura).
+  taxDeclaration?: { id: string; tipo: string; periodo: string; status: string } | null;
   // Conciliación uno-a-varios: porciones asignadas a varias facturas.
   conciliacionDetalles?: {
     id: string; montoAsignado: number;
@@ -33,6 +36,12 @@ interface SeleccionFactura { id: string; label: string; total: number; monto: st
 interface Candidate {
   id: string; uuid?: string; fecha: string; total: number; cliente: string; rfc: string;
   score: number; confidence: "alta" | "media" | "baja"; folio?: string;
+}
+// Candidato de pago de impuestos (declaración pendiente, sólo egresos).
+interface ImpuestoCandidate {
+  id: string; tipo: string; periodo: string; etiqueta: string;
+  montoEsperado: number | null; fechaLimitePago: string | null;
+  score: number; confidence: "alta" | "media" | "baja";
 }
 interface Counts {
   UNMATCHED?: number; MATCHED?: number; IGNORED?: number; total?: number;
@@ -106,6 +115,7 @@ export default function BancosPage() {
   const [busy, setBusy] = useState<"" | "auto" | "upload">("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [impuestoCands, setImpuestoCands] = useState<ImpuestoCandidate[]>([]);
   const [candLoading, setCandLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
   // Búsqueda manual de factura para el movimiento expandido (inline, antes era /detalle).
@@ -218,7 +228,7 @@ export default function BancosPage() {
 
   async function expand(tx: BankTx) {
     if (expandedId === tx.id) { setExpandedId(null); setMultiSel([]); return; }
-    setExpandedId(tx.id); setCandidates([]); setCandLoading(true); setMultiSel([]);
+    setExpandedId(tx.id); setCandidates([]); setImpuestoCands([]); setCandLoading(true); setMultiSel([]);
     // Reset de la búsqueda manual; arranca con el tipo probable según el signo.
     setManualOpen(false); setManualQuery(""); setManualResults([]);
     setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
@@ -226,6 +236,7 @@ export default function BancosPage() {
       const res = await fetch(`/api/bancos/${selectedId}/match?txId=${tx.id}`);
       const data = await res.json();
       setCandidates(data.candidates ?? []);
+      setImpuestoCands(data.impuestos ?? []);
     } finally { setCandLoading(false); }
   }
 
@@ -236,6 +247,26 @@ export default function BancosPage() {
     });
     if (res.ok) { showToast("Movimiento conciliado"); setExpandedId(null); setMultiSel([]); await Promise.all([loadTxs(), loadAccounts()]); }
     else showToast("No se pudo conciliar");
+  }
+
+  // Conciliar el egreso como pago de una declaración (SIPARE / línea de
+  // captura): movimiento → MATCHED y declaración → PAID en un solo gesto.
+  async function conciliarImpuesto(txId: string, taxDeclarationId: string, etiqueta: string) {
+    setActing(txId);
+    try {
+      const res = await fetch(`/api/bancos/transactions/${txId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "match-impuesto", taxDeclarationId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast(`Pago conciliado: ${etiqueta}`);
+        setExpandedId(null); setMultiSel([]);
+        await Promise.all([loadTxs(), loadAccounts()]);
+      } else {
+        showToast(data?.error ?? "No se pudo conciliar el pago de impuestos");
+      }
+    } finally { setActing(null); }
   }
 
   // ── Conciliación múltiple: un movimiento ↔ varias facturas ─────────────────
@@ -541,6 +572,21 @@ export default function BancosPage() {
                         </div>
                       )}
 
+                      {/* Pago de impuestos conciliado (SIPARE / línea de captura). */}
+                      {matched && !m.invoice && m.taxDeclaration && (
+                        <div className="mt-3 border-t border-dashed border-cos-jade-tint pt-3">
+                          <div className="flex items-center gap-1.5 text-[13px] text-cos-jade-ink">
+                            <Building2 className="h-[15px] w-[15px]" /> Pago de impuestos: <b>{etiquetaImpuesto(m.taxDeclaration.tipo, m.taxDeclaration.periodo)}</b>
+                          </div>
+                          {!selectMode && (
+                            <button onClick={() => desconciliar(m.id)} disabled={acting === m.id}
+                              className="mt-2 text-[13px] font-semibold text-cos-red-ink hover:underline disabled:opacity-50">
+                              {acting === m.id ? "…" : "Desconciliar"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                       {/* Conciliación uno-a-varios: lista de facturas con su porción asignada. */}
                       {matched && !m.invoice && (m.conciliacionDetalles?.length ?? 0) > 0 && (
                         <div className="mt-3 border-t border-dashed border-cos-jade-tint pt-3">
@@ -609,6 +655,37 @@ export default function BancosPage() {
                                 </>
                               ) : (
                                 <span className="text-[13px] text-cos-ink-faint">Sin coincidencias automáticas.</span>
+                              )}
+
+                              {/* Pagos de impuestos pendientes (sólo egresos): declaraciones
+                                  SIPARE / línea de captura sin pagar de periodos recientes.
+                                  Un tap en «Conciliar» marca pago PAID + movimiento MATCHED. */}
+                              {!candLoading && impuestoCands.length > 0 && (
+                                <>
+                                  <p className="text-[12.5px] font-semibold text-cos-ink">Pagos de impuestos pendientes</p>
+                                  <div className="flex flex-col gap-2">
+                                    {impuestoCands.map((c) => (
+                                      <div key={c.id} className="flex items-center justify-between gap-3 rounded-control bg-cos-paper px-3 py-2.5">
+                                        <div className="min-w-0">
+                                          <p className="truncate text-[13.5px] font-medium text-cos-ink">{c.etiqueta}</p>
+                                          <p className="text-[12px] text-cos-ink-faint">
+                                            {c.montoEsperado != null
+                                              ? <Money value={c.montoEsperado} size={12} muted />
+                                              : <span>Monto según SUA (sin estimado)</span>}
+                                            {c.fechaLimitePago && <> · vence {fmtFecha(c.fechaLimitePago)}</>}
+                                          </p>
+                                        </div>
+                                        <div className="flex flex-none items-center gap-2">
+                                          <Chip tone={CONF[c.confidence]} label={c.confidence} />
+                                          <button onClick={() => conciliarImpuesto(m.id, c.id, c.etiqueta)} disabled={acting === m.id}
+                                            className="rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+                                            Conciliar
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
                               )}
 
                               {/* Charola de conciliación múltiple: facturas agregadas, monto asignado

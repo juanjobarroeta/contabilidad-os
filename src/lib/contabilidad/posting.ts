@@ -94,6 +94,9 @@ function monthRange(year: number, month: number): { start: Date; end: Date } {
  *   - Invoice (INGRESO, EGRESO) stamped in the period
  *   - BankTransaction in the period, grouped by status/notes:
  *       MATCHED (to invoice) → settles the invoice's client/supplier account
+ *       MATCHED (to TaxDeclaration, taxDeclarationId) → NOT posted (v1): no es
+ *           liquidación de Clientes/Proveedores; el enteramiento pertenece al
+ *           módulo de impuestos (ver comentario y TODO en el loop)
  *       IGNORED + TAX_PAYMENT       → debits impuestos por pagar
  *       IGNORED + PAYROLL_NO_CFDI   → debits sueldos y salarios
  *       IGNORED + NON_DEDUCTIBLE    → debits gastos no deducibles
@@ -464,6 +467,21 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         `Movimiento sin conciliar: ${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 40)} $${absAmount.toFixed(2)}`
       );
       continue; // not posted
+    }
+
+    // Pago de impuestos conciliado (movimiento MATCHED ↔ TaxDeclaration vía
+    // taxDeclarationId): NO es una liquidación de Clientes/Proveedores — el
+    // CFDI nunca pasó por esas cuentas — así que se EXCLUYE de la póliza de
+    // liquidación de abajo. Decisión v1 documentada: el enteramiento (cargo a
+    // impuestos por pagar / abono a bancos) pertenece al módulo de impuestos,
+    // que hoy no provisiona ese pasivo; postear aquí sólo la mitad del asiento
+    // rompería la partida doble. Mismo trato que los matches de construcción
+    // (Gasto/Raya/Reembolso), que tampoco se postean desde este motor.
+    // TODO(impuestos): cuando el módulo de impuestos provisione el pasivo
+    // (impuestos por pagar) al cierre, postear aquí la liquidación
+    // DR Impuestos por pagar / CR Bancos, espejo del tag IGNORED+TAX_PAYMENT.
+    if (tx.status === "MATCHED" && tx.taxDeclarationId) {
+      continue; // not posted (v1)
     }
 
     if (tx.status === "MATCHED" && (tx.invoiceId || tx.conciliacionDetalles.length > 0)) {
