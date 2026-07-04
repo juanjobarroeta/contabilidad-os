@@ -27,35 +27,30 @@ ni probado una restauración** en este proyecto. Checklist único (≈30 min):
    Ojo: el dump contiene credenciales cifradas — el bucket debe ser privado y
    la llave `CREDENTIALS_ENCRYPTION_KEY` NUNCA se respalda junto al dump.
 
-## 2. Esquema: `db push` hoy, `prisma migrate` como destino
+## 2. Esquema: `prisma migrate` (adoptado 2026-07-04)
 
-Hoy `railway.json` ejecuta en cada deploy:
+El deploy ejecuta `node scripts/deploy-db.mjs`, que decide solo:
 
-```
-npx prisma db push --skip-generate --accept-data-loss
-```
+- **Base existente sin historial** (producción el día del cambio): baseline
+  automático — `migrate resolve --applied 0_init` marca la migración inicial
+  como aplicada SIN tocar el esquema, y luego `migrate deploy`.
+- **Base con historial**: `migrate deploy` aplica lo pendiente.
+- **Base vacía** (staging/entorno nuevo): `migrate deploy` corre `0_init`
+  completo y crea todo el esquema.
 
-Esto funciona **solo** porque mantenemos la disciplina de cambios aditivos.
-`--accept-data-loss` significa que un rename/drop/retype en `schema.prisma`
-**tira la columna con sus datos, sin preguntar**, en el deploy.
+Cualquier fallo aborta el deploy (la imagen anterior sigue sirviendo).
+`--accept-data-loss` desapareció del pipeline.
 
-Reglas vigentes mientras exista `db push`:
+Reglas nuevas:
 
-- Todo diff de `schema.prisma` se revisa en PR con la pregunta explícita:
-  ¿es 100% aditivo? (columna opcional nueva, tabla nueva, índice nuevo).
-- Prohibido: renombrar columnas/tablas (es drop+create), cambiar tipos,
-  quitar columnas, volver requerido un campo existente sin default.
-- Si un cambio no-aditivo es inevitable: hacerlo en dos fases (agregar lo
-  nuevo → migrar datos con script → dejar de leer lo viejo → borrar lo viejo
-  en un deploy posterior y con respaldo verificado ese mismo día).
-
-**Destino** (cuando haya un hueco tranquilo): adoptar `prisma migrate`.
-Camino estándar para una base existente (baseline):
-
-1. `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/0_init/migration.sql`
-2. `npx prisma migrate resolve --applied 0_init` contra producción.
-3. Cambiar `preDeployCommand` a `npx prisma migrate deploy`.
-4. A partir de ahí, cada cambio de esquema genera migración revisable en PR.
+- **Todo cambio de `prisma/schema.prisma` debe venir con su migración**:
+  `npx prisma migrate dev --name <cambio>` en local (necesita un Postgres de
+  desarrollo) y el SQL generado se revisa en el PR como cualquier código.
+- Los renames/retypes ahora son posibles vía SQL revisado, pero siguen
+  mereciendo el patrón de dos fases para cambios grandes con datos.
+- Nunca editar a mano una migración ya aplicada en producción; corregir con
+  una migración nueva.
+- `0_init` es el baseline congelado del esquema al 2026-07-04; no se toca.
 
 ## 3. Variables de entorno críticas
 
