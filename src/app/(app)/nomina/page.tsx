@@ -17,6 +17,7 @@ import {
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
 import ValidacionCalculo from "./ValidacionCalculo";
+import ImssPagosCard from "./ImssPagosCard";
 import { Building2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 // Server constant — en cliente aplica el default (el override por env sólo
@@ -235,6 +236,9 @@ export default function NominaPage() {
               )}
             </Card>
           </div>
+
+          {/* cuotas IMSS (SIPARE): estimado del periodo con vencimiento en curso + registro del pago */}
+          <ImssPagosCard companyId={activeCompany.id} />
 
           {/* recordatorio enteramiento */}
           <div className="flex items-start gap-3 rounded-card border border-cos-line bg-cos-card px-5 py-4 text-[13.5px] leading-relaxed text-cos-ink-soft">

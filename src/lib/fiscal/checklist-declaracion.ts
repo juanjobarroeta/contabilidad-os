@@ -5,6 +5,7 @@ import {
   detectComplementosRecibidosPendientes,
 } from "../complementos";
 import { calcularVencimiento } from "../obligaciones";
+import { bimestreDe } from "./imss-pagos";
 import { formatCurrency } from "../utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,6 +77,18 @@ export interface ChecklistInputs {
   isrPagar: number | null;
   diot: { aplica: boolean; generada: boolean; presentada: boolean };
   nomina: { tieneEmpleados: boolean; corridasDelMes: number; timbradasDelMes: number };
+  /**
+   * Cuotas IMSS (SIPARE) del periodo. `aplica` = hay empleados activos o
+   * corridas de nómina en el mes. El estimado sale de la nómina timbrada (el
+   * SUA da la cifra exacta). `bimestre` sólo viene en meses que CIERRAN
+   * bimestre (feb, abr, jun, ago, oct, dic): RCV + Infonavit.
+   */
+  imss: {
+    aplica: boolean;
+    estimadoMensual: number;
+    pagadaMensual: boolean;
+    bimestre: { etiqueta: string; estimado: number; pagada: boolean } | null;
+  };
   declaracionGuardada: boolean;
   declaracionPresentada: boolean;
 }
@@ -261,7 +274,44 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
     accionUrl: n.tieneEmpleados ? "/nomina" : undefined,
   });
 
-  // 9. Declaración del periodo guardada / presentada.
+  // 9. Cuotas IMSS (SIPARE) — mensuales (obrero-patronales, día 17 del mes
+  // siguiente) y, en meses que cierran bimestre, RCV + Infonavit (LSS Art. 39).
+  // El monto mostrado es un ESTIMADO desde la nómina timbrada; el SUA determina
+  // la cifra exacta y el usuario la ajusta al registrar el pago.
+  const im = i.imss;
+  const diasImss = diasParaFechaLimite(i.fechaLimite, i.hoy);
+  const imssPendiente = !im.pagadaMensual || (im.bimestre != null && !im.bimestre.pagada);
+  const imssEstado: ChecklistEstado = !im.aplica
+    ? "no-aplica"
+    : !imssPendiente
+      ? "listo"
+      : diasImss < 0
+        ? "atencion"
+        : "pendiente";
+  const bimTxt = im.bimestre
+    ? im.bimestre.pagada
+      ? ` El bimestre ${im.bimestre.etiqueta} (RCV e Infonavit) ya está pagado.`
+      : ` Además cierra el bimestre ${im.bimestre.etiqueta}: RCV e Infonavit (estimado ${formatCurrency(im.bimestre.estimado)}, sin la aportación patronal de vivienda) vencen la misma fecha.`
+    : "";
+  items.push({
+    clave: "cuotas-imss",
+    titulo: "Cuotas IMSS (SIPARE)",
+    estado: imssEstado,
+    detalle: !im.aplica
+      ? "La empresa no tiene empleados activos ni nómina en el mes; no hay cuotas IMSS que enterar."
+      : !imssPendiente
+        ? `Las cuotas IMSS del periodo están pagadas.${bimTxt}`
+        : (im.pagadaMensual
+            ? "Las cuotas IMSS mensuales ya están pagadas."
+            : `Cuotas IMSS del mes: ${formatCurrency(im.estimadoMensual)} estimado desde tu nómina timbrada — el SUA determina la cifra exacta.`) +
+          bimTxt +
+          (diasImss < 0
+            ? ` La fecha límite (${fmtFechaLarga(i.fechaLimite)}) ya venció; paga cuanto antes con tu línea de captura SIPARE para limitar actualización y recargos.`
+            : ` Vence el ${fmtFechaLarga(i.fechaLimite)}; registra el pago con tu línea de captura SIPARE.`),
+    accionUrl: im.aplica ? "/nomina" : undefined,
+  });
+
+  // 10. Declaración del periodo guardada / presentada.
   items.push({
     clave: "declaracion-periodo",
     titulo: "Declaración del periodo",
@@ -274,7 +324,7 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
     accionUrl: linkMes,
   });
 
-  // 10. Fecha límite (día 17 del mes siguiente, en día hábil).
+  // 11. Fecha límite (día 17 del mes siguiente, en día hábil).
   const dias = diasParaFechaLimite(i.fechaLimite, i.hoy);
   const fechaTxt = fmtFechaLarga(i.fechaLimite);
   items.push({
@@ -311,6 +361,12 @@ export async function checklistDeclaracion(
   const periodo = `${year}-${String(month).padStart(2, "0")}`;
   const from = new Date(year, month - 1, 1);
   const to = new Date(year, month, 1);
+  // Bimestre IMSS: en meses de cierre (feb, abr, …, dic) el renglón de cuotas
+  // incluye RCV + Infonavit del bimestre. Su fila IMSS_BIMESTRAL se llavea con
+  // el MISMO periodo (el mes de cierre), así cabe en la consulta de declRows.
+  const bimImss = bimestreDe(year, month);
+  const fromBimestre = new Date(year, bimImss.meses[0] - 1, 1);
+  const NOMINA_RUN_STATUSES = ["CALCULATED", "STAMPED", "PAID"] as const;
 
   const [
     pos,
@@ -323,6 +379,8 @@ export async function checklistDeclaracion(
     empleadosActivos,
     corridasNomina,
     companyRow,
+    imssSumsMes,
+    imssSumsBimestre,
   ] = await Promise.all([
     // La MISMA llamada que alimenta la página de impuestos y el asistente —
     // incluye las advertencias de cadena de declaraciones rota.
@@ -344,7 +402,7 @@ export async function checklistDeclaracion(
       where: {
         companyId,
         periodo,
-        tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR", "DIOT"] },
+        tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR", "DIOT", "IMSS_MENSUAL", "IMSS_BIMESTRAL"] },
       },
       select: { tipo: true, status: true },
     }),
@@ -357,6 +415,23 @@ export async function checklistDeclaracion(
       where: { id: companyId },
       select: { aperturaConfirmadaAt: true },
     }),
+    // Estimado de cuotas IMSS del mes (mismos estatus de corrida que el GET de
+    // /api/impuestos, para que la cifra coincida con la tarjeta de nómina).
+    prisma.payrollItem.aggregate({
+      where: {
+        payrollRun: { companyId, status: { in: [...NOMINA_RUN_STATUSES] }, fechaPago: { gte: from, lt: to } },
+      },
+      _sum: { imssObrero: true, imssPatronal: true },
+    }),
+    // Infonavit del bimestre — sólo en meses que cierran bimestre.
+    bimImss.cierraBimestre
+      ? prisma.payrollItem.aggregate({
+          where: {
+            payrollRun: { companyId, status: { in: [...NOMINA_RUN_STATUSES] }, fechaPago: { gte: fromBimestre, lt: to } },
+          },
+          _sum: { infonavit: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   // Cobertura del SAT para el periodo: mismas semánticas que getSatSyncStatus
@@ -380,6 +455,24 @@ export async function checklistDeclaracion(
 
   const corridas = corridasNomina.length;
   const timbradas = corridasNomina.filter((r) => r.status === "STAMPED" || r.status === "PAID").length;
+
+  // Cuotas IMSS (SIPARE): pagada = fila con status PAID. El estimado es un
+  // redondeo a centavos de los agregados de nómina.
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const imssMensualDecl = declOf("IMSS_MENSUAL");
+  const imssBimestralDecl = declOf("IMSS_BIMESTRAL");
+  const imss: ChecklistInputs["imss"] = {
+    aplica: empleadosActivos > 0 || corridas > 0,
+    estimadoMensual: r2((imssSumsMes._sum.imssObrero ?? 0) + (imssSumsMes._sum.imssPatronal ?? 0)),
+    pagadaMensual: imssMensualDecl?.status === "PAID",
+    bimestre: bimImss.cierraBimestre
+      ? {
+          etiqueta: bimImss.etiqueta,
+          estimado: r2(imssSumsBimestre?._sum.infonavit ?? 0),
+          pagada: imssBimestralDecl?.status === "PAID",
+        }
+      : null,
+  };
 
   const fechaLimite = fechaLimiteDeclaracion(year, month);
 
@@ -414,6 +507,7 @@ export async function checklistDeclaracion(
       corridasDelMes: corridas,
       timbradasDelMes: timbradas,
     },
+    imss,
     declaracionGuardada: federalDecl != null && GUARDADA_STATUSES.includes(federalDecl.status),
     declaracionPresentada: federalDecl != null && PRESENTADA_STATUSES.includes(federalDecl.status),
   };

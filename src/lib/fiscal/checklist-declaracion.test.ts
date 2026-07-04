@@ -31,6 +31,8 @@ function baseInputs(overrides: Partial<ChecklistInputs> = {}): ChecklistInputs {
     isrPagar: 8300,
     diot: { aplica: true, generada: true, presentada: true },
     nomina: { tieneEmpleados: true, corridasDelMes: 2, timbradasDelMes: 2 },
+    // mayo NO cierra bimestre → sin bloque bimestral en la base.
+    imss: { aplica: true, estimadoMensual: 15200.4, pagadaMensual: true, bimestre: null },
     declaracionGuardada: true,
     declaracionPresentada: true,
     ...overrides,
@@ -46,7 +48,7 @@ function item(items: ChecklistItem[], clave: string): ChecklistItem {
 describe("decidirChecklist — empresa limpia", () => {
   it("todo listo cuando datos completos, conciliado, complementado y presentada", () => {
     const items = decidirChecklist(baseInputs());
-    expect(items.length).toBe(11);
+    expect(items.length).toBe(12);
     for (const it of items) {
       expect(it.estado, `item ${it.clave}`).toBe("listo");
     }
@@ -64,6 +66,7 @@ describe("decidirChecklist — empresa limpia", () => {
       "posicion-calculada",
       "diot",
       "nomina",
+      "cuotas-imss",
       "declaracion-periodo",
       "fecha-limite",
     ]);
@@ -234,6 +237,102 @@ describe("decidirChecklist — nómina", () => {
     );
     expect(nom.estado).toBe("pendiente");
     expect(nom.detalle).toContain("2 de 3");
+  });
+});
+
+describe("decidirChecklist — cuotas IMSS (SIPARE)", () => {
+  it("sin empleados ni nómina → no-aplica, sin link", () => {
+    const im = item(
+      decidirChecklist(
+        baseInputs({ imss: { aplica: false, estimadoMensual: 0, pagadaMensual: false, bimestre: null } })
+      ),
+      "cuotas-imss"
+    );
+    expect(im.estado).toBe("no-aplica");
+    expect(im.detalle).toContain("no hay cuotas IMSS");
+    expect(im.accionUrl).toBeUndefined();
+  });
+
+  it("nómina timbrada sin pago registrado y antes del 17 → pendiente con estimado y fecha", () => {
+    const im = item(
+      decidirChecklist(
+        baseInputs({ imss: { aplica: true, estimadoMensual: 15200.4, pagadaMensual: false, bimestre: null } })
+      ),
+      "cuotas-imss"
+    );
+    expect(im.estado).toBe("pendiente");
+    expect(im.detalle).toContain("15,200.40");
+    expect(im.detalle).toContain("estimado desde tu nómina timbrada");
+    expect(im.detalle).toContain("17 de junio de 2026");
+    expect(im.detalle).toContain("SIPARE");
+    expect(im.accionUrl).toBe("/nomina");
+  });
+
+  it("sin pago y ya vencida → escala a atención con recargos", () => {
+    const im = item(
+      decidirChecklist(
+        baseInputs({
+          hoy: new Date(2026, 5, 20), // 20 jun > 17 jun
+          imss: { aplica: true, estimadoMensual: 9000, pagadaMensual: false, bimestre: null },
+        })
+      ),
+      "cuotas-imss"
+    );
+    expect(im.estado).toBe("atencion");
+    expect(im.detalle).toContain("ya venció");
+    expect(im.detalle).toContain("recargos");
+  });
+
+  it("pago mensual registrado (PAID) → listo", () => {
+    const im = item(decidirChecklist(baseInputs()), "cuotas-imss");
+    expect(im.estado).toBe("listo");
+    expect(im.detalle).toContain("pagadas");
+  });
+
+  it("mes de cierre de bimestre: mensual pagada pero bimestral pendiente → sigue pendiente con RCV e Infonavit", () => {
+    const im = item(
+      decidirChecklist(
+        baseInputs({
+          month: 6,
+          fechaLimite: fechaLimiteDeclaracion(2026, 6),
+          hoy: new Date(2026, 6, 10),
+          imss: {
+            aplica: true,
+            estimadoMensual: 15200.4,
+            pagadaMensual: true,
+            bimestre: { etiqueta: "mayo-junio de 2026", estimado: 4300, pagada: false },
+          },
+        })
+      ),
+      "cuotas-imss"
+    );
+    expect(im.estado).toBe("pendiente");
+    expect(im.detalle).toContain("mensuales ya están pagadas");
+    expect(im.detalle).toContain("mayo-junio de 2026");
+    expect(im.detalle).toContain("RCV e Infonavit");
+    expect(im.detalle).toContain("4,300");
+  });
+
+  it("mes de cierre con mensual y bimestral pagadas → listo mencionando el bimestre", () => {
+    const im = item(
+      decidirChecklist(
+        baseInputs({
+          month: 6,
+          fechaLimite: fechaLimiteDeclaracion(2026, 6),
+          hoy: new Date(2026, 6, 10),
+          imss: {
+            aplica: true,
+            estimadoMensual: 15200.4,
+            pagadaMensual: true,
+            bimestre: { etiqueta: "mayo-junio de 2026", estimado: 4300, pagada: true },
+          },
+        })
+      ),
+      "cuotas-imss"
+    );
+    expect(im.estado).toBe("listo");
+    expect(im.detalle).toContain("mayo-junio de 2026");
+    expect(im.detalle).toContain("ya está pagado");
   });
 });
 

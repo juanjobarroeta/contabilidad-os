@@ -327,6 +327,11 @@ export const TIPO_DESC: Record<string, string> = {
   ISR_ANUAL: "ISR del ejercicio",
   DIOT: "DIOT mensual",
   RETENCIONES_ISR: "Retenciones de ISR",
+  // Cuotas IMSS (SIPARE) — no derivan del régimen SAT sino de tener nómina:
+  // obrero-patronales mensuales y RCV + Infonavit bimestrales (LSS Art. 39),
+  // ambas con vencimiento el día 17 (defaultConfigForTipo ya las resuelve).
+  IMSS_MENSUAL: "Cuotas IMSS mensuales (SIPARE)",
+  IMSS_BIMESTRAL: "RCV e Infonavit bimestral (SIPARE)",
 };
 
 /** Best-effort config for an obligation tipo not present in the régimen map. */

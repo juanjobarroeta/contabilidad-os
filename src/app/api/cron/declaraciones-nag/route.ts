@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notifyDeclaracionesFaltantes } from "@/lib/notify-declaraciones";
+import { notifyImssPago } from "@/lib/notify-imss";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/declaraciones-nag
@@ -8,6 +9,10 @@ import { notifyDeclaracionesFaltantes } from "@/lib/notify-declaraciones";
 // Recordatorio AGREGADO de acuses de declaración faltantes: un solo push por
 // usuario suscrito (= por despacho, en la práctica; el operador recibe uno con
 // todas sus empresas). Pensado para correr entre semana mientras falten datos.
+//
+// Incluye además el recordatorio de pago de cuotas IMSS (SIPARE): desde T-5
+// antes del día 17 y por empresa con nómina timbrada sin pago registrado, con
+// dedupe fechado `imss-pago:<companyId>:<periodo>:<fecha>` (ver notify-imss).
 //
 // Auth: CRON_SECRET (Bearer o x-cron-secret), igual que los otros crons.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,8 +40,11 @@ async function handle(req: Request) {
     distinct: ["userId"],
   });
 
+  const hoy = new Date();
   let usuariosNotificados = 0;
   let pushesEnviados = 0;
+  let imssEmpresas = 0;
+  let imssPushes = 0;
   for (const { userId } of subs) {
     try {
       const r = await notifyDeclaracionesFaltantes(userId);
@@ -47,9 +55,25 @@ async function handle(req: Request) {
     } catch (e) {
       console.error(`[cron/declaraciones-nag] user ${userId} failed:`, e);
     }
+    try {
+      // Cuotas IMSS (SIPARE) debidas: dedupe fechado por empresa dentro de
+      // notify-imss — seguro de re-correr varias veces al día.
+      const imss = await notifyImssPago(userId, hoy);
+      imssEmpresas += imss.empresas;
+      imssPushes += imss.notified;
+    } catch (e) {
+      console.error(`[cron/declaraciones-nag] imss user ${userId} failed:`, e);
+    }
   }
 
-  const summary = { ok: true, usuariosConsiderados: subs.length, usuariosNotificados, pushesEnviados };
+  const summary = {
+    ok: true,
+    usuariosConsiderados: subs.length,
+    usuariosNotificados,
+    pushesEnviados,
+    imssEmpresas,
+    imssPushes,
+  };
   console.log("[cron/declaraciones-nag] done:", JSON.stringify(summary));
   return NextResponse.json(summary);
 }
