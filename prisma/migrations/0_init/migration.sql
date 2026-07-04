@@ -1,6 +1,11 @@
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
+-- Extensiones requeridas. pgvector alimenta el embedding de FiscalChunk
+-- (base de conocimiento fiscal). En producción ya está instalada (npm run
+-- fiscal:setup); IF NOT EXISTS la hace idempotente para entornos nuevos.
+CREATE EXTENSION IF NOT EXISTS "vector";
+
 -- CreateEnum
 CREATE TYPE "SubscriptionStatus" AS ENUM ('TRIALING', 'ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED');
 
