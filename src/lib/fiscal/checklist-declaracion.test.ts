@@ -336,6 +336,45 @@ describe("decidirChecklist — cuotas IMSS (SIPARE)", () => {
   });
 });
 
+describe("decidirChecklist — ajuste anual de ISR de sueldos (Art. 97 LISR)", () => {
+  // Diciembre es el mes donde se practica el ajuste (la diferencia a favor se
+  // compensa contra la retención de diciembre; la a cargo se retiene ahí y se
+  // entera a más tardar en febrero). En v1 el punto es INFORMATIVO: sin
+  // persistencia de "ajuste aplicado" siempre aparece pendiente con la liga.
+  const diciembre = (overrides: Partial<ChecklistInputs> = {}) =>
+    baseInputs({
+      month: 12,
+      fechaLimite: fechaLimiteDeclaracion(2026, 12),
+      hoy: new Date(2027, 0, 5),
+      ...overrides,
+    });
+
+  it("sólo aparece en diciembre", () => {
+    const claves = decidirChecklist(baseInputs()).map((i) => i.clave); // mayo
+    expect(claves).not.toContain("ajuste-anual");
+    const clavesDic = decidirChecklist(diciembre()).map((i) => i.clave);
+    expect(clavesDic).toContain("ajuste-anual");
+  });
+
+  it("con empleados → pendiente (informativo) con liga al reporte del ejercicio", () => {
+    const it12 = item(decidirChecklist(diciembre()), "ajuste-anual");
+    expect(it12.estado).toBe("pendiente");
+    expect(it12.detalle).toContain("Art. 97");
+    expect(it12.detalle).toContain("febrero");
+    expect(it12.accionUrl).toBe("/nomina/ajuste-anual?ejercicio=2026");
+  });
+
+  it("sin empleados ni corridas en el mes → no aplica", () => {
+    const it12 = item(
+      decidirChecklist(
+        diciembre({ nomina: { tieneEmpleados: false, corridasDelMes: 0, timbradasDelMes: 0 } })
+      ),
+      "ajuste-anual"
+    );
+    expect(it12.estado).toBe("no-aplica");
+  });
+});
+
 describe("decidirChecklist — fecha límite y declaración", () => {
   it("no presentada y antes del vencimiento → pendiente con días restantes", () => {
     const inputs = baseInputs({ declaracionPresentada: false, declaracionGuardada: false });

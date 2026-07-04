@@ -274,6 +274,27 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
     accionUrl: n.tieneEmpleados ? "/nomina" : undefined,
   });
 
+  // 8b. Ajuste anual de ISR de sueldos (Art. 97 LISR) — SÓLO en diciembre:
+  // es el mes donde el ajuste se materializa (la diferencia a favor se
+  // compensa contra la retención de DICIEMBRE y la diferencia a cargo se
+  // retiene ahí para enterarse a más tardar en febrero — Art. 97, cuarto
+  // párrafo). Punto INFORMATIVO en v1: no hay persistencia de "ajuste
+  // aplicado", así que siempre aparece pendiente con liga al reporte; un
+  // estado "listo" real requiere la fase 2 (aplicar el ajuste a la corrida
+  // de diciembre y registrarlo).
+  if (i.month === 12) {
+    const aplicaAjuste = n.tieneEmpleados || n.corridasDelMes > 0;
+    items.push({
+      clave: "ajuste-anual",
+      titulo: "Ajuste anual de ISR de sueldos",
+      estado: aplicaAjuste ? "pendiente" : "no-aplica",
+      detalle: aplicaAjuste
+        ? "Diciembre es el mes del ajuste anual (Art. 97 LISR): recalcula el ISR del ejercicio de cada trabajador con la tarifa anual y compáralo contra lo retenido. La diferencia a cargo se retiene en diciembre y se entera a más tardar en febrero; la diferencia a favor se compensa contra la retención de diciembre y las siguientes. Revisa el reporte por trabajador."
+        : "La empresa no tiene empleados activos ni nómina en el mes; no hay ajuste anual de ISR que calcular.",
+      accionUrl: aplicaAjuste ? `/nomina/ajuste-anual?ejercicio=${i.year}` : undefined,
+    });
+  }
+
   // 9. Cuotas IMSS (SIPARE) — mensuales (obrero-patronales, día 17 del mes
   // siguiente) y, en meses que cierran bimestre, RCV + Infonavit (LSS Art. 39).
   // El monto mostrado es un ESTIMADO desde la nómina timbrada; el SUA determina
