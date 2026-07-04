@@ -6,8 +6,18 @@ import type { Employee, PayrollRunType } from "@prisma/client";
 import { calcularIsrRetenido } from "./isr";
 import { calcularImss, type ImssCalcResult } from "./imss";
 import { calcularInfonavit } from "./infonavit";
-import { calcularAguinaldo, calcularVacaciones, type AguinaldoResult, type VacacionesResult } from "./prestaciones";
+import {
+  calcularAguinaldo,
+  calcularVacaciones,
+  calcularHorasExtra,
+  calcularPrimaVacacionalPorDias,
+  type AguinaldoResult,
+  type VacacionesResult,
+  type HorasExtraResult,
+} from "./prestaciones";
 import { calcularPtu, type PtuDistribucion } from "./ptu";
+import type { IncidenciasResumen } from "./incidencias";
+import { umaDiariaDelEjercicio, salarioMinimoGeneralDelEjercicio } from "./constants";
 
 function r2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -46,6 +56,12 @@ export type NominaCalcInput = {
   // For PTU (single-employee slice from calcularPtu)
   ptuMonto?: number;
   ptuExento?: number;
+  /**
+   * Incidencias del periodo (sólo ORDINARIA/EXTRAORDINARIA): faltas,
+   * incapacidades, horas extra, vacaciones, bonos, comisiones y descuentos.
+   * Ver src/lib/nomina/incidencias.ts para el tratamiento por tipo.
+   */
+  incidencias?: IncidenciasResumen;
 };
 
 export type NominaCalcResult = {
@@ -62,6 +78,14 @@ export type NominaCalcResult = {
   imssPatronal: number;
   infonavitDeduccion: number;
   tipoNomina: "O" | "E"; // Ordinaria vs Extraordinaria
+  /**
+   * Días efectivamente pagados del periodo tras descontar faltas e
+   * incapacidades. Sin incidencias es igual a diasPagados. Es el número de
+   * días que debe reportar el CFDI (num_dias_pagados) y con el que cotiza IMSS.
+   */
+  diasEfectivos: number;
+  /** Desglose de horas extra del periodo (cuando hubo). */
+  horasExtraResult?: HorasExtraResult;
   // Extraordinary details
   aguinaldoResult?: AguinaldoResult;
   vacacionesResult?: VacacionesResult;
@@ -76,15 +100,42 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
   const tipoNomina: "O" | "E" =
     tipo === "ORDINARIA" ? "O" : "E";
 
+  // ── Incidencias del periodo (sólo nómina de sueldo) ──
+  const inc = (tipo === "ORDINARIA" || tipo === "EXTRAORDINARIA") ? input.incidencias : undefined;
+
+  // Días NO pagados del periodo:
+  // - Faltas y permisos sin goce: no generan salario (Art. 82 LFT — el salario
+  //   retribuye el trabajo prestado).
+  // - Incapacidades: el patrón no paga esos días; el subsidio lo cubre el IMSS
+  //   (enfermedad general desde el 4o día, Art. 96 LSS; riesgo de trabajo y
+  //   maternidad al 100% desde el día 1, Arts. 58 y 101 LSS). SIMPLIFICACIÓN
+  //   DOCUMENTADA: todos los días de incapacidad capturados se tratan como no
+  //   pagados por el patrón y quedan fuera de la base de ISR; los 3 días de
+  //   espera de enfermedad general (sin subsidio IMSS) sólo se pagan si el
+  //   contrato lo pacta — en tal caso capturarlos como PERMISO_CON_GOCE.
+  // Los días de VACACIONES no reducen nada: se pagan como sueldo normal.
+  const diasNoPagados = Math.min(
+    diasPagados,
+    (inc?.diasFalta ?? 0) + (inc?.diasIncapacidad ?? 0)
+  );
+  // Días efectivos: base del sueldo, del CFDI (num_dias_pagados) y de la
+  // cotización IMSS/INFONAVIT del periodo. SIMPLIFICACIÓN DOCUMENTADA (IMSS):
+  // se reducen TODOS los ramos proporcionalmente; en estricto, por faltas
+  // subsiste la cuota fija de EyM hasta 7 días/mes (Art. 31 fracc. I LSS) y en
+  // incapacidades subsiste sólo el ramo de Retiro (Art. 31 fracc. IV LSS) —
+  // el ajuste fino lo aplica SUA al determinar las cuotas definitivas.
+  const diasEfectivos = diasPagados - diasNoPagados;
+
   // ── Percepciones ──
   const percepciones: PercepcionItem[] = [];
   let totalGravado = 0;
   let totalExento = 0;
   let aguinaldoResult: AguinaldoResult | undefined;
   let vacacionesResult: VacacionesResult | undefined;
+  let horasExtraResult: HorasExtraResult | undefined;
 
   if (tipo === "ORDINARIA" || tipo === "EXTRAORDINARIA") {
-    const sueldoBruto = input.sueldoBruto ?? r2(employee.salarioDiario * diasPagados);
+    const sueldoBruto = input.sueldoBruto ?? r2(employee.salarioDiario * diasEfectivos);
     percepciones.push({
       tipoPercepcion: "001",
       clave: "001",
@@ -93,6 +144,95 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
       importeExento: 0,
     });
     totalGravado = sueldoBruto;
+
+    // Valores UMA/SM del ejercicio de pago (año-conscientes, como ISR/IMSS);
+    // si el ejercicio no está versionado se usan los vigentes de constants.
+    const ejercicio = input.ejercicio ?? new Date().getFullYear();
+    const umaEjercicio = umaDiariaDelEjercicio(ejercicio) ?? undefined;
+    const smEjercicio = salarioMinimoGeneralDelEjercicio(ejercicio) ?? undefined;
+
+    // Horas extra: dobles con exención del Art. 93 fracc. I LISR (100% para
+    // salario mínimo; 50% con tope 5 UMA/semana para los demás), triples 100%
+    // gravadas. Ver calcularHorasExtra (prestaciones.ts) para la base legal y
+    // la aproximación semanal documentada.
+    // NOTA SBC (simplificación documentada): el tiempo extraordinario dentro
+    // de los márgenes de la LFT NO integra el SBC (Art. 27 fracc. IX LSS); el
+    // excedente habitual y los bonos/comisiones recurrentes sí integran como
+    // elemento variable (Arts. 27 y 30 LSS) mediante la modificación
+    // bimestral de salario — eso se administra en la ficha del empleado y los
+    // movimientos IMSS, no en el cálculo del periodo.
+    if (inc && (inc.horasExtraDobles > 0 || inc.horasExtraTriples > 0)) {
+      horasExtraResult = calcularHorasExtra({
+        salarioDiario: employee.salarioDiario,
+        horasDobles: inc.horasExtraDobles,
+        horasTriples: inc.horasExtraTriples,
+        diasPeriodo: diasPagados,
+        umaDiaria: umaEjercicio,
+        salarioMinimoDiario: smEjercicio,
+      });
+      if (horasExtraResult.montoTotal > 0) {
+        percepciones.push({
+          tipoPercepcion: "019", // c_TipoPercepcion 019 — Horas extra
+          clave: "019",
+          concepto: "Horas Extra",
+          importeGravado: horasExtraResult.montoGravado,
+          importeExento: horasExtraResult.montoExento,
+        });
+        totalGravado = r2(totalGravado + horasExtraResult.montoGravado);
+        totalExento = r2(totalExento + horasExtraResult.montoExento);
+      }
+    }
+
+    // Vacaciones tomadas en el periodo: los días se pagan como sueldo normal
+    // (ya vienen dentro de diasEfectivos); lo que se agrega es la prima
+    // vacacional del 25% (Art. 80 LFT) con exención de 15 UMA (Art. 93
+    // fracc. XIV LISR).
+    if (inc && inc.diasVacaciones > 0) {
+      const prima = calcularPrimaVacacionalPorDias({
+        salarioDiario: employee.salarioDiario,
+        diasVacaciones: inc.diasVacaciones,
+        primaVacacionalPct: input.primaVacacionalPct,
+        umaDiaria: umaEjercicio,
+      });
+      if (prima.monto > 0) {
+        percepciones.push({
+          tipoPercepcion: "021", // c_TipoPercepcion 021 — Prima vacacional
+          clave: "021",
+          concepto: "Prima Vacacional",
+          importeGravado: prima.gravada,
+          importeExento: prima.exenta,
+        });
+        totalGravado = r2(totalGravado + prima.gravada);
+        totalExento = r2(totalExento + prima.exenta);
+      }
+    }
+
+    // Bonos / gratificaciones / destajo: 100% gravados — son ingresos por la
+    // prestación de un servicio personal subordinado (Art. 94 LISR) sin
+    // exención en el Art. 93; tributan con la tarifa ordinaria del periodo
+    // (Art. 96 LISR).
+    if (inc && inc.bonos > 0) {
+      percepciones.push({
+        tipoPercepcion: "038", // c_TipoPercepcion 038 — Otros ingresos por salarios
+        clave: "038",
+        concepto: "Bono / Gratificación",
+        importeGravado: r2(inc.bonos),
+        importeExento: 0,
+      });
+      totalGravado = r2(totalGravado + inc.bonos);
+    }
+
+    // Comisiones: mismo tratamiento — 100% gravadas (Arts. 94 y 96 LISR).
+    if (inc && inc.comisiones > 0) {
+      percepciones.push({
+        tipoPercepcion: "028", // c_TipoPercepcion 028 — Comisiones
+        clave: "028",
+        concepto: "Comisiones",
+        importeGravado: r2(inc.comisiones),
+        importeExento: 0,
+      });
+      totalGravado = r2(totalGravado + inc.comisiones);
+    }
 
   } else if (tipo === "AGUINALDO") {
     aguinaldoResult = calcularAguinaldo({
@@ -174,10 +314,12 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     });
   }
 
-  // IMSS — only on ORDINARIA
+  // IMSS — only on ORDINARIA. Cotiza sobre los días EFECTIVOS del periodo:
+  // las faltas e incapacidades reducen los días de cotización (Art. 31 LSS;
+  // ver simplificación documentada arriba — todos los ramos proporcionales).
   const imssCalc = calcularImss({
     salarioBaseCotizacion: sdi,
-    diasPagados,
+    diasPagados: diasEfectivos,
     riesgoPuesto: employee.riesgoPuesto,
     // Columna del ejercicio para la CEAV patronal progresiva (DOF 16-dic-2020).
     ejercicio: input.ejercicio,
@@ -191,14 +333,14 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     });
   }
 
-  // Infonavit — only on ORDINARIA
+  // Infonavit — only on ORDINARIA. Igual que IMSS, sobre días efectivos.
   let infonavitDeduccion = 0;
   if (tipo === "ORDINARIA") {
     infonavitDeduccion = calcularInfonavit({
       tipoDescuento: employee.tipoDescuentoInfonavit ?? null,
       descuentoInfonavit: employee.descuentoInfonavit ?? null,
       salarioBaseCotizacion: sdi,
-      diasPagados,
+      diasPagados: diasEfectivos,
     });
     if (infonavitDeduccion > 0) {
       deducciones.push({
@@ -208,6 +350,18 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
         importe: infonavitDeduccion,
       });
     }
+  }
+
+  // Descuentos capturados (préstamos, uniformes, etc.): deducción NETA
+  // post-impuestos — no altera la base gravable de ISR ni el SBC/días de
+  // cotización IMSS; sólo reduce el neto a pagar. c_TipoDeduccion 004 (Otros).
+  if (inc && inc.descuentos > 0) {
+    deducciones.push({
+      tipoDeduccion: "004",
+      clave: "004",
+      concepto: "Otros descuentos",
+      importe: r2(inc.descuentos),
+    });
   }
 
   const totalDeducciones = r2(deducciones.reduce((s, d) => s + d.importe, 0));
@@ -226,6 +380,8 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     imssPatronal: imssCalc.patronal.total,
     infonavitDeduccion,
     tipoNomina,
+    diasEfectivos,
+    horasExtraResult,
     aguinaldoResult,
     vacacionesResult,
   };

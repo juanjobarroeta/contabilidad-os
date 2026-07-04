@@ -4,6 +4,7 @@
 
 import {
   UMA_DIARIO,
+  SALARIO_MINIMO_GENERAL,
   DIAS_AGUINALDO_MINIMO,
   AGUINALDO_EXENTO_UMA,
   PRIMA_VACACIONAL_PCT_MINIMO,
@@ -114,6 +115,146 @@ export function calcularVacaciones(input: VacacionesInput): VacacionesResult {
     montoPrimaVacacional,
     primaExenta,
     primaGravada,
+  };
+}
+
+// ─── Prima vacacional por días tomados en el periodo ─────────────────────────
+// Para la captura de incidencias: cuando el empleado toma vacaciones DENTRO de
+// una corrida ordinaria, los días de vacaciones se pagan como sueldo normal
+// (sin cambio) y lo que se agrega es la prima vacacional de esos días.
+//
+// Base legal:
+// - Prima vacacional: mínimo 25% sobre el salario de los días de vacaciones
+//   (Art. 80 LFT).
+// - Exención ISR: hasta 15 UMA diarias por la prima vacacional pagada
+//   (Art. 93 fracc. XIV LISR). La exención aplica POR PAGO de prima; aquí se
+//   aplica completa al pago del periodo — si la empresa fracciona la prima en
+//   varios periodos, la exención podría duplicarse (simplificación documentada;
+//   el criterio conservador es pagar la prima en una sola exhibición).
+
+export type PrimaVacacionalPorDiasInput = {
+  salarioDiario: number;
+  diasVacaciones: number;
+  primaVacacionalPct?: number; // default 0.25 (Art. 80 LFT)
+  /** UMA diaria a usar para la exención. Default: la vigente (constants). */
+  umaDiaria?: number;
+};
+
+export type PrimaVacacionalPorDiasResult = {
+  monto: number;
+  exenta: number;
+  gravada: number;
+};
+
+export function calcularPrimaVacacionalPorDias(
+  input: PrimaVacacionalPorDiasInput
+): PrimaVacacionalPorDiasResult {
+  const pct = input.primaVacacionalPct ?? PRIMA_VACACIONAL_PCT_MINIMO;
+  const uma = input.umaDiaria ?? UMA_DIARIO;
+  const monto = r2(input.diasVacaciones * input.salarioDiario * pct);
+  // Exención: 15 × UMA diaria (Art. 93 fracc. XIV LISR).
+  const exenta = r2(Math.min(monto, PRIMA_VACACIONAL_EXENTO_UMA * uma));
+  const gravada = r2(Math.max(0, monto - exenta));
+  return { monto, exenta, gravada };
+}
+
+// ─── Horas extra: pago y exención ISR ────────────────────────────────────────
+// Base legal:
+// - LFT Art. 66: la jornada extraordinaria no puede exceder 3 horas diarias ni
+//   3 veces por semana (máximo 9 horas dobles a la semana).
+// - LFT Art. 67: las horas extra dentro de ese límite se pagan al 100%
+//   adicional (dobles).
+// - LFT Art. 68: las horas que excedan de 9 a la semana se pagan al 200%
+//   adicional (triples).
+// - LISR Art. 93 fracc. I:
+//   · Trabajadores de salario mínimo: 100% exentas las remuneraciones por
+//     tiempo extraordinario DENTRO del límite de la LFT.
+//   · Demás trabajadores: exento el 50% de esas remuneraciones (las que están
+//     dentro del límite LFT) SIN exceder 5 UMA por cada semana de servicios.
+//   · Las horas que exceden el límite legal (triples, o dobles fuera del
+//     límite) son 100% gravadas (último párrafo de la fracción).
+//
+// SIMPLIFICACIÓN DOCUMENTADA (aproximación estándar por periodo): la ley
+// controla el límite por SEMANA de servicios; en una captura por periodo
+// (quincena/mes) no se conoce la distribución semanal exacta. Se aproxima con
+// semanas = round(díasPeriodo / 7) (mínimo 1): el límite de dobles exentables
+// es 9 h × semanas y el tope de exención es 5 UMA × semanas. Las horas
+// capturadas como TRIPLES ya exceden el límite por definición (Art. 68) y se
+// gravan al 100%. La jornada se asume de 8 horas (máximo diurno, Art. 61 LFT)
+// para valuar la hora ordinaria.
+
+export type HorasExtraInput = {
+  salarioDiario: number;
+  /** Horas pagadas al doble (Art. 67 LFT). */
+  horasDobles: number;
+  /** Horas pagadas al triple (Art. 68 LFT — exceden el límite legal). */
+  horasTriples?: number;
+  /** Días del periodo de pago (para aproximar las semanas de servicios). */
+  diasPeriodo: number;
+  /** UMA diaria del ejercicio (tope 5 UMA/semana). Default: la vigente. */
+  umaDiaria?: number;
+  /** Salario mínimo diario aplicable (exención 100% a salario mínimo). Default: el general vigente. */
+  salarioMinimoDiario?: number;
+  /** Horas de la jornada diaria para valuar la hora ordinaria. Default: 8 (Art. 61 LFT). */
+  horasJornada?: number;
+};
+
+export type HorasExtraResult = {
+  /** Semanas de servicios aproximadas del periodo. */
+  semanas: number;
+  /** Horas dobles dentro del límite LFT (9 h/semana) — las únicas con exención. */
+  horasDoblesDentroLimite: number;
+  pagoDobles: number;
+  pagoTriples: number;
+  montoTotal: number;
+  montoExento: number;
+  montoGravado: number;
+  /** True si aplicó la exención del 100% por salario mínimo. */
+  exentoSalarioMinimo: boolean;
+};
+
+export function calcularHorasExtra(input: HorasExtraInput): HorasExtraResult {
+  const horasJornada = input.horasJornada ?? 8;
+  const uma = input.umaDiaria ?? UMA_DIARIO;
+  const salarioMinimo = input.salarioMinimoDiario ?? SALARIO_MINIMO_GENERAL;
+  const horasTriples = input.horasTriples ?? 0;
+
+  const valorHora = input.salarioDiario / horasJornada;
+  // Aproximación por periodo (ver nota arriba): semanas de servicios.
+  const semanas = Math.max(1, Math.round(input.diasPeriodo / 7));
+
+  // Límite LFT de jornada extraordinaria doble: 3 h/día × 3 veces/semana = 9 h
+  // por semana (Arts. 66-67 LFT). Sólo estas horas tienen exención de ISR.
+  const limiteDobles = 9 * semanas;
+  const horasDoblesDentroLimite = Math.min(input.horasDobles, limiteDobles);
+
+  const pagoDobles = r2(input.horasDobles * valorHora * 2);
+  const pagoTriples = r2(horasTriples * valorHora * 3);
+  const pagoDoblesDentroLimite = r2(horasDoblesDentroLimite * valorHora * 2);
+  const montoTotal = r2(pagoDobles + pagoTriples);
+
+  // Exención (Art. 93 fracc. I LISR):
+  const exentoSalarioMinimo = input.salarioDiario <= salarioMinimo;
+  let montoExento: number;
+  if (exentoSalarioMinimo) {
+    // Salario mínimo: 100% exento dentro del límite LFT.
+    montoExento = pagoDoblesDentroLimite;
+  } else {
+    // Demás trabajadores: 50% de lo pagado dentro del límite, con tope de
+    // 5 UMA por semana de servicios.
+    montoExento = r2(Math.min(0.5 * pagoDoblesDentroLimite, 5 * uma * semanas));
+  }
+  const montoGravado = r2(Math.max(0, montoTotal - montoExento));
+
+  return {
+    semanas,
+    horasDoblesDentroLimite,
+    pagoDobles,
+    pagoTriples,
+    montoTotal,
+    montoExento,
+    montoGravado,
+    exentoSalarioMinimo,
   };
 }
 

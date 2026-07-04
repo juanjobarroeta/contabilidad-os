@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { rangoDelPeriodo } from "@/lib/nomina/incidencias";
+import type { Incidencia } from "@prisma/client";
 
 type Params = { params: Promise<{ id: string }> };
 
 // GET /api/nomina/run/[id]
+// Incluye las incidencias del periodo de la corrida (ORDINARIA): alimentan el
+// chip de resumen y la captura por empleado en el detalle antes de timbrar.
 export async function GET(_req: Request, { params }: Params) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -25,7 +29,21 @@ export async function GET(_req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(session.user.id, run.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  return NextResponse.json(run);
+  // Incidencias cuya fecha cae dentro del periodo, de los empleados de la corrida.
+  let incidencias: Incidencia[] = [];
+  const rango = run.tipo === "ORDINARIA" ? rangoDelPeriodo(run.periodo) : null;
+  if (rango && run.items.length > 0) {
+    incidencias = await prisma.incidencia.findMany({
+      where: {
+        companyId: run.companyId,
+        employeeId: { in: run.items.map((i) => i.employeeId) },
+        fecha: { gte: rango.inicio, lte: rango.fin },
+      },
+      orderBy: { fecha: "asc" },
+    });
+  }
+
+  return NextResponse.json({ ...run, incidencias });
 }
 
 // DELETE /api/nomina/run/[id]

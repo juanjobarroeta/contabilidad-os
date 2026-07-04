@@ -10,7 +10,24 @@ import { recordTimbrado } from "../costos/record";
 import { calcularIsrRetenido } from "./isr";
 import { calcularImss } from "./imss";
 import { calcularInfonavit } from "./infonavit";
+import type { PercepcionItem, DeduccionItem } from "./calc-nomina";
 import type { Employee } from "@prisma/client";
+
+/**
+ * Desglose ya calculado por calcularNomina. Cuando se pasa, el CFDI se
+ * construye EXACTAMENTE con estas percepciones/deducciones (respetando la
+ * separación gravado/exento de horas extra, prima vacacional, etc.) en lugar
+ * de re-derivar una sola percepción de sueldo 100% gravada. Es la vía que usa
+ * el timbrado de corridas con incidencias — nunca se editan a mano los
+ * impuestos calculados.
+ */
+export type NominaDesglose = {
+  percepciones: PercepcionItem[];
+  deducciones: DeduccionItem[];
+  totalPercepciones: number;
+  totalDeducciones: number;
+  netoAPagar: number;
+};
 
 export type EmitNominaInput = {
   companyId: string;
@@ -21,6 +38,8 @@ export type EmitNominaInput = {
   fechaPago: Date;
   /** Sueldo bruto del periodo (gravable). Si no se pasa, se calcula como SBC × días. */
   sueldoBruto?: number;
+  /** Desglose precalculado (ver NominaDesglose). Tiene prioridad sobre sueldoBruto. */
+  desglose?: NominaDesglose;
 };
 
 export type EmitNominaResult = {
@@ -54,37 +73,101 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
   }
 
   // ── Cálculo de percepciones, deducciones, neto ────────────────────────
-  const sueldoBruto = input.sueldoBruto ?? +(employee.salarioDiario * input.diasPagados).toFixed(2);
   const sdi = employee.salarioDiarioIntegrado ?? employee.salarioDiario;
 
-  const isrCalc = calcularIsrRetenido({
-    baseGravable: sueldoBruto,
-    periodicidadPago: employee.periodicidadPago,
-    ejercicio: input.fechaPago.getFullYear(),
-    mes: input.fechaPago.getMonth() + 1,
-  });
-  const imssCalc = calcularImss({
-    salarioBaseCotizacion: sdi,
-    diasPagados: input.diasPagados,
-    riesgoPuesto: employee.riesgoPuesto,
-    // Columna del ejercicio para la CEAV patronal progresiva (DOF 16-dic-2020).
-    ejercicio: input.fechaPago.getFullYear(),
-  });
-  const imssObrero = imssCalc.obrero.total;
-  const imssPatronal = imssCalc.patronal.total;
-  const infonavitDeduccion = calcularInfonavit({
-    tipoDescuento: (employee as Employee & { tipoDescuentoInfonavit?: string | null }).tipoDescuentoInfonavit ?? null,
-    descuentoInfonavit: employee.descuentoInfonavit ?? null,
-    salarioBaseCotizacion: sdi,
-    diasPagados: input.diasPagados,
-  });
+  let totalPercepciones: number;
+  let totalDeducciones: number;
+  let netoAPagar: number;
+  // Percepciones/deducciones del complemento en el formato Facturapi.
+  let percepcionesCfdi: {
+    tipo_percepcion: string;
+    clave: string;
+    concepto: string;
+    importe_gravado: number;
+    importe_exento: number;
+  }[];
+  let deduccionesCfdi: {
+    tipo_deduccion: string;
+    clave: string;
+    concepto: string;
+    importe: number;
+  }[];
 
-  const totalPercepciones = sueldoBruto;
-  const totalDeducciones = +(isrCalc.isrRetenido + imssObrero + infonavitDeduccion).toFixed(2);
-  const netoAPagar = +(totalPercepciones - totalDeducciones).toFixed(2);
+  if (input.desglose) {
+    // Desglose precalculado por calcularNomina (corridas con incidencias):
+    // el CFDI refleja exactamente lo calculado — separación gravado/exento de
+    // horas extra (Art. 93 fracc. I LISR) y prima vacacional (fracc. XIV),
+    // bonos/comisiones gravados y descuentos netos incluidos.
+    totalPercepciones = input.desglose.totalPercepciones;
+    totalDeducciones = input.desglose.totalDeducciones;
+    netoAPagar = input.desglose.netoAPagar;
+    percepcionesCfdi = input.desglose.percepciones.map((p) => ({
+      tipo_percepcion: p.tipoPercepcion,
+      clave: p.clave,
+      concepto: p.concepto,
+      importe_gravado: p.importeGravado,
+      importe_exento: p.importeExento,
+    }));
+    deduccionesCfdi = input.desglose.deducciones.map((d) => ({
+      tipo_deduccion: d.tipoDeduccion,
+      clave: d.clave,
+      concepto: d.concepto,
+      importe: d.importe,
+    }));
+    console.log(`[nomina] ${employee.nombre}: desglose precalculado percepciones=${totalPercepciones} deducciones=${totalDeducciones} neto=${netoAPagar}`);
+  } else {
+    const sueldoBruto = input.sueldoBruto ?? +(employee.salarioDiario * input.diasPagados).toFixed(2);
 
-  // Log for debugging
-  console.log(`[nomina] ${employee.nombre}: bruto=${sueldoBruto} ISR=${isrCalc.isrRetenido} IMSS_obrero=${imssObrero} IMSS_patronal=${imssPatronal} INFONAVIT=${infonavitDeduccion} neto=${netoAPagar}`);
+    const isrCalc = calcularIsrRetenido({
+      baseGravable: sueldoBruto,
+      periodicidadPago: employee.periodicidadPago,
+      ejercicio: input.fechaPago.getFullYear(),
+      mes: input.fechaPago.getMonth() + 1,
+    });
+    const imssCalc = calcularImss({
+      salarioBaseCotizacion: sdi,
+      diasPagados: input.diasPagados,
+      riesgoPuesto: employee.riesgoPuesto,
+      // Columna del ejercicio para la CEAV patronal progresiva (DOF 16-dic-2020).
+      ejercicio: input.fechaPago.getFullYear(),
+    });
+    const imssObrero = imssCalc.obrero.total;
+    const imssPatronal = imssCalc.patronal.total;
+    const infonavitDeduccion = calcularInfonavit({
+      tipoDescuento: (employee as Employee & { tipoDescuentoInfonavit?: string | null }).tipoDescuentoInfonavit ?? null,
+      descuentoInfonavit: employee.descuentoInfonavit ?? null,
+      salarioBaseCotizacion: sdi,
+      diasPagados: input.diasPagados,
+    });
+
+    totalPercepciones = sueldoBruto;
+    totalDeducciones = +(isrCalc.isrRetenido + imssObrero + infonavitDeduccion).toFixed(2);
+    netoAPagar = +(totalPercepciones - totalDeducciones).toFixed(2);
+
+    percepcionesCfdi = [
+      {
+        tipo_percepcion: "001", // Sueldos, Salarios Rayas y Jornales
+        clave: "001",
+        concepto: "Sueldo",
+        importe_gravado: totalPercepciones,
+        importe_exento: 0,
+      },
+    ];
+    deduccionesCfdi = [
+      ...(isrCalc.isrRetenido > 0
+        ? [{ tipo_deduccion: "002", clave: "002", concepto: "ISR", importe: isrCalc.isrRetenido }]
+        : []),
+      ...(imssObrero > 0
+        ? [{ tipo_deduccion: "001", clave: "001", concepto: "IMSS", importe: imssObrero }]
+        : []),
+      ...(infonavitDeduccion > 0
+        ? [{ tipo_deduccion: "010", clave: "006", concepto: "INFONAVIT", importe: infonavitDeduccion }]
+        : []),
+    ];
+
+    // Log for debugging
+    console.log(`[nomina] ${employee.nombre}: bruto=${sueldoBruto} ISR=${isrCalc.isrRetenido} IMSS_obrero=${imssObrero} IMSS_patronal=${imssPatronal} INFONAVIT=${infonavitDeduccion} neto=${netoAPagar}`);
+  }
 
   // ── Construir el payload Facturapi ─────────────────────────────────────
   const facturapi = getFacturapiClient(company.facturapiApiKey);
@@ -148,48 +231,9 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
             clave_ent_fed: employee.claveEntFed,
           },
           percepciones: {
-            percepcion: [
-              {
-                tipo_percepcion: "001", // Sueldos, Salarios Rayas y Jornales
-                clave: "001",
-                concepto: "Sueldo",
-                importe_gravado: totalPercepciones,
-                importe_exento: 0,
-              },
-            ],
+            percepcion: percepcionesCfdi,
           },
-          deducciones: [
-            ...(isrCalc.isrRetenido > 0
-              ? [
-                  {
-                    tipo_deduccion: "002", // ISR
-                    clave: "002",
-                    concepto: "ISR",
-                    importe: isrCalc.isrRetenido,
-                  },
-                ]
-              : []),
-            ...(imssObrero > 0
-              ? [
-                  {
-                    tipo_deduccion: "001", // Seguridad Social (IMSS obrero)
-                    clave: "001",
-                    concepto: "IMSS",
-                    importe: imssObrero,
-                  },
-                ]
-              : []),
-            ...(infonavitDeduccion > 0
-              ? [
-                  {
-                    tipo_deduccion: "010", // Descuento INFONAVIT (vivienda)
-                    clave: "006",
-                    concepto: "INFONAVIT",
-                    importe: infonavitDeduccion,
-                  },
-                ]
-              : []),
-          ],
+          deducciones: deduccionesCfdi,
         },
       },
     ],

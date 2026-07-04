@@ -8,11 +8,19 @@
 //   API returns immediately, client polls for progress.
 
 import { prisma } from "../prisma";
-import { calcularNomina, type NominaCalcInput } from "./calc-nomina";
+import { calcularNomina, type NominaCalcInput, type NominaCalcResult } from "./calc-nomina";
 import { calcularPtu, type PtuEmployeeData } from "./ptu";
 import { emitNominaCfdi } from "./emit-nomina";
 import { SALARIO_MINIMO_GENERAL } from "./constants";
-import type { PayrollRunType, Employee, Prisma } from "@prisma/client";
+import {
+  incidenciasDelPeriodo,
+  resumirIncidencias,
+  resumenTieneEfecto,
+  rangoDelPeriodo,
+  diasDelPeriodo,
+  type IncidenciasResumen,
+} from "./incidencias";
+import type { PayrollRunType, Employee, Incidencia, Prisma } from "@prisma/client";
 
 // Concurrency limit for Facturapi calls
 const STAMP_CONCURRENCY = 5;
@@ -98,6 +106,9 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
       tipo: input.tipo,
       status: "DRAFT",
       extraData: {
+        // Días pagados del periodo: los usan el recálculo por incidencias y el
+        // timbrado (num_dias_pagados) — antes se re-derivaban del neto.
+        diasPagados: input.diasPagados,
         diasAguinaldo: input.diasAguinaldo,
         fechaCorte: input.fechaCorte?.toISOString(),
         diasVacacionesTomar: input.diasVacacionesTomar,
@@ -108,13 +119,26 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
     },
   });
 
+  // Incidencias del periodo (sólo ORDINARIA): las capturadas antes de crear la
+  // corrida entran directo al cálculo; las que se capturen después disparan el
+  // recálculo del empleado (ver recalcularPayrollRun).
+  const incidenciasPorEmpleado: Map<string, Incidencia[]> =
+    input.tipo === "ORDINARIA"
+      ? await incidenciasDelPeriodo(
+          input.companyId,
+          employees.map((e) => e.id),
+          input.periodoInicio,
+          input.periodoFin
+        )
+      : new Map();
+
   // Calculate all employees (pure math, no network calls)
   let sumPerc = 0, sumDed = 0, sumNeto = 0;
   let tarifasVerificadas = true;
   const itemsData: Prisma.PayrollItemCreateManyInput[] = [];
 
   for (const emp of employees) {
-    const calcInput: NominaCalcInput = {
+    const calc = calcularNomina({
       employee: emp as Employee & { tipoDescuentoInfonavit?: string | null },
       diasPagados: input.diasPagados,
       tipo: input.tipo,
@@ -127,26 +151,13 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
       primaVacacionalPct: input.primaVacacionalPct,
       ptuMonto: ptuDistribuciones?.get(emp.id)?.monto,
       ptuExento: ptuDistribuciones?.get(emp.id)?.exento,
-    };
+      incidencias: resumirIncidencias(incidenciasPorEmpleado.get(emp.id) ?? []),
+    });
 
-    const calc = calcularNomina(calcInput);
-
-    const ptuPerc = calc.percepciones.find((p) => p.tipoPercepcion === "003");
     itemsData.push({
       payrollRunId: run.id,
       employeeId: emp.id,
-      sueldoBase: calc.percepciones.find((p) => p.tipoPercepcion === "001")?.importeGravado ?? 0,
-      isrRetenido: calc.isrRetenido,
-      imssObrero: calc.imssObrero,
-      imssPatronal: calc.imssPatronal,
-      infonavit: calc.infonavitDeduccion,
-      aguinaldo: calc.aguinaldoResult?.montoTotal ?? 0,
-      primaVacacional: calc.vacacionesResult?.montoPrimaVacacional ?? 0,
-      vacaciones: calc.vacacionesResult?.pagoVacaciones ?? 0,
-      ptu: ptuPerc ? (ptuPerc.importeGravado + ptuPerc.importeExento) : 0,
-      totalPercepciones: calc.totalPercepciones,
-      totalDeducciones: calc.totalDeducciones,
-      netoAPagar: calc.netoAPagar,
+      ...payrollItemFieldsFromCalc(calc),
     });
 
     sumPerc += calc.totalPercepciones;
@@ -189,6 +200,146 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
       const nombres = bajo.slice(0, 5).map((e) => `${e.nombre} ${e.apellidoPaterno}`).join(", ");
       return `${bajo.length} empleado(s) con salario diario por debajo del mínimo general (${SALARIO_MINIMO_GENERAL.toFixed(2)}): ${nombres}${bajo.length > 5 ? "…" : ""}`;
     })(),
+  };
+}
+
+// ─── Mapeo calc → columnas de PayrollItem ────────────────────────────────────
+// Único punto donde el resultado del motor se traduce a columnas del item —
+// lo usan el cálculo inicial y el recálculo por incidencias.
+function payrollItemFieldsFromCalc(calc: NominaCalcResult) {
+  const ptuPerc = calc.percepciones.find((p) => p.tipoPercepcion === "003");
+  const horasExtraPerc = calc.percepciones.find((p) => p.tipoPercepcion === "019");
+  const bonoPerc = calc.percepciones.find((p) => p.tipoPercepcion === "038");
+  const comisionPerc = calc.percepciones.find((p) => p.tipoPercepcion === "028");
+  const primaVacPerc = calc.percepciones.find((p) => p.tipoPercepcion === "021");
+  const otrosDescuentos = calc.deducciones
+    .filter((d) => d.tipoDeduccion === "004")
+    .reduce((s, d) => s + d.importe, 0);
+
+  return {
+    sueldoBase: calc.percepciones.find((p) => p.tipoPercepcion === "001")?.importeGravado ?? 0,
+    horasExtra: horasExtraPerc ? horasExtraPerc.importeGravado + horasExtraPerc.importeExento : 0,
+    bonosPagoFijo: bonoPerc ? bonoPerc.importeGravado + bonoPerc.importeExento : 0,
+    bonosPagoVar: comisionPerc ? comisionPerc.importeGravado + comisionPerc.importeExento : 0,
+    isrRetenido: calc.isrRetenido,
+    imssObrero: calc.imssObrero,
+    imssPatronal: calc.imssPatronal,
+    infonavit: calc.infonavitDeduccion,
+    otrasDeducc: Math.round(otrosDescuentos * 100) / 100,
+    aguinaldo: calc.aguinaldoResult?.montoTotal ?? 0,
+    primaVacacional:
+      calc.vacacionesResult?.montoPrimaVacacional ??
+      (primaVacPerc ? primaVacPerc.importeGravado + primaVacPerc.importeExento : 0),
+    vacaciones: calc.vacacionesResult?.pagoVacaciones ?? 0,
+    ptu: ptuPerc ? ptuPerc.importeGravado + ptuPerc.importeExento : 0,
+    totalPercepciones: calc.totalPercepciones,
+    totalDeducciones: calc.totalDeducciones,
+    netoAPagar: calc.netoAPagar,
+  };
+}
+
+/** Días pagados con los que se calculó la corrida: primero extraData (corridas
+ *  nuevas); para corridas previas, los días naturales del periodo. */
+function diasPagadosDeRun(run: { periodo: string; extraData: unknown }): number {
+  const extra = (run.extraData ?? {}) as Record<string, unknown>;
+  const guardados = Number(extra.diasPagados);
+  if (Number.isFinite(guardados) && guardados > 0) return guardados;
+  return diasDelPeriodo(run.periodo) ?? 15;
+}
+
+// ─── Recalcular una corrida (o un empleado) con sus incidencias ──────────────
+// Después de capturar/eliminar incidencias el cliente NUNCA edita importes a
+// mano: se recalcula el item completo con el motor (calcularNomina) y se
+// actualizan los totales de la corrida. Sólo corridas DRAFT/CALCULATED de la
+// app (las timbradas ya emitieron CFDI; las importadas del SAT son histórico).
+
+export type RecalcResult = {
+  ok: boolean;
+  recalculados?: number;
+  totalPercepciones?: number;
+  totalDeducciones?: number;
+  totalNeto?: number;
+  tarifaWarning?: string | null;
+  error?: string;
+};
+
+export async function recalcularPayrollRun(
+  payrollRunId: string,
+  employeeId?: string
+): Promise<RecalcResult> {
+  const run = await prisma.payrollRun.findUnique({
+    where: { id: payrollRunId },
+    include: { items: { include: { employee: true } } },
+  });
+  if (!run) return { ok: false, error: "Corrida no encontrada" };
+  if (run.status === "STAMPED" || run.status === "PAID") {
+    return { ok: false, error: "La corrida ya está timbrada — los CFDIs emitidos no se recalculan." };
+  }
+  if (run.origen === "SAT") {
+    return { ok: false, error: "Las corridas importadas del SAT son histórico de sólo lectura." };
+  }
+  if (run.tipo !== "ORDINARIA") {
+    return { ok: false, error: "Las incidencias sólo aplican a corridas ordinarias." };
+  }
+
+  const rango = rangoDelPeriodo(run.periodo);
+  if (!rango) return { ok: false, error: `Periodo de corrida inválido: ${run.periodo}` };
+  const diasPagados = diasPagadosDeRun(run);
+
+  const targets = employeeId
+    ? run.items.filter((i) => i.employeeId === employeeId)
+    : run.items;
+  if (targets.length === 0) {
+    return { ok: false, error: "El empleado no pertenece a esta corrida." };
+  }
+
+  const incidenciasPorEmpleado = await incidenciasDelPeriodo(
+    run.companyId,
+    targets.map((i) => i.employeeId),
+    rango.inicio,
+    rango.fin
+  );
+
+  let tarifasVerificadas = true;
+  for (const item of targets) {
+    const calc = calcularNomina({
+      employee: item.employee as Employee & { tipoDescuentoInfonavit?: string | null },
+      diasPagados,
+      tipo: run.tipo,
+      ejercicio: run.fechaPago.getFullYear(),
+      mes: run.fechaPago.getMonth() + 1,
+      incidencias: resumirIncidencias(incidenciasPorEmpleado.get(item.employeeId) ?? []),
+    });
+    if (!calc.isrTarifaVerificada) tarifasVerificadas = false;
+    await prisma.payrollItem.update({
+      where: { id: item.id },
+      data: payrollItemFieldsFromCalc(calc),
+    });
+  }
+
+  // Totales de la corrida sobre TODOS los items (recalculados o no).
+  const agg = await prisma.payrollItem.aggregate({
+    where: { payrollRunId },
+    _sum: { totalPercepciones: true, totalDeducciones: true, netoAPagar: true },
+  });
+  const totalPercepciones = Math.round((agg._sum.totalPercepciones ?? 0) * 100) / 100;
+  const totalDeducciones = Math.round((agg._sum.totalDeducciones ?? 0) * 100) / 100;
+  const totalNeto = Math.round((agg._sum.netoAPagar ?? 0) * 100) / 100;
+
+  await prisma.payrollRun.update({
+    where: { id: payrollRunId },
+    data: { status: "CALCULATED", totalPercepciones, totalDeducciones, totalNeto },
+  });
+
+  return {
+    ok: true,
+    recalculados: targets.length,
+    totalPercepciones,
+    totalDeducciones,
+    totalNeto,
+    tarifaWarning: tarifasVerificadas
+      ? null
+      : "ISR retenido calculado con tarifa/subsidio sin verificar para el ejercicio — cotejar antes de timbrar.",
   };
 }
 
@@ -242,20 +393,75 @@ export async function stampPayrollRun(payrollRunId: string): Promise<StampResult
   const unstamped = run.items.filter((item) => !item.cfdiUuid);
   const alreadyStamped = run.items.length - unstamped.length;
 
+  // Incidencias del periodo (sólo ORDINARIA): los empleados que tienen
+  // incidencias con efecto monetario se timbran con el desglose exacto del
+  // motor (exenciones de horas extra/prima vacacional, bonos, descuentos) —
+  // el CFDI nunca se arma re-derivando una sola percepción gravada.
+  const rango = rangoDelPeriodo(run.periodo);
+  const incidenciasPorEmpleado: Map<string, Incidencia[]> =
+    run.tipo === "ORDINARIA" && rango
+      ? await incidenciasDelPeriodo(
+          run.companyId,
+          unstamped.map((i) => i.employeeId),
+          rango.inicio,
+          rango.fin
+        )
+      : new Map();
+  const diasPagadosRun = diasPagadosDeRun(run);
+
   const errors: string[] = [];
   let newlyStamped = 0;
 
   // Build tasks for parallel execution
   const tasks = unstamped.map((item) => async () => {
     try {
+      const resumen: IncidenciasResumen = resumirIncidencias(
+        incidenciasPorEmpleado.get(item.employeeId) ?? []
+      );
+
+      let desglose;
+      let diasPagadosCfdi = Math.round(item.totalPercepciones / item.employee.salarioDiario) || 15;
+      if (resumenTieneEfecto(resumen)) {
+        // Recalcular con el MISMO motor e insumos que produjo el item revisado
+        // y verificar que coincide antes de timbrar: si alguien capturó una
+        // incidencia (o cambió el salario) sin recalcular, se bloquea el
+        // timbrado de ese empleado en vez de emitir un CFDI distinto a lo
+        // que el contador revisó.
+        const calc = calcularNomina({
+          employee: item.employee as Employee & { tipoDescuentoInfonavit?: string | null },
+          diasPagados: diasPagadosRun,
+          tipo: run.tipo,
+          ejercicio: run.fechaPago.getFullYear(),
+          mes: run.fechaPago.getMonth() + 1,
+          incidencias: resumen,
+        });
+        if (Math.abs(calc.netoAPagar - item.netoAPagar) > 0.05) {
+          errors.push(
+            `${item.employee.nombre} ${item.employee.apellidoPaterno}: los importes cambiaron desde el último cálculo (neto calculado ${calc.netoAPagar.toFixed(2)} vs ${item.netoAPagar.toFixed(2)}). Recalcule la corrida antes de timbrar.`
+          );
+          return;
+        }
+        desglose = {
+          percepciones: calc.percepciones,
+          deducciones: calc.deducciones,
+          totalPercepciones: calc.totalPercepciones,
+          totalDeducciones: calc.totalDeducciones,
+          netoAPagar: calc.netoAPagar,
+        };
+        // El CFDI reporta los días efectivamente pagados (faltas e
+        // incapacidades ya descontadas).
+        diasPagadosCfdi = calc.diasEfectivos;
+      }
+
       const result = await emitNominaCfdi({
         companyId: run.companyId,
         employeeId: item.employeeId,
         periodoInicio: new Date(periodoInicio),
         periodoFin: new Date(periodoFin),
-        diasPagados: Math.round(item.totalPercepciones / item.employee.salarioDiario) || 15,
+        diasPagados: diasPagadosCfdi,
         fechaPago: run.fechaPago,
         sueldoBruto: item.totalPercepciones,
+        desglose,
       });
 
       if (result.ok && result.uuid) {
