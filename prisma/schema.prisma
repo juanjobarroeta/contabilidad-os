@@ -1276,6 +1276,12 @@ model TaxDeclaration {
   // en su propio renglón con tipo RETENCIONES_ISR.
   retencionesIsr Float? // ISR retenido a enterar en el periodo
 
+  // Cuotas IMSS (SIPARE) — monto pagado/por pagar del periodo. En filas
+  // IMSS_MENSUAL: cuotas obrero-patronales del mes; en IMSS_BIMESTRAL: RCV +
+  // Infonavit del bimestre. Se precarga con el estimado desde la nómina
+  // timbrada y el usuario lo ajusta a la cifra exacta del SUA al registrar.
+  imssCuotas Float?
+
   // DIOT
   diotXmlUrl String?
 
@@ -1425,6 +1431,12 @@ enum TaxDeclarationType {
   DIOT
   DECLARACION_ANUAL
   CERO
+  // Cuotas obrero-patronales IMSS (SIPARE) — mensuales (LSS Art. 39, día 17 del
+  // mes siguiente) y RCV + Infonavit bimestrales (día 17 del mes siguiente al
+  // cierre del bimestre). El periodo bimestral se guarda con el mes que CIERRA
+  // el bimestre ("2026-02" = ene-feb).
+  IMSS_MENSUAL
+  IMSS_BIMESTRAL
 }
 
 enum DeclarationStatus {
