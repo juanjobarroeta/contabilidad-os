@@ -82,4 +82,22 @@
   body {
     @apply bg-cos-canvas text-cos-ink;
   }
+  /* Los controles nativos no heredan fondo ni color: sin clases bg-*/text-*
+     explícitas el UA pinta fondo blanco — ilegible en modo oscuro (p. ej. los
+     inputs de salario del importador de nómina). Base: fondo transparente y
+     color heredado; las utilidades bg-*/text-* siguen ganando donde existan. */
+  input,
+  select,
+  textarea {
+    background-color: transparent;
+    color: inherit;
+  }
+  /* color-scheme hace que los widgets nativos (checkboxes, spinners numéricos,
+     date pickers, scrollbars, listas de select) se pinten acordes al tema. */
+  :root {
+    color-scheme: light;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
 }
