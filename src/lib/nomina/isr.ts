@@ -14,7 +14,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { tarifaMensualSueldos, subsidioEmpleo, aplicarTarifa } from "../fiscal/tarifas";
-import { UMA_MENSUAL, UMA_MENSUAL_2025, SALARIO_MINIMO_GENERAL, SALARIO_MINIMO_ZLFN } from "./constants";
+import {
+  UMA_DIARIO,
+  UMA_MENSUAL_2025,
+  SALARIO_MINIMO_GENERAL,
+  SALARIO_MINIMO_ZLFN,
+  umaDiariaDelEjercicio,
+  salarioMinimoGeneralDelEjercicio,
+} from "./constants";
 
 // Periodicidad → factor para convertir base del periodo a base mensual
 // (la tarifa está en mensual; convertimos primero, calculamos, luego dividimos
@@ -95,26 +102,37 @@ export function calcularIsrRetenido(input: IsrCalcInput): IsrCalcResult {
 
   // Subsidio para el empleo (decreto): monto único mensual cuando el ingreso
   // mensual no excede el tope. Se compara contra la base mensualizada.
+  // La UMA es la DEL EJERCICIO de la fecha de pago (histórica para recálculos
+  // de años previos — nómina en paralelo); si el ejercicio no está versionado
+  // se usa la vigente y se marca NO verificado.
   // ENERO (transitorio): la UMA del año entra en vigor el 1-feb (Art. 5 LUMA),
   // así que el decreto fija para enero un pct mayor sobre la UMA del año
   // anterior — se calcula contra la UMA 2025 histórica fija, no la env, para
   // que un recálculo de enero siga siendo exacto después de actualizar la UMA.
   const sub = subsidioEmpleo(ejercicio);
+  const umaDiariaEj = umaDiariaDelEjercicio(ejercicio);
   let subsidioMensual = 0;
+  let umaSubsidioVersionada = true;
   if (sub && baseMensual > 0 && baseMensual <= sub.topeIngresoMensual) {
-    subsidioMensual =
-      mes === 1 && ejercicio === 2026 && sub.pctUmaMensualEnero != null
-        ? r2(sub.pctUmaMensualEnero * UMA_MENSUAL_2025)
-        : r2(sub.pctUmaMensual * UMA_MENSUAL);
+    if (mes === 1 && ejercicio === 2026 && sub.pctUmaMensualEnero != null) {
+      subsidioMensual = r2(sub.pctUmaMensualEnero * UMA_MENSUAL_2025);
+    } else {
+      subsidioMensual = r2(sub.pctUmaMensual * (umaDiariaEj ?? UMA_DIARIO) * 30.4);
+      umaSubsidioVersionada = umaDiariaEj != null;
+    }
   }
 
   // LISR Art. 96, último párrafo: NO se retiene a quien en el mes únicamente
   // percibe el salario mínimo del área geográfica. El tope = salario mínimo del
-  // área elevado al mes (mismo factor 30.4 que la base mensual). Deriva del
-  // salario mínimo vigente (constante/env SALARIO_MINIMO_*), así que se actualiza
-  // solo al actualizar el salario mínimo — una sola fuente de verdad. Lo que
-  // exceda el tope (percepciones gravadas extra) sí grava normal.
-  const salarioMinimoDiario = input.zonaFrontera ? SALARIO_MINIMO_ZLFN : SALARIO_MINIMO_GENERAL;
+  // área elevado al mes (mismo factor 30.4 que la base mensual). Se usa el
+  // salario mínimo GENERAL del ejercicio de la fecha de pago (histórico para
+  // recálculos; el vigente deriva de la constante/env — una sola fuente de
+  // verdad). El mínimo ZLFN histórico NO está versionado: con zonaFrontera se
+  // aplica el vigente (los recálculos históricos pasan zonaFrontera=false).
+  // Lo que exceda el tope (percepciones gravadas extra) sí grava normal.
+  const salarioMinimoDiario = input.zonaFrontera
+    ? SALARIO_MINIMO_ZLFN
+    : salarioMinimoGeneralDelEjercicio(ejercicio) ?? SALARIO_MINIMO_GENERAL;
   const topeExento = salarioMinimoDiario * 30.4;
   const exentoSalarioMinimo = baseMensual > 0 && baseMensual <= topeExento + 0.01; // +0.01: tolerancia FP en el borde
 
@@ -131,7 +149,9 @@ export function calcularIsrRetenido(input: IsrCalcInput): IsrCalcResult {
     exentoSalarioMinimo,
     tarifaEjercicio: t.tarifa.ejercicio,
     tarifaVerificada:
-      t.vigente && t.tarifa.verificado && (subsidioMensual === 0 || (sub?.verificado ?? false)),
+      t.vigente &&
+      t.tarifa.verificado &&
+      (subsidioMensual === 0 || ((sub?.verificado ?? false) && umaSubsidioVersionada)),
   };
 }
 

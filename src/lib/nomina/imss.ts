@@ -3,8 +3,6 @@
 // based on real stepped rates per Ley del Seguro Social.
 
 import {
-  TOPE_SBC_25_UMA,
-  TRES_UMA,
   UMA_DIARIO,
   UMA_EJERCICIO,
   IMSS_RAMOS,
@@ -24,6 +22,13 @@ export type ImssCalcInput = {
    * excedente 3 UMA y tope 25 UMA siempre se calculan con la UMA vigente).
    */
   ejercicio?: number;
+  /**
+   * UMA diaria a usar para la cuota fija, el excedente de 3 UMA y el tope de
+   * 25 UMA. Default: UMA_DIARIO (la vigente). Pasar la UMA histórica del
+   * ejercicio (umaDiariaDelEjercicio) al recalcular periodos de años previos —
+   * nómina en paralelo.
+   */
+  umaDiaria?: number;
 };
 
 export type ImssDesglose = {
@@ -51,16 +56,17 @@ function r2(n: number): number {
 export function calcularImss(input: ImssCalcInput): ImssCalcResult {
   const { diasPagados, riesgoPuesto } = input;
   const ejercicio = input.ejercicio ?? UMA_EJERCICIO;
+  const umaDiaria = input.umaDiaria ?? UMA_DIARIO;
 
   // Cap SBC at 25 UMA
-  const sbcDiario = Math.min(input.salarioBaseCotizacion, TOPE_SBC_25_UMA);
+  const sbcDiario = Math.min(input.salarioBaseCotizacion, umaDiaria * 25);
   const sbcPeriodo = sbcDiario * diasPagados;
 
   // Excedente sobre 3 UMA (for EyM Especie Excedente)
-  const excedente3Uma = Math.max(0, sbcDiario - TRES_UMA) * diasPagados;
+  const excedente3Uma = Math.max(0, sbcDiario - umaDiaria * 3) * diasPagados;
 
   // UMA base for cuota fija
-  const umaBase = UMA_DIARIO * diasPagados;
+  const umaBase = umaDiaria * diasPagados;
 
   const obrero: ImssDesglose = {
     eymEspecieFija: 0, // employer-only
