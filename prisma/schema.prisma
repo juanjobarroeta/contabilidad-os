@@ -1059,7 +1059,14 @@ model Incidencia {
   fecha    DateTime // Date of the incident
   fechaFin DateTime? // End date for multi-day (incapacidad, vacaciones)
   dias     Float          @default(1) // Number of days affected
-  horas    Float? // For overtime: number of extra hours
+  horas    Float? // For overtime: DOUBLE hours (dentro/fuera del límite LFT las separa el cálculo)
+  // Horas extra TRIPLES (las que exceden el límite de la jornada extraordinaria,
+  // LFT Art. 68: se pagan al 200% adicional y son 100% gravadas). Columna
+  // ADITIVA — prod usa `prisma db push`.
+  horasTriples Float?
+  // Monto en pesos para incidencias económicas (BONO, COMISION, DESCUENTO).
+  // Columna ADITIVA — prod usa `prisma db push`.
+  monto Float?
 
   // Incapacidad-specific
   folioImss String? // IMSS disability folio number
@@ -1084,6 +1091,11 @@ enum IncidenciaTipo {
   HORAS_EXTRA // Overtime
   VACACIONES // Vacation days taken
   RETARDO // Late arrival
+  // Valores ADITIVOS (prod usa `prisma db push`) — incidencias económicas del
+  // periodo que alimentan el cálculo de la corrida:
+  BONO // Bono / gratificación / destajo — 100% gravado (Arts. 94 y 96 LISR)
+  COMISION // Comisiones — 100% gravadas (Arts. 94 y 96 LISR)
+  DESCUENTO // Descuento neto post-impuestos (préstamos, uniformes, etc.)
 }
 
 // IMSS Movimientos Afiliatorios — auto-detected from employee changes

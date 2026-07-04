@@ -8,7 +8,7 @@ import {
   Plus, Users2, Loader2, X, AlertCircle, CheckCircle2, Receipt,
   Upload, Sparkles, FileText, Play, Download, Calendar, ClipboardList,
   ArrowLeftRight, Shield, ChevronDown, ChevronUp, UserX, Trash2,
-  Wand2, History,
+  Wand2, History, RefreshCw,
 } from "lucide-react";
 import { RosterImport } from "./RosterImport";
 
@@ -81,9 +81,27 @@ interface Incidencia {
   fechaFin: string | null;
   dias: number;
   horas: number | null;
+  horasTriples: number | null;
+  monto: number | null;
   notas: string | null;
   periodo: string | null;
   employee: { nombre: string; apellidoPaterno: string; rfc: string };
+}
+
+/** Incidencia del periodo de una corrida (GET /api/nomina/run/[id]) — sin
+ *  include de empleado: se cruza con los items por employeeId. */
+interface RunIncidencia {
+  id: string;
+  employeeId: string;
+  tipo: string;
+  fecha: string;
+  fechaFin: string | null;
+  dias: number;
+  horas: number | null;
+  horasTriples: number | null;
+  monto: number | null;
+  ramoImss: string | null;
+  notas: string | null;
 }
 
 const TIPO_RUN_LABEL: Record<string, string> = {
@@ -118,6 +136,22 @@ const INCIDENCIA_LABEL: Record<string, string> = {
   HORAS_EXTRA: "Horas extra",
   VACACIONES: "Vacaciones",
   RETARDO: "Retardo",
+  BONO: "Bono / Destajo",
+  COMISION: "Comisión",
+  DESCUENTO: "Descuento",
+};
+
+// Tipos que requieren monto en pesos (percepciones/deducciones del periodo).
+const INCIDENCIA_CON_MONTO = ["BONO", "COMISION", "DESCUENTO"];
+// Tipos que se capturan en días.
+const INCIDENCIA_CON_DIAS = [
+  "FALTA", "FALTA_JUSTIFICADA", "INCAPACIDAD", "PERMISO_CON_GOCE", "PERMISO_SIN_GOCE", "VACACIONES",
+];
+
+const RAMO_IMSS_LABEL: Record<string, string> = {
+  "01": "Riesgo de trabajo",
+  "02": "Enfermedad general",
+  "03": "Maternidad",
 };
 
 type TabId = "empleados" | "corridas" | "incidencias";
@@ -177,6 +211,9 @@ export default function NominaPage() {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [runItems, setRunItems] = useState<PayrollItemDetail[]>([]);
   const [runItemsLoading, setRunItemsLoading] = useState(false);
+  // Incidencias del periodo de la corrida expandida + item con el modal abierto.
+  const [runIncidencias, setRunIncidencias] = useState<RunIncidencia[]>([]);
+  const [incForItem, setIncForItem] = useState<PayrollItemDetail | null>(null);
 
   // Incidencias state
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
@@ -222,16 +259,40 @@ export default function NominaPage() {
   useEffect(() => { if (tab === "corridas") loadRuns(); }, [tab, loadRuns]);
   useEffect(() => { if (tab === "incidencias") loadIncidencias(); }, [tab, loadIncidencias, incPeriodo]);
 
-  async function toggleRunDetail(runId: string) {
-    if (expandedRunId === runId) { setExpandedRunId(null); return; }
-    setExpandedRunId(runId);
+  const loadRunDetail = useCallback(async (runId: string) => {
     setRunItemsLoading(true);
     try {
       const res = await fetch(`/api/nomina/run/${runId}`);
       const data = await res.json();
       setRunItems(data.items ?? []);
-    } catch { setRunItems([]); }
+      setRunIncidencias(data.incidencias ?? []);
+    } catch { setRunItems([]); setRunIncidencias([]); }
     finally { setRunItemsLoading(false); }
+  }, []);
+
+  function toggleRunDetail(runId: string) {
+    if (expandedRunId === runId) { setExpandedRunId(null); return; }
+    setExpandedRunId(runId);
+    setRunItems([]);
+    setRunIncidencias([]);
+    loadRunDetail(runId);
+  }
+
+  // Recalcular toda la corrida con las incidencias vigentes del periodo (útil
+  // tras capturas masivas). El motor rehace ISR/IMSS/INFONAVIT — nada a mano.
+  const [recalcId, setRecalcId] = useState<string | null>(null);
+  async function handleRecalc(runId: string) {
+    setRecalcId(runId);
+    setError("");
+    try {
+      const res = await fetch(`/api/nomina/run/${runId}/recalcular`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Error al recalcular"); return; }
+      setError(`✓ Corrida recalculada (${data.recalculados} empleado${data.recalculados === 1 ? "" : "s"})${data.tarifaWarning ? ` — ${data.tarifaWarning}` : ""}`);
+      loadRuns();
+      if (expandedRunId === runId) loadRunDetail(runId);
+    } catch { setError("Error al recalcular"); }
+    finally { setRecalcId(null); }
   }
 
   async function handleDeleteRun(runId: string) {
@@ -439,6 +500,13 @@ export default function NominaPage() {
             <div className="space-y-3">
               {runs.map(run => {
                 const isExpanded = expandedRunId === run.id;
+                // Captura de incidencias: sólo corridas ordinarias de la app
+                // que aún no se timbran (los CFDIs emitidos no cambian).
+                const puedeCapturar = (run.status === "DRAFT" || run.status === "CALCULATED")
+                  && run.origen !== "SAT" && run.tipo === "ORDINARIA";
+                const numEmpleadosConInc = isExpanded
+                  ? new Set(runIncidencias.map(i => i.employeeId)).size
+                  : 0;
                 return (
                   <div key={run.id} className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
                     {/* Run header — clickable to expand */}
@@ -461,6 +529,12 @@ export default function NominaPage() {
                               Timbrado {String((run.extraData as Record<string, unknown>).stampedCount ?? 0)}/{String(run._count?.items ?? "?")}
                             </span>
                           )}
+                          {isExpanded && runIncidencias.length > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-cos-amber-tint text-cos-amber-ink"
+                              title="Incidencias del periodo capturadas para esta corrida">
+                              {runIncidencias.length} incidencia{runIncidencias.length === 1 ? "" : "s"} en {numEmpleadosConInc} empleado{numEmpleadosConInc === 1 ? "" : "s"}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-cos-ink-soft">{run.periodo}</p>
                         <div className="flex gap-4 mt-1 text-xs">
@@ -471,6 +545,14 @@ export default function NominaPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                        {puedeCapturar && (
+                          <button onClick={() => handleRecalc(run.id)} disabled={recalcId === run.id}
+                            className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper disabled:opacity-50"
+                            title="Recalcular todos los recibos con las incidencias vigentes del periodo">
+                            {recalcId === run.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                            Recalcular
+                          </button>
+                        )}
                         {run.status === "CALCULATED" && (
                           <button onClick={() => handleStamp(run.id)} disabled={stampingId === run.id}
                             className="flex items-center gap-1.5 bg-cos-jade-ink text-white px-3 py-1.5 rounded-md text-xs font-medium hover:opacity-90 disabled:opacity-50">
@@ -521,6 +603,12 @@ export default function NominaPage() {
                                   <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Percepciones</th>
                                   <th className="text-right px-3 py-2 font-medium text-cos-ink-soft">Deducciones</th>
                                   <th className="text-right px-3 py-2 font-medium text-cos-ink-soft font-bold">Neto</th>
+                                  {run.tipo === "ORDINARIA" && (
+                                    <th className="text-center px-3 py-2 font-medium text-cos-ink-soft"
+                                      title="Faltas, horas extra, incapacidades, vacaciones, bonos y descuentos del periodo">
+                                      Incidencias
+                                    </th>
+                                  )}
                                   <th className="text-center px-3 py-2 font-medium text-cos-ink-soft">CFDI</th>
                                 </tr>
                               </thead>
@@ -553,6 +641,28 @@ export default function NominaPage() {
                                     <td className="px-3 py-2 text-right font-mono"><Money value={item.totalPercepciones} /></td>
                                     <td className="px-3 py-2 text-right font-mono text-cos-red-ink">{formatCurrency(item.totalDeducciones)}</td>
                                     <td className="px-3 py-2 text-right font-mono font-bold text-cos-jade-ink">{formatCurrency(item.netoAPagar)}</td>
+                                    {run.tipo === "ORDINARIA" && (
+                                      <td className="px-3 py-2 text-center">
+                                        {(() => {
+                                          const numInc = runIncidencias.filter(i => i.employeeId === item.employeeId).length;
+                                          if (puedeCapturar) {
+                                            return (
+                                              <button onClick={() => setIncForItem(item)}
+                                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] ${
+                                                  numInc > 0
+                                                    ? "border-cos-amber-ink/30 bg-cos-amber-tint text-cos-amber-ink hover:opacity-80"
+                                                    : "border-cos-line text-cos-ink-soft hover:bg-cos-paper"
+                                                }`}
+                                                title="Capturar incidencias del periodo — el recibo se recalcula automáticamente">
+                                                <ClipboardList className="h-3 w-3" />
+                                                {numInc > 0 ? numInc : "+"}
+                                              </button>
+                                            );
+                                          }
+                                          return <span className="text-cos-ink-soft">{numInc > 0 ? numInc : "—"}</span>;
+                                        })()}
+                                      </td>
+                                    )}
                                     <td className="px-3 py-2 text-center">
                                       {item.cfdiUuid ? (
                                         <span className="text-cos-jade-ink" title={item.cfdiUuid}>✓</span>
@@ -578,6 +688,9 @@ export default function NominaPage() {
                                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(runItems.reduce((s, i) => s + i.totalPercepciones, 0))}</td>
                                     <td className="px-3 py-2 text-right font-mono text-cos-red-ink">{formatCurrency(runItems.reduce((s, i) => s + i.totalDeducciones, 0))}</td>
                                     <td className="px-3 py-2 text-right font-mono font-bold text-cos-jade-ink">{formatCurrency(runItems.reduce((s, i) => s + i.netoAPagar, 0))}</td>
+                                    {run.tipo === "ORDINARIA" && (
+                                      <td className="px-3 py-2 text-center">{runIncidencias.length > 0 ? runIncidencias.length : "—"}</td>
+                                    )}
                                     <td className="px-3 py-2 text-center text-xs">{runItems.filter(i => i.cfdiUuid).length}/{runItems.length}</td>
                                   </tr>
                                 </tfoot>
@@ -623,6 +736,7 @@ export default function NominaPage() {
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Fecha</th>
                     <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Días</th>
                     <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Horas</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Monto</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Notas</th>
                   </tr>
                 </thead>
@@ -639,7 +753,12 @@ export default function NominaPage() {
                         {inc.fechaFin && <> — {formatDate(inc.fechaFin)}</>}
                       </td>
                       <td className="px-4 py-2.5 text-right text-xs font-mono">{inc.dias}</td>
-                      <td className="px-4 py-2.5 text-right text-xs font-mono">{inc.horas ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-mono">
+                        {inc.horas || inc.horasTriples
+                          ? `${inc.horas ?? 0}${inc.horasTriples ? ` + ${inc.horasTriples} triples` : ""}`
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-xs font-mono">{inc.monto ? formatCurrency(inc.monto) : "—"}</td>
                       <td className="px-4 py-2.5 text-xs text-cos-ink-soft truncate max-w-[200px]">{inc.notas ?? "—"}</td>
                     </tr>
                   ))}
@@ -687,6 +806,17 @@ export default function NominaPage() {
       {showNewInc && activeCompany && (
         <NewIncidenciaModal companyId={activeCompany.id} employees={employees}
           onClose={() => setShowNewInc(false)} onCreated={() => { setShowNewInc(false); loadIncidencias(); }} />
+      )}
+      {incForItem && activeCompany && expandedRunId && (
+        <RunIncidenciasModal
+          companyId={activeCompany.id}
+          runId={expandedRunId}
+          periodo={runs.find(r => r.id === expandedRunId)?.periodo ?? ""}
+          item={incForItem}
+          incidencias={runIncidencias.filter(i => i.employeeId === incForItem.employeeId)}
+          onClose={() => setIncForItem(null)}
+          onChanged={() => { loadRunDetail(expandedRunId); loadRuns(); }}
+        />
       )}
       {editFor && activeCompany && (
         <EditEmployeeModal companyId={activeCompany.id} employee={editFor}
@@ -1489,7 +1619,16 @@ function NewRunModal({
               <p>
                 Se copian los {initial.employeeIds.length} empleado{initial.employeeIds.length === 1 ? "" : "s"} y el periodo avanza una {initial.periodicidad === "SEMANAL" ? "semana" : initial.periodicidad === "MENSUAL" ? "mensualidad" : "quincena"}.
                 {initial.omitidosPorBaja > 0 ? ` Se omitieron ${initial.omitidosPorBaja} por baja.` : ""}
-                {" "}El ISR, IMSS e INFONAVIT se recalculan con los datos vigentes; las incidencias (faltas, horas extra) no se copian.
+                {" "}El ISR, IMSS e INFONAVIT se recalculan con los datos vigentes; las incidencias (faltas, horas extra) no se copian — captúralas por empleado en el detalle de la corrida una vez calculada.
+              </p>
+            </div>
+          )}
+          {!initial && form.tipo === "ORDINARIA" && (
+            <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-md px-3 py-2 text-xs text-cos-brand-ink">
+              <p>
+                Las incidencias del periodo (faltas, horas extra, incapacidades, vacaciones, bonos y descuentos) se
+                capturan por empleado en el detalle de la corrida una vez calculada; cada captura recalcula el recibo
+                automáticamente antes de timbrar.
               </p>
             </div>
           )}
@@ -1572,6 +1711,8 @@ function NewIncidenciaModal({
     fechaFin: "",
     dias: "1",
     horas: "",
+    horasTriples: "",
+    monto: "",
     notas: "",
   });
   const [saving, setSaving] = useState(false);
@@ -1593,6 +1734,8 @@ function NewIncidenciaModal({
           fechaFin: form.fechaFin || undefined,
           dias: parseFloat(form.dias) || undefined,
           horas: form.horas ? parseFloat(form.horas) : undefined,
+          horasTriples: form.horasTriples ? parseFloat(form.horasTriples) : undefined,
+          monto: form.monto ? parseFloat(form.monto) : undefined,
           notas: form.notas || undefined,
         }),
       });
@@ -1637,12 +1780,24 @@ function NewIncidenciaModal({
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Días">
-              <input type="number" min="0.5" step="0.5" value={form.dias} onChange={e => setForm(p => ({ ...p, dias: e.target.value }))} className={inputCls} />
-            </Field>
+            {INCIDENCIA_CON_DIAS.includes(form.tipo) && (
+              <Field label="Días">
+                <input type="number" min="0.5" step="0.5" value={form.dias} onChange={e => setForm(p => ({ ...p, dias: e.target.value }))} className={inputCls} />
+              </Field>
+            )}
             {(form.tipo === "HORAS_EXTRA" || form.tipo === "RETARDO") && (
-              <Field label="Horas">
+              <Field label={form.tipo === "HORAS_EXTRA" ? "Horas dobles" : "Horas"}>
                 <input type="number" min="0" step="0.5" value={form.horas} onChange={e => setForm(p => ({ ...p, horas: e.target.value }))} className={inputCls} />
+              </Field>
+            )}
+            {form.tipo === "HORAS_EXTRA" && (
+              <Field label="Horas triples (exceden el límite LFT)">
+                <input type="number" min="0" step="0.5" value={form.horasTriples} onChange={e => setForm(p => ({ ...p, horasTriples: e.target.value }))} className={inputCls} />
+              </Field>
+            )}
+            {INCIDENCIA_CON_MONTO.includes(form.tipo) && (
+              <Field label="Monto (MXN)">
+                <input type="number" min="0.01" step="0.01" value={form.monto} onChange={e => setForm(p => ({ ...p, monto: e.target.value }))} className={inputCls} required />
               </Field>
             )}
           </div>
@@ -1658,6 +1813,220 @@ function NewIncidenciaModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Incidencias por empleado dentro de una corrida ──────────────────────────
+// Captura rápida entre el cálculo y el timbrado: cada alta/baja recalcula el
+// recibo del empleado con el motor (nunca se editan importes a mano). El
+// backend bloquea la mutación si la corrida ya se timbró.
+function RunIncidenciasModal({
+  companyId, runId, periodo, item, incidencias, onClose, onChanged,
+}: {
+  companyId: string;
+  runId: string;
+  periodo: string; // "YYYY-MM-DD/YYYY-MM-DD"
+  item: PayrollItemDetail;
+  incidencias: RunIncidencia[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [periodoInicio, periodoFin] = periodo.split("/");
+  const [form, setForm] = useState({
+    tipo: "FALTA",
+    fecha: periodoInicio ?? new Date().toISOString().slice(0, 10),
+    dias: "1",
+    horas: "",
+    horasTriples: "",
+    monto: "",
+    ramoImss: "02",
+    folioImss: "",
+    notas: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+
+  async function agregar(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setErr("");
+    setMsg("");
+    try {
+      const res = await fetch("/api/nomina/incidencias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          payrollRunId: runId, // dispara el recálculo del empleado en el servidor
+          employeeId: item.employeeId,
+          tipo: form.tipo,
+          fecha: form.fecha,
+          dias: INCIDENCIA_CON_DIAS.includes(form.tipo) ? (parseFloat(form.dias) || 1) : undefined,
+          horas: form.horas ? parseFloat(form.horas) : undefined,
+          horasTriples: form.horasTriples ? parseFloat(form.horasTriples) : undefined,
+          monto: form.monto ? parseFloat(form.monto) : undefined,
+          ramoImss: form.tipo === "INCAPACIDAD" ? form.ramoImss : undefined,
+          folioImss: form.tipo === "INCAPACIDAD" ? (form.folioImss || undefined) : undefined,
+          notas: form.notas || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al capturar");
+      setMsg(
+        data.recalculo?.ok
+          ? `Incidencia capturada — recibo recalculado (neto de la corrida: ${formatCurrency(data.recalculo.totalNeto ?? 0)}).`
+          : "Incidencia capturada."
+      );
+      setForm(p => ({ ...p, dias: "1", horas: "", horasTriples: "", monto: "", folioImss: "", notas: "" }));
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error al capturar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function eliminar(incidenciaId: string) {
+    setDeletingId(incidenciaId);
+    setErr("");
+    setMsg("");
+    try {
+      const res = await fetch("/api/nomina/incidencias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, action: "delete", incidenciaId, payrollRunId: runId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al eliminar");
+      setMsg("Incidencia eliminada — recibo recalculado.");
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error al eliminar");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-12 p-4 z-50 overflow-auto">
+      <div className="bg-cos-card rounded-xl shadow-xl w-full max-w-lg">
+        <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">Incidencias — {item.employee.nombre} {item.employee.apellidoPaterno}</h2>
+            <p className="text-xs text-cos-ink-soft mt-0.5">Periodo {periodo} · neto actual {formatCurrency(item.netoAPagar)}</p>
+          </div>
+          <button onClick={onClose}><X className="h-4 w-4" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* Incidencias ya capturadas en el periodo */}
+          {incidencias.length === 0 ? (
+            <p className="text-xs text-cos-ink-soft">Sin incidencias capturadas en este periodo.</p>
+          ) : (
+            <div className="border border-cos-line rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <tbody>
+                  {incidencias.map(inc => (
+                    <tr key={inc.id} className="border-b border-cos-line last:border-0">
+                      <td className="px-3 py-2 font-medium">{INCIDENCIA_LABEL[inc.tipo] ?? inc.tipo}</td>
+                      <td className="px-3 py-2 text-cos-ink-soft">{formatDate(inc.fecha)}</td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {INCIDENCIA_CON_MONTO.includes(inc.tipo)
+                          ? formatCurrency(inc.monto ?? 0)
+                          : inc.tipo === "HORAS_EXTRA"
+                            ? `${inc.horas ?? 0} h${inc.horasTriples ? ` + ${inc.horasTriples} h triples` : ""}`
+                            : `${inc.dias} día${inc.dias === 1 ? "" : "s"}`}
+                        {inc.tipo === "INCAPACIDAD" && inc.ramoImss && (
+                          <span className="text-cos-ink-soft font-sans ml-1">({RAMO_IMSS_LABEL[inc.ramoImss] ?? inc.ramoImss})</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button onClick={() => eliminar(inc.id)} disabled={deletingId === inc.id}
+                          className="text-cos-red-ink hover:bg-cos-red-tint rounded p-1 disabled:opacity-50"
+                          title="Eliminar y recalcular">
+                          {deletingId === inc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Captura */}
+          <form onSubmit={agregar} className="space-y-3 border-t border-cos-line pt-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Tipo de incidencia">
+                <select value={form.tipo} onChange={e => setForm(p => ({ ...p, tipo: e.target.value }))} className={inputCls}>
+                  {Object.entries(INCIDENCIA_LABEL).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Fecha (dentro del periodo)">
+                <input type="date" value={form.fecha} min={periodoInicio} max={periodoFin}
+                  onChange={e => setForm(p => ({ ...p, fecha: e.target.value }))} className={inputCls} required />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {INCIDENCIA_CON_DIAS.includes(form.tipo) && (
+                <Field label="Días">
+                  <input type="number" min="0.5" step="0.5" value={form.dias}
+                    onChange={e => setForm(p => ({ ...p, dias: e.target.value }))} className={inputCls} required />
+                </Field>
+              )}
+              {(form.tipo === "HORAS_EXTRA" || form.tipo === "RETARDO") && (
+                <Field label={form.tipo === "HORAS_EXTRA" ? "Horas dobles" : "Horas"}>
+                  <input type="number" min="0" step="0.5" value={form.horas}
+                    onChange={e => setForm(p => ({ ...p, horas: e.target.value }))} className={inputCls} />
+                </Field>
+              )}
+              {form.tipo === "HORAS_EXTRA" && (
+                <Field label="Horas triples (exceden el límite LFT)">
+                  <input type="number" min="0" step="0.5" value={form.horasTriples}
+                    onChange={e => setForm(p => ({ ...p, horasTriples: e.target.value }))} className={inputCls} />
+                </Field>
+              )}
+              {INCIDENCIA_CON_MONTO.includes(form.tipo) && (
+                <Field label="Monto (MXN)">
+                  <input type="number" min="0.01" step="0.01" value={form.monto}
+                    onChange={e => setForm(p => ({ ...p, monto: e.target.value }))} className={inputCls} required />
+                </Field>
+              )}
+              {form.tipo === "INCAPACIDAD" && (
+                <>
+                  <Field label="Ramo IMSS">
+                    <select value={form.ramoImss} onChange={e => setForm(p => ({ ...p, ramoImss: e.target.value }))} className={inputCls}>
+                      {Object.entries(RAMO_IMSS_LABEL).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Folio IMSS (opcional)">
+                    <input value={form.folioImss} onChange={e => setForm(p => ({ ...p, folioImss: e.target.value }))} className={inputCls} />
+                  </Field>
+                </>
+              )}
+            </div>
+            <Field label="Notas">
+              <input value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} className={inputCls} placeholder="Opcional" />
+            </Field>
+            {err && <p className="text-xs text-cos-red-ink">{err}</p>}
+            {msg && <p className="text-xs text-cos-jade-ink">{msg}</p>}
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cerrar</button>
+              <button type="submit" disabled={saving}
+                className="flex-1 bg-cos-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Agregar y recalcular
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
