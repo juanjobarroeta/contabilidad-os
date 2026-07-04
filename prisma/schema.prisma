@@ -193,6 +193,13 @@ model Company {
   perdidaFiscalPendiente Float? // Monto ACTUALIZADO del remanente pendiente de amortizar
   perdidaFiscalAnio      Int? // Ejercicio al que corresponde el remanente (última anual)
 
+  // Apertura fiscal — momento en que el contador revisó y CONFIRMÓ el punto de
+  // partida (saldo a favor de IVA inicial, pérdidas por amortizar, coeficiente,
+  // pagos provisionales previos y obligaciones). Null = aún sin confirmar. Las
+  // correcciones posteriores no borran la marca; re-confirmar la actualiza.
+  aperturaConfirmadaAt  DateTime?
+  aperturaConfirmadaPor String? // email (o id) del usuario que confirmó
+
   // Precio mensual por empresa para análisis de rentabilidad (centavos MXN).
   // Sólo unit economics; desacoplado del trial/subscription gating.
   precioMensualCentavos Int?

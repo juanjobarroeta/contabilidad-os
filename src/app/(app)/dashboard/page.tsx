@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   AlertTriangle, Clock, CheckCircle2, CalendarDays,
   ArrowUpRight, ArrowDownLeft, ChevronRight, Sparkles, ShieldQuestion,
-  Loader2, KeyRound, SearchX,
+  Loader2, KeyRound, SearchX, ClipboardCheck,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Chip, type ChipStatus, Alert, Loading } from "@/components/ui";
@@ -30,6 +30,7 @@ interface DashboardData {
   periodo: { year: number; month: number };
   fiel: { estado: "ok" | "por_vencer" | "vencida" | "sin_fiel"; vigencia: string | null; diasRestantes: number | null } | null;
   estadoDatos?: EstadoDatos;
+  apertura?: { confirmada: boolean; nudge: boolean };
   taxThisMonth: {
     iva: number; isr: number | null; total: number; saldoAFavor: number;
     vence: string; venceFmt: string; diasRestantes: number; tarifaVerificada: boolean;
@@ -216,6 +217,38 @@ function EstadoDatosCard({ estado }: { estado: EstadoDatos }) {
   return null;
 }
 
+// ── Apertura fiscal: nudge de revisión del punto de partida ───────────────────
+// Aparece cuando ya hay con qué revisar (e.firma + descarga histórica lista) y
+// el contador aún no ha confirmado la apertura. Un dato inicial erróneo se
+// hereda a todos los meses, así que este aviso empuja a revisarlo UNA vez.
+function AperturaNudgeCard() {
+  return (
+    <div className="flex items-start gap-4 rounded-card bg-cos-amber-tint px-6 py-[22px]">
+      <div className="grid h-12 w-12 flex-none place-items-center rounded-[14px] bg-cos-amber text-white">
+        <ClipboardCheck className="h-[26px] w-[26px]" strokeWidth={2.2} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-[21px] font-semibold tracking-[-0.02em] text-cos-amber-ink">
+          Revisa y confirma tu punto de partida fiscal
+        </h2>
+        <p className="mt-1 text-[14.5px] leading-snug text-cos-amber-ink opacity-90">
+          Tus datos del SAT ya están descargados. Antes de confiar en los cálculos, revisa el
+          saldo a favor de IVA inicial, las pérdidas por amortizar, el coeficiente de utilidad y
+          las obligaciones: un error en el arranque se arrastra a todos los meses.
+        </p>
+        <div className="mt-3.5">
+          <Link
+            href="/empresa/apertura"
+            className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3.5 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep"
+          >
+            Revisar punto de partida <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Hero status band ──────────────────────────────────────────────────────────
 function HeroBand({ obligaciones }: { obligaciones: UpcomingOb[] }) {
   const vencidas = obligaciones.filter((o) => !o.filed && o.status === "OVERDUE").length;
@@ -354,6 +387,7 @@ export default function InicioPage() {
       ) : (
         <div className="space-y-5">
           {data.estadoDatos && <EstadoDatosCard estado={data.estadoDatos} />}
+          {data.apertura?.nudge && <AperturaNudgeCard />}
           {data.fiel && (data.fiel.estado === "vencida" || data.fiel.estado === "por_vencer") && (
             <div className={`flex items-center gap-3 rounded-card px-5 py-3.5 text-[14px] ${data.fiel.estado === "vencida" ? "bg-cos-red-tint text-cos-red-ink" : "bg-cos-amber-tint text-cos-amber-ink"}`}>
               <AlertTriangle className="h-5 w-5 flex-none" />

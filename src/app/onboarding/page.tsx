@@ -1167,7 +1167,9 @@ function OnboardingPageInner() {
           {loading && fiel.cerFile && (
             <p className="text-center text-[12.5px] leading-snug text-cos-ink-soft">
               La descarga de tus CFDI del SAT comienza en este momento; el tablero se irá
-              llenando progresivamente (puede tardar desde minutos hasta horas).
+              llenando progresivamente (puede tardar desde minutos hasta horas). Cuando
+              termine, revisa y confirma tu punto de partida fiscal en Mi empresa →
+              Apertura fiscal.
             </p>
           )}
         </div>

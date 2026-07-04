@@ -20,6 +20,7 @@ function baseInputs(overrides: Partial<ChecklistInputs> = {}): ChecklistInputs {
     month: 5,
     hoy: new Date(2026, 5, 10), // 10 de junio de 2026 — antes del vencimiento (17 jun)
     fechaLimite: fechaLimiteDeclaracion(2026, 5),
+    aperturaConfirmada: true,
     satEmitidosCompleto: true,
     satRecibidosCompleto: true,
     advertenciasCadena: [],
@@ -45,7 +46,7 @@ function item(items: ChecklistItem[], clave: string): ChecklistItem {
 describe("decidirChecklist — empresa limpia", () => {
   it("todo listo cuando datos completos, conciliado, complementado y presentada", () => {
     const items = decidirChecklist(baseInputs());
-    expect(items.length).toBe(10);
+    expect(items.length).toBe(11);
     for (const it of items) {
       expect(it.estado, `item ${it.clave}`).toBe("listo");
     }
@@ -54,6 +55,7 @@ describe("decidirChecklist — empresa limpia", () => {
   it("mantiene el orden de trabajo esperado", () => {
     const claves = decidirChecklist(baseInputs()).map((i) => i.clave);
     expect(claves).toEqual([
+      "apertura",
       "sincronizacion-sat",
       "cadena-declaraciones",
       "conciliacion-bancaria",
@@ -65,6 +67,23 @@ describe("decidirChecklist — empresa limpia", () => {
       "declaracion-periodo",
       "fecha-limite",
     ]);
+  });
+});
+
+describe("decidirChecklist — apertura fiscal", () => {
+  it("apertura sin confirmar → atención, primero en la lista, con link a /empresa/apertura", () => {
+    const items = decidirChecklist(baseInputs({ aperturaConfirmada: false }));
+    const ap = item(items, "apertura");
+    expect(items[0].clave).toBe("apertura");
+    expect(ap.estado).toBe("atencion");
+    expect(ap.detalle).toContain("no está confirmado");
+    expect(ap.accionUrl).toBe("/empresa/apertura");
+  });
+
+  it("apertura confirmada → listo", () => {
+    const ap = item(decidirChecklist(baseInputs({ aperturaConfirmada: true })), "apertura");
+    expect(ap.estado).toBe("listo");
+    expect(ap.detalle).toContain("confirmado");
   });
 });
 
