@@ -5,7 +5,7 @@ import { recordTimbrado } from "@/lib/costos/record";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { z } from "zod";
-import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireScope, requireUser, AuthzError } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
 import { gateEscritura } from "@/lib/subscription";
 
@@ -178,11 +178,13 @@ export async function POST(req: Request) {
   let userEmail: string | null = null;
   try {
     const user = await requireUser(req);
+    requireScope(user, "facturas"); // sólo aplica a tokens emitidos con scope
     userId = user.id;
     userEmail = user.email;
   } catch (e) {
     const status = e instanceof AuthzError ? e.status : 401;
-    return NextResponse.json({ error: "Unauthorized" }, { status });
+    const error = e instanceof AuthzError ? e.message : "Unauthorized";
+    return NextResponse.json({ error }, { status });
   }
 
   const body = await req.json();

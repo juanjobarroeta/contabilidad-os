@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { AuthzError, requireWriter } from "@/lib/authz";
+import { AuthzError, requireScope, requireWriter } from "@/lib/authz";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import { emitNominaCfdi } from "@/lib/nomina/emit-nomina";
 import { registrarBitacora } from "@/lib/audit";
@@ -33,6 +33,7 @@ export async function POST(req: Request) {
     // the NextAuth web session — lets ZionX mirror payroll into CFDI de nómina.
     // Membership (requireWriter) still enforces multi-tenancy.
     const { user } = await requireWriter(companyId, req);
+    requireScope(user, "nomina"); // sólo aplica a tokens emitidos con scope
     // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED); el 402
     // fluye por el catch de AuthzError de abajo.
     await assertPuedeEscribir(user.id);

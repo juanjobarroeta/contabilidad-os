@@ -50,6 +50,8 @@ model User {
   // Verified WhatsApp numbers bound to this user (W0 channel).
   whatsappLinks       WhatsappLink[]
   chatConversations   ChatConversation[]
+  // Refresh tokens de la API de satélites (flujo access corto + refresh rotatorio).
+  apiRefreshTokens    ApiRefreshToken[]
 }
 
 enum SubscriptionStatus {
@@ -3235,4 +3237,28 @@ model AuditLog {
 
   @@index([companyId, createdAt])
   @@index([accion, createdAt])
+}
+
+// Refresh tokens opacos para la API de satélites (flujo access corto + refresh
+// rotatorio). Se guarda SOLO el SHA-256 del secreto (nunca el secreto en claro).
+// La rotación encadena filas vía replacedById; presentar un token ya rotado o
+// revocado se trata como robo y revoca la cadena completa (detección estándar
+// de reutilización). Sin FK-cascade hacia AuditLog: la bitácora registra
+// emisión/revocación por separado.
+model ApiRefreshToken {
+  id           String    @id @default(cuid())
+  tokenHash    String    @unique // SHA-256 (hex) del secreto opaco
+  userId       String
+  etiqueta     String // satélite emisor (body `cliente` o User-Agent)
+  scope        String? // scopes separados por espacio; null = acceso total
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String? // id del token que lo sustituyó al rotar
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  ip           String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
