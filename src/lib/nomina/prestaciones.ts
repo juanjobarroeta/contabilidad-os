@@ -45,10 +45,21 @@ export type AguinaldoInput = {
   fechaIngreso: Date;
   fechaCorte: Date; // typically Dec 31
   diasAguinaldo?: number; // default 15 (LFT minimum)
+  /** UMA diaria del ejercicio de pago para la exención. Default: la vigente (constants). */
+  umaDiaria?: number;
+  /**
+   * Monto ajustado manualmente (vista previa editable de la corrida de
+   * aguinaldo): sustituye la fórmula salarioDiario × días proporcionales,
+   * pero la exención de 30 UMA (Art. 93 fracc. XIV LISR) se aplica igual —
+   * el ajuste manual nunca decide gravado/exento a mano.
+   */
+  montoOverride?: number;
 };
 
 export type AguinaldoResult = {
   diasCorrespondientes: number;
+  /** Días trabajados del ejercicio considerados en la proporción (tope 365). */
+  diasTrabajadosEjercicio: number;
   montoTotal: number;
   montoExento: number;
   montoGravado: number;
@@ -57,19 +68,24 @@ export type AguinaldoResult = {
 export function calcularAguinaldo(input: AguinaldoInput): AguinaldoResult {
   const { salarioDiario, fechaIngreso, fechaCorte } = input;
   const diasAguinaldo = input.diasAguinaldo ?? DIAS_AGUINALDO_MINIMO;
+  const uma = input.umaDiaria ?? UMA_DIARIO;
 
-  // Proportional if less than 1 full year
+  // Proporcional a los días trabajados del ejercicio (Art. 87 LFT, segundo
+  // párrafo: quienes no cumplieron el año tienen derecho a la parte
+  // proporcional). Divisor 365 por convención — en bisiestos se conserva 365
+  // (simplificación documentada, criterio de práctica generalizada).
   const dias = diasTrabajados(fechaIngreso, fechaCorte);
   const diasEnElAnio = Math.min(dias, 365);
   const diasCorrespondientes = r2((diasEnElAnio / 365) * diasAguinaldo);
 
-  const montoTotal = r2(diasCorrespondientes * salarioDiario);
+  const montoTotal =
+    input.montoOverride != null ? r2(input.montoOverride) : r2(diasCorrespondientes * salarioDiario);
 
   // Exempt: 30 × UMA diario (Art. 93 LISR fraction XIV)
-  const montoExento = r2(Math.min(montoTotal, AGUINALDO_EXENTO_UMA * UMA_DIARIO));
+  const montoExento = r2(Math.min(montoTotal, AGUINALDO_EXENTO_UMA * uma));
   const montoGravado = r2(Math.max(0, montoTotal - montoExento));
 
-  return { diasCorrespondientes, montoTotal, montoExento, montoGravado };
+  return { diasCorrespondientes, diasTrabajadosEjercicio: diasEnElAnio, montoTotal, montoExento, montoGravado };
 }
 
 // ─── Vacaciones + Prima Vacacional ───────────────────────────────────────────

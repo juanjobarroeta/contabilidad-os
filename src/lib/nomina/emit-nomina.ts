@@ -40,6 +40,13 @@ export type EmitNominaInput = {
   sueldoBruto?: number;
   /** Desglose precalculado (ver NominaDesglose). Tiene prioridad sobre sueldoBruto. */
   desglose?: NominaDesglose;
+  /**
+   * TipoNomina del complemento: "O" ordinaria (default) o "E" extraordinaria
+   * (aguinaldo, PTU y demás pagos fuera del periodo regular — Guía de llenado
+   * del complemento nómina, Apéndices 4 y 5). Con "E" la periodicidad de pago
+   * del receptor se reporta como "99" (Otra periodicidad), conforme a la guía.
+   */
+  tipoNomina?: "O" | "E";
 };
 
 export type EmitNominaResult = {
@@ -204,7 +211,7 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       {
         type: "nomina",
         data: {
-          tipo_nomina: "O", // O=Ordinaria, E=Extraordinaria
+          tipo_nomina: input.tipoNomina ?? "O", // O=Ordinaria, E=Extraordinaria (aguinaldo/PTU)
           fecha_pago: input.fechaPago.toISOString(),
           fecha_inicial_pago: input.periodoInicio.toISOString(),
           fecha_final_pago: input.periodoFin.toISOString(),
@@ -225,7 +232,9 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
             departamento: employee.departamento ?? undefined,
             puesto: employee.puesto ?? undefined,
             riesgo_puesto: employee.riesgoPuesto,
-            periodicidad_pago: employee.periodicidadPago,
+            // Nómina extraordinaria: periodicidad "99" (Otra periodicidad),
+            // Guía de llenado del complemento nómina, Apéndices 4 y 5.
+            periodicidad_pago: input.tipoNomina === "E" ? "99" : employee.periodicidadPago,
             salario_base_cot_apor: employee.salarioDiario,
             salario_diario_integrado: sdi,
             clave_ent_fed: employee.claveEntFed,

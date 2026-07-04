@@ -11,7 +11,7 @@ import { prisma } from "../prisma";
 import { calcularNomina, type NominaCalcInput, type NominaCalcResult } from "./calc-nomina";
 import { calcularPtu, type PtuEmployeeData } from "./ptu";
 import { emitNominaCfdi } from "./emit-nomina";
-import { SALARIO_MINIMO_GENERAL } from "./constants";
+import { SALARIO_MINIMO_GENERAL, PTU_EXENTO_UMA, UMA_DIARIO, umaDiariaDelEjercicio } from "./constants";
 import {
   incidenciasDelPeriodo,
   resumirIncidencias,
@@ -40,6 +40,19 @@ export type CreatePayrollRunInput = {
   primaVacacionalPct?: number;
   utilidadFiscalGravable?: number; // for PTU
   topeSalarioPtu?: number;
+  // ── Corridas especiales de un toque (aguinaldo / PTU) ──
+  /** Ejercicio al que corresponde la prestación (p.ej. aguinaldo 2026, PTU del ejercicio 2025). */
+  ejercicio?: number;
+  /** Monto total de PTU capturado directamente (renglón de la declaración anual). */
+  ptuMontoTotal?: number;
+  /** Overrides por empleado del monto de aguinaldo (vista previa editable). */
+  aguinaldoMontos?: Record<string, number>;
+  /**
+   * Asignación final de PTU por empleado (monto y exento), calculada por
+   * repartirPtu + ajustes manuales de la vista previa. Cuando se pasa, tiene
+   * prioridad sobre el cálculo desde utilidadFiscalGravable.
+   */
+  ptuAsignaciones?: Record<string, { monto: number; exento: number }>;
 };
 
 export type PayrollRunResult = {
@@ -73,7 +86,11 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
 
   // For PTU, pre-calculate the distribution
   let ptuDistribuciones: Map<string, { monto: number; exento: number }> | undefined;
-  if (input.tipo === "PTU" && input.utilidadFiscalGravable) {
+  if (input.tipo === "PTU" && input.ptuAsignaciones) {
+    // Asignación ya repartida (repartirPtu + ajustes de la vista previa) —
+    // corrida especial de un toque.
+    ptuDistribuciones = new Map(Object.entries(input.ptuAsignaciones));
+  } else if (input.tipo === "PTU" && input.utilidadFiscalGravable) {
     const ptuEmployees: PtuEmployeeData[] = employees.map((e) => {
       const dias = Math.min(365, Math.max(1,
         Math.floor(((input.fechaCorte ?? new Date()).getTime() - e.fechaIngreso.getTime()) / (1000 * 60 * 60 * 24))
@@ -115,6 +132,8 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
         primaVacacionalPct: input.primaVacacionalPct,
         utilidadFiscalGravable: input.utilidadFiscalGravable,
         topeSalarioPtu: input.topeSalarioPtu,
+        ejercicio: input.ejercicio,
+        ptuMontoTotal: input.ptuMontoTotal,
       },
     },
   });
@@ -147,6 +166,7 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
       mes: input.fechaPago.getMonth() + 1,
       diasAguinaldo: input.diasAguinaldo,
       fechaCorte: input.fechaCorte,
+      aguinaldoMontoOverride: input.aguinaldoMontos?.[emp.id],
       diasVacacionesTomar: input.diasVacacionesTomar,
       primaVacacionalPct: input.primaVacacionalPct,
       ptuMonto: ptuDistribuciones?.get(emp.id)?.monto,
@@ -421,7 +441,60 @@ export async function stampPayrollRun(payrollRunId: string): Promise<StampResult
 
       let desglose;
       let diasPagadosCfdi = Math.round(item.totalPercepciones / item.employee.salarioDiario) || 15;
-      if (resumenTieneEfecto(resumen)) {
+      let tipoNominaCfdi: "O" | "E" = "O";
+      let periodoInicioCfdi = new Date(periodoInicio);
+      let periodoFinCfdi = new Date(periodoFin);
+
+      if (run.tipo === "AGUINALDO" || run.tipo === "PTU") {
+        // Corridas especiales: el CFDI se arma con el desglose EXACTO del
+        // motor (separación gravado/exento del aguinaldo — 30 UMA, Art. 93
+        // fracc. XIV LISR — y de la PTU — 15 UMA, misma fracción), nunca con
+        // una sola percepción de sueldo 100% gravada. Conforme a la Guía de
+        // llenado del complemento de nómina del SAT (Apéndices 4 y 5): se
+        // timbran como nómina EXTRAORDINARIA (TipoNomina = E) con
+        // NumDiasPagados = 1 y FechaInicialPago = FechaFinalPago = fecha de
+        // pago.
+        const extra = (run.extraData ?? {}) as Record<string, unknown>;
+        const umaPago = umaDiariaDelEjercicio(run.fechaPago.getFullYear()) ?? UMA_DIARIO;
+        // El monto por empleado se reconstruye desde el propio item (columna
+        // aguinaldo/ptu) — reproduce exactamente lo revisado, incluyendo los
+        // ajustes manuales de la vista previa; el motor rehace exención e ISR
+        // y el guard de neto bloquea cualquier divergencia.
+        const calc = calcularNomina({
+          employee: item.employee as Employee & { tipoDescuentoInfonavit?: string | null },
+          diasPagados: 0,
+          tipo: run.tipo,
+          ejercicio: run.fechaPago.getFullYear(),
+          mes: run.fechaPago.getMonth() + 1,
+          ...(run.tipo === "AGUINALDO"
+            ? {
+                diasAguinaldo: Number(extra.diasAguinaldo) || undefined,
+                fechaCorte: extra.fechaCorte ? new Date(String(extra.fechaCorte)) : undefined,
+                aguinaldoMontoOverride: item.aguinaldo,
+              }
+            : {
+                ptuMonto: item.ptu,
+                ptuExento: Math.round(Math.min(item.ptu, PTU_EXENTO_UMA * umaPago) * 100) / 100,
+              }),
+        });
+        if (Math.abs(calc.netoAPagar - item.netoAPagar) > 0.05) {
+          errors.push(
+            `${item.employee.nombre} ${item.employee.apellidoPaterno}: los importes del recibo no coinciden con el recálculo del motor (neto ${calc.netoAPagar.toFixed(2)} vs ${item.netoAPagar.toFixed(2)}). Elimine y regenere la corrida especial antes de timbrar.`
+          );
+          return;
+        }
+        desglose = {
+          percepciones: calc.percepciones,
+          deducciones: calc.deducciones,
+          totalPercepciones: calc.totalPercepciones,
+          totalDeducciones: calc.totalDeducciones,
+          netoAPagar: calc.netoAPagar,
+        };
+        tipoNominaCfdi = "E";
+        diasPagadosCfdi = 1;
+        periodoInicioCfdi = run.fechaPago;
+        periodoFinCfdi = run.fechaPago;
+      } else if (resumenTieneEfecto(resumen)) {
         // Recalcular con el MISMO motor e insumos que produjo el item revisado
         // y verificar que coincide antes de timbrar: si alguien capturó una
         // incidencia (o cambió el salario) sin recalcular, se bloquea el
@@ -456,12 +529,13 @@ export async function stampPayrollRun(payrollRunId: string): Promise<StampResult
       const result = await emitNominaCfdi({
         companyId: run.companyId,
         employeeId: item.employeeId,
-        periodoInicio: new Date(periodoInicio),
-        periodoFin: new Date(periodoFin),
+        periodoInicio: periodoInicioCfdi,
+        periodoFin: periodoFinCfdi,
         diasPagados: diasPagadosCfdi,
         fechaPago: run.fechaPago,
         sueldoBruto: item.totalPercepciones,
         desglose,
+        tipoNomina: tipoNominaCfdi,
       });
 
       if (result.ok && result.uuid) {

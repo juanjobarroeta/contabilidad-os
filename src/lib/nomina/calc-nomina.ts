@@ -50,6 +50,8 @@ export type NominaCalcInput = {
   // For AGUINALDO
   diasAguinaldo?: number;
   fechaCorte?: Date;
+  /** Monto de aguinaldo ajustado a mano en la vista previa (sustituye la fórmula; la exención se recalcula igual). */
+  aguinaldoMontoOverride?: number;
   // For VACACIONES
   diasVacacionesTomar?: number;
   primaVacacionalPct?: number;
@@ -134,6 +136,12 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
   let vacacionesResult: VacacionesResult | undefined;
   let horasExtraResult: HorasExtraResult | undefined;
 
+  // Valores UMA/SM del ejercicio de pago (año-conscientes, como ISR/IMSS);
+  // si el ejercicio no está versionado se usan los vigentes de constants.
+  const ejercicio = input.ejercicio ?? new Date().getFullYear();
+  const umaEjercicio = umaDiariaDelEjercicio(ejercicio) ?? undefined;
+  const smEjercicio = salarioMinimoGeneralDelEjercicio(ejercicio) ?? undefined;
+
   if (tipo === "ORDINARIA" || tipo === "EXTRAORDINARIA") {
     const sueldoBruto = input.sueldoBruto ?? r2(employee.salarioDiario * diasEfectivos);
     percepciones.push({
@@ -144,12 +152,6 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
       importeExento: 0,
     });
     totalGravado = sueldoBruto;
-
-    // Valores UMA/SM del ejercicio de pago (año-conscientes, como ISR/IMSS);
-    // si el ejercicio no está versionado se usan los vigentes de constants.
-    const ejercicio = input.ejercicio ?? new Date().getFullYear();
-    const umaEjercicio = umaDiariaDelEjercicio(ejercicio) ?? undefined;
-    const smEjercicio = salarioMinimoGeneralDelEjercicio(ejercicio) ?? undefined;
 
     // Horas extra: dobles con exención del Art. 93 fracc. I LISR (100% para
     // salario mínimo; 50% con tope 5 UMA/semana para los demás), triples 100%
@@ -240,6 +242,8 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
       fechaIngreso: employee.fechaIngreso,
       fechaCorte: input.fechaCorte ?? new Date(new Date().getFullYear(), 11, 31),
       diasAguinaldo: input.diasAguinaldo,
+      umaDiaria: umaEjercicio,
+      montoOverride: input.aguinaldoMontoOverride,
     });
     percepciones.push({
       tipoPercepcion: "002",
@@ -298,7 +302,17 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
   // ── Deducciones ──
   const deducciones: DeduccionItem[] = [];
 
-  // ISR on gravado portion
+  // ISR on gravado portion.
+  //
+  // MÉTODO PARA PAGOS EXTRAORDINARIOS (aguinaldo, PTU, etc. — DOCUMENTADO):
+  // se aplica la tarifa ORDINARIA mensual del Art. 96 LISR sobre la porción
+  // gravada del pago (periodicidad "05"). Este método es válido y es el que
+  // más retiene. El Art. 174 del RLISR ofrece un método OPCIONAL (elevar la
+  // gratificación a proporción mensual, calcular la tasa marginal sobre el
+  // sueldo ordinario + esa proporción y aplicarla sólo al gravado), que suele
+  // retener menos; requiere el sueldo mensual ordinario del empleado en el
+  // punto de cálculo. PENDIENTE DOCUMENTADO: ofrecer el método del Art. 174
+  // RLISR como opción de la corrida especial en una iteración futura.
   const isrCalc = calcularIsrRetenido({
     baseGravable: totalGravado,
     periodicidadPago: tipo === "ORDINARIA" ? employee.periodicidadPago : "05", // monthly equiv for extraordinary
