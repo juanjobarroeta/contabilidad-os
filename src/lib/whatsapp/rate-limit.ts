@@ -88,8 +88,9 @@ function startOfMonthMx(now = new Date()): Date {
  * consultas baratas:
  *   - COUNT de mensajes USER del link desde el inicio del día (índice
  *     conversationId+createdAt, acotado a las conversaciones del link).
- *   - SUM de costoMicroUsd de CostEvent (LLM / whatsapp.agent) de la empresa
- *     desde el inicio del mes (índice companyId+occurredAt).
+ *   - SUM de costoMicroUsd de CostEvent (LLM, subtipos whatsapp.*: el agente y
+ *     la visión de estados de cuenta) de la empresa desde el inicio del mes
+ *     (índice companyId+occurredAt).
  */
 export async function checkWhatsappRateLimit(opts: {
   linkId: string;
@@ -119,7 +120,9 @@ export async function checkWhatsappRateLimit(opts: {
       where: {
         companyId,
         categoria: "LLM",
-        subtipo: "whatsapp.agent",
+        // La visión de estados de cuenta por WhatsApp también gasta el
+        // presupuesto de la empresa — es el paso caro del intake.
+        subtipo: { in: ["whatsapp.agent", "whatsapp.vision_statement"] },
         occurredAt: { gte: monthStart },
       },
       _sum: { costoMicroUsd: true },

@@ -21,7 +21,7 @@
 
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
-import { parseStatement, type ParsedTransaction, type RowDescartada } from "@/lib/bank-parser";
+import { parseStatement, type ParseResult, type ParsedTransaction, type RowDescartada } from "@/lib/bank-parser";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
 import { claveDeDuplicado, planImportacion } from "@/lib/bancos/dedup";
 
@@ -152,20 +152,24 @@ export async function persistTransactions(opts: {
   return { imported, skipped };
 }
 
-export async function importBankStatement(opts: {
-  bankAccountId: string;
-  companyId: string;
+/**
+ * Normaliza (Excel/SpreadsheetML → texto) y parsea un archivo de estado de
+ * cuenta SIN persistir nada. Hook aditivo: lo usa importBankStatement (abajo)
+ * y el flujo de WhatsApp cuando la empresa tiene varias cuentas bancarias y
+ * hay que preguntar a cuál pertenece el archivo ANTES de importar — las filas
+ * parseadas se guardan en el pendingAction de la conversación, nunca el
+ * archivo crudo.
+ */
+export function parseStatementFile(opts: {
   fileContent: string;
-  filename: string;
+  filename?: string;
   // "base64" cuando el archivo es binario (Excel .xlsx/.xls) y se envió
   // codificado; "text" (default) para CSV/TXT/OFX enviados como texto.
   encoding?: "text" | "base64";
-}): Promise<ImportResult> {
-  const { bankAccountId, companyId, fileContent, filename, encoding } = opts;
+}): { ok: true; result: ParseResult } | { ok: false; error: string } {
+  const { fileContent, filename, encoding } = opts;
 
-  if (!fileContent) {
-    return { ok: false, imported: 0, skipped: 0, posiblesDuplicados: 0, descartadas: [], message: "Archivo vacío", error: "Archivo vacío" };
-  }
+  if (!fileContent) return { ok: false, error: "Archivo vacío" };
 
   // Excel (.xlsx/.xls/.xlsm): binario, el front lo manda en base64.
   let content = fileContent;
@@ -193,16 +197,34 @@ export async function importBankStatement(opts: {
         content = XLSX.utils.sheet_to_csv(ws);
         parseName = parseName.replace(/\.(xlsx|xls|xlsm)$/i, ".csv");
       } catch {
-        return {
-          ok: false, imported: 0, skipped: 0, posiblesDuplicados: 0, descartadas: [],
-          message: "No se pudo leer el archivo de Excel. Verifica que sea un .xlsx válido.",
-          error: "Excel ilegible",
-        };
+        return { ok: false, error: "Excel ilegible" };
       }
     }
   }
 
-  const parseResult = parseStatement(content, parseName);
+  return { ok: true, result: parseStatement(content, parseName) };
+}
+
+export async function importBankStatement(opts: {
+  bankAccountId: string;
+  companyId: string;
+  fileContent: string;
+  filename: string;
+  // "base64" cuando el archivo es binario (Excel .xlsx/.xls) y se envió
+  // codificado; "text" (default) para CSV/TXT/OFX enviados como texto.
+  encoding?: "text" | "base64";
+}): Promise<ImportResult> {
+  const { bankAccountId, companyId, fileContent, filename, encoding } = opts;
+
+  const parsed = parseStatementFile({ fileContent, filename, encoding });
+  if (!parsed.ok) {
+    const message =
+      parsed.error === "Excel ilegible"
+        ? "No se pudo leer el archivo de Excel. Verifica que sea un .xlsx válido."
+        : parsed.error;
+    return { ok: false, imported: 0, skipped: 0, posiblesDuplicados: 0, descartadas: [], message, error: parsed.error };
+  }
+  const parseResult = parsed.result;
 
   if (parseResult.transactions.length === 0) {
     return {

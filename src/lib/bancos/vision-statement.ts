@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ParsedTransaction } from "@/lib/bank-parser";
 import { meteredCreate } from "@/lib/costos/anthropic";
+import type { CostCtx } from "@/lib/costos/record";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vision extraction of a bank statement from a PDF or image (estado de cuenta).
@@ -72,10 +73,15 @@ type RawExtraction = {
   }[];
 };
 
-/** Extract + validate a bank statement from a PDF/image buffer. */
+/** Extract + validate a bank statement from a PDF/image buffer.
+ *  `costCtx` (opcional, aditivo) atribuye el costo LLM a una empresa/subtipo —
+ *  el flujo de WhatsApp lo usa para que la visión cuente contra el presupuesto
+ *  mensual de la empresa; sin él se mide como antes (bancos.vision_statement,
+ *  sin empresa). */
 export async function extractStatementFromDocument(
   buf: Buffer,
-  mediaType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp"
+  mediaType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp",
+  costCtx?: CostCtx
 ): Promise<StatementExtraction> {
   const base64 = buf.toString("base64");
   const docBlock: Anthropic.ContentBlockParam =
@@ -84,7 +90,7 @@ export async function extractStatementFromDocument(
       : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response: any = await meteredCreate(anthropic, { subtipo: "bancos.vision_statement" }, {
+  const response: any = await meteredCreate(anthropic, { subtipo: "bancos.vision_statement", ...costCtx }, {
     model: MODEL,
     max_tokens: 8000,
     system: SYSTEM_PROMPT,

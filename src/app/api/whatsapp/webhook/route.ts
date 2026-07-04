@@ -152,16 +152,33 @@ async function processMediaTurn(opts: {
     return deliver(conversationId, phone, answer);
   }
 
-  // Documents → extractors.
+  // Documents → extractors. Se procesa UN solo adjunto por mensaje (los
+  // documentos —sobre todo estados de cuenta por visión— son el paso caro);
+  // si vienen más, se pide enviarlos uno por uno.
+  const documentos = media.filter((m) => !m.contentType.toLowerCase().startsWith("audio/"));
   const summaries: string[] = [];
-  for (const m of media) {
+  const doc = documentos[0];
+  if (doc) {
     try {
-      const { buffer, contentType } = await downloadTwilioMedia(m.url);
-      summaries.push(await handleWhatsappMedia({ companyId, buffer, contentType: contentType || m.contentType, filename: "" }));
+      const { buffer, contentType } = await downloadTwilioMedia(doc.url);
+      summaries.push(
+        await handleWhatsappMedia({
+          companyId,
+          conversationId,
+          buffer,
+          contentType: contentType || doc.contentType,
+          filename: "",
+        })
+      );
     } catch (e) {
       console.error("[whatsapp] media error", e);
-      summaries.push("No pude procesar uno de los archivos. Inténtalo de nuevo.");
+      summaries.push("No pude procesar el archivo. Inténtalo de nuevo.");
     }
+  }
+  if (documentos.length > 1) {
+    summaries.push(
+      `Recibí ${documentos.length} archivos, pero solo procesé el primero. Envíamelos uno por uno, por favor.`
+    );
   }
   await deliver(conversationId, phone, summaries.join("\n\n") || "No recibí ningún archivo legible.");
 }
@@ -319,6 +336,18 @@ export async function POST(req: Request) {
     // For documents we record a placeholder user turn here; for audio the
     // transcript becomes the user turn inside processMediaTurn.
     if (!isAudioOnly) {
+      // Costo-seguridad ANTES de descargar/procesar el documento: la extracción
+      // por visión de un estado de cuenta es el paso caro, así que respeta los
+      // mismos topes (diario por usuario + presupuesto mensual por empresa)
+      // que un turno normal del agente. Respuesta estática, sin LLM.
+      const mediaLimit = await checkWhatsappRateLimit({
+        linkId: sender.linkId,
+        companyId: activeCompanyId,
+        plan: effectiveWhatsappPlan({ tier: company.tier, despachoId: company.despachoId }),
+      });
+      if (!mediaLimit.allowed) {
+        return reply(mediaLimit.mensaje ?? "Alcanzaste tu límite de uso del asistente.");
+      }
       await prisma.whatsappMessage.create({
         data: {
           conversationId: conversation.id,
@@ -346,9 +375,14 @@ export async function POST(req: Request) {
   // agent turns ARE counted and limited. When over a cap we reply with a cheap
   // STATIC message (no LLM) and stop.
   const pending = await getPendingAction(conversation.id);
+  // Un estado de cuenta pendiente se confirma con el NÚMERO de la cuenta
+  // (1-2 dígitos); las escrituras (timbrar/conciliar), con el código de 6.
+  // Ninguna de las dos pasa por el agente, así que no se les aplica el tope.
   const isConfirmationReply =
     pending != null &&
-    (/\b\d{6}\b/.test(body) || /^(cancelar|cancela|no)\b/i.test(body.trim()));
+    (pending.type === "importar_estado"
+      ? /^\d{1,2}$/.test(body.trim()) || /^(cancelar|cancela|no)\b/i.test(body.trim())
+      : /\b\d{6}\b/.test(body) || /^(cancelar|cancela|no)\b/i.test(body.trim()));
 
   if (!isConfirmationReply) {
     const decision = await checkWhatsappRateLimit({
