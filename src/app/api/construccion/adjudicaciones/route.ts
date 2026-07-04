@@ -17,6 +17,8 @@ export const GET = withAuthz(async (req: Request) => {
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
   const estado = searchParams.get("estado");
+  // abiertas=1 → POR_PAGAR + PARCIAL (todo lo que tiene saldo por pagar).
+  const abiertas = searchParams.get("abiertas") === "1";
   if (!companyId) {
     return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
   }
@@ -24,7 +26,10 @@ export const GET = withAuthz(async (req: Request) => {
   await requireModule(companyId, "CONSTRUCCION");
 
   const rows = await prisma.solicitudAdjudicacion.findMany({
-    where: { companyId, ...(estado ? { estado } : {}) },
+    where: {
+      companyId,
+      ...(abiertas ? { estado: { in: ["POR_PAGAR", "PARCIAL"] } } : estado ? { estado } : {}),
+    },
     include: {
       solicitud: {
         select: {
@@ -43,31 +48,40 @@ export const GET = withAuthz(async (req: Request) => {
           bankAccount: { select: { banco: true, nombre: true } },
         },
       },
+      aplicaciones: { select: { monto: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  const out = rows.map((a) => ({
-    id: a.id,
-    solicitudId: a.solicitudId,
-    folio: a.solicitud?.folio ?? "",
-    proyecto: a.solicitud?.proyecto ?? null,
-    aprobadaAt: a.solicitud?.aprobadaAt ?? null,
-    supplierId: a.supplierId,
-    supplierNombre: a.supplierNombre,
-    tieneCredito: a.tieneCredito,
-    diasCredito: a.diasCredito,
-    diasEntrega: a.diasEntrega,
-    total: a.total,
-    estado: a.estado,
-    createdAt: a.createdAt,
-    enviadaTesoreriaAt: a.enviadaTesoreriaAt,
-    pagadaAt: a.pagadaAt,
-    conciliadaAt: a.conciliadaAt,
-    referenciaPago: a.referenciaPago,
-    comprobanteName: a.comprobanteName,
-    bankTransaction: a.bankTransaction,
-  }));
+  const out = rows.map((a) => {
+    const aplicado = a.aplicaciones.reduce((s, x) => s + x.monto, 0);
+    // Tolerancia legacy: PAGADA/CONCILIADA sin aplicaciones (flujo anterior)
+    // cuenta como saldada.
+    const legacyPaid = (a.estado === "PAGADA" || a.estado === "CONCILIADA") && aplicado <= 0.01;
+    return {
+      id: a.id,
+      solicitudId: a.solicitudId,
+      folio: a.solicitud?.folio ?? "",
+      proyecto: a.solicitud?.proyecto ?? null,
+      aprobadaAt: a.solicitud?.aprobadaAt ?? null,
+      supplierId: a.supplierId,
+      supplierNombre: a.supplierNombre,
+      tieneCredito: a.tieneCredito,
+      diasCredito: a.diasCredito,
+      diasEntrega: a.diasEntrega,
+      total: a.total,
+      aplicado,
+      saldo: legacyPaid ? 0 : Math.max(0, a.total - aplicado),
+      estado: a.estado,
+      createdAt: a.createdAt,
+      enviadaTesoreriaAt: a.enviadaTesoreriaAt,
+      pagadaAt: a.pagadaAt,
+      conciliadaAt: a.conciliadaAt,
+      referenciaPago: a.referenciaPago,
+      comprobanteName: a.comprobanteName,
+      bankTransaction: a.bankTransaction,
+    };
+  });
 
   return NextResponse.json(out);
 });
