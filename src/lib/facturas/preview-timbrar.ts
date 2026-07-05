@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { createDraftInvoice, type StampInput, type StampItem } from "@/lib/facturas/stamp";
 import { signDraftToken, publicBaseUrl } from "@/lib/facturas/file-token";
-import { stagePendingTimbrar } from "@/lib/whatsapp/pending-action";
+import { createStagedAction } from "@/lib/staged-action-server";
 
 // Builds a CFDI PREFACTURA (Facturapi borrador) from a natural-language-ish tool
 // input, validates readiness, links its PDF so the user can verify the SAT
-// classification (clave producto/servicio + unidad), and stages it as a pending
-// action requiring a confirmation code. Does NOT stamp — the draft is promoted
-// to a real CFDI only when the user replies with the code.
+// classification (clave producto/servicio + unidad), and STAGES it on the Tier-3
+// rails: a deep link to an in-app review+confirm screen. Does NOT stamp — the
+// draft is promoted to a real CFDI only when the user authorizes it inside the
+// app (authenticated session = real re-authentication, not a chat "sí").
 
 type PreviewInput = {
   customer_id?: string;
@@ -50,10 +51,11 @@ function unidadLabel(clave: string): string {
 export async function previewTimbrar(
   raw: Record<string, unknown>,
   companyId: string,
-  conversationId?: string
+  ctx: { conversationId?: string; userId?: string; inApp?: boolean } = {}
 ): Promise<string> {
-  if (!conversationId) {
-    return JSON.stringify({ error: "Timbrar solo está disponible por WhatsApp con confirmación." });
+  const { conversationId, userId, inApp } = ctx;
+  if (!userId) {
+    return JSON.stringify({ error: "No puedo identificar tu usuario para preparar el timbrado." });
   }
   const input = raw as PreviewInput;
 
@@ -155,18 +157,44 @@ export async function previewTimbrar(
     `Método: ${payload.metodoPago} · Uso: ${payload.usoCfdi}` +
     (pdfUrl ? `\n📄 Revisa el borrador: ${pdfUrl}` : "");
 
-  const { code } = await stagePendingTimbrar(conversationId, companyId, payload, draft.draftId, preview);
+  // Tier 3: se escenifica en los rieles y se genera un DEEP LINK a la pantalla de
+  // revisión dentro de la app. El timbrado NO ocurre aquí; ocurre cuando el usuario
+  // abre el enlace (sesión autenticada) y toca "Confirmar y timbrar".
+  const { url } = await createStagedAction({
+    type: "timbrar",
+    companyId,
+    createdByUserId: userId,
+    // Solo enlazamos la conversación de WhatsApp (para avisar el resultado por
+    // ahí). En la app el usuario ve el resultado en la misma pantalla.
+    whatsappConversationId: inApp ? null : conversationId ?? null,
+    summary: `Timbrar factura para ${customer.razonSocial} por ${MXN(total)}.`,
+    payload: {
+      stampInput: payload,
+      draftId: draft.draftId,
+      previewText: preview,
+      resumen: {
+        cliente: customer.razonSocial,
+        rfc: customer.rfc,
+        subtotal,
+        iva,
+        total,
+        metodoPago: payload.metodoPago,
+        usoCfdi: payload.usoCfdi,
+      },
+    },
+  });
 
   // The model relays this to the user. It must NOT claim it already stamped.
   return JSON.stringify({
     staged: true,
     preview,
     prefactura_pdf: pdfUrl,
+    autorizar_url: url,
     instruccion_para_el_asistente:
-      `Muestra este resumen al usuario, INCLUYE el enlace de la prefactura (PDF borrador) para que valide la ` +
-      `clasificación SAT (clave producto/servicio y unidad), y pídele que confirme respondiendo con el código ${code} ` +
-      `para timbrar, o 'cancelar'. Si la clave o la unidad están mal (p.ej. salió "Pieza" para un servicio), corrige y ` +
-      `vuelve a llamar preview_factura. NO digas que ya se timbró — aún NO se ha timbrado.`,
-    codigo_confirmacion: code,
+      `Muestra este resumen al usuario y compártele el ENLACE DE AUTORIZACIÓN (${url}) para que revise y timbre ` +
+      `DENTRO de la app (ahí valida la clasificación SAT y confirma con un toque; requiere iniciar sesión, por seguridad). ` +
+      `El enlace vence en 30 minutos. Si la clave o la unidad están mal (p.ej. salió "Pieza" para un servicio), corrige y ` +
+      `vuelve a llamar preview_factura para generar un enlace nuevo. NUNCA digas que ya se timbró — se timbra solo cuando el ` +
+      `usuario autoriza en la app; te avisaré aquí el folio fiscal cuando quede.`,
   });
 }
