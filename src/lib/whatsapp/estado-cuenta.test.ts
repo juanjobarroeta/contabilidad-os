@@ -6,6 +6,8 @@ import {
   interpretarRespuestaSeleccion,
   mensajeResumenImportacion,
   mensajeSeleccionCuenta,
+  mensajeConfirmarImportacion,
+  bancosDifieren,
   ultimos4Digitos,
   serializarMovimientos,
   deserializarMovimientos,
@@ -233,6 +235,16 @@ describe("interpretarRespuestaSeleccion", () => {
     expect(interpretarRespuestaSeleccion("¿cuál me conviene?", 3).tipo).toBe("OTRO");
     expect(interpretarRespuestaSeleccion("la 2", 3).tipo).toBe("OTRO");
   });
+
+  it("interpreta 'sí' y sinónimos como CONFIRMAR", () => {
+    for (const t of ["sí", "si", "SÍ", "ok", "dale", "va", "confirmar", "correcto", "adelante"]) {
+      expect(interpretarRespuestaSeleccion(t, 1).tipo).toBe("CONFIRMAR");
+    }
+  });
+
+  it("'no' sigue siendo CANCELAR, no CONFIRMAR", () => {
+    expect(interpretarRespuestaSeleccion("no", 1).tipo).toBe("CANCELAR");
+  });
 });
 
 // ── Formato de mensajes ──────────────────────────────────────────────────────
@@ -296,6 +308,51 @@ describe("mensajes", () => {
     expect(msg).toContain("2) Banorte Nómina (terminación 6655)");
     expect(msg).toContain('"cancelar"');
     expect(msg).not.toMatch(/[*_#]|[\u{1F300}-\u{1FAFF}]|✅|❌/u);
+  });
+
+  it("confirmación nombra empresa y cuenta y pide 'sí'", () => {
+    const msg = mensajeConfirmarImportacion({
+      companyName: "Soluciones de Movilidad Poblana",
+      cuentaEtiqueta: "BanBajío Cheques (terminación 0201)",
+      bancoDetectado: "Santander",
+      movimientos: 397,
+      bancoMismatch: false,
+    });
+    expect(msg).toContain("397 movimientos");
+    expect(msg).toContain("Soluciones de Movilidad Poblana");
+    expect(msg).toContain("BanBajío Cheques (terminación 0201)");
+    expect(msg).toContain("sí");
+    expect(msg).not.toContain("⚠️");
+  });
+
+  it("confirmación ADVIERTE cuando el banco del archivo no coincide con la cuenta", () => {
+    const msg = mensajeConfirmarImportacion({
+      companyName: "Soluciones de Movilidad Poblana",
+      cuentaEtiqueta: "BanBajío Cheques (terminación 0201)",
+      bancoDetectado: "Santander",
+      movimientos: 397,
+      bancoMismatch: true,
+    });
+    expect(msg).toContain("⚠️");
+    expect(msg).toContain("otro banco");
+  });
+});
+
+describe("bancosDifieren", () => {
+  it("detecta bancos distintos (el bug: Santander a una cuenta BanBajío)", () => {
+    expect(bancosDifieren("Santander", "BanBajío")).toBe(true);
+    expect(bancosDifieren("BBVA", "Banorte")).toBe(true);
+  });
+
+  it("no marca diferencia por variantes del mismo banco ni acentos/mayúsculas", () => {
+    expect(bancosDifieren("BBVA Bancomer", "BBVA")).toBe(false);
+    expect(bancosDifieren("banbajío", "BanBajio")).toBe(false);
+    expect(bancosDifieren("SANTANDER", "Santander")).toBe(false);
+  });
+
+  it("sin banco detectado no puede afirmar diferencia (false)", () => {
+    expect(bancosDifieren(null, "BBVA")).toBe(false);
+    expect(bancosDifieren("BBVA", null)).toBe(false);
   });
 });
 
