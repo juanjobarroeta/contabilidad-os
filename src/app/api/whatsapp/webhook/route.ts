@@ -24,7 +24,8 @@ import {
 import { runWhatsappAgent, type WhatsappCompany, type WhatsappCartera } from "@/lib/whatsapp/agent";
 import { parseLinkCode, redeemLinkCode } from "@/lib/whatsapp/linking";
 import { registrarBitacora } from "@/lib/audit";
-import { tryConfirmPendingAction, getPendingAction } from "@/lib/whatsapp/pending-action";
+import { tryConfirmPendingAction, getPendingAction, stagePendingDeshacerImport } from "@/lib/whatsapp/pending-action";
+import { findUltimoLoteImportado, esIntencionDeshacer } from "@/lib/bancos/undo-import";
 import { checkWhatsappRateLimit } from "@/lib/whatsapp/rate-limit";
 import { effectiveWhatsappPlan } from "@/lib/planes";
 import { decideEscrituraUsuario } from "@/lib/subscription";
@@ -406,6 +407,30 @@ export async function POST(req: Request) {
     .reverse()
     .map((m) => ({ role: m.role === "ASSISTANT" ? "assistant" : "user", content: m.body }));
 
+  // ── Deshacer última importación (respuesta rápida, no pasa por el agente). ──
+  // Sólo cuando el mensaje es texto y expresa reversión de una importación. No
+  // borra: escenifica y pide "sí". Va después de resolver la empresa activa, así
+  // que respeta el foco del despacho.
+  if (media.length === 0 && esIntencionDeshacer(body)) {
+    const lote = await findUltimoLoteImportado(activeCompanyId);
+    if (!lote || lote.borrables === 0) {
+      return reply(
+        lote
+          ? "La última importación ya no tiene movimientos que pueda eliminar (o ya se conciliaron). No deshice nada."
+          : "No encuentro una importación reciente que deshacer en esta empresa."
+      );
+    }
+    const de = lote.banco ? `de ${lote.banco} ` : "";
+    const resumen = `${lote.borrables} movimiento${lote.borrables === 1 ? "" : "s"} ${de}de la cuenta ${lote.cuentaEtiqueta} de *${company.razonSocial}*`;
+    await stagePendingDeshacerImport(conversation.id, activeCompanyId, lote.id, resumen);
+    let msg = `Voy a deshacer la última importación: eliminaré ${resumen}.`;
+    if (lote.conciliados > 0) {
+      msg += ` Conservaré ${lote.conciliados} que ya están conciliados con una factura.`;
+    }
+    msg += `\n\nResponde *sí* para confirmar, o *cancelar*.`;
+    return reply(msg);
+  }
+
   // ── Media branch: forwarded document, photo, or voice note. ───────────────
   // Documents go to the extractors; voice notes are transcribed and answered
   // like a normal question. (Caption + media → the media is the intent.)
@@ -458,12 +483,14 @@ export async function POST(req: Request) {
   // Un estado de cuenta pendiente se confirma con "sí" (cuenta por omisión) o con
   // el NÚMERO de la cuenta (1-2 dígitos); las escrituras (timbrar/conciliar), con
   // el código de 6. Ninguna pasa por el agente, así que no se les aplica el tope.
+  const siONumero =
+    /^\d{1,2}$/.test(body.trim()) ||
+    /^(s[íi]|confirm[ao]|confirmar|ok|okay|dale|va|correcto|adelante|de acuerdo)(?![a-zñáéíóúü])/i.test(body.trim()) ||
+    /^(cancelar|cancela|no)\b/i.test(body.trim());
   const isConfirmationReply =
     pending != null &&
-    (pending.type === "importar_estado"
-      ? /^\d{1,2}$/.test(body.trim()) ||
-        /^(s[íi]|confirm[ao]|confirmar|ok|okay|dale|va|correcto|adelante|de acuerdo)(?![a-zñáéíóúü])/i.test(body.trim()) ||
-        /^(cancelar|cancela|no)\b/i.test(body.trim())
+    (pending.type === "importar_estado" || pending.type === "deshacer_import"
+      ? siONumero
       : /\b\d{6}\b/.test(body) || /^(cancelar|cancela|no)\b/i.test(body.trim()));
 
   if (!isConfirmationReply) {
