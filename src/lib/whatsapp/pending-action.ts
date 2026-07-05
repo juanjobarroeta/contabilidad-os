@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { reconcileTransaction } from "@/lib/conciliacion";
 import { resolverPendingImportEstado, type PendingImportEstado } from "@/lib/whatsapp/estado-cuenta";
+import { deshacerLoteImportado } from "@/lib/bancos/undo-import";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WhatsApp write-action confirmation gate (acciones REVERSIBLES en el chat).
@@ -26,6 +27,15 @@ export type PendingAction =
       payload: { txId: string; invoiceId: string };
       preview: string;
       companyId: string;
+    }
+  // Deshacer la última importación de estado de cuenta: se confirma con "sí"
+  // (no borra a ciegas). Reversible por re-importar, así que no lleva código.
+  | {
+      type: "deshacer_import";
+      expiresAt: number;
+      companyId: string;
+      batchId: string;
+      resumen: string;
     }
   // Estado de cuenta recibido por WhatsApp a la espera de que el usuario elija
   // la cuenta bancaria destino (respuesta numerada, no código de 6 dígitos).
@@ -57,6 +67,20 @@ export async function stagePendingConciliar(
   preview: string
 ): Promise<{ code: string }> {
   return stage(conversationId, { type: "conciliar", code: genCode(), expiresAt: Date.now() + TTL_MS, payload, preview, companyId });
+}
+
+/** Escenifica un "deshacer última importación" a la espera del "sí" del usuario. */
+export async function stagePendingDeshacerImport(
+  conversationId: string,
+  companyId: string,
+  batchId: string,
+  resumen: string
+): Promise<void> {
+  await prisma.whatsappConversation.update({
+    where: { id: conversationId },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: { pendingAction: { type: "deshacer_import", expiresAt: Date.now() + TTL_MS, companyId, batchId, resumen } as any },
+  });
 }
 
 export async function clearPendingAction(conversationId: string): Promise<void> {
@@ -99,6 +123,30 @@ export async function tryConfirmPendingAction(
   // lógica vive junto al resto del flujo en estado-cuenta.ts.
   if (pa.type === "importar_estado") {
     return resolverPendingImportEstado(conversationId, pa, body);
+  }
+
+  // Deshacer última importación: "sí" ejecuta, "cancelar" aborta, otro recuerda.
+  if (pa.type === "deshacer_import") {
+    const t = body.trim().toLowerCase();
+    if (/^(cancelar|cancela|no)\b/.test(t)) {
+      await clearPendingAction(conversationId);
+      return "Listo, no deshice nada. Los movimientos siguen como estaban.";
+    }
+    if (/^(s[íi]|confirm[ao]|confirmar|ok|okay|dale|va|correcto|adelante|de acuerdo)(?![a-zñáéíóúü])/.test(t)) {
+      await clearPendingAction(conversationId);
+      try {
+        const { borrados, conservados } = await deshacerLoteImportado(pa.batchId, pa.companyId);
+        let msg = `Listo, deshice la importación: eliminé ${borrados} movimiento${borrados === 1 ? "" : "s"}.`;
+        if (conservados > 0) {
+          msg += ` Conservé ${conservados} que ya estaban conciliados con una factura (no los toco para no romper tu trabajo).`;
+        }
+        return msg;
+      } catch (e) {
+        console.error("[whatsapp] deshacer import error", e);
+        return "Tuve un problema al deshacer la importación. Inténtalo de nuevo o hazlo desde la app.";
+      }
+    }
+    return `Tengo pendiente deshacer: ${pa.resumen}\nResponde *sí* para eliminarlos, o *cancelar* para dejarlos.`;
   }
 
   const text = body.trim().toLowerCase();

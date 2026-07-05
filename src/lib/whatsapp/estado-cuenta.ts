@@ -435,6 +435,8 @@ export async function importarMovimientosWhatsapp(opts: {
     companyId: opts.companyId,
     transactions: opts.transactions,
     source: "WHATSAPP",
+    banco: opts.banco,
+    periodo: opts.periodo,
   });
   registrarBitacora({
     companyId: opts.companyId,
@@ -523,15 +525,17 @@ export async function resolverPendingImportEstado(
       cuentaTerminacion: cuenta.terminacion,
       descartadas: pending.descartadas,
     });
-    return mensajeResumenImportacion({
-      banco: pending.banco,
-      periodo: pending.periodo,
-      importados: imported,
-      yaExistian: skipped,
-      descartadas: pending.descartadas,
-      saldoVerificado: pending.saldoVerificado,
-      notaCuenta: `Los registré en la cuenta ${cuenta.etiqueta}.`,
-    });
+    return (
+      mensajeResumenImportacion({
+        banco: pending.banco,
+        periodo: pending.periodo,
+        importados: imported,
+        yaExistian: skipped,
+        descartadas: pending.descartadas,
+        saldoVerificado: pending.saldoVerificado,
+        notaCuenta: `Los registré en la cuenta ${cuenta.etiqueta}.`,
+      }) + (imported > 0 ? '\n\n¿Te equivocaste de empresa o cuenta? Dime "deshacer importación".' : "")
+    );
   } catch (e) {
     console.error("[whatsapp] import estado (pendiente) error", e);
     return "Tuve un problema importando los movimientos. Vuelve a enviarme el estado de cuenta o súbelo desde la aplicación.";

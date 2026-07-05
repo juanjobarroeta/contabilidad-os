@@ -1,0 +1,136 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// "Deshacer última importación" — revierte un lote de estado de cuenta que cayó
+// en la empresa/cuenta equivocada. Borra SOLO los movimientos del lote que aún
+// están sin conciliar (UNMATCHED) o ignorados sin asientos (IGNORED de import),
+// y CONSERVA los que ya se conciliaron con un CFDI (borrarlos rompería trabajo
+// hecho). El lote se marca como deshecho (auditoría), no se elimina.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { registrarBitacora } from "@/lib/audit";
+
+// Intención de "deshacer la última importación": un verbo de reversión + una
+// referencia a la importación/movimientos/subida. Así "deshacer conciliación" u
+// otras reversiones NO la disparan. PURA (testeable sin DB).
+const DESHACER_VERBO = /\b(deshacer|deshaz|deshace|revertir|revierte|revierta|revoca(r)?)\b/i;
+const DESHACER_OBJETO = /(importaci|movimient|estado\s+de\s+cuenta|sub[íi]|la\s+subida|lo\s+que\s+sub)/i;
+
+export function esIntencionDeshacer(body: string): boolean {
+  return DESHACER_VERBO.test(body) && DESHACER_OBJETO.test(body);
+}
+
+export interface LoteImportado {
+  id: string;
+  createdAt: Date;
+  banco: string | null;
+  periodo: string | null;
+  count: number;
+  bankAccountId: string;
+  cuentaEtiqueta: string;
+  /** Movimientos del lote que aún se pueden borrar (no conciliados). */
+  borrables: number;
+  /** Movimientos ya conciliados que se conservarían. */
+  conciliados: number;
+}
+
+/** Últimos 4 dígitos de un número (para etiquetar la cuenta). */
+function ult4(n: string | null | undefined): string | null {
+  const d = (n ?? "").replace(/\D/g, "");
+  return d.length >= 4 ? d.slice(-4) : null;
+}
+
+/**
+ * Encuentra el ÚLTIMO lote importado (no deshecho) de la empresa, con cuántos
+ * movimientos son borrables vs. ya conciliados. null si no hay ninguno.
+ */
+export async function findUltimoLoteImportado(companyId: string): Promise<LoteImportado | null> {
+  const batch = await prisma.importBatch.findFirst({
+    where: { companyId, undoneAt: null },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true, createdAt: true, banco: true, periodo: true, count: true, bankAccountId: true,
+      bankAccount: { select: { banco: true, nombre: true, numeroCuenta: true, clabe: true } },
+    },
+  });
+  if (!batch) return null;
+
+  const [borrables, total] = await Promise.all([
+    prisma.bankTransaction.count({ where: whereBorrables(batch.id, companyId) }),
+    prisma.bankTransaction.count({ where: { importBatchId: batch.id, companyId } }),
+  ]);
+
+  const t = ult4(batch.bankAccount.numeroCuenta) ?? ult4(batch.bankAccount.clabe);
+  const cuentaEtiqueta =
+    `${batch.bankAccount.banco} ${batch.bankAccount.nombre}` + (t ? ` (terminación ${t})` : "");
+
+  return {
+    id: batch.id,
+    createdAt: batch.createdAt,
+    banco: batch.banco,
+    periodo: batch.periodo,
+    count: batch.count,
+    bankAccountId: batch.bankAccountId,
+    cuentaEtiqueta,
+    borrables,
+    conciliados: total - borrables,
+  };
+}
+
+/** Condición de "borrable": del lote, sin conciliar y sin enlaces duros. */
+function whereBorrables(batchId: string, companyId: string): Prisma.BankTransactionWhereInput {
+  return {
+    importBatchId: batchId,
+    companyId,
+    status: { in: ["UNMATCHED", "IGNORED"] },
+    invoiceId: null,
+    taxDeclarationId: null,
+    conciliacionDetalles: { none: {} },
+  };
+}
+
+export interface ResultadoDeshacer {
+  borrados: number;
+  conservados: number;
+}
+
+/**
+ * Ejecuta el deshacer: borra los movimientos borrables del lote y marca el lote
+ * como deshecho. Idempotente por el marcado (un lote ya deshecho no borra más).
+ * Devuelve cuántos se borraron y cuántos se conservaron (conciliados).
+ */
+export async function deshacerLoteImportado(
+  batchId: string,
+  companyId: string,
+  userId?: string | null
+): Promise<ResultadoDeshacer> {
+  return prisma.$transaction(async (tx) => {
+    const batch = await tx.importBatch.findFirst({
+      where: { id: batchId, companyId, undoneAt: null },
+      select: { id: true },
+    });
+    if (!batch) return { borrados: 0, conservados: 0 };
+
+    const conservados = await tx.bankTransaction.count({
+      where: { importBatchId: batchId, companyId, NOT: whereBorrables(batchId, companyId) },
+    });
+    const { count: borrados } = await tx.bankTransaction.deleteMany({
+      where: whereBorrables(batchId, companyId),
+    });
+    await tx.importBatch.update({
+      where: { id: batchId },
+      data: { undoneAt: new Date(), undoneByUserId: userId ?? null },
+    });
+
+    registrarBitacora({
+      companyId,
+      userId: userId ?? null,
+      accion: "bancos.deshacer-importacion",
+      entidad: "ImportBatch",
+      entidadId: batchId,
+      detalle: { borrados, conservados },
+    });
+
+    return { borrados, conservados };
+  });
+}

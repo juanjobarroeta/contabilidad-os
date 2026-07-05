@@ -52,10 +52,28 @@ export async function persistTransactions(opts: {
   companyId: string;
   transactions: ParsedTransaction[];
   source?: string;
-}): Promise<{ imported: number; skipped: number }> {
+  /** Metadatos del lote (para el "deshacer última importación"). */
+  banco?: string | null;
+  periodo?: string | null;
+}): Promise<{ imported: number; skipped: number; batchId: string | null }> {
   const { bankAccountId, companyId, transactions, source = "UPLOAD" } = opts;
   let imported = 0;
   let skipped = 0;
+
+  // Lote de importación: agrupa lo que entra en esta subida para poder DESHACERLO
+  // exactamente después. Se crea antes de insertar y se sella con el conteo al
+  // final; si no entró nada (todo duplicado), se descarta el lote vacío.
+  const batch = await prisma.importBatch.create({
+    data: {
+      companyId,
+      bankAccountId,
+      source,
+      banco: opts.banco ?? null,
+      periodo: opts.periodo ?? null,
+      count: 0,
+    },
+    select: { id: true },
+  });
 
   // Regla de conteo por clave (día + monto + descripción + referencia):
   // D = movimientos que YA existían en la BD para esa clave (medido ANTES de
@@ -130,9 +148,17 @@ export async function persistTransactions(opts: {
         status,
         notes,
         source,
+        importBatchId: batch.id,
       },
     });
     imported++;
+  }
+
+  // Sella el lote con el conteo real; si no entró nada, descártalo (nada que deshacer).
+  if (imported > 0) {
+    await prisma.importBatch.update({ where: { id: batch.id }, data: { count: imported } });
+  } else {
+    await prisma.importBatch.delete({ where: { id: batch.id } }).catch(() => {});
   }
 
   // Conciliación event-driven: en cuanto entra un estado de cuenta (subida CSV,
@@ -149,7 +175,7 @@ export async function persistTransactions(opts: {
     }
   }
 
-  return { imported, skipped };
+  return { imported, skipped, batchId: imported > 0 ? batch.id : null };
 }
 
 /**

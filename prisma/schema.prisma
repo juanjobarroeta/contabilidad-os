@@ -286,6 +286,7 @@ model Company {
   whatsappLinks         WhatsappLink[]         @relation("WhatsappActiveCompany")
   whatsappConversations WhatsappConversation[]
   stagedActions         StagedAction[]
+  importBatches         ImportBatch[]
 
   // Post-sync IVA-change notices (one baseline per unfiled period)
   ivaPeriodNotices IvaPeriodNotice[]
@@ -915,6 +916,7 @@ model BankAccount {
   transactions BankTransaction[]
   gastos       Gasto[]
   reembolsos   ReembolsoSemanal[]
+  importBatches ImportBatch[]
 
   @@unique([companyId, numeroCuenta])
 }
@@ -953,9 +955,13 @@ model BankTransaction {
   belvoId       String? @unique // Belvo transaction ID (for dedup)
   belvoCategory String? // Belvo auto-category (e.g. "Bills & Utilities")
   externalRef   String? @unique // idempotency key for external app ingest (e.g. PADEL payment id)
+  // Lote de importación (estado de cuenta) al que pertenece — habilita el
+  // "deshacer última importación": borrar exactamente ese lote sin tocar el resto.
+  importBatchId String?
 
   company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankAccount           BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  importBatch           ImportBatch?           @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
   supplier              Supplier?              @relation(fields: [supplierId], references: [id])
   invoice               Invoice?               @relation(fields: [invoiceId], references: [id])
   taxDeclaration        TaxDeclaration?        @relation(fields: [taxDeclarationId], references: [id])
@@ -978,6 +984,31 @@ model BankTransaction {
   // Conciliación de impuestos: «¿qué movimiento pagó esta declaración?»
   // (guard de segundo movimiento y detalle en la respuesta del PATCH).
   @@index([taxDeclarationId])
+  // "Deshacer última importación": último lote por empresa/cuenta y borrado del lote.
+  @@index([importBatchId])
+}
+
+// Lote de importación de estado de cuenta — agrupa los movimientos que entraron
+// juntos (una subida) para poder DESHACER exactamente ese lote. Se conserva la
+// fila aunque se deshaga (auditoría: undoneAt), pero sus movimientos se borran.
+model ImportBatch {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  companyId     String
+  bankAccountId String
+  source        String // WHATSAPP | UPLOAD | …
+  banco         String?
+  periodo       String?
+  count         Int      @default(0) // movimientos importados en este lote
+  undoneAt      DateTime?
+  undoneByUserId String?
+
+  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankAccount  BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  transactions BankTransaction[]
+
+  @@index([companyId, createdAt])
+  @@index([bankAccountId])
 }
 
 enum BankTransactionType {
