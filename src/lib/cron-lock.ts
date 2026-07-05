@@ -11,29 +11,39 @@ import { prisma } from "@/lib/prisma";
 // envíos/importaciones duplicadas al SAT, notificaciones push repetidas y
 // carreras en autoConciliarEmpresa.
 //
-// Solución: un advisory lock de sesión de Postgres. `pg_try_advisory_lock` es NO
-// bloqueante — si el candado ya está tomado devuelve false y la corrida se salta
-// con un 409 en vez de duplicar trabajo.
+// Solución: un MUTEX por trabajo en una fila de la tabla `CronLock`. A
+// diferencia de un advisory lock de sesión de Postgres, este candado NO depende
+// de la afinidad de conexión del pool de Prisma — tomar y liberar pueden caer en
+// conexiones distintas sin problema, porque el estado vive en una fila, no en la
+// conexión. (El advisory lock de sesión se filtraría: `pg_advisory_unlock`
+// podría ejecutarse en otra conexión del pool, no soltar el candado real y dejar
+// el cron trabado en 409 indefinidamente.)
 //
-// IMPORTANTE: el advisory lock está atado a la CONEXIÓN de la base de datos. Se
-// toma y se libera dentro de la misma petición; el `finally` garantiza la
-// liberación en el camino feliz, y si la corrida se cae (el proceso muere) la
-// conexión se cierra y Postgres libera el candado automáticamente — es el
-// failsafe deseado, nunca queda un candado huérfano de forma permanente.
+// Failsafe ante caídas: la toma exige que el candado esté libre O vencido. Si
+// una corrida muere sin liberar, otra corrida posterior lo toma en cuanto pasa
+// el TTL (TTL_CORRIDA_MS, holgadamente mayor que maxDuration), así un crash no
+// deja el cron trabado para siempre.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Vida máxima de una corrida antes de considerar el candado vencido y permitir
+ * que otra corrida lo tome (takeover). 10 min > maxDuration (5 min) para no
+ * arrebatarle el candado a una corrida legítima aún en curso.
+ */
+export const TTL_CORRIDA_MS = 10 * 60 * 1000;
+
+/**
+ * Marca de "liberado": una fecha muy en el pasado. Siempre queda fuera del TTL,
+ * así el candado liberado se ve como no-vigente y la próxima corrida lo toma.
+ */
+const LIBERADO = new Date(0);
 
 /**
  * Deriva la clave canónica de candado a partir del nombre lógico del trabajo.
  *
- * Función PURA y determinista (sin E/S) para poder probarla en unidad: la misma
- * entrada siempre produce la misma clave, y la clave es estable en el tiempo
- * (cambiarla soltaría el solapamiento contra corridas viejas). La clave se pasa
- * a `hashtext()` de Postgres, que la convierte en el entero de 32 bits que
- * identifica al advisory lock.
- *
- * Normaliza para que "sat-sync", "  SAT-SYNC  " y "cron:sat-sync" refieran al
- * MISMO candado, evitando que una variación de mayúsculas/espacios abra una
- * segunda corrida en paralelo por error.
+ * Función PURA y determinista (sin E/S). Normaliza para que "sat-sync",
+ * "  SAT-SYNC  " y "cron:sat-sync" refieran al MISMO candado, evitando que una
+ * variación de mayúsculas/espacios abra una segunda corrida en paralelo.
  */
 export function cronLockKey(job: string): string {
   const normalizado = job.trim().toLowerCase();
@@ -44,34 +54,71 @@ export function cronLockKey(job: string): string {
 }
 
 /**
- * Ejecuta `fn` sólo si se logra adquirir el candado de `job`. Si otra corrida ya
- * lo tiene, devuelve 409 { skipped: "already running" } sin ejecutar `fn`. En
- * cualquier caso (éxito o excepción) libera el candado en el `finally`.
+ * ¿La corrida marcada en `lockedAt` sigue vigente (dentro del TTL)?
+ *
+ * Función PURA y testeable — encapsula la decisión de toma/takeover:
+ *   - vigente (true)  → hay otra corrida activa: se omite (409).
+ *   - no vigente (false) → candado libre o vencido por un crash: se toma.
+ */
+export function esCorridaVigente(
+  lockedAt: Date,
+  now: Date,
+  ttlMs: number = TTL_CORRIDA_MS
+): boolean {
+  return now.getTime() - lockedAt.getTime() < ttlMs;
+}
+
+/**
+ * Ejecuta `fn` sólo si se logra adquirir el candado de `job`. Si otra corrida
+ * vigente ya lo tiene, devuelve 409 { skipped: "already running" } sin ejecutar
+ * `fn`. En cualquier caso (éxito o excepción) libera el candado en el `finally`.
  */
 export async function withCronLock(
   job: string,
   fn: () => Promise<Response>
 ): Promise<Response> {
   const key = cronLockKey(job);
+  const now = new Date();
 
-  const filas = await prisma.$queryRaw<Array<{ locked: boolean }>>`
-    SELECT pg_try_advisory_lock(hashtext(${key})) AS locked
-  `;
-  const adquirido = filas[0]?.locked === true;
+  // Asegura que exista la fila del mutex sin perturbar un candado en curso.
+  const fila = await prisma.cronLock.upsert({
+    where: { job: key },
+    create: { job: key, lockedAt: LIBERADO },
+    update: {},
+  });
 
-  if (!adquirido) {
+  // Decisión pura de toma/takeover contra el valor leído.
+  if (esCorridaVigente(fila.lockedAt, now)) {
     console.warn(`[cron-lock] ${key} ya en ejecución — se omite esta corrida`);
+    return NextResponse.json({ skipped: "already running" }, { status: 409 });
+  }
+
+  // Toma atómica por compare-and-set sobre lockedAt: sólo gana quien encuentre
+  // el valor exacto que leyó. Una corrida concurrente que haya tomado primero
+  // cambia lockedAt y deja este WHERE sin coincidencia (count 0 → 409). El
+  // bloqueo de fila del servidor serializa a los competidores.
+  const { count } = await prisma.cronLock.updateMany({
+    where: { job: key, lockedAt: fila.lockedAt },
+    data: { lockedAt: now },
+  });
+
+  if (count !== 1) {
+    console.warn(`[cron-lock] ${key} tomado por otra corrida — se omite`);
     return NextResponse.json({ skipped: "already running" }, { status: 409 });
   }
 
   try {
     return await fn();
   } finally {
+    // Liberar: dejar lockedAt en el pasado para que la próxima corrida lo tome
+    // de inmediato. Nunca debe enmascarar el resultado del trabajo; si falla, el
+    // TTL termina liberándolo (failsafe).
     try {
-      await prisma.$queryRaw`SELECT pg_advisory_unlock(hashtext(${key}))`;
+      await prisma.cronLock.update({
+        where: { job: key },
+        data: { lockedAt: LIBERADO },
+      });
     } catch (e) {
-      // Liberar el candado nunca debe enmascarar el resultado del trabajo. Si la
-      // liberación falla, la conexión terminará soltándolo (failsafe).
       console.error(`[cron-lock] no se pudo liberar ${key}:`, e);
     }
   }
