@@ -3,8 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
-import { getFacturapiClient } from "@/lib/facturapi";
-import { recordTimbrado } from "@/lib/costos/record";
+import { registrarBitacora } from "@/lib/audit";
+import { emitirComplementoPago } from "@/lib/complementos-rep-emit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Complemento de Pagos (REP — Recibo Electrónico de Pago)
@@ -183,117 +183,22 @@ export async function POST(req: Request) {
   const gate = await gateEscritura(session.user.id);
   if (gate) return gate;
 
-  // Load the parent PPD invoice
-  const parentInv = await prisma.invoice.findFirst({
-    where: { id: invoiceId, companyId, tipo: "INGRESO", metodoPago: "PPD" },
-    include: { customer: true },
+  // Toda la validación fiscal, el timbrado y la persistencia consistente viven en
+  // el motor (parcialidad correcta, saldos, desglose de IVA, PagoDoctoRelacionado).
+  const result = await emitirComplementoPago({ companyId, invoiceId, bankTransactionId, monto, fechaPago, formaPago });
+
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+
+  registrarBitacora({
+    accion: "complemento.emitir",
+    userId: session.user.id,
+    companyId,
+    entidad: "Invoice",
+    entidadId: invoiceId,
+    detalle: { uuid: result.uuid, monto: result.monto, parcialidad: result.numParcialidad, parentUuid: result.parentUuid },
   });
-  if (!parentInv) return NextResponse.json({ error: "Factura PPD no encontrada" }, { status: 404 });
-  if (!parentInv.uuid) return NextResponse.json({ error: "La factura no tiene UUID (no está timbrada)" }, { status: 400 });
 
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { facturapiApiKey: true, rfc: true },
-  });
-  if (!company?.facturapiApiKey) {
-    return NextResponse.json({ error: "Facturapi no configurado" }, { status: 400 });
-  }
-
-  // Determine payment amount
-  let paymentAmount = monto ? Number(monto) : null;
-  let paymentDate = fechaPago ? new Date(fechaPago) : new Date();
-
-  // If bankTransactionId provided, get amount from the bank tx
-  if (bankTransactionId) {
-    const bankTx = await prisma.bankTransaction.findFirst({
-      where: { id: bankTransactionId, companyId },
-      select: { monto: true, fecha: true },
-    });
-    if (bankTx) {
-      paymentAmount = paymentAmount ?? Math.abs(bankTx.monto);
-      paymentDate = bankTx.fecha;
-    }
-  }
-
-  if (!paymentAmount || paymentAmount <= 0) {
-    return NextResponse.json({ error: "Monto de pago requerido" }, { status: 400 });
-  }
-
-  // Build Facturapi REP payload
-  const facturapi = getFacturapiClient(company.facturapiApiKey);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const payload: any = {
-    type: "P", // Pago
-    customer: parentInv.customer?.facturapiId ?? {
-      legal_name: parentInv.customer?.razonSocial ?? "PUBLICO EN GENERAL",
-      tax_id: parentInv.customer?.rfc ?? "XAXX010101000",
-      tax_system: "601",
-      address: { zip: "72830" },
-    },
-    complements: [
-      {
-        type: "pago",
-        data: {
-          payment_form: formaPago ?? "03", // 03 = Transferencia electrónica
-          currency: parentInv.moneda ?? "MXN",
-          date: paymentDate.toISOString().slice(0, 10),
-          amount: paymentAmount,
-          related_documents: [
-            {
-              uuid: parentInv.uuid,
-              series: parentInv.serie ?? undefined,
-              folio_number: parentInv.folio ? parseInt(parentInv.folio) : undefined,
-              currency: parentInv.moneda ?? "MXN",
-              last_balance: parentInv.total, // TODO: track remaining balance
-              amount: paymentAmount,
-              installment: 1, // TODO: track installment number
-            },
-          ],
-        },
-      },
-    ],
-  };
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result: any = await facturapi.invoices.create(payload);
-    // Costo del timbre del REP (fire-and-forget).
-    void recordTimbrado("pago", 1, { companyId, subtipo: "complemento_pagos" });
-
-    // Persist the REP as an Invoice record
-    await prisma.invoice.create({
-      data: {
-        companyId,
-        tipo: "PAGO",
-        serie: result.series ?? null,
-        folio: result.folio_number ? String(result.folio_number) : null,
-        fecha: paymentDate,
-        formaPago: formaPago ?? "03",
-        metodoPago: "PUE",
-        usoCfdi: "CP01",
-        moneda: parentInv.moneda ?? "MXN",
-        subtotal: 0,
-        total: paymentAmount,
-        status: "STAMPED",
-        uuid: result.uuid?.toUpperCase() ?? null, // folio fiscal canónico en MAYÚSCULAS
-        facturapiId: result.id ?? null,
-        customerId: parentInv.customerId,
-        notas: invoiceId, // Link back to parent invoice
-      },
-    });
-
-    return NextResponse.json({
-      ok: true,
-      uuid: result.uuid,
-      monto: paymentAmount,
-      parentUuid: parentInv.uuid,
-    });
-  } catch (e) {
-    console.error("[complemento-pagos] Facturapi error:", e);
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Error al emitir complemento de pago" },
-      { status: 502 }
-    );
-  }
+  return NextResponse.json({ ok: true, uuid: result.uuid, monto: result.monto, parentUuid: result.parentUuid, numParcialidad: result.numParcialidad });
 }
