@@ -562,6 +562,7 @@ model Supplier {
   bankTransactions  BankTransaction[]
   solicitudesCompra SolicitudCompra[]
   cotizaciones      SolicitudCompraCotizacion[]
+  pagosProveedor    PagoProveedor[]
   terms             SupplierTerms?
 
   @@unique([companyId, rfc])
@@ -2309,11 +2310,13 @@ model SolicitudAdjudicacion {
   diasCredito       Int? // días de crédito de la oferta ganadora → vencimiento
   diasEntrega       Int?
   total             Float // Σ importe de las líneas adjudicadas a este proveedor
-  // POR_PAGAR → PAGADA (pago registrado con comprobante, por conciliar) →
+  // POR_PAGAR → PARCIAL (pagos aplicados < total) → PAGADA (saldada) →
   // CONCILIADA (empatada con un movimiento bancario importado = pago real).
-  // Registrar el pago NO crea un movimiento bancario: el estado de cuenta se
-  // llena sólo con el CSV importado y la conciliación lo empata después.
-  estado            String    @default("POR_PAGAR") // POR_PAGAR | PAGADA | CONCILIADA
+  // El pago vive en PagoProveedor (cuenta corriente del proveedor) y se
+  // aplica a adjudicaciones vía PagoAplicacion — un pago puede cubrir varias
+  // requisiciones, parciales o quedar como anticipo. Registrar pagos NO crea
+  // movimientos bancarios: el banco se llena sólo con el CSV importado.
+  estado            String    @default("POR_PAGAR") // POR_PAGAR | PARCIAL | PAGADA | CONCILIADA
   // Cuándo admin la mandó a tesorería para pago (workflow de cuentas por pagar).
   enviadaTesoreriaAt DateTime?
   pagadaAt          DateTime? // cuándo se registró el pago (comprobante)
@@ -2331,10 +2334,60 @@ model SolicitudAdjudicacion {
   solicitud       SolicitudCompra           @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
   cotizacion      SolicitudCompraCotizacion @relation(fields: [cotizacionId], references: [id])
   bankTransaction BankTransaction?          @relation("AdjudicacionPago", fields: [bankTransactionId], references: [id])
+  aplicaciones    PagoAplicacion[]
 
   @@index([solicitudId])
   @@index([companyId, estado])
   @@map("construccion_solicitud_adjudicacion")
+}
+
+// ─── Cuenta corriente del proveedor (pagos + aplicaciones) ──────────────────
+//
+// Un pago se registra CONTRA EL PROVEEDOR (abono a su cuenta), no contra una
+// requisición: un SPEI puede cubrir varias adjudicaciones, parcialidades, o
+// quedar como anticipo (saldo a favor) cuando excede la deuda abierta. La
+// aplicación (PagoAplicacion) es el puente pago ↔ adjudicación con monto
+// parcial. NO toca el banco ni el ledger: el movimiento real llega por el CSV
+// y se empata en la conciliación (CFDI ↔ movimiento).
+model PagoProveedor {
+  id              String   @id @default(cuid())
+  companyId       String
+  supplierId      String? // null cuando el proveedor es texto libre
+  supplierNombre  String // clave de agrupación cuando no hay Supplier row
+  fecha           DateTime @default(now())
+  monto           Float // total del pago; lo no aplicado = anticipo/saldo a favor
+  referencia      String? // folio SPEI / transferencia
+  comprobanteData String?  @db.Text
+  comprobanteMime String?
+  comprobanteName String?
+  notas           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  supplier     Supplier?        @relation(fields: [supplierId], references: [id])
+  aplicaciones PagoAplicacion[]
+
+  @@index([companyId, supplierId])
+  @@index([companyId, fecha])
+  @@map("construccion_pago_proveedor")
+}
+
+// Aplicación parcial de un pago a una adjudicación. Un pago → N adjudicaciones
+// y una adjudicación → N pagos. Σ monto por pago ≤ pago.monto; Σ monto por
+// adjudicación ≤ adjudicación.total (con tolerancia de centavos).
+model PagoAplicacion {
+  id             String   @id @default(cuid())
+  pagoId         String
+  adjudicacionId String
+  monto          Float
+  createdAt      DateTime @default(now())
+
+  pago         PagoProveedor         @relation(fields: [pagoId], references: [id], onDelete: Cascade)
+  adjudicacion SolicitudAdjudicacion @relation(fields: [adjudicacionId], references: [id], onDelete: Cascade)
+
+  @@unique([pagoId, adjudicacionId])
+  @@index([adjudicacionId])
+  @@map("construccion_pago_aplicacion")
 }
 
 model SolicitudCotizacionPartida {
