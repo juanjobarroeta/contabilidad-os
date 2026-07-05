@@ -5,8 +5,8 @@ import { importCfdiFromXml } from "@/lib/facturas/import-cfdi";
 import {
   MAX_MEDIA_BYTES,
   decidirIngesta,
-  importarMovimientosWhatsapp,
-  mensajeResumenImportacion,
+  bancosDifieren,
+  mensajeConfirmarImportacion,
   mensajeSeleccionCuenta,
   mensajeSinCuentas,
   resolverCuentaDestino,
@@ -71,6 +71,17 @@ async function cuentasDeEmpresa(companyId: string): Promise<CuentaCandidata[]> {
     select: { id: true, banco: true, nombre: true, numeroCuenta: true, clabe: true },
     orderBy: { createdAt: "asc" },
   });
+}
+
+/** Razón social de la empresa destino (para el mensaje de confirmación). */
+async function razonSocialDe(companyId: string): Promise<string> {
+  const c = await prisma.company.findUnique({ where: { id: companyId }, select: { razonSocial: true } });
+  return c?.razonSocial ?? "tu empresa";
+}
+
+/** Etiqueta corta de una cuenta candidata (banco + terminación). */
+function etiquetaDe(cuenta: CuentaCandidata): string {
+  return etiquetaCuenta(cuenta);
 }
 
 /** Firma del extractor por visión — inyectable para tests (extracción falsa). */
@@ -173,36 +184,44 @@ export async function handleWhatsappMedia(opts: {
 
   switch (decision.accion) {
     case "IMPORTAR": {
-      try {
-        const { imported, skipped } = await importarMovimientosWhatsapp({
-          companyId,
-          bankAccountId: decision.cuenta.id,
-          transactions: extraction.transactions,
-          origen: "vision",
-          banco: extraction.banco,
-          periodo: extraction.periodo,
-          cuentaTerminacion:
-            ultimos4Digitos(decision.cuenta.numeroCuenta) ?? ultimos4Digitos(decision.cuenta.clabe),
-          descartadas: [],
-        });
-        return mensajeResumenImportacion({
-          banco: extraction.banco,
-          periodo: extraction.periodo,
-          importados: imported,
-          yaExistian: skipped,
-          descartadas: [],
-          saldoVerificado: true,
-          notaCuenta: decision.notaCuenta,
-        });
-      } catch (e) {
-        console.error("[whatsapp] vision import error", e);
-        return "Leí el estado de cuenta, pero tuve un problema al guardar los movimientos. Inténtalo de nuevo en un momento.";
-      }
+      // GUARDARRAÍL: NO se importa a ciegas. Se escenifica y se pide confirmación
+      // que nombra empresa + cuenta destino (y advierte si el banco no coincide),
+      // para que un estado de cuenta no caiga en la empresa/cuenta equivocada.
+      const companyName = await razonSocialDe(companyId);
+      const bancoMismatch = bancosDifieren(extraction.banco, decision.cuenta.banco);
+      await stagePendingImportEstado(conversationId, {
+        companyId,
+        companyName,
+        origen: "vision",
+        banco: extraction.banco,
+        periodo: extraction.periodo,
+        saldoVerificado: true,
+        movimientos: serializarMovimientos(extraction.transactions),
+        descartadas: [],
+        cuentas: [
+          {
+            id: decision.cuenta.id,
+            etiqueta: etiquetaDe(decision.cuenta),
+            terminacion: ultimos4Digitos(decision.cuenta.numeroCuenta) ?? ultimos4Digitos(decision.cuenta.clabe),
+          },
+        ],
+        defaultCuentaId: decision.cuenta.id,
+        bancoMismatch,
+      });
+      return mensajeConfirmarImportacion({
+        companyName,
+        cuentaEtiqueta: etiquetaDe(decision.cuenta),
+        bancoDetectado: extraction.banco,
+        movimientos: extraction.transactions.length,
+        bancoMismatch,
+      });
     }
     case "ELEGIR_CUENTA": {
       // Cacheamos las filas parseadas (no el archivo) hasta que elija cuenta.
+      const companyName = await razonSocialDe(companyId);
       await stagePendingImportEstado(conversationId, {
         companyId,
+        companyName,
         origen: "vision",
         banco: extraction.banco,
         periodo: extraction.periodo,
@@ -214,8 +233,10 @@ export async function handleWhatsappMedia(opts: {
           etiqueta: etiquetaCuenta(c),
           terminacion: ultimos4Digitos(c.numeroCuenta) ?? ultimos4Digitos(c.clabe),
         })),
+        defaultCuentaId: null,
+        bancoMismatch: false,
       });
-      return decision.mensaje;
+      return `Para *${companyName}*: ${decision.mensaje}`;
     }
     default:
       // SIN_MOVIMIENTOS / BALANCE_NO_VERIFICABLE / BALANCE_NO_CUADRA / SIN_CUENTAS:
@@ -261,9 +282,12 @@ async function intakeArchivoBanco(opts: {
 
   if (resolucion.tipo === "NINGUNA") return mensajeSinCuentas();
 
+  const companyName = await razonSocialDe(companyId);
+
   if (resolucion.tipo === "VARIAS") {
     await stagePendingImportEstado(conversationId, {
       companyId,
+      companyName,
       origen: "archivo",
       banco: r.detectedBank ?? null,
       periodo: null,
@@ -275,36 +299,44 @@ async function intakeArchivoBanco(opts: {
         etiqueta: etiquetaCuenta(c),
         terminacion: ultimos4Digitos(c.numeroCuenta) ?? ultimos4Digitos(c.clabe),
       })),
+      defaultCuentaId: null,
+      bancoMismatch: false,
     });
-    return mensajeSeleccionCuenta(resolucion.cuentas, {
+    return `Para *${companyName}*: ${mensajeSeleccionCuenta(resolucion.cuentas, {
       banco: r.detectedBank ?? null,
       movimientos: r.transactions.length,
-    });
+    })}`;
   }
 
-  // UNICA (MATCH_ULTIMOS4 es imposible aquí sin número extraído): importar directo.
+  // UNICA. Antes se importaba DIRECTO — ese fue el hoyo: un estado de cuenta de
+  // otro banco caía en la única cuenta sin confirmar. Ahora se escenifica y se
+  // pide confirmación nombrando empresa + cuenta, con aviso si el banco difiere.
   const cuenta = resolucion.cuenta;
-  try {
-    const { imported, skipped } = await importarMovimientosWhatsapp({
-      companyId,
-      bankAccountId: cuenta.id,
-      transactions: r.transactions,
-      origen: "archivo",
-      banco: r.detectedBank ?? null,
-      periodo: null,
-      cuentaTerminacion: ultimos4Digitos(cuenta.numeroCuenta) ?? ultimos4Digitos(cuenta.clabe),
-      descartadas: r.descartadas,
-    });
-    return mensajeResumenImportacion({
-      banco: r.detectedBank ?? null,
-      periodo: null,
-      importados: imported,
-      yaExistian: skipped,
-      descartadas: r.descartadas,
-      saldoVerificado: false,
-    });
-  } catch (e) {
-    console.error("[whatsapp] csv import error", e);
-    return "Tuve un problema importando el archivo. Inténtalo de nuevo o súbelo desde la aplicación.";
-  }
+  const bancoMismatch = bancosDifieren(r.detectedBank ?? null, cuenta.banco);
+  await stagePendingImportEstado(conversationId, {
+    companyId,
+    companyName,
+    origen: "archivo",
+    banco: r.detectedBank ?? null,
+    periodo: null,
+    saldoVerificado: false,
+    movimientos: serializarMovimientos(r.transactions),
+    descartadas: r.descartadas,
+    cuentas: [
+      {
+        id: cuenta.id,
+        etiqueta: etiquetaDe(cuenta),
+        terminacion: ultimos4Digitos(cuenta.numeroCuenta) ?? ultimos4Digitos(cuenta.clabe),
+      },
+    ],
+    defaultCuentaId: cuenta.id,
+    bancoMismatch,
+  });
+  return mensajeConfirmarImportacion({
+    companyName,
+    cuentaEtiqueta: etiquetaDe(cuenta),
+    bancoDetectado: r.detectedBank ?? null,
+    movimientos: r.transactions.length,
+    bancoMismatch,
+  });
 }

@@ -297,6 +297,9 @@ export interface PendingImportEstado {
   type: "importar_estado";
   expiresAt: number;
   companyId: string;
+  /** Razón social de la empresa DESTINO — se muestra al confirmar para que un
+   *  usuario de despacho no importe a la empresa equivocada por descuido. */
+  companyName: string;
   origen: "vision" | "archivo";
   banco: string | null;
   periodo: string | null;
@@ -304,6 +307,25 @@ export interface PendingImportEstado {
   movimientos: MovimientoSerializado[];
   descartadas: RowDescartada[];
   cuentas: { id: string; etiqueta: string; terminacion: string | null }[];
+  /** Cuenta por omisión (única o coincidente): "sí" la confirma sin pedir número. */
+  defaultCuentaId?: string | null;
+  /** El banco del archivo NO coincide con el de la cuenta destino → advertir. */
+  bancoMismatch?: boolean;
+}
+
+/**
+ * ¿El banco detectado en el archivo difiere del de la cuenta destino? Compara sin
+ * acentos ni mayúsculas por contención (BBVA Bancomer ~ BBVA). Si no se detectó
+ * banco en el archivo, NO se puede afirmar que difiera → false. PURA.
+ */
+export function bancosDifieren(detectado: string | null, cuentaBanco: string | null): boolean {
+  if (!detectado || !cuentaBanco) return false;
+  const n = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  const a = n(detectado);
+  const b = n(cuentaBanco);
+  if (!a || !b) return false;
+  return !(a.includes(b) || b.includes(a));
 }
 
 export function serializarMovimientos(txs: ParsedTransaction[]): MovimientoSerializado[] {
@@ -351,6 +373,7 @@ async function clearPending(conversationId: string): Promise<void> {
 
 export type RespuestaSeleccion =
   | { tipo: "CANCELAR" }
+  | { tipo: "CONFIRMAR" } // "sí" — confirma la cuenta por omisión
   | { tipo: "SELECCION"; indice: number } // 0-based, ya validado contra el rango
   | { tipo: "FUERA_DE_RANGO" }
   | { tipo: "OTRO" };
@@ -358,11 +381,38 @@ export type RespuestaSeleccion =
 export function interpretarRespuestaSeleccion(body: string, numCuentas: number): RespuestaSeleccion {
   const texto = body.trim().toLowerCase();
   if (/^(cancelar|cancela|no)\b/.test(texto)) return { tipo: "CANCELAR" };
+  if (/^(s[íi]|confirm[ao]|confirmar|ok|okay|dale|va|correcto|adelante|de acuerdo)(?![a-zñáéíóúü])/.test(texto))
+    return { tipo: "CONFIRMAR" };
   const m = texto.match(/^(\d{1,2})$/);
   if (!m) return { tipo: "OTRO" };
   const idx = parseInt(m[1], 10) - 1;
   if (idx < 0 || idx >= numCuentas) return { tipo: "FUERA_DE_RANGO" };
   return { tipo: "SELECCION", indice: idx };
+}
+
+/**
+ * Mensaje de CONFIRMACIÓN antes de importar (guardarraíl): nombra la empresa y la
+ * cuenta destino y, si el banco del archivo no coincide con el de la cuenta,
+ * ADVIERTE. Evita que un estado de cuenta caiga en la empresa/cuenta equivocada.
+ */
+export function mensajeConfirmarImportacion(d: {
+  companyName: string;
+  cuentaEtiqueta: string;
+  bancoDetectado: string | null;
+  movimientos: number;
+  bancoMismatch: boolean;
+}): string {
+  const de = d.bancoDetectado ? ` de ${d.bancoDetectado}` : "";
+  let msg =
+    `Voy a importar ${d.movimientos} movimiento${d.movimientos === 1 ? "" : "s"}${de} ` +
+    `a la cuenta *${d.cuentaEtiqueta}* de *${d.companyName}*.`;
+  if (d.bancoMismatch) {
+    msg +=
+      `\n\n⚠️ Ojo: el archivo parece ser${de}, pero esa cuenta es de otro banco. ` +
+      `Verifica que estés subiéndolo a la empresa y cuenta correctas.`;
+  }
+  msg += `\n\nResponde *sí* para confirmar, o *cambiar de empresa* si va a otra. También puedes escribir *cancelar*.`;
+  return msg;
 }
 
 // ── Ejecución: importar a la cuenta elegida ──────────────────────────────────
@@ -422,23 +472,45 @@ export async function resolverPendingImportEstado(
     return "Cancelado. No se importó ningún movimiento.";
   }
 
-  if (respuesta.tipo === "FUERA_DE_RANGO" || respuesta.tipo === "OTRO") {
+  // "sí" confirma la cuenta por omisión (única o coincidente). Si no hay cuenta
+  // por omisión (varias sin match), pedimos el número.
+  let indiceElegido: number | null = null;
+  if (respuesta.tipo === "CONFIRMAR") {
+    const idx = pending.defaultCuentaId
+      ? pending.cuentas.findIndex((c) => c.id === pending.defaultCuentaId)
+      : -1;
+    if (idx < 0) {
+      const lineas = pending.cuentas.map((c, i) => `${i + 1}) ${c.etiqueta}`);
+      return (
+        "¿A cuál cuenta la importo? Responde con el número:\n" +
+        lineas.join("\n") +
+        '\nO responde "cancelar" para descartarlo.'
+      );
+    }
+    indiceElegido = idx;
+  } else if (respuesta.tipo === "SELECCION") {
+    indiceElegido = respuesta.indice;
+  }
+
+  if (indiceElegido == null) {
+    // FUERA_DE_RANGO / OTRO: recordar la pregunta sin importar.
     const lineas = pending.cuentas.map((c, i) => `${i + 1}) ${c.etiqueta}`);
     const encabezado =
       respuesta.tipo === "FUERA_DE_RANGO"
         ? "Ese número no corresponde a ninguna cuenta."
-        : "Tienes un estado de cuenta pendiente de asignar.";
-    return (
-      `${encabezado} Responde con el número de la cuenta:\n` +
-      lineas.join("\n") +
-      "\nO responde \"cancelar\" para descartarlo."
-    );
+        : pending.cuentas.length === 1
+          ? `Tienes un estado de cuenta pendiente de importar a *${pending.companyName}*. Responde *sí* para confirmar`
+          : "Tienes un estado de cuenta pendiente de asignar. Responde con el número de la cuenta";
+    if (pending.cuentas.length === 1) {
+      return `${encabezado}, o *cancelar* para descartarlo.`;
+    }
+    return `${encabezado}:\n` + lineas.join("\n") + '\nO responde "cancelar" para descartarlo.';
   }
 
   // Selección válida → un solo uso: limpiar ANTES de importar para que un
   // reintento de Twilio o un doble mensaje no importe dos veces.
   await clearPending(conversationId);
-  const cuenta = pending.cuentas[respuesta.indice];
+  const cuenta = pending.cuentas[indiceElegido];
 
   try {
     const { imported, skipped } = await importarMovimientosWhatsapp({

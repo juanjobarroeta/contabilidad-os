@@ -455,13 +455,15 @@ export async function POST(req: Request) {
   // agent turns ARE counted and limited. When over a cap we reply with a cheap
   // STATIC message (no LLM) and stop.
   const pending = await getPendingAction(conversation.id);
-  // Un estado de cuenta pendiente se confirma con el NÚMERO de la cuenta
-  // (1-2 dígitos); las escrituras (timbrar/conciliar), con el código de 6.
-  // Ninguna de las dos pasa por el agente, así que no se les aplica el tope.
+  // Un estado de cuenta pendiente se confirma con "sí" (cuenta por omisión) o con
+  // el NÚMERO de la cuenta (1-2 dígitos); las escrituras (timbrar/conciliar), con
+  // el código de 6. Ninguna pasa por el agente, así que no se les aplica el tope.
   const isConfirmationReply =
     pending != null &&
     (pending.type === "importar_estado"
-      ? /^\d{1,2}$/.test(body.trim()) || /^(cancelar|cancela|no)\b/i.test(body.trim())
+      ? /^\d{1,2}$/.test(body.trim()) ||
+        /^(s[íi]|confirm[ao]|confirmar|ok|okay|dale|va|correcto|adelante|de acuerdo)(?![a-zñáéíóúü])/i.test(body.trim()) ||
+        /^(cancelar|cancela|no)\b/i.test(body.trim())
       : /\b\d{6}\b/.test(body) || /^(cancelar|cancela|no)\b/i.test(body.trim()));
 
   if (!isConfirmationReply) {
