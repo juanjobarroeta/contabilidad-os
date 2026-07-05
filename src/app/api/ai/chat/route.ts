@@ -252,8 +252,10 @@ export async function POST(req: Request) {
                 companyId,
                 // inApp habilita las herramientas "proponer_*" (tarjeta Confirmar).
                 // Sólo roles con permiso de escritura pueden STAGEAR (VIEWER no);
-                // el confirm endpoint re-valida igualmente.
-                { conversationId: convId!, inApp: canWrite }
+                // el confirm endpoint re-valida igualmente. userId habilita las
+                // herramientas de cartera (query_despacho_panorama), acotadas a
+                // las empresas accesibles del propio usuario.
+                { conversationId: convId!, inApp: canWrite, userId }
               );
               toolResults.push({
                 type: "tool_result",

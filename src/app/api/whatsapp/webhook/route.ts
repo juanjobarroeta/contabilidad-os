@@ -17,9 +17,11 @@ import {
   userCanAccessCompany,
   setActiveCompany,
   phoneVariants,
+  matchCompanyByName,
+  parseCompanySelection,
   type AccessibleCompany,
 } from "@/lib/whatsapp/identity";
-import { runWhatsappAgent, type WhatsappCompany } from "@/lib/whatsapp/agent";
+import { runWhatsappAgent, type WhatsappCompany, type WhatsappCartera } from "@/lib/whatsapp/agent";
 import { parseLinkCode, redeemLinkCode } from "@/lib/whatsapp/linking";
 import { registrarBitacora } from "@/lib/audit";
 import { tryConfirmPendingAction, getPendingAction } from "@/lib/whatsapp/pending-action";
@@ -56,17 +58,6 @@ function menuText(companies: AccessibleCompany[]): string {
     "¿Sobre cuál empresa quieres consultar? Responde con el número:\n" +
     lines.join("\n")
   );
-}
-
-/** Interprets a bare-number reply as a 1-based selection from the menu. */
-function parseSelection(
-  body: string,
-  companies: AccessibleCompany[]
-): AccessibleCompany | null {
-  const m = body.trim().match(/^(\d{1,2})$/);
-  if (!m) return null;
-  const idx = parseInt(m[1], 10) - 1;
-  return idx >= 0 && idx < companies.length ? companies[idx] : null;
 }
 
 const SWITCH_RE = /\b(cambiar|cambia(r)?\s+(de\s+)?empresa|otra\s+empresa)\b/i;
@@ -123,14 +114,16 @@ async function processAgentTurn(opts: {
   history: Anthropic.MessageParam[];
   userText: string;
   phone: string;
+  userId: string;
+  cartera: WhatsappCartera;
 }): Promise<void> {
-  const { companyId, company, conversationId, history, userText, phone } = opts;
+  const { companyId, company, conversationId, history, userText, phone, userId, cartera } = opts;
   let answer: string;
   try {
     // Safety gate: if a write (e.g. timbrar) is staged, this message may be the
     // confirmation. Handle it BEFORE the agent — only the exact code executes.
     const confirmed = await tryConfirmPendingAction(conversationId, userText);
-    answer = confirmed ?? (await runWhatsappAgent({ companyId, company, history, userText, conversationId }));
+    answer = confirmed ?? (await runWhatsappAgent({ companyId, company, history, userText, conversationId, userId, cartera }));
   } catch (e) {
     console.error("[whatsapp] agent error", e);
     answer = "Tuve un problema al procesar tu consulta. Inténtalo de nuevo en un momento.";
@@ -158,8 +151,10 @@ async function processMediaTurn(opts: {
   phone: string;
   media: { url: string; contentType: string }[];
   history: Anthropic.MessageParam[];
+  userId: string;
+  cartera: WhatsappCartera;
 }): Promise<void> {
-  const { companyId, company, conversationId, phone, media, history } = opts;
+  const { companyId, company, conversationId, phone, media, history, userId, cartera } = opts;
 
   // Voice note → transcribe → answer like a normal question.
   const audio = media.find((m) => m.contentType.toLowerCase().startsWith("audio/"));
@@ -185,7 +180,7 @@ async function processMediaTurn(opts: {
     });
     let answer: string;
     try {
-      answer = await runWhatsappAgent({ companyId, company, history, userText: transcript });
+      answer = await runWhatsappAgent({ companyId, company, history, userText: transcript, conversationId, userId, cartera });
     } catch (e) {
       console.error("[whatsapp] agent error (voice)", e);
       answer = "Tuve un problema al procesar tu consulta. Inténtalo de nuevo.";
@@ -344,10 +339,24 @@ export async function POST(req: Request) {
     return reply("Tu cuenta no tiene empresas activas asignadas todavía.");
   }
 
+  // Encuadre "despacho": el agente necesita saber que atiende una CARTERA (no
+  // solo la empresa activa) para razonar preguntas intercompañía.
+  const cartera: WhatsappCartera = {
+    total: companies.length,
+    empresas: companies.map((c) => c.razonSocial),
+  };
+
   // ── 4. Resolve which company this turn is about (fast, inline replies). ────
   let activeCompanyId: string | null = sender.activeCompanyId;
 
   if (SWITCH_RE.test(body) && companies.length > 1) {
+    // Si el usuario nombró la empresa en el mismo mensaje ("cambiar a Reyes
+    // Huerta"), cámbiala directo; si no, muestra el menú.
+    const named = matchCompanyByName(body.replace(SWITCH_RE, " "), companies);
+    if (named) {
+      await setActiveCompany(sender.linkId, named.id);
+      return reply(`Listo, ahora consulto sobre ${named.razonSocial}. ¿Qué necesitas saber?`);
+    }
     await setActiveCompany(sender.linkId, null);
     return reply(menuText(companies));
   }
@@ -362,7 +371,7 @@ export async function POST(req: Request) {
       activeCompanyId = companies[0].id;
       await setActiveCompany(sender.linkId, activeCompanyId);
     } else {
-      const picked = parseSelection(body, companies);
+      const picked = parseCompanySelection(body, companies);
       if (!picked) return reply(menuText(companies));
       activeCompanyId = picked.id;
       await setActiveCompany(sender.linkId, activeCompanyId);
@@ -433,6 +442,8 @@ export async function POST(req: Request) {
       phone,
       media,
       history,
+      userId: sender.userId,
+      cartera,
     });
     return ack();
   }
@@ -485,6 +496,8 @@ export async function POST(req: Request) {
     history,
     userText: body,
     phone,
+    userId: sender.userId,
+    cartera,
   });
 
   return ack();
