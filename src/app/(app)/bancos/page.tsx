@@ -86,6 +86,35 @@ const TIPO_CHIPS: { f: Filter; t: string; k: keyof Counts }[] = [
   { f: "IGNORED", t: "Ignorados", k: "IGNORED" },
 ];
 
+// Familias que se registran en el LIBRO MAYOR vía aprobarSugerencia (endpoint
+// /api/bancos/sugerencias/lote). A diferencia de CATEGORIAS (que sólo ignora +
+// etiqueta), estas escriben el asiento. Los restaurantes pueden ser parcialmente
+// deducibles: NO se agrupan a ciegas — el usuario elige la familia aquí.
+const FAMILIA_LOTE: { familia: string; label: string }[] = [
+  { familia: "NON_DEDUCTIBLE",    label: "No deducible" },
+  { familia: "COMISION",          label: "Comisiones bancarias" },
+  { familia: "TAX_PAYMENT",       label: "Impuestos y derechos" },
+  { familia: "PAYROLL_NO_CFDI",   label: "Nómina sin CFDI" },
+  { familia: "RENT",              label: "Renta / arrendamiento" },
+  { familia: "FINANCIAL_INCOME",  label: "Intereses / rendimientos" },
+  { familia: "INTERNAL_TRANSFER", label: "Traspaso entre cuentas" },
+];
+// Ruido bancario que no distingue a un comercio (espeja el heurístico del
+// servidor en reglas-categorizacion.ts). El token propuesto es editable.
+const TOKEN_STOP = new Set([
+  "SPEI","PAGO","PAGOS","COMPRA","CARGO","ABONO","TARJETA","DEBITO","CREDITO",
+  "TRANSFERENCIA","TRASPASO","REFERENCIA","REF","FOLIO","CLABE","CUENTA","BANCO",
+  "COM","MXN","USD","OPERACION","AUT","MEXICO","MEX","SUC","TDD","TDC","INT",
+  "NACIONAL","NEGOCIO","DIGITAL","ONLINE","WWW","COMISION",
+]);
+function tokenDeDescripcion(desc: string): string {
+  if (!desc) return "";
+  const norm = desc.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  const tokens = norm.split(/[^A-Z]+/).filter((t) => t.length >= 3 && !TOKEN_STOP.has(t));
+  if (tokens.length === 0) return "";
+  return tokens.reduce((mejor, t) => (t.length > mejor.length ? t : mejor), tokens[0]);
+}
+
 const BANKS = ["BBVA","Banamex","Santander","Banorte","HSBC","Scotiabank","Afirme","Inbursa","BanBajío","Otro"];
 const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint";
 const CONF: Record<Candidate["confidence"], "jade" | "amber" | "slate"> = { alta: "jade", media: "amber", baja: "slate" };
@@ -132,6 +161,13 @@ export default function BancosPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bulkMatchOpen, setBulkMatchOpen] = useState(false);
+  // Panel "categorizar todos los similares" del movimiento expandido.
+  const [similarOpen, setSimilarOpen] = useState<string | null>(null);
+  const [similarToken, setSimilarToken] = useState("");
+  const [similarFamilia, setSimilarFamilia] = useState<string>("NON_DEDUCTIBLE");
+  const [similarSigno, setSimilarSigno] = useState<"CREDITO" | "DEBITO">("DEBITO");
+  const [similarCount, setSimilarCount] = useState<number | null>(null);
+  const [similarBusy, setSimilarBusy] = useState(false);
   // Modal de cuenta: null=cerrado · {account:null}=agregar · {account:X}=editar
   const [accountModal, setAccountModal] = useState<{ account: BankAccount | null } | null>(null);
   // Resumen de la última importación cuando hubo filas descartadas o posibles
@@ -372,6 +408,81 @@ export default function BancosPage() {
       setPicked(new Set()); setSelectMode(false);
       await Promise.all([loadTxs(), loadAccounts()]);
     } finally { setActing(null); }
+  }
+
+  // Categorización en lote que SÍ registra el asiento en el libro mayor (familias
+  // de FAMILIA_LOTE), vía /api/bancos/sugerencias/lote. Distinta de bulkCategorizar
+  // (que sólo ignora + etiqueta). Se usa para "No deducible" y el selector de familia.
+  async function bulkCategorizarLote(familia: string, label: string) {
+    if (pickedIds.length === 0) return;
+    setActing("__bulk__");
+    try {
+      const res = await fetch("/api/bancos/sugerencias/lote", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txIds: pickedIds, familia }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const n = data?.lote?.aprobados ?? pickedIds.length;
+        showToast(`${n} movimiento(s): ${label}`);
+        setPicked(new Set()); setSelectMode(false);
+        await Promise.all([loadTxs(), loadAccounts()]);
+      } else {
+        showToast(data?.error ?? "No se pudo categorizar");
+      }
+    } finally { setActing(null); }
+  }
+
+  // ── "Categorizar todos los similares" (movimiento expandido) ────────────────
+  function abrirSimilares(tx: BankTx) {
+    if (similarOpen === tx.id) { setSimilarOpen(null); return; }
+    const token = tokenDeDescripcion(tx.descripcion);
+    const signo: "CREDITO" | "DEBITO" = tx.monto >= 0 ? "CREDITO" : "DEBITO";
+    setSimilarOpen(tx.id);
+    setSimilarToken(token);
+    setSimilarSigno(signo);
+    setSimilarFamilia("NON_DEDUCTIBLE");
+    setSimilarCount(null);
+  }
+
+  // Cuenta los similares sin conciliar cada vez que cambia el token/signo.
+  useEffect(() => {
+    if (!similarOpen || !activeCompany || !similarToken.trim()) { setSimilarCount(null); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ companyId: activeCompany.id, patron: similarToken.trim(), signo: similarSigno });
+        const res = await fetch(`/api/bancos/sugerencias/lote?${params}`);
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) setSimilarCount(typeof data.count === "number" ? data.count : null);
+      } catch { if (!cancelled) setSimilarCount(null); }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [similarOpen, similarToken, similarSigno, activeCompany]);
+
+  async function categorizarSimilares(txId: string) {
+    const patron = similarToken.trim();
+    if (!patron) { showToast("Escribe un patrón para agrupar"); return; }
+    const label = FAMILIA_LOTE.find((f) => f.familia === similarFamilia)?.label ?? similarFamilia;
+    setSimilarBusy(true);
+    try {
+      const res = await fetch("/api/bancos/sugerencias/lote", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txIds: [txId], familia: similarFamilia, patron, signo: similarSigno,
+          crearRegla: true, retroactivo: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const n = (data?.lote?.aprobados ?? 0) + (data?.retro?.aprobados ?? 0);
+        showToast(`${n} movimiento(s) categorizados como "${label}". Regla guardada.`);
+        setSimilarOpen(null); setExpandedId(null);
+        await Promise.all([loadTxs(), loadAccounts()]);
+      } else {
+        showToast(data?.error ?? "No se pudieron categorizar los similares");
+      }
+    } finally { setSimilarBusy(false); }
   }
 
   function statusChip(tx: BankTx) {
@@ -806,6 +917,47 @@ export default function BancosPage() {
                                   </button>
                                 ))}
                               </div>
+
+                              {/* Categorizar TODOS los similares: deriva un token del
+                                  concepto, cuenta los movimientos sin conciliar que
+                                  coinciden, deja elegir la familia (los restaurantes
+                                  pueden ser parcialmente deducibles — no se agrupan a
+                                  ciegas), guarda la regla y la aplica retroactivamente. */}
+                              <div className="rounded-control border border-cos-line">
+                                <button onClick={() => abrirSimilares(m)}
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint/40">
+                                  <SlidersHorizontal className="h-[15px] w-[15px]" /> Categorizar todos los similares…
+                                  <ChevronDown className={"ml-auto h-3.5 w-3.5 transition-transform " + (similarOpen === m.id ? "rotate-180" : "")} />
+                                </button>
+                                {similarOpen === m.id && (
+                                  <div className="flex flex-col gap-2.5 border-t border-cos-line-soft p-3">
+                                    <label className="block">
+                                      <span className="text-[11.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Patrón a agrupar</span>
+                                      <input value={similarToken} onChange={(e) => setSimilarToken(e.target.value.toUpperCase())}
+                                        placeholder="Ej. RAPPI, OPENAI…"
+                                        className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 font-mono text-[13px] uppercase text-cos-ink outline-none focus:border-cos-brand" />
+                                    </label>
+                                    <label className="block">
+                                      <span className="text-[11.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Clasificar como</span>
+                                      <select value={similarFamilia} onChange={(e) => setSimilarFamilia(e.target.value)}
+                                        className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13px] text-cos-ink outline-none focus:border-cos-brand">
+                                        {FAMILIA_LOTE.map((f) => <option key={f.familia} value={f.familia}>{f.label}</option>)}
+                                      </select>
+                                    </label>
+                                    <p className="text-[12.5px] text-cos-ink-soft">
+                                      {similarToken.trim()
+                                        ? similarCount == null
+                                          ? "Contando movimientos similares…"
+                                          : <>Se categorizarán <b>{similarCount}</b> movimiento{similarCount === 1 ? "" : "s"} sin conciliar que contienen <span className="font-mono">{similarToken.trim()}</span>. Se recordará como regla.</>
+                                        : "Escribe un patrón para agrupar los movimientos similares."}
+                                    </p>
+                                    <button onClick={() => categorizarSimilares(m.id)} disabled={similarBusy || !similarToken.trim() || similarCount === 0}
+                                      className="w-full rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+                                      {similarBusy ? "Categorizando…" : similarCount != null && similarCount > 0 ? `Categorizar ${similarCount} similares` : "Categorizar similares"}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -826,6 +978,17 @@ export default function BancosPage() {
                   className="rounded-control bg-white/15 px-3.5 py-2 text-[13.5px] font-semibold hover:bg-white/25 disabled:opacity-50">Impuestos</button>
                 <button onClick={() => bulkCategorizar("INTERNAL_TRANSFER", "Transferencia")} disabled={acting === "__bulk__"}
                   className="rounded-control bg-white/15 px-3.5 py-2 text-[13.5px] font-semibold hover:bg-white/25 disabled:opacity-50">Transferencia</button>
+                {/* No deducible + selector de familia → registran el asiento (endpoint lote). */}
+                <button onClick={() => bulkCategorizarLote("NON_DEDUCTIBLE", "No deducible")} disabled={acting === "__bulk__"}
+                  className="rounded-control bg-white/15 px-3.5 py-2 text-[13.5px] font-semibold hover:bg-white/25 disabled:opacity-50">No deducible</button>
+                <select value="" disabled={acting === "__bulk__"} aria-label="Clasificar en otra familia"
+                  onChange={(e) => { const f = FAMILIA_LOTE.find((x) => x.familia === e.target.value); if (f) bulkCategorizarLote(f.familia, f.label); e.target.value = ""; }}
+                  className="rounded-control bg-white/15 px-3 py-2 text-[13.5px] font-semibold text-white hover:bg-white/25 disabled:opacity-50 [&>option]:text-cos-ink">
+                  <option value="" disabled>Otra familia…</option>
+                  {FAMILIA_LOTE.filter((f) => f.familia !== "NON_DEDUCTIBLE").map((f) => (
+                    <option key={f.familia} value={f.familia}>{f.label}</option>
+                  ))}
+                </select>
                 <button onClick={() => bulkCategorizar(null, "Ignorar")} disabled={acting === "__bulk__"}
                   className="rounded-control bg-white/15 px-3.5 py-2 text-[13.5px] font-semibold hover:bg-white/25 disabled:opacity-50">Ignorar</button>
                 <button onClick={() => setBulkMatchOpen(true)} disabled={acting === "__bulk__"}

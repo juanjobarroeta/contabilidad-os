@@ -13,6 +13,7 @@ import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
 import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
 import { stageChatPendingAction } from "@/lib/ai/pending-action";
+import { contarSimilaresSinConciliar } from "@/lib/bancos/reglas-categorizacion";
 import {
   computeEmpresasBriefing,
   empresasConEstadoCuentaVencido,
@@ -67,6 +68,8 @@ export async function executeToolCall(
       return proponerConciliacion(input, companyId, context);
     case "proponer_categorizacion":
       return proponerCategorizacion(input, companyId, context);
+    case "proponer_categorizacion_lote":
+      return proponerCategorizacionLote(input, companyId, context);
     case "proponer_resolver_hallazgo":
       return proponerResolverHallazgo(input, companyId, context);
     case "proponer_posponer_hallazgo":
@@ -271,6 +274,36 @@ async function proponerCategorizacion(input: ToolInput, companyId: string, conte
   const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
     type: "categorizacion",
     payload: { txId, familia },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+async function proponerCategorizacionLote(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const patron = String(input.patron ?? "").trim();
+  const familia = String(input.familia ?? "") as FamiliaConcepto;
+  const signoRaw = input.signo === "CREDITO" || input.signo === "DEBITO" ? input.signo : undefined;
+  if (!patron || !FAMILIA_LABEL[familia]) {
+    return JSON.stringify({ error: "Falta el patrón o la familia es inválida." });
+  }
+
+  // Cuenta cuántos movimientos sin conciliar se verían afectados (para el resumen).
+  const n = await contarSimilaresSinConciliar(companyId, patron, signoRaw);
+  if (n === 0) {
+    return JSON.stringify({
+      error: `No hay movimientos sin conciliar cuya descripción contenga "${patron}".`,
+    });
+  }
+
+  const summary =
+    `Categorizar ${n} movimiento(s) sin conciliar que contienen "${patron}" ` +
+    `como "${FAMILIA_LABEL[familia]}", registrar sus asientos en el libro mayor y ` +
+    `guardar la regla para los próximos estados de cuenta.`;
+
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "categorizacion_lote",
+    payload: { patron, familia, signo: signoRaw, crearRegla: true },
   });
   return propuestaStaged(summary, pa.token);
 }

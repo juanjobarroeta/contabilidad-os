@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   sugerirCategoriaConcepto,
   signoDeMonto,
+  primeraReglaQueEmpata,
+  type CompanyRule,
 } from "./categorizar-concepto";
+import { extraerTokenConcepto } from "./reglas-categorizacion";
 import { COE_CODES } from "@/lib/contabilidad/catalog";
 
 describe("sugerirCategoriaConcepto — familias de concepto", () => {
@@ -104,5 +107,79 @@ describe("signoDeMonto", () => {
     expect(signoDeMonto(1500)).toBe("CREDITO");
     expect(signoDeMonto(-1500)).toBe("DEBITO");
     expect(signoDeMonto(0)).toBe("DEBITO");
+  });
+});
+
+describe("reglas persistidas de la empresa (companyRules)", () => {
+  const reglaRappi: CompanyRule = { pattern: "RAPPI", familia: "NON_DEDUCTIBLE" };
+
+  it("una regla del usuario clasifica un concepto que las REGLAS no reconocen", () => {
+    // Sin reglas → desconocido.
+    expect(sugerirCategoriaConcepto("COMPRA RAPPI MX", "DEBITO")).toBeNull();
+    // Con la regla del usuario → NON_DEDUCTIBLE (603.01).
+    const s = sugerirCategoriaConcepto("COMPRA RAPPI MX", "DEBITO", [reglaRappi]);
+    expect(s).toMatchObject({
+      familia: "NON_DEDUCTIBLE",
+      cuentaSugerida: COE_CODES.GASTOS_NO_DEDUCIBLES,
+      confianza: "alta",
+    });
+  });
+
+  it("la regla del usuario GANA sobre el motor hardcodeado", () => {
+    // "COMISION" normalmente → COMISION; una regla del usuario la re-mapea.
+    const s = sugerirCategoriaConcepto("COMISION SERVICIO", "DEBITO", [
+      { pattern: "COMISION", familia: "NON_DEDUCTIBLE" },
+    ]);
+    expect(s?.familia).toBe("NON_DEDUCTIBLE");
+  });
+
+  it("es insensible a mayúsculas y acentos en el patrón y el concepto", () => {
+    const s = sugerirCategoriaConcepto("pago café münchën", "DEBITO", [
+      { pattern: "cafe munchen", familia: "NON_DEDUCTIBLE" },
+    ]);
+    expect(s?.familia).toBe("NON_DEDUCTIBLE");
+  });
+
+  it("respeta el signo de la regla", () => {
+    const reglas: CompanyRule[] = [{ pattern: "INTERESES", familia: "FINANCIAL_INCOME", signo: "CREDITO" }];
+    expect(sugerirCategoriaConcepto("INTERESES", "CREDITO", reglas)?.familia).toBe("FINANCIAL_INCOME");
+    // En un débito la regla no aplica → cae al motor (que tampoco lo clasifica como ingreso).
+    expect(sugerirCategoriaConcepto("INTERESES", "DEBITO", reglas)?.familia).not.toBe("FINANCIAL_INCOME");
+  });
+
+  it("matchType EXACT y STARTS_WITH", () => {
+    const exacto: CompanyRule[] = [{ pattern: "OXXO", familia: "NON_DEDUCTIBLE", matchType: "EXACT" }];
+    expect(sugerirCategoriaConcepto("OXXO", "DEBITO", exacto)?.familia).toBe("NON_DEDUCTIBLE");
+    expect(sugerirCategoriaConcepto("COMPRA OXXO 123", "DEBITO", exacto)).toBeNull();
+
+    const prefijo: CompanyRule[] = [{ pattern: "UBER", familia: "NON_DEDUCTIBLE", matchType: "STARTS_WITH" }];
+    expect(sugerirCategoriaConcepto("UBER EATS", "DEBITO", prefijo)?.familia).toBe("NON_DEDUCTIBLE");
+    expect(sugerirCategoriaConcepto("PAGO UBER", "DEBITO", prefijo)).toBeNull();
+  });
+
+  it("primeraReglaQueEmpata devuelve la regla (con sus campos extra)", () => {
+    const reglas = [
+      { id: "r1", pattern: "OPENAI", familia: "NON_DEDUCTIBLE" as const },
+      { id: "r2", pattern: "ANTHROPIC", familia: "NON_DEDUCTIBLE" as const },
+    ];
+    expect(primeraReglaQueEmpata("PAGO ANTHROPIC", "DEBITO", reglas)?.id).toBe("r2");
+    expect(primeraReglaQueEmpata("SIN COINCIDENCIA", "DEBITO", reglas)).toBeNull();
+  });
+});
+
+describe("extraerTokenConcepto", () => {
+  it("extrae el token de comercio más distintivo", () => {
+    expect(extraerTokenConcepto("COMPRA RAPPI MX")).toBe("RAPPI");
+    expect(extraerTokenConcepto("PAGO SPEI ANTHROPIC PBC")).toBe("ANTHROPIC");
+    expect(extraerTokenConcepto("compra openai chatgpt")).toBe("CHATGPT");
+  });
+
+  it("ignora ruido bancario y devuelve '' cuando no hay nada útil", () => {
+    expect(extraerTokenConcepto("SPEI PAGO REF 12345")).toBe("");
+    expect(extraerTokenConcepto("")).toBe("");
+  });
+
+  it("normaliza acentos a mayúsculas sin diacríticos", () => {
+    expect(extraerTokenConcepto("café münchen")).toBe("MUNCHEN");
   });
 });

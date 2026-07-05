@@ -49,6 +49,48 @@ export interface SugerenciaCategoria {
   confianza: "alta" | "media";
 }
 
+/**
+ * Metadatos por familia: la contracuenta SAT y la etiqueta legible. Se usan para
+ * construir una `SugerenciaCategoria` a partir de una regla PERSISTIDA del
+ * usuario (que sólo guarda el patrón + la familia elegida). El código de cuenta
+ * espeja el que usa `construirAsiento`/postMonth para cada familia.
+ */
+export const FAMILIA_META: Record<FamiliaConcepto, { cuenta: string; etiqueta: string }> = {
+  COMISION: { cuenta: COE_CODES.COMISIONES_BANCARIAS, etiqueta: "Comisiones bancarias" },
+  TAX_PAYMENT: { cuenta: COE_CODES.IMPUESTOS_DERECHOS, etiqueta: "Impuestos y derechos" },
+  PAYROLL_NO_CFDI: { cuenta: COE_CODES.SUELDOS_SALARIOS, etiqueta: "Nómina (sueldos y salarios)" },
+  INTERNAL_TRANSFER: { cuenta: COE_CODES.BANCOS, etiqueta: "Traspaso entre cuentas propias" },
+  FINANCIAL_INCOME: { cuenta: COE_CODES.OTROS_INGRESOS, etiqueta: "Productos financieros (intereses ganados)" },
+  RENT: { cuenta: COE_CODES.RENTAS, etiqueta: "Rentas" },
+  NON_DEDUCTIBLE: { cuenta: COE_CODES.GASTOS_NO_DEDUCIBLES, etiqueta: "Gasto no deducible" },
+};
+
+/**
+ * Regla de categorización PERSISTIDA de la empresa (subconjunto de las columnas
+ * del modelo Prisma `CategorizationRule` que el matcher necesita). Se pasa como
+ * argumento — el matcher NO consulta la base de datos, sigue siendo puro.
+ */
+export interface CompanyRule {
+  pattern: string;
+  matchType?: string; // "CONTAINS" (default) | "EXACT" | "STARTS_WITH"
+  familia: FamiliaConcepto;
+  signo?: SignoMovimiento | null;
+}
+
+/** True si el concepto (normalizado) empata con el patrón de la regla. */
+function reglaEmpata(normConcepto: string, regla: CompanyRule): boolean {
+  const patron = normalizar(regla.pattern);
+  if (!patron) return false;
+  switch (regla.matchType) {
+    case "EXACT":
+      return normConcepto === patron;
+    case "STARTS_WITH":
+      return normConcepto.startsWith(patron);
+    default: // CONTAINS
+      return normConcepto.includes(patron);
+  }
+}
+
 /** Quita acentos/diacríticos y normaliza a mayúsculas para comparar. */
 function normalizar(texto: string): string {
   return texto
@@ -164,16 +206,42 @@ const REGLAS: Regla[] = [
  * de su concepto y signo. Función pura y determinista. Devuelve `null` cuando
  * ninguna regla aplica (mejor dejar sin clasificar que adivinar).
  *
- * @param concepto  Descripción del movimiento (BankTransaction.descripcion).
- * @param signo     "CREDITO" (entra dinero) | "DEBITO" (sale dinero).
+ * Las reglas PERSISTIDAS de la empresa (`companyRules`) se evalúan ANTES que las
+ * reglas hardcodeadas: una regla que el usuario confirmó siempre gana. Sólo se
+ * consideran las reglas activas cuyo signo (si lo fijan) coincide. El matcher no
+ * consulta la base de datos — las reglas se pasan ya cargadas, para mantenerlo
+ * puro y testeable.
+ *
+ * @param concepto      Descripción del movimiento (BankTransaction.descripcion).
+ * @param signo         "CREDITO" (entra dinero) | "DEBITO" (sale dinero).
+ * @param companyRules  Reglas persistidas de la empresa (opcional). Ganan sobre REGLAS.
  */
 export function sugerirCategoriaConcepto(
   concepto: string,
   signo: SignoMovimiento,
+  companyRules?: CompanyRule[],
 ): SugerenciaCategoria | null {
   if (!concepto || !concepto.trim()) return null;
   const norm = normalizar(concepto);
 
+  // 1) Reglas del usuario primero (ganan sobre el motor hardcodeado).
+  if (companyRules && companyRules.length > 0) {
+    for (const regla of companyRules) {
+      if (regla.signo && regla.signo !== signo) continue;
+      if (reglaEmpata(norm, regla)) {
+        const meta = FAMILIA_META[regla.familia];
+        if (!meta) continue; // familia desconocida → ignorar la regla, no adivinar
+        return {
+          familia: regla.familia,
+          cuentaSugerida: meta.cuenta,
+          etiqueta: meta.etiqueta,
+          confianza: "alta", // el usuario la confirmó
+        };
+      }
+    }
+  }
+
+  // 2) Motor de reglas hardcodeado.
   for (const regla of REGLAS) {
     if (regla.soloSigno && regla.soloSigno !== signo) continue;
     const match = regla.patrones.some((p) => norm.includes(normalizar(p)));
@@ -193,4 +261,26 @@ export function sugerirCategoriaConcepto(
 /** Conveniencia: deriva el signo a partir del monto firmado (>0 = crédito). */
 export function signoDeMonto(monto: number): SignoMovimiento {
   return monto > 0 ? "CREDITO" : "DEBITO";
+}
+
+/**
+ * Devuelve la PRIMERA regla persistida de la empresa que empata con el concepto
+ * y el signo, o `null`. A diferencia de `sugerirCategoriaConcepto`, entrega la
+ * regla misma (no una `SugerenciaCategoria`), para que quien la aplica —el
+ * importador— pueda, por ejemplo, incrementar su `hitCount`. Puro: no consulta
+ * la base de datos. El genérico preserva campos extra de la regla (p. ej. `id`).
+ */
+export function primeraReglaQueEmpata<T extends CompanyRule>(
+  concepto: string,
+  signo: SignoMovimiento,
+  rules: T[],
+): T | null {
+  if (!concepto || !concepto.trim() || rules.length === 0) return null;
+  const norm = normalizar(concepto);
+  for (const regla of rules) {
+    if (regla.signo && regla.signo !== signo) continue;
+    if (!FAMILIA_META[regla.familia]) continue;
+    if (reglaEmpata(norm, regla)) return regla;
+  }
+  return null;
 }

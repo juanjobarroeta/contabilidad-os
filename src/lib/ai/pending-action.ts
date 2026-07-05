@@ -2,7 +2,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { reconcileTransaction } from "@/lib/conciliacion";
 import { aprobarSugerencia } from "@/lib/bancos/sugerencias-concepto";
-import type { FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
+import { aplicarReglaRetroactiva, upsertReglaCategorizacion } from "@/lib/bancos/reglas-categorizacion";
+import type { FamiliaConcepto, SignoMovimiento } from "@/lib/bancos/categorizar-concepto";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gate de acciones del asistente DENTRO de la app (Fase B — "el contador dentro
@@ -34,6 +35,7 @@ export const PENDING_ACTION_TTL_MS = 15 * 60 * 1000; // 15 min
 export type PendingActionType =
   | "conciliar"
   | "categorizacion"
+  | "categorizacion_lote"
   | "resolver_hallazgo"
   | "posponer_hallazgo"
   | "marcar_pendiente";
@@ -53,6 +55,10 @@ interface BasePending {
 export type ChatPendingAction =
   | (BasePending & { type: "conciliar"; payload: { txId: string; invoiceId: string } })
   | (BasePending & { type: "categorizacion"; payload: { txId: string; familia: FamiliaConcepto } })
+  | (BasePending & {
+      type: "categorizacion_lote";
+      payload: { patron: string; familia: FamiliaConcepto; signo?: SignoMovimiento; crearRegla?: boolean };
+    })
   | (BasePending & { type: "resolver_hallazgo"; payload: { hallazgoId: string } })
   | (BasePending & {
       type: "posponer_hallazgo";
@@ -68,6 +74,7 @@ export function isReversibleType(type: string): type is PendingActionType {
   return (
     type === "conciliar" ||
     type === "categorizacion" ||
+    type === "categorizacion_lote" ||
     type === "resolver_hallazgo" ||
     type === "posponer_hallazgo" ||
     type === "marcar_pendiente"
@@ -135,6 +142,10 @@ export async function clearChatPendingAction(conversationId: string): Promise<vo
 type StagePayload =
   | { type: "conciliar"; payload: { txId: string; invoiceId: string } }
   | { type: "categorizacion"; payload: { txId: string; familia: FamiliaConcepto } }
+  | {
+      type: "categorizacion_lote";
+      payload: { patron: string; familia: FamiliaConcepto; signo?: SignoMovimiento; crearRegla?: boolean };
+    }
   | { type: "resolver_hallazgo"; payload: { hallazgoId: string } }
   | { type: "posponer_hallazgo"; payload: { hallazgoId: string; token: "7d" | "30d" | "fin_de_mes" } }
   | { type: "marcar_pendiente"; payload: { itemId: string; accion: "hecho" | "posponer" } };
@@ -220,6 +231,34 @@ export async function executeChatPendingAction(
         message: r.created
           ? "Movimiento categorizado y registrado en el libro mayor."
           : "El movimiento ya estaba categorizado; no se duplicó el asiento.",
+      };
+    }
+
+    case "categorizacion_lote": {
+      // Reusa el escaneo retroactivo (que a su vez reusa aprobarSugerencia,
+      // idempotente) para categorizar TODOS los movimientos sin conciliar que
+      // empatan con el patrón, y opcionalmente recuerda la regla. companyId ya
+      // fue re-verificado contra la membresía en el endpoint de confirm.
+      const { patron, familia, signo, crearRegla } = pa.payload;
+      if (crearRegla !== false) {
+        await upsertReglaCategorizacion({
+          companyId: pa.companyId,
+          pattern: patron,
+          familia,
+          signo: signo ?? null,
+          createdBy: confirmingUserId,
+        });
+      }
+      const res = await aplicarReglaRetroactiva(pa.companyId, patron, familia, signo ?? null);
+      if (res.aprobados === 0) {
+        return { ok: false, error: "No quedaron movimientos sin conciliar que empataran con ese patrón." };
+      }
+      return {
+        ok: true,
+        message:
+          `${res.aprobados} movimiento(s) categorizados` +
+          `${res.errores > 0 ? ` (${res.errores} no se pudieron)` : ""}` +
+          `${crearRegla !== false ? " y la regla quedó guardada para futuros estados de cuenta." : "."}`,
       };
     }
 
