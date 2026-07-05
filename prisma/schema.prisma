@@ -3427,3 +3427,16 @@ model ApiRefreshToken {
 
   @@index([userId])
 }
+
+// ─── Candado de crons (single-flight, seguro ante el pool de conexiones) ──────
+
+// Mutex por trabajo para los crons mutantes. Una fila por `job`; `lockedAt`
+// marca cuándo la tomó la corrida en curso. La adquisición es un compare-and-set
+// atómico sobre `lockedAt` condicionado a que el candado esté libre o vencido
+// (TTL > maxDuration), así un crash que no liberó no deja el cron trabado. A
+// diferencia de un advisory lock de sesión, NO depende de la afinidad de
+// conexión del pool de Prisma. Ver src/lib/cron-lock.ts.
+model CronLock {
+  job      String   @id
+  lockedAt DateTime
+}

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
 import { detectarMovimientosSinCfdi, periodoMesActual } from "@/lib/bancos/movimientos-sin-cfdi";
@@ -90,9 +91,9 @@ async function handle(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return handle(req);
+  return withCronLock("cron:auto-conciliar", () => handle(req));
 }
 
 export async function GET(req: Request) {
-  return handle(req);
+  return withCronLock("cron:auto-conciliar", () => handle(req));
 }

@@ -17,6 +17,14 @@ on:
     - cron: "0 * * * *" # top of every hour (UTC)
   workflow_dispatch: {} # manual "Run workflow" button
 
+# Serializa los disparos del mismo cron (schedule + workflow_dispatch):
+# GitHub nunca corre este workflow dos veces en paralelo. Es
+# cinturon-y-tirantes; el candado de la app (withCronLock / advisory lock
+# de Postgres) es la proteccion real contra el solapamiento.
+concurrency:
+  group: cron:sat-backfill
+  cancel-in-progress: false
+
 jobs:
   backfill:
     runs-on: ubuntu-latest
