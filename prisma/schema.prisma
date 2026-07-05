@@ -607,6 +607,16 @@ model Invoice {
   formaPago      String // SAT catalog key e.g. "01" = Efectivo
   metodoPago     String // "PUE" or "PPD"
   usoCfdi        String // SAT catalog key e.g. "G01"
+
+  // TipoDeComprobante del SAT (I/E/N/P/T). Null = legado (se asume I para
+  // INGRESO/EGRESO). "E" marca una NOTA DE CREDITO: dentro de su tipo, el
+  // motor fiscal la NETEA con signo negativo (emitida reduce ingresos e IVA
+  // trasladado; recibida reduce deducciones e IVA acreditable).
+  tipoSat String?
+  // CFDI relacionado (nota de credito emitida): UUID del padre y clave de
+  // relacion SAT ("01" = nota de credito de los documentos relacionados).
+  cfdiRelacionadoUuid String?
+  tipoRelacion        String?
   moneda         String      @default("MXN")
   tipoCambio     Float       @default(1.0)
   subtotal       Float

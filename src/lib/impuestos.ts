@@ -39,6 +39,15 @@ function filtroEfos(bloqueados: Set<string>): Record<string, unknown> {
 // Helpers puros de flujo (IVA trasladado por factura y por pago de REP) —
 // extraídos a src/lib/fiscal/iva-flujo.ts para compartirlos con la DIOT.
 // Se re-exportan con sus nombres históricos para no romper a los llamadores.
+/**
+ * Signo fiscal por TipoDeComprobante: una nota de crédito ("E") NETEA con signo
+ * negativo dentro de su tipo (emitida reduce ingresos e IVA trasladado;
+ * recibida reduce deducciones e IVA acreditable). Null/I → +1 (legado = I).
+ */
+export function signoTipoSat(tipoSat: string | null | undefined): 1 | -1 {
+  return tipoSat === "E" ? -1 : 1;
+}
+
 export type { InvoiceLike } from "./fiscal/iva-flujo";
 export { ivaTrasladadoDe, repIvaTrasladadoDe as repIvaAcreditableDe } from "./fiscal/iva-flujo";
 const ivaTrasladado = ivaTrasladadoDe;
@@ -97,6 +106,22 @@ async function flujoEfectivoAcum(
     }),
   ]);
 
+  // Notas de crédito ("E") dentro de los mismos filtros: netean en negativo.
+  const [puIngresoE, puEgresoE] = await Promise.all([
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "INGRESO", tipoSat: "E", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
+      _sum: { subtotal: true },
+    }),
+    prisma.invoice.aggregate({
+      where: {
+        companyId, tipo: "EGRESO", tipoSat: "E", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to },
+        OR: [{ naturaleza: null }, { naturaleza: { notIn: ["INVERSION", "SIN_EFECTOS"] } }],
+        ...efosWhere,
+      },
+      _sum: { subtotal: true },
+    }),
+  ]);
+
   const uuids = [...new Set(repLinks.map((l) => l.parentUuid))];
   const parents = uuids.length
     ? await prisma.invoice.findMany({
@@ -104,6 +129,7 @@ async function flujoEfectivoAcum(
         select: {
           uuid: true,
           tipo: true,
+          tipoSat: true,
           subtotal: true,
           total: true,
           naturaleza: true,
@@ -125,22 +151,25 @@ async function flujoEfectivoAcum(
     if (!p || p.total <= 0 || l.impPagado == null) continue;
     const fraccionPagada = l.impPagado / p.total;
     const base = l.impPagado * (p.subtotal / p.total); // subtotal-equivalent collected/paid
+    const signoNota = signoTipoSat(p.tipoSat);
     if (p.tipo === "INGRESO") {
-      ppdIngreso += base;
+      ppdIngreso += signoNota * base;
       const parentIsrRet = p.taxes.reduce((s, t) => s + t.importe, 0);
       ppdIsrRetenido += parentIsrRet * fraccionPagada; // retención del ingreso cobrado
     } else if (p.tipo === "EGRESO") {
       // INVERSION/SIN_EFECTOS no son deducción inmediata (igual que el PUE);
       // proveedor 69-B definitivo → deducción improcedente (Art. 69-B).
       if (!EXCLUIDAS_DEDUCCION.has(p.naturaleza ?? "") && !esEfosBloqueado(p.customer?.rfc)) {
-        ppdEgreso += base;
+        ppdEgreso += signoNota * base;
       }
     }
   }
 
   return {
-    ingresosCobrados: (puIngreso._sum.subtotal ?? 0) + ppdIngreso,
-    deduccionesPagadas: (puEgreso._sum.subtotal ?? 0) + ppdEgreso,
+    // El agregado positivo INCLUYE las notas "E" (+), así que el neto es
+    // total − 2·E (una vez para quitarlas, otra para restarlas).
+    ingresosCobrados: (puIngreso._sum.subtotal ?? 0) - 2 * (puIngresoE._sum.subtotal ?? 0) + ppdIngreso,
+    deduccionesPagadas: (puEgreso._sum.subtotal ?? 0) - 2 * (puEgresoE._sum.subtotal ?? 0) + ppdEgreso,
     isrRetenidoCobrado: (puIngresoIsrRet._sum.importe ?? 0) + ppdIsrRetenido,
   };
 }
@@ -601,6 +630,23 @@ export async function computeTaxPosition(
     prisma.perdidaFiscal.findMany({ where: { companyId } }),
   ]);
 
+  // Notas de crédito ("E") en los agregados anuales: el agregado positivo las
+  // incluye (+), así que el neto es total − 2·E.
+  const [prevYearIngresosE, prevYearEgresosE, acumuladosE] = await Promise.all([
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "INGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
+      _sum: { subtotal: true },
+    }),
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "EGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo }, ...efosWhere },
+      _sum: { subtotal: true },
+    }),
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "INGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: yearFrom, lt: to } },
+      _sum: { subtotal: true },
+    }),
+  ]);
+
   // Resolve the parent PPD invoices these REP payments settle: the parent's
   // tipo decides direction (INGRESO → trasladado, EGRESO → acreditable) and its
   // IVA/total is the proration base for legacy 1.0 complementos.
@@ -608,7 +654,7 @@ export async function computeTaxPosition(
   const repParents = repParentUuids.length
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, metodoPago: "PPD", status: "STAMPED" },
-        select: { uuid: true, tipo: true, total: true, totalImpuestos: true, taxes: true, ivaNoAcreditable: true, ivaNoCausado: true, customer: { select: { rfc: true } } },
+        select: { uuid: true, tipo: true, tipoSat: true, total: true, totalImpuestos: true, taxes: true, ivaNoAcreditable: true, ivaNoCausado: true, customer: { select: { rfc: true } } },
       })
     : [];
   const repParentByUuid = new Map(repParents.map((p) => [p.uuid!, p]));
@@ -620,7 +666,7 @@ export async function computeTaxPosition(
   for (const link of repCobrosDelMes) {
     const parent = repParentByUuid.get(link.parentUuid);
     if (!parent) continue; // REP references a non-PPD or unknown invoice — skip
-    const iva = repIvaTrasladado(link, parent);
+    const iva = signoTipoSat(parent.tipoSat) * repIvaTrasladado(link, parent);
     if (parent.tipo === "INGRESO" && !parent.ivaNoCausado) ivaTrasladadoPPD += iva;
     // EGRESO de proveedor 69-B definitivo → IVA no acreditable (Art. 69-B).
     // Igual si el contador lo excluyó del acreditamiento (p. ej. no pagado).
@@ -630,10 +676,10 @@ export async function computeTaxPosition(
   // ── IVA (flujo de efectivo) ──────────────────────────────────────────────
   const ivaTrasladadoPUE = facturasEmitidas
     .filter((inv) => inv.metodoPago === "PUE" && !inv.ivaNoCausado)
-    .reduce((s, inv) => s + ivaTrasladado(inv), 0);
+    .reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
   const ivaTrasladadoTotal = ivaTrasladadoPUE + ivaTrasladadoPPD;
 
-  const ivaTrasladadoDevengado = facturasEmitidas.reduce((s, inv) => s + ivaTrasladado(inv), 0);
+  const ivaTrasladadoDevengado = facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
   const ivaRetenidoPorClientes = facturasEmitidas.reduce(
     (sum, inv) => sum + inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion).reduce((s, t) => s + t.importe, 0),
     0
@@ -647,9 +693,9 @@ export async function computeTaxPosition(
 
   const ivaAcreditablePUE = facturasEgresos
     .filter((inv) => inv.metodoPago === "PUE" && !inv.ivaNoAcreditable)
-    .reduce((s, inv) => s + ivaTrasladado(inv), 0);
+    .reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
   const ivaAcreditableBruto = ivaAcreditablePUE + ivaAcreditablePPD;
-  const ivaAcreditableDevengado = facturasEgresos.reduce((s, inv) => s + ivaTrasladado(inv), 0);
+  const ivaAcreditableDevengado = facturasEgresos.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
 
   // Proporción de acreditamiento (Art. 5-V LIVA): con actos exentos en el mes,
   // el IVA de los gastos sólo procede en gravados/(gravados+exentos). v1 trata
@@ -664,9 +710,10 @@ export async function computeTaxPosition(
   const ivaSaldoAFavor = ivaNeto < 0 ? round2(-ivaNeto) : 0;
 
   // ── ISR provisional — régimen-aware ──────────────────────────────────────
-  const ingresosDelMes = round2(facturasEmitidas.reduce((s, inv) => s + inv.subtotal, 0));
-  const gastosDelMes = round2(facturasEgresos.reduce((s, inv) => s + inv.subtotal, 0));
-  const ingresosAcumulados = ingresosAcumuladosAgg._sum.subtotal ?? 0;
+  const ingresosDelMes = round2(facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0));
+  const gastosDelMes = round2(facturasEgresos.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0));
+  const ingresosAcumulados =
+    (ingresosAcumuladosAgg._sum.subtotal ?? 0) - 2 * (acumuladosE._sum.subtotal ?? 0);
   const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
 
   const resicoKind = detectResicoKind(company?.regimenFiscal ?? null, company?.rfc ?? null);
@@ -845,8 +892,10 @@ export async function computeTaxPosition(
     // Persona MORAL general / RESICO PM / otros: Art. 14 (coeficiente × 30%
     // sobre ingresos nominales acumulados). Sólo personas morales llegan aquí —
     // cualquier persona física se resuelve arriba con tarifa/tasa (sin coeficiente).
-    const prevIngresosTotal = prevYearIngresos._sum.subtotal ?? 0;
-    const prevGastosTotal = prevYearEgresos._sum.subtotal ?? 0;
+    const prevIngresosTotal =
+      (prevYearIngresos._sum.subtotal ?? 0) - 2 * (prevYearIngresosE._sum.subtotal ?? 0);
+    const prevGastosTotal =
+      (prevYearEgresos._sum.subtotal ?? 0) - 2 * (prevYearEgresosE._sum.subtotal ?? 0);
     const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
     const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 

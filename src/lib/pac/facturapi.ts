@@ -33,6 +33,13 @@ function buildInvoiceBody(input: CfdiInput) {
     items: mapItems(input),
     ...(input.notes ? { pdf_custom_section: input.notes } : {}),
     ...(input.global ? { global: input.global } : {}),
+    // Nota de credito (type "E") + CFDI relacionado. Nombre del campo
+    // related_documents por verificar en sandbox antes de produccion (los
+    // documents son los UUID/folios fiscales de los padres).
+    ...(input.type ? { type: input.type } : {}),
+    ...(input.relations
+      ? { related_documents: [{ relationship: input.relations.relationship, documents: input.relations.documents }] }
+      : {}),
   };
 }
 
