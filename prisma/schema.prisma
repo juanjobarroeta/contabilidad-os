@@ -285,6 +285,7 @@ model Company {
   // WhatsApp channel (W0)
   whatsappLinks         WhatsappLink[]         @relation("WhatsappActiveCompany")
   whatsappConversations WhatsappConversation[]
+  stagedActions         StagedAction[]
 
   // Post-sync IVA-change notices (one baseline per unfiled period)
   ivaPeriodNotices IvaPeriodNotice[]
@@ -2843,6 +2844,59 @@ model WhatsappLinkCode {
 
   @@index([code])
   @@index([userId])
+}
+
+// Tier 3 — "rieles" de escrituras de alto valor (timbrar, complemento de pago…).
+// Una acción irreversible/fiscal NUNCA se ejecuta desde WhatsApp con un simple
+// "sí": el asistente la ESCENIFICA aquí y manda un deep link a una pantalla de
+// revisión DENTRO de la app (sesión autenticada = reautenticación real, resistente
+// a SIM-swap). El usuario revisa el documento completo y confirma; recién ahí se
+// ejecuta por la ruta endurecida (idempotencia + bitácora + gating de suscripción)
+// y el bot responde el resultado (UUID) por la conversación de origen.
+model StagedAction {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // SHA-256 (hex) del token crudo del deep link. El token crudo solo sale del
+  // servidor una vez, embebido en el enlace enviado por WhatsApp — nunca se guarda.
+  tokenHash String @unique
+
+  // Qué acción es (p.ej. "timbrar"). Determina cómo se ejecuta al confirmar.
+  type String
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Usuario para quien se preparó (el emisor de WhatsApp). Al confirmar en la app
+  // se re-verifica la membresía; este campo por sí solo NO autoriza.
+  createdByUserId String
+
+  // Conversación de WhatsApp de origen — para responder el resultado por ahí.
+  whatsappConversationId String?
+
+  // Resumen legible (lo que EXACTAMENTE pasará al confirmar) + payload de la acción.
+  summary String
+  payload Json
+
+  status            StagedActionStatus @default(PENDING)
+  expiresAt         DateTime
+  confirmedAt       DateTime?
+  confirmedByUserId String?
+  // Resultado tras ejecutar (p.ej. folio fiscal del CFDI) o el error si falló.
+  resultUuid String?
+  error      String?
+
+  @@index([companyId])
+  @@index([createdByUserId])
+}
+
+enum StagedActionStatus {
+  PENDING // escenificada, esperando confirmación en la app
+  EXECUTING // confirmada; ejecución en curso (candado de un solo uso)
+  DONE // ejecutada con éxito
+  FAILED // la ejecución falló (ver `error`)
+  CANCELLED // el usuario la descartó
 }
 
 // One thread per (link, company). Holds rolling history + a reserved slot for a

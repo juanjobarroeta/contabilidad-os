@@ -45,7 +45,11 @@ export async function executeToolCall(
 ): Promise<string> {
   switch (toolName) {
     case "preview_factura":
-      return previewTimbrar(input, companyId, context.conversationId);
+      return previewTimbrar(input, companyId, {
+        conversationId: context.conversationId,
+        userId: context.userId,
+        inApp: context.inApp,
+      });
     case "list_unmatched_transactions":
       return JSON.stringify(
         await listUnmatched(companyId, typeof input.limit === "number" ? input.limit : 10)

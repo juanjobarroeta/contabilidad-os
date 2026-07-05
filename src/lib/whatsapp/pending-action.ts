@@ -1,33 +1,24 @@
 import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { stampDraftFromPending, discardDraft, type StampInput, type StampResult } from "@/lib/facturas/stamp";
 import { reconcileTransaction } from "@/lib/conciliacion";
 import { resolverPendingImportEstado, type PendingImportEstado } from "@/lib/whatsapp/estado-cuenta";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WhatsApp write-action confirmation gate.
+// WhatsApp write-action confirmation gate (acciones REVERSIBLES en el chat).
 //
-// A write (e.g. timbrar) is NEVER executed directly by the agent. Instead the
-// agent stages it as a `pendingAction` on the conversation with a short-lived
-// 6-digit confirmation code. The user must reply with that exact code to
-// execute — a bare "sí" is intentionally NOT enough (defends against a hijacked
-// phone and accidental sends of a billable, legally-binding CFDI).
+// Una conciliación se ESCENIFICA como `pendingAction` con un código de 6 dígitos
+// de corta vida; el usuario responde ese código exacto para ejecutar — un "sí"
+// pelón NO basta (defiende contra un teléfono secuestrado y envíos accidentales).
+//
+// Las acciones IRREVERSIBLES/fiscales (timbrar, complemento de pago…) ya NO se
+// confirman aquí con un código: viajan por los "rieles" del Tier 3 (deep link a
+// una pantalla de revisión y autorización DENTRO de la app). Ver `staged-action.ts`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TTL_MS = 15 * 60 * 1000; // pending action expires in 15 min
 
 export type PendingAction =
-  | {
-      type: "timbrar";
-      code: string;
-      expiresAt: number;
-      payload: StampInput;
-      /** Facturapi draft (borrador) id; stamping promotes this exact draft. */
-      draftId: string;
-      preview: string;
-      companyId: string;
-    }
   | {
       type: "conciliar";
       code: string;
@@ -57,16 +48,6 @@ async function stage(
     data: { pendingAction: action as any },
   });
   return { code: action.code };
-}
-
-export async function stagePendingTimbrar(
-  conversationId: string,
-  companyId: string,
-  payload: StampInput,
-  draftId: string,
-  preview: string
-): Promise<{ code: string }> {
-  return stage(conversationId, { type: "timbrar", code: genCode(), expiresAt: Date.now() + TTL_MS, payload, draftId, preview, companyId });
 }
 
 export async function stagePendingConciliar(
@@ -120,21 +101,17 @@ export async function tryConfirmPendingAction(
     return resolverPendingImportEstado(conversationId, pa, body);
   }
 
-  const accionLabel = pa.type === "conciliar" ? "conciliación" : "factura";
-
   const text = body.trim().toLowerCase();
   if (/^(cancelar|cancela|no)\b/.test(text)) {
     await clearPendingAction(conversationId);
-    // Drop the throwaway Facturapi draft so cancelled prefacturas don't linger.
-    if (pa.type === "timbrar") await discardDraft(pa.companyId, pa.draftId);
-    return `Cancelado. No se realizó la ${accionLabel}.`;
+    return "Cancelado. No se realizó la conciliación.";
   }
 
   const codeMatch = body.trim().match(/\b(\d{6})\b/);
   if (!codeMatch) {
     // They said something else while an action is pending — remind, don't execute.
     return (
-      `Tienes una ${accionLabel} pendiente de confirmar. Responde con el código *${pa.code}* para proceder, ` +
+      `Tienes una conciliación pendiente de confirmar. Responde con el código *${pa.code}* para proceder, ` +
       "o escribe *cancelar* para descartarla y seguir con otra cosa."
     );
   }
@@ -145,35 +122,12 @@ export async function tryConfirmPendingAction(
   // Correct code → execute the write.
   await clearPendingAction(conversationId);
 
-  if (pa.type === "timbrar") {
-    let result: StampResult;
-    try {
-      // Promote the borrador the user reviewed into a stamped CFDI — same draft,
-      // so what they validated is exactly what gets timbrado.
-      result = await stampDraftFromPending(pa.payload, pa.draftId);
-    } catch (e) {
-      console.error("[whatsapp] stamp error", e);
-      return "Hubo un error al timbrar. No se generó la factura. Inténtalo de nuevo o hazlo desde la app.";
-    }
-    if (!result.ok) return `No se pudo timbrar: ${result.error}`;
-    return (
-      `✅ Factura timbrada.\n` +
-      `Folio fiscal: ${result.uuid}\n` +
-      `Total: ${result.total.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}\n` +
-      `Pídeme el XML/PDF cuando lo necesites.`
-    );
+  try {
+    const r = await reconcileTransaction(pa.payload.txId, pa.payload.invoiceId, pa.companyId);
+    if (!r.ok) return `No se pudo conciliar: ${r.error}`;
+    return `✅ Movimiento conciliado con la factura de ${r.cliente}${r.uuid ? ` (${r.uuid})` : ""}.`;
+  } catch (e) {
+    console.error("[whatsapp] reconcile error", e);
+    return "Hubo un error al conciliar. Inténtalo de nuevo o hazlo desde la app.";
   }
-
-  if (pa.type === "conciliar") {
-    try {
-      const r = await reconcileTransaction(pa.payload.txId, pa.payload.invoiceId, pa.companyId);
-      if (!r.ok) return `No se pudo conciliar: ${r.error}`;
-      return `✅ Movimiento conciliado con la factura de ${r.cliente}${r.uuid ? ` (${r.uuid})` : ""}.`;
-    } catch (e) {
-      console.error("[whatsapp] reconcile error", e);
-      return "Hubo un error al conciliar. Inténtalo de nuevo o hazlo desde la app.";
-    }
-  }
-
-  return "Acción desconocida.";
 }
