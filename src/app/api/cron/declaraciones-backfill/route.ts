@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withCronLock } from "@/lib/cron-lock";
 import {
   backfillAllDeclaracionesMensuales,
   backfillDeclaracionesMensuales,
@@ -46,8 +47,8 @@ async function handle(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return handle(req);
+  return withCronLock("cron:declaraciones-backfill", () => handle(req));
 }
 export async function GET(req: Request) {
-  return handle(req);
+  return withCronLock("cron:declaraciones-backfill", () => handle(req));
 }

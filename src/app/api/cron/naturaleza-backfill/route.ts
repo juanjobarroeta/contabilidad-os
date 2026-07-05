@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { clasificarCfdi } from "@/lib/fiscal/clasificar-cfdi";
 
@@ -107,8 +108,8 @@ async function handle(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return handle(req);
+  return withCronLock("cron:naturaleza-backfill", () => handle(req));
 }
 export async function GET(req: Request) {
-  return handle(req);
+  return withCronLock("cron:naturaleza-backfill", () => handle(req));
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
 
@@ -221,9 +222,9 @@ async function handle(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return handle(req);
+  return withCronLock("cron:sat-backfill", () => handle(req));
 }
 
 export async function GET(req: Request) {
-  return handle(req);
+  return withCronLock("cron:sat-backfill", () => handle(req));
 }

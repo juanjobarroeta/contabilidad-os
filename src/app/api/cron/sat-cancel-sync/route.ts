@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { syncCancelacionesPeriodo } from "@/lib/sat-sync";
 
@@ -98,8 +99,8 @@ async function handle(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return handle(req);
+  return withCronLock("cron:sat-cancel-sync", () => handle(req));
 }
 export async function GET(req: Request) {
-  return handle(req);
+  return withCronLock("cron:sat-cancel-sync", () => handle(req));
 }

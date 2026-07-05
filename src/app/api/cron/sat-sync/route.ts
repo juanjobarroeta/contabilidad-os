@@ -6,6 +6,7 @@ import { notifyNewInvoices } from "@/lib/notify-new-invoices";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
 import { fielStatus } from "@/lib/fiel";
 import { notificarFielInvalida, notificarFielPorVencer } from "@/lib/notify-fiel";
+import { withCronLock } from "@/lib/cron-lock";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-sync
@@ -232,11 +233,14 @@ async function handle(req: Request) {
   return NextResponse.json(summary);
 }
 
+// Candado de ejecución única: evita que una corrida lenta y el siguiente tick
+// (o un disparo manual) procesen las mismas empresas en paralelo — envíos e
+// importaciones duplicadas al SAT, pushes repetidos y carreras de conciliación.
 export async function POST(req: Request) {
-  return handle(req);
+  return withCronLock("cron:sat-sync", () => handle(req));
 }
 
 // Allow GET too — many schedulers can only issue a GET against a URL.
 export async function GET(req: Request) {
-  return handle(req);
+  return withCronLock("cron:sat-sync", () => handle(req));
 }
