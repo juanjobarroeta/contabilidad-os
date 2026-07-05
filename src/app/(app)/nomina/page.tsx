@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
@@ -37,12 +38,16 @@ export default function NominaHubPage() {
   const { companies } = useCompany();
   const [tab, setTab] = useState<Tab>("resumen");
 
-  // Honra el deep-link ?tab=. Se lee directo de la URL para evitar forzar un
-  // límite de Suspense (useSearchParams).
+  // Honra el deep-link ?tab= Y sus cambios en vivo: la sección Nómina del
+  // sidebar navega entre pestañas con enlaces ?tab=, así que hay que reaccionar
+  // a cada cambio del parámetro, no sólo al montar. (Las rutas bajo (app) son
+  // dinámicas — el layout lee la sesión — así que useSearchParams no exige un
+  // límite de Suspense propio.)
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
   useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get("tab");
-    if (t && (TAB_IDS as string[]).includes(t)) setTab(t as Tab);
-  }, []);
+    if (tabParam && (TAB_IDS as string[]).includes(tabParam)) setTab(tabParam as Tab);
+  }, [tabParam]);
 
   function selectTab(next: Tab) {
     setTab(next);

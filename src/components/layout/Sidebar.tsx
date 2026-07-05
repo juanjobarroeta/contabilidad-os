@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useCompany } from "./CompanyProvider";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,10 @@ import {
   TrendingUp,
   Wrench,
   Inbox,
+  Banknote,
+  UserRound,
+  ClipboardCheck,
+  LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -47,7 +51,6 @@ const SECTIONS: NavSection[] = [
       { href: "/facturas", label: "Facturas", icon: FileText },
       { href: "/clientes", label: "Clientes", icon: Users },
       { href: "/bancos", label: "Bancos", icon: Landmark },
-      { href: "/nomina", label: "Nómina", icon: Users2 },
     ],
   },
   {
@@ -59,6 +62,35 @@ const SECTIONS: NavSection[] = [
     ],
   },
 ];
+
+// Nómina: pilar propio en la navegación (deja de ser un renglón dentro de
+// Operación). Las entradas enlazan a las pestañas del hub /nomina (deep-link
+// ?tab=) y a las páginas hermanas — las RUTAS no cambian, sólo se hacen
+// visibles. El resaltado sigue la pestaña activa (y las páginas hijas
+// /nomina/empleado/* y /nomina/ajuste-anual encienden a su padre).
+type NominaItem = { href: string; label: string; icon: LucideIcon; tab: string | null };
+
+const NOMINA_ITEMS: NominaItem[] = [
+  { href: "/nomina", label: "Resumen", icon: Users2, tab: "resumen" },
+  { href: "/nomina?tab=corridas", label: "Corridas", icon: Banknote, tab: "corridas" },
+  { href: "/nomina?tab=empleados", label: "Empleados", icon: UserRound, tab: "empleados" },
+  { href: "/nomina?tab=cumplimiento", label: "IMSS y cumplimiento", icon: ClipboardCheck, tab: "cumplimiento" },
+];
+
+/**
+ * Cuál entrada de Nómina está activa. PURA para poder probarla a ojo:
+ *   - /nomina → la pestaña de la URL (?tab=), o "resumen" sin ella.
+ *   - /nomina/empleado/* → "empleados"; /nomina/ajuste-anual → "cumplimiento"
+ *     (de ahí se llega); /nomina/cockpit → "cockpit" (item del despacho).
+ */
+function nominaTabActiva(pathname: string, tabParam: string | null): string | null {
+  if (pathname === "/nomina") return tabParam ?? "resumen";
+  if (pathname.startsWith("/nomina/empleado")) return "empleados";
+  if (pathname.startsWith("/nomina/ajuste-anual")) return "cumplimiento";
+  if (pathname.startsWith("/nomina/cockpit")) return "cockpit";
+  if (pathname.startsWith("/nomina")) return "resumen";
+  return null;
+}
 
 // Cartera (vista despacho) reutiliza la ruta /despacho; sólo aparece cuando el
 // usuario opera más de una empresa.
@@ -87,6 +119,9 @@ interface SidebarProps {
 
 export function Sidebar({ user, esOperador }: SidebarProps) {
   const pathname = usePathname();
+  // Para resaltar la pestaña activa de Nómina (?tab=). Todas las rutas bajo
+  // (app) son dinámicas (el layout lee la sesión), así que no requiere Suspense.
+  const searchParams = useSearchParams();
   const { companies, activeCompany, setActiveCompany } = useCompany();
   const [companyOpen, setCompanyOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -128,6 +163,9 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   const activeNavHref = allHrefs
     .filter((href) => pathname === href || pathname.startsWith(href + "/"))
     .sort((a, b) => b.length - a.length)[0] ?? null;
+
+  // Entrada activa de la sección Nómina (por pestaña, no sólo por ruta).
+  const nominaActiva = nominaTabActiva(pathname, searchParams.get("tab"));
 
   return (
     <>
@@ -286,29 +324,48 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
           )}
         </div>
 
-        {/* Secciones con encabezado (Operación / Fiscal) */}
+        {/* Secciones con encabezado (Operación / Nómina / Fiscal) */}
         {SECTIONS.filter((s) => s.label).map((section) => (
           <div key={section.label}>
             <p className={GRP_LBL}>{section.label}</p>
             <div className="space-y-1">
-              {section.items.map(({ href, label, icon: Icon, badge }) => {
-                // Para despachos (varias empresas), "Nómina" entra al cockpit
-                // multi-RFC (todas las empresas de un vistazo) en vez del
-                // workspace de una sola; un usuario de una empresa mantiene /nomina.
-                const efHref = href === "/nomina" && showCartera ? "/nomina/cockpit" : href;
-                return (
-                  <Link key={href} href={efHref} className={navLinkClass(href === activeNavHref)}>
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="flex-1">{label}</span>
-                    {badge && (
-                      <span className="rounded-full bg-cos-brand-tint px-2 py-0.5 font-mono text-[10px] font-semibold text-cos-brand-ink">
-                        {badge}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
+              {section.items.map(({ href, label, icon: Icon, badge }) => (
+                <Link key={href} href={href} className={navLinkClass(href === activeNavHref)}>
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">{label}</span>
+                  {badge && (
+                    <span className="rounded-full bg-cos-brand-tint px-2 py-0.5 font-mono text-[10px] font-semibold text-cos-brand-ink">
+                      {badge}
+                    </span>
+                  )}
+                </Link>
+              ))}
             </div>
+            {/* Nómina: sección propia, entre Operación y Fiscal. */}
+            {section.label === "Operación" && (
+              <div>
+                <p className={GRP_LBL}>Nómina</p>
+                <div className="space-y-1">
+                  {/* Despachos: el cockpit multi-RFC encabeza la sección (antes
+                      era un redirect silencioso del único renglón "Nómina"). */}
+                  {showCartera && (
+                    <Link
+                      href="/nomina/cockpit"
+                      className={navLinkClass(nominaActiva === "cockpit")}
+                    >
+                      <LayoutGrid className="h-4 w-4 shrink-0" />
+                      <span className="flex-1">Cockpit multi-RFC</span>
+                    </Link>
+                  )}
+                  {NOMINA_ITEMS.map(({ href, label, icon: Icon, tab }) => (
+                    <Link key={href} href={href} className={navLinkClass(nominaActiva === tab)}>
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="flex-1">{label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ))}
 
