@@ -603,6 +603,9 @@ export async function verifyAndImportSatSync(
             companyId,
             customerId,
             tipo: invoiceType,
+            // TipoDeComprobante crudo del SAT: "E" marca nota de credito y el
+            // motor fiscal la netea con signo negativo dentro de su tipo.
+            tipoSat: cfdi.tipo ?? null,
             fecha: new Date(cfdi.fecha),
             serie: cfdi.serie ?? null,
             folio: cfdi.folio ?? null,

@@ -36,6 +36,10 @@ export interface CfdiLineItem {
 
 /** Datos neutrales para emitir un CFDI de ingreso. */
 export interface CfdiInput {
+  /** TipoDeComprobante: "I" (default) o "E" (egreso / nota de credito). */
+  type?: "I" | "E";
+  /** CFDI relacionados (p.ej. relacion "01" = nota de credito del documento). */
+  relations?: { relationship: string; documents: string[] };
   /** Referencia del receptor en el PAC (hoy: el customer id de Facturapi). */
   customerRef: string;
   /**
