@@ -110,3 +110,24 @@ const CHAT_LLM_USD_MENSUAL: Record<CompanyPlan, number> = {
 export function chatLlmUsdMensual(plan: CompanyPlan): number {
   return CHAT_LLM_USD_MENSUAL[plan];
 }
+
+// ── Tope diario de mensajes del chat in-app POR USUARIO ──────────────────────
+// El presupuesto mensual de LLM protege el COGS a nivel EMPRESA, pero un solo
+// usuario en una empresa con presupuesto amplio (p.ej. DESPACHO) puede vaciar
+// ese presupuesto compartido y disparar el gasto sin backstop individual. Este
+// tope diario por usuario cierra ese hueco: acota cuántos mensajes puede enviar
+// una misma persona al día (zona horaria de México), igual que el
+// `dailyMsgsPerUser` del asistente de WhatsApp. Es un tope de COSTO, no de
+// precio; el chat sigue incluido en todos los tiers. Los números exactos son
+// una decisión de producto: ajústalos a tu oferta.
+const CHAT_MSGS_DIARIOS_POR_USUARIO: Record<CompanyPlan, number> = {
+  ASISTENTE: 50,
+  AUTOMATIZADO: 100,
+  PRO: 200,
+  DESPACHO: 400,
+};
+
+/** Tope diario de mensajes del chat in-app por usuario, por tier. */
+export function dailyChatMsgsPerUser(plan: CompanyPlan): number {
+  return CHAT_MSGS_DIARIOS_POR_USUARIO[plan];
+}

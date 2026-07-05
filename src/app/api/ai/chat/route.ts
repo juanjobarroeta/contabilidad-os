@@ -9,6 +9,8 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { recordLlmCost } from "@/lib/costos/record";
 import { checkChatBudget } from "@/lib/ai/budget";
+import { checkChatUserDaily } from "@/lib/ai/rate-limit";
+import { effectiveWhatsappPlan } from "@/lib/planes";
 import { getChatPendingAction } from "@/lib/ai/pending-action";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
@@ -74,6 +76,21 @@ export async function POST(req: Request) {
   });
   if (!budget.allowed) {
     return NextResponse.json({ error: budget.mensaje }, { status: 429 });
+  }
+
+  // Backstop por USUARIO: el presupuesto anterior protege el COGS de la empresa,
+  // pero no impide que una sola persona monopolice el presupuesto compartido
+  // (cada POST corre hasta MAX_TOOL_ROUNDS rondas del modelo). Este tope diario
+  // acota los mensajes de un mismo usuario al día. Sólo aplica al POST (enviar
+  // mensaje); cargar el historial es un GET y no pasa por aquí. Una empresa de
+  // despacho hereda el tope del plan DESPACHO, igual que el presupuesto mensual.
+  const userDaily = await checkChatUserDaily({
+    userId: session.user.id,
+    companyId,
+    plan: effectiveWhatsappPlan({ tier: companyPlan.tier, despachoId: companyPlan.despachoId }),
+  });
+  if (!userDaily.allowed) {
+    return NextResponse.json({ error: userDaily.mensaje }, { status: 429 });
   }
 
   // Sólo roles con permiso de escritura pueden STAGEAR acciones reversibles. A un
