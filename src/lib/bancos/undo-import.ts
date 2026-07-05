@@ -40,9 +40,20 @@ function ult4(n: string | null | undefined): string | null {
   return d.length >= 4 ? d.slice(-4) : null;
 }
 
+/** Ventana para agrupar como UN mismo "lote" las importaciones sin rastrear que
+ *  ocurrieron casi juntas (subidas seguidas). Previo al tracking de lotes. */
+const CLUSTER_GAP_MS = 15 * 60 * 1000;
+
 /**
  * Encuentra el ÚLTIMO lote importado (no deshecho) de la empresa, con cuántos
  * movimientos son borrables vs. ya conciliados. null si no hay ninguno.
+ *
+ * Fallback histórico: si la empresa no tiene NINGÚN lote rastreado (movimientos
+ * importados antes de que existiera el tracking), busca el cúmulo de movimientos
+ * de importación MÁS RECIENTE sin lote, lo MATERIALIZA en un ImportBatch real
+ * (etiquetando esos movimientos) y lo devuelve — así el deshacer funciona igual
+ * para importaciones viejas. Sólo agrupa lo reciente (ventana de 15 min sobre el
+ * último movimiento sin lote), nunca movimientos antiguos legítimos.
  */
 export async function findUltimoLoteImportado(companyId: string): Promise<LoteImportado | null> {
   const batch = await prisma.importBatch.findFirst({
@@ -53,7 +64,7 @@ export async function findUltimoLoteImportado(companyId: string): Promise<LoteIm
       bankAccount: { select: { banco: true, nombre: true, numeroCuenta: true, clabe: true } },
     },
   });
-  if (!batch) return null;
+  if (!batch) return materializarClusterSinLote(companyId);
 
   const [borrables, total] = await Promise.all([
     prisma.bankTransaction.count({ where: whereBorrables(batch.id, companyId) }),
@@ -72,6 +83,58 @@ export async function findUltimoLoteImportado(companyId: string): Promise<LoteIm
     count: batch.count,
     bankAccountId: batch.bankAccountId,
     cuentaEtiqueta,
+    borrables,
+    conciliados: total - borrables,
+  };
+}
+
+/**
+ * Materializa el cúmulo de importación reciente SIN lote (histórico, previo al
+ * tracking) en un ImportBatch real, etiquetando esos movimientos. Devuelve el
+ * lote resultante, o null si no hay movimientos sin lote. Sólo agrupa fuentes de
+ * importación (WHATSAPP/UPLOAD), nunca sincronización automática (BELVO/PADEL).
+ */
+async function materializarClusterSinLote(companyId: string): Promise<LoteImportado | null> {
+  const ultimo = await prisma.bankTransaction.findFirst({
+    where: { companyId, importBatchId: null, source: { in: ["WHATSAPP", "UPLOAD"] } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      bankAccountId: true, createdAt: true, source: true,
+      bankAccount: { select: { banco: true, nombre: true, numeroCuenta: true, clabe: true } },
+    },
+  });
+  if (!ultimo) return null;
+
+  const desde = new Date(ultimo.createdAt.getTime() - CLUSTER_GAP_MS);
+  const scope: Prisma.BankTransactionWhereInput = {
+    companyId,
+    importBatchId: null,
+    bankAccountId: ultimo.bankAccountId,
+    source: ultimo.source,
+    createdAt: { gte: desde, lte: ultimo.createdAt },
+  };
+
+  const count = await prisma.bankTransaction.count({ where: scope });
+  const nuevo = await prisma.importBatch.create({
+    data: { companyId, bankAccountId: ultimo.bankAccountId, source: ultimo.source, count },
+    select: { id: true, createdAt: true },
+  });
+  await prisma.bankTransaction.updateMany({ where: scope, data: { importBatchId: nuevo.id } });
+
+  const [borrables, total] = await Promise.all([
+    prisma.bankTransaction.count({ where: whereBorrables(nuevo.id, companyId) }),
+    prisma.bankTransaction.count({ where: { importBatchId: nuevo.id, companyId } }),
+  ]);
+  const t = ult4(ultimo.bankAccount.numeroCuenta) ?? ult4(ultimo.bankAccount.clabe);
+  return {
+    id: nuevo.id,
+    createdAt: nuevo.createdAt,
+    banco: null,
+    periodo: null,
+    count: total,
+    bankAccountId: ultimo.bankAccountId,
+    cuentaEtiqueta:
+      `${ultimo.bankAccount.banco} ${ultimo.bankAccount.nombre}` + (t ? ` (terminación ${t})` : ""),
     borrables,
     conciliados: total - borrables,
   };
