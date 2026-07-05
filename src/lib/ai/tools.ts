@@ -71,6 +71,16 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "query_despacho_panorama",
+    description:
+      "Panorama de TODA la cartera del usuario (todas las empresas que administra), NO sólo la empresa activa. Úsala para preguntas 'intercompañía' o 'a nivel despacho': '¿qué estados de cuenta me quedan por subir?', '¿en qué empresas hay vencimientos próximos?', '¿dónde tengo hallazgos por resolver?', '¿cómo va mi cartera?'. Devuelve, por empresa: estados de cuenta pendientes de subir, vencimientos próximos y hallazgos abiertos/críticos. Si el usuario administra una sola empresa, no aporta nada (usa las herramientas normales).",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
     name: "query_customers",
     description: "Busca clientes por RFC, razón social, o devuelve la lista completa.",
     input_schema: {

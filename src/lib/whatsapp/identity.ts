@@ -144,6 +144,81 @@ export async function listAccessibleCompanies(
   );
 }
 
+/** Tokeniza un nombre: minúsculas, sin acentos ni puntuación, en palabras. PURA. */
+function tokenize(s: string): string[] {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+// Marcadores de razón social / palabras vacías que NO distinguen una empresa de
+// otra (una cartera entera comparte "SA de CV"). Nunca cuentan como coincidencia.
+const TOKENS_IGNORADOS = new Set([
+  "sa", "sapi", "sas", "sc", "ac", "srl", "rl", "cv", "sab", "spr", "sofom",
+  "de", "del", "la", "el", "los", "las", "y", "s", "en", "con", "para",
+  "sociedad", "anonima", "capital", "variable", "responsabilidad", "limitada",
+]);
+
+/** Tokens "distintivos" de una empresa: >=4 chars y no marcadores legales. */
+function tokensDistintivos(razonSocial: string): string[] {
+  return tokenize(razonSocial).filter((t) => t.length >= 4 && !TOKENS_IGNORADOS.has(t));
+}
+
+/**
+ * Busca una empresa por NOMBRE dentro de un texto libre (despacho): "y de Reyes
+ * Huerta?", "cambiar a ZionX". Coincide por TOKENS DISTINTIVOS —una palabra >=4
+ * chars, no marcador legal ("SA de CV"), que pertenezca a UNA sola empresa de la
+ * cartera— presentes en el mensaje. Devuelve la empresa SOLO si el mensaje apunta
+ * inequívocamente a una; con 0 o >1 candidatas regresa null para no cambiar de
+ * empresa por error. PURA (testeable sin DB).
+ */
+export function matchCompanyByName(
+  body: string,
+  companies: AccessibleCompany[]
+): AccessibleCompany | null {
+  const palabras = new Set(tokenize(body));
+  if (palabras.size === 0) return null;
+
+  // Un token es distintivo solo si pertenece a EXACTAMENTE una empresa (dos
+  // empresas "Grupo ..." no se distinguen por "grupo").
+  const duenoDeToken = new Map<string, string | null>(); // token -> companyId | null (ambiguo)
+  for (const c of companies) {
+    for (const t of tokensDistintivos(c.razonSocial)) {
+      duenoDeToken.set(t, duenoDeToken.has(t) ? null : c.id);
+    }
+  }
+
+  const empresasAludidas = new Set<string>();
+  for (const t of palabras) {
+    const dueno = duenoDeToken.get(t);
+    if (dueno) empresasAludidas.add(dueno);
+  }
+  if (empresasAludidas.size !== 1) return null;
+  const [id] = [...empresasAludidas];
+  return companies.find((c) => c.id === id) ?? null;
+}
+
+/**
+ * Interpreta la respuesta a un menú de empresas: un número (selección 1-based) o
+ * el nombre de una empresa (para carteras largas donde contar es tedioso).
+ * Devuelve la empresa elegida o null. PURA.
+ */
+export function parseCompanySelection(
+  body: string,
+  companies: AccessibleCompany[]
+): AccessibleCompany | null {
+  const m = body.trim().match(/^(\d{1,2})$/);
+  if (m) {
+    const idx = parseInt(m[1], 10) - 1;
+    return idx >= 0 && idx < companies.length ? companies[idx] : null;
+  }
+  return matchCompanyByName(body, companies);
+}
+
 /** Verifies a user still has access to a specific company (used before serving). */
 export async function userCanAccessCompany(
   userId: string,

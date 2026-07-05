@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { normalizePhone, phoneVariants } from "./identity";
+import {
+  normalizePhone,
+  phoneVariants,
+  matchCompanyByName,
+  parseCompanySelection,
+  type AccessibleCompany,
+} from "./identity";
+
+const CARTERA: AccessibleCompany[] = [
+  { id: "c1", razonSocial: "Reyes Huerta Cholula SA de CV" },
+  { id: "c2", razonSocial: "ZionX Soluciones SAPI de CV" },
+  { id: "c3", razonSocial: "Comercializadora del Bajío" },
+];
 
 describe("normalizePhone", () => {
   it("agrega el + y limpia espacios/guiones/paréntesis", () => {
@@ -47,5 +59,40 @@ describe("phoneVariants", () => {
 
   it("para otros países sólo la canónica", () => {
     expect(phoneVariants("+14155238886")).toEqual(["+14155238886"]);
+  });
+});
+
+describe("matchCompanyByName", () => {
+  it("encuentra por nombre parcial, insensible a mayúsculas y acentos", () => {
+    expect(matchCompanyByName("y de reyes huerta?", CARTERA)?.id).toBe("c1");
+    expect(matchCompanyByName("BAJIO", CARTERA)?.id).toBe("c3"); // sin acento
+    expect(matchCompanyByName("zionx", CARTERA)?.id).toBe("c2");
+  });
+
+  it("ignora marcadores legales compartidos (SA de CV) — no cambia de empresa", () => {
+    expect(matchCompanyByName("SA de CV", CARTERA)).toBeNull();
+    expect(matchCompanyByName("de cv", CARTERA)).toBeNull();
+    expect(matchCompanyByName("empresa que no existe", CARTERA)).toBeNull();
+  });
+
+  it("es null si el mensaje alude a más de una empresa (ambiguo)", () => {
+    // "reyes" (c1) y "zionx" (c2) presentes a la vez → ambiguo → null.
+    expect(matchCompanyByName("compara reyes con zionx", CARTERA)).toBeNull();
+  });
+});
+
+describe("parseCompanySelection", () => {
+  it("interpreta un número como selección 1-based del menú", () => {
+    expect(parseCompanySelection("1", CARTERA)?.id).toBe("c1");
+    expect(parseCompanySelection("3", CARTERA)?.id).toBe("c3");
+    expect(parseCompanySelection("9", CARTERA)).toBeNull(); // fuera de rango
+  });
+
+  it("acepta el nombre de la empresa como selección", () => {
+    expect(parseCompanySelection("ZionX", CARTERA)?.id).toBe("c2");
+  });
+
+  it("devuelve null si no es número ni nombre reconocible", () => {
+    expect(parseCompanySelection("hola", CARTERA)).toBeNull();
   });
 });

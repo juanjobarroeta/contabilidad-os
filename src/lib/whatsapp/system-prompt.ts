@@ -5,6 +5,37 @@ interface CompanyContext {
   codigoPostal: string;
 }
 
+/** Cartera del usuario (despacho): total de empresas y sus nombres. */
+interface CarteraContext {
+  total: number;
+  empresas: string[];
+}
+
+/**
+ * Bloque "Cartera / despacho" — sólo cuando el usuario administra más de una
+ * empresa. Da al asistente conciencia de que atiende una CARTERA, para que no se
+ * quede clavado en la empresa activa cuando la pregunta es intercompañía.
+ */
+function carteraBlock(company: CompanyContext, cartera?: CarteraContext): string {
+  if (!cartera || cartera.total <= 1) return "";
+  // Cap la lista para no inflar el prompt de un despacho con decenas de empresas.
+  const MAX = 30;
+  const lista = cartera.empresas.slice(0, MAX).map((e) => `- ${e}`).join("\n");
+  const extra = cartera.empresas.length > MAX ? `\n- …y ${cartera.empresas.length - MAX} más` : "";
+  return `
+
+## Cartera del usuario (despacho)
+Este usuario administra *${cartera.total} empresas*, no solo la empresa activa. La empresa activa (${company.razonSocial}) es el foco ACTUAL de esta conversación, pero muchas preguntas son "a nivel despacho" (intercompañía) y NO se responden con las herramientas de una sola empresa.
+
+Empresas que administra:
+${lista}${extra}
+
+Cómo distinguir y actuar:
+- Preguntas INTERCOMPAÑÍA (sobre "mis empresas", "todas", "la cartera", "cuáles me faltan", "en dónde", "el despacho"): usa *query_despacho_panorama*. Ejemplos: "¿qué estados de cuenta me quedan por subir?", "¿en qué empresas tengo vencimientos?", "¿dónde hay hallazgos críticos?". NO respondas estas con datos de la empresa activa; serían incompletas.
+- Preguntas sobre UNA empresa específica distinta a la activa: las herramientas por empresa operan SOLO sobre la empresa activa, así que primero hay que cambiar el foco. Dile que escriba *cambiar a [nombre de la empresa]* (por ejemplo "cambiar a ${company.razonSocial}") o solo "cambiar empresa" para ver el menú. No des cifras de otra empresa sin cambiar antes: serían de la empresa equivocada.
+- Si no está claro si la pregunta es de una empresa o de toda la cartera, pregúntalo en una línea.`;
+}
+
 /**
  * WhatsApp variant of the assistant system prompt. Differs from the web
  * assistant in three ways that matter for the channel:
@@ -14,7 +45,10 @@ interface CompanyContext {
  *      must say so plainly rather than implying it can act.
  *   3. Brevity — replies are read on a phone.
  */
-export function buildWhatsappSystemPrompt(company: CompanyContext): string {
+export function buildWhatsappSystemPrompt(
+  company: CompanyContext,
+  cartera?: CarteraContext
+): string {
   const now = new Date();
   const hoyIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(now); // YYYY-MM-DD
   const hoyLargo = new Intl.DateTimeFormat("es-MX", {
@@ -34,7 +68,7 @@ Hoy es ${hoyLargo} (${hoyIso}), zona horaria de México. Usa SIEMPRE esta fecha 
 - Razón social: ${company.razonSocial}
 - RFC: ${company.rfc}
 - Régimen fiscal: ${company.regimenFiscal}
-- Código postal: ${company.codigoPostal}
+- Código postal: ${company.codigoPostal}${carteraBlock(company, cartera)}
 
 ## Tu rol
 Eres un contador experto en fiscalidad mexicana. Consultas los datos reales de la empresa con las herramientas disponibles y respondes preguntas sobre facturas (CFDI), movimientos bancarios, declaraciones, IVA/ISR, clientes, nómina y obligaciones fiscales.

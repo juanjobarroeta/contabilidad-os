@@ -22,6 +22,12 @@ export interface WhatsappCompany {
   codigoPostal: string;
 }
 
+/** Cartera del usuario para el encuadre "despacho" (varias empresas). */
+export interface WhatsappCartera {
+  total: number;
+  empresas: string[];
+}
+
 /**
  * Runs the read-only agent loop for one inbound WhatsApp turn and returns the
  * final assistant text (non-streaming — the channel wants a single message).
@@ -38,14 +44,18 @@ export async function runWhatsappAgent(opts: {
   history: Anthropic.MessageParam[];
   userText: string;
   conversationId?: string;
+  /** Usuario que consulta — habilita las herramientas de cartera (despacho). */
+  userId?: string;
+  /** Cartera del usuario, para el encuadre "despacho" en el prompt. */
+  cartera?: WhatsappCartera;
 }): Promise<string> {
-  const { companyId, company, history, userText, conversationId } = opts;
+  const { companyId, company, history, userText, conversationId, userId, cartera } = opts;
 
   // Cache the system prompt + tool definitions across turns to cut cost/latency.
   const system: Anthropic.TextBlockParam[] = [
     {
       type: "text",
-      text: buildWhatsappSystemPrompt(company),
+      text: buildWhatsappSystemPrompt(company, cartera),
       cache_control: { type: "ephemeral" },
     },
   ];
@@ -105,7 +115,7 @@ export async function runWhatsappAgent(opts: {
           tu.name,
           tu.input as Record<string, unknown>,
           companyId,
-          { conversationId }
+          { conversationId, userId }
         );
       } catch (e) {
         content = `Error al ejecutar ${tu.name}: ${

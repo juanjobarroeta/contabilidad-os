@@ -12,6 +12,11 @@ import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
 import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
 import { stageChatPendingAction } from "@/lib/ai/pending-action";
+import {
+  computeEmpresasBriefing,
+  empresasConEstadoCuentaVencido,
+} from "@/lib/briefing/matutino";
+import { DIAS_DEADLINE_AVISO } from "@/lib/briefing/matutino-format";
 import type { FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 
 type ToolInput = Record<string, unknown>;
@@ -22,8 +27,13 @@ type ToolInput = Record<string, unknown>;
  *  - inApp: true for the in-app AI chat. The reversible "proponer_*" tools only
  *    work in-app (the chat renders the Confirm/Cancel card); they refuse over
  *    WhatsApp (which has its own preview_/code flow).
+ *  - userId: quién hace la consulta. Necesario para las herramientas de CARTERA
+ *    (`query_despacho_panorama`), que agregan a través de TODAS las empresas
+ *    accesibles del usuario — no de la empresa activa. La lista de empresas se
+ *    deriva del propio userId (misma fuente que la app), así que la herramienta
+ *    nunca expone datos de empresas que el usuario no administra.
  */
-export type ToolContext = { conversationId?: string; inApp?: boolean };
+export type ToolContext = { conversationId?: string; inApp?: boolean; userId?: string };
 
 const MXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
@@ -86,6 +96,8 @@ export async function executeToolCall(
           "Presenta el checklist en el orden dado: primero los puntos en 'atencion' y 'pendiente' con su 'detalle' textual, y después confirma brevemente lo que está 'listo' (omite los 'no-aplica'). Menciona siempre la fecha límite y los días restantes, o que ya venció. No inventes montos ni conteos: usa los del checklist.",
       });
     }
+    case "query_despacho_panorama":
+      return queryDespachoPanorama(context);
     case "query_complementos_pendientes":
       return JSON.stringify(await detectComplementosPendientes(companyId));
     case "query_complementos_recibidos_pendientes":
@@ -422,6 +434,74 @@ async function getInvoiceFiles(input: ToolInput, companyId: string): Promise<str
     count: files.length,
     files,
     instrucciones: "Comparte los enlaces con el usuario. Son temporales (30 min). Si falta el XML, explícale que esa factura se importó antes de que guardáramos el archivo.",
+  });
+}
+
+// ─── query_despacho_panorama (CARTERA — cruza todas las empresas) ────────────
+// Responde preguntas "a nivel despacho" ("¿qué estados de cuenta me faltan?",
+// "¿dónde tengo vencimientos?", "¿en qué empresas hay hallazgos?") agregando a
+// través de TODAS las empresas que el usuario administra. Reusa la misma capa de
+// datos del briefing matutino (computeEmpresasBriefing), que ya deriva las
+// empresas accesibles del userId con el mismo aislamiento por inquilino que la
+// app — la empresa "activa" de la conversación NO acota esta herramienta.
+async function queryDespachoPanorama(context: ToolContext): Promise<string> {
+  if (!context.userId) {
+    return JSON.stringify({
+      error: "No puedo identificar tu cuenta para consultar la cartera completa.",
+    });
+  }
+
+  const empresas = await computeEmpresasBriefing(context.userId);
+  if (empresas.length === 0) {
+    return JSON.stringify({ totalEmpresas: 0, message: "No administras ninguna empresa activa." });
+  }
+  if (empresas.length === 1) {
+    return JSON.stringify({
+      totalEmpresas: 1,
+      instruccion_para_el_asistente:
+        "El usuario sólo administra una empresa, así que no hay panorama de cartera que dar. " +
+        "Responde con las herramientas normales por empresa (query_dashboard_kpis, etc.).",
+    });
+  }
+
+  const estadosCuentaPendientes = empresasConEstadoCuentaVencido(empresas).map((e) => ({
+    razonSocial: e.razonSocial,
+    diasSinMovimiento: e.diasSinMovimiento,
+    // null ⇒ nunca se ha subido un movimiento para esa empresa.
+    nuncaHaSubido: e.diasSinMovimiento == null,
+  }));
+
+  const proximosVencimientos = empresas
+    .filter((e) => e.proxDeadline && e.proxDeadline.diasRestantes <= DIAS_DEADLINE_AVISO)
+    .sort((a, b) => a.proxDeadline!.diasRestantes - b.proxDeadline!.diasRestantes)
+    .map((e) => ({
+      razonSocial: e.razonSocial,
+      periodo: e.proxDeadline!.periodo,
+      diasRestantes: e.proxDeadline!.diasRestantes,
+    }));
+
+  const conHallazgos = empresas
+    .filter((e) => e.hallazgosAbiertos > 0)
+    .sort((a, b) => b.hallazgosCriticos - a.hallazgosCriticos || b.hallazgosAbiertos - a.hallazgosAbiertos)
+    .map((e) => ({
+      razonSocial: e.razonSocial,
+      abiertos: e.hallazgosAbiertos,
+      criticos: e.hallazgosCriticos,
+    }));
+
+  return JSON.stringify({
+    totalEmpresas: empresas.length,
+    empresas: empresas.map((e) => e.razonSocial),
+    estadosCuentaPendientes,
+    proximosVencimientos,
+    hallazgos: conHallazgos,
+    totalHallazgosCriticos: empresas.reduce((s, e) => s + e.hallazgosCriticos, 0),
+    instruccion_para_el_asistente:
+      "Es un resumen a nivel CARTERA (todas las empresas del usuario), no de la empresa activa. " +
+      "Responde la pregunta del usuario con estos datos: para '¿qué estados de cuenta me faltan?' " +
+      "lista 'estadosCuentaPendientes' por razón social (di 'nunca has subido' si nuncaHaSubido). " +
+      "Menciona conteos, no inventes cifras. Si una lista viene vacía, dilo (p.ej. 'estás al día con los estados de cuenta'). " +
+      "Para detalles de UNA empresa, ofrece cambiar el foco a ella (el usuario escribe 'cambiar a [nombre de la empresa]').",
   });
 }
 
