@@ -358,6 +358,40 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "proponer_categorizacion_lote",
+    description:
+      "Propone categorizar EN LOTE todos los movimientos bancarios SIN CFDI cuya descripción contiene un patrón (p.ej. 'RAPPI', 'OPENAI', 'ANTHROPIC'), registrándolos en el libro mayor con la MISMA familia, y recuerda una regla para que los próximos estados de cuenta se categoricen solos. Úsala cuando el usuario quiera 'categorizar todos los cargos de X', o para limpiar de una vez los cargos recurrentes sin factura. NO escribe nada: stagea la propuesta y devuelve un resumen + token; el usuario debe tocar Confirmar. Elige la familia correcta: usa NON_DEDUCTIBLE sólo para gastos claramente personales; los consumos en restaurantes pueden ser parcialmente deducibles, así que confirma con el usuario antes de agruparlos. Tras llamarla, resume cuántos movimientos se verían afectados y pide tocar Confirmar.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        patron: {
+          type: "string",
+          description: "Texto a buscar dentro de la descripción del movimiento (p.ej. 'RAPPI'). Insensible a mayúsculas/acentos.",
+        },
+        familia: {
+          type: "string",
+          enum: [
+            "COMISION",
+            "TAX_PAYMENT",
+            "PAYROLL_NO_CFDI",
+            "INTERNAL_TRANSFER",
+            "FINANCIAL_INCOME",
+            "RENT",
+            "NON_DEDUCTIBLE",
+          ],
+          description:
+            "Familia contable con la que se categorizarán todos los movimientos que empaten el patrón.",
+        },
+        signo: {
+          type: "string",
+          enum: ["CREDITO", "DEBITO"],
+          description: "Opcional: acota la regla a un signo (CREDITO=entra dinero, DEBITO=sale). Omítelo para ambos.",
+        },
+      },
+      required: ["patron", "familia"],
+    },
+  },
+  {
     name: "proponer_resolver_hallazgo",
     description:
       "Propone marcar un hallazgo del auditor fiscal como RESUELTO, y lo deja PENDIENTE de confirmación. NO lo resuelve: stagea la propuesta y devuelve un resumen + token; el usuario debe tocar Confirmar. Úsala cuando el usuario diga que ya atendió un hallazgo. Necesitas el hallazgo_id.",

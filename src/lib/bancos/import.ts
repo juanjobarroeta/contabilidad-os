@@ -24,6 +24,7 @@ import * as XLSX from "xlsx";
 import { parseStatement, type ParseResult, type ParsedTransaction, type RowDescartada } from "@/lib/bank-parser";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
 import { claveDeDuplicado, planImportacion } from "@/lib/bancos/dedup";
+import { primeraReglaQueEmpata, signoDeMonto, type FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 
 export type ImportResult = {
   ok: boolean;
@@ -107,32 +108,66 @@ export async function persistTransactions(opts: {
   }
   const plan = planImportacion(claves, (clave) => conteoEnBD.get(clave) ?? 0);
 
+  // Reglas de categorización CONFIRMADAS por el usuario (origen USER): se cargan
+  // UNA sola vez (fuera del bucle) y se auto-aplican a cada movimiento que empate
+  // — así los cargos recurrentes sin CFDI (Rappi, OpenAI, …) entran ya
+  // categorizados en vez de saturar la bandeja de "sin conciliar". Las reglas del
+  // usuario GANAN sobre los patrones hardcodeados de abajo. No se puede empatar
+  // con un CFDI en este punto (el movimiento apenas se está creando; la
+  // conciliación bancaria corre después), así que no hay riesgo de pisar un match.
+  const reglasUsuario = await prisma.categorizationRule.findMany({
+    where: { companyId, activo: true, origen: "USER" },
+    select: { id: true, pattern: true, matchType: true, familia: true, signo: true },
+  });
+  const reglasMatcher = reglasUsuario.map((r) => ({
+    id: r.id,
+    pattern: r.pattern,
+    matchType: r.matchType,
+    familia: r.familia as FamiliaConcepto,
+    signo: (r.signo as "CREDITO" | "DEBITO" | null) ?? undefined,
+  }));
+  // Conteo de aciertos por regla, para sellar hitCount al final del lote.
+  const hitsPorRegla = new Map<string, number>();
+
   for (let i = 0; i < transactions.length; i++) {
     const tx = transactions[i];
 
     if (!plan[i]) { skipped++; continue; }
 
     const desc = tx.descripcion;
-    const isBankFee = /comisi[oó]n|iva\s+comisi/i.test(desc);
-    const isTaxPayment =
-      /pago\s+de\s+impuestos|^impuesto|recaudaci[oó]n|\bsat\b|tesofe/i.test(desc);
-    const isInternalTransfer = /traspaso\s+(entre|a)\s+cuentas?\s+propias?|transferencia\s+propia/i.test(desc);
-    const isBankNoise = /compensaci[oó]n\s+por\s+retraso/i.test(desc) || tx.monto === 0;
 
     let status: "UNMATCHED" | "IGNORED" = "UNMATCHED";
     let notes: string | null = null;
-    if (isBankFee) {
+
+    // 1) Regla del usuario (gana sobre los patrones hardcodeados).
+    const reglaMatch =
+      reglasMatcher.length > 0
+        ? primeraReglaQueEmpata(desc, signoDeMonto(tx.monto), reglasMatcher)
+        : null;
+    if (reglaMatch) {
       status = "IGNORED";
-      notes = "PENDING_MONTHLY_CFDI";
-    } else if (isTaxPayment) {
-      status = "IGNORED";
-      notes = "TAX_PAYMENT";
-    } else if (isInternalTransfer) {
-      status = "IGNORED";
-      notes = "INTERNAL_TRANSFER";
-    } else if (isBankNoise) {
-      status = "IGNORED";
-      notes = "BANK_NOISE";
+      notes = reglaMatch.familia;
+      hitsPorRegla.set(reglaMatch.id, (hitsPorRegla.get(reglaMatch.id) ?? 0) + 1);
+    } else {
+      // 2) Patrones hardcodeados de siempre.
+      const isBankFee = /comisi[oó]n|iva\s+comisi/i.test(desc);
+      const isTaxPayment =
+        /pago\s+de\s+impuestos|^impuesto|recaudaci[oó]n|\bsat\b|tesofe/i.test(desc);
+      const isInternalTransfer = /traspaso\s+(entre|a)\s+cuentas?\s+propias?|transferencia\s+propia/i.test(desc);
+      const isBankNoise = /compensaci[oó]n\s+por\s+retraso/i.test(desc) || tx.monto === 0;
+      if (isBankFee) {
+        status = "IGNORED";
+        notes = "PENDING_MONTHLY_CFDI";
+      } else if (isTaxPayment) {
+        status = "IGNORED";
+        notes = "TAX_PAYMENT";
+      } else if (isInternalTransfer) {
+        status = "IGNORED";
+        notes = "INTERNAL_TRANSFER";
+      } else if (isBankNoise) {
+        status = "IGNORED";
+        notes = "BANK_NOISE";
+      }
     }
 
     await prisma.bankTransaction.create({
@@ -152,6 +187,15 @@ export async function persistTransactions(opts: {
       },
     });
     imported++;
+  }
+
+  // Sella el hitCount de cada regla que categorizó movimientos en este lote
+  // (best-effort: la telemetría nunca debe tumbar una importación).
+  for (const [ruleId, n] of hitsPorRegla) {
+    if (n <= 0) continue;
+    await prisma.categorizationRule
+      .update({ where: { id: ruleId }, data: { hitCount: { increment: n } } })
+      .catch(() => {});
   }
 
   // Sella el lote con el conteo real; si no entró nada, descártalo (nada que deshacer).

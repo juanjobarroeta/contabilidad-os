@@ -287,6 +287,9 @@ model Company {
   whatsappConversations WhatsappConversation[]
   stagedActions         StagedAction[]
   importBatches         ImportBatch[]
+  // Reglas de categorización persistidas por el usuario (Rappi, OpenAI, …): se
+  // recuerdan y se re-aplican al importar y en el escaneo retroactivo.
+  categorizationRules   CategorizationRule[]
 
   // Post-sync IVA-change notices (one baseline per unfiled period)
   ivaPeriodNotices IvaPeriodNotice[]
@@ -1009,6 +1012,42 @@ model ImportBatch {
 
   @@index([companyId, createdAt])
   @@index([bankAccountId])
+}
+
+// Regla de categorización de conceptos bancarios SIN CFDI, persistida por
+// empresa. Nace cuando el usuario categoriza un movimiento recurrente sin CFDI
+// (Rappi, OpenAI, restaurantes, …) y pide "categorizar todos los similares":
+// se recuerda el patrón + la familia elegida y se re-aplica automáticamente al
+// importar nuevos estados de cuenta y en el escaneo retroactivo de movimientos
+// existentes. Las reglas del usuario GANAN sobre el motor de reglas hardcodeado
+// (ver sugerirCategoriaConcepto). La `familia` reutiliza las MISMAS etiquetas
+// que lee el cierre mensual (postMonth) desde BankTransaction.notes.
+model CategorizationRule {
+  id        String   @id @default(cuid())
+  companyId String
+  // Token/patrón a buscar dentro de la descripción del movimiento (case- e
+  // insensible a acentos; la comparación vive en el matcher puro).
+  pattern   String
+  // CONTAINS (default) | EXACT | STARTS_WITH — cómo se compara el patrón.
+  matchType String   @default("CONTAINS")
+  // Familia contable (valor de FamiliaConcepto): COMISION, TAX_PAYMENT,
+  // PAYROLL_NO_CFDI, INTERNAL_TRANSFER, FINANCIAL_INCOME, RENT, NON_DEDUCTIBLE.
+  familia   String
+  // Restringe la regla a un signo del movimiento (CREDITO/DEBITO). Null = ambos.
+  signo     String?
+  activo    Boolean  @default(true)
+  // Procedencia: USER (confirmada por el usuario, se auto-aplica al importar) o
+  // SYSTEM/SUGGESTED (semilla, no se auto-aplica sin confirmación).
+  origen    String   @default("USER")
+  // Cuántas veces esta regla ha etiquetado un movimiento (telemetría de utilidad).
+  hitCount  Int      @default(0)
+  createdBy String? // email o id del usuario que la creó
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, activo])
 }
 
 enum BankTransactionType {
