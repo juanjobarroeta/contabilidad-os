@@ -27,6 +27,7 @@ describe("mintStagedToken / hashStagedToken", () => {
 describe("isStagedActionType", () => {
   it("solo acepta tipos de la lista blanca", () => {
     expect(isStagedActionType("timbrar")).toBe(true);
+    expect(isStagedActionType("complemento_pago")).toBe(true);
     expect(isStagedActionType("dispersar")).toBe(false);
     expect(isStagedActionType("")).toBe(false);
   });

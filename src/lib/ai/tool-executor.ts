@@ -8,6 +8,7 @@ import { checklistDeclaracion } from "@/lib/fiscal/checklist-declaracion";
 import { getSatSyncStatus } from "@/lib/sat-status";
 import { signFileToken, publicBaseUrl } from "@/lib/facturas/file-token";
 import { previewTimbrar } from "@/lib/facturas/preview-timbrar";
+import { previewComplemento } from "@/lib/complementos-preview";
 import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
 import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
@@ -46,6 +47,12 @@ export async function executeToolCall(
   switch (toolName) {
     case "preview_factura":
       return previewTimbrar(input, companyId, {
+        conversationId: context.conversationId,
+        userId: context.userId,
+        inApp: context.inApp,
+      });
+    case "preview_complemento":
+      return previewComplemento(input, companyId, {
         conversationId: context.conversationId,
         userId: context.userId,
         inApp: context.inApp,

@@ -14,8 +14,10 @@ type Resultado =
   | { estado: "cancelada" }
   | { estado: "error"; mensaje: string };
 
-export function AutorizarAcciones({ token }: { token: string }) {
+export function AutorizarAcciones({ token, accion = "timbrar" }: { token: string; accion?: "timbrar" | "emitir" }) {
   const [r, setR] = useState<Resultado>({ estado: "idle" });
+  const verbo = accion === "emitir" ? "emitir" : "timbrar";
+  const exitoTitulo = accion === "emitir" ? "Complemento emitido" : "Factura timbrada";
 
   async function enviar(action: "confirmar" | "cancelar") {
     setR({ estado: "enviando" });
@@ -45,7 +47,7 @@ export function AutorizarAcciones({ token }: { token: string }) {
       <div className="flex items-start gap-3 rounded-control bg-cos-jade-tint px-4 py-3.5">
         <CheckCircle2 className="mt-0.5 h-5 w-5 flex-none text-cos-jade" />
         <div className="min-w-0">
-          <p className="text-[14px] font-semibold text-cos-jade-ink">Factura timbrada</p>
+          <p className="text-[14px] font-semibold text-cos-jade-ink">{exitoTitulo}</p>
           {r.uuid && <p className="mt-0.5 break-all text-[12.5px] text-cos-jade-ink opacity-90">Folio fiscal: {r.uuid}</p>}
           <p className="mt-1 text-[12.5px] text-cos-jade-ink opacity-80">Ya puedes cerrar esta ventana.</p>
         </div>
@@ -56,7 +58,7 @@ export function AutorizarAcciones({ token }: { token: string }) {
   if (r.estado === "cancelada") {
     return (
       <div className="flex items-center gap-2 rounded-control bg-cos-slate-tint px-4 py-3 text-[14px] text-cos-ink-soft">
-        <XCircle className="h-5 w-5 flex-none" /> Acción cancelada. No se timbró nada.
+        <XCircle className="h-5 w-5 flex-none" /> Acción cancelada. No se {verbo === "emitir" ? "emitió" : "timbró"} nada.
       </div>
     );
   }
@@ -71,7 +73,7 @@ export function AutorizarAcciones({ token }: { token: string }) {
           className="inline-flex flex-1 items-center justify-center gap-2 rounded-control bg-cos-jade px-4 py-2.5 text-[14.5px] font-semibold text-white hover:opacity-90 disabled:opacity-60"
         >
           {r.estado === "enviando" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Confirmar y timbrar
+          Confirmar y {verbo}
         </button>
         <button
           type="button"

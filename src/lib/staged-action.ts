@@ -20,7 +20,7 @@ import type { StagedActionStatus } from "@prisma/client";
 export const STAGED_ACTION_TTL_MS = 30 * 60 * 1000; // 30 min
 
 /** Tipos de acción que pueden viajar por los rieles (lista blanca). */
-export const STAGED_ACTION_TYPES = ["timbrar"] as const;
+export const STAGED_ACTION_TYPES = ["timbrar", "complemento_pago"] as const;
 export type StagedActionType = (typeof STAGED_ACTION_TYPES)[number];
 
 export function isStagedActionType(t: string): t is StagedActionType {

@@ -3,7 +3,11 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { signDraftToken, publicBaseUrl } from "@/lib/facturas/file-token";
 import { checkStagedActionUsable, stagedActionErrorMessage } from "@/lib/staged-action";
-import { getStagedActionByRawToken, type StagedTimbrarPayload } from "@/lib/staged-action-server";
+import {
+  getStagedActionByRawToken,
+  type StagedTimbrarPayload,
+  type StagedComplementoPayload,
+} from "@/lib/staged-action-server";
 import { AutorizarAcciones } from "@/components/staged/AutorizarAcciones";
 import { AlertCircle, FileText, ShieldCheck } from "lucide-react";
 
@@ -59,6 +63,64 @@ export default async function AutorizarPage({ params }: { params: Promise<{ toke
     where: { id: staged.companyId },
     select: { razonSocial: true },
   });
+
+  const empresa = company?.razonSocial ?? "Empresa";
+
+  // ── Complemento de pago (REP) ─────────────────────────────────────────────
+  if (staged.type === "complemento_pago") {
+    const c = (staged.payload as unknown as StagedComplementoPayload).resumen;
+    return (
+      <div className="mx-auto mt-10 max-w-lg px-5 pb-24">
+        <div className="mb-4 flex items-center gap-2 text-cos-jade">
+          <ShieldCheck className="h-5 w-5" />
+          <span className="text-[13px] font-medium uppercase tracking-wide">Autorización de complemento de pago</span>
+        </div>
+        <div className="rounded-card border border-cos-line bg-cos-card px-6 py-6">
+          <p className="text-[13px] text-cos-ink-faint">{empresa}</p>
+          <h1 className="mt-0.5 text-[20px] font-semibold text-cos-ink">Revisa antes de emitir el REP</h1>
+          <p className="mt-1 text-[14px] leading-snug text-cos-ink-soft">
+            Este complemento de pago aún <span className="font-semibold">NO</span> está timbrado. El timbrado es definitivo.
+          </p>
+          <dl className="mt-5 space-y-2.5 text-[14px]">
+            <div className="flex justify-between gap-4">
+              <dt className="text-cos-ink-soft">Cliente</dt>
+              <dd className="text-right font-medium text-cos-ink">
+                {c.cliente} <span className="text-cos-ink-faint">({c.rfc})</span>
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-cos-ink-soft">Pago</dt>
+              <dd className="font-medium text-cos-ink">{MXN(c.monto)} · {c.fechaPago}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-cos-ink-soft">Parcialidad</dt>
+              <dd className="font-medium text-cos-ink">{c.numParcialidad}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-cos-ink-soft">Saldo anterior</dt>
+              <dd className="font-medium text-cos-ink">{MXN(c.impSaldoAnterior)}</dd>
+            </div>
+            <div className="flex justify-between gap-4 border-t border-cos-line-soft pt-2.5">
+              <dt className="font-semibold text-cos-ink">Saldo insoluto</dt>
+              <dd className="text-[16px] font-semibold text-cos-ink">{MXN(c.impSaldoInsoluto)}</dd>
+            </div>
+            {c.ivaTrasladado > 0 && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-cos-ink-soft">IVA del pago</dt>
+                <dd className="font-medium text-cos-ink">{MXN(c.ivaTrasladado)}</dd>
+              </div>
+            )}
+          </dl>
+          <div className="mt-6">
+            <AutorizarAcciones token={token} accion="emitir" />
+          </div>
+          <p className="mt-4 text-[12px] leading-snug text-cos-ink-faint">
+            Al confirmar, el complemento de pago (REP) se timbra de forma definitiva ante el SAT. Enlace de un solo uso; vence a los 30 minutos.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (staged.type !== "timbrar") {
     return <EstadoError titulo="Acción no reconocida" mensaje="Este tipo de autorización no está disponible." />;

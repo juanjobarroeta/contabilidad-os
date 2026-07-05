@@ -224,11 +224,27 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "query_complementos_pendientes",
     description:
-      "Detecta facturas PPD (pago en parcialidades o diferido) que recibieron pago pero a las que aún les falta emitir el Complemento de Pago (REP). Incluye la fecha límite legal (día 5 del mes siguiente al pago) y la urgencia (VENCIDO / POR_VENCER / EN_TIEMPO). Úsala cuando pregunten por complementos de pago, REP, o qué les falta timbrar.",
+      "Detecta facturas PPD (pago en parcialidades o diferido) que recibieron pago pero a las que aún les falta emitir el Complemento de Pago (REP). Incluye la fecha límite legal (día 5 del mes siguiente al pago) y la urgencia (VENCIDO / POR_VENCER / EN_TIEMPO). Úsala cuando pregunten por complementos de pago, REP, o qué les falta timbrar. Devuelve el invoiceId de cada factura, que necesitas para emitir su complemento con preview_complemento.",
     input_schema: {
       type: "object" as const,
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: "preview_complemento",
+    description:
+      "Prepara la emisión del Complemento de Pago (REP) de una factura PPD y devuelve un ENLACE DE AUTORIZACIÓN para que el usuario lo revise y emita DENTRO de la app (no se emite aquí). Úsala cuando el usuario quiera emitir el complemento/REP de una factura concreta. Sin monto, asume el saldo pendiente completo (el caso común). El usuario abre el enlace, revisa la parcialidad y los saldos, y confirma con un toque; te llegará aquí el folio fiscal cuando quede.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        invoice_id: { type: "string", description: "ID de la factura PPD a la que se le emite el complemento (de query_complementos_pendientes)" },
+        bank_transaction_id: { type: "string", description: "ID del movimiento bancario del pago (opcional; de él se toma la fecha del pago)" },
+        monto: { type: "number", description: "Monto del pago a complementar (opcional; por defecto el saldo pendiente completo)" },
+        fecha_pago: { type: "string", description: "Fecha del pago YYYY-MM-DD (opcional)" },
+        forma_pago: { type: "string", description: "Forma de pago SAT, p.ej. '03' transferencia (opcional; default 03)" },
+      },
+      required: ["invoice_id"],
     },
   },
   {
