@@ -11,6 +11,7 @@
 import { prisma } from "@/lib/prisma";
 import type { StagedAction } from "@prisma/client";
 import { stampDraftFromPending, discardDraft, type StampInput } from "@/lib/facturas/stamp";
+import { emitirComplementoPago, type EmitirRepInput } from "@/lib/complementos-rep-emit";
 import { sendWhatsappMessage } from "@/lib/whatsapp/twilio";
 import {
   mintStagedToken,
@@ -40,7 +41,24 @@ export interface StagedTimbrarPayload {
   };
 }
 
-export type StagedPayload = StagedTimbrarPayload;
+/** Complemento de pago: emite un REP para una factura PPD. */
+export interface StagedComplementoPayload {
+  emitInput: EmitirRepInput;
+  /** Datos para pintar la pantalla de revisión sin recomputar. */
+  resumen: {
+    cliente: string;
+    rfc: string;
+    parentUuid: string;
+    monto: number;
+    fechaPago: string;
+    numParcialidad: number;
+    impSaldoAnterior: number;
+    impSaldoInsoluto: number;
+    ivaTrasladado: number;
+  };
+}
+
+export type StagedPayload = StagedTimbrarPayload | StagedComplementoPayload;
 
 // ── Escenificar ──────────────────────────────────────────────────────────────
 
@@ -138,6 +156,22 @@ export async function executeStagedAction(action: StagedAction): Promise<Execute
           `Folio fiscal: ${result.uuid}\n` +
           `Total: ${result.total.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}\n` +
           `Pídeme el XML/PDF cuando lo necesites.`,
+      };
+    }
+    case "complemento_pago": {
+      const payload = action.payload as unknown as StagedComplementoPayload;
+      // El motor RE-CALCULA la parcialidad/saldos contra el estado ACTUAL (si
+      // entre la escenificación y la confirmación ya se emitió otro REP, aquí se
+      // refleja o se rechaza por sobrepago). No re-timbra a ciegas.
+      const result = await emitirComplementoPago(payload.emitInput);
+      if (!result.ok) return { ok: false, error: result.error };
+      return {
+        ok: true,
+        uuid: result.uuid,
+        message:
+          `✅ Complemento de pago emitido (parcialidad ${result.numParcialidad}).\n` +
+          `Folio fiscal: ${result.uuid}\n` +
+          `Monto: ${result.monto.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}`,
       };
     }
     default:

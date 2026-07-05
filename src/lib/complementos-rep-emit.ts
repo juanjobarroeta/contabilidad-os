@@ -15,7 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { recordTimbrado } from "@/lib/costos/record";
 import { checkStampReadiness } from "@/lib/facturas/stamp";
-import { computeRepDoctoRelacionado, type RepParentTax, type RepDoctoRelacionado } from "@/lib/complementos-rep";
+import { computeRepDoctoRelacionado, round2, type RepParentTax, type RepDoctoRelacionado } from "@/lib/complementos-rep";
 
 export interface EmitirRepInput {
   companyId: string;
@@ -255,6 +255,17 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
     return { ok: false, status: readiness.status, error: readiness.error };
   }
 
+  // Parcialidades previas: sumamos los REP ya emitidos para este padre (misma
+  // convención que el detector: Invoice tipo PAGO con notas = id del padre).
+  const prev = await prisma.invoice.aggregate({
+    where: { companyId: input.companyId, tipo: "PAGO", status: "STAMPED", notas: parentInv.id },
+    _sum: { total: true },
+    _count: { _all: true },
+  });
+  const priorImpPagado = prev._sum.total ?? 0;
+  const priorCount = prev._count._all;
+  const saldoPendiente = round2(parentInv.total - priorImpPagado);
+
   // Monto y fecha del pago.
   let paymentAmount = input.monto != null ? Number(input.monto) : null;
   let paymentDate = input.fechaPago ? new Date(input.fechaPago) : new Date();
@@ -267,19 +278,13 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
     paymentAmount = paymentAmount ?? Math.abs(bankTx.monto);
     paymentDate = input.fechaPago ? paymentDate : bankTx.fecha;
   }
-  if (!paymentAmount || !(paymentAmount > 0)) {
-    return { ok: false, status: 400, error: "Falta el monto del pago." };
+  // "De un toque": sin monto ni movimiento, se asume el SALDO PENDIENTE completo
+  // (el caso común — un pago en una sola exhibición reportado tarde, o la última
+  // parcialidad). El motor valida que no exceda el saldo de todas formas.
+  if (paymentAmount == null) paymentAmount = saldoPendiente;
+  if (!(paymentAmount > 0)) {
+    return { ok: false, status: 400, error: "No hay saldo pendiente para emitir el complemento." };
   }
-
-  // Parcialidades previas: sumamos los REP ya emitidos para este padre (misma
-  // convención que el detector: Invoice tipo PAGO con notas = id del padre).
-  const prev = await prisma.invoice.aggregate({
-    where: { companyId: input.companyId, tipo: "PAGO", status: "STAMPED", notas: parentInv.id },
-    _sum: { total: true },
-    _count: { _all: true },
-  });
-  const priorImpPagado = prev._sum.total ?? 0;
-  const priorCount = prev._count._all;
 
   const parentTaxes: RepParentTax[] = parentInv.taxes.map((t) => ({
     tipo: t.tipo as RepParentTax["tipo"],
