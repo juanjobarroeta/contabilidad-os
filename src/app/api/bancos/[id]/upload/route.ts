@@ -1,31 +1,36 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { importBankStatement } from "@/lib/bancos/import";
 
 type Params = { params: Promise<{ id: string }> };
 
-// POST /api/bancos/[id]/upload  (session-cookie auth)
+// POST /api/bancos/[id]/upload  (sesión web O token de servicio Bearer)
 // Body: { fileContent: string, filename: string }
 //
 // Thin wrapper over the shared importBankStatement helper. Same logic
 // runs from /api/construccion/bank-accounts/[id]/upload (bearer auth)
-// for bartiz.
+// for bartiz. Bearer auth here lets ZionX upload statements into the
+// shared source of truth.
 export async function POST(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id: bankAccountId } = await params;
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
-  const gate = await gateEscritura(session.user.id);
+  const gate = await gateEscritura(user.id);
   if (gate) return gate;
 
   const { fileContent, filename, encoding } = await req.json();
