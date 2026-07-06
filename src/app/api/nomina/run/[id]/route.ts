@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { rangoDelPeriodo } from "@/lib/nomina/incidencias";
 import type { Incidencia } from "@prisma/client";
 
@@ -10,9 +10,15 @@ type Params = { params: Promise<{ id: string }> };
 // GET /api/nomina/run/[id]
 // Incluye las incidencias del periodo de la corrida (ORDINARIA): alimentan el
 // chip de resumen y la captura por empleado en el detalle antes de timbrar.
-export async function GET(_req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+// Autz: sesión web O token de servicio (Bearer) — ZionX espeja el detalle.
+export async function GET(req: Request, { params }: Params) {
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id } = await params;
   const run = await prisma.payrollRun.findUnique({
@@ -26,7 +32,7 @@ export async function GET(_req: Request, { params }: Params) {
 
   if (!run) return NextResponse.json({ error: "Corrida no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, run.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, run.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   // Incidencias cuya fecha cae dentro del periodo, de los empleados de la corrida.

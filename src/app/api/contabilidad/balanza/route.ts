@@ -18,7 +18,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "companyId, year, month requeridos" }, { status: 400 });
     }
 
-    await requireMembership(companyId);
+    // Pasar `req` habilita el token de servicio (Bearer) además de la sesión
+    // web, para que ZionX pueda espejar la balanza.
+    await requireMembership(companyId, undefined, req);
 
     const period = await prisma.accountingPeriod.findUnique({
       where: { companyId_year_month: { companyId, year, month } },
