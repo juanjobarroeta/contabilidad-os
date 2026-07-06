@@ -362,7 +362,7 @@ export default function DespachoCockpitPage() {
       <div className="mt-3 flex flex-wrap items-center gap-4 text-[12.5px] text-cos-ink-faint">
         <span className="inline-flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" /> Periodo a declarar = mes anterior (vence el 17).</span>
         <Link href="/nomina/cockpit" className="inline-flex items-center gap-1 text-cos-brand-ink hover:underline">
-          Cockpit de nómina <ChevronR className="h-3.5 w-3.5" />
+          Tablero de nómina <ChevronR className="h-3.5 w-3.5" />
         </Link>
       </div>
     </div>

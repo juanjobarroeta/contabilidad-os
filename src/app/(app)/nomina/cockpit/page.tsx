@@ -176,7 +176,7 @@ export default function NominaCockpitPage() {
       </Link>
       <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[24px] font-bold tracking-[-0.02em] text-cos-ink">Cockpit de nómina</h1>
+          <h1 className="text-[24px] font-bold tracking-[-0.02em] text-cos-ink">Tablero de nómina</h1>
           <p className="mt-0.5 text-[14px] text-cos-ink-soft">
             Todas tus empresas en un panel — corre, timbra y detecta pendientes sin cambiar de contexto.
           </p>

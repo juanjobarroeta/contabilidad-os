@@ -346,7 +346,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
               <div>
                 <p className={GRP_LBL}>Nómina</p>
                 <div className="space-y-1">
-                  {/* Despachos: el cockpit multi-RFC encabeza la sección (antes
+                  {/* Despachos: el tablero multi-RFC encabeza la sección (antes
                       era un redirect silencioso del único renglón "Nómina"). */}
                   {showCartera && (
                     <Link
@@ -354,7 +354,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
                       className={navLinkClass(nominaActiva === "cockpit")}
                     >
                       <LayoutGrid className="h-4 w-4 shrink-0" />
-                      <span className="flex-1">Cockpit multi-RFC</span>
+                      <span className="flex-1">Tablero multi-RFC</span>
                     </Link>
                   )}
                   {NOMINA_ITEMS.map(({ href, label, icon: Icon, tab }) => (
