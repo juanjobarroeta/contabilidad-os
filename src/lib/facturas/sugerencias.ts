@@ -7,6 +7,17 @@
 // This module holds the PURE aggregation — no Prisma, no auth — so it can be
 // unit-tested in isolation. The route layer fetches rows and feeds them here.
 
+/** Tratamiento de IVA por concepto, igual que en el formulario de nueva factura. */
+export type IvaTratamiento = "16" | "0" | "EXENTO";
+
+/** Fila de impuesto del comprobante (subset de InvoiceTax que nos interesa). */
+export interface RawTax {
+  tipo: string; // "IVA" | "ISR" | "IEPS"
+  factor: string; // "TASA" | "CUOTA" | "EXENTO"
+  tasa: number;
+  retencion: boolean;
+}
+
 /** A line item as read from the DB (subset of InvoiceItem we care about). */
 export interface RawItem {
   claveProdServ: string;
@@ -17,6 +28,12 @@ export interface RawItem {
   fecha: Date;
   /** customerId of the parent invoice — null when the invoice has no customer. */
   customerId: string | null;
+  /**
+   * Tratamiento de IVA derivado de los impuestos del comprobante padre
+   * (ver derivarTratamientoIva). Null cuando el comprobante no permite
+   * derivarlo sin ambigüedad (mixto, sin filas de IVA, tasa no representable).
+   */
+  ivaTratamiento?: IvaTratamiento | null;
 }
 
 /** A distinct concepto suggestion, ranked by recency + frequency. */
@@ -27,6 +44,64 @@ export interface ConceptoSugerido {
   claveUnidad: string;
   vecesUsado: number;
   ultimoUso: string; // ISO date
+  /** Tratamiento de IVA del uso más reciente (null = desconocido). */
+  ivaTratamiento: IvaTratamiento | null;
+}
+
+/**
+ * Deriva el tratamiento de IVA de un comprobante a partir de sus filas de
+ * impuesto (InvoiceTax, que vive a nivel comprobante, no por partida).
+ *
+ * Solo regresa un tratamiento cuando es INEQUÍVOCO: todos los traslados de
+ * IVA del comprobante son del mismo tipo. Regresa null cuando:
+ *   - no hay traslados de IVA (p.ej. borradores o facturas legacy sin filas),
+ *   - el comprobante mezcla tratamientos (16% y tasa 0 en el mismo CFDI: no
+ *     sabemos cuál corresponde a cada partida),
+ *   - aparece una tasa que el formulario no representa (p.ej. 8% de franja
+ *     fronteriza) o un factor CUOTA.
+ * El caller decide el default ante null (hoy: "16", el comportamiento previo).
+ */
+export function derivarTratamientoIva(taxes: RawTax[]): IvaTratamiento | null {
+  const traslados = taxes.filter((t) => t.tipo === "IVA" && !t.retencion);
+  if (traslados.length === 0) return null;
+
+  const tratamientos = new Set<IvaTratamiento>();
+  for (const t of traslados) {
+    if (t.factor === "EXENTO") {
+      tratamientos.add("EXENTO");
+    } else if (t.factor === "TASA" && t.tasa === 0) {
+      tratamientos.add("0");
+    } else if (t.factor === "TASA" && t.tasa === 0.16) {
+      tratamientos.add("16");
+    } else {
+      // Factor CUOTA o tasa fuera del modelo del formulario: sin opinión.
+      return null;
+    }
+  }
+  if (tratamientos.size !== 1) return null;
+  return tratamientos.values().next().value ?? null;
+}
+
+/**
+ * Último tratamiento de IVA conocido por clave de producto/servicio: para
+ * cada claveProdServ toma el tratamiento del comprobante MÁS RECIENTE que lo
+ * tenga derivado sin ambigüedad. Alimenta el prellenado del selector de IVA
+ * cuando el usuario elige una clave que la empresa ya ha facturado.
+ */
+export function tratamientoPorClave(
+  items: Pick<RawItem, "claveProdServ" | "fecha" | "ivaTratamiento">[]
+): Record<string, IvaTratamiento> {
+  const latest = new Map<string, { fecha: Date; tratamiento: IvaTratamiento }>();
+  for (const it of items) {
+    if (!it.ivaTratamiento) continue;
+    const cur = latest.get(it.claveProdServ);
+    if (!cur || it.fecha > cur.fecha) {
+      latest.set(it.claveProdServ, { fecha: it.fecha, tratamiento: it.ivaTratamiento });
+    }
+  }
+  const out: Record<string, IvaTratamiento> = {};
+  for (const [clave, v] of latest) out[clave] = v.tratamiento;
+  return out;
 }
 
 /**
@@ -100,5 +175,6 @@ function rankConceptos(items: RawItem[]): ConceptoSugerido[] {
       claveUnidad: g.latest.claveUnidad,
       vecesUsado: g.count,
       ultimoUso: g.ultimoUso.toISOString(),
+      ivaTratamiento: g.latest.ivaTratamiento ?? null,
     }));
 }

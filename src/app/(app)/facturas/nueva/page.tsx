@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency } from "@/lib/utils";
 import { SatCodePicker } from "@/components/ui/SatCodePicker";
+import { contradiccionIva } from "@/lib/fiscal/iva-esperado";
 import {
   ChevronRight, ChevronLeft, Plus, Trash2, Loader2,
   CheckCircle2, Search, FileText, AlertCircle, History, Sparkles,
@@ -80,6 +81,8 @@ interface ConceptoSugerido {
   claveUnidad: string;
   vecesUsado: number;
   ultimoUso: string;
+  // Tratamiento de IVA del uso más reciente del concepto (null = desconocido).
+  ivaTratamiento?: "16" | "0" | "EXENTO" | null;
 }
 
 interface FacturaPreviaItem {
@@ -96,11 +99,16 @@ interface FacturaPrevia {
   fecha: string;
   total: number;
   items: FacturaPreviaItem[];
+  // Tratamiento de IVA derivado de los impuestos de la factura origen
+  // (rate 0 + factor Tasa → "0"; factor Exento → "EXENTO"; ambiguo → "16").
+  ivaTratamiento?: "16" | "0" | "EXENTO";
 }
 
 interface Sugerencias {
   conceptos: ConceptoSugerido[];
   facturasPrevias: FacturaPrevia[];
+  // Último tratamiento de IVA que la empresa usó por clave de producto/servicio.
+  tratamientoPorClave?: Record<string, "16" | "0" | "EXENTO">;
 }
 
 function newItem(): LineItem {
@@ -195,7 +203,10 @@ export default function NuevaFacturaPage() {
         unit_key: it.claveUnidad || "E48",
         quantity: it.cantidad || 1,
         price: it.valorUnitario,
-        iva: "16",
+        // Se hereda el tratamiento de IVA de la factura origen (derivado de
+        // sus impuestos timbrados) en lugar de asumir siempre 16%: quien
+        // factura a tasa 0 o exento repite ese tratamiento mes a mes.
+        iva: f.ivaTratamiento ?? "16",
       }))
     );
     setShowFacturasPrevias(false);
@@ -213,11 +224,28 @@ export default function NuevaFacturaPage() {
               product_key: c.claveProdServ,
               unit_key: c.claveUnidad || it.unit_key,
               price: c.valorUnitario,
+              // Prellenado, no imposición: si el concepto trae el tratamiento
+              // de IVA de su último uso lo sugerimos; el usuario puede cambiarlo.
+              iva: c.ivaTratamiento ?? it.iva,
             }
           : it
       )
     );
     setConceptoOpenFor(null);
+  }
+
+  // Al elegir una clave SAT, además de fijarla, prellena el tratamiento de
+  // IVA con el último que la empresa usó para esa clave en una factura
+  // timbrada (si se conoce). Solo prellenado — el selector sigue editable.
+  function handleProductKeyChange(itemId: string, key: string) {
+    const tratamiento = sugerencias?.tratamientoPorClave?.[key];
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === itemId
+          ? { ...it, product_key: key, ...(tratamiento ? { iva: tratamiento } : {}) }
+          : it
+      )
+    );
   }
 
   // ── Calculations ──────────────────────────────────────────────────────────
@@ -673,7 +701,7 @@ export default function NuevaFacturaPage() {
                           companyId={activeCompany.id}
                           endpoint="products"
                           value={item.product_key}
-                          onChange={(key) => updateItem(item.id, "product_key", key)}
+                          onChange={(key) => handleProductKeyChange(item.id, key)}
                           placeholder="Buscar producto/servicio…"
                           recentKey={`sat-recent-products-${activeCompany.id}`}
                         />
@@ -727,6 +755,19 @@ export default function NuevaFacturaPage() {
                           Verifícalo con tu contador.
                         </p>
                       )}
+                      {/* Pista por clave SAT — solo informativa, nunca bloquea ni
+                          cambia la selección (ver src/lib/fiscal/iva-esperado.ts). */}
+                      {(() => {
+                        const esperado = contradiccionIva(item.product_key, item.iva);
+                        if (!esperado) return null;
+                        return (
+                          <p className="text-xs text-cos-amber-ink mt-1">
+                            Este producto ({esperado.etiqueta}) suele ser{" "}
+                            <b>IVA 0% (tasa cero)</b> — {esperado.fundamento}.
+                            Verifícalo con tu contador.
+                          </p>
+                        );
+                      })()}
                       <p className="text-xs text-cos-ink-soft mt-1">
                         Importe: <span className="font-medium"><Money value={item.quantity * item.price} /></span>
                       </p>
