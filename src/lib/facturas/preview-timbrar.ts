@@ -109,7 +109,10 @@ export async function previewTimbrar(
         // which would stamp different numbers than the user confirmed. Force
         // tax_included=false so the stamp matches the preview exactly.
         tax_included: false,
-        taxes: rate > 0 ? [{ type: "IVA", rate, factor: "Tasa" }] : [],
+        // iva_rate 0 = TASA CERO (agua, alimentos — Art. 2o.-A LIVA): lleva su
+        // nodo de IVA con rate 0, NO se omite (omitirlo no es tasa 0 ni exento
+        // y clasifica mal el CFDI, perdiendo el acreditamiento del emisor).
+        taxes: [{ type: "IVA", rate, factor: "Tasa" }],
       },
     });
   }
