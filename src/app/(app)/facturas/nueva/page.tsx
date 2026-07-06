@@ -63,7 +63,12 @@ interface LineItem {
   unit_key: string;
   quantity: number;
   price: number;
-  iva: boolean; // 16% IVA
+  // Tratamiento de IVA del concepto. "16" = tasa general; "0" = TASA CERO
+  // (p.ej. agua, alimentos — Art. 2o.-A LIVA: acto gravado, IVA acreditable);
+  // "EXENTO" = exento (el IVA de los gastos relacionados NO se acredita).
+  // No es lo mismo tasa 0 que exento — facturar exento cuando corresponde
+  // tasa 0 hace perder el acreditamiento.
+  iva: "16" | "0" | "EXENTO";
 }
 
 // ── Invoicing suggestions (sugerencias) ──────────────────────────────────────
@@ -106,7 +111,7 @@ function newItem(): LineItem {
     unit_key: "E48",
     quantity: 1,
     price: 0,
-    iva: true,
+    iva: "16",
   };
 }
 
@@ -190,7 +195,7 @@ export default function NuevaFacturaPage() {
         unit_key: it.claveUnidad || "E48",
         quantity: it.cantidad || 1,
         price: it.valorUnitario,
-        iva: true,
+        iva: "16",
       }))
     );
     setShowFacturasPrevias(false);
@@ -219,7 +224,7 @@ export default function NuevaFacturaPage() {
 
   const subtotal = items.reduce((sum, it) => sum + it.quantity * it.price, 0);
   const ivaTotal = items
-    .filter((it) => it.iva)
+    .filter((it) => it.iva === "16")
     .reduce((sum, it) => sum + it.quantity * it.price * 0.16, 0);
   const total = subtotal + ivaTotal;
 
@@ -301,9 +306,15 @@ export default function NuevaFacturaPage() {
             price: it.price,
             unit_key: it.unit_key,
             tax_included: false,
-            taxes: it.iva
-              ? [{ type: "IVA", rate: 0.16, factor: "Tasa", withholding: false }]
-              : [],
+            // Tasa 0 y Exento llevan SIEMPRE su nodo de IVA (rate 0) — omitir
+            // el impuesto por completo (lo que hacía el checkbox anterior) no
+            // es ninguna de las dos cosas y deja el CFDI mal clasificado.
+            taxes:
+              it.iva === "16"
+                ? [{ type: "IVA", rate: 0.16, factor: "Tasa", withholding: false }]
+                : it.iva === "0"
+                  ? [{ type: "IVA", rate: 0, factor: "Tasa", withholding: false }]
+                  : [{ type: "IVA", rate: 0, factor: "Exento", withholding: false }],
           },
         })),
       };
@@ -700,12 +711,22 @@ export default function NuevaFacturaPage() {
                       />
                     </div>
                     <div className="flex flex-col justify-end">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={item.iva}
-                          onChange={(e) => updateItem(item.id, "iva", e.target.checked)}
-                          className="rounded border-cos-line" />
-                        <span className="text-xs font-medium">IVA 16%</span>
-                      </label>
+                      <label className="block text-xs font-medium mb-1">IVA</label>
+                      <select value={item.iva}
+                        onChange={(e) => updateItem(item.id, "iva", e.target.value)}
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-transparent"
+                      >
+                        <option value="16">IVA 16%</option>
+                        <option value="0">IVA 0% (tasa cero)</option>
+                        <option value="EXENTO">Exento</option>
+                      </select>
+                      {item.iva === "EXENTO" && (
+                        <p className="text-xs text-cos-amber-ink mt-1">
+                          Exento hace que el IVA de tus gastos NO sea acreditable. Si vendes
+                          agua, alimentos o medicinas, lo usual es <b>IVA 0% (tasa cero)</b>.
+                          Verifícalo con tu contador.
+                        </p>
+                      )}
                       <p className="text-xs text-cos-ink-soft mt-1">
                         Importe: <span className="font-medium"><Money value={item.quantity * item.price} /></span>
                       </p>
@@ -782,7 +803,7 @@ export default function NuevaFacturaPage() {
                       <tr key={it.id} className="border-b border-cos-line last:border-0">
                         <td className="px-4 py-2.5">
                           <p className="font-medium">{it.description}</p>
-                          <p className="text-xs text-cos-ink-soft">{it.product_key} · {it.unit_key}{it.iva ? " · IVA 16%" : " · Sin IVA"}</p>
+                          <p className="text-xs text-cos-ink-soft">{it.product_key} · {it.unit_key}{it.iva === "16" ? " · IVA 16%" : it.iva === "0" ? " · IVA 0% (tasa cero)" : " · Exento"}</p>
                         </td>
                         <td className="px-4 py-2.5 text-right">{it.quantity}</td>
                         <td className="px-4 py-2.5 text-right"><Money value={it.price} /></td>

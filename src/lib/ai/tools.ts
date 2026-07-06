@@ -164,7 +164,7 @@ export const tools: Anthropic.Tool[] = [
               tipo: { type: "string", enum: ["servicio", "producto"], description: "Si el concepto es un servicio o un bien/producto físico. Determina la unidad SAT por defecto (servicio→E48, producto→H87)." },
               product_key: { type: "string", description: "Clave ProdServ SAT (8 dígitos) lo más específica posible para el concepto. Obligatoria para un CFDI correcto; p.ej. intereses/servicios financieros 84121500." },
               unit_key: { type: "string", description: "Clave de unidad SAT. Servicios: E48 (Unidad de servicio) o ACT (Actividad). Productos: H87 (Pieza), KGM, LTR, MTR, etc. Si no la das, se infiere de 'tipo'." },
-              iva_rate: { type: "number", description: "Tasa IVA, default 0.16; usa 0 si exento" },
+              iva_rate: { type: "number", description: "Tasa IVA, default 0.16. Usa 0 para TASA CERO (agua, alimentos, medicinas — Art. 2o.-A LIVA). Tasa 0 NO es lo mismo que exento: si el usuario dice 'sin IVA' por un producto de tasa cero, corresponde 0, no omitir el impuesto." },
             },
             required: ["description", "unit_price", "tipo"],
           },
