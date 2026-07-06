@@ -92,7 +92,7 @@ export default function NominaHubPage() {
               title="La nómina de todas tus empresas en un solo panel"
             >
               <Building2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Cockpit multi-RFC</span>
+              <span className="hidden sm:inline">Tablero multi-RFC</span>
             </Link>
           )}
         </div>
