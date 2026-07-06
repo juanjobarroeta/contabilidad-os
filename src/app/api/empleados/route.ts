@@ -16,7 +16,9 @@ export async function GET(req: Request) {
     const includeInactive = url.searchParams.get("includeInactive") === "1";
     const withUltimoRecibo = url.searchParams.get("withUltimoRecibo") === "1";
 
-    await requireMembership(companyId);
+    // Pasar `req` habilita el token de servicio (Bearer) además de la sesión
+    // web, para que ZionX mapee empleados por RFC y timbre nómina.
+    await requireMembership(companyId, undefined, req);
 
     const employees = await prisma.employee.findMany({
       where: { companyId, ...(includeInactive ? {} : { isActive: true }) },
