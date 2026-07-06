@@ -410,8 +410,16 @@ export function parsePresupuestoXls(buffer: Buffer): PresupuestoParseResult {
 
   const presupuestoRows = findSheet("PRESUPUESTO");
   if (!presupuestoRows) {
+    // Formato alterno: "Matrices" (export estilo Opus/Neodata de análisis de
+    // precios unitarios — el template de Bartiz). Una sola hoja con bloques
+    // por análisis. Se convierte al MISMO PresupuestoParseResult para que
+    // todo lo demás (import, explosión, requisiciones) funcione sin cambios.
+    const matricesRows = findSheet("MATRICES") ?? findSheet("MATRIZ");
+    if (matricesRows) {
+      return parseMatricesResult(matricesRows, warnings);
+    }
     throw new Error(
-      `No se encontró la hoja "PRESUPUESTO" (hojas: ${wb.SheetNames.join(", ")}).`
+      `No se encontró la hoja "PRESUPUESTO" ni "Matrices" (hojas: ${wb.SheetNames.join(", ")}).`
     );
   }
   const caratulaRows = findSheet("CARÁTULA") ?? findSheet("CARATULA") ?? [];
@@ -460,6 +468,276 @@ export function parsePresupuestoXls(buffer: Buffer): PresupuestoParseResult {
       maxDepth,
       sumLeafImporte,
       sumBranchTopImporte,
+    },
+  };
+}
+
+// ─── Formato "Matrices" (Opus/Neodata — template Bartiz) ─────────────────────
+//
+// Una sola hoja con bloques repetidos por análisis de precio unitario:
+//
+//   Partida: A            Análisis No.: 10
+//   Análisis: DES.-01 | (vacío) | M² | (vacío) | 1.8 | $158.96
+//   <descripción del concepto en la(s) fila(s) siguiente(s), col A>
+//   MATERIALES
+//     <clave> <desc> <unidad> <PU> <*|/> <cantidad> <importe> <%>
+//   MANO DE OBRA
+//     <cuadrilla header (PU $0.00, sin importe)>
+//     <miembros con cantidad por jornada>
+//     Importe: …
+//     Rendimiento: M²/JOR … <R> <costo/unidad>   ← cantidad efectiva = miembro/R
+//   EQUIPO Y HERRAMIENTA / BASICOS
+//     (filas %MOx = herramienta/seguridad como % de MO — costo ya incluido en
+//      el PU del concepto; se omiten del listado de insumos)
+//   (CD)/(CI)/(CF)/(CU)/PRECIO UNITARIO …
+//
+// Salida: branches = una por letra de Partida (nivel 1); leaves = un concepto
+// por análisis (cantidad/PU/importe de la fila "Análisis:"); insumos =
+// agregados por clave con cantidad total = Σ (cantidad por unidad × cantidad
+// del concepto).
+
+const MATRICES_SECTIONS: Record<string, ParsedInsumo["tipo"]> = {
+  "MATERIALES": "MATERIAL",
+  "MANO DE OBRA": "MANO_OBRA",
+  "EQUIPO Y HERRAMIENTA": "EQUIPO",
+  "HERRAMIENTA": "HERRAMIENTA",
+  "MAQUINARIA": "EQUIPO",
+  "BASICOS": "BASICO",
+  "AUXILIARES": "BASICO",
+  "SUBCONTRATOS": "BASICO",
+};
+
+function parseMatricesResult(
+  rows: unknown[][],
+  warnings: string[]
+): PresupuestoParseResult {
+  const branches: ParsedPresupuestoBranch[] = [];
+  const leaves: ParsedPresupuestoLeaf[] = [];
+  const branchByLetter = new Map<string, ParsedPresupuestoBranch>();
+
+  // Acumulador de insumos por clave.
+  type Acc = {
+    clave: string;
+    descripcion: string;
+    unidad: string;
+    costoActual: number;
+    cantidad: number;
+    tipo: ParsedInsumo["tipo"];
+  };
+  const insumoAcc = new Map<string, Acc>();
+  const addInsumo = (
+    clave: string,
+    descripcion: string,
+    unidad: string,
+    costo: number,
+    perUnitQty: number,
+    conceptoQty: number,
+    tipo: ParsedInsumo["tipo"]
+  ) => {
+    if (!(perUnitQty > 0) || !(conceptoQty > 0)) return;
+    const cur = insumoAcc.get(clave);
+    const add = perUnitQty * conceptoQty;
+    if (cur) {
+      cur.cantidad += add;
+      if (!cur.descripcion && descripcion) cur.descripcion = descripcion;
+      if (costo > 0) cur.costoActual = costo;
+    } else {
+      insumoAcc.set(clave, { clave, descripcion, unidad, costoActual: costo, cantidad: add, tipo });
+    }
+  };
+
+  let titulo: string | null = null;
+  let currentPartida: string | null = null;
+  let currentSection: ParsedInsumo["tipo"] | null = null;
+  let concepto: ParsedPresupuestoLeaf | null = null;
+  let collectingDesc = false;
+  // Bloques compuestos (cuadrillas de MO y básicos): sus renglones traen
+  // cantidades POR UNIDAD DEL COMPUESTO y se escalan al cerrar el bloque:
+  //   "Rendimiento: <unidad>/JOR" → factor = 1/R (unidades por jornada)
+  //   "Volumen:"                  → factor = V   (volumen del básico por unidad)
+  let buffer: { clave: string; descripcion: string; unidad: string; costo: number; qty: number; tipo: ParsedInsumo["tipo"] }[] = [];
+  let buffering = false;
+
+  // Clasifica un miembro de compuesto por su clave (una cuadrilla dentro de un
+  // básico sigue siendo mano de obra aunque la sección sea BASICOS).
+  const tipoDe = (clave: string, fallback: ParsedInsumo["tipo"]): ParsedInsumo["tipo"] => {
+    const c = clave.toUpperCase();
+    if (c.startsWith("MO") || /CUADRILLA/.test(c)) return "MANO_OBRA";
+    if (c.startsWith("EQ")) return "EQUIPO";
+    return fallback;
+  };
+
+  const flushBuffer = (factor: number | null, rowIndex: number) => {
+    if (buffer.length === 0) { buffering = false; return; }
+    if (factor && factor > 0) {
+      for (const m of buffer) {
+        addInsumo(m.clave, m.descripcion, m.unidad, m.costo, m.qty * factor, concepto?.cantidad ?? 0, m.tipo);
+      }
+    } else {
+      warnings.push(
+        `Matrices: bloque compuesto sin fila de Rendimiento/Volumen cerca de la fila ${rowIndex + 1}; sus insumos se omitieron del listado.`
+      );
+    }
+    buffer = [];
+    buffering = false;
+  };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] ?? [];
+    const c0 = toStr(row[0]);
+    const c1 = toStr(row[1]);
+
+    if (!titulo && c0 === "Obra:") {
+      titulo = c1.replace(/[\r\n]+/g, " ").trim() || null;
+      continue;
+    }
+
+    if (c0 === "Partida:") {
+      flushBuffer(null, i);
+      collectingDesc = false;
+      currentSection = null;
+      const letter = c1 || "SIN PARTIDA";
+      currentPartida = letter;
+      if (!branchByLetter.has(letter)) {
+        const b: ParsedPresupuestoBranch = {
+          kind: "branch",
+          codigo: letter,
+          nivel: 1,
+          descripcion: `Partida ${letter}`,
+          importeReportado: 0,
+          rowIndex: i,
+        };
+        branchByLetter.set(letter, b);
+        branches.push(b);
+      }
+      continue;
+    }
+
+    if (c0 === "Análisis:") {
+      flushBuffer(null, i);
+      currentSection = null;
+      const cantidad = toNum(row[5]) ?? 0;
+      const importe = toNum(row[6]) ?? 0;
+      const pu = cantidad > 0 ? importe / cantidad : importe;
+      concepto = {
+        kind: "leaf",
+        parentCodigo: currentPartida,
+        conceptoClave: c1 || `ANALISIS-${i}`,
+        descripcion: "",
+        unidad: toStr(row[3]),
+        cantidad,
+        precioUnitario: pu,
+        importe,
+        rowIndex: i,
+      };
+      leaves.push(concepto);
+      if (currentPartida) {
+        const b = branchByLetter.get(currentPartida);
+        if (b) b.importeReportado += importe;
+      }
+      collectingDesc = true;
+      continue;
+    }
+
+    // Encabezado de sección (MATERIALES / MANO DE OBRA / …): solo col A.
+    const sectionKey = Object.keys(MATRICES_SECTIONS).find((k) => c0.toUpperCase() === k);
+    if (sectionKey && !toStr(row[2])) {
+      flushBuffer(null, i);
+      currentSection = MATRICES_SECTIONS[sectionKey];
+      collectingDesc = false;
+      continue;
+    }
+
+    // Descripción del concepto: filas de texto en col A entre "Análisis:" y la
+    // primera sección.
+    if (collectingDesc && concepto) {
+      if (c0 && !c1) {
+        concepto.descripcion = concepto.descripcion ? `${concepto.descripcion} ${c0}` : c0;
+        continue;
+      }
+      if (c0 || c1) collectingDesc = false;
+      continue;
+    }
+
+    // Cierres de bloque compuesto:
+    //   "Rendimiento: M²/JOR" (col B) → las cantidades del bloque son por
+    //   jornada; factor = 1/R.  "Volumen:" → son por unidad del básico;
+    //   factor = V (volumen usado por unidad del concepto).
+    if (c1.startsWith("Rendimiento")) {
+      const r = toNum(row[5]);
+      flushBuffer(r && r > 0 ? 1 / r : null, i);
+      continue;
+    }
+    if (c1.startsWith("Volumen")) {
+      flushBuffer(toNum(row[5]), i);
+      continue;
+    }
+    if (c0 === "SUBTOTAL:") {
+      flushBuffer(null, i);
+      continue;
+    }
+    if (c1 === "Importe:" || c1.startsWith("(CD)") || c1.startsWith("(CI)") || c1.startsWith("(CF)") || c1.startsWith("(CU)") || c1.startsWith("SUBTOTAL") || c1.startsWith("PRECIO UNITARIO")) {
+      continue;
+    }
+
+    // Fila de insumo dentro de una sección.
+    if (currentSection && concepto && c0) {
+      // %MOx (herramienta menor / equipo de seguridad como % de la MO): costo
+      // ya incluido en el PU del concepto; no es un insumo requisitable.
+      if (c0.startsWith("%")) continue;
+
+      const op = toStr(row[4]);
+      const costo = toNum(row[3]) ?? 0;
+      const cant = toNum(row[5]) ?? 0;
+      const importe = toNum(row[6]);
+
+      // Header de compuesto (cuadrilla o básico): sin operador */, sin importe
+      // y sin costo/cantidad reales → los renglones siguientes son sus
+      // componentes, escalados al cerrar con Rendimiento/Volumen.
+      if (op !== "*" && op !== "/" && (importe == null || importe === 0) && (costo === 0 || cant === 0)) {
+        flushBuffer(null, i);
+        buffering = true;
+        continue;
+      }
+
+      const perUnitLocal = op === "/" ? (cant > 0 ? 1 / cant : 0) : cant;
+      if (buffering) {
+        buffer.push({ clave: c0, descripcion: c1, unidad: toStr(row[2]), costo, qty: perUnitLocal, tipo: tipoDe(c0, currentSection) });
+        continue;
+      }
+      addInsumo(c0, c1, toStr(row[2]), costo, perUnitLocal, concepto.cantidad, currentSection);
+    }
+  }
+  flushBuffer(null, rows.length - 1);
+
+  const insumos: ParsedInsumo[] = [...insumoAcc.values()].map((a) => ({
+    clave: a.clave,
+    descripcion: a.descripcion,
+    unidad: a.unidad,
+    cantidad: Math.round(a.cantidad * 10000) / 10000,
+    costoActual: a.costoActual,
+    importe: Math.round(a.cantidad * a.costoActual * 100) / 100,
+    familia: null,
+    tipo: a.tipo,
+  }));
+
+  const sumLeafImporte = leaves.reduce((s, l) => s + l.importe, 0);
+  if (leaves.length === 0) {
+    warnings.push('Matrices: no se encontró ningún bloque "Análisis:" — ¿es el formato correcto?');
+  }
+
+  return {
+    caratula: { titulo, subtotal: null, utilidad: null, total: sumLeafImporte },
+    branches,
+    leaves,
+    insumos,
+    warnings,
+    totals: {
+      branchCount: branches.length,
+      leafCount: leaves.length,
+      maxDepth: 1,
+      sumLeafImporte,
+      sumBranchTopImporte: branches.reduce((s, b) => s + b.importeReportado, 0),
     },
   };
 }
