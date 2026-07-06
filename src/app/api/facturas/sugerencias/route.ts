@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
-import { aggregateConceptos, type RawItem } from "@/lib/facturas/sugerencias";
+import {
+  aggregateConceptos,
+  derivarTratamientoIva,
+  tratamientoPorClave,
+  type RawItem,
+} from "@/lib/facturas/sugerencias";
 
 // GET /api/facturas/sugerencias?companyId=xxx&customerId=yyy
 //
 // Powers the "invoicing suggestions" UX in facturas/nueva. Returns:
 //   - conceptos: distinct recent line items (customer-first, then company-wide),
-//     ranked by recency/frequency, ~top 15.
+//     ranked by recency/frequency, ~top 15. Each carries the ivaTratamiento
+//     derived from its most recent invoice (null = unknown).
 //   - facturasPrevias: recent STAMPED invoices to that customer (~top 5) so the
-//     user can prefill the whole line-item list from a past invoice.
+//     user can prefill the whole line-item list from a past invoice, including
+//     the invoice's derived ivaTratamiento (fallback "16" when ambiguous).
+//   - tratamientoPorClave: last known IVA treatment per claveProdServ (from
+//     stamped invoices with an unambiguous treatment), so picking a clave the
+//     company already invoices prefills the right treatment.
 //
 // Same auth/scoping shape as the rest of /api/facturas (requireUser +
 // getEffectiveCompanyMembership). customerId is optional — without it we still
@@ -42,6 +52,7 @@ export async function GET(req: Request) {
     select: {
       fecha: true,
       customerId: true,
+      status: true,
       items: {
         select: {
           claveProdServ: true,
@@ -50,21 +61,34 @@ export async function GET(req: Request) {
           claveUnidad: true,
         },
       },
+      taxes: {
+        select: { tipo: true, factor: true, tasa: true, retencion: true },
+      },
     },
   });
 
-  const rawItems: RawItem[] = recentInvoices.flatMap((inv) =>
-    inv.items.map((it) => ({
+  const rawItems: RawItem[] = recentInvoices.flatMap((inv) => {
+    // El tratamiento de IVA solo se deriva de facturas TIMBRADAS (los
+    // borradores no tienen filas de impuesto confiables) y solo cuando el
+    // comprobante es inequívoco; en cualquier otro caso queda null.
+    const ivaTratamiento =
+      inv.status === "STAMPED" ? derivarTratamientoIva(inv.taxes) : null;
+    return inv.items.map((it) => ({
       claveProdServ: it.claveProdServ,
       descripcion: it.descripcion,
       valorUnitario: it.valorUnitario,
       claveUnidad: it.claveUnidad,
       fecha: inv.fecha,
       customerId: inv.customerId,
-    }))
-  );
+      ivaTratamiento,
+    }));
+  });
 
   const conceptos = aggregateConceptos(rawItems, customerId, 15);
+
+  // Último tratamiento de IVA conocido por clave de producto/servicio —
+  // prellenado del selector cuando el usuario elige una clave ya facturada.
+  const tratamientos = tratamientoPorClave(rawItems);
 
   // Recent STAMPED invoices to this customer, with their items, for one-click
   // prefill. Only meaningful when a customer is selected.
@@ -88,6 +112,9 @@ export async function GET(req: Request) {
                 claveUnidad: true,
               },
             },
+            taxes: {
+              select: { tipo: true, factor: true, tasa: true, retencion: true },
+            },
           },
         })
       ).map((inv) => ({
@@ -96,8 +123,12 @@ export async function GET(req: Request) {
         fecha: inv.fecha,
         total: inv.total,
         items: inv.items,
+        // Tratamiento de IVA de la factura origen para el prellenado. Antes el
+        // formulario asumía siempre "16"; ahora respeta tasa 0 / exento de la
+        // factura copiada. Ante ambigüedad (mixto/sin filas) conserva "16".
+        ivaTratamiento: derivarTratamientoIva(inv.taxes) ?? "16",
       }))
     : [];
 
-  return NextResponse.json({ conceptos, facturasPrevias });
+  return NextResponse.json({ conceptos, facturasPrevias, tratamientoPorClave: tratamientos });
 }
