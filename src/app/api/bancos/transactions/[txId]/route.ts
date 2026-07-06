@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import {
   checkInvoiceMatchGuard,
   checkSumaAsignada,
@@ -43,8 +42,13 @@ type Params = { params: Promise<{ txId: string }> };
  * so we update both rows atomically.
  */
 export async function PATCH(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { txId } = await params;
   const tx = await prisma.bankTransaction.findUnique({
@@ -63,7 +67,7 @@ export async function PATCH(req: Request, { params }: Params) {
   });
   if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, tx.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, tx.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   const { action, invoiceId, gastoId, reembolsoId, rayaId, solicitudCompraId, taxDeclarationId, notes, asignaciones } = await req.json();
@@ -442,8 +446,8 @@ export async function PATCH(req: Request, { params }: Params) {
   if (action === "match" || action === "match-multiple" || action === "match-impuesto" || action === "unmatch") {
     registrarBitacora({
       companyId: tx.companyId,
-      userId: session.user.id,
-      actorEmail: session.user.email ?? null,
+      userId: user.id,
+      actorEmail: user.email ?? null,
       accion:
         action === "unmatch"
           ? "conciliacion.unmatch"

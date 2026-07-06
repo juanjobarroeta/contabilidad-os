@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 
 type Params = { params: Promise<{ id: string }> };
 
 // GET /api/bancos/[id]?status=UNMATCHED|MATCHED|IGNORED|PENDING&page=1&pageSize=50
 // PENDING = IGNORED rows with notes = "PENDING_MONTHLY_CFDI" (bank fees waiting
 // for the consolidated monthly CFDI from the bank).
+// Autz: sesión web O token de servicio (Bearer) — ZionX espeja los movimientos.
 export async function GET(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id: bankAccountId } = await params;
   const { searchParams } = new URL(req.url);
@@ -22,7 +27,7 @@ export async function GET(req: Request, { params }: Params) {
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, account.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   // Tag-based subcategories of IGNORED that we surface as their own tabs.
@@ -162,14 +167,19 @@ export async function GET(req: Request, { params }: Params) {
 
 // PATCH /api/bancos/[id]  — editar datos de la cuenta (banco, nombre, número, CLABE)
 export async function PATCH(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id } = await params;
   const account = await prisma.bankAccount.findUnique({ where: { id } });
   if (!account) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   const { banco, nombre, numeroCuenta, clabe, moneda } = await req.json();
@@ -187,15 +197,20 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 // DELETE /api/bancos/[id]
-export async function DELETE(_req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function DELETE(req: Request, { params }: Params) {
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id: bankAccountId } = await params;
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   await prisma.bankAccount.delete({ where: { id: bankAccountId } });

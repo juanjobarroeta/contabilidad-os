@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { autoConciliarCuenta } from "@/lib/bancos/auto-conciliar";
 import {
   TIPOS_IMPUESTO_CONCILIABLES,
@@ -20,14 +19,19 @@ type Params = { params: Promise<{ id: string }> };
 // @/lib/bancos/auto-conciliar (reutilizada por el cron diario). El umbral y el
 // scoring son idénticos — esta ruta sólo añade la verificación de permisos.
 export async function POST(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id: bankAccountId } = await params;
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   const { matched: autoMatched, total } = await autoConciliarCuenta(bankAccountId);
@@ -37,8 +41,13 @@ export async function POST(req: Request, { params }: Params) {
 
 // GET /api/bancos/[id]/match?txId=xxx — get match candidates for a specific transaction
 export async function GET(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id: bankAccountId } = await params;
   const txId = new URL(req.url).searchParams.get("txId");
@@ -47,7 +56,7 @@ export async function GET(req: Request, { params }: Params) {
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, account.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const tx = await prisma.bankTransaction.findUnique({ where: { id: txId } });

@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 
 // GET /api/bancos?companyId=xxx
+// Autz: sesión web O token de servicio (Authorization: Bearer <jwt>), para que
+// ZionX (app satélite) pueda espejear cuentas y movimientos bancarios.
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const companyId = new URL(req.url).searchParams.get("companyId");
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
+  const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const accounts = await prisma.bankAccount.findMany({
@@ -52,15 +58,20 @@ export async function GET(req: Request) {
 
 // POST /api/bancos — create a bank account
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { companyId, banco, nombre, numeroCuenta, clabe, moneda } = await req.json();
   if (!companyId || !banco || !nombre || !numeroCuenta) {
     return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
   }
 
-  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
+  const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
