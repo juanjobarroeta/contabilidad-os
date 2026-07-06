@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
@@ -197,20 +198,18 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 // DELETE /api/bancos/[id]
-export async function DELETE(req: Request, { params }: Params) {
-  let user;
-  try {
-    user = await requireUser(req);
-  } catch (e) {
-    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
-    throw e;
-  }
+// SOLO sesión web, a propósito: borrar una cuenta elimina en cascada TODOS sus
+// movimientos. Los tokens de servicio (ZionX) espejan y concilian — no tienen
+// por qué destruir; un token filtrado no debe poder borrar la historia bancaria.
+export async function DELETE(_req: Request, { params }: Params) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: bankAccountId } = await params;
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(user.id, account.companyId);
+  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   await prisma.bankAccount.delete({ where: { id: bankAccountId } });
