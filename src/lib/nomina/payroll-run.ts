@@ -9,7 +9,12 @@
 //   avance se registra en extraData.stampedCount por si el cliente consulta.
 
 import { prisma } from "../prisma";
-import { calcularNomina, type NominaCalcInput, type NominaCalcResult } from "./calc-nomina";
+import {
+  calcularNomina,
+  empleadoTieneConceptosRecurrentes,
+  type NominaCalcInput,
+  type NominaCalcResult,
+} from "./calc-nomina";
 import { calcularPtu, type PtuEmployeeData } from "./ptu";
 import { emitNominaCfdi } from "./emit-nomina";
 import { SALARIO_MINIMO_GENERAL, PTU_EXENTO_UMA, UMA_DIARIO, umaDiariaDelEjercicio } from "./constants";
@@ -234,8 +239,12 @@ function payrollItemFieldsFromCalc(calc: NominaCalcResult) {
   const bonoPerc = calc.percepciones.find((p) => p.tipoPercepcion === "038");
   const comisionPerc = calc.percepciones.find((p) => p.tipoPercepcion === "028");
   const primaVacPerc = calc.percepciones.find((p) => p.tipoPercepcion === "021");
+  const valesPerc = calc.percepciones.find((p) => p.tipoPercepcion === "029");
+  // Otras deducciones del item: descuentos capturados (004) y pensión
+  // alimenticia (007) — PayrollItem no tiene columna dedicada para la
+  // pensión; el CFDI sí la desglosa con su clave propia.
   const otrosDescuentos = calc.deducciones
-    .filter((d) => d.tipoDeduccion === "004")
+    .filter((d) => d.tipoDeduccion === "004" || d.tipoDeduccion === "007")
     .reduce((s, d) => s + d.importe, 0);
 
   return {
@@ -243,6 +252,7 @@ function payrollItemFieldsFromCalc(calc: NominaCalcResult) {
     horasExtra: horasExtraPerc ? horasExtraPerc.importeGravado + horasExtraPerc.importeExento : 0,
     bonosPagoFijo: bonoPerc ? bonoPerc.importeGravado + bonoPerc.importeExento : 0,
     bonosPagoVar: comisionPerc ? comisionPerc.importeGravado + comisionPerc.importeExento : 0,
+    vales: valesPerc ? Math.round((valesPerc.importeGravado + valesPerc.importeExento) * 100) / 100 : 0,
     isrRetenido: calc.isrRetenido,
     imssObrero: calc.imssObrero,
     imssPatronal: calc.imssPatronal,
@@ -555,7 +565,14 @@ async function stampPayrollRunClaimed(payrollRunId: string): Promise<StampResult
         diasPagadosCfdi = 1;
         periodoInicioCfdi = run.fechaPago;
         periodoFinCfdi = run.fechaPago;
-      } else if (resumenTieneEfecto(resumen)) {
+      } else if (
+        resumenTieneEfecto(resumen) ||
+        (run.tipo === "ORDINARIA" && empleadoTieneConceptosRecurrentes(item.employee))
+      ) {
+        // También entran aquí los empleados con conceptos recurrentes de su
+        // ficha (vales de despensa 029, pensión alimenticia 007): el CFDI debe
+        // llevar el desglose exacto del motor (exención de vales incluida), no
+        // una sola percepción de sueldo 100% gravada.
         // Recalcular con el MISMO motor e insumos que produjo el item revisado
         // y verificar que coincide antes de timbrar: si alguien capturó una
         // incidencia (o cambió el salario) sin recalcular, se bloquea el
@@ -597,6 +614,10 @@ async function stampPayrollRunClaimed(payrollRunId: string): Promise<StampResult
         sueldoBruto: item.totalPercepciones,
         desglose,
         tipoNomina: tipoNominaCfdi,
+        // Las corridas NO ordinarias se calcularon sin los conceptos
+        // recurrentes de la ficha (vales/pensión — sólo aplican a la nómina
+        // ordinaria); la vía sin desglose no debe agregarlos encima.
+        omitirConceptosRecurrentes: run.tipo !== "ORDINARIA",
       });
 
       if (result.ok && result.uuid) {

@@ -1134,6 +1134,17 @@ model Employee {
   tipoDescuentoInfonavit String? // "PCT_SBC" | "VSM" | "PESOS"
   descuentoInfonavit     Float?
 
+  // Pensión alimenticia (resolución judicial) — deducción recurrente
+  // post-impuestos por periodo; en el CFDI viaja con c_TipoDeduccion 007.
+  // Columnas ADITIVAS (migración 20260707_pension_vales).
+  pensionAlimenticiaTipo  String? // "PCT_NETO" | "PCT_SBC" | "MONTO_FIJO"
+  pensionAlimenticiaValor Float? // porcentaje decimal (0.20 = 20%) o monto fijo por periodo, según tipo
+
+  // Vales de despensa — monto MENSUAL recurrente; se prorratea por días
+  // efectivos del periodo y en el CFDI viaja con c_TipoPercepcion 029.
+  // Columna ADITIVA (migración 20260707_pension_vales).
+  valesDespensaMensual Float?
+
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   payrollItems      PayrollItem[]
   imssMovimientos   ImssMovimiento[]

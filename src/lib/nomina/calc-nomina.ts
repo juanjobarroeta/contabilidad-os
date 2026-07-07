@@ -11,10 +11,13 @@ import {
   calcularVacaciones,
   calcularHorasExtra,
   calcularPrimaVacacionalPorDias,
+  calcularValesDespensa,
   type AguinaldoResult,
   type VacacionesResult,
   type HorasExtraResult,
+  type ValesDespensaResult,
 } from "./prestaciones";
+import { calcularPensionAlimenticia } from "./pension-alimenticia";
 import { calcularPtu, type PtuDistribucion } from "./ptu";
 import type { IncidenciasResumen } from "./incidencias";
 import { umaDiariaDelEjercicio, salarioMinimoGeneralDelEjercicio } from "./constants";
@@ -79,6 +82,8 @@ export type NominaCalcResult = {
   imssObrero: number;
   imssPatronal: number;
   infonavitDeduccion: number;
+  /** Pensión alimenticia del periodo (deducción CFDI 007); 0 sin resolución capturada. */
+  pensionAlimenticia: number;
   tipoNomina: "O" | "E"; // Ordinaria vs Extraordinaria
   /**
    * Días efectivamente pagados del periodo tras descontar faltas e
@@ -88,6 +93,8 @@ export type NominaCalcResult = {
   diasEfectivos: number;
   /** Desglose de horas extra del periodo (cuando hubo). */
   horasExtraResult?: HorasExtraResult;
+  /** Desglose de vales de despensa del periodo (cuando el empleado los tiene). */
+  valesResult?: ValesDespensaResult;
   // Extraordinary details
   aguinaldoResult?: AguinaldoResult;
   vacacionesResult?: VacacionesResult;
@@ -135,6 +142,7 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
   let aguinaldoResult: AguinaldoResult | undefined;
   let vacacionesResult: VacacionesResult | undefined;
   let horasExtraResult: HorasExtraResult | undefined;
+  let valesResult: ValesDespensaResult | undefined;
 
   // Valores UMA/SM del ejercicio de pago (año-conscientes, como ISR/IMSS);
   // si el ejercicio no está versionado se usan los vigentes de constants.
@@ -234,6 +242,31 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
         importeExento: 0,
       });
       totalGravado = r2(totalGravado + inc.comisiones);
+    }
+
+    // Vales de despensa recurrentes (ficha del empleado): sólo en la nómina
+    // ORDINARIA — es una prestación mensual que se paga con el periodo
+    // regular, no con pagos extraordinarios. El monto mensual se prorratea
+    // por los días efectivos y la exención es 40% UMA diaria por día
+    // trabajado; el excedente grava (ver calcularValesDespensa,
+    // prestaciones.ts, para la base legal y la simplificación documentada).
+    if (tipo === "ORDINARIA" && (employee.valesDespensaMensual ?? 0) > 0) {
+      valesResult = calcularValesDespensa({
+        valesMensual: employee.valesDespensaMensual ?? 0,
+        diasPagados: diasEfectivos,
+        umaDiaria: umaEjercicio,
+      });
+      if (valesResult.monto > 0) {
+        percepciones.push({
+          tipoPercepcion: "029", // c_TipoPercepcion 029 — Vales de despensa
+          clave: "029",
+          concepto: "Vales de Despensa",
+          importeGravado: valesResult.gravado,
+          importeExento: valesResult.exento,
+        });
+        totalGravado = r2(totalGravado + valesResult.gravado);
+        totalExento = r2(totalExento + valesResult.exento);
+      }
     }
 
   } else if (tipo === "AGUINALDO") {
@@ -366,6 +399,33 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     }
   }
 
+  // Pensión alimenticia (resolución judicial, Arts. 110 fracc. V y 112 LFT) —
+  // sólo ORDINARIA: es un descuento recurrente por periodo de pago; en pagos
+  // extraordinarios (aguinaldo, PTU) capturarla manualmente si la resolución
+  // los alcanza. Es deducción POST-impuestos: no altera la base de ISR ni la
+  // cotización IMSS. Para PCT_NETO la base es el neto tras deducciones de LEY
+  // (ISR, IMSS, INFONAVIT) — los descuentos internos no reducen la pensión,
+  // que tiene prelación. c_TipoDeduccion 007 (Pensión alimenticia).
+  let pensionAlimenticia = 0;
+  if (tipo === "ORDINARIA") {
+    const deduccionesLey = r2(deducciones.reduce((s, d) => s + d.importe, 0));
+    pensionAlimenticia = calcularPensionAlimenticia({
+      tipo: employee.pensionAlimenticiaTipo ?? null,
+      valor: employee.pensionAlimenticiaValor ?? null,
+      netoAntesPension: r2(totalPercepciones - deduccionesLey),
+      salarioBaseCotizacion: sdi,
+      diasPagados: diasEfectivos,
+    });
+    if (pensionAlimenticia > 0) {
+      deducciones.push({
+        tipoDeduccion: "007",
+        clave: "007",
+        concepto: "Pensión Alimenticia",
+        importe: pensionAlimenticia,
+      });
+    }
+  }
+
   // Descuentos capturados (préstamos, uniformes, etc.): deducción NETA
   // post-impuestos — no altera la base gravable de ISR ni el SBC/días de
   // cotización IMSS; sólo reduce el neto a pagar. c_TipoDeduccion 004 (Otros).
@@ -393,10 +453,28 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     imssObrero: tipo === "ORDINARIA" ? imssCalc.obrero.total : 0,
     imssPatronal: imssCalc.patronal.total,
     infonavitDeduccion,
+    pensionAlimenticia,
     tipoNomina,
     diasEfectivos,
     horasExtraResult,
+    valesResult,
     aguinaldoResult,
     vacacionesResult,
   };
+}
+
+/**
+ * True cuando la ficha del empleado tiene conceptos recurrentes (vales de
+ * despensa o pensión alimenticia) que el motor agrega a toda corrida
+ * ordinaria. El timbrado lo usa para armar el CFDI con el desglose exacto de
+ * calcularNomina (percepción 029 con su exención, deducción 007) en lugar de
+ * re-derivar una sola percepción de sueldo 100% gravada.
+ */
+export function empleadoTieneConceptosRecurrentes(
+  e: Pick<Employee, "valesDespensaMensual" | "pensionAlimenticiaTipo" | "pensionAlimenticiaValor">
+): boolean {
+  return (
+    (e.valesDespensaMensual ?? 0) > 0 ||
+    (!!e.pensionAlimenticiaTipo && (e.pensionAlimenticiaValor ?? 0) > 0)
+  );
 }

@@ -16,10 +16,14 @@
 
 import { describe, it, expect } from "vitest";
 import type { Employee } from "@prisma/client";
-import { calcularNomina } from "./calc-nomina";
+import { calcularNomina, empleadoTieneConceptosRecurrentes } from "./calc-nomina";
+import { calcularIsrRetenido } from "./isr";
 import { resumirIncidencias, resumenTieneEfecto, RESUMEN_VACIO } from "./incidencias";
 
-function empleado(salarioDiario: number): Employee & { tipoDescuentoInfonavit?: string | null } {
+function empleado(
+  salarioDiario: number,
+  extra: Record<string, unknown> = {}
+): Employee & { tipoDescuentoInfonavit?: string | null } {
   return {
     salarioDiario,
     salarioDiarioIntegrado: null, // SDI = salario diario (goldens simples)
@@ -28,6 +32,10 @@ function empleado(salarioDiario: number): Employee & { tipoDescuentoInfonavit?: 
     fechaIngreso: new Date("2020-01-15"),
     tipoDescuentoInfonavit: null,
     descuentoInfonavit: null,
+    pensionAlimenticiaTipo: null,
+    pensionAlimenticiaValor: null,
+    valesDespensaMensual: null,
+    ...extra,
   } as unknown as Employee & { tipoDescuentoInfonavit?: string | null };
 }
 
@@ -179,6 +187,123 @@ describe("calcularNomina + incidencias — corrida ordinaria quincenal 2026", ()
     const ded = r.deducciones.find((d) => d.tipoDeduccion === "004");
     expect(ded!.importe).toBe(800);
     expect(r.netoAPagar).toBe(Math.round((base.netoAPagar - 800) * 100) / 100);
+  });
+
+  it("VALES DE DESPENSA: percepción 029 con exención de 40% UMA/día; el excedente entra a la base de ISR", () => {
+    // Vales 2,000/mes → 986.84 en la quincena (mes comercial 30.4); tope
+    // exento 0.40 × 117.31 × 15 = 703.86 → gravado 282.98. Base ISR:
+    // 9,000 + 282.98 = 9,282.98. El SBC/IMSS no cambia (los vales dentro del
+    // 40% UMA no integran, Art. 27 fracc. VI LSS).
+    const r = calcularNomina({
+      employee: empleado(600, { valesDespensaMensual: 2000 }),
+      ...BASE,
+    });
+    const vales = r.percepciones.find((p) => p.tipoPercepcion === "029");
+    expect(vales).toBeDefined();
+    expect(vales!.importeExento).toBe(703.86);
+    expect(vales!.importeGravado).toBe(282.98);
+    expect(r.valesResult?.monto).toBe(986.84);
+    expect(r.totalPercepciones).toBe(9986.84); // 9,000 + 986.84
+    expect(r.isrRetenido).toBe(
+      calcularIsrRetenido({ baseGravable: 9282.98, periodicidadPago: "04", ejercicio: 2026, mes: 3 }).isrRetenido
+    );
+    expect(r.imssObrero).toBe(228.63); // idéntico a la línea base
+  });
+
+  it("VALES DE DESPENSA: las faltas los reducen en proporción a los días efectivos", () => {
+    const r = calcularNomina({
+      employee: empleado(600, { valesDespensaMensual: 2000 }),
+      ...BASE,
+      incidencias: { ...RESUMEN_VACIO, diasFalta: 2, numIncidencias: 1 },
+    });
+    expect(r.diasEfectivos).toBe(13);
+    expect(r.valesResult?.monto).toBe(855.26); // 2,000 / 30.4 × 13
+  });
+
+  it("PENSIÓN ALIMENTICIA PCT_NETO: deducción 007 post-impuestos sobre el neto de ley", () => {
+    // Línea base: 9,000 − ISR 990.65 − IMSS 228.63 = 7,780.72 de neto de ley
+    // → pensión 20% = 1,556.14. ISR e IMSS idénticos a la línea base (la
+    // pensión no toca la base gravable ni la cotización).
+    const r = calcularNomina({
+      employee: empleado(600, { pensionAlimenticiaTipo: "PCT_NETO", pensionAlimenticiaValor: 0.2 }),
+      ...BASE,
+    });
+    expect(r.isrRetenido).toBe(990.65);
+    expect(r.imssObrero).toBe(228.63);
+    const pension = r.deducciones.find((d) => d.tipoDeduccion === "007");
+    expect(pension).toBeDefined();
+    expect(pension!.importe).toBe(1556.14);
+    expect(r.pensionAlimenticia).toBe(1556.14);
+    expect(r.netoAPagar).toBe(6224.58); // 7,780.72 − 1,556.14
+  });
+
+  it("PENSIÓN ALIMENTICIA PCT_SBC y MONTO_FIJO", () => {
+    const porSbc = calcularNomina({
+      employee: empleado(600, { pensionAlimenticiaTipo: "PCT_SBC", pensionAlimenticiaValor: 0.1 }),
+      ...BASE,
+    });
+    expect(porSbc.pensionAlimenticia).toBe(900); // 600 × 15 × 10%
+
+    const fija = calcularNomina({
+      employee: empleado(600, { pensionAlimenticiaTipo: "MONTO_FIJO", pensionAlimenticiaValor: 1500 }),
+      ...BASE,
+    });
+    expect(fija.pensionAlimenticia).toBe(1500);
+    expect(fija.netoAPagar).toBe(6280.72); // 7,780.72 − 1,500
+  });
+
+  it("VALES + PENSIÓN combinados: la pensión PCT_NETO se calcula sobre el neto que incluye vales", () => {
+    const r = calcularNomina({
+      employee: empleado(600, {
+        valesDespensaMensual: 2000,
+        pensionAlimenticiaTipo: "PCT_NETO",
+        pensionAlimenticiaValor: 0.2,
+      }),
+      ...BASE,
+    });
+    const isr = calcularIsrRetenido({
+      baseGravable: 9282.98,
+      periodicidadPago: "04",
+      ejercicio: 2026,
+      mes: 3,
+    }).isrRetenido;
+    const netoLey = Math.round((9986.84 - isr - 228.63) * 100) / 100;
+    expect(r.pensionAlimenticia).toBe(Math.round(netoLey * 0.2 * 100) / 100);
+    expect(r.netoAPagar).toBe(Math.round((netoLey - r.pensionAlimenticia) * 100) / 100);
+  });
+
+  it("vales y pensión sólo aplican a la nómina ORDINARIA (no a corridas especiales)", () => {
+    const r = calcularNomina({
+      employee: empleado(600, {
+        valesDespensaMensual: 2000,
+        pensionAlimenticiaTipo: "PCT_NETO",
+        pensionAlimenticiaValor: 0.2,
+      }),
+      diasPagados: 15,
+      tipo: "AGUINALDO",
+      ejercicio: 2026,
+      mes: 12,
+      fechaCorte: new Date("2026-12-31"),
+    });
+    expect(r.percepciones.find((p) => p.tipoPercepcion === "029")).toBeUndefined();
+    expect(r.deducciones.find((d) => d.tipoDeduccion === "007")).toBeUndefined();
+    expect(r.pensionAlimenticia).toBe(0);
+  });
+
+  it("empleadoTieneConceptosRecurrentes detecta vales o pensión en la ficha", () => {
+    expect(empleadoTieneConceptosRecurrentes(empleado(600))).toBe(false);
+    expect(empleadoTieneConceptosRecurrentes(empleado(600, { valesDespensaMensual: 2000 }))).toBe(true);
+    expect(
+      empleadoTieneConceptosRecurrentes(
+        empleado(600, { pensionAlimenticiaTipo: "PCT_NETO", pensionAlimenticiaValor: 0.2 })
+      )
+    ).toBe(true);
+    // Tipo capturado sin valor (o valor 0) no cuenta como concepto activo.
+    expect(
+      empleadoTieneConceptosRecurrentes(
+        empleado(600, { pensionAlimenticiaTipo: "PCT_NETO", pensionAlimenticiaValor: 0 })
+      )
+    ).toBe(false);
   });
 
   it("las incidencias no aplican a corridas extraordinarias tipo AGUINALDO", () => {

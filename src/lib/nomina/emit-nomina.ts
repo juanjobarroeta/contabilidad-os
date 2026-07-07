@@ -10,6 +10,9 @@ import { recordTimbrado } from "../costos/record";
 import { calcularIsrRetenido } from "./isr";
 import { calcularImss } from "./imss";
 import { calcularInfonavit } from "./infonavit";
+import { calcularValesDespensa } from "./prestaciones";
+import { calcularPensionAlimenticia } from "./pension-alimenticia";
+import { umaDiariaDelEjercicio } from "./constants";
 import type { PercepcionItem, DeduccionItem } from "./calc-nomina";
 import type { Employee } from "@prisma/client";
 
@@ -47,6 +50,13 @@ export type EmitNominaInput = {
    * del receptor se reporta como "99" (Otra periodicidad), conforme a la guía.
    */
   tipoNomina?: "O" | "E";
+  /**
+   * Omite los conceptos recurrentes de la ficha del empleado (vales de
+   * despensa 029, pensión alimenticia 007) en la vía SIN desglose. Lo activan
+   * las corridas NO ordinarias al timbrar: sus items se calcularon sin estos
+   * conceptos y el CFDI debe coincidir exactamente con lo revisado.
+   */
+  omitirConceptosRecurrentes?: boolean;
 };
 
 export type EmitNominaResult = {
@@ -125,8 +135,20 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
   } else {
     const sueldoBruto = input.sueldoBruto ?? +(employee.salarioDiario * input.diasPagados).toFixed(2);
 
+    // Vales de despensa recurrentes de la ficha del empleado (percepción 029):
+    // prorrateo del monto mensual a los días pagados y exención de 40% UMA
+    // diaria por día trabajado — el excedente entra a la base de ISR (misma
+    // lógica que calcularNomina; ver calcularValesDespensa, prestaciones.ts).
+    const valesCalc = input.omitirConceptosRecurrentes
+      ? { monto: 0, exento: 0, gravado: 0 }
+      : calcularValesDespensa({
+          valesMensual: employee.valesDespensaMensual ?? 0,
+          diasPagados: input.diasPagados,
+          umaDiaria: umaDiariaDelEjercicio(input.fechaPago.getFullYear()) ?? undefined,
+        });
+
     const isrCalc = calcularIsrRetenido({
-      baseGravable: sueldoBruto,
+      baseGravable: +(sueldoBruto + valesCalc.gravado).toFixed(2),
       periodicidadPago: employee.periodicidadPago,
       ejercicio: input.fechaPago.getFullYear(),
       mes: input.fechaPago.getMonth() + 1,
@@ -147,8 +169,24 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       diasPagados: input.diasPagados,
     });
 
-    totalPercepciones = sueldoBruto;
-    totalDeducciones = +(isrCalc.isrRetenido + imssObrero + infonavitDeduccion).toFixed(2);
+    // Pensión alimenticia (deducción CFDI 007) — post-impuestos, sobre el
+    // neto tras deducciones de ley (misma lógica que calcularNomina).
+    const pensionAlimenticia = input.omitirConceptosRecurrentes
+      ? 0
+      : calcularPensionAlimenticia({
+          tipo: employee.pensionAlimenticiaTipo ?? null,
+          valor: employee.pensionAlimenticiaValor ?? null,
+          netoAntesPension: +(
+            sueldoBruto + valesCalc.monto - isrCalc.isrRetenido - imssObrero - infonavitDeduccion
+          ).toFixed(2),
+          salarioBaseCotizacion: sdi,
+          diasPagados: input.diasPagados,
+        });
+
+    totalPercepciones = +(sueldoBruto + valesCalc.monto).toFixed(2);
+    totalDeducciones = +(
+      isrCalc.isrRetenido + imssObrero + infonavitDeduccion + pensionAlimenticia
+    ).toFixed(2);
     netoAPagar = +(totalPercepciones - totalDeducciones).toFixed(2);
 
     percepcionesCfdi = [
@@ -156,9 +194,18 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
         tipo_percepcion: "001", // Sueldos, Salarios Rayas y Jornales
         clave: "001",
         concepto: "Sueldo",
-        importe_gravado: totalPercepciones,
+        importe_gravado: sueldoBruto,
         importe_exento: 0,
       },
+      ...(valesCalc.monto > 0
+        ? [{
+            tipo_percepcion: "029", // Vales de despensa
+            clave: "029",
+            concepto: "Vales de Despensa",
+            importe_gravado: valesCalc.gravado,
+            importe_exento: valesCalc.exento,
+          }]
+        : []),
     ];
     deduccionesCfdi = [
       ...(isrCalc.isrRetenido > 0
@@ -170,10 +217,13 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       ...(infonavitDeduccion > 0
         ? [{ tipo_deduccion: "010", clave: "006", concepto: "INFONAVIT", importe: infonavitDeduccion }]
         : []),
+      ...(pensionAlimenticia > 0
+        ? [{ tipo_deduccion: "007", clave: "007", concepto: "Pensión Alimenticia", importe: pensionAlimenticia }]
+        : []),
     ];
 
     // Log for debugging
-    console.log(`[nomina] ${employee.nombre}: bruto=${sueldoBruto} ISR=${isrCalc.isrRetenido} IMSS_obrero=${imssObrero} IMSS_patronal=${imssPatronal} INFONAVIT=${infonavitDeduccion} neto=${netoAPagar}`);
+    console.log(`[nomina] ${employee.nombre}: bruto=${sueldoBruto} vales=${valesCalc.monto} ISR=${isrCalc.isrRetenido} IMSS_obrero=${imssObrero} IMSS_patronal=${imssPatronal} INFONAVIT=${infonavitDeduccion} pension=${pensionAlimenticia} neto=${netoAPagar}`);
   }
 
   // ── Construir el payload Facturapi ─────────────────────────────────────

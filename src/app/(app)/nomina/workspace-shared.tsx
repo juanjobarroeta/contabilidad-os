@@ -241,6 +241,11 @@ export interface Employee {
   departamento: string | null;
   clabe: string | null;
   banco: string | null;
+  /** Pensión alimenticia recurrente: "PCT_NETO" | "PCT_SBC" | "MONTO_FIJO". */
+  pensionAlimenticiaTipo?: string | null;
+  pensionAlimenticiaValor?: number | null;
+  /** Vales de despensa: monto mensual recurrente. */
+  valesDespensaMensual?: number | null;
   isActive: boolean;
   /** Presente cuando la lista se pide con withUltimoRecibo=1. */
   ultimoRecibo?: { fechaPago: string; periodo: string; origen: string } | null;

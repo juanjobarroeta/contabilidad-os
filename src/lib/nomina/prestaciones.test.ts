@@ -9,7 +9,12 @@
 //   15 UMA).
 
 import { describe, it, expect } from "vitest";
-import { calcularAguinaldo, calcularHorasExtra, calcularPrimaVacacionalPorDias } from "./prestaciones";
+import {
+  calcularAguinaldo,
+  calcularHorasExtra,
+  calcularPrimaVacacionalPorDias,
+  calcularValesDespensa,
+} from "./prestaciones";
 
 describe("calcularHorasExtra — Art. 93 fracc. I LISR / LFT Arts. 66-68", () => {
   it("trabajador de salario mínimo: dobles dentro del límite 100% exentas", () => {
@@ -213,5 +218,49 @@ describe("calcularAguinaldo — Art. 87 LFT / exención 30 UMA", () => {
     });
     expect(r.montoExento).toBe(3394.2); // 30 × 113.14
     expect(r.montoGravado).toBe(2605.8);
+  });
+});
+
+describe("calcularValesDespensa — prorrateo mensual y exención 40% UMA/día", () => {
+  it("prorratea el monto mensual con mes comercial de 30.4 días", () => {
+    // 2,000 mensuales, quincena de 15 días → 2,000 / 30.4 × 15 = 986.84.
+    const r = calcularValesDespensa({ valesMensual: 2000, diasPagados: 15 });
+    expect(r.monto).toBe(986.84);
+  });
+
+  it("exención: hasta 40% de UMA diaria por día trabajado; el excedente grava", () => {
+    // Tope quincenal 2026: 0.40 × 117.31 × 15 = 703.86.
+    const r = calcularValesDespensa({ valesMensual: 2000, diasPagados: 15 });
+    expect(r.exento).toBe(703.86);
+    expect(r.gravado).toBe(282.98); // 986.84 − 703.86
+  });
+
+  it("monto bajo el tope: 100% exento", () => {
+    // 1,200 mensuales → 592.11 en la quincena, bajo el tope de 703.86.
+    const r = calcularValesDespensa({ valesMensual: 1200, diasPagados: 15 });
+    expect(r.monto).toBe(592.11);
+    expect(r.exento).toBe(592.11);
+    expect(r.gravado).toBe(0);
+  });
+
+  it("faltas reducen los vales y el tope en la misma proporción (días efectivos)", () => {
+    // 13 días efectivos: monto 2,000 / 30.4 × 13 = 855.26; tope 0.40 × 117.31
+    // × 13 = 610.01.
+    const r = calcularValesDespensa({ valesMensual: 2000, diasPagados: 13 });
+    expect(r.monto).toBe(855.26);
+    expect(r.exento).toBe(610.01);
+    expect(r.gravado).toBe(245.25);
+  });
+
+  it("acepta la UMA del ejercicio de pago (histórica) para la exención", () => {
+    // UMA 2025: 113.14 → tope quincenal 0.40 × 113.14 × 15 = 678.84.
+    const r = calcularValesDespensa({ valesMensual: 2000, diasPagados: 15, umaDiaria: 113.14 });
+    expect(r.exento).toBe(678.84);
+    expect(r.gravado).toBe(308); // 986.84 − 678.84
+  });
+
+  it("sin monto o sin días: todo en ceros", () => {
+    expect(calcularValesDespensa({ valesMensual: 0, diasPagados: 15 })).toEqual({ monto: 0, exento: 0, gravado: 0 });
+    expect(calcularValesDespensa({ valesMensual: 2000, diasPagados: 0 })).toEqual({ monto: 0, exento: 0, gravado: 0 });
   });
 });

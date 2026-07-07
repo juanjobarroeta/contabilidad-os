@@ -9,6 +9,8 @@ import {
   AGUINALDO_EXENTO_UMA,
   PRIMA_VACACIONAL_PCT_MINIMO,
   PRIMA_VACACIONAL_EXENTO_UMA,
+  DIAS_MES_COMERCIAL,
+  VALES_DESPENSA_EXENTO_PCT_UMA,
   getDiasVacaciones,
 } from "./constants";
 
@@ -272,6 +274,58 @@ export function calcularHorasExtra(input: HorasExtraInput): HorasExtraResult {
     montoGravado,
     exentoSalarioMinimo,
   };
+}
+
+// ─── Vales de despensa: prorrateo mensual y exención ISR ─────────────────────
+// Base legal:
+// - Deducibilidad patronal: Art. 27 fracc. XI LISR — los vales de despensa
+//   son deducibles cuando se entregan por monedero electrónico autorizado por
+//   el SAT y cumplen los requisitos de generalidad de la previsión social.
+// - Exención para el trabajador: los vales son PREVISIÓN SOCIAL (Art. 93
+//   fracc. VIII y penúltimo párrafo LISR). SIMPLIFICACIÓN DOCUMENTADA: el tope
+//   global de previsión social del penúltimo párrafo (ingresos + previsión
+//   ≤ 7 UMA elevadas al año) requiere la visión anual de TODAS las
+//   prestaciones; aquí se aplica el criterio operativo generalizado de
+//   exentar hasta el 40% de la UMA diaria por día trabajado — espejo del tope
+//   con el que los vales NO integran el SBC (Art. 27 fracc. VI LSS). El
+//   excedente es gravado. Si el ajuste anual detecta que el paquete de
+//   previsión social rebasó el tope global, la corrección entra por esa vía.
+// - Prorrateo: el monto capturado en la ficha del empleado es MENSUAL; el
+//   periodo se paga proporcional a los días efectivos con mes comercial de
+//   30.4 días (consistente con UMA_MENSUAL). Las faltas e incapacidades
+//   reducen los vales en la misma proporción que el sueldo.
+
+export type ValesDespensaInput = {
+  /** Monto MENSUAL de vales asignado al empleado. */
+  valesMensual: number;
+  /** Días efectivos del periodo (ya descontadas faltas/incapacidades). */
+  diasPagados: number;
+  /** UMA diaria del ejercicio de pago para la exención. Default: la vigente (constants). */
+  umaDiaria?: number;
+};
+
+export type ValesDespensaResult = {
+  monto: number;
+  exento: number;
+  gravado: number;
+};
+
+export function calcularValesDespensa(input: ValesDespensaInput): ValesDespensaResult {
+  const uma = input.umaDiaria ?? UMA_DIARIO;
+
+  if (!input.valesMensual || input.valesMensual <= 0 || input.diasPagados <= 0) {
+    return { monto: 0, exento: 0, gravado: 0 };
+  }
+
+  // Prorrateo del monto mensual a los días efectivos del periodo.
+  const monto = r2((input.valesMensual / DIAS_MES_COMERCIAL) * input.diasPagados);
+
+  // Exención: 40% de la UMA diaria por día trabajado (ver nota de arriba).
+  const topeExento = r2(VALES_DESPENSA_EXENTO_PCT_UMA * uma * input.diasPagados);
+  const exento = r2(Math.min(monto, topeExento));
+  const gravado = r2(Math.max(0, monto - exento));
+
+  return { monto, exento, gravado };
 }
 
 // ─── SDI Factor de Integración ───────────────────────────────────────────────

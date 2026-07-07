@@ -74,6 +74,10 @@ const createSchema = z.object({
   creditoInfonavit: z.string().optional(),
   tipoDescuentoInfonavit: z.enum(["PCT_SBC", "VSM", "PESOS"]).optional(),
   descuentoInfonavit: z.number().optional(),
+  // Pensión alimenticia (deducción CFDI 007) y vales de despensa (percepción 029)
+  pensionAlimenticiaTipo: z.enum(["PCT_NETO", "PCT_SBC", "MONTO_FIJO"]).optional(),
+  pensionAlimenticiaValor: z.number().nonnegative().optional(),
+  valesDespensaMensual: z.number().nonnegative().optional(),
   clabe: z
     .string()
     .trim()
@@ -123,6 +127,9 @@ export async function POST(req: Request) {
         creditoInfonavit: data.creditoInfonavit || null,
         tipoDescuentoInfonavit: data.tipoDescuentoInfonavit || null,
         descuentoInfonavit: data.descuentoInfonavit ?? null,
+        pensionAlimenticiaTipo: data.pensionAlimenticiaTipo || null,
+        pensionAlimenticiaValor: data.pensionAlimenticiaValor ?? null,
+        valesDespensaMensual: data.valesDespensaMensual ?? null,
         clabe: data.clabe || null,
         banco: data.banco || null,
       },
@@ -211,6 +218,17 @@ export async function PATCH(req: Request) {
     if (fields.creditoInfonavit !== undefined) data.creditoInfonavit = fields.creditoInfonavit?.trim() || null;
     if (fields.tipoDescuentoInfonavit !== undefined) data.tipoDescuentoInfonavit = fields.tipoDescuentoInfonavit || null;
     if (fields.descuentoInfonavit !== undefined) data.descuentoInfonavit = fields.descuentoInfonavit != null ? Number(fields.descuentoInfonavit) : null;
+
+    // Pensión alimenticia (deducción CFDI 007) y vales de despensa (percepción 029)
+    if (fields.pensionAlimenticiaTipo !== undefined) {
+      const tipoPension = fields.pensionAlimenticiaTipo || null;
+      if (tipoPension && !["PCT_NETO", "PCT_SBC", "MONTO_FIJO"].includes(tipoPension)) {
+        return NextResponse.json({ error: "Tipo de pensión alimenticia inválido" }, { status: 400 });
+      }
+      data.pensionAlimenticiaTipo = tipoPension;
+    }
+    if (fields.pensionAlimenticiaValor !== undefined) data.pensionAlimenticiaValor = fields.pensionAlimenticiaValor != null ? Number(fields.pensionAlimenticiaValor) : null;
+    if (fields.valesDespensaMensual !== undefined) data.valesDespensaMensual = fields.valesDespensaMensual != null ? Number(fields.valesDespensaMensual) : null;
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "No hay datos para actualizar" }, { status: 400 });

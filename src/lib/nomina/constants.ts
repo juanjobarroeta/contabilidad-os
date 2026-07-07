@@ -406,3 +406,12 @@ export const PRIMA_VACACIONAL_EXENTO_UMA = 15;   // 15 × UMA diario
 // ─── PTU ─────────────────────────────────────────────────────────────────────
 export const PTU_PCT = 0.10; // 10% of renta gravable
 export const PTU_EXENTO_UMA = 15; // 15 × UMA diario
+
+// ─── Vales de despensa ───────────────────────────────────────────────────────
+// Mes comercial para prorratear montos mensuales a días del periodo —
+// consistente con UMA_MENSUAL (30.4 = 365 / 12).
+export const DIAS_MES_COMERCIAL = 30.4;
+// Tope de exención operativo: 40% de la UMA diaria por día trabajado
+// (ver base legal y simplificación documentada en calcularValesDespensa,
+// prestaciones.ts).
+export const VALES_DESPENSA_EXENTO_PCT_UMA = 0.4;

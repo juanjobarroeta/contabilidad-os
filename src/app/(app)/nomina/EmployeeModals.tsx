@@ -31,6 +31,9 @@ export function NewEmployeeModal({
     creditoInfonavit: "",
     tipoDescuentoInfonavit: "",
     descuentoInfonavit: "",
+    pensionAlimenticiaTipo: "",
+    pensionAlimenticiaValor: "",
+    valesDespensaMensual: "",
     clabe: "",
     banco: "",
   });
@@ -82,6 +85,11 @@ export function NewEmployeeModal({
           creditoInfonavit: e.creditoInfonavit?.trim() || prev.creditoInfonavit,
           tipoDescuentoInfonavit: e.tipoDescuentoInfonavit || prev.tipoDescuentoInfonavit,
           descuentoInfonavit: e.descuentoInfonavit ? String(e.descuentoInfonavit) : prev.descuentoInfonavit,
+          // Pensión alimenticia / vales: no vienen en los documentos de alta —
+          // se conserva lo capturado a mano.
+          pensionAlimenticiaTipo: prev.pensionAlimenticiaTipo,
+          pensionAlimenticiaValor: prev.pensionAlimenticiaValor,
+          valesDespensaMensual: prev.valesDespensaMensual,
           clabe: e.clabe?.trim() || prev.clabe,
           banco: e.banco?.trim() || prev.banco,
         }));
@@ -110,6 +118,9 @@ export function NewEmployeeModal({
           creditoInfonavit: form.creditoInfonavit || undefined,
           tipoDescuentoInfonavit: form.tipoDescuentoInfonavit || undefined,
           descuentoInfonavit: form.descuentoInfonavit ? parseFloat(form.descuentoInfonavit) : undefined,
+          pensionAlimenticiaTipo: form.pensionAlimenticiaTipo || undefined,
+          pensionAlimenticiaValor: form.pensionAlimenticiaValor ? parseFloat(form.pensionAlimenticiaValor) : undefined,
+          valesDespensaMensual: form.valesDespensaMensual ? parseFloat(form.valesDespensaMensual) : undefined,
         }),
       });
       const data = await res.json();
@@ -259,6 +270,43 @@ export function NewEmployeeModal({
             </div>
           </details>
 
+          {/* Pensión alimenticia y vales de despensa (conceptos recurrentes) */}
+          <details className="border border-cos-line rounded-lg">
+            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-cos-slate-tint flex items-center gap-2">
+              <span>Pensión alimenticia y vales</span>
+              {(form.pensionAlimenticiaValor || form.valesDespensaMensual) && (
+                <span className="text-[10px] bg-cos-jade-tint text-cos-jade-ink px-1.5 py-0.5 rounded-full font-medium">
+                  Configurado
+                </span>
+              )}
+            </summary>
+            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-cos-line">
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="Pensión alimenticia">
+                  <select value={form.pensionAlimenticiaTipo} onChange={e => set("pensionAlimenticiaTipo", e.target.value)} className={inputCls}>
+                    <option value="">Sin pensión</option>
+                    <option value="PCT_NETO">% del neto</option>
+                    <option value="PCT_SBC">% del SBC</option>
+                    <option value="MONTO_FIJO">Monto fijo por periodo</option>
+                  </select>
+                </Field>
+                <Field label={form.pensionAlimenticiaTipo === "MONTO_FIJO" ? "Monto por periodo" : "Porcentaje (decimal)"}>
+                  <input type="number" min="0" step="0.01" value={form.pensionAlimenticiaValor}
+                    onChange={e => set("pensionAlimenticiaValor", e.target.value)} className={inputCls}
+                    placeholder={form.pensionAlimenticiaTipo === "MONTO_FIJO" ? "Ej: 1500.00" : "Ej: 0.20"} />
+                </Field>
+                <Field label="Vales de despensa (mensual)">
+                  <input type="number" min="0" step="0.01" value={form.valesDespensaMensual}
+                    onChange={e => set("valesDespensaMensual", e.target.value)} className={inputCls}
+                    placeholder="Ej: 2000.00" />
+                </Field>
+              </div>
+              <p className="text-[10px] text-cos-ink-soft">
+                La pensión se descuenta después de ISR/IMSS/Infonavit (deducción 007 del CFDI). Los vales se prorratean por días del periodo, exentos hasta 40% de UMA diaria por día (percepción 029).
+              </p>
+            </div>
+          </details>
+
           {err && <p className="text-xs text-cos-red-ink">{err}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
@@ -400,6 +448,9 @@ export function EditEmployeeModal({
     creditoInfonavit: "",
     tipoDescuentoInfonavit: "",
     descuentoInfonavit: "",
+    pensionAlimenticiaTipo: employee.pensionAlimenticiaTipo ?? "",
+    pensionAlimenticiaValor: employee.pensionAlimenticiaValor != null ? String(employee.pensionAlimenticiaValor) : "",
+    valesDespensaMensual: employee.valesDespensaMensual != null ? String(employee.valesDespensaMensual) : "",
     clabe: employee.clabe ?? "",
     banco: employee.banco ?? "",
   });
@@ -437,6 +488,9 @@ export function EditEmployeeModal({
           creditoInfonavit: form.creditoInfonavit || null,
           tipoDescuentoInfonavit: form.tipoDescuentoInfonavit || null,
           descuentoInfonavit: form.descuentoInfonavit ? parseFloat(form.descuentoInfonavit) : null,
+          pensionAlimenticiaTipo: form.pensionAlimenticiaTipo || null,
+          pensionAlimenticiaValor: form.pensionAlimenticiaValor ? parseFloat(form.pensionAlimenticiaValor) : null,
+          valesDespensaMensual: form.valesDespensaMensual ? parseFloat(form.valesDespensaMensual) : null,
           clabe: form.clabe || null,
           banco: form.banco || null,
           skipImssMovimiento: skipImss,
@@ -538,6 +592,43 @@ export function EditEmployeeModal({
                     placeholder="1321.50" />
                 </Field>
               </div>
+            </div>
+          </details>
+
+          {/* Pensión alimenticia y vales de despensa (conceptos recurrentes) */}
+          <details className="border border-cos-line rounded-lg" open={!!(form.pensionAlimenticiaValor || form.valesDespensaMensual)}>
+            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-cos-slate-tint flex items-center gap-2">
+              <span>Pensión alimenticia y vales</span>
+              {(form.pensionAlimenticiaValor || form.valesDespensaMensual) && (
+                <span className="text-[10px] bg-cos-jade-tint text-cos-jade-ink px-1.5 py-0.5 rounded-full font-medium">
+                  Configurado
+                </span>
+              )}
+            </summary>
+            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-cos-line">
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="Pensión alimenticia">
+                  <select value={form.pensionAlimenticiaTipo} onChange={e => setForm(p => ({ ...p, pensionAlimenticiaTipo: e.target.value }))} className={inputCls}>
+                    <option value="">Sin pensión</option>
+                    <option value="PCT_NETO">% del neto</option>
+                    <option value="PCT_SBC">% del SBC</option>
+                    <option value="MONTO_FIJO">Monto fijo por periodo</option>
+                  </select>
+                </Field>
+                <Field label={form.pensionAlimenticiaTipo === "MONTO_FIJO" ? "Monto por periodo" : "Porcentaje (decimal)"}>
+                  <input type="number" min="0" step="0.01" value={form.pensionAlimenticiaValor}
+                    onChange={e => setForm(p => ({ ...p, pensionAlimenticiaValor: e.target.value }))} className={inputCls}
+                    placeholder={form.pensionAlimenticiaTipo === "MONTO_FIJO" ? "Ej: 1500.00" : "Ej: 0.20"} />
+                </Field>
+                <Field label="Vales de despensa (mensual)">
+                  <input type="number" min="0" step="0.01" value={form.valesDespensaMensual}
+                    onChange={e => setForm(p => ({ ...p, valesDespensaMensual: e.target.value }))} className={inputCls}
+                    placeholder="Ej: 2000.00" />
+                </Field>
+              </div>
+              <p className="text-[10px] text-cos-ink-soft">
+                La pensión se descuenta después de ISR/IMSS/Infonavit (deducción 007 del CFDI). Los vales se prorratean por días del periodo, exentos hasta 40% de UMA diaria por día (percepción 029).
+              </p>
             </div>
           </details>
 
