@@ -159,6 +159,13 @@ export interface ImssDeclRow {
   fechaPresentacion: string | null; // ISO
   fechaLimitePago: string | null; // ISO
   acuseUrl: string | null;
+  /**
+   * true cuando el pago ya tiene un movimiento bancario MATCHED vinculado
+   * (conciliado vía match-impuesto en /bancos). Un pago registrado a mano en
+   * Cumplimiento nace sin evidencia — la tarjeta lo señala y el vínculo se
+   * hace en Bancos → Buscar coincidencia.
+   */
+  conciliadaBanco: boolean;
 }
 
 /**
@@ -227,6 +234,7 @@ function toDeclRow(d: {
   fechaPresentacion: Date | null;
   fechaLimitePago: Date | null;
   acuseUrl: string | null;
+  bankTransactions: { id: string }[];
 } | null): ImssDeclRow | null {
   if (!d) return null;
   return {
@@ -237,6 +245,7 @@ function toDeclRow(d: {
     fechaPresentacion: d.fechaPresentacion?.toISOString() ?? null,
     fechaLimitePago: d.fechaLimitePago?.toISOString() ?? null,
     acuseUrl: d.acuseUrl,
+    conciliadaBanco: d.bankTransactions.length > 0,
   };
 }
 
@@ -248,6 +257,8 @@ const DECL_SELECT = {
   fechaPresentacion: true,
   fechaLimitePago: true,
   acuseUrl: true,
+  // ¿Ya hay evidencia bancaria? (v1: a lo más un movimiento por declaración.)
+  bankTransactions: { where: { status: "MATCHED" as const }, select: { id: true }, take: 1 },
 } as const;
 
 /**

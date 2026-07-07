@@ -229,22 +229,62 @@ export interface DeclCandidataImpuesto extends MontosDeclaracion {
   periodo: string;
   status: string;
   fechaLimitePago?: Date | null;
+  /**
+   * true cuando la fila NO tiene ningún movimiento bancario MATCHED vinculado.
+   * El caller (que sí ve los movimientos) lo aporta; sin el flag (undefined)
+   * una fila PAID se excluye, conservando el comportamiento previo.
+   */
+  sinEvidenciaBancaria?: boolean;
 }
 
 /**
- * Filtro PURO de candidatas: tipo conciliable, no pagadas, y con algo que
- * pagar — un renglón de IVA/ISR/retenciones con monto a pagar null/0 (p. ej.
- * saldo a favor) no es pagable y se excluye; IMSS sin estimado SÍ se ofrece
- * (el SUA determina la cifra y se acepta cualquier monto).
+ * Filtro PURO de candidatas: tipo conciliable, con algo que pagar — un renglón
+ * de IVA/ISR/retenciones con monto a pagar null/0 (p. ej. saldo a favor) no es
+ * pagable y se excluye; IMSS sin estimado SÍ se ofrece (el SUA determina la
+ * cifra y se acepta cualquier monto).
+ *
+ * Una fila PAID sólo es candidata cuando el caller la marca
+ * `sinEvidenciaBancaria: true`: es un pago capturado a mano (p. ej. SIPARE
+ * registrado en la pestaña Cumplimiento de nómina) al que el match únicamente
+ * le adjunta la evidencia bancaria — misma regla que checkImpuestoMatchGuard.
  */
 export function filtrarCandidatosImpuesto<T extends DeclCandidataImpuesto>(decls: T[]): T[] {
   return decls.filter((d) => {
     if (!esTipoImpuestoConciliable(d.tipo)) return false;
-    if (d.status === "PAID") return false;
+    if (d.status === "PAID" && d.sinEvidenciaBancaria !== true) return false;
     const esperado = montoEsperadoDeclaracion(d);
     if (esperado == null && d.tipo !== "IMSS_MENSUAL" && d.tipo !== "IMSS_BIMESTRAL") return false;
     return true;
   });
+}
+
+// ── Línea de captura en la descripción del movimiento ─────────────────────────
+
+/**
+ * Longitud mínima (en caracteres alfanuméricos) para que una línea de captura
+ * cuente como señal: las líneas SIPARE/SAT rondan los 20 caracteres; por
+ * debajo de este piso una coincidencia sería ruido (folios, importes).
+ */
+export const MIN_LINEA_CAPTURA = 8;
+
+function soloAlfanumerico(s: string): string {
+  return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/**
+ * ¿La descripción del movimiento contiene la línea de captura registrada?
+ * PURA. Compara sobre los caracteres alfanuméricos en mayúsculas (los bancos
+ * insertan espacios o guiones al transcribirla) y exige una longitud mínima
+ * para no puntuar coincidencias accidentales.
+ */
+export function coincideLineaCaptura(
+  lineaCaptura: string | null | undefined,
+  descripcion: string | null | undefined
+): boolean {
+  if (!lineaCaptura || !descripcion) return false;
+  const linea = soloAlfanumerico(lineaCaptura);
+  if (linea.length < MIN_LINEA_CAPTURA) return false;
+  return soloAlfanumerico(descripcion).includes(linea);
 }
 
 /**
@@ -252,11 +292,20 @@ export function filtrarCandidatosImpuesto<T extends DeclCandidataImpuesto>(decls
  * Mismas bandas que el scoring de facturas (conciliacion.ts) para que las
  * chips de confianza signifiquen lo mismo en toda la página:
  *   monto: exacto +100 · <0.5% +70 · ≤1% +40 (sin esperado: 0, decide la fecha)
- *   fecha (vs fecha límite de pago): ≤1d +30 · ≤3d +20 · ≤7d +10 · ≤15d +5
+ *   fecha: ≤1d +30 · ≤3d +20 · ≤7d +10 · ≤15d +5 — contra la fecha de pago
+ *     registrada (`fechaPago`, p. ej. la capturada al registrar el SIPARE en
+ *     Cumplimiento) cuando existe; si no, contra la fecha límite de pago.
+ *   línea de captura: +25 si la descripción del movimiento la contiene
+ *     (mismo peso que el RFC en el scoring de facturas).
  */
 export function scoreCandidatoImpuesto(
-  decl: { montoEsperado: number | null; fechaLimitePago: Date | null },
-  tx: { monto: number; fecha: Date }
+  decl: {
+    montoEsperado: number | null;
+    fechaLimitePago: Date | null;
+    fechaPago?: Date | null;
+    lineaCaptura?: string | null;
+  },
+  tx: { monto: number; fecha: Date; descripcion?: string | null }
 ): number {
   let score = 0;
   const pagado = Math.abs(tx.monto);
@@ -266,13 +315,15 @@ export function scoreCandidatoImpuesto(
     else if (diff / decl.montoEsperado < 0.005) score += 70;
     else if (diff / decl.montoEsperado <= TOLERANCIA_MONTO_IMPUESTO) score += 40;
   }
-  if (decl.fechaLimitePago) {
-    const dias = Math.abs(decl.fechaLimitePago.getTime() - tx.fecha.getTime()) / 86_400_000;
+  const fechaRef = decl.fechaPago ?? decl.fechaLimitePago;
+  if (fechaRef) {
+    const dias = Math.abs(fechaRef.getTime() - tx.fecha.getTime()) / 86_400_000;
     if (dias <= 1) score += 30;
     else if (dias <= 3) score += 20;
     else if (dias <= 7) score += 10;
     else if (dias <= 15) score += 5;
   }
+  if (coincideLineaCaptura(decl.lineaCaptura, tx.descripcion)) score += 25;
   return score;
 }
 

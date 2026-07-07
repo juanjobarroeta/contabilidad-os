@@ -37,10 +37,14 @@ interface Candidate {
   id: string; uuid?: string; fecha: string; total: number; cliente: string; rfc: string;
   score: number; confidence: "alta" | "media" | "baja"; folio?: string;
 }
-// Candidato de pago de impuestos (declaración pendiente, sólo egresos).
+// Candidato de pago de impuestos (sólo egresos): declaración pendiente o
+// registrada como pagada sin evidencia bancaria (p. ej. SIPARE capturado en
+// la pestaña Cumplimiento de nómina) — el match le adjunta el movimiento.
 interface ImpuestoCandidate {
   id: string; tipo: string; periodo: string; etiqueta: string;
   montoEsperado: number | null; fechaLimitePago: string | null;
+  fechaPago: string | null; lineaCaptura: string | null;
+  pagadaSinEvidencia: boolean;
   score: number; confidence: "alta" | "media" | "baja";
 }
 interface Counts {
@@ -768,12 +772,15 @@ export default function BancosPage() {
                                 <span className="text-[13px] text-cos-ink-faint">Sin coincidencias automáticas.</span>
                               )}
 
-                              {/* Pagos de impuestos pendientes (sólo egresos): declaraciones
-                                  SIPARE / línea de captura sin pagar de periodos recientes.
-                                  Un tap en «Conciliar» marca pago PAID + movimiento MATCHED. */}
+                              {/* Pagos de impuestos por conciliar (sólo egresos): declaraciones
+                                  SIPARE / línea de captura de periodos recientes sin movimiento
+                                  vinculado — pendientes o registradas como pagadas a mano (p. ej.
+                                  el SIPARE capturado en Cumplimiento de nómina). Un tap en
+                                  «Conciliar» marca pago PAID + movimiento MATCHED (a las ya
+                                  pagadas sólo les adjunta la evidencia bancaria). */}
                               {!candLoading && impuestoCands.length > 0 && (
                                 <>
-                                  <p className="text-[12.5px] font-semibold text-cos-ink">Pagos de impuestos pendientes</p>
+                                  <p className="text-[12.5px] font-semibold text-cos-ink">Pagos de impuestos por conciliar</p>
                                   <div className="flex flex-col gap-2">
                                     {impuestoCands.map((c) => (
                                       <div key={c.id} className="flex items-center justify-between gap-3 rounded-control bg-cos-paper px-3 py-2.5">
@@ -783,8 +790,16 @@ export default function BancosPage() {
                                             {c.montoEsperado != null
                                               ? <Money value={c.montoEsperado} size={12} muted />
                                               : <span>Monto según SUA (sin estimado)</span>}
-                                            {c.fechaLimitePago && <> · vence {fmtFecha(c.fechaLimitePago)}</>}
+                                            {c.pagadaSinEvidencia && c.fechaPago
+                                              ? <> · pagado el {fmtFecha(c.fechaPago)}</>
+                                              : c.fechaLimitePago && <> · vence {fmtFecha(c.fechaLimitePago)}</>}
+                                            {c.lineaCaptura && <> · <span className="font-mono">{c.lineaCaptura}</span></>}
                                           </p>
+                                          {c.pagadaSinEvidencia && (
+                                            <p className="mt-0.5 text-[11.5px] font-medium text-cos-amber-ink">
+                                              Registrado como pagado — sin movimiento bancario vinculado
+                                            </p>
+                                          )}
                                         </div>
                                         <div className="flex flex-none items-center gap-2">
                                           <Chip tone={CONF[c.confidence]} label={c.confidence} />

@@ -139,12 +139,15 @@ export async function GET(req: Request, { params }: Params) {
     };
   }).sort((a, b) => b.score - a.score);
 
-  // ── Pagos de impuestos pendientes ──────────────────────────────────────────
-  // Sólo para egresos: declaraciones no pagadas (SIPARE / línea de captura) de
-  // periodos recientes (ventana acotada), aún sin movimiento vinculado. El
-  // scoring (monto/fecha límite) y el filtro son puros — ver
-  // lib/conciliacion-impuestos. Un tap en «Conciliar» llama al PATCH con
-  // action "match-impuesto".
+  // ── Pagos de impuestos por conciliar ───────────────────────────────────────
+  // Sólo para egresos: declaraciones (SIPARE / línea de captura) de periodos
+  // recientes (ventana acotada) aún sin movimiento vinculado. Incluye tanto
+  // las NO pagadas como las registradas PAID a mano sin evidencia bancaria —
+  // p. ej. el SIPARE capturado en la pestaña Cumplimiento de nómina, al que el
+  // match sólo le adjunta el movimiento. El scoring (monto / fecha de pago
+  // registrada o límite / línea de captura en la descripción) y el filtro son
+  // puros — ver lib/conciliacion-impuestos. Un tap en «Conciliar» llama al
+  // PATCH con action "match-impuesto".
   let impuestos: Array<{
     id: string;
     tipo: string;
@@ -152,6 +155,9 @@ export async function GET(req: Request, { params }: Params) {
     etiqueta: string;
     montoEsperado: number | null;
     fechaLimitePago: Date | null;
+    fechaPago: Date | null;
+    lineaCaptura: string | null;
+    pagadaSinEvidencia: boolean;
     score: number;
     confidence: "alta" | "media" | "baja";
   }> = [];
@@ -161,7 +167,6 @@ export async function GET(req: Request, { params }: Params) {
         companyId,
         tipo: { in: [...TIPOS_IMPUESTO_CONCILIABLES] },
         periodo: { in: periodosRecientes(tx.fecha) },
-        status: { not: "PAID" },
         // v1: una declaración ↔ un movimiento; las ya vinculadas no son candidatas.
         bankTransactions: { none: { status: "MATCHED" } },
       },
@@ -175,14 +180,23 @@ export async function GET(req: Request, { params }: Params) {
         retencionesIsr: true,
         imssCuotas: true,
         fechaLimitePago: true,
+        fechaPresentacion: true,
+        lineaCaptura: true,
       },
     });
-    impuestos = filtrarCandidatosImpuesto(decls)
+    // La consulta ya garantiza que ninguna fila tiene movimiento MATCHED
+    // vinculado — de ahí el flag para que el filtro puro conserve las PAID.
+    impuestos = filtrarCandidatosImpuesto(decls.map((d) => ({ ...d, sinEvidenciaBancaria: true })))
       .map((d) => {
         const montoEsperado = montoEsperadoDeclaracion(d);
         const score = scoreCandidatoImpuesto(
-          { montoEsperado, fechaLimitePago: d.fechaLimitePago },
-          { monto: tx.monto, fecha: tx.fecha }
+          {
+            montoEsperado,
+            fechaLimitePago: d.fechaLimitePago,
+            fechaPago: d.fechaPresentacion,
+            lineaCaptura: d.lineaCaptura,
+          },
+          { monto: tx.monto, fecha: tx.fecha, descripcion: tx.descripcion }
         );
         return {
           id: d.id,
@@ -191,6 +205,9 @@ export async function GET(req: Request, { params }: Params) {
           etiqueta: etiquetaImpuesto(d.tipo, d.periodo),
           montoEsperado,
           fechaLimitePago: d.fechaLimitePago,
+          fechaPago: d.fechaPresentacion,
+          lineaCaptura: d.lineaCaptura,
+          pagadaSinEvidencia: d.status === "PAID",
           score,
           confidence: confianzaImpuesto(score),
         };

@@ -20,6 +20,8 @@ interface DeclRow {
   monto: number | null;
   lineaCaptura: string | null;
   fechaPresentacion: string | null;
+  /** true cuando el pago ya está conciliado con un movimiento bancario. */
+  conciliadaBanco: boolean;
 }
 
 interface BloquePago {
@@ -268,11 +270,29 @@ function BloqueRegistro({
       )}
 
       {bloque.pagada && decl ? (
-        <p className="mt-1.5 text-[12.5px] text-cos-ink-soft">
-          Pagado {formatCurrency(decl.monto ?? 0)}
-          {decl.fechaPresentacion ? ` el ${fmtFecha(decl.fechaPresentacion.slice(0, 10))}` : ""}
-          {decl.lineaCaptura ? ` · línea de captura ${decl.lineaCaptura}` : ""}.
-        </p>
+        <>
+          <p className="mt-1.5 text-[12.5px] text-cos-ink-soft">
+            Pagado {formatCurrency(decl.monto ?? 0)}
+            {decl.fechaPresentacion ? ` el ${fmtFecha(decl.fechaPresentacion.slice(0, 10))}` : ""}
+            {decl.lineaCaptura ? ` · línea de captura ${decl.lineaCaptura}` : ""}.
+          </p>
+          {/* Evidencia bancaria: el pago registrado a mano queda listo para
+              vincularse al cargo del estado de cuenta en Bancos (el candidato
+              aparece en «Buscar coincidencia» del egreso). */}
+          {decl.conciliadaBanco ? (
+            <p className="mt-1 inline-flex items-center gap-1 text-[12px] font-medium text-cos-jade-ink">
+              <BadgeCheck className="h-3.5 w-3.5" /> Conciliado con el estado de cuenta.
+            </p>
+          ) : (
+            <p className="mt-1 text-[12px] text-cos-ink-faint">
+              Sin conciliar con el banco — vincula el cargo en{" "}
+              <a href="/bancos" className="font-medium text-cos-brand-ink underline underline-offset-2">
+                Bancos
+              </a>{" "}
+              con «Buscar coincidencia».
+            </p>
+          )}
+        </>
       ) : estimadoPendiente && !mostrarForm ? (
         <button
           onClick={() => setMostrarForm(true)}

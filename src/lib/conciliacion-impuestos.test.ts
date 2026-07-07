@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   campoMontoPorTipo,
   checkImpuestoMatchGuard,
+  coincideLineaCaptura,
   confianzaImpuesto,
   elegirMovimientoSugerido,
   esTipoImpuestoConciliable,
@@ -174,6 +175,49 @@ describe("filtrarCandidatosImpuesto", () => {
     ];
     expect(filtrarCandidatosImpuesto(decls).map((d) => d.id)).toEqual(["a", "f", "g"]);
   });
+
+  it("conserva una PAID marcada sin evidencia bancaria (SIPARE registrado en Cumplimiento)", () => {
+    const decls = [
+      // El SIPARE capturado a mano nace PAID; el caller (que ya excluyó las
+      // filas con movimiento MATCHED) la marca sinEvidenciaBancaria.
+      { ...base, id: "sipare", tipo: "IMSS_MENSUAL", imssCuotas: 8_500, status: "PAID", sinEvidenciaBancaria: true },
+      { ...base, id: "iva-mano", tipo: "IVA_MENSUAL", ivaPagar: 5_000, status: "PAID", sinEvidenciaBancaria: true },
+      // Sin el flag (o en false) una PAID se sigue excluyendo — comportamiento previo.
+      { ...base, id: "sin-flag", tipo: "IMSS_MENSUAL", imssCuotas: 8_500, status: "PAID" },
+      { ...base, id: "con-evidencia", tipo: "IMSS_MENSUAL", imssCuotas: 8_500, status: "PAID", sinEvidenciaBancaria: false },
+    ];
+    expect(filtrarCandidatosImpuesto(decls).map((d) => d.id)).toEqual(["sipare", "iva-mano"]);
+  });
+});
+
+describe("coincideLineaCaptura", () => {
+  const linea = "026668 12345678 9012 3456"; // SIPARE con espacios de captura
+
+  it("encuentra la línea aunque el banco la transcriba con espacios o guiones", () => {
+    expect(coincideLineaCaptura(linea, "PAGO SIPARE 0266681234567890123456 IMSS")).toBe(true);
+    expect(coincideLineaCaptura("0266681234567890123456", "REF 026668-1234-5678-9012-3456")).toBe(true);
+  });
+
+  it("no distingue mayúsculas de minúsculas", () => {
+    expect(coincideLineaCaptura("AB12CD34EF", "pago ref ab12cd34ef banco")).toBe(true);
+  });
+
+  it("false cuando la descripción no la contiene", () => {
+    expect(coincideLineaCaptura(linea, "SPEI ENVIADO CFE SUMINISTRADOR")).toBe(false);
+  });
+
+  it("una línea demasiado corta no cuenta como señal (evita falsos positivos)", () => {
+    expect(coincideLineaCaptura("1234567", "PAGO 1234567")).toBe(false); // 7 < mínimo 8
+    expect(coincideLineaCaptura("12345678", "PAGO 12345678")).toBe(true);
+  });
+
+  it("null o vacío nunca coinciden", () => {
+    expect(coincideLineaCaptura(null, "PAGO")).toBe(false);
+    expect(coincideLineaCaptura(undefined, "PAGO")).toBe(false);
+    expect(coincideLineaCaptura("", "PAGO")).toBe(false);
+    expect(coincideLineaCaptura("0266681234567890123456", null)).toBe(false);
+    expect(coincideLineaCaptura("0266681234567890123456", "")).toBe(false);
+  });
 });
 
 describe("scoreCandidatoImpuesto / confianzaImpuesto", () => {
@@ -222,6 +266,38 @@ describe("scoreCandidatoImpuesto / confianzaImpuesto", () => {
       tx(-12_000, "2026-03-20")
     );
     expect(s).toBe(0);
+  });
+
+  it("la fecha de pago registrada manda sobre la fecha límite (SIPARE pagado antes)", () => {
+    // Pago registrado el 10 de febrero (una semana antes del límite): el
+    // movimiento de ese día puntúa ≤1d (+30) y no ≤7d (+10).
+    const s = scoreCandidatoImpuesto(
+      { montoEsperado: 10_000, fechaLimitePago: limite, fechaPago: new Date("2026-02-10T00:00:00Z") },
+      tx(-10_000, "2026-02-10")
+    );
+    expect(s).toBe(130);
+    // Sin fechaPago el mismo movimiento cae en la banda ≤7d de la fecha límite.
+    expect(
+      scoreCandidatoImpuesto({ montoEsperado: 10_000, fechaLimitePago: limite }, tx(-10_000, "2026-02-10"))
+    ).toBe(110);
+  });
+
+  it("la línea de captura en la descripción del movimiento suma +25", () => {
+    const decl = {
+      montoEsperado: 10_000,
+      fechaLimitePago: limite,
+      lineaCaptura: "0266681234567890123456",
+    };
+    const conLinea = scoreCandidatoImpuesto(decl, {
+      ...tx(-10_000, "2026-02-17"),
+      descripcion: "PAGO SIPARE 026668 1234 5678 9012 3456",
+    });
+    expect(conLinea).toBe(155);
+    const sinLinea = scoreCandidatoImpuesto(decl, {
+      ...tx(-10_000, "2026-02-17"),
+      descripcion: "SPEI ENVIADO IMSS",
+    });
+    expect(sinLinea).toBe(130);
   });
 });
 
