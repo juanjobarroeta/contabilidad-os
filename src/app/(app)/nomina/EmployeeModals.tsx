@@ -562,6 +562,9 @@ export function BajaModal({
   const [motivo, setMotivo] = useState<"VOLUNTARIA" | "JUSTIFICADA" | "INJUSTIFICADA">("VOLUNTARIA");
   const [fechaBaja, setFechaBaja] = useState(new Date().toISOString().slice(0, 10));
   const [diasPendientes, setDiasPendientes] = useState("0");
+  // Corrida FINIQUITO (recibo CFDI de separación): se crea CALCULATED y se
+  // timbra después desde la pestaña de corridas — nunca se timbra aquí.
+  const [crearCorrida, setCrearCorrida] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -580,6 +583,7 @@ export function BajaModal({
           fechaBaja,
           motivo,
           diasSalarioPendiente: parseInt(diasPendientes) || 0,
+          crearCorridaFiniquito: crearCorrida,
         }),
       });
       const data = await res.json();
@@ -637,6 +641,14 @@ export function BajaModal({
                   <p>Incluye 3 meses de indemnización + 20 días por año + prima de antigüedad, además del finiquito base.</p>
                 </div>
               )}
+              <label className="flex items-start gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={crearCorrida} onChange={e => setCrearCorrida(e.target.checked)}
+                  className="mt-0.5 accent-cos-brand" />
+                <span>
+                  Crear la corrida de finiquito con este cálculo (recibo listo para timbrar el CFDI de
+                  separación desde la pestaña de corridas)
+                </span>
+              </label>
               {err && <p className="text-xs text-cos-red-ink">{err}</p>}
               <div className="flex gap-2">
                 <button onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
@@ -686,6 +698,26 @@ export function BajaModal({
                     </div>
                   </div>
                 </div>
+              )}
+
+              {result.finiquitoRun && (
+                result.finiquitoRun.ok ? (
+                  <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-md px-4 py-3 text-xs text-cos-jade-ink space-y-0.5">
+                    <p className="font-medium">Corrida de finiquito creada</p>
+                    <p>
+                      Neto a pagar: <span className="font-mono">{formatCurrency(result.finiquitoRun.totalNeto ?? 0)}</span>
+                      {" "}(ISR retenido incluido). Timbra el CFDI de separación desde la pestaña de corridas.
+                    </p>
+                    {result.finiquitoRun.tarifaWarning && (
+                      <p className="text-cos-amber-ink">{result.finiquitoRun.tarifaWarning}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-md px-4 py-3 text-xs text-cos-amber-ink">
+                    <p className="font-medium">No se pudo crear la corrida de finiquito</p>
+                    <p>{result.finiquitoRun.error}</p>
+                  </div>
+                )
               )}
 
               <button onClick={() => onDone(`${employee.nombre} ${employee.apellidoPaterno} dado de baja`)}

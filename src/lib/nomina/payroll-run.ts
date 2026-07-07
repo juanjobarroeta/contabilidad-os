@@ -11,6 +11,7 @@
 import { prisma } from "../prisma";
 import { calcularNomina, type NominaCalcInput, type NominaCalcResult } from "./calc-nomina";
 import { calcularPtu, type PtuEmployeeData } from "./ptu";
+import { camposItemFiniquito } from "./finiquito-cfdi";
 import { emitNominaCfdi } from "./emit-nomina";
 import { SALARIO_MINIMO_GENERAL, PTU_EXENTO_UMA, UMA_DIARIO, umaDiariaDelEjercicio } from "./constants";
 import {
@@ -55,6 +56,18 @@ export type CreatePayrollRunInput = {
    * prioridad sobre el cálculo desde utilidadFiscalGravable.
    */
   ptuAsignaciones?: Record<string, { monto: number; exento: number }>;
+  // ── Corrida FINIQUITO (baja del trabajador) ──
+  /**
+   * Datos de la baja para la corrida FINIQUITO (individual: exactamente un
+   * empleado en employeeIds). Se persisten en extraData para que el timbrado
+   * recalcule el desglose con el mismo motor (calcularFiniquito vía
+   * calcularNomina) y el guard de neto detecte cualquier divergencia.
+   */
+  finiquito?: {
+    motivo: "VOLUNTARIA" | "JUSTIFICADA" | "INJUSTIFICADA";
+    fechaBaja: Date;
+    diasSalarioPendiente?: number;
+  };
 };
 
 export type PayrollRunResult = {
@@ -72,16 +85,34 @@ export type PayrollRunResult = {
 };
 
 export async function createPayrollRun(input: CreatePayrollRunInput): Promise<PayrollRunResult> {
-  // Fetch employees
+  // Corrida FINIQUITO: individual y con datos de baja obligatorios.
+  if (input.tipo === "FINIQUITO") {
+    if (!input.finiquito) {
+      return { ok: false, error: "La corrida FINIQUITO requiere los datos de la baja (motivo y fecha)." };
+    }
+    if (!input.employeeIds || input.employeeIds.length !== 1) {
+      return { ok: false, error: "La corrida FINIQUITO es individual: debe incluir exactamente un empleado." };
+    }
+  }
+
+  // Fetch employees. La corrida FINIQUITO se crea DESPUÉS de dar de baja al
+  // empleado (isActive = false), por lo que no exige empleados activos; el
+  // resto de corridas sólo incluye el roster activo.
   const where = {
     companyId: input.companyId,
-    isActive: true,
+    ...(input.tipo === "FINIQUITO" ? {} : { isActive: true }),
     ...(input.employeeIds ? { id: { in: input.employeeIds } } : {}),
   };
   const employees = await prisma.employee.findMany({ where });
 
   if (employees.length === 0) {
-    return { ok: false, error: "No hay empleados activos para esta corrida" };
+    return {
+      ok: false,
+      error:
+        input.tipo === "FINIQUITO"
+          ? "Empleado no encontrado para la corrida de finiquito"
+          : "No hay empleados activos para esta corrida",
+    };
   }
 
   const periodo = `${input.periodoInicio.toISOString().split("T")[0]}/${input.periodoFin.toISOString().split("T")[0]}`;
@@ -136,6 +167,15 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
         topeSalarioPtu: input.topeSalarioPtu,
         ejercicio: input.ejercicio,
         ptuMontoTotal: input.ptuMontoTotal,
+        // Datos de la baja (corrida FINIQUITO): el timbrado los usa para
+        // recalcular el desglose con el motor antes de emitir el CFDI.
+        finiquito: input.finiquito
+          ? {
+              motivo: input.finiquito.motivo,
+              fechaBaja: input.finiquito.fechaBaja.toISOString(),
+              diasSalarioPendiente: input.finiquito.diasSalarioPendiente ?? 0,
+            }
+          : undefined,
       },
     },
   });
@@ -173,6 +213,7 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
       primaVacacionalPct: input.primaVacacionalPct,
       ptuMonto: ptuDistribuciones?.get(emp.id)?.monto,
       ptuExento: ptuDistribuciones?.get(emp.id)?.exento,
+      finiquito: input.finiquito,
       incidencias: resumirIncidencias(incidenciasPorEmpleado.get(emp.id) ?? []),
     });
 
@@ -229,6 +270,29 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
 // Único punto donde el resultado del motor se traduce a columnas del item —
 // lo usan el cálculo inicial y el recálculo por incidencias.
 function payrollItemFieldsFromCalc(calc: NominaCalcResult) {
+  // Corrida FINIQUITO: columnas directamente desde el desglose puro del
+  // finiquito (finiquito-cfdi.ts) — la indemnización y la prima de antigüedad
+  // van a otrasPercepciones (mismo destino que da la importación SAT a las
+  // claves 022/025). Deducciones: sólo ISR (la baja corta la cotización del
+  // periodo, así que IMSS obrero e INFONAVIT son 0 en el motor).
+  if (calc.finiquitoResult) {
+    return {
+      ...camposItemFiniquito(calc.finiquitoResult.desglose),
+      horasExtra: 0,
+      bonosPagoFijo: 0,
+      bonosPagoVar: 0,
+      ptu: 0,
+      isrRetenido: calc.isrRetenido,
+      imssObrero: calc.imssObrero,
+      imssPatronal: calc.imssPatronal,
+      infonavit: calc.infonavitDeduccion,
+      otrasDeducc: 0,
+      totalPercepciones: calc.totalPercepciones,
+      totalDeducciones: calc.totalDeducciones,
+      netoAPagar: calc.netoAPagar,
+    };
+  }
+
   const ptuPerc = calc.percepciones.find((p) => p.tipoPercepcion === "003");
   const horasExtraPerc = calc.percepciones.find((p) => p.tipoPercepcion === "019");
   const bonoPerc = calc.percepciones.find((p) => p.tipoPercepcion === "038");
@@ -541,6 +605,57 @@ async function stampPayrollRunClaimed(payrollRunId: string): Promise<StampResult
         if (Math.abs(calc.netoAPagar - item.netoAPagar) > 0.05) {
           errors.push(
             `${item.employee.nombre} ${item.employee.apellidoPaterno}: los importes del recibo no coinciden con el recálculo del motor (neto ${calc.netoAPagar.toFixed(2)} vs ${item.netoAPagar.toFixed(2)}). Elimine y regenere la corrida especial antes de timbrar.`
+          );
+          return;
+        }
+        desglose = {
+          percepciones: calc.percepciones,
+          deducciones: calc.deducciones,
+          totalPercepciones: calc.totalPercepciones,
+          totalDeducciones: calc.totalDeducciones,
+          netoAPagar: calc.netoAPagar,
+        };
+        tipoNominaCfdi = "E";
+        diasPagadosCfdi = 1;
+        periodoInicioCfdi = run.fechaPago;
+        periodoFinCfdi = run.fechaPago;
+      } else if (run.tipo === "FINIQUITO") {
+        // CFDI de separación: el desglose se rearma con el MISMO motor
+        // (calcularFiniquito vía calcularNomina) desde los datos de la baja
+        // guardados en extraData — separación gravado/exento de los Arts. 93
+        // fraccs. XIII y XIV LISR incluida. Igual que las demás corridas
+        // especiales se timbra como nómina EXTRAORDINARIA (TipoNomina = E,
+        // Guía de llenado del complemento, Apéndice 4) con NumDiasPagados = 1
+        // y FechaInicialPago = FechaFinalPago = fecha de pago. El guard de
+        // neto bloquea el timbrado si el salario o los datos del empleado
+        // cambiaron desde el cálculo revisado.
+        const extra = (run.extraData ?? {}) as Record<string, unknown>;
+        const fin = (extra.finiquito ?? null) as {
+          motivo?: string;
+          fechaBaja?: string;
+          diasSalarioPendiente?: number;
+        } | null;
+        if (!fin?.motivo || !fin?.fechaBaja) {
+          errors.push(
+            `${item.employee.nombre} ${item.employee.apellidoPaterno}: la corrida de finiquito no tiene los datos de la baja (extraData.finiquito). Elimine la corrida y regenérela desde la baja del empleado.`
+          );
+          return;
+        }
+        const calc = calcularNomina({
+          employee: item.employee as Employee & { tipoDescuentoInfonavit?: string | null },
+          diasPagados: 0,
+          tipo: "FINIQUITO",
+          ejercicio: run.fechaPago.getFullYear(),
+          mes: run.fechaPago.getMonth() + 1,
+          finiquito: {
+            motivo: fin.motivo as "VOLUNTARIA" | "JUSTIFICADA" | "INJUSTIFICADA",
+            fechaBaja: new Date(String(fin.fechaBaja)),
+            diasSalarioPendiente: Number(fin.diasSalarioPendiente) || 0,
+          },
+        });
+        if (Math.abs(calc.netoAPagar - item.netoAPagar) > 0.05) {
+          errors.push(
+            `${item.employee.nombre} ${item.employee.apellidoPaterno}: los importes del finiquito no coinciden con el recálculo del motor (neto ${calc.netoAPagar.toFixed(2)} vs ${item.netoAPagar.toFixed(2)}). Elimine y regenere la corrida de finiquito antes de timbrar.`
           );
           return;
         }

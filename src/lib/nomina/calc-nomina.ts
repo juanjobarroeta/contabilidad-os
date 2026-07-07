@@ -16,6 +16,8 @@ import {
   type HorasExtraResult,
 } from "./prestaciones";
 import { calcularPtu, type PtuDistribucion } from "./ptu";
+import { calcularFiniquito, type FiniquitoResult } from "./finiquito";
+import { percepcionesFiniquito } from "./finiquito-cfdi";
 import type { IncidenciasResumen } from "./incidencias";
 import { umaDiariaDelEjercicio, salarioMinimoGeneralDelEjercicio } from "./constants";
 
@@ -59,6 +61,16 @@ export type NominaCalcInput = {
   ptuMonto?: number;
   ptuExento?: number;
   /**
+   * Datos de la baja para corridas FINIQUITO: el desglose (salarios
+   * pendientes, aguinaldo/vacaciones proporcionales, indemnización y prima de
+   * antigüedad) y sus exenciones los calcula el módulo puro finiquito.ts.
+   */
+  finiquito?: {
+    motivo: "VOLUNTARIA" | "JUSTIFICADA" | "INJUSTIFICADA";
+    fechaBaja: Date;
+    diasSalarioPendiente?: number;
+  };
+  /**
    * Incidencias del periodo (sólo ORDINARIA/EXTRAORDINARIA): faltas,
    * incapacidades, horas extra, vacaciones, bonos, comisiones y descuentos.
    * Ver src/lib/nomina/incidencias.ts para el tratamiento por tipo.
@@ -92,6 +104,8 @@ export type NominaCalcResult = {
   aguinaldoResult?: AguinaldoResult;
   vacacionesResult?: VacacionesResult;
   ptuDistribucion?: PtuDistribucion;
+  /** Desglose completo del finiquito/liquidación (corridas FINIQUITO). */
+  finiquitoResult?: FiniquitoResult;
 };
 
 export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
@@ -135,6 +149,7 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
   let aguinaldoResult: AguinaldoResult | undefined;
   let vacacionesResult: VacacionesResult | undefined;
   let horasExtraResult: HorasExtraResult | undefined;
+  let finiquitoResult: FiniquitoResult | undefined;
 
   // Valores UMA/SM del ejercicio de pago (año-conscientes, como ISR/IMSS);
   // si el ejercicio no está versionado se usan los vigentes de constants.
@@ -295,6 +310,29 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     });
     totalGravado = montoGravado;
     totalExento = montoExento;
+
+  } else if (tipo === "FINIQUITO") {
+    // Finiquito / liquidación por baja del trabajador (Arts. 50, 76, 79, 80,
+    // 87 y 162 LFT). El desglose y la separación gravado/exento (Art. 93
+    // fraccs. XIII y XIV LISR) los hace el módulo puro finiquito.ts — aquí
+    // sólo se traducen a percepciones del CFDI de separación (finiquito-cfdi).
+    if (!input.finiquito) {
+      throw new Error("La corrida FINIQUITO requiere los datos de la baja (motivo y fechaBaja).");
+    }
+    finiquitoResult = calcularFiniquito({
+      salarioDiario: employee.salarioDiario,
+      salarioDiarioIntegrado: sdi,
+      fechaIngreso: employee.fechaIngreso,
+      fechaBaja: input.finiquito.fechaBaja,
+      motivo: input.finiquito.motivo,
+      diasSalarioPendiente: input.finiquito.diasSalarioPendiente ?? 0,
+      primaVacacionalPct: input.primaVacacionalPct,
+    });
+    for (const p of percepcionesFiniquito(finiquitoResult.desglose)) {
+      percepciones.push(p);
+      totalGravado = r2(totalGravado + p.importeGravado);
+      totalExento = r2(totalExento + p.importeExento);
+    }
   }
 
   const totalPercepciones = r2(totalGravado + totalExento);
@@ -313,6 +351,12 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
   // retener menos; requiere el sueldo mensual ordinario del empleado en el
   // punto de cálculo. PENDIENTE DOCUMENTADO: ofrecer el método del Art. 174
   // RLISR como opción de la corrida especial en una iteración futura.
+  //
+  // FINIQUITO (SIMPLIFICACIÓN DOCUMENTADA): la porción gravada del pago por
+  // separación también se retiene con la tarifa ordinaria mensual. El método
+  // específico del Art. 96, párrafos sexto y séptimo LISR (tasa efectiva del
+  // último sueldo mensual ordinario aplicada al excedente) queda como
+  // pendiente documentado, igual que el Art. 174 RLISR.
   const isrCalc = calcularIsrRetenido({
     baseGravable: totalGravado,
     periodicidadPago: tipo === "ORDINARIA" ? employee.periodicidadPago : "05", // monthly equiv for extraordinary
@@ -398,5 +442,6 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     horasExtraResult,
     aguinaldoResult,
     vacacionesResult,
+    finiquitoResult,
   };
 }
