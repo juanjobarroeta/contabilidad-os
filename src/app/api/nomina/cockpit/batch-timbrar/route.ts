@@ -22,11 +22,21 @@ import { registrarBitacora } from "@/lib/audit";
 //    con motivo (STAMPED ya está timbrada; DRAFT aún no se calcula).
 //  - Idempotencia: stampPayrollRun() ya salta los items con cfdiUuid; reintentar
 //    una corrida parcialmente timbrada sólo emite los faltantes.
+//  - Candado: stampPayrollRun() reclama la corrida de forma atómica
+//    (extraData.stampingInProgress). Si un timbrado individual se traslapa con
+//    el lote, sólo una llamada emite; la otra se reporta con error, sin
+//    duplicar CFDIs ante el SAT.
 //
 // Concurrencia: las corridas se procesan con un límite PEQUEÑO (2) para no
 // saturar Facturapi entre empresas — cada corrida ya emite con concurrencia 5
 // internamente. La salida agrega { stamped, total, errors } por corrida.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Petición de larga duración (emite CFDIs vía Facturapi para cientos de
+// empleados en varias empresas) — mismo patrón que api/ai/chat/route.ts.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const RUN_CONCURRENCY = 2;
 

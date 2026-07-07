@@ -4,8 +4,9 @@
 //
 // Designed to handle 1,000+ employees:
 // - Calculation: batch DB inserts via createMany
-// - Stamping: concurrent with limit (5 at a time), progress tracked on run,
-//   API returns immediately, client polls for progress.
+// - Stamping: concurrent with limit (5 at a time), progress tracked on run.
+//   La API espera a que el timbrado termine (no responde de inmediato); el
+//   avance se registra en extraData.stampedCount por si el cliente consulta.
 
 import { prisma } from "../prisma";
 import { calcularNomina, type NominaCalcInput, type NominaCalcResult } from "./calc-nomina";
@@ -20,6 +21,7 @@ import {
   diasDelPeriodo,
   type IncidenciasResumen,
 } from "./incidencias";
+import { motivoTimbradoNoDisponible } from "./timbrado-candado";
 import type { PayrollRunType, Employee, Incidencia, Prisma } from "@prisma/client";
 
 // Concurrency limit for Facturapi calls
@@ -392,22 +394,77 @@ async function parallelLimit<T>(
   return results;
 }
 
+/** Libera el candado de timbrado sin tocar el resto de extraData (merge JSONB). */
+async function liberarCandadoTimbrado(payrollRunId: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "PayrollRun"
+    SET "extraData" = COALESCE("extraData", '{}'::jsonb) || '{"stampingInProgress": false}'::jsonb,
+        "updatedAt" = NOW()
+    WHERE "id" = ${payrollRunId}
+  `;
+}
+
 export async function stampPayrollRun(payrollRunId: string): Promise<StampResult> {
+  // ── Candado atómico contra doble timbrado ──────────────────────────────────
+  // Dos llamadas concurrentes (doble clic en "Timbrar", o timbrado individual
+  // que se traslapa con el lote del cockpit) NO deben emitir CFDIs duplicados
+  // ante el SAT. Como el estado permanece CALCULATED durante el timbrado, la
+  // reclamación se hace en UNA sola sentencia condicional: marca
+  // extraData.stampingInProgress = true SÓLO si la corrida sigue CALCULATED y
+  // nadie más la tiene reclamada. Se usa SQL directo porque el filtro de
+  // Prisma sobre rutas JSON no distingue de forma fiable la clave ausente
+  // (extracción -> NULL en SQL), y las corridas nunca timbradas no traen la
+  // clave. Sólo una de las llamadas concurrentes obtiene claimed = 1; la otra
+  // recibe 0 y aborta sin emitir nada.
+  const claimed = await prisma.$executeRaw`
+    UPDATE "PayrollRun"
+    SET "extraData" = COALESCE("extraData", '{}'::jsonb) || '{"stampingInProgress": true, "stampedCount": 0}'::jsonb,
+        "updatedAt" = NOW()
+    WHERE "id" = ${payrollRunId}
+      AND "status" = 'CALCULATED'::"PayrollStatus"
+      AND COALESCE("extraData"->>'stampingInProgress', 'false') <> 'true'
+  `;
+
+  if (claimed === 0) {
+    // No se obtuvo el candado: diagnosticar el motivo para el usuario.
+    const existente = await prisma.payrollRun.findUnique({
+      where: { id: payrollRunId },
+      select: { status: true, extraData: true, _count: { select: { items: true } } },
+    });
+    if (!existente) return { ok: false, stamped: 0, total: 0, errors: ["Corrida no encontrada"] };
+    const motivo =
+      motivoTimbradoNoDisponible(existente) ??
+      "No fue posible reclamar la corrida para timbrar. Reintente en unos momentos.";
+    return { ok: false, stamped: 0, total: existente._count.items, errors: [motivo] };
+  }
+
+  // El candado está tomado: cualquier salida (éxito, error de negocio o
+  // excepción inesperada) debe liberarlo para no bloquear reintentos.
+  try {
+    return await stampPayrollRunClaimed(payrollRunId);
+  } catch (e) {
+    await liberarCandadoTimbrado(payrollRunId).catch(() => {
+      // La liberación es el mejor esfuerzo; el error original es el relevante.
+    });
+    throw e;
+  }
+}
+
+/**
+ * Cuerpo del timbrado. Se invoca ÚNICAMENTE con el candado ya reclamado
+ * (stampingInProgress = true); las actualizaciones finales lo liberan.
+ */
+async function stampPayrollRunClaimed(payrollRunId: string): Promise<StampResult> {
+  // La corrida y sus items se leen DESPUÉS de reclamar el candado, para que el
+  // filtro de items ya timbrados (cfdiUuid) vea el estado más reciente.
   const run = await prisma.payrollRun.findUnique({
     where: { id: payrollRunId },
     include: { items: { include: { employee: true } } },
   });
 
-  if (!run) return { ok: false, stamped: 0, total: 0, errors: ["Corrida no encontrada"] };
-  if (run.status !== "CALCULATED") {
-    return { ok: false, stamped: 0, total: run.items.length, errors: [`Estado inválido: ${run.status}. Debe estar CALCULATED.`] };
+  if (!run) {
+    return { ok: false, stamped: 0, total: 0, errors: ["Corrida no encontrada"] };
   }
-
-  // Mark as stamping in progress
-  await prisma.payrollRun.update({
-    where: { id: payrollRunId },
-    data: { extraData: { ...(run.extraData as Record<string, unknown> ?? {}), stampingInProgress: true, stampedCount: 0 } },
-  });
 
   const [periodoInicio, periodoFin] = run.periodo.split("/");
   const unstamped = run.items.filter((item) => !item.cfdiUuid);
@@ -440,7 +497,11 @@ export async function stampPayrollRun(payrollRunId: string): Promise<StampResult
       );
 
       let desglose;
-      let diasPagadosCfdi = Math.round(item.totalPercepciones / item.employee.salarioDiario) || 15;
+      // NumDiasPagados por defecto: los días con los que se CALCULÓ la corrida
+      // (extraData.diasPagados, o los días naturales del periodo para corridas
+      // previas) — nunca re-derivados del neto/percepciones, que con bonos,
+      // horas extra o SDI distinto al salario diario daban un número absurdo.
+      let diasPagadosCfdi = diasPagadosRun;
       let tipoNominaCfdi: "O" | "E" = "O";
       let periodoInicioCfdi = new Date(periodoInicio);
       let periodoFinCfdi = new Date(periodoFin);

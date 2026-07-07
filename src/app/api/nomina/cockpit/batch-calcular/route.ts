@@ -18,6 +18,12 @@ import type { PayrollRunType } from "@prisma/client";
 //  - Sin empleados activos: skipped "sin empleados".
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Petición de larga duración (calcula la nómina completa de varias empresas
+// en secuencia) — mismo patrón que api/ai/chat/route.ts.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
 type BatchResult = {
   companyId: string;
   razonSocial: string;
