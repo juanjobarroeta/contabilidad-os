@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
-import { cantidadDespacho, DESPACHO_MINIMO_EMPRESAS } from "@/lib/billing/cantidad-despacho";
 
 // Acciones de suscripción (Checkout y Billing Portal de Stripe). Los montos no
 // se muestran aquí: los define el objeto Price en Stripe y se ven al confirmar.
+// El plan "Despacho" ya no se ofrece: los precios negociados (despachos,
+// multiempresa) se aplican con un código de descuento que el cliente escribe
+// en la pantalla de pago (el checkout envía allow_promotion_codes).
 const PLANES = [
   { id: "BASICO", nombre: "Básico", blurb: "Sincronización SAT, consultas y declaraciones." },
   { id: "PROFESIONAL", nombre: "Profesional", blurb: "Todo lo de Básico + banco y WhatsApp.", destacado: true },
-  { id: "DESPACHO", nombre: "Despacho", blurb: "Multiempresa para contadores, con revisión humana." },
 ] as const;
 
 type PlanId = (typeof PLANES)[number]["id"];
@@ -23,14 +24,11 @@ const INTERVALOS: Array<{ id: Intervalo; etiqueta: string }> = [
 export function SuscripcionAcciones({
   configurado,
   tieneCliente,
-  empresasActivas,
 }: {
   /** ¿Stripe está configurado en el servidor? */
   configurado: boolean;
   /** ¿El usuario ya tiene cliente de Stripe (puede abrir el portal)? */
   tieneCliente: boolean;
-  /** Empresas activas facturables del usuario (para la cantidad de DESPACHO). */
-  empresasActivas: number;
 }) {
   const [plan, setPlan] = useState<PlanId>("PROFESIONAL");
   const [intervalo, setIntervalo] = useState<Intervalo>("mensual");
@@ -91,7 +89,7 @@ export function SuscripcionAcciones({
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         {PLANES.map((p) => (
           <button
             key={p.id}
@@ -113,13 +111,6 @@ export function SuscripcionAcciones({
               )}
             </p>
             <p className="text-xs text-cos-ink-soft mt-1">{p.blurb}</p>
-            {p.id === "DESPACHO" && (
-              <p className="text-xs text-cos-ink-soft mt-2">
-                Se cobra por empresa administrada (mínimo {DESPACHO_MINIMO_EMPRESAS}): actualmente{" "}
-                {empresasActivas} {empresasActivas === 1 ? "empresa" : "empresas"} → cantidad{" "}
-                {cantidadDespacho(empresasActivas)}.
-              </p>
-            )}
           </button>
         ))}
       </div>
@@ -127,6 +118,10 @@ export function SuscripcionAcciones({
       <p className="text-xs text-cos-ink-faint mb-4">
         El precio y la moneda se muestran al confirmar el pago en Stripe.
         {intervalo === "anual" && " El plan anual equivale a 10 meses: 2 meses gratis."}
+      </p>
+      <p className="text-xs text-cos-ink-faint mb-4">
+        ¿Tienes un código de descuento (precio negociado, despachos, multiempresa)? Escríbelo en la
+        pantalla de pago antes de confirmar.
       </p>
 
       {error && (

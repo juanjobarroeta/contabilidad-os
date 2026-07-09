@@ -22,6 +22,12 @@ import type { CompanyPlan } from "@prisma/client";
 //   DESPACHO    → DESPACHO     (+ revisión humana / SLA, multiempresa)
 // El tier ASISTENTE no se vende por Stripe (tier interno/degradado).
 //
+// DESPACHO ya NO se ofrece en la UI (onboarding ni facturación): los precios
+// a la medida se negocian y se aplican con un código de descuento
+// (src/lib/billing/codigos-descuento.ts) sobre Básico/Profesional. Se mantiene
+// aquí — y en el webhook y la sincronización de cantidad — por compatibilidad
+// con cualquier suscripción DESPACHO existente.
+//
 // Los MONTOS nunca se codifican aquí: viven en los objetos Price de Stripe
 // (moneda incluida) referenciados por las variables de entorno STRIPE_PRICE_*.
 // ─────────────────────────────────────────────────────────────────────────────

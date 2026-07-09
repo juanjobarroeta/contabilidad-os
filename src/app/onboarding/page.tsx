@@ -101,9 +101,13 @@ const STEPS = [
 
 const LAST_STEP = 7;
 
-// 3-tier plan cards. Precios de lista MXN/mes (decisión 2026-07); el cobro
+// 2-tier plan cards. Precios de lista MXN/mes (decisión 2026-07); el cobro
 // real usa los objetos Price de Stripe (STRIPE_PRICE_*) — mantener ambos en
 // sincronía al cambiar precios. Anual: 10 meses (se crea como Price aparte).
+// El plan "Despacho" ya no se vende como tal: los precios a la medida
+// (despachos, multiempresa, negociaciones) se dan con un CÓDIGO DE DESCUENTO
+// generado por el admin (/configuracion/codigos) que el cliente escribe en la
+// pantalla de pago de Stripe.
 const PLANS = [
   {
     id: "BASICO",
@@ -119,13 +123,6 @@ const PLANS = [
     blurb: "Para tu negocio",
     features: ["Todo lo de Básico", "Asistente IA + WhatsApp", "Conciliación bancaria", "Complementos de pago"],
     highlight: true,
-  },
-  {
-    id: "DESPACHO",
-    name: "Despacho",
-    price: "$299",
-    blurb: "por empresa · mínimo 10",
-    features: ["Multiempresa", "Todo lo Profesional", "Gestión de clientes", "50+ empresas: $199 c/u"],
   },
 ];
 
@@ -908,7 +905,7 @@ function OnboardingPageInner() {
                 <Sparkles className="h-4 w-4 shrink-0" />
                 Elige tu plan. Empiezas con una <strong>prueba gratis</strong> — no se cobra nada todavía.
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {PLANS.map((p) => {
                   const selected = plan === p.id;
                   return (
@@ -942,6 +939,10 @@ function OnboardingPageInner() {
               </div>
               <p className="text-[11px] text-cos-ink-soft text-center">
                 Sin tarjeta por ahora. Podrás cambiar de plan cuando activemos los pagos.
+              </p>
+              <p className="text-[11px] text-cos-ink-soft text-center">
+                ¿Eres despacho o llevas varias empresas? Escríbenos y armamos un precio a tu medida
+                con un código de descuento.
               </p>
             </>
           )}

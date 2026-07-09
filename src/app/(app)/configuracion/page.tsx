@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { Building2, Users, CreditCard, UserCircle, Briefcase, Bell, MessageCircle } from "lucide-react";
+import { Building2, Users, CreditCard, UserCircle, Briefcase, Bell, MessageCircle, TicketPercent } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { esAdminPlataforma } from "@/lib/billing/admin-plataforma";
 
 const SECTIONS = [
   {
@@ -46,7 +49,27 @@ const SECTIONS = [
   },
 ];
 
-export default function ConfiguracionPage() {
+// Sección extra SOLO para el admin de plataforma (PLATFORM_ADMIN_EMAILS):
+// generador de códigos de descuento por negociación. Para el resto de los
+// usuarios ni siquiera aparece la tarjeta (y la página responde 404).
+const SECCION_CODIGOS = {
+  href: "/configuracion/codigos",
+  title: "Códigos de descuento",
+  description: "Genera códigos por cliente según el precio negociado.",
+  icon: TicketPercent,
+};
+
+export default async function ConfiguracionPage() {
+  const session = await auth();
+  let sections = SECTIONS;
+  if (session?.user?.id) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { email: true },
+    });
+    if (user?.email && esAdminPlataforma(user.email)) sections = [...SECTIONS, SECCION_CODIGOS];
+  }
+
   return (
     <div className="p-6 max-w-5xl">
       <div className="mb-6">
@@ -57,7 +80,7 @@ export default function ConfiguracionPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <Link
             key={s.href}
             href={s.href}

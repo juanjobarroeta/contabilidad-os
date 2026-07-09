@@ -4,7 +4,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeState } from "@/lib/subscription";
 import { stripeConfigured } from "@/lib/billing/stripe";
-import { contarEmpresasFacturables } from "@/lib/billing/sync-cantidad-despacho";
 import { PLAN_LABEL } from "@/lib/planes";
 import { ArrowLeft, CreditCard } from "lucide-react";
 import { SuscripcionAcciones } from "./suscripcion-acciones";
@@ -52,10 +51,6 @@ export default async function FacturacionPage() {
     select: { tier: true },
   });
   const planesActuales = [...new Set(empresas.map((e) => PLAN_LABEL[e.tier]))];
-
-  // Empresas ACTIVAS facturables: mismo conteo que usa el checkout DESPACHO
-  // (cantidad = max(10, N)) y la sincronización en altas/bajas.
-  const empresasActivas = await contarEmpresasFacturables(session.user.id);
 
   const configurado = stripeConfigured();
 
@@ -112,11 +107,7 @@ export default async function FacturacionPage() {
         </div>
 
         <div className="border-t border-cos-line pt-5 mt-6">
-          <SuscripcionAcciones
-            configurado={configurado}
-            tieneCliente={!!user.stripeCustomerId}
-            empresasActivas={empresasActivas}
-          />
+          <SuscripcionAcciones configurado={configurado} tieneCliente={!!user.stripeCustomerId} />
         </div>
       </div>
     </div>
