@@ -25,6 +25,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "../prisma";
+import { calcularFactorIntegracion } from "./prestaciones";
 import {
   parseComplementoNomina,
   clasificarEmpleado,
@@ -535,6 +536,9 @@ export async function importarNominaHistorica(
         ? round2(fuente.desglose.totalPercepciones / fuente.numDiasPagados)
         : round2(fuente.desglose.totalPercepciones / 15));
 
+    const fechaIngreso = fuente.complemento.fechaInicioRelLaboral
+      ? new Date(fuente.complemento.fechaInicioRelLaboral)
+      : new Date();
     const created = await prisma.employee.create({
       data: {
         companyId,
@@ -544,17 +548,18 @@ export async function importarNominaHistorica(
         rfc,
         curp: fuente.complemento.curp ?? "",
         nss: fuente.complemento.nss ?? "",
-        fechaIngreso: fuente.complemento.fechaInicioRelLaboral
-          ? new Date(fuente.complemento.fechaInicioRelLaboral)
-          : new Date(),
+        fechaIngreso,
         isActive: estado === "ACTIVO",
         fechaBaja: estado === "BAJA" ? hoy : null,
         tipoContrato: fuente.complemento.tipoContrato ?? "01",
         tipoJornada: "01",
         tipoRegimen: fuente.complemento.tipoRegimen ?? "02",
         salarioDiario: Math.max(0.01, salarioDiario),
+        // SDI del recibo; si falta, factor de integración real por antigüedad
+        // (vacaciones reforma 2023 — año 1 = 1.0493, no el 1.0452 pre-reforma).
         salarioDiarioIntegrado:
-          fuente.complemento.sdi ?? round2(Math.max(0.01, salarioDiario) * 1.0452),
+          fuente.complemento.sdi ??
+          round2(Math.max(0.01, salarioDiario) * calcularFactorIntegracion(fechaIngreso, hoy)),
         periodicidadPago: fuente.complemento.periodicidadPago ?? "04",
         departamento: fuente.complemento.departamento,
         puesto: fuente.complemento.puesto,

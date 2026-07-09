@@ -9,7 +9,7 @@
 //   15 UMA).
 
 import { describe, it, expect } from "vitest";
-import { calcularAguinaldo, calcularHorasExtra, calcularPrimaVacacionalPorDias } from "./prestaciones";
+import { calcularAguinaldo, calcularFactorIntegracion, calcularHorasExtra, calcularPrimaVacacionalPorDias } from "./prestaciones";
 
 describe("calcularHorasExtra — Art. 93 fracc. I LISR / LFT Arts. 66-68", () => {
   it("trabajador de salario mínimo: dobles dentro del límite 100% exentas", () => {
@@ -213,5 +213,36 @@ describe("calcularAguinaldo — Art. 87 LFT / exención 30 UMA", () => {
     });
     expect(r.montoExento).toBe(3394.2); // 30 × 113.14
     expect(r.montoGravado).toBe(2605.8);
+  });
+});
+
+describe("calcularFactorIntegracion — vacaciones reforma 2023, año de servicio en curso", () => {
+  // El factor integra las prestaciones del año que el trabajador está
+  // DEVENGANDO (años cumplidos + 1), como lo esperan las modificaciones de SBC
+  // ante el IMSS. Con la reforma de vacaciones 2023 (Art. 76 LFT), año 1 = 12
+  // días → factor mínimo 1.0493 (NO el 1.0452 pre-reforma).
+  it("año 1 (recién contratado): 12 días de vacaciones → 1.0493", () => {
+    const f = calcularFactorIntegracion(new Date("2026-01-01"), new Date("2026-07-01"));
+    expect(f).toBe(1.0493);
+  });
+
+  it("caso real: salario mínimo 315.04 × factor año 1 = SBC 330.57 (no 329.28)", () => {
+    const f = calcularFactorIntegracion(new Date("2026-02-01"), new Date("2026-07-08"));
+    expect(+(315.04 * f).toFixed(2)).toBe(330.57);
+  });
+
+  it("1 año cumplido (entra al año 2): 14 días → 1.0507", () => {
+    const f = calcularFactorIntegracion(new Date("2025-03-01"), new Date("2026-07-01"));
+    expect(f).toBe(1.0507);
+  });
+
+  it("5 años cumplidos (entra al año 6): 22 días → 1.0562", () => {
+    const f = calcularFactorIntegracion(new Date("2021-01-15"), new Date("2026-07-01"));
+    expect(f).toBe(1.0562);
+  });
+
+  it("prestaciones superiores a la ley: aguinaldo 30 días, año 1 → 1.0904", () => {
+    const f = calcularFactorIntegracion(new Date("2026-01-01"), new Date("2026-07-01"), 30);
+    expect(f).toBe(1.0904);
   });
 });
