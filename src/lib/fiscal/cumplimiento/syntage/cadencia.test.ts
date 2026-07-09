@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractoresADisparar, EXTRACTORES_PROVISION } from "./cadencia";
+import { debeArrancarCE, extractoresADisparar, EXTRACTORES_PROVISION } from "./cadencia";
 
 const ahora = new Date("2026-06-24T12:00:00Z");
 const hace = (dias: number) => new Date(ahora.getTime() - dias * 24 * 60 * 60 * 1000);
@@ -94,5 +94,36 @@ describe("extractoresADisparar", () => {
       ahora,
     });
     expect(r).toEqual(["tax_status"]);
+  });
+});
+
+describe("debeArrancarCE — piso de reintento del bootstrap de Contabilidad Electrónica", () => {
+  const base = { plan: "AUTOMATIZADO" as const, ceBootstrapAt: null, ahora };
+
+  it("nunca intentada → dispara", () => {
+    expect(debeArrancarCE({ ...base, ultimoIntentoCE: null })).toBe(true);
+  });
+
+  it("ya bootstrapeada → nunca re-dispara (ni con force)", () => {
+    expect(debeArrancarCE({ ...base, ceBootstrapAt: hace(100), ultimoIntentoCE: null })).toBe(false);
+    expect(
+      debeArrancarCE({ ...base, ceBootstrapAt: hace(100), ultimoIntentoCE: null, force: true })
+    ).toBe(false);
+  });
+
+  it("intento reciente sin aterrizar → respeta el piso de 30 días (el bug: re-disparaba a diario)", () => {
+    expect(debeArrancarCE({ ...base, ultimoIntentoCE: hace(1) })).toBe(false);
+    expect(debeArrancarCE({ ...base, ultimoIntentoCE: hace(29) })).toBe(false);
+    expect(debeArrancarCE({ ...base, ultimoIntentoCE: hace(30) })).toBe(true);
+    expect(debeArrancarCE({ ...base, ultimoIntentoCE: hace(45) })).toBe(true);
+  });
+
+  it("force brinca el piso pero no el ceBootstrapAt", () => {
+    expect(debeArrancarCE({ ...base, ultimoIntentoCE: hace(1), force: true })).toBe(true);
+  });
+
+  it("ASISTENTE no arranca CE (salvo force)", () => {
+    expect(debeArrancarCE({ ...base, plan: "ASISTENTE", ultimoIntentoCE: null })).toBe(false);
+    expect(debeArrancarCE({ ...base, plan: "ASISTENTE", ultimoIntentoCE: null, force: true })).toBe(true);
   });
 });

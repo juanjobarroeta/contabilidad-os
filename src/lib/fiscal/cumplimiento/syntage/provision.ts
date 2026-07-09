@@ -15,7 +15,12 @@ import { decryptSecret } from "@/lib/crypto";
 import { recordSyntageExtraction } from "@/lib/costos/record";
 import { planIncluyeSyntage } from "@/lib/planes";
 import { SyntageClient } from "./client";
-import { EXTRACTORES_PROVISION, extractoresADisparar, type ExtractorProvision } from "./cadencia";
+import {
+  EXTRACTORES_PROVISION,
+  debeArrancarCE,
+  extractoresADisparar,
+  type ExtractorProvision,
+} from "./cadencia";
 
 type Json = Record<string, unknown>;
 
@@ -63,20 +68,27 @@ const FIEL_SELECT = {
 } as const;
 
 /** Última extracción exitosa de cada fuente Syntage (del ledger de costos). */
-async function ultimasExtracciones(
-  companyId: string,
-): Promise<Partial<Record<ExtractorProvision, Date | null>>> {
+async function ultimasExtracciones(companyId: string): Promise<{
+  porExtractor: Partial<Record<ExtractorProvision, Date | null>>;
+  /** Último disparo del bootstrap de CE (para su piso de reintento). */
+  ultimoIntentoCE: Date | null;
+}> {
   const rows = await prisma.costEvent.groupBy({
     by: ["subtipo"],
     where: { companyId, categoria: "SYNTAGE" },
     _max: { occurredAt: true },
   });
-  const out: Partial<Record<ExtractorProvision, Date | null>> = {};
+  const porExtractor: Partial<Record<ExtractorProvision, Date | null>> = {};
+  let ultimoIntentoCE: Date | null = null;
   for (const r of rows) {
-    const ex = r.subtipo.replace("syntage.extraction.", "") as ExtractorProvision;
-    if ((EXTRACTORES_PROVISION as readonly string[]).includes(ex)) out[ex] = r._max.occurredAt ?? null;
+    const ex = r.subtipo.replace("syntage.extraction.", "");
+    if ((EXTRACTORES_PROVISION as readonly string[]).includes(ex)) {
+      porExtractor[ex as ExtractorProvision] = r._max.occurredAt ?? null;
+    } else if (ex === "electronic_accounting") {
+      ultimoIntentoCE = r._max.occurredAt ?? null;
+    }
   }
-  return out;
+  return { porExtractor, ultimoIntentoCE };
 }
 
 /**
@@ -124,27 +136,31 @@ async function provisionOne(
 
   // Decide QUÉ extraer antes de tocar a Syntage: por plan + cadencia. Si no hay
   // nada pendiente, no creamos entidad/credencial en vano (igual son idempotentes).
-  const [ultimaPorExtractor, presentes] = await Promise.all([
+  const [ultimas, presentes] = await Promise.all([
     ultimasExtracciones(c.id),
     datosPresentes(c.id),
   ]);
   const pendientes = extractoresADisparar({
     plan: c.tier,
-    ultimaPorExtractor,
+    ultimaPorExtractor: ultimas.porExtractor,
     datosPresentes: presentes,
     ahora: new Date(),
     force: opts?.force,
   });
 
   // Arranque ÚNICO de la Contabilidad Electrónica (apertura): si esta empresa
-  // aún no se ha bootstrapeado (`ceBootstrapAt == null`) y el plan incluye
-  // Syntage (o es manual/force), disparamos TAMBIÉN el extractor
-  // `electronic_accounting` —una sola vez— junto con la cadencia. NO está en el
-  // mapa recurrente de cadencia.ts a propósito (no debe re-extraerse cada
-  // ciclo). El sync cosechará el resultado e importará catálogo + balanza, y
-  // sólo entonces fijará `ceBootstrapAt`, evitando re-importar la balanza del
-  // SAT como apertura sobre el libro vivo.
-  const arrancarCE = c.ceBootstrapAt == null && (planIncluyeSyntage(c.tier) || !!opts?.force);
+  // aún no se ha bootstrapeado (`ceBootstrapAt == null`), disparamos TAMBIÉN el
+  // extractor `electronic_accounting` junto con la cadencia. El sync cosecha el
+  // resultado, importa catálogo + balanza y sólo entonces fija `ceBootstrapAt`.
+  // Si el SAT no devuelve CE (empresas que nunca la presentan), el piso de 30
+  // días de debeArrancarCE evita re-disparar cada corrida (antes: 1/día/RFC).
+  const arrancarCE = debeArrancarCE({
+    plan: c.tier,
+    ceBootstrapAt: c.ceBootstrapAt,
+    ultimoIntentoCE: ultimas.ultimoIntentoCE,
+    ahora: new Date(),
+    force: opts?.force,
+  });
 
   // Si no hay extracciones de cadencia pendientes NI arranque de CE, no creamos
   // entidad/credencial en vano (igual son idempotentes).

@@ -35,7 +35,42 @@ export const CADENCIA_DIAS: Record<ExtractorProvision, number> = {
 // genuinamente no tienen ese trámite, p.ej. un RFC nuevo sin anual cerrada).
 export const CADENCIA_REINTENTO_DIAS = 3;
 
+// Piso de reintento del arranque de Contabilidad Electrónica. El bootstrap de
+// CE (`electronic_accounting`) está diseñado como disparo ÚNICO: el sync fija
+// `ceBootstrapAt` al importar catálogo + balanza y no se vuelve a extraer.
+// Pero si el SAT no devuelve CE (la mayoría de las PyMEs nunca la presentan),
+// `ceBootstrapAt` se queda null para siempre y sin piso el provision lo
+// re-disparaba CADA día (~30 extracciones/RFC/mes de puro reintento — con 10
+// RFCs eso solo consumía ~300 de la cuota mensual). Con este piso, una empresa
+// sin CE cuesta a lo más 1 extracción/mes.
+export const CADENCIA_CE_REINTENTO_DIAS = 30;
+
 const DIA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * ¿Toca disparar el arranque de Contabilidad Electrónica? Puro y testeable.
+ * - Ya bootstrapeada (`ceBootstrapAt` fijado) → nunca (re-extraer la balanza
+ *   del SAT sobre el libro vivo la re-importaría como apertura).
+ * - Plan sin Syntage y sin `force` → no.
+ * - Nunca intentada → sí.
+ * - Intentada sin que aterrizara → sólo si el último intento tiene ≥ 30 días.
+ * `force` (aprovisionamiento manual) brinca el piso, no el `ceBootstrapAt`.
+ */
+export function debeArrancarCE(opts: {
+  plan: CompanyPlan;
+  ceBootstrapAt: Date | null;
+  /** Último disparo de `electronic_accounting` medido en CostEvent. */
+  ultimoIntentoCE: Date | null;
+  ahora: Date;
+  force?: boolean;
+}): boolean {
+  if (opts.ceBootstrapAt != null) return false;
+  if (!planIncluyeSyntage(opts.plan) && !opts.force) return false;
+  if (opts.force) return true;
+  if (!opts.ultimoIntentoCE) return true;
+  const dias = (opts.ahora.getTime() - opts.ultimoIntentoCE.getTime()) / DIA_MS;
+  return dias >= CADENCIA_CE_REINTENTO_DIAS;
+}
 
 /**
  * Qué extractores disparar para una empresa. Puro y testeable.
