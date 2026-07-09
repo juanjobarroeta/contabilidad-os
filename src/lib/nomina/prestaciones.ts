@@ -275,7 +275,14 @@ export function calcularHorasExtra(input: HorasExtraInput): HorasExtraResult {
 }
 
 // ─── SDI Factor de Integración ───────────────────────────────────────────────
-// Real factor based on seniority: 1 + (aguinaldo/365) + (vacaciones × prima / 365)
+// Factor real por antigüedad: 1 + (aguinaldo/365) + (vacaciones × prima / 365).
+//
+// Las vacaciones que se integran son las del AÑO DE SERVICIO EN CURSO (años
+// cumplidos + 1), no las del año ya cumplido: al alta el trabajador va a
+// devengar las del año 1 (12 días, reforma 2023 → factor mínimo 1.0493) y en
+// cada aniversario el SBC se modifica con los días del año que INICIA (año 2 =
+// 14 días → 1.0507, etc.). Así lo esperan las modificaciones salariales ante
+// el IMSS (IDSE).
 
 export function calcularFactorIntegracion(
   fechaIngreso: Date,
@@ -286,7 +293,7 @@ export function calcularFactorIntegracion(
   const aguinaldo = diasAguinaldo ?? DIAS_AGUINALDO_MINIMO;
   const prima = primaVacacionalPct ?? PRIMA_VACACIONAL_PCT_MINIMO;
   const anios = aniosAntiguedad(fechaIngreso, fechaCalculo);
-  const diasVac = getDiasVacaciones(Math.max(1, anios)); // at least year 1
+  const diasVac = getDiasVacaciones(anios + 1); // año de servicio en curso
 
   const factor = 1 + (aguinaldo / 365) + (diasVac * prima / 365);
   return Math.round(factor * 10000) / 10000; // 4 decimal places

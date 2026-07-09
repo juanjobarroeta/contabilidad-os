@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { detectarRosterDesdeCfdis } from "@/lib/nomina/roster-import";
+import { calcularFactorIntegracion } from "@/lib/nomina/prestaciones";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bootstrap del roster de nómina desde los CFDIs de nómina propios.
@@ -104,10 +105,14 @@ export async function POST(req: Request) {
       continue;
     }
 
+    // SDI del recibo si vino; si no, salario × factor de integración real por
+    // antigüedad (vacaciones reforma 2023 — sin fecha de ingreso se asume año 1,
+    // factor mínimo 1.0493).
+    const fechaIngreso = e.fechaIngreso ? new Date(e.fechaIngreso) : new Date();
     const sdi =
       e.salarioDiarioIntegrado && e.salarioDiarioIntegrado > 0
         ? e.salarioDiarioIntegrado
-        : +(e.salarioDiario * 1.0452).toFixed(2);
+        : +(e.salarioDiario * calcularFactorIntegracion(fechaIngreso, new Date())).toFixed(2);
 
     // CURP/NSS pueden faltar en recibos viejos; el modelo los exige como string,
     // así que guardamos cadena vacía cuando no los hay (el usuario los completa
@@ -121,7 +126,7 @@ export async function POST(req: Request) {
         rfc: e.rfc,
         curp: e.curp?.trim() || "",
         nss: e.nss?.trim() || "",
-        fechaIngreso: e.fechaIngreso ? new Date(e.fechaIngreso) : new Date(),
+        fechaIngreso,
         isActive: e.estado === "ACTIVO",
         fechaBaja: e.estado === "BAJA" ? new Date() : null,
         tipoContrato: e.tipoContrato || "01",

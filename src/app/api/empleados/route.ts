@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireWriter } from "@/lib/authz";
+import { calcularFactorIntegracion } from "@/lib/nomina/prestaciones";
 
 // GET /api/empleados?companyId=xxx
 // Params opcionales (ADITIVOS — sin ellos la respuesta es idéntica a antes):
@@ -95,8 +96,12 @@ export async function POST(req: Request) {
     const { companyId, ...data } = parsed.data;
     await requireWriter(companyId);
 
-    // SDI defaults to SBC × 1.0452 (factor de integración minimum)
-    const sdi = data.salarioDiarioIntegrado ?? +(data.salarioDiario * 1.0452).toFixed(2);
+    // SDI default: salario × factor de integración real por antigüedad
+    // (reforma de vacaciones 2023: año 1 = 12 días → 1.0493; NO el 1.0452
+    // pre-reforma, que subestimaba el SBC ante el IMSS).
+    const sdi =
+      data.salarioDiarioIntegrado ??
+      +(data.salarioDiario * calcularFactorIntegracion(new Date(data.fechaIngreso), new Date())).toFixed(2);
 
     const employee = await prisma.employee.create({
       data: {
@@ -180,7 +185,7 @@ export async function PATCH(req: Request) {
       data.salarioDiario = newSalario;
       data.salarioDiarioIntegrado = fields.salarioDiarioIntegrado
         ? Number(fields.salarioDiarioIntegrado)
-        : +(newSalario * 1.0452).toFixed(2);
+        : +(newSalario * calcularFactorIntegracion(employee.fechaIngreso, new Date())).toFixed(2);
 
       if (!fields.skipImssMovimiento) {
         await prisma.imssMovimiento.create({
