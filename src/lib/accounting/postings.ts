@@ -40,6 +40,12 @@ const DEFAULT_ACCOUNTS: Array<{
   // Padel module accounts (auto-created on first use per company).
   { cuentaSAT: "1100", nombre: "Caja",                  tipo: "ACTIVO"  },
   { cuentaSAT: "4150", nombre: "Ingresos por renta de cancha", tipo: "INGRESO" },
+  // Restaurante module accounts (auto-created on first use per company).
+  { cuentaSAT: "1107", nombre: "Almacén de insumos",              tipo: "ACTIVO"  },
+  { cuentaSAT: "1118", nombre: "IVA acreditable",                 tipo: "ACTIVO"  },
+  { cuentaSAT: "2107", nombre: "Propinas por pagar",              tipo: "PASIVO"  },
+  { cuentaSAT: "4160", nombre: "Ingresos por alimentos y bebidas", tipo: "INGRESO" },
+  { cuentaSAT: "5103", nombre: "Costo de alimentos y bebidas",    tipo: "COSTO"   },
 ];
 
 /**
@@ -454,5 +460,250 @@ export async function postCourtRentalRevenue(
         fuente: "PADEL",
       },
     ],
+  });
+}
+
+// ─── Restaurante-specific postings ───────────────────────────────────────────
+//
+// The RestauranteOS money loops. Purchases feed inventory (almacén) and
+// payables; charged orders recognize revenue + IVA + tips and relieve
+// inventory at theoretical (recipe) cost. Account mapping by forma de pago
+// mirrors the padel module:
+//   EFECTIVO       → 1100 Caja
+//   TRANSFERENCIA  → 1101 Bancos
+//   TARJETA        → 1101 Bancos
+
+export type RestFormaPagoPosting = "EFECTIVO" | "TRANSFERENCIA" | "TARJETA";
+
+function restCashAccountFor(formaPago: RestFormaPagoPosting): string {
+  switch (formaPago) {
+    case "EFECTIVO":
+      return "1100"; // Caja
+    case "TRANSFERENCIA":
+    case "TARJETA":
+      return "1101"; // Bancos
+  }
+}
+
+/**
+ * Compra de insumos RECIBIDA (goods received, not yet paid).
+ *   DR 1107 Almacén de insumos   (= subtotal)
+ *   DR 1118 IVA acreditable      (= iva, only when > 0 — many foodstuffs are 0%)
+ *   CR 2104 Acreedores diversos  (= subtotal + iva)
+ *
+ * 2-leg via postBalancedEntry when iva = 0; otherwise a 3-leg posting emitted
+ * directly (mirrors postEstimacionTimbrada). Fiscal IVA acreditación is
+ * derived by the tax engine from CFDIs — this entry is the operational book.
+ */
+export async function postCompraRestauranteRecibida(
+  tx: Tx,
+  args: {
+    companyId: string;
+    compraId: string;
+    folio: string;
+    subtotal: number;
+    iva: number;
+    fecha: Date;
+    proveedorNombre?: string;
+  }
+): Promise<void> {
+  const desc =
+    `Compra insumos ${args.folio}` +
+    (args.proveedorNombre ? ` — ${args.proveedorNombre}` : "");
+
+  if (!(args.iva > 0)) {
+    await postBalancedEntry(tx, {
+      companyId: args.companyId,
+      fecha: args.fecha,
+      descripcion: desc,
+      monto: args.subtotal,
+      fuente: "RESTAURANTE",
+      referencia: args.compraId,
+      referenciaTipo: "REST_COMPRA_RECIBIDA",
+      cargo: { cuentaSAT: "1107" },
+      abono: { cuentaSAT: "2104" },
+    });
+    return;
+  }
+
+  const total = args.subtotal + args.iva;
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
+
+  const [almacen, ivaAcred, acreedores] = await Promise.all([
+    getOrCreateAccount(tx, args.companyId, "1107"),
+    getOrCreateAccount(tx, args.companyId, "1118"),
+    getOrCreateAccount(tx, args.companyId, "2104"),
+  ]);
+
+  await tx.accountingEntry.createMany({
+    data: [
+      {
+        companyId: args.companyId,
+        chartAccountId: almacen.id,
+        fecha: args.fecha,
+        year,
+        month,
+        descripcion: desc,
+        referencia: args.compraId,
+        referenciaTipo: "REST_COMPRA_RECIBIDA",
+        monto: args.subtotal,
+        tipo: "CARGO",
+        fuente: "RESTAURANTE",
+      },
+      {
+        companyId: args.companyId,
+        chartAccountId: ivaAcred.id,
+        fecha: args.fecha,
+        year,
+        month,
+        descripcion: desc,
+        referencia: args.compraId,
+        referenciaTipo: "REST_COMPRA_RECIBIDA",
+        monto: args.iva,
+        tipo: "CARGO",
+        fuente: "RESTAURANTE",
+      },
+      {
+        companyId: args.companyId,
+        chartAccountId: acreedores.id,
+        fecha: args.fecha,
+        year,
+        month,
+        descripcion: desc,
+        referencia: args.compraId,
+        referenciaTipo: "REST_COMPRA_RECIBIDA",
+        monto: total,
+        tipo: "ABONO",
+        fuente: "RESTAURANTE",
+      },
+    ],
+  });
+}
+
+/**
+ * Compra de insumos PAGADA (settles the payable created at receipt).
+ *   DR 2104 Acreedores diversos  (= total)
+ *   CR 1100 Caja / 1101 Bancos   (= total, by forma de pago)
+ */
+export async function postCompraRestaurantePagada(
+  tx: Tx,
+  args: {
+    companyId: string;
+    compraId: string;
+    folio: string;
+    total: number;
+    formaPago: RestFormaPagoPosting;
+    fecha: Date;
+    proveedorNombre?: string;
+  }
+): Promise<void> {
+  const desc =
+    `Pago compra insumos ${args.folio}` +
+    (args.proveedorNombre ? ` — ${args.proveedorNombre}` : "");
+
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: desc,
+    monto: args.total,
+    fuente: "RESTAURANTE",
+    referencia: args.compraId,
+    referenciaTipo: "REST_COMPRA_PAGADA",
+    cargo: { cuentaSAT: "2104" },
+    abono: { cuentaSAT: restCashAccountFor(args.formaPago) },
+  });
+}
+
+/**
+ * Orden (comanda) cobrada — revenue side.
+ *   DR 1100 Caja / 1101 Bancos            (= subtotal + iva + propina)
+ *   CR 4160 Ingresos alimentos y bebidas  (= subtotal)
+ *   CR 2102 IVA trasladado                (= iva, when > 0)
+ *   CR 2107 Propinas por pagar            (= propina, when > 0 — NOT revenue)
+ *
+ * CORTESIA posts nothing — the caller skips this helper entirely.
+ */
+export async function postVentaRestaurante(
+  tx: Tx,
+  args: {
+    companyId: string;
+    ordenId: string;
+    descripcion: string; // e.g. "Orden #123 — Mesa 4"
+    subtotal: number;
+    iva: number;
+    propina: number;
+    formaPago: RestFormaPagoPosting;
+    fecha: Date;
+  }
+): Promise<void> {
+  const totalCobrado = args.subtotal + args.iva + args.propina;
+  if (!(totalCobrado > 0)) {
+    throw new Error(`postVentaRestaurante: total must be > 0, got ${totalCobrado}`);
+  }
+
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
+
+  const [cargo, ingresos, ivaTras, propinas] = await Promise.all([
+    getOrCreateAccount(tx, args.companyId, restCashAccountFor(args.formaPago)),
+    getOrCreateAccount(tx, args.companyId, "4160"),
+    args.iva > 0 ? getOrCreateAccount(tx, args.companyId, "2102") : null,
+    args.propina > 0 ? getOrCreateAccount(tx, args.companyId, "2107") : null,
+  ]);
+
+  const base = {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    year,
+    month,
+    descripcion: args.descripcion,
+    referencia: args.ordenId,
+    referenciaTipo: "REST_ORDEN_COBRADA",
+    fuente: "RESTAURANTE" as EntrySource,
+  };
+
+  await tx.accountingEntry.createMany({
+    data: [
+      { ...base, chartAccountId: cargo.id, monto: totalCobrado, tipo: "CARGO" },
+      { ...base, chartAccountId: ingresos.id, monto: args.subtotal, tipo: "ABONO" },
+      ...(ivaTras
+        ? [{ ...base, chartAccountId: ivaTras.id, monto: args.iva, tipo: "ABONO" as const }]
+        : []),
+      ...(propinas
+        ? [{ ...base, chartAccountId: propinas.id, monto: args.propina, tipo: "ABONO" as const }]
+        : []),
+    ],
+  });
+}
+
+/**
+ * Costo de venta teórico de una orden cobrada (recipe cost) — relieves the
+ * inventory the kitchen consumed.
+ *   DR 5103 Costo de alimentos y bebidas
+ *   CR 1107 Almacén de insumos
+ *
+ * Skipped by the caller when the order has no recipe-costed items (costo 0).
+ */
+export async function postCostoVentaRestaurante(
+  tx: Tx,
+  args: {
+    companyId: string;
+    ordenId: string;
+    descripcion: string;
+    costo: number;
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: `Costo de venta — ${args.descripcion}`,
+    monto: args.costo,
+    fuente: "RESTAURANTE",
+    referencia: args.ordenId,
+    referenciaTipo: "REST_COSTO_VENTA",
+    cargo: { cuentaSAT: "5103" },
+    abono: { cuentaSAT: "1107" },
   });
 }
