@@ -19,9 +19,38 @@ import {
 // formal, sin testimonios ni cifras inventadas, sin prometer roadmap como
 // existente. Los precios de lista coinciden con el onboarding (PLANS) y con
 // los Price de Stripe — mantener en sincronía al cambiarlos.
+//
+// PALETA: azul marino + blanco (la misma del deck de ventas), deliberadamente
+// independiente de los tokens cos-* de la app — la landing siempre se ve así,
+// sin importar el tema claro/oscuro del visitante. Colores fijos:
+//   fondo #081527 · paneles #0A1D3A · acento #8FB8F2 · texto suave #B8CCEB
 
 const DEMO_MAILTO =
   "mailto:juanjosebarroetah@gmail.com?subject=Demo%20ContabilidadOS&body=Hola%2C%20me%20interesa%20una%20demo%20para%20mi%20despacho.";
+
+const ACENTO = "text-[#8FB8F2]";
+const SUAVE = "text-[#B8CCEB]";
+const FAINT = "text-[#7E96BD]";
+const CARD = "rounded-2xl border border-white/10 bg-white/[0.04]";
+const BTN_PRIMARIO =
+  "inline-flex items-center gap-2 rounded-lg bg-white px-6 py-3 text-sm font-semibold text-[#0A1D3A] hover:bg-[#DCE9FB]";
+const BTN_SECUNDARIO =
+  "inline-flex items-center gap-2 rounded-lg border border-white/25 px-6 py-3 text-sm font-semibold text-white hover:border-[#8FB8F2] hover:text-[#8FB8F2]";
+
+function Logo() {
+  return (
+    <span className="inline-flex items-center gap-2.5">
+      <span className="flex h-8 w-8 items-center justify-center rounded-[10px] border-2 border-white">
+        <span className="ml-2 mt-2 h-2.5 w-2.5 rounded-full bg-[#8FB8F2]" />
+      </span>
+      <span className="text-lg font-bold tracking-tight text-white">
+        Contabilidad <span className={ACENTO}>OS</span>
+      </span>
+    </span>
+  );
+}
+
+const CHIPS = ["SAT automático", "Multi-RFC", "WhatsApp", "Nómina 2026"];
 
 const FEATURES = [
   {
@@ -76,17 +105,17 @@ const TRUST = [
 
 const PASOS = [
   {
-    n: "1",
+    n: "01",
     title: "Conecta la e.firma",
     desc: "Hasta 5 años de historia fiscal se importan y clasifican en la primera sincronización.",
   },
   {
-    n: "2",
+    n: "02",
     title: "Vincula los bancos",
     desc: "Por conexión bancaria o mandando el estado de cuenta por WhatsApp. La categorización corre sola.",
   },
   {
-    n: "3",
+    n: "03",
     title: "Opera tu cartera",
     desc: "Impuestos, nómina, facturación y cumplimiento de todas tus empresas, en un solo lugar.",
   },
@@ -94,21 +123,21 @@ const PASOS = [
 
 export function Landing() {
   return (
-    <div className="min-h-screen bg-cos-canvas text-cos-ink">
+    <div className="min-h-screen bg-[#081527] text-white">
       {/* ── Nav ── */}
-      <header className="border-b border-cos-line">
+      <header className="border-b border-white/10">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <span className="text-lg font-bold tracking-tight">ContabilidadOS</span>
+          <Logo />
           <nav className="flex items-center gap-3">
             <Link
               href="/login"
-              className="rounded-md px-3 py-2 text-sm font-medium text-cos-ink-soft hover:text-cos-ink"
+              className={`rounded-md px-3 py-2 text-sm font-medium ${SUAVE} hover:text-white`}
             >
               Iniciar sesión
             </Link>
             <Link
               href="/signup"
-              className="rounded-md bg-cos-brand px-4 py-2 text-sm font-semibold text-white hover:bg-cos-brand-deep"
+              className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#0A1D3A] hover:bg-[#DCE9FB]"
             >
               Crear cuenta
             </Link>
@@ -117,82 +146,87 @@ export function Landing() {
       </header>
 
       {/* ── Hero ── */}
-      <section className="mx-auto max-w-6xl px-6 pb-16 pt-20 text-center">
-        <p className="mb-4 inline-block rounded-full border border-cos-line bg-cos-card px-3 py-1 text-xs font-semibold uppercase tracking-wide text-cos-ink-soft">
-          Para despachos contables y sus clientes
-        </p>
-        <h1 className="mx-auto max-w-3xl text-4xl font-bold leading-tight sm:text-5xl">
-          La contabilidad de tu despacho, en automático
-        </h1>
-        <p className="mx-auto mt-5 max-w-2xl text-lg text-cos-ink-soft">
-          CFDIs que se descargan solos, bancos que llegan por WhatsApp, nómina verificada contra el
-          DOF y toda tu cartera de clientes en un tablero. Tú pones el criterio; el sistema pone las
-          horas.
-        </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 rounded-md bg-cos-brand px-6 py-3 text-sm font-semibold text-white hover:bg-cos-brand-deep"
-          >
-            Empieza tu prueba gratis <ArrowRight className="h-4 w-4" />
-          </Link>
-          <a
-            href={DEMO_MAILTO}
-            className="inline-flex items-center gap-2 rounded-md border border-cos-line bg-cos-card px-6 py-3 text-sm font-semibold text-cos-ink hover:border-cos-brand/40"
-          >
-            Agenda una demo para tu despacho
-          </a>
+      <section className="bg-gradient-to-b from-[#0E2A52] via-[#0A1D3A] to-[#081527]">
+        <div className="mx-auto max-w-6xl px-6 pb-20 pt-24 text-center">
+          <p className={`mb-5 text-xs font-semibold uppercase tracking-[0.2em] ${FAINT}`}>
+            Para despachos contables y sus clientes
+          </p>
+          <h1 className="mx-auto max-w-3xl text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
+            La contabilidad de tu despacho, en automático.
+          </h1>
+          <p className={`mx-auto mt-6 max-w-2xl text-lg leading-relaxed ${SUAVE}`}>
+            CFDIs que se descargan solos, bancos que llegan por WhatsApp, nómina verificada contra
+            el DOF y toda tu cartera de clientes en un tablero. Tú pones el criterio; el sistema
+            pone las horas.
+          </p>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/signup" className={BTN_PRIMARIO}>
+              Empieza tu prueba gratis <ArrowRight className="h-4 w-4" />
+            </Link>
+            <a href={DEMO_MAILTO} className={BTN_SECUNDARIO}>
+              Agenda una demo para tu despacho
+            </a>
+          </div>
+          <p className={`mt-4 text-xs ${FAINT}`}>Sin tarjeta. La prueba incluye acceso completo.</p>
+
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
+            {CHIPS.map((c) => (
+              <span
+                key={c}
+                className={`rounded-lg border border-white/15 bg-white/[0.05] px-4 py-2 font-mono text-sm ${SUAVE}`}
+              >
+                {c}
+              </span>
+            ))}
+          </div>
         </div>
-        <p className="mt-3 text-xs text-cos-ink-faint">Sin tarjeta. La prueba incluye acceso completo.</p>
       </section>
 
       {/* ── Cómo funciona ── */}
-      <section className="border-y border-cos-line bg-cos-paper">
-        <div className="mx-auto grid max-w-6xl gap-8 px-6 py-14 sm:grid-cols-3">
+      <section className="border-y border-white/10 bg-[#0A1D3A]/60">
+        <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 sm:grid-cols-3">
           {PASOS.map((p) => (
-            <div key={p.n} className="text-center sm:text-left">
-              <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-cos-brand-tint text-sm font-bold text-cos-brand-ink sm:mx-0">
-                {p.n}
-              </div>
-              <h3 className="font-semibold">{p.title}</h3>
-              <p className="mt-1 text-sm text-cos-ink-soft">{p.desc}</p>
+            <div key={p.n}>
+              <div className={`font-mono text-sm font-bold ${ACENTO}`}>{p.n}</div>
+              <h3 className="mt-2 text-lg font-semibold text-white">{p.title}</h3>
+              <p className={`mt-1.5 text-sm leading-relaxed ${SUAVE}`}>{p.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ── Features ── */}
-      <section className="mx-auto max-w-6xl px-6 py-16">
-        <h2 className="text-center text-2xl font-bold sm:text-3xl">
-          Lo que hoy te come el día, resuelto
+      <section className="mx-auto max-w-6xl px-6 py-20">
+        <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">
+          Lo que hoy te come el día, resuelto.
         </h2>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f) => (
-            <div key={f.title} className="rounded-card border border-cos-line bg-cos-card p-6 shadow-card">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-cos-brand-tint text-cos-brand-ink">
+            <div key={f.title} className={`${CARD} p-6`}>
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-[#8FB8F2]/15 text-[#8FB8F2]">
                 <f.icon className="h-5 w-5" />
               </div>
-              <h3 className="font-semibold">{f.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-cos-ink-soft">{f.desc}</p>
+              <h3 className="font-semibold text-white">{f.title}</h3>
+              <p className={`mt-2 text-sm leading-relaxed ${SUAVE}`}>{f.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ── Confianza ── */}
-      <section className="border-y border-cos-line bg-cos-paper">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <h2 className="text-center text-2xl font-bold sm:text-3xl">
-            Hecho para que puedas confiarle la llave
+      <section className="border-y border-white/10 bg-[#0A1D3A]/60">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">
+            Hecho para que puedas confiarle la llave.
           </h2>
-          <div className="mt-10 grid gap-5 sm:grid-cols-3">
+          <div className="mt-12 grid gap-5 sm:grid-cols-3">
             {TRUST.map((t) => (
-              <div key={t.title} className="rounded-card border border-cos-line bg-cos-card p-6">
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-cos-jade-tint text-cos-jade-ink">
+              <div key={t.title} className={`${CARD} p-6`}>
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-[#8FB8F2]/15 text-[#8FB8F2]">
                   <t.icon className="h-5 w-5" />
                 </div>
-                <h3 className="font-semibold">{t.title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-cos-ink-soft">{t.desc}</p>
+                <h3 className="font-semibold text-white">{t.title}</h3>
+                <p className={`mt-2 text-sm leading-relaxed ${SUAVE}`}>{t.desc}</p>
               </div>
             ))}
           </div>
@@ -200,34 +234,34 @@ export function Landing() {
       </section>
 
       {/* ── Precios ── */}
-      <section className="mx-auto max-w-6xl px-6 py-16">
-        <h2 className="text-center text-2xl font-bold sm:text-3xl">Precios simples</h2>
-        <p className="mx-auto mt-2 max-w-xl text-center text-sm text-cos-ink-soft">
+      <section className="mx-auto max-w-6xl px-6 py-20">
+        <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">Precios simples.</h2>
+        <p className={`mx-auto mt-3 max-w-xl text-center text-sm ${SUAVE}`}>
           Por empresa, por mes. El plan anual equivale a 10 meses.
         </p>
-        <div className="mx-auto mt-10 grid max-w-4xl gap-5 sm:grid-cols-3">
-          <div className="rounded-card border border-cos-line bg-cos-card p-6">
-            <h3 className="font-semibold">Básico</h3>
-            <p className="mt-2 text-3xl font-bold">
-              $499 <span className="text-sm font-normal text-cos-ink-soft">MXN/mes</span>
+        <div className="mx-auto mt-12 grid max-w-4xl gap-5 sm:grid-cols-3">
+          <div className={`${CARD} p-6`}>
+            <h3 className="font-semibold text-white">Básico</h3>
+            <p className="mt-3 text-3xl font-bold text-white">
+              $499 <span className={`text-sm font-normal ${FAINT}`}>MXN/mes</span>
             </p>
-            <ul className="mt-4 space-y-2 text-sm text-cos-ink-soft">
+            <ul className={`mt-5 space-y-2.5 text-sm ${SUAVE}`}>
               {["Sincronización SAT", "Consultas y reportes", "Declaraciones"].map((x) => (
                 <li key={x} className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-cos-jade-ink" /> {x}
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#8FB8F2]" /> {x}
                 </li>
               ))}
             </ul>
           </div>
-          <div className="relative rounded-card border-2 border-cos-brand bg-cos-card p-6">
-            <span className="absolute -top-3 left-6 rounded-full bg-cos-brand px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+          <div className="relative rounded-2xl border-2 border-[#8FB8F2] bg-white/[0.06] p-6">
+            <span className="absolute -top-3 left-6 rounded-full bg-[#8FB8F2] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0A1D3A]">
               Recomendado
             </span>
-            <h3 className="font-semibold">Profesional</h3>
-            <p className="mt-2 text-3xl font-bold">
-              $1,299 <span className="text-sm font-normal text-cos-ink-soft">MXN/mes</span>
+            <h3 className="font-semibold text-white">Profesional</h3>
+            <p className="mt-3 text-3xl font-bold text-white">
+              $1,299 <span className={`text-sm font-normal ${FAINT}`}>MXN/mes</span>
             </p>
-            <ul className="mt-4 space-y-2 text-sm text-cos-ink-soft">
+            <ul className={`mt-5 space-y-2.5 text-sm ${SUAVE}`}>
               {[
                 "Todo lo de Básico",
                 "Asistente IA + WhatsApp",
@@ -235,21 +269,21 @@ export function Landing() {
                 "Complementos de pago",
               ].map((x) => (
                 <li key={x} className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-cos-jade-ink" /> {x}
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#8FB8F2]" /> {x}
                 </li>
               ))}
             </ul>
           </div>
-          <div className="rounded-card border border-cos-line bg-cos-card p-6">
-            <h3 className="font-semibold">Despachos</h3>
-            <p className="mt-2 text-3xl font-bold">A tu medida</p>
-            <p className="mt-4 text-sm leading-relaxed text-cos-ink-soft">
+          <div className={`${CARD} p-6`}>
+            <h3 className="font-semibold text-white">Despachos</h3>
+            <p className="mt-3 text-3xl font-bold text-white">A tu medida</p>
+            <p className={`mt-5 text-sm leading-relaxed ${SUAVE}`}>
               Multiempresa con precio por volumen según tu cartera. Cuéntanos cuántas empresas
               llevas y armamos tu propuesta.
             </p>
             <a
               href={DEMO_MAILTO}
-              className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-cos-brand-ink hover:underline"
+              className={`mt-5 inline-flex items-center gap-1.5 text-sm font-semibold ${ACENTO} hover:underline`}
             >
               Agenda una demo <ArrowRight className="h-3.5 w-3.5" />
             </a>
@@ -258,26 +292,20 @@ export function Landing() {
       </section>
 
       {/* ── CTA final ── */}
-      <section className="border-t border-cos-line bg-cos-paper">
-        <div className="mx-auto max-w-6xl px-6 py-16 text-center">
-          <h2 className="text-2xl font-bold sm:text-3xl">
-            La demo se hace con tus propios CFDIs
+      <section className="border-t border-white/10 bg-gradient-to-b from-[#0A1D3A] to-[#0E2A52]">
+        <div className="mx-auto max-w-6xl px-6 py-20 text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            La demo se hace con tus propios CFDIs.
           </h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm text-cos-ink-soft">
+          <p className={`mx-auto mt-4 max-w-xl text-sm leading-relaxed ${SUAVE}`}>
             Veinte minutos: conectamos una e.firma, la historia fiscal se importa sola y ves tu
             operación real dentro del sistema. Sin diapositivas.
           </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href="/signup"
-              className="inline-flex items-center gap-2 rounded-md bg-cos-brand px-6 py-3 text-sm font-semibold text-white hover:bg-cos-brand-deep"
-            >
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/signup" className={BTN_PRIMARIO}>
               Crear cuenta <ArrowRight className="h-4 w-4" />
             </Link>
-            <a
-              href={DEMO_MAILTO}
-              className="inline-flex items-center gap-2 rounded-md border border-cos-line bg-cos-card px-6 py-3 text-sm font-semibold text-cos-ink hover:border-cos-brand/40"
-            >
+            <a href={DEMO_MAILTO} className={BTN_SECUNDARIO}>
               Escríbenos
             </a>
           </div>
@@ -285,14 +313,16 @@ export function Landing() {
       </section>
 
       {/* ── Footer ── */}
-      <footer className="border-t border-cos-line">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-xs text-cos-ink-faint">
-          <span>ContabilidadOS — Sistema contable y fiscal mexicano</span>
+      <footer className="border-t border-white/10 bg-[#081527]">
+        <div className={`mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-xs ${FAINT}`}>
+          <span>
+            Contabilidad <span className={ACENTO}>OS</span> — Sistema contable y fiscal mexicano
+          </span>
           <span className="flex gap-4">
-            <Link href="/legal/aviso-de-privacidad" className="hover:text-cos-brand-ink hover:underline">
+            <Link href="/legal/aviso-de-privacidad" className="hover:text-white hover:underline">
               Aviso de Privacidad
             </Link>
-            <Link href="/legal/terminos" className="hover:text-cos-brand-ink hover:underline">
+            <Link href="/legal/terminos" className="hover:text-white hover:underline">
               Términos y Condiciones
             </Link>
           </span>
