@@ -198,12 +198,12 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "query_tax_position",
     description:
-      "Calcula la posición fiscal del mes (IVA a pagar e ISR provisional) a partir de los CFDIs sincronizados, en flujo de efectivo. Úsala cuando pregunten '¿cuánto IVA/ISR debo este mes?', cuánto van a pagar de impuestos, o la posición fiscal de un periodo. Devuelve IVA trasladado/acreditable/a pagar, saldo a favor, y el ISR provisional (Art. 14) con su coeficiente de utilidad. Si no se dan mes/año, usa el mes actual.",
+      "Calcula la posición fiscal del mes (IVA a pagar e ISR provisional) a partir de los CFDIs sincronizados, en flujo de efectivo. Úsala cuando pregunten '¿cuánto IVA/ISR debo este mes?', cuánto van a pagar de impuestos, o la posición fiscal de un periodo. Devuelve IVA trasladado/acreditable/a pagar, saldo a favor, y el ISR provisional (Art. 14) con su coeficiente de utilidad. Si no se dan mes/año, usa el PERIODO EN JUEGO: el mes anterior mientras su declaración no esté presentada (del 1 al 17 se trabaja el mes pasado), y el mes en curso cuando ya se presentó — el campo 'periodo' de la respuesta dice cuál se usó; menciónalo SIEMPRE al responder.",
     input_schema: {
       type: "object" as const,
       properties: {
-        year: { type: "number", description: "Año del periodo, e.g. 2026. Default: año actual." },
-        month: { type: "number", description: "Mes 1-12. Default: mes actual." },
+        year: { type: "number", description: "Año del periodo, e.g. 2026. Default: el del periodo en juego." },
+        month: { type: "number", description: "Mes 1-12. Default: el del periodo en juego (mes anterior hasta presentarse; luego el actual)." },
       },
       required: [],
     },

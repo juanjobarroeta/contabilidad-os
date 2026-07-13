@@ -34,6 +34,8 @@ interface DashboardData {
   apertura?: { confirmada: boolean; nudge: boolean };
   taxThisMonth: {
     iva: number; isr: number | null; total: number; saldoAFavor: number;
+    /** Período fiscal EN JUEGO (no necesariamente el mes calendario). */
+    periodo: string; periodoFmt: string; modo: "por_presentar" | "en_curso";
     vence: string; venceFmt: string; diasRestantes: number; tarifaVerificada: boolean;
     coeficiente?: number | null;
     coeficienteSugerido?: number | null;
@@ -265,9 +267,20 @@ function HeroBand({ obligaciones }: { obligaciones: UpcomingOb[] }) {
     title = vencidas === 1 ? "Tienes 1 obligación vencida" : `Tienes ${vencidas} obligaciones vencidas`;
     body = "Preséntala lo antes posible para evitar recargos. Te decimos exactamente cuánto y cómo.";
   } else if (pendientes > 0) {
+    // "Nada urgente" sólo si de verdad no urge: con un vencimiento a ≤7 días
+    // el tono cambia (el caso típico: las mensuales de junio vencen el 17 de
+    // julio y el tablero decía "tienes tiempo").
+    const masProximo = Math.min(
+      ...obligaciones.filter((o) => !o.filed && o.status !== "OVERDUE").map((o) => o.daysUntil)
+    );
     tone = "blue"; Icon = Clock;
     title = "Casi listo este mes";
-    body = `Te queda ${pendientes === 1 ? "1 trámite" : `${pendientes} trámites`} por presentar. Nada urgente — tienes tiempo.`;
+    body =
+      masProximo <= 7
+        ? `Te queda ${pendientes === 1 ? "1 trámite" : `${pendientes} trámites`} por presentar. El más próximo vence ${
+            masProximo === 0 ? "hoy" : masProximo === 1 ? "mañana" : `en ${masProximo} días`
+          }.`
+        : `Te queda ${pendientes === 1 ? "1 trámite" : `${pendientes} trámites`} por presentar. Nada urgente — tienes tiempo.`;
   } else {
     tone = "jade"; Icon = CheckCircle2;
     title = "Vas al día";
@@ -405,7 +418,16 @@ export default function InicioPage() {
           {/* cuánto debo + mes en números */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card className="rounded-card border-cos-line p-5 shadow-card">
-              <span className={LBL}>¿Cuánto debo este mes?</span>
+              {/* El período fiscal en juego puede diferir del mes calendario:
+                  del 1 al ~17 se trabaja (y se muestra) el mes anterior. */}
+              <div className="flex items-center justify-between gap-2">
+                <span className={LBL}>¿Cuánto debo? · {data.taxThisMonth.periodoFmt}</span>
+                {data.taxThisMonth.modo === "en_curso" && (
+                  <span className="rounded-full bg-cos-slate-tint px-2 py-0.5 text-[11px] font-medium text-cos-ink-soft">
+                    Mes en curso · va acumulando
+                  </span>
+                )}
+              </div>
               <div className="my-2.5">
                 <Money value={data.taxThisMonth.total} size={40} weight={700} />
               </div>
@@ -424,8 +446,19 @@ export default function InicioPage() {
                 </div>
               </div>
               <div className="mt-3.5 flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 text-[13.5px] text-cos-ink-soft">
-                  <CalendarDays className="h-[15px] w-[15px]" /> Vence el {data.taxThisMonth.venceFmt}
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[13.5px] ${
+                    data.taxThisMonth.diasRestantes < 0
+                      ? "font-semibold text-cos-red-ink"
+                      : data.taxThisMonth.diasRestantes <= 7 && data.taxThisMonth.modo === "por_presentar"
+                        ? "font-semibold text-cos-amber-ink"
+                        : "text-cos-ink-soft"
+                  }`}
+                >
+                  <CalendarDays className="h-[15px] w-[15px]" />
+                  {data.taxThisMonth.diasRestantes < 0
+                    ? `Venció el ${data.taxThisMonth.venceFmt}`
+                    : `Vence el ${data.taxThisMonth.venceFmt}`}
                 </span>
                 <Link href="/impuestos?tab=del-mes" className="inline-flex items-center gap-1 rounded-control px-2 py-1.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
                   Ver detalle <ChevronRight className="h-3.5 w-3.5" />

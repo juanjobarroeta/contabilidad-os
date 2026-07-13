@@ -32,6 +32,16 @@ export async function GET(req: Request) {
   const monthFrom = new Date(year, month - 1, 1);
   const monthTo   = new Date(year, month, 1);
 
+  // ── Período fiscal EN JUEGO (mensuales) ───────────────────────────────────
+  // El contador no piensa en el mes calendario: del día 1 al ~17 se trabaja el
+  // MES ANTERIOR (su IVA/ISR/DIOT vencen el 17). El mes anterior deja de estar
+  // "en juego" cuando su declaración ya se presentó; sólo entonces la tarjeta
+  // de impuestos avanza al mes en curso (como avance acumulado).
+  const prevDate    = new Date(year, month - 2, 1);
+  const prevYear    = prevDate.getFullYear();
+  const prevMonth   = prevDate.getMonth() + 1;
+  const prevPeriodo = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+
   // ── Build last-6-months ranges ────────────────────────────────────────────
   const months6: { year: number; month: number; from: Date; to: Date; label: string }[] = [];
   for (let i = 5; i >= 0; i--) {
@@ -55,7 +65,7 @@ export async function GET(req: Request) {
     bankAccounts,
     savedDeclaracion,
     company,
-    taxPosition,
+    mesAnteriorPresentado,
     asimilados,
     invoiceCount,
     satRequests,
@@ -122,9 +132,17 @@ export async function GET(req: Request) {
       where: { id: companyId },
       include: { obligations: { where: { activa: true } } },
     }),
-    // Real fiscal-engine position for this month (IVA flujo + régimen-aware ISR) —
-    // the source of truth for "¿Cuánto debo?", not the rough ivaEstimado above.
-    computeTaxPosition(companyId, year, month),
+    // ¿El mes anterior ya se presentó? Decide el período de la tarjeta de
+    // impuestos (IVA_MENSUAL manda como declaración mensual principal).
+    prisma.taxDeclaration.findFirst({
+      where: {
+        companyId,
+        tipo: TaxDeclarationType.IVA_MENSUAL,
+        periodo: prevPeriodo,
+        status: { in: ["FILED", "PAID"] },
+      },
+      select: { id: true },
+    }),
     // Asimilados a salarios recibidos (Art. 94) — null si la empresa no recibe.
     getAsimiladosResumen(companyId, year, month),
     // ¿Hay al menos una factura? (take: 1 → conteo barato de existencia)
@@ -138,6 +156,17 @@ export async function GET(req: Request) {
       take: 300,
     }),
   ]);
+
+  // ── Posición fiscal del período EN JUEGO (motor real) ─────────────────────
+  // Mes anterior sin presentar → ese es el período de la tarjeta "¿Cuánto
+  // debo?" (vence el 17 de este mes). Ya presentado → mes en curso como
+  // avance (vence el 17 del mes siguiente).
+  const fiscalEnCurso = !!mesAnteriorPresentado;
+  const fiscalYear    = fiscalEnCurso ? year : prevYear;
+  const fiscalMonth   = fiscalEnCurso ? month : prevMonth;
+  // Source of truth for "¿Cuánto debo?" (IVA flujo + ISR por régimen), not the
+  // rough ivaEstimado below.
+  const taxPosition = await computeTaxPosition(companyId, fiscalYear, fiscalMonth);
 
   // ── 6-month trend ─────────────────────────────────────────────────────────
   const trendData = await Promise.all(
@@ -235,8 +264,14 @@ export async function GET(req: Request) {
         });
       }
     } else {
-      // MENSUAL / BIMESTRAL — check this month and possibly next
-      for (const offset of [0, 1]) {
+      // MENSUAL / BIMESTRAL — del mes ANTERIOR al siguiente. El offset -1 es
+      // esencial: del día 1 al ~17 el trámite en juego es el del mes pasado
+      // (junio vence el 17 de julio) — sin él, el tablero decía "nada urgente"
+      // a días de un vencimiento real. También se conservan vencidos SIN
+      // presentar hasta 45 días atrás (luego se filtra lo ya presentado).
+      const lookbackFrom = new Date(today);
+      lookbackFrom.setDate(lookbackFrom.getDate() - 45);
+      for (const offset of [-1, 0, 1]) {
         const d     = new Date(year, month - 1 + offset, 1);
         const y2    = d.getFullYear();
         const m2    = d.getMonth() + 1;
@@ -244,7 +279,7 @@ export async function GET(req: Request) {
         const dueY  = m2 + 1 > 12 ? y2 + 1 : y2;
         const due   = new Date(dueY, dueM - 1, ob.diaVencimiento);
 
-        if (due >= today && due <= inXDays) {
+        if (due >= lookbackFrom && due <= inXDays) {
           const periodoStr = ob.periodicidad === "BIMESTRAL"
             ? `Bim ${Math.ceil(m2 / 2)} ${y2}`
             : `${MONTH_NAMES[m2 - 1]} ${y2}`;
@@ -259,9 +294,12 @@ export async function GET(req: Request) {
             periodo:      periodoStr,
             periodoKey:   `${y2}-${String(m2).padStart(2, "0")}`, // periodo declarado (mes que cubre la obligación)
             daysUntil:    diff,
-            status:       diff === 0 ? "OVERDUE" : diff <= 7 ? "SOON" : "UPCOMING",
+            status:       diff < 0 ? "OVERDUE" : diff <= 7 ? "SOON" : "UPCOMING",
           });
-          break; // only the nearest occurrence
+          // Sin break: se juntan todas las ocurrencias del rango y DESPUÉS de
+          // consultar qué está presentado se elige una por obligación (la
+          // pendiente más próxima) — con break, junio presentado ocultaría
+          // el trámite de julio.
         }
       }
     }
@@ -296,6 +334,23 @@ export async function GET(req: Request) {
       return { ...ob, filed: !!filed && filed.status !== "CALCULATED" };
     })
   );
+
+  // Una fila por obligación: la ocurrencia SIN presentar más próxima a vencer;
+  // si todas las del rango ya se presentaron, la más reciente (badge ✓). Así el
+  // mes anterior pendiente desplaza al mes en curso, y al presentarlo la lista
+  // avanza sola al siguiente período.
+  const porTipo = new Map<string, typeof filedCheck>();
+  for (const o of filedCheck) {
+    const arr = porTipo.get(o.tipo) ?? [];
+    arr.push(o);
+    porTipo.set(o.tipo, arr);
+  }
+  const obligacionesSeleccion: typeof filedCheck = [];
+  for (const arr of porTipo.values()) {
+    arr.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    obligacionesSeleccion.push(arr.find((o) => !o.filed) ?? arr[arr.length - 1]);
+  }
+  obligacionesSeleccion.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   // ── Bank reconciliation summary ───────────────────────────────────────────
   const bankSummary = bankAccounts.map((acct) => ({
@@ -350,9 +405,12 @@ export async function GET(req: Request) {
     ? fielStatus({ fielCer: company.fielCer, fielVigencia: company.fielVigencia })
     : null;
 
-  const taxDue = new Date(year, month, 17);
+  // Vence el 17 del mes SIGUIENTE al período en juego (Art. 5.1 RMF; sin los
+  // días extra por sexto dígito — criterio conservador).
+  const taxDue = new Date(fiscalYear, fiscalMonth, 17);
   const isrPagarMes = taxPosition.isr.isrPagar;
   const totalPagarMes = taxPosition.iva.pagar + (isrPagarMes ?? 0);
+  const MES_LARGO = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
   // ── Estado de datos ("¿por qué está vacío mi tablero?") ───────────────────
   const estadoDatos = computeEstadoDatos({
@@ -385,6 +443,12 @@ export async function GET(req: Request) {
       isr: isrPagarMes,
       total: totalPagarMes,
       saldoAFavor: taxPosition.iva.saldoAFavor,
+      // Período fiscal en juego (puede diferir del mes calendario) + modo:
+      // "por_presentar" = mes anterior aún sin declarar; "en_curso" = avance
+      // del mes corriente (el anterior ya se presentó).
+      periodo: `${fiscalYear}-${String(fiscalMonth).padStart(2, "0")}`,
+      periodoFmt: `${MES_LARGO[fiscalMonth - 1]} ${fiscalYear}`,
+      modo: fiscalEnCurso ? "en_curso" : "por_presentar",
       vence: taxDue.toISOString().substring(0, 10),
       venceFmt: `${taxDue.getDate()} ${MES_ABBR[taxDue.getMonth()]} ${taxDue.getFullYear()}`,
       diasRestantes: Math.round((taxDue.getTime() - today.getTime()) / 86400000),
@@ -410,7 +474,7 @@ export async function GET(req: Request) {
       facturasRecibidas: gastosThisMonth._count.id,
     },
     trend: trendData,
-    upcomingObligations: filedCheck.slice(0, 5),
+    upcomingObligations: obligacionesSeleccion.slice(0, 5),
     recentInvoices: recentRows,
     bankSummary,
     totalUnmatched,
