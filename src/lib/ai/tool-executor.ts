@@ -121,9 +121,31 @@ export async function executeToolCall(
     case "get_invoice_files":
       return getInvoiceFiles(input, companyId);
     case "query_tax_position": {
+      // Período por defecto = el EN JUEGO (mismo criterio que el dashboard):
+      // del 1 al ~17 se trabaja el mes ANTERIOR (vence el 17); sólo cuando su
+      // declaración ya está presentada se avanza al mes en curso. El modelo
+      // puede pedir otro periodo explícito con year/month.
       const now = new Date();
-      const year = typeof input.year === "number" ? input.year : now.getFullYear();
-      const month = typeof input.month === "number" ? input.month : now.getMonth() + 1;
+      let year: number;
+      let month: number;
+      if (typeof input.year === "number" && typeof input.month === "number") {
+        year = input.year;
+        month = input.month;
+      } else {
+        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const prevPeriodo = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+        const presentado = await prisma.taxDeclaration.findFirst({
+          where: {
+            companyId,
+            tipo: "IVA_MENSUAL",
+            periodo: prevPeriodo,
+            status: { in: ["FILED", "PAID"] },
+          },
+          select: { id: true },
+        });
+        year = presentado ? now.getFullYear() : prev.getFullYear();
+        month = presentado ? now.getMonth() + 1 : prev.getMonth() + 1;
+      }
       const pos = await computeTaxPosition(companyId, year, month);
       // Cadena de arrastre rota (mes con CFDIs sin declaración guardada): el
       // usuario de WhatsApp/chat DEBE enterarse — las cifras pueden estar
