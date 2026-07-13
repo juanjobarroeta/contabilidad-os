@@ -73,5 +73,11 @@ export const config = {
     "/api/companies/:path*",
     "/api/construccion/:path*",
     "/api/padel/:path*",
+    "/api/restaurante/:path*",
+    // RestauranteOS stamps CFDIs for charged orders directly against the
+    // hub's bearer-aware invoicing endpoint (POST /api/facturas), so the
+    // facturas surface needs CORS for allowlisted satellite origins too.
+    "/api/facturas",
+    "/api/facturas/:path*",
   ],
 };

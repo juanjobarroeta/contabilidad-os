@@ -311,6 +311,15 @@ model Company {
   courts       Court[]
   clubMembers  ClubMember[]
   reservations Reservation[]
+
+  // RESTAURANTE module (only used when RESTAURANTE is enabled) — see
+  // "Module: Restaurante" below.
+  restauranteConfig  RestauranteConfig?
+  restInsumos        RestInsumo[]
+  restCompras        RestCompra[]
+  restMenuCategorias RestMenuCategoria[]
+  restMenuItems      RestMenuItem[]
+  restOrdenes        RestOrden[]
 }
 
 model CompanyMember {
@@ -513,6 +522,7 @@ enum ModuloApp {
   FLOTA
   MARKETING
   PADEL
+  RESTAURANTE
 }
 
 // ─── Module 3: Invoicing / CFDI ───────────────────────────────────────────────
@@ -538,6 +548,7 @@ model Customer {
   invoices    Invoice[]
   proyectos   Proyecto[]
   clubMembers ClubMember[]
+  restOrdenes RestOrden[]
 
   @@unique([companyId, rfc])
 }
@@ -569,6 +580,7 @@ model Supplier {
   cotizaciones      SolicitudCompraCotizacion[]
   pagosProveedor    PagoProveedor[]
   terms             SupplierTerms?
+  restCompras       RestCompra[]
 
   @@unique([companyId, rfc])
 }
@@ -600,30 +612,30 @@ model Invoice {
   updatedAt  DateTime @updatedAt
 
   // CFDI data
-  tipo           InvoiceType // INGRESO, EGRESO, TRASLADO, NOMINA, PAGO
-  serie          String?
-  folio          String?
-  fecha          DateTime
-  formaPago      String // SAT catalog key e.g. "01" = Efectivo
-  metodoPago     String // "PUE" or "PPD"
-  usoCfdi        String // SAT catalog key e.g. "G01"
+  tipo       InvoiceType // INGRESO, EGRESO, TRASLADO, NOMINA, PAGO
+  serie      String?
+  folio      String?
+  fecha      DateTime
+  formaPago  String // SAT catalog key e.g. "01" = Efectivo
+  metodoPago String // "PUE" or "PPD"
+  usoCfdi    String // SAT catalog key e.g. "G01"
 
   // TipoDeComprobante del SAT (I/E/N/P/T). Null = legado (se asume I para
   // INGRESO/EGRESO). "E" marca una NOTA DE CREDITO: dentro de su tipo, el
   // motor fiscal la NETEA con signo negativo (emitida reduce ingresos e IVA
   // trasladado; recibida reduce deducciones e IVA acreditable).
-  tipoSat String?
+  tipoSat             String?
   // CFDI relacionado (nota de credito emitida): UUID del padre y clave de
   // relacion SAT ("01" = nota de credito de los documentos relacionados).
   cfdiRelacionadoUuid String?
   tipoRelacion        String?
-  moneda         String      @default("MXN")
-  tipoCambio     Float       @default(1.0)
-  subtotal       Float
-  descuento      Float       @default(0)
-  totalImpuestos Float       @default(0)
-  total          Float
-  notas          String?
+  moneda              String  @default("MXN")
+  tipoCambio          Float   @default(1.0)
+  subtotal            Float
+  descuento           Float   @default(0)
+  totalImpuestos      Float   @default(0)
+  total               Float
+  notas               String?
 
   // Contador override: if set, the posting engine uses this SAT account
   // instead of whatever classifyInvoice() would return. Stores the short
@@ -700,17 +712,17 @@ model Invoice {
   // que no mandan llave (Postgres permite múltiples NULL en el unique).
   idempotencyKey String?
 
-  company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer           Customer?              @relation(fields: [customerId], references: [id])
-  items              InvoiceItem[]
-  taxes              InvoiceTax[]
-  bankTransactions   BankTransaction[]
+  company              Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer             Customer?              @relation(fields: [customerId], references: [id])
+  items                InvoiceItem[]
+  taxes                InvoiceTax[]
+  bankTransactions     BankTransaction[]
   // Conciliación uno-a-varios: porciones de movimientos asignadas a esta factura.
   conciliacionDetalles ConciliacionDetalle[]
-  estimacion         Estimacion?
+  estimacion           Estimacion?
   // When this invoice is a complemento de pago (tipo=PAGO), the parent
   // invoice UUIDs it pays off (parsed from <pago:DoctoRelacionado>).
-  doctosRelacionados PagoDoctoRelacionado[]
+  doctosRelacionados   PagoDoctoRelacionado[]
 
   // Activos fijos registrados a partir de este CFDI (naturaleza = INVERSION).
   activosFijos ActivoFijo[]
@@ -718,6 +730,9 @@ model Invoice {
   // Construcción: vínculo operativo (a requisición / gasto / estimación) +
   // estado de conciliación manual. Datos del módulo, no fiscales.
   construccionVinculo ConstruccionCfdiVinculo?
+
+  // Restaurante: la orden (comanda) que se facturó con este CFDI.
+  restOrden RestOrden?
 
   // Único por empresa: permite que un CFDI intercompañía viva en las dos
   // empresas (emisor + receptor) sin chocar, y evita duplicados dentro de una.
@@ -925,10 +940,10 @@ model BankAccount {
   belvoAccountId String?
   belvoLinkId    String?
 
-  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  transactions BankTransaction[]
-  gastos       Gasto[]
-  reembolsos   ReembolsoSemanal[]
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transactions  BankTransaction[]
+  gastos        Gasto[]
+  reembolsos    ReembolsoSemanal[]
   importBatches ImportBatch[]
 
   @@unique([companyId, numeroCuenta])
@@ -954,10 +969,10 @@ model BankTransaction {
   tipo        BankTransactionType
 
   // Reconciliation
-  status     ReconciliationStatus @default(UNMATCHED)
-  invoiceId  String?
-  supplierId String?
-  notes      String?
+  status           ReconciliationStatus @default(UNMATCHED)
+  invoiceId        String?
+  supplierId       String?
+  notes            String?
   // Conciliación de pagos de impuestos: el movimiento (egreso) que pagó una
   // línea de captura SIPARE o de una declaración federal. v1: un movimiento
   // paga UNA declaración y viceversa (el segundo intento se rechaza con 409).
@@ -985,6 +1000,8 @@ model BankTransaction {
   adjudicacionPagada    SolicitudAdjudicacion? @relation("AdjudicacionPago")
   estimacionCobrada     Estimacion?
   reservacionCobrada    Reservation?
+  compraRestPagada      RestCompra?
+  ordenRestCobrada      RestOrden?
   // Conciliación uno-a-varios: asignaciones por factura (ver ConciliacionDetalle).
   conciliacionDetalles  ConciliacionDetalle[]
 
@@ -1005,15 +1022,15 @@ model BankTransaction {
 // juntos (una subida) para poder DESHACER exactamente ese lote. Se conserva la
 // fila aunque se deshaga (auditoría: undoneAt), pero sus movimientos se borran.
 model ImportBatch {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  companyId     String
-  bankAccountId String
-  source        String // WHATSAPP | UPLOAD | …
-  banco         String?
-  periodo       String?
-  count         Int      @default(0) // movimientos importados en este lote
-  undoneAt      DateTime?
+  id             String    @id @default(cuid())
+  createdAt      DateTime  @default(now())
+  companyId      String
+  bankAccountId  String
+  source         String // WHATSAPP | UPLOAD | …
+  banco          String?
+  periodo        String?
+  count          Int       @default(0) // movimientos importados en este lote
+  undoneAt       DateTime?
   undoneByUserId String?
 
   company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1150,18 +1167,18 @@ model Incidencia {
   employeeId String
   createdAt  DateTime @default(now())
 
-  tipo     IncidenciaTipo
-  fecha    DateTime // Date of the incident
-  fechaFin DateTime? // End date for multi-day (incapacidad, vacaciones)
-  dias     Float          @default(1) // Number of days affected
-  horas    Float? // For overtime: DOUBLE hours (dentro/fuera del límite LFT las separa el cálculo)
+  tipo         IncidenciaTipo
+  fecha        DateTime // Date of the incident
+  fechaFin     DateTime? // End date for multi-day (incapacidad, vacaciones)
+  dias         Float          @default(1) // Number of days affected
+  horas        Float? // For overtime: DOUBLE hours (dentro/fuera del límite LFT las separa el cálculo)
   // Horas extra TRIPLES (las que exceden el límite de la jornada extraordinaria,
   // LFT Art. 68: se pagan al 200% adicional y son 100% gravadas). Columna
   // ADITIVA — prod usa `prisma db push`.
   horasTriples Float?
   // Monto en pesos para incidencias económicas (BONO, COMISION, DESCUENTO).
   // Columna ADITIVA — prod usa `prisma db push`.
-  monto Float?
+  monto        Float?
 
   // Incapacidad-specific
   folioImss String? // IMSS disability folio number
@@ -1408,7 +1425,7 @@ model TaxDeclaration {
   // Shape: { extractedAt, tipoImpuesto, tipoPago, filed:{…}, computed:{…}, diffs:[…] }
   acuseData Json?
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   // Conciliación bancaria del pago (SIPARE/línea de captura). En la práctica
   // v1 es 0 o 1 movimiento MATCHED (un segundo intento se rechaza con 409);
   // la lista existe porque la FK vive del lado del movimiento.
@@ -1695,6 +1712,7 @@ enum EntrySource {
   CONSTRUCCION
   FLOTA
   PADEL
+  RESTAURANTE
   APERTURA // saldos iniciales / asiento de apertura (no se borra al re-postear el mes)
   CIERRE // asiento de cierre anual (mes 13) — cancela ingresos/costos/gastos a resultado
 }
@@ -2381,36 +2399,36 @@ model SolicitudCompraCotizacion {
 // proveedor se paga por separado (monto propio, condición de crédito y fecha de
 // entrega de su cotización). Es la unidad que ve tesorería en cuentas por pagar.
 model SolicitudAdjudicacion {
-  id                String    @id @default(cuid())
-  companyId         String // denormalizado para listar cuentas por pagar por empresa
-  solicitudId       String
-  cotizacionId      String // la cotización ganadora (origen de crédito/entrega)
-  supplierId        String? // null cuando el proveedor es texto libre
-  supplierNombre    String
-  tieneCredito      Boolean   @default(false)
-  diasCredito       Int? // días de crédito de la oferta ganadora → vencimiento
-  diasEntrega       Int?
-  total             Float // Σ importe de las líneas adjudicadas a este proveedor
+  id                 String    @id @default(cuid())
+  companyId          String // denormalizado para listar cuentas por pagar por empresa
+  solicitudId        String
+  cotizacionId       String // la cotización ganadora (origen de crédito/entrega)
+  supplierId         String? // null cuando el proveedor es texto libre
+  supplierNombre     String
+  tieneCredito       Boolean   @default(false)
+  diasCredito        Int? // días de crédito de la oferta ganadora → vencimiento
+  diasEntrega        Int?
+  total              Float // Σ importe de las líneas adjudicadas a este proveedor
   // POR_PAGAR → PARCIAL (pagos aplicados < total) → PAGADA (saldada) →
   // CONCILIADA (empatada con un movimiento bancario importado = pago real).
   // El pago vive en PagoProveedor (cuenta corriente del proveedor) y se
   // aplica a adjudicaciones vía PagoAplicacion — un pago puede cubrir varias
   // requisiciones, parciales o quedar como anticipo. Registrar pagos NO crea
   // movimientos bancarios: el banco se llena sólo con el CSV importado.
-  estado            String    @default("POR_PAGAR") // POR_PAGAR | PARCIAL | PAGADA | CONCILIADA
+  estado             String    @default("POR_PAGAR") // POR_PAGAR | PARCIAL | PAGADA | CONCILIADA
   // Cuándo admin la mandó a tesorería para pago (workflow de cuentas por pagar).
   enviadaTesoreriaAt DateTime?
-  pagadaAt          DateTime? // cuándo se registró el pago (comprobante)
-  conciliadaAt      DateTime? // cuándo se empató con el movimiento bancario real
-  referenciaPago    String? // referencia/folio SPEI capturado al registrar el pago
+  pagadaAt           DateTime? // cuándo se registró el pago (comprobante)
+  conciliadaAt       DateTime? // cuándo se empató con el movimiento bancario real
+  referenciaPago     String? // referencia/folio SPEI capturado al registrar el pago
   // Comprobante de pago (SPEI/transferencia) — mismo patrón dual que las
   // cotizaciones. Se sube al registrar el pago, antes de conciliar.
-  comprobanteData   String?   @db.Text
-  comprobanteMime   String?
-  comprobanteName   String?
-  bankTransactionId String?   @unique // se fija al conciliar, no al pagar
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  comprobanteData    String?   @db.Text
+  comprobanteMime    String?
+  comprobanteName    String?
+  bankTransactionId  String?   @unique // se fija al conciliar, no al pagar
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   solicitud       SolicitudCompra           @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
   cotizacion      SolicitudCompraCotizacion @relation(fields: [cotizacionId], references: [id])
@@ -2765,8 +2783,8 @@ model Gasto {
   categoriaIndirecto String? // free-text tag: "GASOLINA" | "VIATICOS" | "FLETE" | "HERRAMIENTA_MENOR" | "EQUIPO_SEGURIDAD" | "RENTA_EQUIPO" | "ALIMENTOS" | etc.
 
   // Populated on /aprobar-pagar
-  bankTransactionId String?   @unique
-  pagadoAt          DateTime?
+  bankTransactionId  String?   @unique
+  pagadoAt           DateTime?
   // Cuándo admin lo mandó a tesorería para pago (workflow de cuentas por pagar).
   enviadaTesoreriaAt DateTime?
 
@@ -2964,8 +2982,8 @@ model StagedAction {
   confirmedAt       DateTime?
   confirmedByUserId String?
   // Resultado tras ejecutar (p.ej. folio fiscal del CFDI) o el error si falló.
-  resultUuid String?
-  error      String?
+  resultUuid        String?
+  error             String?
 
   @@index([companyId])
   @@index([createdByUserId])
@@ -3368,6 +3386,314 @@ enum ReservationFormaPago {
   TARJETA
   CORTESIA
   CUENTA // on account (cuenta por cobrar)
+}
+
+// ─── Module: Restaurante — RestauranteOS ─────────────────────────────────────
+//
+// Gated behind CompanyModule(modulo = RESTAURANTE). Satellite app
+// "restauranteos" (React/Vite SPA) renders the UI; all data + auth +
+// accounting live here in the hub. Every table is scoped by companyId so
+// cross-tenant reads are impossible. v1 covers:
+//   • Insumos con costo promedio móvil e inventario (stock / stock mínimo)
+//   • Compras a proveedores (ciclo ORDENADA → RECIBIDA → PAGADA) que
+//     alimentan inventario, costo promedio y el libro (ver postings.ts)
+//   • Menú con categorías y recetas → costeo teórico y margen por platillo
+//   • Comandas (mesa / llevar / domicilio) con flujo de cocina por partida
+//   • Money-loop de cobro: ingresos A&B + IVA + propinas (pasivo) + costo de
+//     venta teórico con descarga de inventario
+// La facturación CFDI reutiliza POST /api/facturas (Facturapi, bearer-aware);
+// la orden queda ligada al Invoice timbrado vía invoiceId.
+
+/// Configuración por restaurante. Una fila por Company con módulo RESTAURANTE.
+model RestauranteConfig {
+  id        String   @id @default(cuid())
+  companyId String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // IVA aplicado a la venta de alimentos y bebidas (0.16). Los precios del
+  // menú son IVA-incluido (costumbre mexicana); al cobrar se desglosan.
+  ivaRate Float @default(0.16)
+
+  // Número de mesas del piso; alimenta el selector del POS (0 = texto libre).
+  numMesas Int @default(0)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+enum RestUnidad {
+  KG
+  G
+  L
+  ML
+  PZA
+}
+
+/// Ingrediente / insumo de almacén. El costo promedio móvil se recalcula al
+/// RECIBIR cada compra: (stock*costoPromedio + qty*costo) / (stock + qty).
+/// El stock se descarga al cobrar órdenes según las recetas (puede quedar
+/// negativo — señal de recetas o capturas incompletas, se resalta en UI).
+model RestInsumo {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombre    String
+  categoria String? // "Carnes", "Abarrotes", "Lácteos", …
+  unidad    RestUnidad @default(PZA)
+
+  costoPromedio Float @default(0) // por unidad, sin IVA
+  stock         Float @default(0)
+  stockMinimo   Float @default(0)
+
+  activo Boolean @default(true)
+
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  recetas     RestReceta[]
+  compraItems RestCompraItem[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo])
+}
+
+enum RestCompraEstado {
+  BORRADOR
+  ORDENADA
+  RECIBIDA
+  PAGADA
+  CANCELADA
+}
+
+enum RestFormaPago {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+}
+
+/// Orden de compra a proveedor. Recibir descarga los items al inventario y
+/// postea DR almacén + IVA acreditable / CR acreedores; pagar postea
+/// DR acreedores / CR caja-bancos (ver postings.ts). El IVA se captura
+/// explícito porque muchos insumos alimentarios son tasa 0%.
+model RestCompra {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio      String // "OC-0001", consecutivo por empresa
+  supplierId String?
+  estado     RestCompraEstado @default(ORDENADA)
+  fecha      DateTime         @default(now())
+
+  subtotal Float @default(0) // Σ items.importe, sin IVA
+  iva      Float @default(0) // capturado explícito (insumos tasa 0% abundan)
+
+  notas String?
+
+  recibidaAt DateTime?
+
+  pagadaAt          DateTime?
+  formaPago         RestFormaPago?
+  bankAccountId     String?
+  bankTransactionId String?        @unique
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier        Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  items           RestCompraItem[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, estado])
+  @@index([companyId, fecha])
+}
+
+model RestCompraItem {
+  id       String @id @default(cuid())
+  compraId String
+  insumoId String
+
+  cantidad      Float
+  costoUnitario Float // sin IVA, por unidad del insumo
+  importe       Float // cantidad * costoUnitario
+
+  compra RestCompra @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  insumo RestInsumo @relation(fields: [insumoId], references: [id])
+
+  @@index([compraId])
+  @@index([insumoId])
+}
+
+model RestMenuCategoria {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  nombre String
+  orden  Int     @default(0)
+  activa Boolean @default(true)
+
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items   RestMenuItem[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa])
+}
+
+enum RestEstacion {
+  COCINA
+  BARRA
+  POSTRES
+}
+
+/// Platillo / bebida del menú. `precio` es al público, IVA incluido. El costo
+/// teórico = Σ receta.cantidad * insumo.costoPromedio se calcula al vuelo (no
+/// se persiste aquí) y se congela por partida al cobrar cada orden.
+model RestMenuItem {
+  id          String   @id @default(cuid())
+  companyId   String
+  categoriaId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  nombre      String
+  descripcion String?
+
+  precio Float // precio al público, IVA incluido
+
+  // Claves SAT para facturar (CFDI 4.0): 90101500 = establecimientos para
+  // comer y beber; E48 = unidad de servicio.
+  claveProdServ String @default("90101500")
+  claveUnidad   String @default("E48")
+
+  // Estación del KDS a la que se enrutan las partidas de este platillo.
+  estacion RestEstacion @default(COCINA)
+
+  activo     Boolean @default(true) // en catálogo
+  disponible Boolean @default(true) // toggle del día ("86")
+
+  company    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  categoria  RestMenuCategoria? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  receta     RestReceta[]
+  ordenItems RestOrdenItem[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo])
+}
+
+/// Línea de receta: cuánto insumo consume UNA unidad del platillo.
+model RestReceta {
+  id         String @id @default(cuid())
+  menuItemId String
+  insumoId   String
+  cantidad   Float // en la unidad del insumo
+
+  menuItem RestMenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  insumo   RestInsumo   @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, insumoId])
+}
+
+enum RestOrdenTipo {
+  MESA
+  LLEVAR
+  DOMICILIO
+}
+
+enum RestOrdenEstado {
+  ABIERTA
+  COBRADA
+  CANCELADA
+}
+
+enum RestItemEstado {
+  PENDIENTE
+  EN_PREPARACION
+  LISTO
+  ENTREGADO
+  CANCELADO
+}
+
+enum RestOrdenFormaPago {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+  CORTESIA
+}
+
+/// Comanda. Los importes se congelan al cobrar (precios IVA-incluido → se
+/// desglosan con RestauranteConfig.ivaRate). La propina NO es ingreso: se
+/// postea como pasivo (2107 Propinas por pagar). CORTESIA no postea nada.
+model RestOrden {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio         Int
+  tipo          RestOrdenTipo @default(MESA)
+  mesa          String?
+  comensales    Int?
+  clienteNombre String?
+  notas         String?
+
+  // Mesero/cajero que levantó la orden (User id plano, sin FK — mismo patrón
+  // que Reservation.bookedByUserId).
+  meseroUserId String?
+
+  estado RestOrdenEstado @default(ABIERTA)
+
+  subtotal   Float @default(0)
+  iva        Float @default(0)
+  total      Float @default(0) // subtotal + iva (sin propina)
+  propina    Float @default(0)
+  costoTotal Float @default(0) // costo teórico (recetas) congelado al cobrar
+
+  formaPago         RestOrdenFormaPago?
+  cobradaAt         DateTime?
+  bankAccountId     String?
+  bankTransactionId String?             @unique
+
+  // Facturación CFDI: cliente fiscal + factura timbrada vía POST /api/facturas.
+  customerId String?
+  invoiceId  String? @unique
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  invoice         Invoice?         @relation(fields: [invoiceId], references: [id])
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  items           RestOrdenItem[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, estado])
+  @@index([companyId, createdAt])
+}
+
+/// Partida de la comanda. `estadoCocina` es el flujo del KDS; `precioUnitario`
+/// se congela al agregar (el menú puede cambiar de precio después);
+/// `costoUnitario` se congela al cobrar la orden.
+model RestOrdenItem {
+  id         String   @id @default(cuid())
+  ordenId    String
+  menuItemId String
+  createdAt  DateTime @default(now())
+
+  cantidad       Float
+  precioUnitario Float // IVA incluido, congelado al agregar
+  notas          String? // "sin cebolla", "término medio"
+
+  estacion     RestEstacion   @default(COCINA)
+  estadoCocina RestItemEstado @default(PENDIENTE)
+  listoAt      DateTime?
+
+  costoUnitario Float @default(0) // costo teórico congelado al cobrar
+
+  orden    RestOrden    @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  menuItem RestMenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@index([ordenId])
+  @@index([menuItemId])
+  @@index([estadoCocina])
 }
 
 // ── Chat del asistente IA (persistencia + hilos) ──────────────────────────────
