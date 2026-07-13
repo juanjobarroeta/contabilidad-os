@@ -55,7 +55,8 @@ node scripts/validate-restaurante-postings.mjs   # "✅ All checks passed"
 ```
 
 Deploy checklist (una vez, por entorno):
-1. `prisma db push` (nuevas tablas Rest* + enums).
+1. `prisma migrate deploy` (migración `20260713_restaurante`: tablas Rest* +
+   enums, sólo aditiva).
 2. `API_ALLOWED_ORIGINS` += origen del satélite (p. ej.
    `https://restauranteos.vercel.app`) — sin espacios ni slash final.
 3. Habilitar el módulo en la(s) empresa(s) piloto.
