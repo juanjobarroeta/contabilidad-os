@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   Landmark, Upload, Sparkles, Loader2, Link2, Search, CheckCircle2,
   AlertTriangle, ChevronDown, Plus, CheckSquare, X, Building2, Users,
@@ -22,7 +23,21 @@ interface BankTx {
   tipo: "CREDITO" | "DEBITO"; status: "UNMATCHED" | "MATCHED" | "IGNORED";
   notes?: string | null;
   invoiceId?: string | null;
-  invoice?: { id: string; uuid?: string; total: number; customer?: { razonSocial: string } } | null;
+  invoice?: {
+    id: string;
+    uuid?: string | null;
+    folio?: string | null;
+    serie?: string | null;
+    total: number;
+    fecha?: string | null;
+    customer?: { razonSocial: string } | null;
+  } | null;
+  /** Devolución bancaria: este movimiento ES la devolución de aquel pago. */
+  devolucionDe?: { id: string; fecha: string; descripcion: string; monto: number } | null;
+  /** Devolución bancaria: este pago FUE devuelto por aquel movimiento. */
+  devolucionPor?: { id: string; fecha: string; descripcion: string; monto: number } | null;
+  /** Sugerencia del servidor: probable pago original de esta devolución. */
+  sugerenciaDevolucion?: { origenId: string; descripcion: string; fecha: string; monto: number } | null;
   // Pago de impuestos conciliado (SIPARE / línea de captura).
   taxDeclaration?: { id: string; tipo: string; periodo: string; status: string } | null;
   // Conciliación uno-a-varios: porciones asignadas a varias facturas.
@@ -368,6 +383,33 @@ export default function BancosPage() {
     } finally { setActing(null); }
   }
 
+  // Devolución bancaria: vincular la devolución con su pago original (deshace
+  // la conciliación del original en el servidor) y desvincular el par.
+  async function vincularDevolucion(devolucionId: string, origenId: string) {
+    setActing(devolucionId);
+    try {
+      const res = await fetch(`/api/bancos/transactions/${devolucionId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "vincular-devolucion", origenId }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (res.ok) { showToast("Devolución vinculada — ambos movimientos se netean"); await Promise.all([loadTxs(), loadAccounts()]); }
+      else showToast(data?.error ?? "No se pudo vincular la devolución");
+    } finally { setActing(null); }
+  }
+
+  async function desvincularDevolucion(txId: string) {
+    setActing(txId);
+    try {
+      const res = await fetch(`/api/bancos/transactions/${txId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "desvincular-devolucion" }),
+      });
+      if (res.ok) { showToast("Par de devolución desvinculado"); await Promise.all([loadTxs(), loadAccounts()]); }
+      else showToast("No se pudo desvincular");
+    } finally { setActing(null); }
+  }
+
   async function reabrir(txId: string) {
     setActing(txId);
     try {
@@ -487,6 +529,15 @@ export default function BancosPage() {
 
   function statusChip(tx: BankTx) {
     if (tx.status === "MATCHED") return <Chip status="conciliado" label="Conciliado" icon={<CheckCircle2 className="h-3 w-3" />} />;
+    // Par de devolución vinculado: se distingue del "Ignorado" suelto — estos
+    // dos movimientos se netean y la historia del rebote queda conservada.
+    if (tx.devolucionDe || tx.devolucionPor) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-cos-amber-tint px-2.5 py-1 text-[12px] font-semibold text-cos-amber-ink">
+          <ArrowLeftRight className="h-3 w-3" /> {tx.devolucionDe ? "Devolución" : "Pago devuelto"}
+        </span>
+      );
+    }
     if (tx.status === "IGNORED") {
       const lbl = tx.notes && TAG_LABEL[tx.notes] ? TAG_LABEL[tx.notes] : "Ignorado";
       return <span className="inline-flex items-center gap-1.5 rounded-full bg-cos-slate-tint px-2.5 py-1 text-[12px] font-semibold text-cos-ink-soft">{lbl}</span>;
@@ -678,8 +729,73 @@ export default function BancosPage() {
                       </div>
 
                       {matched && m.invoice && (
-                        <div className="mt-3 flex items-center gap-1.5 border-t border-dashed border-cos-jade-tint pt-3 text-[13px] text-cos-jade-ink">
-                          <Link2 className="h-[15px] w-[15px]" /> Conciliado con <b>{m.invoice.customer?.razonSocial ?? "factura"}</b>
+                        <div className="mt-3 border-t border-dashed border-cos-jade-tint pt-3 text-[13px] text-cos-jade-ink">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Link2 className="h-[15px] w-[15px]" /> Conciliado con{" "}
+                            <b>{m.invoice.customer?.razonSocial ?? "factura"}</b>
+                          </div>
+                          {/* La factura concreta, no solo la contraparte: folio,
+                              fecha y total — y enlace al CFDI por UUID. */}
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[12.5px] text-cos-ink-soft">
+                            {(m.invoice.serie || m.invoice.folio) && (
+                              <span className="font-mono">
+                                {m.invoice.serie ?? ""}{m.invoice.folio ?? ""}
+                              </span>
+                            )}
+                            {m.invoice.fecha && (
+                              <span>
+                                {new Date(m.invoice.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                              </span>
+                            )}
+                            <Money value={m.invoice.total} size={12.5} muted />
+                            {m.invoice.uuid && (
+                              <Link
+                                href={`/facturas?q=${m.invoice.uuid}`}
+                                className="font-semibold text-cos-brand-ink hover:underline"
+                              >
+                                Ver factura
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Par de devolución vinculado (cualquiera de los dos lados). */}
+                      {(m.devolucionDe || m.devolucionPor) && (
+                        <div className="mt-3 border-t border-dashed border-cos-amber-tint pt-3">
+                          <div className="flex items-center gap-1.5 text-[13px] text-cos-amber-ink">
+                            <ArrowLeftRight className="h-[15px] w-[15px]" />
+                            {m.devolucionDe ? (
+                              <>Devolución del pago del <b>{new Date(m.devolucionDe.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}</b> — ambos se netean</>
+                            ) : (
+                              <>Este pago fue devuelto el <b>{new Date(m.devolucionPor!.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}</b> — no cuenta como pagado</>
+                            )}
+                          </div>
+                          {!selectMode && (
+                            <button onClick={() => desvincularDevolucion(m.id)} disabled={acting === m.id}
+                              className="mt-2 text-[13px] font-semibold text-cos-red-ink hover:underline disabled:opacity-50">
+                              {acting === m.id ? "…" : "Desvincular"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Sugerencia: probable devolución de un pago anterior. */}
+                      {m.sugerenciaDevolucion && !m.devolucionDe && !m.devolucionPor && (
+                        <div className="mt-3 rounded-md bg-cos-amber-tint px-3 py-2.5">
+                          <div className="flex flex-wrap items-center gap-x-2 text-[13px] text-cos-amber-ink">
+                            <ArrowLeftRight className="h-[15px] w-[15px]" />
+                            ¿Es la devolución de este pago?{" "}
+                            <b className="truncate">{m.sugerenciaDevolucion.descripcion}</b>
+                            <span>· {new Date(m.sugerenciaDevolucion.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}</span>
+                            <Money value={m.sugerenciaDevolucion.monto} size={13} muted />
+                          </div>
+                          {!selectMode && (
+                            <button onClick={() => vincularDevolucion(m.id, m.sugerenciaDevolucion!.origenId)} disabled={acting === m.id}
+                              className="mt-1.5 text-[13px] font-bold text-cos-amber-ink underline disabled:opacity-50">
+                              {acting === m.id ? "…" : "Vincular como devolución"}
+                            </button>
+                          )}
                         </div>
                       )}
 

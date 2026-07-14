@@ -1005,6 +1005,16 @@ model BankTransaction {
   // Conciliación uno-a-varios: asignaciones por factura (ver ConciliacionDetalle).
   conciliacionDetalles  ConciliacionDetalle[]
 
+  // Devolución bancaria (pago rebotado): el movimiento de DEVOLUCIÓN apunta al
+  // pago ORIGINAL. Emparejados, ambos quedan IGNORED —se netean: no son ingreso
+  // ni gasto ni evidencia de pago— pero el vínculo conserva la historia (a
+  // diferencia de un "Ignorado" suelto) y al vincular se deshace la
+  // conciliación del original (la factura vuelve a no-pagada). @unique: un
+  // original tiene a lo más UNA devolución.
+  devolucionDeId String?          @unique
+  devolucionDe   BankTransaction? @relation("DevolucionPago", fields: [devolucionDeId], references: [id], onDelete: SetNull)
+  devolucionPor  BankTransaction? @relation("DevolucionPago")
+
   // Conciliación: los flujos calientes filtran por cuenta + status
   // (auto-conciliar UNMATCHED, groupBy de status en /api/bancos).
   @@index([bankAccountId, status])
