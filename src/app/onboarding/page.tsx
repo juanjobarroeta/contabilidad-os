@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X, ListChecks, RefreshCw, CreditCard, ExternalLink } from "lucide-react";
 import { mapCsfObligacion, TIPO_DESC } from "@/lib/obligaciones";
@@ -498,13 +499,32 @@ function OnboardingPageInner() {
 
         {/* Header */}
         <div className="px-8 pt-8 pb-6 border-b border-cos-line">
-          {backHref && (
+          {/* Salida SIEMPRE visible: antes solo existía al venir de Empresas y
+              el primer onboarding era una trampa sin escape (caso real: un
+              contador invitado que no debía crear la empresa no podía salir). */}
+          {backHref ? (
             <Link
               href={backHref}
               className="inline-flex items-center gap-1.5 text-xs text-cos-ink-soft hover:text-cos-ink mb-3"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Volver a Empresas
             </Link>
+          ) : (
+            <div className="mb-3 flex items-center justify-between">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-1.5 text-xs text-cos-ink-soft hover:text-cos-ink"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Salir
+              </Link>
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="text-xs text-cos-ink-faint hover:text-cos-ink"
+              >
+                Cerrar sesión
+              </button>
+            </div>
           )}
           <h1 className="text-xl font-bold text-cos-ink mb-1">
             {fromEmpresas ? "Agregar nueva empresa" : "Configura tu empresa"}
