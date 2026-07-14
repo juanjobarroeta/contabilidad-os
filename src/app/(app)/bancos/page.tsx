@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   Landmark, Upload, Sparkles, Loader2, Link2, Search, CheckCircle2,
   AlertTriangle, ChevronDown, Plus, CheckSquare, X, Building2, Users,
@@ -22,7 +23,15 @@ interface BankTx {
   tipo: "CREDITO" | "DEBITO"; status: "UNMATCHED" | "MATCHED" | "IGNORED";
   notes?: string | null;
   invoiceId?: string | null;
-  invoice?: { id: string; uuid?: string; total: number; customer?: { razonSocial: string } } | null;
+  invoice?: {
+    id: string;
+    uuid?: string | null;
+    folio?: string | null;
+    serie?: string | null;
+    total: number;
+    fecha?: string | null;
+    customer?: { razonSocial: string } | null;
+  } | null;
   // Pago de impuestos conciliado (SIPARE / línea de captura).
   taxDeclaration?: { id: string; tipo: string; periodo: string; status: string } | null;
   // Conciliación uno-a-varios: porciones asignadas a varias facturas.
@@ -678,8 +687,34 @@ export default function BancosPage() {
                       </div>
 
                       {matched && m.invoice && (
-                        <div className="mt-3 flex items-center gap-1.5 border-t border-dashed border-cos-jade-tint pt-3 text-[13px] text-cos-jade-ink">
-                          <Link2 className="h-[15px] w-[15px]" /> Conciliado con <b>{m.invoice.customer?.razonSocial ?? "factura"}</b>
+                        <div className="mt-3 border-t border-dashed border-cos-jade-tint pt-3 text-[13px] text-cos-jade-ink">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Link2 className="h-[15px] w-[15px]" /> Conciliado con{" "}
+                            <b>{m.invoice.customer?.razonSocial ?? "factura"}</b>
+                          </div>
+                          {/* La factura concreta, no solo la contraparte: folio,
+                              fecha y total — y enlace al CFDI por UUID. */}
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[12.5px] text-cos-ink-soft">
+                            {(m.invoice.serie || m.invoice.folio) && (
+                              <span className="font-mono">
+                                {m.invoice.serie ?? ""}{m.invoice.folio ?? ""}
+                              </span>
+                            )}
+                            {m.invoice.fecha && (
+                              <span>
+                                {new Date(m.invoice.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                              </span>
+                            )}
+                            <Money value={m.invoice.total} size={12.5} muted />
+                            {m.invoice.uuid && (
+                              <Link
+                                href={`/facturas?q=${m.invoice.uuid}`}
+                                className="font-semibold text-cos-brand-ink hover:underline"
+                              >
+                                Ver factura
+                              </Link>
+                            )}
+                          </div>
                         </div>
                       )}
 

@@ -66,7 +66,15 @@ export async function GET(req: Request, { params }: Params) {
       where,
       include: {
         invoice: {
-          select: { id: true, uuid: true, total: true, fecha: true, customer: { select: { razonSocial: true } } },
+          select: {
+            id: true,
+            uuid: true,
+            folio: true,
+            serie: true,
+            total: true,
+            fecha: true,
+            customer: { select: { razonSocial: true } },
+          },
         },
         // Pago de impuestos conciliado: la UI muestra «Pago de impuestos:
         // {etiqueta del periodo/tipo}» con opción de desconciliar.
