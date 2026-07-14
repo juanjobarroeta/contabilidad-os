@@ -89,13 +89,35 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
     });
 
     if (existing) {
-      // Gap-fill: si la anual ya existe pero aún no se le extrajo el coeficiente
-      // ni la pérdida (y tenemos el PDF), parsearla una sola vez. No sobreescribe
-      // importes capturados/calculados.
-      const sinEnriquecer =
-        existing.isrIngresos == null && existing.isrCoeficienteUtilidad == null && existing.isrPerdidaPendiente == null;
-      if (sinEnriquecer && existing.acusePdf) {
-        await enriquecerAnualDesdePdf(existing.id, companyId, new Uint8Array(existing.acusePdf));
+      // Gap-fill del PDF: el acuse se descargaba SOLO al crear la fila
+      // (best-effort) y un fallo de descarga dejaba la anual sin PDF para
+      // siempre — sin documento descargable y sin nada que parsear (caso real:
+      // 2023-2025 de una empresa existían como filas pero solo 2022 tenía
+      // PDF, con Syntage teniendo los tres archivos disponibles). Reintenta
+      // aquí en cada sync hasta conseguirlo.
+      let pdf = existing.acusePdf ? new Uint8Array(existing.acusePdf) : null;
+      if (!pdf) {
+        const refExistente = fileRefDe(tr as Record<string, unknown>);
+        if (refExistente) {
+          try {
+            pdf = new Uint8Array((await client.downloadAcuse(refExistente)).data);
+            await prisma.taxDeclaration.update({
+              where: { id: existing.id },
+              data: { acusePdf: pdf, acusePdfNombre: `acuse-anual-${periodo}.pdf` },
+            });
+          } catch {
+            pdf = null; // siguiente sync reintenta
+          }
+        }
+      }
+      // Re-parseo cuando la anual nunca se extrajo COMPLETA: `isrIngresos` es
+      // el centinela — los ingresos nominales siempre vienen en un acuse anual,
+      // así que su null significa "parse nunca completado" (p. ej. la fila
+      // nació del onboarding solo con coeficiente). Usar la pérdida como
+      // condición re-parsearía cada sync las anuales que legítimamente no
+      // tienen pérdidas. No sobreescribe importes capturados/calculados.
+      if (existing.isrIngresos == null && pdf) {
+        await enriquecerAnualDesdePdf(existing.id, companyId, pdf);
       }
       continue;
     }
