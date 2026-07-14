@@ -14,6 +14,7 @@ import {
   statusTrasDesconciliar,
 } from "@/lib/conciliacion-impuestos";
 import { registrarBitacora } from "@/lib/audit";
+import { validarParDevolucion } from "@/lib/bancos/devoluciones";
 
 type Params = { params: Promise<{ txId: string }> };
 
@@ -63,6 +64,8 @@ export async function PATCH(req: Request, { params }: Params) {
       taxDeclaration: {
         select: { id: true, tipo: true, periodo: true, status: true, acuseUrl: true, acusePdfNombre: true, lineaCaptura: true },
       },
+      // Devolución bancaria: para validar vincular/desvincular pares.
+      devolucionPor: { select: { id: true } },
     },
   });
   if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
@@ -70,7 +73,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(user.id, tx.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
-  const { action, invoiceId, gastoId, reembolsoId, rayaId, solicitudCompraId, taxDeclarationId, notes, asignaciones } = await req.json();
+  const { action, invoiceId, gastoId, reembolsoId, rayaId, solicitudCompraId, taxDeclarationId, notes, asignaciones, origenId } = await req.json();
 
   // Aviso (no bloqueante) para conciliación múltiple: la suma asignada quedó
   // por debajo del movimiento más allá de la tolerancia. Se devuelve en la
@@ -436,6 +439,97 @@ export async function PATCH(req: Request, { params }: Params) {
         data: { status: "UNMATCHED", notes: null },
       });
       break;
+    // ── Devolución bancaria (pago rebotado) ───────────────────────────────────
+    // txId = el movimiento de DEVOLUCIÓN; body.origenId = el pago original.
+    // Ambos quedan IGNORED (se netean: fuera de KPIs y del motor de IVA) y el
+    // vínculo conserva la historia. La conciliación del ORIGINAL se deshace en
+    // la misma transacción: la factura vuelve a no-pagada y una declaración
+    // PAID regresa a su estatus por evidencia — el pago nunca ocurrió (flujo).
+    case "vincular-devolucion": {
+      if (typeof origenId !== "string" || !origenId)
+        return NextResponse.json({ error: "Falta origenId (el pago original)." }, { status: 400 });
+      if (tx.devolucionDeId || tx.devolucionPor)
+        return NextResponse.json({ error: "Este movimiento ya es parte de una devolución vinculada." }, { status: 409 });
+
+      const origen = await prisma.bankTransaction.findFirst({
+        where: { id: origenId, companyId: tx.companyId },
+        include: {
+          devolucionPor: { select: { id: true } },
+          gastoPagado: { select: { id: true } },
+          reembolsoPagado: { select: { id: true } },
+          rayaPagada: { select: { id: true } },
+          solicitudCompraPagada: { select: { id: true } },
+          taxDeclaration: {
+            select: { id: true, tipo: true, periodo: true, status: true, acuseUrl: true, acusePdfNombre: true, lineaCaptura: true },
+          },
+          conciliacionDetalles: { select: { invoiceId: true, montoAsignado: true } },
+        },
+      });
+      if (!origen) return NextResponse.json({ error: "Pago original no encontrado." }, { status: 404 });
+      if (origen.devolucionDeId || origen.devolucionPor)
+        return NextResponse.json({ error: "El pago original ya tiene una devolución vinculada." }, { status: 409 });
+      // Vínculos de construcción viven en la entidad (Gasto.bankTxId, etc.):
+      // se piden desconciliar explícitamente primero, no se rompen en silencio.
+      if (origen.gastoPagado || origen.reembolsoPagado || origen.rayaPagada || origen.solicitudCompraPagada)
+        return NextResponse.json(
+          { error: "El pago original está vinculado a construcción (gasto/raya/reembolso). Desconcílialo primero." },
+          { status: 409 },
+        );
+
+      const motivo = validarParDevolucion(
+        { id: tx.id, bankAccountId: tx.bankAccountId, fecha: tx.fecha, monto: tx.monto, descripcion: tx.descripcion, referencia: tx.referencia },
+        { id: origen.id, bankAccountId: origen.bankAccountId, fecha: origen.fecha, monto: origen.monto, descripcion: origen.descripcion, referencia: origen.referencia },
+      );
+      if (motivo) return NextResponse.json({ error: motivo }, { status: 422 });
+
+      // Reversa de la declaración pagada por el original (misma regla que unmatch).
+      const revertDeclDevol: ReturnType<typeof prisma.taxDeclaration.update>[] = [];
+      if (origen.taxDeclaration && origen.taxDeclaration.status === "PAID") {
+        revertDeclDevol.push(
+          prisma.taxDeclaration.update({
+            where: { id: origen.taxDeclaration.id },
+            data: { status: statusTrasDesconciliar(origen.taxDeclaration) },
+          }),
+        );
+      }
+      await prisma.$transaction([
+        prisma.conciliacionDetalle.deleteMany({ where: { bankTransactionId: origen.id } }),
+        prisma.bankTransaction.update({
+          where: { id: origen.id },
+          data: { status: "IGNORED", invoiceId: null, taxDeclarationId: null },
+        }),
+        prisma.bankTransaction.update({
+          where: { id: txId },
+          data: { status: "IGNORED", invoiceId: null, taxDeclarationId: null, devolucionDeId: origen.id },
+        }),
+        ...revertDeclDevol,
+      ]);
+      detalleBitacora = {
+        origenId: origen.id,
+        montoOrigen: origen.monto,
+        invoicePrevio: origen.invoiceId,
+        asignacionesPrevias: origen.conciliacionDetalles.length || undefined,
+        taxDeclarationPrevia: origen.taxDeclaration?.id,
+      };
+      break;
+    }
+    case "desvincular-devolucion": {
+      // txId puede ser cualquiera de los dos lados del par.
+      const origenDelPar = tx.devolucionDeId ?? tx.devolucionPor?.id ?? null;
+      if (!origenDelPar)
+        return NextResponse.json({ error: "Este movimiento no tiene una devolución vinculada." }, { status: 409 });
+      const devolucionId = tx.devolucionDeId ? tx.id : tx.devolucionPor!.id;
+      const origenIdPar = tx.devolucionDeId ?? tx.id;
+      await prisma.$transaction([
+        prisma.bankTransaction.update({
+          where: { id: devolucionId },
+          data: { devolucionDeId: null, status: "UNMATCHED" },
+        }),
+        prisma.bankTransaction.update({ where: { id: origenIdPar }, data: { status: "UNMATCHED" } }),
+      ]);
+      detalleBitacora = { devolucionId, origenId: origenIdPar };
+      break;
+    }
     default:
       return NextResponse.json({ error: `Acción desconocida: ${action}` }, { status: 400 });
   }
@@ -443,7 +537,14 @@ export async function PATCH(req: Request, { params }: Params) {
   // Bitácora de seguridad: conciliación manual (fire-and-forget). Sólo
   // match/match-multiple/match-impuesto/unmatch — ignore/unignore no mueven
   // dinero ni vínculos fiscales.
-  if (action === "match" || action === "match-multiple" || action === "match-impuesto" || action === "unmatch") {
+  if (
+    action === "match" ||
+    action === "match-multiple" ||
+    action === "match-impuesto" ||
+    action === "unmatch" ||
+    action === "vincular-devolucion" ||
+    action === "desvincular-devolucion"
+  ) {
     registrarBitacora({
       companyId: tx.companyId,
       userId: user.id,
@@ -453,7 +554,11 @@ export async function PATCH(req: Request, { params }: Params) {
           ? "conciliacion.unmatch"
           : action === "match-impuesto"
             ? "conciliacion.match-impuesto"
-            : "conciliacion.match",
+            : action === "vincular-devolucion"
+              ? "conciliacion.devolucion"
+              : action === "desvincular-devolucion"
+                ? "conciliacion.devolucion-desvincular"
+                : "conciliacion.match",
       entidad: "BankTransaction",
       entidadId: txId,
       detalle: {

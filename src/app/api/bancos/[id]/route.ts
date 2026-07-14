@@ -3,6 +3,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import {
+  DEVOLUCION_VENTANA_DIAS,
+  elegirOrigenDevolucion,
+  esDescripcionDevolucion,
+} from "@/lib/bancos/devoluciones";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -81,6 +86,9 @@ export async function GET(req: Request, { params }: Params) {
         taxDeclaration: {
           select: { id: true, tipo: true, periodo: true, status: true, fechaLimitePago: true },
         },
+        // Devolución bancaria vinculada (cualquiera de los dos lados del par).
+        devolucionDe: { select: { id: true, fecha: true, descripcion: true, monto: true } },
+        devolucionPor: { select: { id: true, fecha: true, descripcion: true, monto: true } },
         // Conciliación uno-a-varios: porciones asignadas a varias facturas
         // (la UI muestra "Conciliado con N facturas" con este detalle).
         conciliacionDetalles: {
@@ -159,9 +167,58 @@ export async function GET(req: Request, { params }: Params) {
   };
   const taggedTotal = Object.values(subCounts).reduce((s, n) => s + n, 0);
 
+  // ── Sugerencias de devolución (pago rebotado) ─────────────────────────────
+  // Para los movimientos de la página cuya descripción huele a devolución y
+  // que aún no están vinculados ni conciliados, se busca en la MISMA cuenta el
+  // pago original (monto opuesto, ≤30 días antes). Sólo se propone con señal
+  // fuerte (referencia idéntica, o descripción + cercanía); el humano decide.
+  const sugerenciasDevolucion: Record<
+    string,
+    { origenId: string; descripcion: string; fecha: Date; monto: number }
+  > = {};
+  const candidatasDevolucion = transactions.filter(
+    (t) =>
+      esDescripcionDevolucion(t.descripcion) &&
+      !t.devolucionDeId &&
+      !t.devolucionPor &&
+      t.status !== "MATCHED",
+  );
+  for (const dev of candidatasDevolucion) {
+    const desde = new Date(dev.fecha.getTime() - DEVOLUCION_VENTANA_DIAS * 86400000);
+    const posibles = await prisma.bankTransaction.findMany({
+      where: {
+        bankAccountId,
+        id: { not: dev.id },
+        fecha: { gte: desde, lte: dev.fecha },
+        // Monto opuesto exacto (el validador re-verifica con tolerancia).
+        monto: -dev.monto,
+        devolucionDeId: null,
+        devolucionPor: { is: null },
+      },
+      select: { id: true, bankAccountId: true, fecha: true, monto: true, descripcion: true, referencia: true },
+      take: 20,
+    });
+    const origen = elegirOrigenDevolucion(
+      { id: dev.id, bankAccountId: dev.bankAccountId, fecha: dev.fecha, monto: dev.monto, descripcion: dev.descripcion, referencia: dev.referencia },
+      posibles,
+    );
+    if (origen) {
+      const full = posibles.find((p) => p.id === origen.id)!;
+      sugerenciasDevolucion[dev.id] = {
+        origenId: full.id,
+        descripcion: full.descripcion,
+        fecha: full.fecha,
+        monto: full.monto,
+      };
+    }
+  }
+
   return NextResponse.json({
     account,
-    transactions,
+    transactions: transactions.map((t) => ({
+      ...t,
+      sugerenciaDevolucion: sugerenciasDevolucion[t.id] ?? null,
+    })),
     pagination: { page, pageSize, total, pages: Math.ceil(total / pageSize) },
     statusCounts: {
       UNMATCHED: statusCounts.UNMATCHED ?? 0,
