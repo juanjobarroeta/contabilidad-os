@@ -235,16 +235,21 @@ function OnboardingPageInner() {
           method: "POST",
           body: form,
         });
-        const data = await res.json();
-        if (!res.ok) {
-          setError(`${file.name}: ${data.error ?? "No se pudo procesar"}`);
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+          type?: string;
+          extracted?: unknown;
+          warnings?: string[];
+        } | null;
+        if (!res.ok || !data) {
+          setError(`${file.name}: ${data?.error ?? "No se pudo procesar"}`);
           continue;
         }
         results.push({
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           fileName: file.name,
           type: data.type as DocType,
-          extracted: data.extracted,
+          extracted: data.extracted as ParsedDoc["extracted"],
           warnings: data.warnings ?? [],
         });
       }
@@ -442,8 +447,14 @@ function OnboardingPageInner() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "Error al crear la empresa");
+        // Nunca confíes en que el cuerpo sea JSON: un 500 inesperado llega sin
+        // cuerpo y `res.json()` truena con "Unexpected end of JSON input",
+        // ocultando el error real al usuario (caso real: RFC duplicado).
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(
+          data?.error ??
+            "No se pudo crear la empresa por un error del servidor. Intenta de nuevo en un momento o escríbenos."
+        );
       }
 
       router.push(successHref);
