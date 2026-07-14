@@ -41,10 +41,22 @@ export const REUSE_WINDOW_HOURS = 24;
 const REUSABLE_STATUSES = ["PENDING", "ACCEPTED", "IN_PROGRESS", "FINISHED"] as const;
 type ReusableStatus = "PENDING" | "ACCEPTED" | "IN_PROGRESS" | "FINISHED";
 
+// Timeout explícito del cliente HTTPS hacia el SAT. NO es cosmético: el
+// HttpsWebClient de @nodecfdi tiene un bug en su manejador de timeout — si el
+// cliente se construye SIN timeout explícito, un socket timeout rechaza con un
+// Error plano (no WebClientException) y el ServiceConsumer de la propia
+// librería truena con "webError.getResponse is not a function", matando el
+// procesamiento de la empresa a media corrida (visto en producción cuando el
+// SAT anda lento: sat-sync/backfill/cancel-sync fallando en TODAS las
+// empresas). Con timeout explícito, el mismo evento viaja por la ruta buena
+// (WebClientException → HttpTimeoutError) y queda como error legible que el
+// cron reintenta en la siguiente pasada.
+const SAT_HTTP_TIMEOUT_MS = 60_000;
+
 function buildService(fiel: Awaited<ReturnType<typeof getFielForCompany>>): Service {
   return new Service(
     new FielRequestBuilder(fiel),
-    new HttpsWebClient(),
+    new HttpsWebClient(undefined, undefined, SAT_HTTP_TIMEOUT_MS),
     undefined,
     ServiceEndpoints.cfdi()
   );
