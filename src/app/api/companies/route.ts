@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertPuedeEscribir } from "@/lib/subscription";
-import { AuthzError } from "@/lib/authz";
+import { AuthzError, getEffectiveCompanyMembership } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { provisionCompany } from "@/lib/fiscal/cumplimiento/syntage/provision";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
@@ -185,6 +186,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
   }
 
+  // ── RFC duplicado (el RFC es único en TODA la plataforma) ──────────────────
+  // Antes esto explotaba como P2002 sin manejar → 500 sin cuerpo JSON, y el
+  // onboarding moría con "Unexpected end of JSON input" sin decirle al usuario
+  // qué pasó (caso real: un cliente reintentó 8 veces contra el mismo RFC ya
+  // registrado). Ahora se responde 409 con la salida correcta según el caso.
+  const rfcNorm = rfc.toUpperCase().trim();
+  const existente = await prisma.company.findUnique({
+    where: { rfc: rfcNorm },
+    select: { id: true, isActive: true },
+  });
+  if (existente) {
+    const acceso = await getEffectiveCompanyMembership(session.user.id, existente.id);
+    return NextResponse.json(
+      {
+        error: acceso
+          ? "Esta empresa ya está registrada y ya tienes acceso a ella. Selecciónala en el selector de empresas (arriba a la izquierda) en lugar de crearla de nuevo."
+          : "Este RFC ya está registrado en la plataforma por otra cuenta. Si la empresa es tuya, pide a quien la administra que te invite desde Configuración → Usuarios, o escríbenos para ayudarte a recuperar el acceso.",
+        codigo: "RFC_DUPLICADO",
+        ...(acceso ? { companyId: existente.id } : {}),
+      },
+      { status: 409 },
+    );
+  }
+
   // Auto-link to the creator's despacho (if they belong to one). Every
   // despacho member automatically gets access to companies the despacho
   // owns, so this is the main path for teams/firms. The creator still gets
@@ -274,9 +299,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
-  const company = await prisma.company.create({
+  const creadorId = session.user.id;
+  let company;
+  try {
+    company = await crearCompany();
+  } catch (e) {
+    // Carrera contra el pre-check (dos creaciones simultáneas del mismo RFC).
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return NextResponse.json(
+        {
+          error:
+            "Este RFC ya está registrado en la plataforma. Si la empresa es tuya, pide a quien la administra que te invite, o escríbenos para ayudarte.",
+          codigo: "RFC_DUPLICADO",
+        },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
+
+  async function crearCompany() {
+    return prisma.company.create({
     data: {
-      rfc: rfc.toUpperCase(),
+      rfc: rfcNorm,
       razonSocial,
       regimenFiscal,
       codigoPostal,
@@ -302,7 +347,7 @@ export async function POST(req: Request) {
       grupoId: grupoIdValido,
       members: {
         create: {
-          userId: session.user.id,
+          userId: creadorId,
           role: "OWNER",
         },
       },
@@ -316,7 +361,8 @@ export async function POST(req: Request) {
         create: regimenCreate,
       },
     },
-  });
+    });
+  }
 
   // Si el creador paga plan DESPACHO (per-unit por empresa, mínimo 10) en
   // Stripe, sube la cantidad de su suscripción. Fire-and-forget: nunca lanza
