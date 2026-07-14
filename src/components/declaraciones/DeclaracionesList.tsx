@@ -18,6 +18,10 @@ export function DeclaracionesList() {
   const [data, setData] = useState<Cobertura | null>(null);
   const [acuses, setAcuses] = useState<Acuse[]>([]);
   const [loading, setLoading] = useState(true);
+  // Filtros de la lista de acuses (519+ renglones sin filtro era inservible;
+  // además el orden por periodo desc entierra las anuales — "2026-05" > "2025").
+  const [filtroTipo, setFiltroTipo] = useState<string>("TODAS");
+  const [busqueda, setBusqueda] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,6 +40,17 @@ export function DeclaracionesList() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const q = busqueda.trim().toLowerCase();
+  const acusesFiltrados = acuses.filter((a) => {
+    if (filtroTipo !== "TODAS" && a.tipo !== filtroTipo) return false;
+    if (!q) return true;
+    return (
+      a.razonSocial.toLowerCase().includes(q) ||
+      a.rfc.toLowerCase().includes(q) ||
+      a.periodo.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
@@ -82,11 +97,49 @@ export function DeclaracionesList() {
           <div className="mb-2 flex items-center gap-2">
             <Download className="h-4 w-4 text-cos-ink-faint" />
             <h2 className="text-sm font-semibold text-cos-ink">Acuses disponibles</h2>
-            <span className="text-[12px] text-cos-ink-faint">PDF guardado · {acuses.length}</span>
+            <span className="text-[12px] text-cos-ink-faint">
+              PDF guardado · {acusesFiltrados.length}
+              {acusesFiltrados.length !== acuses.length ? ` de ${acuses.length}` : ""}
+            </span>
           </div>
+
+          {/* Filtros: por tipo (las anuales existen pero el orden cronológico
+              las entierra bajo cientos de mensuales) y búsqueda libre. */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-cos-line bg-cos-card p-1" role="group" aria-label="Filtrar por tipo">
+              {(["TODAS", "DECLARACION_ANUAL", "IVA_MENSUAL", "ISR_PROVISIONAL"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setFiltroTipo(t)}
+                  aria-pressed={filtroTipo === t}
+                  className={`rounded-md px-2.5 py-1 text-[12.5px] font-semibold transition-all ${
+                    filtroTipo === t ? "bg-cos-brand-tint text-cos-brand-ink" : "text-cos-ink-soft hover:text-cos-ink"
+                  }`}
+                >
+                  {t === "TODAS" ? "Todas" : TIPO_LABEL[t]}
+                </button>
+              ))}
+            </div>
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Empresa, RFC o periodo (2025, 2026-05…)"
+              className="min-w-[220px] flex-1 rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-cos-brand-tint"
+            />
+          </div>
+
+          {acusesFiltrados.length === 0 ? (
+            <p className="rounded-card border border-cos-line bg-cos-card px-4 py-6 text-center text-sm text-cos-ink-faint">
+              Ningún acuse coincide con el filtro.
+              {filtroTipo === "DECLARACION_ANUAL" &&
+                " Si esperabas una anual aquí, es que su PDF no está guardado: súbela arriba y quedará disponible."}
+            </p>
+          ) : (
           <div className="overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
             <ul className="divide-y divide-cos-line">
-              {acuses.map((a) => (
+              {acusesFiltrados.map((a) => (
                 <li key={a.id} className="flex items-center gap-3 px-4 py-2.5">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-cos-ink">
@@ -104,6 +157,7 @@ export function DeclaracionesList() {
               ))}
             </ul>
           </div>
+          )}
         </div>
       )}
     </div>
