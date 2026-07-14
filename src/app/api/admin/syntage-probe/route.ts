@@ -46,6 +46,7 @@ export async function POST(req: Request) {
     rfc?: string;
     ciec?: string;
     soloLeer?: boolean; // solo lee los últimos resultados ya extraídos (rápido)
+    declaraciones?: boolean; // con soloLeer: incluye tax-returns (anuales raw + resumen mensuales)
   };
   const pasos: unknown[] = [];
 
@@ -107,6 +108,28 @@ export async function POST(req: Request) {
         client.getLatestTaxComplianceCheck(ent.id),
         client.getLatestTaxStatus(ent.id),
       ]);
+      // Con { declaraciones: true } también trae las tax-returns ya extraídas:
+      // las ANUALES completas (raw — para cotejar qué campos manda Syntage,
+      // p.ej. si el remanente de pérdidas viene y bajo qué llave) y un resumen
+      // de las mensuales. Sin costo: es lectura de lo ya extraído.
+      let declaraciones: unknown = null;
+      if (body.declaraciones) {
+        const returns = (await client.getEntityTaxReturns(ent.id)) as Record<string, unknown>[];
+        const esMensual = (tr: Record<string, unknown>) => String(tr.intervalUnit) === "Mensual";
+        declaraciones = {
+          total: returns.length,
+          anualesRaw: returns.filter((tr) => !esMensual(tr)).slice(0, 3),
+          mensualesResumen: returns
+            .filter(esMensual)
+            .slice(0, 6)
+            .map((tr) => ({
+              fiscalYear: tr.fiscalYear,
+              period: tr.period,
+              intervalUnit: tr.intervalUnit,
+              llaves: Object.keys(tr),
+            })),
+        };
+      }
       return NextResponse.json({
         ok: true,
         modo: "soloLeer",
@@ -114,6 +137,7 @@ export async function POST(req: Request) {
         entityId: ent.id,
         opinion: { raw: opinionRes, mapped: opinionRes ? mapTaxCompliance(opinionRes) : null },
         csf: { raw: csfRes, mapped: csfRes ? mapTaxStatus(csfRes) : null },
+        declaraciones,
       });
     }
 
