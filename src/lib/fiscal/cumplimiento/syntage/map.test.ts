@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapTaxReturnAnual, camposAnualDesdeAcuse } from "./map";
+import { mapTaxReturnAnual, camposAnualDesdeAcuse, mergeCamposAnual, type CamposAnualAcuse } from "./map";
 
 // Campos del recurso TaxReturn confirmados en docs.syntage.com:
 // intervalUnit ("Anual"|"Mensual"|"RIF"), fiscalYear/period, type,
@@ -105,5 +105,55 @@ describe("camposAnualDesdeAcuse", () => {
       isrCoeficienteUtilidad: null,
       isrPerdidaPendiente: null,
     });
+  });
+});
+
+describe("mergeCamposAnual", () => {
+  const campos = (over: Partial<CamposAnualAcuse> = {}) => ({
+    isrIngresos: null,
+    isrBaseGravable: null,
+    isrCoeficienteUtilidad: null,
+    isrPerdidaPendiente: null,
+    ...over,
+  });
+
+  it("lo extraído no-null corrige lo existente (caso real: utilidad guardada como ingresos)", () => {
+    // Fila vieja de SMP 2025: un parseo anterior guardó la utilidad (34,459)
+    // en isrIngresos y dejó la pérdida en null; el re-parseo del acuse trae
+    // las cifras correctas y debe ganar.
+    const merged = mergeCamposAnual(
+      campos({ isrIngresos: 34_459, isrCoeficienteUtilidad: 0.0308 }),
+      campos({
+        isrIngresos: 1_118_029,
+        isrBaseGravable: 34_459,
+        isrCoeficienteUtilidad: 0.0308,
+        isrPerdidaPendiente: 450_415,
+      }),
+    );
+    expect(merged).toEqual({
+      isrIngresos: 1_118_029,
+      isrBaseGravable: 34_459,
+      isrCoeficienteUtilidad: 0.0308,
+      isrPerdidaPendiente: 450_415,
+    });
+  });
+
+  it("un null extraído nunca borra un valor existente", () => {
+    const merged = mergeCamposAnual(
+      campos({ isrPerdidaPendiente: 450_415, isrCoeficienteUtilidad: 0.0308 }),
+      campos({ isrIngresos: 1_118_029 }),
+    );
+    expect(merged).toEqual({
+      isrIngresos: 1_118_029,
+      isrBaseGravable: null,
+      isrCoeficienteUtilidad: 0.0308,
+      isrPerdidaPendiente: 450_415,
+    });
+  });
+
+  it("devuelve null cuando nada cambia (ahorra el UPDATE)", () => {
+    const iguales = campos({ isrIngresos: 100, isrPerdidaPendiente: 50 });
+    expect(mergeCamposAnual(iguales, campos({ isrIngresos: 100, isrPerdidaPendiente: 50 }))).toBeNull();
+    expect(mergeCamposAnual(iguales, campos())).toBeNull();
   });
 });

@@ -10,10 +10,28 @@ import { prisma } from "@/lib/prisma";
 import { planIncluyeSyntage } from "@/lib/planes";
 import { persistComplianceResult } from "../persist";
 import { SyntageClient } from "./client";
-import { mapTaxCompliance, mapTaxStatus, mapTaxReturnAnual, camposAnualDesdeAcuse } from "./map";
+import {
+  mapTaxCompliance,
+  mapTaxStatus,
+  mapTaxReturnAnual,
+  camposAnualDesdeAcuse,
+  mergeCamposAnual,
+  type CamposAnualAcuse,
+} from "./map";
 import { fileRefDe } from "./declaraciones-backfill";
 import { parseSatDocument } from "@/lib/fiscal/acuse/parse";
 import { leerEImportarContabilidadElectronicaSyntage } from "@/lib/contabilidad/ce-import-syntage";
+
+export interface SyncOptions {
+  /**
+   * Fuerza el re-parseo del acuse PDF de TODAS las anuales de la empresa aunque
+   * el centinela (`isrIngresos != null`) diga que ya se extrajeron — para
+   * corregir filas con datos parciales/erróneos de parseos viejos. Cuesta una
+   * llamada a Claude por anual con PDF: úsalo puntual (cron con companyId), no
+   * en la corrida global.
+   */
+  reparseAnuales?: boolean;
+}
 
 export interface SyncResult {
   companyId: string;
@@ -50,7 +68,12 @@ export interface SyncResult {
  * sólo cuando esas columnas están vacías, así cada anual se parsea una vez (no
  * en cada corrida del sync). No toca el campo manual de la empresa.
  */
-async function enriquecerAnualDesdePdf(declId: string, companyId: string, pdf: Uint8Array): Promise<void> {
+async function enriquecerAnualDesdePdf(
+  declId: string,
+  companyId: string,
+  pdf: Uint8Array,
+  existentes: CamposAnualAcuse,
+): Promise<void> {
   let parsed;
   try {
     parsed = await parseSatDocument(Buffer.from(pdf).toString("base64"), {
@@ -61,22 +84,19 @@ async function enriquecerAnualDesdePdf(declId: string, companyId: string, pdf: U
     return; // si Claude falla, no rompemos el sync; se reintenta la próxima corrida
   }
   if (parsed.type !== "ACUSE_ANUAL" || !parsed.acuseAnual) return;
-  const c = camposAnualDesdeAcuse(parsed.acuseAnual);
-  if (c.isrIngresos == null && c.isrBaseGravable == null && c.isrCoeficienteUtilidad == null && c.isrPerdidaPendiente == null) {
-    return; // nada aprovechable extraído
-  }
-  await prisma.taxDeclaration.update({
-    where: { id: declId },
-    data: {
-      isrIngresos: c.isrIngresos,
-      isrBaseGravable: c.isrBaseGravable,
-      isrCoeficienteUtilidad: c.isrCoeficienteUtilidad,
-      isrPerdidaPendiente: c.isrPerdidaPendiente,
-    },
-  });
+  // Mezcla y no sobreescritura ciega: lo extraído no-null gana, un null extraído
+  // no borra lo guardado (una pasada de Claude puede no encontrar un renglón).
+  const merged = mergeCamposAnual(existentes, camposAnualDesdeAcuse(parsed.acuseAnual));
+  if (!merged) return; // nada nuevo aprovechable
+  await prisma.taxDeclaration.update({ where: { id: declId }, data: { ...merged } });
 }
 
-async function persistDeclaracionesAnuales(companyId: string, entityId: string, client: SyntageClient): Promise<number> {
+async function persistDeclaracionesAnuales(
+  companyId: string,
+  entityId: string,
+  client: SyntageClient,
+  opts: SyncOptions = {},
+): Promise<number> {
   const returns = await client.getEntityTaxReturns(entityId);
   let creadas = 0;
   for (const tr of returns) {
@@ -85,7 +105,14 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
     const periodo = String(anual.ejercicio);
     const existing = await prisma.taxDeclaration.findFirst({
       where: { companyId, tipo: "DECLARACION_ANUAL", periodo },
-      select: { id: true, isrIngresos: true, isrCoeficienteUtilidad: true, isrPerdidaPendiente: true, acusePdf: true },
+      select: {
+        id: true,
+        isrIngresos: true,
+        isrBaseGravable: true,
+        isrCoeficienteUtilidad: true,
+        isrPerdidaPendiente: true,
+        acusePdf: true,
+      },
     });
 
     if (existing) {
@@ -115,9 +142,13 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
       // así que su null significa "parse nunca completado" (p. ej. la fila
       // nació del onboarding solo con coeficiente). Usar la pérdida como
       // condición re-parsearía cada sync las anuales que legítimamente no
-      // tienen pérdidas. No sobreescribe importes capturados/calculados.
-      if (existing.isrIngresos == null && pdf) {
-        await enriquecerAnualDesdePdf(existing.id, companyId, pdf);
+      // tienen pérdidas. El centinela tiene un punto ciego: una fila con datos
+      // PARCIALES de un parseo viejo (isrIngresos poblado con la cifra
+      // equivocada) nunca se re-parsea sola — para eso está `reparseAnuales`
+      // (forzado puntual desde el cron con companyId). No toca importes
+      // capturados/calculados: sólo las 4 columnas del coeficiente/pérdida.
+      if (pdf && (existing.isrIngresos == null || opts.reparseAnuales)) {
+        await enriquecerAnualDesdePdf(existing.id, companyId, pdf, existing);
       }
       continue;
     }
@@ -147,7 +178,14 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
       },
       select: { id: true },
     });
-    if (acusePdf) await enriquecerAnualDesdePdf(creada.id, companyId, acusePdf);
+    if (acusePdf) {
+      await enriquecerAnualDesdePdf(creada.id, companyId, acusePdf, {
+        isrIngresos: null,
+        isrBaseGravable: null,
+        isrCoeficienteUtilidad: null,
+        isrPerdidaPendiente: null,
+      });
+    }
     creadas++;
   }
   return creadas;
@@ -156,6 +194,7 @@ async function persistDeclaracionesAnuales(companyId: string, entityId: string, 
 export async function syncCompanyComplianceSyntage(
   companyId: string,
   client = new SyntageClient(),
+  opts: SyncOptions = {},
 ): Promise<SyncResult> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
@@ -180,7 +219,7 @@ export async function syncCompanyComplianceSyntage(
   // los tax-returns aún no se han extraído o el recurso cambia de forma.
   let declaracionesAnuales: { creadas: number } | null = null;
   try {
-    declaracionesAnuales = { creadas: await persistDeclaracionesAnuales(companyId, entity.id, client) };
+    declaracionesAnuales = { creadas: await persistDeclaracionesAnuales(companyId, entity.id, client, opts) };
   } catch {
     declaracionesAnuales = null;
   }
