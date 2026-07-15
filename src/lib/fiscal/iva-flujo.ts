@@ -18,6 +18,8 @@
 // para poder probarlas sin mocks — convención del repo.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { normalizarUuid } from "./uuid";
+
 export type InvoiceLike = {
   taxes: { tipo: string; retencion: boolean; importe: number }[];
   totalImpuestos: number | null;
@@ -237,9 +239,12 @@ export function operacionesEgresoFlujo(params: {
   }
 
   // PPD: cada pago de REP con FechaPago en el mes es una operación pagada.
-  const byUuid = new Map(ppdParents.map((p) => [p.uuid, p]));
+  // Empate por UUID normalizado: el REP escribe IdDocumento en MAYÚSCULAS y
+  // las facturas timbradas vía PAC se guardan en minúsculas — un empate
+  // sensible a mayúsculas descartaba pagos reales como "padre desconocido".
+  const byUuid = new Map(ppdParents.map((p) => [normalizarUuid(p.uuid), p]));
   for (const link of repLinksDelMes) {
-    const parent = byUuid.get(link.parentUuid);
+    const parent = byUuid.get(normalizarUuid(link.parentUuid));
     // Padre desconocido o no-PPD: fuera (mismo criterio que computeTaxPosition).
     if (!parent || parent.metodoPago !== "PPD") continue;
     const iva = r2(repIvaTrasladadoDe(link, parent));

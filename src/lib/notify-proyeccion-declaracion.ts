@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
 import { registrarYNotificar } from "./notificaciones";
 import { empresasAccesiblesIds } from "./authz";
 import { computeTaxPosition } from "./impuestos";
@@ -48,20 +49,21 @@ async function complementosFaltantes(
   const uuids = egresosPpd.map((i) => i.uuid).filter((u): u is string => !!u);
   if (uuids.length === 0) return 0;
 
+  // Empate por UUID normalizado (REP en MAYÚSCULAS vs PAC en minúsculas).
   const conRep = new Set(
     (
       await prisma.pagoDoctoRelacionado.findMany({
         where: {
-          parentUuid: { in: uuids },
+          parentUuid: { in: variantesUuid(uuids) },
           fechaPago: { lt: to },
           pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
         },
         select: { parentUuid: true },
       })
-    ).map((r) => r.parentUuid),
+    ).map((r) => normalizarUuid(r.parentUuid)),
   );
 
-  return uuids.filter((u) => !conRep.has(u)).length;
+  return uuids.filter((u) => !conRep.has(normalizarUuid(u))).length;
 }
 
 interface EmpresaEnMarca {

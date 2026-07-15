@@ -6,6 +6,8 @@ import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
 import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
 import { repIvaAcreditableDe } from "@/lib/impuestos";
+import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
+import { esConceptoExcluido, UMBRAL_MONTO } from "@/lib/fiscal/audit/ingreso-no-facturado";
 
 // GET /api/papeles/iva?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -96,22 +98,26 @@ export async function GET(req: Request) {
   ]);
   // REP links liquidados en el periodo, agrupados por CFDI pagado (parentUuid).
   type RepLink = { impPagado: number | null; ivaTrasladado: number | null; ivaDerivado: boolean; fechaPago: Date | null };
+  // Llaves NORMALIZADAS: el REP escribe IdDocumento en MAYÚSCULAS y las
+  // facturas del PAC se guardan en minúsculas (src/lib/fiscal/uuid.ts) — sin
+  // normalizar, los cobros reales se descartaban como "padre desconocido".
   const repLinksPorParent = new Map<string, RepLink[]>();
   for (const r of repCobros) {
-    repLinksPorParent.set(r.parentUuid, [...(repLinksPorParent.get(r.parentUuid) ?? []), r]);
+    const k = normalizarUuid(r.parentUuid);
+    repLinksPorParent.set(k, [...(repLinksPorParent.get(k) ?? []), r]);
   }
   // Padres INGRESO (de cualquier mes) de los REP cobrados este periodo: su IVA
   // se causa al COBRARSE (flujo), no en la fecha del CFDI — igual que el motor.
   // Por eso el PPD ingreso se arma desde los complementos, no desde la lista por
   // fecha (capta también lo cobrado este mes de facturas de meses anteriores).
-  const repParentUuids = [...new Set(repCobros.map((r) => r.parentUuid))];
+  const repParentUuids = variantesUuid(repCobros.map((r) => r.parentUuid));
   const repIngresoParents = repParentUuids.length
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, tipo: "INGRESO", metodoPago: "PPD", status: "STAMPED" },
         select: { id: true, uuid: true, serie: true, folio: true, total: true, totalImpuestos: true, taxes: true, ivaNoCausado: true, customer: { select: { razonSocial: true, rfc: true } } },
       })
     : [];
-  const repIngresoByUuid = new Map(repIngresoParents.map((p) => [p.uuid!, p]));
+  const repIngresoByUuid = new Map(repIngresoParents.map((p) => [normalizarUuid(p.uuid!), p]));
 
   type InvoiceRelation = (typeof ingresos)[number];
 
@@ -284,7 +290,7 @@ export async function GET(req: Request) {
       // el monto pagado (prorrateado) — exactamente como el motor. Sin REP en el
       // mes: aún no acreditable. PUE: el IVA completo del CFDI.
       const esPPD = inv.metodoPago === "PPD";
-      const links = inv.uuid ? repLinksPorParent.get(inv.uuid) : undefined;
+      const links = inv.uuid ? repLinksPorParent.get(normalizarUuid(inv.uuid)) : undefined;
       const acreditadoPPD = esPPD && links
         ? links.reduce((s, l) => s + repIvaAcreditableDe(l, { taxes: inv.taxes, totalImpuestos: inv.totalImpuestos, total: inv.total }), 0)
         : 0;
@@ -382,6 +388,35 @@ export async function GET(req: Request) {
     }
   }
 
+  // Cobros bancarios del PERIODO sin CFDI que los respalde. El IVA se causa al
+  // cobro (Art. 1-B LIVA) exista o no la factura, así que un depósito sin
+  // conciliar es IVA potencialmente omitido en ESTE mes — la advertencia vive
+  // junto al cálculo porque aquí es donde se firma la declaración (el hallazgo
+  // de Revisión existe, pero llega tarde si nadie abre esa pestaña). Mismos
+  // candados anti-ruido que el check banco.ingreso_no_facturado.
+  const depositosDelPeriodo = reconActiva
+    ? (
+        await prisma.bankTransaction.findMany({
+          where: {
+            companyId,
+            tipo: "CREDITO",
+            status: "UNMATCHED",
+            invoiceId: null,
+            monto: { gte: UMBRAL_MONTO },
+            fecha: { gte: from, lt: to },
+          },
+          select: { monto: true, descripcion: true },
+        })
+      ).filter((r) => !esConceptoExcluido(r.descripcion))
+    : [];
+  const depositosSinFacturaTotal = depositosDelPeriodo.reduce((s, d) => s + d.monto, 0);
+  const depositosSinFactura = {
+    count: depositosDelPeriodo.length,
+    total: +depositosSinFacturaTotal.toFixed(2),
+    // IVA implícito si esos cobros fueran gravados al 16% (el depósito incluye IVA).
+    ivaPotencial: +((depositosSinFacturaTotal * 0.16) / 1.16).toFixed(2),
+  };
+
   const payload = {
     periodo,
     company: company ? { rfc: company.rfc, razonSocial: company.razonSocial } : null,
@@ -417,6 +452,7 @@ export async function GET(req: Request) {
     },
     ppdSinComplemento,
     ppdIngresoPendiente,
+    depositosSinFactura,
   };
 
   if (format === "csv") {

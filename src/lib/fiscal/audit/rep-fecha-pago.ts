@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import type { Hallazgo } from "./types";
 
 export interface RepFechaAnterior {
@@ -45,16 +46,16 @@ export async function cargarRepFechaPagoAnterior(companyId: string): Promise<Rep
   });
   if (links.length === 0) return [];
 
-  const parentUuids = [...new Set(links.map((l) => l.parentUuid))];
+  const parentUuids = variantesUuid(links.map((l) => l.parentUuid));
   const parents = await prisma.invoice.findMany({
     where: { companyId, uuid: { in: parentUuids }, status: { not: "CANCELLED" } },
     select: { id: true, uuid: true, fecha: true, serie: true, folio: true },
   });
-  const byUuid = new Map(parents.map((p) => [p.uuid!, p]));
+  const byUuid = new Map(parents.map((p) => [normalizarUuid(p.uuid!), p]));
 
   const items: RepFechaAnterior[] = [];
   for (const l of links) {
-    const parent = byUuid.get(l.parentUuid);
+    const parent = byUuid.get(normalizarUuid(l.parentUuid));
     if (!parent || !l.fechaPago) continue;
     const pagoDay = l.fechaPago.toISOString().slice(0, 10);
     const facturaDay = parent.fecha.toISOString().slice(0, 10);

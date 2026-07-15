@@ -133,6 +133,22 @@ describe("operacionesEgresoFlujo — flujo de efectivo (Art. 1-B LIVA)", () => {
     expect(ops).toHaveLength(0);
   });
 
+  it("(3b) empata el REP aunque el IdDocumento venga en otra caja (MAYÚSCULAS vs minúsculas)", () => {
+    // Caso real: los REP escriben IdDocumento en MAYÚSCULAS y las facturas
+    // timbradas vía PAC se guardan en minúsculas — el empate sensible a
+    // mayúsculas descartaba pagos reales como "padre desconocido".
+    const ppd = { ...egresoPpd(), uuid: "abcd1234-ppd-1" };
+    const ops = operacionesEgresoFlujo({
+      egresosDelMes: [],
+      repLinksDelMes: [
+        { parentUuid: "ABCD1234-PPD-1", impPagado: 1160, ivaTrasladado: 160, ivaDerivado: false },
+      ],
+      ppdParents: [ppd],
+    });
+    expect(ops).toHaveLength(1);
+    expect(ops[0].ivaAcreditable).toBe(160);
+  });
+
   it("(3b) pago de REP cuyo padre no es PPD o es desconocido → ignorado (mismo criterio que el motor)", () => {
     const ops = operacionesEgresoFlujo({
       egresosDelMes: [],

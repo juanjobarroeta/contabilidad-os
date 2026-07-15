@@ -14,6 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import type { Hallazgo } from "./types";
 
 /** Tolerancia en pesos para no reportar residuos de centavos/comisiones. */
@@ -70,22 +71,24 @@ export async function cargarCobrosSinRep(companyId: string, hoy: Date): Promise<
   });
   if (facturas.length === 0) return [];
 
+  // Empate por UUID normalizado (REP en MAYÚSCULAS vs PAC en minúsculas).
   const uuids = facturas.map((f) => f.uuid).filter(Boolean) as string[];
   const links = uuids.length
     ? await prisma.pagoDoctoRelacionado.findMany({
-        where: { parentUuid: { in: uuids } },
+        where: { parentUuid: { in: variantesUuid(uuids) } },
         select: { parentUuid: true, impPagado: true },
       })
     : [];
   const amparadoPorUuid = new Map<string, number>();
   for (const l of links) {
-    amparadoPorUuid.set(l.parentUuid, (amparadoPorUuid.get(l.parentUuid) ?? 0) + (l.impPagado ?? 0));
+    const k = normalizarUuid(l.parentUuid);
+    amparadoPorUuid.set(k, (amparadoPorUuid.get(k) ?? 0) + (l.impPagado ?? 0));
   }
 
   const resultado: CobroSinRep[] = [];
   for (const f of facturas) {
     const cobradoBanco = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
-    const amparadoRep = f.uuid ? (amparadoPorUuid.get(f.uuid) ?? 0) : 0;
+    const amparadoRep = f.uuid ? (amparadoPorUuid.get(normalizarUuid(f.uuid)) ?? 0) : 0;
     const sinRep = cobradoBanco - amparadoRep;
     if (sinRep <= TOLERANCIA_MONTO) continue;
     const ivaFactura = (() => {

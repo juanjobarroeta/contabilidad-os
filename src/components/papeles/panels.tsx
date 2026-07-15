@@ -47,6 +47,8 @@ interface IvaData {
   reconciliacion?: { activa: boolean; ivaPueSinPago: number; cfdisPueSinPago: number };
   ppdSinComplemento?: { count: number; iva: number };
   ppdIngresoPendiente?: { count: number; iva: number };
+  /** Depósitos bancarios del periodo sin CFDI que los respalde (posible IVA omitido). */
+  depositosSinFactura?: { count: number; total: number; ivaPotencial: number };
 }
 
 export function IvaPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
@@ -130,6 +132,18 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
             <b>{data.ppdIngresoPendiente.count} factura(s) de ingreso PPD</b> ({formatCurrency(data.ppdIngresoPendiente.iva)} de IVA)
             emitida(s) este mes <b>aún sin cobrar</b> — su IVA trasladado se causa en el mes en que las cobres (al recibir su
             complemento de pago / REP), no al emitirlas. Por eso están tenues y fuera del total (igual que el cálculo).
+          </span>
+        </div>
+      )}
+      {data.depositosSinFactura && data.depositosSinFactura.count > 0 && (
+        <div className="flex items-start gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+          <span>
+            <b>{data.depositosSinFactura.count} depósito(s) bancario(s)</b> del periodo por{" "}
+            <b>{formatCurrency(data.depositosSinFactura.total)}</b> sin CFDI de ingreso que los respalde. El IVA se causa
+            al cobro <i>exista o no la factura</i> (Art. 1-B LIVA): si son ingresos gravados, este cálculo omite hasta{" "}
+            <b>{formatCurrency(data.depositosSinFactura.ivaPotencial)}</b> de IVA trasladado. Revísalos en Bancos — emite el
+            CFDI si es ingreso, o concílialos/márcalos como no fiscales (préstamo, traspaso) para descartar el aviso.
           </span>
         </div>
       )}

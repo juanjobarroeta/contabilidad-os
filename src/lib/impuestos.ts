@@ -9,6 +9,7 @@ import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
 import { efosRfcsBloqueados } from "./fiscal/efos/service";
 import { perdidasDisponibles } from "./fiscal/perdidas";
 import { ivaTrasladadoDe, repIvaTrasladadoDe } from "./fiscal/iva-flujo";
+import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
 
 /**
  * Prisma `where` que EXCLUYE los CFDIs de egreso emitidos por un proveedor 69-B
@@ -122,7 +123,9 @@ async function flujoEfectivoAcum(
     }),
   ]);
 
-  const uuids = [...new Set(repLinks.map((l) => l.parentUuid))];
+  // Empate por UUID normalizado: el REP referencia en MAYÚSCULAS y las
+  // facturas del PAC se guardan en minúsculas (ver src/lib/fiscal/uuid.ts).
+  const uuids = variantesUuid(repLinks.map((l) => l.parentUuid));
   const parents = uuids.length
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: uuids }, metodoPago: "PPD", status: "STAMPED" },
@@ -138,7 +141,7 @@ async function flujoEfectivoAcum(
         },
       })
     : [];
-  const byUuid = new Map(parents.map((p) => [p.uuid!, p]));
+  const byUuid = new Map(parents.map((p) => [normalizarUuid(p.uuid!), p]));
   const EXCLUIDAS_DEDUCCION = new Set(["INVERSION", "SIN_EFECTOS"]);
   const esEfosBloqueado = (rfc?: string | null) =>
     efosBloqueados.size > 0 && !!rfc && efosBloqueados.has(rfc.toUpperCase().trim());
@@ -147,7 +150,7 @@ async function flujoEfectivoAcum(
   let ppdEgreso = 0;
   let ppdIsrRetenido = 0;
   for (const l of repLinks) {
-    const p = byUuid.get(l.parentUuid);
+    const p = byUuid.get(normalizarUuid(l.parentUuid));
     if (!p || p.total <= 0 || l.impPagado == null) continue;
     const fraccionPagada = l.impPagado / p.total;
     const base = l.impPagado * (p.subtotal / p.total); // subtotal-equivalent collected/paid
@@ -650,21 +653,21 @@ export async function computeTaxPosition(
   // Resolve the parent PPD invoices these REP payments settle: the parent's
   // tipo decides direction (INGRESO → trasladado, EGRESO → acreditable) and its
   // IVA/total is the proration base for legacy 1.0 complementos.
-  const repParentUuids = [...new Set(repCobrosDelMes.map((r) => r.parentUuid))];
+  const repParentUuids = variantesUuid(repCobrosDelMes.map((r) => r.parentUuid));
   const repParents = repParentUuids.length
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, metodoPago: "PPD", status: "STAMPED" },
         select: { uuid: true, tipo: true, tipoSat: true, total: true, totalImpuestos: true, taxes: true, ivaNoAcreditable: true, ivaNoCausado: true, customer: { select: { rfc: true } } },
       })
     : [];
-  const repParentByUuid = new Map(repParents.map((p) => [p.uuid!, p]));
+  const repParentByUuid = new Map(repParents.map((p) => [normalizarUuid(p.uuid!), p]));
   const esEfosBloqueado = (rfc?: string | null) =>
     efosBloqueados.size > 0 && !!rfc && efosBloqueados.has(rfc.toUpperCase().trim());
 
   let ivaTrasladadoPPD = 0;
   let ivaAcreditablePPD = 0;
   for (const link of repCobrosDelMes) {
-    const parent = repParentByUuid.get(link.parentUuid);
+    const parent = repParentByUuid.get(normalizarUuid(link.parentUuid));
     if (!parent) continue; // REP references a non-PPD or unknown invoice — skip
     const iva = signoTipoSat(parent.tipoSat) * repIvaTrasladado(link, parent);
     if (parent.tipo === "INGRESO" && !parent.ivaNoCausado) ivaTrasladadoPPD += iva;
