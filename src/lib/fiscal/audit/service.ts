@@ -21,6 +21,7 @@ import { cargarRepFechaPagoAnterior, auditarRepFechaPagoAnterior } from "./rep-f
 import { cargarPosiblesDuplicados, auditarDuplicados } from "./duplicados";
 import { cargarBancoDesactualizado, auditarBancoDesactualizado } from "./banco-movimientos";
 import { cargarIngresoNoFacturado, auditarIngresoNoFacturado } from "./ingreso-no-facturado";
+import { cargarCobrosSinRep, auditarCobrosSinRep } from "./rep-faltante";
 import { cargarCredencialesVigencia, auditarCredencialesVigencia } from "./credenciales-vigencia";
 import { cargarObligacionProxima, auditarObligacionProxima } from "./obligacion-proxima";
 import { cargarResicoLimite, auditarResicoLimite } from "./resico-limite";
@@ -198,6 +199,7 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
   const hoy = new Date(fecha);
   const bancoDesactualizado = await cargarBancoDesactualizado(companyId, hoy);
   const ingresoNoFacturado = await cargarIngresoNoFacturado(companyId, hoy);
+  const cobrosSinRep = await cargarCobrosSinRep(companyId, hoy);
   const credenciales = await cargarCredencialesVigencia(companyId);
   const obligacionProxima = await cargarObligacionProxima(companyId, hoy);
   const resicoLimite = await cargarResicoLimite(companyId, hoy);
@@ -211,6 +213,7 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
     ...auditarDuplicados(duplicados),
     ...auditarBancoDesactualizado(bancoDesactualizado),
     ...auditarIngresoNoFacturado(ingresoNoFacturado),
+    ...auditarCobrosSinRep(cobrosSinRep),
     ...auditarCredencialesVigencia(credenciales, hoy),
     ...auditarObligacionProxima(obligacionProxima, hoy),
     ...auditarResicoLimite(resicoLimite),
