@@ -46,11 +46,23 @@ export function mesDePeriodo(period: unknown): number | null {
   return MESES[norm(s)] ?? null;
 }
 
-/** Referencia descargable del acuse dentro del tax-return (`files[]`). */
+/**
+ * Referencia descargable del documento del tax-return (`files[]`), PREFIRIENDO
+ * el transcript. Syntage adjunta hasta 3 archivos por declaración —
+ * `tax_return.transcript` (PDF, el formulario completo con ingresos nominales
+ * y la tabla de pérdidas), `tax_return.ack_receipt` (PDF corto, solo el acuse)
+ * y `tax_return.financial_statements` (XLSX) — y el ORDEN del arreglo varía
+ * entre declaraciones. Tomar "el primero" descargaba a veces el acuse corto,
+ * que no trae nada parseable (caso real: la anual 2025 de una empresa quedó
+ * con el receipt de 25 KB y el remanente de pérdidas nunca se extrajo).
+ * Preferencia: transcript → cualquier PDF que no sea estados financieros →
+ * lo que haya.
+ */
 export function fileRefDe(tr: Record<string, unknown>): string | null {
   const files = tr.files;
   const arr = Array.isArray(files) ? files : files ? [files] : [];
-  for (const f of arr) {
+
+  const refDe = (f: unknown): string | null => {
     if (typeof f === "string") return f;
     if (f && typeof f === "object") {
       const o = f as Record<string, unknown>;
@@ -58,6 +70,22 @@ export function fileRefDe(tr: Record<string, unknown>): string | null {
       if (typeof o.resource === "string") return o.resource as string;
       if (typeof o.id === "string") return `/files/${o.id}`;
     }
+    return null;
+  };
+  const tipoDe = (f: unknown): string =>
+    f && typeof f === "object" ? String((f as Record<string, unknown>).type ?? "") : "";
+  const esPdf = (f: unknown): boolean => {
+    if (typeof f === "string") return true; // sin metadatos, no podemos descartar
+    if (!f || typeof f !== "object") return false;
+    const o = f as Record<string, unknown>;
+    return o.mimeType == null || String(o.mimeType) === "application/pdf";
+  };
+
+  const transcript = arr.find((f) => tipoDe(f) === "tax_return.transcript" && esPdf(f));
+  const otroPdf = arr.find((f) => esPdf(f) && tipoDe(f) !== "tax_return.financial_statements");
+  for (const candidato of [transcript, otroPdf, arr[0]]) {
+    const ref = candidato == null ? null : refDe(candidato);
+    if (ref) return ref;
   }
   return null;
 }
