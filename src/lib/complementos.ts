@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Complemento de Pago (REP) detection.
@@ -233,18 +234,20 @@ export async function detectComplementosRecibidosPendientes(
 
   // Which of these parent UUIDs are referenced by ANY received PAGO complemento?
   const uuids = paid.map((g) => g.uuid!) as string[];
+  // Empate por UUID normalizado: el REP referencia IdDocumento en MAYÚSCULAS y
+  // las facturas del PAC se guardan en minúsculas (src/lib/fiscal/uuid.ts).
   const links = await prisma.pagoDoctoRelacionado.findMany({
     where: {
-      parentUuid: { in: uuids },
+      parentUuid: { in: variantesUuid(uuids) },
       pagoInvoice: { companyId, tipo: "PAGO" },
     },
     select: { parentUuid: true },
   });
-  const complementado = new Set(links.map((l) => l.parentUuid));
+  const complementado = new Set(links.map((l) => normalizarUuid(l.parentUuid)));
 
   const pendientes: ComplementoRecibidoPendiente[] = [];
   for (const g of paid) {
-    if (complementado.has(g.uuid!)) continue; // vendor already sent the REP
+    if (complementado.has(normalizarUuid(g.uuid!))) continue; // vendor already sent the REP
     // Neto firmado: un reembolso (cargo) resta de lo pagado. Las porciones
     // asignadas (conciliación múltiple) suman por su monto asignado.
     const totalPagado =
