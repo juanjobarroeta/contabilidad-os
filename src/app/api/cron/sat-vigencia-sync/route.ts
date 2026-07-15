@@ -95,8 +95,18 @@ async function handle(req: Request) {
         ? { re: inv.company.rfc, rr: inv.customer.rfc, tt: inv.total.toFixed(2), id: inv.uuid! }
         : null;
     if (!datos) {
+      // Sin datos para consultar (p. ej. recibida legacy sin XML). También
+      // avanza el cursor: si no, estas facturas se quedan clavadas al frente
+      // del orden (vigenciaCheckedAt null) y cada pasada las re-evalúa,
+      // desperdiciando cupo del `limit` (visto en producción: 140+ saltadas
+      // por pasada). Cuando el backfill les consiga el rawXml, la rotación
+      // normal del cursor las vuelve a intentar.
       skipped++;
-      continue; // sin datos para consultar (p. ej. recibida legacy sin XML)
+      await prisma.invoice.update({
+        where: { id: inv.id },
+        data: { vigenciaCheckedAt: new Date() },
+      });
+      continue;
     }
 
     try {
