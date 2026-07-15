@@ -123,6 +123,11 @@ export function auditarIngresoNoFacturado(data: IngresoNoFacturado): Hallazgo[] 
   return [
     {
       checkClave: "banco.ingreso_no_facturado",
+      // Hallazgo AGREGADO (uno por empresa): identidad estable como los demás
+      // checks agregados. Sin esto la llave concatenaba los IDs de todos los
+      // depósitos y con cientos de movimientos sin conciliar desbordaba el
+      // índice btree de FiscalHallazgo — el hallazgo nunca se guardaba.
+      dedupeRef: "banco.ingreso_no_facturado",
       severidad: "warn",
       mensaje: `${depositos.length} depósito(s) sin CFDI de ingreso por ${fmt(total)} en ${periodo}: posible ingreso no facturado o movimiento personal en la cuenta del negocio.`,
       referencias: depositos.map((d) => d.id),

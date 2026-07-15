@@ -4,6 +4,7 @@
 // The cron route calls runAuditForCompany per company.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { construirContexto } from "@/lib/fiscal/rules";
 import {
@@ -31,7 +32,19 @@ import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
  *  fijan `dedupeRef` (identidad estable por empresa); el resto se identifica por
  *  el conjunto de CFDIs referenciados. */
 export function dedupeKey(h: Pick<Hallazgo, "checkClave" | "referencias" | "dedupeRef">): string {
-  return `${h.checkClave}|${h.dedupeRef ?? [...h.referencias].sort().join(",")}`;
+  const identidad = h.dedupeRef ?? [...h.referencias].sort().join(",");
+  // El índice único (companyId, dedupeKey) es un btree y Postgres rechaza filas
+  // de índice de más de ~2.7 KB ("index row size exceeds btree maximum" — caso
+  // real: un hallazgo agregado con cientos de referencias tumbaba el upsert y
+  // con él TODA la corrida de auditoría de la empresa, dejando la Revisión sin
+  // hallazgos nuevos). Identidades largas se compactan a un hash estable: misma
+  // semántica de deduplicación, tamaño acotado. El listado completo de
+  // referencias se persiste aparte en la columna `referencias` (sin índice).
+  const cuerpo =
+    identidad.length > 200
+      ? `sha256:${createHash("sha256").update(identidad).digest("hex")}`
+      : identidad;
+  return `${h.checkClave}|${cuerpo}`;
 }
 
 /**
