@@ -56,7 +56,7 @@ REGLAS CRÍTICAS:
 3. Primero determina "type" examinando el encabezado, sellos y estructura del documento:
    - "CSF": Constancia de Situación Fiscal del SAT (dice "Constancia de Situación Fiscal", muestra RFC, régimen fiscal, obligaciones).
    - "TARJETA_IMSS": Tarjeta de Identificación Patronal del IMSS (muestra Registro Patronal, clase, prima, actividad económica IMSS).
-   - "ACUSE_ANUAL": Acuse de declaración ANUAL del SAT (dice "Declaración Anual", muestra ejercicio, coeficiente de utilidad, utilidad fiscal, ISR causado).
+   - "ACUSE_ANUAL": Acuse de declaración ANUAL del SAT (dice "Declaración Anual", muestra ejercicio, coeficiente de utilidad, utilidad fiscal, ISR causado). TAMBIÉN es ACUSE_ANUAL el formato largo "DECLARACIÓN DEL EJERCICIO / ISR PERSONAS MORALES" (transcript de 20+ páginas con todos los renglones del formulario: INGRESOS, DEDUCCIONES AUTORIZADAS, DETERMINACIÓN).
    - "ACUSE_MENSUAL": Acuse de pago mensual / provisional / definitivo (dice "Pago provisional", "Pago definitivo", "Declaración mensual", muestra periodo mes/año, IVA o ISR).
    - "OTRO": cualquier otro documento.
 4. Devuelve los campos correspondientes al type detectado. Los demás quedan como null o arrays vacíos.
@@ -65,7 +65,7 @@ REGLAS CRÍTICAS:
 7. Para ACUSE_ANUAL (declaración anual de Persona Moral), distingue con cuidado dos pares de cifras que suelen confundirse:
    - "ingresosNominales" = el renglón "INGRESOS NOMINALES" (base para el coeficiente de utilidad del Art. 14). NO es lo mismo que "ingresosAcumulables" (= "TOTAL DE INGRESOS ACUMULABLES", que incluye el ajuste anual por inflación acumulable). Extrae AMBOS por separado; si sólo aparece uno, deja el otro en null.
    - "utilidadFiscal" = "UTILIDAD FISCAL DEL EJERCICIO" (antes de restar pérdidas de ejercicios anteriores), NO el "RESULTADO FISCAL".
-   - "perdidaFiscalRemanente" = el "REMANENTE" de pérdidas fiscales de ejercicios anteriores que queda PENDIENTE de aplicar a ejercicios FUTUROS (la columna "Remanente" de la tabla de pérdidas, ya actualizada). NO es el monto aplicado en este ejercicio ni las "PÉRDIDAS FISCALES DE EJERCICIOS ANTERIORES" restadas este año. "perdidasPendientes" puede dejarse igual al remanente si el documento no las separa.
+   - "perdidaFiscalRemanente" = el "REMANENTE" de pérdidas fiscales de ejercicios anteriores que queda PENDIENTE de aplicar a ejercicios FUTUROS (la columna "Remanente" de la tabla de pérdidas, ya actualizada). NO es el monto aplicado en este ejercicio ni las "PÉRDIDAS FISCALES DE EJERCICIOS ANTERIORES" restadas este año. "perdidasPendientes" puede dejarse igual al remanente si el documento no las separa. En el formato largo la tabla vive en la sección DETERMINACIÓN con columnas "PÉRDIDAS PENDIENTES DE APLICAR / PÉRDIDA FISCAL ACTUALIZADA / POR APLICAR EN ESTE EJERCICIO / REMANENTE": toma el renglón "Total" de la columna REMANENTE (suma de todas las pérdidas por año de origen). El "LÍMITE DE PÉRDIDAS A APLICAR" y el "MONTO POR APLICAR" NO son el remanente.
 
 CATÁLOGO DE RÉGIMENES (clave — nombre). Usa exactamente estas claves:
 ${REGIMEN_CATALOG}

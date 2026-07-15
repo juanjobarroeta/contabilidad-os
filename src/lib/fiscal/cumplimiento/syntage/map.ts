@@ -151,6 +151,30 @@ export function camposAnualDesdeAcuse(a: {
   return { isrIngresos, isrBaseGravable, isrCoeficienteUtilidad, isrPerdidaPendiente };
 }
 
+/**
+ * Mezcla lo extraído del acuse sobre lo ya guardado en la fila (gap-fill):
+ * un valor extraído no-null GANA (el acuse del SAT es la fuente autoritativa —
+ * corrige filas con datos de parseos viejos, p. ej. la utilidad guardada como
+ * ingresos), pero un null extraído NUNCA borra un valor existente (Claude puede
+ * no encontrar un renglón en esa pasada). Devuelve null si nada cambia, para
+ * que el llamador se ahorre el UPDATE.
+ */
+export function mergeCamposAnual(
+  existentes: CamposAnualAcuse,
+  extraidos: CamposAnualAcuse,
+): CamposAnualAcuse | null {
+  const merged: CamposAnualAcuse = {
+    isrIngresos: extraidos.isrIngresos ?? existentes.isrIngresos,
+    isrBaseGravable: extraidos.isrBaseGravable ?? existentes.isrBaseGravable,
+    isrCoeficienteUtilidad: extraidos.isrCoeficienteUtilidad ?? existentes.isrCoeficienteUtilidad,
+    isrPerdidaPendiente: extraidos.isrPerdidaPendiente ?? existentes.isrPerdidaPendiente,
+  };
+  const cambia = (Object.keys(merged) as (keyof CamposAnualAcuse)[]).some(
+    (k) => merged[k] !== existentes[k],
+  );
+  return cambia ? merged : null;
+}
+
 /** Recurso TaxStatus → CsfResult (CSF). */
 export function mapTaxStatus(ts: Json, fetchedAt = new Date().toISOString()): CsfResult {
   const address = (ts.address as Json) ?? {};
