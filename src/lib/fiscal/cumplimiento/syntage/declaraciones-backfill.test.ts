@@ -37,4 +37,30 @@ describe("fileRefDe (acuse ref from tax-return files[])", () => {
     expect(fileRefDe({ files: [] })).toBeNull();
     expect(fileRefDe({ files: [{}] })).toBeNull();
   });
+
+  // Formas reales de Syntage: cada tax-return trae hasta 3 archivos
+  // (transcript PDF, ack_receipt PDF, financial_statements XLSX) en ORDEN
+  // VARIABLE. Caso real: la anual 2025 de SMP traía el ack_receipt primero y
+  // se descargó el acuse corto sin la tabla de pérdidas.
+  it("prefiere el transcript aunque el ack_receipt venga primero (anual 2025 real)", () => {
+    const files = [
+      { "@id": "/files/receipt", type: "tax_return.ack_receipt", mimeType: "application/pdf" },
+      { "@id": "/files/xlsx", type: "tax_return.financial_statements", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+      { "@id": "/files/transcript", type: "tax_return.transcript", mimeType: "application/pdf" },
+    ];
+    expect(fileRefDe({ files })).toBe("/files/transcript");
+  });
+  it("sin transcript cae al PDF que no sea estados financieros", () => {
+    const files = [
+      { "@id": "/files/xlsx", type: "tax_return.financial_statements", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+      { "@id": "/files/receipt", type: "tax_return.ack_receipt", mimeType: "application/pdf" },
+    ];
+    expect(fileRefDe({ files })).toBe("/files/receipt");
+  });
+  it("como último recurso devuelve el primer archivo aunque no sea PDF", () => {
+    const files = [
+      { "@id": "/files/xlsx", type: "tax_return.financial_statements", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+    ];
+    expect(fileRefDe({ files })).toBe("/files/xlsx");
+  });
 });

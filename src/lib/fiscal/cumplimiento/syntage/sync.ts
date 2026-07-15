@@ -145,17 +145,24 @@ async function persistDeclaracionesAnuales(
       // PDF, con Syntage teniendo los tres archivos disponibles). Reintenta
       // aquí en cada sync hasta conseguirlo.
       let pdf = existing.acusePdf ? new Uint8Array(existing.acusePdf) : null;
-      if (!pdf) {
+      // Con reparse forzado también RE-descarga aunque ya haya PDF: filas
+      // viejas pueden tener guardado el ack_receipt (fileRefDe tomaba "el
+      // primero" de files[]) y el documento correcto es el transcript.
+      if (!pdf || opts.reparseAnuales) {
         const refExistente = fileRefDe(tr as Record<string, unknown>);
         if (refExistente) {
           try {
-            pdf = new Uint8Array((await client.downloadAcuse(refExistente)).data);
-            await prisma.taxDeclaration.update({
-              where: { id: existing.id },
-              data: { acusePdf: pdf, acusePdfNombre: `acuse-anual-${periodo}.pdf` },
-            });
+            const bajado = new Uint8Array((await client.downloadAcuse(refExistente)).data);
+            if (!pdf || bajado.byteLength !== pdf.byteLength) {
+              await prisma.taxDeclaration.update({
+                where: { id: existing.id },
+                data: { acusePdf: bajado, acusePdfNombre: `acuse-anual-${periodo}.pdf` },
+              });
+              pdf = bajado;
+            }
           } catch {
-            pdf = null; // siguiente sync reintenta
+            // sin red no hay upgrade; se sigue con el PDF guardado (si lo hay)
+            // y el siguiente sync reintenta la descarga
           }
         }
       }
