@@ -38,8 +38,18 @@ export interface SyncResult {
   rfc?: string;
   opinion?: { changed: boolean; hallazgos: number } | null;
   csf?: { changed: boolean; hallazgos: number } | null;
-  /** Declaraciones anuales históricas creadas a partir de los tax-returns. */
-  declaracionesAnuales?: { creadas: number } | null;
+  /**
+   * Declaraciones anuales históricas creadas a partir de los tax-returns.
+   * `reparse` sólo viene cuando se pidió `reparseAnuales`: un renglón por anual
+   * con el resultado del re-parseo ("actualizada" | "sin_cambios" |
+   * "sin_datos_extraibles" | "sin_pdf" | "tipo_inesperado: X" | "error: ...")
+   * y el tamaño del PDF guardado — para distinguir el acuse corto del
+   * transcript completo sin acceso a la base.
+   */
+  declaracionesAnuales?: {
+    creadas: number;
+    reparse?: { periodo: string; resultado: string; pdfKb: number | null }[];
+  } | null;
   /**
    * Arranque ÚNICO de la Contabilidad Electrónica (apertura). `importado` indica
    * si en esta corrida se importó catálogo o balanza y se fijó `ceBootstrapAt`.
@@ -73,22 +83,33 @@ async function enriquecerAnualDesdePdf(
   companyId: string,
   pdf: Uint8Array,
   existentes: CamposAnualAcuse,
-): Promise<void> {
+): Promise<string> {
   let parsed;
   try {
     parsed = await parseSatDocument(Buffer.from(pdf).toString("base64"), {
       companyId,
       subtipo: "declaraciones.anual.coeficiente",
     });
-  } catch {
-    return; // si Claude falla, no rompemos el sync; se reintenta la próxima corrida
+  } catch (e) {
+    // No rompemos el sync; se reintenta la próxima corrida. El motivo viaja en
+    // el detalle del reparse para no depurar a ciegas.
+    return `error: ${e instanceof Error ? e.message : String(e)}`;
   }
-  if (parsed.type !== "ACUSE_ANUAL" || !parsed.acuseAnual) return;
+  if (parsed.type !== "ACUSE_ANUAL" || !parsed.acuseAnual) {
+    return `tipo_inesperado: ${parsed.type}`;
+  }
+  const extraidos = camposAnualDesdeAcuse(parsed.acuseAnual);
   // Mezcla y no sobreescritura ciega: lo extraído no-null gana, un null extraído
   // no borra lo guardado (una pasada de Claude puede no encontrar un renglón).
-  const merged = mergeCamposAnual(existentes, camposAnualDesdeAcuse(parsed.acuseAnual));
-  if (!merged) return; // nada nuevo aprovechable
+  const merged = mergeCamposAnual(existentes, extraidos);
+  if (!merged) {
+    // Distingue "el PDF no trae nada" (acuse corto sin la tabla de pérdidas) de
+    // "trae lo mismo que ya está" — cambia el diagnóstico por completo.
+    const vacio = Object.values(extraidos).every((v) => v == null);
+    return vacio ? "sin_datos_extraibles" : "sin_cambios";
+  }
   await prisma.taxDeclaration.update({ where: { id: declId }, data: { ...merged } });
+  return "actualizada";
 }
 
 async function persistDeclaracionesAnuales(
@@ -96,9 +117,10 @@ async function persistDeclaracionesAnuales(
   entityId: string,
   client: SyntageClient,
   opts: SyncOptions = {},
-): Promise<number> {
+): Promise<NonNullable<SyncResult["declaracionesAnuales"]>> {
   const returns = await client.getEntityTaxReturns(entityId);
   let creadas = 0;
+  const reparse: { periodo: string; resultado: string; pdfKb: number | null }[] = [];
   for (const tr of returns) {
     const anual = mapTaxReturnAnual(tr);
     if (!anual) continue;
@@ -148,7 +170,12 @@ async function persistDeclaracionesAnuales(
       // (forzado puntual desde el cron con companyId). No toca importes
       // capturados/calculados: sólo las 4 columnas del coeficiente/pérdida.
       if (pdf && (existing.isrIngresos == null || opts.reparseAnuales)) {
-        await enriquecerAnualDesdePdf(existing.id, companyId, pdf, existing);
+        const resultado = await enriquecerAnualDesdePdf(existing.id, companyId, pdf, existing);
+        if (opts.reparseAnuales) {
+          reparse.push({ periodo, resultado, pdfKb: Math.round(pdf.byteLength / 1024) });
+        }
+      } else if (opts.reparseAnuales) {
+        reparse.push({ periodo, resultado: "sin_pdf", pdfKb: null });
       }
       continue;
     }
@@ -188,7 +215,7 @@ async function persistDeclaracionesAnuales(
     }
     creadas++;
   }
-  return creadas;
+  return { creadas, ...(opts.reparseAnuales ? { reparse } : {}) };
 }
 
 export async function syncCompanyComplianceSyntage(
@@ -217,11 +244,15 @@ export async function syncCompanyComplianceSyntage(
 
   // Declaraciones anuales: aislado en try/catch para no romper opinión/CSF si
   // los tax-returns aún no se han extraído o el recurso cambia de forma.
-  let declaracionesAnuales: { creadas: number } | null = null;
+  let declaracionesAnuales: SyncResult["declaracionesAnuales"] = null;
   try {
-    declaracionesAnuales = { creadas: await persistDeclaracionesAnuales(companyId, entity.id, client, opts) };
-  } catch {
-    declaracionesAnuales = null;
+    declaracionesAnuales = await persistDeclaracionesAnuales(companyId, entity.id, client, opts);
+  } catch (e) {
+    // En la corrida normal se degrada en silencio; con reparse explícito el
+    // error viaja en la respuesta (es una corrida de diagnóstico).
+    declaracionesAnuales = opts.reparseAnuales
+      ? { creadas: 0, reparse: [{ periodo: "*", resultado: `error: ${e instanceof Error ? e.message : String(e)}`, pdfKb: null }] }
+      : null;
   }
 
   // Arranque ÚNICO de la Contabilidad Electrónica (apertura). Sólo si:
