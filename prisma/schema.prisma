@@ -712,6 +712,11 @@ model Invoice {
   // que no mandan llave (Postgres permite múltiples NULL en el unique).
   idempotencyKey String?
 
+  // Última verificación de vigencia por UUID contra el servicio público del SAT
+  // (cron sat-vigencia-sync). Cursor del barrido incremental: se revisan primero
+  // las facturas nunca verificadas y luego las de verificación más antigua.
+  vigenciaCheckedAt DateTime?
+
   company              Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer             Customer?              @relation(fields: [customerId], references: [id])
   items                InvoiceItem[]
