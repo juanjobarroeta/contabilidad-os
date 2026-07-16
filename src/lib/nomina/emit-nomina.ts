@@ -10,6 +10,7 @@ import { recordTimbrado } from "../costos/record";
 import { calcularIsrRetenido } from "./isr";
 import { calcularImss } from "./imss";
 import { calcularInfonavit } from "./infonavit";
+import { receptorDesdeXmlNomina } from "./receptor-xml";
 import type { PercepcionItem, DeduccionItem } from "./calc-nomina";
 import type { Employee } from "@prisma/client";
 
@@ -179,6 +180,48 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     console.log(`[nomina] ${employee.nombre}: bruto=${sueldoBruto} ISR=${isrCalc.isrRetenido} IMSS_obrero=${imssObrero} IMSS_patronal=${imssPatronal} INFONAVIT=${infonavitDeduccion} neto=${netoAPagar}`);
   }
 
+  // ── Identidad fiscal del receptor (CP y nombre EXACTOS del SAT) ────────
+  // CFDI 4.0 valida RFC + Nombre + DomicilioFiscalReceptor contra el padrón.
+  // Fuente de verdad en cascada: (1) el CP capturado en la ficha; (2) el
+  // Receptor de un recibo de nómina previo YA TIMBRADO del mismo RFC (pasó esa
+  // validación, así que trae los datos exactos) — y si de ahí sale, se guarda
+  // en la ficha para no volver a buscar; (3) el CP de la empresa (último
+  // recurso, puede fallar la validación). El nombre textual del XML previo
+  // también sustituye al reconstruido (evita desajustes por acentos/espacios).
+  let cpReceptor = employee.codigoPostal;
+  let nombreReceptor = `${employee.nombre} ${employee.apellidoPaterno} ${employee.apellidoMaterno ?? ""}`
+    .trim()
+    .toUpperCase();
+  {
+    const previo = await prisma.invoice.findFirst({
+      where: {
+        companyId: company.id,
+        tipo: "NOMINA",
+        status: "STAMPED",
+        rawXml: { contains: employee.rfc },
+      },
+      orderBy: { fecha: "desc" },
+      select: { rawXml: true },
+    });
+    const receptor = previo?.rawXml ? receptorDesdeXmlNomina(previo.rawXml, employee.rfc) : null;
+    if (receptor?.nombre) nombreReceptor = receptor.nombre;
+    if (receptor?.codigoPostal) {
+      if (!cpReceptor) {
+        cpReceptor = receptor.codigoPostal;
+        await prisma.employee.update({
+          where: { id: employee.id },
+          data: { codigoPostal: receptor.codigoPostal },
+        });
+      } else if (cpReceptor !== receptor.codigoPostal) {
+        // Captura manual distinta al CP de un recibo validado: gana la captura
+        // (puede haber cambiado el domicilio fiscal), sólo se deja rastro.
+        console.warn(
+          `[nomina] CP capturado (${cpReceptor}) difiere del CP de recibo timbrado (${receptor.codigoPostal}) para ${employee.rfc}`,
+        );
+      }
+    }
+  }
+
   // ── Subsidio para el empleo (OtrosPagos clave 002) ─────────────────────
   // El SAT exige reportar el subsidio causado cuando el trabajador tiene
   // derecho (decreto 1-may-2024 vigente; validación: "El elemento OtroPago no
@@ -207,16 +250,14 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     payment_form: "99",
     payment_method: "PUE",
     customer: {
-      legal_name: `${employee.nombre} ${employee.apellidoPaterno} ${employee.apellidoMaterno ?? ""}`.trim().toUpperCase(),
+      // Nombre y CP resueltos arriba: captura de la ficha → recibo timbrado
+      // previo del mismo RFC → CP de la empresa (último recurso).
+      legal_name: nombreReceptor,
       tax_id: employee.rfc,
       tax_system: "605", // Sueldos y Salarios e Ingresos Asimilados
       address: {
         country: "MEX",
-        // CFDI 4.0 valida que el DomicilioFiscalReceptor coincida con el CP
-        // registrado en el SAT para el RFC del EMPLEADO — el de la empresa no
-        // pasa ("debe pertenecer al nombre asociado al RFC del Receptor").
-        // Fallback al CP de la empresa sólo si el empleado no lo tiene capturado.
-        zip: employee.codigoPostal ?? company.codigoPostal,
+        zip: cpReceptor ?? company.codigoPostal,
       },
       email: employee.email ?? undefined,
     },
