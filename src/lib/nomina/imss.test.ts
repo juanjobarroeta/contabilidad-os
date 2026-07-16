@@ -248,3 +248,34 @@ describe("calcularImss — integración: CEAV patronal progresiva, demás ramos 
     expect(r.patronal.cesantiaVejez).toBe(r2(SM_2026 * 15 * 0.0315));
   });
 });
+
+describe("Art. 36 LSS — trabajador de salario mínimo: el patrón absorbe la cuota obrera", () => {
+  // Caso real (jul 2026): dos empleados con cuota diaria = SM 2026 ($315.04),
+  // SBC 330.57 (factor 1.0493), quincena de 15 días. La corrida les retenía
+  // $117.76 de IMSS obrero — improcedente: Art. 36 LSS (y LFT Art. 97).
+  const base = {
+    salarioBaseCotizacion: 330.57,
+    diasPagados: 15,
+    riesgoPuesto: "1",
+    ejercicio: 2026,
+  };
+
+  it("con salarioDiario = SM la retención obrera es 0 y el patrón la absorbe", () => {
+    const sin = calcularImss(base); // comportamiento normal (sin cuota diaria)
+    const con = calcularImss({ ...base, salarioDiario: SM_2026 });
+    expect(sin.obrero.total).toBeGreaterThan(0); // antes sí retenía
+    expect(con.obrero.total).toBe(0);
+    // El costo total (obrero + patronal) se conserva: sólo cambia quién lo paga.
+    expect(r2(con.patronal.total)).toBe(r2(sin.patronal.total + sin.obrero.total));
+  });
+
+  it("apenas arriba del mínimo la retención obrera se mantiene", () => {
+    const con = calcularImss({ ...base, salarioDiario: SM_2026 + 1 });
+    expect(con.obrero.total).toBeGreaterThan(0);
+  });
+
+  it("sin salarioDiario (llamadores legados) no cambia nada", () => {
+    const a = calcularImss(base);
+    expect(a.obrero.total).toBeGreaterThan(0);
+  });
+});
