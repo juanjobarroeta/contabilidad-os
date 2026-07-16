@@ -461,6 +461,8 @@ interface IsrData {
     perdidaFiscalPendiente?: number | null;
   };
   acumulado: { mes: number; mesLabel: string; ingresos: number; facturas: number }[];
+  /** Cobros anticipados (REP con FechaPago anterior a la factura) reubicados a su mes de cobro. */
+  anticipos?: { movimientos: number; monto: number };
   calculo:
     | {
         tipo: "art14";
@@ -753,6 +755,13 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
                 })}
               </tbody>
             </table>
+            {data.anticipos && data.anticipos.movimientos > 0 && (
+              <p className="border-t border-cos-line-soft px-4 py-2.5 text-[12px] text-cos-ink-faint">
+                Incluye {formatCurrency(data.anticipos.monto)} de cobros anticipados reubicados a su mes de cobro
+                (pagos con REP anteriores a la emisión de su factura — Art. 17-I LISR: el ingreso se acumula en lo
+                que ocurra primero, cobro o expedición).
+              </p>
+            )}
           </div>
 
           <div className={`${CARD} p-5 text-[14px]`}>

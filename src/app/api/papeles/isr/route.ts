@@ -6,6 +6,7 @@ import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularIsrResicoPf, detectResicoKind, TARIFA_RESICO_PF_MENSUAL } from "@/lib/resico";
 import { DEDUCCION_CIEGA_ARRENDAMIENTO } from "@/lib/fiscal/isr-arrendamiento";
 import { sumIsrPagar } from "@/lib/isr-provisional";
+import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import { computeTaxPosition } from "@/lib/impuestos";
 
 // GET /api/papeles/isr?companyId=xxx&year=2026&month=3[&format=csv]
@@ -48,7 +49,7 @@ export async function GET(req: Request) {
   const [ingresosYTD, prevYearIngresos, prevYearGastos, company, prevDeclaraciones] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearFrom, lt: yearTo } },
-      select: { id: true, fecha: true, uuid: true, folio: true, serie: true, subtotal: true, customer: { select: { razonSocial: true, rfc: true } } },
+      select: { id: true, fecha: true, uuid: true, folio: true, serie: true, subtotal: true, total: true, metodoPago: true, customer: { select: { razonSocial: true, rfc: true } } },
       orderBy: { fecha: "asc" },
     }),
     prisma.invoice.aggregate({
@@ -75,17 +76,57 @@ export async function GET(req: Request) {
     }),
   ]);
 
+  // ANTICIPOS (Art. 17-I LISR): el ingreso nominal de una PM se acumula en lo
+  // que ocurra PRIMERO — expedición o cobro. Un cobro documentado por REP con
+  // FechaPago ANTERIOR al mes de emisión de la factura (caso real: pago 19-may,
+  // factura/REP de junio) se acumula en el mes del COBRO; el resto de la
+  // factura, en su mes de emisión. Sólo mueve porciones hacia atrás dentro del
+  // ejercicio; el acumulado YTD no cambia (Art. 14 se autocorrige entre meses),
+  // pero la tabla mensual sí — que es contra lo que cuadra el contador.
+  const ppdUuids = ingresosYTD.filter((i) => i.metodoPago === "PPD" && i.uuid).map((i) => i.uuid!);
+  const anticipoLinks = ppdUuids.length
+    ? await prisma.pagoDoctoRelacionado.findMany({
+        where: {
+          parentUuid: { in: variantesUuid(ppdUuids) },
+          fechaPago: { gte: yearFrom, lt: yearTo },
+          pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
+        },
+        select: { parentUuid: true, impPagado: true, fechaPago: true },
+      })
+    : [];
+  const linksPorParent = new Map<string, { impPagado: number | null; fechaPago: Date | null }[]>();
+  for (const l of anticipoLinks) {
+    const k = normalizarUuid(l.parentUuid);
+    linksPorParent.set(k, [...(linksPorParent.get(k) ?? []), l]);
+  }
+
   // Group ingresos by month to build the monthly acumulado table
   const monthlyTotals: Array<{ month: number; ingresos: number; invoices: number }> = [];
   for (let m = 1; m <= month; m++) {
     monthlyTotals.push({ month: m, ingresos: 0, invoices: 0 });
   }
+  let anticiposReubicados = 0;
+  let anticiposMonto = 0;
   for (const inv of ingresosYTD) {
     const m = inv.fecha.getUTCMonth() + 1;
-    if (m >= 1 && m <= month) {
-      monthlyTotals[m - 1].ingresos += inv.subtotal;
-      monthlyTotals[m - 1].invoices += 1;
+    if (m < 1 || m > month) continue;
+    monthlyTotals[m - 1].invoices += 1;
+
+    let restante = inv.subtotal;
+    const links = inv.uuid ? (linksPorParent.get(normalizarUuid(inv.uuid)) ?? []) : [];
+    for (const l of links) {
+      if (!l.fechaPago || l.impPagado == null || inv.total <= 0) continue;
+      const mPago = l.fechaPago.getUTCMonth() + 1;
+      if (mPago >= m || mPago < 1 || mPago > month) continue; // sólo cobros ANTERIORES a la emisión
+      // Equivalente en subtotal del pago (el REP trae importes con IVA).
+      const porcion = Math.min(restante, l.impPagado * (inv.subtotal / inv.total));
+      if (porcion <= 0) continue;
+      monthlyTotals[mPago - 1].ingresos += porcion;
+      restante -= porcion;
+      anticiposReubicados += 1;
+      anticiposMonto += porcion;
     }
+    monthlyTotals[m - 1].ingresos += restante;
   }
 
   // Cifras históricas del ejercicio anterior (sólo informativas para el papel).
@@ -143,6 +184,8 @@ export async function GET(req: Request) {
   const payload = {
     periodo: `${year}-${String(month).padStart(2, "0")}`,
     company: company ? { rfc: company.rfc, razonSocial: company.razonSocial, regimenFiscal: company.regimenFiscal } : null,
+    // Cobros anticipados reubicados a su mes de cobro (Art. 17-I LISR).
+    anticipos: { movimientos: anticiposReubicados, monto: +anticiposMonto.toFixed(2) },
     regimen: {
       kind: esPfActEmpresarial
         ? "pf_act_empresarial"
