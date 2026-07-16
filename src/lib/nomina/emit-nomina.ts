@@ -179,6 +179,24 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     console.log(`[nomina] ${employee.nombre}: bruto=${sueldoBruto} ISR=${isrCalc.isrRetenido} IMSS_obrero=${imssObrero} IMSS_patronal=${imssPatronal} INFONAVIT=${infonavitDeduccion} neto=${netoAPagar}`);
   }
 
+  // ── Subsidio para el empleo (OtrosPagos clave 002) ─────────────────────
+  // El SAT exige reportar el subsidio causado cuando el trabajador tiene
+  // derecho (decreto 1-may-2024 vigente; validación: "El elemento OtroPago no
+  // contiene un atributo TipoOtroPago con la clave 002…"). Se calcula sobre el
+  // GRAVADO del periodo con el mismo motor del ISR; el importe ENTREGADO es 0
+  // — el subsidio actual solo se acredita contra el ISR, nunca se paga en
+  // efectivo. Las extraordinarias (aguinaldo/PTU) no llevan subsidio.
+  const gravadoPeriodo = percepcionesCfdi.reduce((s, p) => s + p.importe_gravado, 0);
+  const subsidioCausado =
+    input.tipoNomina === "E"
+      ? 0
+      : calcularIsrRetenido({
+          baseGravable: gravadoPeriodo,
+          periodicidadPago: employee.periodicidadPago,
+          ejercicio: input.fechaPago.getFullYear(),
+          mes: input.fechaPago.getMonth() + 1,
+        }).subsidio;
+
   // ── Construir el payload Facturapi ─────────────────────────────────────
   const facturapi = getFacturapiClient(company.facturapiApiKey);
 
@@ -246,6 +264,19 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
             percepcion: percepcionesCfdi,
           },
           deducciones: deduccionesCfdi,
+          ...(subsidioCausado > 0
+            ? {
+                otros_pagos: [
+                  {
+                    tipo_otro_pago: "002",
+                    clave: "002",
+                    concepto: "Subsidio para el empleo",
+                    importe: 0,
+                    subsidio_causado: +subsidioCausado.toFixed(2),
+                  },
+                ],
+              }
+            : {}),
         },
       },
     ],
