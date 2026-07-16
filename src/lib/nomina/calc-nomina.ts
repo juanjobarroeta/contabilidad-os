@@ -337,6 +337,9 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
     riesgoPuesto: employee.riesgoPuesto,
     // Columna del ejercicio para la CEAV patronal progresiva (DOF 16-dic-2020).
     ejercicio: input.ejercicio,
+    // Art. 36 LSS: al trabajador de salario mínimo no se le retiene IMSS
+    // (la cuota obrera la absorbe el patrón).
+    salarioDiario: employee.salarioDiario,
   });
   if (tipo === "ORDINARIA" && imssCalc.obrero.total > 0) {
     deducciones.push({

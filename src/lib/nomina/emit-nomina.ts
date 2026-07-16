@@ -137,6 +137,9 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       riesgoPuesto: employee.riesgoPuesto,
       // Columna del ejercicio para la CEAV patronal progresiva (DOF 16-dic-2020).
       ejercicio: input.fechaPago.getFullYear(),
+      // Art. 36 LSS: al trabajador de salario mínimo no se le retiene IMSS
+      // (la cuota obrera la absorbe el patrón).
+      salarioDiario: employee.salarioDiario,
     });
     const imssObrero = imssCalc.obrero.total;
     const imssPatronal = imssCalc.patronal.total;

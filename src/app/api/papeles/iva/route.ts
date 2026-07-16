@@ -244,23 +244,26 @@ export async function GET(req: Request) {
   const ppdIngresoUuids = ingresos
     .filter((i) => i.metodoPago === "PPD" && i.uuid)
     .map((i) => i.uuid!);
+  // Empate por UUID normalizado (REP en MAYÚSCULAS vs PAC en minúsculas): sin
+  // esto, una PPD YA cobrada seguía apareciendo "sin complemento" (tenue) junto
+  // a su renglón cobrado (REP) — parecía duplicada aunque el total era correcto.
   const pagadosHastaPeriodo = ppdIngresoUuids.length
     ? new Set(
         (
           await prisma.pagoDoctoRelacionado.findMany({
             where: {
-              parentUuid: { in: ppdIngresoUuids },
+              parentUuid: { in: variantesUuid(ppdIngresoUuids) },
               fechaPago: { lt: to },
               pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
             },
             select: { parentUuid: true },
           })
-        ).map((r) => r.parentUuid)
+        ).map((r) => normalizarUuid(r.parentUuid))
       )
     : new Set<string>();
   for (const inv of ingresos) {
     if (inv.metodoPago !== "PPD") continue;
-    if (inv.uuid && pagadosHastaPeriodo.has(inv.uuid)) continue;
+    if (inv.uuid && pagadosHastaPeriodo.has(normalizarUuid(inv.uuid))) continue;
     const { trasladado: t } = extractIva(inv);
     if (t <= 0.005) continue;
     trasladado.push({
