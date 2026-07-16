@@ -198,18 +198,10 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       },
       email: employee.email ?? undefined,
     },
-    items: [
-      {
-        quantity: 1,
-        product: {
-          description: `Pago de nómina ${input.periodoInicio.toISOString().slice(0, 10)} a ${input.periodoFin.toISOString().slice(0, 10)}`,
-          product_key: "84111505", // Servicios de nómina (SAT default)
-          price: totalPercepciones,
-          tax_included: true,
-          taxes: [], // nómina no lleva IVA en items, las deducciones van en el complemento
-        },
-      },
-    ],
+    // SIN `items`: en los recibos de nómina (type "N") Facturapi deriva los
+    // conceptos y totales del propio complemento (percepciones/deducciones) y
+    // RECHAZA el campo con `"items" is not allowed` — visto al timbrar la
+    // primera corrida real (las anteriores venían importadas del SAT).
     complements: [
       {
         type: "nomina",
