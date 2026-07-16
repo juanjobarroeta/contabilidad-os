@@ -59,6 +59,10 @@ const createSchema = z.object({
   rfc: z.string().trim().toUpperCase().regex(/^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$/, "RFC inválido"),
   curp: z.string().trim().toUpperCase().length(18, "CURP debe tener 18 caracteres"),
   nss: z.string().trim().regex(/^\d{11}$/, "NSS debe tener 11 dígitos"),
+  // CP fiscal del empleado (su CSF): DomicilioFiscalReceptor del CFDI de
+  // nómina. Opcional — sin él, el timbrado cae al CP de la empresa (que el
+  // SAT puede rechazar si no coincide con el RFC del empleado).
+  codigoPostal: z.string().trim().regex(/^\d{5}$/, "CP de 5 dígitos").optional().or(z.literal("")),
   email: z.string().email().optional().or(z.literal("")),
   fechaIngreso: z.string().min(1),
   tipoContrato: z.string().default("01"),
@@ -112,6 +116,7 @@ export async function POST(req: Request) {
         rfc: data.rfc,
         curp: data.curp,
         nss: data.nss,
+        codigoPostal: data.codigoPostal || null,
         email: data.email || null,
         fechaIngreso: new Date(data.fechaIngreso),
         tipoContrato: data.tipoContrato,
@@ -174,6 +179,15 @@ export async function PATCH(req: Request) {
     if (fields.puesto !== undefined) data.puesto = fields.puesto?.trim() || null;
     if (fields.departamento !== undefined) data.departamento = fields.departamento?.trim() || null;
     if (fields.email !== undefined) data.email = fields.email?.trim() || null;
+    // CP fiscal del empleado (CSF) — DomicilioFiscalReceptor del recibo de
+    // nómina; CFDI 4.0 lo valida contra el RFC del receptor.
+    if (fields.codigoPostal !== undefined) {
+      const cp = String(fields.codigoPostal ?? "").trim();
+      if (cp && !/^\d{5}$/.test(cp)) {
+        return NextResponse.json({ error: "El CP fiscal debe tener 5 dígitos" }, { status: 400 });
+      }
+      data.codigoPostal = cp || null;
+    }
     if (fields.periodicidadPago) data.periodicidadPago = fields.periodicidadPago;
     if (fields.riesgoPuesto) data.riesgoPuesto = fields.riesgoPuesto;
     if (fields.claveEntFed) data.claveEntFed = fields.claveEntFed;

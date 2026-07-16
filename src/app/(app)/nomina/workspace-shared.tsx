@@ -232,6 +232,8 @@ export interface Employee {
   rfc: string;
   curp: string;
   nss: string;
+  /** CP del domicilio FISCAL del empleado (CSF) — DomicilioFiscalReceptor del recibo. */
+  codigoPostal?: string | null;
   salarioDiario: number;
   salarioDiarioIntegrado: number | null;
   periodicidadPago: string;

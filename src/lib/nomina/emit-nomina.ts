@@ -194,7 +194,11 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       tax_system: "605", // Sueldos y Salarios e Ingresos Asimilados
       address: {
         country: "MEX",
-        zip: company.codigoPostal, // we use empresa's CP since we don't store empleado's
+        // CFDI 4.0 valida que el DomicilioFiscalReceptor coincida con el CP
+        // registrado en el SAT para el RFC del EMPLEADO — el de la empresa no
+        // pasa ("debe pertenecer al nombre asociado al RFC del Receptor").
+        // Fallback al CP de la empresa sólo si el empleado no lo tiene capturado.
+        zip: employee.codigoPostal ?? company.codigoPostal,
       },
       email: employee.email ?? undefined,
     },
@@ -212,7 +216,11 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
           fecha_final_pago: input.periodoFin.toISOString(),
           num_dias_pagados: input.diasPagados,
           emisor: {
-            curp: CURP_PM_PLACEHOLDER,
+            // Nomina12:Emisor:Curp SOLO aplica a patrón persona física (RFC de
+            // 13); para una PM el SAT rechaza el atributo ("no aplica para
+            // persona moral") — se omite. El placeholder queda únicamente para
+            // el caso PF legado.
+            ...(company.rfc.length === 13 ? { curp: CURP_PM_PLACEHOLDER } : {}),
             registro_patronal: company.registroPatronal,
           },
           receptor: {
