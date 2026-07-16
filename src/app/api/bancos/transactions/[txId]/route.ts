@@ -647,5 +647,21 @@ export async function PATCH(req: Request, { params }: Params) {
     },
   });
 
-  return NextResponse.json(advertencia ? { ...updated, advertencia } : updated);
+  // Sugerencia de REP: si se acaba de conciliar un ABONO contra una factura
+  // PPD de ingreso vigente, este cobro necesita complemento de pago (el IVA se
+  // causa en el mes de la FechaPago y el plazo es el quinto día natural del mes
+  // siguiente, RMF 2.7.1.32). La UI ofrece emitirlo de un toque con el monto y
+  // la fecha del propio movimiento. Solo se sugiere; no se emite nada aquí.
+  let repSugerido: { invoiceId: string; cliente: string; monto: number; fecha: Date } | null = null;
+  if (action === "match" && invoiceId && tx.monto > 0) {
+    const inv = await prisma.invoice.findFirst({
+      where: { id: invoiceId, companyId: tx.companyId, tipo: "INGRESO", metodoPago: "PPD", status: "STAMPED", uuid: { not: null } },
+      select: { id: true, customer: { select: { razonSocial: true } } },
+    });
+    if (inv) {
+      repSugerido = { invoiceId: inv.id, cliente: inv.customer?.razonSocial ?? "—", monto: Math.abs(tx.monto), fecha: tx.fecha };
+    }
+  }
+
+  return NextResponse.json({ ...updated, ...(advertencia ? { advertencia } : {}), ...(repSugerido ? { repSugerido } : {}) });
 }

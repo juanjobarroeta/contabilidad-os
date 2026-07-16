@@ -1139,6 +1139,11 @@ model Employee {
   rfc             String
   curp            String
   nss             String // Número de Seguridad Social
+  // CP del domicilio FISCAL del empleado (su CSF). CFDI 4.0 valida que el
+  // DomicilioFiscalReceptor del recibo de nómina coincida con el registrado en
+  // el SAT para su RFC — el CP de la empresa NO pasa esa validación. Null =
+  // fallback al CP de la empresa (comportamiento previo).
+  codigoPostal    String?
   email           String?
   fechaIngreso    DateTime
   fechaBaja       DateTime?

@@ -15,6 +15,7 @@ interface Invoice {
   uuid: string | null;
   fecha: string;
   tipo: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO";
+  metodoPago?: string; // "PUE" | "PPD"
   status: string; // DRAFT | STAMPED | CANCELLED
   subtotal: number;
   total: number;
@@ -447,6 +448,46 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
   const canCancel = inv.status === "STAMPED" && inv.tipo === "INGRESO" && !!inv.facturapiId;
   const nota = k === "pago" ? "Complemento de pago (REP)" : inv.notas;
 
+  // REP desde la factura: una PPD de ingreso vigente puede complementarse aquí
+  // SIN esperar la conciliación bancaria (el cobro puede conocerse antes de que
+  // llegue el estado de cuenta). El motor calcula parcialidad y saldos; con el
+  // monto vacío asume el saldo pendiente completo.
+  const canEmitRep = inv.status === "STAMPED" && inv.tipo === "INGRESO" && inv.metodoPago === "PPD" && !!inv.uuid;
+  const [repEmitOpen, setRepEmitOpen] = useState(false);
+  const [repMonto, setRepMonto] = useState("");
+  const [repFecha, setRepFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [repFormaPago, setRepFormaPago] = useState("03");
+  const [repBusy, setRepBusy] = useState(false);
+  const [repErr, setRepErr] = useState("");
+  const [repOkMsg, setRepOkMsg] = useState("");
+
+  async function doEmitRep() {
+    setRepBusy(true);
+    setRepErr("");
+    try {
+      const res = await fetch("/api/facturas/complemento-pagos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: inv.companyId,
+          invoiceId: inv.id,
+          ...(repMonto.trim() ? { monto: Number(repMonto) } : {}),
+          fechaPago: repFecha,
+          formaPago: repFormaPago,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "Error al emitir el complemento");
+      setRepOkMsg(`Complemento emitido (parcialidad ${data.numParcialidad}, ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(data.monto)}).`);
+      setRepEmitOpen(false);
+      onCancelled(); // refresca la lista — aparece el nuevo CFDI tipo PAGO
+    } catch (e) {
+      setRepErr(e instanceof Error ? e.message : "Error al emitir el complemento");
+    } finally {
+      setRepBusy(false);
+    }
+  }
+
   async function doCancel() {
     if (motivo === "01" && !sustituye.trim()) {
       setErr("El motivo 01 requiere el UUID de la factura que sustituye.");
@@ -551,6 +592,85 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
         </div>
 
         {repOpen && <RepresentacionImpresa invoiceId={inv.id} onClose={() => setRepOpen(false)} />}
+
+        {repOkMsg && (
+          <p className="mt-3 rounded-[10px] bg-cos-jade-tint px-3 py-2.5 text-[13px] text-cos-jade-ink">✓ {repOkMsg}</p>
+        )}
+        {canEmitRep && !repEmitOpen && !repOkMsg && (
+          <button
+            onClick={() => setRepEmitOpen(true)}
+            className="mt-3 w-full rounded-control border border-cos-line py-2 text-[13px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint"
+          >
+            Emitir complemento de pago (REP)
+          </button>
+        )}
+        {repEmitOpen && (
+          <div className="mt-3 rounded-[12px] border border-cos-line bg-cos-paper p-3.5">
+            <p className="text-[13px] font-medium text-cos-ink">Emitir complemento de pago</p>
+            <p className="mt-1 text-[12px] text-cos-ink-faint">
+              Registra un cobro de esta factura PPD y timbra su REP ante el SAT. No necesitas esperar la
+              conciliación bancaria; el sistema calcula la parcialidad y los saldos.
+            </p>
+            {repErr && (
+              <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-cos-red-ink">
+                <AlertTriangle className="h-3.5 w-3.5" /> {repErr}
+              </p>
+            )}
+            <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+              <label className="block text-[12.5px] text-cos-ink-soft">
+                Fecha del cobro
+                <input
+                  type="date"
+                  value={repFecha}
+                  onChange={(e) => setRepFecha(e.target.value)}
+                  className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 text-[13.5px] text-cos-ink outline-none"
+                />
+              </label>
+              <label className="block text-[12.5px] text-cos-ink-soft">
+                Monto cobrado
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={repMonto}
+                  onChange={(e) => setRepMonto(e.target.value)}
+                  placeholder="Saldo pendiente completo"
+                  className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 text-[13.5px] text-cos-ink outline-none"
+                />
+              </label>
+            </div>
+            <label className="mt-2.5 block text-[12.5px] text-cos-ink-soft">
+              Forma de pago
+              <select
+                value={repFormaPago}
+                onChange={(e) => setRepFormaPago(e.target.value)}
+                className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 text-[13.5px] text-cos-ink outline-none"
+              >
+                <option value="03">03 — Transferencia electrónica</option>
+                <option value="01">01 — Efectivo</option>
+                <option value="02">02 — Cheque nominativo</option>
+                <option value="04">04 — Tarjeta de crédito</option>
+                <option value="28">28 — Tarjeta de débito</option>
+              </select>
+            </label>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={doEmitRep}
+                disabled={repBusy}
+                className="flex-1 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50"
+              >
+                {repBusy ? "Timbrando…" : "Timbrar complemento"}
+              </button>
+              <button
+                onClick={() => setRepEmitOpen(false)}
+                disabled={repBusy}
+                className="rounded-control border border-cos-line px-3 py-2 text-[13px] text-cos-ink-soft hover:bg-cos-card"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
         {canCancel && !cancelOpen && (
           <button

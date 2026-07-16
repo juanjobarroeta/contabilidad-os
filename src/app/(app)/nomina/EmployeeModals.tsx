@@ -20,7 +20,7 @@ export function NewEmployeeModal({
 }) {
   const [form, setForm] = useState({
     nombre: "", apellidoPaterno: "", apellidoMaterno: "",
-    rfc: "", curp: "", nss: "",
+    rfc: "", curp: "", nss: "", codigoPostal: "",
     fechaIngreso: new Date().toISOString().slice(0, 10),
     salarioDiario: "",
     periodicidadPago: "04",
@@ -72,6 +72,9 @@ export function NewEmployeeModal({
           rfc: e.rfc?.trim().toUpperCase() || prev.rfc,
           curp: e.curp?.trim().toUpperCase() || prev.curp,
           nss: String(e.nss ?? "").trim() || prev.nss,
+          // CP fiscal: el parser de CSF lo trae — es justo el dato que el CFDI
+          // de nómina valida como DomicilioFiscalReceptor.
+          codigoPostal: String(e.codigoPostal ?? "").trim() || prev.codigoPostal,
           fechaIngreso: e.fechaIngreso || e.fechaAlta || prev.fechaIngreso,
           salarioDiario: e.salarioDiario ? String(e.salarioDiario) : (e.salarioMensual ? String(Math.round((e.salarioMensual / 30.4) * 100) / 100) : (e.salarioBaseCotizacion && !e.salarioDiario ? "" : prev.salarioDiario)),
           periodicidadPago: e.periodicidadPago || prev.periodicidadPago,
@@ -179,6 +182,7 @@ export function NewEmployeeModal({
             <Field label="RFC*"><input required value={form.rfc} onChange={e => set("rfc", e.target.value)} className={inputCls} placeholder="13 caracteres" /></Field>
             <Field label="CURP*"><input required value={form.curp} onChange={e => set("curp", e.target.value)} className={inputCls} placeholder="18 caracteres" /></Field>
             <Field label="NSS*"><input required value={form.nss} onChange={e => set("nss", e.target.value)} className={inputCls} placeholder="11 dígitos" /></Field>
+            <Field label="CP fiscal (CSF)"><input value={form.codigoPostal} onChange={e => set("codigoPostal", e.target.value)} className={inputCls} placeholder="5 dígitos — del CSF del empleado" maxLength={5} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fecha de ingreso*">
@@ -393,6 +397,7 @@ export function EditEmployeeModal({
     nombre: employee.nombre,
     apellidoPaterno: employee.apellidoPaterno,
     apellidoMaterno: employee.apellidoMaterno ?? "",
+    codigoPostal: employee.codigoPostal ?? "",
     salarioDiario: String(employee.salarioDiario),
     periodicidadPago: employee.periodicidadPago,
     puesto: employee.puesto ?? "",
@@ -430,6 +435,7 @@ export function EditEmployeeModal({
           nombre: form.nombre,
           apellidoPaterno: form.apellidoPaterno,
           apellidoMaterno: form.apellidoMaterno || null,
+          codigoPostal: form.codigoPostal || null,
           salarioDiario: parseFloat(form.salarioDiario),
           periodicidadPago: form.periodicidadPago,
           puesto: form.puesto || null,
@@ -467,6 +473,7 @@ export function EditEmployeeModal({
             <Field label="Nombre(s)"><input required value={form.nombre} onChange={e => setForm(p => ({ ...p, nombre: e.target.value }))} className={inputCls} /></Field>
             <Field label="Ap. Paterno"><input required value={form.apellidoPaterno} onChange={e => setForm(p => ({ ...p, apellidoPaterno: e.target.value }))} className={inputCls} /></Field>
             <Field label="Ap. Materno"><input value={form.apellidoMaterno} onChange={e => setForm(p => ({ ...p, apellidoMaterno: e.target.value }))} className={inputCls} /></Field>
+            <Field label="CP fiscal (CSF)"><input value={form.codigoPostal} onChange={e => setForm(p => ({ ...p, codigoPostal: e.target.value }))} className={inputCls} placeholder="5 dígitos — del CSF del empleado" maxLength={5} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Salario diario (SBC)">
