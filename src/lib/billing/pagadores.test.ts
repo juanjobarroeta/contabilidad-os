@@ -61,4 +61,13 @@ describe("nivelPago", () => {
     expect(nivelPago([{ subscriptionStatus: "CANCELED", trialEndsAt: null }])).toBe("NINGUNO");
     expect(nivelPago([])).toBe("NINGUNO");
   });
+
+  it("operador de plataforma → ACTIVO siempre (empresas de la casa), aunque su status esté vencido", () => {
+    expect(
+      nivelPago([{ subscriptionStatus: "EXPIRED", trialEndsAt: null, esOperador: true }])
+    ).toBe("ACTIVO");
+    expect(
+      nivelPago([{ subscriptionStatus: "TRIALING", trialEndsAt: HACE_UNA_SEMANA, esOperador: true }])
+    ).toBe("ACTIVO");
+  });
 });

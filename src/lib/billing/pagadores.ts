@@ -16,6 +16,8 @@ import { prisma } from "../prisma";
 export type PagadorSub = {
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: Date | null;
+  /** Operador de plataforma (User.esOperador): sus empresas son de la casa. */
+  esOperador?: boolean;
 };
 
 /**
@@ -37,6 +39,10 @@ export function nivelPago(pagadores: PagadorSub[]): NivelPago {
   const ahora = Date.now();
   let hayTrial = false;
   for (const p of pagadores) {
+    // Empresas del operador de plataforma (las "de la casa"): ACTIVO siempre —
+    // el operador se paga a sí mismo. Mismo override que suspension.ts y el
+    // gate de escritura, para que el COGS nunca se corte en las propias.
+    if (p.esOperador) return "ACTIVO";
     if (p.subscriptionStatus === "ACTIVE" || p.subscriptionStatus === "PAST_DUE") return "ACTIVO";
     if (
       p.subscriptionStatus === "TRIALING" &&
@@ -55,7 +61,7 @@ export function hayPagoVigente(pagadores: PagadorSub[]): boolean {
 }
 
 const PAYER_SELECT = {
-  user: { select: { subscriptionStatus: true, trialEndsAt: true } },
+  user: { select: { subscriptionStatus: true, trialEndsAt: true, esOperador: true } },
 } as const;
 
 /**
