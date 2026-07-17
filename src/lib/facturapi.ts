@@ -2,6 +2,7 @@ import Facturapi from "facturapi";
 import { Readable } from "stream";
 import { prisma } from "./prisma";
 import { decryptSecret, encryptSecret } from "./crypto";
+import { emisorNombreDesdeXml, sinRegimenSocietario } from "./fiscal/nombre-fiscal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Master client — uses the user-level (sk_user_/sk_live_) key from Facturapi.
@@ -59,6 +60,30 @@ export type ProvisionResult = {
   warning?: string;
   error?: string;
 };
+
+/**
+ * Nombre EXACTO del padrón del SAT para el RFC de la empresa, rescatado del
+ * nodo Emisor de sus CFDIs timbrados guardados (un CFDI timbrado ya pasó la
+ * validación de nombre del SAT). Se revisan algunos candidatos porque la
+ * empresa también guarda CFDIs RECIBIDOS (emisor = un tercero) — el helper
+ * verifica el RFC y aquí nos quedamos con el primero que cuadre.
+ */
+async function nombreEmisorDesdeCfdisTimbrados(
+  companyId: string,
+  rfc: string
+): Promise<string | null> {
+  const candidatos = await prisma.invoice.findMany({
+    where: { companyId, status: "STAMPED", rawXml: { not: null } },
+    orderBy: { fecha: "desc" },
+    take: 10,
+    select: { rawXml: true },
+  });
+  for (const c of candidatos) {
+    const nombre = c.rawXml ? emisorNombreDesdeXml(c.rawXml, rfc) : null;
+    if (nombre) return nombre;
+  }
+  return null;
+}
 
 function base64ToStream(base64: string): NodeJS.ReadableStream {
   const buffer = Buffer.from(base64, "base64");
@@ -128,10 +153,18 @@ export async function provisionFacturapiOrg(companyId: string): Promise<Provisio
     // 2. Update legal info — idempotent.
     // Facturapi v2 note: `tax_id` (RFC) is NOT accepted here — it's inferred
     // from the CSD certificate when uploaded. `name` is the display name,
-    // `legal_name` is the razón social used on CFDIs.
+    // `legal_name` es el Nombre del EMISOR en los CFDIs y el SAT lo valida
+    // contra el padrón: debe ser EXACTO y SIN régimen societario (CFDI 4.0 —
+    // "El campo Nombre del emisor, debe pertenecer al nombre asociado al RFC").
+    // Se rescata del nodo Emisor de un CFDI ya timbrado de este RFC (los
+    // importados del SAT traen el nombre exacto del padrón); sin historial,
+    // se recorta el sufijo societario de la razón social capturada.
+    const legalName =
+      (await nombreEmisorDesdeCfdisTimbrados(company.id, company.rfc)) ??
+      sinRegimenSocietario(company.razonSocial);
     await admin.organizations.updateLegal(orgId, {
       name: company.nombreComercial || company.razonSocial,
-      legal_name: company.razonSocial,
+      legal_name: legalName,
       tax_system: company.regimenFiscal,
       address: {
         zip: company.codigoPostal,
