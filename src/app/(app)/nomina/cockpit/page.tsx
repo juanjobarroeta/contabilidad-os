@@ -762,6 +762,10 @@ function BatchTimbrarPanel({
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<TimbrarResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Fecha de emisión de los CFDIs del lote (regla SAT: máx. 72 h atrás; el mes
+  // fiscal de cada corrida lo fija su fecha de pago, no esta fecha).
+  const hoyStr = new Date().toLocaleDateString("en-CA");
+  const [fechaCfdi, setFechaCfdi] = useState(hoyStr);
 
   const toggle = (id: string) =>
     setSeleccion((prev) => {
@@ -790,7 +794,7 @@ function BatchTimbrarPanel({
       const res = await fetch("/api/nomina/cockpit/batch-timbrar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runIds }),
+        body: JSON.stringify({ runIds, ...(fechaCfdi !== hoyStr ? { fechaCfdi } : {}) }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -874,6 +878,23 @@ function BatchTimbrarPanel({
                   <p className="px-3 py-6 text-center text-[12.5px] text-cos-ink-faint">No hay corridas calculadas pendientes de timbrar.</p>
                 )}
               </div>
+            </div>
+
+            {/* Fecha de emisión de los CFDIs (opcional; default = hoy). */}
+            <div className="px-5 pb-3">
+              <label className="mb-1 block text-[12px] font-medium text-cos-ink">Fecha de emisión de los CFDIs</label>
+              <input
+                type="date"
+                value={fechaCfdi}
+                max={hoyStr}
+                min={new Date(Date.now() - 2 * 86400000).toLocaleDateString("en-CA")}
+                onChange={(e) => setFechaCfdi(e.target.value)}
+                className="w-full max-w-[220px] rounded-control border border-cos-line px-3 py-2 text-[13px]"
+              />
+              <p className="mt-1 text-[11px] text-cos-ink-faint">
+                El SAT permite fechar la emisión hasta 72 h antes del timbrado. El mes fiscal de cada nómina lo
+                determina su fecha de pago (FechaPago del complemento), no esta fecha.
+              </p>
             </div>
 
             {/* Confirmación tipada con el conteo real — requisito para habilitar. */}

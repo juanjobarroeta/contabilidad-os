@@ -56,6 +56,10 @@ interface ReciboExpediente {
   totalDeducciones: number;
   netoAPagar: number;
   cfdiUuid: string | null;
+  /** Invoice que respalda el recibo timbrado — habilita la descarga PDF/XML. */
+  invoiceId?: string | null;
+  pdfDisponible?: boolean;
+  xmlDisponible?: boolean;
 }
 
 interface CambioSalario {
@@ -284,15 +288,27 @@ export default function ExpedienteEmpleadoPage() {
                 <p className="font-mono text-[14px] font-bold text-cos-jade-ink">{formatCurrency(r.netoAPagar)}</p>
                 <p className="font-mono text-[11px] text-cos-ink-faint">de <Money value={r.totalPercepciones} /></p>
               </div>
-              <div className="w-full sm:w-auto">
+              <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 sm:w-auto">
                 {r.cfdiUuid ? (
-                  <Link
-                    href={`/facturas?q=${r.cfdiUuid}`}
-                    className="inline-flex items-center gap-1 text-[12px] font-medium text-cos-brand-ink hover:underline"
-                    title={r.cfdiUuid}
-                  >
-                    <FileText className="h-3.5 w-3.5" /> CFDI …{r.cfdiUuid.slice(-8)}
-                  </Link>
+                  <>
+                    <Link
+                      href={`/facturas?q=${r.cfdiUuid}`}
+                      className="inline-flex items-center gap-1 text-[12px] font-medium text-cos-brand-ink hover:underline"
+                      title={r.cfdiUuid}
+                    >
+                      <FileText className="h-3.5 w-3.5" /> CFDI …{r.cfdiUuid.slice(-8)}
+                    </Link>
+                    {r.invoiceId && r.pdfDisponible && (
+                      <a href={`/api/facturas/${r.invoiceId}/download?format=pdf`}
+                        className="text-[11px] font-medium text-cos-brand underline hover:opacity-80"
+                        title="Descargar el recibo timbrado en PDF">PDF</a>
+                    )}
+                    {r.invoiceId && r.xmlDisponible && (
+                      <a href={`/api/facturas/${r.invoiceId}/download?format=xml`}
+                        className="text-[11px] font-medium text-cos-brand underline hover:opacity-80"
+                        title="Descargar el XML del CFDI de nómina">XML</a>
+                    )}
+                  </>
                 ) : (
                   <span className="text-[12px] text-cos-ink-faint">Sin timbrar</span>
                 )}

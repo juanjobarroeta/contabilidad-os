@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
-import { stampPayrollRun } from "@/lib/nomina/payroll-run";
+import { stampPayrollRun, type StampOpciones } from "@/lib/nomina/payroll-run";
+import { resolverFechaCfdi } from "@/lib/nomina/fecha-cfdi";
 import { registrarBitacora } from "@/lib/audit";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,9 +78,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  const { runIds } = (body ?? {}) as { runIds?: unknown };
+  const { runIds, fechaCfdi } = (body ?? {}) as { runIds?: unknown; fechaCfdi?: unknown };
   if (!Array.isArray(runIds) || runIds.length === 0) {
     return NextResponse.json({ error: "runIds requerido" }, { status: 400 });
+  }
+  // Fecha de emisión opcional para TODO el lote (máx. 72 h atrás por regla
+  // SAT; el mes fiscal de cada corrida lo fija su FechaPago, no esta fecha).
+  const opciones: StampOpciones = {};
+  if (typeof fechaCfdi === "string" && fechaCfdi) {
+    const res = resolverFechaCfdi(fechaCfdi);
+    if (res.error) return NextResponse.json({ error: res.error }, { status: 400 });
+    if (res.fechaCfdi) opciones.fechaCfdi = res.fechaCfdi;
   }
   // Sólo strings, deduplicados — la selección explícita del usuario.
   const ids = Array.from(
@@ -145,7 +154,7 @@ export async function POST(req: Request) {
 
       // Reutiliza la lógica de timbrado por corrida: idempotente (salta items ya
       // timbrados), concurrencia 5 interna, pasa la corrida a STAMPED si completa.
-      const result = await stampPayrollRun(runId);
+      const result = await stampPayrollRun(runId, opciones);
 
       // Bitácora de seguridad: timbrado en lote, una fila por corrida que
       // efectivamente timbró CFDIs (fire-and-forget).

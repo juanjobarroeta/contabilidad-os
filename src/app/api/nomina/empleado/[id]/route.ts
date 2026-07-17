@@ -6,6 +6,8 @@ import {
   aniosConRecibos,
   type ReciboAcumulable,
 } from "@/lib/nomina/acumulados";
+import { descargasPorUuid } from "@/lib/nomina/recibos-descarga";
+import { normalizarUuid } from "@/lib/fiscal/uuid";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -115,23 +117,33 @@ export async function GET(req: Request, { params }: Params) {
     const total = items.length;
     const pagina = items.slice((page - 1) * pageSize, page * pageSize);
 
-    const recibos = pagina.map((i) => ({
-      id: i.id,
-      runId: i.payrollRun.id,
-      periodo: i.payrollRun.periodo,
-      fechaPago: i.payrollRun.fechaPago,
-      tipo: i.payrollRun.tipo,
-      status: i.payrollRun.status,
-      origen: i.payrollRun.origen,
-      sueldoBase: i.sueldoBase,
-      totalPercepciones: i.totalPercepciones,
-      isrRetenido: i.isrRetenido,
-      imssObrero: i.imssObrero,
-      infonavit: i.infonavit,
-      totalDeducciones: i.totalDeducciones,
-      netoAPagar: i.netoAPagar,
-      cfdiUuid: i.cfdiUuid,
-    }));
+    // Descarga del recibo timbrado (PDF/XML): Invoice resuelto por UUID —
+    // sólo de la página visible, no de todo el ejercicio.
+    const descargas = await descargasPorUuid(empleado.companyId, pagina.map((i) => i.cfdiUuid));
+
+    const recibos = pagina.map((i) => {
+      const d = i.cfdiUuid ? descargas.get(normalizarUuid(i.cfdiUuid)) : undefined;
+      return {
+        id: i.id,
+        runId: i.payrollRun.id,
+        periodo: i.payrollRun.periodo,
+        fechaPago: i.payrollRun.fechaPago,
+        tipo: i.payrollRun.tipo,
+        status: i.payrollRun.status,
+        origen: i.payrollRun.origen,
+        sueldoBase: i.sueldoBase,
+        totalPercepciones: i.totalPercepciones,
+        isrRetenido: i.isrRetenido,
+        imssObrero: i.imssObrero,
+        infonavit: i.infonavit,
+        totalDeducciones: i.totalDeducciones,
+        netoAPagar: i.netoAPagar,
+        cfdiUuid: i.cfdiUuid,
+        invoiceId: d?.invoiceId ?? null,
+        pdfDisponible: d?.pdfDisponible ?? false,
+        xmlDisponible: d?.xmlDisponible ?? false,
+      };
+    });
 
     // Historial salarial: movimientos IMSS de alta / modificación de salario.
     const cambiosSalario = await prisma.imssMovimiento.findMany({

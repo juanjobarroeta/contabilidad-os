@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { rangoDelPeriodo } from "@/lib/nomina/incidencias";
+import { descargasPorUuid } from "@/lib/nomina/recibos-descarga";
+import { normalizarUuid } from "@/lib/fiscal/uuid";
 import type { Incidencia } from "@prisma/client";
 
 type Params = { params: Promise<{ id: string }> };
@@ -49,7 +51,20 @@ export async function GET(req: Request, { params }: Params) {
     });
   }
 
-  return NextResponse.json({ ...run, incidencias });
+  // Descarga de recibos timbrados: se resuelve el Invoice de cada item por
+  // UUID para que la UI enlace a /api/facturas/[invoiceId]/download.
+  const descargas = await descargasPorUuid(run.companyId, run.items.map((i) => i.cfdiUuid));
+  const items = run.items.map((i) => {
+    const d = i.cfdiUuid ? descargas.get(normalizarUuid(i.cfdiUuid)) : undefined;
+    return {
+      ...i,
+      invoiceId: d?.invoiceId ?? null,
+      pdfDisponible: d?.pdfDisponible ?? false,
+      xmlDisponible: d?.xmlDisponible ?? false,
+    };
+  });
+
+  return NextResponse.json({ ...run, items, incidencias });
 }
 
 // DELETE /api/nomina/run/[id]
