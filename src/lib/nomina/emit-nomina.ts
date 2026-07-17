@@ -10,7 +10,7 @@ import { recordTimbrado } from "../costos/record";
 import { calcularIsrRetenido } from "./isr";
 import { calcularImss } from "./imss";
 import { calcularInfonavit } from "./infonavit";
-import { receptorDesdeXmlNomina } from "./receptor-xml";
+import { receptorDesdeXmlNomina, registroPatronalDesdeXmlNomina } from "./receptor-xml";
 import type { PercepcionItem, DeduccionItem } from "./calc-nomina";
 import type { Employee } from "@prisma/client";
 
@@ -70,7 +70,23 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
   if (!company.facturapiApiKey) {
     return { ok: false, error: "La empresa no tiene clave Facturapi configurada" };
   }
-  if (!company.registroPatronal) {
+  // Registro patronal: si no está capturado, se rescata del complemento de un
+  // recibo de nómina YA TIMBRADO de la empresa (los importados del SAT lo
+  // traen validado) y se guarda en la ficha — mismo auto-backfill que el CP
+  // fiscal del receptor. Solo si tampoco hay historial se pide capturarlo.
+  let registroPatronal = company.registroPatronal;
+  if (!registroPatronal) {
+    const previo = await prisma.invoice.findFirst({
+      where: { companyId: company.id, tipo: "NOMINA", status: "STAMPED", rawXml: { not: null } },
+      orderBy: { fecha: "desc" },
+      select: { rawXml: true },
+    });
+    registroPatronal = previo?.rawXml ? registroPatronalDesdeXmlNomina(previo.rawXml) : null;
+    if (registroPatronal) {
+      await prisma.company.update({ where: { id: company.id }, data: { registroPatronal } });
+    }
+  }
+  if (!registroPatronal) {
     return { ok: false, error: "Falta el Registro Patronal de la empresa (configúralo en /empresa)" };
   }
 
@@ -280,7 +296,7 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
             // persona moral") — se omite. El placeholder queda únicamente para
             // el caso PF legado.
             ...(company.rfc.length === 13 ? { curp: CURP_PM_PLACEHOLDER } : {}),
-            registro_patronal: company.registroPatronal,
+            registro_patronal: registroPatronal,
           },
           receptor: {
             curp: employee.curp,
