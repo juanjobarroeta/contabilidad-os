@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { receptorDesdeXmlNomina } from "./receptor-xml";
+import { receptorDesdeXmlNomina, registroPatronalDesdeXmlNomina } from "./receptor-xml";
 
 const XML = `<?xml version="1.0"?><cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" TipoDeComprobante="N">
 <cfdi:Emisor Rfc="ZIO190321JI6" Nombre="ZIONX SA DE CV" RegimenFiscal="601"/>
@@ -32,5 +32,17 @@ describe("receptorDesdeXmlNomina", () => {
 
   it("sin nodo Receptor → null", () => {
     expect(receptorDesdeXmlNomina("<cfdi:Comprobante/>", "MIGP920407KQ9")).toBeNull();
+  });
+});
+
+describe("registroPatronalDesdeXmlNomina", () => {
+  it("extrae el RegistroPatronal del complemento de nomina", () => {
+    const xml = `<cfdi:Comprobante><cfdi:Emisor Rfc="ZIO190321JI6" Nombre="ZIONX"/><nomina12:Nomina Version="1.2"><nomina12:Emisor RegistroPatronal="B5510768108"/></nomina12:Nomina></cfdi:Comprobante>`;
+    expect(registroPatronalDesdeXmlNomina(xml)).toBe("B5510768108");
+  });
+
+  it("sin atributo → null (no inventa)", () => {
+    expect(registroPatronalDesdeXmlNomina(`<cfdi:Comprobante><cfdi:Emisor Rfc="X"/></cfdi:Comprobante>`)).toBeNull();
+    expect(registroPatronalDesdeXmlNomina(`<nomina12:Emisor RegistroPatronal=""/>`)).toBeNull();
   });
 });

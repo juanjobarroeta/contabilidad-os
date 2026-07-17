@@ -19,6 +19,19 @@ export interface ReceptorFiscal {
  * verificando que el Rfc del nodo sea el esperado (el XML podría ser de otro
  * empleado si el llamador filtró mal). Null si no hay nodo o el RFC no cuadra.
  */
+/**
+ * Extrae el RegistroPatronal del complemento de nómina de un recibo timbrado
+ * (nodo nomina12:Emisor — el ÚNICO lugar del CFDI donde aparece ese atributo,
+ * así que el regex por atributo es inequívoco). Un recibo importado del SAT lo
+ * trae validado por el PAC: es el registro patronal real del emisor. Null si
+ * no está o viene vacío.
+ */
+export function registroPatronalDesdeXmlNomina(rawXml: string): string | null {
+  const m = rawXml.match(/\sRegistroPatronal\s*=\s*"([^"]+)"/i);
+  const rp = m?.[1].trim();
+  return rp || null;
+}
+
 export function receptorDesdeXmlNomina(rawXml: string, rfcEsperado: string): ReceptorFiscal | null {
   const m = rawXml.match(/<(?:[\w-]+:)?Receptor\b[^>]*>/i);
   if (!m) return null;
