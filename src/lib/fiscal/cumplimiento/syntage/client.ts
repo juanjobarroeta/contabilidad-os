@@ -141,6 +141,43 @@ export class SyntageClient {
     return asArray(await this.request<Json>("GET", "/credentials"));
   }
 
+  /**
+   * TODAS las credenciales de un RFC, en cualquier estado (valid/invalid/…).
+   * Para liberar el slot de un RFC hay que borrarlas todas — una credencial
+   * inválida sigue contando como RFC vinculado en el plan de Syntage.
+   */
+  async credencialesDeRfc(rfc: string): Promise<{ id: string; status: string }[]> {
+    const list = await this.listCredentials();
+    const target = rfc.trim().toUpperCase();
+    return list
+      .filter((c) => String(c.rfc ?? "").toUpperCase() === target)
+      .map((c) => ({ id: String(c.id ?? iriId(c["@id"])), status: String(c.status ?? "") }))
+      .filter((c) => c.id);
+  }
+
+  /**
+   * Borra una credencial (libera el RFC vinculado del plan). DELETE devuelve
+   * 204 sin cuerpo; un 404 se trata como ya-borrada (idempotente).
+   */
+  async deleteCredential(id: string): Promise<void> {
+    try {
+      await this.request("DELETE", `/credentials/${id}`);
+    } catch (e) {
+      if (e instanceof SyntageError && e.status === 404) return;
+      throw e;
+    }
+  }
+
+  /** Borra una entidad (y su historial extraído en Syntage). 404 = ya borrada. */
+  async deleteEntity(id: string): Promise<void> {
+    try {
+      await this.request("DELETE", `/entities/${id}`);
+    } catch (e) {
+      if (e instanceof SyntageError && e.status === 404) return;
+      throw e;
+    }
+  }
+
   /** Credencial VÁLIDA existente para un RFC, o null. */
   async findValidCredentialForRfc(rfc: string): Promise<{ id: string } | null> {
     const list = await this.listCredentials();

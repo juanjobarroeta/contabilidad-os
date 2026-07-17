@@ -7,6 +7,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
 import { fielStatus, parseCertExpiry } from "@/lib/fiel";
 import { borrarCredencialesEmpresa, borrarEmpresaDefinitivo } from "@/lib/empresas/baja";
+import { liberarSlotSyntage } from "@/lib/fiscal/cumplimiento/syntage/deprovision";
 import { registrarBitacora } from "@/lib/audit";
 import { sincronizarCantidadDespacho } from "@/lib/billing/sync-cantidad-despacho";
 
@@ -278,6 +279,13 @@ export async function DELETE(req: Request, { params }: Params) {
     // de Facturapi y Playtomic). Aunque la fase 2 falle, los secretos ya no existen.
     await borrarCredencialesEmpresa(companyId);
     console.warn(`[baja-empresa] credenciales eliminadas ${JSON.stringify(auditoria)}`);
+
+    // Liberar el slot de Syntage (RFC vinculado + entidad con su historial):
+    // sin esto el cliente dado de baja sigue ocupando lugar del plan de
+    // Syntage para siempre. Mejor esfuerzo — liberarSlotSyntage nunca lanza;
+    // si Syntage está caído, el cron syntage-liberar-slots recoge el huérfano.
+    const slot = await liberarSlotSyntage(company.rfc, { borrarEntidad: true });
+    console.warn(`[baja-empresa] syntage ${JSON.stringify({ ...auditoria, ...slot })}`);
 
     // Fase 2 — borrado total en una transacción (todo-o-nada).
     await borrarEmpresaDefinitivo(companyId);
