@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { debeArrancarCE, extractoresADisparar, EXTRACTORES_PROVISION } from "./cadencia";
+import {
+  debeArrancarCE,
+  extractoresADisparar,
+  EXTRACTORES_PROVISION,
+  EXTRACTORES_TRIAL,
+} from "./cadencia";
 
 const ahora = new Date("2026-06-24T12:00:00Z");
 const hace = (dias: number) => new Date(ahora.getTime() - dias * 24 * 60 * 60 * 1000);
@@ -17,6 +22,39 @@ describe("extractoresADisparar", () => {
   it("empresa nueva sin historial dispara las 4", () => {
     const r = extractoresADisparar({ plan: "AUTOMATIZADO", ultimaPorExtractor: {}, ahora });
     expect(r.sort()).toEqual([...EXTRACTORES_PROVISION].sort());
+  });
+
+  it("TRIAL sólo extrae la probadita (opinión + CSF), sin backfill de declaraciones", () => {
+    const r = extractoresADisparar({
+      plan: "AUTOMATIZADO",
+      ultimaPorExtractor: {},
+      ahora,
+      nivelPago: "TRIAL",
+    });
+    expect(r.sort()).toEqual([...EXTRACTORES_TRIAL].sort());
+  });
+
+  it("TRIAL acota INCLUSO con force (la subida de e.firma auto-dispara force)", () => {
+    const r = extractoresADisparar({
+      plan: "PRO",
+      ultimaPorExtractor: {},
+      ahora,
+      force: true,
+      nivelPago: "TRIAL",
+    });
+    expect(r.sort()).toEqual([...EXTRACTORES_TRIAL].sort());
+  });
+
+  it("al convertir a ACTIVO la cadencia detecta lo que falta y lo extrae", () => {
+    // Durante el trial sólo se extrajo la probadita; ya con pago, los
+    // extractores nunca disparados (anual/mensual) salen de inmediato.
+    const r = extractoresADisparar({
+      plan: "AUTOMATIZADO",
+      ultimaPorExtractor: { tax_compliance: hace(1), tax_status: hace(1) },
+      ahora,
+      nivelPago: "ACTIVO",
+    });
+    expect(r.sort()).toEqual(["annual_tax_return", "monthly_tax_return"]);
   });
 
   it("respeta la cadencia: nada vencido → no dispara", () => {
@@ -102,6 +140,13 @@ describe("debeArrancarCE — piso de reintento del bootstrap de Contabilidad Ele
 
   it("nunca intentada → dispara", () => {
     expect(debeArrancarCE({ ...base, ultimoIntentoCE: null })).toBe(true);
+  });
+
+  it("TRIAL nunca arranca la CE, ni con force (parte del backfill caro)", () => {
+    expect(debeArrancarCE({ ...base, ultimoIntentoCE: null, nivelPago: "TRIAL" })).toBe(false);
+    expect(
+      debeArrancarCE({ ...base, ultimoIntentoCE: null, nivelPago: "TRIAL", force: true })
+    ).toBe(false);
   });
 
   it("ya bootstrapeada → nunca re-dispara (ni con force)", () => {

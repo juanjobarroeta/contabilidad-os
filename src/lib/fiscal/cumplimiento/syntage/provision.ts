@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/crypto";
 import { recordSyntageExtraction } from "@/lib/costos/record";
 import { planIncluyeSyntage } from "@/lib/planes";
-import { empresasConPagoVigente } from "@/lib/billing/pagadores";
+import { nivelPagoEmpresas, type NivelPago } from "@/lib/billing/pagadores";
 import { SyntageClient } from "./client";
 import {
   EXTRACTORES_PROVISION,
@@ -129,13 +129,20 @@ async function provisionOne(
   c: FielCompany,
   entities: Json[],
   creds: Json[],
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; nivelPago?: NivelPago },
 ): Promise<ProvisionResult> {
   // Empresas sin Syntage en su plan (ASISTENTE) no gastan extracciones —
   // ni siquiera creamos entidad/credencial — salvo aprovisionamiento manual (force).
   if (!planIncluyeSyntage(c.tier) && !opts?.force) {
     return { companyId: c.id, rfc: c.rfc, skipped: true };
   }
+  // Sin ningún pagador vigente no se extrae nada, ni con force: el COGS de un
+  // cliente que no paga no se gasta por ninguna vía.
+  if (opts?.nivelPago === "NINGUNO") {
+    return { companyId: c.id, rfc: c.rfc, skipped: true, motivo: "sin_pago_vigente" };
+  }
+  // TRIAL acota la extracción a la probadita (opinión + CSF) en cadencia.ts.
+  const nivelExtraccion = opts?.nivelPago === "TRIAL" ? ("TRIAL" as const) : ("ACTIVO" as const);
 
   // Decide QUÉ extraer antes de tocar a Syntage: por plan + cadencia. Si no hay
   // nada pendiente, no creamos entidad/credencial en vano (igual son idempotentes).
@@ -149,6 +156,7 @@ async function provisionOne(
     datosPresentes: presentes,
     ahora: new Date(),
     force: opts?.force,
+    nivelPago: nivelExtraccion,
   });
 
   // Arranque ÚNICO de la Contabilidad Electrónica (apertura): si esta empresa
@@ -163,6 +171,7 @@ async function provisionOne(
     ultimoIntentoCE: ultimas.ultimoIntentoCE,
     ahora: new Date(),
     force: opts?.force,
+    nivelPago: nivelExtraccion,
   });
 
   // Si no hay extracciones de cadencia pendientes NI arranque de CE, no creamos
@@ -207,7 +216,14 @@ async function provisionOne(
     }
   }
 
-  return { companyId: c.id, rfc: c.rfc, entityId, credencial };
+  return {
+    companyId: c.id,
+    rfc: c.rfc,
+    entityId,
+    credencial,
+    // Observabilidad: en trial la extracción quedó acotada a la probadita.
+    ...(nivelExtraccion === "TRIAL" ? { motivo: "trial_solo_basicos" } : {}),
+  };
 }
 
 /**
@@ -228,8 +244,15 @@ export async function provisionCompany(
   if (!c.fielCer || !c.fielKey || !c.fielPassword) {
     return { companyId, rfc: c.rfc, skipped: true, error: "Sin e.firma guardada" };
   }
+  // El nivel de pago acota la extracción TAMBIÉN en la vía manual/force: esta
+  // función se auto-dispara al subir la e.firma, la vía exacta del abuso de
+  // trial (backfill completo con presupuesto nuestro y adiós a la semana).
+  const niveles = await nivelPagoEmpresas([c.id]);
   const [entities, creds] = await Promise.all([client.listEntities(), client.listCredentials()]);
-  return provisionOne(client, c as FielCompany, entities, creds, { force: opts?.force ?? true });
+  return provisionOne(client, c as FielCompany, entities, creds, {
+    force: opts?.force ?? true,
+    nivelPago: niveles.get(c.id) ?? "NINGUNO",
+  });
 }
 
 /** Aprovisiona TODAS las empresas que tienen e.firma guardada. */
@@ -247,20 +270,22 @@ export async function provisionAllCompanies(): Promise<{
 
   // Clientes que dejaron de pagar NO generan más COGS: si ningún pagador de la
   // empresa (OWNER/ADMIN propio o de su despacho) tiene suscripción vigente,
-  // se pausan sus extracciones. El slot en Syntage lo libera el cron
-  // syntage-liberar-slots; si vuelven a pagar, esto se reactiva solo.
-  const conPago = await empresasConPagoVigente(companies.map((c) => c.id));
+  // se pausan sus extracciones. Un TRIAL en curso extrae sólo la probadita
+  // (opinión + CSF, sin backfill). El slot en Syntage lo libera el cron
+  // syntage-liberar-slots; si vuelven a pagar, todo se reactiva solo.
+  const niveles = await nivelPagoEmpresas(companies.map((c) => c.id));
 
   const resultados: ProvisionResult[] = [];
   let errores = 0;
   for (const c of companies) {
-    if (!conPago.has(c.id)) {
+    const nivel = niveles.get(c.id) ?? "NINGUNO";
+    if (nivel === "NINGUNO") {
       resultados.push({ companyId: c.id, rfc: c.rfc, skipped: true, motivo: "sin_pago_vigente" });
       continue;
     }
     try {
       // Cron = sin force: respeta plan + cadencia (el ahorro de COGS).
-      resultados.push(await provisionOne(client, c as FielCompany, entities, creds));
+      resultados.push(await provisionOne(client, c as FielCompany, entities, creds, { nivelPago: nivel }));
     } catch (e) {
       errores++;
       resultados.push({ companyId: c.id, rfc: c.rfc, error: e instanceof Error ? e.message : String(e) });
