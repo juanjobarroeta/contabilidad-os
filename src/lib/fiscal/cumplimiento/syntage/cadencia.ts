@@ -19,6 +19,19 @@ export const EXTRACTORES_PROVISION = [
 ] as const;
 export type ExtractorProvision = (typeof EXTRACTORES_PROVISION)[number];
 
+// Extractores permitidos durante un TRIAL (nadie paga aún). La probadita es la
+// foto de cumplimiento (opinión + CSF) — barata y con efecto "wow"; el
+// BACKFILL caro (5 ejercicios de anuales/mensuales + arranque de CE) queda
+// para cuando alguien paga de verdad. Sin esto, un trial de una semana podía
+// descargarse todo el historial con nuestro presupuesto de Syntage e irse.
+export const EXTRACTORES_TRIAL: readonly ExtractorProvision[] = [
+  "tax_compliance",
+  "tax_status",
+] as const;
+
+/** Nivel de pago que gobierna la extracción (espejo de billing/pagadores.ts). */
+export type NivelPagoExtraccion = "ACTIVO" | "TRIAL";
+
 /** Días mínimos entre refrescos de cada fuente (su ritmo real de cambio). */
 export const CADENCIA_DIAS: Record<ExtractorProvision, number> = {
   tax_compliance: 7, // opinión — semanal (cambia al pagar/declarar)
@@ -51,6 +64,9 @@ const DIA_MS = 24 * 60 * 60 * 1000;
  * ¿Toca disparar el arranque de Contabilidad Electrónica? Puro y testeable.
  * - Ya bootstrapeada (`ceBootstrapAt` fijado) → nunca (re-extraer la balanza
  *   del SAT sobre el libro vivo la re-importaría como apertura).
+ * - Nivel TRIAL → nunca, NI con `force`: el arranque de CE es parte del
+ *   backfill caro y `force` se dispara solo al subir la e.firma — justo la
+ *   vía de abuso del trial. Se arranca solo cuando alguien paga (ACTIVO).
  * - Plan sin Syntage y sin `force` → no.
  * - Nunca intentada → sí.
  * - Intentada sin que aterrizara → sólo si el último intento tiene ≥ 30 días.
@@ -63,8 +79,11 @@ export function debeArrancarCE(opts: {
   ultimoIntentoCE: Date | null;
   ahora: Date;
   force?: boolean;
+  /** Ausente = ACTIVO (compatibilidad con llamadores previos). */
+  nivelPago?: NivelPagoExtraccion;
 }): boolean {
   if (opts.ceBootstrapAt != null) return false;
+  if (opts.nivelPago === "TRIAL") return false;
   if (!planIncluyeSyntage(opts.plan) && !opts.force) return false;
   if (opts.force) return true;
   if (!opts.ultimoIntentoCE) return true;
@@ -74,7 +93,11 @@ export function debeArrancarCE(opts: {
 
 /**
  * Qué extractores disparar para una empresa. Puro y testeable.
- * - `force` (onboarding / aprovisionamiento manual) → los 4.
+ * - nivel TRIAL → sólo la probadita (EXTRACTORES_TRIAL), INCLUSO con `force`:
+ *   el force se auto-dispara al subir la e.firma, que es exactamente cómo un
+ *   trial de una semana se llevaba el backfill completo. El resto se extrae
+ *   solo en cuanto alguien paga (la cadencia detecta lo que falta).
+ * - `force` (onboarding / aprovisionamiento manual) → todos los permitidos.
  * - plan sin Syntage (ASISTENTE) → ninguno.
  * - si el dato NO está presente (`datosPresentes[ex] === false`) → re-disparar
  *   aunque la cadencia diga "fresco", respetando el piso de reintento. Esto
@@ -88,10 +111,14 @@ export function extractoresADisparar(opts: {
   force?: boolean;
   /** Si el dato derivado de cada extractor ya existe en la BD. Ausente = no se evalúa. */
   datosPresentes?: Partial<Record<ExtractorProvision, boolean>>;
+  /** Ausente = ACTIVO (compatibilidad con llamadores previos). */
+  nivelPago?: NivelPagoExtraccion;
 }): ExtractorProvision[] {
-  if (opts.force) return [...EXTRACTORES_PROVISION];
+  const permitidos =
+    opts.nivelPago === "TRIAL" ? EXTRACTORES_TRIAL : EXTRACTORES_PROVISION;
+  if (opts.force) return [...permitidos];
   if (!planIncluyeSyntage(opts.plan)) return [];
-  return EXTRACTORES_PROVISION.filter((ex) => {
+  return permitidos.filter((ex) => {
     const ultima = opts.ultimaPorExtractor[ex] ?? null;
     if (!ultima) return true; // nunca extraído
     const dias = (opts.ahora.getTime() - ultima.getTime()) / DIA_MS;

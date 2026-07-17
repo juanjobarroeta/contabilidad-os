@@ -16,36 +16,60 @@ import { prisma } from "../prisma";
 export type PagadorSub = {
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: Date | null;
+  /** Operador de plataforma (User.esOperador): sus empresas son de la casa. */
+  esOperador?: boolean;
 };
 
 /**
- * ¿Algún pagador sigue vigente? (puro — testeable sin DB). Misma regla que
- * computeState (subscription.ts): TRIALING sólo cuenta con trial en curso —
- * vencido equivale a EXPIRED. No se importa subscription.ts porque su cadena
- * (authz → next-auth) no carga fuera de Next.
+ * Nivel de pago de una empresa según sus pagadores:
+ *   ACTIVO  — alguien paga de verdad (ACTIVE, o PAST_DUE en gracia).
+ *   TRIAL   — nadie paga aún, pero hay un trial EN CURSO. Prueba ≠ cliente:
+ *             el COGS de trial se acota (extracciones básicas, sin backfill).
+ *   NINGUNO — nadie vigente (vencidos/cancelados) → sin COGS, slot liberable.
  */
-export function hayPagoVigente(pagadores: PagadorSub[]): boolean {
+export type NivelPago = "ACTIVO" | "TRIAL" | "NINGUNO";
+
+/**
+ * Nivel de pago a partir de los pagadores (puro — testeable sin DB). Misma
+ * regla que computeState (subscription.ts): TRIALING sólo cuenta con trial en
+ * curso — vencido equivale a EXPIRED. No se importa subscription.ts porque su
+ * cadena (authz → next-auth) no carga fuera de Next.
+ */
+export function nivelPago(pagadores: PagadorSub[]): NivelPago {
   const ahora = Date.now();
-  return pagadores.some((p) => {
-    if (p.subscriptionStatus === "ACTIVE" || p.subscriptionStatus === "PAST_DUE") return true;
-    return (
+  let hayTrial = false;
+  for (const p of pagadores) {
+    // Empresas del operador de plataforma (las "de la casa"): ACTIVO siempre —
+    // el operador se paga a sí mismo. Mismo override que suspension.ts y el
+    // gate de escritura, para que el COGS nunca se corte en las propias.
+    if (p.esOperador) return "ACTIVO";
+    if (p.subscriptionStatus === "ACTIVE" || p.subscriptionStatus === "PAST_DUE") return "ACTIVO";
+    if (
       p.subscriptionStatus === "TRIALING" &&
       !!p.trialEndsAt &&
       p.trialEndsAt.getTime() > ahora
-    );
-  });
+    ) {
+      hayTrial = true;
+    }
+  }
+  return hayTrial ? "TRIAL" : "NINGUNO";
+}
+
+/** ¿Algún pagador sigue vigente? (trial en curso incluido). */
+export function hayPagoVigente(pagadores: PagadorSub[]): boolean {
+  return nivelPago(pagadores) !== "NINGUNO";
 }
 
 const PAYER_SELECT = {
-  user: { select: { subscriptionStatus: true, trialEndsAt: true } },
+  user: { select: { subscriptionStatus: true, trialEndsAt: true, esOperador: true } },
 } as const;
 
 /**
- * Subconjunto de `companyIds` cuyas empresas tienen al menos un pagador
- * vigente. Una sola consulta para todo el lote (pensado para crons).
+ * Nivel de pago de cada empresa del lote, en una sola consulta (para crons).
+ * Empresas no encontradas no aparecen en el mapa (trátalas como NINGUNO).
  */
-export async function empresasConPagoVigente(companyIds: string[]): Promise<Set<string>> {
-  if (companyIds.length === 0) return new Set();
+export async function nivelPagoEmpresas(companyIds: string[]): Promise<Map<string, NivelPago>> {
+  if (companyIds.length === 0) return new Map();
   const companies = await prisma.company.findMany({
     where: { id: { in: companyIds } },
     select: {
@@ -58,13 +82,26 @@ export async function empresasConPagoVigente(companyIds: string[]): Promise<Set<
       },
     },
   });
-  const vigentes = new Set<string>();
+  const niveles = new Map<string, NivelPago>();
   for (const c of companies) {
     const pagadores = [
       ...c.members.map((m) => m.user),
       ...(c.despacho?.members.map((m) => m.user) ?? []),
     ];
-    if (hayPagoVigente(pagadores)) vigentes.add(c.id);
+    niveles.set(c.id, nivelPago(pagadores));
   }
-  return vigentes;
+  return niveles;
+}
+
+/**
+ * Subconjunto de `companyIds` cuyas empresas tienen al menos un pagador
+ * vigente (ACTIVO o TRIAL en curso).
+ */
+export async function empresasConPagoVigente(companyIds: string[]): Promise<Set<string>> {
+  const niveles = await nivelPagoEmpresas(companyIds);
+  return new Set(
+    Array.from(niveles.entries())
+      .filter(([, n]) => n !== "NINGUNO")
+      .map(([id]) => id)
+  );
 }
