@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/crypto";
 import { recordSyntageExtraction } from "@/lib/costos/record";
 import { planIncluyeSyntage } from "@/lib/planes";
+import { empresasConPagoVigente } from "@/lib/billing/pagadores";
 import { SyntageClient } from "./client";
 import {
   EXTRACTORES_PROVISION,
@@ -30,6 +31,8 @@ export interface ProvisionResult {
   entityId?: string;
   credencial?: "valida" | "creada";
   skipped?: boolean;
+  /** Por qué se omitió (p.ej. "sin_pago_vigente") — no es un error. */
+  motivo?: string;
   error?: string;
 }
 
@@ -242,9 +245,19 @@ export async function provisionAllCompanies(): Promise<{
   });
   const [entities, creds] = await Promise.all([client.listEntities(), client.listCredentials()]);
 
+  // Clientes que dejaron de pagar NO generan más COGS: si ningún pagador de la
+  // empresa (OWNER/ADMIN propio o de su despacho) tiene suscripción vigente,
+  // se pausan sus extracciones. El slot en Syntage lo libera el cron
+  // syntage-liberar-slots; si vuelven a pagar, esto se reactiva solo.
+  const conPago = await empresasConPagoVigente(companies.map((c) => c.id));
+
   const resultados: ProvisionResult[] = [];
   let errores = 0;
   for (const c of companies) {
+    if (!conPago.has(c.id)) {
+      resultados.push({ companyId: c.id, rfc: c.rfc, skipped: true, motivo: "sin_pago_vigente" });
+      continue;
+    }
     try {
       // Cron = sin force: respeta plan + cadencia (el ahorro de COGS).
       resultados.push(await provisionOne(client, c as FielCompany, entities, creds));
