@@ -28,6 +28,10 @@ export interface PayrollItemDetail {
   totalDeducciones: number;
   netoAPagar: number;
   cfdiUuid: string | null;
+  /** Invoice que respalda el recibo timbrado — habilita la descarga PDF/XML. */
+  invoiceId?: string | null;
+  pdfDisponible?: boolean;
+  xmlDisponible?: boolean;
   employee: { nombre: string; apellidoPaterno: string; rfc: string };
 }
 

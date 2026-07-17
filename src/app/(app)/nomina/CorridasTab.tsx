@@ -172,18 +172,33 @@ export default function CorridasTab() {
     finally { setPrefillLoading(false); }
   }
 
-  async function handleStamp(runId: string) {
+  // Confirmación de timbrado con fecha de emisión del CFDI elegible (regla
+  // SAT: máx. 72 h atrás — el mes fiscal lo fija la FechaPago de la corrida).
+  const [stampForRun, setStampForRun] = useState<PayrollRun | null>(null);
+  const hoyStr = new Date().toLocaleDateString("en-CA");
+  const [stampFecha, setStampFecha] = useState(hoyStr);
+
+  async function handleStamp(runId: string, fechaCfdi?: string) {
     setStampingId(runId);
     setError("");
     try {
-      const res = await fetch(`/api/nomina/run/${runId}/stamp`, { method: "POST" });
+      const conFecha = fechaCfdi && fechaCfdi !== hoyStr;
+      const res = await fetch(`/api/nomina/run/${runId}/stamp`, {
+        method: "POST",
+        ...(conFecha
+          ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fechaCfdi }) }
+          : {}),
+      });
       const data = await res.json();
-      if (data.errors?.length) {
+      if (!res.ok) {
+        setError(data.error ?? "Error al timbrar");
+      } else if (data.errors?.length) {
         setError(`Timbrado: ${data.stamped}/${data.total} OK. Errores: ${data.errors.join("; ")}`);
       } else {
         setError(`✓ ${data.stamped} recibos timbrados exitosamente`);
       }
       loadRuns();
+      if (expandedRunId === runId) loadRunDetail(runId);
     } catch { setError("Error al timbrar"); }
     finally { setStampingId(null); }
   }
@@ -340,7 +355,7 @@ export default function CorridasTab() {
                     </button>
                   )}
                   {run.status === "CALCULATED" && (
-                    <button onClick={() => handleStamp(run.id)} disabled={stampingId === run.id}
+                    <button onClick={() => { setStampFecha(hoyStr); setStampForRun(run); }} disabled={stampingId === run.id}
                       className="flex items-center gap-1.5 bg-cos-jade-ink text-white px-3 py-1.5 rounded-md text-xs font-medium hover:opacity-90 disabled:opacity-50">
                       {stampingId === run.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                       Timbrar todo
@@ -449,9 +464,21 @@ export default function CorridasTab() {
                                   })()}
                                 </td>
                               )}
-                              <td className="px-3 py-2 text-center">
+                              <td className="px-3 py-2 text-center whitespace-nowrap">
                                 {item.cfdiUuid ? (
-                                  <span className="text-cos-jade-ink" title={item.cfdiUuid}>✓</span>
+                                  <span className="inline-flex items-center gap-1.5" title={item.cfdiUuid}>
+                                    <span className="text-cos-jade-ink">✓</span>
+                                    {item.invoiceId && item.pdfDisponible && (
+                                      <a href={`/api/facturas/${item.invoiceId}/download?format=pdf`}
+                                        className="text-[10px] font-medium text-cos-brand underline hover:opacity-80"
+                                        title="Descargar el recibo timbrado en PDF">PDF</a>
+                                    )}
+                                    {item.invoiceId && item.xmlDisponible && (
+                                      <a href={`/api/facturas/${item.invoiceId}/download?format=xml`}
+                                        className="text-[10px] font-medium text-cos-brand underline hover:opacity-80"
+                                        title="Descargar el XML del CFDI de nómina">XML</a>
+                                    )}
+                                  </span>
                                 ) : (
                                   <span className="text-cos-ink-soft">—</span>
                                 )}
@@ -563,6 +590,37 @@ export default function CorridasTab() {
         </div>
       )}
       </div>
+
+      {/* ── Confirmación de timbrado (fecha de emisión elegible) ── */}
+      {stampForRun && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setStampForRun(null)}>
+          <div className="bg-cos-card border border-cos-line rounded-xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold mb-1">Timbrar corrida</h3>
+            <p className="text-xs text-cos-ink-soft mb-4">
+              Se emitirán CFDIs de nómina <strong>reales</strong> ante el SAT para{" "}
+              {stampForRun._count?.items ?? "los"} empleado{(stampForRun._count?.items ?? 2) === 1 ? "" : "s"} ({fmtPeriodoCorto(stampForRun.periodo)}).
+            </p>
+            <label className="block text-xs font-medium mb-1">Fecha de emisión del CFDI</label>
+            <input type="date" value={stampFecha} max={hoyStr}
+              min={new Date(Date.now() - 2 * 86400000).toLocaleDateString("en-CA")}
+              onChange={e => setStampFecha(e.target.value)}
+              className="w-full px-3 py-2 border border-cos-line rounded-md text-sm mb-2" />
+            <p className="text-[11px] text-cos-ink-soft mb-4">
+              El SAT permite fechar la emisión hasta <strong>72 horas antes</strong> del timbrado. No hace falta
+              antedatar para nóminas de periodos pasados: el mes fiscal lo determina la <strong>fecha de pago</strong> de
+              la corrida ({formatDate(stampForRun.fechaPago)}), que viaja en el complemento como FechaPago.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setStampForRun(null)}
+                className="border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper">Cancelar</button>
+              <button onClick={() => { const r = stampForRun; setStampForRun(null); handleStamp(r.id, stampFecha); }}
+                className="flex items-center gap-1.5 bg-cos-jade-ink text-white px-3 py-1.5 rounded-md text-xs font-medium hover:opacity-90">
+                <Play className="h-3.5 w-3.5" /> Timbrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modals ── */}
       {showNewRun && activeCompany && (

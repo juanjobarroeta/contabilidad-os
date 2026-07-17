@@ -404,7 +404,16 @@ async function liberarCandadoTimbrado(payrollRunId: string): Promise<void> {
   `;
 }
 
-export async function stampPayrollRun(payrollRunId: string): Promise<StampResult> {
+/** Opciones del timbrado de una corrida (aplican a TODOS sus CFDIs). */
+export type StampOpciones = {
+  /** Fecha de emisión del CFDI (≤72 h atrás, validada con resolverFechaCfdi). */
+  fechaCfdi?: Date;
+};
+
+export async function stampPayrollRun(
+  payrollRunId: string,
+  opciones: StampOpciones = {}
+): Promise<StampResult> {
   // ── Candado atómico contra doble timbrado ──────────────────────────────────
   // Dos llamadas concurrentes (doble clic en "Timbrar", o timbrado individual
   // que se traslapa con el lote del cockpit) NO deben emitir CFDIs duplicados
@@ -441,7 +450,7 @@ export async function stampPayrollRun(payrollRunId: string): Promise<StampResult
   // El candado está tomado: cualquier salida (éxito, error de negocio o
   // excepción inesperada) debe liberarlo para no bloquear reintentos.
   try {
-    return await stampPayrollRunClaimed(payrollRunId);
+    return await stampPayrollRunClaimed(payrollRunId, opciones);
   } catch (e) {
     await liberarCandadoTimbrado(payrollRunId).catch(() => {
       // La liberación es el mejor esfuerzo; el error original es el relevante.
@@ -454,7 +463,10 @@ export async function stampPayrollRun(payrollRunId: string): Promise<StampResult
  * Cuerpo del timbrado. Se invoca ÚNICAMENTE con el candado ya reclamado
  * (stampingInProgress = true); las actualizaciones finales lo liberan.
  */
-async function stampPayrollRunClaimed(payrollRunId: string): Promise<StampResult> {
+async function stampPayrollRunClaimed(
+  payrollRunId: string,
+  opciones: StampOpciones = {}
+): Promise<StampResult> {
   // La corrida y sus items se leen DESPUÉS de reclamar el candado, para que el
   // filtro de items ya timbrados (cfdiUuid) vea el estado más reciente.
   const run = await prisma.payrollRun.findUnique({
@@ -597,6 +609,7 @@ async function stampPayrollRunClaimed(payrollRunId: string): Promise<StampResult
         sueldoBruto: item.totalPercepciones,
         desglose,
         tipoNomina: tipoNominaCfdi,
+        fechaCfdi: opciones.fechaCfdi,
       });
 
       if (result.ok && result.uuid) {

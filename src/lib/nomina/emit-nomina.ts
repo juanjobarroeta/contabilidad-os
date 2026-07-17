@@ -48,6 +48,12 @@ export type EmitNominaInput = {
    * del receptor se reporta como "99" (Otra periodicidad), conforme a la guía.
    */
   tipoNomina?: "O" | "E";
+  /**
+   * Fecha de EMISIÓN del CFDI (atributo Fecha). El SAT sólo acepta hasta 72 h
+   * antes del timbrado — validar antes con resolverFechaCfdi. Sin ella,
+   * Facturapi fecha con el momento del timbrado.
+   */
+  fechaCfdi?: Date;
 };
 
 export type EmitNominaResult = {
@@ -265,6 +271,9 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     use: "CN01",
     payment_form: "99",
     payment_method: "PUE",
+    // Fecha de emisión elegida (≤72 h atrás). La FechaPago del complemento —
+    // la que fija el mes fiscal — viaja aparte, en complements[0].data.
+    ...(input.fechaCfdi ? { date: input.fechaCfdi.toISOString() } : {}),
     customer: {
       // Nombre y CP resueltos arriba: captura de la ficha → recibo timbrado
       // previo del mismo RFC → CP de la empresa (último recurso).
