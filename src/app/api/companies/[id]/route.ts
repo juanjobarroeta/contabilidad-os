@@ -173,15 +173,19 @@ export async function PATCH(req: Request, { params }: Params) {
     facturapi = await provisionFacturapiOrg(companyId);
   }
 
-  // If the e.firma just changed, kick a Syntage provision (force → full
-  // historic pull) right away instead of waiting for the next cron. Mirrors the
-  // CSD→Facturapi flow above. Best-effort: provisionOne only TRIGGERS extractions
-  // (no waiting for results), so it's a few quick calls; the compliance-sync cron
-  // persists the results later. Never fails the save.
+  // If the e.firma just changed, kick a Syntage provision right away instead
+  // of waiting for the next cron. Mirrors the CSD→Facturapi flow above.
+  // SIN force: respeta tier (ASISTENTE no extrae nada) y nivel de pago —
+  // para una empresa nueva con plan que incluye Syntage el resultado es el
+  // mismo (nada extraído antes → salen los 4 + CE), pero una ASISTENTE o un
+  // trial ya no se llevan el backfill por el simple hecho de subir la firma.
+  // El force queda reservado al aprovisionamiento manual del operador
+  // (cron compliance-provision?companyId=). Best-effort: sólo DISPARA
+  // extracciones; el compliance-sync persiste después. Never fails the save.
   let syntage = null;
   if (data.fielCer || data.fielKey || data.fielPassword) {
     try {
-      syntage = await provisionCompany(companyId);
+      syntage = await provisionCompany(companyId, undefined, { force: false });
     } catch (e) {
       syntage = { error: e instanceof Error ? e.message : String(e) };
     }

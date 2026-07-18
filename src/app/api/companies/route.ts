@@ -461,13 +461,16 @@ export async function POST(req: Request) {
   // surface a warning ("CSD missing", "Facturapi down", etc.).
   const facturapi = await provisionFacturapiOrg(company.id);
 
-  // If e.firma was provided at creation, kick a Syntage provision (force → full
-  // historic pull) immediately so the new client doesn't wait for the next cron.
+  // If e.firma was provided at creation, kick a Syntage provision immediately
+  // so the new client doesn't wait for the next cron. SIN force: respeta tier
+  // (ASISTENTE no extrae) y nivel de pago; para un plan con Syntage el
+  // resultado es idéntico (empresa nueva → salen los 4 + CE). El force queda
+  // para el aprovisionamiento manual del operador (cron ?companyId=).
   // Best-effort: only triggers extractions (sync persists results later).
   let syntage = null;
   if (fielCer && fielKey && fielPassword) {
     try {
-      syntage = await provisionCompany(company.id);
+      syntage = await provisionCompany(company.id, undefined, { force: false });
     } catch (e) {
       syntage = { error: e instanceof Error ? e.message : String(e) };
     }
