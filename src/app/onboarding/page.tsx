@@ -495,7 +495,7 @@ function OnboardingPageInner() {
 
   return (
     <div className="min-h-screen bg-cos-slate-tint flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-sm border border-cos-line w-full max-w-xl">
+      <div className="bg-cos-card rounded-xl shadow-sm border border-cos-line w-full max-w-xl">
 
         {/* Header */}
         <div className="px-8 pt-8 pb-6 border-b border-cos-line">
@@ -590,7 +590,7 @@ function OnboardingPageInner() {
                     </ul>
                   </div>
                 </div>
-                <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-cos-brand-ink/15 rounded-md text-sm bg-white cursor-pointer hover:bg-cos-brand-tint/50 transition-colors">
+                <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-cos-brand-ink/15 rounded-md text-sm bg-cos-card cursor-pointer hover:bg-cos-brand-tint/50 transition-colors">
                   {aiParsing ? (
                     <Loader2 className="h-4 w-4 text-cos-brand-ink shrink-0 animate-spin" />
                   ) : (
@@ -625,7 +625,7 @@ function OnboardingPageInner() {
                       className={`flex items-center gap-3 px-3 py-2.5 rounded-md border text-sm ${
                         d.type === "OTRO"
                           ? "bg-cos-amber-tint border-cos-amber-ink/20"
-                          : "bg-white border-cos-line"
+                          : "bg-cos-card border-cos-line"
                       }`}
                     >
                       <FileText
@@ -721,7 +721,7 @@ function OnboardingPageInner() {
                     <div
                       key={r.code}
                       className={`flex items-center gap-2 px-2.5 py-2 rounded border ${
-                        included ? "bg-white border-cos-brand-ink/15" : "bg-white/40 border-transparent opacity-60"
+                        included ? "bg-cos-card border-cos-brand-ink/15" : "bg-cos-card/40 border-transparent opacity-60"
                       }`}
                     >
                       <input
@@ -741,7 +741,7 @@ function OnboardingPageInner() {
                         className={`text-[10px] px-2 py-1 rounded-full border shrink-0 transition-colors ${
                           isPrimary
                             ? "bg-cos-brand text-white border-cos-brand-ink/15"
-                            : "bg-white text-cos-brand-ink border-cos-brand-ink/15 hover:bg-cos-brand-tint disabled:opacity-40"
+                            : "bg-cos-card text-cos-brand-ink border-cos-brand-ink/15 hover:bg-cos-brand-tint disabled:opacity-40"
                         }`}
                       >
                         {isPrimary ? "Principal ✓" : "Hacer principal"}
@@ -779,7 +779,7 @@ function OnboardingPageInner() {
                   <label className="block text-sm font-medium mb-1.5">Régimen Fiscal <span className="text-cos-red-ink">*</span></label>
                   <select
                     name="regimenFiscal" value={fiscal.regimenFiscal} onChange={handleFiscalChange} required
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-white"
+                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card"
                   >
                     <option value="">Selecciona un régimen...</option>
                     {REGIMENES_FISCALES.map((r) => (
@@ -827,7 +827,7 @@ function OnboardingPageInner() {
                     const r = detectedRegimenes.find((x) => x.code === code);
                     return (
                       <span key={code} className={`text-xs px-2 py-1 rounded-full border ${
-                        fiscal.regimenFiscal === code ? "bg-cos-brand text-white border-cos-brand-ink/15" : "bg-white border-cos-line"
+                        fiscal.regimenFiscal === code ? "bg-cos-brand text-white border-cos-brand-ink/15" : "bg-cos-card border-cos-line"
                       }`}>
                         {code}{r ? ` · ${r.label}` : ""}{fiscal.regimenFiscal === code ? " (principal)" : ""}
                       </span>
