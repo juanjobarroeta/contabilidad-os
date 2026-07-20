@@ -47,6 +47,28 @@ describe("calcularNomina + incidencias — corrida ordinaria quincenal 2026", ()
     expect(r.imssObrero).toBe(228.63);
   });
 
+  it("FONACOT + pensión alimenticia: deducciones netas desglosadas en el recibo", () => {
+    const emp = {
+      ...empleado(600),
+      descuentoFonacot: 1200, // cédula mensual → 600 por quincena
+      pensionAlimenticiaTipo: "PCT_NETO",
+      pensionAlimenticiaValor: 0.3,
+    } as unknown as Employee & { tipoDescuentoInfonavit?: string | null };
+    const base = calcularNomina({ employee: empleado(600), ...BASE });
+    const r = calcularNomina({ employee: emp, ...BASE });
+    // No tocan ISR ni IMSS (deducción neta post-impuestos).
+    expect(r.isrRetenido).toBe(base.isrRetenido);
+    expect(r.imssObrero).toBe(base.imssObrero);
+    const pension = r.deducciones.find((d) => d.tipoDeduccion === "007");
+    const fonacot = r.deducciones.find((d) => d.tipoDeduccion === "011");
+    // 30% de (9,000 − 990.65 − 228.63) = 2,334.22
+    expect(pension?.importe).toBe(2334.22);
+    expect(fonacot?.importe).toBe(600);
+    expect(r.netoAPagar).toBe(
+      Math.round((base.netoAPagar - 2334.22 - 600) * 100) / 100
+    );
+  });
+
   it("FALTAS: 2 faltas reducen sueldo y días de cotización IMSS", () => {
     const r = calcularNomina({
       employee: empleado(600),

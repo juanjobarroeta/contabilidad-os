@@ -79,6 +79,12 @@ const createSchema = z.object({
   creditoInfonavit: z.string().optional(),
   tipoDescuentoInfonavit: z.enum(["PCT_SBC", "VSM", "PESOS"]).optional(),
   descuentoInfonavit: z.number().optional(),
+  // FONACOT: número de crédito + retención MENSUAL (cédula Fonacot).
+  creditoFonacot: z.string().trim().optional().or(z.literal("")),
+  descuentoFonacot: z.number().nonnegative().optional(),
+  // Pensión alimenticia (resolución judicial): % o monto mensual.
+  pensionAlimenticiaTipo: z.enum(["PCT_TOTAL", "PCT_NETO", "PESOS"]).optional(),
+  pensionAlimenticiaValor: z.number().nonnegative().optional(),
   clabe: z
     .string()
     .trim()
@@ -133,6 +139,10 @@ export async function POST(req: Request) {
         creditoInfonavit: data.creditoInfonavit || null,
         tipoDescuentoInfonavit: data.tipoDescuentoInfonavit || null,
         descuentoInfonavit: data.descuentoInfonavit ?? null,
+        creditoFonacot: data.creditoFonacot || null,
+        descuentoFonacot: data.descuentoFonacot ?? null,
+        pensionAlimenticiaTipo: data.pensionAlimenticiaTipo || null,
+        pensionAlimenticiaValor: data.pensionAlimenticiaValor ?? null,
         clabe: data.clabe || null,
         banco: data.banco || null,
       },
@@ -230,6 +240,20 @@ export async function PATCH(req: Request) {
     if (fields.creditoInfonavit !== undefined) data.creditoInfonavit = fields.creditoInfonavit?.trim() || null;
     if (fields.tipoDescuentoInfonavit !== undefined) data.tipoDescuentoInfonavit = fields.tipoDescuentoInfonavit || null;
     if (fields.descuentoInfonavit !== undefined) data.descuentoInfonavit = fields.descuentoInfonavit != null ? Number(fields.descuentoInfonavit) : null;
+
+    // FONACOT (retención mensual de la cédula)
+    if (fields.creditoFonacot !== undefined) data.creditoFonacot = fields.creditoFonacot?.trim() || null;
+    if (fields.descuentoFonacot !== undefined) data.descuentoFonacot = fields.descuentoFonacot != null ? Number(fields.descuentoFonacot) : null;
+
+    // Pensión alimenticia (resolución judicial)
+    if (fields.pensionAlimenticiaTipo !== undefined) {
+      const t = fields.pensionAlimenticiaTipo || null;
+      if (t && !["PCT_TOTAL", "PCT_NETO", "PESOS"].includes(t)) {
+        return NextResponse.json({ error: "Tipo de pensión alimenticia inválido" }, { status: 400 });
+      }
+      data.pensionAlimenticiaTipo = t;
+    }
+    if (fields.pensionAlimenticiaValor !== undefined) data.pensionAlimenticiaValor = fields.pensionAlimenticiaValor != null ? Number(fields.pensionAlimenticiaValor) : null;
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "No hay datos para actualizar" }, { status: 400 });

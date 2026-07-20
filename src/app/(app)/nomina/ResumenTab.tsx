@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Users2, Play, ChevronRight as ChevronR, AlertTriangle,
-  CalendarDays, BadgeCheck, Clock4,
+  CalendarDays, BadgeCheck, Clock4, Receipt, FileText,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
@@ -32,6 +32,42 @@ interface Employee {
   salarioDiario: number;
   periodicidadPago: string;
   isActive: boolean;
+  ultimoRecibo?: { fechaPago: string; periodo: string; origen: string } | null;
+}
+
+/** GET /api/nomina/hub — recibos recientes + desglose del mes. */
+interface HubData {
+  recientes: {
+    id: string;
+    empleado: string;
+    rfc: string;
+    periodo: string;
+    fechaPago: string;
+    tipo: string;
+    origen: string;
+    neto: number;
+    cfdiUuid: string | null;
+    invoiceId: string | null;
+    pdfDisponible: boolean;
+    xmlDisponible: boolean;
+  }[];
+  mes: {
+    recibos: number;
+    timbrados: number;
+    sueldos: number;
+    horasExtra: number;
+    bonosComisiones: number;
+    valesOtras: number;
+    especiales: number;
+    isr: number;
+    imssObrero: number;
+    infonavit: number;
+    otrasDeducciones: number;
+    imssPatronal: number;
+    totalPercepciones: number;
+    totalDeducciones: number;
+    neto: number;
+  };
 }
 
 interface PayrollRun {
@@ -55,15 +91,17 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
   const { activeCompany } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [runs, setRuns] = useState<PayrollRun[]>([]);
+  const [hub, setHub] = useState<HubData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true);
     try {
-      const [empRes, runRes] = await Promise.all([
-        fetch(`/api/empleados?companyId=${activeCompany.id}`),
+      const [empRes, runRes, hubRes] = await Promise.all([
+        fetch(`/api/empleados?companyId=${activeCompany.id}&withUltimoRecibo=1`),
         fetch(`/api/nomina/run?companyId=${activeCompany.id}`),
+        fetch(`/api/nomina/hub?companyId=${activeCompany.id}`),
       ]);
       if (empRes.ok) {
         const data = await empRes.json();
@@ -73,6 +111,7 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
         const data = await runRes.json();
         setRuns(Array.isArray(data) ? data : data.runs ?? []);
       }
+      if (hubRes.ok) setHub(await hubRes.json());
     } finally {
       setLoading(false);
     }
@@ -186,6 +225,27 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
               </p>
               <FriendlyRow label="Masa salarial (diaria)" value={masaDiaria} />
               <FriendlyRow label="Costo mensual aprox. (sueldos brutos)" value={costoMensualAprox} />
+              {/* mini-roster: los primeros del equipo con su último recibo */}
+              {activos.length > 0 && (
+                <div className="mt-3 border-t border-cos-line pt-2">
+                  {activos.slice(0, 5).map((e) => (
+                    <div key={e.id} className="flex items-center justify-between gap-2 py-1 text-[12.5px]">
+                      <span className="min-w-0 truncate text-cos-ink">{e.nombre} {e.apellidoPaterno}</span>
+                      <span className="flex flex-none items-center gap-2.5">
+                        <span className="font-mono text-cos-ink-soft">{formatCurrency(e.salarioDiario)}/día</span>
+                        <span className="text-[11.5px] text-cos-ink-faint" title={e.ultimoRecibo ? `Último recibo · ${e.ultimoRecibo.periodo}` : "Sin recibos"}>
+                          {e.ultimoRecibo ? formatDate(e.ultimoRecibo.fechaPago) : "sin recibos"}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                  {activos.length > 5 && (
+                    <button onClick={() => onTab("empleados")} className="mt-1 text-[12px] font-medium text-cos-brand-ink hover:underline">
+                      Ver a los {activos.length} en Empleados →
+                    </button>
+                  )}
+                </div>
+              )}
               <p className="mt-2 text-[12px] text-cos-ink-faint">
                 Sin carga patronal (IMSS patronal, INFONAVIT) — el detalle por corrida está en{" "}
                 <button onClick={() => onTab("corridas")} className="font-medium text-cos-brand-ink hover:underline">Corridas</button>; el roster completo, en{" "}
@@ -222,6 +282,83 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
               ) : (
                 <p className="text-[13.5px] leading-relaxed text-cos-ink-soft">
                   Aún no hay corridas. Da de alta a tu equipo en la pestaña Empleados y corre la primera nómina desde Corridas.
+                </p>
+              )}
+            </Card>
+          </div>
+
+          {/* desglose del mes + últimos recibos timbrados */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card className="rounded-card border-cos-line p-5 shadow-card">
+              <div className="mb-2.5 flex items-center justify-between">
+                <span className="rounded-full bg-cos-brand-tint px-2.5 py-1 text-[13px] font-semibold text-cos-brand-ink">Desglose de {mesActual}</span>
+                {hub && hub.mes.recibos > 0 && (
+                  <span className={`inline-flex items-center gap-1 text-[13px] font-semibold ${hub.mes.timbrados === hub.mes.recibos ? "text-cos-jade-ink" : "text-cos-amber-ink"}`}>
+                    <Receipt className="h-4 w-4" /> {hub.mes.timbrados}/{hub.mes.recibos} timbrados
+                  </span>
+                )}
+              </div>
+              {hub && hub.mes.recibos > 0 ? (
+                <>
+                  <FriendlyRow label="Sueldos" value={hub.mes.sueldos} />
+                  {hub.mes.horasExtra > 0 && <FriendlyRow label="Horas extra" value={hub.mes.horasExtra} />}
+                  {hub.mes.bonosComisiones > 0 && <FriendlyRow label="Bonos y comisiones" value={hub.mes.bonosComisiones} />}
+                  {hub.mes.valesOtras > 0 && <FriendlyRow label="Vales y otras percepciones" value={hub.mes.valesOtras} />}
+                  {hub.mes.especiales > 0 && <FriendlyRow label="Aguinaldo / prima vac. / PTU" value={hub.mes.especiales} />}
+                  <FriendlyRow label="ISR retenido" value={-hub.mes.isr} negative />
+                  <FriendlyRow label="IMSS obrero" value={-hub.mes.imssObrero} negative />
+                  {hub.mes.infonavit > 0 && <FriendlyRow label="INFONAVIT" value={-hub.mes.infonavit} negative />}
+                  {hub.mes.otrasDeducciones > 0 && <FriendlyRow label="Otras deducciones (FONACOT, pensión, descuentos)" value={-hub.mes.otrasDeducciones} negative />}
+                  <FriendlyRow label="Neto pagado" value={hub.mes.neto} total />
+                  <p className="mt-2 text-[12px] text-cos-ink-faint">
+                    Carga patronal del mes (IMSS patronal): <b className="font-mono text-cos-ink-soft">{formatCurrency(hub.mes.imssPatronal)}</b>
+                  </p>
+                </>
+              ) : (
+                <p className="text-[13.5px] leading-relaxed text-cos-ink-soft">
+                  Sin recibos con fecha de pago en {mesActual}. El desglose aparece al calcular la nómina del mes.
+                </p>
+              )}
+            </Card>
+
+            <Card className="rounded-card border-cos-line p-5 shadow-card">
+              <div className="mb-2.5 flex items-center justify-between">
+                <span className="rounded-full bg-cos-brand-tint px-2.5 py-1 text-[13px] font-semibold text-cos-brand-ink">Últimos recibos timbrados</span>
+              </div>
+              {hub && hub.recientes.length > 0 ? (
+                <div>
+                  {hub.recientes.map((r) => (
+                    <div key={r.id} className="flex items-center justify-between gap-2 border-b border-cos-line py-1.5 text-[12.5px] last:border-0">
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-cos-ink">{r.empleado}</span>
+                        <span className="block text-[11.5px] text-cos-ink-faint">
+                          {TIPO_RUN_LABEL[r.tipo] ?? r.tipo} · pago {formatDate(r.fechaPago)}
+                        </span>
+                      </span>
+                      <span className="flex flex-none items-center gap-2.5">
+                        <span className="font-mono font-semibold text-cos-jade-ink">{formatCurrency(r.neto)}</span>
+                        {r.invoiceId && r.pdfDisponible && (
+                          <a href={`/api/facturas/${r.invoiceId}/download?format=pdf`}
+                            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-cos-brand-ink underline hover:opacity-80"
+                            title="Descargar recibo en PDF">
+                            <FileText className="h-3 w-3" /> PDF
+                          </a>
+                        )}
+                        {r.invoiceId && r.xmlDisponible && (
+                          <a href={`/api/facturas/${r.invoiceId}/download?format=xml`}
+                            className="text-[11px] font-medium text-cos-brand-ink underline hover:opacity-80"
+                            title="Descargar XML del CFDI">XML</a>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                  <button onClick={() => onTab("corridas")} className="mt-2 text-[12px] font-medium text-cos-brand-ink hover:underline">
+                    Ver todas las corridas →
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[13.5px] leading-relaxed text-cos-ink-soft">
+                  Aún no hay recibos timbrados. Al timbrar una corrida (o importar tu historial del SAT), aquí aparecen los últimos con su PDF y XML.
                 </p>
               )}
             </Card>

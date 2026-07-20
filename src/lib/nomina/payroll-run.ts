@@ -234,8 +234,10 @@ function payrollItemFieldsFromCalc(calc: NominaCalcResult) {
   const bonoPerc = calc.percepciones.find((p) => p.tipoPercepcion === "038");
   const comisionPerc = calc.percepciones.find((p) => p.tipoPercepcion === "028");
   const primaVacPerc = calc.percepciones.find((p) => p.tipoPercepcion === "021");
+  // Todo lo que no tiene columna propia (otros 004, pensión alimenticia 007,
+  // FONACOT 011) se acumula en otrasDeducc; el CFDI los desglosa por clave.
   const otrosDescuentos = calc.deducciones
-    .filter((d) => d.tipoDeduccion === "004")
+    .filter((d) => ["004", "007", "011"].includes(d.tipoDeduccion))
     .reduce((s, d) => s + d.importe, 0);
 
   return {

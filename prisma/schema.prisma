@@ -1194,6 +1194,19 @@ model Employee {
   tipoDescuentoInfonavit String? // "PCT_SBC" | "VSM" | "PESOS"
   descuentoInfonavit     Float?
 
+  /// FONACOT (crédito de nómina): número de crédito y retención MENSUAL en
+  /// pesos según la cédula de Fonacot. El motor la prorratea por periodicidad
+  /// de pago (CFDI c_TipoDeduccion 011 — Pago de abonos INFONACOT).
+  creditoFonacot   String?
+  descuentoFonacot Float?
+
+  /// Pensión alimenticia por resolución judicial (CFDI c_TipoDeduccion 007).
+  /// Tipo: "PCT_TOTAL" (% de percepciones totales), "PCT_NETO" (% del neto
+  /// tras ISR/IMSS/INFONAVIT) o "PESOS" (monto MENSUAL fijo, prorrateado por
+  /// periodicidad). El valor es el porcentaje (0.30 = 30%) o el monto mensual.
+  pensionAlimenticiaTipo  String?
+  pensionAlimenticiaValor Float?
+
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   payrollItems      PayrollItem[]
   imssMovimientos   ImssMovimiento[]

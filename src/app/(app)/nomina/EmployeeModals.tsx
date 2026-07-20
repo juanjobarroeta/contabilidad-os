@@ -31,6 +31,10 @@ export function NewEmployeeModal({
     creditoInfonavit: "",
     tipoDescuentoInfonavit: "",
     descuentoInfonavit: "",
+    creditoFonacot: "",
+    descuentoFonacot: "",
+    pensionAlimenticiaTipo: "",
+    pensionAlimenticiaValor: "",
     clabe: "",
     banco: "",
   });
@@ -85,6 +89,10 @@ export function NewEmployeeModal({
           creditoInfonavit: e.creditoInfonavit?.trim() || prev.creditoInfonavit,
           tipoDescuentoInfonavit: e.tipoDescuentoInfonavit || prev.tipoDescuentoInfonavit,
           descuentoInfonavit: e.descuentoInfonavit ? String(e.descuentoInfonavit) : prev.descuentoInfonavit,
+          creditoFonacot: prev.creditoFonacot,
+          descuentoFonacot: prev.descuentoFonacot,
+          pensionAlimenticiaTipo: prev.pensionAlimenticiaTipo,
+          pensionAlimenticiaValor: prev.pensionAlimenticiaValor,
           clabe: e.clabe?.trim() || prev.clabe,
           banco: e.banco?.trim() || prev.banco,
         }));
@@ -113,6 +121,10 @@ export function NewEmployeeModal({
           creditoInfonavit: form.creditoInfonavit || undefined,
           tipoDescuentoInfonavit: form.tipoDescuentoInfonavit || undefined,
           descuentoInfonavit: form.descuentoInfonavit ? parseFloat(form.descuentoInfonavit) : undefined,
+          creditoFonacot: form.creditoFonacot || undefined,
+          descuentoFonacot: form.descuentoFonacot ? parseFloat(form.descuentoFonacot) : undefined,
+          pensionAlimenticiaTipo: form.pensionAlimenticiaTipo || undefined,
+          pensionAlimenticiaValor: form.pensionAlimenticiaValor ? parseFloat(form.pensionAlimenticiaValor) : undefined,
         }),
       });
       const data = await res.json();
@@ -263,6 +275,48 @@ export function NewEmployeeModal({
             </div>
           </details>
 
+          {/* FONACOT + pensión alimenticia — deducciones recurrentes de ley */}
+          <details className="border border-cos-line rounded-lg">
+            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-cos-slate-tint flex items-center gap-2">
+              <span>FONACOT y pensión alimenticia</span>
+              {(form.descuentoFonacot || form.pensionAlimenticiaValor) && (
+                <span className="text-[10px] bg-cos-jade-tint text-cos-jade-ink px-1.5 py-0.5 rounded-full font-medium">
+                  {[form.descuentoFonacot && "FONACOT", form.pensionAlimenticiaValor && "Pensión"].filter(Boolean).join(" · ")}
+                </span>
+              )}
+            </summary>
+            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-cos-line">
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="N° crédito FONACOT">
+                  <input value={form.creditoFonacot} onChange={e => set("creditoFonacot", e.target.value)} className={inputCls} placeholder="Opcional" />
+                </Field>
+                <Field label="Retención mensual ($)">
+                  <input type="number" min="0" step="0.01" value={form.descuentoFonacot}
+                    onChange={e => set("descuentoFonacot", e.target.value)} className={inputCls}
+                    placeholder="De la cédula Fonacot" />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Pensión alimenticia">
+                  <select value={form.pensionAlimenticiaTipo} onChange={e => set("pensionAlimenticiaTipo", e.target.value)} className={inputCls}>
+                    <option value="">Sin pensión</option>
+                    <option value="PCT_TOTAL">% de percepciones</option>
+                    <option value="PCT_NETO">% del neto</option>
+                    <option value="PESOS">Monto mensual ($)</option>
+                  </select>
+                </Field>
+                <Field label={form.pensionAlimenticiaTipo === "PESOS" ? "Monto mensual" : "Porcentaje"}>
+                  <input type="number" min="0" step="0.01" value={form.pensionAlimenticiaValor}
+                    onChange={e => set("pensionAlimenticiaValor", e.target.value)} className={inputCls}
+                    placeholder={form.pensionAlimenticiaTipo === "PESOS" ? "Ej: 2500" : "Ej: 0.30 (30%)"} />
+                </Field>
+              </div>
+              <p className="text-[10px] text-cos-ink-soft">
+                Se retienen en cada nómina ordinaria (FONACOT prorrateado por periodo; pensión conforme a la resolución) y van desglosadas en el CFDI.
+              </p>
+            </div>
+          </details>
+
           {err && <p className="text-xs text-cos-red-ink">{err}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 border border-cos-line rounded-md py-2 text-sm">Cancelar</button>
@@ -402,24 +456,22 @@ export function EditEmployeeModal({
     periodicidadPago: employee.periodicidadPago,
     puesto: employee.puesto ?? "",
     departamento: employee.departamento ?? "",
-    creditoInfonavit: "",
-    tipoDescuentoInfonavit: "",
-    descuentoInfonavit: "",
+    // Infonavit/FONACOT/pensión vienen del roster (el GET regresa la fila
+    // completa) — inicializar del prop evita que guardar la edición BORRE la
+    // configuración existente (el PATCH siempre manda estos campos).
+    creditoInfonavit: (employee as Employee & { creditoInfonavit?: string | null }).creditoInfonavit ?? "",
+    tipoDescuentoInfonavit: (employee as Employee & { tipoDescuentoInfonavit?: string | null }).tipoDescuentoInfonavit ?? "",
+    descuentoInfonavit: (() => { const v = (employee as Employee & { descuentoInfonavit?: number | null }).descuentoInfonavit; return v != null ? String(v) : ""; })(),
+    creditoFonacot: (employee as Employee & { creditoFonacot?: string | null }).creditoFonacot ?? "",
+    descuentoFonacot: (() => { const v = (employee as Employee & { descuentoFonacot?: number | null }).descuentoFonacot; return v != null ? String(v) : ""; })(),
+    pensionAlimenticiaTipo: (employee as Employee & { pensionAlimenticiaTipo?: string | null }).pensionAlimenticiaTipo ?? "",
+    pensionAlimenticiaValor: (() => { const v = (employee as Employee & { pensionAlimenticiaValor?: number | null }).pensionAlimenticiaValor; return v != null ? String(v) : ""; })(),
     clabe: employee.clabe ?? "",
     banco: employee.banco ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [skipImss, setSkipImss] = useState(true); // default: corrections don't generate IMSS
-
-  // Load full employee data (including Infonavit) on mount
-  useEffect(() => {
-    fetch(`/api/empleados?companyId=${companyId}`)
-      .then(r => r.json())
-      .then((emps: Employee[]) => {
-        // The list endpoint may not return Infonavit fields, but we set what we have
-      });
-  }, [companyId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -443,6 +495,10 @@ export function EditEmployeeModal({
           creditoInfonavit: form.creditoInfonavit || null,
           tipoDescuentoInfonavit: form.tipoDescuentoInfonavit || null,
           descuentoInfonavit: form.descuentoInfonavit ? parseFloat(form.descuentoInfonavit) : null,
+          creditoFonacot: form.creditoFonacot || null,
+          descuentoFonacot: form.descuentoFonacot ? parseFloat(form.descuentoFonacot) : null,
+          pensionAlimenticiaTipo: form.pensionAlimenticiaTipo || null,
+          pensionAlimenticiaValor: form.pensionAlimenticiaValor ? parseFloat(form.pensionAlimenticiaValor) : null,
           clabe: form.clabe || null,
           banco: form.banco || null,
           skipImssMovimiento: skipImss,
@@ -545,6 +601,48 @@ export function EditEmployeeModal({
                     placeholder="1321.50" />
                 </Field>
               </div>
+            </div>
+          </details>
+
+          {/* FONACOT + pensión alimenticia */}
+          <details className="border border-cos-line rounded-lg" open={!!(form.descuentoFonacot || form.pensionAlimenticiaValor)}>
+            <summary className="px-3 py-2 text-xs font-medium cursor-pointer hover:bg-cos-slate-tint flex items-center gap-2">
+              <span>FONACOT y pensión alimenticia</span>
+              {(form.descuentoFonacot || form.pensionAlimenticiaValor) && (
+                <span className="text-[10px] bg-cos-jade-tint text-cos-jade-ink px-1.5 py-0.5 rounded-full font-medium">
+                  {[form.descuentoFonacot && "FONACOT", form.pensionAlimenticiaValor && "Pensión"].filter(Boolean).join(" · ")}
+                </span>
+              )}
+            </summary>
+            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-cos-line">
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="N° crédito FONACOT">
+                  <input value={form.creditoFonacot} onChange={e => setForm(p => ({ ...p, creditoFonacot: e.target.value }))} className={inputCls} placeholder="Opcional" />
+                </Field>
+                <Field label="Retención mensual ($)">
+                  <input type="number" min="0" step="0.01" value={form.descuentoFonacot}
+                    onChange={e => setForm(p => ({ ...p, descuentoFonacot: e.target.value }))} className={inputCls}
+                    placeholder="De la cédula Fonacot" />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Pensión alimenticia">
+                  <select value={form.pensionAlimenticiaTipo} onChange={e => setForm(p => ({ ...p, pensionAlimenticiaTipo: e.target.value }))} className={inputCls}>
+                    <option value="">Sin pensión</option>
+                    <option value="PCT_TOTAL">% de percepciones</option>
+                    <option value="PCT_NETO">% del neto</option>
+                    <option value="PESOS">Monto mensual ($)</option>
+                  </select>
+                </Field>
+                <Field label={form.pensionAlimenticiaTipo === "PESOS" ? "Monto mensual" : "Porcentaje"}>
+                  <input type="number" min="0" step="0.01" value={form.pensionAlimenticiaValor}
+                    onChange={e => setForm(p => ({ ...p, pensionAlimenticiaValor: e.target.value }))} className={inputCls}
+                    placeholder={form.pensionAlimenticiaTipo === "PESOS" ? "Ej: 2500" : "Ej: 0.30 (30%)"} />
+                </Field>
+              </div>
+              <p className="text-[10px] text-cos-ink-soft">
+                Se retienen en cada nómina ordinaria (FONACOT prorrateado por periodo; pensión conforme a la resolución) y van desglosadas en el CFDI.
+              </p>
             </div>
           </details>
 

@@ -10,6 +10,7 @@ import { recordTimbrado } from "../costos/record";
 import { calcularIsrRetenido } from "./isr";
 import { calcularImss } from "./imss";
 import { calcularInfonavit } from "./infonavit";
+import { calcularDescuentosRecurrentes } from "./descuentos-recurrentes";
 import { receptorDesdeXmlNomina, registroPatronalDesdeXmlNomina } from "./receptor-xml";
 import type { PercepcionItem, DeduccionItem } from "./calc-nomina";
 import type { Employee } from "@prisma/client";
@@ -173,8 +174,23 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       diasPagados: input.diasPagados,
     });
 
+    // FONACOT y pensión alimenticia — MISMO módulo que calc-nomina, para que
+    // este fallback (timbrado sin desglose) nunca difiera del recibo calculado.
+    const recurrentes = calcularDescuentosRecurrentes({
+      descuentoFonacot: employee.descuentoFonacot ?? null,
+      pensionAlimenticiaTipo: employee.pensionAlimenticiaTipo ?? null,
+      pensionAlimenticiaValor: employee.pensionAlimenticiaValor ?? null,
+      periodicidadPago: employee.periodicidadPago,
+      diasPagados: input.diasPagados,
+      totalPercepciones: sueldoBruto,
+      deduccionesLey: +(isrCalc.isrRetenido + imssObrero + infonavitDeduccion).toFixed(2),
+    });
+
     totalPercepciones = sueldoBruto;
-    totalDeducciones = +(isrCalc.isrRetenido + imssObrero + infonavitDeduccion).toFixed(2);
+    totalDeducciones = +(
+      isrCalc.isrRetenido + imssObrero + infonavitDeduccion +
+      recurrentes.pensionAlimenticia + recurrentes.fonacot
+    ).toFixed(2);
     netoAPagar = +(totalPercepciones - totalDeducciones).toFixed(2);
 
     percepcionesCfdi = [
@@ -195,6 +211,12 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
         : []),
       ...(infonavitDeduccion > 0
         ? [{ tipo_deduccion: "010", clave: "006", concepto: "INFONAVIT", importe: infonavitDeduccion }]
+        : []),
+      ...(recurrentes.pensionAlimenticia > 0
+        ? [{ tipo_deduccion: "007", clave: "007", concepto: "Pensión alimenticia", importe: recurrentes.pensionAlimenticia }]
+        : []),
+      ...(recurrentes.fonacot > 0
+        ? [{ tipo_deduccion: "011", clave: "011", concepto: "FONACOT (abonos)", importe: recurrentes.fonacot }]
         : []),
     ];
 
