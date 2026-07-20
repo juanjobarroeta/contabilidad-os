@@ -116,11 +116,25 @@ function DownloadBtn({ id, format, onUnavailable }: { id: string; format: "xml" 
   );
 }
 
+/** Prefactura pendiente (GET /api/facturas/borradores). */
+interface Prefactura {
+  id: string;
+  cliente: string;
+  rfc: string;
+  emailCliente: string | null;
+  total: number;
+  enviadaAt: string | null;
+  createdAt: string;
+  pdfUrl: string;
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function FacturasPage() {
   const { activeCompany } = useCompany();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [prefacturas, setPrefacturas] = useState<Prefactura[]>([]);
+  const [prefBusy, setPrefBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("todas");
   const [q, setQ] = useState("");
@@ -132,12 +146,14 @@ export default function FacturasPage() {
     if (!activeCompany) return;
     setLoading(true);
     try {
-      const [list, res] = await Promise.all([
+      const [list, res, prefs] = await Promise.all([
         fetch(`/api/facturas?companyId=${activeCompany.id}&take=200`).then((r) => r.json()),
         fetch(`/api/facturas/resumen?companyId=${activeCompany.id}`).then((r) => r.json()),
+        fetch(`/api/facturas/borradores?companyId=${activeCompany.id}`).then((r) => r.json()).catch(() => []),
       ]);
       setInvoices(Array.isArray(list) ? list : []);
       setResumen(res);
+      setPrefacturas(Array.isArray(prefs) ? prefs : []);
     } finally {
       setLoading(false);
     }
@@ -156,6 +172,36 @@ export default function FacturasPage() {
   function showToast(m: string) {
     setToast(m);
     setTimeout(() => setToast(""), 4500);
+  }
+
+  // ── Acciones sobre prefacturas ──
+  async function prefAccion(p: Prefactura, accion: "timbrar" | "enviar" | "descartar") {
+    if (accion === "timbrar" && !confirm(`¿Timbrar la prefactura de ${p.cliente} por ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(p.total)}? Se emite un CFDI real ante el SAT.`)) return;
+    if (accion === "descartar" && !confirm(`¿Descartar la prefactura de ${p.cliente}?`)) return;
+    let email: string | undefined;
+    if (accion === "enviar") {
+      const cap = prompt("Correo del cliente:", p.emailCliente ?? "");
+      if (cap === null) return;
+      email = cap.trim() || undefined;
+    }
+    setPrefBusy(p.id);
+    try {
+      const res = await fetch(`/api/facturas/borradores/${p.id}`, {
+        method: accion === "descartar" ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        ...(accion !== "descartar" ? { body: JSON.stringify({ accion, ...(email ? { email } : {}) }) } : {}),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { showToast(data?.error ?? "Error"); return; }
+      showToast(
+        accion === "timbrar" ? `✓ Prefactura timbrada (${data.uuid?.slice(-8) ?? "CFDI emitido"})`
+        : accion === "enviar" ? `✓ Prefactura enviada a ${data.email}`
+        : "✓ Prefactura descartada"
+      );
+      fetchData();
+    } finally {
+      setPrefBusy(null);
+    }
   }
 
   // Pregunta al SAT (metadata) si alguna factura fue cancelada y marca las que sí.
@@ -255,6 +301,45 @@ export default function FacturasPage() {
           <span className="text-[12.5px] text-cos-ink-faint">trasladado a clientes</span>
         </Card>
       </div>
+
+      {/* prefacturas pendientes de timbrar */}
+      {prefacturas.length > 0 && (
+        <Card className="mt-4 overflow-hidden rounded-card border-cos-line shadow-card">
+          <div className="flex items-center justify-between border-b border-cos-line px-[18px] py-3">
+            <span className="text-[13px] font-semibold text-cos-ink">
+              Prefacturas por timbrar <span className="ml-1 rounded-full bg-cos-amber-tint px-2 py-0.5 font-mono text-[11.5px] text-cos-amber-ink">{prefacturas.length}</span>
+            </span>
+            <span className="text-[12px] text-cos-ink-faint">El PDF sale con marca BORRADOR — no consume timbre hasta que la timbras.</span>
+          </div>
+          {prefacturas.map((p) => (
+            <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-cos-line px-[18px] py-2.5 last:border-0">
+              <div className="min-w-0">
+                <p className="truncate text-[13.5px] font-medium text-cos-ink">{p.cliente}</p>
+                <p className="font-mono text-[11.5px] text-cos-ink-faint">
+                  {p.rfc} · {fmtFecha(p.createdAt)}{p.enviadaAt ? ` · enviada ${fmtFecha(p.enviadaAt)}` : ""}
+                </p>
+              </div>
+              <div className="flex flex-none items-center gap-2">
+                <span className="mr-1 font-mono text-[13.5px] font-semibold text-cos-ink">
+                  {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(p.total)}
+                </span>
+                <a href={p.pdfUrl} target="_blank" rel="noopener noreferrer"
+                  className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">PDF</a>
+                <button onClick={() => { navigator.clipboard.writeText(p.pdfUrl); showToast("✓ Enlace copiado (vigente 7 días)"); }}
+                  className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">Copiar enlace</button>
+                <button onClick={() => prefAccion(p, "enviar")} disabled={prefBusy === p.id}
+                  className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint disabled:opacity-50">Enviar</button>
+                <button onClick={() => prefAccion(p, "timbrar")} disabled={prefBusy === p.id}
+                  className="rounded-control bg-cos-jade-ink px-2.5 py-1.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
+                  {prefBusy === p.id ? "…" : "Timbrar"}
+                </button>
+                <button onClick={() => prefAccion(p, "descartar")} disabled={prefBusy === p.id}
+                  className="rounded-control border border-cos-red-ink/20 px-2.5 py-1.5 text-[12px] font-medium text-cos-red-ink hover:bg-cos-red-tint disabled:opacity-50">✕</button>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
 
       {/* search */}
       <div className="mt-[18px] flex items-center gap-2.5 rounded-control border border-cos-line bg-cos-card px-3.5 text-cos-ink-faint">
@@ -444,6 +529,34 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
   const [err, setErr] = useState("");
   const [repOpen, setRepOpen] = useState(false);
 
+  // Enviar el CFDI timbrado (PDF+XML) al correo del cliente vía Facturapi.
+  const canEmail = inv.status === "STAMPED" && !!inv.facturapiId;
+  const [mailOpen, setMailOpen] = useState(false);
+  const [mailTo, setMailTo] = useState("");
+  const [mailBusy, setMailBusy] = useState(false);
+  const [mailMsg, setMailMsg] = useState("");
+  const [mailErr, setMailErr] = useState("");
+
+  async function doEmail() {
+    setMailBusy(true);
+    setMailErr("");
+    try {
+      const res = await fetch(`/api/facturas/${inv.id}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mailTo.trim() ? { email: mailTo.trim() } : {}),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo enviar");
+      setMailMsg(`Enviada a ${data.email}`);
+      setMailOpen(false);
+    } catch (e) {
+      setMailErr(e instanceof Error ? e.message : "No se pudo enviar");
+    } finally {
+      setMailBusy(false);
+    }
+  }
+
   // Only emitted-and-stamped CFDIs we own can be cancelled at the SAT.
   const canCancel = inv.status === "STAMPED" && inv.tipo === "INGRESO" && !!inv.facturapiId;
   const nota = k === "pago" ? "Complemento de pago (REP)" : inv.notas;
@@ -590,6 +703,41 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
           <DownloadBtn id={inv.id} format="xml" />
           <DownloadBtn id={inv.id} format="pdf" onUnavailable={() => setRepOpen(true)} />
         </div>
+
+        {/* enviar por correo (PDF + XML, vía Facturapi) */}
+        {mailMsg && (
+          <p className="mt-2.5 rounded-[10px] bg-cos-jade-tint px-3 py-2.5 text-[13px] text-cos-jade-ink">✓ {mailMsg}</p>
+        )}
+        {canEmail && !mailOpen && !mailMsg && (
+          <button
+            onClick={() => setMailOpen(true)}
+            className="mt-2.5 w-full rounded-control border border-cos-line py-2 text-[13px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint"
+          >
+            Enviar por correo al cliente
+          </button>
+        )}
+        {mailOpen && (
+          <div className="mt-2.5 rounded-[12px] border border-cos-line bg-cos-paper p-3.5">
+            <p className="text-[13px] font-medium text-cos-ink">Enviar factura por correo</p>
+            <p className="mt-1 text-[12px] text-cos-ink-faint">
+              Facturapi manda el PDF y el XML. Deja el campo vacío para usar el correo del cliente.
+            </p>
+            {mailErr && <p className="mt-2 text-[12.5px] text-cos-red-ink">{mailErr}</p>}
+            <div className="mt-2 flex gap-2">
+              <input
+                type="email"
+                value={mailTo}
+                onChange={(e) => setMailTo(e.target.value)}
+                placeholder="correo@cliente.com (opcional)"
+                className="flex-1 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13px] outline-none"
+              />
+              <button onClick={doEmail} disabled={mailBusy}
+                className="rounded-control bg-cos-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+                {mailBusy ? "Enviando…" : "Enviar"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {repOpen && <RepresentacionImpresa invoiceId={inv.id} onClose={() => setRepOpen(false)} />}
 

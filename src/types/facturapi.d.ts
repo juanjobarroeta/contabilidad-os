@@ -123,6 +123,8 @@ declare module "facturapi" {
       editDraft(id: string, data: Partial<FacturapiCreateInvoiceOptions>): Promise<FacturapiInvoice>;
       downloadPdf(id: string): Promise<NodeJS.ReadableStream>;
       downloadXml(id: string): Promise<NodeJS.ReadableStream>;
+      /** Envía la factura (PDF+XML) por correo; sin `email` usa el del cliente. */
+      sendByEmail(id: string, data?: { email?: string }): Promise<unknown>;
     };
 
     customers: {

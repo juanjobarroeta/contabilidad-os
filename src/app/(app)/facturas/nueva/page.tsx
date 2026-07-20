@@ -140,6 +140,12 @@ export default function NuevaFacturaPage() {
   const [submitError, setSubmitError] = useState("");
   const [needsReconfigure, setNeedsReconfigure] = useState(false);
   const [successId, setSuccessId] = useState<string | null>(null);
+  // Prefactura guardada: enlace del PDF BORRADOR (7 días) + envío por correo.
+  const [prefOk, setPrefOk] = useState<{ id: string; pdfUrl: string } | null>(null);
+  const [savingPref, setSavingPref] = useState(false);
+  const [prefMail, setPrefMail] = useState("");
+  const [prefMailBusy, setPrefMailBusy] = useState(false);
+  const [prefMailMsg, setPrefMailMsg] = useState("");
 
   // Step 1
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -302,6 +308,70 @@ export default function NuevaFacturaPage() {
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
+  // Cuerpo compartido de timbrado y prefactura — el borrador que ve el
+  // cliente es EXACTAMENTE lo que después se promueve a CFDI.
+  function buildPayload() {
+    return {
+      companyId: activeCompany!.id,
+      customerId: selectedCliente!.id,
+      formaPago,
+      metodoPago,
+      usoCfdi,
+      notes: notas || undefined,
+      ...(isPublicoGeneral && {
+        global: {
+          periodicity: globalPeriodicity as "day" | "week" | "fortnight" | "month" | "two_months",
+          months: globalMonth,
+          year: globalYear,
+        },
+      }),
+      items: items.map((it) => ({
+        quantity: it.quantity,
+        product: {
+          description: it.description,
+          product_key: it.product_key,
+          price: it.price,
+          unit_key: it.unit_key,
+          tax_included: false,
+          // Tasa 0 y Exento llevan SIEMPRE su nodo de IVA (rate 0) — omitir
+          // el impuesto por completo (lo que hacía el checkbox anterior) no
+          // es ninguna de las dos cosas y deja el CFDI mal clasificado.
+          taxes:
+            it.iva === "16"
+              ? [{ type: "IVA", rate: 0.16, factor: "Tasa", withholding: false }]
+              : it.iva === "0"
+                ? [{ type: "IVA", rate: 0, factor: "Tasa", withholding: false }]
+                : [{ type: "IVA", rate: 0, factor: "Exento", withholding: false }],
+        },
+      })),
+    };
+  }
+
+  // Prefactura: crea el BORRADOR en Facturapi (PDF con marca BORRADOR, sin
+  // consumir timbre) y lo guarda para timbrar/compartir/enviar después.
+  async function handlePrefactura() {
+    if (!activeCompany || !selectedCliente) return;
+    setSavingPref(true);
+    setSubmitError("");
+    try {
+      const res = await fetch("/api/facturas/borradores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload()),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.needsReconfigure) setNeedsReconfigure(true);
+        throw new Error(typeof data.error === "string" ? data.error : "Error al guardar la prefactura");
+      }
+      setPrefOk({ id: data.id, pdfUrl: data.pdfUrl });
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Error inesperado");
+    } finally {
+      setSavingPref(false);
+    }
+  }
+
   async function handleStamp() {
     if (!activeCompany || !selectedCliente) return;
     setSubmitting(true);
@@ -312,40 +382,7 @@ export default function NuevaFacturaPage() {
     // otro timbre si el request se duplica en la red).
     const idempotencyKey = crypto.randomUUID();
     try {
-      const payload = {
-        companyId: activeCompany.id,
-        customerId: selectedCliente.id,
-        formaPago,
-        metodoPago,
-        usoCfdi,
-        notes: notas || undefined,
-        ...(isPublicoGeneral && {
-          global: {
-            periodicity: globalPeriodicity as "day" | "week" | "fortnight" | "month" | "two_months",
-            months: globalMonth,
-            year: globalYear,
-          },
-        }),
-        items: items.map((it) => ({
-          quantity: it.quantity,
-          product: {
-            description: it.description,
-            product_key: it.product_key,
-            price: it.price,
-            unit_key: it.unit_key,
-            tax_included: false,
-            // Tasa 0 y Exento llevan SIEMPRE su nodo de IVA (rate 0) — omitir
-            // el impuesto por completo (lo que hacía el checkbox anterior) no
-            // es ninguna de las dos cosas y deja el CFDI mal clasificado.
-            taxes:
-              it.iva === "16"
-                ? [{ type: "IVA", rate: 0.16, factor: "Tasa", withholding: false }]
-                : it.iva === "0"
-                  ? [{ type: "IVA", rate: 0, factor: "Tasa", withholding: false }]
-                  : [{ type: "IVA", rate: 0, factor: "Exento", withholding: false }],
-          },
-        })),
-      };
+      const payload = buildPayload();
 
       const res = await fetch("/api/facturas", {
         method: "POST",
@@ -376,6 +413,67 @@ export default function NuevaFacturaPage() {
   }
 
   // ── Success screen ────────────────────────────────────────────────────────
+
+  if (prefOk) {
+    return (
+      <div className="p-8 flex items-center justify-center min-h-[60vh]">
+        <div className="text-center max-w-md w-full">
+          <div className="h-16 w-16 rounded-full bg-cos-amber-tint flex items-center justify-center mx-auto mb-4">
+            <FileText className="h-8 w-8 text-cos-amber-ink" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">Prefactura guardada</h2>
+          <p className="text-cos-ink-soft text-sm mb-5">
+            El PDF sale con marca <b>BORRADOR</b> y no consume timbre. Compártela con tu cliente
+            para que valide los datos; cuando esté de acuerdo, tímbrala desde Facturas.
+          </p>
+          <div className="flex gap-2 justify-center mb-4">
+            <a href={prefOk.pdfUrl} target="_blank" rel="noopener noreferrer"
+              className="border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper">Ver PDF</a>
+            <button
+              onClick={() => { navigator.clipboard.writeText(prefOk.pdfUrl); setPrefMailMsg("✓ Enlace copiado (vigente 7 días)"); }}
+              className="border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper">
+              Copiar enlace
+            </button>
+          </div>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="email"
+              value={prefMail}
+              onChange={(e) => setPrefMail(e.target.value)}
+              placeholder="correo@cliente.com (vacío = correo del cliente)"
+              className="flex-1 border border-cos-line rounded-md px-3 py-2 text-sm"
+            />
+            <button
+              disabled={prefMailBusy}
+              onClick={async () => {
+                setPrefMailBusy(true);
+                setPrefMailMsg("");
+                try {
+                  const res = await fetch(`/api/facturas/borradores/${prefOk.id}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ accion: "enviar", ...(prefMail.trim() ? { email: prefMail.trim() } : {}) }),
+                  });
+                  const data = await res.json().catch(() => null);
+                  setPrefMailMsg(res.ok ? `✓ Enviada a ${data.email}` : (data?.error ?? "No se pudo enviar"));
+                } finally {
+                  setPrefMailBusy(false);
+                }
+              }}
+              className="bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50">
+              {prefMailBusy ? "Enviando…" : "Enviar por correo"}
+            </button>
+          </div>
+          {prefMailMsg && <p className="text-sm text-cos-ink-soft mb-3">{prefMailMsg}</p>}
+          <button
+            onClick={() => router.push("/facturas")}
+            className="bg-cos-jade-ink text-white px-4 py-2 rounded-md text-sm font-medium hover:opacity-90">
+            Ir a Facturas
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (successId) {
     return (
@@ -918,11 +1016,19 @@ export default function NuevaFacturaPage() {
               Continuar <ChevronRight className="h-4 w-4" />
             </button>
           ) : (
-            <button onClick={handleStamp} disabled={submitting}
-              className="flex items-center gap-2 bg-cos-jade-ink text-white px-5 py-2 rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              {submitting ? "Timbrando..." : "Timbrar CFDI"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={handlePrefactura} disabled={savingPref || submitting}
+                title="Guarda un BORRADOR (sin timbre) para compartirlo con el cliente y timbrarlo después"
+                className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper disabled:opacity-50">
+                {savingPref ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                {savingPref ? "Guardando…" : "Guardar prefactura"}
+              </button>
+              <button onClick={handleStamp} disabled={submitting || savingPref}
+                className="flex items-center gap-2 bg-cos-jade-ink text-white px-5 py-2 rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                {submitting ? "Timbrando..." : "Timbrar CFDI"}
+              </button>
+            </div>
           )}
         </div>
       </div>

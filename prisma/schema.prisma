@@ -237,6 +237,7 @@ model Company {
   members           CompanyMember[]
   invoices          Invoice[]
   customers         Customer[]
+  facturaBorradores FacturaBorrador[]
   suppliers         Supplier[]
   bankAccounts      BankAccount[]
   bankTransactions  BankTransaction[]
@@ -556,12 +557,13 @@ model Customer {
   // Facturapi customer ID
   facturapiId String?
 
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  invoices    Invoice[]
-  proyectos   Proyecto[]
-  clubMembers ClubMember[]
-  restOrdenes RestOrden[]
-  purifVentas PurifVenta[]
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoices            Invoice[]
+  borradores          FacturaBorrador[]
+  proyectos           Proyecto[]
+  clubMembers         ClubMember[]
+  restOrdenes         RestOrden[]
+  purifVentas         PurifVenta[]
   purifSucursales     PurifSucursal[]
   purifCorteLineas    PurifCorteEmpresa[]
   purifClienteConfigs PurifClienteConfig[]
@@ -928,6 +930,34 @@ enum InvoiceStatus {
   DRAFT
   STAMPED // timbrado
   CANCELLED
+}
+
+/// Prefactura (borrador de CFDI): existe en Facturapi como draft — su PDF
+/// se imprime con marca BORRADOR y NO consume timbre — y aquí se guarda el
+/// payload para poder timbrarla después, listarla y compartirla al cliente
+/// con un enlace firmado. Al timbrar se promueve al Invoice definitivo.
+model FacturaBorrador {
+  id         String    @id @default(cuid())
+  companyId  String
+  customerId String
+  /// Id del borrador en Facturapi (el PDF BORRADOR se descarga de allá).
+  draftId    String
+  /// StampInput serializado — el mismo cuerpo con el que se creó el draft;
+  /// al timbrar se promueve ESE draft y se persiste el Invoice con esto.
+  payload    Json
+  total      Float
+  status     String    @default("PENDIENTE") // PENDIENTE | TIMBRADA | DESCARTADA
+  /// Invoice creado al timbrar (para el enlace "ver factura").
+  invoiceId  String?
+  /// Último envío por correo al cliente (vía Facturapi).
+  enviadaAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
 }
 
 enum TaxType {
@@ -3854,8 +3884,8 @@ model PurifCorte {
   fecha  DateTime // día del corte (normalizado a medianoche local)
   estado PurifCorteEstado @default(BORRADOR)
 
-  cortesiasGarrafones Int    @default(0)
-  cortesiasImporte    Float  @default(0) // valor de lo regalado (no es ingreso)
+  cortesiasGarrafones Int     @default(0)
+  cortesiasImporte    Float   @default(0) // valor de lo regalado (no es ingreso)
   notas               String?
 
   confirmadoAt DateTime?
@@ -3907,7 +3937,7 @@ model PurifCorteGasto {
   categoria   PurifGastoCategoria
   descripcion String
   monto       Float
-  formaPago   PurifFormaPago @default(EFECTIVO)
+  formaPago   PurifFormaPago      @default(EFECTIVO)
 
   corte PurifCorte @relation(fields: [corteId], references: [id], onDelete: Cascade)
 
@@ -3920,8 +3950,8 @@ model PurifProducto {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  nombre  String
-  precio  Float
+  nombre     String
+  precio     Float
   // Cuántos garrafones físicos representa una unidad vendida (recarga = 1,
   // paquete de 5 = 5, botella PET = 0). Alimenta el contador de garrafones
   // vendidos por cliente sin depender del nombre del producto.
@@ -3973,11 +4003,11 @@ model PurifVenta {
   notas          String?
 
   // CFDI que ampara la venta (opcional; una factura puede cubrir varias ventas).
-  invoiceId String?
+  invoiceId         String?
   // Movimiento bancario que la cobró, cuando se concilia contra el estado de cuenta.
   bankTransactionId String? @unique
   // Corte del día que generó esta venta (al confirmar el corte).
-  corteId String?
+  corteId           String?
 
   company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer        Customer?        @relation(fields: [customerId], references: [id])
@@ -4004,9 +4034,9 @@ model PurifVentaItem {
   importe        Float
   // Garrafones físicos de esta partida (cantidad × factor del producto),
   // congelado al vender para que editar el producto no reescriba la historia.
-  garrafones     Int    @default(0)
+  garrafones     Int     @default(0)
   // Sucursal del cliente donde se entregó (estado de cuenta por sucursal).
-  sucursalId String?
+  sucursalId     String?
 
   venta    PurifVenta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
   producto PurifProducto? @relation(fields: [productoId], references: [id], onDelete: SetNull)
@@ -4033,16 +4063,16 @@ model PurifGasto {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  fecha       DateTime
-  categoria   PurifGastoCategoria
-  descripcion String
-  monto       Float
+  fecha             DateTime
+  categoria         PurifGastoCategoria
+  descripcion       String
+  monto             Float
   // CREDITO = queda a deber al proveedor (se abona a 2104 Acreedores diversos).
-  formaPago   PurifFormaPago @default(EFECTIVO)
-  supplierId  String?
-  notas       String?
+  formaPago         PurifFormaPago      @default(EFECTIVO)
+  supplierId        String?
+  notas             String?
   // Movimiento bancario que lo pagó, cuando se concilia contra el estado de cuenta.
-  bankTransactionId String? @unique
+  bankTransactionId String?             @unique
 
   company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   supplier        Supplier?        @relation(fields: [supplierId], references: [id])
