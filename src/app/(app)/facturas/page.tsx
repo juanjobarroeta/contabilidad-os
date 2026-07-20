@@ -99,7 +99,11 @@ function DownloadBtn({ id, format, onUnavailable }: { id: string; format: "xml" 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `factura.${format}`;
+      // Nombre del servidor (UUID completo, via Content-Disposition) — el
+      // hardcode "factura.xml" de antes pisaba el folio fiscal.
+      const cd = res.headers.get("content-disposition") ?? "";
+      const m = /filename="?([^";]+)"?/i.exec(cd);
+      a.download = m?.[1] ?? `factura.${format}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch {
