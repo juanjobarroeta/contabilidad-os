@@ -67,6 +67,24 @@ describe("compararRecibo — coincidencias", () => {
     expect(r.subsidio!.delta).toBeCloseTo(0, 2);
   });
 
+  it("salario mínimo (Art. 36 LSS): IMSS obrero $0 timbrado coincide — el patrón absorbe la cuota", () => {
+    // El caso real que marcaba diff falso: Juan Carlos Méndez (Reyes Huerta),
+    // sueldo quincenal 4,725.60 = 315.04/día (SM 2026 exacto), IMSS timbrado $0.
+    const r = compararRecibo(
+      entrada2026({
+        sbcDiario: 330.57, // SBC = SM × factor de integración
+        totalGravado: 4725.6,
+        gravadoPorCodigo: { "001": 4725.6 },
+        timbrado: { isr: 0, imssObrero: 0, subsidioEntregado: 0 },
+      })
+    );
+    expect(r.comparable).toBe(true);
+    expect(r.imssObrero!.nuestro).toBe(0);
+    expect(r.imssObrero!.delta).toBe(0);
+    // ISR también 0 al mínimo (subsidio ≥ ISR causado) — veredicto: coincide.
+    expect(r.veredicto).toBe("coincide");
+  });
+
   it("tolerancia: ±$0.50 en un concepto sigue siendo coincidencia", () => {
     const r = compararRecibo(
       entrada2026({ timbrado: { isr: 709.36, imssObrero: 195.56, subsidioEntregado: 0 } })

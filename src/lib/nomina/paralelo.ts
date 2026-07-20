@@ -312,6 +312,16 @@ export function compararRecibo(entrada: EntradaComparacion): ComparacionRecibo {
   if (umaDiaria == null) {
     return noComparable(`Sin UMA versionada para el ejercicio ${ejercicio}`, ejercicio);
   }
+  // Art. 36 LSS: al trabajador con CUOTA DIARIA de salario mínimo no se le
+  // retiene IMSS (el patrón absorbe la cuota obrera) — sin esto, un recibo de
+  // salario mínimo correctamente timbrado con IMSS $0 marcaba diff falso.
+  // La cuota diaria no viaja en el CFDI; se aproxima del propio recibo:
+  // sueldo timbrado (percepción 001 gravada) / días pagados. Sin percepción
+  // 001 se omite y aplica la retención normal (comportamiento previo).
+  const sueldo001 = entrada.gravadoPorCodigo?.["001"] ?? 0;
+  const salarioDiarioAprox =
+    sueldo001 > 0 && entrada.diasPagados > 0 ? sueldo001 / entrada.diasPagados : undefined;
+
   // El riesgo de puesto sólo afecta la cuota PATRONAL — para la obrera da igual.
   const imssObreroCon = (dias: number) => {
     try {
@@ -321,6 +331,7 @@ export function compararRecibo(entrada: EntradaComparacion): ComparacionRecibo {
         riesgoPuesto: "1",
         ejercicio,
         umaDiaria,
+        salarioDiario: salarioDiarioAprox,
       }).obrero.total;
     } catch {
       return null;
