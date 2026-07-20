@@ -44,12 +44,14 @@ export async function GET(
   // have no facturapiId — but we DID store the authentic CFDI. Serve that for XML
   // directly so the file is downloadable without Facturapi.
   if (format === "xml" && invoice.rawXml) {
-    const uuidShort = invoice.uuid?.replace(/-/g, "").substring(0, 8) ?? id.substring(0, 8);
+    // Nombre = UUID completo (folio fiscal) — igual que los archivos del SAT,
+    // para que el cliente los archive/empate por folio sin renombrar.
+    const nombre = invoice.uuid ?? id;
     return new NextResponse(invoice.rawXml, {
       status: 200,
       headers: {
         "Content-Type": "application/xml",
-        "Content-Disposition": `attachment; filename="factura-${uuidShort}.xml"`,
+        "Content-Disposition": `attachment; filename="${nombre}.xml"`,
       },
     });
   }
@@ -85,9 +87,8 @@ export async function GET(
     );
   }
 
-  // Build filename
-  const uuidShort = invoice.uuid?.replace(/-/g, "").substring(0, 8) ?? id.substring(0, 8);
-  const filename = `factura-${uuidShort}.${format}`;
+  // Nombre = UUID completo (folio fiscal); sin UUID (borradores) cae al id.
+  const filename = `${invoice.uuid ?? id}.${format}`;
 
   const contentTypes: Record<string, string> = {
     pdf: "application/pdf",
