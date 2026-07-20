@@ -16,7 +16,15 @@ export const GET = withAuthz(async (req: Request) => {
 
   const config = await prisma.purifConfig.findUnique({ where: { companyId } });
   return NextResponse.json(
-    config ?? { companyId, nombreComercial: null, precioGarrafon: 15, ivaTasaDefault: 0 }
+    config ?? {
+      companyId,
+      nombreComercial: null,
+      precioGarrafon: 15,
+      ivaTasaDefault: 0,
+      claveProdServ: "50202306",
+      claveUnidad: "H87",
+      descripcionFactura: "Agua purificada en garrafón 20 L",
+    }
   );
 });
 
@@ -25,6 +33,9 @@ const putSchema = z.object({
   nombreComercial: z.string().trim().max(120).nullish(),
   precioGarrafon: z.number().positive().optional(),
   ivaTasaDefault: z.number().min(0).max(0.16).optional(),
+  claveProdServ: z.string().trim().min(1).max(20).optional(),
+  claveUnidad: z.string().trim().min(1).max(10).optional(),
+  descripcionFactura: z.string().trim().min(1).max(200).optional(),
 });
 
 // PUT /api/purificadora/config — upsert de la configuración.

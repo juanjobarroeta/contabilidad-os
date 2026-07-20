@@ -323,10 +323,14 @@ model Company {
 
   // PURIFICADORA module (only used when PURIFICADORA is enabled) — see
   // "Module: Purificadora" below.
-  purifConfig    PurifConfig?
-  purifProductos PurifProducto[]
-  purifVentas    PurifVenta[]
-  purifGastos    PurifGasto[]
+  purifConfig         PurifConfig?
+  purifProductos      PurifProducto[]
+  purifVentas         PurifVenta[]
+  purifGastos         PurifGasto[]
+  purifRutas          PurifRuta[]
+  purifSucursales     PurifSucursal[]
+  purifCortes         PurifCorte[]
+  purifClienteConfigs PurifClienteConfig[]
 }
 
 model CompanyMember {
@@ -558,6 +562,9 @@ model Customer {
   clubMembers ClubMember[]
   restOrdenes RestOrden[]
   purifVentas PurifVenta[]
+  purifSucursales     PurifSucursal[]
+  purifCorteLineas    PurifCorteEmpresa[]
+  purifClienteConfigs PurifClienteConfig[]
 
   @@unique([companyId, rfc])
 }
@@ -3749,13 +3756,149 @@ model PurifConfig {
 
   nombreComercial String?
   // Precio de lista de la recarga de garrafón — el producto ancla del negocio.
+  // Se puede sobreescribir por cliente en PurifClienteConfig.
   precioGarrafon  Float   @default(15)
   // IVA default de las ventas. El agua no gaseosa ni compuesta en envases
   // mayores a 10 L tributa al 0% (Art. 2-A LIVA), por eso el default es 0.
   // Configurable por producto para presentaciones gravadas (botella chica, hielo).
   ivaTasaDefault  Float   @default(0)
 
+  // Datos CFDI para "facturar consumo del mes" desde el satélite.
+  claveProdServ      String @default("50202306") // SAT c_ClaveProdServ: agua potable/purificada
+  claveUnidad        String @default("H87") // Pieza
+  descripcionFactura String @default("Agua purificada en garrafón 20 L")
+
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Precio de garrafón pactado con un cliente-empresa (STELLA $34, SHIRUSHI $30,
+// …). Sin fila, aplica PurifConfig.precioGarrafon. Dato del módulo — el
+// Customer canónico no se toca.
+model PurifClienteConfig {
+  id         String @id @default(cuid())
+  companyId  String
+  customerId String
+
+  precioGarrafon Float
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, customerId])
+}
+
+// Ruta de reparto a casas (Brayan, Angélica) o mostrador (Ventanilla). El
+// chofer reporta por día el efectivo, transferencias y garrafones de su ruta.
+model PurifRuta {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  nombre String
+  activo Boolean @default(true)
+
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  corteLineas PurifCorteRuta[]
+
+  @@unique([companyId, nombre])
+}
+
+// Punto de entrega dentro de un cliente-empresa (FCA Reforma, FCA Serdán, …).
+// El estado de cuenta mensual se desglosa por sucursal.
+model PurifSucursal {
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String
+  createdAt  DateTime @default(now())
+
+  nombre String
+  activo Boolean @default(true)
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  ventaItems  PurifVentaItem[]
+  corteLineas PurifCorteEmpresa[]
+
+  @@unique([customerId, nombre])
+  @@index([companyId])
+}
+
+enum PurifCorteEstado {
+  BORRADOR // capturado (del talón del chofer), editable, sin efecto contable
+  CONFIRMADO // generó ventas + gastos + asientos
+}
+
+// Corte del día — espejo digital del talón que llena el chofer: ventas de
+// ruta (casas, efectivo/transferencia), garrafones entregados por empresa y
+// sucursal (a crédito), cortesías y gastos. Nace BORRADOR para que se revise
+// y ajuste; al CONFIRMAR genera las PurifVenta/PurifGasto y sus asientos.
+model PurifCorte {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fecha  DateTime // día del corte (normalizado a medianoche local)
+  estado PurifCorteEstado @default(BORRADOR)
+
+  cortesiasGarrafones Int    @default(0)
+  cortesiasImporte    Float  @default(0) // valor de lo regalado (no es ingreso)
+  notas               String?
+
+  confirmadoAt DateTime?
+
+  company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rutas    PurifCorteRuta[]
+  empresas PurifCorteEmpresa[]
+  gastos   PurifCorteGasto[]
+  ventas   PurifVenta[]
+
+  @@unique([companyId, fecha])
+  @@index([companyId, estado])
+}
+
+model PurifCorteRuta {
+  id      String @id @default(cuid())
+  corteId String
+  rutaId  String
+
+  efectivo      Float @default(0)
+  transferencia Float @default(0)
+  garrafones    Int   @default(0)
+
+  corte PurifCorte @relation(fields: [corteId], references: [id], onDelete: Cascade)
+  ruta  PurifRuta  @relation(fields: [rutaId], references: [id])
+
+  @@unique([corteId, rutaId])
+}
+
+model PurifCorteEmpresa {
+  id         String  @id @default(cuid())
+  corteId    String
+  customerId String
+  sucursalId String?
+
+  garrafones Int
+
+  corte    PurifCorte     @relation(fields: [corteId], references: [id], onDelete: Cascade)
+  customer Customer       @relation(fields: [customerId], references: [id])
+  sucursal PurifSucursal? @relation(fields: [sucursalId], references: [id])
+
+  @@index([corteId])
+}
+
+model PurifCorteGasto {
+  id      String @id @default(cuid())
+  corteId String
+
+  categoria   PurifGastoCategoria
+  descripcion String
+  monto       Float
+  formaPago   PurifFormaPago @default(EFECTIVO)
+
+  corte PurifCorte @relation(fields: [corteId], references: [id], onDelete: Cascade)
+
+  @@index([corteId])
 }
 
 model PurifProducto {
@@ -3820,14 +3963,18 @@ model PurifVenta {
   invoiceId String?
   // Movimiento bancario que la cobró, cuando se concilia contra el estado de cuenta.
   bankTransactionId String? @unique
+  // Corte del día que generó esta venta (al confirmar el corte).
+  corteId String?
 
   company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer        Customer?        @relation(fields: [customerId], references: [id])
   invoice         Invoice?         @relation(fields: [invoiceId], references: [id])
   bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  corte           PurifCorte?      @relation(fields: [corteId], references: [id], onDelete: SetNull)
   items           PurifVentaItem[]
 
   @@unique([companyId, folio])
+  @@index([corteId])
   @@index([companyId, fecha])
   @@index([companyId, estado])
   @@index([companyId, customerId])
@@ -3845,11 +3992,15 @@ model PurifVentaItem {
   // Garrafones físicos de esta partida (cantidad × factor del producto),
   // congelado al vender para que editar el producto no reescriba la historia.
   garrafones     Int    @default(0)
+  // Sucursal del cliente donde se entregó (estado de cuenta por sucursal).
+  sucursalId String?
 
   venta    PurifVenta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
   producto PurifProducto? @relation(fields: [productoId], references: [id], onDelete: SetNull)
+  sucursal PurifSucursal? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
 
   @@index([ventaId])
+  @@index([sucursalId])
 }
 
 enum PurifGastoCategoria {
