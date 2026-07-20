@@ -17,6 +17,7 @@ import {
 } from "./prestaciones";
 import { calcularPtu, type PtuDistribucion } from "./ptu";
 import type { IncidenciasResumen } from "./incidencias";
+import { calcularDescuentosRecurrentes } from "./descuentos-recurrentes";
 import { umaDiariaDelEjercicio, salarioMinimoGeneralDelEjercicio } from "./constants";
 
 function r2(n: number): number {
@@ -365,6 +366,39 @@ export function calcularNomina(input: NominaCalcInput): NominaCalcResult {
         clave: "006",
         concepto: "INFONAVIT",
         importe: infonavitDeduccion,
+      });
+    }
+  }
+
+  // FONACOT y pensión alimenticia — deducciones NETAS recurrentes de la ficha
+  // del empleado, sólo en ORDINARIA (ver alcance documentado en
+  // descuentos-recurrentes.ts). No alteran base de ISR ni cotización IMSS.
+  if (tipo === "ORDINARIA") {
+    const recurrentes = calcularDescuentosRecurrentes({
+      descuentoFonacot: employee.descuentoFonacot ?? null,
+      pensionAlimenticiaTipo: employee.pensionAlimenticiaTipo ?? null,
+      pensionAlimenticiaValor: employee.pensionAlimenticiaValor ?? null,
+      periodicidadPago: employee.periodicidadPago,
+      diasPagados: diasEfectivos,
+      totalPercepciones,
+      deduccionesLey: r2(
+        isrCalc.isrRetenido + imssCalc.obrero.total + infonavitDeduccion
+      ),
+    });
+    if (recurrentes.pensionAlimenticia > 0) {
+      deducciones.push({
+        tipoDeduccion: "007",
+        clave: "007",
+        concepto: "Pensión alimenticia",
+        importe: recurrentes.pensionAlimenticia,
+      });
+    }
+    if (recurrentes.fonacot > 0) {
+      deducciones.push({
+        tipoDeduccion: "011",
+        clave: "011",
+        concepto: "FONACOT (abonos)",
+        importe: recurrentes.fonacot,
       });
     }
   }
