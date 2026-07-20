@@ -46,8 +46,13 @@ export function verifyFileToken(
 // so the session-less /api/facturas/draft/[draftId]/pdf route can stream the
 // borrador PDF the WhatsApp bot links to before the user confirms timbrado.
 
-export function signDraftToken(companyId: string, draftId: string): string {
-  const exp = Date.now() + TTL_MS;
+/** TTL largo para enlaces de prefactura COMPARTIDOS con el cliente (el corto
+ *  de 30 min es para la vista inmediata del bot). La verificación lee el exp
+ *  del propio token, así que ambos conviven sin cambios en verifyDraftToken. */
+export const TTL_CLIENTE_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
+
+export function signDraftToken(companyId: string, draftId: string, ttlMs: number = TTL_MS): string {
+  const exp = Date.now() + ttlMs;
   const sig = crypto
     .createHmac("sha256", secret())
     .update(`${companyId}.${draftId}.${exp}`)
