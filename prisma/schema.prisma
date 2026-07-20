@@ -4011,6 +4011,9 @@ model PurifProducto {
   garrafones Int     @default(1)
   ivaTasa    Float   @default(0)
   activo     Boolean @default(true)
+  // Aparece en el menú del POS de ventanilla. Permite productos activos para
+  // ventas normales pero fuera del mostrador (p. ej. paquetes por volumen).
+  enVentanilla Boolean @default(true)
 
   company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   items       PurifVentaItem[]

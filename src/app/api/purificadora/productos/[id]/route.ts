@@ -11,6 +11,7 @@ const patchSchema = z.object({
   garrafones: z.number().int().min(0).optional(),
   ivaTasa: z.number().min(0).max(0.16).optional(),
   activo: z.boolean().optional(),
+  enVentanilla: z.boolean().optional(),
 });
 
 // PATCH /api/purificadora/productos/[id] — editar / activar / desactivar.
