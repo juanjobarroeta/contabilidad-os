@@ -66,7 +66,35 @@ GET  /api/purificadora/gastos?companyId=[&from=&to=&categoria=]
 POST /api/purificadora/gastos            ← gasto + asiento, atómico
 GET  /api/purificadora/dashboard?companyId=
 GET  /api/purificadora/clientes/resumen?companyId=   ← garrafones/saldo por cliente
+
+# Corte del día (el talón del chofer, digital)
+GET  /api/purificadora/rutas?companyId=              ← rutas/repartidores
+POST /api/purificadora/rutas · PATCH /rutas/[id]
+GET  /api/purificadora/sucursales?companyId=[&customerId=]  ← puntos de entrega
+POST /api/purificadora/sucursales · PATCH /sucursales/[id]
+GET  /api/purificadora/clientes/config?companyId=    ← precio de garrafón por cliente
+PUT  /api/purificadora/clientes/config
+GET  /api/purificadora/cortes?companyId=[&from=&to=&estado=]
+POST /api/purificadora/cortes                        ← borrador del día
+GET|PUT|DELETE /api/purificadora/cortes/[id]         ← editar/borrar mientras BORRADOR
+POST /api/purificadora/cortes/[id]/confirmar         ← genera ventas (casas por ruta en
+                                                       efectivo/transferencia; empresas a
+                                                       crédito con partida por sucursal al
+                                                       precio pactado), gastos y asientos
+
+# Reportes (las vistas del Excel de cortes)
+GET  /api/purificadora/reportes/matriz?companyId=&year=&month=[&customerId=]
+     ← garrafones por día: empresa × día, o sucursal × día de un cliente
+GET  /api/purificadora/reportes/estado-cuenta?companyId=&customerId=&year=&month=
+     ← consumo mensual por sucursal + datos para timbrar el CFDI del consumo
+GET  /api/purificadora/reportes/resumen?companyId=&year=
+     ← ingresos/garrafones por cliente por mes + gastos por mes
 ```
+
+El satélite factura el consumo mensual llamando `POST /api/facturas` con las
+claves SAT de `PurifConfig` (claveProdServ/claveUnidad/descripcionFactura) y
+`Idempotency-Key = purif-consumo-<customerId>-<year>-<month>`, y vincula las
+ventas del mes al CFDI con `PATCH /ventas/[id] {action: "vincular-factura"}`.
 
 ## Puesta en marcha
 
