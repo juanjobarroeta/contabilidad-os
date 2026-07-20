@@ -332,6 +332,7 @@ model Company {
   purifSucursales     PurifSucursal[]
   purifCortes         PurifCorte[]
   purifClienteConfigs PurifClienteConfig[]
+  purifTickets        PurifTicket[]
 }
 
 model CompanyMember {
@@ -3895,6 +3896,7 @@ model PurifCorte {
   empresas PurifCorteEmpresa[]
   gastos   PurifCorteGasto[]
   ventas   PurifVenta[]
+  tickets  PurifTicket[]
 
   @@unique([companyId, fecha])
   @@index([companyId, estado])
@@ -3930,6 +3932,57 @@ model PurifCorteEmpresa {
   @@index([corteId])
 }
 
+enum PurifTicketEstado {
+  REGISTRADO // capturado en ventanilla, pendiente de revisión
+  INTEGRADO // ya contemplado en un corte confirmado
+  CANCELADO
+}
+
+// Ticket de ventanilla — la venta rápida de mostrador que captura quien
+// atiende (menú de productos → cantidad → cobrar). NO postea contabilidad:
+// es el embudo que Minerva revisa; al confirmar el corte del día, los
+// tickets REGISTRADOS de esa fecha quedan INTEGRADOS al corte y el ingreso
+// viaja por el renglón de ruta VENTANILLA del corte (flujo normal de ventas).
+model PurifTicket {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now()) // hora real del cobro
+
+  fecha     DateTime // día del ticket (medianoche UTC, igual que PurifCorte.fecha)
+  formaPago PurifFormaPago
+  estado    PurifTicketEstado @default(REGISTRADO)
+
+  total      Float
+  garrafones Int   @default(0)
+  notas      String?
+
+  corteId String? // corte que lo integró
+
+  company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  corte   PurifCorte?       @relation(fields: [corteId], references: [id], onDelete: SetNull)
+  items   PurifTicketItem[]
+
+  @@index([companyId, fecha, estado])
+  @@index([corteId])
+}
+
+model PurifTicketItem {
+  id       String  @id @default(cuid())
+  ticketId String
+
+  productoId     String?
+  descripcion    String
+  cantidad       Float
+  precioUnitario Float
+  importe        Float
+  garrafones     Int    @default(0)
+
+  ticket   PurifTicket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  producto PurifProducto? @relation(fields: [productoId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId])
+}
+
 model PurifCorteGasto {
   id      String @id @default(cuid())
   corteId String
@@ -3959,8 +4012,9 @@ model PurifProducto {
   ivaTasa    Float   @default(0)
   activo     Boolean @default(true)
 
-  company Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  items   PurifVentaItem[]
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items       PurifVentaItem[]
+  ticketItems PurifTicketItem[]
 
   @@unique([companyId, nombre])
   @@index([companyId, activo])
