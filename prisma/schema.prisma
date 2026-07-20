@@ -320,6 +320,13 @@ model Company {
   restMenuCategorias RestMenuCategoria[]
   restMenuItems      RestMenuItem[]
   restOrdenes        RestOrden[]
+
+  // PURIFICADORA module (only used when PURIFICADORA is enabled) — see
+  // "Module: Purificadora" below.
+  purifConfig    PurifConfig?
+  purifProductos PurifProducto[]
+  purifVentas    PurifVenta[]
+  purifGastos    PurifGasto[]
 }
 
 model CompanyMember {
@@ -522,6 +529,7 @@ enum ModuloApp {
   FLOTA
   MARKETING
   PADEL
+  PURIFICADORA
   RESTAURANTE
 }
 
@@ -549,6 +557,7 @@ model Customer {
   proyectos   Proyecto[]
   clubMembers ClubMember[]
   restOrdenes RestOrden[]
+  purifVentas PurifVenta[]
 
   @@unique([companyId, rfc])
 }
@@ -581,6 +590,7 @@ model Supplier {
   pagosProveedor    PagoProveedor[]
   terms             SupplierTerms?
   restCompras       RestCompra[]
+  purifGastos       PurifGasto[]
 
   @@unique([companyId, rfc])
 }
@@ -738,6 +748,10 @@ model Invoice {
 
   // Restaurante: la orden (comanda) que se facturó con este CFDI.
   restOrden RestOrden?
+
+  // Purificadora: ventas de mostrador amparadas por este CFDI (una factura
+  // puede cubrir varias ventas — p.ej. factura global del día).
+  purifVentas PurifVenta[]
 
   // Único por empresa: permite que un CFDI intercompañía viva en las dos
   // empresas (emisor + receptor) sin chocar, y evita duplicados dentro de una.
@@ -1007,6 +1021,8 @@ model BankTransaction {
   reservacionCobrada    Reservation?
   compraRestPagada      RestCompra?
   ordenRestCobrada      RestOrden?
+  purifVentaCobrada     PurifVenta?
+  purifGastoPagado      PurifGasto?
   // Conciliación uno-a-varios: asignaciones por factura (ver ConciliacionDetalle).
   conciliacionDetalles  ConciliacionDetalle[]
 
@@ -1732,6 +1748,7 @@ enum EntrySource {
   CONSTRUCCION
   FLOTA
   PADEL
+  PURIFICADORA
   RESTAURANTE
   APERTURA // saldos iniciales / asiento de apertura (no se borra al re-postear el mes)
   CIERRE // asiento de cierre anual (mes 13) — cancela ingresos/costos/gastos a resultado
@@ -3714,6 +3731,161 @@ model RestOrdenItem {
   @@index([ordenId])
   @@index([menuItemId])
   @@index([estadoCocina])
+}
+
+// ─── Module: Purificadora — venta de agua purificada ─────────────────────────
+// Gated behind CompanyModule(modulo = PURIFICADORA). El satélite (repo
+// `purificadora`, SPA React/Vite) consume estos modelos vía /api/purificadora/*.
+// Clientes, CFDI, cuentas bancarias y conciliación siguen viviendo en los
+// modelos canónicos del hub (Customer / Invoice / BankAccount / BankTransaction);
+// aquí sólo se guarda el dato operativo del negocio: ventas de garrafón por
+// cliente y gastos de operación de la planta.
+
+model PurifConfig {
+  id        String   @id @default(cuid())
+  companyId String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombreComercial String?
+  // Precio de lista de la recarga de garrafón — el producto ancla del negocio.
+  precioGarrafon  Float   @default(15)
+  // IVA default de las ventas. El agua no gaseosa ni compuesta en envases
+  // mayores a 10 L tributa al 0% (Art. 2-A LIVA), por eso el default es 0.
+  // Configurable por producto para presentaciones gravadas (botella chica, hielo).
+  ivaTasaDefault  Float   @default(0)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model PurifProducto {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombre  String
+  precio  Float
+  // Cuántos garrafones físicos representa una unidad vendida (recarga = 1,
+  // paquete de 5 = 5, botella PET = 0). Alimenta el contador de garrafones
+  // vendidos por cliente sin depender del nombre del producto.
+  garrafones Int     @default(1)
+  ivaTasa    Float   @default(0)
+  activo     Boolean @default(true)
+
+  company Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items   PurifVentaItem[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo])
+}
+
+enum PurifFormaPago {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+  CREDITO
+}
+
+enum PurifVentaEstado {
+  COBRADA
+  PENDIENTE // venta a crédito aún no liquidada (saldo del cliente)
+  CANCELADA
+}
+
+model PurifVenta {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio      String
+  fecha      DateTime
+  customerId String? // venta de mostrador puede ser sin cliente (público general)
+  formaPago  PurifFormaPago
+  estado     PurifVentaEstado @default(COBRADA)
+
+  subtotal   Float
+  iva        Float @default(0)
+  total      Float
+  // Garrafones físicos que salieron en esta venta (suma de items × factor).
+  garrafones Int   @default(0)
+
+  // Liquidación de una venta a crédito (estado PENDIENTE → COBRADA).
+  fechaCobro     DateTime?
+  cobroFormaPago PurifFormaPago?
+  notas          String?
+
+  // CFDI que ampara la venta (opcional; una factura puede cubrir varias ventas).
+  invoiceId String?
+  // Movimiento bancario que la cobró, cuando se concilia contra el estado de cuenta.
+  bankTransactionId String? @unique
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer        Customer?        @relation(fields: [customerId], references: [id])
+  invoice         Invoice?         @relation(fields: [invoiceId], references: [id])
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  items           PurifVentaItem[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, fecha])
+  @@index([companyId, estado])
+  @@index([companyId, customerId])
+}
+
+model PurifVentaItem {
+  id      String @id @default(cuid())
+  ventaId String
+
+  productoId     String?
+  descripcion    String
+  cantidad       Float
+  precioUnitario Float
+  importe        Float
+  // Garrafones físicos de esta partida (cantidad × factor del producto),
+  // congelado al vender para que editar el producto no reescriba la historia.
+  garrafones     Int    @default(0)
+
+  venta    PurifVenta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto PurifProducto? @relation(fields: [productoId], references: [id], onDelete: SetNull)
+
+  @@index([ventaId])
+}
+
+enum PurifGastoCategoria {
+  AGUA_CRUDA
+  ELECTRICIDAD
+  FILTROS_INSUMOS
+  MANTENIMIENTO
+  SUELDOS
+  RENTA
+  COMBUSTIBLE
+  OTRO
+}
+
+model PurifGasto {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fecha       DateTime
+  categoria   PurifGastoCategoria
+  descripcion String
+  monto       Float
+  // CREDITO = queda a deber al proveedor (se abona a 2104 Acreedores diversos).
+  formaPago   PurifFormaPago @default(EFECTIVO)
+  supplierId  String?
+  notas       String?
+  // Movimiento bancario que lo pagó, cuando se concilia contra el estado de cuenta.
+  bankTransactionId String? @unique
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier        Supplier?        @relation(fields: [supplierId], references: [id])
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+
+  @@index([companyId, fecha])
+  @@index([companyId, categoria])
 }
 
 // ── Chat del asistente IA (persistencia + hilos) ──────────────────────────────

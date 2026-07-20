@@ -46,6 +46,9 @@ const DEFAULT_ACCOUNTS: Array<{
   { cuentaSAT: "2107", nombre: "Propinas por pagar",              tipo: "PASIVO"  },
   { cuentaSAT: "4160", nombre: "Ingresos por alimentos y bebidas", tipo: "INGRESO" },
   { cuentaSAT: "5103", nombre: "Costo de alimentos y bebidas",    tipo: "COSTO"   },
+  // Purificadora module accounts (auto-created on first use per company).
+  { cuentaSAT: "4170", nombre: "Ingresos por venta de agua purificada", tipo: "INGRESO" },
+  { cuentaSAT: "5203", nombre: "Gastos de operación purificadora",      tipo: "GASTO"   },
 ];
 
 /**
@@ -705,5 +708,230 @@ export async function postCostoVentaRestaurante(
     referenciaTipo: "REST_COSTO_VENTA",
     cargo: { cuentaSAT: "5103" },
     abono: { cuentaSAT: "1107" },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Purificadora module (venta de agua purificada / garrafones)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type PurifFormaPagoPosting =
+  | "EFECTIVO"
+  | "TRANSFERENCIA"
+  | "TARJETA"
+  | "CREDITO";
+
+function purifCashAccountFor(
+  formaPago: Exclude<PurifFormaPagoPosting, "CREDITO">
+): string {
+  switch (formaPago) {
+    case "EFECTIVO":
+      return "1100"; // Caja
+    case "TRANSFERENCIA":
+    case "TARJETA":
+      return "1101"; // Bancos
+  }
+}
+
+/**
+ * Venta de agua / garrafones registrada — revenue side.
+ *   DR 1100 Caja / 1101 Bancos / 1103 Cuentas por cobrar (CREDITO)  (= total)
+ *   CR 4170 Ingresos por venta de agua purificada                   (= subtotal)
+ *   CR 2102 IVA trasladado                                          (= iva, cuando > 0)
+ *
+ * El agua en garrafón es tasa 0% (Art. 2-A LIVA), así que normalmente esto es
+ * un par de 2 patas; el IVA sólo aparece con presentaciones gravadas.
+ */
+export async function postVentaPurificadora(
+  tx: Tx,
+  args: {
+    companyId: string;
+    ventaId: string;
+    descripcion: string; // e.g. "Venta V-0042 — Tienda La Esperanza"
+    subtotal: number;
+    iva: number;
+    formaPago: PurifFormaPagoPosting;
+    fecha: Date;
+  }
+): Promise<void> {
+  const total = args.subtotal + args.iva;
+  if (!(total > 0)) {
+    throw new Error(`postVentaPurificadora: total must be > 0, got ${total}`);
+  }
+
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
+
+  const cargoSAT =
+    args.formaPago === "CREDITO"
+      ? "1103" // Cuentas por cobrar — el cliente queda a deber
+      : purifCashAccountFor(args.formaPago);
+
+  const [cargo, ingresos, ivaTras] = await Promise.all([
+    getOrCreateAccount(tx, args.companyId, cargoSAT),
+    getOrCreateAccount(tx, args.companyId, "4170"),
+    args.iva > 0 ? getOrCreateAccount(tx, args.companyId, "2102") : null,
+  ]);
+
+  const base = {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    year,
+    month,
+    descripcion: args.descripcion,
+    referencia: args.ventaId,
+    referenciaTipo: "PURIF_VENTA",
+    fuente: "PURIFICADORA" as EntrySource,
+  };
+
+  await tx.accountingEntry.createMany({
+    data: [
+      { ...base, chartAccountId: cargo.id, monto: total, tipo: "CARGO" },
+      { ...base, chartAccountId: ingresos.id, monto: args.subtotal, tipo: "ABONO" },
+      ...(ivaTras
+        ? [{ ...base, chartAccountId: ivaTras.id, monto: args.iva, tipo: "ABONO" as const }]
+        : []),
+    ],
+  });
+}
+
+/**
+ * Cobro de una venta a crédito (settles the receivable created at sale time).
+ *   DR 1100 Caja / 1101 Bancos   (= monto)
+ *   CR 1103 Cuentas por cobrar   (= monto)
+ */
+export async function postCobroVentaPurificadora(
+  tx: Tx,
+  args: {
+    companyId: string;
+    ventaId: string;
+    descripcion: string;
+    monto: number;
+    formaPago: Exclude<PurifFormaPagoPosting, "CREDITO">;
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: args.descripcion,
+    monto: args.monto,
+    fuente: "PURIFICADORA",
+    referencia: args.ventaId,
+    referenciaTipo: "PURIF_VENTA_COBRADA",
+    cargo: { cuentaSAT: purifCashAccountFor(args.formaPago) },
+    abono: { cuentaSAT: "1103" },
+  });
+}
+
+/**
+ * Cancelación de una venta — reverso espejo de lo que la venta llegó a postear.
+ * Emite el reverso del asiento de venta y, si la venta a crédito ya se había
+ * cobrado, también el reverso del cobro. El caller valida el estado (no se
+ * cancelan ventas facturadas ni conciliadas) — aquí sólo se escriben los
+ * asientos espejo para que el mayor quede neto en cero.
+ */
+export async function postCancelacionVentaPurificadora(
+  tx: Tx,
+  args: {
+    companyId: string;
+    ventaId: string;
+    descripcion: string;
+    subtotal: number;
+    iva: number;
+    formaPago: PurifFormaPagoPosting;
+    cobro: { monto: number; formaPago: Exclude<PurifFormaPagoPosting, "CREDITO"> } | null;
+    fecha: Date;
+  }
+): Promise<void> {
+  const total = args.subtotal + args.iva;
+  if (!(total > 0)) {
+    throw new Error(`postCancelacionVentaPurificadora: total must be > 0, got ${total}`);
+  }
+
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
+
+  const cargoSAT =
+    args.formaPago === "CREDITO"
+      ? "1103"
+      : purifCashAccountFor(args.formaPago);
+
+  const [cargo, ingresos, ivaTras] = await Promise.all([
+    getOrCreateAccount(tx, args.companyId, cargoSAT),
+    getOrCreateAccount(tx, args.companyId, "4170"),
+    args.iva > 0 ? getOrCreateAccount(tx, args.companyId, "2102") : null,
+  ]);
+
+  const base = {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    year,
+    month,
+    descripcion: args.descripcion,
+    referencia: args.ventaId,
+    referenciaTipo: "PURIF_VENTA_CANCELADA",
+    fuente: "PURIFICADORA" as EntrySource,
+  };
+
+  // Espejo de la venta: ABONO donde hubo CARGO y viceversa.
+  await tx.accountingEntry.createMany({
+    data: [
+      { ...base, chartAccountId: cargo.id, monto: total, tipo: "ABONO" },
+      { ...base, chartAccountId: ingresos.id, monto: args.subtotal, tipo: "CARGO" },
+      ...(ivaTras
+        ? [{ ...base, chartAccountId: ivaTras.id, monto: args.iva, tipo: "CARGO" as const }]
+        : []),
+    ],
+  });
+
+  // Espejo del cobro, si lo hubo: DR 1103 / CR Caja-Bancos.
+  if (args.cobro) {
+    await postBalancedEntry(tx, {
+      companyId: args.companyId,
+      fecha: args.fecha,
+      descripcion: args.descripcion,
+      monto: args.cobro.monto,
+      fuente: "PURIFICADORA",
+      referencia: args.ventaId,
+      referenciaTipo: "PURIF_VENTA_CANCELADA",
+      cargo: { cuentaSAT: "1103" },
+      abono: { cuentaSAT: purifCashAccountFor(args.cobro.formaPago) },
+    });
+  }
+}
+
+/**
+ * Gasto de operación de la purificadora (agua cruda, luz, filtros, renta, …).
+ *   DR 5203 Gastos de operación purificadora  (= monto)
+ *   CR 1100 Caja / 1101 Bancos                (= monto, pagado de contado)
+ *   CR 2104 Acreedores diversos               (= monto, cuando formaPago = CREDITO)
+ */
+export async function postGastoPurificadora(
+  tx: Tx,
+  args: {
+    companyId: string;
+    gastoId: string;
+    descripcion: string;
+    monto: number;
+    formaPago: PurifFormaPagoPosting;
+    fecha: Date;
+  }
+): Promise<void> {
+  const abonoSAT =
+    args.formaPago === "CREDITO"
+      ? "2104" // Acreedores diversos
+      : purifCashAccountFor(args.formaPago);
+
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: args.descripcion,
+    monto: args.monto,
+    fuente: "PURIFICADORA",
+    referencia: args.gastoId,
+    referenciaTipo: "PURIF_GASTO",
+    cargo: { cuentaSAT: "5203" },
+    abono: { cuentaSAT: abonoSAT },
   });
 }
