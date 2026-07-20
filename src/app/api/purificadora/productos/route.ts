@@ -15,8 +15,14 @@ export const GET = withAuthz(async (req: Request) => {
   await requireModule(companyId, "PURIFICADORA", req);
 
   const all = searchParams.get("all") === "true";
+  // ?ventanilla=true → sólo el menú del POS de mostrador.
+  const soloVentanilla = searchParams.get("ventanilla") === "true";
   const productos = await prisma.purifProducto.findMany({
-    where: { companyId, ...(all ? {} : { activo: true }) },
+    where: {
+      companyId,
+      ...(all ? {} : { activo: true }),
+      ...(soloVentanilla ? { enVentanilla: true } : {}),
+    },
     orderBy: [{ activo: "desc" }, { createdAt: "asc" }],
   });
   return NextResponse.json(productos);
@@ -28,6 +34,7 @@ const createSchema = z.object({
   precio: z.number().nonnegative(),
   garrafones: z.number().int().min(0).default(1),
   ivaTasa: z.number().min(0).max(0.16).default(0),
+  enVentanilla: z.boolean().default(true),
 });
 
 // POST /api/purificadora/productos — alta de producto.

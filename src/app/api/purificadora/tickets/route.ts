@@ -90,7 +90,7 @@ export const POST = withAuthz(async (req: Request) => {
 
   const productoIds = [...new Set(items.map((i) => i.productoId))];
   const productos = await prisma.purifProducto.findMany({
-    where: { id: { in: productoIds }, companyId, activo: true },
+    where: { id: { in: productoIds }, companyId, activo: true, enVentanilla: true },
   });
   const productoById = new Map(productos.map((p) => [p.id, p]));
   for (const id of productoIds) {
