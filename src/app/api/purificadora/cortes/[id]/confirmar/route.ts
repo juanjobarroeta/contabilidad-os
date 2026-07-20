@@ -206,6 +206,14 @@ export const POST = withAuthz(async (req: Request, ctx: Params) => {
           data: { estado: "CONFIRMADO", confirmadoAt: new Date() },
         });
 
+        // Tickets de ventanilla del día: quedan INTEGRADOS a este corte.
+        // Minerva ya revisó el resumen de ventanilla (el renglón de ruta
+        // VENTANILLA del corte); el ingreso viaja por las ventas de ruta.
+        await tx.purifTicket.updateMany({
+          where: { companyId, fecha, estado: "REGISTRADO" },
+          data: { estado: "INTEGRADO", corteId: corte.id },
+        });
+
         return ventaIds;
       });
 
