@@ -73,7 +73,14 @@ export const config = {
     "/api/companies/:path*",
     "/api/construccion/:path*",
     "/api/padel/:path*",
+    "/api/purificadora/:path*",
     "/api/restaurante/:path*",
+    // PurificadoraOS (satélite) administra clientes y concilia contra el
+    // estado de cuenta desde su propio origen, así que las superficies
+    // canónicas de clientes y bancos también necesitan CORS.
+    "/api/clientes",
+    "/api/clientes/:path*",
+    "/api/bancos/:path*",
     // RestauranteOS stamps CFDIs for charged orders directly against the
     // hub's bearer-aware invoicing endpoint (POST /api/facturas), so the
     // facturas surface needs CORS for allowlisted satellite origins too.
