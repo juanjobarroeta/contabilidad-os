@@ -93,6 +93,13 @@ export const GET = withAuthz(
                 cantidadEjecutada: true,
                 cantidadAcumulada: true,
                 importe: true,
+                // Modo plantilla (viviendas): el avance viene como pctAcumulado
+                // contra una rama del árbol via templatePartida — el cliente lo
+                // usa para pintar "Avance por partida" cuando no hay cantidades.
+                pctAcumulado: true,
+                template: {
+                  select: { presupuestoPartidaId: true, capituloCode: true },
+                },
               },
             },
           },

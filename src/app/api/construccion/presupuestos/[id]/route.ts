@@ -51,7 +51,7 @@ export const GET = withAuthz(
       where: { id },
       include: {
         proyecto: {
-          select: { id: true, codigo: true, nombre: true, ubicacion: true },
+          select: { id: true, codigo: true, nombre: true, ubicacion: true, aplicaIva: true },
         },
         partidas: {
           include: {
