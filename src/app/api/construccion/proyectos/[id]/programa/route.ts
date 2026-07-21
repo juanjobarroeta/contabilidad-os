@@ -53,7 +53,7 @@ export const GET = withAuthz(
       include: {
         partidas: {
           include: {
-            presupuestoPartida: { select: { importe: true } },
+            presupuestoPartida: { select: { importe: true, presupuestoId: true } },
           },
         },
         curvas: { orderBy: { capituloCode: "asc" } },
@@ -78,11 +78,35 @@ export const GET = withAuthz(
       importeByCap.set(cap, (importeByCap.get(cap) ?? 0) + imp);
       if (!descByCap.has(cap)) descByCap.set(cap, tp.descripcion);
     }
+
+    // Canonical: el importe del capítulo es el de su rama nivel-1 del árbol.
+    // Sumar las template partidas subestima el contrato cuando un capítulo
+    // "abierto" (≥16) tiene hojas colgadas directamente además de sub-ramas —
+    // esas hojas no existen en la plantilla y su importe se perdía, dejando
+    // el "Total contrato" del Programa por debajo del presupuesto real.
+    const presupuestoId =
+      template.partidas[0]?.presupuestoPartida?.presupuestoId ?? null;
+    const capImporteCanonico = new Map<string, number>();
+    if (presupuestoId) {
+      const roots = await prisma.presupuestoPartida.findMany({
+        where: { presupuestoId, esRollup: true },
+        select: { codigo: true, importe: true },
+      });
+      // Igual que el bootstrap: preferir códigos canónicos ("12" sobre "12.0").
+      const preferred = roots.filter((r) => /^\d+$/.test(r.codigo ?? ""));
+      const rest = roots.filter((r) => !/^\d+$/.test(r.codigo ?? ""));
+      for (const r of [...preferred, ...rest]) {
+        const norm = (r.codigo ?? "").replace(/\.0+$/, "");
+        if (!/^\d+$/.test(norm)) continue; // solo ramas nivel 1
+        if (!capImporteCanonico.has(norm)) capImporteCanonico.set(norm, r.importe ?? 0);
+      }
+    }
+
     const capitulos = [...importeByCap.entries()]
       .map(([capituloCode, importe]) => ({
         capituloCode,
         descripcion: descByCap.get(capituloCode) ?? `Capítulo ${capituloCode}`,
-        importeContrato: importe,
+        importeContrato: capImporteCanonico.get(capituloCode) ?? importe,
       }))
       .sort((a, b) => parseInt(a.capituloCode) - parseInt(b.capituloCode));
 
