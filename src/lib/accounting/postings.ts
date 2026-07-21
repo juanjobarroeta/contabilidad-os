@@ -935,3 +935,69 @@ export async function postGastoPurificadora(
     abono: { cuentaSAT: abonoSAT },
   });
 }
+
+/**
+ * Compra a proveedor de la purificadora (insumos, agua cruda, refacciones…).
+ *   DR 5203 Gastos de operación purificadora  (= total)
+ *   CR 1100 Caja / 1101 Bancos                (= total, pagada de contado)
+ *   CR 2104 Acreedores diversos               (= total, cuando formaPago = CREDITO)
+ * El desglose costo-del-agua vs gasto de operación del estado de resultados
+ * viaja por la categoría de la compra, no por la cuenta.
+ */
+export async function postCompraPurificadora(
+  tx: Tx,
+  args: {
+    companyId: string;
+    compraId: string;
+    descripcion: string;
+    monto: number;
+    formaPago: PurifFormaPagoPosting;
+    fecha: Date;
+  }
+): Promise<void> {
+  const abonoSAT =
+    args.formaPago === "CREDITO"
+      ? "2104"
+      : purifCashAccountFor(args.formaPago);
+
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: args.descripcion,
+    monto: args.monto,
+    fuente: "PURIFICADORA",
+    referencia: args.compraId,
+    referenciaTipo: "PURIF_COMPRA",
+    cargo: { cuentaSAT: "5203" },
+    abono: { cuentaSAT: abonoSAT },
+  });
+}
+
+/**
+ * Pago de una compra a crédito (settles the payable created at purchase).
+ *   DR 2104 Acreedores diversos  (= monto)
+ *   CR 1100 Caja / 1101 Bancos   (= monto)
+ */
+export async function postPagoCompraPurificadora(
+  tx: Tx,
+  args: {
+    companyId: string;
+    compraId: string;
+    descripcion: string;
+    monto: number;
+    formaPago: Exclude<PurifFormaPagoPosting, "CREDITO">;
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: args.descripcion,
+    monto: args.monto,
+    fuente: "PURIFICADORA",
+    referencia: args.compraId,
+    referenciaTipo: "PURIF_COMPRA_PAGADA",
+    cargo: { cuentaSAT: "2104" },
+    abono: { cuentaSAT: purifCashAccountFor(args.formaPago) },
+  });
+}
