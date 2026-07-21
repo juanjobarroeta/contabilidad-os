@@ -45,7 +45,46 @@ type Conocido = {
   empresa: string | null;
   codigoPostal: string | null;
   regimenFiscal: string | null;
+  /** Identidad cruzada (como la muestra check.id): RFC/CURP/NSS conocidos. */
+  rfc: string | null;
+  curp: string | null;
+  nss: string | null;
 };
+
+const EMPLEADO_SELECT = {
+  nombre: true,
+  apellidoPaterno: true,
+  apellidoMaterno: true,
+  rfc: true,
+  curp: true,
+  nss: true,
+  codigoPostal: true,
+  company: { select: { razonSocial: true } },
+} as const;
+
+type EmpleadoRow = {
+  nombre: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string | null;
+  rfc: string;
+  curp: string;
+  nss: string;
+  codigoPostal: string | null;
+  company: { razonSocial: string };
+};
+
+function empleadoAConocido(e: EmpleadoRow): Conocido {
+  return {
+    origen: "EMPLEADO",
+    nombre: [e.nombre, e.apellidoPaterno, e.apellidoMaterno].filter(Boolean).join(" "),
+    empresa: e.company.razonSocial,
+    codigoPostal: e.codigoPostal ?? null,
+    regimenFiscal: null,
+    rfc: e.rfc,
+    curp: e.curp,
+    nss: e.nss,
+  };
+}
 
 async function conocidosDeRfc(rfc: string, visibles: string[] | "TODAS"): Promise<Conocido[]> {
   const scope = visibles === "TODAS" ? {} : { companyId: { in: visibles } };
@@ -66,17 +105,7 @@ async function conocidosDeRfc(rfc: string, visibles: string[] | "TODAS"): Promis
       },
       take: 5,
     }),
-    prisma.employee.findMany({
-      where: { rfc, ...scope },
-      select: {
-        nombre: true,
-        apellidoPaterno: true,
-        apellidoMaterno: true,
-        codigoPostal: true,
-        company: { select: { razonSocial: true } },
-      },
-      take: 5,
-    }),
+    prisma.employee.findMany({ where: { rfc, ...scope }, select: EMPLEADO_SELECT, take: 5 }),
   ]);
   return [
     ...empresas.map((e): Conocido => ({
@@ -85,6 +114,9 @@ async function conocidosDeRfc(rfc: string, visibles: string[] | "TODAS"): Promis
       empresa: null,
       codigoPostal: e.codigoPostal ?? null,
       regimenFiscal: e.regimenFiscal ?? null,
+      rfc,
+      curp: null,
+      nss: null,
     })),
     ...clientes.map((c): Conocido => ({
       origen: "CLIENTE",
@@ -92,15 +124,28 @@ async function conocidosDeRfc(rfc: string, visibles: string[] | "TODAS"): Promis
       empresa: c.company.razonSocial,
       codigoPostal: c.codigoPostal ?? null,
       regimenFiscal: c.regimenFiscal ?? null,
+      rfc,
+      curp: null,
+      nss: null,
     })),
-    ...empleados.map((e): Conocido => ({
-      origen: "EMPLEADO",
-      nombre: [e.nombre, e.apellidoPaterno, e.apellidoMaterno].filter(Boolean).join(" "),
-      empresa: e.company.razonSocial,
-      codigoPostal: e.codigoPostal ?? null,
-      regimenFiscal: null,
-    })),
+    ...empleados.map(empleadoAConocido),
   ];
+}
+
+/** Búsqueda INVERSA por CURP o NSS: sólo los empleados de la cartera los
+ *  tienen capturados — devuelve a la persona con su RFC y demás identidad. */
+async function conocidosDeEmpleado(
+  campo: "curp" | "nss",
+  valor: string,
+  visibles: string[] | "TODAS"
+): Promise<Conocido[]> {
+  const scope = visibles === "TODAS" ? {} : { companyId: { in: visibles } };
+  const empleados = await prisma.employee.findMany({
+    where: { [campo]: valor, ...scope },
+    select: EMPLEADO_SELECT,
+    take: 5,
+  });
+  return empleados.map(empleadoAConocido);
 }
 
 export async function GET(req: Request) {
@@ -129,12 +174,20 @@ export async function GET(req: Request) {
     });
 
   if (curp) {
-    bitacora("CURP", curp.trim().toUpperCase());
-    return NextResponse.json({ tipo: "CURP", estructura: validarCurp(curp) });
+    const estructura = validarCurp(curp);
+    bitacora("CURP", estructura.valor);
+    const conocidos = estructura.formatoValido
+      ? await conocidosDeEmpleado("curp", estructura.valor, await companyIdsVisibles(user.id))
+      : [];
+    return NextResponse.json({ tipo: "CURP", estructura, conocidos });
   }
   if (nss) {
-    bitacora("NSS", nss.trim());
-    return NextResponse.json({ tipo: "NSS", estructura: validarNss(nss) });
+    const estructura = validarNss(nss);
+    bitacora("NSS", estructura.valor);
+    const conocidos = estructura.formatoValido
+      ? await conocidosDeEmpleado("nss", estructura.valor, await companyIdsVisibles(user.id))
+      : [];
+    return NextResponse.json({ tipo: "NSS", estructura, conocidos });
   }
   if (!rfc) {
     return NextResponse.json({ error: "Indica rfc, curp o nss" }, { status: 400 });

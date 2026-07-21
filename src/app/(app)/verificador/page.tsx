@@ -35,6 +35,9 @@ interface Resultado {
     empresa: string | null;
     codigoPostal: string | null;
     regimenFiscal: string | null;
+    rfc: string | null;
+    curp: string | null;
+    nss: string | null;
   }[];
 }
 
@@ -171,18 +174,18 @@ export default function VerificadorPage() {
             </p>
           )}
 
-          {/* lo que tu cartera ya sabe */}
+          {/* lo que tu cartera ya sabe (identidad cruzada, estilo check.id) */}
           {resultado.conocidos && resultado.conocidos.length > 0 && (
             <div className="mt-4 border-t border-cos-line pt-3">
               <p className="mb-2 text-[12.5px] font-semibold uppercase tracking-[0.03em] text-cos-ink-faint">
-                Lo que tu cartera ya sabe de este RFC
+                Lo que tu cartera ya sabe de este {resultado.tipo}
               </p>
               {resultado.conocidos.map((c, i) => {
                 const meta = ORIGEN_META[c.origen];
                 return (
                   <div key={i} className="flex items-start gap-2.5 border-b border-cos-line py-2 text-[13px] last:border-0">
                     <meta.icon className="mt-0.5 h-4 w-4 flex-none text-cos-ink-faint" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="font-medium text-cos-ink">
                         {c.nombre}
                         <span className="ml-2 rounded-full bg-cos-slate-tint px-2 py-0.5 text-[10.5px] font-medium text-cos-ink-soft">{meta.label}</span>
@@ -191,6 +194,14 @@ export default function VerificadorPage() {
                         {[c.empresa && `en ${c.empresa}`, c.codigoPostal && `CP ${c.codigoPostal}`, c.regimenFiscal && `régimen ${c.regimenFiscal}`]
                           .filter(Boolean).join(" · ") || "—"}
                       </p>
+                      {/* Identidad cruzada: lo que hace útil buscar por cualquiera de los tres. */}
+                      {(c.rfc || c.curp || c.nss) && (
+                        <div className="mt-1 grid gap-x-4 gap-y-0.5 font-mono text-[12px] text-cos-ink-soft sm:grid-cols-3">
+                          {c.rfc && <span><span className="font-sans text-cos-ink-faint">RFC </span>{c.rfc}</span>}
+                          {c.curp && <span><span className="font-sans text-cos-ink-faint">CURP </span>{c.curp}</span>}
+                          {c.nss && <span><span className="font-sans text-cos-ink-faint">NSS </span>{c.nss}</span>}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -199,6 +210,11 @@ export default function VerificadorPage() {
                 Datos validados por el SAT al timbrar o extraídos de constancias — no una consulta al padrón en vivo.
               </p>
             </div>
+          )}
+          {resultado.conocidos && resultado.conocidos.length === 0 && e.formatoValido && (
+            <p className="mt-3 text-[12.5px] text-cos-ink-faint">
+              Este {resultado.tipo} no aparece en tu cartera (empresas, clientes o empleados visibles para ti).
+            </p>
           )}
         </Card>
       )}
