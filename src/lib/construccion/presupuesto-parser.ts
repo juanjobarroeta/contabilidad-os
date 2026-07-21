@@ -1,8 +1,16 @@
 /**
  * Presupuesto XLS/XLSX parser — Decolsa's "Master Presupuesto" import.
  *
- * Gerardo's template (ref: PRESUPUESTO DE CONTRATO T05 Y T06 - PROTOTIPO 2R)
- * has three sheets we care about:
+ * Three input formats, auto-detected by sheet names:
+ *
+ *   1. "PRESUPUESTO" (master) — dotted-code tree + INSUMOS + CARÁTULA.
+ *   2. "Matrices" — Opus/Neodata APU export (template Bartiz).
+ *   3. "LISTA DE CONCEPTOS" — Gerardo's remodelación format: CARATULA DE
+ *      PRESUPUESTO + LISTA DE CONCEPTOS (filas CAPITULO/CONCEPTO agrupadas
+ *      por LOCAL) + MATERIALES (explosión con PRECIO / PRECIO CON IVA).
+ *
+ * Gerardo's master template (ref: PRESUPUESTO DE CONTRATO T05 Y T06 -
+ * PROTOTIPO 2R) has three sheets we care about:
  *
  *   • CARÁTULA  — top-level summary (30 capítulos + subtotal + utilidad +
  *                  total). Used for cross-checking only.
@@ -408,8 +416,33 @@ export function parsePresupuestoXls(buffer: Buffer): PresupuestoParseResult {
     });
   }
 
-  const presupuestoRows = findSheet("PRESUPUESTO");
+  // La hoja del árbol se llama "PRESUPUESTO", pero la carátula de otros
+  // formatos puede llamarse "CARATULA DE PRESUPUESTO" — excluirla para no
+  // parsear la carátula como si fuera el árbol (daría 0 conceptos).
+  const presupuestoName = wb.SheetNames.find((n) => {
+    const up = n
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "");
+    return up.includes("PRESUPUESTO") && !up.includes("CARATULA");
+  });
+  const presupuestoRows = presupuestoName
+    ? XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[presupuestoName], {
+        header: 1,
+        defval: null,
+        raw: true,
+        blankrows: false,
+      })
+    : null;
   if (!presupuestoRows) {
+    // Formato "LISTA DE CONCEPTOS" (remodelaciones de Gerardo): filas
+    // CAPITULO/CONCEPTO agrupadas por LOCAL + hoja MATERIALES como explosión.
+    const conceptosRows = findSheet("CONCEPTOS");
+    if (conceptosRows) {
+      const caratulaRows = findSheet("CARÁTULA") ?? findSheet("CARATULA") ?? [];
+      const materialesRows = findSheet("MATERIALES") ?? findSheet("INSUMOS") ?? [];
+      return parseListaConceptosResult(conceptosRows, materialesRows, caratulaRows, warnings);
+    }
     // Formato alterno: "Matrices" (export estilo Opus/Neodata de análisis de
     // precios unitarios — el template de Bartiz). Una sola hoja con bloques
     // por análisis. Se convierte al MISMO PresupuestoParseResult para que
@@ -419,7 +452,7 @@ export function parsePresupuestoXls(buffer: Buffer): PresupuestoParseResult {
       return parseMatricesResult(matricesRows, warnings);
     }
     throw new Error(
-      `No se encontró la hoja "PRESUPUESTO" ni "Matrices" (hojas: ${wb.SheetNames.join(", ")}).`
+      `No se encontró la hoja "PRESUPUESTO", "LISTA DE CONCEPTOS" ni "Matrices" (hojas: ${wb.SheetNames.join(", ")}).`
     );
   }
   const caratulaRows = findSheet("CARÁTULA") ?? findSheet("CARATULA") ?? [];
@@ -738,6 +771,364 @@ function parseMatricesResult(
       maxDepth: 1,
       sumLeafImporte,
       sumBranchTopImporte: branches.reduce((s, b) => s + b.importeReportado, 0),
+    },
+  };
+}
+
+// ─── Formato "LISTA DE CONCEPTOS" (remodelaciones de Gerardo) ────────────────
+//
+// Hojas: CARATULA DE PRESUPUESTO / LISTA DE CONCEPTOS / MATERIALES.
+//
+// LISTA DE CONCEPTOS — columnas: Tipo | Clave | Descripción | Unidad |
+// Cantidad | Precio unitario | Total. Filas por tipo (col A):
+//   • "CAPITULO n"      → rama. La numeración REINICIA por local, así que el
+//                          código se compone: local "1" → capítulos "1.1"…
+//   • "CONCEPTO"        → hoja (leaf). La col Clave viene vacía: se genera una
+//                          clave determinística a partir de la descripción
+//                          (mismo texto → misma clave → mismo concepto de
+//                          catálogo entre presupuestos).
+//   • (col A vacía) + descripción + Total, sin cantidad/PU → agrupador
+//     "LOCAL D/E/F/G" (rama nivel 1). La fila "TOTAL …" de arriba se ignora.
+//
+// MATERIALES — explosión de insumos: Clave | Descripción | Unidad | Cantidad |
+// PRECIO | PRECIO CON IVA | IMPORTE | PORCENTAJE. Filas "TIPO" (nombre de la
+// sección en la col Cantidad) separan Herramientas y equipo / Mano de obra /
+// Materiales / Contrato. costoActual = PRECIO (sin IVA) e importe se recalcula
+// cantidad × precio para mantener todo el sistema a costo directo sin IVA; la
+// columna IMPORTE del Excel trae IVA incluido y no se usa. Filas con unidad
+// "(%)mo" (herramienta menor / seguridad como % de MO) no son requisitables y
+// se omiten, igual que en el formato Matrices.
+//
+// CARÁTULA — etiquetas en col B, importes en col E. Ojo: en este formato la
+// fila "UTILIDAD 16%" es el IVA (mal etiquetada en el template), NO utilidad;
+// se ignora para el campo utilidad y el TOTAL ya lo incluye.
+
+/** Clave determinística a partir de la descripción (djb2 → base36). */
+function claveFromDescripcion(desc: string): string {
+  const s = desc
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  }
+  return `AUTO-${h.toString(36).toUpperCase()}`;
+}
+
+function parseCaratulaLocalesSheet(rows: unknown[][]): ParsedCaratula {
+  let titulo: string | null = null;
+  let subtotal: number | null = null;
+  let utilidad: number | null = null;
+  let total: number | null = null;
+
+  for (const row of rows) {
+    const a = toStr(row[0]);
+    const b = toStr(row[1]);
+    const obraMatch = b.match(/^Obra\s*:\s*(.+)$/i);
+    if (!titulo && obraMatch) titulo = obraMatch[1].trim();
+    if (!titulo && a && /presupuesto/i.test(a)) titulo = a;
+
+    const val = toNum(row[4]) ?? toNum(row[5]);
+    if (!b || val == null) continue;
+    if (/SUBTOTAL/i.test(b)) subtotal = val;
+    else if (/IVA/i.test(b) || /UTILIDAD\s*16\s*%/i.test(b)) {
+      // "UTILIDAD 16%" en este template es el IVA — no es utilidad.
+    } else if (/UTILIDAD/i.test(b)) utilidad = val;
+    else if (/^TOTAL\b/i.test(b.trim())) total = val;
+  }
+  return { titulo, subtotal, utilidad, total };
+}
+
+function parseMaterialesSheet(
+  rows: unknown[][],
+  warnings: string[]
+): ParsedInsumo[] {
+  const out: ParsedInsumo[] = [];
+  let currentTipo: ParsedInsumo["tipo"] = "MATERIAL";
+  let mismatchWarns = 0;
+
+  const base = findBaseCol(rows);
+  // Empezar después de la fila de encabezados ("Clave | Descripción | …").
+  let start = 0;
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    if (toStr((rows[i] ?? [])[base]).toLowerCase() === "clave") {
+      start = i + 1;
+      break;
+    }
+  }
+
+  for (let i = start; i < rows.length; i++) {
+    const row = rows[i] ?? [];
+    const clave = toStr(row[base]);
+    const desc = toStr(row[base + 1]);
+    if (!clave) continue;
+
+    // Fila de sección: clave = "TIPO", nombre en la columna Cantidad.
+    if (/^tipo$/i.test(clave)) {
+      const seccion = toStr(row[base + 3])
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "");
+      if (seccion.startsWith("herr")) currentTipo = "HERRAMIENTA";
+      else if (seccion.startsWith("mano")) currentTipo = "MANO_OBRA";
+      else if (seccion.startsWith("equipo") || seccion.startsWith("maquin")) currentTipo = "EQUIPO";
+      else if (seccion.startsWith("material")) currentTipo = "MATERIAL";
+      else if (seccion.startsWith("contrato") || seccion.startsWith("flete") || seccion.startsWith("subcontr")) currentTipo = "BASICO";
+      continue;
+    }
+
+    if (/IMPORTE\s+TOTAL/i.test(clave)) continue; // fila de cierre
+    if (!desc) continue;
+
+    const unidad = toStr(row[base + 2]) || "pza";
+    // "(%)mo": herramienta menor / equipo de seguridad como % de la mano de
+    // obra — su "precio" es la base de MO, no un costo unitario requisitable.
+    if (/\(%\)/.test(unidad)) continue;
+
+    const cantidad = toNum(row[base + 3]) ?? 0;
+    const costo = toNum(row[base + 4]); // PRECIO sin IVA
+    if (costo == null) continue;
+
+    // Heurística de desalineación: Gerardo a veces ordena la columna de
+    // descripciones sin arrastrar la de claves y quedan corridas una fila.
+    // No se puede corregir desde aquí, pero sí avisar.
+    const token = clave
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^A-Z]/g, " ")
+      .trim()
+      .split(/\s+/)[0];
+    const descNorm = desc
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "");
+    if (token && token.length >= 4 && !descNorm.includes(token.slice(0, 4))) {
+      if (mismatchWarns < 10) {
+        warnings.push(
+          `MATERIALES fila ${i + 1}: la clave "${clave}" no parece corresponder a "${desc.slice(0, 40)}" — revisa que las columnas Clave y Descripción no estén corridas en el Excel.`
+        );
+      }
+      mismatchWarns++;
+    }
+
+    out.push({
+      clave,
+      descripcion: desc,
+      unidad,
+      cantidad,
+      costoActual: costo,
+      importe: Math.round(cantidad * costo * 100) / 100,
+      familia: null,
+      tipo: currentTipo,
+    });
+  }
+  if (mismatchWarns > 10) {
+    warnings.push(
+      `MATERIALES: …y ${mismatchWarns - 10} fila(s) más con clave/descripción que no coinciden.`
+    );
+  }
+
+  // Dedup por clave: acumular cantidades, avisar si el costo difiere.
+  const seen = new Map<string, number>();
+  const deduped: ParsedInsumo[] = [];
+  for (const ins of out) {
+    const idx = seen.get(ins.clave);
+    if (idx != null) {
+      const prior = deduped[idx];
+      if (Math.abs(prior.costoActual - ins.costoActual) > 0.01) {
+        warnings.push(
+          `Insumo ${ins.clave}: costo distinto en MATERIALES (${prior.costoActual} vs ${ins.costoActual}), se conservó el primero.`
+        );
+      }
+      prior.cantidad += ins.cantidad;
+      prior.importe += ins.importe;
+      continue;
+    }
+    seen.set(ins.clave, deduped.length);
+    deduped.push({ ...ins });
+  }
+  return deduped;
+}
+
+function parseListaConceptosResult(
+  conceptosRows: unknown[][],
+  materialesRows: unknown[][],
+  caratulaRows: unknown[][],
+  warnings: string[]
+): PresupuestoParseResult {
+  const branches: ParsedPresupuestoBranch[] = [];
+  const leaves: ParsedPresupuestoLeaf[] = [];
+
+  // Localizar la fila de encabezados por la celda "Tipo".
+  let base = 0;
+  let start = 0;
+  for (let i = 0; i < Math.min(conceptosRows.length, 15); i++) {
+    const row = conceptosRows[i] ?? [];
+    for (let c = 0; c < row.length; c++) {
+      if (toStr(row[c]).toLowerCase() === "tipo") {
+        base = c;
+        start = i + 1;
+        break;
+      }
+    }
+    if (start) break;
+  }
+  if (!start) {
+    warnings.push(
+      'LISTA DE CONCEPTOS: no se encontró la fila de encabezados ("Tipo | Clave | Descripción | …"); se leyó desde el inicio de la hoja.'
+    );
+  }
+
+  const usedCodes = new Set<string>();
+  let localSeq = 0;
+  let capSeq = 0;
+  let currentLocal: ParsedPresupuestoBranch | null = null;
+  let currentCap: ParsedPresupuestoBranch | null = null;
+  const conceptoDescs = new Map<string, string>();
+
+  for (let i = start; i < conceptosRows.length; i++) {
+    const row = conceptosRows[i] ?? [];
+    const tipoCell = toStr(row[base]);
+    const claveCell = toStr(row[base + 1]);
+    const desc = toStr(row[base + 2]);
+    const unidad = toStr(row[base + 3]);
+    const cantidad = toNum(row[base + 4]);
+    const pu = toNum(row[base + 5]);
+    const total = toNum(row[base + 6]);
+
+    // Rama "CAPITULO n" (o "PARTIDA n"). La numeración reinicia por local.
+    const capMatch = tipoCell.match(/^(?:CAP[IÍ]TULO|PARTIDA)\s*(\d+)?/i);
+    if (capMatch && tipoCell) {
+      capSeq++;
+      const num = capMatch[1] ? parseInt(capMatch[1], 10) : capSeq;
+      let codigo = currentLocal ? `${currentLocal.codigo}.${num}` : String(num);
+      if (usedCodes.has(codigo)) {
+        codigo = currentLocal ? `${currentLocal.codigo}.${capSeq}` : String(capSeq);
+      }
+      if (usedCodes.has(codigo)) {
+        warnings.push(`Fila ${i + 1}: capítulo con código repetido (${codigo}), se omitió.`);
+        continue;
+      }
+      usedCodes.add(codigo);
+      currentCap = {
+        kind: "branch",
+        codigo,
+        nivel: currentLocal ? 2 : 1,
+        descripcion: desc || tipoCell,
+        importeReportado: total ?? 0,
+        rowIndex: i,
+      };
+      branches.push(currentCap);
+      continue;
+    }
+
+    // Hoja (leaf): fila "CONCEPTO" o cualquier fila con cantidad y PU.
+    const isConceptoRow = /^CONCEPTO/i.test(tipoCell);
+    if (isConceptoRow || (cantidad != null && pu != null && desc)) {
+      if (cantidad == null || pu == null) {
+        warnings.push(
+          `Fila ${i + 1}: concepto sin ${cantidad == null ? "cantidad" : "precio unitario"} ("${desc.slice(0, 40)}"), se omitió.`
+        );
+        continue;
+      }
+      const parent = currentCap ?? currentLocal;
+      if (!parent) {
+        warnings.push(`Fila ${i + 1}: concepto sin capítulo padre, se omitió.`);
+        continue;
+      }
+      const clave = claveCell || claveFromDescripcion(desc || `FILA-${i}`);
+      const importe = total ?? cantidad * pu;
+      const expected = cantidad * pu;
+      if (Math.abs(importe - expected) > Math.max(0.05, expected * 0.001)) {
+        warnings.push(
+          `Fila ${i + 1}: importe ${importe.toFixed(2)} ≠ cantidad × PU ${expected.toFixed(2)}.`
+        );
+      }
+      const prior = conceptoDescs.get(clave);
+      if (!prior) conceptoDescs.set(clave, desc);
+      leaves.push({
+        kind: "leaf",
+        parentCodigo: parent.codigo,
+        conceptoClave: clave,
+        descripcion: prior ?? desc,
+        unidad,
+        cantidad,
+        precioUnitario: pu,
+        importe,
+        rowIndex: i,
+      });
+      continue;
+    }
+
+    // Agrupador "LOCAL D" (nivel 1): sin tipo ni clave, con descripción y
+    // Total pero sin cantidad/PU. La fila "TOTAL …" del gran total se ignora.
+    if (!tipoCell && !claveCell && desc && total != null && cantidad == null && pu == null) {
+      if (/^TOTAL\b/i.test(desc.trim())) continue;
+      localSeq++;
+      capSeq = 0;
+      currentLocal = {
+        kind: "branch",
+        codigo: String(localSeq),
+        nivel: 1,
+        descripcion: desc,
+        importeReportado: total,
+        rowIndex: i,
+      };
+      usedCodes.add(currentLocal.codigo);
+      branches.push(currentLocal);
+      currentCap = null;
+      continue;
+    }
+
+    // Fila incompleta con pinta de concepto (tiene PU o cantidad pero no
+    // ambos): avisar en vez de tirarla en silencio.
+    if (desc && (cantidad != null || pu != null)) {
+      warnings.push(
+        `Fila ${i + 1}: fila con ${cantidad != null ? "cantidad" : "precio"} pero sin ${cantidad != null ? "precio unitario" : "cantidad"} ("${desc.slice(0, 40)}"), se omitió.`
+      );
+    }
+    // Todo lo demás (notas sueltas al final, filas vacías) se ignora.
+  }
+
+  const caratula = parseCaratulaLocalesSheet(caratulaRows);
+  const insumos = parseMaterialesSheet(materialesRows, warnings);
+
+  const sumLeafImporte = leaves.reduce((a, l) => a + l.importe, 0);
+  const sumBranchTopImporte = branches
+    .filter((b) => b.nivel === 1)
+    .reduce((a, b) => a + b.importeReportado, 0);
+  const maxDepth = branches.reduce((m, b) => Math.max(m, b.nivel), 0);
+
+  if (leaves.length === 0) {
+    warnings.push(
+      'LISTA DE CONCEPTOS: no se encontró ninguna fila "CONCEPTO" — ¿es el formato correcto?'
+    );
+  }
+  if (caratula.subtotal != null) {
+    const drift = Math.abs(caratula.subtotal - sumLeafImporte);
+    if (drift > Math.max(1, sumLeafImporte * 0.001)) {
+      warnings.push(
+        `Subtotal CARÁTULA ($${caratula.subtotal.toFixed(2)}) difiere de la suma de conceptos ($${sumLeafImporte.toFixed(2)}) por $${drift.toFixed(2)}.`
+      );
+    }
+  }
+
+  return {
+    caratula,
+    branches,
+    leaves,
+    insumos,
+    warnings,
+    totals: {
+      branchCount: branches.length,
+      leafCount: leaves.length,
+      maxDepth,
+      sumLeafImporte,
+      sumBranchTopImporte,
     },
   };
 }
