@@ -97,7 +97,7 @@ export const GET = withAuthz(
                 // contra una rama del árbol via templatePartida — el cliente lo
                 // usa para pintar "Avance por partida" cuando no hay cantidades.
                 pctAcumulado: true,
-                templatePartida: {
+                template: {
                   select: { presupuestoPartidaId: true, capituloCode: true },
                 },
               },
