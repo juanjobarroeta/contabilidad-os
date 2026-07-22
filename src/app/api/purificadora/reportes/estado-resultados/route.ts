@@ -30,7 +30,7 @@ export const GET = withAuthz(async (req: Request) => {
   const desde = new Date(Date.UTC(year, month - 1, 1));
   const hasta = new Date(Date.UTC(year, month, 1));
 
-  const [ventas, gastosCat, cortesias] = await Promise.all([
+  const [ventas, gastosCat, comprasCat, cortesias] = await Promise.all([
     prisma.purifVenta.groupBy({
       by: ["estado"],
       where: { companyId, estado: { not: "CANCELADA" }, fecha: { gte: desde, lt: hasta } },
@@ -43,11 +43,27 @@ export const GET = withAuthz(async (req: Request) => {
       _sum: { monto: true },
       orderBy: { _sum: { monto: "desc" } },
     }),
+    // Las compras a proveedor pegan al P&L por su categoría, igual que los
+    // gastos rápidos (crédito incluido: el gasto se reconoce al comprar).
+    prisma.purifCompra.groupBy({
+      by: ["categoria"],
+      where: { companyId, estado: { not: "CANCELADA" }, fecha: { gte: desde, lt: hasta } },
+      _sum: { total: true },
+    }),
     prisma.purifCorte.aggregate({
       where: { companyId, estado: "CONFIRMADO", fecha: { gte: desde, lt: hasta } },
       _sum: { cortesiasGarrafones: true, cortesiasImporte: true },
     }),
   ]);
+
+  // Gastos + compras fusionados por categoría.
+  const porCategoria = new Map<string, number>();
+  for (const g of gastosCat) {
+    porCategoria.set(g.categoria, round2((porCategoria.get(g.categoria) ?? 0) + (g._sum.monto ?? 0)));
+  }
+  for (const c of comprasCat) {
+    porCategoria.set(c.categoria, round2((porCategoria.get(c.categoria) ?? 0) + (c._sum.total ?? 0)));
+  }
 
   const porEstado = new Map(ventas.map((v) => [v.estado, v]));
   const cobrado = round2(porEstado.get("COBRADA")?._sum.total ?? 0);
@@ -58,12 +74,11 @@ export const GET = withAuthz(async (req: Request) => {
     (porEstado.get("PENDIENTE")?._sum.garrafones ?? 0);
 
   // Costo directo del agua = agua cruda / pipas. El resto es gasto de operación.
-  const costoAgua = round2(
-    gastosCat.find((g) => g.categoria === "AGUA_CRUDA")?._sum.monto ?? 0
-  );
-  const gastosOperacion = gastosCat
-    .filter((g) => g.categoria !== "AGUA_CRUDA")
-    .map((g) => ({ categoria: g.categoria, total: round2(g._sum.monto ?? 0) }));
+  const costoAgua = round2(porCategoria.get("AGUA_CRUDA") ?? 0);
+  const gastosOperacion = [...porCategoria.entries()]
+    .filter(([categoria]) => categoria !== "AGUA_CRUDA")
+    .map(([categoria, total]) => ({ categoria, total }))
+    .sort((a, b) => b.total - a.total);
   const totalGastosOperacion = round2(gastosOperacion.reduce((s, g) => s + g.total, 0));
 
   const utilidadBruta = round2(ingresos - costoAgua);

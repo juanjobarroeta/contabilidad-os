@@ -333,6 +333,8 @@ model Company {
   purifCortes         PurifCorte[]
   purifClienteConfigs PurifClienteConfig[]
   purifTickets        PurifTicket[]
+  purifInsumos        PurifInsumo[]
+  purifCompras        PurifCompra[]
 }
 
 model CompanyMember {
@@ -601,6 +603,7 @@ model Supplier {
   terms             SupplierTerms?
   restCompras       RestCompra[]
   purifGastos       PurifGasto[]
+  purifCompras      PurifCompra[]
 
   @@unique([companyId, rfc])
 }
@@ -762,6 +765,8 @@ model Invoice {
   // Purificadora: ventas de mostrador amparadas por este CFDI (una factura
   // puede cubrir varias ventas — p.ej. factura global del día).
   purifVentas PurifVenta[]
+  // Purificadora: compras a proveedor amparadas por este CFDI recibido.
+  purifCompras PurifCompra[]
 
   // Único por empresa: permite que un CFDI intercompañía viva en las dos
   // empresas (emisor + receptor) sin chocar, y evita duplicados dentro de una.
@@ -1061,6 +1066,7 @@ model BankTransaction {
   ordenRestCobrada      RestOrden?
   purifVentaCobrada     PurifVenta?
   purifGastoPagado      PurifGasto?
+  purifCompraPagada     PurifCompra?
   // Conciliación uno-a-varios: asignaciones por factura (ver ConciliacionDetalle).
   conciliacionDetalles  ConciliacionDetalle[]
 
@@ -4111,7 +4117,92 @@ enum PurifGastoCategoria {
   SUELDOS
   RENTA
   COMBUSTIBLE
+  ESTACIONAMIENTO
   OTRO
+}
+
+// ── Compras a proveedores (purificadora) ─────────────────────────────────────
+// A diferencia de PurifGasto (gasto rápido de operación), la compra se liga a
+// un proveedor canónico (Supplier), opcionalmente al CFDI recibido (Invoice
+// EGRESO) y al movimiento bancario que la pagó; soporta crédito (queda
+// PENDIENTE hasta pagarse) y partidas de insumos del catálogo.
+
+// Catálogo de insumos de la planta (filtros, tapas, sellos, garrafones nuevos…).
+model PurifInsumo {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  nombre    String
+  unidad    String              @default("pieza")
+  categoria PurifGastoCategoria @default(FILTROS_INSUMOS)
+  activo    Boolean             @default(true)
+
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  compraItems PurifCompraItem[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo])
+}
+
+enum PurifCompraEstado {
+  PAGADA
+  PENDIENTE // a crédito, por pagar al proveedor
+  CANCELADA
+}
+
+model PurifCompra {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio      String
+  fecha      DateTime
+  supplierId String?
+  // Categoría con la que pega al estado de resultados (AGUA_CRUDA = costo
+  // directo del agua; el resto, gasto de operación).
+  categoria PurifGastoCategoria @default(FILTROS_INSUMOS)
+  formaPago PurifFormaPago
+  estado    PurifCompraEstado   @default(PAGADA)
+
+  total Float
+  notas String?
+
+  // CFDI recibido que la ampara y movimiento bancario que la pagó (opcionales).
+  invoiceId         String?
+  bankTransactionId String? @unique
+
+  // Liquidación de una compra a crédito.
+  fechaPago     DateTime?
+  pagoFormaPago PurifFormaPago?
+
+  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier        Supplier?         @relation(fields: [supplierId], references: [id])
+  invoice         Invoice?          @relation(fields: [invoiceId], references: [id])
+  bankTransaction BankTransaction?  @relation(fields: [bankTransactionId], references: [id])
+  items           PurifCompraItem[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, fecha])
+  @@index([companyId, estado])
+  @@index([companyId, supplierId])
+}
+
+model PurifCompraItem {
+  id       String @id @default(cuid())
+  compraId String
+
+  insumoId       String?
+  descripcion    String
+  cantidad       Float
+  precioUnitario Float
+  importe        Float
+
+  compra PurifCompra  @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  insumo PurifInsumo? @relation(fields: [insumoId], references: [id], onDelete: SetNull)
+
+  @@index([compraId])
 }
 
 model PurifGasto {

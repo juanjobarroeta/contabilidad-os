@@ -21,7 +21,7 @@ export const GET = withAuthz(async (req: Request) => {
   const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1);
   const hace14 = new Date(hoy.getTime() - 13 * 86400000);
 
-  const [ventasHoy, ventasMes, gastosMes, porCobrar, ventas14, topClientesRaw, gastosCat] =
+  const [ventasHoy, ventasMes, gastosMes, comprasMes, porCobrar, ventas14, topClientesRaw, gastosCat] =
     await Promise.all([
       prisma.purifVenta.aggregate({
         where: { companyId, fecha: { gte: hoy }, estado: { not: "CANCELADA" } },
@@ -36,6 +36,11 @@ export const GET = withAuthz(async (req: Request) => {
       prisma.purifGasto.aggregate({
         where: { companyId, fecha: { gte: inicioMes } },
         _sum: { monto: true },
+        _count: true,
+      }),
+      prisma.purifCompra.aggregate({
+        where: { companyId, estado: { not: "CANCELADA" }, fecha: { gte: inicioMes } },
+        _sum: { total: true },
         _count: true,
       }),
       prisma.purifVenta.aggregate({
@@ -96,7 +101,8 @@ export const GET = withAuthz(async (req: Request) => {
   const nombreById = new Map(clientes.map((c) => [c.id, c.razonSocial]));
 
   const ingresosMes = round2(ventasMes._sum.total ?? 0);
-  const gastosMesTotal = round2(gastosMes._sum.monto ?? 0);
+  // Gastos del mes = gastos rápidos + compras a proveedor (no canceladas).
+  const gastosMesTotal = round2((gastosMes._sum.monto ?? 0) + (comprasMes._sum.total ?? 0));
 
   return NextResponse.json({
     hoy: {
@@ -109,7 +115,7 @@ export const GET = withAuthz(async (req: Request) => {
       ingresos: ingresosMes,
       garrafones: ventasMes._sum.garrafones ?? 0,
       gastos: gastosMesTotal,
-      gastosCount: gastosMes._count,
+      gastosCount: gastosMes._count + comprasMes._count,
       utilidad: round2(ingresosMes - gastosMesTotal),
     },
     porCobrar: {
