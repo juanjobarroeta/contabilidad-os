@@ -335,6 +335,7 @@ model Company {
   purifTickets        PurifTicket[]
   purifInsumos        PurifInsumo[]
   purifCompras        PurifCompra[]
+  purifPortalAccounts PurifPortalAccount[]
 }
 
 model CompanyMember {
@@ -570,6 +571,7 @@ model Customer {
   purifSucursales     PurifSucursal[]
   purifCorteLineas    PurifCorteEmpresa[]
   purifClienteConfigs PurifClienteConfig[]
+  purifPortalAccount  PurifPortalAccount?
 
   @@unique([companyId, rfc])
 }
@@ -4187,6 +4189,29 @@ model PurifCompra {
   @@index([companyId, fecha])
   @@index([companyId, estado])
   @@index([companyId, supplierId])
+}
+
+// Cuenta del portal de clientes de la purificadora — acceso de SOLO LECTURA
+// del cliente-empresa a sus CFDIs y su consumo de garrafones. Se activa
+// explícitamente por cliente («Activar portal»): no todo RFC fiscal es un
+// cliente real del negocio. NO es User/CompanyMember: autentica con su propio
+// token (audiencia purificadora:portal) y sólo ve datos de SU customerId.
+model PurifPortalAccount {
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String   @unique
+  createdAt  DateTime @default(now())
+
+  email        String  @unique
+  passwordHash String
+  activo       Boolean @default(true)
+
+  lastLoginAt DateTime?
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }
 
 model PurifCompraItem {

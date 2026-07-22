@@ -196,3 +196,55 @@ export async function verifyClubMemberToken(
     companyId: payload.companyId as string,
   };
 }
+
+// ─── Purificadora: tokens del portal de clientes ─────────────────────────────
+// El cliente-empresa de la purificadora (SHIRUSHI, GYPSA…) entra a un portal
+// de sólo-lectura para ver sus CFDIs y su consumo de garrafones. NO es un
+// User ni un CompanyMember: su cuenta vive en PurifPortalAccount y su token
+// lleva una audiencia propia, así que jamás pasa por requireUser/membership.
+
+const PURIF_PORTAL_AUDIENCE = "purificadora:portal";
+
+export type PurifPortalTokenPayload = {
+  sub: string; // PurifPortalAccount id
+  companyId: string;
+  customerId: string;
+  email: string;
+};
+
+/** Firma un token de 7 días para una cuenta del portal de clientes. */
+export async function signPurifPortalToken(
+  payload: PurifPortalTokenPayload
+): Promise<string> {
+  return new SignJWT({
+    companyId: payload.companyId,
+    customerId: payload.customerId,
+    email: payload.email,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(payload.sub)
+    .setIssuedAt()
+    .setIssuer(ISSUER)
+    .setAudience(PURIF_PORTAL_AUDIENCE)
+    .setExpirationTime(LEGACY_EXPIRY)
+    .sign(getSecretKey());
+}
+
+/** Verifica un token del portal y devuelve el payload, o lanza. */
+export async function verifyPurifPortalToken(
+  token: string
+): Promise<PurifPortalTokenPayload> {
+  const { payload } = await jwtVerify(token, getSecretKey(), {
+    issuer: ISSUER,
+    audience: PURIF_PORTAL_AUDIENCE,
+  });
+  if (!payload.sub || !payload.companyId || !payload.customerId) {
+    throw new Error("Token de portal incompleto");
+  }
+  return {
+    sub: payload.sub,
+    companyId: payload.companyId as string,
+    customerId: payload.customerId as string,
+    email: (payload.email as string) ?? "",
+  };
+}
