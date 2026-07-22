@@ -212,9 +212,13 @@ export type PurifPortalTokenPayload = {
   email: string;
 };
 
-/** Firma un token de 7 días para una cuenta del portal de clientes. */
+/**
+ * Firma un token para una cuenta del portal de clientes. 7 días por default;
+ * la vista de administrador («ver como cliente») pide una vigencia corta.
+ */
 export async function signPurifPortalToken(
-  payload: PurifPortalTokenPayload
+  payload: PurifPortalTokenPayload,
+  opts?: { expiry?: string }
 ): Promise<string> {
   return new SignJWT({
     companyId: payload.companyId,
@@ -226,7 +230,7 @@ export async function signPurifPortalToken(
     .setIssuedAt()
     .setIssuer(ISSUER)
     .setAudience(PURIF_PORTAL_AUDIENCE)
-    .setExpirationTime(LEGACY_EXPIRY)
+    .setExpirationTime(opts?.expiry ?? LEGACY_EXPIRY)
     .sign(getSecretKey());
 }
 
