@@ -111,6 +111,48 @@ export function vinDesdeDescripcion(descripcion: string): string | null {
   return suelto ? suelto[1] : null;
 }
 
+// Marcas comunes en México (para heurística de marca desde texto libre).
+const MARCAS = [
+  "JAC", "NISSAN", "TOYOTA", "VOLKSWAGEN", "VW", "CHEVROLET", "FORD", "KIA",
+  "HYUNDAI", "MAZDA", "HONDA", "SEAT", "RENAULT", "PEUGEOT", "JEEP", "RAM",
+  "DODGE", "MITSUBISHI", "SUZUKI", "BMW", "MERCEDES", "AUDI", "GMC", "CHIREY",
+  "BYD", "MG", "GWM", "CHANGAN", "GEELY", "OMODA", "JETOUR", "BAIC", "FIAT",
+  "ACURA", "BUICK", "CADILLAC", "LINCOLN", "MINI", "VOLVO", "SUBARU", "CUPRA",
+];
+
+export interface DatosGeneralesVehiculo {
+  marca: string | null;
+  modelo: string | null;
+  anio: number | null;
+}
+
+/**
+ * Heurística de marca / modelo / año desde el texto del CFDI. El complemento no
+ * los trae estructurados, así que se estiman para pre-poblar la unidad; se crea
+ * con `autoCreado` para que el distribuidor confirme (precedente ActivoFijo).
+ *
+ * - marca: primera marca conocida encontrada en la descripción.
+ * - modelo: NoIdentificacion (SKU del distribuidor, p.ej. "FRISON T9 AT 4X4"),
+ *   que suele traer modelo + versión más limpio que la descripción larga.
+ * - año: "Modelo:AAAA" o un año de 4 dígitos en la descripción; si no, el del CFDI.
+ */
+export function datosGeneralesDesdeCfdi(
+  descripcion: string | null,
+  noIdentificacion: string | null,
+  anioFallback: number
+): DatosGeneralesVehiculo {
+  const d = (descripcion ?? "").toUpperCase();
+  const marca = MARCAS.find((m) => new RegExp(`\\b${m}\\b`).test(d)) ?? null;
+
+  const modelo = (noIdentificacion ?? "").trim().slice(0, 60) || null;
+
+  const mModelo = d.match(/MODELO\s*[:#]?\s*((?:19|20)\d{2})/);
+  const mSuelto = d.match(/\b((?:19|20)\d{2})\b/);
+  const anio = mModelo ? Number(mModelo[1]) : mSuelto ? Number(mSuelto[1]) : anioFallback;
+
+  return { marca, modelo, anio };
+}
+
 /** Mapea un concepto adicional a su tipo de VehiculoCosto por clave SAT / texto. */
 export function tipoCostoDesdeConcepto(
   claveProdServ: string | null,
