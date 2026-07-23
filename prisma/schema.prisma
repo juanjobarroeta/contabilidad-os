@@ -4551,6 +4551,16 @@ model Vehiculo {
   vendedorId     String? // Employee que cierra la venta (comisiones)
   comisionMonto  Float     @default(0)
 
+  // Derivación automática desde CFDIs (onboarding con la e.firma). autoCreado
+  // marca las unidades creadas por el sync a partir del complemento de venta de
+  // vehículos — marca/modelo/año se estiman del texto y el distribuidor los
+  // confirma (mismo patrón que ActivoFijo.autoCreado). claveVehicular liga al
+  // Código de Claves Vehiculares del Anexo 15; descripcionCfdi guarda el texto
+  // original de la línea para la revisión.
+  autoCreado      Boolean @default(false)
+  claveVehicular  String?
+  descripcionCfdi String?
+
   notas String?
 
   company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
