@@ -405,11 +405,49 @@ model Despacho {
   // Sólo para unit economics; desacoplado del trial/subscription gating.
   precioMensualCentavos Int?
 
+  /// Tier con el que nacen las empresas creadas bajo este despacho. Lo fija una
+  /// invitación de onboarding (OnboardingInvite.tierEmpresas): AUTOMATIZADO+ =
+  /// Syntage habilitado; ASISTENTE = sin COGS. Null = default del esquema.
+  defaultTier CompanyPlan?
+
   members     DespachoMember[]
   companies   Company[]
   grupos      Grupo[]
   costEvents  CostEvent[]
   invitations CompanyInvitation[]
+}
+
+/// Invitación de ONBOARDING creada por el admin de plataforma para que un nuevo
+/// cliente (p.ej. un grupo automotriz) se dé de alta por la web con condiciones
+/// PREDEFINIDAS: cortesía (sin cargo) y Syntage habilitado. Distinta de
+/// CompanyInvitation (que suma un cliente a UNA empresa existente): ésta CREA un
+/// despacho nuevo con su dueño. El token sirve como enlace (?invite=) o como
+/// código para teclear; sólo se guarda su hash SHA-256. Un solo uso + expira.
+model OnboardingInvite {
+  id                 String      @id @default(cuid())
+  /// Admin de plataforma que la generó (auditoría) — columna plana, sin FK.
+  createdByEmail     String
+  /// Nombre del despacho que se creará al aceptar.
+  despachoName       String
+  /// Prefill opcional del nombre del dueño.
+  ownerNombre        String?
+  /// Tier de las empresas del despacho (Syntage on/off). AUTOMATIZADO = Syntage.
+  tierEmpresas       CompanyPlan @default(AUTOMATIZADO)
+  /// true = cortesía: el dueño nace con subscriptionStatus ACTIVE (sin cargo).
+  sinCargo           Boolean     @default(true)
+  /// Días de prueba si NO es cortesía (sinCargo=false).
+  trialDays          Int         @default(15)
+  /// SHA-256 hex del token crudo. El token sólo sale una vez, al crearla.
+  tokenHash          String      @unique
+  status             String      @default("PENDING") // PENDING | ACCEPTED | REVOKED
+  expiresAt          DateTime
+  acceptedByEmail    String?
+  acceptedDespachoId String?
+  acceptedAt         DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([status])
 }
 
 // Grupo de empresas — sub-conjunto del despacho del mismo dueño que se factura
@@ -4247,8 +4285,8 @@ model PurifEntrega {
   garrafones Int
   // CASAS: lo cobrado en el momento. EMPRESA: garrafones × precio pactado
   // (calculado en el servidor). CORTESIA: valor de referencia (no es ingreso).
-  importe   Float           @default(0)
-  formaPago PurifFormaPago? // CASAS: EFECTIVO/TRANSFERENCIA/TARJETA; EMPRESA: CREDITO; CORTESIA: null
+  importe    Float           @default(0)
+  formaPago  PurifFormaPago? // CASAS: EFECTIVO/TRANSFERENCIA/TARJETA; EMPRESA: CREDITO; CORTESIA: null
 
   estado PurifEntregaEstado @default(REGISTRADO)
   notas  String?

@@ -217,8 +217,12 @@ export async function POST(req: Request) {
   // (e.g. only explicit OWNERs can delete or transfer the company).
   const despachoMembership = await prisma.despachoMember.findFirst({
     where: { userId: session.user.id },
-    select: { despachoId: true },
+    select: { despachoId: true, despacho: { select: { defaultTier: true } } },
   });
+  // Tier con el que nace la empresa: el defaultTier del despacho si lo fijó una
+  // invitación de onboarding (Syntage on/off según las condiciones), o el
+  // default del esquema (AUTOMATIZADO) para altas normales.
+  const tierDespacho = despachoMembership?.despacho?.defaultTier ?? undefined;
 
   // Extract IMSS + anual fields from onboardingPackage so they persist on Company row
   const registroPatronal = onboardingPackage?.imss?.registroPatronal ?? null;
@@ -344,6 +348,7 @@ export async function POST(req: Request) {
       registroPatronal: registroPatronal ?? undefined,
       coeficienteUtilidad: coeficienteUtilidad ?? undefined,
       despachoId: despachoMembership?.despachoId ?? null,
+      ...(tierDespacho ? { tier: tierDespacho } : {}),
       grupoId: grupoIdValido,
       members: {
         create: {

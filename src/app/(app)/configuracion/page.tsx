@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Users, CreditCard, UserCircle, Briefcase, Bell, MessageCircle, TicketPercent } from "lucide-react";
+import { Building2, Users, CreditCard, UserCircle, Briefcase, Bell, MessageCircle, TicketPercent, Gift } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { esAdminPlataforma } from "@/lib/billing/admin-plataforma";
@@ -59,6 +59,15 @@ const SECCION_CODIGOS = {
   icon: TicketPercent,
 };
 
+// También SOLO admin de plataforma: invitaciones de onboarding para dar de alta
+// a un cliente nuevo por la web con condiciones predefinidas (cortesía + Syntage).
+const SECCION_INVITACIONES = {
+  href: "/configuracion/invitaciones",
+  title: "Invitaciones de onboarding",
+  description: "Invita a un cliente a darse de alta con condiciones que tú defines.",
+  icon: Gift,
+};
+
 export default async function ConfiguracionPage() {
   const session = await auth();
   let sections = SECTIONS;
@@ -67,7 +76,7 @@ export default async function ConfiguracionPage() {
       where: { id: session.user.id },
       select: { email: true },
     });
-    if (user?.email && esAdminPlataforma(user.email)) sections = [...SECTIONS, SECCION_CODIGOS];
+    if (user?.email && esAdminPlataforma(user.email)) sections = [...SECTIONS, SECCION_CODIGOS, SECCION_INVITACIONES];
   }
 
   return (
