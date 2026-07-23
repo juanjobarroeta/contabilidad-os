@@ -120,6 +120,12 @@ const MARCAS = [
   "ACURA", "BUICK", "CADILLAC", "LINCOLN", "MINI", "VOLVO", "SUBARU", "CUPRA",
 ];
 
+/** Primera marca conocida encontrada en un texto libre (o null). */
+export function marcaDesdeTexto(texto: string | null | undefined): string | null {
+  const t = (texto ?? "").toUpperCase();
+  return MARCAS.find((m) => new RegExp(`\\b${m}\\b`).test(t)) ?? null;
+}
+
 export interface DatosGeneralesVehiculo {
   marca: string | null;
   modelo: string | null;
@@ -142,7 +148,7 @@ export function datosGeneralesDesdeCfdi(
   anioFallback: number
 ): DatosGeneralesVehiculo {
   const d = (descripcion ?? "").toUpperCase();
-  const marca = MARCAS.find((m) => new RegExp(`\\b${m}\\b`).test(d)) ?? null;
+  const marca = marcaDesdeTexto(d);
 
   const modelo = (noIdentificacion ?? "").trim().slice(0, 60) || null;
 
