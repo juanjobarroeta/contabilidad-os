@@ -336,6 +336,9 @@ model Company {
   purifInsumos        PurifInsumo[]
   purifCompras        PurifCompra[]
   purifPortalAccounts PurifPortalAccount[]
+
+  // Automotriz
+  vehiculos Vehiculo[]
 }
 
 model CompanyMember {
@@ -540,6 +543,7 @@ enum ModuloApp {
   PADEL
   PURIFICADORA
   RESTAURANTE
+  AUTOMOTRIZ
 }
 
 // ─── Module 3: Invoicing / CFDI ───────────────────────────────────────────────
@@ -572,6 +576,9 @@ model Customer {
   purifCorteLineas    PurifCorteEmpresa[]
   purifClienteConfigs PurifClienteConfig[]
   purifPortalAccount  PurifPortalAccount?
+
+  // Automotriz
+  vehiculos Vehiculo[]
 
   @@unique([companyId, rfc])
 }
@@ -606,6 +613,9 @@ model Supplier {
   restCompras       RestCompra[]
   purifGastos       PurifGasto[]
   purifCompras      PurifCompra[]
+
+  // Automotriz
+  vehiculos Vehiculo[]
 
   @@unique([companyId, rfc])
 }
@@ -766,9 +776,15 @@ model Invoice {
 
   // Purificadora: ventas de mostrador amparadas por este CFDI (una factura
   // puede cubrir varias ventas — p.ej. factura global del día).
-  purifVentas PurifVenta[]
+  purifVentas  PurifVenta[]
   // Purificadora: compras a proveedor amparadas por este CFDI recibido.
   purifCompras PurifCompra[]
+
+  // Automotriz: unidades cuya compra/venta ampara este CFDI, y costos
+  // unitarios (acondicionamiento, accesorios…) soportados por él.
+  vehiculosComprados Vehiculo[]      @relation("VehiculoCompraCfdi")
+  vehiculosVendidos  Vehiculo[]      @relation("VehiculoVentaCfdi")
+  vehiculoCostos     VehiculoCosto[]
 
   // Único por empresa: permite que un CFDI intercompañía viva en las dos
   // empresas (emisor + receptor) sin chocar, y evita duplicados dentro de una.
@@ -1251,6 +1267,8 @@ model Employee {
   imssMovimientos   ImssMovimiento[]
   incidencias       Incidencia[]
   cuadrillaMiembros CuadrillaMiembro[]
+  // Automotriz: unidades vendidas por este empleado (comisiones)
+  vehiculosVendidos Vehiculo[]
 
   @@unique([companyId, rfc])
 }
@@ -1811,6 +1829,7 @@ enum EntrySource {
   RESTAURANTE
   APERTURA // saldos iniciales / asiento de apertura (no se borra al re-postear el mes)
   CIERRE // asiento de cierre anual (mes 13) — cancela ingresos/costos/gastos a resultado
+  AUTOMOTRIZ
 }
 
 // ─── Module 6: Construction Project Management ───────────────────────────────
@@ -3961,7 +3980,7 @@ model PurifTicket {
   estado    PurifTicketEstado @default(REGISTRADO)
 
   total      Float
-  garrafones Int   @default(0)
+  garrafones Int     @default(0)
   notas      String?
 
   corteId String? // corte que lo integró
@@ -3975,7 +3994,7 @@ model PurifTicket {
 }
 
 model PurifTicketItem {
-  id       String  @id @default(cuid())
+  id       String @id @default(cuid())
   ticketId String
 
   productoId     String?
@@ -3983,7 +4002,7 @@ model PurifTicketItem {
   cantidad       Float
   precioUnitario Float
   importe        Float
-  garrafones     Int    @default(0)
+  garrafones     Int     @default(0)
 
   ticket   PurifTicket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   producto PurifProducto? @relation(fields: [productoId], references: [id], onDelete: SetNull)
@@ -4011,14 +4030,14 @@ model PurifProducto {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  nombre     String
-  precio     Float
+  nombre       String
+  precio       Float
   // Cuántos garrafones físicos representa una unidad vendida (recarga = 1,
   // paquete de 5 = 5, botella PET = 0). Alimenta el contador de garrafones
   // vendidos por cliente sin depender del nombre del producto.
-  garrafones Int     @default(1)
-  ivaTasa    Float   @default(0)
-  activo     Boolean @default(true)
+  garrafones   Int     @default(1)
+  ivaTasa      Float   @default(0)
+  activo       Boolean @default(true)
   // Aparece en el menú del POS de ventanilla. Permite productos activos para
   // ventas normales pero fuera del mostrador (p. ej. paquetes por volumen).
   enVentanilla Boolean @default(true)
@@ -4164,9 +4183,9 @@ model PurifCompra {
   supplierId String?
   // Categoría con la que pega al estado de resultados (AGUA_CRUDA = costo
   // directo del agua; el resto, gasto de operación).
-  categoria PurifGastoCategoria @default(FILTROS_INSUMOS)
-  formaPago PurifFormaPago
-  estado    PurifCompraEstado   @default(PAGADA)
+  categoria  PurifGastoCategoria @default(FILTROS_INSUMOS)
+  formaPago  PurifFormaPago
+  estado     PurifCompraEstado   @default(PAGADA)
 
   total Float
   notas String?
@@ -4373,4 +4392,112 @@ model ApiRefreshToken {
 model CronLock {
   job      String   @id
   lockedAt DateTime
+}
+
+// ─── Module: Automotriz — Dealer Management System ───────────────────────────
+// Gated behind CompanyModule(modulo = AUTOMOTRIZ). La unidad (Vehiculo) es el
+// hilo conductor del vertical: ata el CFDI de compra, los costos capitalizados
+// (incl. interés de plan piso devengado), el ISAN y el CFDI de venta para
+// reportar utilidad real por VIN. La máquina de estados es la idempotencia de
+// las pólizas (regla 4 de postings.ts): cada transición postea exactamente
+// una vez.
+
+enum VehiculoTipo {
+  NUEVO
+  SEMINUEVO
+}
+
+enum VehiculoEstado {
+  EN_TRANSITO // pedida a planta / en camino; aún no postea inventario
+  DISPONIBLE // recibida: inventario posteado, lista para venta
+  APARTADO // con anticipo de cliente
+  VENDIDO // facturada: ingreso + costo de ventas posteados
+  ENTREGADO
+  CANCELADO
+}
+
+model Vehiculo {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vin             String
+  marca           String
+  modelo          String
+  version         String?
+  anio            Int
+  color           String?
+  numeroEconomico String?
+  tipo            VehiculoTipo   @default(NUEVO)
+  estado          VehiculoEstado @default(EN_TRANSITO)
+  // Seminuevos
+  kilometraje     Int?
+
+  // Compra — CFDI del proveedor/planta cuando existe (seminuevos comprados a
+  // persona física pueden no traer factura: queda el costo capturado y el
+  // contrato fuera del sistema).
+  costoCompra     Float     @default(0) // sin IVA
+  fechaCompra     DateTime?
+  compraInvoiceId String?
+  supplierId      String?
+
+  // Plan piso (floor plan): tasa anual de la línea que financia esta unidad.
+  // El cron de devengo diario usa estos campos para generar
+  // VehiculoCosto(tipo=INTERES_PISO) + póliza de gasto financiero.
+  planPisoTasaAnual Float?
+  planPisoInicio    DateTime?
+
+  // Venta
+  precioLista    Float?
+  precioVenta    Float? // sin IVA, al momento de vender
+  isan           Float     @default(0) // calculado al vender unidades NUEVO
+  fechaVenta     DateTime?
+  ventaInvoiceId String?
+  clienteId      String?
+  vendedorId     String? // Employee que cierra la venta (comisiones)
+  comisionMonto  Float     @default(0)
+
+  notas String?
+
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  compraInvoice Invoice?        @relation("VehiculoCompraCfdi", fields: [compraInvoiceId], references: [id], onDelete: SetNull)
+  ventaInvoice  Invoice?        @relation("VehiculoVentaCfdi", fields: [ventaInvoiceId], references: [id], onDelete: SetNull)
+  supplier      Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  cliente       Customer?       @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vendedor      Employee?       @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
+  costos        VehiculoCosto[]
+
+  @@unique([companyId, vin])
+  @@index([companyId, estado])
+  @@index([companyId, tipo, estado])
+}
+
+enum VehiculoCostoTipo {
+  INTERES_PISO // devengo diario de la línea de plan piso (gasto financiero)
+  ACONDICIONAMIENTO // reacondicionamiento (capitaliza al inventario)
+  TRASLADO
+  ACCESORIOS
+  OTRO
+}
+
+// Costo unitario adicional al costo de compra. Los tipos que capitalizan
+// (ACONDICIONAMIENTO/TRASLADO/ACCESORIOS/OTRO) postean DR inventario; el
+// INTERES_PISO postea gasto financiero pero igual suma al costo económico de
+// la unidad para el reporte de utilidad por VIN.
+model VehiculoCosto {
+  id         String   @id @default(cuid())
+  vehiculoId String
+  createdAt  DateTime @default(now())
+
+  tipo      VehiculoCostoTipo
+  concepto  String
+  monto     Float // sin IVA
+  fecha     DateTime
+  invoiceId String? // CFDI del gasto cuando existe
+
+  vehiculo Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  invoice  Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@index([vehiculoId, tipo])
 }

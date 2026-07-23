@@ -49,6 +49,12 @@ const DEFAULT_ACCOUNTS: Array<{
   // Purificadora module accounts (auto-created on first use per company).
   { cuentaSAT: "4170", nombre: "Ingresos por venta de agua purificada", tipo: "INGRESO" },
   { cuentaSAT: "5203", nombre: "Gastos de operación purificadora",      tipo: "GASTO"   },
+  // Automotriz module accounts (auto-created on first use per company).
+  { cuentaSAT: "1115", nombre: "Inventario de vehículos",               tipo: "ACTIVO"  },
+  { cuentaSAT: "2110", nombre: "ISAN por pagar",                        tipo: "PASIVO"  },
+  { cuentaSAT: "4180", nombre: "Ingresos por venta de vehículos",       tipo: "INGRESO" },
+  { cuentaSAT: "5110", nombre: "Costo de ventas de vehículos",          tipo: "COSTO"   },
+  { cuentaSAT: "5205", nombre: "Intereses de plan piso",                tipo: "GASTO"   },
 ];
 
 /**
@@ -1000,4 +1006,154 @@ export async function postPagoCompraPurificadora(
     cargo: { cuentaSAT: "2104" },
     abono: { cuentaSAT: purifCashAccountFor(args.formaPago) },
   });
+}
+
+// ─── Automotriz (DMS) ────────────────────────────────────────────────────────
+// La máquina de estados de `Vehiculo` (EN_TRANSITO → DISPONIBLE → APARTADO →
+// VENDIDO) es la idempotencia: cada helper se llama exactamente una vez por
+// transición, dentro de la transacción del caller.
+
+/**
+ * Unidad recibida en la agencia (EN_TRANSITO → DISPONIBLE).
+ *   DR 1115 Inventario de vehículos
+ *   CR 2104 Acreedores diversos
+ * El pasivo se cancela después contra bancos vía conciliación / pago a
+ * proveedor; si la compra trae CFDI, el vínculo vive en compraInvoiceId.
+ */
+export async function postVehiculoRecibido(
+  tx: Tx,
+  args: {
+    companyId: string;
+    vehiculoId: string;
+    vin: string;
+    costo: number; // sin IVA
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: `Entrada de unidad VIN ${args.vin}`,
+    monto: args.costo,
+    fuente: "AUTOMOTRIZ",
+    referencia: args.vehiculoId,
+    referenciaTipo: "VEHICULO_COMPRA",
+    cargo: { cuentaSAT: "1115" },
+    abono: { cuentaSAT: "2104" },
+  });
+}
+
+export type VehiculoCostoPosting =
+  | "INTERES_PISO"
+  | "ACONDICIONAMIENTO"
+  | "TRASLADO"
+  | "ACCESORIOS"
+  | "OTRO";
+
+/**
+ * Costo unitario adicional.
+ *   INTERES_PISO      → DR 5205 Intereses de plan piso / CR 2104 (gasto financiero)
+ *   demás (capitaliza) → DR 1115 Inventario de vehículos / CR 2104
+ * En ambos casos el costo suma a la utilidad-por-VIN vía VehiculoCosto.
+ */
+export async function postVehiculoCosto(
+  tx: Tx,
+  args: {
+    companyId: string;
+    costoId: string;
+    vin: string;
+    tipo: VehiculoCostoPosting;
+    concepto: string;
+    monto: number; // sin IVA
+    fecha: Date;
+  }
+): Promise<void> {
+  const esInteres = args.tipo === "INTERES_PISO";
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: `${esInteres ? "Interés plan piso" : args.concepto} — VIN ${args.vin}`,
+    monto: args.monto,
+    fuente: "AUTOMOTRIZ",
+    referencia: args.costoId,
+    referenciaTipo: esInteres ? "VEHICULO_INTERES_PISO" : "VEHICULO_COSTO",
+    cargo: { cuentaSAT: esInteres ? "5205" : "1115" },
+    abono: { cuentaSAT: "2104" },
+  });
+}
+
+/**
+ * Venta de la unidad (DISPONIBLE/APARTADO → VENDIDO). Doble bloque:
+ *
+ * Ingreso (hasta 4 legs, emitidos directo para que los totales sean exactos):
+ *   DR 1103 Cuentas por cobrar   (= precio + IVA + ISAN)
+ *   CR 4180 Ingresos por venta de vehículos (= precio sin IVA)
+ *   CR 2102 IVA trasladado       (= iva)
+ *   CR 2110 ISAN por pagar       (= isan, sólo unidades nuevas)
+ *
+ * Costo de ventas (saca del inventario el costo capitalizado):
+ *   DR 5110 Costo de ventas de vehículos
+ *   CR 1115 Inventario de vehículos
+ */
+export async function postVehiculoVendido(
+  tx: Tx,
+  args: {
+    companyId: string;
+    vehiculoId: string;
+    vin: string;
+    precio: number; // sin IVA
+    iva: number;
+    isan: number;
+    costoInventario: number; // costo compra + costos capitalizados
+    fecha: Date;
+  }
+): Promise<void> {
+  const desc = `Venta de unidad VIN ${args.vin}`;
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
+  const total = args.precio + args.iva + args.isan;
+
+  const [cxc, ingresos, ivaAcct, isanAcct] = await Promise.all([
+    getOrCreateAccount(tx, args.companyId, "1103"),
+    getOrCreateAccount(tx, args.companyId, "4180"),
+    getOrCreateAccount(tx, args.companyId, "2102"),
+    getOrCreateAccount(tx, args.companyId, "2110"),
+  ]);
+
+  const base = {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    year,
+    month,
+    descripcion: desc,
+    referencia: args.vehiculoId,
+    referenciaTipo: "VEHICULO_VENTA",
+    fuente: "AUTOMOTRIZ" as EntrySource,
+  };
+
+  const data = [
+    { ...base, chartAccountId: cxc.id, monto: total, tipo: "CARGO" as const },
+    { ...base, chartAccountId: ingresos.id, monto: args.precio, tipo: "ABONO" as const },
+  ];
+  if (args.iva > 0) {
+    data.push({ ...base, chartAccountId: ivaAcct.id, monto: args.iva, tipo: "ABONO" as const });
+  }
+  if (args.isan > 0) {
+    data.push({ ...base, chartAccountId: isanAcct.id, monto: args.isan, tipo: "ABONO" as const });
+  }
+  await tx.accountingEntry.createMany({ data });
+
+  if (args.costoInventario > 0) {
+    await postBalancedEntry(tx, {
+      companyId: args.companyId,
+      fecha: args.fecha,
+      descripcion: `Costo de venta — VIN ${args.vin}`,
+      monto: args.costoInventario,
+      fuente: "AUTOMOTRIZ",
+      referencia: args.vehiculoId,
+      referenciaTipo: "VEHICULO_COSTO_VENTA",
+      cargo: { cuentaSAT: "5110" },
+      abono: { cuentaSAT: "1115" },
+    });
+  }
 }
