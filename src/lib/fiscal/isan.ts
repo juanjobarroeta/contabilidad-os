@@ -35,30 +35,40 @@ export type IsanTarifa = {
   exencionTotalHasta: number;
   /** Art. 8-II: precio ≤ este monto (y > exencionTotalHasta) → exención del 50%. */
   exencionParcialHasta: number;
+  /**
+   * Reducción para autos de gama alta (Art. 8, último párrafo, reflejado en la
+   * nota al pie de la tarifa del Anexo 15): si el precio excede este umbral, se
+   * REDUCE del impuesto determinado el `reduccionLujoTasa` sobre el excedente.
+   * `null` si el ejercicio no contempla la reducción.
+   */
+  reduccionLujoDesde: number | null;
+  reduccionLujoTasa: number; // 0.07 = 7%
   /** true sólo cuando los montos fueron cotejados contra DOF / Anexo 15 RMF. */
   verificada: boolean;
   fuente: string;
 };
 
 // Montos tomados del Anexo 15 de la RMF (actualización anual por INPC).
-// ⚠️ `verificada: false`: cotejar contra el DOF del ejercicio antes de activar
-// el timbrado de ventas con ISAN en producción. Actualizar vía PR (mismo
-// mecanismo que el INPC).
 const TARIFAS: Record<number, IsanTarifa> = {
   2026: {
     ejercicio: 2026,
+    // Anexo 15-A RMF 2026 (DOF 28-dic-2025). Tarifa Art. 3-I.
     brackets: [
-      { limiteInferior: 0.01, limiteSuperior: 381_983.75, cuotaFija: 0, tasaExcedente: 0.02 },
-      { limiteInferior: 381_983.76, limiteSuperior: 458_380.35, cuotaFija: 7_639.66, tasaExcedente: 0.05 },
-      { limiteInferior: 458_380.36, limiteSuperior: 534_777.11, cuotaFija: 11_459.5, tasaExcedente: 0.1 },
-      { limiteInferior: 534_777.12, limiteSuperior: 687_570.42, cuotaFija: 19_099.17, tasaExcedente: 0.15 },
-      { limiteInferior: 687_570.43, limiteSuperior: null, cuotaFija: 42_018.16, tasaExcedente: 0.17 },
+      { limiteInferior: 0.01, limiteSuperior: 383_940.35, cuotaFija: 0, tasaExcedente: 0.02 },
+      { limiteInferior: 383_940.36, limiteSuperior: 460_728.35, cuotaFija: 7_678.67, tasaExcedente: 0.05 },
+      { limiteInferior: 460_728.36, limiteSuperior: 537_516.64, cuotaFija: 11_518.25, tasaExcedente: 0.1 },
+      { limiteInferior: 537_516.65, limiteSuperior: 691_092.34, cuotaFija: 19_197.04, tasaExcedente: 0.15 },
+      { limiteInferior: 691_092.35, limiteSuperior: null, cuotaFija: 42_233.35, tasaExcedente: 0.17 },
     ],
-    exencionTotalHasta: 317_519.71,
-    exencionParcialHasta: 402_258.29,
-    verificada: false,
-    fuente:
-      "PENDIENTE de cotejo — Anexo 15 RMF (tarifa Art. 3-I y montos Art. 8-II actualizados por INPC). No timbrar ISAN en producción hasta verificar.",
+    // Anexo 15-B RMF 2026: Art. 8o. fracción II.
+    exencionTotalHasta: 356_934.05, // primer párrafo
+    exencionParcialHasta: 452_116.48, // segundo párrafo (hasta)
+    // Nota al pie de la tarifa 15-A: reducción del 7% sobre el excedente de
+    // $1,060,189.93 para el ejercicio 2026.
+    reduccionLujoDesde: 1_060_189.93,
+    reduccionLujoTasa: 0.07,
+    verificada: true,
+    fuente: "Anexo 15 RMF 2026, publicado en el DOF el 28-dic-2025 (rubros A y B).",
   },
 };
 
@@ -69,11 +79,13 @@ export function getTarifaIsan(ejercicio: number): IsanTarifa | null {
 export type IsanResultado = {
   /** Base gravable: precio de enajenación sin IVA (Art. 2). */
   base: number;
-  /** Impuesto según tarifa Art. 3-I, antes de exenciones. */
+  /** Impuesto según tarifa Art. 3-I, antes de exenciones y reducción. */
   impuestoTarifa: number;
+  /** Reducción por gama alta aplicada (7% del excedente); 0 si no aplica. */
+  reduccionLujo: number;
   /** "TOTAL" (no paga), "PARCIAL" (paga 50%), o null (paga completo). */
   exencion: "TOTAL" | "PARCIAL" | null;
-  /** Impuesto a cargo después de aplicar Art. 8-II. */
+  /** Impuesto a cargo después de aplicar Art. 8-II y la reducción. */
   isan: number;
   /** Advertencias operativas (tarifa no verificada, ejercicio sin tabla…). */
   advertencias: string[];
@@ -98,14 +110,14 @@ export function calcularIsan(
   const advertencias: string[] = [];
 
   if (!(precioSinIva > 0)) {
-    return { base: 0, impuestoTarifa: 0, exencion: null, isan: 0, advertencias };
+    return { base: 0, impuestoTarifa: 0, reduccionLujo: 0, exencion: null, isan: 0, advertencias };
   }
 
   if (!tarifa) {
     advertencias.push(
       `Sin tarifa ISAN cargada para el ejercicio ${ejercicio} — capturar en src/lib/fiscal/isan.ts (Anexo 15 RMF). ISAN calculado como $0.`
     );
-    return { base: precioSinIva, impuestoTarifa: 0, exencion: null, isan: 0, advertencias };
+    return { base: precioSinIva, impuestoTarifa: 0, reduccionLujo: 0, exencion: null, isan: 0, advertencias };
   }
 
   if (!tarifa.verificada) {
@@ -124,19 +136,34 @@ export function calcularIsan(
   const impuestoTarifa =
     bracket.cuotaFija + (precioSinIva - bracket.limiteInferior) * bracket.tasaExcedente;
 
+  // Reducción de gama alta (Anexo 15-A, nota al pie): reduce el impuesto en el
+  // 7% del excedente sobre el umbral. No lleva el impuesto por debajo de cero.
+  let reduccionLujo = 0;
+  if (tarifa.reduccionLujoDesde != null && precioSinIva > tarifa.reduccionLujoDesde) {
+    reduccionLujo = Math.min(
+      impuestoTarifa,
+      (precioSinIva - tarifa.reduccionLujoDesde) * tarifa.reduccionLujoTasa
+    );
+  }
+  const impuestoTrasReduccion = impuestoTarifa - reduccionLujo;
+
+  // Exención Art. 8-II y reducción de gama alta son mutuamente excluyentes por
+  // construcción (los umbrales no se solapan), pero el orden es explícito: la
+  // exención opera sobre el impuesto ya reducido.
   let exencion: IsanResultado["exencion"] = null;
-  let isan = impuestoTarifa;
+  let isan = impuestoTrasReduccion;
   if (precioSinIva <= tarifa.exencionTotalHasta) {
     exencion = "TOTAL";
     isan = 0;
   } else if (precioSinIva <= tarifa.exencionParcialHasta) {
     exencion = "PARCIAL";
-    isan = impuestoTarifa * 0.5;
+    isan = impuestoTrasReduccion * 0.5;
   }
 
   return {
     base: precioSinIva,
     impuestoTarifa: round2(impuestoTarifa),
+    reduccionLujo: round2(reduccionLujo),
     exencion,
     isan: round2(isan),
     advertencias,
