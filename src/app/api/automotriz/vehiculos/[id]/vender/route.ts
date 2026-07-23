@@ -82,7 +82,14 @@ export const POST = withAuthz(
     const isanResultado =
       vehiculo.tipo === "NUEVO"
         ? calcularIsan(parsed.data.precioVenta, fecha.getUTCFullYear())
-        : { base: parsed.data.precioVenta, impuestoTarifa: 0, exencion: null, isan: 0, advertencias: [] };
+        : {
+            base: parsed.data.precioVenta,
+            impuestoTarifa: 0,
+            reduccionLujo: 0,
+            exencion: null,
+            isan: 0,
+            advertencias: [],
+          };
 
     const iva = Math.round((parsed.data.precioVenta + isanResultado.isan) * IVA_TASA * 100) / 100;
 
@@ -125,6 +132,8 @@ export const POST = withAuthz(
       desglose: {
         precio: parsed.data.precioVenta,
         isan: isanResultado.isan,
+        isanImpuestoTarifa: isanResultado.impuestoTarifa,
+        isanReduccionLujo: isanResultado.reduccionLujo,
         exencionIsan: isanResultado.exencion,
         iva,
         total: parsed.data.precioVenta + isanResultado.isan + iva,
