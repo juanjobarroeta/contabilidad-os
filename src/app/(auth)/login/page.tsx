@@ -4,6 +4,8 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { BrandMark, ThemeToggle } from "@/components/ui";
+import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,12 +19,7 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-
+    const res = await signIn("credentials", { email, password, redirect: false });
     if (res?.error) {
       setError(
         res.code === "rate_limit"
@@ -35,75 +32,73 @@ export default function LoginPage() {
     }
   }
 
+  // Fondo y tinta con tokens de tema para que contraste en claro Y oscuro
+  // (el fondo blanco fijo anterior dejaba la tinta de tema casi invisible en
+  // modo oscuro del sistema).
+  const inputCls =
+    "w-full rounded-lg border border-cos-line bg-cos-canvas px-3.5 py-2.5 text-[15px] text-cos-ink " +
+    "placeholder:text-cos-ink-faint focus:border-cos-brand focus:outline-none focus:ring-2 focus:ring-cos-brand/25";
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-xl shadow-sm border border-cos-line p-8">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-cos-ink">ContabilidadOS</h1>
-            <p className="text-cos-ink-soft text-sm mt-1">
-              Sistema contable y fiscal mexicano
-            </p>
+    <div className="relative flex min-h-screen items-center justify-center bg-cos-canvas px-4 py-10">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
+
+      <div className="w-full max-w-[420px]">
+        <div className="mb-6 flex items-center justify-center gap-2">
+          <BrandMark size={26} className="text-cos-brand" />
+          <span className="text-[19px] font-bold tracking-[-0.02em] text-cos-ink">
+            Contabilidad<span className="text-cos-brand">OS</span>
+          </span>
+        </div>
+
+        <div className="rounded-2xl border border-cos-line bg-cos-card p-7 shadow-card">
+          <div className="mb-6">
+            <h1 className="text-[24px] font-bold tracking-[-0.02em] text-cos-ink">Inicia sesión</h1>
+            <p className="mt-1 text-[14px] text-cos-ink-soft">Bienvenido de vuelta.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-cos-ink mb-1">
+              <label htmlFor="email" className="mb-1.5 block text-[13px] font-semibold text-cos-ink">
                 Correo electrónico
               </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand"
-                placeholder="tu@empresa.com"
-              />
+              <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                required autoComplete="email" className={inputCls} placeholder="tu@empresa.com" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-cos-ink mb-1">
+              <label htmlFor="password" className="mb-1.5 block text-[13px] font-semibold text-cos-ink">
                 Contraseña
               </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand"
-                placeholder="••••••••"
-              />
+              <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                required autoComplete="current-password" className={inputCls} placeholder="••••••••" />
             </div>
 
             {error && (
-              <p className="text-sm text-cos-red-ink">{error}</p>
+              <p className="rounded-lg border border-cos-red-ink/20 bg-cos-red-tint px-3 py-2 text-[13px] text-cos-red-ink">
+                {error}
+              </p>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-cos-brand text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-cos-brand-deep/90 transition-colors disabled:opacity-50"
-            >
-              {loading ? "Iniciando sesión..." : "Iniciar sesión"}
+            <button type="submit" disabled={loading}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-cos-brand py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-cos-brand-deep disabled:opacity-50">
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {loading ? "Iniciando sesión…" : "Iniciar sesión"}
             </button>
           </form>
 
-          <p className="text-sm text-cos-ink-soft mt-6 text-center">
+          <p className="mt-6 text-center text-[14px] text-cos-ink-soft">
             ¿No tienes cuenta?{" "}
-            <Link href="/signup" className="text-cos-brand-ink hover:underline">
-              Empieza tu prueba gratis
-            </Link>
+            <Link href="/signup" className="font-semibold text-cos-brand-ink hover:underline">Empieza tu prueba gratis</Link>
           </p>
         </div>
 
-        <p className="text-xs text-cos-ink-faint mt-4 text-center">
-          <Link href="/legal/aviso-de-privacidad" className="hover:text-cos-brand-ink hover:underline">
-            Aviso de Privacidad
-          </Link>
+        <p className="mt-5 text-center text-[12px] text-cos-ink-faint">
+          <Link href="/legal/aviso-de-privacidad" className="hover:text-cos-brand-ink hover:underline">Aviso de Privacidad</Link>
           {" · "}
-          <Link href="/legal/terminos" className="hover:text-cos-brand-ink hover:underline">
-            Términos y Condiciones
-          </Link>
+          <Link href="/legal/terminos" className="hover:text-cos-brand-ink hover:underline">Términos y Condiciones</Link>
         </p>
       </div>
     </div>
