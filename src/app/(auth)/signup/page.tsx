@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BrandMark, ThemeToggle } from "@/components/ui";
-import { Loader2, ShieldCheck, CreditCard, CalendarClock } from "lucide-react";
+import { Loader2, ShieldCheck, CreditCard, CalendarClock, Gift, Sparkles } from "lucide-react";
+
+type InvitePreview =
+  | { valida: true; despachoName: string; ownerNombre: string | null; syntage: boolean; sinCargo: boolean }
+  | { valida: false; mensaje?: string };
 
 export default function SignupPage() {
   const router = useRouter();
@@ -15,6 +19,28 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Invitación: del enlace (?invite=) o tecleada como código. Se previsualiza
+  // para mostrar el banner de condiciones antes de registrarse.
+  const [inviteToken, setInviteToken] = useState("");
+  const [codeInput, setCodeInput] = useState("");
+  const [preview, setPreview] = useState<InvitePreview | null>(null);
+
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("invite");
+    if (t) { setInviteToken(t); setCodeInput(t); }
+  }, []);
+
+  useEffect(() => {
+    const t = inviteToken.trim();
+    if (!t) { setPreview(null); return; }
+    let vivo = true;
+    fetch(`/api/onboarding-invites/preview?token=${encodeURIComponent(t)}`)
+      .then((r) => r.json())
+      .then((d) => { if (vivo) { setPreview(d); if (d.valida && d.ownerNombre) setName((n) => n || d.ownerNombre); } })
+      .catch(() => { if (vivo) setPreview(null); });
+    return () => { vivo = false; };
+  }, [inviteToken]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -23,7 +49,7 @@ export default function SignupPage() {
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, ...(inviteToken.trim() ? { inviteToken: inviteToken.trim() } : {}) }),
     });
 
     if (!res.ok) {
@@ -72,6 +98,24 @@ export default function SignupPage() {
             </p>
           </div>
 
+          {/* Banner de invitación (enlace o código válido) */}
+          {preview?.valida && (
+            <div className="mb-5 rounded-xl border border-cos-jade-ink/25 bg-cos-jade-tint px-4 py-3">
+              <p className="flex items-center gap-2 text-[13.5px] font-semibold text-cos-jade-ink">
+                <Gift className="h-4 w-4" /> Invitación para {preview.despachoName}
+              </p>
+              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-cos-jade-ink/90">
+                {preview.sinCargo && <span className="inline-flex items-center gap-1"><CreditCard className="h-3.5 w-3.5" /> Sin cargo</span>}
+                {preview.syntage && <span className="inline-flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> Sincronización SAT (Syntage) incluida</span>}
+              </p>
+            </div>
+          )}
+          {preview && !preview.valida && codeInput.trim() && (
+            <p className="mb-4 rounded-lg border border-cos-amber-ink/20 bg-cos-amber-tint px-3 py-2 text-[12.5px] text-cos-amber-ink">
+              {preview.mensaje ?? "La invitación no es válida."}
+            </p>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="name" className="mb-1.5 block text-[13px] font-semibold text-cos-ink">
@@ -96,6 +140,23 @@ export default function SignupPage() {
               <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                 required minLength={8} autoComplete="new-password" className={inputCls} placeholder="Mínimo 8 caracteres" />
             </div>
+
+            {/* Código de invitación manual — sólo si no llegó por enlace */}
+            {!inviteToken && (
+              <details className="rounded-lg border border-cos-line px-3 py-2">
+                <summary className="cursor-pointer text-[12.5px] font-medium text-cos-ink-soft">
+                  ¿Tienes un código de invitación?
+                </summary>
+                <div className="mt-2 flex gap-2">
+                  <input type="text" value={codeInput} onChange={(e) => setCodeInput(e.target.value)}
+                    placeholder="Pega tu código" className={inputCls + " font-mono text-[13px]"} />
+                  <button type="button" onClick={() => setInviteToken(codeInput.trim())}
+                    className="rounded-lg border border-cos-line px-3 text-[13px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint">
+                    Aplicar
+                  </button>
+                </div>
+              </details>
+            )}
 
             {error && (
               <p className="rounded-lg border border-cos-red-ink/20 bg-cos-red-tint px-3 py-2 text-[13px] text-cos-red-ink">
