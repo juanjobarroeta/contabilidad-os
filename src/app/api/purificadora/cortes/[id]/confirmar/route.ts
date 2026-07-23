@@ -214,6 +214,13 @@ export const POST = withAuthz(async (req: Request, ctx: Params) => {
           data: { estado: "INTEGRADO", corteId: corte.id },
         });
 
+        // Entregas en ruta del día: mismo destino — Minerva las revisó al
+        // volcar el «Reparto del día» al corte antes de confirmar.
+        await tx.purifEntrega.updateMany({
+          where: { companyId, fecha, estado: "REGISTRADO" },
+          data: { estado: "INTEGRADO", corteId: corte.id },
+        });
+
         return ventaIds;
       });
 
