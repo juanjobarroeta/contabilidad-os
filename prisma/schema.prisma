@@ -336,6 +336,7 @@ model Company {
   purifInsumos        PurifInsumo[]
   purifCompras        PurifCompra[]
   purifPortalAccounts PurifPortalAccount[]
+  purifEntregas       PurifEntrega[]
 
   // Automotriz
   vehiculos Vehiculo[]
@@ -576,6 +577,7 @@ model Customer {
   purifCorteLineas    PurifCorteEmpresa[]
   purifClienteConfigs PurifClienteConfig[]
   purifPortalAccount  PurifPortalAccount?
+  purifEntregas       PurifEntrega[]
 
   // Automotriz
   vehiculos Vehiculo[]
@@ -3870,6 +3872,7 @@ model PurifRuta {
 
   company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   corteLineas PurifCorteRuta[]
+  entregas    PurifEntrega[]
 
   @@unique([companyId, nombre])
 }
@@ -3889,6 +3892,7 @@ model PurifSucursal {
   customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   ventaItems  PurifVentaItem[]
   corteLineas PurifCorteEmpresa[]
+  entregas    PurifEntrega[]
 
   @@unique([customerId, nombre])
   @@index([companyId])
@@ -3924,6 +3928,7 @@ model PurifCorte {
   gastos   PurifCorteGasto[]
   ventas   PurifVenta[]
   tickets  PurifTicket[]
+  entregas PurifEntrega[]
 
   @@unique([companyId, fecha])
   @@index([companyId, estado])
@@ -4208,6 +4213,56 @@ model PurifCompra {
   @@index([companyId, fecha])
   @@index([companyId, estado])
   @@index([companyId, supplierId])
+}
+
+enum PurifEntregaTipo {
+  CASAS // venta puerta a puerta en ruta (cobrada en el momento)
+  EMPRESA // entrega a cliente-empresa (siempre a crédito, precio pactado)
+  CORTESIA // garrafones regalados (sin ingreso)
+}
+
+enum PurifEntregaEstado {
+  REGISTRADO // capturado por el repartidor, pendiente de autorización
+  INTEGRADO // Minerva lo volcó al corte del día y el corte se confirmó
+  CANCELADO
+}
+
+// Entrega en ruta — el talón del chofer, capturado en el momento desde su
+// teléfono (página Reparto: botones grandes). Igual que los tickets de
+// ventanilla, NO postea contabilidad: es el embudo que Minerva autoriza —
+// el card «Reparto del día» del corte se prellena con estas entregas y al
+// confirmar el corte quedan INTEGRADAS.
+model PurifEntrega {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now()) // hora real de la entrega
+
+  fecha DateTime // día (medianoche UTC, igual que PurifCorte.fecha)
+  tipo  PurifEntregaTipo
+
+  rutaId     String? // ruta/repartidor que capturó
+  customerId String? // EMPRESA
+  sucursalId String? // EMPRESA con sucursal
+
+  garrafones Int
+  // CASAS: lo cobrado en el momento. EMPRESA: garrafones × precio pactado
+  // (calculado en el servidor). CORTESIA: valor de referencia (no es ingreso).
+  importe   Float           @default(0)
+  formaPago PurifFormaPago? // CASAS: EFECTIVO/TRANSFERENCIA/TARJETA; EMPRESA: CREDITO; CORTESIA: null
+
+  estado PurifEntregaEstado @default(REGISTRADO)
+  notas  String?
+
+  corteId String? // corte que la integró
+
+  company  Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  ruta     PurifRuta?     @relation(fields: [rutaId], references: [id], onDelete: SetNull)
+  customer Customer?      @relation(fields: [customerId], references: [id])
+  sucursal PurifSucursal? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  corte    PurifCorte?    @relation(fields: [corteId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, fecha, estado])
+  @@index([corteId])
 }
 
 // Cuenta del portal de clientes de la purificadora — acceso de SOLO LECTURA
