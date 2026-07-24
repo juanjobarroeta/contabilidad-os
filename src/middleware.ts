@@ -70,6 +70,12 @@ export function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     "/api/auth/token",
+    // Onboarding desde satélites (wizard Automotriz): alta de cuenta, parseo
+    // de la CSF y checkout de Stripe se llaman cross-origin con bearer token.
+    "/api/auth/signup",
+    "/api/onboarding/:path*",
+    "/api/billing/checkout",
+    "/api/billing/portal",
     "/api/companies/:path*",
     "/api/construccion/:path*",
     "/api/padel/:path*",

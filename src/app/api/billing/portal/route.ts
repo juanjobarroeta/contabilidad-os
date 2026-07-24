@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { AuthzError, requireUser } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { appBaseUrl, getStripe } from "@/lib/billing/stripe";
 
 // POST /api/billing/portal — crea una sesión del Billing Portal de Stripe para
 // que el usuario administre su suscripción (método de pago, cancelación,
 // facturas) y devuelve { url }. 503 en español si Stripe no está configurado.
-export async function POST() {
-  const session = await auth();
-  if (!session?.user?.id)
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+// Bearer-aware: los satélites lo llaman con el token de /api/auth/token.
+export async function POST(req: Request) {
+  let session: { user: { id: string } };
+  try {
+    const user = await requireUser(req);
+    session = { user: { id: user.id } };
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const stripe = getStripe();
   if (!stripe)
