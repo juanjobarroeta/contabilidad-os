@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { AuthzError, requireUser } from "@/lib/authz";
 import { appBaseUrl, getStripe, resolveStripeCustomerId } from "@/lib/billing/stripe";
 import {
   parseIntervaloFacturable,
@@ -17,9 +17,17 @@ import { contarEmpresasFacturables } from "@/lib/billing/sync-cantidad-despacho"
 // empresas a las que el webhook aplica el tier. Responde 503 en español
 // mientras Stripe (o el Price del intervalo pedido) no esté configurado.
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id)
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  // Bearer-aware: el wizard de onboarding de los satélites inicia el checkout
+  // con el token de /api/auth/token; la web sigue entrando por cookie
+  // (requireUser intenta ambos).
+  let session: { user: { id: string } };
+  try {
+    const user = await requireUser(req);
+    session = { user: { id: user.id } };
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   let body: unknown = null;
   try {
@@ -55,6 +63,19 @@ export async function POST(req: Request) {
       { status: 503 },
     );
 
+  // Un satélite puede pedir que Stripe regrese a SU origen (wizard de
+  // onboarding). Sólo se acepta un origen de la misma lista blanca que usa el
+  // CORS (API_ALLOWED_ORIGINS) — nunca una URL arbitraria (open redirect).
+  const returnBaseRaw = (body as { returnBase?: unknown } | null)?.returnBase;
+  const allowedOrigins = (process.env.API_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const returnBase =
+    typeof returnBaseRaw === "string" && allowedOrigins.includes(returnBaseRaw)
+      ? returnBaseRaw
+      : null;
+
   try {
     const customerId = await resolveStripeCustomerId(session.user.id);
     const base = appBaseUrl();
@@ -78,8 +99,12 @@ export async function POST(req: Request) {
       subscription_data: { metadata: { userId: session.user.id, plan, intervalo } },
       allow_promotion_codes: true,
       locale: "es-419",
-      success_url: `${base}/configuracion/facturacion?checkout=exito`,
-      cancel_url: `${base}/configuracion/facturacion?checkout=cancelado`,
+      success_url: returnBase
+        ? `${returnBase}/onboarding?checkout=exito`
+        : `${base}/configuracion/facturacion?checkout=exito`,
+      cancel_url: returnBase
+        ? `${returnBase}/onboarding?checkout=cancelado`
+        : `${base}/configuracion/facturacion?checkout=cancelado`,
     });
 
     return NextResponse.json({ url: checkout.url });

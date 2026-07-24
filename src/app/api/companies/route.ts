@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertPuedeEscribir } from "@/lib/subscription";
-import { AuthzError, getEffectiveCompanyMembership } from "@/lib/authz";
+import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { provisionCompany } from "@/lib/fiscal/cumplimiento/syntage/provision";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
@@ -107,8 +107,17 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Bearer-aware: los satélites (Automotriz, …) crean la empresa desde su
+  // wizard de onboarding con el token de /api/auth/token; la web sigue
+  // entrando por la cookie de NextAuth (requireUser intenta ambos).
+  let session: { user: { id: string } };
+  try {
+    const user = await requireUser(req);
+    session = { user: { id: user.id } };
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   try {
     // Gating detrás de SUBSCRIPTION_ENFORCEMENT_ENABLED (default apagado).
@@ -132,6 +141,7 @@ export async function POST(req: Request) {
     manifiestoAck,
     onboardingPackage,
     grupoId,
+    modulos,
   } = body as {
     rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string;
     domicilioFiscal?: string; nombreComercial?: string; email?: string;
@@ -180,11 +190,22 @@ export async function POST(req: Request) {
       } | null>;
     };
     grupoId?: string | null;
+    modulos?: string[];
   };
 
   if (!rfc || !razonSocial || !regimenFiscal || !codigoPostal) {
     return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
   }
+
+  // Módulos verticales que el wizard de un satélite puede auto-habilitar al
+  // crear la empresa (p. ej. Automotriz manda ["AUTOMOTRIZ"]). Lista blanca
+  // explícita — CONTABILIDAD siempre se habilita de base más abajo.
+  const MODULOS_AUTOHABILITABLES = new Set([
+    "AUTOMOTRIZ", "CONSTRUCCION", "PADEL", "PURIFICADORA", "RESTAURANTE", "FLOTA",
+  ]);
+  const modulosExtra = [...new Set(modulos ?? [])].filter((m) =>
+    MODULOS_AUTOHABILITABLES.has(m)
+  ) as Prisma.CompanyModuleCreateWithoutCompanyInput["modulo"][];
 
   // ── RFC duplicado (el RFC es único en TODA la plataforma) ──────────────────
   // Antes esto explotaba como P2002 sin manejar → 500 sin cuerpo JSON, y el
@@ -358,9 +379,15 @@ export async function POST(req: Request) {
       },
       // Every new company gets the base accounting module enabled.
       // Add-on modules (CONSTRUCCION, FLOTA, …) are enabled separately
-      // by an admin or by the Stripe webhook on add-on purchase.
+      // by an admin, by the Stripe webhook on add-on purchase, or — vía
+      // `modulos` — por el wizard de onboarding de un satélite (lista blanca).
       modules: {
-        create: { modulo: "CONTABILIDAD" },
+        create: [
+          { modulo: "CONTABILIDAD" as const },
+          ...modulosExtra
+            .filter((m) => m !== "CONTABILIDAD")
+            .map((modulo) => ({ modulo })),
+        ],
       },
       regimenes: {
         create: regimenCreate,

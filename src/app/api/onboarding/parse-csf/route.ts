@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { auth } from "@/lib/auth";
+import { AuthzError, requireUser } from "@/lib/authz";
 import { meteredCreate } from "@/lib/costos/anthropic";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,8 +142,15 @@ function buildValidationWarnings(data: ExtractedCsf): string[] {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Bearer-aware: el wizard de onboarding de los satélites sube la CSF con el
+  // token de /api/auth/token; la web sigue entrando por cookie (requireUser
+  // intenta ambos).
+  try {
+    await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
