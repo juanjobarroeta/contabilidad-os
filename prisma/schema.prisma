@@ -339,7 +339,8 @@ model Company {
   purifEntregas       PurifEntrega[]
 
   // Automotriz
-  vehiculos Vehiculo[]
+  vehiculos          Vehiculo[]
+  autoPortalAccounts AutoPortalAccount[]
 }
 
 model CompanyMember {
@@ -618,7 +619,8 @@ model Customer {
   purifEntregas       PurifEntrega[]
 
   // Automotriz
-  vehiculos Vehiculo[]
+  vehiculos         Vehiculo[]
+  autoPortalAccount AutoPortalAccount?
 
   @@unique([companyId, rfc])
 }
@@ -4619,4 +4621,25 @@ model ClaveVehicularCatalogo {
   fuente    String // p. ej. "Anexo 15 RMF 2026 (DOF 28-dic-2025)"
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Portal del cliente de la agencia (automotriz) — clon del patrón
+// PurifPortalAccount: cuenta de sólo-lectura ligada al Customer canónico,
+// nunca pasa por requireUser/membership (audiencia automotriz:portal).
+model AutoPortalAccount {
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String   @unique
+  createdAt  DateTime @default(now())
+
+  email        String  @unique
+  passwordHash String
+  activo       Boolean @default(true)
+
+  lastLoginAt DateTime?
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }
