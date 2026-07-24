@@ -22,8 +22,10 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   datosGeneralesDesdeCfdi,
   extraerDatosVehiculoCfdi,
+  marcaDesdeTexto,
   tipoCostoDesdeConcepto,
 } from "./vin";
+import { modeloLimpio } from "./claves";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -44,6 +46,46 @@ export interface DerivarVehiculoResultado {
   creados: number;
   actualizados: number;
   vins: string[];
+}
+
+/**
+ * marca/modelo/versión/año para una unidad nueva: primero el catálogo de claves
+ * vehiculares (Anexo 15 — autoritativo) vía la clave del complemento; si la
+ * clave aún no está ingerida, la heurística de texto. En ambos casos la unidad
+ * nace `autoCreado` y el distribuidor confirma.
+ */
+async function generalesParaUnidad(
+  db: Db,
+  v: { claveVehicular: string | null; descripcion: string | null; noIdentificacion: string | null },
+  anioFallback: number
+): Promise<{ marca: string; modelo: string; version: string | null; anio: number }> {
+  const heur = datosGeneralesDesdeCfdi(v.descripcion, v.noIdentificacion, anioFallback);
+
+  if (v.claveVehicular) {
+    const cat = await db.claveVehicularCatalogo.findUnique({
+      where: { clave: v.claveVehicular },
+      select: { empresa: true, modelo: true, version: true },
+    });
+    if (cat) {
+      return {
+        marca:
+          marcaDesdeTexto(`${cat.modelo} ${cat.version ?? ""}`) ??
+          marcaDesdeTexto(cat.empresa) ??
+          heur.marca ??
+          cat.empresa.slice(0, 60),
+        modelo: modeloLimpio(cat.modelo).slice(0, 60) || heur.modelo || "POR REVISAR",
+        version: cat.version ? cat.version.slice(0, 80) : null,
+        anio: heur.anio ?? anioFallback,
+      };
+    }
+  }
+
+  return {
+    marca: heur.marca ?? "POR REVISAR",
+    modelo: heur.modelo ?? "POR REVISAR",
+    version: null,
+    anio: heur.anio ?? anioFallback,
+  };
 }
 
 /**
@@ -100,14 +142,15 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         await registrarCostosCompra(db, existente.id, args, datos.otrosConceptos);
         continue;
       }
-      const g = datosGeneralesDesdeCfdi(v.descripcion, v.noIdentificacion, anioFallback);
+      const g = await generalesParaUnidad(db, v, anioFallback);
       const creado = await db.vehiculo.create({
         data: {
           companyId: args.companyId,
           vin: v.niv,
-          marca: g.marca ?? "POR REVISAR",
-          modelo: g.modelo ?? "POR REVISAR",
-          anio: g.anio ?? anioFallback,
+          marca: g.marca,
+          modelo: g.modelo,
+          version: g.version,
+          anio: g.anio,
           tipo: "NUEVO",
           estado: "DISPONIBLE",
           costoCompra: v.importe,
@@ -142,14 +185,15 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
       continue;
     }
     // Venta sin compra previa: crea la unidad ya VENDIDA para no perderla.
-    const g = datosGeneralesDesdeCfdi(v.descripcion, v.noIdentificacion, anioFallback);
+    const g = await generalesParaUnidad(db, v, anioFallback);
     await db.vehiculo.create({
       data: {
         companyId: args.companyId,
         vin: v.niv,
-        marca: g.marca ?? "POR REVISAR",
-        modelo: g.modelo ?? "POR REVISAR",
-        anio: g.anio ?? anioFallback,
+        marca: g.marca,
+        modelo: g.modelo,
+        version: g.version,
+        anio: g.anio,
         tipo: "NUEVO",
         estado: "VENDIDO",
         precioVenta: v.importe,

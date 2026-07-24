@@ -4604,3 +4604,19 @@ model VehiculoCosto {
 
   @@index([vehiculoId, tipo])
 }
+
+// Catálogo global (SAT) del Código de Claves Vehiculares — Anexo 15 RMF,
+// sección C. Cada Anexo anual publica las claves NUEVAS del ejercicio, así que
+// la cobertura crece con cada ingesta (scripts/automotriz-ingest-claves.mjs).
+// La clave (7 caracteres: tipo + empresa + modelo + versión, puede terminar en
+// letras) llega en el complemento VentaVehiculos de cada CFDI de unidad nueva y
+// permite resolver marca/modelo/versión de forma autoritativa, sin heurística.
+model ClaveVehicularCatalogo {
+  clave     String   @id // p. ej. "1621710" o "00559AR"
+  empresa   String // razón social del fabricante/ensamblador (p. ej. GIANT MOTORS)
+  modelo    String // texto del renglón "Modelo NN : …" del Anexo
+  version   String? // descripción de la versión
+  fuente    String // p. ej. "Anexo 15 RMF 2026 (DOF 28-dic-2025)"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

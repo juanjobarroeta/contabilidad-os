@@ -22,7 +22,7 @@ const cfdiVenta = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd
 </cfdi:Comprobante>`;
 
 // Prisma-client mínimo en memoria: sólo los métodos que usa el derivador.
-function fakeDb() {
+function fakeDb(catalogo: Record<string, { empresa: string; modelo: string; version: string | null }> = {}) {
   const vehiculos = new Map<string, Record<string, unknown>>();
   const costos: Array<Record<string, unknown>> = [];
   let seq = 1;
@@ -31,6 +31,9 @@ function fakeDb() {
   return {
     _vehiculos: vehiculos,
     _costos: costos,
+    claveVehicularCatalogo: {
+      findUnique: async ({ where }: any) => catalogo[where.clave] ?? null,
+    },
     vehiculo: {
       findUnique: async ({ where }: any) => {
         const { companyId, vin } = where.companyId_vin;
@@ -140,6 +143,39 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — venta y round-trip", () => {
     const r2 = await derivarVehiculoDesdeCfdiSiAplica(db as never, args);
     expect(r2?.actualizados).toBe(0);
     expect(r2?.creados).toBe(0);
+  });
+});
+
+describe("derivarVehiculoDesdeCfdiSiAplica() — catálogo de claves vehiculares", () => {
+  it("con la clave en el catálogo, marca/modelo/versión salen del Anexo 15 (no heurística)", async () => {
+    const db = fakeDb({
+      "1621710": {
+        empresa: "Giant Motors Latinoamérica, S.A. de C.V.",
+        modelo: "Pick Up JAC 4 puertas Marca GML (nacional)",
+        version: "Frison T9 Luxury, 2.0 lts., Turbo, 4x4",
+      },
+    });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    const veh = [...db._vehiculos.values()][0];
+    expect(veh).toMatchObject({
+      marca: "JAC", // del texto del catálogo
+      modelo: "Pick Up JAC 4 puertas", // modeloLimpio: sin "Marca GML (nacional)"
+      version: "Frison T9 Luxury, 2.0 lts., Turbo, 4x4",
+      claveVehicular: "1621710",
+      autoCreado: true, // el distribuidor sigue confirmando
+    });
+  });
+
+  it("sin la clave en el catálogo, cae a la heurística de texto", async () => {
+    const db = fakeDb(); // catálogo vacío
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    const veh = [...db._vehiculos.values()][0];
+    expect(veh.marca).toBe("JAC"); // heurística sobre la descripción
+    expect(veh.modelo).toBe("FRISON T9 AT 4X4"); // NoIdentificacion
   });
 });
 
