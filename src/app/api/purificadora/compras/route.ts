@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { registrarBitacora } from "@/lib/audit";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { postCompraPurificadora } from "@/lib/accounting/postings";
 
@@ -93,7 +94,7 @@ export const POST = withAuthz(async (req: Request) => {
   const { companyId, supplierId, categoria, formaPago, items, invoiceId, notas } = parsed.data;
   const fecha = parsed.data.fecha ? new Date(parsed.data.fecha) : new Date();
 
-  await requireWriter(companyId, req);
+  const { user: actor } = await requireWriter(companyId, req);
   await requireModule(companyId, "PURIFICADORA", req);
 
   let supplierNombre: string | null = null;
@@ -180,6 +181,15 @@ export const POST = withAuthz(async (req: Request) => {
           fecha,
         });
         return created;
+      });
+      registrarBitacora({
+        companyId,
+        userId: actor.id,
+        actorEmail: actor.email,
+        accion: "compra.crear",
+        entidad: "PurifCompra",
+        entidadId: compra.id,
+        detalle: { folio: compra.folio, total, formaPago, proveedor: supplierNombre },
       });
       return NextResponse.json(compra, { status: 201 });
     } catch (e) {

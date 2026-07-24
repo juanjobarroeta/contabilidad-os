@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { registrarBitacora } from "@/lib/audit";
 import { AuthzError, requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { postPagoCompraPurificadora } from "@/lib/accounting/postings";
 
@@ -50,7 +51,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
   });
   if (!compra) throw new AuthzError(404, "Compra no encontrada");
 
-  await requireWriter(compra.companyId, req);
+  const { user: actor } = await requireWriter(compra.companyId, req);
   await requireModule(compra.companyId, "PURIFICADORA", req);
 
   switch (parsed.data.action) {
@@ -80,6 +81,15 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           data: { estado: "PAGADA", fechaPago: fecha, pagoFormaPago: formaPago },
           include: compraInclude,
         });
+      });
+      registrarBitacora({
+        companyId: compra.companyId,
+        userId: actor.id,
+        actorEmail: actor.email,
+        accion: "compra.pagar",
+        entidad: "PurifCompra",
+        entidadId: compra.id,
+        detalle: { folio: compra.folio, total: compra.total, formaPago },
       });
       return NextResponse.json(updated);
     }

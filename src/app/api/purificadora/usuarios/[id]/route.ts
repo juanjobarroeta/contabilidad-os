@@ -11,7 +11,10 @@ const patchSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("permisos"),
     role: z.enum(["ADMIN", "ACCOUNTANT", "VIEWER"]),
-    soloVentanilla: z.boolean().default(false),
+    // Puesto del empleado restringido; null = módulo completo.
+    // soloVentanilla (boolean) se acepta por compatibilidad → VENTANILLA.
+    puesto: z.enum(["VENTANILLA", "REPARTO", "AMBOS"]).nullish(),
+    soloVentanilla: z.boolean().optional(),
   }),
   z.object({
     action: z.literal("password"),
@@ -87,12 +90,18 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           { status: 403 }
         );
       }
+      // Puesto = operativo encajonado al módulo purificadora (ventanilla,
+      // reparto o ambos). Cualquier otro rol va sin restricción.
+      const puesto =
+        data.role === "ACCOUNTANT"
+          ? data.puesto ?? (data.soloVentanilla ? ("VENTANILLA" as const) : null)
+          : null;
       const updated = await prisma.companyMember.update({
         where: { id },
         data: {
           role: data.role,
-          // Sólo ventanilla = operativo encajonado al módulo purificadora.
-          allowedModules: data.soloVentanilla && data.role === "ACCOUNTANT" ? ["PURIFICADORA"] : [],
+          allowedModules: puesto ? ["PURIFICADORA"] : [],
+          purifPuesto: puesto,
         },
       });
       registrarBitacora({
@@ -106,10 +115,15 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           email: target.user.email,
           rolAnterior: target.role,
           rol: updated.role,
-          soloVentanilla: updated.allowedModules.length > 0,
+          puesto,
         },
       });
-      return NextResponse.json({ ok: true, role: updated.role, allowedModules: updated.allowedModules });
+      return NextResponse.json({
+        ok: true,
+        role: updated.role,
+        allowedModules: updated.allowedModules,
+        puesto: updated.purifPuesto,
+      });
     }
 
     case "password": {

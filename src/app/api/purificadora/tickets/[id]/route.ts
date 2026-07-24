@@ -38,7 +38,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
 
   switch (parsed.data.action) {
     case "cancelar": {
-      await requireWriter(ticket.companyId, req);
+      const { user: actor } = await requireWriter(ticket.companyId, req);
       if (ticket.estado !== "REGISTRADO") {
         return NextResponse.json(
           { error: `Sólo se cancelan tickets REGISTRADOS (estado actual: ${ticket.estado})` },
@@ -48,6 +48,15 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
       const updated = await prisma.purifTicket.update({
         where: { id },
         data: { estado: "CANCELADO" },
+      });
+      registrarBitacora({
+        companyId: ticket.companyId,
+        userId: actor.id,
+        actorEmail: actor.email,
+        accion: "ticket.cancelar",
+        entidad: "PurifTicket",
+        entidadId: ticket.id,
+        detalle: { total: ticket.total, fecha: ticket.fecha.toISOString().slice(0, 10) },
       });
       return NextResponse.json(updated);
     }
