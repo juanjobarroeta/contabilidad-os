@@ -671,6 +671,7 @@ model Supplier {
   solicitudesCompra SolicitudCompra[]
   cotizaciones      SolicitudCompraCotizacion[]
   pagosProveedor    PagoProveedor[]
+  gastos            Gasto[]                     @relation("GastosProveedor")
   terms             SupplierTerms?
   restCompras       RestCompra[]
   purifGastos       PurifGasto[]
@@ -2898,7 +2899,9 @@ model RayaDetalleMiembro {
 model Gasto {
   id            String   @id @default(cuid())
   companyId     String
-  proyectoId    String
+  // Opcional desde el rediseño de gastos: null = gasto general de la
+  // empresa (no atado a una obra), normalmente ligado a un proveedor.
+  proyectoId    String?
   // Cuenta que pagó. Opcional: la cuenta real se determina en la conciliación
   // (CFDI ↔ movimiento importado), no al capturar el gasto. Se conserva para
   // datos históricos y para caja chica.
@@ -2925,12 +2928,19 @@ model Gasto {
   // of a Rosy-style weekly reimbursement package; null for one-off pays.
   reembolsoId String?
 
+  // Proveedor al que se le debe/pagó este gasto (opcional; los gastos
+  // generales sin obra normalmente lo traen — es su "a quién").
+  supplierId String?
+
   // Attachments — two flavors:
   //   *Url  = external URL (legacy, back-compat with pre-upload flow)
   //   *Data = base64 content directly in DB (same pattern as csdCer /
   //           fielCer elsewhere). Small-file friendly — Rosy's WhatsApp
   //           photos are usually < 2 MB. Mime + name let us serve them
   //           back with the right headers.
+  // Tipo de comprobante que respalda el gasto: nota de venta simple o
+  // factura (CFDI). Elegido al capturar, junto con la foto/PDF.
+  comprobanteTipo     ComprobanteTipo?
   comprobanteUrl      String? // invoice/receipt URL
   comprobanteData     String? @db.Text
   comprobanteMime     String?
@@ -2972,7 +2982,8 @@ model Gasto {
   notas String?
 
   company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  proyecto           Proyecto            @relation(fields: [proyectoId], references: [id])
+  proyecto           Proyecto?           @relation(fields: [proyectoId], references: [id])
+  supplier           Supplier?           @relation("GastosProveedor", fields: [supplierId], references: [id])
   bankAccount        BankAccount?        @relation(fields: [bankAccountId], references: [id])
   presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
   insumo             Insumo?             @relation(fields: [insumoId], references: [id])
@@ -2982,6 +2993,12 @@ model Gasto {
   @@index([companyId, estado])
   @@index([proyectoId, createdAt])
   @@index([reembolsoId])
+  @@index([supplierId])
+}
+
+enum ComprobanteTipo {
+  NOTA
+  FACTURA
 }
 
 enum GastoEstado {

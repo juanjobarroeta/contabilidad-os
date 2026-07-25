@@ -31,6 +31,8 @@ export const POST = withAuthz(
         insumoId: true,
         indirecto: true,
         categoriaIndirecto: true,
+        proyectoId: true,
+        supplierId: true,
       },
     });
     if (!gasto) throw new AuthzError(404, "Gasto no encontrado");
@@ -47,7 +49,10 @@ export const POST = withAuthz(
     // Misma regla de atribución que aprobar-pagar.
     const isDirecto = !!(gasto.presupuestoPartidaId || gasto.insumoId);
     const isIndirecto = gasto.indirecto === true;
-    if (!isDirecto && !isIndirecto) {
+    // Gasto general (sin obra): su atribución es el proveedor o la categoría —
+    // no hay presupuesto al cual atarlo.
+    const isGeneral = !gasto.proyectoId && !!(gasto.supplierId || gasto.categoriaIndirecto);
+    if (!isDirecto && !isIndirecto && !isGeneral) {
       return NextResponse.json(
         {
           error:

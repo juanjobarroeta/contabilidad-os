@@ -21,6 +21,13 @@ const patchSchema = z.object({
   insumoId: z.string().min(1).nullable().optional(),
   bankAccountId: z.string().min(1).optional(),
   comprobanteUrl: z.string().max(1000).nullable().optional(),
+  // Adjuntar/reemplazar el comprobante después de creado (foto de la nota o
+  // factura) y su tipo.
+  comprobanteTipo: z.enum(["NOTA", "FACTURA"]).nullable().optional(),
+  comprobanteData: z.string().nullable().optional(),
+  comprobanteMime: z.string().max(80).nullable().optional(),
+  comprobanteName: z.string().max(200).nullable().optional(),
+  supplierId: z.string().min(1).nullable().optional(),
   notas: z.string().max(1000).nullable().optional(),
   estado: z.enum(["PENDIENTE", "RECHAZADO"]).optional(),
   // Indirecto flag + categoría — Katia can set these from the 3-button picker.

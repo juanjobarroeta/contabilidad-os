@@ -42,6 +42,9 @@ const TESORERIA_RULES: Rule[] = [
   { methods: "read", pattern: "bank-transactions" },
   { methods: "read", pattern: "gastos" },
   { methods: "read", pattern: "gastos/*" },
+  { methods: "read", pattern: "gastos/*/comprobante" },
+  // Pagar un gasto aprobado desde su cola (mismo flujo que las compras)
+  { methods: "all", pattern: "gastos/*/aprobar-pagar" },
   { methods: "read", pattern: "solicitudes-compra" },
   { methods: "read", pattern: "solicitudes-compra/*" },
   { methods: "read", pattern: "solicitudes-compra/*/bt-candidates" },
@@ -77,11 +80,14 @@ const RESIDENTE_RULES: Rule[] = [
   { methods: "read", pattern: "suppliers" },
   { methods: "read", pattern: "bitacora" },
   { methods: "read", pattern: "bitacora/*" },
-  // Caja chica (ver) + el contexto que esa pantalla carga
+  // Caja chica: ver, y CAPTURAR gastos con su comprobante (nota/factura +
+  // foto). Las decisiones (aprobar/aprobar-pagar/enviar-tesoreria) son
+  // sub-acciones de 3 segmentos y quedan fuera.
   { methods: "read", pattern: "reembolsos" },
   { methods: "read", pattern: "reembolsos/*" },
-  { methods: "read", pattern: "gastos" },
-  { methods: "read", pattern: "gastos/*" },
+  { methods: "all", pattern: "gastos" },
+  { methods: "all", pattern: "gastos/*" },
+  { methods: "read", pattern: "gastos/*/comprobante" },
   { methods: "read", pattern: "bank-accounts" },
   // Requisiciones: crear y editar las propias (borradores). Las sub-acciones
   // de decisión (cotizaciones/aprobar/adjudicaciones/pagar) NO están listadas
