@@ -29,7 +29,12 @@ import {
 } from "@/lib/authz";
 
 const createSchema = z.object({
-  proyectoId: z.string().min(1),
+  // Opcional desde el rediseño: sin proyecto = gasto general de la empresa
+  // (companyId requerido en ese caso), normalmente ligado a un proveedor.
+  proyectoId: z.string().min(1).nullable().optional(),
+  companyId: z.string().min(1).optional(),
+  supplierId: z.string().min(1).nullable().optional(),
+  comprobanteTipo: z.enum(["NOTA", "FACTURA"]).nullable().optional(),
   // Opcional: la cuenta real se determina en la conciliación (CFDI ↔ movimiento
   // importado). Se sigue aceptando para caja chica / datos históricos.
   bankAccountId: z.string().min(1).nullable().optional(),
@@ -66,7 +71,11 @@ export const GET = withAuthz(async (req: Request) => {
   const gastos = await prisma.gasto.findMany({
     where: {
       companyId,
-      ...(proyectoId ? { proyectoId } : {}),
+      ...(proyectoId === "null"
+        ? { proyectoId: null } // sólo gastos generales (sin obra)
+        : proyectoId
+          ? { proyectoId }
+          : {}),
       ...(estado ? { estado: estado as "PENDIENTE" | "APROBADO" | "PAGADO" | "RECHAZADO" } : {}),
       ...(cajaOnly ? { caja: true } : {}),
     },
@@ -76,6 +85,7 @@ export const GET = withAuthz(async (req: Request) => {
     omit: { comprobanteData: true, pagoComprobanteData: true },
     include: {
       proyecto: { select: { id: true, codigo: true, nombre: true } },
+      supplier: { select: { id: true, rfc: true, razonSocial: true } },
       bankAccount: { select: { id: true, banco: true, nombre: true, tipo: true, titular: true } },
       presupuestoPartida: {
         select: {
@@ -100,13 +110,38 @@ export const POST = withAuthz(async (req: Request) => {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const proyecto = await prisma.proyecto.findUnique({
-    where: { id: parsed.data.proyectoId },
-    select: { companyId: true },
-  });
-  if (!proyecto) throw new AuthzError(404, "Proyecto no encontrado");
-  await requireWriter(proyecto.companyId, req);
-  await requireModule(proyecto.companyId, "CONSTRUCCION");
+  // Resolver la empresa: por proyecto (gasto de obra) o por companyId del
+  // body (gasto general sin obra).
+  let companyId: string;
+  if (parsed.data.proyectoId) {
+    const proyecto = await prisma.proyecto.findUnique({
+      where: { id: parsed.data.proyectoId },
+      select: { companyId: true },
+    });
+    if (!proyecto) throw new AuthzError(404, "Proyecto no encontrado");
+    companyId = proyecto.companyId;
+  } else {
+    if (!parsed.data.companyId) {
+      return NextResponse.json(
+        { error: "companyId requerido para un gasto sin obra" },
+        { status: 400 }
+      );
+    }
+    companyId = parsed.data.companyId;
+  }
+  await requireWriter(companyId, req);
+  await requireModule(companyId, "CONSTRUCCION");
+
+  // Proveedor (opcional) debe ser de la misma empresa.
+  if (parsed.data.supplierId) {
+    const sup = await prisma.supplier.findUnique({
+      where: { id: parsed.data.supplierId },
+      select: { companyId: true },
+    });
+    if (!sup || sup.companyId !== companyId) {
+      return NextResponse.json({ error: "supplierId inválido" }, { status: 400 });
+    }
+  }
 
   // Validate bank account belongs to same company (only when provided — the
   // account is optional now; conciliación resolves the real one later).
@@ -116,7 +151,7 @@ export const POST = withAuthz(async (req: Request) => {
       where: { id: parsed.data.bankAccountId },
       select: { id: true, companyId: true, tipo: true },
     });
-    if (!account || account.companyId !== proyecto.companyId) {
+    if (!account || account.companyId !== companyId) {
       return NextResponse.json({ error: "BankAccount inválido" }, { status: 400 });
     }
   }
@@ -127,7 +162,7 @@ export const POST = withAuthz(async (req: Request) => {
       where: { id: parsed.data.presupuestoPartidaId },
       select: { presupuesto: { select: { companyId: true } } },
     });
-    if (!pp || pp.presupuesto.companyId !== proyecto.companyId) {
+    if (!pp || pp.presupuesto.companyId !== companyId) {
       return NextResponse.json({ error: "presupuestoPartidaId inválido" }, { status: 400 });
     }
   }
@@ -136,7 +171,7 @@ export const POST = withAuthz(async (req: Request) => {
       where: { id: parsed.data.insumoId },
       select: { companyId: true },
     });
-    if (!ins || ins.companyId !== proyecto.companyId) {
+    if (!ins || ins.companyId !== companyId) {
       return NextResponse.json({ error: "insumoId inválido" }, { status: 400 });
     }
   }
@@ -149,8 +184,10 @@ export const POST = withAuthz(async (req: Request) => {
 
   const created = await prisma.gasto.create({
     data: {
-      companyId: proyecto.companyId,
-      proyectoId: parsed.data.proyectoId,
+      companyId,
+      proyectoId: parsed.data.proyectoId ?? null,
+      supplierId: parsed.data.supplierId ?? null,
+      comprobanteTipo: parsed.data.comprobanteTipo ?? null,
       bankAccountId: parsed.data.bankAccountId ?? null,
       beneficiarioNombre: parsed.data.beneficiarioNombre,
       descripcion: parsed.data.descripcion,
@@ -167,6 +204,7 @@ export const POST = withAuthz(async (req: Request) => {
       categoriaIndirecto: parsed.data.categoriaIndirecto ?? null,
     },
     include: {
+      supplier: { select: { id: true, rfc: true, razonSocial: true } },
       bankAccount: { select: { id: true, banco: true, nombre: true, tipo: true, titular: true } },
       presupuestoPartida: {
         select: {

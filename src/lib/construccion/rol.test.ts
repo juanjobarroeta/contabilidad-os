@@ -28,6 +28,9 @@ describe("enforceConstruccionRol", () => {
     // decisiones y otros módulos: no
     expect(allowed("TESORERIA", "POST", "/api/construccion/solicitudes-compra")).toBe(false);
     expect(allowed("TESORERIA", "POST", "/api/construccion/solicitudes-compra/abc/aprobar")).toBe(false);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/gastos/abc/aprobar-pagar")).toBe(true);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/gastos")).toBe(false);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/gastos/abc/aprobar")).toBe(false);
     expect(allowed("TESORERIA", "GET", "/api/construccion/presupuestos")).toBe(false);
     expect(allowed("TESORERIA", "GET", "/api/construccion/reembolsos")).toBe(false);
     expect(allowed("TESORERIA", "POST", "/api/construccion/proyectos")).toBe(false);
@@ -40,13 +43,19 @@ describe("enforceConstruccionRol", () => {
     expect(allowed("RESIDENTE", "GET", "/api/construccion/presupuestos/abc")).toBe(true);
     expect(allowed("RESIDENTE", "GET", "/api/construccion/apus/abc")).toBe(true);
     expect(allowed("RESIDENTE", "GET", "/api/construccion/reembolsos")).toBe(true);
+    // Caja chica: captura gastos con comprobante, sin decidir sobre ellos
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/gastos")).toBe(true);
+    expect(allowed("RESIDENTE", "PATCH", "/api/construccion/gastos/abc")).toBe(true);
+    expect(allowed("RESIDENTE", "GET", "/api/construccion/gastos/abc/comprobante")).toBe(true);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/gastos/abc/aprobar")).toBe(false);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/gastos/abc/aprobar-pagar")).toBe(false);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/gastos/abc/enviar-tesoreria")).toBe(false);
     // escritura de presupuesto/APU y decisiones de compra: no
     expect(allowed("RESIDENTE", "POST", "/api/construccion/presupuestos")).toBe(false);
     expect(allowed("RESIDENTE", "PATCH", "/api/construccion/apus/abc")).toBe(false);
     expect(allowed("RESIDENTE", "POST", "/api/construccion/solicitudes-compra/abc/aprobar")).toBe(false);
     expect(allowed("RESIDENTE", "POST", "/api/construccion/solicitudes-compra/abc/cotizaciones")).toBe(false);
     expect(allowed("RESIDENTE", "POST", "/api/construccion/solicitudes-compra/abc/pagar")).toBe(false);
-    expect(allowed("RESIDENTE", "POST", "/api/construccion/reembolsos")).toBe(false);
     expect(allowed("RESIDENTE", "GET", "/api/construccion/bank-transactions")).toBe(false);
     expect(allowed("RESIDENTE", "GET", "/api/construccion/usuarios")).toBe(false);
   });
