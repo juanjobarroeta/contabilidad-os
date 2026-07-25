@@ -233,6 +233,7 @@ export async function POST(req: Request) {
         role: true,
         allowedModules: true,
         purifPuesto: true,
+        construccionRol: true,
         company: {
           select: {
             id: true,
@@ -280,6 +281,8 @@ export async function POST(req: Request) {
     modulos: string[];
     /** Encajonamiento de empleados restringidos de purificadora (o null). */
     purifPuesto: string | null;
+    /** Rol del satélite de construcción (bartiz), o null = sin restricción. */
+    construccionRol: string | null;
   };
   const byId = new Map<string, CompanyEntry>();
 
@@ -297,6 +300,7 @@ export async function POST(req: Request) {
       role: m.role,
       modulos,
       purifPuesto: m.purifPuesto ?? null,
+      construccionRol: m.construccionRol ?? null,
     });
   }
 
@@ -318,6 +322,7 @@ export async function POST(req: Request) {
         role: dm.role,
         modulos,
         purifPuesto: null, // acceso vía despacho: sin restricción de puesto
+        construccionRol: null, // acceso vía despacho: sin rol restringido
       });
     }
   }

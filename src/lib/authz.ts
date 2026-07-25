@@ -285,6 +285,15 @@ export async function requireMembership(
     throw new AuthzError(403, "Sin permisos suficientes");
   }
 
+  // Rol de construcción restringido (TESORERIA/RESIDENTE): allowlist por
+  // método+ruta sobre /api/construccion/*. Vive aquí porque TODA ruta del
+  // satélite pasa por requireMembership con `req` — un solo choke point.
+  // Sólo aplica a miembros directos; el acceso vía despacho no se restringe.
+  if (req && direct?.construccionRol) {
+    const { enforceConstruccionRol } = await import("./construccion/rol");
+    enforceConstruccionRol(direct.construccionRol, req);
+  }
+
   // Return the direct row if it exists (some callers read its id for audit);
   // otherwise synthesize one. This keeps the shape stable for existing callers.
   const membership = direct ?? {
