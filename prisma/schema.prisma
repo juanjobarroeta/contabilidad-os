@@ -368,6 +368,11 @@ model CompanyMember {
   ///      from the contabilidad-os web UI entirely
   allowedModules ModuloApp[] @default([])
 
+  /// Sólo para empleados restringidos de purificadora: a qué páginas del
+  /// satélite se encajona (ventanilla, reparto o ambas). null = sin
+  /// restricción de puesto (usuarios normales y restringidos previos).
+  purifPuesto PurifPuesto?
+
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -4259,6 +4264,15 @@ enum PurifEntregaTipo {
   CASAS // venta puerta a puerta en ruta (cobrada en el momento)
   EMPRESA // entrega a cliente-empresa (siempre a crédito, precio pactado)
   CORTESIA // garrafones regalados (sin ingreso)
+}
+
+/// Puesto de un empleado restringido de purificadora (rol ACCOUNTANT con
+/// allowedModules=[PURIFICADORA]): a qué páginas del satélite se encajona.
+/// null = AMBOS (compatibilidad con los usuarios ya creados).
+enum PurifPuesto {
+  VENTANILLA // sólo el POS de mostrador
+  REPARTO // sólo la página de reparto en ruta
+  AMBOS // cubre mostrador y ruta
 }
 
 enum PurifEntregaEstado {

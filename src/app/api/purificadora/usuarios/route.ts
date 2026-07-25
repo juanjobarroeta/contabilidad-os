@@ -22,20 +22,25 @@ export const GET = withAuthz(async (req: Request) => {
   });
 
   return NextResponse.json(
-    members.map((m) => ({
-      membershipId: m.id,
-      userId: m.user.id,
-      nombre: m.user.name,
-      email: m.user.email,
-      role: m.role,
-      allowedModules: m.allowedModules,
-      // Sólo puede usar el módulo PURIFICADORA (el satélite lo encajona en Ventanilla).
-      soloVentanilla:
+    members.map((m) => {
+      // Sólo puede usar el módulo PURIFICADORA: el satélite lo encajona
+      // según su puesto (ventanilla, reparto o ambos).
+      const restringido =
         m.role === "ACCOUNTANT" &&
         m.allowedModules.length > 0 &&
-        m.allowedModules.every((mod) => mod === "PURIFICADORA"),
-      createdAt: m.createdAt,
-    }))
+        m.allowedModules.every((mod) => mod === "PURIFICADORA");
+      return {
+        membershipId: m.id,
+        userId: m.user.id,
+        nombre: m.user.name,
+        email: m.user.email,
+        role: m.role,
+        allowedModules: m.allowedModules,
+        soloVentanilla: restringido,
+        puesto: restringido ? m.purifPuesto ?? "AMBOS" : null,
+        createdAt: m.createdAt,
+      };
+    })
   );
 });
 
@@ -44,7 +49,10 @@ const createSchema = z.object({
   nombre: z.string().trim().min(1).max(120),
   email: z.string().email().transform((s) => s.toLowerCase().trim()),
   password: z.string().min(8, "Mínimo 8 caracteres").max(200),
-  soloVentanilla: z.boolean().default(true),
+  // Puesto del empleado restringido; null = acceso completo al módulo.
+  // soloVentanilla (boolean) se acepta por compatibilidad → VENTANILLA.
+  puesto: z.enum(["VENTANILLA", "REPARTO", "AMBOS"]).nullish(),
+  soloVentanilla: z.boolean().optional(),
 });
 
 // POST /api/purificadora/usuarios — crea un usuario-empleado y su membresía
@@ -62,7 +70,9 @@ export const POST = withAuthz(async (req: Request) => {
     const first = parsed.error.issues[0]?.message ?? "Datos inválidos";
     return NextResponse.json({ error: first }, { status: 400 });
   }
-  const { companyId, nombre, email, password, soloVentanilla } = parsed.data;
+  const { companyId, nombre, email, password } = parsed.data;
+  const puesto =
+    parsed.data.puesto ?? (parsed.data.soloVentanilla ? ("VENTANILLA" as const) : null);
 
   const { user: actor } = await requireMembership(companyId, ["OWNER", "ADMIN"], req);
   await requireModule(companyId, "PURIFICADORA", req);
@@ -94,7 +104,8 @@ export const POST = withAuthz(async (req: Request) => {
         userId: user.id,
         companyId,
         role: "ACCOUNTANT",
-        allowedModules: soloVentanilla ? ["PURIFICADORA"] : [],
+        allowedModules: puesto ? ["PURIFICADORA"] : [],
+        purifPuesto: puesto,
       },
       include: { user: { select: { id: true, name: true, email: true } } },
     });
@@ -107,7 +118,7 @@ export const POST = withAuthz(async (req: Request) => {
     accion: "usuario.crear",
     entidad: "CompanyMember",
     entidadId: member.id,
-    detalle: { email, role: "ACCOUNTANT", soloVentanilla, origen: "purificadora" },
+    detalle: { email, role: "ACCOUNTANT", puesto, origen: "purificadora" },
   });
 
   return NextResponse.json(
@@ -118,7 +129,8 @@ export const POST = withAuthz(async (req: Request) => {
       email: member.user.email,
       role: member.role,
       allowedModules: member.allowedModules,
-      soloVentanilla,
+      soloVentanilla: !!puesto,
+      puesto,
     },
     { status: 201 }
   );

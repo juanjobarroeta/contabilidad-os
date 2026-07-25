@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { registrarBitacora } from "@/lib/audit";
 import { parseFechaCorte } from "@/lib/purificadora/cortes";
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -148,7 +149,7 @@ export const POST = withAuthz(async (req: Request) => {
   const fecha = parseFechaCorte(parsed.data.fecha);
   if (!fecha) return NextResponse.json({ error: "Fecha inválida" }, { status: 400 });
 
-  await requireWriter(companyId, req);
+  const { user: actor } = await requireWriter(companyId, req);
   await requireModule(companyId, "PURIFICADORA", req);
 
   if (rutaId) {
@@ -224,5 +225,16 @@ export const POST = withAuthz(async (req: Request) => {
     },
     include: entregaInclude,
   });
+
+  registrarBitacora({
+    companyId,
+    userId: actor.id,
+    actorEmail: actor.email,
+    accion: "entrega.crear",
+    entidad: "PurifEntrega",
+    entidadId: entrega.id,
+    detalle: { tipo, garrafones, importe, fecha: parsed.data.fecha },
+  });
+
   return NextResponse.json(entrega, { status: 201 });
 });

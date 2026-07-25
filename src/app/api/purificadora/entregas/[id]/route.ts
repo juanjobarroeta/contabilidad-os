@@ -33,7 +33,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
 
   switch (parsed.data.action) {
     case "cancelar": {
-      await requireWriter(entrega.companyId, req);
+      const { user: actor } = await requireWriter(entrega.companyId, req);
       if (entrega.estado !== "REGISTRADO") {
         return NextResponse.json(
           { error: `Sólo se cancelan entregas REGISTRADAS (estado actual: ${entrega.estado})` },
@@ -43,6 +43,19 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
       const updated = await prisma.purifEntrega.update({
         where: { id },
         data: { estado: "CANCELADO" },
+      });
+      registrarBitacora({
+        companyId: entrega.companyId,
+        userId: actor.id,
+        actorEmail: actor.email,
+        accion: "entrega.cancelar",
+        entidad: "PurifEntrega",
+        entidadId: entrega.id,
+        detalle: {
+          tipo: entrega.tipo,
+          importe: entrega.importe,
+          fecha: entrega.fecha.toISOString().slice(0, 10),
+        },
       });
       return NextResponse.json(updated);
     }

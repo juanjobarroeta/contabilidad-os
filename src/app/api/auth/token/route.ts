@@ -232,6 +232,7 @@ export async function POST(req: Request) {
       select: {
         role: true,
         allowedModules: true,
+        purifPuesto: true,
         company: {
           select: {
             id: true,
@@ -277,6 +278,8 @@ export async function POST(req: Request) {
     razonSocial: string;
     role: string;
     modulos: string[];
+    /** Encajonamiento de empleados restringidos de purificadora (o null). */
+    purifPuesto: string | null;
   };
   const byId = new Map<string, CompanyEntry>();
 
@@ -293,6 +296,7 @@ export async function POST(req: Request) {
       razonSocial: m.company.razonSocial,
       role: m.role,
       modulos,
+      purifPuesto: m.purifPuesto ?? null,
     });
   }
 
@@ -313,6 +317,7 @@ export async function POST(req: Request) {
         razonSocial: c.razonSocial,
         role: dm.role,
         modulos,
+        purifPuesto: null, // acceso vía despacho: sin restricción de puesto
       });
     }
   }

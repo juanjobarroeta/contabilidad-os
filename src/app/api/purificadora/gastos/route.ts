@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { registrarBitacora } from "@/lib/audit";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { postGastoPurificadora } from "@/lib/accounting/postings";
 
@@ -77,7 +78,7 @@ export const POST = withAuthz(async (req: Request) => {
   const { companyId, categoria, descripcion, monto, formaPago, supplierId, notas } = parsed.data;
   const fecha = parsed.data.fecha ? new Date(parsed.data.fecha) : new Date();
 
-  await requireWriter(companyId, req);
+  const { user: actor } = await requireWriter(companyId, req);
   await requireModule(companyId, "PURIFICADORA", req);
 
   if (supplierId) {
@@ -115,6 +116,16 @@ export const POST = withAuthz(async (req: Request) => {
     });
 
     return created;
+  });
+
+  registrarBitacora({
+    companyId,
+    userId: actor.id,
+    actorEmail: actor.email,
+    accion: "gasto.crear",
+    entidad: "PurifGasto",
+    entidadId: gasto.id,
+    detalle: { categoria, descripcion, monto, formaPago },
   });
 
   return NextResponse.json(gasto, { status: 201 });

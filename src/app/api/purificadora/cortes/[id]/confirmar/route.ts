@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { registrarBitacora } from "@/lib/audit";
 import { postGastoPurificadora, postVentaPurificadora } from "@/lib/accounting/postings";
 import { corteInclude } from "@/lib/purificadora/cortes";
 
@@ -37,7 +38,7 @@ export const POST = withAuthz(async (req: Request, ctx: Params) => {
   });
   if (!corte) throw new AuthzError(404, "Corte no encontrado");
 
-  await requireWriter(corte.companyId, req);
+  const { user: actor } = await requireWriter(corte.companyId, req);
   await requireModule(corte.companyId, "PURIFICADORA", req);
 
   if (corte.estado !== "BORRADOR") {
@@ -227,6 +228,15 @@ export const POST = withAuthz(async (req: Request, ctx: Params) => {
       const confirmado = await prisma.purifCorte.findUnique({
         where: { id: corte.id },
         include: corteInclude,
+      });
+      registrarBitacora({
+        companyId,
+        userId: actor.id,
+        actorEmail: actor.email,
+        accion: "corte.confirmar",
+        entidad: "PurifCorte",
+        entidadId: corte.id,
+        detalle: { fecha: fechaLabel, ventasCreadas: result.length, gastos: corte.gastos.length },
       });
       return NextResponse.json({ corte: confirmado, ventasCreadas: result.length });
     } catch (e) {

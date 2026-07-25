@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { registrarBitacora } from "@/lib/audit";
 import { AuthzError, requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import {
   postCancelacionVentaPurificadora,
@@ -57,7 +58,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
   });
   if (!venta) throw new AuthzError(404, "Venta no encontrada");
 
-  await requireWriter(venta.companyId, req);
+  const { user: actor } = await requireWriter(venta.companyId, req);
   await requireModule(venta.companyId, "PURIFICADORA", req);
 
   switch (parsed.data.action) {
@@ -86,6 +87,15 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           where: { id: venta.id },
           data: { estado: "COBRADA", fechaCobro: fecha, cobroFormaPago: formaPago },
         });
+      });
+      registrarBitacora({
+        companyId: venta.companyId,
+        userId: actor.id,
+        actorEmail: actor.email,
+        accion: "venta.cobrar",
+        entidad: "PurifVenta",
+        entidadId: venta.id,
+        detalle: { folio: venta.folio, total: venta.total, formaPago },
       });
       return NextResponse.json(updated);
     }
@@ -132,6 +142,15 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           where: { id: venta.id },
           data: { estado: "CANCELADA" },
         });
+      });
+      registrarBitacora({
+        companyId: venta.companyId,
+        userId: actor.id,
+        actorEmail: actor.email,
+        accion: "venta.cancelar",
+        entidad: "PurifVenta",
+        entidadId: venta.id,
+        detalle: { folio: venta.folio, total: venta.total },
       });
       return NextResponse.json(updated);
     }
