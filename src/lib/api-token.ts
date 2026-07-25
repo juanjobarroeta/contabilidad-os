@@ -252,3 +252,53 @@ export async function verifyPurifPortalToken(
     email: (payload.email as string) ?? "",
   };
 }
+
+// ─── Automotriz: tokens del portal de clientes de la agencia ─────────────────
+// El comprador de un auto entra a un portal de sólo-lectura (estado de cuenta,
+// sus CFDIs, sus unidades). NO es un User ni CompanyMember: su cuenta vive en
+// AutoPortalAccount con audiencia propia — jamás pasa por requireUser.
+
+const AUTO_PORTAL_AUDIENCE = "automotriz:portal";
+
+export type AutoPortalTokenPayload = {
+  sub: string; // AutoPortalAccount id
+  companyId: string;
+  customerId: string;
+  email: string;
+};
+
+export async function signAutoPortalToken(
+  payload: AutoPortalTokenPayload,
+  opts?: { expiry?: string }
+): Promise<string> {
+  return new SignJWT({
+    companyId: payload.companyId,
+    customerId: payload.customerId,
+    email: payload.email,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(payload.sub)
+    .setIssuedAt()
+    .setIssuer(ISSUER)
+    .setAudience(AUTO_PORTAL_AUDIENCE)
+    .setExpirationTime(opts?.expiry ?? LEGACY_EXPIRY)
+    .sign(getSecretKey());
+}
+
+export async function verifyAutoPortalToken(
+  token: string
+): Promise<AutoPortalTokenPayload> {
+  const { payload } = await jwtVerify(token, getSecretKey(), {
+    issuer: ISSUER,
+    audience: AUTO_PORTAL_AUDIENCE,
+  });
+  if (!payload.sub || !payload.companyId || !payload.customerId) {
+    throw new Error("Token de portal incompleto");
+  }
+  return {
+    sub: payload.sub,
+    companyId: payload.companyId as string,
+    customerId: payload.customerId as string,
+    email: (payload.email as string) ?? "",
+  };
+}
