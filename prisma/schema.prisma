@@ -373,6 +373,14 @@ model CompanyMember {
   /// restricción de puesto (usuarios normales y restringidos previos).
   purifPuesto PurifPuesto?
 
+  /// Rol dentro del satélite de construcción (bartiz). null = sin
+  /// restricción (dueños/admins actuales). TESORERIA se encajona a la cola
+  /// de pagos enviados a tesorería; RESIDENTE genera requisiciones, lee
+  /// presupuestos/precios unitarios y caja chica, y nada más. Enforced en
+  /// requireMembership (src/lib/construccion/rol.ts) y expuesto en
+  /// /api/auth/token para que bartiz filtre navegación y rutas.
+  construccionRol ConstruccionRol?
+
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -384,6 +392,13 @@ enum MemberRole {
   ADMIN
   ACCOUNTANT
   VIEWER
+}
+
+/// Rol del satélite de construcción (bartiz). Ver CompanyMember.construccionRol.
+enum ConstruccionRol {
+  ADMIN
+  TESORERIA
+  RESIDENTE
 }
 
 // ─── Despacho (multi-user organization) ─────────────────────────────────────
