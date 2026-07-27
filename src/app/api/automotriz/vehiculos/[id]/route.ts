@@ -63,6 +63,7 @@ const patchSchema = z.object({
   color: z.string().max(40).nullable().optional(),
   numeroEconomico: z.string().max(20).nullable().optional(),
   kilometraje: z.number().int().min(0).nullable().optional(),
+  uso: z.enum(["VENTA", "DEMO", "CORTESIA"]).optional(),
   costoCompra: z.number().min(0).optional(),
   planPisoTasaAnual: z.number().min(0).max(2).nullable().optional(),
   planPisoInicio: z.string().datetime().nullable().optional(),

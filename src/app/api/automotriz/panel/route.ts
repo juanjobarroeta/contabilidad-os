@@ -30,7 +30,7 @@ export const GET = withAuthz(async (req: Request) => {
     prisma.vehiculo.findMany({
       where: { companyId, estado: { in: ["DISPONIBLE", "APARTADO"] } },
       select: {
-        id: true, vin: true, marca: true, modelo: true, anio: true, estado: true,
+        id: true, vin: true, marca: true, modelo: true, anio: true, estado: true, uso: true,
         costoCompra: true, fechaCompra: true,
         costos: { select: { monto: true } },
       },
@@ -50,7 +50,9 @@ export const GET = withAuthz(async (req: Request) => {
   const valorPiso = r2(
     enPiso.reduce((s, v) => s + v.costoCompra + v.costos.reduce((c, x) => c + x.monto, 0), 0)
   );
-  const masDe90 = enPiso.filter((v) => (dias(v) ?? 0) > 90);
+  // Las demos/cortesías no suenan en el aging: están en piso a propósito.
+  const enVenta = enPiso.filter((v) => v.uso === "VENTA");
+  const masDe90 = enVenta.filter((v) => (dias(v) ?? 0) > 90);
 
   const ingresosMes = r2(vendidasMes.reduce((s, v) => s + (v.precioVenta ?? 0), 0));
   const margenMes = r2(
@@ -91,9 +93,10 @@ export const GET = withAuthz(async (req: Request) => {
       unidades: enPiso.length,
       valorPiso,
       masDe90: masDe90.length,
-      diasPromedio: enPiso.length
-        ? Math.round(enPiso.reduce((s, v) => s + (dias(v) ?? 0), 0) / enPiso.length)
+      diasPromedio: enVenta.length
+        ? Math.round(enVenta.reduce((s, v) => s + (dias(v) ?? 0), 0) / enVenta.length)
         : 0,
+      demos: enPiso.filter((v) => v.uso !== "VENTA").length,
     },
     mes: { vendidas: vendidasMes.length, ingresos: ingresosMes, margen: margenMes, isan: isanMes },
     urgentes,

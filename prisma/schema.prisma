@@ -4548,6 +4548,16 @@ enum VehiculoTipo {
   SEMINUEVO
 }
 
+// Uso de la unidad — dimensión aparte del estado: una demo sigue en piso y
+// devengando interés, pero no está a la venta inmediata y NO debe sonar en el
+// aging (+90 días). Al volver al piso se vende como seminuevo sin romper la
+// máquina de estados. (Handoff 3a: filtro Nuevas/Seminuevas/Demo.)
+enum VehiculoUso {
+  VENTA
+  DEMO
+  CORTESIA
+}
+
 enum VehiculoEstado {
   EN_TRANSITO // pedida a planta / en camino; aún no postea inventario
   DISPONIBLE // recibida: inventario posteado, lista para venta
@@ -4572,6 +4582,7 @@ model Vehiculo {
   numeroEconomico String?
   tipo            VehiculoTipo   @default(NUEVO)
   estado          VehiculoEstado @default(EN_TRANSITO)
+  uso             VehiculoUso    @default(VENTA)
   // Seminuevos
   kilometraje     Int?
 
