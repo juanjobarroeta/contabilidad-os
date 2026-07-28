@@ -3,7 +3,12 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* `.force-light` re-declara los tokens claros dentro de un subárbol aunque la
+     app esté en tema oscuro. Úsalo en DOCUMENTOS que siempre son en claro
+     (p.ej. la representación impresa de un CFDI: hoja blanca en pantalla y en
+     papel) — sin él, la tinta de tema se vuelve casi blanca sobre la hoja. */
+  :root,
+  .force-light {
     /* Radio base de shadcn — aún alimenta rounded-sm/md/lg en tailwind.config. */
     --radius: 0.5rem;
 
