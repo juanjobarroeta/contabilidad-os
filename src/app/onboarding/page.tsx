@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
@@ -201,6 +201,20 @@ function OnboardingPageInner() {
   // SAT historical backfill depth (years) + selected plan tier.
   const [satBackfillYears, setSatBackfillYears] = useState(5);
   const [plan, setPlan] = useState("PROFESIONAL");
+  // Invitación de onboarding: si el despacho del usuario nació de una
+  // invitación (condiciones predefinidas), el paso Plan no vende precios.
+  const [invitacion, setInvitacion] = useState<{
+    invitado: boolean; despachoNombre: string | null; sinCargo: boolean;
+    syntage: boolean | null; maxEmpresas: number | null;
+  } | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/onboarding/contexto")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (vivo && d) setInvitacion(d); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
   // Acknowledgement that the user must sign Facturapi's Carta Manifiesto.
   const [manifiestoAck, setManifiestoAck] = useState(false);
 
@@ -441,7 +455,9 @@ function OnboardingPageInner() {
           regimenes,
           csfObligaciones,
           satBackfillYears,
-          plan,
+          // Con invitación el plan viene de las condiciones del despacho
+          // (defaultTier) — no se manda el elegible de la UI.
+          ...(invitacion?.invitado ? {} : { plan }),
           manifiestoAck,
           onboardingPackage,
         }),
@@ -930,7 +946,25 @@ function OnboardingPageInner() {
           )}
 
           {/* ── STEP 4: Plan ── */}
-          {step === 4 && (
+          {step === 4 && invitacion?.invitado && (
+            <>
+              <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-4 py-4 text-sm text-cos-jade-ink">
+                <p className="flex items-center gap-2 font-semibold">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  Tu plan ya está incluido{invitacion.despachoNombre ? ` para ${invitacion.despachoNombre}` : ""}
+                </p>
+                <ul className="mt-2 space-y-1 pl-6 text-[13px]">
+                  {invitacion.sinCargo && <li>• Cortesía — sin cargo, sin prueba que venza.</li>}
+                  {invitacion.syntage && <li>• Sincronización SAT (Syntage) incluida para tus empresas.</li>}
+                  {invitacion.maxEmpresas != null && <li>• Hasta {invitacion.maxEmpresas} empresa{invitacion.maxEmpresas === 1 ? "" : "s"} en tu despacho.</li>}
+                </ul>
+                <p className="mt-2 text-[12px] text-cos-jade-ink/80">
+                  No necesitas elegir precio — continúa con la configuración.
+                </p>
+              </div>
+            </>
+          )}
+          {step === 4 && !invitacion?.invitado && (
             <>
               <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-md px-4 py-3 text-sm text-cos-jade-ink flex items-center gap-2">
                 <Sparkles className="h-4 w-4 shrink-0" />
