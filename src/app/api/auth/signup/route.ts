@@ -76,12 +76,12 @@ export async function POST(req: Request) {
   // normal — el cliente llegó esperando las condiciones de la invitación).
   let invite: {
     id: string; despachoName: string; tierEmpresas: "ASISTENTE" | "AUTOMATIZADO" | "PRO" | "DESPACHO";
-    sinCargo: boolean; trialDays: number;
+    sinCargo: boolean; trialDays: number; maxEmpresas: number | null;
   } | null = null;
   if (inviteToken) {
     const row = await prisma.onboardingInvite.findUnique({
       where: { tokenHash: hashOnboardingToken(inviteToken) },
-      select: { id: true, despachoName: true, tierEmpresas: true, sinCargo: true, trialDays: true, status: true, expiresAt: true },
+      select: { id: true, despachoName: true, tierEmpresas: true, sinCargo: true, trialDays: true, maxEmpresas: true, status: true, expiresAt: true },
     });
     const estado = evaluarInvitacion(row, new Date());
     if (!estado.ok) {
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
         throw new Error("INVITE_RACE");
       }
       const despacho = await tx.despacho.create({
-        data: { name: invite.despachoName, defaultTier: invite.tierEmpresas },
+        data: { name: invite.despachoName, defaultTier: invite.tierEmpresas, maxEmpresas: invite.maxEmpresas },
         select: { id: true },
       });
       await tx.despachoMember.create({

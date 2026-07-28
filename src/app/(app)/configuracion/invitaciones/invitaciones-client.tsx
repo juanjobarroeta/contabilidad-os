@@ -10,6 +10,7 @@ interface Invite {
   tierEmpresas: string;
   sinCargo: boolean;
   trialDays: number;
+  maxEmpresas: number | null;
   status: string;
   expiresAt: string;
   acceptedByEmail: string | null;
@@ -34,6 +35,7 @@ export function InvitacionesClient() {
   const [ownerNombre, setOwnerNombre] = useState("");
   const [tier, setTier] = useState("AUTOMATIZADO");
   const [sinCargo, setSinCargo] = useState(true);
+  const [maxEmpresas, setMaxEmpresas] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [nuevo, setNuevo] = useState<{ link: string; codigo: string; despachoName: string } | null>(null);
@@ -59,7 +61,13 @@ export function InvitacionesClient() {
       const res = await fetch("/api/onboarding-invites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ despachoName, ownerNombre: ownerNombre || undefined, tierEmpresas: tier, sinCargo }),
+        body: JSON.stringify({
+          despachoName,
+          ownerNombre: ownerNombre || undefined,
+          tierEmpresas: tier,
+          sinCargo,
+          maxEmpresas: maxEmpresas.trim() ? Number(maxEmpresas) : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "No se pudo crear"); return; }
@@ -104,6 +112,11 @@ export function InvitacionesClient() {
             <select value={tier} onChange={(e) => setTier(e.target.value)} className={inputCls}>
               {Object.entries(TIER_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-cos-ink-soft">Límite de empresas (vacío = sin límite)</span>
+            <input type="number" min={1} max={100} value={maxEmpresas} onChange={(e) => setMaxEmpresas(e.target.value)}
+              className={inputCls} placeholder="Ej. 9" />
           </label>
           <label className="flex items-end gap-2 pb-2">
             <input type="checkbox" checked={sinCargo} onChange={(e) => setSinCargo(e.target.checked)} className="h-4 w-4 accent-cos-brand" />
@@ -157,7 +170,8 @@ export function InvitacionesClient() {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-cos-ink">{i.despachoName}</p>
                 <p className="text-xs text-cos-ink-faint">
-                  {TIER_LABEL[i.tierEmpresas] ?? i.tierEmpresas} · {i.sinCargo ? "cortesía" : `prueba ${i.trialDays}d`} · vence {fmt(i.expiresAt)}
+                  {TIER_LABEL[i.tierEmpresas] ?? i.tierEmpresas} · {i.sinCargo ? "cortesía" : `prueba ${i.trialDays}d`}
+                  {i.maxEmpresas != null ? ` · hasta ${i.maxEmpresas} empresa${i.maxEmpresas === 1 ? "" : "s"}` : " · empresas sin límite"} · vence {fmt(i.expiresAt)}
                   {i.acceptedByEmail ? ` · aceptada por ${i.acceptedByEmail}` : ""}
                 </p>
               </div>

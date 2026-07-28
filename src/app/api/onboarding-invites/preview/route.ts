@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
   const invite = await prisma.onboardingInvite.findUnique({
     where: { tokenHash: hashOnboardingToken(token) },
-    select: { despachoName: true, ownerNombre: true, tierEmpresas: true, sinCargo: true, status: true, expiresAt: true },
+    select: { despachoName: true, ownerNombre: true, tierEmpresas: true, sinCargo: true, maxEmpresas: true, status: true, expiresAt: true },
   });
 
   const estado = evaluarInvitacion(invite, new Date());
@@ -30,5 +30,6 @@ export async function GET(req: Request) {
     // Syntage on = tier distinto de ASISTENTE.
     syntage: invite!.tierEmpresas !== "ASISTENTE",
     sinCargo: invite!.sinCargo,
+    maxEmpresas: invite!.maxEmpresas,
   });
 }

@@ -8,7 +8,7 @@ import { BrandMark, ThemeToggle } from "@/components/ui";
 import { Loader2, ShieldCheck, CreditCard, CalendarClock, Gift, Sparkles } from "lucide-react";
 
 type InvitePreview =
-  | { valida: true; despachoName: string; ownerNombre: string | null; syntage: boolean; sinCargo: boolean }
+  | { valida: true; despachoName: string; ownerNombre: string | null; syntage: boolean; sinCargo: boolean; maxEmpresas: number | null }
   | { valida: false; mensaje?: string };
 
 export default function SignupPage() {
@@ -107,6 +107,7 @@ export default function SignupPage() {
               <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-cos-jade-ink/90">
                 {preview.sinCargo && <span className="inline-flex items-center gap-1"><CreditCard className="h-3.5 w-3.5" /> Sin cargo</span>}
                 {preview.syntage && <span className="inline-flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> Sincronización SAT (Syntage) incluida</span>}
+                {preview.maxEmpresas != null && <span className="inline-flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5" /> Hasta {preview.maxEmpresas} empresa{preview.maxEmpresas === 1 ? "" : "s"}</span>}
               </p>
             </div>
           )}

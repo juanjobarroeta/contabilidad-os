@@ -238,12 +238,30 @@ export async function POST(req: Request) {
   // (e.g. only explicit OWNERs can delete or transfer the company).
   const despachoMembership = await prisma.despachoMember.findFirst({
     where: { userId: session.user.id },
-    select: { despachoId: true, despacho: { select: { defaultTier: true } } },
+    select: { despachoId: true, despacho: { select: { defaultTier: true, maxEmpresas: true } } },
   });
   // Tier con el que nace la empresa: el defaultTier del despacho si lo fijó una
   // invitación de onboarding (Syntage on/off según las condiciones), o el
   // default del esquema (AUTOMATIZADO) para altas normales.
   const tierDespacho = despachoMembership?.despacho?.defaultTier ?? undefined;
+
+  // Tope de empresas del despacho (condición de la invitación de onboarding):
+  // se valida contra las ACTIVAS — una baja libera el lugar. Null = sin límite.
+  const maxEmpresas = despachoMembership?.despacho?.maxEmpresas ?? null;
+  if (despachoMembership && maxEmpresas != null) {
+    const activas = await prisma.company.count({
+      where: { despachoId: despachoMembership.despachoId, isActive: true },
+    });
+    if (activas >= maxEmpresas) {
+      return NextResponse.json(
+        {
+          error: `Tu plan incluye hasta ${maxEmpresas} empresa${maxEmpresas === 1 ? "" : "s"} y ya las tienes dadas de alta. Escríbenos para ampliar tu límite.`,
+          codigo: "LIMITE_EMPRESAS",
+        },
+        { status: 403 },
+      );
+    }
+  }
 
   // Extract IMSS + anual fields from onboardingPackage so they persist on Company row
   const registroPatronal = onboardingPackage?.imss?.registroPatronal ?? null;
