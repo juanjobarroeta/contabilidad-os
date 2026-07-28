@@ -86,6 +86,7 @@ const bodySchema = z.object({
       utilidad: z.number().nullable(),
       total: z.number().nullable(),
     }),
+    formato: z.enum(["PRESUPUESTO", "LISTA_CONCEPTOS", "MATRICES"]).optional(),
     branches: z.array(branchSchema),
     leaves: z.array(leafSchema),
     insumos: z.array(insumoSchema),
@@ -387,14 +388,18 @@ export const POST = withAuthz(
         }
 
         // ─── Step 6: Bootstrap the EstimacionTemplate ────────────────────────
-        // Decolsa workflow needs the compacted billing structure ready
-        // immediately. This creates the template + per-capítulo curvas using
-        // the 1-15-rolled / ≥16-open default. Gerardo can edit afterwards.
+        // Decolsa workflow needs the billing structure ready immediately.
+        // Vivienda (formato PRESUPUESTO): compactado por capítulo (1-15
+        // rolled / ≥16 open). Remodelaciones (LISTA DE CONCEPTOS): una fila
+        // POR CONCEPTO — las estimaciones se capturan a ese nivel, no por
+        // capítulo condensado.
         const bootstrap = await bootstrapEstimacionTemplate(tx, {
           proyectoId: id,
           companyId: proyecto.companyId,
           presupuestoId: presupuesto.id,
           weekCount: finalWeekCount,
+          granularidad:
+            parsed.formato === "LISTA_CONCEPTOS" ? "CONCEPTOS" : "CAPITULOS",
         });
 
         return {
