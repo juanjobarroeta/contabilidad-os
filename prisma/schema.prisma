@@ -431,6 +431,11 @@ model Despacho {
   /// Syntage habilitado; ASISTENTE = sin COGS. Null = default del esquema.
   defaultTier CompanyPlan?
 
+  /// Tope de empresas ACTIVAS que este despacho puede dar de alta (condición de
+  /// la invitación de onboarding). Null = sin límite. Se valida al crear
+  /// empresas; una baja libera el lugar.
+  maxEmpresas Int?
+
   members     DespachoMember[]
   companies   Company[]
   grupos      Grupo[]
@@ -458,6 +463,8 @@ model OnboardingInvite {
   sinCargo           Boolean     @default(true)
   /// Días de prueba si NO es cortesía (sinCargo=false).
   trialDays          Int         @default(15)
+  /// Tope de empresas del despacho que se creará. Null = sin límite.
+  maxEmpresas        Int?
   /// SHA-256 hex del token crudo. El token sólo sale una vez, al crearla.
   tokenHash          String      @unique
   status             String      @default("PENDING") // PENDING | ACCEPTED | REVOKED
@@ -2942,11 +2949,11 @@ model Gasto {
   // factura (CFDI). Elegido al capturar, junto con la foto/PDF.
   comprobanteTipo     ComprobanteTipo?
   comprobanteUrl      String? // invoice/receipt URL
-  comprobanteData     String? @db.Text
+  comprobanteData     String?          @db.Text
   comprobanteMime     String?
   comprobanteName     String?
   pagoComprobanteUrl  String? // SPEI / cheque screenshot URL
-  pagoComprobanteData String? @db.Text
+  pagoComprobanteData String?          @db.Text
   pagoComprobanteMime String?
   pagoComprobanteName String?
 

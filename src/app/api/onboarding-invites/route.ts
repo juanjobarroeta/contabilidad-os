@@ -26,6 +26,8 @@ const createSchema = z.object({
   tierEmpresas: z.enum(TIERS).default("AUTOMATIZADO"),
   sinCargo: z.boolean().default(true),
   trialDays: z.number().int().min(1).max(90).default(15),
+  /// Tope de empresas del despacho invitado. Ausente/null = sin límite.
+  maxEmpresas: z.number().int().min(1).max(100).nullable().optional(),
 });
 
 async function requireAdmin() {
@@ -58,6 +60,7 @@ export async function POST(req: Request) {
       tierEmpresas: d.tierEmpresas,
       sinCargo: d.sinCargo,
       trialDays: d.trialDays,
+      maxEmpresas: d.maxEmpresas ?? null,
       tokenHash,
       expiresAt: onboardingInviteExpiry(),
     },
@@ -71,7 +74,7 @@ export async function POST(req: Request) {
     accion: "onboarding-invite.crear",
     entidad: "OnboardingInvite",
     entidadId: invite.id,
-    detalle: { despachoName: d.despachoName, tierEmpresas: d.tierEmpresas, sinCargo: d.sinCargo },
+    detalle: { despachoName: d.despachoName, tierEmpresas: d.tierEmpresas, sinCargo: d.sinCargo, maxEmpresas: d.maxEmpresas ?? null },
     req,
   });
 
@@ -88,7 +91,7 @@ export async function GET() {
     take: 100,
     select: {
       id: true, despachoName: true, ownerNombre: true, tierEmpresas: true,
-      sinCargo: true, trialDays: true, status: true, expiresAt: true,
+      sinCargo: true, trialDays: true, maxEmpresas: true, status: true, expiresAt: true,
       acceptedByEmail: true, acceptedAt: true, createdAt: true,
     },
   });
