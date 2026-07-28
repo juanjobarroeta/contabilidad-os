@@ -81,7 +81,7 @@ export type PresupuestoParseResult = {
   /** Formato de origen detectado. LISTA_CONCEPTOS = remodelaciones de
    *  Gerardo (locales): las estimaciones se plantillan a nivel CONCEPTO,
    *  no por capítulo condensado. */
-  formato?: "PRESUPUESTO" | "LISTA_CONCEPTOS" | "MATRICES";
+  formato?: "PRESUPUESTO" | "LISTA_CONCEPTOS" | "MATRICES" | "ACTIVIDADES_PDF";
   branches: ParsedPresupuestoBranch[];
   leaves: ParsedPresupuestoLeaf[];
   insumos: ParsedInsumo[];

@@ -21,6 +21,7 @@ import {
   withAuthz,
 } from "@/lib/authz";
 import { parsePresupuestoXls } from "@/lib/construccion/presupuesto-parser";
+import { extractActividadesFromPdf } from "@/lib/construccion/presupuesto-actividades-vision";
 
 export const POST = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -47,9 +48,20 @@ export const POST = withAuthz(
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    // PDF = "Presupuesto por Actividades" (licitación): suele venir
+    // rasterizado sin capa de texto, así que se extrae por visión y se
+    // valida contra los totales impresos. Excel sigue el parser clásico.
+    const isPdf =
+      file.type === "application/pdf" ||
+      /\.pdf$/i.test(file.name) ||
+      buffer.subarray(0, 5).toString("latin1").startsWith("%PDF");
     let parsed;
     try {
-      parsed = parsePresupuestoXls(buffer);
+      parsed = isPdf
+        ? await extractActividadesFromPdf(buffer, "application/pdf", {
+            companyId: proyecto.companyId,
+          })
+        : parsePresupuestoXls(buffer);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Error al leer el archivo";
       return NextResponse.json({ error: msg }, { status: 422 });
