@@ -208,9 +208,16 @@ async function main() {
       await tx.pagoProveedor.deleteMany({ where: { id: { in: pagoProvIds } } });
     }
 
-    // 3. Requisiciones (partidas/cotizaciones/adjudicaciones/aplicaciones
-    //    caen en cascada). Esto vacía las cuentas por pagar de prueba.
+    // 3. Requisiciones — árbol explícito de hijos a padres: dos FKs son
+    //    RESTRICT a nivel de base (SolicitudCotizacionPartida→partida y
+    //    adjudicación→cotización), así que la cascada sola falla.
     if (reqIds.length) {
+      await tx.solicitudAdjudicacion.deleteMany({ where: { solicitudId: { in: reqIds } } });
+      await tx.solicitudCotizacionPartida.deleteMany({
+        where: { cotizacion: { solicitudId: { in: reqIds } } },
+      });
+      await tx.solicitudCompraCotizacion.deleteMany({ where: { solicitudId: { in: reqIds } } });
+      await tx.solicitudPartida.deleteMany({ where: { solicitudId: { in: reqIds } } });
       await tx.solicitudCompra.deleteMany({ where: { id: { in: reqIds } } });
     }
 
@@ -223,7 +230,20 @@ async function main() {
     //    cubiertos arriba si aplican; reembolsos y cualquier resto aquí),
     //    luego el proyecto (presupuestos/estimaciones/etc caen en cascada).
     if (proyIds.length) {
-      await tx.solicitudCompra.deleteMany({ where: { proyectoId: { in: proyIds } } });
+      const restantes = await tx.solicitudCompra.findMany({
+        where: { proyectoId: { in: proyIds } },
+        select: { id: true },
+      });
+      const restIds = restantes.map((r) => r.id);
+      if (restIds.length) {
+        await tx.solicitudAdjudicacion.deleteMany({ where: { solicitudId: { in: restIds } } });
+        await tx.solicitudCotizacionPartida.deleteMany({
+          where: { cotizacion: { solicitudId: { in: restIds } } },
+        });
+        await tx.solicitudCompraCotizacion.deleteMany({ where: { solicitudId: { in: restIds } } });
+        await tx.solicitudPartida.deleteMany({ where: { solicitudId: { in: restIds } } });
+        await tx.solicitudCompra.deleteMany({ where: { id: { in: restIds } } });
+      }
       await tx.gasto.deleteMany({ where: { proyectoId: { in: proyIds } } });
       await tx.reembolsoSemanal.deleteMany({ where: { proyectoId: { in: proyIds } } });
       await tx.proyecto.deleteMany({ where: { id: { in: proyIds } } });

@@ -53,6 +53,11 @@ export async function bootstrapEstimacionTemplate(
     companyId: string;
     presupuestoId: string;
     weekCount?: number;
+    /** CAPITULOS (default): política Decolsa de compactación por capítulo.
+     *  CONCEPTOS: una fila por concepto del presupuesto (formato LISTA DE
+     *  CONCEPTOS de remodelaciones — las estimaciones se capturan concepto
+     *  por concepto, no por capítulo condensado). */
+    granularidad?: "CAPITULOS" | "CONCEPTOS";
   }
 ): Promise<BootstrapResult> {
   const { proyectoId, companyId, presupuestoId } = args;
@@ -113,6 +118,53 @@ export async function bootstrapEstimacionTemplate(
   const picks: Pick[] = [];
   let orden = 0;
 
+  const granularidad = args.granularidad ?? "CAPITULOS";
+
+  // Mapa capítulo → descripción (nombre del branch de nivel 1) para curvas
+  // y calendario, válido en ambas granularidades.
+  const capDesc = new Map<string, string>();
+  for (const b of branches) {
+    if (depthOf(b.codigo) === 1) {
+      const cap = topCapitulo(b.codigo);
+      if (cap && !capDesc.has(cap)) capDesc.set(cap, b.partida ?? `Capítulo ${cap}`);
+    }
+  }
+
+  if (granularidad === "CONCEPTOS") {
+    // Una fila por CONCEPTO (leaf): el formato LISTA DE CONCEPTOS estima a
+    // este nivel. capituloCode = primer segmento del código del padre.
+    const branchById = new Map(branches.map((b) => [b.id, b]));
+    const leaves = await tx.presupuestoPartida.findMany({
+      where: { presupuestoId, esRollup: false },
+      select: {
+        id: true,
+        parentPartidaId: true,
+        orden: true,
+        concepto: { select: { descripcion: true } },
+      },
+      orderBy: [{ orden: "asc" }],
+    });
+    // Orden estable: por posición del padre en el árbol y luego por fila.
+    const parentOrden = (leafParent: string | null): number => {
+      const b = leafParent ? branchById.get(leafParent) : undefined;
+      return b?.orden ?? 0;
+    };
+    leaves.sort((a, b) =>
+      parentOrden(a.parentPartidaId) - parentOrden(b.parentPartidaId) ||
+      (a.orden ?? 0) - (b.orden ?? 0)
+    );
+    for (const l of leaves) {
+      const parent = l.parentPartidaId ? branchById.get(l.parentPartidaId) : undefined;
+      const capCode = topCapitulo(parent?.codigo ?? null) ?? "1";
+      picks.push({
+        presupuestoPartidaId: l.id,
+        capituloCode: capCode,
+        descripcion: (l.concepto?.descripcion ?? "Concepto").slice(0, 200),
+        orden: orden++,
+      });
+    }
+  }
+
   // Sort depth1 by numeric capítulo so we get rows 1, 2, 3, ..., 30.
   depth1.sort((a, b) => {
     const ca = parseInt(topCapitulo(a.codigo) ?? "0", 10);
@@ -141,7 +193,7 @@ export async function bootstrapEstimacionTemplate(
     return ca - cb;
   });
 
-  for (const cap of dedupedDepth1) {
+  for (const cap of granularidad === "CONCEPTOS" ? [] : dedupedDepth1) {
     const capCode = topCapitulo(cap.codigo);
     if (!capCode) continue;
     const capNum = parseInt(capCode, 10);
@@ -212,7 +264,7 @@ export async function bootstrapEstimacionTemplate(
     pesoPctSemanal: number[];
   };
   const curvaRows: CurvaRow[] = [];
-  for (const def of CURVA_VIVIENDA_2R_DEFAULT) {
+  for (const def of granularidad === "CONCEPTOS" ? [] : CURVA_VIVIENDA_2R_DEFAULT) {
     if (!usedCapitulos.has(def.capituloCode)) continue;
     curvaRows.push({
       templateId: template.id,
@@ -226,7 +278,9 @@ export async function bootstrapEstimacionTemplate(
   for (const cap of usedCapitulos) {
     if (CURVA_VIVIENDA_2R_DEFAULT.some((c) => c.capituloCode === cap)) continue;
     const desc =
-      picks.find((p) => p.capituloCode === cap)?.descripcion ?? `Capítulo ${cap}`;
+      capDesc.get(cap) ??
+      picks.find((p) => p.capituloCode === cap)?.descripcion ??
+      `Capítulo ${cap}`;
     curvaRows.push({
       templateId: template.id,
       capituloCode: cap,
@@ -246,7 +300,9 @@ export async function bootstrapEstimacionTemplate(
     templateId: template.id,
     capituloCode: cap,
     descripcion:
-      picks.find((p) => p.capituloCode === cap)?.descripcion ?? `Capítulo ${cap}`,
+      capDesc.get(cap) ??
+      picks.find((p) => p.capituloCode === cap)?.descripcion ??
+      `Capítulo ${cap}`,
     pesoPctSemanal: new Array(weekCount).fill(0),
   }));
   if (calRows.length > 0) {

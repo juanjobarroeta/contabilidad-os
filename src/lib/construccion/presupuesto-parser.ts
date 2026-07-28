@@ -78,6 +78,10 @@ export type ParsedCaratula = {
 
 export type PresupuestoParseResult = {
   caratula: ParsedCaratula;
+  /** Formato de origen detectado. LISTA_CONCEPTOS = remodelaciones de
+   *  Gerardo (locales): las estimaciones se plantillan a nivel CONCEPTO,
+   *  no por capítulo condensado. */
+  formato?: "PRESUPUESTO" | "LISTA_CONCEPTOS" | "MATRICES";
   branches: ParsedPresupuestoBranch[];
   leaves: ParsedPresupuestoLeaf[];
   insumos: ParsedInsumo[];
@@ -491,6 +495,7 @@ export function parsePresupuestoXls(buffer: Buffer): PresupuestoParseResult {
 
   return {
     caratula,
+    formato: "PRESUPUESTO",
     branches,
     leaves,
     insumos,
@@ -761,6 +766,7 @@ function parseMatricesResult(
 
   return {
     caratula: { titulo, subtotal: null, utilidad: null, total: sumLeafImporte },
+    formato: "MATRICES",
     branches,
     leaves,
     insumos,
@@ -1119,6 +1125,7 @@ function parseListaConceptosResult(
 
   return {
     caratula,
+    formato: "LISTA_CONCEPTOS",
     branches,
     leaves,
     insumos,
