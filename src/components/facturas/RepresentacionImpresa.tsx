@@ -103,7 +103,10 @@ export function RepresentacionImpresa({ invoiceId, onClose }: { invoiceId: strin
     <div className="fixed inset-0 z-[80] grid place-items-start justify-center overflow-y-auto bg-[oklch(0.2_0.02_258_/_0.55)] p-4 sm:p-8 print:bg-white print:p-0" onClick={onClose}>
       <style>{`@media print { body * { visibility: hidden !important; } .rep-sheet, .rep-sheet * { visibility: visible !important; } .rep-sheet { position: absolute !important; left: 0; top: 0; width: 100% !important; max-width: none !important; box-shadow: none !important; border-radius: 0 !important; } .rep-noprint { display: none !important; } }`}</style>
 
-      <div className="rep-sheet w-full max-w-[820px] rounded-[16px] bg-white shadow-[0_30px_60px_-20px_oklch(0.2_0.05_258_/_0.5)]" onClick={(e) => e.stopPropagation()}>
+      {/* force-light: la hoja es un DOCUMENTO (blanco en pantalla y en papel);
+          sin esto, en tema oscuro la tinta de tema se vuelve casi blanca sobre
+          el fondo blanco fijo — texto invisible. */}
+      <div className="rep-sheet force-light w-full max-w-[820px] rounded-[16px] bg-white text-cos-ink shadow-[0_30px_60px_-20px_oklch(0.2_0.05_258_/_0.5)]" onClick={(e) => e.stopPropagation()}>
         {/* Barra superior (no se imprime) */}
         <div className="rep-noprint flex items-center justify-between border-b border-cos-line-soft px-5 py-3">
           <p className="text-[14px] font-semibold text-cos-ink">Representación impresa</p>
