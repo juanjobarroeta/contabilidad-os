@@ -43,6 +43,11 @@ describe("enforceConstruccionRol", () => {
     expect(allowed("RESIDENTE", "GET", "/api/construccion/presupuestos/abc")).toBe(true);
     expect(allowed("RESIDENTE", "GET", "/api/construccion/apus/abc")).toBe(true);
     expect(allowed("RESIDENTE", "GET", "/api/construccion/reembolsos")).toBe(true);
+    // Proveedores: ver y dar de alta; editar existentes/importar de CFDIs no
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/suppliers")).toBe(true);
+    expect(allowed("RESIDENTE", "GET", "/api/construccion/suppliers/abc")).toBe(true);
+    expect(allowed("RESIDENTE", "PATCH", "/api/construccion/suppliers/abc")).toBe(false);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/suppliers/import-cfdis")).toBe(false);
     // Caja chica: captura gastos con comprobante, sin decidir sobre ellos
     expect(allowed("RESIDENTE", "POST", "/api/construccion/gastos")).toBe(true);
     expect(allowed("RESIDENTE", "PATCH", "/api/construccion/gastos/abc")).toBe(true);

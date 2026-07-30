@@ -86,7 +86,7 @@ const bodySchema = z.object({
       utilidad: z.number().nullable(),
       total: z.number().nullable(),
     }),
-    formato: z.enum(["PRESUPUESTO", "LISTA_CONCEPTOS", "MATRICES"]).optional(),
+    formato: z.enum(["PRESUPUESTO", "LISTA_CONCEPTOS", "MATRICES", "ACTIVIDADES_PDF"]).optional(),
     branches: z.array(branchSchema),
     leaves: z.array(leafSchema),
     insumos: z.array(insumoSchema),
@@ -399,7 +399,9 @@ export const POST = withAuthz(
           presupuestoId: presupuesto.id,
           weekCount: finalWeekCount,
           granularidad:
-            parsed.formato === "LISTA_CONCEPTOS" ? "CONCEPTOS" : "CAPITULOS",
+            parsed.formato === "LISTA_CONCEPTOS" || parsed.formato === "ACTIVIDADES_PDF"
+              ? "CONCEPTOS"
+              : "CAPITULOS",
         });
 
         return {

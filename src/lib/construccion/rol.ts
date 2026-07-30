@@ -77,7 +77,11 @@ const RESIDENTE_RULES: Rule[] = [
   { methods: "read", pattern: "conceptos/*" },
   { methods: "read", pattern: "insumos" },
   { methods: "read", pattern: "insumos/*" },
-  { methods: "read", pattern: "suppliers" },
+  // Proveedores: ver el directorio y DAR DE ALTA nuevos desde la requisición
+  // (edición de existentes y condiciones siguen siendo de admin: los PATCH/PUT
+  // de suppliers/* y suppliers/*/terms no están listados).
+  { methods: "all", pattern: "suppliers" },
+  { methods: "read", pattern: "suppliers/*" },
   { methods: "read", pattern: "bitacora" },
   { methods: "read", pattern: "bitacora/*" },
   // Caja chica: ver, y CAPTURAR gastos con su comprobante (nota/factura +
