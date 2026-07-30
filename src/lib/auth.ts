@@ -7,7 +7,8 @@ import { z } from "zod";
 import { checkRateLimit, getClientIp } from "./rate-limit";
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  // trim antes de validar: los teclados móviles cuelan espacios al autocompletar
+  email: z.string().trim().email(),
   password: z.string().min(6),
 });
 
@@ -52,8 +53,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (!ipLimit.ok) throw new RateLimitError();
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email },
+        // Búsqueda insensible a mayúsculas: el teclado del teléfono capitaliza
+        // la primera letra ("Admin@…") y con findUnique exacto el login fallaba
+        // con la contraseña correcta.
+        const user = await prisma.user.findFirst({
+          where: { email: { equals: parsed.data.email, mode: "insensitive" } },
         });
 
         if (!user || !user.password) return null;
