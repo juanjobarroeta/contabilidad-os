@@ -317,15 +317,29 @@ export async function recalcularPayrollRun(
     return { ok: false, error: "El empleado no pertenece a esta corrida." };
   }
 
+  // Los items con CFDI vigente NO se recalculan: su comprobante ante el SAT es
+  // inmutable y sobreescribir el espejo local lo desincronizaría. Aplica a
+  // corridas parcialmente timbradas y al flujo cancelar-timbre → recalcular →
+  // retimbrar (sólo el empleado cancelado debe recalcularse).
+  const aRecalcular = targets.filter((i) => !i.cfdiUuid);
+  if (aRecalcular.length === 0) {
+    return {
+      ok: false,
+      error: employeeId
+        ? "El recibo de ese empleado ya está timbrado — cancela su timbre antes de recalcular."
+        : "Todos los recibos de la corrida ya están timbrados — no hay nada que recalcular.",
+    };
+  }
+
   const incidenciasPorEmpleado = await incidenciasDelPeriodo(
     run.companyId,
-    targets.map((i) => i.employeeId),
+    aRecalcular.map((i) => i.employeeId),
     rango.inicio,
     rango.fin
   );
 
   let tarifasVerificadas = true;
-  for (const item of targets) {
+  for (const item of aRecalcular) {
     const calc = calcularNomina({
       employee: item.employee as Employee & { tipoDescuentoInfonavit?: string | null },
       diasPagados,
@@ -357,7 +371,7 @@ export async function recalcularPayrollRun(
 
   return {
     ok: true,
-    recalculados: targets.length,
+    recalculados: aRecalcular.length,
     totalPercepciones,
     totalDeducciones,
     totalNeto,

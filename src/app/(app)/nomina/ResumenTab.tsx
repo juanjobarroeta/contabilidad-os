@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Users2, Play, ChevronRight as ChevronR, AlertTriangle,
-  CalendarDays, BadgeCheck, Clock4, Receipt, FileText,
+  CalendarDays, BadgeCheck, Clock4, Receipt, FileText, Ban, Loader2, X,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
@@ -94,6 +94,15 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
   const [hub, setHub] = useState<HubData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Cancelación de un timbre de nómina: modal con motivo SAT. Tras cancelar,
+  // el empleado queda listo para retimbrar (la corrida vuelve a CALCULATED).
+  const [cancelRecibo, setCancelRecibo] = useState<HubData["recientes"][number] | null>(null);
+  const [cancelMotivo, setCancelMotivo] = useState("02");
+  const [cancelSustituye, setCancelSustituye] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelErr, setCancelErr] = useState("");
+  const [cancelOkMsg, setCancelOkMsg] = useState("");
+
   const load = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true);
@@ -118,6 +127,37 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
   }, [activeCompany]);
 
   useEffect(() => { load(); }, [load]);
+
+  async function doCancelTimbre() {
+    if (!activeCompany || !cancelRecibo) return;
+    setCancelBusy(true);
+    setCancelErr("");
+    try {
+      const res = await fetch("/api/nomina/recibos/cancelar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: activeCompany.id,
+          payrollItemId: cancelRecibo.id,
+          motivo: cancelMotivo,
+          ...(cancelMotivo === "01" ? { sustituyeUuid: cancelSustituye.trim() } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo cancelar el recibo");
+      setCancelOkMsg(
+        `Recibo de ${data.empleado} cancelado ante el SAT. El empleado quedó listo para retimbrar: corrige sus datos si hace falta, recalcula la corrida y vuelve a timbrar.`
+      );
+      setCancelRecibo(null);
+      setCancelSustituye("");
+      setCancelMotivo("02");
+      load();
+    } catch (e) {
+      setCancelErr(e instanceof Error ? e.message : "No se pudo cancelar el recibo");
+    } finally {
+      setCancelBusy(false);
+    }
+  }
 
   if (!activeCompany) return <Loading />;
 
@@ -349,6 +389,14 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
                             className="text-[11px] font-medium text-cos-brand-ink underline hover:opacity-80"
                             title="Descargar XML del CFDI">XML</a>
                         )}
+                        {/* Cancelable sólo si lo emitimos nosotros (pdfDisponible ⇔ facturapiId) */}
+                        {r.invoiceId && r.pdfDisponible && (
+                          <button onClick={() => { setCancelRecibo(r); setCancelOkMsg(""); setCancelErr(""); }}
+                            className="rounded p-0.5 text-cos-red-ink/70 hover:bg-cos-red-tint hover:text-cos-red-ink"
+                            title="Cancelar este timbre ante el SAT">
+                            <Ban className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </span>
                     </div>
                   ))}
@@ -359,6 +407,11 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
               ) : (
                 <p className="text-[13.5px] leading-relaxed text-cos-ink-soft">
                   Aún no hay recibos timbrados. Al timbrar una corrida (o importar tu historial del SAT), aquí aparecen los últimos con su PDF y XML.
+                </p>
+              )}
+              {cancelOkMsg && (
+                <p className="mt-2 rounded-lg border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-2 text-[12.5px] text-cos-jade-ink">
+                  {cancelOkMsg}
                 </p>
               )}
             </Card>
@@ -374,6 +427,60 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
               El <b>ISR retenido</b> a los trabajadores se entera al SAT junto con la declaración del mes (vence el día 17).
               El monto y su estado viven en <Link href="/impuestos?tab=del-mes" className="font-semibold text-cos-brand-ink hover:underline">Impuestos</Link>.
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: cancelar timbre de nómina ── */}
+      {cancelRecibo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => !cancelBusy && setCancelRecibo(null)}>
+          <div className="w-full max-w-[440px] rounded-card border border-cos-line bg-cos-card p-5 shadow-card" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[16px] font-bold text-cos-ink">Cancelar timbre ante el SAT</h3>
+                <p className="mt-0.5 text-[13px] text-cos-ink-soft">
+                  {cancelRecibo.empleado} · {TIPO_RUN_LABEL[cancelRecibo.tipo] ?? cancelRecibo.tipo} · pago {formatDate(cancelRecibo.fechaPago)} · {formatCurrency(cancelRecibo.neto)}
+                </p>
+              </div>
+              <button onClick={() => !cancelBusy && setCancelRecibo(null)} className="rounded p-1 text-cos-ink-faint hover:bg-cos-canvas">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="mb-1 block text-[12.5px] font-semibold text-cos-ink">Motivo de cancelación</label>
+            <select value={cancelMotivo} onChange={(e) => setCancelMotivo(e.target.value)}
+              className="w-full rounded-lg border border-cos-line bg-cos-canvas px-3 py-2 text-[13.5px] text-cos-ink focus:border-cos-brand focus:outline-none">
+              <option value="02">02 — Errores sin relación (cancelar y retimbrar)</option>
+              <option value="01">01 — Errores con relación (ya emití el sustituto)</option>
+              <option value="03">03 — No se llevó a cabo la operación</option>
+              <option value="04">04 — Operación nominativa en factura global</option>
+            </select>
+            {cancelMotivo === "01" && (
+              <input value={cancelSustituye} onChange={(e) => setCancelSustituye(e.target.value)}
+                placeholder="UUID del recibo que lo sustituye"
+                className="mt-2 w-full rounded-lg border border-cos-line bg-cos-canvas px-3 py-2 font-mono text-[12.5px] text-cos-ink focus:border-cos-brand focus:outline-none" />
+            )}
+
+            <p className="mt-3 rounded-lg border border-cos-amber-ink/20 bg-cos-amber-tint px-3 py-2 text-[12.5px] leading-relaxed text-cos-amber-ink">
+              El CFDI se cancela ante el SAT (el receptor es el empleado — no requiere su aceptación).
+              El empleado queda listo para <b>retimbrar</b>: corrige los datos, recalcula la corrida y vuelve a timbrar.
+            </p>
+
+            {cancelErr && (
+              <p className="mt-2 rounded-lg border border-cos-red-ink/20 bg-cos-red-tint px-3 py-2 text-[12.5px] text-cos-red-ink">{cancelErr}</p>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setCancelRecibo(null)} disabled={cancelBusy}
+                className="rounded-lg border border-cos-line px-4 py-2 text-[13.5px] font-medium text-cos-ink hover:bg-cos-canvas disabled:opacity-50">
+                Conservar el timbre
+              </button>
+              <button onClick={doCancelTimbre} disabled={cancelBusy || (cancelMotivo === "01" && !cancelSustituye.trim())}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-cos-red-ink px-4 py-2 text-[13.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
+                {cancelBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
+                {cancelBusy ? "Cancelando…" : "Cancelar ante el SAT"}
+              </button>
+            </div>
           </div>
         </div>
       )}
