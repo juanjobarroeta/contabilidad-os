@@ -84,20 +84,17 @@ export async function emitirComplementoPago(input: EmitirRepInput): Promise<Emit
 
   const facturapi = getFacturapiClient(company.facturapiApiKey!);
 
+  // Sólo los campos documentados por Facturapi para el DoctoRelacionado del
+  // complemento de pago: uuid, amount, installment, last_balance, taxes. El
+  // validador es estricto ("El campo X no está permitido") — series/folio/
+  // taxability/currency del documento se derivan del CFDI padre en su lado, y
+  // el Monto del pago se calcula a partir de los related_documents.
   const relatedDoc: Record<string, unknown> = {
     uuid: parentInv.uuid,
-    series: parentInv.serie ?? undefined,
-    folio_number: parentInv.folio ? Number.parseInt(parentInv.folio, 10) || undefined : undefined,
-    currency: parentInv.moneda ?? "MXN",
     last_balance: docto.impSaldoAnterior,
     amount: docto.impPagado,
     installment: docto.numParcialidad,
-    taxability: docto.objetoImp, // ObjetoImpDR: "01"/"02"
   };
-  // Desglose de impuestos del documento (ImpuestosDR). Nota operativa: el nombre
-  // exacto del campo de Facturapi para los impuestos por documento debe verificarse
-  // contra el sandbox antes de producción; si Facturapi los deriva del CFDI padre,
-  // enviar este arreglo es redundante pero consistente con lo que persistimos.
   if (docto.objetoImp === "02") {
     relatedDoc.taxes = [...docto.traslados, ...docto.retenciones].map((t) => ({
       type: t.tipo,
@@ -114,13 +111,16 @@ export async function emitirComplementoPago(input: EmitirRepInput): Promise<Emit
     complements: [
       {
         type: "pago",
-        data: {
-          payment_form: formaPago,
-          currency: parentInv.moneda ?? "MXN",
-          date: paymentDate.toISOString().slice(0, 10),
-          amount: docto.impPagado,
-          related_documents: [relatedDoc],
-        },
+        // `data` es un ARREGLO de pagos (un REP puede amparar varios); sin
+        // `amount` a nivel pago — Facturapi lo deriva de los documentos.
+        data: [
+          {
+            payment_form: formaPago,
+            currency: parentInv.moneda ?? "MXN",
+            date: paymentDate.toISOString().slice(0, 10),
+            related_documents: [relatedDoc],
+          },
+        ],
       },
     ],
   };
