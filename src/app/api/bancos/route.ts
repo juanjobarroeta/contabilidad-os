@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { BankAccountTipo } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 
@@ -66,9 +67,13 @@ export async function POST(req: Request) {
     throw e;
   }
 
-  const { companyId, banco, nombre, numeroCuenta, clabe, moneda } = await req.json();
+  const { companyId, banco, nombre, numeroCuenta, clabe, moneda, tipo } = await req.json();
   if (!companyId || !banco || !nombre || !numeroCuenta) {
     return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
+  }
+  // tipo opcional (satélites crean su cuenta puente como CAJA); inválido → 400.
+  if (tipo !== undefined && !Object.values(BankAccountTipo).includes(tipo)) {
+    return NextResponse.json({ error: "tipo inválido" }, { status: 400 });
   }
 
   const member = await getEffectiveCompanyMembership(user.id, companyId);
@@ -78,7 +83,7 @@ export async function POST(req: Request) {
 
   try {
     const account = await prisma.bankAccount.create({
-      data: { companyId, banco, nombre, numeroCuenta, clabe, moneda: moneda ?? "MXN" },
+      data: { companyId, banco, nombre, numeroCuenta, clabe, moneda: moneda ?? "MXN", ...(tipo ? { tipo } : {}) },
     });
     return NextResponse.json(account, { status: 201 });
   } catch {

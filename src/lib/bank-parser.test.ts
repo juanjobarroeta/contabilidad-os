@@ -200,3 +200,97 @@ describe("parseStatement — CSV filas descartadas", () => {
     expect(res.descartadas).toEqual([]);
   });
 });
+
+// ── Banorte CSV (export "Cuentas de Cheques") ────────────────────────────────
+// Cabecera real: CUENTA,FECHA DE OPERACIÓN,FECHA,REFERENCIA,DESCRIPCIÓN,
+// COD. TRANSAC,SUCURSAL,DEPÓSITOS,RETIROS,SALDO,MOVIMIENTO,DESCRIPCIÓN
+// DETALLADA,CHEQUE. Trampas: MOVIMIENTO es un consecutivo (NO un importe),
+// DESCRIPCIÓN trae la clave de rastreo (la útil es DESCRIPCIÓN DETALLADA),
+// los montos vienen con $ y comas, y las celdas vacías son "-".
+const BANORTE_CSV = `﻿CUENTA,FECHA DE OPERACIÓN,FECHA,REFERENCIA,DESCRIPCIÓN,COD. TRANSAC,SUCURSAL,DEPÓSITOS,RETIROS,SALDO,MOVIMIENTO,DESCRIPCIÓN DETALLADA,CHEQUE
+'1349182277,03/07/2026,03/07/2026,0,20260703400140HDH0000485641770,3,5663,"$5,127.17",-,"$69,301.50",74,"SPEI RECIBIDO, BCO:0014 SANTANDER, DEL CLIENTE STRIPE PAYMENTS MEXICO S DE RL DE CV, CONCEPTO: STRIPE, REFERENCIA: 0693689",-
+'1349182277,14/07/2026,14/07/2026,0,DEPOSITO REFERENCIADO;,537,8846,-,$4.00,"$78,595.76",79,"(BANCA POR INTERNET), CARGO POR COMISION CEP",-
+'1349182277,16/07/2026,16/07/2026,160726,COMPRA ORDEN DE PAGO SPEI,511,8846,-,"$2,358.92","$76,236.20",81,"=REFERENCIA  CTA/CLABE: 012180015437920135, BEM SPEI, Pago 1 Julio a Coach Ana",-`;
+
+describe("parseStatement — Banorte CSV", () => {
+  const res = parseStatement(BANORTE_CSV, "Cuentas_de_Cheques_Banorte.csv");
+
+  it("detecta Banorte por la firma de encabezados (no Santander por 'sucursal')", () => {
+    expect(res.detectedBank).toBe("Banorte");
+  });
+
+  it("usa DEPÓSITOS/RETIROS como monto — NO la columna MOVIMIENTO (consecutivo)", () => {
+    expect(res.transactions).toHaveLength(3);
+    expect(res.transactions[0].monto).toBe(5127.17);   // depósito
+    expect(res.transactions[1].monto).toBe(-4.0);      // retiro
+    expect(res.transactions[2].monto).toBe(-2358.92);  // retiro
+  });
+
+  it("usa DESCRIPCIÓN DETALLADA (no la clave de rastreo) y lee saldo y fecha", () => {
+    expect(res.transactions[0].descripcion).toContain("STRIPE PAYMENTS");
+    expect(res.transactions[0].saldo).toBe(69301.5);
+    expect(res.transactions[0].fecha.getUTCMonth()).toBe(6); // julio
+    expect(res.transactions[0].fecha.getUTCDate()).toBe(3);
+  });
+
+  it("descarta la referencia de relleno '0'/'-' pero conserva la real", () => {
+    expect(res.transactions[0].referencia).not.toBe("0");
+    expect(res.transactions[2].referencia).toBe("160726");
+  });
+});
+
+// ── Movimientos pegados del portal (Scotiabank) ──────────────────────────────
+const SCOTIA_PEGADO = `iva transf recepcion internacional
+30 Jul 2026 , 12:07:00
+-$67.23
+transf recepcion internacional
+30 Jul 2026 , 12:07:00
+$79,068.00
+sweb transf. interb spei
+28 Jul 2026 , 13:07:00
+-$10,000.00
+cobranza con recibo 1415
+24 Jul 2026 , 12:07:00
+-$194,000.00
+transf interbancaria spei
+23 Jul 2026 , 18:07:00
+$210,000.00`;
+
+describe("parseStatement — movimientos pegados del portal (Scotiabank)", () => {
+  const res = parseStatement(SCOTIA_PEGADO, "movimientos.txt");
+
+  it("reconoce el formato pegado (descripción / fecha / monto)", () => {
+    expect(res.format).toBe("pegado");
+    expect(res.transactions).toHaveLength(5);
+    expect(res.descartadas).toHaveLength(0);
+  });
+
+  it("conserva signo: retiros negativos, depósitos positivos", () => {
+    expect(res.transactions[0].monto).toBe(-67.23);
+    expect(res.transactions[1].monto).toBe(79068.0);
+    expect(res.transactions[4].monto).toBe(210000.0);
+  });
+
+  it("parsea la fecha 'DD MMM YYYY , HH:MM:SS'", () => {
+    const f = res.transactions[0].fecha;
+    expect(f.getUTCFullYear()).toBe(2026);
+    expect(f.getUTCMonth()).toBe(6);
+    expect(f.getUTCDate()).toBe(30);
+  });
+
+  it("asigna la descripción de la línea previa", () => {
+    expect(res.transactions[3].descripcion).toBe("cobranza con recibo 1415");
+  });
+
+  it("un CSV normal NO cae en el formato pegado", () => {
+    const csv = "FECHA,DESCRIPCION,CARGO,ABONO\n01/07/2026,PAGO,100.00,\n02/07/2026,DEPOSITO,,200.00";
+    expect(parseStatement(csv, "estado.csv").format).toBe("csv");
+  });
+
+  it("reporta (no ignora) una fecha sin monto posterior", () => {
+    const roto = SCOTIA_PEGADO + "\nmovimiento incompleto\n22 Jul 2026 , 09:07:00";
+    const r = parseStatement(roto, "movimientos.txt");
+    expect(r.transactions).toHaveLength(5);
+    expect(r.descartadas.length).toBeGreaterThan(0);
+  });
+});

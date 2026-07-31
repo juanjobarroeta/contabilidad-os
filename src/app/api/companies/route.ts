@@ -202,7 +202,7 @@ export async function POST(req: Request) {
   // crear la empresa (p. ej. Automotriz manda ["AUTOMOTRIZ"]). Lista blanca
   // explícita — CONTABILIDAD siempre se habilita de base más abajo.
   const MODULOS_AUTOHABILITABLES = new Set([
-    "AUTOMOTRIZ", "CONSTRUCCION", "PADEL", "PURIFICADORA", "RESTAURANTE", "FLOTA",
+    "AUTOMOTRIZ", "CONSTRUCCION", "PADEL", "PURIFICADORA", "RESTAURANTE", "FLOTA", "JCPT",
   ]);
   const modulosExtra = [...new Set(modulos ?? [])].filter((m) =>
     MODULOS_AUTOHABILITABLES.has(m)
