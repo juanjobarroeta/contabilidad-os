@@ -817,3 +817,14 @@ When all boxes are checked, the integration is complete.
 - How do I deploy? → §6
 - How do I debug? → §7 failure mode decoder
 - What am I forbidden from doing? → §8
+
+---
+
+## Appendix A: JCPT (server-side satellite)
+
+JCPT (Jo Cana Performance Training, the CoachOs repo) is the first satellite with **its own backend and database**. It keeps its coaching domain (athletes, programs, Stripe subscriptions) in its own Postgres and uses contabilidad-os only for accounting/admin. That changes the integration shape versus the Vite SPAs:
+
+- **Server-to-server, not browser calls.** JCPT's Next.js server calls the hub with a bearer token obtained from `POST /api/auth/token` (`cliente: "jcpt"`) and refreshed via `POST /api/auth/token/refresh`. No CORS entry in `API_ALLOWED_ORIGINS` is needed and the token never reaches a browser.
+- **Income push.** Each paid Stripe invoice in JCPT is pushed as a `BankTransaction` via `POST /api/ingest/external-income` with `modulo: "JCPT"` and `externalRef: "jcpt:stripe:<invoice_id>"` (idempotent). The contador reconciles and posts it through the normal bank flow, so no JCPT posting helper is required for v1.
+- **Read surfaces.** JCPT's admin screen reads `GET /api/facturas/resumen` and `GET /api/bancos` to surface invoicing totals and conciliación backlog inside JCPT.
+- **Setup.** Enable the `JCPT` module (`CompanyModule`) on the target Company, create the hub `User` + `CompanyMember` the JCPT server authenticates as (consider `allowedModules: ["JCPT", "CONTABILIDAD"]`), and configure `CONTABILIDADOS_*` env vars on the JCPT side (see the CoachOs repo's `docs/CONTABILIDADOS.md`).

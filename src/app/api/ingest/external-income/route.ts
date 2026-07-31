@@ -2,16 +2,17 @@
  * POST /api/ingest/external-income
  *
  * Idempotent ingest of an income movement pushed by a satellite app (e.g. the
- * padel club app). Records a BankTransaction (CREDITO, UNMATCHED) the contador
- * then reconciles + posts to the ledger via the normal flow. Idempotent by
- * `externalRef` so re-pushes never double-count.
+ * padel club app or the JCPT coaching platform). Records a BankTransaction
+ * (CREDITO, UNMATCHED) the contador then reconciles + posts to the ledger via
+ * the normal flow. Idempotent by `externalRef` so re-pushes never double-count.
  *
- * Auth: bearer token (or session) + membership + the PADEL module.
+ * Auth: bearer token (or session) + membership + the satellite's module.
  *
  * Body: {
  *   companyId, bankAccountId, externalRef,
  *   fecha (ISO), descripcion, monto (number, pesos),
- *   tipo? "CREDITO" | "DEBITO" (default CREDITO), referencia?
+ *   tipo? "CREDITO" | "DEBITO" (default CREDITO), referencia?,
+ *   modulo? "PADEL" | "JCPT" (default PADEL — the module gate + `source` tag)
  * }
  */
 
@@ -29,6 +30,7 @@ const schema = z.object({
   monto: z.number().positive(),
   tipo: z.enum(["CREDITO", "DEBITO"]).default("CREDITO"),
   referencia: z.string().optional(),
+  modulo: z.enum(["PADEL", "JCPT"]).default("PADEL"),
 });
 
 export const POST = withAuthz(async (req: Request) => {
@@ -40,7 +42,7 @@ export const POST = withAuthz(async (req: Request) => {
   const d = parsed.data;
 
   await requireMembership(d.companyId, undefined, req);
-  await requireModule(d.companyId, "PADEL", req);
+  await requireModule(d.companyId, d.modulo, req);
 
   // Idempotency: return the existing row if this ref was already ingested.
   const existing = await prisma.bankTransaction.findUnique({ where: { externalRef: d.externalRef } });
@@ -72,7 +74,7 @@ export const POST = withAuthz(async (req: Request) => {
         referencia: d.referencia,
         monto: d.tipo === "DEBITO" ? -Math.abs(d.monto) : Math.abs(d.monto),
         tipo: d.tipo,
-        source: "PADEL",
+        source: d.modulo,
         externalRef: d.externalRef,
       },
     });

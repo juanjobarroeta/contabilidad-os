@@ -632,6 +632,7 @@ enum ModuloApp {
   PURIFICADORA
   RESTAURANTE
   AUTOMOTRIZ
+  JCPT
 }
 
 // ─── Module 3: Invoicing / CFDI ───────────────────────────────────────────────
@@ -1150,10 +1151,10 @@ model BankTransaction {
   taxDeclarationId String?
 
   // Source
-  source        String  @default("UPLOAD") // UPLOAD or BELVO or PADEL
+  source        String  @default("UPLOAD") // UPLOAD, BELVO, or a satellite module (PADEL, JCPT)
   belvoId       String? @unique // Belvo transaction ID (for dedup)
   belvoCategory String? // Belvo auto-category (e.g. "Bills & Utilities")
-  externalRef   String? @unique // idempotency key for external app ingest (e.g. PADEL payment id)
+  externalRef   String? @unique // idempotency key for external app ingest (e.g. PADEL/JCPT payment id)
   // Lote de importación (estado de cuenta) al que pertenece — habilita el
   // "deshacer última importación": borrar exactamente ese lote sin tocar el resto.
   importBatchId String?
@@ -1921,6 +1922,7 @@ enum EntrySource {
   APERTURA // saldos iniciales / asiento de apertura (no se borra al re-postear el mes)
   CIERRE // asiento de cierre anual (mes 13) — cancela ingresos/costos/gastos a resultado
   AUTOMOTRIZ
+  JCPT // plataforma de coaching JCPT (satélite con backend propio)
 }
 
 // ─── Module 6: Construction Project Management ───────────────────────────────
