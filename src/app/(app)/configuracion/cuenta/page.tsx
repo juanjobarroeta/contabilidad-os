@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ArrowLeft, UserCircle } from "lucide-react";
 import { EliminarCuenta } from "./EliminarCuenta";
 import { TokensApi } from "./TokensApi";
+import { CambiarPassword } from "./CambiarPassword";
 
 export default async function CuentaPage() {
   const session = await auth();
@@ -42,10 +43,10 @@ export default async function CuentaPage() {
             />
           </div>
         </div>
-        <p className="text-xs text-cos-ink-soft mt-6">
-          Edición de perfil y cambio de contraseña próximamente.
-        </p>
       </div>
+
+      {/* Cambio de contraseña self-serve (pide la actual) */}
+      <CambiarPassword />
 
       {/* Accesos de API activos (tokens de satélites) con revocación */}
       <TokensApi />

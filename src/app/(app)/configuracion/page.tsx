@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Users, CreditCard, UserCircle, Briefcase, Bell, MessageCircle, TicketPercent, Gift } from "lucide-react";
+import { Building2, Users, CreditCard, UserCircle, Briefcase, Bell, MessageCircle, TicketPercent, Gift, KeyRound } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { esAdminPlataforma } from "@/lib/billing/admin-plataforma";
@@ -68,6 +68,15 @@ const SECCION_INVITACIONES = {
   icon: Gift,
 };
 
+// SOLO admin de plataforma: enlaces de restablecimiento de contraseña para
+// rescatar a un usuario que no puede entrar (aún no hay correo automático).
+const SECCION_RESET = {
+  href: "/configuracion/reset-password",
+  title: "Restablecer contraseñas",
+  description: "Genera un enlace de un solo uso para un usuario que no puede entrar.",
+  icon: KeyRound,
+};
+
 export default async function ConfiguracionPage() {
   const session = await auth();
   let sections = SECTIONS;
@@ -76,7 +85,7 @@ export default async function ConfiguracionPage() {
       where: { id: session.user.id },
       select: { email: true },
     });
-    if (user?.email && esAdminPlataforma(user.email)) sections = [...SECTIONS, SECCION_CODIGOS, SECCION_INVITACIONES];
+    if (user?.email && esAdminPlataforma(user.email)) sections = [...SECTIONS, SECCION_CODIGOS, SECCION_INVITACIONES, SECCION_RESET];
   }
 
   return (
