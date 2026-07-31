@@ -55,6 +55,7 @@ model User {
   chatConversations   ChatConversation[]
   // Refresh tokens de la API de satélites (flujo access corto + refresh rotatorio).
   apiRefreshTokens    ApiRefreshToken[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 enum SubscriptionStatus {
@@ -476,6 +477,26 @@ model OnboardingInvite {
   updatedAt          DateTime    @updatedAt
 
   @@index([status])
+}
+
+/// Token de restablecimiento de contraseña, de un solo uso y vida corta
+/// (30 min). Lo genera el admin de plataforma y se entrega fuera de banda
+/// (WhatsApp/correo manual) mientras no haya proveedor SMTP. Sólo se guarda
+/// el hash SHA-256 del token; el crudo sale una vez.
+model PasswordResetToken {
+  id             String    @id @default(cuid())
+  userId         String
+  /// Admin que lo generó (auditoría) — columna plana, sin FK.
+  createdByEmail String
+  /// SHA-256 hex del token crudo.
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // Grupo de empresas — sub-conjunto del despacho del mismo dueño que se factura
