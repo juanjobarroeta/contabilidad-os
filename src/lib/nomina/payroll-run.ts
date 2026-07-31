@@ -263,8 +263,10 @@ function payrollItemFieldsFromCalc(calc: NominaCalcResult) {
 }
 
 /** Días pagados con los que se calculó la corrida: primero extraData (corridas
- *  nuevas); para corridas previas, los días naturales del periodo. */
-function diasPagadosDeRun(run: { periodo: string; extraData: unknown }): number {
+ *  nuevas); para corridas previas, los días naturales del periodo. Exportado
+ *  para que la vista previa del recibo (preview-recibo.ts) use el MISMO insumo
+ *  que el timbrado. */
+export function diasPagadosDeRun(run: { periodo: string; extraData: unknown }): number {
   const extra = (run.extraData ?? {}) as Record<string, unknown>;
   const guardados = Number(extra.diasPagados);
   if (Number.isFinite(guardados) && guardados > 0) return guardados;
