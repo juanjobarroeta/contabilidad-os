@@ -71,9 +71,16 @@ type RepData = {
   qrDataUrl: string | null;
   fromXml: boolean;
   cancelada: boolean;
+  /** true = vista previa de un recibo SIN timbrar (marca de agua BORRADOR). */
+  borrador?: boolean;
 };
 
-export function RepresentacionImpresa({ invoiceId, onClose }: { invoiceId: string; onClose: () => void }) {
+/**
+ * Con `invoiceId` renderiza la representación de un CFDI existente; con
+ * `previewUrl` consume un endpoint que devuelve el mismo shape para un
+ * BORRADOR (p. ej. /api/nomina/recibos/preview) — marca de agua incluida.
+ */
+export function RepresentacionImpresa({ invoiceId, previewUrl, onClose }: { invoiceId?: string; previewUrl?: string; onClose: () => void }) {
   const [data, setData] = useState<RepData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +90,7 @@ export function RepresentacionImpresa({ invoiceId, onClose }: { invoiceId: strin
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/facturas/${invoiceId}/representacion`);
+        const res = await fetch(previewUrl ?? `/api/facturas/${invoiceId}/representacion`);
         const d = await res.json();
         if (cancelled) return;
         if (!res.ok) { setError(d?.error ?? "No se pudo generar la representación impresa."); return; }
@@ -95,7 +102,7 @@ export function RepresentacionImpresa({ invoiceId, onClose }: { invoiceId: strin
       }
     })();
     return () => { cancelled = true; };
-  }, [invoiceId]);
+  }, [invoiceId, previewUrl]);
 
   const r = data?.representacion;
 
@@ -106,7 +113,13 @@ export function RepresentacionImpresa({ invoiceId, onClose }: { invoiceId: strin
       {/* force-light: la hoja es un DOCUMENTO (blanco en pantalla y en papel);
           sin esto, en tema oscuro la tinta de tema se vuelve casi blanca sobre
           el fondo blanco fijo — texto invisible. */}
-      <div className="rep-sheet force-light w-full max-w-[820px] rounded-[16px] bg-white text-cos-ink shadow-[0_30px_60px_-20px_oklch(0.2_0.05_258_/_0.5)]" onClick={(e) => e.stopPropagation()}>
+      <div className="rep-sheet force-light relative w-full max-w-[820px] overflow-hidden rounded-[16px] bg-white text-cos-ink shadow-[0_30px_60px_-20px_oklch(0.2_0.05_258_/_0.5)]" onClick={(e) => e.stopPropagation()}>
+        {/* Marca de agua BORRADOR (también al imprimir): el recibo aún no existe ante el SAT */}
+        {data?.borrador && (
+          <div aria-hidden className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+            <span className="-rotate-[24deg] select-none text-[92px] font-black tracking-[0.18em] text-cos-ink opacity-[0.07]">BORRADOR</span>
+          </div>
+        )}
         {/* Barra superior (no se imprime) */}
         <div className="rep-noprint flex items-center justify-between border-b border-cos-line-soft px-5 py-3">
           <p className="text-[14px] font-semibold text-cos-ink">Representación impresa</p>
@@ -129,7 +142,12 @@ export function RepresentacionImpresa({ invoiceId, onClose }: { invoiceId: strin
               {data?.cancelada && (
                 <div className="mb-4 rounded-[10px] border border-cos-red-tint bg-cos-red-tint px-4 py-2.5 text-[13px] font-semibold text-cos-red-ink">CFDI CANCELADO ante el SAT</div>
               )}
-              {!data?.fromXml && (
+              {data?.borrador && (
+                <div className="mb-4 rounded-[10px] bg-cos-amber-tint px-4 py-2.5 text-[13px] font-semibold text-cos-amber-ink">
+                  BORRADOR — SIN TIMBRAR. Así se emitirá el recibo al timbrar; aún no existe ante el SAT (sin folio fiscal, sellos ni QR).
+                </div>
+              )}
+              {!data?.fromXml && !data?.borrador && (
                 <div className="mb-4 rounded-[10px] bg-cos-amber-tint px-4 py-2.5 text-[12.5px] text-cos-amber-ink">No tenemos el XML original de este CFDI — esta vista se arma con los datos guardados y puede estar incompleta (sin sellos ni QR).</div>
               )}
 

@@ -70,6 +70,8 @@ export default function CorridasTab() {
   // Representación impresa del recibo (funciona también para los importados del
   // SAT: se renderiza desde el XML guardado, con "Imprimir / Guardar PDF").
   const [repInvoiceId, setRepInvoiceId] = useState<string | null>(null);
+  // Vista previa BORRADOR de un recibo calculado sin timbrar (marca de agua).
+  const [previewItemId, setPreviewItemId] = useState<string | null>(null);
   // Cancelación de un timbre ante el SAT (sólo recibos emitidos por la app).
   const [cancelCtx, setCancelCtx] = useState<{ item: PayrollItemDetail; runId: string } | null>(null);
   const [cancelMotivo, setCancelMotivo] = useState("02");
@@ -534,6 +536,12 @@ export default function CorridasTab() {
                                       </button>
                                     )}
                                   </span>
+                                ) : run.origen !== "SAT" ? (
+                                  /* Sin timbrar: vista previa BORRADOR del recibo tal
+                                     como se emitiría (verifica deducciones antes de timbrar) */
+                                  <button onClick={() => setPreviewItemId(item.id)}
+                                    className="text-[10px] font-medium text-cos-brand underline hover:opacity-80"
+                                    title="Vista previa del recibo (borrador, sin timbrar)">Vista previa</button>
                                 ) : (
                                   <span className="text-cos-ink-soft">—</span>
                                 )}
@@ -736,6 +744,14 @@ export default function CorridasTab() {
 
       {/* representación impresa del recibo (imprimir / guardar PDF) */}
       {repInvoiceId && <RepresentacionImpresa invoiceId={repInvoiceId} onClose={() => setRepInvoiceId(null)} />}
+
+      {/* vista previa BORRADOR de un recibo sin timbrar */}
+      {previewItemId && activeCompany && (
+        <RepresentacionImpresa
+          previewUrl={`/api/nomina/recibos/preview?companyId=${activeCompany.id}&payrollItemId=${previewItemId}`}
+          onClose={() => setPreviewItemId(null)}
+        />
+      )}
 
       {/* cancelar timbre ante el SAT */}
       {cancelCtx && (
