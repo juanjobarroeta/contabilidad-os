@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading } from "@/components/ui";
+import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import ValidacionCalculo from "./ValidacionCalculo";
 import ImssPagosCard from "./ImssPagosCard";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -102,6 +103,8 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelErr, setCancelErr] = useState("");
   const [cancelOkMsg, setCancelOkMsg] = useState("");
+  // Representación impresa (imprimir / guardar PDF — también recibos importados).
+  const [repInvoiceId, setRepInvoiceId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!activeCompany) return;
@@ -389,6 +392,12 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
                             className="text-[11px] font-medium text-cos-brand-ink underline hover:opacity-80"
                             title="Descargar XML del CFDI">XML</a>
                         )}
+                        {/* Representación impresa — imprime/guarda PDF también para importados */}
+                        {r.invoiceId && (
+                          <button onClick={() => setRepInvoiceId(r.invoiceId)}
+                            className="text-[11px] font-medium text-cos-brand-ink underline hover:opacity-80"
+                            title="Ver la representación impresa (imprimir / guardar PDF)">Recibo</button>
+                        )}
                         {/* Cancelable sólo si lo emitimos nosotros (pdfDisponible ⇔ facturapiId) */}
                         {r.invoiceId && r.pdfDisponible && (
                           <button onClick={() => { setCancelRecibo(r); setCancelOkMsg(""); setCancelErr(""); }}
@@ -430,6 +439,9 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
           </div>
         </div>
       )}
+
+      {/* representación impresa del recibo (imprimir / guardar PDF) */}
+      {repInvoiceId && <RepresentacionImpresa invoiceId={repInvoiceId} onClose={() => setRepInvoiceId(null)} />}
 
       {/* ── Modal: cancelar timbre de nómina ── */}
       {cancelRecibo && (
