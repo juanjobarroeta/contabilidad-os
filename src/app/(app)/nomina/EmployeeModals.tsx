@@ -596,9 +596,12 @@ export function EditEmployeeModal({
                   </select>
                 </Field>
                 <Field label="Monto">
+                  {/* Placeholder genérico a propósito: uno con pinta de cuota real
+                      ("1321.50") se confunde con un valor guardado y el usuario
+                      cree que el crédito quedó registrado cuando el campo está vacío. */}
                   <input type="number" min="0" step="0.01" value={form.descuentoInfonavit}
                     onChange={e => setForm(p => ({ ...p, descuentoInfonavit: e.target.value }))} className={inputCls}
-                    placeholder="1321.50" />
+                    placeholder="0.00" />
                 </Field>
               </div>
             </div>
