@@ -33,6 +33,12 @@ export async function register() {
 
     const { initObservability } = await import("./lib/observability");
     initObservability();
+
+    // 4) Pipeline de datos en-proceso: agenda los crons de backfill/sync SAT y
+    //    Syntage dentro del servidor (Railway siempre encendido), para que el
+    //    producto no dependa de GitHub Actions. Ver src/lib/cron-scheduler.ts.
+    const { startInAppCron } = await import("./lib/cron-scheduler");
+    startInAppCron();
   }
 }
 

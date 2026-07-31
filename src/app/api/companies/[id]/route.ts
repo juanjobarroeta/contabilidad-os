@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { provisionCompany } from "@/lib/fiscal/cumplimiento/syntage/provision";
+import { kickCron } from "@/lib/cron-scheduler";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
 import { fielStatus, parseCertExpiry } from "@/lib/fiel";
@@ -189,6 +190,9 @@ export async function PATCH(req: Request, { params }: Params) {
     } catch (e) {
       syntage = { error: e instanceof Error ? e.message : String(e) };
     }
+    // Con la firma recién guardada, el backfill de CFDIs arranca YA (primer
+    // envío de solicitudes al SAT) en vez de esperar al siguiente tick.
+    kickCron("sat-backfill");
   }
 
   return NextResponse.json({ ok: true, facturapi, syntage });

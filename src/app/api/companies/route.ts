@@ -6,6 +6,7 @@ import { assertPuedeEscribir } from "@/lib/subscription";
 import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { provisionCompany } from "@/lib/fiscal/cumplimiento/syntage/provision";
+import { kickCron } from "@/lib/cron-scheduler";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 import { encryptNullable } from "@/lib/crypto";
@@ -524,6 +525,10 @@ export async function POST(req: Request) {
     } catch (e) {
       syntage = { error: e instanceof Error ? e.message : String(e) };
     }
+    // El backfill de CFDIs arranca YA para la empresa nueva (primer envío de
+    // solicitudes al SAT); los ticks del scheduler importan conforme el SAT
+    // libere los paquetes. El cliente ve su historial entrar sin esperar.
+    kickCron("sat-backfill");
   }
 
   return NextResponse.json({ ...company, facturapi, syntage }, { status: 201 });
