@@ -13,14 +13,23 @@ import { encryptNullable } from "@/lib/crypto";
 import { parseCertExpiry } from "@/lib/fiel";
 import { sincronizarCantidadDespacho } from "@/lib/billing/sync-cantidad-despacho";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json([], { status: 401 });
+// GET /api/companies — sesión web O token de servicio (Authorization: Bearer),
+// para que un satélite con backend propio (JCPT) pueda enumerar sus empresas
+// sin re-loguearse (la lista del login se vuelve obsoleta al agregar una
+// empresa nueva, p. ej. la SA de CV).
+export async function GET(req: Request) {
+  let userId: string;
+  try {
+    userId = (await requireUser(req)).id;
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json([], { status: e.status });
+    throw e;
+  }
 
   // Operador de plataforma: ve TODAS las empresas activas de todos los
   // despachos (supervisión cross-despacho). Bypasea la unión de membresías.
   const operador = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: userId },
     select: { esOperador: true },
   });
   if (operador?.esOperador) {
@@ -50,7 +59,7 @@ export async function GET() {
   //   2. Companies owned by a Despacho the user is a member of
   const [direct, despachoMember] = await Promise.all([
     prisma.companyMember.findMany({
-      where: { userId: session.user.id },
+      where: { userId },
       include: {
         company: {
           select: {
@@ -65,7 +74,7 @@ export async function GET() {
       },
     }),
     prisma.despachoMember.findFirst({
-      where: { userId: session.user.id },
+      where: { userId },
       select: { id: true, despachoId: true },
     }),
   ]);
