@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { extractStatementFromDocument } from "@/lib/bancos/vision-statement";
+import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuentes";
 import { persistTransactions } from "@/lib/bancos/import";
 
 export const runtime = "nodejs";
@@ -42,6 +43,12 @@ export async function POST(req: Request, { params }: Params) {
   // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
   const gate = await gateEscritura(session.user.id);
   if (gate) return gate;
+
+  // Guardia anti-duplicado (antes de gastar visión): una cuenta puente
+  // alimentada por ingest externo nunca recibe estados de cuenta.
+  if (await cuentaTieneIngestExterno(bankAccountId)) {
+    return NextResponse.json({ error: ERROR_CUENTA_PUENTE }, { status: 409 });
+  }
 
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1";

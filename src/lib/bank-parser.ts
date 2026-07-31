@@ -22,7 +22,7 @@ export interface RowDescartada {
 
 export interface ParseResult {
   transactions: ParsedTransaction[];
-  format: "csv" | "ofx" | "spreadsheetml";
+  format: "csv" | "ofx" | "spreadsheetml" | "pegado";
   detectedBank?: string;
   warnings: string[];
   /** Filas con contenido que se omitieron (fecha/monto ilegibles, etc.). */
@@ -52,7 +52,102 @@ export function parseStatement(content: string, filename: string): ParseResult {
     return parseSpreadsheetML(clean);
   }
 
+  // Movimientos "pegados" — el usuario copió la lista de movimientos del
+  // portal web del banco (p. ej. Scotiabank, que no ofrece un export fácil):
+  // tercias de líneas descripción / fecha / monto. Va ANTES del CSV porque
+  // no hay separadores ni encabezados que el CSV pueda entender.
+  if (esMovimientosPegados(clean)) {
+    return parsePegado(clean);
+  }
+
   return parseCSV(clean);
+}
+
+// ── Movimientos pegados del portal del banco ─────────────────────────────────
+// Formato observado (Scotiabank web, copiar y pegar):
+//   sweb transf. interb spei
+//   28 Jul 2026 , 13:07:00
+//   -$10,000.00
+// La descripción puede ocupar más de una línea; la fecha lleva hora opcional;
+// el monto siempre trae "$" y signo "-" cuando es retiro.
+
+const RE_LINEA_MONTO = /^-?\s*\$\s*\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?$/;
+const RE_LINEA_FECHA = /^(\d{1,2})\s+([a-zA-ZÀ-ÿ]{3,5})\.?\s+(\d{4})\s*(?:,\s*\d{1,2}:\d{2}(?::\d{2})?)?$/;
+
+const MESES_ABREV: Record<string, number> = {
+  ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5,
+  jul: 6, ago: 7, sep: 8, oct: 9, nov: 10, dic: 11,
+  jan: 0, apr: 3, aug: 7, dec: 11,
+};
+
+function parseFechaPegada(line: string): Date | null {
+  const m = line.trim().match(RE_LINEA_FECHA);
+  if (!m) return null;
+  const mes = MESES_ABREV[
+    m[2].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 3)
+  ];
+  if (mes === undefined) return null;
+  return utcNoon(parseInt(m[3]), mes, parseInt(m[1]));
+}
+
+function esMovimientosPegados(content: string): boolean {
+  const lines = content.split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length < 6) return false;
+  const montos = lines.filter(l => RE_LINEA_MONTO.test(l)).length;
+  const fechas = lines.filter(l => RE_LINEA_FECHA.test(l)).length;
+  // La mayoría del contenido debe ser el ciclo fecha/monto — un CSV con
+  // encabezados y separadores nunca cumple esto.
+  return montos >= 2 && fechas >= 2 && montos + fechas >= lines.length * 0.5;
+}
+
+function parsePegado(content: string): ParseResult {
+  const warnings: string[] = [];
+  const descartadas: RowDescartada[] = [];
+  const transactions: ParsedTransaction[] = [];
+
+  let descBuffer: string[] = [];
+  let fecha: Date | null = null;
+  let fechaFila = 0;
+
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const fila = i + 1;
+    if (!line) continue;
+
+    if (RE_LINEA_FECHA.test(line)) {
+      if (fecha) {
+        descartadas.push({ fila: fechaFila, motivo: "movimiento sin monto (fecha sin importe posterior)" });
+      }
+      fecha = parseFechaPegada(line);
+      fechaFila = fila;
+      if (!fecha) descartadas.push({ fila, motivo: `fecha inválida: ${line}` });
+      continue;
+    }
+
+    if (RE_LINEA_MONTO.test(line)) {
+      const monto = parseMXNumber(line);
+      if (!fecha) {
+        descartadas.push({ fila, motivo: `monto sin fecha: ${line}` });
+      } else if (isNaN(monto) || monto === 0) {
+        descartadas.push({ fila, motivo: `monto inválido o en cero: ${line}` });
+      } else {
+        transactions.push({
+          fecha,
+          descripcion: descBuffer.join(" ").replace(/\s+/g, " ").trim(),
+          monto,
+        });
+      }
+      descBuffer = [];
+      fecha = null;
+      continue;
+    }
+
+    descBuffer.push(line);
+  }
+  if (fecha) descartadas.push({ fila: fechaFila, motivo: "movimiento sin monto al final del texto" });
+
+  return { transactions, format: "pegado", warnings, descartadas };
 }
 
 // ── OFX / QFX parser ──────────────────────────────────────────────────────────
@@ -159,10 +254,17 @@ function parseCSV(content: string): ParseResult {
 
   // 4. Detect columns
   const dateCol    = detectCol(headers, ["fecha", "date", "fecha de operacion", "fch"]);
-  const descCol    = detectCol(headers, ["descripcion", "descripci", "concepto", "movimiento", "referencia", "detalle", "memo"]);
-  const amountCol  = detectCol(headers, ["monto", "importe", "amount", "movimiento"]);
+  // "descripcion detallada" primero: Banorte trae DESCRIPCIÓN (críptica, p.ej.
+  // la clave de rastreo) Y DESCRIPCIÓN DETALLADA (la útil, con cliente/concepto).
+  const descCol    = detectCol(headers, ["descripcion detallada", "descripcion", "descripci", "concepto", "movimiento", "referencia", "detalle", "memo"]);
   const debitCol   = detectCol(headers, ["cargo", "debito", "egreso", "retiro", "retiros", "debe"]);
   const creditCol  = detectCol(headers, ["abono", "credito", "ingreso", "deposito", "depositos", "haber"]);
+  // "movimiento" como monto es un último recurso: en Banorte MOVIMIENTO es un
+  // consecutivo de fila, no un importe — si hay par cargo/abono, ese par manda.
+  let amountCol    = detectCol(headers, ["monto", "importe", "amount"]);
+  if (amountCol < 0 && (debitCol < 0 || creditCol < 0)) {
+    amountCol = detectCol(headers, ["movimiento"]);
+  }
   const balanceCol = detectCol(headers, ["saldo", "balance", "disponible"]);
   const refCol     = detectCol(headers, ["referencia", "folio", "num operacion", "id", "fitid"]);
 
@@ -227,6 +329,9 @@ function parseCSV(content: string): ParseResult {
 
     // Auto-extract reference from Banamex descriptions (embedded "Referencia Numérica: XXXX")
     let ref = refCol >= 0 ? row[refCol] : undefined;
+    // Banorte rellena REFERENCIA con "0" o "-" cuando no hay: eso no es una
+    // referencia útil para conciliar.
+    if (ref === "0" || ref === "-") ref = undefined;
     if (!ref) {
       const refMatch = desc.match(/[Rr]eferencia\s+[Nn].{0,10}?:\s*(\S+)/);
       if (refMatch) ref = refMatch[1].replace(/^0+/, "") || refMatch[1]; // strip leading zeros
@@ -470,8 +575,10 @@ function detectBank(headers: string[], content: string): string | undefined {
   const c = content.substring(0, 500).toLowerCase();
   if (c.includes("bbva") || h.includes("num de referencia")) return "BBVA";
   if (c.includes("banamex") || c.includes("citibanamex") || c.includes("cuenta cheques"))    return "Banamex";
+  // Firma del export CSV de Banorte (antes de "sucursal", que también trae y
+  // haría caer en Santander): DESCRIPCIÓN DETALLADA + COD. TRANSAC.
+  if (c.includes("banorte") || (h.includes("descripcion detallada") && h.includes("cod")))   return "Banorte";
   if (c.includes("santander") || h.includes("sucursal"))       return "Santander";
-  if (c.includes("banorte"))                                  return "Banorte";
   if (c.includes("hsbc"))                                     return "HSBC";
   if (c.includes("scotiabank"))                               return "Scotiabank";
   return undefined;

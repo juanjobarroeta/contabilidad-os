@@ -8,6 +8,10 @@
  *
  * Auth: bearer token (or session) + membership + the satellite's module.
  *
+ * The target account must be a dedicated cuenta puente (e.g. tipo CAJA):
+ * accounts fed by statement uploads or Belvo are rejected with 409 so the
+ * same charge can never enter twice (see src/lib/bancos/fuentes.ts).
+ *
  * Body: {
  *   companyId, bankAccountId, externalRef,
  *   fecha (ISO), descripcion, monto (number, pesos),
@@ -20,6 +24,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
+import { cuentaTieneEstadosDeCuenta, ERROR_CUENTA_CON_ESTADOS } from "@/lib/bancos/fuentes";
 
 const schema = z.object({
   companyId: z.string().min(1),
@@ -53,10 +58,21 @@ export const POST = withAuthz(async (req: Request) => {
   // The bank account must belong to this company.
   const account = await prisma.bankAccount.findFirst({
     where: { id: d.bankAccountId, companyId: d.companyId },
-    select: { id: true },
+    select: { id: true, belvoLinkId: true, belvoAccountId: true },
   });
   if (!account) {
     return NextResponse.json({ error: "Cuenta bancaria no encontrada" }, { status: 404 });
+  }
+
+  // Guardia anti-duplicado: sólo cuentas puente dedicadas — una cuenta que se
+  // alimenta de estados de cuenta (upload/Belvo) registraría el mismo cobro
+  // dos veces. Ver src/lib/bancos/fuentes.ts.
+  if (
+    account.belvoLinkId ||
+    account.belvoAccountId ||
+    (await cuentaTieneEstadosDeCuenta(d.bankAccountId))
+  ) {
+    return NextResponse.json({ error: ERROR_CUENTA_CON_ESTADOS }, { status: 409 });
   }
 
   const fecha = new Date(d.fecha);

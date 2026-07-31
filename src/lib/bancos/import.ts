@@ -24,6 +24,7 @@ import * as XLSX from "xlsx";
 import { parseStatement, type ParseResult, type ParsedTransaction, type RowDescartada } from "@/lib/bank-parser";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
 import { claveDeDuplicado, planImportacion } from "@/lib/bancos/dedup";
+import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuentes";
 import { primeraReglaQueEmpata, signoDeMonto, type FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 
 export type ImportResult = {
@@ -285,6 +286,20 @@ export async function importBankStatement(opts: {
   encoding?: "text" | "base64";
 }): Promise<ImportResult> {
   const { bankAccountId, companyId, fileContent, filename, encoding } = opts;
+
+  // Guardia anti-duplicado: una cuenta puente (alimentada por ingest externo)
+  // nunca recibe estados de cuenta. Ver src/lib/bancos/fuentes.ts.
+  if (await cuentaTieneIngestExterno(bankAccountId)) {
+    return {
+      ok: false,
+      imported: 0,
+      skipped: 0,
+      posiblesDuplicados: 0,
+      descartadas: [],
+      message: ERROR_CUENTA_PUENTE,
+      error: ERROR_CUENTA_PUENTE,
+    };
+  }
 
   const parsed = parseStatementFile({ fileContent, filename, encoding });
   if (!parsed.ok) {
