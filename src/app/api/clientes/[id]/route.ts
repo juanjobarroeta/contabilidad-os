@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 
 async function getMember(userId: string, customerId: string) {
@@ -17,20 +17,26 @@ async function getMember(userId: string, customerId: string) {
   return member ? customer : null;
 }
 
-// PATCH /api/clientes/[id]
+// PATCH /api/clientes/[id] — sesión web O token de servicio (Bearer):
+// el satélite JCPT edita clientes desde su propio admin.
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let userId: string;
+  try {
+    userId = (await requireUser(req)).id;
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id } = await params;
-  const customer = await getMember(session.user.id, id);
+  const customer = await getMember(userId, id);
   if (!customer) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
-  const gate = await gateEscritura(session.user.id);
+  const gate = await gateEscritura(userId);
   if (gate) return gate;
 
   const body = await req.json();

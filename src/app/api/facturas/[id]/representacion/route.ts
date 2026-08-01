@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { parseRepresentacion, type Representacion } from "@/lib/facturas/representacion";
 import QRCode from "qrcode";
 
@@ -16,8 +15,15 @@ type Params = { params: Promise<{ id: string }> };
 // así que esta es la fuente legible. Si no hay rawXml (algunas emitidas), se
 // arma un DTO parcial desde las columnas + conceptos + impuestos guardados.
 export async function GET(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Sesión web O token de servicio (Bearer) — JCPT renderiza la representación
+  // imprimible de los CFDIs en su propio admin.
+  let userId: string;
+  try {
+    userId = (await requireUser(req)).id;
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id } = await params;
   const invoice = await prisma.invoice.findUnique({
@@ -31,7 +37,7 @@ export async function GET(req: Request, { params }: Params) {
   });
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, invoice.companyId);
+  const member = await getEffectiveCompanyMembership(userId, invoice.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   let rep: Representacion;
