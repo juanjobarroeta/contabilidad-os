@@ -23,9 +23,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 
 type Params = { params: Promise<{ txId: string }> };
 
@@ -33,8 +32,15 @@ const DELTA_PCT = 0.15;
 const DATE_WINDOW_DAYS = 10;
 
 export async function GET(_req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Sesión web O token de servicio (Bearer) — el satélite JCPT usa las
+  // sugerencias en su propio UI de conciliación.
+  let userId: string;
+  try {
+    userId = (await requireUser(_req)).id;
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { txId } = await params;
   const tx = await prisma.bankTransaction.findUnique({
@@ -43,7 +49,7 @@ export async function GET(_req: Request, { params }: Params) {
   });
   if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, tx.companyId);
+  const member = await getEffectiveCompanyMembership(userId, tx.companyId);
   if (!member) return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   const abs = Math.abs(tx.monto);
