@@ -72,7 +72,10 @@ export function parseStatement(content: string, filename: string): ParseResult {
 // el monto siempre trae "$" y signo "-" cuando es retiro.
 
 const RE_LINEA_MONTO = /^-?\s*\$\s*\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?$/;
-const RE_LINEA_FECHA = /^(\d{1,2})\s+([a-zA-ZÀ-ÿ]{3,5})\.?\s+(\d{4})\s*(?:,\s*\d{1,2}:\d{2}(?::\d{2})?)?$/;
+const RE_LINEA_FECHA =
+  /^(\d{1,2})[-\s]([a-zA-ZÀ-ÿ]{3,5})\.?[-\s](\d{2}|\d{4})\s*(?:,\s*\d{1,2}:\d{2}(?::\d{2})?)?$/;
+// La tarjeta de crédito muestra el movimiento más reciente como "Hoy" (sin fecha).
+const RE_LINEA_HOY = /^hoy$/i;
 
 const MESES_ABREV: Record<string, number> = {
   ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5,
@@ -81,20 +84,30 @@ const MESES_ABREV: Record<string, number> = {
 };
 
 function parseFechaPegada(line: string): Date | null {
-  const m = line.trim().match(RE_LINEA_FECHA);
+  const limpia = line.trim();
+  if (RE_LINEA_HOY.test(limpia)) {
+    const hoy = new Date();
+    return utcNoon(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
+  }
+  const m = limpia.match(RE_LINEA_FECHA);
   if (!m) return null;
   const mes = MESES_ABREV[
     m[2].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 3)
   ];
   if (mes === undefined) return null;
-  return utcNoon(parseInt(m[3]), mes, parseInt(m[1]));
+  const anio = m[3].length === 2 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
+  return utcNoon(anio, mes, parseInt(m[1]));
+}
+
+function esLineaFechaPegada(line: string): boolean {
+  return RE_LINEA_FECHA.test(line) || RE_LINEA_HOY.test(line);
 }
 
 function esMovimientosPegados(content: string): boolean {
   const lines = content.split("\n").map(l => l.trim()).filter(Boolean);
   if (lines.length < 6) return false;
   const montos = lines.filter(l => RE_LINEA_MONTO.test(l)).length;
-  const fechas = lines.filter(l => RE_LINEA_FECHA.test(l)).length;
+  const fechas = lines.filter(l => esLineaFechaPegada(l)).length;
   // La mayoría del contenido debe ser el ciclo fecha/monto — un CSV con
   // encabezados y separadores nunca cumple esto.
   return montos >= 2 && fechas >= 2 && montos + fechas >= lines.length * 0.5;
@@ -115,7 +128,7 @@ function parsePegado(content: string): ParseResult {
     const fila = i + 1;
     if (!line) continue;
 
-    if (RE_LINEA_FECHA.test(line)) {
+    if (esLineaFechaPegada(line)) {
       if (fecha) {
         descartadas.push({ fila: fechaFila, motivo: "movimiento sin monto (fecha sin importe posterior)" });
       }
@@ -134,7 +147,9 @@ function parsePegado(content: string): ParseResult {
       } else {
         transactions.push({
           fecha,
-          descripcion: descBuffer.join(" ").replace(/\s+/g, " ").trim(),
+          // La tarjeta adorna algunas descripciones con asteriscos
+          // ("*** su pago gracias **") — se limpian, no son datos.
+          descripcion: descBuffer.join(" ").replace(/\*+/g, " ").replace(/\s+/g, " ").trim(),
           monto,
         });
       }
@@ -146,6 +161,24 @@ function parsePegado(content: string): ParseResult {
     descBuffer.push(line);
   }
   if (fecha) descartadas.push({ fila: fechaFila, motivo: "movimiento sin monto al final del texto" });
+
+  // Tarjeta de crédito pegada: el portal imprime TODO sin signo (cargos y
+  // pagos positivos). Si ningún monto trajo signo y hay líneas de pago
+  // ("su pago … gracias"), es un estado de tarjeta: los pagos abonan (+) y
+  // el resto son cargos (−) — así el pago de tarjeta cuadra contra el retiro
+  // del débito para detectarse como traspaso interno.
+  if (
+    transactions.length > 0 &&
+    transactions.every(t => t.monto > 0) &&
+    transactions.some(t => /su pago/i.test(t.descripcion))
+  ) {
+    for (const t of transactions) {
+      if (!/su pago/i.test(t.descripcion)) t.monto = -t.monto;
+    }
+    warnings.push(
+      "Formato de tarjeta de crédito detectado: los cargos se importaron como retiros y los pagos como abonos."
+    );
+  }
 
   return { transactions, format: "pegado", warnings, descartadas };
 }

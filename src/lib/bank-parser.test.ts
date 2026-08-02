@@ -294,3 +294,81 @@ describe("parseStatement — movimientos pegados del portal (Scotiabank)", () =>
     expect(r.descartadas.length).toBeGreaterThan(0);
   });
 });
+
+// ── Movimientos pegados de tarjeta de crédito (Scotiabank) ────────────────────
+// El portal de la tarjeta imprime todo sin signo, con "Hoy" para el movimiento
+// más reciente, fechas "DD-MMM-YY" y pagos descritos como "su pago gracias"
+// (a veces adornados con asteriscos: "*** su pago gracias **").
+const SCOTIA_CREDITO_PEGADO = `*** su pago gracias **
+Hoy
+$2,369.33
+su pago en linea gracias
+28-Jul-26
+$12,198.68
+d local*rest rappipro ciudad de mex
+27-Jul-26
+$69.00
+d oxxo gas praderas apodaca
+26-Jul-26
+$500.00
+su pago en linea gracias
+20-Jul-26
+$8,000.00
+d farmacias guadalajara monterrey
+19-Jul-26
+$1,245.50`;
+
+describe("parseStatement — pegado de tarjeta de crédito (Scotiabank)", () => {
+  const res = parseStatement(SCOTIA_CREDITO_PEGADO, "movimientos.txt");
+
+  it("reconoce el formato pegado de la tarjeta", () => {
+    expect(res.format).toBe("pegado");
+    expect(res.transactions).toHaveLength(6);
+    expect(res.descartadas).toHaveLength(0);
+  });
+
+  it("limpia los asteriscos decorativos de las descripciones", () => {
+    expect(res.transactions[0].descripcion).toBe("su pago gracias");
+    expect(res.transactions[2].descripcion).toBe("d local rest rappipro ciudad de mex");
+    for (const t of res.transactions) {
+      expect(t.descripcion).not.toMatch(/\*/);
+    }
+  });
+
+  it("parsea 'Hoy' como la fecha de hoy", () => {
+    const hoy = new Date();
+    const f = res.transactions[0].fecha;
+    expect(f.getUTCFullYear()).toBe(hoy.getUTCFullYear());
+    expect(f.getUTCMonth()).toBe(hoy.getUTCMonth());
+    expect(f.getUTCDate()).toBe(hoy.getUTCDate());
+  });
+
+  it("parsea fechas 'DD-MMM-YY' con año de dos dígitos", () => {
+    const f = res.transactions[1].fecha;
+    expect(f.getUTCFullYear()).toBe(2026);
+    expect(f.getUTCMonth()).toBe(6);
+    expect(f.getUTCDate()).toBe(28);
+  });
+
+  it("los pagos ('su pago … gracias') quedan como abonos (+)", () => {
+    expect(res.transactions[0].monto).toBe(2369.33);
+    expect(res.transactions[1].monto).toBe(12198.68);
+    expect(res.transactions[4].monto).toBe(8000.0);
+  });
+
+  it("los cargos quedan como retiros (−)", () => {
+    expect(res.transactions[2].monto).toBe(-69.0);
+    expect(res.transactions[3].monto).toBe(-500.0);
+    expect(res.transactions[5].monto).toBe(-1245.5);
+  });
+
+  it("avisa que se detectó formato de tarjeta de crédito", () => {
+    expect(res.warnings.some(w => /tarjeta de crédito/i.test(w))).toBe(true);
+  });
+
+  it("el pegado de débito (con signos) NO dispara la heurística de tarjeta", () => {
+    const r = parseStatement(SCOTIA_PEGADO, "movimientos.txt");
+    expect(r.warnings.some(w => /tarjeta de crédito/i.test(w))).toBe(false);
+    expect(r.transactions[0].monto).toBe(-67.23);
+  });
+});
