@@ -121,6 +121,12 @@ function parsePegado(content: string): ParseResult {
   let descBuffer: string[] = [];
   let fecha: Date | null = null;
   let fechaFila = 0;
+  // "Hoy": el banco aún NO le asigna fecha definitiva al movimiento. Importarlo
+  // con la fecha del día de la importación crea duplicados (la clave de dedup
+  // lleva el día: re-importar mañana lo vuelve a meter con otra fecha). Se
+  // omite con aviso — entrará en la siguiente importación, ya fechado.
+  let fechaEsHoy = false;
+  let omitidosHoy = 0;
 
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -133,6 +139,7 @@ function parsePegado(content: string): ParseResult {
         descartadas.push({ fila: fechaFila, motivo: "movimiento sin monto (fecha sin importe posterior)" });
       }
       fecha = parseFechaPegada(line);
+      fechaEsHoy = RE_LINEA_HOY.test(line);
       fechaFila = fila;
       if (!fecha) descartadas.push({ fila, motivo: `fecha inválida: ${line}` });
       continue;
@@ -144,6 +151,13 @@ function parsePegado(content: string): ParseResult {
         descartadas.push({ fila, motivo: `monto sin fecha: ${line}` });
       } else if (isNaN(monto) || monto === 0) {
         descartadas.push({ fila, motivo: `monto inválido o en cero: ${line}` });
+      } else if (fechaEsHoy) {
+        omitidosHoy++;
+        descartadas.push({
+          fila: fechaFila,
+          motivo:
+            "movimiento fechado 'Hoy': el banco aún no le asigna fecha definitiva — se importará en la próxima importación, ya fechado",
+        });
       } else {
         transactions.push({
           fecha,
@@ -155,12 +169,18 @@ function parsePegado(content: string): ParseResult {
       }
       descBuffer = [];
       fecha = null;
+      fechaEsHoy = false;
       continue;
     }
 
     descBuffer.push(line);
   }
   if (fecha) descartadas.push({ fila: fechaFila, motivo: "movimiento sin monto al final del texto" });
+  if (omitidosHoy > 0) {
+    warnings.push(
+      `${omitidosHoy} movimiento(s) fechados 'Hoy' se omitieron: el banco aún no les asigna fecha definitiva. Vuelve a pegar los movimientos cuando aparezcan fechados y se importarán sin duplicarse.`
+    );
+  }
 
   // Tarjeta de crédito pegada: el portal imprime TODO sin signo (cargos y
   // pagos positivos). Si ningún monto trajo signo y hay líneas de pago

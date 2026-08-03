@@ -323,43 +323,40 @@ describe("parseStatement — pegado de tarjeta de crédito (Scotiabank)", () => 
 
   it("reconoce el formato pegado de la tarjeta", () => {
     expect(res.format).toBe("pegado");
-    expect(res.transactions).toHaveLength(6);
-    expect(res.descartadas).toHaveLength(0);
+    expect(res.transactions).toHaveLength(5);
   });
 
-  it("limpia los asteriscos decorativos de las descripciones", () => {
-    expect(res.transactions[0].descripcion).toBe("su pago gracias");
-    expect(res.transactions[2].descripcion).toBe("d local rest rappipro ciudad de mex");
+  it("omite (con aviso) el movimiento fechado 'Hoy' — el banco aún no lo fecha; importarlo duplicaría al re-importar otro día", () => {
+    expect(res.descartadas).toHaveLength(1);
+    expect(res.descartadas[0].motivo).toMatch(/hoy/i);
+    expect(res.warnings.some(w => /'Hoy'/.test(w))).toBe(true);
+    // Ningún movimiento importado lleva la fecha "de hoy".
+    expect(res.transactions.some(t => /su pago gracias$/.test(t.descripcion))).toBe(false);
+  });
+
+  it("limpia los asteriscos de las descripciones", () => {
+    expect(res.transactions[1].descripcion).toBe("d local rest rappipro ciudad de mex");
     for (const t of res.transactions) {
       expect(t.descripcion).not.toMatch(/\*/);
     }
   });
 
-  it("parsea 'Hoy' como la fecha de hoy", () => {
-    const hoy = new Date();
-    const f = res.transactions[0].fecha;
-    expect(f.getUTCFullYear()).toBe(hoy.getUTCFullYear());
-    expect(f.getUTCMonth()).toBe(hoy.getUTCMonth());
-    expect(f.getUTCDate()).toBe(hoy.getUTCDate());
-  });
-
   it("parsea fechas 'DD-MMM-YY' con año de dos dígitos", () => {
-    const f = res.transactions[1].fecha;
+    const f = res.transactions[0].fecha;
     expect(f.getUTCFullYear()).toBe(2026);
     expect(f.getUTCMonth()).toBe(6);
     expect(f.getUTCDate()).toBe(28);
   });
 
   it("los pagos ('su pago … gracias') quedan como abonos (+)", () => {
-    expect(res.transactions[0].monto).toBe(2369.33);
-    expect(res.transactions[1].monto).toBe(12198.68);
-    expect(res.transactions[4].monto).toBe(8000.0);
+    expect(res.transactions[0].monto).toBe(12198.68);
+    expect(res.transactions[3].monto).toBe(8000.0);
   });
 
   it("los cargos quedan como retiros (−)", () => {
-    expect(res.transactions[2].monto).toBe(-69.0);
-    expect(res.transactions[3].monto).toBe(-500.0);
-    expect(res.transactions[5].monto).toBe(-1245.5);
+    expect(res.transactions[1].monto).toBe(-69.0);
+    expect(res.transactions[2].monto).toBe(-500.0);
+    expect(res.transactions[4].monto).toBe(-1245.5);
   });
 
   it("avisa que se detectó formato de tarjeta de crédito", () => {
