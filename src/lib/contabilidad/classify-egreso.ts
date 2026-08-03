@@ -65,78 +65,78 @@ export type EgresoCategory = {
 
 // Ordered by specificity — longer prefixes checked first
 const MAPPING: EgresoCategory[] = [
-  // ── Combustibles ─────────────────────────────────────────────────────
-  { prefix: "15101", cuenta: "601.15", label: "Combustibles" },        // Diésel, gasolina
-  { prefix: "15111", cuenta: "601.15", label: "Combustibles" },        // Gas natural, LP
-  { prefix: "1510",  cuenta: "601.15", label: "Combustibles" },        // Otros combustibles
-  { prefix: "1512",  cuenta: "601.16", label: "Lubricantes" },         // Aceites, lubricantes
+  // ── Combustibles y lubricantes (601.48 oficial) ──────────────────────
+  { prefix: "15101", cuenta: COE_CODES.COMBUSTIBLES, label: "Combustibles" },  // Diésel, gasolina
+  { prefix: "15111", cuenta: COE_CODES.COMBUSTIBLES, label: "Gas" },           // Gas natural, LP
+  { prefix: "1510",  cuenta: COE_CODES.COMBUSTIBLES, label: "Combustibles" },  // Otros combustibles
+  { prefix: "1512",  cuenta: COE_CODES.COMBUSTIBLES, label: "Lubricantes" },   // Aceites, lubricantes
 
   // ── Servicios profesionales / Honorarios ─────────────────────────────
   { prefix: "80101", cuenta: COE_CODES.HONORARIOS, label: "Honorarios" },  // Business admin
   { prefix: "80111", cuenta: COE_CODES.HONORARIOS, label: "Honorarios" },  // Management consulting
   { prefix: "80121", cuenta: COE_CODES.HONORARIOS, label: "Honorarios legales" },  // Legal
-  { prefix: "80131", cuenta: "601.17", label: "Bienes raíces / notariales" },
-  { prefix: "80141", cuenta: "601.18", label: "Publicidad y marketing" },  // Marketing
+  { prefix: "80131", cuenta: COE_CODES.HONORARIOS_PF, label: "Servicios notariales" }, // Notarios (PF)
+  { prefix: "80141", cuenta: "601.61", label: "Publicidad y marketing" },  // Propaganda y publicidad
   { prefix: "80161", cuenta: COE_CODES.HONORARIOS, label: "Gestión de negocios" },
   { prefix: "80171", cuenta: COE_CODES.HONORARIOS, label: "Servicios de consultoría" },
 
   // ── IT / Software / Telecom ───────────────────────────────────────────
-  { prefix: "81111", cuenta: "601.19", label: "Servicios de software" },
-  { prefix: "81112", cuenta: "601.19", label: "Servicios de TI" },
-  { prefix: "81161", cuenta: "601.20", label: "Servicios de telecomunicaciones" },
-  { prefix: "4323",  cuenta: "601.21", label: "Equipos de cómputo y software" },
-  { prefix: "4620",  cuenta: "601.21", label: "Equipos de cómputo" },
+  { prefix: "81111", cuenta: "601.32", label: "Servicios de software" },   // Servicios administrativos
+  { prefix: "81112", cuenta: "601.32", label: "Servicios de TI" },
+  { prefix: "81161", cuenta: "601.50", label: "Teléfono, internet" },
+  { prefix: "4323",  cuenta: COE_CODES.OTROS_GASTOS, label: "Equipos de cómputo (gasto)" },
+  { prefix: "4620",  cuenta: COE_CODES.OTROS_GASTOS, label: "Equipos de cómputo (gasto)" },
 
   // ── Rentas ───────────────────────────────────────────────────────────
   { prefix: "80131601", cuenta: COE_CODES.RENTAS, label: "Arrendamiento inmueble" },
   { prefix: "80141604", cuenta: COE_CODES.RENTAS, label: "Arrendamiento" },
   { prefix: "80131603", cuenta: COE_CODES.RENTAS, label: "Arrendamiento" },
 
-  // ── Transporte y logística ───────────────────────────────────────────
-  { prefix: "7818",  cuenta: "601.22", label: "Fletes y transporte" },
-  { prefix: "7810",  cuenta: "601.22", label: "Transporte de pasajeros" },
-  { prefix: "7812",  cuenta: "601.22", label: "Transporte" },
-  { prefix: "7814",  cuenta: "601.22", label: "Almacenaje" },
+  // ── Transporte y logística (601.72 Fletes y acarreos) ────────────────
+  { prefix: "7818",  cuenta: "601.72", label: "Fletes y transporte" },
+  { prefix: "7810",  cuenta: "601.72", label: "Transporte de pasajeros" },
+  { prefix: "7812",  cuenta: "601.72", label: "Transporte" },
+  { prefix: "7814",  cuenta: "601.72", label: "Almacenaje" },
 
-  // ── Viajes / Viáticos ────────────────────────────────────────────────
-  { prefix: "90101", cuenta: "601.23", label: "Restaurantes / alimentación" },
-  { prefix: "90111", cuenta: "601.23", label: "Hotelería" },
-  { prefix: "90121", cuenta: "601.24", label: "Viajes" },
-  { prefix: "78111", cuenta: "601.24", label: "Viajes (boletos aéreos)" },
+  // ── Viajes / Viáticos (601.49 Viáticos y gastos de viaje) ────────────
+  { prefix: "90101", cuenta: "601.49", label: "Restaurantes / alimentación" },
+  { prefix: "90111", cuenta: "601.49", label: "Hotelería" },
+  { prefix: "90121", cuenta: "601.49", label: "Viajes" },
+  { prefix: "78111", cuenta: "601.49", label: "Viajes (boletos aéreos)" },
 
   // ── Servicios públicos ───────────────────────────────────────────────
-  { prefix: "83101", cuenta: "601.25", label: "Agua" },
-  { prefix: "83111", cuenta: "601.26", label: "Energía eléctrica" },
-  { prefix: "83121", cuenta: "601.26", label: "Gas" },
+  { prefix: "83101", cuenta: "601.51", label: "Agua" },
+  { prefix: "83111", cuenta: "601.52", label: "Energía eléctrica" },
+  { prefix: "83121", cuenta: COE_CODES.COMBUSTIBLES, label: "Gas" },
 
-  // ── Mantenimiento / Reparaciones ─────────────────────────────────────
-  { prefix: "7214",  cuenta: "601.27", label: "Mantenimiento" },
-  { prefix: "7215",  cuenta: "601.27", label: "Reparaciones" },
-  { prefix: "7216",  cuenta: "601.27", label: "Mantenimiento industrial" },
-  { prefix: "7610",  cuenta: "601.28", label: "Limpieza" },
+  // ── Mantenimiento / Reparaciones (601.56) ────────────────────────────
+  { prefix: "7214",  cuenta: "601.56", label: "Mantenimiento" },
+  { prefix: "7215",  cuenta: "601.56", label: "Reparaciones" },
+  { prefix: "7216",  cuenta: "601.56", label: "Mantenimiento industrial" },
+  { prefix: "7610",  cuenta: "601.54", label: "Limpieza" },
 
   // ── Seguros y financieros ────────────────────────────────────────────
-  { prefix: "84131", cuenta: "601.29", label: "Seguros" },
-  { prefix: "84121", cuenta: "601.30", label: "Servicios bancarios" },
+  { prefix: "84131", cuenta: "601.57", label: "Seguros y fianzas" },
+  { prefix: "84121", cuenta: COE_CODES.COMISIONES_BANCARIAS, label: "Servicios bancarios" },
 
-  // ── Material de oficina / papelería ──────────────────────────────────
-  { prefix: "44121", cuenta: "601.31", label: "Papelería y material de oficina" },
-  { prefix: "14111", cuenta: "601.31", label: "Papelería" },
-  { prefix: "44103", cuenta: "601.31", label: "Material de oficina" },
+  // ── Material de oficina / papelería (601.55) ─────────────────────────
+  { prefix: "44121", cuenta: "601.55", label: "Papelería y artículos de oficina" },
+  { prefix: "14111", cuenta: "601.55", label: "Papelería" },
+  { prefix: "44103", cuenta: "601.55", label: "Material de oficina" },
 
   // ── Nómina de terceros / Outsourcing (deprecated 2021 pero aún en CFDI) ──
   { prefix: "80161501", cuenta: COE_CODES.HONORARIOS, label: "Servicios administrativos" },
 
   // ── Alimentos (comedor industrial) ───────────────────────────────────
-  { prefix: "5010",  cuenta: "601.32", label: "Alimentos" },
+  { prefix: "5010",  cuenta: COE_CODES.OTROS_GASTOS, label: "Alimentos" },
 
-  // ── Publicidad ───────────────────────────────────────────────────────
-  { prefix: "8214",  cuenta: "601.18", label: "Publicidad" },
-  { prefix: "8215",  cuenta: "601.18", label: "Publicidad" },
-  { prefix: "8216",  cuenta: "601.18", label: "Diseño gráfico" },
+  // ── Publicidad (601.61 Propaganda y publicidad) ──────────────────────
+  { prefix: "8214",  cuenta: "601.61", label: "Publicidad" },
+  { prefix: "8215",  cuenta: "601.61", label: "Publicidad" },
+  { prefix: "8216",  cuenta: "601.61", label: "Diseño gráfico" },
 
-  // ── Capacitación / Educación ─────────────────────────────────────────
-  { prefix: "8611",  cuenta: "601.33", label: "Capacitación y educación" },
+  // ── Capacitación / Educación (601.62) ────────────────────────────────
+  { prefix: "8611",  cuenta: "601.62", label: "Capacitación al personal" },
 ];
 
 /**
@@ -185,23 +185,19 @@ export const EXTRA_ACCOUNTS_FOR_CLASSIFICATION: Array<{
   nivel: number;
   naturaleza?: "D" | "A";
 }> = [
-  { cuentaSAT: "601", subcuenta: "601.15", nombre: "Combustibles", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.16", nombre: "Lubricantes",  tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.17", nombre: "Servicios notariales y bienes raíces", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.18", nombre: "Publicidad y marketing", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.19", nombre: "Servicios de software / TI", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.20", nombre: "Telecomunicaciones", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.21", nombre: "Equipos de cómputo", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.22", nombre: "Fletes y transporte", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.23", nombre: "Hospedaje y alimentación", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.24", nombre: "Viajes", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.25", nombre: "Agua", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.26", nombre: "Energía y gas", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.27", nombre: "Mantenimiento y reparaciones", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.28", nombre: "Limpieza", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.29", nombre: "Seguros", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.30", nombre: "Servicios bancarios", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.31", nombre: "Papelería y material de oficina", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.32", nombre: "Alimentos", tipo: "GASTO", nivel: 3 },
-  { cuentaSAT: "601", subcuenta: "601.33", nombre: "Capacitación y educación", tipo: "GASTO", nivel: 3 },
+  // Nombres OFICIALES del código agrupador (ver codigo-agrupador.ts); el test
+  // codigo-agrupador.test.ts los coteja letra por letra.
+  { cuentaSAT: "601", subcuenta: "601.32", nombre: "Servicios administrativos", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.48", nombre: "Combustibles y lubricantes", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.49", nombre: "Viáticos y gastos de viaje", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.50", nombre: "Teléfono, internet", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.51", nombre: "Agua", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.52", nombre: "Energía eléctrica", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.54", nombre: "Limpieza", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.55", nombre: "Papelería y artículos de oficina", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.56", nombre: "Mantenimiento y conservación", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.57", nombre: "Seguros y fianzas", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.61", nombre: "Propaganda y publicidad", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.62", nombre: "Capacitación al personal", tipo: "GASTO", nivel: 3 },
+  { cuentaSAT: "601", subcuenta: "601.72", nombre: "Fletes y acarreos", tipo: "GASTO", nivel: 3 },
 ];

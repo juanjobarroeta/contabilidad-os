@@ -4,13 +4,12 @@ import { EXTRA_ACCOUNTS_FOR_CLASSIFICATION } from "./classify-egreso";
 import { naturalezaPorTipo } from "./coe-saldos";
 
 /**
- * Seeds the SAT COE starter catalog for a company. Idempotent — uses
- * `upsert` keyed on (companyId, cuentaSAT, subcuenta).
+ * Seeds the SAT COE starter catalog for a company. Idempotent — skips
+ * accounts that already exist keyed on (companyId, cuentaSAT, subcuenta).
  *
  * Called by:
  *   - POST /api/companies after company creation (best-effort)
- *   - POST /api/contabilidad/seed (manual trigger / retry)
- *   - prisma/scripts/backfill-catalog.ts (one-time backfill)
+ *   - scripts/repair-codigo-agrupador.ts (repara catálogos con códigos viejos)
  */
 export async function seedChartOfAccounts(companyId: string) {
   let created = 0;
@@ -51,8 +50,11 @@ export async function seedChartOfAccounts(companyId: string) {
 
 /**
  * Resolve a ChartAccount row by its SAT code. Used throughout the posting
- * engine. Throws if the account doesn't exist — callers should make sure
- * the catalog is seeded before posting.
+ * engine. Si la cuenta no existe pero SÍ está definida en el catálogo semilla
+ * (starter o extras del clasificador), se AUTOCREA — así un cambio de códigos
+ * en el catálogo no rompe el posteo de empresas sembradas con la versión
+ * anterior (el cron postea antes de que corra el script de reparación).
+ * Sólo lanza para códigos desconocidos.
  */
 export async function resolveAccount(companyId: string, code: string) {
   // `code` may be a parent code ("102") or subaccount ("102.01").
@@ -63,8 +65,23 @@ export async function resolveAccount(companyId: string, code: string) {
       OR: [{ subcuenta: code }, { cuentaSAT: code, subcuenta: null }],
     },
   });
-  if (!acc) {
+  if (acc) return acc;
+
+  const def = [...SAT_STARTER_CATALOG, ...EXTRA_ACCOUNTS_FOR_CLASSIFICATION].find(
+    (a) => (a.subcuenta ?? a.cuentaSAT) === code
+  );
+  if (!def) {
     throw new Error(`ChartAccount no encontrada: ${code}. Siembra el catálogo primero.`);
   }
-  return acc;
+  return prisma.chartAccount.create({
+    data: {
+      companyId,
+      cuentaSAT: def.cuentaSAT,
+      subcuenta: def.subcuenta,
+      nombre: def.nombre,
+      tipo: def.tipo,
+      nivel: def.nivel,
+      naturaleza: def.naturaleza ?? naturalezaPorTipo(def.tipo),
+    },
+  });
 }

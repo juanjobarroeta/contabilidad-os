@@ -9,11 +9,12 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 // ALL companies in the same despacho, so the user sees a cross-company net
 // position. Each row = one company with its outstanding loans given/received.
 //
-// Account codes: 107.06 = Préstamos otorgados (ACTIVO, debit-balance)
-//                205.02 = Préstamos por pagar (PASIVO, credit-balance)
+// Cuentas oficiales (ver COE_CODES): préstamos interempresa = partes
+// relacionadas nacionales, activo 107.03 / pasivo 205.04.
+import { COE_CODES } from "@/lib/contabilidad/catalog";
 
-const LOAN_GIVEN_SUBCUENTA = "107.06";
-const LOAN_RECEIVED_SUBCUENTA = "205.02";
+const LOAN_GIVEN_SUBCUENTA = COE_CODES.PRESTAMOS_OTORGADOS;
+const LOAN_RECEIVED_SUBCUENTA = COE_CODES.PRESTAMOS_RECIBIDOS;
 
 export async function GET(req: Request) {
   const session = await auth();

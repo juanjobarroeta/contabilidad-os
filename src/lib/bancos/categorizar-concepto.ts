@@ -30,13 +30,13 @@ export type SignoMovimiento = "CREDITO" | "DEBITO";
  * etiqueta en `BankTransaction.notes`. La sugerencia las reutiliza tal cual.
  */
 export type FamiliaConcepto =
-  | "COMISION" // comisiones / gastos bancarios → 601.84
-  | "TAX_PAYMENT" // impuestos y derechos pagados → 601.20
-  | "PAYROLL_NO_CFDI" // dispersión de nómina sin CFDI → 601.01
-  | "INTERNAL_TRANSFER" // traspaso entre cuentas propias → 102.01 (lavado)
-  | "FINANCIAL_INCOME" // intereses / rendimientos ganados → 402.01
-  | "RENT" // renta / arrendamiento pagado → 601.03
-  | "NON_DEDUCTIBLE"; // gasto no deducible → 603.01
+  | "COMISION" // comisiones / gastos bancarios → COE_CODES.COMISIONES_BANCARIAS
+  | "TAX_PAYMENT" // impuestos y derechos pagados → COE_CODES.IMPUESTOS_DERECHOS
+  | "PAYROLL_NO_CFDI" // dispersión de nómina sin CFDI → COE_CODES.SUELDOS_SALARIOS
+  | "INTERNAL_TRANSFER" // traspaso entre cuentas propias → COE_CODES.BANCOS (lavado)
+  | "FINANCIAL_INCOME" // intereses / rendimientos ganados → COE_CODES.OTROS_INGRESOS
+  | "RENT" // renta / arrendamiento pagado → COE_CODES.RENTAS
+  | "NON_DEDUCTIBLE"; // gasto no deducible → COE_CODES.GASTOS_NO_DEDUCIBLES
 
 export interface SugerenciaCategoria {
   /** Familia interna (coincide con la etiqueta de notes que lee postMonth). */
