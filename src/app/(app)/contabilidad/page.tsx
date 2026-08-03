@@ -8,8 +8,10 @@ import {
   Calendar, CheckCircle2, AlertCircle, Loader2, X,
   RotateCcw, FileText, BookOpen, Download, ArrowLeftRight, Boxes,
   Landmark, FileCheck2, Clock, ExternalLink, ShieldCheck, ArrowRight,
+  ScrollText, Scale,
 } from "lucide-react";
 import { ActivoFijoView } from "@/components/contabilidad/ActivoFijoView";
+import { LibroDiarioPanel, BalanceGeneralPanel, AuxiliarCuentaModal } from "@/components/contabilidad/LibroPanels";
 
 // ── Readiness CE (tipos espejo de /api/contabilidad/ce-readiness) ──────────────
 type ReadinessCheckEstado = "ok" | "warn" | "error";
@@ -93,9 +95,9 @@ interface SaldoRow {
   neto: number;
 }
 
-type TabId = "periods" | "coe" | "balanza" | "estado" | "saldos" | "activo-fijo";
+type TabId = "periods" | "coe" | "libro" | "balanza" | "estado" | "balance" | "saldos" | "activo-fijo";
 
-const TAB_IDS: readonly TabId[] = ["periods", "coe", "balanza", "estado", "saldos", "activo-fijo"];
+const TAB_IDS: readonly TabId[] = ["periods", "coe", "libro", "balanza", "estado", "balance", "saldos", "activo-fijo"];
 
 export default function ContabilidadPage() {
   const { activeCompany } = useCompany();
@@ -297,8 +299,10 @@ export default function ContabilidadPage() {
           {([
             ["periods", "Cierres mensuales", Calendar],
             ["coe", "Contabilidad Electrónica", Landmark],
-            ["balanza", "Balanza de comprobación", BookOpen],
+            ["libro", "Libro diario", ScrollText],
+            ["balanza", "Balanza", BookOpen],
             ["estado",  "Estado de resultados", FileText],
+            ["balance", "Balance general", Scale],
             ["saldos",  "Saldos interempresa", ArrowLeftRight],
             ["activo-fijo", "Activo fijo", Boxes],
           ] as const).map(([id, label, Icon]) => (
@@ -342,6 +346,14 @@ export default function ContabilidadPage() {
         />
       )}
 
+      {tab === "libro" && (
+        <div>
+          <PeriodPicker year={selectedYear} month={selectedMonth}
+            onChange={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }} />
+          <LibroDiarioPanel companyId={activeCompany.id} year={selectedYear} month={selectedMonth} />
+        </div>
+      )}
+
       {tab === "balanza" && (
         <BalanzaPanel
           companyId={activeCompany.id}
@@ -349,6 +361,14 @@ export default function ContabilidadPage() {
           month={selectedMonth}
           onChangePeriod={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }}
         />
+      )}
+
+      {tab === "balance" && (
+        <div>
+          <PeriodPicker year={selectedYear} month={selectedMonth}
+            onChange={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }} />
+          <BalanceGeneralPanel companyId={activeCompany.id} year={selectedYear} month={selectedMonth} />
+        </div>
       )}
 
       {tab === "estado" && (
@@ -765,6 +785,8 @@ function BalanzaPanel({
   const [rows, setRows] = useState<BalanzaRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [preliminar, setPreliminar] = useState(false);
+  // Drill-down: clic en una cuenta → auxiliar con saldo corrido.
+  const [auxCuenta, setAuxCuenta] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -811,7 +833,12 @@ function BalanzaPanel({
             </thead>
             <tbody>
               {nonZero.map((r, i) => (
-                <tr key={`${r.cuentaSAT}-${r.subcuenta}-${i}`} className="border-b border-cos-line last:border-0 hover:bg-cos-paper/50">
+                <tr
+                  key={`${r.cuentaSAT}-${r.subcuenta}-${i}`}
+                  onClick={() => setAuxCuenta(r.subcuenta ?? r.cuentaSAT)}
+                  title="Ver auxiliar de la cuenta"
+                  className="border-b border-cos-line last:border-0 hover:bg-cos-paper/50 cursor-pointer"
+                >
                   <td className="px-4 py-2 text-xs font-mono">{r.subcuenta ?? r.cuentaSAT}</td>
                   <td className="px-4 py-2">{r.nombre}</td>
                   <td className="px-4 py-2 text-right font-mono text-xs">{r.cargos > 0 ? formatCurrency(r.cargos) : "—"}</td>
@@ -822,6 +849,16 @@ function BalanzaPanel({
             </tbody>
           </table>
         </div>
+      )}
+
+      {auxCuenta && (
+        <AuxiliarCuentaModal
+          companyId={companyId}
+          year={year}
+          month={month}
+          cuenta={auxCuenta}
+          onClose={() => setAuxCuenta(null)}
+        />
       )}
     </div>
   );

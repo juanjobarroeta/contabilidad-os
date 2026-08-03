@@ -58,7 +58,7 @@ const SECTIONS: NavSection[] = [
     label: "Fiscal",
     items: [
       { href: "/impuestos", label: "Impuestos", icon: Calculator, badge: "3 tabs" },
-      { href: "/contabilidad", label: "Contabilidad", icon: BookOpen, badge: "6 tabs" },
+      { href: "/contabilidad", label: "Contabilidad", icon: BookOpen, badge: "8 tabs" },
       { href: "/cumplimiento", label: "Cumplimiento", icon: ShieldCheck, badge: "3 tabs" },
       // Herramienta transversal (no depende de la empresa activa): valida
       // RFC/CURP/NSS y cruza la lista 69-B — el "check.id" incluido en el plan.
