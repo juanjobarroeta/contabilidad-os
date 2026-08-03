@@ -180,17 +180,32 @@ export async function generatePolizasXml(opts: PolizasXmlOptions): Promise<strin
   });
 
   // CompNal: resuelve los CFDIs referenciados (UUID → RFC del tercero + total).
+  // El RFC del tercero depende de la dirección del CFDI: en un EGRESO/PAGO
+  // recibido el tercero es el EMISOR; en INGRESO/NOMINA emitidos, el RECEPTOR.
+  // La relación `customer` puede faltar (CFDIs recibidos de la descarga masiva
+  // sin proveedor ligado) — sin fallback, la póliza salía SIN el nodo CompNal
+  // obligatorio. Fallback: el RFC leído del propio rawXml guardado.
   const uuids = [...new Set(entries.filter((e) => e.referenciaTipo === "CFDI" && e.referencia).map((e) => e.referencia!))];
   const invoices = uuids.length
     ? await prisma.invoice.findMany({
         where: { companyId: opts.companyId, uuid: { in: uuids } },
-        select: { uuid: true, total: true, customer: { select: { rfc: true } } },
+        select: { uuid: true, total: true, tipo: true, rawXml: true, customer: { select: { rfc: true } } },
       })
     : [];
+  const rfcDesdeXml = (xml: string | null, nodo: "Emisor" | "Receptor"): string | null => {
+    if (!xml) return null;
+    const m = new RegExp(`<(?:[a-zA-Z0-9]+:)?${nodo}\\b[^>]*\\bRfc="([^"]+)"`).exec(xml);
+    return m?.[1] ?? null;
+  };
   const compNalPorUuid = new Map<string, CompNalInput>();
   for (const inv of invoices) {
-    if (inv.uuid && inv.customer?.rfc) {
-      compNalPorUuid.set(inv.uuid, { uuid: inv.uuid, rfc: inv.customer.rfc, montoTotal: inv.total });
+    if (!inv.uuid) continue;
+    const esRecibido = inv.tipo === "EGRESO" || inv.tipo === "PAGO";
+    const rfc = esRecibido
+      ? rfcDesdeXml(inv.rawXml, "Emisor") ?? inv.customer?.rfc ?? null
+      : inv.customer?.rfc ?? rfcDesdeXml(inv.rawXml, "Receptor");
+    if (rfc) {
+      compNalPorUuid.set(inv.uuid, { uuid: inv.uuid, rfc, montoTotal: inv.total });
     }
   }
 
