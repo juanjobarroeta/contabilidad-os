@@ -89,6 +89,45 @@ export async function findUltimoLoteImportado(companyId: string): Promise<LoteIm
 }
 
 /**
+ * Lista los últimos lotes importados (no deshechos) de la empresa, con cuántos
+ * movimientos siguen borrables vs. ya conciliados — para la UI de "deshacer una
+ * importación" (hub y satélites como JCPT). Orden: más reciente primero.
+ */
+export async function listarLotesImportados(companyId: string, take = 10): Promise<LoteImportado[]> {
+  const batches = await prisma.importBatch.findMany({
+    where: { companyId, undoneAt: null },
+    orderBy: { createdAt: "desc" },
+    take,
+    select: {
+      id: true, createdAt: true, banco: true, periodo: true, count: true, bankAccountId: true,
+      bankAccount: { select: { banco: true, nombre: true, numeroCuenta: true, clabe: true } },
+    },
+  });
+
+  return Promise.all(
+    batches.map(async (batch) => {
+      const [borrables, total] = await Promise.all([
+        prisma.bankTransaction.count({ where: whereBorrables(batch.id, companyId) }),
+        prisma.bankTransaction.count({ where: { importBatchId: batch.id, companyId } }),
+      ]);
+      const t = ult4(batch.bankAccount.numeroCuenta) ?? ult4(batch.bankAccount.clabe);
+      return {
+        id: batch.id,
+        createdAt: batch.createdAt,
+        banco: batch.banco,
+        periodo: batch.periodo,
+        count: batch.count,
+        bankAccountId: batch.bankAccountId,
+        cuentaEtiqueta:
+          `${batch.bankAccount.banco} ${batch.bankAccount.nombre}` + (t ? ` (terminación ${t})` : ""),
+        borrables,
+        conciliados: total - borrables,
+      };
+    })
+  );
+}
+
+/**
  * Materializa el cúmulo de importación reciente SIN lote (histórico, previo al
  * tracking) en un ImportBatch real, etiquetando esos movimientos. Devuelve el
  * lote resultante, o null si no hay movimientos sin lote. Sólo agrupa fuentes de
