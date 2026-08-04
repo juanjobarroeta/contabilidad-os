@@ -160,51 +160,48 @@ async function handle(req: Request) {
 
     if (ejecutar) await seedChartOfAccounts(company.id);
 
-    // 1) Mover asientos preservados de cuentas viejas → nuevas.
+    // 0) Cuentas viejas detectadas + DESACTIVAR las de código duplicado ANTES
+    //    de re-postear: mientras la fila vieja mal nombrada comparta código con
+    //    la oficial (601.84 «Comisiones bancarias» vs «Otros gastos generales»),
+    //    resolveAccount podría enrutar el re-posteo a la vieja. resolveAccount
+    //    sólo resuelve cuentas ACTIVAS, así que desactivarla primero garantiza
+    //    que todo asiento regenerado caiga en la fila oficial.
     for (const move of MOVES) {
       const vieja = await findByCodeAndNombre(company.id, move.code, move.oldNombre);
       if (!vieja) continue;
       r.cuentasViejas++;
-      const preservados = await prisma.accountingEntry.count({
-        where: { chartAccountId: vieja.id, fuente: { notIn: [...REGENERATED_SOURCES] } },
+      if (!ejecutar || !vieja.isActive) continue;
+      // Sólo cuando el código está REUTILIZADO por la fila oficial: ahí es
+      // donde resolveAccount podría escoger la fila vieja. Las demás se
+      // desactivan hasta el final (paso 5), ya vacías.
+      const sibling = await prisma.chartAccount.findFirst({
+        where: { companyId: company.id, subcuenta: move.code, id: { not: vieja.id } },
+        select: { id: true },
       });
-      if (preservados > 0 && ejecutar) {
-        const nueva = await prisma.chartAccount.findFirst({
-          where: { companyId: company.id, subcuenta: move.newCode },
-        });
-        if (!nueva) {
-          r.pendientes.push(`${move.code} «${move.oldNombre}»: cuenta destino ${move.newCode} no existe`);
-          continue;
-        }
-        const upd = await prisma.accountingEntry.updateMany({
-          where: { chartAccountId: vieja.id, fuente: { notIn: [...REGENERATED_SOURCES] } },
-          data: { chartAccountId: nueva.id },
-        });
-        r.asientosPreservadosMovidos += upd.count;
-      } else if (preservados > 0) {
-        r.asientosPreservadosMovidos += preservados; // dry-run: lo que se movería
+      if (sibling) {
+        await prisma.chartAccount.update({ where: { id: vieja.id }, data: { isActive: false } });
       }
     }
 
-    // 2) Renombrar cuentas con código correcto y nombre viejo.
-    for (const ren of RENAMES) {
-      const acc = await findByCodeAndNombre(company.id, ren.code, ren.oldNombre);
-      if (!acc) continue;
-      r.renombradas++;
-      if (ejecutar) {
-        await prisma.chartAccount.update({ where: { id: acc.id }, data: { nombre: ren.newNombre } });
-      }
-    }
-
-    // 3) Re-postear cada periodo con asientos (regenera CFDI/NOMINA/BANCO sobre
-    //    las cuentas correctas). CLOSED aún no existe; POSTED/DRAFT se re-postean.
-    const periodos = await prisma.accountingPeriod.findMany({
-      where: { companyId: company.id, status: { in: ["DRAFT", "POSTED"] }, entriesCount: { gt: 0 } },
-      select: { year: true, month: true },
+    // 1) Re-postear TODOS los meses con asientos regenerables — derivados de
+    //    los propios asientos, no de AccountingPeriod.entriesCount (que puede
+    //    estar desfasado y saltarse meses, como pasó en la primera corrida).
+    const meses = await prisma.accountingEntry.groupBy({
+      by: ["year", "month"],
+      where: { companyId: company.id, fuente: { in: [...REGENERATED_SOURCES] } },
       orderBy: [{ year: "asc" }, { month: "asc" }],
     });
-    for (const p of periodos) {
-      if (p.month === 13) continue; // cierre anual: sólo asientos CIERRE, no se regenera
+    const cerrados = new Set(
+      (
+        await prisma.accountingPeriod.findMany({
+          where: { companyId: company.id, status: "CLOSED" },
+          select: { year: true, month: true },
+        })
+      ).map((p) => `${p.year}-${p.month}`)
+    );
+    for (const p of meses) {
+      if (p.month === 13) continue; // cierre anual: sólo asientos CIERRE
+      if (cerrados.has(`${p.year}-${p.month}`)) continue;
       if (!ejecutar) { r.periodosReposteados++; continue; }
       try {
         await postMonth({ companyId: company.id, year: p.year, month: p.month });
@@ -214,13 +211,74 @@ async function handle(req: Request) {
       }
     }
 
-    // 4) Desactivar cuentas viejas que quedaron sin asientos (y encabezados huérfanos).
+    // 2) Mover asientos preservados (APERTURA/MANUAL/satélites) vieja → nueva.
+    for (const move of MOVES) {
+      const vieja = await findByCodeAndNombre(company.id, move.code, move.oldNombre);
+      if (!vieja) continue;
+      const preservados = await prisma.accountingEntry.count({
+        where: { chartAccountId: vieja.id, fuente: { notIn: [...REGENERATED_SOURCES] } },
+      });
+      if (preservados === 0) continue;
+      if (!ejecutar) {
+        r.asientosPreservadosMovidos += preservados; // lo que se movería
+        continue;
+      }
+      const nueva = await prisma.chartAccount.findFirst({
+        where: { companyId: company.id, subcuenta: move.newCode, isActive: true },
+      });
+      if (!nueva) {
+        r.pendientes.push(`${move.code} «${move.oldNombre}»: cuenta destino ${move.newCode} no existe`);
+        continue;
+      }
+      const upd = await prisma.accountingEntry.updateMany({
+        where: { chartAccountId: vieja.id, fuente: { notIn: [...REGENERATED_SOURCES] } },
+        data: { chartAccountId: nueva.id },
+      });
+      r.asientosPreservadosMovidos += upd.count;
+    }
+
+    // 3) Barrido de residuos: asientos que la primera corrida re-posteó sobre
+    //    la fila vieja de un código REUTILIZADO (misma subcuenta, otra fila).
+    //    Son asientos con el código correcto en la fila equivocada — se
+    //    re-apuntan a la fila oficial activa del MISMO código.
+    for (const move of MOVES) {
+      const vieja = await findByCodeAndNombre(company.id, move.code, move.oldNombre);
+      if (!vieja) continue;
+      const restantes = await prisma.accountingEntry.count({ where: { chartAccountId: vieja.id } });
+      if (restantes === 0) continue;
+      const oficialMismoCodigo = await prisma.chartAccount.findFirst({
+        where: { companyId: company.id, subcuenta: move.code, isActive: true, id: { not: vieja.id } },
+      });
+      if (!oficialMismoCodigo) continue; // código no reutilizado — se reporta abajo
+      if (ejecutar) {
+        const upd = await prisma.accountingEntry.updateMany({
+          where: { chartAccountId: vieja.id },
+          data: { chartAccountId: oficialMismoCodigo.id },
+        });
+        r.asientosPreservadosMovidos += upd.count;
+      } else {
+        r.asientosPreservadosMovidos += restantes;
+      }
+    }
+
+    // 4) Renombrar cuentas con código correcto y nombre viejo.
+    for (const ren of RENAMES) {
+      const acc = await findByCodeAndNombre(company.id, ren.code, ren.oldNombre);
+      if (!acc) continue;
+      r.renombradas++;
+      if (ejecutar) {
+        await prisma.chartAccount.update({ where: { id: acc.id }, data: { nombre: ren.newNombre } });
+      }
+    }
+
+    // 5) Desactivar cuentas viejas restantes y encabezados huérfanos; lo que
+    //    conserve asientos (código NO reutilizado) se reporta para humano.
     for (const item of [...MOVES, ...ORPHAN_HEADERS]) {
       const vieja = await findByCodeAndNombre(company.id, item.code, item.oldNombre);
-      if (!vieja || !vieja.isActive) continue;
+      if (!vieja) continue;
       const restantes = await prisma.accountingEntry.count({ where: { chartAccountId: vieja.id } });
       if (restantes === 0) {
-        if (ejecutar) {
+        if (ejecutar && vieja.isActive) {
           await prisma.chartAccount.update({ where: { id: vieja.id }, data: { isActive: false } });
         }
         r.desactivadas++;
