@@ -3,6 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { withCronLock } from "@/lib/cron-lock";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 import { postMonth, REGENERATED_SOURCES } from "@/lib/contabilidad/posting";
+import { SAT_STARTER_CATALOG } from "@/lib/contabilidad/catalog";
+import { EXTRA_ACCOUNTS_FOR_CLASSIFICATION } from "@/lib/contabilidad/classify-egreso";
+import { CODIGO_AGRUPADOR_OFICIAL } from "@/lib/contabilidad/codigo-agrupador";
+
+/** Códigos que el catálogo NUEVO también usa: la fila vieja mal nombrada ocupa
+ *  el código y BLOQUEA al seeder (que ancla por código) — la reparación las
+ *  RENOMBRA EN SU LUGAR al nombre oficial en vez de desactivarlas. */
+const CODIGOS_SEMILLA_NUEVA = new Set(
+  [...SAT_STARTER_CATALOG, ...EXTRA_ACCOUNTS_FOR_CLASSIFICATION].map((a) => a.subcuenta ?? a.cuentaSAT)
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // REPARACIÓN ÚNICA: catálogos sembrados con códigos agrupadores inventados.
@@ -170,14 +180,38 @@ async function handle(req: Request) {
       const vieja = await findByCodeAndNombre(company.id, move.code, move.oldNombre);
       if (!vieja) continue;
       r.cuentasViejas++;
-      if (!ejecutar || !vieja.isActive) continue;
-      // Sólo cuando el código está REUTILIZADO por la fila oficial: ahí es
-      // donde resolveAccount podría escoger la fila vieja. Las demás se
-      // desactivan hasta el final (paso 5), ya vacías.
+
       const sibling = await prisma.chartAccount.findFirst({
         where: { companyId: company.id, subcuenta: move.code, id: { not: vieja.id } },
         select: { id: true },
       });
+      const preservados = await prisma.accountingEntry.count({
+        where: { chartAccountId: vieja.id, fuente: { notIn: [...REGENERATED_SOURCES] } },
+      });
+
+      if (!sibling && CODIGOS_SEMILLA_NUEVA.has(move.code) && preservados === 0) {
+        // Código REUTILIZADO sin fila oficial: la vieja ocupa el código y
+        // bloqueó al seeder. Tras el re-posteo, los asientos que viven en ella
+        // ya PERTENECEN al significado oficial del código (el posteo resuelve
+        // por código) — renombrarla en su lugar la vuelve la fila oficial sin
+        // mover un solo asiento. Sin preservados no hay ambigüedad.
+        const nombreOficial = CODIGO_AGRUPADOR_OFICIAL[move.code];
+        if (nombreOficial) {
+          r.renombradas++;
+          if (ejecutar) {
+            await prisma.chartAccount.update({
+              where: { id: vieja.id },
+              data: { nombre: nombreOficial, isActive: true },
+            });
+          }
+          continue;
+        }
+      }
+
+      if (!ejecutar || !vieja.isActive) continue;
+      // Código reutilizado CON fila oficial ya presente: desactivar la vieja
+      // antes de re-postear para que resolveAccount (sólo activas) enrute a la
+      // oficial. Las de código no reutilizado se desactivan al final, vacías.
       if (sibling) {
         await prisma.chartAccount.update({ where: { id: vieja.id }, data: { isActive: false } });
       }
@@ -276,6 +310,18 @@ async function handle(req: Request) {
     for (const item of [...MOVES, ...ORPHAN_HEADERS]) {
       const vieja = await findByCodeAndNombre(company.id, item.code, item.oldNombre);
       if (!vieja) continue;
+      // En dry-run, las filas que el paso 0 renombraría en su lugar no son
+      // pendientes — quedarán como la fila oficial del código.
+      if (!ejecutar && CODIGOS_SEMILLA_NUEVA.has(item.code) && CODIGO_AGRUPADOR_OFICIAL[item.code]) {
+        const sibling = await prisma.chartAccount.findFirst({
+          where: { companyId: company.id, subcuenta: item.code, id: { not: vieja.id } },
+          select: { id: true },
+        });
+        const preservados = await prisma.accountingEntry.count({
+          where: { chartAccountId: vieja.id, fuente: { notIn: [...REGENERATED_SOURCES] } },
+        });
+        if (!sibling && preservados === 0) continue;
+      }
       const restantes = await prisma.accountingEntry.count({ where: { chartAccountId: vieja.id } });
       if (restantes === 0) {
         if (ejecutar && vieja.isActive) {
