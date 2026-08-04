@@ -59,11 +59,16 @@ export async function seedChartOfAccounts(companyId: string) {
 export async function resolveAccount(companyId: string, code: string) {
   // `code` may be a parent code ("102") or subaccount ("102.01").
   // We always match on subcuenta (the most specific) first.
+  // SÓLO cuentas ACTIVAS: durante la reparación de códigos conviven dos filas
+  // con el mismo código (la vieja mal nombrada y la oficial) — resolver la
+  // inactiva re-postearía sobre la cuenta equivocada.
   const acc = await prisma.chartAccount.findFirst({
     where: {
       companyId,
+      isActive: true,
       OR: [{ subcuenta: code }, { cuentaSAT: code, subcuenta: null }],
     },
+    orderBy: { createdAt: "desc" },
   });
   if (acc) return acc;
 
