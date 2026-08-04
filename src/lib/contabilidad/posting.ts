@@ -17,6 +17,8 @@ import { resolveAccount } from "./seed-catalog";
 import { COE_CODES } from "./catalog";
 import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { classifyInvoice } from "./classify-egreso";
+import { calcularDepreciacionMes, CUENTA_ACTIVO_FIJO } from "./depreciacion-contable";
+import { tipoActivoDesdeSubtipo } from "../fiscal/depreciacion";
 import type { Prisma, EntryType, EntrySource, AccountingPeriod } from "@prisma/client";
 
 type EntryDraft = {
@@ -35,7 +37,7 @@ type EntryDraft = {
 // re-postear un mes; el resto (APERTURA, MANUAL, CONSTRUCCION, FLOTA, PADEL,
 // CIERRE) se PRESERVA porque lo capturan a mano el contador u otros módulos
 // satélite y postMonth nunca lo vuelve a generar.
-export const REGENERATED_SOURCES: readonly EntrySource[] = ["CFDI", "NOMINA", "BANCO"];
+export const REGENERATED_SOURCES: readonly EntrySource[] = ["CFDI", "NOMINA", "BANCO", "DEPRECIACION"];
 
 export type EntrySummary = { entriesCount: number; totalCargos: number; totalAbonos: number };
 
@@ -363,6 +365,26 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     },
   });
 
+  // CFDIs clasificados INVERSION: el cargo va al ACTIVO FIJO (15x), no a
+  // gasto — de otro modo la compra se duplicaría contra la depreciación.
+  // La cuenta 15x sale del tipo del ActivoFijo ligado al CFDI (auto-creado
+  // por la clasificación fiscal); sin activo ligado, 160.01 Otros activos.
+  const activosPorInvoice = new Map<string, string>();
+  {
+    const inversionIds = egresos.filter((i) => i.naturaleza === "INVERSION").map((i) => i.id);
+    if (inversionIds.length > 0) {
+      const activos = await prisma.activoFijo.findMany({
+        where: { invoiceId: { in: inversionIds } },
+        select: { invoiceId: true, tipo: true },
+      });
+      for (const a of activos) {
+        if (a.invoiceId) {
+          activosPorInvoice.set(a.invoiceId, CUENTA_ACTIVO_FIJO[tipoActivoDesdeSubtipo(a.tipo)]);
+        }
+      }
+    }
+  }
+
   for (const inv of egresos) {
     const ref = inv.uuid ?? inv.id;
     const base = {
@@ -376,15 +398,18 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     const delta = inv.total - inv.subtotal;
 
     // Classification: user override wins, otherwise auto-classify from SAT code.
-    // The override is stored as the subcuenta SAT code (e.g. "601.15");
+    // The override is stored as the subcuenta SAT code (e.g. "601.48");
     // resolveCached will raise an error if it doesn't exist, which is what
     // we want — it means a user-supplied bad override, which shouldn't
-    // silently fall back to Otros gastos.
+    // silently fall back to Otros gastos. Los CFDIs INVERSION van al activo
+    // fijo (15x) salvo override manual explícito.
     const classification = inv.overrideCuenta
       ? { cuenta: inv.overrideCuenta, label: "manual" }
-      : classifyInvoice(
-          inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
-        );
+      : inv.naturaleza === "INVERSION"
+        ? { cuenta: activosPorInvoice.get(inv.id) ?? "160.01", label: "activo fijo" }
+        : classifyInvoice(
+            inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
+          );
     const gastoAccountId = await resolveCached(classification.cuenta);
 
     drafts.push({
@@ -415,6 +440,71 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       monto: inv.total,
       tipo: "ABONO",
     });
+  }
+
+  // ─── 2b. Depreciación contable del mes (fuente DEPRECIACION) ───────────
+  // Nominal, sin tope de automóvil (ambos son fiscales — ver
+  // depreciacion-contable.ts). Regenerable: cada re-posteo la reconstruye del
+  // registro de activos, igual que CFDI/NOMINA/BANCO. Bajas del mes: se
+  // cancela MOI y acumulada; el valor en libros va a resultados (703.xx).
+  {
+    const activosFijos = await prisma.activoFijo.findMany({
+      where: { companyId },
+      select: {
+        id: true, descripcion: true, tipo: true, moi: true,
+        fechaAdquisicion: true, fechaInicioUso: true, tasaAnual: true, fechaBaja: true,
+      },
+    });
+    if (activosFijos.length > 0) {
+      const { mensuales, bajas } = calcularDepreciacionMes(
+        activosFijos.map((a) => ({
+          id: a.id,
+          descripcion: a.descripcion,
+          tipo: a.tipo,
+          moi: a.moi,
+          fechaInicioUso: a.fechaInicioUso ?? a.fechaAdquisicion,
+          tasaAnual: a.tasaAnual,
+          fechaBaja: a.fechaBaja,
+        })),
+        year,
+        month
+      );
+      const finDeMes = new Date(Date.UTC(year, month, 0, 12));
+      for (const m of mensuales) {
+        const base = {
+          fecha: finDeMes,
+          descripcion: `Depreciación contable · ${m.descripcion}`,
+          referencia: m.activoId,
+          referenciaTipo: "ACTIVO",
+          fuente: "DEPRECIACION" as EntrySource,
+        };
+        drafts.push({ ...base, chartAccountId: await resolveCached(m.cuentaGasto), monto: m.monto, tipo: "CARGO" });
+        drafts.push({ ...base, chartAccountId: await resolveCached(m.cuentaAcumulada), monto: m.monto, tipo: "ABONO" });
+      }
+      for (const b of bajas) {
+        const base = {
+          fecha: finDeMes,
+          descripcion: `Baja de activo fijo · ${b.descripcion}`,
+          referencia: b.activoId,
+          referenciaTipo: "ACTIVO",
+          fuente: "DEPRECIACION" as EntrySource,
+        };
+        if (b.acumuladaALaBaja > 0.005) {
+          drafts.push({ ...base, chartAccountId: await resolveCached(b.cuentaAcumulada), monto: b.acumuladaALaBaja, tipo: "CARGO" });
+        }
+        if (b.valorEnLibros > 0.005) {
+          drafts.push({ ...base, chartAccountId: await resolveCached(b.cuentaPerdida), monto: b.valorEnLibros, tipo: "CARGO" });
+        }
+        drafts.push({ ...base, chartAccountId: await resolveCached(b.cuentaActivo), monto: b.moi, tipo: "ABONO" });
+      }
+      if (mensuales.length > 0 || bajas.length > 0) {
+        warnings.push(
+          `Depreciación contable: ${mensuales.length} activo(s) depreciado(s)` +
+          (bajas.length > 0 ? `, ${bajas.length} baja(s) registrada(s)` : "") +
+          ` — la actualización INPC y el tope de automóvil son sólo fiscales (declaración).`
+        );
+      }
+    }
   }
 
   // ─── 3. Bank transactions ──────────────────────────────────────────────
