@@ -19,6 +19,82 @@ import { validarParDevolucion } from "@/lib/bancos/devoluciones";
 type Params = { params: Promise<{ txId: string }> };
 
 /**
+ * DELETE /api/bancos/transactions/[txId]
+ *
+ * Borra UN movimiento — pensado para capturas manuales equivocadas (caja
+ * chica / ingresos externos). Nunca destruye trabajo fiscal: se rechaza si el
+ * movimiento está MATCHED o tiene cualquier vínculo (facturas múltiples,
+ * declaración de impuestos, construcción, devolución vinculada) — primero
+ * desconciliar/desvincular, luego borrar. Queda en bitácora.
+ */
+export async function DELETE(req: Request, { params }: Params) {
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
+
+  const { txId } = await params;
+  const tx = await prisma.bankTransaction.findUnique({
+    where: { id: txId },
+    include: {
+      conciliacionDetalles: { select: { id: true } },
+      gastoPagado: { select: { id: true } },
+      reembolsoPagado: { select: { id: true } },
+      rayaPagada: { select: { id: true } },
+      solicitudCompraPagada: { select: { id: true } },
+      devolucionPor: { select: { id: true } },
+    },
+  });
+  if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
+
+  const member = await getEffectiveCompanyMembership(user.id, tx.companyId);
+  if (!member || member.role === "VIEWER") {
+    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
+  if (tx.status === "MATCHED" || tx.invoiceId || tx.taxDeclarationId || tx.conciliacionDetalles.length > 0) {
+    return NextResponse.json(
+      { error: "El movimiento está conciliado. Desconcílialo antes de borrarlo." },
+      { status: 409 },
+    );
+  }
+  if (tx.gastoPagado || tx.reembolsoPagado || tx.rayaPagada || tx.solicitudCompraPagada) {
+    return NextResponse.json(
+      { error: "El movimiento está vinculado a construcción. Desconcílialo primero." },
+      { status: 409 },
+    );
+  }
+  if (tx.devolucionDeId || tx.devolucionPor) {
+    return NextResponse.json(
+      { error: "El movimiento es parte de una devolución vinculada. Desvincúlala primero." },
+      { status: 409 },
+    );
+  }
+
+  await prisma.bankTransaction.delete({ where: { id: txId } });
+  registrarBitacora({
+    companyId: tx.companyId,
+    userId: user.id,
+    actorEmail: user.email ?? null,
+    accion: "bancos.delete-transaction",
+    entidad: "BankTransaction",
+    entidadId: txId,
+    detalle: {
+      monto: tx.monto,
+      fecha: tx.fecha,
+      descripcion: tx.descripcion,
+      statusPrevio: tx.status,
+      externalRef: tx.externalRef ?? null,
+    },
+    req,
+  });
+  return NextResponse.json({ ok: true });
+}
+
+/**
  * PATCH /api/bancos/transactions/[txId]
  *
  * Body shapes:
@@ -73,7 +149,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(user.id, tx.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
-  const { action, invoiceId, gastoId, reembolsoId, rayaId, solicitudCompraId, taxDeclarationId, notes, asignaciones, origenId } = await req.json();
+  const { action, invoiceId, gastoId, reembolsoId, rayaId, solicitudCompraId, taxDeclarationId, notes, asignaciones, origenId, fecha, descripcion, monto } = await req.json();
 
   // Aviso (no bloqueante) para conciliación múltiple: la suma asignada quedó
   // por debajo del movimiento más allá de la tolerancia. Se devuelve en la
@@ -439,6 +515,58 @@ export async function PATCH(req: Request, { params }: Params) {
         data: { status: "UNMATCHED", notes: null },
       });
       break;
+    // ── Edición de captura manual (caja chica / ingresos externos) ───────────
+    // Corrige fecha/descripción/monto de un movimiento SIN vínculos fiscales
+    // (mismos guards que DELETE): lo conciliado se desconcilia primero.
+    case "edit": {
+      if (tx.status === "MATCHED" || tx.invoiceId || tx.taxDeclarationId) {
+        return NextResponse.json(
+          { error: "El movimiento está conciliado. Desconcílialo antes de editarlo." },
+          { status: 409 },
+        );
+      }
+      if (tx.gastoPagado || tx.reembolsoPagado || tx.rayaPagada || tx.solicitudCompraPagada) {
+        return NextResponse.json(
+          { error: "El movimiento está vinculado a construcción. Desconcílialo primero." },
+          { status: 409 },
+        );
+      }
+      if (tx.devolucionDeId || tx.devolucionPor) {
+        return NextResponse.json(
+          { error: "El movimiento es parte de una devolución vinculada. Desvincúlala primero." },
+          { status: 409 },
+        );
+      }
+      const cambios: { fecha?: Date; descripcion?: string; monto?: number } = {};
+      if (fecha !== undefined) {
+        const f = new Date(fecha);
+        if (Number.isNaN(f.getTime())) {
+          return NextResponse.json({ error: "Fecha inválida" }, { status: 400 });
+        }
+        cambios.fecha = f;
+      }
+      if (descripcion !== undefined) {
+        const d = String(descripcion).trim();
+        if (!d) return NextResponse.json({ error: "Descripción vacía" }, { status: 400 });
+        cambios.descripcion = d.slice(0, 500);
+      }
+      if (monto !== undefined) {
+        const n = Number(monto);
+        if (!Number.isFinite(n) || n === 0) {
+          return NextResponse.json({ error: "Monto inválido" }, { status: 400 });
+        }
+        cambios.monto = n;
+      }
+      if (Object.keys(cambios).length === 0) {
+        return NextResponse.json({ error: "Nada que editar" }, { status: 400 });
+      }
+      await prisma.bankTransaction.update({ where: { id: txId }, data: cambios });
+      detalleBitacora = {
+        previo: { fecha: tx.fecha, descripcion: tx.descripcion, monto: tx.monto },
+        cambios,
+      };
+      break;
+    }
     // ── Devolución bancaria (pago rebotado) ───────────────────────────────────
     // txId = el movimiento de DEVOLUCIÓN; body.origenId = el pago original.
     // Ambos quedan IGNORED (se netean: fuera de KPIs y del motor de IVA) y el
@@ -543,7 +671,8 @@ export async function PATCH(req: Request, { params }: Params) {
     action === "match-impuesto" ||
     action === "unmatch" ||
     action === "vincular-devolucion" ||
-    action === "desvincular-devolucion"
+    action === "desvincular-devolucion" ||
+    action === "edit"
   ) {
     registrarBitacora({
       companyId: tx.companyId,
@@ -558,7 +687,9 @@ export async function PATCH(req: Request, { params }: Params) {
               ? "conciliacion.devolucion"
               : action === "desvincular-devolucion"
                 ? "conciliacion.devolucion-desvincular"
-                : "conciliacion.match",
+                : action === "edit"
+                  ? "bancos.edit-transaction"
+                  : "conciliacion.match",
       entidad: "BankTransaction",
       entidadId: txId,
       detalle: {
