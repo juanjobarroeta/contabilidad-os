@@ -74,6 +74,17 @@ export async function DELETE(req: Request, { params }: Params) {
     );
   }
 
+  // Sólo CAPTURAS MANUALES (caja chica / ingest externo, con externalRef).
+  // Los renglones importados del estado de cuenta no se borran uno a uno:
+  // se corrigen deshaciendo el lote — y borrarlos aquí sólo haría que la
+  // detección de duplicados los reviva en la siguiente importación.
+  if (!tx.externalRef) {
+    return NextResponse.json(
+      { error: "Sólo capturas manuales se pueden borrar. Un movimiento importado se corrige deshaciendo su lote." },
+      { status: 409 },
+    );
+  }
+
   await prisma.bankTransaction.delete({ where: { id: txId } });
   registrarBitacora({
     companyId: tx.companyId,
@@ -534,6 +545,14 @@ export async function PATCH(req: Request, { params }: Params) {
       if (tx.devolucionDeId || tx.devolucionPor) {
         return NextResponse.json(
           { error: "El movimiento es parte de una devolución vinculada. Desvincúlala primero." },
+          { status: 409 },
+        );
+      }
+      // Igual que DELETE: sólo capturas manuales — lo importado del banco es
+      // el estado de cuenta real y no se reescribe a mano.
+      if (!tx.externalRef) {
+        return NextResponse.json(
+          { error: "Sólo capturas manuales se pueden editar. Un movimiento importado refleja el estado de cuenta del banco." },
           { status: 409 },
         );
       }
