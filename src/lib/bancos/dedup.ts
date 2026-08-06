@@ -53,3 +53,54 @@ export function planImportacion(claves: string[], enBD: (clave: string) => numbe
     return n > Math.max(0, enBD(clave));
   });
 }
+
+/**
+ * Variante con HORA (formato "pegado" del portal, que trae "13:07:00" en la
+ * línea de fecha). La regla F − D por día no distingue "re-pegado del mismo
+ * movimiento" de "segundo movimiento idéntico" cuando los pegados son
+ * PARCIALES (el usuario copia sólo lo nuevo del portal): dos SPEI de $10,000
+ * el mismo día, pegados en momentos distintos, y el segundo se omitía como
+ * duplicado. La hora identifica al movimiento dentro del día y rompe el
+ * empate.
+ *
+ * Regla por fila, en orden del archivo:
+ *   1. Sin hora → regla clásica F − D sobre la clave del día.
+ *   2. Con hora → si la BD ya tiene esa (clave, hora), es un re-pegado: se
+ *      omite (con conteo F − D por si el portal imprime dos movimientos con
+ *      la MISMA hora exacta).
+ *   3. Si no, se descuenta del pool de renglones LEGADO de la clave (los
+ *      guardados antes de que existiera la hora, referencia NULL): cubren
+ *      re-pegados de movimientos viejos sin re-importarlos.
+ *   4. Agotado el pool, es un movimiento nuevo: se importa.
+ *
+ * Nota: si un día tiene renglones legado Y el pegado es parcial, el pool
+ * puede omitir un movimiento realmente nuevo — re-pegar el día completo lo
+ * corrige (los legado se consumen en orden y el faltante entra). Hacia
+ * adelante todo se guarda con hora y la ambigüedad desaparece.
+ */
+export function planImportacionConHora(
+  filas: { clave: string; hora: string | null }[],
+  enBD: (clave: string) => number,
+  enBDConHora: (clave: string, hora: string) => number,
+): boolean[] {
+  const vistasSinHora = new Map<string, number>();
+  const vistasConHora = new Map<string, number>();
+  const legadoUsado = new Map<string, number>();
+  return filas.map(({ clave, hora }) => {
+    if (!hora) {
+      const n = (vistasSinHora.get(clave) ?? 0) + 1;
+      vistasSinHora.set(clave, n);
+      return n > Math.max(0, enBD(clave));
+    }
+    const kh = `${clave}|${hora}`;
+    const n = (vistasConHora.get(kh) ?? 0) + 1;
+    vistasConHora.set(kh, n);
+    if (n <= Math.max(0, enBDConHora(clave, hora))) return false;
+    const usado = legadoUsado.get(clave) ?? 0;
+    if (usado < Math.max(0, enBD(clave))) {
+      legadoUsado.set(clave, usado + 1);
+      return false;
+    }
+    return true;
+  });
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { claveDeDuplicado, planImportacion } from "./dedup";
+import { claveDeDuplicado, planImportacion, planImportacionConHora } from "./dedup";
 
 // Regla de conteo: por clave, con F ocurrencias en el archivo y D ya en la
 // BD (antes de la subida), se importan max(0, F − D). Las D primeras
@@ -68,5 +68,100 @@ describe("claveDeDuplicado", () => {
     const a = { fecha: new Date(Date.UTC(2026, 5, 30, 12)), monto: 100, descripcion: "DEPOSITO", referencia: undefined };
     const b = { fecha: new Date(Date.UTC(2026, 5, 30, 12)), monto: 100, descripcion: "DEPOSITO" };
     expect(claveDeDuplicado(a)).toBe(claveDeDuplicado(b));
+  });
+});
+
+// La hora del formato pegado identifica al movimiento dentro del día: dos
+// SPEI idénticos el mismo día (13:07 y 15:07) pegados en momentos DISTINTOS
+// deben entrar ambos — la regla F − D por día sola omitía el segundo.
+describe("planImportacionConHora — pegados parciales con hora", () => {
+  const k = "dia|-10000|sweb transf. interb spei|";
+  const sinLegado = () => 0;
+
+  it("pegados parciales: cada 10k llega en un pegado distinto y ambos entran", () => {
+    // Pegado 1: sólo el de las 13:07, BD vacía.
+    expect(planImportacionConHora([{ clave: k, hora: "13:07:00" }], sinLegado, () => 0)).toEqual([
+      true,
+    ]);
+    // Pegado 2: sólo el de las 15:07; la BD ya tiene el de las 13:07.
+    const enBDHora = (_: string, h: string) => (h === "13:07:00" ? 1 : 0);
+    expect(planImportacionConHora([{ clave: k, hora: "15:07:00" }], sinLegado, enBDHora)).toEqual([
+      true,
+    ]);
+  });
+
+  it("re-pegar un movimiento ya guardado con su hora es no-op", () => {
+    const enBDHora = (_: string, h: string) => (h === "13:07:00" ? 1 : 0);
+    expect(planImportacionConHora([{ clave: k, hora: "13:07:00" }], sinLegado, enBDHora)).toEqual([
+      false,
+    ]);
+  });
+
+  it("dos movimientos con la MISMA hora exacta en un pegado: F − D por (clave, hora)", () => {
+    expect(
+      planImportacionConHora(
+        [
+          { clave: k, hora: "13:07:00" },
+          { clave: k, hora: "13:07:00" },
+        ],
+        sinLegado,
+        () => 0,
+      ),
+    ).toEqual([true, true]);
+    expect(
+      planImportacionConHora(
+        [
+          { clave: k, hora: "13:07:00" },
+          { clave: k, hora: "13:07:00" },
+        ],
+        sinLegado,
+        () => 1,
+      ),
+    ).toEqual([false, true]);
+  });
+
+  it("renglones legado (sin hora en BD) cubren re-pegados sin re-importar", () => {
+    // BD: un renglón viejo del día sin hora (referencia NULL). Re-pegado
+    // completo del día con ambos 10k: el legado cubre uno, el otro entra.
+    const legado = () => 1;
+    expect(
+      planImportacionConHora(
+        [
+          { clave: k, hora: "15:07:00" },
+          { clave: k, hora: "13:07:00" },
+        ],
+        legado,
+        () => 0,
+      ),
+    ).toEqual([false, true]);
+  });
+
+  it("estable tras la recuperación: re-pegar de nuevo ya no importa nada", () => {
+    // BD tras el caso anterior: 1 legado + 1 con hora 13:07.
+    const legado = () => 1;
+    const enBDHora = (_: string, h: string) => (h === "13:07:00" ? 1 : 0);
+    expect(
+      planImportacionConHora(
+        [
+          { clave: k, hora: "15:07:00" },
+          { clave: k, hora: "13:07:00" },
+        ],
+        legado,
+        enBDHora,
+      ),
+    ).toEqual([false, false]);
+  });
+
+  it("filas sin hora siguen la regla clásica F − D", () => {
+    expect(
+      planImportacionConHora(
+        [
+          { clave: k, hora: null },
+          { clave: k, hora: null },
+        ],
+        () => 1,
+        () => 0,
+      ),
+    ).toEqual([false, true]);
   });
 });
