@@ -11,9 +11,11 @@ import {
 
 type Params = { params: Promise<{ id: string }> };
 
-// GET /api/bancos/[id]?status=UNMATCHED|MATCHED|IGNORED|PENDING&page=1&pageSize=50
+// GET /api/bancos/[id]?status=UNMATCHED|MATCHED|IGNORED|PENDING&page=1&pageSize=50&mes=YYYY-MM
 // PENDING = IGNORED rows with notes = "PENDING_MONTHLY_CFDI" (bank fees waiting
 // for the consolidated monthly CFDI from the bank).
+// mes acota movimientos Y conteos a ese mes calendario (UTC) — el workbench de
+// conciliación de ZionX trabaja mes por mes.
 // Autz: sesión web O token de servicio (Bearer) — ZionX espeja los movimientos.
 export async function GET(req: Request, { params }: Params) {
   let user;
@@ -29,6 +31,12 @@ export async function GET(req: Request, { params }: Params) {
   const status   = searchParams.get("status") ?? undefined;
   const page     = parseInt(searchParams.get("page") ?? "1");
   const pageSize = parseInt(searchParams.get("pageSize") ?? "50");
+  const mes      = searchParams.get("mes") ?? "";
+  let fechaMes: { gte: Date; lt: Date } | undefined;
+  if (/^\d{4}-\d{2}$/.test(mes)) {
+    const [y, m] = mes.split("-").map(Number);
+    fechaMes = { gte: new Date(Date.UTC(y, m - 1, 1)), lt: new Date(Date.UTC(y, m, 1)) };
+  }
 
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
@@ -50,20 +58,23 @@ export async function GET(req: Request, { params }: Params) {
   };
   const knownTags = Object.values(TAG_TABS);
 
-  let where: Prisma.BankTransactionWhereInput = { bankAccountId };
+  const scope: Prisma.BankTransactionWhereInput = fechaMes
+    ? { bankAccountId, fecha: fechaMes }
+    : { bankAccountId };
+  let where: Prisma.BankTransactionWhereInput = { ...scope };
   if (status && status in TAG_TABS) {
-    where = { bankAccountId, status: "IGNORED", notes: TAG_TABS[status] };
+    where = { ...scope, status: "IGNORED", notes: TAG_TABS[status] };
   } else if (status === "IGNORED") {
     // Plain Ignorados = IGNORED rows whose notes is null or some other tag
     where = {
-      bankAccountId,
+      ...scope,
       status: "IGNORED",
       OR: [{ notes: null }, { notes: { notIn: knownTags } }],
     };
   } else if (status && status !== "all") {
     // "all" (o sin status) = todos los movimientos, sin filtro de estado.
     // Cualquier otro valor es un estado del enum (UNMATCHED/MATCHED/IGNORED).
-    where = { bankAccountId, status: status as "UNMATCHED" | "MATCHED" | "IGNORED" };
+    where = { ...scope, status: status as "UNMATCHED" | "MATCHED" | "IGNORED" };
   }
 
   const [transactions, total] = await Promise.all([
@@ -141,12 +152,12 @@ export async function GET(req: Request, { params }: Params) {
   const [counts, tagCounts] = await Promise.all([
     prisma.bankTransaction.groupBy({
       by: ["status"],
-      where: { bankAccountId },
+      where: scope,
       _count: true,
     }),
     prisma.bankTransaction.groupBy({
       by: ["notes"],
-      where: { bankAccountId, status: "IGNORED" },
+      where: { ...scope, status: "IGNORED" },
       _count: true,
     }),
   ]);
