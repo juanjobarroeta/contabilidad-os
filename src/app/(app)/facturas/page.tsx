@@ -2,11 +2,18 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck, FileText } from "lucide-react";
+import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck, FileText, CalendarRange } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Button } from "@/components/ui";
 import { esAsimilado, etiquetaRegimenNomina } from "@/lib/nomina/regimen";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
+import {
+  PERIODO_TODO,
+  etiquetaPeriodo,
+  opcionesPeriodo,
+  rangoPeriodo,
+  type ConteoPeriodo,
+} from "@/lib/facturas/periodos";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -39,7 +46,16 @@ const NATURALEZA_META: Record<string, { label: string; hint: string }> = {
   INVENTARIO:  { label: "Inventario",   hint: "Se deduce al venderse — costo de lo vendido (Art. 39)" },
   SIN_EFECTOS: { label: "Sin efectos",  hint: "No deducible" },
 };
-interface Resumen { timbradas: number; totalFacturado: number; ivaCobrado: number }
+interface Resumen {
+  timbradas: number;
+  totalFacturado: number;
+  ivaCobrado: number;
+  periodos?: ConteoPeriodo[];
+}
+
+/** Filas por página. La lista se pagina: antes se cargaban 200 y punto, así que
+ *  en una empresa con volumen los CFDIs viejos no existían para el usuario. */
+const TAKE = 200;
 
 type FilterKey = "todas" | "ingreso" | "egreso" | "nomina" | "pago" | "cancelada";
 
@@ -145,25 +161,78 @@ export default function FacturasPage() {
   const [sel, setSel] = useState<Invoice | null>(null);
   const [toast, setToast] = useState("");
   const [checkingCancel, setCheckingCancel] = useState(false);
+  // Periodo elegido en el selector ("todo" | "YYYY" | "YYYY-MM") + los meses
+  // que tienen comprobantes (los da /api/facturas/resumen).
+  const [periodo, setPeriodo] = useState<string>(PERIODO_TODO);
+  const [periodos, setPeriodos] = useState<ConteoPeriodo[]>([]);
+  const [hayMas, setHayMas] = useState(false);
+  const [cargandoMas, setCargandoMas] = useState(false);
+
+  // La búsqueda va al SERVIDOR (antes filtraba sólo sobre lo ya cargado, así que
+  // no encontraba nada fuera de las últimas 200 filas). Debounce para no
+  // disparar una consulta por tecla.
+  const [qBuscado, setQBuscado] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQBuscado(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  // Al cambiar de empresa el periodo elegido ya no aplica.
+  useEffect(() => { setPeriodo(PERIODO_TODO); }, [activeCompany?.id]);
+
+  /** Query de la lista para una página, con la ventana del periodo y la búsqueda. */
+  const listaUrl = useCallback(
+    (skip: number) => {
+      const p = new URLSearchParams({ companyId: activeCompany!.id, take: String(TAKE), skip: String(skip) });
+      const r = rangoPeriodo(periodo);
+      if (r) {
+        p.set("from", r.from.toISOString());
+        p.set("to", r.to.toISOString());
+      }
+      if (qBuscado) p.set("q", qBuscado);
+      return `/api/facturas?${p.toString()}`;
+    },
+    [activeCompany, periodo, qBuscado]
+  );
 
   const fetchData = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true);
     try {
       const [list, res, prefs] = await Promise.all([
-        fetch(`/api/facturas?companyId=${activeCompany.id}&take=200`).then((r) => r.json()),
-        fetch(`/api/facturas/resumen?companyId=${activeCompany.id}`).then((r) => r.json()),
+        fetch(listaUrl(0)).then((r) => r.json()),
+        fetch(`/api/facturas/resumen?companyId=${activeCompany.id}&periodo=${encodeURIComponent(periodo)}`).then((r) => r.json()),
         fetch(`/api/facturas/borradores?companyId=${activeCompany.id}`).then((r) => r.json()).catch(() => []),
       ]);
-      setInvoices(Array.isArray(list) ? list : []);
+      const filas: Invoice[] = Array.isArray(list) ? list : [];
+      setInvoices(filas);
+      setHayMas(filas.length === TAKE);
       setResumen(res);
+      setPeriodos(Array.isArray(res?.periodos) ? res.periodos : []);
       setPrefacturas(Array.isArray(prefs) ? prefs : []);
     } finally {
       setLoading(false);
     }
-  }, [activeCompany]);
+  }, [activeCompany, listaUrl, periodo]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  /** Siguiente página (se agrega al final; el orden del servidor es fecha desc). */
+  async function cargarMas() {
+    if (!activeCompany || cargandoMas) return;
+    setCargandoMas(true);
+    try {
+      const res = await fetch(listaUrl(invoices.length));
+      const filas: Invoice[] = await res.json();
+      const nuevas = Array.isArray(filas) ? filas : [];
+      setInvoices((prev) => [...prev, ...nuevas]);
+      setHayMas(nuevas.length === TAKE);
+    } catch {
+      showToast("No se pudieron cargar más facturas");
+    } finally {
+      setCargandoMas(false);
+    }
+  }
 
   // Deep-link ?q= — p. ej. el expediente del empleado enlaza el CFDI del
   // recibo por UUID (/facturas?q=<uuid>). Se lee directo de la URL para no
@@ -247,16 +316,31 @@ export default function FacturasPage() {
     cancelada: invoices.filter((i) => keyOf(i) === "cancelada").length,
   };
 
-  let rows = invoices.filter((i) => filter === "todas" || keyOf(i) === filter);
-  if (q.trim()) {
-    const s = q.toLowerCase();
-    rows = rows.filter(
-      (i) =>
-        (i.customer?.razonSocial ?? "").toLowerCase().includes(s) ||
-        (i.customer?.rfc ?? "").toLowerCase().includes(s) ||
-        (i.uuid ?? "").toLowerCase().includes(s)
-    );
-  }
+  // La búsqueda ya la resolvió el servidor sobre TODO el historial (UUID, folio,
+  // notas, nombre y RFC), así que aquí sólo queda el filtro por tipo.
+  const rows = invoices.filter((i) => filter === "todas" || keyOf(i) === filter);
+
+  const opciones = opcionesPeriodo(periodos);
+  // Sublabel de las tarjetas: siguen la ventana elegida, no el año fijo.
+  const subPeriodo =
+    periodo === PERIODO_TODO
+      ? "en todo el historial"
+      : /^\d{4}$/.test(periodo)
+      ? `en ${periodo}`
+      : `en ${etiquetaPeriodo(periodo)}`;
+
+  // Excel: se lleva la misma ventana y el mismo tipo que estás viendo.
+  const exportUrl = (() => {
+    const p = new URLSearchParams({ companyId: activeCompany?.id ?? "" });
+    const r = rangoPeriodo(periodo);
+    if (r) {
+      p.set("from", r.from.toISOString());
+      p.set("to", r.to.toISOString());
+    }
+    if (filter === "cancelada") p.set("tipo", "CANCELLED");
+    else if (filter !== "todas") p.set("tipo", filter.toUpperCase());
+    return `/api/facturas/export?${p.toString()}`;
+  })();
 
   if (!activeCompany) {
     return <div className="p-8 text-sm text-cos-ink-faint">Selecciona una empresa.</div>;
@@ -278,7 +362,7 @@ export default function FacturasPage() {
             {checkingCancel ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
             {checkingCancel ? "Verificando…" : "Verificar cancelaciones"}
           </Button>
-          <a href={`/api/facturas/export?companyId=${activeCompany.id}`}>
+          <a href={exportUrl} title="Exporta lo que estás viendo: el periodo y el filtro seleccionados">
             <Button variant="soft" size="md"><Download className="h-4 w-4" /> Excel</Button>
           </a>
           <Link href="/facturas/nueva">
@@ -292,12 +376,12 @@ export default function FacturasPage() {
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <span className={LBL}>Facturas timbradas</span>
           <div className="my-1 text-[28px] font-semibold tracking-[-0.02em] text-cos-ink">{resumen?.timbradas ?? "—"}</div>
-          <span className="text-[12.5px] text-cos-ink-faint">este año</span>
+          <span className="text-[12.5px] text-cos-ink-faint">{subPeriodo}</span>
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <span className={LBL}>Total facturado</span>
           <div className="my-1"><Money value={resumen?.totalFacturado ?? 0} size={24} /></div>
-          <span className="text-[12.5px] text-cos-ink-faint">emitido este año</span>
+          <span className="text-[12.5px] text-cos-ink-faint">emitido {subPeriodo}</span>
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <span className={LBL}>IVA cobrado</span>
@@ -345,15 +429,37 @@ export default function FacturasPage() {
         </Card>
       )}
 
-      {/* search */}
-      <div className="mt-[18px] flex items-center gap-2.5 rounded-control border border-cos-line bg-cos-card px-3.5 text-cos-ink-faint">
-        <Search className="h-[18px] w-[18px]" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por nombre o RFC…"
-          className="flex-1 border-0 bg-transparent py-3 text-[14.5px] text-cos-ink outline-none"
-        />
+      {/* búsqueda (servidor, sobre todo el historial) + selector de periodo */}
+      <div className="mt-[18px] flex flex-wrap items-stretch gap-2.5">
+        <div className="flex min-w-[240px] flex-1 items-center gap-2.5 rounded-control border border-cos-line bg-cos-card px-3.5 text-cos-ink-faint">
+          <Search className="h-[18px] w-[18px]" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por nombre, RFC, folio o UUID…"
+            className="flex-1 border-0 bg-transparent py-3 text-[14.5px] text-cos-ink outline-none"
+          />
+        </div>
+        <label className="flex items-center gap-2 rounded-control border border-cos-line bg-cos-card px-3.5 text-cos-ink-faint">
+          <CalendarRange className="h-[18px] w-[18px]" />
+          <span className="sr-only">Periodo</span>
+          <select
+            value={periodo}
+            onChange={(e) => setPeriodo(e.target.value)}
+            className="border-0 bg-transparent py-3 pr-1 text-[14.5px] font-medium text-cos-ink outline-none"
+          >
+            {/* Si el periodo elegido aún no está en la lista (primer render),
+                se muestra igual para que el select no aparezca vacío. */}
+            {!opciones.some((o) => o.valor === periodo) && (
+              <option value={periodo}>{etiquetaPeriodo(periodo)}</option>
+            )}
+            {opciones.map((o) => (
+              <option key={o.valor} value={o.valor}>
+                {`${o.nivel === 1 ? "  · " : ""}${o.etiqueta} (${o.total})`}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {/* filter chips */}
@@ -387,7 +493,13 @@ export default function FacturasPage() {
             <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
           </div>
         ) : rows.length === 0 ? (
-          <div className="px-10 py-10 text-center text-cos-ink-faint">No hay facturas con ese filtro.</div>
+          <div className="px-10 py-10 text-center text-cos-ink-faint">
+            {qBuscado
+              ? `No encontré comprobantes que coincidan con «${qBuscado}»${periodo === PERIODO_TODO ? "" : ` en ${etiquetaPeriodo(periodo)}`}.`
+              : periodo === PERIODO_TODO
+              ? "No hay facturas con ese filtro."
+              : `No hay facturas de ${etiquetaPeriodo(periodo)} con ese filtro.`}
+          </div>
         ) : (
           rows.map((inv) => {
             const k = keyOf(inv);
@@ -423,6 +535,25 @@ export default function FacturasPage() {
               </button>
             );
           })
+        )}
+
+        {/* Paginación: la lista trae de 200 en 200. Sin esto, los comprobantes
+            más viejos que la primera página eran invisibles. */}
+        {!loading && invoices.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-cos-line px-[18px] py-3">
+            <span className="text-[12.5px] text-cos-ink-faint">
+              {rows.length === invoices.length
+                ? `${invoices.length} comprobante${invoices.length === 1 ? "" : "s"}`
+                : `${rows.length} de ${invoices.length} cargados`}
+              {periodo !== PERIODO_TODO ? ` · ${etiquetaPeriodo(periodo)}` : ""}
+              {hayMas ? " · hay más" : ""}
+            </span>
+            {hayMas && (
+              <Button variant="soft" size="md" onClick={cargarMas} loading={cargandoMas}>
+                Cargar más
+              </Button>
+            )}
+          </div>
         )}
       </Card>
 
