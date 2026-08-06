@@ -369,3 +369,55 @@ describe("parseStatement — pegado de tarjeta de crédito (Scotiabank)", () => 
     expect(r.transactions[0].monto).toBe(-67.23);
   });
 });
+
+// ── Hora del pegado + montos en formato europeo ──────────────────────────────
+// La hora de la línea de fecha identifica al movimiento dentro del día (dos
+// SPEI de $10,000 el 13 de julio a las 13:07 y 15:07 son transacciones
+// distintas — la dedup la usa como desempate). Algunos perfiles del portal
+// imprimen los montos estilo europeo ("-$10.000,00").
+describe("parseStatement — pegado: hora y montos europeos", () => {
+  const CON_DUPLICADOS = `sweb transf. interb spei
+13 Jul 2026 , 15:07:00
+-$10,000.00
+sweb transf. interb spei
+13 Jul 2026 , 13:07:00
+-$618.00
+sweb transf. interb spei
+13 Jul 2026 , 13:07:00
+-$10,000.00`;
+
+  it("captura la hora normalizada HH:MM:SS de cada movimiento", () => {
+    const r = parseStatement(CON_DUPLICADOS, "movimientos.txt");
+    expect(r.transactions.map((t) => t.hora)).toEqual(["15:07:00", "13:07:00", "13:07:00"]);
+  });
+
+  it("dos movimientos idénticos el mismo día se parsean AMBOS", () => {
+    const r = parseStatement(CON_DUPLICADOS, "movimientos.txt");
+    expect(r.transactions.filter((t) => t.monto === -10000)).toHaveLength(2);
+    expect(r.descartadas).toHaveLength(0);
+  });
+
+  it("hora con minutos sin segundos se normaliza (9:07 → 09:07:00)", () => {
+    const r = parseStatement(
+      "pago servicio\n09 Jul 2026 , 9:07\n-$300.00\npago servicio\n08 Jul 2026 , 14:07\n-$150.00",
+      "movimientos.txt",
+    );
+    expect(r.transactions[0].hora).toBe("09:07:00");
+  });
+
+  it("acepta montos en formato europeo ($10.000,00) y mixto", () => {
+    const eu = `sweb transf. interb spei
+17 Jul 2026 , 11:07:00
+-$3.580,00
+transf interbancaria spei
+15 Jul 2026 , 16:07:00
+$14.300,00
+sweb transf. interb spei
+13 Jul 2026 , 15:07:00
+-$10.000,00`;
+    const r = parseStatement(eu, "movimientos.txt");
+    expect(r.format).toBe("pegado");
+    expect(r.transactions.map((t) => t.monto)).toEqual([-3580, 14300, -10000]);
+    expect(r.descartadas).toHaveLength(0);
+  });
+});

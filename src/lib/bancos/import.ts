@@ -12,7 +12,10 @@
  * F ocurrencias y la BD ya tiene D (antes de esta subida), se importan
  * max(0, F − D) y las D primeras se omiten como posibles duplicados. Así,
  * dos cargos idénticos el mismo día dentro de un archivo se importan ambos,
- * y re-subir el mismo archivo sigue siendo un no-op.
+ * y re-subir el mismo archivo sigue siendo un no-op. Cuando la fuente trae
+ * hora (formato pegado del portal) la regla es POR HORA: dos pegados
+ * parciales pueden traer cada uno un movimiento idéntico del mismo día y
+ * ambos entran (la hora, persistida en referencia, los distingue).
  *
  * Auto-categorize on import: bank fees, SAT payments, and internal
  * transfers go straight to IGNORED with a notes tag, so the UNMATCHED
@@ -23,7 +26,7 @@ import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
 import { parseStatement, type ParseResult, type ParsedTransaction, type RowDescartada } from "@/lib/bank-parser";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
-import { claveDeDuplicado, planImportacion } from "@/lib/bancos/dedup";
+import { claveDeDuplicado, planImportacionConHora } from "@/lib/bancos/dedup";
 import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuentes";
 import { primeraReglaQueEmpata, signoDeMonto, type FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 
@@ -82,32 +85,51 @@ export async function persistTransactions(opts: {
   // insertar nada de este archivo — por eso se cachea el conteo la primera
   // vez que vemos la clave, para que nuestras propias inserciones no lo
   // inflen), F = ocurrencias en el archivo. Se importan max(0, F − D) y las
-  // D primeras ocurrencias se omiten como posibles duplicados. Ver
-  // src/lib/bancos/dedup.ts para la justificación (dos cargos idénticos el
-  // mismo día son casi siempre transacciones reales distintas).
+  // D primeras ocurrencias se omiten como posibles duplicados. Cuando la
+  // fuente trae HORA (formato pegado del portal), ésta identifica al
+  // movimiento dentro del día — así dos pegados PARCIALES pueden traer, cada
+  // uno, un SPEI idéntico del mismo día y ambos entran. Ver
+  // src/lib/bancos/dedup.ts para la regla completa. La hora se persiste en
+  // `referencia` (el pegado no trae referencia bancaria), de modo que los
+  // re-pegados futuros la encuentran con la MISMA consulta exacta de siempre.
   const conteoEnBD = new Map<string, number>();
-  const claves: string[] = [];
+  const conteoConHora = new Map<string, number>();
+  const filas: { clave: string; hora: string | null }[] = [];
   for (const tx of transactions) {
     const clave = claveDeDuplicado(tx);
-    claves.push(clave);
+    const hora = tx.referencia ? null : (tx.hora ?? null);
+    filas.push({ clave, hora });
+    const fechaStart = new Date(tx.fecha);
+    fechaStart.setHours(0, 0, 0, 0);
+    const fechaEnd = new Date(tx.fecha);
+    fechaEnd.setHours(23, 59, 59, 999);
+    const whereBase = {
+      bankAccountId,
+      fecha: { gte: fechaStart, lte: fechaEnd },
+      monto: tx.monto,
+      descripcion: tx.descripcion,
+    };
     if (!conteoEnBD.has(clave)) {
-      const fechaStart = new Date(tx.fecha);
-      fechaStart.setHours(0, 0, 0, 0);
-      const fechaEnd = new Date(tx.fecha);
-      fechaEnd.setHours(23, 59, 59, 999);
       const d = await prisma.bankTransaction.count({
-        where: {
-          bankAccountId,
-          fecha: { gte: fechaStart, lte: fechaEnd },
-          monto: tx.monto,
-          descripcion: tx.descripcion,
-          referencia: tx.referencia ?? null,
-        },
+        where: { ...whereBase, referencia: tx.referencia ?? null },
       });
       conteoEnBD.set(clave, d);
     }
+    if (hora) {
+      const kh = `${clave}|${hora}`;
+      if (!conteoConHora.has(kh)) {
+        const d = await prisma.bankTransaction.count({
+          where: { ...whereBase, referencia: hora },
+        });
+        conteoConHora.set(kh, d);
+      }
+    }
   }
-  const plan = planImportacion(claves, (clave) => conteoEnBD.get(clave) ?? 0);
+  const plan = planImportacionConHora(
+    filas,
+    (clave) => conteoEnBD.get(clave) ?? 0,
+    (clave, hora) => conteoConHora.get(`${clave}|${hora}`) ?? 0,
+  );
 
   // Reglas de categorización CONFIRMADAS por el usuario (origen USER): se cargan
   // UNA sola vez (fuera del bucle) y se auto-aplican a cada movimiento que empate
@@ -179,7 +201,9 @@ export async function persistTransactions(opts: {
         descripcion: tx.descripcion,
         monto: tx.monto,
         saldo: tx.saldo ?? null,
-        referencia: tx.referencia ?? null,
+        // La hora del pegado viaja en referencia: identifica al movimiento
+        // dentro del día para los pegados futuros (y se ve en conciliar).
+        referencia: tx.referencia ?? tx.hora ?? null,
         tipo: tx.monto >= 0 ? "CREDITO" : "DEBITO",
         status,
         notes,

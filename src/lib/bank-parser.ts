@@ -9,6 +9,11 @@ export interface ParsedTransaction {
   monto: number;    // positive = credit, negative = debit
   referencia?: string;
   saldo?: number;
+  /** Hora del movimiento (HH:MM:SS) cuando la fuente la trae — hoy sólo el
+   *  formato "pegado" del portal. Desempata movimientos idénticos del mismo
+   *  día en la deduplicación (dos SPEI de $10,000 el 13 de julio, a las
+   *  13:07 y a las 15:07, son transacciones distintas). */
+  hora?: string;
 }
 
 /** Fila del archivo que NO se convirtió en transacción, con el motivo.
@@ -71,9 +76,13 @@ export function parseStatement(content: string, filename: string): ParseResult {
 // La descripción puede ocupar más de una línea; la fecha lleva hora opcional;
 // el monto siempre trae "$" y signo "-" cuando es retiro.
 
-const RE_LINEA_MONTO = /^-?\s*\$\s*\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?$/;
+// Acepta ambos estilos de miles/decimales: "$10,000.00" (US) y "$10.000,00"
+// (europeo — algunos perfiles del portal lo muestran así). parseMXNumber ya
+// entiende los dos.
+const RE_LINEA_MONTO =
+  /^-?\s*\$\s*(?:\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)$/;
 const RE_LINEA_FECHA =
-  /^(\d{1,2})[-\s]([a-zA-ZÀ-ÿ]{3,5})\.?[-\s](\d{2}|\d{4})\s*(?:,\s*\d{1,2}:\d{2}(?::\d{2})?)?$/;
+  /^(\d{1,2})[-\s]([a-zA-ZÀ-ÿ]{3,5})\.?[-\s](\d{2}|\d{4})\s*(?:,\s*(\d{1,2}:\d{2}(?::\d{2})?))?$/;
 // La tarjeta de crédito muestra el movimiento más reciente como "Hoy" (sin fecha).
 const RE_LINEA_HOY = /^hoy$/i;
 
@@ -83,11 +92,14 @@ const MESES_ABREV: Record<string, number> = {
   jan: 0, apr: 3, aug: 7, dec: 11,
 };
 
-function parseFechaPegada(line: string): Date | null {
+function parseFechaPegada(line: string): { fecha: Date; hora: string | null } | null {
   const limpia = line.trim();
   if (RE_LINEA_HOY.test(limpia)) {
     const hoy = new Date();
-    return utcNoon(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
+    return {
+      fecha: utcNoon(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()),
+      hora: null,
+    };
   }
   const m = limpia.match(RE_LINEA_FECHA);
   if (!m) return null;
@@ -96,7 +108,17 @@ function parseFechaPegada(line: string): Date | null {
   ];
   if (mes === undefined) return null;
   const anio = m[3].length === 2 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
-  return utcNoon(anio, mes, parseInt(m[1]));
+  // Hora normalizada a HH:MM:SS \u2014 identifica el movimiento dentro del d\u00eda
+  // (clave estable para la deduplicaci\u00f3n entre pegados parciales).
+  const hora = m[4]
+    ? m[4]
+        .split(":")
+        .concat("00")
+        .slice(0, 3)
+        .map((p) => p.padStart(2, "0"))
+        .join(":")
+    : null;
+  return { fecha: utcNoon(anio, mes, parseInt(m[1])), hora };
 }
 
 function esLineaFechaPegada(line: string): boolean {
@@ -120,6 +142,7 @@ function parsePegado(content: string): ParseResult {
 
   let descBuffer: string[] = [];
   let fecha: Date | null = null;
+  let hora: string | null = null;
   let fechaFila = 0;
   // "Hoy": el banco aún NO le asigna fecha definitiva al movimiento. Importarlo
   // con la fecha del día de la importación crea duplicados (la clave de dedup
@@ -138,7 +161,9 @@ function parsePegado(content: string): ParseResult {
       if (fecha) {
         descartadas.push({ fila: fechaFila, motivo: "movimiento sin monto (fecha sin importe posterior)" });
       }
-      fecha = parseFechaPegada(line);
+      const parsed = parseFechaPegada(line);
+      fecha = parsed?.fecha ?? null;
+      hora = parsed?.hora ?? null;
       fechaEsHoy = RE_LINEA_HOY.test(line);
       fechaFila = fila;
       if (!fecha) descartadas.push({ fila, motivo: `fecha inválida: ${line}` });
@@ -165,10 +190,12 @@ function parsePegado(content: string): ParseResult {
           // ("*** su pago gracias **") — se limpian, no son datos.
           descripcion: descBuffer.join(" ").replace(/\*+/g, " ").replace(/\s+/g, " ").trim(),
           monto,
+          ...(hora ? { hora } : {}),
         });
       }
       descBuffer = [];
       fecha = null;
+      hora = null;
       fechaEsHoy = false;
       continue;
     }
