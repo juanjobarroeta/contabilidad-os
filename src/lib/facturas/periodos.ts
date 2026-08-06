@@ -23,20 +23,24 @@ export interface ConteoPeriodo {
   total: number;
 }
 
-/** Una opción del selector: todo el historial, un ejercicio o un mes. */
-export interface OpcionPeriodo {
-  /** "todo" | "YYYY" | "YYYY-MM" */
-  valor: string;
-  etiqueta: string;
+/** Un ejercicio con sus meses, para pintar la rejilla del selector. */
+export interface EjercicioConteo {
+  anio: number;
+  /** Comprobantes del ejercicio completo. */
   total: number;
-  /** Sangrado en el <select>: los meses cuelgan de su ejercicio. */
-  nivel: 0 | 1;
+  /** Los 12 meses SIEMPRE, en orden natural; `total: 0` en los que no hubo
+   *  nada. La rejilla los pinta apagados en vez de esconderlos: la posición
+   *  fija de cada mes es lo que la hace escaneable de un vistazo. */
+  meses: { periodo: string; mes: number; total: number }[];
 }
 
 const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
+
+/** Abreviatura de tres letras para las celdas de la rejilla ("ene", "feb"…). */
+export const MESES_CORTOS = MESES.map((m) => m.slice(0, 3));
 
 const RE_MES = /^(\d{4})-(\d{2})$/;
 const RE_ANIO = /^(\d{4})$/;
@@ -83,38 +87,42 @@ export function rangoPeriodo(valor: string): { from: Date; to: Date } | null {
 }
 
 /**
- * Opciones del selector a partir de los meses QUE SÍ TIENEN comprobantes: "todo
- * el historial", y por cada ejercicio (del más reciente al más antiguo) el año
- * completo seguido de sus meses. Nunca ofrece un mes vacío — si aparece en la
- * lista, hay algo que ver.
+ * Agrupa los conteos mensuales por ejercicio, del más reciente al más antiguo,
+ * rellenando SIEMPRE los 12 meses (con cero donde no hubo comprobantes) para
+ * que la rejilla del selector tenga posiciones fijas.
  */
-export function opcionesPeriodo(conteos: ConteoPeriodo[]): OpcionPeriodo[] {
-  const validos = conteos.filter((c) => RE_MES.test(c.periodo) && c.total > 0);
-  const total = validos.reduce((s, c) => s + c.total, 0);
-
-  const porAnio = new Map<string, ConteoPeriodo[]>();
-  for (const c of validos) {
-    const anio = c.periodo.slice(0, 4);
-    const lista = porAnio.get(anio) ?? [];
-    lista.push(c);
-    porAnio.set(anio, lista);
+export function agruparPorEjercicio(conteos: ConteoPeriodo[]): EjercicioConteo[] {
+  const porAnio = new Map<number, Map<number, number>>();
+  for (const c of conteos) {
+    const m = RE_MES.exec(c.periodo);
+    if (!m || c.total <= 0) continue;
+    const anio = Number(m[1]);
+    const mes = Number(m[2]);
+    if (mes < 1 || mes > 12) continue;
+    const meses = porAnio.get(anio) ?? new Map<number, number>();
+    meses.set(mes, (meses.get(mes) ?? 0) + c.total);
+    porAnio.set(anio, meses);
   }
 
-  const opciones: OpcionPeriodo[] = [
-    { valor: PERIODO_TODO, etiqueta: etiquetaPeriodo(PERIODO_TODO), total, nivel: 0 },
-  ];
-  const anios = [...porAnio.keys()].sort().reverse();
-  for (const anio of anios) {
-    const meses = (porAnio.get(anio) ?? []).slice().sort((a, b) => b.periodo.localeCompare(a.periodo));
-    opciones.push({
-      valor: anio,
-      etiqueta: etiquetaPeriodo(anio),
-      total: meses.reduce((s, c) => s + c.total, 0),
-      nivel: 0,
+  return [...porAnio.keys()]
+    .sort((a, b) => b - a)
+    .map((anio) => {
+      const meses = porAnio.get(anio)!;
+      return {
+        anio,
+        total: [...meses.values()].reduce((s, n) => s + n, 0),
+        meses: Array.from({ length: 12 }, (_, i) => ({
+          periodo: `${anio}-${String(i + 1).padStart(2, "0")}`,
+          mes: i + 1,
+          total: meses.get(i + 1) ?? 0,
+        })),
+      };
     });
-    for (const m of meses) {
-      opciones.push({ valor: m.periodo, etiqueta: etiquetaPeriodo(m.periodo), total: m.total, nivel: 1 });
-    }
-  }
-  return opciones;
+}
+
+/** Total de comprobantes en todo el historial. */
+export function totalComprobantes(conteos: ConteoPeriodo[]): number {
+  return conteos
+    .filter((c) => RE_MES.test(c.periodo) && c.total > 0)
+    .reduce((s, c) => s + c.total, 0);
 }

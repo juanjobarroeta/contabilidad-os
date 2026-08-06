@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
+  MESES_CORTOS,
   PERIODO_TODO,
+  agruparPorEjercicio,
   etiquetaPeriodo,
-  opcionesPeriodo,
   rangoPeriodo,
+  totalComprobantes,
 } from "./periodos";
 
 describe("rangoPeriodo", () => {
@@ -56,53 +58,66 @@ describe("etiquetaPeriodo", () => {
   });
 });
 
-describe("opcionesPeriodo", () => {
+describe("agruparPorEjercicio", () => {
   const conteos = [
     { periodo: "2026-07", total: 210 },
     { periodo: "2026-06", total: 180 },
     { periodo: "2025-12", total: 40 },
   ];
 
-  it("ordena del más reciente al más antiguo, con los meses bajo su ejercicio", () => {
-    expect(opcionesPeriodo(conteos).map((o) => o.valor)).toEqual([
-      "todo",
-      "2026",
-      "2026-07",
-      "2026-06",
-      "2025",
-      "2025-12",
-    ]);
+  it("ordena los ejercicios del más reciente al más antiguo", () => {
+    expect(agruparPorEjercicio(conteos).map((e) => e.anio)).toEqual([2026, 2025]);
   });
 
-  it("suma los totales por ejercicio y en el total general", () => {
-    const ops = opcionesPeriodo(conteos);
-    expect(ops.find((o) => o.valor === "todo")!.total).toBe(430);
-    expect(ops.find((o) => o.valor === "2026")!.total).toBe(390);
-    expect(ops.find((o) => o.valor === "2025")!.total).toBe(40);
+  it("rellena SIEMPRE los 12 meses en orden natural, con cero donde no hubo nada", () => {
+    const [dosMilVeintiseis] = agruparPorEjercicio(conteos);
+    expect(dosMilVeintiseis.meses).toHaveLength(12);
+    expect(dosMilVeintiseis.meses.map((m) => m.mes)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(dosMilVeintiseis.meses[6]).toEqual({ periodo: "2026-07", mes: 7, total: 210 });
+    expect(dosMilVeintiseis.meses[0]).toEqual({ periodo: "2026-01", mes: 1, total: 0 });
   });
 
-  it("sangra los meses (nivel 1) y deja ejercicios y «todo» al ras", () => {
-    const ops = opcionesPeriodo(conteos);
-    expect(ops.filter((o) => o.nivel === 1).map((o) => o.valor)).toEqual([
-      "2026-07",
-      "2026-06",
-      "2025-12",
-    ]);
+  it("suma el total del ejercicio", () => {
+    const grupos = agruparPorEjercicio(conteos);
+    expect(grupos.find((e) => e.anio === 2026)!.total).toBe(390);
+    expect(grupos.find((e) => e.anio === 2025)!.total).toBe(40);
   });
 
-  it("nunca ofrece un mes vacío ni un periodo mal formado", () => {
-    const ops = opcionesPeriodo([
+  it("ignora meses vacíos, periodos mal formados y meses fuera de rango", () => {
+    const grupos = agruparPorEjercicio([
       { periodo: "2026-07", total: 3 },
       { periodo: "2026-05", total: 0 },
+      { periodo: "2026-13", total: 5 },
       { periodo: "basura", total: 9 },
     ]);
-    expect(ops.map((o) => o.valor)).toEqual(["todo", "2026", "2026-07"]);
-    expect(ops[0].total).toBe(3);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].total).toBe(3);
   });
 
-  it("sin comprobantes deja sólo «todo el historial» en cero", () => {
-    expect(opcionesPeriodo([])).toEqual([
-      { valor: "todo", etiqueta: "Todo el historial", total: 0, nivel: 0 },
-    ]);
+  it("un ejercicio sin comprobantes no aparece", () => {
+    expect(agruparPorEjercicio([])).toEqual([]);
+    expect(agruparPorEjercicio([{ periodo: "2026-03", total: 0 }])).toEqual([]);
+  });
+});
+
+describe("totalComprobantes", () => {
+  it("suma todo el historial e ignora la basura", () => {
+    expect(
+      totalComprobantes([
+        { periodo: "2026-07", total: 210 },
+        { periodo: "2025-12", total: 40 },
+        { periodo: "basura", total: 9 },
+      ])
+    ).toBe(250);
+    expect(totalComprobantes([])).toBe(0);
+  });
+});
+
+describe("MESES_CORTOS", () => {
+  it("son las abreviaturas de tres letras que van en la rejilla", () => {
+    expect(MESES_CORTOS).toHaveLength(12);
+    expect(MESES_CORTOS[0]).toBe("ene");
+    expect(MESES_CORTOS[11]).toBe("dic");
+    expect(MESES_CORTOS.every((m) => m.length === 3)).toBe(true);
   });
 });
