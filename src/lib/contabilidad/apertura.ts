@@ -12,6 +12,7 @@
 
 import { prisma } from "../prisma";
 import { naturalezaPorTipo, type Naturaleza } from "./coe-saldos";
+import { PeriodoCerradoError } from "./ejercicio";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -74,6 +75,17 @@ export async function postApertura(
   if (isNaN(fecha.getTime())) throw new AperturaError("Fecha inválida");
   const year = fecha.getFullYear();
   const month = fecha.getMonth() + 1;
+
+  // Candado de ejercicio: recapturar la apertura BORRA todos los asientos
+  // APERTURA de la empresa (es una sola por empresa, ver abajo), así que
+  // reescribiría el arranque de un ejercicio ya cerrado. Basta con que exista
+  // UN periodo cerrado para negarse — hay que reabrirlo primero.
+  const cerrado = await prisma.accountingPeriod.findFirst({
+    where: { companyId, status: "CLOSED" },
+    select: { year: true, month: true },
+    orderBy: [{ year: "asc" }, { month: "asc" }],
+  });
+  if (cerrado) throw new PeriodoCerradoError(cerrado.year, cerrado.month);
 
   const accounts = await prisma.chartAccount.findMany({
     where: { companyId, isActive: true },

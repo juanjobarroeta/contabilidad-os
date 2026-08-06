@@ -19,6 +19,8 @@ import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { classifyInvoice } from "./classify-egreso";
 import { calcularDepreciacionMes, CUENTA_ACTIVO_FIJO } from "./depreciacion-contable";
 import { tipoActivoDesdeSubtipo } from "../fiscal/depreciacion";
+import { assertPeriodoAbierto } from "./candado";
+import { PeriodoCerradoError } from "./ejercicio";
 import type { Prisma, EntryType, EntrySource, AccountingPeriod } from "@prisma/client";
 
 type EntryDraft = {
@@ -120,6 +122,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     select: { id: true },
   });
   if (!company) throw new Error("Empresa no encontrada");
+
+  // Candado de ejercicio: un mes de un ejercicio cerrado no se re-postea. Se
+  // comprueba aquí para fallar barato (antes de leer CFDIs, bancos y nómina) y
+  // otra vez dentro de la transacción, que es donde la decisión es autoritativa.
+  await assertPeriodoAbierto(prisma, companyId, year, month);
 
   // Pre-resolve the accounts we'll need most often
   const [
@@ -702,6 +709,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       update: {},
       create: { companyId, year, month, status: "DRAFT" },
     });
+    // Comprobación autoritativa dentro de la transacción: si el ejercicio se
+    // cerró entre el chequeo barato de arriba y este punto, se aborta aquí.
+    if (periodRow.status === "CLOSED") throw new PeriodoCerradoError(year, month);
 
     // Borra SÓLO los asientos que este motor regenera (CFDI/NOMINA/BANCO).
     // Se PRESERVA todo lo demás: APERTURA (saldos iniciales), MANUAL (ajustes
@@ -787,6 +797,9 @@ export async function unpostMonth(companyId: string, year: number, month: number
       where: { companyId_year_month: { companyId, year, month } },
     });
     if (!period) return;
+    // Reabrir un mes suelto de un ejercicio cerrado saltaría el candado: para
+    // eso está «Reabrir ejercicio», que es explícito y queda en bitácora.
+    if (period.status === "CLOSED") throw new PeriodoCerradoError(year, month);
     await tx.accountingEntry.deleteMany({
       where: { companyId, periodId: period.id, fuente: { in: [...REGENERATED_SOURCES] } },
     });

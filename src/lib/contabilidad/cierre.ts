@@ -12,6 +12,7 @@
 import { prisma } from "../prisma";
 import { COE_CODES } from "./catalog";
 import { resolveAccount } from "./seed-catalog";
+import { assertPeriodoAbierto } from "./candado";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -118,6 +119,9 @@ export async function generarCierre(
 
   const fecha = new Date(year, 11, 31); // 31-dic del ejercicio
   await prisma.$transaction(async (tx) => {
+    // Candado de ejercicio: regenerar el cierre de un año ya cerrado cambiaría
+    // la balanza de mes 13 que ya se entregó al SAT.
+    await assertPeriodoAbierto(tx, companyId, year, 13);
     const period = await tx.accountingPeriod.upsert({
       where: { companyId_year_month: { companyId, year, month: 13 } },
       update: {},
