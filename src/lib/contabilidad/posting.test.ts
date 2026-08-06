@@ -33,7 +33,7 @@ const e = (id: string, fuente: EntrySource, tipo: EntryType, monto: number): E =
 
 describe("REGENERATED_SOURCES", () => {
   it("contiene exactamente las fuentes que postMonth regenera", () => {
-    expect([...REGENERATED_SOURCES].sort()).toEqual(["BANCO", "CFDI", "NOMINA"]);
+    expect([...REGENERATED_SOURCES].sort()).toEqual(["BANCO", "CFDI", "DEPRECIACION", "NOMINA"]);
   });
 
   it("NO incluye fuentes que se preservan (MANUAL, APERTURA, CIERRE, satélite)", () => {

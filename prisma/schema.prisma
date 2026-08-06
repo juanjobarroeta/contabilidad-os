@@ -1923,6 +1923,7 @@ enum EntrySource {
   CIERRE // asiento de cierre anual (mes 13) — cancela ingresos/costos/gastos a resultado
   AUTOMOTRIZ
   JCPT // plataforma de coaching JCPT (satélite con backend propio)
+  DEPRECIACION // depreciación contable mensual — REGENERABLE (postMonth la reconstruye del registro de activos)
 }
 
 // ─── Module 6: Construction Project Management ───────────────────────────────

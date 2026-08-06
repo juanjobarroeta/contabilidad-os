@@ -54,6 +54,10 @@ export interface DepreciacionInput {
   factorInpc?: number;
   /** Acota el uso a ene→hastaMes (1-12) del ejercicio — depreciación proporcional al periodo provisional. */
   hastaMes?: number;
+  /** Tasa anual capturada en la ficha del activo (sustituye la tasa por tipo).
+   *  La usa la depreciación CONTABLE; fiscalmente respeta el máximo Art. 34/35
+   *  bajo responsabilidad del capturista. */
+  tasaOverride?: number;
 }
 
 export interface DepreciacionResult {
@@ -122,7 +126,11 @@ export function mesesUsoEnEjercicio(
  * Pura; el llamador provee MOI, tipo, fechas y (opcional) el factor INPC.
  */
 export function calcularDepreciacionEjercicio(input: DepreciacionInput): DepreciacionResult {
-  const { tasa, fundamento, aprox } = TASA_DEPRECIACION[input.tipo] ?? TASA_DEPRECIACION.otro;
+  const porTipo = TASA_DEPRECIACION[input.tipo] ?? TASA_DEPRECIACION.otro;
+  const usaOverride = input.tasaOverride != null && input.tasaOverride > 0 && input.tasaOverride <= 1;
+  const tasa = usaOverride ? input.tasaOverride! : porTipo.tasa;
+  const fundamento = usaOverride ? `Tasa capturada en la ficha (${porTipo.fundamento})` : porTipo.fundamento;
+  const aprox = usaOverride ? false : porTipo.aprox;
 
   // Tope MOI deducible para automóviles (Art. 36-II). Las camionetas de carga
   // NO son automóvil → sin tope (esAutomovil=false).
