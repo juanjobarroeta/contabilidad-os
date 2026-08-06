@@ -139,7 +139,10 @@ export async function GET(req: Request) {
       // muestre $0.00.
       doctosRelacionados: { select: { impPagado: true, ivaTrasladado: true, fechaPago: true } },
     },
-    orderBy: { fecha: "desc" },
+    // El desempate por id hace DETERMINISTA la paginación: con sólo `fecha`,
+    // los comprobantes que comparten timestamp (importaciones masivas del SAT)
+    // pueden reordenarse entre páginas y salir duplicados o perderse al paginar.
+    orderBy: [{ fecha: "desc" }, { id: "desc" }],
     skip,
     take: fetchTake,
   });

@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { PERIODO_TODO, etiquetaPeriodo, rangoPeriodo } from "@/lib/facturas/periodos";
 
-// GET /api/facturas/resumen?companyId=xxx
-// Year-to-date headline stats for the Facturas screen cards. Aggregated
-// server-side so the figures are accurate regardless of how many rows the
-// table itself loads.
+// GET /api/facturas/resumen?companyId=xxx[&periodo=YYYY-MM|YYYY|todo]
+//
+// Cifras de encabezado de la pantalla de Facturas, agregadas en el servidor
+// para que sean exactas sin importar cuántas filas cargue la tabla.
+//
+// `periodo` acota las cifras a la MISMA ventana que el usuario eligió en el
+// selector (un mes, un ejercicio o todo el historial). Sin el parámetro se
+// mantiene el comportamiento histórico: año en curso.
+//
+// Además devuelve `periodos`: el conteo de comprobantes por mes, que alimenta
+// el selector — así sólo se ofrecen meses que de verdad tienen algo que ver.
+// El rollup se hace en Postgres (to_char) para que escale con el volumen.
 export async function GET(req: Request) {
   let user;
   try {
@@ -22,23 +31,41 @@ export async function GET(req: Request) {
   const membership = await getEffectiveCompanyMembership(user.id, companyId);
   if (!membership) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const yearFrom = new Date(new Date().getFullYear(), 0, 1);
+  // Ventana de las cifras. Sin `periodo` (llamadas previas al selector) se usa
+  // el año en curso, que es lo que la pantalla mostraba antes.
+  const periodoParam = searchParams.get("periodo");
+  const anioActual = new Date().getFullYear();
+  const periodo = periodoParam ?? String(anioActual);
+  const rango = periodo === PERIODO_TODO ? null : rangoPeriodo(periodo) ?? rangoPeriodo(String(anioActual));
+  const ventana = rango ? { gte: rango.from, lte: rango.to } : undefined;
 
-  const [timbradas, facturado] = await Promise.all([
-    // Comprobantes timbrados (emitidos + recibidos) este año.
+  const [timbradas, facturado, porMes] = await Promise.all([
+    // Comprobantes timbrados (emitidos + recibidos) en la ventana.
     prisma.invoice.count({
-      where: { companyId, status: "STAMPED", fecha: { gte: yearFrom } },
+      where: { companyId, status: "STAMPED", ...(ventana ? { fecha: ventana } : {}) },
     }),
     // Total facturado + IVA trasladado: sólo INGRESO timbrado (lo que emites).
     prisma.invoice.aggregate({
-      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearFrom } },
+      where: { companyId, tipo: "INGRESO", status: "STAMPED", ...(ventana ? { fecha: ventana } : {}) },
       _sum: { total: true, totalImpuestos: true },
     }),
+    // Meses con comprobantes (TODO el historial — el selector no se acota a sí
+    // mismo). `fecha` es timestamp sin zona: to_char da el mes en UTC, el mismo
+    // que usan rangoPeriodo y postMonth.
+    prisma.$queryRaw<{ periodo: string; total: number }[]>`
+      SELECT to_char("fecha", 'YYYY-MM') AS periodo, COUNT(*)::int AS total
+      FROM "Invoice"
+      WHERE "companyId" = ${companyId}
+      GROUP BY 1
+      ORDER BY 1 DESC`,
   ]);
 
   return NextResponse.json({
     timbradas,
     totalFacturado: facturado._sum.total ?? 0,
     ivaCobrado: facturado._sum.totalImpuestos ?? 0,
+    periodo,
+    etiquetaPeriodo: etiquetaPeriodo(periodo),
+    periodos: porMes.map((r) => ({ periodo: r.periodo, total: Number(r.total) })),
   });
 }
