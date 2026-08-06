@@ -256,6 +256,9 @@ export async function GET(req: Request) {
           tipo: "pf_arrendamiento" as const,
           ingresosCobradosMes: enginePos.isr.ingresosAcumulados,
           deduccionCiega: +(enginePos.isr.ingresosAcumulados * DEDUCCION_CIEGA_ARRENDAMIENTO).toFixed(2),
+          // Predial pagado del mes: se deduce ADEMÁS de la ciega (Art. 115).
+          // Va explícito para que la resta cuadre en pantalla.
+          predialPagado: enginePos.isr.predialPagado ?? 0,
           baseGravable: enginePos.isr.baseGravable,
           isrCausado: enginePos.isr.isrDelEjercicio,
           retencionesAcreditadas: enginePos.isr.retencionesAcreditadas,

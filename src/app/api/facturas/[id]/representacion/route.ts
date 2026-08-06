@@ -93,6 +93,9 @@ export async function GET(req: Request, { params }: Params) {
         importe: it.importe,
         descuento: it.descuento,
         objetoImp: null,
+        // Sin XML (borradores/CFDIs sin rawXml) la cuenta predial viene de la
+        // partida guardada, que sólo lleva una.
+        cuentasPrediales: it.cuentaPredial ? [it.cuentaPredial] : [],
       })),
       traslados: invoice.taxes
         .filter((t) => !t.retencion)

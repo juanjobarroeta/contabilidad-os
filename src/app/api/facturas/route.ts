@@ -8,9 +8,15 @@ import { z } from "zod";
 import { getEffectiveCompanyMembership, requireScope, requireUser, AuthzError } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
 import { gateEscritura } from "@/lib/subscription";
+import { MAX_LARGO_CUENTA_PREDIAL, normalizarCuentaPredial } from "@/lib/facturas/predial";
 
 const invoiceItemSchema = z.object({
   quantity: z.number().positive(),
+  // Cuenta predial del inmueble arrendado (CFDI 4.0: nodo CuentaPredial del
+  // concepto). Va en la PARTIDA, no en el producto. Sin validación de formato:
+  // la cuenta catastral la define cada municipio y no hay dígito verificador
+  // universal — sólo se acota el largo del atributo del SAT.
+  cuentaPredial: z.string().trim().min(1).max(MAX_LARGO_CUENTA_PREDIAL).optional(),
   product: z.object({
     description: z.string(),
     product_key: z.string(),
@@ -319,6 +325,11 @@ export async function POST(req: Request) {
       items: items.map((item) => ({
         quantity: item.quantity,
         product: item.product,
+        // Arrendamiento: CuentaPredial va en la partida y Facturapi la recibe
+        // como arreglo (un concepto puede amparar varias cuentas catastrales).
+        ...(normalizarCuentaPredial(item.cuentaPredial)
+          ? { property_tax_account: [normalizarCuentaPredial(item.cuentaPredial)!] }
+          : {}),
       })),
       ...(notes && { pdf_custom_section: notes }),
       ...(resolvedGlobal && { global: resolvedGlobal }),
@@ -377,6 +388,7 @@ export async function POST(req: Request) {
         descripcion: item.product.description,
         valorUnitario: item.product.price,
         importe: item.quantity * item.product.price,
+        cuentaPredial: normalizarCuentaPredial(item.cuentaPredial),
       })),
     },
   };

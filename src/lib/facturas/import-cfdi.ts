@@ -120,6 +120,10 @@ export async function importCfdiFromXml(opts: {
               valorUnitario: it.valorUnitario,
               importe: it.importe,
               descuento: it.descuento,
+              // Arrendamiento: guardamos la primera cuenta predial del concepto.
+              // El XML íntegro queda en rawXml, así que la representación
+              // impresa sigue mostrando todas si el CFDI trae varias.
+              cuentaPredial: it.cuentasPrediales[0] ?? null,
             })),
           }
         : undefined,

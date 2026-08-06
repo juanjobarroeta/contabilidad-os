@@ -296,7 +296,16 @@ function ConceptosTable({ conceptos }: { conceptos: RepConcepto[] }) {
           {conceptos.map((c, i) => (
             <tr key={i} className="border-t border-cos-line-soft align-top">
               <td className="px-2 py-1.5 font-mono text-[11px] text-cos-ink-soft">{c.claveProdServ}</td>
-              <td className="px-2 py-1.5 text-cos-ink">{c.descripcion}</td>
+              <td className="px-2 py-1.5 text-cos-ink">
+                {c.descripcion}
+                {/* Arrendamiento: la cuenta predial del inmueble va en el
+                    concepto, así que se imprime bajo su descripción. */}
+                {c.cuentasPrediales?.length > 0 && (
+                  <span className="mt-0.5 block font-mono text-[10.5px] text-cos-ink-faint">
+                    Cuenta predial: {c.cuentasPrediales.join(" · ")}
+                  </span>
+                )}
+              </td>
               <td className="px-2 py-1.5 text-right text-cos-ink-soft">{c.cantidad}</td>
               <td className="px-2 py-1.5 text-right text-cos-ink-soft">{money(c.valorUnitario)}</td>
               <td className="px-2 py-1.5 text-right font-medium text-cos-ink">{money(c.importe)}</td>

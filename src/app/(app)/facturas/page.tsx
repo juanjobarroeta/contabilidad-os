@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck, FileText } from "lucide-react";
+import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck, FileText, Copy } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Button } from "@/components/ui";
 import { esAsimilado, etiquetaRegimenNomina } from "@/lib/nomina/regimen";
@@ -820,6 +820,17 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
           <DownloadBtn id={inv.id} format="xml" />
           <DownloadBtn id={inv.id} format="pdf" onUnavailable={() => setRepOpen(true)} />
         </div>
+
+        {/* Volver a facturar: clona esta factura (cliente, conceptos, precios y
+            cuenta predial) en el formulario de nueva factura. Sólo tiene sentido
+            en las que emites tú. */}
+        {inv.tipo === "INGRESO" && inv.customer && (
+          <Link href={`/facturas/nueva?desde=${inv.id}`} className="mt-2.5 block">
+            <Button variant="soft" size="md" className="w-full">
+              <Copy className="h-4 w-4" /> Volver a facturar
+            </Button>
+          </Link>
+        )}
 
         {/* enviar por correo (PDF + XML, vía Facturapi) */}
         {mailMsg && (

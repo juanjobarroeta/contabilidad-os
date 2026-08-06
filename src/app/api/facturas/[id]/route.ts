@@ -7,6 +7,32 @@ import { registrarBitacora } from "@/lib/audit";
 
 const VALID_MOTIVOS = ["01", "02", "03", "04"] as const;
 
+// GET /api/facturas/[id] — una factura con sus partidas y su cliente.
+// Sirve al atajo «volver a facturar» (/facturas/nueva?desde=<id>), que clona
+// una factura concreta sin depender de que aparezca en las sugerencias.
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      customer: { select: { id: true, rfc: true, razonSocial: true, regimenFiscal: true } },
+    },
+  });
+  if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+
+  const member = await getEffectiveCompanyMembership(session.user.id, invoice.companyId);
+  if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+
+  return NextResponse.json(invoice);
+}
+
 // DELETE /api/facturas/[id] — cancel a CFDI.
 // Body (JSON): { motivo: "01"|"02"|"03"|"04", sustituyeUuid?: string }
 //   01 = comprobante emitido con errores CON relación (requiere sustituyeUuid)

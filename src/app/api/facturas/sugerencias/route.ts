@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import {
   aggregateConceptos,
+  agruparFacturasRecurrentes,
   derivarTratamientoIva,
   tratamientoPorClave,
   type RawItem,
@@ -17,6 +18,10 @@ import {
 //   - facturasPrevias: recent STAMPED invoices to that customer (~top 5) so the
 //     user can prefill the whole line-item list from a past invoice, including
 //     the invoice's derived ivaTratamiento (fallback "16" when ambiguous).
+//   - recurrentes: las FORMAS de factura que la empresa repite (mismo cliente +
+//     mismos conceptos), ordenadas por frecuencia. A diferencia de
+//     facturasPrevias, NO requieren elegir cliente primero: son el atajo de
+//     "vuelve a facturar" con el que arranca la pantalla.
 //   - tratamientoPorClave: last known IVA treatment per claveProdServ (from
 //     stamped invoices with an unambiguous treatment), so picking a clave the
 //     company already invoices prefills the right treatment.
@@ -50,15 +55,20 @@ export async function GET(req: Request) {
     orderBy: { fecha: "desc" },
     take: 200,
     select: {
+      id: true,
       fecha: true,
+      total: true,
       customerId: true,
       status: true,
+      customer: { select: { razonSocial: true } },
       items: {
         select: {
           claveProdServ: true,
           descripcion: true,
+          cantidad: true,
           valorUnitario: true,
           claveUnidad: true,
+          cuentaPredial: true,
         },
       },
       taxes: {
@@ -78,11 +88,30 @@ export async function GET(req: Request) {
       descripcion: it.descripcion,
       valorUnitario: it.valorUnitario,
       claveUnidad: it.claveUnidad,
+      cuentaPredial: it.cuentaPredial,
       fecha: inv.fecha,
       customerId: inv.customerId,
       ivaTratamiento,
     }));
   });
+
+  // «Vuelve a facturar»: las formas de factura que la empresa REPITE (mismo
+  // cliente + mismos conceptos), sin necesidad de elegir cliente primero. Sólo
+  // timbradas: un borrador no prueba que esa factura se emita de verdad.
+  const recurrentes = agruparFacturasRecurrentes(
+    recentInvoices
+      .filter((inv) => inv.status === "STAMPED")
+      .map((inv) => ({
+        id: inv.id,
+        fecha: inv.fecha,
+        total: inv.total,
+        customerId: inv.customerId,
+        cliente: inv.customer?.razonSocial ?? "Sin cliente",
+        items: inv.items,
+        ivaTratamiento: derivarTratamientoIva(inv.taxes),
+      })),
+    6
+  );
 
   const conceptos = aggregateConceptos(rawItems, customerId, 15);
 
@@ -110,6 +139,7 @@ export async function GET(req: Request) {
                 cantidad: true,
                 valorUnitario: true,
                 claveUnidad: true,
+                cuentaPredial: true,
               },
             },
             taxes: {
@@ -130,5 +160,5 @@ export async function GET(req: Request) {
       }))
     : [];
 
-  return NextResponse.json({ conceptos, facturasPrevias, tratamientoPorClave: tratamientos });
+  return NextResponse.json({ conceptos, facturasPrevias, recurrentes, tratamientoPorClave: tratamientos });
 }
