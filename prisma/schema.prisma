@@ -1015,6 +1015,13 @@ model InvoiceItem {
   importe       Float
   descuento     Float   @default(0)
 
+  // Cuenta predial del inmueble arrendado (CFDI 4.0: nodo hijo CuentaPredial
+  // del concepto, atributo Numero). Guarda UNA cuenta: es la que captura el
+  // formulario al emitir y la primera al importar un CFDI recibido. En los
+  // recibidos, el XML íntegro vive en Invoice.rawXml y la representación
+  // impresa muestra todas las que traiga el comprobante.
+  cuentaPredial String?
+
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }
 

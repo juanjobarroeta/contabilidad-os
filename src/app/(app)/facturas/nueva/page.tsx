@@ -8,6 +8,11 @@ import { formatCurrency } from "@/lib/utils";
 import { SatCodePicker } from "@/components/ui/SatCodePicker";
 import { contradiccionIva } from "@/lib/fiscal/iva-esperado";
 import {
+  MAX_LARGO_CUENTA_PREDIAL,
+  avisoCuentaPredial,
+  esClaveArrendamiento,
+} from "@/lib/facturas/predial";
+import {
   ChevronRight, ChevronLeft, Plus, Trash2, Loader2,
   CheckCircle2, Search, FileText, AlertCircle, History, Sparkles,
 } from "lucide-react";
@@ -70,6 +75,9 @@ interface LineItem {
   // No es lo mismo tasa 0 que exento — facturar exento cuando corresponde
   // tasa 0 hace perder el acreditamiento.
   iva: "16" | "0" | "EXENTO";
+  // Cuenta predial del inmueble arrendado (CFDI 4.0: nodo CuentaPredial del
+  // concepto). Vacía en todo lo que no sea arrendamiento.
+  cuentaPredial: string;
 }
 
 // ── Invoicing suggestions (sugerencias) ──────────────────────────────────────
@@ -83,6 +91,7 @@ interface ConceptoSugerido {
   ultimoUso: string;
   // Tratamiento de IVA del uso más reciente del concepto (null = desconocido).
   ivaTratamiento?: "16" | "0" | "EXENTO" | null;
+  cuentaPredial?: string | null;
 }
 
 interface FacturaPreviaItem {
@@ -91,6 +100,19 @@ interface FacturaPreviaItem {
   cantidad: number;
   valorUnitario: number;
   claveUnidad: string;
+  cuentaPredial?: string | null;
+}
+
+/** Una forma de factura que la empresa repite — el atajo «vuelve a facturar». */
+interface FacturaRecurrente {
+  facturaId: string;
+  customerId: string | null;
+  cliente: string;
+  total: number;
+  veces: number;
+  ultimoUso: string;
+  items: FacturaPreviaItem[];
+  ivaTratamiento: "16" | "0" | "EXENTO";
 }
 
 interface FacturaPrevia {
@@ -107,6 +129,7 @@ interface FacturaPrevia {
 interface Sugerencias {
   conceptos: ConceptoSugerido[];
   facturasPrevias: FacturaPrevia[];
+  recurrentes?: FacturaRecurrente[];
   // Último tratamiento de IVA que la empresa usó por clave de producto/servicio.
   tratamientoPorClave?: Record<string, "16" | "0" | "EXENTO">;
 }
@@ -120,6 +143,7 @@ function newItem(): LineItem {
     quantity: 1,
     price: 0,
     iva: "16",
+    cuentaPredial: "",
   };
 }
 
@@ -182,6 +206,49 @@ export default function NuevaFacturaPage() {
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
+  // Deep-link «volver a facturar» desde el detalle de una factura
+  // (/facturas/nueva?desde=<id>): clona esa factura tal cual. Se lee la URL
+  // directamente para no forzar un límite de Suspense (useSearchParams).
+  const [desdeId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("desde")
+  );
+  const [desdeAplicado, setDesdeAplicado] = useState(false);
+  useEffect(() => {
+    if (!desdeId || desdeAplicado || !activeCompany) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/facturas/${desdeId}`);
+        if (!res.ok) return;
+        const f = await res.json();
+        if (cancelado || !Array.isArray(f?.items) || f.items.length === 0) return;
+        await refacturar({
+          facturaId: f.id,
+          customerId: f.customerId ?? null,
+          cliente: f.customer?.razonSocial ?? "",
+          total: f.total ?? 0,
+          veces: 1,
+          ultimoUso: f.fecha,
+          ivaTratamiento: "16",
+          items: f.items.map((it: FacturaPreviaItem) => ({
+            claveProdServ: it.claveProdServ,
+            descripcion: it.descripcion,
+            cantidad: it.cantidad,
+            valorUnitario: it.valorUnitario,
+            claveUnidad: it.claveUnidad,
+            cuentaPredial: it.cuentaPredial ?? null,
+          })),
+        });
+      } finally {
+        if (!cancelado) setDesdeAplicado(true);
+      }
+    })();
+    return () => { cancelado = true; };
+    // refacturar depende de `clientes`, que cambia con la búsqueda; el guard
+    // desdeAplicado asegura que esto corra una sola vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desdeId, desdeAplicado, activeCompany]);
+
   // ── Sugerencias ─────────────────────────────────────────────────────────────
   // Fetch concepto suggestions + recent invoices whenever the company or the
   // selected customer changes. Additive: never blocks manual entry.
@@ -213,10 +280,56 @@ export default function NuevaFacturaPage() {
         // sus impuestos timbrados) en lugar de asumir siempre 16%: quien
         // factura a tasa 0 o exento repite ese tratamiento mes a mes.
         iva: f.ivaTratamiento ?? "16",
+        // La cuenta predial viaja con el concepto: el arrendamiento se
+        // re-factura sin volver a teclear la cuenta catastral.
+        cuentaPredial: it.cuentaPredial ?? "",
       }))
     );
     setShowFacturasPrevias(false);
     setSubmitError("");
+  }
+
+  /**
+   * «Vuelve a facturar»: clona una forma de factura recurrente — cliente y
+   * conceptos — y salta directo a la captura. El cliente puede no estar en la
+   * lista cargada (depende del buscador), así que se pide por razón social y se
+   * identifica por id, nunca por nombre.
+   */
+  async function refacturar(r: FacturaRecurrente) {
+    setSubmitError("");
+    let cliente = clientes.find((c) => c.id === r.customerId) ?? null;
+    if (!cliente && r.customerId && activeCompany) {
+      try {
+        const res = await fetch(
+          `/api/clientes?companyId=${activeCompany.id}&search=${encodeURIComponent(r.cliente)}`
+        );
+        const data = await res.json();
+        cliente = Array.isArray(data)
+          ? (data as Cliente[]).find((c) => c.id === r.customerId) ?? null
+          : null;
+      } catch {
+        cliente = null;
+      }
+    }
+    if (!cliente) {
+      setSubmitError("No pude cargar el cliente de esa factura. Búscalo abajo y vuelve a intentar.");
+      return;
+    }
+    setSelectedCliente(cliente);
+    setClienteSearch("");
+    setItems(
+      r.items.map((it) => ({
+        id: Math.random().toString(36).slice(2),
+        description: it.descripcion,
+        product_key: it.claveProdServ,
+        unit_key: it.claveUnidad || "E48",
+        quantity: it.cantidad || 1,
+        price: it.valorUnitario,
+        iva: r.ivaTratamiento,
+        cuentaPredial: it.cuentaPredial ?? "",
+      }))
+    );
+    setStep(2);
   }
 
   // Fill a line item from a concepto suggestion (clave + descripción + precio + unidad).
@@ -233,6 +346,7 @@ export default function NuevaFacturaPage() {
               // Prellenado, no imposición: si el concepto trae el tratamiento
               // de IVA de su último uso lo sugerimos; el usuario puede cambiarlo.
               iva: c.ivaTratamiento ?? it.iva,
+              cuentaPredial: c.cuentaPredial ?? it.cuentaPredial,
             }
           : it
       )
@@ -327,6 +441,9 @@ export default function NuevaFacturaPage() {
       }),
       items: items.map((it) => ({
         quantity: it.quantity,
+        // Cuenta predial va en la PARTIDA (nodo CuentaPredial del concepto),
+        // no dentro del producto.
+        cuentaPredial: it.cuentaPredial.trim() || undefined,
         product: {
           description: it.description,
           product_key: it.product_key,
@@ -540,6 +657,47 @@ export default function NuevaFacturaPage() {
         {/* ── STEP 1: Receptor ── */}
         {step === 1 && (
           <div className="p-6 space-y-5">
+            {/* «Vuelve a facturar»: lo que esta empresa repite mes con mes. Va
+                ANTES de elegir cliente porque así se piensa al facturar — «toca
+                la renta de Ana», no «veamos qué le facturé a Ana». */}
+            {!selectedCliente && (sugerencias?.recurrentes?.length ?? 0) > 0 && (
+              <div>
+                <h2 className="font-semibold text-base border-b border-cos-line pb-3">
+                  Vuelve a facturar
+                </h2>
+                <p className="mt-2 text-xs text-cos-ink-soft">
+                  Lo que facturas de forma recurrente. Un clic llena cliente y conceptos con los
+                  datos de la última vez; puedes ajustar todo antes de timbrar.
+                </p>
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {sugerencias!.recurrentes!.map((r) => (
+                    <button
+                      key={r.facturaId}
+                      type="button"
+                      onClick={() => refacturar(r)}
+                      className="text-left rounded-xl border border-cos-line bg-cos-card p-3 hover:border-cos-brand hover:bg-cos-paper transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-cos-ink truncate">{r.cliente}</p>
+                        <span className="shrink-0 rounded-full bg-cos-slate-tint px-2 py-0.5 text-[11px] font-medium text-cos-ink-soft">
+                          {r.veces}×
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-cos-ink-soft truncate">
+                        {r.items.map((it) => it.descripcion).join(" · ")}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-cos-ink">
+                        {formatCurrency(r.total)}
+                        <span className="ml-2 text-[11px] font-normal text-cos-ink-faint">
+                          última: {new Date(r.ultimoUso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                        </span>
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <h2 className="font-semibold text-base border-b border-cos-line pb-3">Datos del receptor</h2>
 
             {/* Cliente search */}
@@ -871,6 +1029,36 @@ export default function NuevaFacturaPage() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Cuenta predial — sólo aparece cuando el concepto es de
+                      arrendamiento de inmuebles (o cuando ya trae una, para
+                      poder corregirla). No es un complemento: es el nodo
+                      CuentaPredial del propio concepto en CFDI 4.0. */}
+                  {(esClaveArrendamiento(item.product_key) || item.cuentaPredial) && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium mb-1">
+                        Cuenta predial del inmueble
+                        <span className="ml-1 font-normal text-cos-ink-soft">(opcional)</span>
+                      </label>
+                      <input
+                        value={item.cuentaPredial}
+                        onChange={(e) => updateItem(item.id, "cuentaPredial", e.target.value)}
+                        placeholder="Número de cuenta catastral"
+                        maxLength={MAX_LARGO_CUENTA_PREDIAL}
+                        className="w-full max-w-[320px] px-3 py-2 border border-cos-line rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
+                      />
+                      {(() => {
+                        const aviso = avisoCuentaPredial(item.product_key, item.cuentaPredial);
+                        return aviso ? (
+                          <p className="text-xs text-cos-amber-ink mt-1">{aviso}</p>
+                        ) : (
+                          <p className="text-xs text-cos-ink-soft mt-1">
+                            Se guarda con el concepto: la próxima renta ya viene con ella.
+                          </p>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

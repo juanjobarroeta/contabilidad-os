@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck, FileText, CalendarRange } from "lucide-react";
+import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck, FileText, Copy } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Button } from "@/components/ui";
 import { esAsimilado, etiquetaRegimenNomina } from "@/lib/nomina/regimen";
@@ -10,10 +10,10 @@ import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpre
 import {
   PERIODO_TODO,
   etiquetaPeriodo,
-  opcionesPeriodo,
   rangoPeriodo,
   type ConteoPeriodo,
 } from "@/lib/facturas/periodos";
+import { SelectorPeriodo } from "@/components/facturas/SelectorPeriodo";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -320,7 +320,6 @@ export default function FacturasPage() {
   // notas, nombre y RFC), así que aquí sólo queda el filtro por tipo.
   const rows = invoices.filter((i) => filter === "todas" || keyOf(i) === filter);
 
-  const opciones = opcionesPeriodo(periodos);
   // Sublabel de las tarjetas: siguen la ventana elegida, no el año fijo.
   const subPeriodo =
     periodo === PERIODO_TODO
@@ -440,26 +439,9 @@ export default function FacturasPage() {
             className="flex-1 border-0 bg-transparent py-3 text-[14.5px] text-cos-ink outline-none"
           />
         </div>
-        <label className="flex items-center gap-2 rounded-control border border-cos-line bg-cos-card px-3.5 text-cos-ink-faint">
-          <CalendarRange className="h-[18px] w-[18px]" />
-          <span className="sr-only">Periodo</span>
-          <select
-            value={periodo}
-            onChange={(e) => setPeriodo(e.target.value)}
-            className="border-0 bg-transparent py-3 pr-1 text-[14.5px] font-medium text-cos-ink outline-none"
-          >
-            {/* Si el periodo elegido aún no está en la lista (primer render),
-                se muestra igual para que el select no aparezca vacío. */}
-            {!opciones.some((o) => o.valor === periodo) && (
-              <option value={periodo}>{etiquetaPeriodo(periodo)}</option>
-            )}
-            {opciones.map((o) => (
-              <option key={o.valor} value={o.valor}>
-                {`${o.nivel === 1 ? "  · " : ""}${o.etiqueta} (${o.total})`}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="min-w-[220px]">
+          <SelectorPeriodo valor={periodo} conteos={periodos} onChange={setPeriodo} />
+        </div>
       </div>
 
       {/* filter chips */}
@@ -838,6 +820,17 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
           <DownloadBtn id={inv.id} format="xml" />
           <DownloadBtn id={inv.id} format="pdf" onUnavailable={() => setRepOpen(true)} />
         </div>
+
+        {/* Volver a facturar: clona esta factura (cliente, conceptos, precios y
+            cuenta predial) en el formulario de nueva factura. Sólo tiene sentido
+            en las que emites tú. */}
+        {inv.tipo === "INGRESO" && inv.customer && (
+          <Link href={`/facturas/nueva?desde=${inv.id}`} className="mt-2.5 block">
+            <Button variant="soft" size="md" className="w-full">
+              <Copy className="h-4 w-4" /> Volver a facturar
+            </Button>
+          </Link>
+        )}
 
         {/* enviar por correo (PDF + XML, vía Facturapi) */}
         {mailMsg && (

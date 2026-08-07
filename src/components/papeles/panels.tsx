@@ -490,6 +490,8 @@ interface IsrData {
     | {
         tipo: "pf_arrendamiento";
         ingresosCobradosMes: number; deduccionCiega: number; baseGravable: number | null;
+        /** Predial pagado del mes — deducible ADEMÁS de la ciega (Art. 115). */
+        predialPagado?: number;
         isrCausado: number | null; retencionesAcreditadas: number; isrDelMes: number | null;
         tarifaVerificada: boolean;
       }
@@ -600,12 +602,17 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
           <div className="space-y-2 p-4 text-[14px]">
             <KV label="Ingresos cobrados del mes"><Money value={data.calculo.ingresosCobradosMes} size={13} weight={500} /></KV>
             <KV label="− Deducción ciega 35% (Art. 115)"><Money value={data.calculo.deduccionCiega} size={13} weight={500} /></KV>
+            <KV label="− Impuesto predial pagado (Art. 115)"><Money value={data.calculo.predialPagado ?? 0} size={13} weight={500} /></KV>
             <KV label="= Base gravable">{data.calculo.baseGravable != null ? <Money value={data.calculo.baseGravable} size={13} weight={500} /> : <Dash />}</KV>
             <KV label="ISR causado (tarifa mensual Art. 96)">{data.calculo.isrCausado != null ? <Money value={data.calculo.isrCausado} size={13} weight={500} /> : <Dash />}</KV>
             <KV label="− Retenciones 10% PM (Art. 116)"><Money value={data.calculo.retencionesAcreditadas} size={13} weight={500} /></KV>
             <KV label="= ISR del mes" strong>{data.calculo.isrDelMes != null ? <Money value={data.calculo.isrDelMes} size={15} weight={700} /> : <Dash />}</KV>
             {!data.calculo.tarifaVerificada && <p className="pt-1 text-[12px] text-cos-amber-ink">Tarifa ISR sin verificar contra Anexo 8 — cifra provisional.</p>}
-            <p className="pt-1 text-[12px] text-cos-ink-soft">Deducción opcional ciega (sin predial). Si convienen las deducciones comprobadas, ajústalo manualmente — el comparativo automático está pendiente.</p>
+            <p className="pt-1 text-[12px] text-cos-ink-soft">
+              Deducción opcional ciega más el predial pagado del mes, detectado en los cargos del
+              banco (concepto &ldquo;predial&rdquo;). Si convienen las deducciones comprobadas,
+              ajústalo manualmente — el comparativo automático está pendiente.
+            </p>
           </div>
         </div>
       ) : data.calculo.tipo === "pf_act_empresarial" ? (

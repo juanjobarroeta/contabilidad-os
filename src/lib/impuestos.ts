@@ -2,7 +2,7 @@ import { prisma } from "./prisma";
 import { sumIsrPagar } from "./isr-provisional";
 import { detectResicoKind, calcularIsrResicoPf } from "./resico";
 import { calcularIsrProvisionalPf } from "./fiscal/isr-pf";
-import { calcularIsrArrendamientoMensual } from "./fiscal/isr-arrendamiento";
+import { calcularIsrArrendamientoMensual, esErogacionPredial } from "./fiscal/isr-arrendamiento";
 import { calcularIsrPlataformas, normalizarActividadPlataforma, TASAS_PLATAFORMA } from "./fiscal/isr-plataformas";
 import { calcularActosDelPeriodo } from "./fiscal/iva";
 import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
@@ -243,6 +243,9 @@ export interface TaxPosition {
     tarifaVerificada: boolean;
     /** Plataformas (625): actividad y etiqueta de la tasa aplicada; null en otros régimenes. */
     plataformaActividad?: { kind: string; label: string; asumida: boolean };
+    /** Arrendamiento (606): predial pagado del mes, deducible ADEMÁS de la
+     *  ciega del 35% (Art. 115). Undefined en los demás régimenes. */
+    predialPagado?: number;
   };
   /**
    * Resumen 69-B: egresos del periodo EXCLUIDOS por provenir de un proveedor
@@ -806,10 +809,25 @@ export async function computeTaxPosition(
     // cobrados (base-REP) − deducción ciega 35% (Art. 115) → tarifa mensual
     // Art. 96 − retención 10% de arrendatarios PM (Art. 116 último párrafo).
     const mes = await flujoEfectivoAcum(companyId, from, to, efosBloqueados);
+    // Predial pagado del mes (Art. 115: deducible ADEMÁS de la ciega). Se lee
+    // del BANCO y no de CFDIs porque el predial se paga a tesorerías
+    // municipales que rara vez timbran: el cargo bancario ES la erogación.
+    // Tomarlo de una sola fuente evita además contarlo dos veces cuando sí
+    // existe CFDI y quedó conciliado con su movimiento.
+    const cargosDelMes = await prisma.bankTransaction.findMany({
+      where: { companyId, fecha: { gte: from, lt: to }, monto: { lt: 0 } },
+      select: { descripcion: true, monto: true },
+    });
+    const predialPagadoMes = round2(
+      cargosDelMes
+        .filter((t) => esErogacionPredial(t.descripcion))
+        .reduce((s, t) => s + Math.abs(t.monto), 0)
+    );
     const r = calcularIsrArrendamientoMensual({
       ejercicio: year,
       ingresosCobradosMes: mes.ingresosCobrados,
       retencionesMes: mes.isrRetenidoCobrado,
+      predialPagadoMes,
     });
     isr = {
       metodo: "PF_ARRENDAMIENTO",
@@ -830,6 +848,7 @@ export async function computeTaxPosition(
       saldoFavorAnterior: 0,
       saldoAFavor: 0,
       tarifaVerificada: r ? r.tarifaVerificada : false,
+      predialPagado: r ? r.predialPagado : predialPagadoMes,
     };
   } else if (esPfActEmpresarial || esPf) {
     // PF con actividad empresarial (Art. 106): base en FLUJO DE EFECTIVO

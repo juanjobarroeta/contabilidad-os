@@ -1,25 +1,28 @@
 import { NextResponse } from "next/server";
 import { AuthzError, requireWriter } from "@/lib/authz";
-import { generarCierre, CierreError } from "@/lib/contabilidad/cierre";
+import { generarTraspasoResultado, TraspasoError } from "@/lib/contabilidad/traspaso";
 import { PeriodoCerradoError } from "@/lib/contabilidad/ejercicio";
 
-// POST /api/contabilidad/cierre   body: { companyId, year }
-// Genera el asiento de cierre del ejercicio (mes 13): cancela ingresos/costos/
-// gastos contra Resultado del ejercicio. Idempotente (reemplaza el cierre previo).
+// POST /api/contabilidad/traspaso   body: { companyId, year }
+//
+// Traspasa el resultado del ejercicio `year` (305.01) a resultados acumulados
+// (304.01) con fecha 1-ene del ejercicio siguiente, para que el año nuevo
+// arranque con 305.01 en cero. Idempotente: regenerarlo reemplaza el asiento
+// anterior en vez de duplicarlo.
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { companyId } = body ?? {};
+    const companyId = body?.companyId as string | undefined;
     const year = parseInt(String(body?.year ?? ""));
     if (!companyId || !Number.isInteger(year)) {
       return NextResponse.json({ error: "companyId y year requeridos" }, { status: 400 });
     }
     await requireWriter(companyId, req);
-    const result = await generarCierre(companyId, year);
-    return NextResponse.json({ ok: true, ...result });
+    const result = await generarTraspasoResultado(companyId, year);
+    return NextResponse.json({ ok: true, year, ...result });
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
-    if (e instanceof CierreError) return NextResponse.json({ error: e.message }, { status: 400 });
+    if (e instanceof TraspasoError) return NextResponse.json({ error: e.message }, { status: e.status });
     if (e instanceof PeriodoCerradoError) return NextResponse.json({ error: e.message }, { status: e.status });
     throw e;
   }

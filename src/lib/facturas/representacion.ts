@@ -9,6 +9,8 @@
 // (cfdi:/nomina12:/pago20:) y a atributos faltantes.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { cuentasPredialesDeConcepto } from "./predial";
+
 const num = (v: string | null | undefined): number | null =>
   v != null && v !== "" && !isNaN(parseFloat(v)) ? parseFloat(v) : null;
 
@@ -60,6 +62,8 @@ export interface RepConcepto {
   importe: number;
   descuento: number;
   objetoImp: string | null;
+  /** Cuentas prediales del concepto (arrendamiento). CFDI 4.0 permite varias. */
+  cuentasPrediales: string[];
 }
 export interface RepNominaConcepto {
   tipo: string | null;
@@ -304,6 +308,8 @@ export function parseRepresentacion(xml: string): Representacion {
       importe: num(A(c.attrs, "Importe")) ?? 0,
       descuento: num(A(c.attrs, "Descuento")) ?? 0,
       objetoImp: A(c.attrs, "ObjetoImp"),
+      // CuentaPredial es nodo hijo del concepto, no atributo: sale del cuerpo.
+      cuentasPrediales: cuentasPredialesDeConcepto(c.body),
     }));
 
   // TimbreFiscalDigital

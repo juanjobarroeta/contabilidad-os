@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   aggregateConceptos,
+  agruparFacturasRecurrentes,
   derivarTratamientoIva,
+  firmaFactura,
   tratamientoPorClave,
   type RawItem,
   type RawTax,
@@ -182,5 +184,107 @@ describe("tratamientoPorClave", () => {
 
   it("regresa un mapa vacío sin datos", () => {
     expect(tratamientoPorClave([])).toEqual({});
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Facturación recurrente («vuelve a facturar»)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("firmaFactura", () => {
+  const base = { id: "x", fecha: new Date("2026-01-31"), total: 100, cliente: "Ana" };
+
+  it("no depende del orden ni del formato de la descripción", () => {
+    const a = firmaFactura({
+      ...base,
+      customerId: "c1",
+      items: [
+        { claveProdServ: "80131502", descripcion: "Renta local", cantidad: 1, valorUnitario: 100, claveUnidad: "E48" },
+        { claveProdServ: "84111506", descripcion: "Mantenimiento", cantidad: 1, valorUnitario: 50, claveUnidad: "E48" },
+      ],
+    });
+    const b = firmaFactura({
+      ...base,
+      customerId: "c1",
+      items: [
+        { claveProdServ: "84111506", descripcion: "  MANTENIMIENTO ", cantidad: 1, valorUnitario: 50, claveUnidad: "E48" },
+        { claveProdServ: "80131502", descripcion: "renta   local", cantidad: 1, valorUnitario: 100, claveUnidad: "E48" },
+      ],
+    });
+    expect(a).toBe(b);
+  });
+
+  it("distingue clientes distintos con los mismos conceptos", () => {
+    const items = [{ claveProdServ: "80131502", descripcion: "Renta", cantidad: 1, valorUnitario: 100, claveUnidad: "E48" }];
+    expect(firmaFactura({ ...base, customerId: "c1", items })).not.toBe(
+      firmaFactura({ ...base, customerId: "c2", items })
+    );
+  });
+});
+
+describe("agruparFacturasRecurrentes", () => {
+  const renta = (id: string, fecha: string, valorUnitario = 12000, cuentaPredial = "0102030405") => ({
+    id,
+    fecha: new Date(fecha),
+    total: valorUnitario * 1.16,
+    customerId: "c1",
+    cliente: "Ana Rentera",
+    ivaTratamiento: "16" as const,
+    items: [
+      { claveProdServ: "80131502", descripcion: "Renta local comercial", cantidad: 1, valorUnitario, claveUnidad: "E48", cuentaPredial },
+    ],
+  });
+
+  it("cuenta las veces que se repite la misma forma de factura", () => {
+    const r = agruparFacturasRecurrentes([
+      renta("f1", "2026-01-31"),
+      renta("f2", "2026-02-28"),
+      renta("f3", "2026-03-31"),
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].veces).toBe(3);
+    expect(r[0].cliente).toBe("Ana Rentera");
+  });
+
+  it("la plantilla es la factura MÁS RECIENTE (precios al día)", () => {
+    const r = agruparFacturasRecurrentes([
+      renta("f1", "2026-01-31", 12000),
+      renta("f3", "2026-03-31", 13500), // subió la renta
+      renta("f2", "2026-02-28", 12000),
+    ]);
+    expect(r[0].facturaId).toBe("f3");
+    expect(r[0].items[0].valorUnitario).toBe(13500);
+    expect(r[0].ultimoUso.slice(0, 10)).toBe("2026-03-31");
+  });
+
+  it("arrastra la cuenta predial para que el arrendamiento se re-facture solo", () => {
+    const r = agruparFacturasRecurrentes([renta("f1", "2026-01-31")]);
+    expect(r[0].items[0].cuentaPredial).toBe("0102030405");
+  });
+
+  it("ordena por frecuencia y desempata por recencia", () => {
+    const otra = {
+      id: "g1",
+      fecha: new Date("2026-04-30"),
+      total: 500,
+      customerId: "c2",
+      cliente: "Beto",
+      ivaTratamiento: "16" as const,
+      items: [{ claveProdServ: "84111506", descripcion: "Consultoría", cantidad: 1, valorUnitario: 500, claveUnidad: "E48" }],
+    };
+    const r = agruparFacturasRecurrentes([renta("f1", "2026-01-31"), renta("f2", "2026-02-28"), otra]);
+    expect(r.map((x) => x.cliente)).toEqual(["Ana Rentera", "Beto"]);
+  });
+
+  it("respeta el tope y descarta facturas sin conceptos", () => {
+    const vacia = { id: "v", fecha: new Date("2026-05-31"), total: 0, customerId: "c9", cliente: "Vacía", items: [] };
+    const r = agruparFacturasRecurrentes([renta("f1", "2026-01-31"), vacia], 1);
+    expect(r).toHaveLength(1);
+    expect(r[0].cliente).toBe("Ana Rentera");
+  });
+
+  it("sin tratamiento de IVA derivable conserva 16%", () => {
+    const sinIva = { ...renta("f1", "2026-01-31"), ivaTratamiento: null };
+    expect(agruparFacturasRecurrentes([sinIva])[0].ivaTratamiento).toBe("16");
   });
 });

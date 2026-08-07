@@ -17,6 +17,7 @@
  */
 
 import type { AccountType, EntrySource, Prisma, PrismaClient } from "@prisma/client";
+import { assertPeriodoAbierto } from "../contabilidad/candado";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 
@@ -137,6 +138,11 @@ export async function postBalancedEntry(
 
   const year = fecha.getUTCFullYear();
   const month = fecha.getUTCMonth() + 1;
+
+  // Candado de ejercicio: los módulos satélite (construcción, flota, padel,
+  // restaurante, purificadora…) postean por evento, así que un evento con fecha
+  // vieja podría aterrizar en un ejercicio ya cerrado y declarado.
+  await assertPeriodoAbierto(tx, companyId, year, month);
 
   await tx.accountingEntry.createMany({
     data: [

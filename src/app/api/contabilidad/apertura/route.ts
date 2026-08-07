@@ -3,6 +3,7 @@ import { AuthzError, requireWriter, requireMembership } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { naturalezaPorTipo } from "@/lib/contabilidad/coe-saldos";
 import { postApertura, AperturaError } from "@/lib/contabilidad/apertura";
+import { PeriodoCerradoError } from "@/lib/contabilidad/ejercicio";
 
 // GET /api/contabilidad/apertura?companyId=xxx
 // Cuentas del catálogo + el saldo de apertura actual de cada una (si existe),
@@ -76,6 +77,9 @@ export async function POST(req: Request) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
     if (e instanceof AperturaError) {
       return NextResponse.json({ error: e.message, diferencia: e.diferencia }, { status: 400 });
+    }
+    if (e instanceof PeriodoCerradoError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
     }
     throw e;
   }

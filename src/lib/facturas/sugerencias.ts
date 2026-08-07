@@ -28,6 +28,8 @@ export interface RawItem {
   fecha: Date;
   /** customerId of the parent invoice — null when the invoice has no customer. */
   customerId: string | null;
+  /** Cuenta predial del concepto (arrendamiento), si la partida la llevaba. */
+  cuentaPredial?: string | null;
   /**
    * Tratamiento de IVA derivado de los impuestos del comprobante padre
    * (ver derivarTratamientoIva). Null cuando el comprobante no permite
@@ -46,6 +48,12 @@ export interface ConceptoSugerido {
   ultimoUso: string; // ISO date
   /** Tratamiento de IVA del uso más reciente (null = desconocido). */
   ivaTratamiento: IvaTratamiento | null;
+  /**
+   * Cuenta predial del uso más reciente. Es lo que hace que el arrendamiento
+   * se re-facture solo: capturas la cuenta catastral una vez y el mes siguiente
+   * viene con el concepto, sin que nadie la vuelva a teclear.
+   */
+  cuentaPredial: string | null;
 }
 
 /**
@@ -176,5 +184,112 @@ function rankConceptos(items: RawItem[]): ConceptoSugerido[] {
       vecesUsado: g.count,
       ultimoUso: g.ultimoUso.toISOString(),
       ivaTratamiento: g.latest.ivaTratamiento ?? null,
+      cuentaPredial: g.latest.cuentaPredial ?? null,
+    }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Facturación recurrente — «vuelve a facturar»
+//
+// Una PyME no factura cosas distintas cada mes: factura LA MISMA factura, al
+// mismo cliente, con los mismos conceptos. El prellenado por cliente ya existía,
+// pero obligaba a elegir primero al cliente — justo al revés de como piensa
+// quien factura ("toca la renta de Ana", no "veamos qué le facturé a Ana").
+//
+// Esto agrupa las facturas timbradas por su FORMA (cliente + juego de
+// conceptos) y las ordena por frecuencia y recencia, para ofrecer de entrada
+// las que se repiten. La plantilla de cada grupo es su factura más reciente:
+// los precios que se usan son los últimos, no los del primer mes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Partida de una factura, tal como se clona al re-facturar. */
+export interface ItemRecurrente {
+  claveProdServ: string;
+  descripcion: string;
+  cantidad: number;
+  valorUnitario: number;
+  claveUnidad: string;
+  cuentaPredial?: string | null;
+}
+
+/** Factura timbrada de entrada para el agrupado. */
+export interface FacturaParaAgrupar {
+  id: string;
+  fecha: Date;
+  total: number;
+  customerId: string | null;
+  cliente: string;
+  items: ItemRecurrente[];
+  ivaTratamiento?: IvaTratamiento | null;
+}
+
+/** Una "forma de factura" que la empresa repite. */
+export interface FacturaRecurrente {
+  /** Factura más reciente del grupo — la plantilla que se clona. */
+  facturaId: string;
+  customerId: string | null;
+  cliente: string;
+  total: number;
+  /** Cuántas veces se ha facturado esta misma forma. */
+  veces: number;
+  ultimoUso: string; // ISO
+  items: ItemRecurrente[];
+  ivaTratamiento: IvaTratamiento;
+}
+
+/** Firma de la forma de una factura: cliente + juego de conceptos (sin importar
+ *  el orden en que se capturaron ni el espaciado/mayúsculas de la descripción). */
+export function firmaFactura(f: FacturaParaAgrupar): string {
+  const conceptos = f.items
+    .map((it) => conceptoKey(it.claveProdServ, it.descripcion))
+    .sort()
+    .join("|");
+  return `${f.customerId ?? "sin-cliente"}::${conceptos}`;
+}
+
+/**
+ * Agrupa facturas por su forma y devuelve las más repetidas primero (a igual
+ * frecuencia, la más reciente). Las facturas sin conceptos se ignoran: no hay
+ * nada que volver a facturar.
+ */
+export function agruparFacturasRecurrentes(
+  facturas: FacturaParaAgrupar[],
+  top = 6
+): FacturaRecurrente[] {
+  const grupos = new Map<string, { plantilla: FacturaParaAgrupar; veces: number; ultimoUso: Date }>();
+
+  for (const f of facturas) {
+    if (f.items.length === 0) continue;
+    const key = firmaFactura(f);
+    const g = grupos.get(key);
+    if (!g) {
+      grupos.set(key, { plantilla: f, veces: 1, ultimoUso: f.fecha });
+      continue;
+    }
+    g.veces += 1;
+    if (f.fecha > g.ultimoUso) {
+      g.ultimoUso = f.fecha;
+      g.plantilla = f; // la plantilla es SIEMPRE la más reciente (precios al día)
+    }
+  }
+
+  return Array.from(grupos.values())
+    .sort((a, b) => {
+      const porFrecuencia = b.veces - a.veces;
+      if (porFrecuencia !== 0) return porFrecuencia;
+      return b.ultimoUso.getTime() - a.ultimoUso.getTime();
+    })
+    .slice(0, top)
+    .map((g) => ({
+      facturaId: g.plantilla.id,
+      customerId: g.plantilla.customerId,
+      cliente: g.plantilla.cliente,
+      total: g.plantilla.total,
+      veces: g.veces,
+      ultimoUso: g.ultimoUso.toISOString(),
+      items: g.plantilla.items,
+      // Ante ambigüedad (comprobante mixto o sin filas de IVA) se conserva 16%,
+      // igual que en el prellenado desde una factura previa.
+      ivaTratamiento: g.plantilla.ivaTratamiento ?? "16",
     }));
 }

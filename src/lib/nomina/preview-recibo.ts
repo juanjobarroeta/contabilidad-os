@@ -183,6 +183,7 @@ export async function previewRecibo(companyId: string, payrollItemId: string): P
         importe: calc.totalPercepciones,
         descuento: calc.totalDeducciones,
         objetoImp: "01",
+        cuentasPrediales: [],
       },
     ],
     traslados: [],

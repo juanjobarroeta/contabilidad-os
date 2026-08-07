@@ -3,6 +3,12 @@ declare module "facturapi" {
 
   interface FacturapiInvoiceItem {
     quantity: number;
+    /**
+     * Cuenta(s) predial(es) del inmueble arrendado — nodo CuentaPredial del
+     * concepto en CFDI 4.0. Va en la PARTIDA, no en el producto, y es arreglo
+     * porque un concepto puede amparar varias cuentas catastrales.
+     */
+    property_tax_account?: string[];
     product: {
       description: string;
       product_key: string;

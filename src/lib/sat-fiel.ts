@@ -2,6 +2,7 @@ import { Fiel } from "@nodecfdi/sat-ws-descarga-masiva";
 import { Certificate } from "@nodecfdi/credentials/node";
 import { prisma } from "./prisma";
 import { decryptSecret } from "./crypto";
+import { cuentasPredialesDeConcepto } from "@/lib/facturas/predial";
 
 export async function getFielForCompany(companyId: string): Promise<Fiel> {
   const company = await prisma.company.findUnique({
@@ -188,12 +189,22 @@ export function parseCfdiXml(xml: string) {
     valorUnitario: number;
     importe: number;
     descuento: number;
+    /** Cuentas prediales del concepto (arrendamiento). CFDI 4.0 permite varias. */
+    cuentasPrediales: string[];
   }> = [];
 
   const conceptoRe = /<(?:[a-zA-Z0-9]+:)?Concepto\b([^>]*)(?:\/>|>)/g;
   let m: RegExpExecArray | null;
   while ((m = conceptoRe.exec(xml)) !== null) {
     const attrs = m[1];
+    // CuentaPredial es un nodo HIJO del concepto, no un atributo: hay que mirar
+    // el cuerpo. Un concepto autocerrado (<Concepto ... />) no puede tenerlo.
+    let cuerpoConcepto = "";
+    if (!m[0].endsWith("/>")) {
+      const resto = xml.slice(conceptoRe.lastIndex);
+      const cierre = resto.search(/<\/(?:[a-zA-Z0-9]+:)?Concepto>/);
+      cuerpoConcepto = cierre === -1 ? "" : resto.slice(0, cierre);
+    }
     const getAttr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
     const cps = getAttr("ClaveProdServ");
     if (!cps) continue;
@@ -206,6 +217,7 @@ export function parseCfdiXml(xml: string) {
       valorUnitario: parseFloat(getAttr("ValorUnitario") ?? "0"),
       importe: parseFloat(getAttr("Importe") ?? "0"),
       descuento: parseFloat(getAttr("Descuento") ?? "0"),
+      cuentasPrediales: cuentasPredialesDeConcepto(cuerpoConcepto),
     });
   }
 

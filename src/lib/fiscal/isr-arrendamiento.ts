@@ -11,9 +11,13 @@ import { tarifaMensualSueldos, aplicarTarifa } from "./tarifas";
 //   = base gravable → tarifa MENSUAL del Art. 96
 //   − retención 10% cuando el arrendatario es PM (Art. 116 último párrafo)
 //
-// v1: siempre deducción ciega 35% — es la opción típica del rentista y no
-// requiere comprobar gastos del inmueble. NO suma predial (no lo trackeamos).
-// El refinamiento (elegir comprobadas cuando convenga + predial) queda anotado.
+// Deducción ciega 35% — la opción típica del rentista, que no exige comprobar
+// gastos del inmueble — MÁS el impuesto predial efectivamente pagado, que el
+// propio Art. 115 permite sumar a la ciega. Antes se ignoraba el predial, lo
+// que sobreestimaba la base y hacía pagar ISR de más.
+//
+// Pendiente (anotado): comparar contra deducciones COMPROBADAS y elegir la que
+// convenga — eso exige un registro de gastos por inmueble que todavía no hay.
 //
 // La tarifa mensual es la publicada en el Anexo 8 (tarifaMensualSueldos): el
 // Anexo publica UNA tabla mensual que sirve tanto para sueldos (Art. 96) como
@@ -33,12 +37,23 @@ export interface IsrArrendamientoInput {
   ingresosCobradosMes: number;
   /** ISR retenido (10%) por arrendatarios PM sobre esos ingresos. */
   retencionesMes?: number;
+  /**
+   * Impuesto predial EFECTIVAMENTE PAGADO en el mes por los inmuebles
+   * arrendados. Art. 115: quien opta por la ciega puede deducirlo ADEMÁS del
+   * 35%. Se deduce en el mes de la erogación (el artículo lo refiere al año de
+   * calendario; en provisionales el criterio práctico es el mes en que se paga).
+   */
+  predialPagadoMes?: number;
 }
 
 export interface IsrArrendamientoResult {
   ingresos: number;
   /** 35% de los ingresos (Art. 115, opción ciega). */
   deduccionCiega: number;
+  /** Predial pagado del mes, deducible ADEMÁS de la ciega (Art. 115). */
+  predialPagado: number;
+  /** Ciega + predial: lo que realmente se resta de los ingresos. */
+  deduccionTotal: number;
   baseGravable: number;
   /** Tarifa mensual Art. 96 aplicada a la base. */
   isrCausado: number;
@@ -64,7 +79,11 @@ export function calcularIsrArrendamientoMensual(
 
   const ingresos = Math.max(0, input.ingresosCobradosMes);
   const deduccionCiega = r2(ingresos * DEDUCCION_CIEGA_ARRENDAMIENTO);
-  const baseGravable = Math.max(0, r2(ingresos - deduccionCiega));
+  const predialPagado = r2(Math.max(0, input.predialPagadoMes ?? 0));
+  const deduccionTotal = r2(deduccionCiega + predialPagado);
+  // La deducción nunca deja base negativa: un predial alto en un mes flojo
+  // agota la base, no genera "pérdida" en el provisional.
+  const baseGravable = Math.max(0, r2(ingresos - deduccionTotal));
   const isrCausado = r2(aplicarTarifa(baseGravable, t.tarifa.filas));
   const retenciones = r2(input.retencionesMes ?? 0);
   const isrPagar = Math.max(0, r2(isrCausado - retenciones));
@@ -72,6 +91,8 @@ export function calcularIsrArrendamientoMensual(
   return {
     ingresos: r2(ingresos),
     deduccionCiega,
+    predialPagado,
+    deduccionTotal,
     baseGravable,
     isrCausado,
     retenciones,
@@ -81,4 +102,17 @@ export function calcularIsrArrendamientoMensual(
     // No vigente (roll-forward a tabla superada) cuenta como NO verificada.
     tarifaVerificada: t.vigente && t.tarifa.verificado,
   };
+}
+
+/**
+ * ¿El concepto de un movimiento bancario es una erogación de impuesto predial?
+ *
+ * Se detecta por texto porque el predial se paga a tesorerías municipales, que
+ * rara vez emiten CFDI: el movimiento del banco ES el comprobante de la
+ * erogación. Deliberadamente sólo mira la palabra "predial" — un patrón más
+ * amplio (tesorería, municipio) arrastraría tenencia, agua y multas, que NO son
+ * deducibles junto con la ciega.
+ */
+export function esErogacionPredial(descripcion: string | null | undefined): boolean {
+  return /\bPREDIAL(?:ES)?\b/i.test(descripcion ?? "");
 }
