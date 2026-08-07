@@ -104,6 +104,11 @@ export async function POST(req: Request, { params }: Params) {
     companyId: account.companyId,
     transactions: extraction.transactions,
     source: "UPLOAD_PDF",
+    banco: extraction.banco,
+    periodo: extraction.periodo,
+    // Los saldos que declara el estado: ancla de la conciliación bancaria.
+    saldoInicial: extraction.balanceCheck.saldoInicial,
+    saldoFinal: extraction.balanceCheck.saldoFinal,
   });
 
   return NextResponse.json({

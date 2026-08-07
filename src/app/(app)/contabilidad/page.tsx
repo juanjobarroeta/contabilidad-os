@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { ActivoFijoView } from "@/components/contabilidad/ActivoFijoView";
 import { LibroDiarioPanel, BalanceGeneralPanel, AuxiliarCuentaModal } from "@/components/contabilidad/LibroPanels";
+import { ConciliacionBancariaPanel } from "@/components/contabilidad/ConciliacionBancariaPanel";
 import { evaluarCierreEjercicio } from "@/lib/contabilidad/ejercicio";
 
 // ── Readiness CE (tipos espejo de /api/contabilidad/ce-readiness) ──────────────
@@ -96,9 +97,9 @@ interface SaldoRow {
   neto: number;
 }
 
-type TabId = "periods" | "coe" | "libro" | "balanza" | "estado" | "balance" | "saldos" | "activo-fijo";
+type TabId = "periods" | "coe" | "libro" | "balanza" | "conciliacion" | "estado" | "balance" | "saldos" | "activo-fijo";
 
-const TAB_IDS: readonly TabId[] = ["periods", "coe", "libro", "balanza", "estado", "balance", "saldos", "activo-fijo"];
+const TAB_IDS: readonly TabId[] = ["periods", "coe", "libro", "balanza", "conciliacion", "estado", "balance", "saldos", "activo-fijo"];
 
 export default function ContabilidadPage() {
   const { activeCompany } = useCompany();
@@ -302,6 +303,7 @@ export default function ContabilidadPage() {
             ["coe", "Contabilidad Electrónica", Landmark],
             ["libro", "Libro diario", ScrollText],
             ["balanza", "Balanza", BookOpen],
+            ["conciliacion", "Conciliación bancaria", Landmark],
             ["estado",  "Estado de resultados", FileText],
             ["balance", "Balance general", Scale],
             ["saldos",  "Saldos interempresa", ArrowLeftRight],
@@ -370,6 +372,14 @@ export default function ContabilidadPage() {
           <PeriodPicker year={selectedYear} month={selectedMonth}
             onChange={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }} />
           <BalanceGeneralPanel companyId={activeCompany.id} year={selectedYear} month={selectedMonth} />
+        </div>
+      )}
+
+      {tab === "conciliacion" && (
+        <div>
+          <PeriodPicker year={selectedYear} month={selectedMonth}
+            onChange={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }} />
+          <ConciliacionBancariaPanel companyId={activeCompany.id} year={selectedYear} month={selectedMonth} />
         </div>
       )}
 

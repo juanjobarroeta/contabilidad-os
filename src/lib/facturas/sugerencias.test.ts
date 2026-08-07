@@ -288,3 +288,30 @@ describe("agruparFacturasRecurrentes", () => {
     expect(agruparFacturasRecurrentes([sinIva])[0].ivaTratamiento).toBe("16");
   });
 });
+
+describe("agruparFacturasRecurrentes — facturas sin cliente", () => {
+  const sinCliente = {
+    id: "sat-1",
+    fecha: new Date("2026-06-15"),
+    total: 7236.97,
+    customerId: null,
+    cliente: "Sin cliente",
+    ivaTratamiento: "16" as const,
+    items: [
+      { claveProdServ: "86121800", descripcion: "Programas de entrenamiento", cantidad: 1, valorUnitario: 6238.77, claveUnidad: "E48" },
+    ],
+  };
+
+  it("NO las ofrece: sin cliente ligado el formulario no puede arrancar", () => {
+    // Caso real: CFDIs que entran por descarga masiva del SAT sin emparejar con
+    // un Customer. Ofrecerlos dejaba tarjetas que al hacer clic sólo daban error.
+    expect(agruparFacturasRecurrentes([sinCliente])).toEqual([]);
+  });
+
+  it("las descarta sin estorbar a las que sí tienen cliente", () => {
+    const conCliente = { ...sinCliente, id: "f1", customerId: "c1", cliente: "Ana Rentera" };
+    const r = agruparFacturasRecurrentes([sinCliente, conCliente]);
+    expect(r).toHaveLength(1);
+    expect(r[0].cliente).toBe("Ana Rentera");
+  });
+});

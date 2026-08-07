@@ -285,13 +285,14 @@ model Company {
   invitations CompanyInvitation[]
 
   // WhatsApp channel (W0)
-  whatsappLinks         WhatsappLink[]         @relation("WhatsappActiveCompany")
-  whatsappConversations WhatsappConversation[]
-  stagedActions         StagedAction[]
-  importBatches         ImportBatch[]
+  whatsappLinks           WhatsappLink[]         @relation("WhatsappActiveCompany")
+  whatsappConversations   WhatsappConversation[]
+  stagedActions           StagedAction[]
+  importBatches           ImportBatch[]
+  conciliacionesBancarias ConciliacionBancaria[]
   // Reglas de categorización persistidas por el usuario (Rappi, OpenAI, …): se
   // recuerdan y se re-aplican al importar y en el escaneo retroactivo.
-  categorizationRules   CategorizationRule[]
+  categorizationRules     CategorizationRule[]
 
   // Post-sync IVA-change notices (one baseline per unfiled period)
   ivaPeriodNotices IvaPeriodNotice[]
@@ -1119,11 +1120,12 @@ model BankAccount {
   belvoAccountId String?
   belvoLinkId    String?
 
-  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  transactions  BankTransaction[]
-  gastos        Gasto[]
-  reembolsos    ReembolsoSemanal[]
-  importBatches ImportBatch[]
+  company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transactions   BankTransaction[]
+  conciliaciones ConciliacionBancaria[]
+  gastos         Gasto[]
+  reembolsos     ReembolsoSemanal[]
+  importBatches  ImportBatch[]
 
   @@unique([companyId, numeroCuenta])
 }
@@ -1225,12 +1227,55 @@ model ImportBatch {
   undoneAt       DateTime?
   undoneByUserId String?
 
+  // Saldos que DECLARA el estado de cuenta importado. El extractor ya los leía
+  // para un cuadre de sanidad y luego los tiraba; persistirlos es lo que
+  // permite proponer el saldo de la conciliación bancaria sin capturarlo a
+  // mano. Null cuando el estado no los trae o el origen no los expone.
+  saldoInicial Float?
+  saldoFinal   Float?
+
   company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankAccount  BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]
 
   @@index([companyId, createdAt])
   @@index([bankAccountId])
+}
+
+// Conciliación bancaria de un mes — el papel de trabajo que el contador revisa
+// y firma. Es un ENTREGABLE, no un cálculo efímero: por eso tiene fila propia.
+//
+// Guarda sólo lo que NO se puede derivar: el saldo que declara el estado de
+// cuenta (propuesto desde el ImportBatch, editable a mano porque hay cuentas
+// sin PDF — caja chica, tarjetas departamentales) y la firma de quien la dio
+// por buena. El saldo en libros y las partidas en conciliación se recalculan
+// del ledger en cada consulta, para que nunca queden desfasados.
+model ConciliacionBancaria {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  companyId     String
+  bankAccountId String
+  year          Int
+  month         Int // 1-12
+
+  /// Saldo final que declara el estado de cuenta del periodo.
+  saldoFinalEstado   Float?
+  /// Saldo inicial declarado — sirve para explicar el arrastre del mes previo.
+  saldoInicialEstado Float?
+  /// true cuando el saldo lo capturó una persona (no vino del import).
+  saldoManual        Boolean @default(false)
+
+  /// Firma: cuándo se dio por conciliado el mes y quién lo hizo.
+  conciliadoAt       DateTime?
+  conciliadoByUserId String?
+  notas              String?
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([bankAccountId, year, month])
+  @@index([companyId, year, month])
 }
 
 // Regla de categorización de conceptos bancarios SIN CFDI, persistida por
