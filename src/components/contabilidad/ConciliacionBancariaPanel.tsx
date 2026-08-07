@@ -34,9 +34,28 @@ interface CuentaConciliada {
   sinRegistrar: number;
 }
 
+interface RenglonAuxiliar {
+  id: string;
+  fecha: string;
+  concepto: string;
+  folioPoliza: string;
+  fuente: string;
+  delta: number;
+  bankTxId: string | null;
+}
+
+interface MovimientoBanco {
+  id: string;
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  registrado: boolean;
+}
+
 interface Conciliacion {
   year: number;
   month: number;
+  mesPosteado: boolean;
   saldoEstadoCuenta: number | null;
   saldoInicialEstado: number | null;
   cuentasSinSaldo: string[];
@@ -52,6 +71,8 @@ interface Conciliacion {
   conciliado: boolean;
   explicadaPorArrastre: boolean;
   cuentas: CuentaConciliada[];
+  auxiliar: RenglonAuxiliar[];
+  movimientosBanco: MovimientoBanco[];
   resumen: string;
   sinCuentaBancos: boolean;
 }
@@ -262,6 +283,110 @@ export function ConciliacionBancariaPanel({
           id: a.id, fecha: a.fecha, texto: a.concepto ?? "", monto: a.delta ?? 0, nota: a.fuente ?? null,
         }))}
       />
+
+      {/* Los DOS lados del cotejo, completos: el auxiliar de Bancos (con el
+          folio de la póliza de cada asiento — el mismo del libro diario y del
+          XML) frente a los movimientos del estado de cuenta. Colapsados por
+          defecto: son el soporte del papel, no su resumen. */}
+      <LadoDetalle
+        titulo="Auxiliar de Bancos (libros)"
+        ayuda="Cada asiento con su folio de póliza — el mismo que ves en el libro diario y el que lleva el XML de pólizas del SAT."
+        vacio="El mes no tiene asientos en la cuenta de Bancos. Si ya importaste los movimientos, cierra el mes en «Cierres mensuales» para generarlos."
+        filas={data.auxiliar.map((a) => ({
+          id: a.id,
+          fecha: a.fecha,
+          texto: a.concepto,
+          monto: a.delta,
+          folio: `#${a.folioPoliza}`,
+          nota: a.fuente,
+          alerta: a.bankTxId == null,
+        }))}
+        notaAlerta="sin movimiento bancario"
+      />
+      <LadoDetalle
+        titulo="Movimientos del estado de cuenta"
+        ayuda="Todos los movimientos del banco en el mes, marcando cuáles llegaron al libro."
+        vacio="No hay movimientos bancarios importados en este mes."
+        filas={data.movimientosBanco.map((m) => ({
+          id: m.id,
+          fecha: m.fecha,
+          texto: m.descripcion,
+          monto: m.monto,
+          folio: null,
+          nota: null,
+          alerta: !m.registrado,
+        }))}
+        notaAlerta="sin registrar"
+      />
+    </div>
+  );
+}
+
+/** Tabla colapsable de un lado del cotejo (auxiliar o estado de cuenta). */
+function LadoDetalle({
+  titulo, ayuda, vacio, filas, notaAlerta,
+}: {
+  titulo: string;
+  ayuda: string;
+  vacio: string;
+  filas: {
+    id: string; fecha: string; texto: string; monto: number;
+    folio: string | null; nota: string | null; alerta: boolean;
+  }[];
+  notaAlerta: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const alertas = filas.filter((f) => f.alerta).length;
+  return (
+    <div className="overflow-hidden rounded-card border border-cos-line bg-cos-card">
+      <button
+        type="button"
+        onClick={() => setAbierto((o) => !o)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-cos-paper"
+      >
+        <span>
+          <span className="text-[14px] font-semibold text-cos-ink">
+            {titulo} <span className="ml-1 font-mono text-[12px] text-cos-ink-faint">{filas.length}</span>
+            {alertas > 0 && (
+              <span className="ml-2 rounded bg-cos-amber-tint px-1.5 py-0.5 text-[11px] font-medium text-cos-amber-ink">
+                {alertas} {notaAlerta}
+              </span>
+            )}
+          </span>
+          <span className="mt-0.5 block text-[12px] text-cos-ink-soft">{ayuda}</span>
+        </span>
+        <span className="ml-3 shrink-0 text-[12.5px] font-medium text-cos-brand-ink">
+          {abierto ? "Ocultar" : "Ver detalle"}
+        </span>
+      </button>
+      {abierto &&
+        (filas.length === 0 ? (
+          <p className="border-t border-cos-line-soft px-4 py-5 text-center text-[13px] text-cos-ink-soft">{vacio}</p>
+        ) : (
+          <div className="max-h-[420px] overflow-y-auto border-t border-cos-line-soft">
+            <table className="w-full text-[13px]">
+              <tbody>
+                {filas.map((f) => (
+                  <tr key={f.id} className={`border-t border-cos-line-soft first:border-t-0 ${f.alerta ? "bg-cos-amber-tint/40" : ""}`}>
+                    <td className="w-[64px] px-4 py-2 font-mono text-[12px] text-cos-ink-soft">{fmtFecha(f.fecha)}</td>
+                    {f.folio !== null && (
+                      <td className="w-[64px] px-1 py-2 font-mono text-[12px] text-cos-ink-soft">{f.folio}</td>
+                    )}
+                    <td className="px-2 py-2 text-cos-ink">
+                      <span className="line-clamp-2">{f.texto}</span>
+                      {(f.nota || f.alerta) && (
+                        <span className="mt-0.5 block text-[11.5px] text-cos-ink-faint">
+                          {[f.nota, f.alerta ? notaAlerta : null].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right align-top"><Money value={f.monto} sign size={13} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
     </div>
   );
 }
