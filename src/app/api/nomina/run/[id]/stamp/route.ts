@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { stampPayrollRun, type StampOpciones } from "@/lib/nomina/payroll-run";
 import { resolverFechaCfdi } from "@/lib/nomina/fecha-cfdi";
@@ -12,21 +11,29 @@ type Params = { params: Promise<{ id: string }> };
 // POST /api/nomina/run/[id]/stamp
 // Body opcional: { fechaCfdi?: "AAAA-MM-DD" } — fecha de emisión del CFDI
 // (máx. 72 h atrás por regla SAT; el mes fiscal lo fija la FechaPago).
+// Autz: sesión web O token de servicio (Bearer) — JCPT timbra la corrida que
+// creó desde su roster. La emisión ante el SAT es idéntica y las mismas
+// reglas aplican (membresía efectiva, VIEWER no timbra, gating de escritura).
 export async function POST(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id } = await params;
   const run = await prisma.payrollRun.findUnique({ where: { id }, select: { companyId: true } });
   if (!run) return NextResponse.json({ error: "Corrida no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, run.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, run.companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
   // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
-  const gate = await gateEscritura(session.user.id);
+  const gate = await gateEscritura(user.id);
   if (gate) return gate;
 
   // Fecha de emisión opcional (el body puede venir vacío — comportamiento previo).
@@ -44,8 +51,8 @@ export async function POST(req: Request, { params }: Params) {
   if (result.ok || result.stamped > 0) {
     registrarBitacora({
       companyId: run.companyId,
-      userId: session.user.id,
-      actorEmail: session.user.email ?? null,
+      userId: user.id,
+      actorEmail: user.email ?? null,
       accion: "nomina.timbrar",
       entidad: "PayrollRun",
       entidadId: id,
