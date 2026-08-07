@@ -40,6 +40,7 @@ function mesLimpio(): ConciliarArgs {
       asiento({ id: "e2", delta: -400, bankTxId: "t2" }),
     ],
     saldoInicialLibros: 5000,
+    mesPosteado: true,
   };
 }
 
@@ -192,6 +193,44 @@ describe("conciliarBancos — varias cuentas bancarias", () => {
     });
     expect(r.cuentasSinSaldo).toEqual(["Santander"]);
     expect(r.diferencia).toBeNull();
+  });
+});
+
+describe("conciliarBancos — mes sin postear", () => {
+  it("un mes sin cerrar avisa que es trabajo pendiente, no partidas en conciliación", () => {
+    // Caso real (SMP julio): 27 movimientos importados, mes sin cerrar. El
+    // papel decía "27 no registrados", que numéricamente es cierto pero se lee
+    // como 27 excepciones a investigar cuando en realidad falta cerrar el mes.
+    const args = mesLimpio();
+    args.asientos = []; // nada posteado todavía
+    args.movimientos = args.movimientos.map((m) => ({ ...m, registrado: false }));
+    args.mesPosteado = false;
+    const r = conciliarBancos(args);
+    expect(r.mesPosteado).toBe(false);
+    expect(resumenConciliacion(r)).toContain("no se ha cerrado");
+    expect(resumenConciliacion(r)).toContain("2 movimiento");
+  });
+
+  it("con el mes posteado el mismo estado se reporta como partidas normales", () => {
+    const args = mesLimpio();
+    args.mesPosteado = true;
+    args.movimientos.push(mov({ id: "t3", monto: -250, registrado: false }));
+    args.saldos[0].saldoFinal = 5350;
+    const r = conciliarBancos(args);
+    expect(r.mesPosteado).toBe(true);
+    expect(resumenConciliacion(r)).not.toContain("no se ha cerrado");
+    expect(resumenConciliacion(r)).toContain("1 partida");
+  });
+
+  it("un mes sin postear y sin movimientos no dispara el aviso de cierre", () => {
+    const r = conciliarBancos({
+      saldos: [{ cuentaBancariaId: "b1", etiqueta: "BBVA", saldoInicial: null, saldoFinal: null }],
+      movimientos: [],
+      asientos: [],
+      saldoInicialLibros: 0,
+      mesPosteado: false,
+    });
+    expect(resumenConciliacion(r)).toContain("Falta capturar el saldo");
   });
 });
 

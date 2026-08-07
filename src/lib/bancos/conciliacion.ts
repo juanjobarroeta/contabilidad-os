@@ -69,6 +69,14 @@ export interface SaldoEstadoCuenta {
 }
 
 export interface ConciliacionResultado {
+  /**
+   * ¿El mes está posteado al libro? Sin esto el papel MIENTE por omisión: un mes
+   * sin cerrar reporta TODOS sus movimientos como "no registrados", que
+   * numéricamente es cierto (no están en el libro) pero no son partidas en
+   * conciliación — es trabajo pendiente, no una excepción a investigar.
+   */
+  mesPosteado: boolean;
+
   /** Σ de los saldos finales declarados. Null si falta el de alguna cuenta. */
   saldoEstadoCuenta: number | null;
   saldoInicialEstado: number | null;
@@ -111,6 +119,8 @@ export interface ConciliarArgs {
   asientos: AsientoBancosParaConciliar[];
   /** Saldo del auxiliar de Bancos al INICIO del mes (del libro). */
   saldoInicialLibros: number;
+  /** ¿El periodo contable está POSTED/CLOSED? */
+  mesPosteado?: boolean;
   tolerancia?: number;
 }
 
@@ -170,6 +180,7 @@ export function conciliarBancos(args: ConciliarArgs): ConciliacionResultado {
     Math.abs(diferencia - diferenciaHeredada) <= tolerancia;
 
   return {
+    mesPosteado: args.mesPosteado ?? false,
     saldoEstadoCuenta,
     saldoInicialEstado,
     cuentasSinSaldo,
@@ -192,6 +203,12 @@ export function conciliarBancos(args: ConciliarArgs): ConciliacionResultado {
  * Se usa igual en la pantalla y en la exportación, para que no diverjan.
  */
 export function resumenConciliacion(r: ConciliacionResultado): string {
+  // Un mes sin cerrar no tiene "partidas en conciliación": tiene trabajo
+  // pendiente. Decirlo primero evita que 27 movimientos normales se lean como
+  // 27 excepciones que hay que investigar.
+  if (!r.mesPosteado && r.movimientosNoRegistrados.length > 0) {
+    return `El mes todavía no se ha cerrado, así que sus ${r.movimientosNoRegistrados.length} movimiento(s) aún no llegan al libro. Ciérralo en «Cierres mensuales» y vuelve: lo que siga apareciendo aquí sí serán partidas en conciliación.`;
+  }
   if (r.saldoEstadoCuenta == null) {
     const cuentas = r.cuentasSinSaldo.length > 0 ? `: ${r.cuentasSinSaldo.join(", ")}` : "";
     return `Falta capturar el saldo del estado de cuenta${cuentas}. Sin él no hay contra qué conciliar.`;

@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { COE_CODES } from "@/lib/contabilidad/catalog";
+import { clavePoliza, numerarPolizas } from "@/lib/contabilidad/coe-polizas";
 import {
   conciliarBancos,
   resumenConciliacion,
@@ -45,10 +46,26 @@ export interface CuentaConciliada {
   sinRegistrar: number;
 }
 
+/** Renglón del auxiliar de Bancos, con el folio de la póliza que lo generó. */
+export interface RenglonAuxiliar {
+  id: string;
+  fecha: string;
+  concepto: string;
+  folioPoliza: string;
+  fuente: string;
+  delta: number;
+  /** Movimiento bancario que lo originó; null si no viene del banco. */
+  bankTxId: string | null;
+}
+
 export interface ConciliacionMes extends ConciliacionResultado {
   year: number;
   month: number;
   cuentas: CuentaConciliada[];
+  /** Auxiliar COMPLETO de la cuenta de Bancos: el otro lado del cotejo. */
+  auxiliar: RenglonAuxiliar[];
+  /** Movimientos del banco del mes, con marca de si llegaron al libro. */
+  movimientosBanco: MovimientoParaConciliar[];
   resumen: string;
   /** No hay cuenta contable de Bancos en el catálogo: nada que conciliar. */
   sinCuentaBancos: boolean;
@@ -98,13 +115,18 @@ export async function conciliacionDelMes(
       year,
       month,
       cuentas: [],
+      auxiliar: [],
+      movimientosBanco: [],
       resumen: "El catálogo no tiene cuenta de Bancos: no hay contra qué conciliar.",
       sinCuentaBancos: true,
     };
   }
 
-  // Asientos del mes en la cuenta de Bancos + saldo inicial (Σ de lo anterior).
-  const [asientosMes, previos] = await Promise.all([
+  // Asientos del mes en la cuenta de Bancos + saldo inicial (Σ de lo anterior)
+  // + el estado del periodo + TODOS los asientos del mes (la numeración de
+  // pólizas es por mes y sobre todas las cuentas: numerar sólo con los de
+  // Bancos daría folios que no coinciden con el libro diario ni con el XML).
+  const [asientosMes, previos, periodoContable, todosDelMes] = await Promise.all([
     prisma.accountingEntry.findMany({
       where: { companyId, chartAccountId: cuentaBancos.id, year, month },
       select: {
@@ -117,6 +139,18 @@ export async function conciliacionDelMes(
       by: ["tipo"],
       where: { companyId, chartAccountId: cuentaBancos.id, fecha: { lt: inicio } },
       _sum: { monto: true },
+    }),
+    prisma.accountingPeriod.findUnique({
+      where: { companyId_year_month: { companyId, year, month } },
+      select: { status: true },
+    }),
+    prisma.accountingEntry.findMany({
+      where: { companyId, year, month },
+      select: { fecha: true, descripcion: true, fuente: true, referencia: true, referenciaTipo: true },
+      // El MISMO orden que los demás alimentadores de numerarPolizas (coe-polizas,
+      // coe-auxiliares, libro-diario): sin él, una póliza con asientos en dos
+      // fechas puede numerar distinto aquí que en el libro diario y el XML.
+      orderBy: { fecha: "asc" },
     }),
   ]);
 
@@ -185,12 +219,48 @@ export async function conciliacionDelMes(
     });
   }
 
-  const resultado = conciliarBancos({ saldos, movimientos, asientos, saldoInicialLibros });
+  const mesPosteado = periodoContable?.status === "POSTED" || periodoContable?.status === "CLOSED";
+
+  // Folio de póliza de cada renglón: el MISMO que muestra el libro diario y el
+  // que lleva el XML de pólizas (NumUnIdenPol), para que el contador pueda ir
+  // del auxiliar a su póliza sin traducir folios.
+  const folios = numerarPolizas(
+    todosDelMes.map((e) => ({
+      referencia: e.referencia,
+      referenciaTipo: e.referenciaTipo,
+      fuente: e.fuente,
+      fecha: e.fecha.toISOString().slice(0, 10),
+      concepto: e.descripcion,
+    }))
+  );
+  // Clave de póliza por asiento (desde las filas crudas); el resto del renglón
+  // sale de `asientos`, que YA fijó la convención de signo y la regla de
+  // bankTxId — así no hay dos copias que puedan desincronizarse.
+  const clavePorId = new Map(
+    asientosMes.map((e) => [
+      e.id,
+      clavePoliza({
+        referencia: e.referencia,
+        referenciaTipo: e.referenciaTipo,
+        fuente: e.fuente,
+        fecha: e.fecha.toISOString().slice(0, 10),
+        concepto: e.descripcion,
+      }),
+    ])
+  );
+  const auxiliar = asientos.map((a) => ({
+    ...a,
+    folioPoliza: folios.get(clavePorId.get(a.id) ?? "") ?? "—",
+  }));
+
+  const resultado = conciliarBancos({ saldos, movimientos, asientos, saldoInicialLibros, mesPosteado });
   return {
     ...resultado,
     year,
     month,
     cuentas,
+    auxiliar,
+    movimientosBanco: movimientos,
     resumen: resumenConciliacion(resultado),
     sinCuentaBancos: false,
   };
