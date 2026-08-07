@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency } from "@/lib/utils";
 import { SatCodePicker } from "@/components/ui/SatCodePicker";
+import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
 import { contradiccionIva } from "@/lib/fiscal/iva-esperado";
 import {
   MAX_LARGO_CUENTA_PREDIAL,
@@ -632,6 +633,14 @@ export default function NuevaFacturaPage() {
         <span className="text-cos-ink-soft">/</span>
         <h1 className="text-xl font-bold">Nueva Factura CFDI 4.0</h1>
       </div>
+
+      {/* Carta Manifiesto pendiente: avisar ANTES de capturar la factura, no
+          hasta que el timbrado truene con un 422 al final del wizard. */}
+      {activeCompany && (
+        <div className="mb-6 [&>div]:mt-0">
+          <ManifiestoBanner companyId={activeCompany.id} />
+        </div>
+      )}
 
       {/* Step indicator */}
       <div className="flex items-center gap-2 mb-8">
