@@ -14,6 +14,7 @@ import { calcularDescuentosRecurrentes } from "./descuentos-recurrentes";
 import { receptorDesdeXmlNomina, registroPatronalDesdeXmlNomina } from "./receptor-xml";
 import type { PercepcionItem, DeduccionItem } from "./calc-nomina";
 import type { Employee } from "@prisma/client";
+import { normalizarRegistroPatronal } from "./registro-patronal";
 
 /**
  * Desglose ya calculado por calcularNomina. Cuando se pasa, el CFDI se
@@ -98,6 +99,11 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
   }
 
   const employee = await prisma.employee.findUnique({ where: { id: input.employeeId } });
+  // Registro EFECTIVO: el del centro de trabajo del empleado gana sobre el de
+  // la empresa (multi-estado: un registro por estado — caso Asturcar).
+  if (employee?.registroPatronal) {
+    registroPatronal = normalizarRegistroPatronal(employee.registroPatronal) ?? registroPatronal;
+  }
   if (!employee) return { ok: false, error: "Empleado no encontrado" };
   if (employee.companyId !== input.companyId) {
     return { ok: false, error: "El empleado no pertenece a esta empresa" };

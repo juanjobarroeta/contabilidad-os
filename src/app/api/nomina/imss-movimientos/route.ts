@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { registroPatronalEfectivo } from "@/lib/nomina/registro-patronal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IMSS Movimientos Afiliatorios
@@ -34,7 +35,7 @@ export async function GET(req: Request) {
     where,
     include: {
       employee: {
-        select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true, nss: true, rfc: true, curp: true },
+        select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true, nss: true, rfc: true, curp: true, registroPatronal: true },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -62,7 +63,8 @@ export async function GET(req: Request) {
       const fecha = m.fechaMovimiento.toISOString().slice(0, 10).replace(/-/g, "");
       return [
         tipoCode,
-        company.registroPatronal,
+        // Registro EFECTIVO del empleado del movimiento (multi-estado).
+        registroPatronalEfectivo(m.employee, company) ?? company.registroPatronal,
         m.employee.nss,
         m.employee.apellidoPaterno.toUpperCase(),
         (m.employee.apellidoMaterno ?? "").toUpperCase(),

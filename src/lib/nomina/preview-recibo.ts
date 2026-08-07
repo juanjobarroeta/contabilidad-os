@@ -23,6 +23,7 @@ import {
 } from "./incidencias";
 import { diasPagadosDeRun } from "./payroll-run";
 import { PTU_EXENTO_UMA, UMA_DIARIO, umaDiariaDelEjercicio } from "./constants";
+import { registroPatronalEfectivo } from "./registro-patronal";
 
 export type PreviewReciboResult =
   | { ok: true; rep: Representacion }
@@ -200,7 +201,8 @@ export async function previewRecibo(companyId: string, payrollItemId: string): P
       totalPercepciones: calc.totalPercepciones,
       totalDeducciones: calc.totalDeducciones,
       totalOtrosPagos: otrosPagos.length > 0 ? 0 : null,
-      registroPatronal: company.registroPatronal,
+      // Registro EFECTIVO: el del centro de trabajo del empleado gana (multi-estado).
+      registroPatronal: registroPatronalEfectivo(employee, company),
       curp: employee.curp,
       nss: employee.nss,
       fechaInicioRelLaboral: d(employee.fechaIngreso),

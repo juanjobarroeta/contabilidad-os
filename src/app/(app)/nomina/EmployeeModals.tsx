@@ -28,6 +28,7 @@ export function NewEmployeeModal({
     departamento: "",
     riesgoPuesto: "1",
     claveEntFed: "PUE",
+    registroPatronal: "",
     creditoInfonavit: "",
     tipoDescuentoInfonavit: "",
     descuentoInfonavit: "",
@@ -86,6 +87,7 @@ export function NewEmployeeModal({
           departamento: e.departamento?.trim() || prev.departamento,
           riesgoPuesto: prev.riesgoPuesto,
           claveEntFed: e.claveEntFed || prev.claveEntFed,
+          registroPatronal: prev.registroPatronal,
           creditoInfonavit: e.creditoInfonavit?.trim() || prev.creditoInfonavit,
           tipoDescuentoInfonavit: e.tipoDescuentoInfonavit || prev.tipoDescuentoInfonavit,
           descuentoInfonavit: e.descuentoInfonavit ? String(e.descuentoInfonavit) : prev.descuentoInfonavit,
@@ -228,6 +230,17 @@ export function NewEmployeeModal({
             <Field label="Puesto"><input value={form.puesto} onChange={e => set("puesto", e.target.value)} className={inputCls} /></Field>
             <Field label="Departamento"><input value={form.departamento} onChange={e => set("departamento", e.target.value)} className={inputCls} /></Field>
           </div>
+          {/* Multi-estado: cada centro de trabajo cotiza bajo su propio registro
+              patronal. Vacío = el de la empresa (el caso común). */}
+          <Field label="Registro patronal IMSS (si difiere del de la empresa)">
+            <input
+              value={form.registroPatronal}
+              onChange={e => set("registroPatronal", e.target.value)}
+              placeholder="Vacío = usar el de la empresa"
+              maxLength={20}
+              className={`${inputCls} font-mono`}
+            />
+          </Field>
 
           {/* Datos bancarios (dispersión SPEI) */}
           <div className="grid grid-cols-2 gap-3">
@@ -468,6 +481,7 @@ export function EditEmployeeModal({
     pensionAlimenticiaValor: (() => { const v = (employee as Employee & { pensionAlimenticiaValor?: number | null }).pensionAlimenticiaValor; return v != null ? String(v) : ""; })(),
     clabe: employee.clabe ?? "",
     banco: employee.banco ?? "",
+    registroPatronal: (employee as Employee & { registroPatronal?: string | null }).registroPatronal ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -501,6 +515,7 @@ export function EditEmployeeModal({
           pensionAlimenticiaValor: form.pensionAlimenticiaValor ? parseFloat(form.pensionAlimenticiaValor) : null,
           clabe: form.clabe || null,
           banco: form.banco || null,
+          registroPatronal: form.registroPatronal || null,
           skipImssMovimiento: skipImss,
         }),
       });
@@ -554,6 +569,15 @@ export function EditEmployeeModal({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Puesto"><input value={form.puesto} onChange={e => setForm(p => ({ ...p, puesto: e.target.value }))} className={inputCls} /></Field>
+            <Field label="Registro patronal IMSS (vacío = el de la empresa)">
+              <input
+                value={form.registroPatronal}
+                onChange={e => setForm(p => ({ ...p, registroPatronal: e.target.value }))}
+                placeholder="Vacío = usar el de la empresa"
+                maxLength={20}
+                className={`${inputCls} font-mono`}
+              />
+            </Field>
             <Field label="Departamento"><input value={form.departamento} onChange={e => setForm(p => ({ ...p, departamento: e.target.value }))} className={inputCls} /></Field>
           </div>
 

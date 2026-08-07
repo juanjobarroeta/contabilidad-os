@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { registroPatronalEfectivo } from "@/lib/nomina/registro-patronal";
 
 // GET /api/nomina/sua-export?companyId=xxx&bimestre=3&year=2026
 //
@@ -104,7 +105,9 @@ export async function GET(req: Request) {
 
     lines.push([
       "D", // Detail record
-      company.registroPatronal,
+      // Registro EFECTIVO por empleado: en una empresa multi-estado cada
+      // centro de trabajo cotiza bajo su propio registro patronal.
+      registroPatronalEfectivo(emp, company) ?? company.registroPatronal,
       emp.nss,
       emp.apellidoPaterno.toUpperCase(),
       (emp.apellidoMaterno ?? "").toUpperCase(),
