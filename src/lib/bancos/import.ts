@@ -60,6 +60,10 @@ export async function persistTransactions(opts: {
   /** Metadatos del lote (para el "deshacer última importación"). */
   banco?: string | null;
   periodo?: string | null;
+  /** Saldos que DECLARA el estado de cuenta — el ancla de la conciliación
+   *  bancaria. El extractor ya los lee; aquí se persisten en vez de tirarse. */
+  saldoInicial?: number | null;
+  saldoFinal?: number | null;
 }): Promise<{ imported: number; skipped: number; batchId: string | null }> {
   const { bankAccountId, companyId, transactions, source = "UPLOAD" } = opts;
   let imported = 0;
@@ -75,6 +79,8 @@ export async function persistTransactions(opts: {
       source,
       banco: opts.banco ?? null,
       periodo: opts.periodo ?? null,
+      saldoInicial: opts.saldoInicial ?? null,
+      saldoFinal: opts.saldoFinal ?? null,
       count: 0,
     },
     select: { id: true },
