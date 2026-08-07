@@ -14,6 +14,7 @@ import {
   type ConteoPeriodo,
 } from "@/lib/facturas/periodos";
 import { SelectorPeriodo } from "@/components/facturas/SelectorPeriodo";
+import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -369,6 +370,10 @@ export default function FacturasPage() {
           </Link>
         </div>
       </div>
+
+      {/* Carta Manifiesto pendiente: sin ella no se timbra — avisar aquí, no
+          hasta que el timbrado falle. */}
+      <ManifiestoBanner companyId={activeCompany.id} />
 
       {/* stat cards */}
       <div className="mt-4 grid grid-cols-1 gap-4 min-[680px]:grid-cols-3">
