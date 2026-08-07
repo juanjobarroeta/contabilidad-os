@@ -238,7 +238,8 @@ export interface FacturaRecurrente {
 }
 
 /** Firma de la forma de una factura: cliente + juego de conceptos (sin importar
- *  el orden en que se capturaron ni el espaciado/mayúsculas de la descripción). */
+ *  el orden en que se capturaron ni el espaciado/mayúsculas de la descripción).
+ *  Las facturas sin cliente no llegan aquí (ver agruparFacturasRecurrentes). */
 export function firmaFactura(f: FacturaParaAgrupar): string {
   const conceptos = f.items
     .map((it) => conceptoKey(it.claveProdServ, it.descripcion))
@@ -260,6 +261,11 @@ export function agruparFacturasRecurrentes(
 
   for (const f of facturas) {
     if (f.items.length === 0) continue;
+    // Sin cliente ligado no hay nada que re-facturar: el formulario necesita el
+    // receptor para arrancar. Pasa con los CFDIs que entran por descarga masiva
+    // del SAT y nunca se emparejaron con una fila de Customer — ofrecerlos
+    // dejaba tarjetas que al hacer clic sólo daban error.
+    if (!f.customerId) continue;
     const key = firmaFactura(f);
     const g = grupos.get(key);
     if (!g) {
