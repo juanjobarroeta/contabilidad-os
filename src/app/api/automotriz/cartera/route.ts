@@ -66,14 +66,18 @@ export const GET = withAuthz(async (req: Request) => {
       rfc: f.customer?.rfc ?? "—",
       facturas: 0, facturado: 0, pagado: 0, saldo: 0, repPendiente: 0, masAntigua: null,
     };
-    const pagado = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+    const conciliado = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
     const rep = f.uuid ? (amparado.get(normalizarUuid(f.uuid)) ?? 0) : 0;
+    // Evidencia de cobro/pago (misma regla que perfil-contacto): PUE queda
+    // pagada en su emisión; PPD por la mejor evidencia (REP o banco). Así la
+    // cartera es la real — sólo PPD sin amparar — aunque no haya bancos cargados.
+    const pagado = f.metodoPago === "PPD" ? Math.max(conciliado, rep) : f.total;
     const saldoFactura = Math.max(0, f.total - pagado);
     fila.facturas += 1;
     fila.facturado += f.total;
     fila.pagado += pagado;
     fila.saldo += saldoFactura;
-    if (f.metodoPago === "PPD") fila.repPendiente += Math.max(0, pagado - rep);
+    if (f.metodoPago === "PPD") fila.repPendiente += Math.max(0, conciliado - rep);
     if (saldoFactura > 1 && (!fila.masAntigua || f.fecha.toISOString() < fila.masAntigua)) {
       fila.masAntigua = f.fecha.toISOString();
     }
