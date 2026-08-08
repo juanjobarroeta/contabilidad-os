@@ -312,6 +312,44 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — conceptos que MENCIONAN un VIN 
   });
 });
 
+describe("derivarVehiculoDesdeCfdiSiAplica() — términos del proveedor (CondicionesDePago)", () => {
+  const compraConCredito = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I" CondicionesDePago="CREDITO 30 DIAS">
+    <cfdi:Conceptos>
+      <cfdi:Concepto ClaveProdServ="25101507" Descripcion="JAC FRISON 2026" Importe="445700.05">
+        <cfdi:ComplementoConcepto><ventavehiculos:VentaVehiculos xmlns:ventavehiculos="http://www.sat.gob.mx/ventavehiculos" ClaveVehicular="1621710" Niv="${VIN}"/></cfdi:ComplementoConcepto>
+      </cfdi:Concepto>
+    </cfdi:Conceptos>
+  </cfdi:Comprobante>`;
+
+  function conTerms(db: ReturnType<typeof fakeDb>, existentes: string[] = []) {
+    const terms: Array<Record<string, unknown>> = existentes.map((supplierId) => ({ id: `t-${supplierId}`, supplierId, diasCredito: 99 }));
+    (db as any)._terms = terms;
+    (db as any).supplierTerms = {
+      findUnique: async ({ where }: any) => terms.find((t) => t.supplierId === where.supplierId) ?? null,
+      create: async ({ data }: any) => { const row = { id: `t-${data.supplierId}`, ...data }; terms.push(row); return row; },
+    };
+    return db;
+  }
+
+  it("una compra a crédito crea SupplierTerms del proveedor (30 días)", async () => {
+    const db = conTerms(fakeDb());
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: compraConCredito(), supplierId: "sup1",
+    });
+    expect((db as any)._terms).toEqual([
+      expect.objectContaining({ supplierId: "sup1", tieneCredito: true, diasCredito: 30 }),
+    ]);
+  });
+
+  it("términos ya capturados nunca se pisan", async () => {
+    const db = conTerms(fakeDb(), ["sup1"]);
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: compraConCredito(), supplierId: "sup1",
+    });
+    expect((db as any)._terms).toEqual([expect.objectContaining({ diasCredito: 99 })]);
+  });
+});
+
 describe("derivarVehiculoDesdeCfdiSiAplica() — notas de crédito y número de motor", () => {
   const notaCredito = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="E">
     <cfdi:Conceptos>
