@@ -23,6 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { recordSyntageExtraction } from "@/lib/costos/record";
 import { planIncluyeSyntage } from "@/lib/planes";
 import { SyntageClient } from "@/lib/fiscal/cumplimiento/syntage/client";
+import { descargarXmlDeRef } from "@/lib/fiscal/cumplimiento/syntage/descarga-xml";
 import { importarCatalogo, importarBalanza } from "./ce-import-apply";
 
 type Json = Record<string, unknown>;
@@ -108,7 +109,8 @@ export async function leerEImportarContabilidadElectronicaSyntage(
     const rec = catalogos.reduce(masReciente);
     const ref = fileRefDe(rec);
     if (ref) {
-      const xml = await client.downloadFileText(ref);
+      // Los CE del SAT vienen como .zip — descargarXmlDeRef los abre.
+      const xml = await descargarXmlDeRef(client, ref);
       catalogo = await importarCatalogo(companyId, xml);
     }
   }
@@ -121,7 +123,7 @@ export async function leerEImportarContabilidadElectronicaSyntage(
     const rec = balanzas.reduce(masReciente);
     const ref = fileRefDe(rec);
     if (ref) {
-      const xml = await client.downloadFileText(ref);
+      const xml = await descargarXmlDeRef(client, ref);
       balanza = await importarBalanza(companyId, xml, { usar: "final" });
       balanzaPeriodo = periodoDe(rec);
     }

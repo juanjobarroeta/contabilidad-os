@@ -16,6 +16,7 @@ import { recordSyntageExtraction } from "@/lib/costos/record";
 import { planIncluyeSyntage } from "@/lib/planes";
 import { nivelPagoEmpresas, type NivelPago } from "@/lib/billing/pagadores";
 import { SyntageClient } from "./client";
+import { opcionesExtraccion } from "./periodos-extraccion";
 import {
   EXTRACTORES_PROVISION,
   debeArrancarCE,
@@ -197,8 +198,16 @@ async function provisionOne(
 
   // Dispara sólo las extracciones pendientes (cadencia). El resultado se lee con
   // el sync; cada disparo se mide en CostEvent (que a su vez alimenta la cadencia).
+  // Con periodo histórico explícito: sin `options.period` Syntage aplica su
+  // ventana default (corta). Pedir más años cuesta lo mismo por extracción.
   const results = await Promise.allSettled(
-    pendientes.map((extractor) => client.createExtraction({ extractor, entity: entityId })),
+    pendientes.map((extractor) =>
+      client.createExtraction({
+        extractor,
+        entity: entityId,
+        options: opcionesExtraccion(extractor, new Date()),
+      }),
+    ),
   );
   results.forEach((r, i) => {
     if (r.status === "fulfilled") void recordSyntageExtraction(pendientes[i], { companyId: c.id });
@@ -208,7 +217,11 @@ async function provisionOne(
   // sync; el costo se mide como CostEvent igual que las demás extracciones.
   if (arrancarCE) {
     try {
-      await client.createExtraction({ extractor: "electronic_accounting", entity: entityId });
+      await client.createExtraction({
+        extractor: "electronic_accounting",
+        entity: entityId,
+        options: opcionesExtraccion("electronic_accounting", new Date()),
+      });
       void recordSyntageExtraction("electronic_accounting", { companyId: c.id });
     } catch {
       // No rompemos el aprovisionamiento si el disparo de CE falla; el sync
