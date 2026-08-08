@@ -61,6 +61,30 @@ export interface DatosVehiculoCfdi {
   otrosConceptos: OtroConcepto[];
 }
 
+/** TipoDeComprobante del CFDI ("I", "E", "P", …) — null si no se encuentra. */
+export function tipoComprobanteDesdeCfdi(rawXml: string): string | null {
+  const el = rawXml.match(/<(?:[\w-]+:)?Comprobante\b([^>]*)>/i)?.[1];
+  if (!el) return null;
+  return attrDe(el, "TipoDeComprobante")?.trim().toUpperCase() ?? null;
+}
+
+/**
+ * Número de motor desde el texto del concepto ("No. Motor:", "NO MOTOR", "MOTOR:").
+ * El complemento VentaVehiculos no lo trae estructurado; las armadoras lo ponen
+ * en la descripción junto al VIN.
+ */
+export function numeroMotorDesdeTexto(texto: string | null | undefined): string | null {
+  if (!texto) return null;
+  const m = texto
+    .toUpperCase()
+    .match(/(?:N[OU]M?\.?\s*(?:DE\s*)?MOTOR|MOTOR)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]{4,19})\b/);
+  if (!m) return null;
+  const valor = m[1];
+  // Un VIN completo no es número de motor (la descripción suele traer ambos).
+  if (valor.length === 17 && esVinValido(valor)) return null;
+  return valor;
+}
+
 /**
  * Emisor del CFDI (RFC y nombre) — para resolver el proveedor canónico de una
  * compra sin cargar un parser completo (misma convención regex del repo).

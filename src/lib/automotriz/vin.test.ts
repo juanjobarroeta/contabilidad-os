@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { emisorDesdeCfdi } from "./vin";
+import { emisorDesdeCfdi, numeroMotorDesdeTexto, tipoComprobanteDesdeCfdi } from "./vin";
+
+describe("tipoComprobanteDesdeCfdi() y numeroMotorDesdeTexto()", () => {
+  it("extrae el TipoDeComprobante del nodo Comprobante", () => {
+    expect(tipoComprobanteDesdeCfdi(`<cfdi:Comprobante Version="4.0" TipoDeComprobante="E" Total="100">`)).toBe("E");
+    expect(tipoComprobanteDesdeCfdi(`<cfdi:Comprobante Version="4.0">`)).toBeNull();
+  });
+  it("número de motor desde el texto libre, sin confundirlo con el VIN", () => {
+    expect(numeroMotorDesdeTexto("JAC FRISON VIN: 3GALD255XTM007338 NO. MOTOR: 4GA3-1234567")).toBe("4GA3-1234567");
+    expect(numeroMotorDesdeTexto("MOTOR HFC4GA3-4D12345678")).toBe("HFC4GA3-4D12345678");
+    expect(numeroMotorDesdeTexto("NUM DE MOTOR 3GALD255XTM007338")).toBeNull(); // es un VIN
+    expect(numeroMotorDesdeTexto("VEHICULO SIN DATO")).toBeNull();
+  });
+});
 
 describe("emisorDesdeCfdi()", () => {
   it("extrae RFC y nombre del emisor sin importar el orden de atributos", () => {

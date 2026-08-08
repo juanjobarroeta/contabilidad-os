@@ -24,6 +24,8 @@ import {
   emisorDesdeCfdi,
   extraerDatosVehiculoCfdi,
   marcaDesdeTexto,
+  numeroMotorDesdeTexto,
+  tipoComprobanteDesdeCfdi,
   tipoCostoDesdeConcepto,
 } from "./vin";
 import { modeloLimpio } from "./claves";
@@ -110,6 +112,36 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   // Sólo compra/venta mueven inventario. TRASLADO/NOMINA/PAGO no aplican.
   if (!esVenta && !esCompra) return null;
 
+  // Nota de crédito (TipoDeComprobante "E"): un rebate/descuento del proveedor
+  // que referencia la unidad NETEA su costo (VehiculoCosto negativo) — jamás
+  // crea ni vende unidades. Una nota de crédito emitida A un cliente (lado
+  // INGRESO) no toca inventario.
+  if (tipoComprobanteDesdeCfdi(args.rawXml) === "E") {
+    if (!esCompra) return null;
+    let actualizadosNc = 0;
+    const vinsNc: string[] = [];
+    const referencias = [
+      ...datos.vehiculos.map((v) => ({ niv: v.niv, descripcion: v.descripcion, importe: v.importe })),
+      ...datos.otrosConceptos
+        .filter((c) => c.nivRef)
+        .map((c) => ({ niv: c.nivRef!, descripcion: c.descripcion, importe: c.importe })),
+    ];
+    if (referencias.length === 0) return null;
+    for (const [niv, items] of agrupa(referencias)) {
+      const unidad = await db.vehiculo.findUnique({
+        where: { companyId_vin: { companyId: args.companyId, vin: niv } },
+        select: { id: true },
+      });
+      if (!unidad) continue;
+      const agrego = await registrarNotaCredito(db, unidad.id, args, items);
+      if (agrego) {
+        actualizadosNc++;
+        vinsNc.push(niv);
+      }
+    }
+    return { creados: 0, actualizados: actualizadosNc, vins: vinsNc };
+  }
+
   // Costos de la unidad facturados APARTE de la compra (flete, seguro,
   // accesorios que mencionan el VIN): se atribuyen a la unidad existente.
   // Sólo en gastos — un INGRESO que menciona un VIN sin ser la unidad es
@@ -149,8 +181,19 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         autoCreado: true,
         marca: true,
         modelo: true,
+        numeroMotor: true,
       },
     });
+
+    // Número de motor: si la unidad no lo tiene y este CFDI lo menciona,
+    // se completa (misma filosofía que cliente/proveedor faltantes).
+    if (existente && !existente.numeroMotor) {
+      const nm = numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion);
+      if (nm) {
+        await db.vehiculo.update({ where: { id: existente.id }, data: { numeroMotor: nm } });
+        actualizados++;
+      }
+    }
 
     // Reparación de generales: una unidad auto-creada cuando el catálogo de
     // claves aún no estaba ingerido quedó "POR REVISAR". Si la clave ya está en
@@ -218,6 +261,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
           fechaCompra: args.fecha,
           compraInvoiceId: args.invoiceId,
           supplierId: await supplierId(),
+          numeroMotor: numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion),
           claveVehicular: v.claveVehicular ?? null,
           descripcionCfdi: v.descripcion ?? null,
           autoCreado: true,
@@ -269,6 +313,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         ventaInvoiceId: args.invoiceId,
         fechaVenta: args.fecha,
         clienteId: args.clienteId ?? null,
+        numeroMotor: numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion),
         claveVehicular: v.claveVehicular ?? null,
         descripcionCfdi: v.descripcion ?? null,
         autoCreado: true,
@@ -364,6 +409,47 @@ function costosDeUnidad(datos: ReturnType<typeof extraerDatosVehiculoCfdi>, niv:
   return datos.otrosConceptos.filter(
     (c) => c.nivRef === niv || (c.nivRef == null && datos.vehiculos.length === 1)
   );
+}
+
+function agrupa<T extends { niv: string }>(items: T[]): Map<string, T[]> {
+  const m = new Map<string, T[]>();
+  for (const it of items) {
+    const arr = m.get(it.niv) ?? [];
+    arr.push(it);
+    m.set(it.niv, arr);
+  }
+  return m;
+}
+
+/**
+ * Nota de crédito del proveedor sobre una unidad: cada concepto que la
+ * referencia se registra como VehiculoCosto NEGATIVO (netea el costo).
+ * Idempotente por (vehiculoId, invoiceId).
+ */
+async function registrarNotaCredito(
+  db: Db,
+  vehiculoId: string,
+  args: DerivarVehiculoArgs,
+  items: Array<{ descripcion: string | null; importe: number }>
+): Promise<boolean> {
+  const conMonto = items.filter((i) => i.importe > 0);
+  if (conMonto.length === 0) return false;
+  const yaHay = await db.vehiculoCosto.findFirst({
+    where: { vehiculoId, invoiceId: args.invoiceId },
+    select: { id: true },
+  });
+  if (yaHay) return false;
+  await db.vehiculoCosto.createMany({
+    data: conMonto.map((i) => ({
+      vehiculoId,
+      tipo: "OTRO" as const,
+      concepto: `Nota de crédito: ${i.descripcion ?? "descuento del proveedor"}`,
+      monto: -i.importe,
+      fecha: args.fecha,
+      invoiceId: args.invoiceId,
+    })),
+  });
+  return true;
 }
 
 function agrupaPorNiv(otros: Otros): Map<string, Otros> {
