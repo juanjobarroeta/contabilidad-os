@@ -71,7 +71,11 @@ async function handle(req: Request) {
   };
   const where = deep ? { ...comun, rawXml: { not: null } } : wherePendientes;
 
-  let lastId: string | undefined;
+  // Cursor para la pasada profunda: escanea TODO el universo, así que una sola
+  // corrida (4 min) no alcanza. `afterId` continúa donde quedó la anterior; la
+  // respuesta trae `nextAfterId` (null = el barrido llegó al final).
+  let lastId: string | undefined = url.searchParams.get("afterId") ?? undefined;
+  let barridoCompleto = true;
   let scanned = 0;
   let creados = 0;
   let actualizados = 0;
@@ -94,7 +98,11 @@ async function handle(req: Request) {
     return s.id;
   };
 
-  while (Date.now() - startedAt < TIME_BUDGET_MS) {
+  while (true) {
+    if (Date.now() - startedAt >= TIME_BUDGET_MS) {
+      barridoCompleto = false;
+      break;
+    }
     const page = await prisma.invoice.findMany({
       where: { ...where, ...(lastId ? { id: { gt: lastId } } : {}) },
       select: {
@@ -132,16 +140,30 @@ async function handle(req: Request) {
   // `remaining` siempre mide la cola normal (con prefiltro), que es la métrica
   // de convergencia; en deep el universo escaneado no converge a cero.
   const remaining = await prisma.invoice.count({ where: wherePendientes });
-  const summary = { ok: true, deep, limpieza, scanned, creados, actualizados, remaining, elapsedMs: Date.now() - startedAt };
+  const summary = {
+    ok: true,
+    deep,
+    limpieza,
+    scanned,
+    creados,
+    actualizados,
+    remaining,
+    // Sólo relevante en deep: pásalo como ?afterId=… en la siguiente llamada
+    // para continuar el barrido. null = ya recorrió todo el universo.
+    nextAfterId: deep && !barridoCompleto ? (lastId ?? null) : null,
+    elapsedMs: Date.now() - startedAt,
+  };
   console.log("[cron/vehiculos-backfill] done:", JSON.stringify(summary));
   return NextResponse.json(summary);
 }
 
 /**
- * Deshace las derivaciones fantasma de una empresa. Los mismos seis pasos del
- * script de limpieza, en SQL parametrizado (el editor de Railway no digiere
- * subqueries). Sólo toca unidades `autoCreado` y CFDIs con rawXml del SAT que
- * NO traen el complemento — nada capturado a mano.
+ * Deshace las derivaciones fantasma de una empresa. Un CFDI es "fantasma" si
+ * NO trae el complemento VentaVehiculos NI ningún concepto con clave de
+ * vehículo (2510xx) — el mismo candado del extractor. La exención 2510 importa:
+ * sin ella, esta limpieza desharía las compras legítimas sin complemento que
+ * el derivador acaba de crear y cada ciclo limpieza+deep se pelearía con el
+ * anterior (churn). Sólo toca unidades `autoCreado` — nada capturado a mano.
  */
 async function limpiarFantasmas(companyId: string) {
   // 1) Ventas ligadas a un CFDI que no ampara unidad → deshacer la venta.
@@ -152,15 +174,22 @@ async function limpiarFantasmas(companyId: string) {
     FROM "Invoice" i
     WHERE i.id = v."ventaInvoiceId" AND v."companyId" = ${companyId}
       AND v."autoCreado" AND i."rawXml" IS NOT NULL
-      AND i."rawXml" NOT LIKE '%VentaVehiculos%'`;
+      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'`;
 
-  // 2) Costos derivados de CFDIs sin complemento (la re-corrida los re-atribuye).
+  // 2) Costos fantasma: sólo los que el derivador VIEJO pegó desde la propia
+  //    factura de compra fantasma (c.invoiceId = compraInvoiceId). Los costos
+  //    por nivRef (flete/seguro facturado aparte) viven en OTRA factura y son
+  //    legítimos — no se tocan.
   const costos = await prisma.$executeRaw`
     DELETE FROM "VehiculoCosto" c
     USING "Invoice" i, "Vehiculo" v
     WHERE c."invoiceId" = i.id AND c."vehiculoId" = v.id
-      AND v."companyId" = ${companyId}
-      AND i."rawXml" IS NOT NULL AND i."rawXml" NOT LIKE '%VentaVehiculos%'`;
+      AND c."invoiceId" = v."compraInvoiceId"
+      AND v."companyId" = ${companyId} AND v."autoCreado"
+      AND i."rawXml" IS NOT NULL
+      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'`;
 
   // 3) Compras fantasma en unidades vendidas de verdad → sólo desligar la compra.
   const compras = await prisma.$executeRaw`
@@ -169,7 +198,9 @@ async function limpiarFantasmas(companyId: string) {
     FROM "Invoice" i
     WHERE i.id = v."compraInvoiceId" AND v."companyId" = ${companyId}
       AND v."autoCreado" AND i."rawXml" IS NOT NULL
-      AND i."rawXml" NOT LIKE '%VentaVehiculos%' AND v."ventaInvoiceId" IS NOT NULL`;
+      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'
+      AND v."ventaInvoiceId" IS NOT NULL`;
 
   // 4) Costos residuales de las unidades que van a borrarse en 5) y 6).
   await prisma.$executeRaw`
@@ -179,15 +210,19 @@ async function limpiarFantasmas(companyId: string) {
     WHERE c."vehiculoId" = v.id AND v."companyId" = ${companyId}
       AND v."autoCreado" AND v."ventaInvoiceId" IS NULL
       AND (v."compraInvoiceId" IS NULL
-           OR (i."rawXml" IS NOT NULL AND i."rawXml" NOT LIKE '%VentaVehiculos%'))`;
+           OR (i."rawXml" IS NOT NULL
+               AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+               AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))`;
 
-  // 5) Unidades fantasma no vendidas cuya "compra" no trae complemento.
+  // 5) Unidades fantasma no vendidas cuya "compra" no ampara vehículo.
   const unidades = await prisma.$executeRaw`
     DELETE FROM "Vehiculo" v
     USING "Invoice" i
     WHERE i.id = v."compraInvoiceId" AND v."companyId" = ${companyId}
       AND v."autoCreado" AND i."rawXml" IS NOT NULL
-      AND i."rawXml" NOT LIKE '%VentaVehiculos%' AND v."ventaInvoiceId" IS NULL`;
+      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'
+      AND v."ventaInvoiceId" IS NULL`;
 
   // 6) Unidades auto-creadas que quedaron sin ningún CFDI (nacieron de una
   //    venta fantasma deshecha en 1).
