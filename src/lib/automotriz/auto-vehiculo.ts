@@ -27,9 +27,11 @@ import {
   extraerDatosVehiculoCfdi,
   marcaDesdeTexto,
   numeroMotorDesdeTexto,
+  sustituyeUuidsDesdeCfdi,
   tipoComprobanteDesdeCfdi,
   tipoCostoDesdeConcepto,
 } from "./vin";
+import { normalizarUuid } from "@/lib/fiscal/uuid";
 import { modeloLimpio } from "./claves";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -231,6 +233,31 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
               if (args.rawXml) await registrarTermsProveedor(db, s, args.rawXml);
               actualizados++;
             }
+            continue;
+          }
+          // Refactura (TipoRelacion 04): este CFDI sustituye al ligado — la
+          // compra vigente es ÉSTA aunque la cancelación no esté marcada aún.
+          if (
+            existente.compraInvoiceId !== args.invoiceId &&
+            (await sustituyeAlLigado(db, args.rawXml, existente.compraInvoiceId))
+          ) {
+            await db.vehiculoCosto.deleteMany({
+              where: { vehiculoId: existente.id, invoiceId: existente.compraInvoiceId },
+            });
+            const sSust = await supplierId();
+            await db.vehiculo.update({
+              where: { id: existente.id },
+              data: {
+                compraInvoiceId: args.invoiceId,
+                costoCompra: v.importe,
+                fechaCompra: args.fecha,
+                supplierId: sSust ?? undefined,
+                claveVehicular: v.claveVehicular ?? undefined,
+              },
+            });
+            actualizados++;
+            await registrarCostosCompra(db, existente.id, args, costosDeUnidad(datos, v.niv));
+            continue;
           }
           continue;
         }
@@ -287,6 +314,25 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
       if (existente.ventaInvoiceId) {
         if (existente.ventaInvoiceId === args.invoiceId && args.clienteId && !existente.clienteId) {
           await db.vehiculo.update({ where: { id: existente.id }, data: { clienteId: args.clienteId } });
+          actualizados++;
+          continue;
+        }
+        // Refactura (TipoRelacion 04): esta venta sustituye a la ligada — el
+        // precio/cliente vigentes son los de ÉSTA (la anterior quedó muerta).
+        if (
+          existente.ventaInvoiceId !== args.invoiceId &&
+          (await sustituyeAlLigado(db, args.rawXml, existente.ventaInvoiceId))
+        ) {
+          await db.vehiculo.update({
+            where: { id: existente.id },
+            data: {
+              estado: "VENDIDO",
+              precioVenta: v.importe,
+              ventaInvoiceId: args.invoiceId,
+              fechaVenta: args.fecha,
+              clienteId: args.clienteId ?? undefined,
+            },
+          });
           actualizados++;
         }
         continue;
@@ -346,6 +392,23 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   }
 
   return { creados, actualizados, vins };
+}
+
+/**
+ * ¿Este CFDI sustituye (TipoRelacion 04) al invoice actualmente ligado?
+ * Sólo consulta la base cuando el CFDI trae la relación — el caso común
+ * (sin CfdiRelacionados) no cuesta nada.
+ */
+async function sustituyeAlLigado(db: Db, rawXml: string, invoiceIdLigado: string): Promise<boolean> {
+  const sustituye = sustituyeUuidsDesdeCfdi(rawXml);
+  if (sustituye.length === 0) return false;
+  const ligado = await db.invoice.findUnique({
+    where: { id: invoiceIdLigado },
+    select: { uuid: true },
+  });
+  if (!ligado?.uuid) return false;
+  const objetivo = normalizarUuid(ligado.uuid);
+  return sustituye.some((u) => normalizarUuid(u) === objetivo);
 }
 
 /**

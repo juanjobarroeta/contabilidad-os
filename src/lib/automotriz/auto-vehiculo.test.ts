@@ -312,6 +312,55 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — conceptos que MENCIONAN un VIN 
   });
 });
 
+describe("derivarVehiculoDesdeCfdiSiAplica() — refacturación (TipoRelacion 04)", () => {
+  const UUID_A = "AAAA1111-2222-3333-4444-555566667777";
+  const ventaConUuid = () => cfdiVenta(); // liga como inv-venta-a (uuid A en fake)
+  const refactura = (importe: number) => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:ventavehiculos="http://www.sat.gob.mx/ventavehiculos" TipoDeComprobante="I">
+    <cfdi:CfdiRelacionados TipoRelacion="04"><cfdi:CfdiRelacionado UUID="${UUID_A.toLowerCase()}"/></cfdi:CfdiRelacionados>
+    <cfdi:Conceptos>
+      <cfdi:Concepto ClaveProdServ="25101507" Descripcion="Unidad JAC FRISON T9 (refacturada)" Importe="${importe}">
+        <cfdi:ComplementoConcepto><ventavehiculos:VentaVehiculos ClaveVehicular="1621710" Niv="${VIN}"/></cfdi:ComplementoConcepto>
+      </cfdi:Concepto>
+    </cfdi:Conceptos>
+  </cfdi:Comprobante>`;
+
+  function conInvoices(db: ReturnType<typeof fakeDb>, uuids: Record<string, string>) {
+    (db as any).invoice = {
+      findUnique: async ({ where }: any) => (uuids[where.id] ? { uuid: uuids[where.id] } : null),
+    };
+    (db as any).vehiculoCosto.deleteMany = async ({ where }: any) => {
+      const antes = db._costos.length;
+      for (let i = db._costos.length - 1; i >= 0; i--) {
+        if (db._costos[i].vehiculoId === where.vehiculoId && db._costos[i].invoiceId === where.invoiceId) db._costos.splice(i, 1);
+      }
+      return { count: antes - db._costos.length };
+    };
+    return db;
+  }
+
+  it("la refactura que SUSTITUYE a la venta ligada se re-liga (precio y factura vigentes)", async () => {
+    const db = conInvoices(fakeDb(), { "inv-venta-a": UUID_A });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-venta-a", tipo: "INGRESO", rawXml: ventaConUuid(), clienteId: "cli-err",
+    });
+    // Otra venta del MISMO VIN sin relación 04 (p. ej. factura a financiera): NO re-liga.
+    const r0 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-venta-x", tipo: "INGRESO", rawXml: ventaConUuid(),
+    });
+    expect(r0?.actualizados).toBe(0);
+    expect([...db._vehiculos.values()][0].ventaInvoiceId).toBe("inv-venta-a");
+
+    // La refactura con TipoRelacion 04 → UUID A sí re-liga, con su precio.
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-refactura", tipo: "INGRESO", rawXml: refactura(560000), clienteId: "cli-bien",
+    });
+    expect(r?.actualizados).toBe(1);
+    expect([...db._vehiculos.values()][0]).toMatchObject({
+      ventaInvoiceId: "inv-refactura", precioVenta: 560000, clienteId: "cli-bien", estado: "VENDIDO",
+    });
+  });
+});
+
 describe("derivarVehiculoDesdeCfdiSiAplica() — términos del proveedor (CondicionesDePago)", () => {
   const compraConCredito = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I" CondicionesDePago="CREDITO 30 DIAS">
     <cfdi:Conceptos>
