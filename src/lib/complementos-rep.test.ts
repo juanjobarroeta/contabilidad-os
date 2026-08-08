@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeRepDoctoRelacionado, round2, type RepParentTax } from "./complementos-rep";
+import { computeRepDoctoRelacionado, round2, type RepParentTax, sintetizarParentTaxes } from "./complementos-rep";
 
 const IVA16: RepParentTax = { tipo: "IVA", factor: "TASA", tasa: 0.16, base: 1000, importe: 160, retencion: false };
 
@@ -159,5 +159,38 @@ describe("computeRepDoctoRelacionado — casos de impuestos", () => {
     if (!r.ok) return;
     expect(r.docto.traslados).toHaveLength(0);
     expect(r.docto.objetoImp).toBe("01");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sintetizarParentTaxes — fallback cuando el padre no tiene filas de impuesto
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("sintetizarParentTaxes", () => {
+  it("deriva IVA 16% del delta subtotal/total (caso real: 2,586.21 → 3,000.00)", () => {
+    const rows = sintetizarParentTaxes(2586.21, 3000)!;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ tipo: "IVA", factor: "TASA", tasa: 0.16, base: 2586.21, importe: 413.79 });
+  });
+
+  it("reconoce la tasa fronteriza del 8%", () => {
+    const rows = sintetizarParentTaxes(1000, 1080)!;
+    expect(rows[0].tasa).toBe(0.08);
+  });
+
+  it("sin delta no hay impuestos que desglosar", () => {
+    expect(sintetizarParentTaxes(1000, 1000)).toEqual([]);
+    expect(sintetizarParentTaxes(1000, 1000.005)).toEqual([]);
+  });
+
+  it("NO inventa cuando el delta no cuadra con una tasa conocida", () => {
+    expect(sintetizarParentTaxes(1000, 1100)).toBeNull(); // 10%: mezcla o retención
+    expect(sintetizarParentTaxes(1000, 900)).toBeNull(); // delta negativo (retenciones)
+    expect(sintetizarParentTaxes(0, 160)).toBeNull(); // subtotal 0
+  });
+
+  it("tolera el redondeo por partida (±2 centavos)", () => {
+    expect(sintetizarParentTaxes(2586.21, 3000.01)).not.toBeNull();
+    expect(sintetizarParentTaxes(2586.21, 3000.05)).toBeNull();
   });
 });

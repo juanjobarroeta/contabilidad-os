@@ -13,7 +13,7 @@ import { SyntageClient } from "./client";
 import {
   mapTaxCompliance,
   mapTaxStatus,
-  mapTaxReturnAnual,
+  anualesAutoritativas, mapTaxReturnAnual,
   camposAnualDesdeAcuse,
   mergeCamposAnual,
   type CamposAnualAcuse,
@@ -48,6 +48,8 @@ export interface SyncResult {
    */
   declaracionesAnuales?: {
     creadas: number;
+    /** Filas ya existentes SUSTITUIDAS por una complementaria más reciente. */
+    complementariasAplicadas?: number;
     reparse?: { periodo: string; resultado: string; pdfKb: number | null }[];
   } | null;
   /**
@@ -120,10 +122,12 @@ async function persistDeclaracionesAnuales(
 ): Promise<NonNullable<SyncResult["declaracionesAnuales"]>> {
   const returns = await client.getEntityTaxReturns(entityId);
   let creadas = 0;
+  let complementariasAplicadas = 0;
   const reparse: { periodo: string; resultado: string; pdfKb: number | null }[] = [];
-  for (const tr of returns) {
-    const anual = mapTaxReturnAnual(tr);
-    if (!anual) continue;
+  // UNA declaración por ejercicio: la vigente ante el SAT (complementaria más
+  // reciente si existe). Iterar todos los returns procesaba "el primero que
+  // viniera" y las complementarias posteriores jamás sustituían a la normal.
+  for (const { tr, anual } of anualesAutoritativas(returns)) {
     const periodo = String(anual.ejercicio);
     const existing = await prisma.taxDeclaration.findFirst({
       where: { companyId, tipo: "DECLARACION_ANUAL", periodo },
@@ -134,8 +138,52 @@ async function persistDeclaracionesAnuales(
         isrCoeficienteUtilidad: true,
         isrPerdidaPendiente: true,
         acusePdf: true,
+        fechaPresentacion: true,
       },
     });
+
+    // ¿La fila guardada quedó SUPERADA por una presentación más reciente
+    // (complementaria)? Se detecta por fecha: la fila conserva la fecha del
+    // acuse del que nació, y la autoritativa trae la de la última presentada.
+    const fechaAutoritativa = anual.fechaPresentacion ? new Date(anual.fechaPresentacion) : null;
+    const superada =
+      existing != null &&
+      fechaAutoritativa != null &&
+      (existing.fechaPresentacion == null ||
+        existing.fechaPresentacion.getTime() < fechaAutoritativa.getTime());
+
+    if (existing && superada) {
+      // Sustituir: bajar el PDF de la complementaria, actualizar los campos del
+      // return y re-parsear — el merge deja que lo extraído no-null gane, así
+      // el coeficiente y las pérdidas pasan a ser los de la última presentada.
+      const ref = fileRefDe(tr as Record<string, unknown>);
+      let pdf: Uint8Array<ArrayBuffer> | null = null;
+      if (ref) {
+        try {
+          pdf = new Uint8Array((await client.downloadAcuse(ref)).data);
+        } catch {
+          pdf = null; // sin red: el siguiente sync reintenta (la fecha no se toca)
+        }
+      }
+      if (pdf) {
+        await prisma.taxDeclaration.update({
+          where: { id: existing.id },
+          data: {
+            acusePdf: pdf,
+            acusePdfNombre: `acuse-anual-${periodo}.pdf`,
+            isrPagar: anual.isrPagar,
+            lineaCaptura: anual.lineaCaptura ?? null,
+            fechaPresentacion: fechaAutoritativa,
+          },
+        });
+        const resultado = await enriquecerAnualDesdePdf(existing.id, companyId, pdf, existing);
+        complementariasAplicadas++;
+        if (opts.reparseAnuales) {
+          reparse.push({ periodo, resultado: `complementaria: ${resultado}`, pdfKb: Math.round(pdf.byteLength / 1024) });
+        }
+      }
+      continue;
+    }
 
     if (existing) {
       // Gap-fill del PDF: el acuse se descargaba SOLO al crear la fila
@@ -222,7 +270,7 @@ async function persistDeclaracionesAnuales(
     }
     creadas++;
   }
-  return { creadas, ...(opts.reparseAnuales ? { reparse } : {}) };
+  return { creadas, complementariasAplicadas, ...(opts.reparseAnuales ? { reparse } : {}) };
 }
 
 export async function syncCompanyComplianceSyntage(
