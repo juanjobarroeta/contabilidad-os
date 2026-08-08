@@ -198,6 +198,7 @@ export async function PATCH(req: Request, { params }: Params) {
     // Con la firma recién guardada, el backfill de CFDIs arranca YA (primer
     // envío de solicitudes al SAT) en vez de esperar al siguiente tick.
     kickCron("sat-backfill");
+    kickCron("declaraciones-backfill", 90_000);
   }
 
   return NextResponse.json({ ok: true, facturapi, syntage });
