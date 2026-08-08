@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { derivarVehiculoDesdeCfdiSiAplica } from "./auto-vehiculo";
+import { derivarVehiculoDesdeCfdiSiAplica, derivarVehiculoInline } from "./auto-vehiculo";
 
 const VIN = "3GALD255XTM007338";
 
@@ -309,6 +309,57 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — conceptos que MENCIONAN un VIN 
     });
     expect(r?.creados).toBe(1);
     expect([...db._vehiculos.values()][0]).toMatchObject({ vin: VIN, estado: "DISPONIBLE", costoCompra: 445700.05 });
+  });
+});
+
+describe("derivarVehiculoInline() — gate de módulo y proveedor por emisor", () => {
+  const conXmlEmisor = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I">
+    <cfdi:Emisor Rfc="GML040609615" Nombre="GIANT MOTORS" RegimenFiscal="601"/>
+    <cfdi:Conceptos>
+      <cfdi:Concepto ClaveProdServ="25101507" Descripcion="JAC FRISON 2026 VIN: ${VIN}" Importe="445700.05">
+        <cfdi:ComplementoConcepto><ventavehiculos:VentaVehiculos xmlns:ventavehiculos="http://www.sat.gob.mx/ventavehiculos" ClaveVehicular="1621710" Niv="${VIN}"/></cfdi:ComplementoConcepto>
+      </cfdi:Concepto>
+    </cfdi:Conceptos>
+  </cfdi:Comprobante>`;
+
+  function fakeDbConModulo(habilitado: boolean, companyId: string) {
+    const db = fakeDb() as any;
+    db.companyModule = {
+      findFirst: async ({ where }: any) =>
+        habilitado && where.companyId === companyId ? { id: "cm1" } : null,
+    };
+    db._suppliers = [] as Array<Record<string, unknown>>;
+    db.supplier = {
+      upsert: async ({ where, create }: any) => {
+        const found = db._suppliers.find(
+          (s: any) => s.companyId === where.companyId_rfc.companyId && s.rfc === where.companyId_rfc.rfc
+        );
+        if (found) return { id: found.id };
+        const row = { id: `sup_${db._suppliers.length + 1}`, ...create };
+        db._suppliers.push(row);
+        return { id: row.id };
+      },
+    };
+    return db;
+  }
+
+  it("sin el módulo AUTOMOTRIZ no deriva nada", async () => {
+    const db = fakeDbConModulo(false, "c-sin");
+    const r = await derivarVehiculoInline(db as never, {
+      companyId: "c-sin", invoiceId: "i1", tipo: "EGRESO", fecha: base.fecha, rawXml: conXmlEmisor(),
+    });
+    expect(r).toBeNull();
+    expect(db._vehiculos.size).toBe(0);
+  });
+
+  it("con el módulo, deriva y resuelve el proveedor por el RFC del emisor", async () => {
+    const db = fakeDbConModulo(true, "c-auto");
+    const r = await derivarVehiculoInline(db as never, {
+      companyId: "c-auto", invoiceId: "i1", tipo: "EGRESO", fecha: base.fecha, rawXml: conXmlEmisor(),
+    });
+    expect(r?.creados).toBe(1);
+    expect(db._suppliers[0]).toMatchObject({ rfc: "GML040609615", razonSocial: "GIANT MOTORS" });
+    expect([...db._vehiculos.values()][0]).toMatchObject({ supplierId: "sup_1" });
   });
 });
 

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { parseCfdiXml } from "@/lib/sat-fiel";
 import { clasificarCfdi } from "@/lib/fiscal/clasificar-cfdi";
 import { crearActivoDesdeCfdiSiAplica } from "@/lib/fiscal/auto-activo";
+import { derivarVehiculoInline } from "@/lib/automotriz/auto-vehiculo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Record a CFDI from an uploaded file as an Invoice (NOT Facturapi-stamped —
@@ -152,6 +153,16 @@ export async function importCfdiFromXml(opts: {
       usoEsDefault: !cfdi.usoCfdi,
       items: cfdi.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
     },
+  });
+
+  // Inventario automotriz inline — misma derivación que el sync del SAT.
+  await derivarVehiculoInline(prisma, {
+    companyId,
+    invoiceId: invoice.id,
+    tipo,
+    fecha: new Date(cfdi.fecha),
+    rawXml: xml,
+    clienteId: tipo === "INGRESO" ? customerId : null,
   });
 
   // Complemento de pago links (DoctoRelacionado), same as SAT import.

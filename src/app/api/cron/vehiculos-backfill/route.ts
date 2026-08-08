@@ -58,6 +58,9 @@ async function handle(req: Request) {
 
   const comun = {
     tipo: { in: ["INGRESO", "EGRESO"] as InvoiceType[] },
+    // Un CFDI cancelado no mueve inventario (una venta cancelada y refacturada
+    // ligaría la unidad a la factura muerta) y tampoco debe contar en la cola.
+    status: { not: "CANCELLED" as const },
     company: { modules: { some: { modulo: "AUTOMOTRIZ" as ModuloApp, habilitado: true } } },
     ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
   };
@@ -173,9 +176,11 @@ async function limpiarFantasmas(companyId: string) {
         "fechaVenta" = NULL, "clienteId" = NULL
     FROM "Invoice" i
     WHERE i.id = v."ventaInvoiceId" AND v."companyId" = ${companyId}
-      AND v."autoCreado" AND i."rawXml" IS NOT NULL
-      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
-      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'`;
+      AND v."autoCreado"
+      AND (i."status" = 'CANCELLED'
+           OR (i."rawXml" IS NOT NULL
+               AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+               AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))`;
 
   // 2) Costos fantasma: sólo los que el derivador VIEJO pegó desde la propia
   //    factura de compra fantasma (c.invoiceId = compraInvoiceId). Los costos
@@ -187,9 +192,10 @@ async function limpiarFantasmas(companyId: string) {
     WHERE c."invoiceId" = i.id AND c."vehiculoId" = v.id
       AND c."invoiceId" = v."compraInvoiceId"
       AND v."companyId" = ${companyId} AND v."autoCreado"
-      AND i."rawXml" IS NOT NULL
-      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
-      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'`;
+      AND (i."status" = 'CANCELLED'
+           OR (i."rawXml" IS NOT NULL
+               AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+               AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))`;
 
   // 3) Compras fantasma en unidades vendidas de verdad → sólo desligar la compra.
   const compras = await prisma.$executeRaw`
@@ -197,9 +203,11 @@ async function limpiarFantasmas(companyId: string) {
     SET "compraInvoiceId" = NULL, "costoCompra" = 0, "fechaCompra" = NULL, "supplierId" = NULL
     FROM "Invoice" i
     WHERE i.id = v."compraInvoiceId" AND v."companyId" = ${companyId}
-      AND v."autoCreado" AND i."rawXml" IS NOT NULL
-      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
-      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'
+      AND v."autoCreado"
+      AND (i."status" = 'CANCELLED'
+           OR (i."rawXml" IS NOT NULL
+               AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+               AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))
       AND v."ventaInvoiceId" IS NOT NULL`;
 
   // 4) Costos residuales de las unidades que van a borrarse en 5) y 6).
@@ -210,6 +218,7 @@ async function limpiarFantasmas(companyId: string) {
     WHERE c."vehiculoId" = v.id AND v."companyId" = ${companyId}
       AND v."autoCreado" AND v."ventaInvoiceId" IS NULL
       AND (v."compraInvoiceId" IS NULL
+           OR i."status" = 'CANCELLED'
            OR (i."rawXml" IS NOT NULL
                AND i."rawXml" NOT LIKE '%VentaVehiculos%'
                AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))`;
@@ -219,9 +228,11 @@ async function limpiarFantasmas(companyId: string) {
     DELETE FROM "Vehiculo" v
     USING "Invoice" i
     WHERE i.id = v."compraInvoiceId" AND v."companyId" = ${companyId}
-      AND v."autoCreado" AND i."rawXml" IS NOT NULL
-      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
-      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'
+      AND v."autoCreado"
+      AND (i."status" = 'CANCELLED'
+           OR (i."rawXml" IS NOT NULL
+               AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+               AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))
       AND v."ventaInvoiceId" IS NULL`;
 
   // 6) Unidades auto-creadas que quedaron sin ningún CFDI (nacieron de una
