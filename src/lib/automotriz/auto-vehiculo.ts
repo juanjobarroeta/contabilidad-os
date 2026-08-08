@@ -122,8 +122,32 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         ventaInvoiceId: true,
         supplierId: true,
         clienteId: true,
+        autoCreado: true,
+        marca: true,
+        modelo: true,
       },
     });
+
+    // Reparación de generales: una unidad auto-creada cuando el catálogo de
+    // claves aún no estaba ingerido quedó "POR REVISAR". Si la clave ya está en
+    // el catálogo (o la heurística hoy da algo mejor), se re-nombra. Nunca toca
+    // unidades editadas a mano (autoCreado=false).
+    if (
+      existente?.autoCreado &&
+      (existente.marca === "POR REVISAR" || existente.modelo === "POR REVISAR")
+    ) {
+      const g = await generalesParaUnidad(db, v, anioFallback);
+      if (
+        (g.marca !== "POR REVISAR" && g.marca !== existente.marca) ||
+        (g.modelo !== "POR REVISAR" && g.modelo !== existente.modelo)
+      ) {
+        await db.vehiculo.update({
+          where: { id: existente.id },
+          data: { marca: g.marca, modelo: g.modelo, version: g.version ?? undefined },
+        });
+        actualizados++;
+      }
+    }
 
     if (esCompra) {
       if (existente) {
