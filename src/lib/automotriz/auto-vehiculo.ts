@@ -38,6 +38,10 @@ export interface DerivarVehiculoArgs {
   rawXml: string | null;
   /** Proveedor canónico (emisor) en una compra, si el import ya lo resolvió. */
   supplierId?: string | null;
+  /** Resolver perezoso del proveedor (find-or-create por RFC del emisor):
+   *  se invoca UNA vez y sólo cuando de verdad se va a ligar una compra —
+   *  así el backfill no crea Suppliers para gastos que no amparan unidades. */
+  resolverSupplierId?: () => Promise<string | null>;
   /** Cliente canónico (receptor) en una venta, si el import ya lo resolvió. */
   clienteId?: string | null;
 }
@@ -121,6 +125,15 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   let actualizados = 0;
   const vins: string[] = [];
 
+  // Proveedor: el valor explícito gana; si no, el resolver perezoso (memoizado).
+  let supplierMemo: string | null | undefined = args.supplierId;
+  const supplierId = async (): Promise<string | null> => {
+    if (supplierMemo === undefined) {
+      supplierMemo = (await args.resolverSupplierId?.()) ?? null;
+    }
+    return supplierMemo;
+  };
+
   for (const v of datos.vehiculos) {
     vins.push(v.niv);
     const existente = await db.vehiculo.findUnique({
@@ -165,9 +178,12 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         // la primera pasada le faltó el proveedor (se resolvió después), una
         // re-corrida lo completa sin tocar nada más.
         if (existente.compraInvoiceId) {
-          if (existente.compraInvoiceId === args.invoiceId && args.supplierId && !existente.supplierId) {
-            await db.vehiculo.update({ where: { id: existente.id }, data: { supplierId: args.supplierId } });
-            actualizados++;
+          if (existente.compraInvoiceId === args.invoiceId && !existente.supplierId) {
+            const s = await supplierId();
+            if (s) {
+              await db.vehiculo.update({ where: { id: existente.id }, data: { supplierId: s } });
+              actualizados++;
+            }
           }
           continue;
         }
@@ -177,7 +193,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
             compraInvoiceId: args.invoiceId,
             costoCompra: v.importe,
             fechaCompra: args.fecha,
-            supplierId: args.supplierId ?? undefined,
+            supplierId: (await supplierId()) ?? undefined,
             claveVehicular: v.claveVehicular ?? undefined,
             descripcionCfdi: v.descripcion ?? undefined,
           },
@@ -200,7 +216,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
           costoCompra: v.importe,
           fechaCompra: args.fecha,
           compraInvoiceId: args.invoiceId,
-          supplierId: args.supplierId ?? null,
+          supplierId: await supplierId(),
           claveVehicular: v.claveVehicular ?? null,
           descripcionCfdi: v.descripcion ?? null,
           autoCreado: true,

@@ -3,6 +3,7 @@ import type { InvoiceType, ModuloApp } from "@prisma/client";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { derivarVehiculoDesdeCfdiSiAplica } from "@/lib/automotriz/auto-vehiculo";
+import { emisorDesdeCfdi } from "@/lib/automotriz/vin";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/vehiculos-backfill
@@ -74,6 +75,24 @@ async function handle(req: Request) {
   let scanned = 0;
   let creados = 0;
   let actualizados = 0;
+  // Cache por corrida: (companyId|rfc emisor) → Supplier.id. El resolver es
+  // perezoso — el derivador sólo lo invoca cuando de verdad liga una compra.
+  const supplierCache = new Map<string, string>();
+  const resolverSupplier = (companyId: string, rawXml: string) => async () => {
+    const emisor = emisorDesdeCfdi(rawXml);
+    if (!emisor) return null;
+    const key = `${companyId}|${emisor.rfc}`;
+    const cached = supplierCache.get(key);
+    if (cached) return cached;
+    const s = await prisma.supplier.upsert({
+      where: { companyId_rfc: { companyId, rfc: emisor.rfc } },
+      create: { companyId, rfc: emisor.rfc, razonSocial: emisor.nombre ?? emisor.rfc },
+      update: {},
+      select: { id: true },
+    });
+    supplierCache.set(key, s.id);
+    return s.id;
+  };
 
   while (Date.now() - startedAt < TIME_BUDGET_MS) {
     const page = await prisma.invoice.findMany({
@@ -94,9 +113,11 @@ async function handle(req: Request) {
         tipo: inv.tipo,
         fecha: inv.fecha,
         rawXml: inv.rawXml,
-        // En una venta el receptor canónico es el cliente. El proveedor de una
-        // compra (emisor) se resuelve en una enriquecedora posterior.
+        // En una venta el receptor canónico es el cliente; en una compra, el
+        // emisor se resuelve (find-or-create por RFC) sólo si liga una unidad.
         clienteId: inv.tipo === "INGRESO" ? inv.customerId : null,
+        resolverSupplierId:
+          inv.tipo === "EGRESO" && inv.rawXml ? resolverSupplier(inv.companyId, inv.rawXml) : undefined,
       });
       if (r) {
         creados += r.creados;

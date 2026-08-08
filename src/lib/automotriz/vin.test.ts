@@ -1,4 +1,16 @@
 import { describe, it, expect } from "vitest";
+import { emisorDesdeCfdi } from "./vin";
+
+describe("emisorDesdeCfdi()", () => {
+  it("extrae RFC y nombre del emisor sin importar el orden de atributos", () => {
+    expect(emisorDesdeCfdi(`<cfdi:Emisor Nombre="GIANT MOTORS" Rfc="GML040609615" RegimenFiscal="601"/>`))
+      .toEqual({ rfc: "GML040609615", nombre: "GIANT MOTORS" });
+  });
+  it("null sin emisor o con RFC inválido", () => {
+    expect(emisorDesdeCfdi(`<cfdi:Comprobante/>`)).toBeNull();
+    expect(emisorDesdeCfdi(`<cfdi:Emisor Rfc="XX" Nombre="X"/>`)).toBeNull();
+  });
+});
 import {
   esVinValido,
   extraerDatosVehiculoCfdi,

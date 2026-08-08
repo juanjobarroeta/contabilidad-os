@@ -161,6 +161,26 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — venta y round-trip", () => {
     expect([...db._vehiculos.values()][0].clienteId).toBe("cli1");
   });
 
+  it("resolver perezoso: la compra liga el proveedor find-or-create sólo cuando aplica", async () => {
+    const db = fakeDb();
+    let llamadas = 0;
+    const resolverSupplierId = async () => { llamadas++; return "sup-lazy" }
+
+    // CFDI sin vehículos: el resolver NO se invoca (no crear proveedores de más).
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-gasto", tipo: "EGRESO", resolverSupplierId,
+      rawXml: `<cfdi:Comprobante><cfdi:Conceptos><cfdi:Concepto Descripcion="Papeleria" Importe="100"/></cfdi:Conceptos></cfdi:Comprobante>`,
+    });
+    expect(llamadas).toBe(0);
+
+    // Compra real: se invoca una vez y liga el proveedor.
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(), resolverSupplierId,
+    });
+    expect(llamadas).toBe(1);
+    expect([...db._vehiculos.values()][0]).toMatchObject({ supplierId: "sup-lazy" });
+  });
+
   it("enriquecimiento: re-procesar la compra con proveedor ya resuelto completa supplierId", async () => {
     const db = fakeDb();
     const args = { ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra() };
