@@ -20,7 +20,9 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
+  condicionesDePagoDesdeCfdi,
   datosGeneralesDesdeCfdi,
+  diasCreditoDesdeCondiciones,
   emisorDesdeCfdi,
   extraerDatosVehiculoCfdi,
   marcaDesdeTexto,
@@ -226,18 +228,21 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
             const s = await supplierId();
             if (s) {
               await db.vehiculo.update({ where: { id: existente.id }, data: { supplierId: s } });
+              if (args.rawXml) await registrarTermsProveedor(db, s, args.rawXml);
               actualizados++;
             }
           }
           continue;
         }
+        const supLiga = await supplierId();
+        if (supLiga && args.rawXml) await registrarTermsProveedor(db, supLiga, args.rawXml);
         await db.vehiculo.update({
           where: { id: existente.id },
           data: {
             compraInvoiceId: args.invoiceId,
             costoCompra: v.importe,
             fechaCompra: args.fecha,
-            supplierId: (await supplierId()) ?? undefined,
+            supplierId: supLiga ?? undefined,
             claveVehicular: v.claveVehicular ?? undefined,
             descripcionCfdi: v.descripcion ?? undefined,
           },
@@ -247,6 +252,8 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         continue;
       }
       const g = await generalesParaUnidad(db, v, anioFallback);
+      const supNuevo = await supplierId();
+      if (supNuevo && args.rawXml) await registrarTermsProveedor(db, supNuevo, args.rawXml);
       const creado = await db.vehiculo.create({
         data: {
           companyId: args.companyId,
@@ -260,7 +267,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
           costoCompra: v.importe,
           fechaCompra: args.fecha,
           compraInvoiceId: args.invoiceId,
-          supplierId: await supplierId(),
+          supplierId: supNuevo,
           numeroMotor: numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion),
           claveVehicular: v.claveVehicular ?? null,
           descripcionCfdi: v.descripcion ?? null,
@@ -339,6 +346,21 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   }
 
   return { creados, actualizados, vins };
+}
+
+/**
+ * Términos del proveedor desde CondicionesDePago del CFDI de compra
+ * ("CRÉDITO 30 DÍAS" → SupplierTerms.diasCredito=30). SOLO crea cuando el
+ * proveedor no tiene términos — lo capturado a mano nunca se pisa.
+ */
+async function registrarTermsProveedor(db: Db, supplierId: string, rawXml: string): Promise<void> {
+  const dias = diasCreditoDesdeCondiciones(condicionesDePagoDesdeCfdi(rawXml));
+  if (dias == null) return;
+  const ya = await db.supplierTerms.findUnique({ where: { supplierId }, select: { id: true } });
+  if (ya) return;
+  await db.supplierTerms.create({
+    data: { supplierId, tieneCredito: dias > 0, diasCredito: dias },
+  });
 }
 
 /** Proveedor canónico por el RFC del emisor del CFDI (find-or-create). */

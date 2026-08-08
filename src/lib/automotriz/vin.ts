@@ -61,6 +61,26 @@ export interface DatosVehiculoCfdi {
   otrosConceptos: OtroConcepto[];
 }
 
+/** CondicionesDePago del nodo Comprobante — texto libre ("CRÉDITO 30 DÍAS"). */
+export function condicionesDePagoDesdeCfdi(rawXml: string): string | null {
+  const el = rawXml.match(/<(?:[\w-]+:)?Comprobante\b([^>]*)>/i)?.[1];
+  if (!el) return null;
+  return attrDe(el, "CondicionesDePago");
+}
+
+/**
+ * Días de crédito desde el texto de CondicionesDePago: "CRÉDITO 30 DÍAS" → 30,
+ * "CONTADO" → 0, texto sin señal → null (no se sabe).
+ */
+export function diasCreditoDesdeCondiciones(texto: string | null | undefined): number | null {
+  if (!texto) return null;
+  const t = texto.toUpperCase();
+  const m = t.match(/(\d{1,3})\s*D[ÍI]AS?/);
+  if (m) return Number(m[1]);
+  if (/\bCONTADO\b|UNA\s+SOLA\s+EXHIBICI[ÓO]N/.test(t)) return 0;
+  return null;
+}
+
 /** TipoDeComprobante del CFDI ("I", "E", "P", …) — null si no se encuentra. */
 export function tipoComprobanteDesdeCfdi(rawXml: string): string | null {
   const el = rawXml.match(/<(?:[\w-]+:)?Comprobante\b([^>]*)>/i)?.[1];
