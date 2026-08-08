@@ -61,6 +61,24 @@ export interface DatosVehiculoCfdi {
   otrosConceptos: OtroConcepto[];
 }
 
+/**
+ * UUIDs que este CFDI SUSTITUYE (CfdiRelacionados TipoRelacion="04").
+ * Una refactura válida apunta así a la factura que reemplaza — señal firme
+ * para re-ligar la unidad aunque la cancelación aún no esté marcada.
+ */
+export function sustituyeUuidsDesdeCfdi(rawXml: string): string[] {
+  const out: string[] = [];
+  const re = /<(?:[\w-]+:)?CfdiRelacionados\b([^>]*)>([\s\S]*?)<\/(?:[\w-]+:)?CfdiRelacionados>/gi;
+  for (const m of rawXml.matchAll(re)) {
+    if (attrDe(m[1] ?? "", "TipoRelacion") !== "04") continue;
+    for (const r of (m[2] ?? "").matchAll(/<(?:[\w-]+:)?CfdiRelacionado\b([^>]*)\/?>/gi)) {
+      const uuid = attrDe(r[1] ?? "", "UUID");
+      if (uuid) out.push(uuid.trim().toUpperCase());
+    }
+  }
+  return out;
+}
+
 /** CondicionesDePago del nodo Comprobante — texto libre ("CRÉDITO 30 DÍAS"). */
 export function condicionesDePagoDesdeCfdi(rawXml: string): string | null {
   const el = rawXml.match(/<(?:[\w-]+:)?Comprobante\b([^>]*)>/i)?.[1];
