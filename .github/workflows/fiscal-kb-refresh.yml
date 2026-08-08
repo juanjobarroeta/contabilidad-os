@@ -6,7 +6,7 @@ name: Fiscal KB refresh (weekly re-ingest)
 # skipped, so re-running weekly is cheap; only a changed law re-embeds.
 #
 # Mirrors the FUENTES with metodo "auto" in src/lib/fiscal/sources.ts.
-# Requires repo secrets CRON_SECRET and STAGING_URL (same as sat-sync.yml).
+# Requires repo secrets CRON_SECRET and STAGING_URL (same as the other crons).
 #
 # NOTE: GitHub only runs `schedule:` triggers from the DEFAULT branch (main).
 # Use "Run workflow" (workflow_dispatch) to trigger manually.

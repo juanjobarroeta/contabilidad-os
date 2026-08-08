@@ -3,7 +3,7 @@ name: Recordatorio de declaraciones (entre semana)
 # Push agregado de acuses faltantes: un aviso por usuario suscrito mientras
 # falten declaraciones por capturar. Sólo entre semana para no fastidiar.
 #
-# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
+# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que los demás crons).
 # NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
 
 on:

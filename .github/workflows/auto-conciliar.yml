@@ -10,8 +10,8 @@ name: Auto-conciliar bancos (daily)
 # (cruce de dos vías: banco-sin-CFDI y CFDI-sin-banco) y levanta/resuelve
 # Hallazgos idempotentes. SÓLO LECTURA — no escribe en el ledger.
 #
-# Requiere los secretos del repo CRON_SECRET y STAGING_URL (igual que
-# sat-sync.yml). Si CRON_SECRET no está, el endpoint regresa 401.
+# Requiere los secretos del repo CRON_SECRET y STAGING_URL (igual que los
+# demás crons). Si CRON_SECRET no está, el endpoint regresa 401.
 #
 # NOTE: GitHub only runs `schedule:` triggers from the DEFAULT branch (main).
 # Use the "Run workflow" button (workflow_dispatch) to trigger a run manually.

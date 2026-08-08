@@ -4,7 +4,7 @@ name: Cotejo de datos fiscales (semanal)
 # verificado cuando empata — sube "sin cotejar" → "al día" en la cobertura.
 # Requiere BANXICO_TOKEN en el entorno de la app (Railway); sin él se omite solo.
 #
-# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
+# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que los demás crons).
 # NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
 
 on:

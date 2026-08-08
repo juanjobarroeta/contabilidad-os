@@ -5,7 +5,7 @@ name: Proyección de declaración (T-7 / T-3)
 # deep-link para revisar y aprobar. Cada empresa sólo dispara en sus marcas
 # exactas, así que correrlo a diario entre semana no spamea.
 #
-# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
+# Requiere repo secrets CRON_SECRET y STAGING_URL (igual que los demás crons).
 # NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
 
 on:

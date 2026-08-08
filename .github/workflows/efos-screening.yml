@@ -4,7 +4,7 @@ name: Screening 69-B/EFOS (diario)
 # clientes/proveedores) contra la lista negra, persistiendo hallazgos. La lista
 # cambia con cada publicación del SAT, por eso se corre a diario.
 #
-# Requiere secretos del repo CRON_SECRET y STAGING_URL (igual que sat-sync.yml).
+# Requiere secretos del repo CRON_SECRET y STAGING_URL (igual que los demás crons).
 # Prerrequisito en el deploy: la tabla FiscalHallazgo debe existir.
 #
 # NOTE: GitHub solo corre `schedule:` desde la rama default (main).

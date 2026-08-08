@@ -9,9 +9,14 @@
 // Este módulo agenda esos crons DENTRO del servidor Next (Railway está siempre
 // encendido): cada tick hace un self-fetch HTTP al endpoint del cron con el
 // CRON_SECRET, reutilizando intactos su auth, su candado de BD (withCronLock —
-// seguro aunque Actions reviva y dispare en paralelo) y su throttling de cuota
-// SAT. Los endpoints son gap-driven: cuando no hay nada pendiente, un tick es
-// un no-op barato, así que una cadencia agresiva no gasta cuota de más.
+// seguro incluso ante disparos manuales/externos en paralelo) y su throttling
+// de cuota SAT. Los endpoints son gap-driven: cuando no hay nada pendiente, un
+// tick es un no-op barato, así que una cadencia agresiva no gasta cuota de más.
+//
+// Desde ago-2026 este scheduler es la ÚNICA fuente de disparo del pipeline:
+// los workflows de Actions equivalentes se eliminaron (consumían el budget de
+// Actions y duplicaban cada corrida). Los workflows que quedan en Actions son
+// notificaciones/digests/auditorías sin equivalente en-proceso.
 //
 // Encendido: producción con CRON_SECRET definido (o IN_APP_CRON=1 para forzar
 // en dev). Apagado: IN_APP_CRON=0. Singleton vía globalThis (sobrevive HMR).
@@ -35,7 +40,14 @@ const HOUR = 60 * MIN;
 const JOBS: Job[] = [
   { name: "sat-backfill", everyMs: 10 * MIN, firstDelayMs: 2 * MIN },
   { name: "sat-sync", everyMs: 4 * HOUR, firstDelayMs: 5 * MIN },
+  // El workflow de Actions de sat-sync encadenaba cancel-sync como segundo
+  // paso. Aquí va como job propio, desfasado ~30 min del sync para conservar
+  // el orden "primero XMLs vigentes, luego cancelaciones" en cada ciclo.
+  { name: "sat-cancel-sync", everyMs: 4 * HOUR, firstDelayMs: 35 * MIN },
   { name: "sat-rawxml-backfill", everyMs: 6 * HOUR, firstDelayMs: 15 * MIN },
+  // Ídem: el workflow de rawxml-backfill encadenaba el desglose de impuestos
+  // (parse local del rawXml recién bajado, sin cuota SAT).
+  { name: "invoice-taxes-backfill", everyMs: 6 * HOUR, firstDelayMs: 25 * MIN },
   { name: "compliance-provision", everyMs: 24 * HOUR, firstDelayMs: 3 * MIN },
   { name: "compliance-sync", everyMs: 6 * HOUR, firstDelayMs: 8 * MIN },
   // Acuses MENSUALES desde Syntage (PDF + parse con Claude). Corría SÓLO en el

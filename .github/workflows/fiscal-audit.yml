@@ -4,7 +4,7 @@ name: Fiscal audit (24/7 contador, daily)
 # (FiscalHallazgo). Hits /api/cron/fiscal-audit, which is idempotent — safe on
 # any cadence. Scheduled after the morning SAT sync so it audits fresh data.
 #
-# Requires repo secrets CRON_SECRET and STAGING_URL (same as sat-sync.yml).
+# Requires repo secrets CRON_SECRET and STAGING_URL (same as the other crons).
 # Prerequisites in the target deployment: the FiscalHallazgo table must exist
 # (prisma db push / the DDL) and CRON_SECRET must be set, else the endpoint
 # returns 401 (no secret) or reports per-company errors (no table).

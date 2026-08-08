@@ -38,7 +38,7 @@ hecho, dónde vive la lógica crítica, y qué falta — en orden de prioridad.
 
 - GitHub Actions → endpoints Railway con `CRON_SECRET`.
 - `/api/cron/sat-sync` corre periódicamente; `lastAutoSyncAt` se popula → confirmado vivo.
-- `/api/cron/sat-rawxml-backfill` cada 6h (workflow `.github/workflows/sat-rawxml-backfill.yml`).
+- `/api/cron/sat-rawxml-backfill` cada 6h (scheduler en-proceso `src/lib/cron-scheduler.ts`; los workflows de Actions del pipeline se eliminaron en ago-2026).
 - **Gotcha resuelto**: el workflow necesita `set -euo pipefail` o `curl | tee` enmascara fallos
   como éxito. `STAGING_URL` y `CRON_SECRET` deben estar seteados en GitHub Secrets (ambos
   estaban vacíos antes; ya corregido).
@@ -101,7 +101,7 @@ En orden de prioridad. Todo correctitud-crítico → revisar contra Anexo 8 RMF 
    (RequestType "metadata", `MetadataPackageReader`) y `interpretarCancelaciones`
    (`sat-cancelaciones.ts`, puro/unit-testeado) marca CANCELLED las facturas STAMPED que el
    SAT reporta canceladas (el motor ya las excluye). Cron `/api/cron/sat-cancel-sync`
-   encadenado a `sat-sync.yml` (2×/día). ⚠️ Falta una corrida real contra el SAT para
+   agendado en el scheduler en-proceso (cada 4h, tras el sync). ⚠️ Falta una corrida real contra el SAT para
    confirmar el formato del paquete de metadata antes de confiar 100% — el marcado es
    conservador (sólo STAMPED→CANCELLED de UUIDs que ya tenemos).
 ✅ **RESICO PF — retención 1.25% (Art. 113-J)**: hecho — `computeTaxPosition` acredita lo
