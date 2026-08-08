@@ -194,6 +194,30 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — catálogo de claves vehiculares
     });
   });
 
+  it("reparación: una unidad POR REVISAR se re-nombra cuando la clave ya está en el catálogo", async () => {
+    // CFDI de venta sin texto útil: nace POR REVISAR (catálogo vacío).
+    const rawXml = `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I">
+      <cfdi:Conceptos><cfdi:Concepto ClaveProdServ="25101507" Descripcion="UNIDAD 2026" Importe="500000">
+        <cfdi:ComplementoConcepto><ventavehiculos:VentaVehiculos xmlns:ventavehiculos="http://www.sat.gob.mx/ventavehiculos" ClaveVehicular="1621710" Niv="${VIN}"/></cfdi:ComplementoConcepto>
+      </cfdi:Concepto></cfdi:Conceptos></cfdi:Comprobante>`;
+    const catalogo = {
+      "1621710": { empresa: "Giant Motors Latinoamérica, S.A. de C.V.", modelo: "Pick Up JAC 4 puertas Marca GML (nacional)", version: "Frison T9 Luxury" },
+    };
+    const db = fakeDb(catalogo);
+    db.claveVehicularCatalogo.findUnique = (async () => null) as never; // catálogo aún no ingerido
+    const args = { ...base, invoiceId: "inv-venta", tipo: "INGRESO", rawXml };
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, args);
+    expect([...db._vehiculos.values()][0]).toMatchObject({ marca: "POR REVISAR", modelo: "POR REVISAR" });
+
+    // Se ingiere el catálogo; la corrida profunda re-procesa el mismo CFDI.
+    db.claveVehicularCatalogo.findUnique = async ({ where }: any) => (catalogo as any)[where.clave] ?? null;
+    const r2 = await derivarVehiculoDesdeCfdiSiAplica(db as never, args);
+    expect(r2?.actualizados).toBe(1);
+    expect([...db._vehiculos.values()][0]).toMatchObject({
+      marca: "JAC", modelo: "Pick Up JAC 4 puertas", version: "Frison T9 Luxury",
+    });
+  });
+
   it("sin la clave en el catálogo, cae a la heurística de texto", async () => {
     const db = fakeDb(); // catálogo vacío
     await derivarVehiculoDesdeCfdiSiAplica(db as never, {
