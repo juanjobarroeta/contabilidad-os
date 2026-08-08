@@ -10,6 +10,7 @@ import {
   Zap, Key, AlertCircle, Trash2, ExternalLink, Eye, EyeOff, X,
   Shield, Upload, FileKey2, FileText, Sparkles, ClipboardCheck, ChevronRight,
 } from "lucide-react";
+import { errorRegistroPatronal } from "@/lib/nomina/registro-patronal";
 
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
 type ImportDoc = {
@@ -764,6 +765,19 @@ export default function EmpresaPage() {
               Actual: <code className="font-mono text-cos-ink">{companyDetail.registroPatronal}</code>
             </p>
           )}
+          {/* Un valor YA GUARDADO que no pasa la validación (p. ej. un correo
+              capturado antes de que validáramos) rompería el timbrado de
+              nómina: señalarlo aquí, donde se corrige. */}
+          {companyDetail?.registroPatronal && errorRegistroPatronal(companyDetail.registroPatronal) && (
+            <p className="text-xs text-cos-amber-ink mt-1">
+              ⚠ El valor guardado no parece un Registro Patronal válido: {errorRegistroPatronal(companyDetail.registroPatronal)}
+            </p>
+          )}
+          <p className="text-xs text-cos-ink-faint mt-1.5">
+            ¿Operas en varios estados con un registro patronal por estado? Captura aquí el principal y
+            asigna el suyo a cada empleado en Nómina › Empleados › Editar — el CFDI, el SUA y el IDSE
+            usan el del empleado.
+          </p>
         </div>
       )}
 

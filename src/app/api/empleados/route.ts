@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireWriter } from "@/lib/authz";
 import { calcularFactorIntegracion } from "@/lib/nomina/prestaciones";
+import { errorRegistroPatronal, normalizarRegistroPatronal } from "@/lib/nomina/registro-patronal";
 
 // GET /api/empleados?companyId=xxx
 // Params opcionales (ADITIVOS — sin ellos la respuesta es idéntica a antes):
@@ -76,6 +77,17 @@ const createSchema = z.object({
   puesto: z.string().optional(),
   riesgoPuesto: z.string().default("1"),
   claveEntFed: z.string().default("PUE"),
+  // Registro patronal del centro de trabajo del empleado (empresas
+  // multi-estado). Vacío/null = usa el de la empresa. Se valida con la misma
+  // regla que el de la empresa (11 alfanuméricos).
+  registroPatronal: z
+    .string()
+    .optional()
+    .nullable()
+    .refine((v) => errorRegistroPatronal(v) === null, {
+      message: "Registro patronal inválido: son 11 caracteres alfanuméricos (Tarjeta de Identificación Patronal).",
+    })
+    .transform((v) => normalizarRegistroPatronal(v)),
   creditoInfonavit: z.string().optional(),
   tipoDescuentoInfonavit: z.enum(["PCT_SBC", "VSM", "PESOS"]).optional(),
   descuentoInfonavit: z.number().optional(),
@@ -136,6 +148,7 @@ export async function POST(req: Request) {
         puesto: data.puesto || null,
         riesgoPuesto: data.riesgoPuesto,
         claveEntFed: data.claveEntFed,
+        registroPatronal: data.registroPatronal ?? null,
         creditoInfonavit: data.creditoInfonavit || null,
         tipoDescuentoInfonavit: data.tipoDescuentoInfonavit || null,
         descuentoInfonavit: data.descuentoInfonavit ?? null,
@@ -201,6 +214,11 @@ export async function PATCH(req: Request) {
     if (fields.periodicidadPago) data.periodicidadPago = fields.periodicidadPago;
     if (fields.riesgoPuesto) data.riesgoPuesto = fields.riesgoPuesto;
     if (fields.claveEntFed) data.claveEntFed = fields.claveEntFed;
+    if (fields.registroPatronal !== undefined) {
+      const errorRp = errorRegistroPatronal(fields.registroPatronal);
+      if (errorRp) return NextResponse.json({ error: errorRp }, { status: 422 });
+      data.registroPatronal = normalizarRegistroPatronal(fields.registroPatronal);
+    }
 
     // Salary change → triggers IMSS modificación UNLESS skipImssMovimiento is set
     // (use skipImssMovimiento: true for data corrections that don't represent a real raise)

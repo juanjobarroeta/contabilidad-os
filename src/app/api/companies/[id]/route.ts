@@ -10,6 +10,7 @@ import { fielStatus, parseCertExpiry } from "@/lib/fiel";
 import { borrarCredencialesEmpresa, borrarEmpresaDefinitivo } from "@/lib/empresas/baja";
 import { liberarSlotSyntage } from "@/lib/fiscal/cumplimiento/syntage/deprovision";
 import { registrarBitacora } from "@/lib/audit";
+import { errorRegistroPatronal, normalizarRegistroPatronal } from "@/lib/nomina/registro-patronal";
 import { sincronizarCantidadDespacho } from "@/lib/billing/sync-cantidad-despacho";
 
 type Params = { params: Promise<{ id: string }> };
@@ -112,8 +113,12 @@ export async function PATCH(req: Request, { params }: Params) {
   if (csdKey) data.csdKey = encryptSecret(csdKey);
   if (csdPassword) data.csdPassword = encryptSecret(csdPassword);
   if (registroPatronal !== undefined) {
-    // Accept empty string as "clear it"
-    data.registroPatronal = registroPatronal?.trim() || null;
+    // Validar ANTES de guardar: un cliente llegó a guardar su CORREO como
+    // registro patronal y nada lo detuvo hasta el timbrado de nómina. Vacío
+    // sigue significando "borrarlo".
+    const errorRp = errorRegistroPatronal(registroPatronal);
+    if (errorRp) return NextResponse.json({ error: errorRp }, { status: 422 });
+    data.registroPatronal = normalizarRegistroPatronal(registroPatronal);
   }
   // General fields — only accept non-empty truthy values
   if (razonSocial?.trim()) data.razonSocial = razonSocial.trim();
