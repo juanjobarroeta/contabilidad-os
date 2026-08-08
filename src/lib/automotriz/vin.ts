@@ -61,6 +61,18 @@ export interface DatosVehiculoCfdi {
   otrosConceptos: OtroConcepto[];
 }
 
+/**
+ * Emisor del CFDI (RFC y nombre) — para resolver el proveedor canónico de una
+ * compra sin cargar un parser completo (misma convención regex del repo).
+ */
+export function emisorDesdeCfdi(rawXml: string): { rfc: string; nombre: string | null } | null {
+  const el = rawXml.match(/<(?:[\w-]+:)?Emisor\b([^>]*)\/?>/i)?.[1];
+  if (!el) return null;
+  const rfc = attrDe(el, "Rfc")?.trim().toUpperCase();
+  if (!rfc || rfc.length < 12 || rfc.length > 13) return null;
+  return { rfc, nombre: attrDe(el, "Nombre") };
+}
+
 // Matchea cada <Concepto …/> o <Concepto …>…</Concepto> (con o sin prefijo de
 // namespace). Grupo 1 = atributos; grupo 3 = contenido interno (undefined si es
 // self-closing). Los conceptos no anidan conceptos, así que el no-greedy es seguro.

@@ -55,6 +55,10 @@ const JOBS: Job[] = [
   // quedaba sin sus mensuales para siempre y el checklist los pedía a mano.
   // Gap-driven con tope de 10 acuses por corrida: sin faltantes es un no-op.
   { name: "declaraciones-backfill", everyMs: 6 * HOUR, firstDelayMs: 20 * MIN },
+  // Inventario automotriz: deriva unidades de los CFDIs recién bajados (parse
+  // local del rawXml, sin cuota SAT). Desfasado del rawxml-backfill para
+  // procesar lo que ese ciclo acaba de traer; sin empresas AUTOMOTRIZ es no-op.
+  { name: "vehiculos-backfill", everyMs: 6 * HOUR, firstDelayMs: 30 * MIN },
 ];
 
 const FLAG = Symbol.for("contabilidad-os.cron-scheduler");
