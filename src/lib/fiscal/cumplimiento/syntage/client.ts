@@ -95,9 +95,26 @@ export class SyntageClient {
     return { id: String(r.id ?? "") };
   }
 
+  /**
+   * Colección COMPLETA, paginando. API Platform limita cada página (~30 por
+   * default); un GET pelado sólo trae la primera, así que todo lo que caiga
+   * después es invisible: findEntityByRfc deja de encontrar entidades
+   * existentes y ensureEntity crea duplicados. Itera hasta página corta.
+   */
+  private async requestAllPages(path: string, itemsPerPage = 200, maxPages = 50): Promise<Json[]> {
+    const sep = path.includes("?") ? "&" : "?";
+    const all: Json[] = [];
+    for (let page = 1; page <= maxPages; page++) {
+      const r = await this.request<Json>("GET", `${path}${sep}itemsPerPage=${itemsPerPage}&page=${page}`);
+      const batch = asArray(r);
+      all.push(...batch);
+      if (batch.length < itemsPerPage) break;
+    }
+    return all;
+  }
+
   async listEntities(): Promise<Json[]> {
-    const r = await this.request<Json>("GET", "/entities");
-    return asArray(r);
+    return this.requestAllPages("/entities");
   }
 
   /**
@@ -138,7 +155,7 @@ export class SyntageClient {
   }
 
   async listCredentials(): Promise<Json[]> {
-    return asArray(await this.request<Json>("GET", "/credentials"));
+    return this.requestAllPages("/credentials");
   }
 
   /**
