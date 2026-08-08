@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapTaxReturnAnual, camposAnualDesdeAcuse, mergeCamposAnual, type CamposAnualAcuse } from "./map";
+import { mapTaxReturnAnual, camposAnualDesdeAcuse, mergeCamposAnual, type CamposAnualAcuse, anualesAutoritativas } from "./map";
 
 // Campos del recurso TaxReturn confirmados en docs.syntage.com:
 // intervalUnit ("Anual"|"Mensual"|"RIF"), fiscalYear/period, type,
@@ -155,5 +155,83 @@ describe("mergeCamposAnual", () => {
     const iguales = campos({ isrIngresos: 100, isrPerdidaPendiente: 50 });
     expect(mergeCamposAnual(iguales, campos({ isrIngresos: 100, isrPerdidaPendiente: 50 }))).toBeNull();
     expect(mergeCamposAnual(iguales, campos())).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// anualesAutoritativas — la última presentada gana (complementarias)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("anualesAutoritativas", () => {
+  const ret = (
+    fiscalYear: number,
+    type: string,
+    presentedAt: string | null,
+    op = `${fiscalYear}-${type}`
+  ) => ({
+    intervalUnit: "Anual",
+    fiscalYear,
+    period: "Del Ejercicio",
+    type,
+    presentedAt,
+    operationNumber: op,
+    payment: {},
+  });
+
+  it("caso real MARGOM: 6 returns (normal+complementaria × 3 ejercicios) → 3 autoritativas", () => {
+    // El orden del arreglo imita al API: complementarias primero, normales después.
+    const returns = [
+      ret(2025, "Complementaria", "2026-08-05"),
+      ret(2024, "Complementaria", "2025-12-04"),
+      ret(2023, "Complementaria", "2025-10-20"),
+      ret(2024, "Normal", "2025-03-27"),
+      ret(2025, "Normal", "2026-03-30"),
+      ret(2023, "Normal", "2024-03-24"),
+    ];
+    const r = anualesAutoritativas(returns);
+    expect(r.map((x) => x.anual.ejercicio)).toEqual([2025, 2024, 2023]);
+    expect(r.every((x) => x.anual.esComplementaria)).toBe(true);
+    expect(r[0].anual.fechaPresentacion).toBe("2026-08-05");
+  });
+
+  it("gana la última presentada aunque la normal venga primero en el arreglo", () => {
+    const r = anualesAutoritativas([
+      ret(2025, "Normal", "2026-03-30"),
+      ret(2025, "Complementaria", "2026-08-05"),
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].anual.esComplementaria).toBe(true);
+  });
+
+  it("una complementaria MÁS VIEJA que la normal no la sustituye", () => {
+    // Complementaria de un ejercicio anterior al refrito: la normal re-presentada
+    // después es la vigente.
+    const r = anualesAutoritativas([
+      ret(2024, "Complementaria", "2025-06-01"),
+      ret(2024, "Normal", "2025-09-15"),
+    ]);
+    expect(r[0].anual.esComplementaria).toBe(false);
+  });
+
+  it("a fecha igual gana la complementaria; sin fecha pierde contra con fecha", () => {
+    const empate = anualesAutoritativas([
+      ret(2023, "Normal", "2024-03-24"),
+      ret(2023, "Complementaria", "2024-03-24"),
+    ]);
+    expect(empate[0].anual.esComplementaria).toBe(true);
+
+    const sinFecha = anualesAutoritativas([
+      ret(2023, "Complementaria", null),
+      ret(2023, "Normal", "2024-03-24"),
+    ]);
+    expect(sinFecha[0].anual.esComplementaria).toBe(false);
+  });
+
+  it("ignora returns que no son anuales", () => {
+    const r = anualesAutoritativas([
+      { intervalUnit: "Mensual", fiscalYear: 2025, period: "Julio", type: "Normal", payment: {} },
+      ret(2025, "Normal", "2026-03-30"),
+    ]);
+    expect(r).toHaveLength(1);
   });
 });

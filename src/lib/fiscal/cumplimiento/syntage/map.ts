@@ -98,6 +98,40 @@ export function mapTaxReturnAnual(tr: Json): DeclaracionAnualSyntage | null {
   };
 }
 
+/**
+ * Elige, por ejercicio, la declaración anual AUTORITATIVA entre las que Syntage
+ * reporta: la de fecha de presentación MÁS RECIENTE — una complementaria
+ * sustituye a la normal (y una complementaria más nueva a la anterior). El SAT
+ * considera vigente la última presentada; procesar "la primera que venga en el
+ * arreglo" (lo que hacía el loop) dejaba el coeficiente y las pérdidas de la
+ * normal aunque existiera una complementaria posterior (caso real: la anual
+ * 2025 de una empresa fue modificada por complementaria cinco meses después).
+ *
+ * Empates y faltantes: a igual fecha gana la complementaria (es la corrección);
+ * una fecha ausente pierde contra cualquier fecha presente.
+ */
+export function anualesAutoritativas(
+  returns: ReadonlyArray<Json>
+): { tr: Json; anual: DeclaracionAnualSyntage }[] {
+  const porEjercicio = new Map<number, { tr: Json; anual: DeclaracionAnualSyntage }>();
+  for (const tr of returns) {
+    const anual = mapTaxReturnAnual(tr);
+    if (!anual) continue;
+    const actual = porEjercicio.get(anual.ejercicio);
+    if (!actual || gana(anual, actual.anual)) porEjercicio.set(anual.ejercicio, { tr, anual });
+  }
+  return [...porEjercicio.values()].sort((a, b) => b.anual.ejercicio - a.anual.ejercicio);
+}
+
+/** ¿`a` es más autoritativa que `b`? Fecha más reciente; empate → complementaria. */
+function gana(a: DeclaracionAnualSyntage, b: DeclaracionAnualSyntage): boolean {
+  const fa = a.fechaPresentacion ?? "";
+  const fb = b.fechaPresentacion ?? "";
+  if (fa !== fb) return fa > fb; // ISO: comparación lexicográfica = cronológica
+  if (a.esComplementaria !== b.esComplementaria) return a.esComplementaria;
+  return false;
+}
+
 /** Columnas de coeficiente/pérdida que se persisten en una DECLARACION_ANUAL a
  *  partir del acuse parseado. */
 export interface CamposAnualAcuse {
