@@ -140,9 +140,45 @@ async function handle(req: Request) {
     if (page.length < PAGE) break;
   }
 
-  // `remaining` siempre mide la cola normal (con prefiltro), que es la métrica
-  // de convergencia; en deep el universo escaneado no converge a cero.
-  const remaining = await prisma.invoice.count({ where: wherePendientes });
+  // `remaining` mide TRABAJO REAL pendiente: CFDIs de la cola cuyo VIN es
+  // válido (ISO 3779) y aún no existe como unidad. Los que jamás podrán
+  // ligarse se reportan aparte — `duplicados` (el VIN ya está ligado a OTRA
+  // factura: refacturación sin cancelar, doble facturación) y `nivInvalido`
+  // (caracteres I/O/Q o basura) — para que remaining=0 signifique "no hay
+  // nada pendiente de verdad". Aproximación por el primer Niv del CFDI.
+  const [detalle] = await prisma.$queryRaw<
+    Array<{ pendientes: bigint; duplicados: bigint; niv_invalido: bigint }>
+  >`
+    SELECT
+      count(*) FILTER (
+        WHERE t.niv ~ '^[A-HJ-NPR-Z0-9]{17}$'
+          AND NOT EXISTS (SELECT 1 FROM "Vehiculo" v WHERE v."companyId" = t."companyId" AND v."vin" = t.niv)
+      ) AS pendientes,
+      count(*) FILTER (
+        WHERE t.niv ~ '^[A-HJ-NPR-Z0-9]{17}$'
+          AND EXISTS (SELECT 1 FROM "Vehiculo" v WHERE v."companyId" = t."companyId" AND v."vin" = t.niv)
+      ) AS duplicados,
+      count(*) FILTER (WHERE t.niv IS NULL OR t.niv !~ '^[A-HJ-NPR-Z0-9]{17}$') AS niv_invalido
+    FROM (
+      SELECT i.id, i."companyId", upper(substring(i."rawXml" from 'Niv="([^"]*)"')) AS niv
+      FROM "Invoice" i
+      WHERE i."tipo" IN ('INGRESO', 'EGRESO')
+        AND i."status" <> 'CANCELLED'
+        AND i."rawXml" LIKE '%VentaVehiculos%'
+        AND EXISTS (
+          SELECT 1 FROM "CompanyModule" m
+          WHERE m."companyId" = i."companyId" AND m."modulo" = 'AUTOMOTRIZ' AND m."habilitado"
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM "Vehiculo" v WHERE v."compraInvoiceId" = i.id OR v."ventaInvoiceId" = i.id
+        )
+        AND (${onlyCompanyId}::text IS NULL OR i."companyId" = ${onlyCompanyId})
+    ) t`;
+  const remaining = Number(detalle?.pendientes ?? 0);
+  const remainingDetalle = {
+    duplicados: Number(detalle?.duplicados ?? 0),
+    nivInvalido: Number(detalle?.niv_invalido ?? 0),
+  };
   const summary = {
     ok: true,
     deep,
@@ -151,6 +187,7 @@ async function handle(req: Request) {
     creados,
     actualizados,
     remaining,
+    remainingDetalle,
     // Sólo relevante en deep: pásalo como ?afterId=… en la siguiente llamada
     // para continuar el barrido. null = ya recorrió todo el universo.
     nextAfterId: deep && !barridoCompleto ? (lastId ?? null) : null,
