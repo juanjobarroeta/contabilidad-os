@@ -120,13 +120,23 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         estado: true,
         compraInvoiceId: true,
         ventaInvoiceId: true,
+        supplierId: true,
+        clienteId: true,
       },
     });
 
     if (esCompra) {
       if (existente) {
-        // Idempotente: si ya tiene su CFDI de compra, no re-procesar.
-        if (existente.compraInvoiceId) continue;
+        // Idempotente: si ya tiene su CFDI de compra, no re-procesar. Pero si a
+        // la primera pasada le faltó el proveedor (se resolvió después), una
+        // re-corrida lo completa sin tocar nada más.
+        if (existente.compraInvoiceId) {
+          if (existente.compraInvoiceId === args.invoiceId && args.supplierId && !existente.supplierId) {
+            await db.vehiculo.update({ where: { id: existente.id }, data: { supplierId: args.supplierId } });
+            actualizados++;
+          }
+          continue;
+        }
         await db.vehiculo.update({
           where: { id: existente.id },
           data: {
@@ -170,7 +180,15 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
 
     // esVenta
     if (existente) {
-      if (existente.ventaInvoiceId) continue; // idempotente
+      // Idempotente; igual que en compra, una re-corrida completa el cliente si
+      // al derivar la venta el CFDI aún no tenía Customer ligado.
+      if (existente.ventaInvoiceId) {
+        if (existente.ventaInvoiceId === args.invoiceId && args.clienteId && !existente.clienteId) {
+          await db.vehiculo.update({ where: { id: existente.id }, data: { clienteId: args.clienteId } });
+          actualizados++;
+        }
+        continue;
+      }
       await db.vehiculo.update({
         where: { id: existente.id },
         data: {

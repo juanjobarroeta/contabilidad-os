@@ -37,19 +37,28 @@ async function handle(req: Request) {
 
   const url = new URL(req.url);
   const onlyCompanyId = url.searchParams.get("companyId");
+  // deep=1: pasada completa — sin el prefiltro del complemento (captura CFDIs
+  // que sólo traen el VIN en la descripción) y SIN excluir facturas ya ligadas,
+  // para que el derivador enriquezca unidades a las que les faltó cliente o
+  // proveedor en la primera pasada. Es más caro (rescanea todo) — pensado como
+  // corrida manual por empresa, no como cron periódico.
+  const deep = url.searchParams.get("deep") === "1";
   const startedAt = Date.now();
 
-  // CFDIs de ingreso/egreso que amparan un vehículo, aún sin ligar a un Vehiculo,
-  // en empresas con AUTOMOTRIZ. `rawXml contains` es un prefiltro barato; el
-  // parser confirma el complemento.
-  const where = {
+  const comun = {
     tipo: { in: ["INGRESO", "EGRESO"] as InvoiceType[] },
-    rawXml: { contains: "VentaVehiculos" },
-    vehiculosComprados: { none: {} },
-    vehiculosVendidos: { none: {} },
     company: { modules: { some: { modulo: "AUTOMOTRIZ" as ModuloApp, habilitado: true } } },
     ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
   };
+  // CFDIs que amparan un vehículo, aún sin ligar a un Vehiculo. `rawXml
+  // contains` es un prefiltro barato; el parser confirma el complemento.
+  const wherePendientes = {
+    ...comun,
+    rawXml: { contains: "VentaVehiculos" },
+    vehiculosComprados: { none: {} },
+    vehiculosVendidos: { none: {} },
+  };
+  const where = deep ? { ...comun, rawXml: { not: null } } : wherePendientes;
 
   let lastId: string | undefined;
   let scanned = 0;
@@ -89,8 +98,10 @@ async function handle(req: Request) {
     if (page.length < PAGE) break;
   }
 
-  const remaining = await prisma.invoice.count({ where });
-  const summary = { ok: true, scanned, creados, actualizados, remaining, elapsedMs: Date.now() - startedAt };
+  // `remaining` siempre mide la cola normal (con prefiltro), que es la métrica
+  // de convergencia; en deep el universo escaneado no converge a cero.
+  const remaining = await prisma.invoice.count({ where: wherePendientes });
+  const summary = { ok: true, deep, scanned, creados, actualizados, remaining, elapsedMs: Date.now() - startedAt };
   console.log("[cron/vehiculos-backfill] done:", JSON.stringify(summary));
   return NextResponse.json(summary);
 }

@@ -144,6 +144,32 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — venta y round-trip", () => {
     expect(r2?.actualizados).toBe(0);
     expect(r2?.creados).toBe(0);
   });
+
+  it("enriquecimiento: re-procesar la venta con cliente ya resuelto completa clienteId", async () => {
+    const db = fakeDb();
+    const args = { ...base, invoiceId: "inv-venta", tipo: "INGRESO", rawXml: cfdiVenta() };
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, args); // sin clienteId (aún no ligado)
+    expect([...db._vehiculos.values()][0].clienteId).toBeNull();
+
+    const r2 = await derivarVehiculoDesdeCfdiSiAplica(db as never, { ...args, clienteId: "cli1" });
+    expect(r2?.actualizados).toBe(1);
+    expect([...db._vehiculos.values()][0]).toMatchObject({ clienteId: "cli1", ventaInvoiceId: "inv-venta" });
+
+    // Con el cliente ya puesto, otra corrida vuelve a ser no-op (no pisa).
+    const r3 = await derivarVehiculoDesdeCfdiSiAplica(db as never, { ...args, clienteId: "cli2" });
+    expect(r3?.actualizados).toBe(0);
+    expect([...db._vehiculos.values()][0].clienteId).toBe("cli1");
+  });
+
+  it("enriquecimiento: re-procesar la compra con proveedor ya resuelto completa supplierId", async () => {
+    const db = fakeDb();
+    const args = { ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra() };
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, args); // sin supplierId
+    const r2 = await derivarVehiculoDesdeCfdiSiAplica(db as never, { ...args, supplierId: "sup1" });
+    expect(r2?.actualizados).toBe(1);
+    expect([...db._vehiculos.values()][0]).toMatchObject({ supplierId: "sup1" });
+    expect(db._costos).toHaveLength(2); // no duplicó costos
+  });
 });
 
 describe("derivarVehiculoDesdeCfdiSiAplica() — catálogo de claves vehiculares", () => {
