@@ -312,6 +312,72 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — conceptos que MENCIONAN un VIN 
   });
 });
 
+describe("derivarVehiculoDesdeCfdiSiAplica() — notas de crédito y número de motor", () => {
+  const notaCredito = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="E">
+    <cfdi:Conceptos>
+      <cfdi:Concepto ClaveProdServ="25101507" Descripcion="REBATE PROGRAMA VIN ${VIN}" Importe="15000.00"/>
+    </cfdi:Conceptos>
+  </cfdi:Comprobante>`;
+
+  it("nota de crédito EGRESO: netea el costo de la unidad (monto negativo), jamás crea unidades", async () => {
+    const db = fakeDb();
+    // Sin unidad: no hace nada.
+    const r0 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-nc", tipo: "EGRESO", rawXml: notaCredito(),
+    });
+    expect(r0?.actualizados ?? 0).toBe(0);
+    expect(db._vehiculos.size).toBe(0);
+
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-nc", tipo: "EGRESO", rawXml: notaCredito(),
+    });
+    expect(r?.actualizados).toBe(1);
+    const nc = db._costos.find((c) => c.invoiceId === "inv-nc");
+    expect(nc).toMatchObject({ monto: -15000, tipo: "OTRO" });
+    // La utilidad reconstruida ya incluye el rebate (costos suman negativo).
+    // Idempotente:
+    const r2 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-nc", tipo: "EGRESO", rawXml: notaCredito(),
+    });
+    expect(r2?.actualizados).toBe(0);
+    expect(db._costos.filter((c) => c.invoiceId === "inv-nc")).toHaveLength(1);
+  });
+
+  it("nota de crédito emitida a un cliente (INGRESO) no toca inventario", async () => {
+    const db = fakeDb();
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-nc-cli", tipo: "INGRESO", rawXml: notaCredito(),
+    });
+    expect(r).toBeNull();
+    expect([...db._vehiculos.values()][0].estado).toBe("DISPONIBLE");
+  });
+
+  it("número de motor: se captura al crear y se completa en re-corridas", async () => {
+    const db = fakeDb();
+    const conMotor = `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I">
+      <cfdi:Conceptos><cfdi:Concepto ClaveProdServ="25101507" Descripcion="JAC FRISON 2026 VIN: ${VIN} NO. MOTOR: HFC4GA3-1234567" Importe="445700.05">
+        <cfdi:ComplementoConcepto><ventavehiculos:VentaVehiculos xmlns:ventavehiculos="http://www.sat.gob.mx/ventavehiculos" ClaveVehicular="1621710" Niv="${VIN}"/></cfdi:ComplementoConcepto>
+      </cfdi:Concepto></cfdi:Conceptos></cfdi:Comprobante>`;
+    // Compra sin motor en el texto → queda null.
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    expect([...db._vehiculos.values()][0].numeroMotor ?? null).toBeNull();
+    // La venta sí lo menciona → re-corrida lo completa.
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-venta", tipo: "INGRESO", rawXml: conMotor,
+    });
+    expect(r?.actualizados).toBeGreaterThanOrEqual(1);
+    expect([...db._vehiculos.values()][0].numeroMotor).toBe("HFC4GA3-1234567");
+  });
+});
+
 describe("derivarVehiculoInline() — gate de módulo y proveedor por emisor", () => {
   const conXmlEmisor = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I">
     <cfdi:Emisor Rfc="GML040609615" Nombre="GIANT MOTORS" RegimenFiscal="601"/>

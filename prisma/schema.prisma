@@ -4708,6 +4708,9 @@ model Vehiculo {
   autoCreado      Boolean @default(false)
   claveVehicular  String?
   descripcionCfdi String?
+  // Número de motor (dato de identificación en factura/carta responsiva) —
+  // extraído del texto del CFDI cuando la armadora lo incluye.
+  numeroMotor     String?
 
   notas String?
 
