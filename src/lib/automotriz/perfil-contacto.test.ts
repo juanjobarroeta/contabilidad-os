@@ -83,6 +83,46 @@ describe("perfilContacto() — lado PROVEEDOR", () => {
   });
 });
 
+describe("perfilContacto() — evidencia de pago sin conciliación bancaria", () => {
+  // Empresa sin bancos cargados (onboarding recién hecho): PUE cuenta como
+  // cobrada por definición y PPD por los REPs que la amparan.
+  function fakeDbSinBancos() {
+    const contacto = {
+      id: "cust1", companyId: "c1", rfc: "AAA010101AAA",
+      razonSocial: "GRUPO DEMO", email: null, phone: null,
+    };
+    const facturas = [
+      { id: "f-pue", customerId: "cust1", tipo: "INGRESO", uuid: "AAAA0001-0000-0000-0000-000000000001",
+        serie: null, folio: "1", fecha: new Date("2026-05-01"), total: 100000, metodoPago: "PUE",
+        conciliacionDetalles: [] },
+      { id: "f-ppd-rep", customerId: "cust1", tipo: "INGRESO", uuid: "AAAA0002-0000-0000-0000-000000000002",
+        serie: null, folio: "2", fecha: new Date("2026-06-01"), total: 200000, metodoPago: "PPD",
+        conciliacionDetalles: [] },
+      { id: "f-ppd-abierta", customerId: "cust1", tipo: "INGRESO", uuid: "AAAA0003-0000-0000-0000-000000000003",
+        serie: null, folio: "3", fecha: new Date("2026-07-01"), total: 300000, metodoPago: "PPD",
+        conciliacionDetalles: [] },
+    ];
+    const reps = [{ parentUuid: "aaaa0002-0000-0000-0000-000000000002", impPagado: 150000 }];
+    return {
+      customer: { findUnique: async () => contacto },
+      invoice: { findMany: async () => facturas },
+      pagoDoctoRelacionado: {
+        findMany: async ({ where }: any) => reps.filter((r) => where.parentUuid.in.includes(r.parentUuid)),
+      },
+      vehiculo: { findMany: async () => [] },
+    };
+  }
+
+  it("PUE cobrada por definición; PPD por sus REPs; sin REP = saldo abierto", async () => {
+    const p = await perfilContacto(fakeDbSinBancos() as never, "c1", "cust1", "CLIENTE");
+    const por = Object.fromEntries(p!.facturas.map((f) => [f.id, f]));
+    expect(por["f-pue"]).toMatchObject({ pagado: 100000, saldo: 0, repPendiente: 0 });
+    expect(por["f-ppd-rep"]).toMatchObject({ pagado: 150000, amparadoRep: 150000, saldo: 50000, repPendiente: 0 });
+    expect(por["f-ppd-abierta"]).toMatchObject({ pagado: 0, saldo: 300000 });
+    expect(p!.resumen).toMatchObject({ totalFacturado: 600000, totalPagado: 250000, saldo: 350000 });
+  });
+});
+
 describe("perfilContacto() — guardias", () => {
   it("contacto inexistente o de otra empresa → null", async () => {
     expect(await perfilContacto(fakeDb() as never, "c1", "nope", "CLIENTE")).toBeNull();

@@ -31,7 +31,8 @@ export interface FacturaPerfil {
   fecha: Date;
   total: number;
   metodoPago: string;
-  /** Cobrado (cliente) o pagado (proveedor) según conciliación bancaria. */
+  /** Cobrado (cliente) o pagado (proveedor): PUE = total por definición; PPD =
+   *  mejor evidencia entre REPs que la amparan y conciliación bancaria. */
   pagado: number;
   /** Amparado por complementos de pago (REPs) hacia esta factura. */
   amparadoRep: number;
@@ -122,9 +123,14 @@ export async function perfilContacto(
   }
 
   const facturas: FacturaPerfil[] = facturasDb.map((f) => {
-    const pagado = r2(f.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0));
+    const conciliado = r2(f.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0));
     const amparadoRep = f.uuid ? r2(amparadoPorUuid.get(normalizarUuid(f.uuid)) ?? 0) : 0;
-    const repPendiente = f.metodoPago === "PPD" ? r2(Math.max(0, pagado - amparadoRep)) : 0;
+    // Evidencia de cobro/pago — misma semántica que el motor de IVA en flujo:
+    // PUE queda pagada en su emisión (pago en una sola exhibición); PPD por la
+    // mejor evidencia disponible (REPs que la amparan o conciliación bancaria),
+    // para que la cartera sea real aunque la empresa no haya cargado bancos.
+    const pagado = f.metodoPago === "PPD" ? r2(Math.max(conciliado, amparadoRep)) : f.total;
+    const repPendiente = f.metodoPago === "PPD" ? r2(Math.max(0, conciliado - amparadoRep)) : 0;
     return {
       id: f.id,
       uuid: f.uuid,
