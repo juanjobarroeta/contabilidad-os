@@ -38,6 +38,11 @@ const JOBS: Job[] = [
   { name: "sat-rawxml-backfill", everyMs: 6 * HOUR, firstDelayMs: 15 * MIN },
   { name: "compliance-provision", everyMs: 24 * HOUR, firstDelayMs: 3 * MIN },
   { name: "compliance-sync", everyMs: 6 * HOUR, firstDelayMs: 8 * MIN },
+  // Acuses MENSUALES desde Syntage (PDF + parse con Claude). Corría SÓLO en el
+  // workflow de Actions del día 22 — con Actions caído, una empresa nueva se
+  // quedaba sin sus mensuales para siempre y el checklist los pedía a mano.
+  // Gap-driven con tope de 10 acuses por corrida: sin faltantes es un no-op.
+  { name: "declaraciones-backfill", everyMs: 6 * HOUR, firstDelayMs: 20 * MIN },
 ];
 
 const FLAG = Symbol.for("contabilidad-os.cron-scheduler");
