@@ -229,6 +229,69 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — catálogo de claves vehiculares
   });
 });
 
+describe("derivarVehiculoDesdeCfdiSiAplica() — conceptos que MENCIONAN un VIN sin ser la unidad", () => {
+  const cfdiFlete = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I">
+    <cfdi:Conceptos>
+      <cfdi:Concepto ClaveProdServ="78181500" Descripcion="TRASLADO DE UNIDAD VIN ${VIN}" Importe="610.03"/>
+    </cfdi:Conceptos>
+  </cfdi:Comprobante>`;
+
+  it("un flete EGRESO con VIN NO crea unidad; si la unidad existe, se registra como costo", async () => {
+    const db = fakeDb();
+    // Sin unidad: no crea nada (antes inventaba una 'compra' de $610).
+    const r1 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-flete", tipo: "EGRESO", rawXml: cfdiFlete(),
+    });
+    expect(r1?.creados ?? 0).toBe(0);
+    expect(db._vehiculos.size).toBe(0);
+
+    // Con la unidad ya comprada: el flete se atribuye como VehiculoCosto.
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    const r2 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-flete", tipo: "EGRESO", rawXml: cfdiFlete(),
+    });
+    expect(r2?.actualizados).toBe(1);
+    expect(db._vehiculos.size).toBe(1);
+    const flete = db._costos.find((c) => c.invoiceId === "inv-flete");
+    expect(flete).toMatchObject({ tipo: "TRASLADO", monto: 610.03 });
+    // Idempotente.
+    const r3 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-flete", tipo: "EGRESO", rawXml: cfdiFlete(),
+    });
+    expect(r3?.actualizados ?? 0).toBe(0);
+    expect(db._costos.filter((c) => c.invoiceId === "inv-flete")).toHaveLength(1);
+  });
+
+  it("un INGRESO de servicio que menciona el VIN NO marca la unidad como vendida", async () => {
+    const db = fakeDb();
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-servicio", tipo: "INGRESO",
+      rawXml: `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4"><cfdi:Conceptos>
+        <cfdi:Concepto ClaveProdServ="78181500" Descripcion="SERVICIO 10,000 KM VIN ${VIN}" Importe="3500.00"/>
+      </cfdi:Conceptos></cfdi:Comprobante>`,
+    });
+    expect(r).toBeNull();
+    expect([...db._vehiculos.values()][0].estado).toBe("DISPONIBLE");
+  });
+
+  it("una compra SIN complemento pero con ClaveProdServ de vehículo (2510xx) sí crea la unidad", async () => {
+    const db = fakeDb();
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra-sc", tipo: "EGRESO",
+      rawXml: `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4"><cfdi:Conceptos>
+        <cfdi:Concepto ClaveProdServ="25101507" NoIdentificacion="${VIN}" Descripcion="CAMIONETA JAC FRISON 2026" Importe="445700.05"/>
+      </cfdi:Conceptos></cfdi:Comprobante>`,
+    });
+    expect(r?.creados).toBe(1);
+    expect([...db._vehiculos.values()][0]).toMatchObject({ vin: VIN, estado: "DISPONIBLE", costoCompra: 445700.05 });
+  });
+});
+
 describe("derivarVehiculoDesdeCfdiSiAplica() — no aplica", () => {
   it("devuelve null sin rawXml, sin vehículos, o en tipo que no mueve inventario", async () => {
     const db = fakeDb();

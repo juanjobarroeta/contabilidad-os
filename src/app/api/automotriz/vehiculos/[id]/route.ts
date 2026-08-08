@@ -20,8 +20,10 @@ export const GET = withAuthz(
         cliente: { select: { id: true, razonSocial: true, rfc: true } },
         supplier: { select: { id: true, razonSocial: true, rfc: true } },
         vendedor: { select: { id: true, nombre: true, apellidoPaterno: true } },
-        compraInvoice: { select: { id: true, uuid: true, total: true, fecha: true } },
-        ventaInvoice: { select: { id: true, uuid: true, total: true, fecha: true } },
+        // serie/folio para etiquetar la descarga; facturapiId marca si existe
+        // PDF (emitida en la app) — un CFDI del SAT sólo tiene su XML.
+        compraInvoice: { select: { id: true, uuid: true, serie: true, folio: true, total: true, fecha: true, facturapiId: true } },
+        ventaInvoice: { select: { id: true, uuid: true, serie: true, folio: true, total: true, fecha: true, facturapiId: true } },
         costos: { orderBy: { fecha: "asc" } },
       },
     });

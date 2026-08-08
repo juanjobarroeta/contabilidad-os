@@ -99,12 +99,22 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   if (!args.rawXml) return null;
 
   const datos = extraerDatosVehiculoCfdi(args.rawXml);
-  if (datos.vehiculos.length === 0) return null;
 
   const esVenta = args.tipo === "INGRESO";
   const esCompra = args.tipo === "EGRESO";
   // Sólo compra/venta mueven inventario. TRASLADO/NOMINA/PAGO no aplican.
   if (!esVenta && !esCompra) return null;
+
+  // Costos de la unidad facturados APARTE de la compra (flete, seguro,
+  // accesorios que mencionan el VIN): se atribuyen a la unidad existente.
+  // Sólo en gastos — un INGRESO que menciona un VIN sin ser la unidad es
+  // ingreso de taller/servicio, no toca inventario.
+  const vinsDelCfdi = new Set(datos.vehiculos.map((v) => v.niv));
+  const costosExternos = esCompra
+    ? datos.otrosConceptos.filter((c) => c.nivRef && !vinsDelCfdi.has(c.nivRef))
+    : [];
+
+  if (datos.vehiculos.length === 0 && costosExternos.length === 0) return null;
 
   const anioFallback = args.fecha.getUTCFullYear();
   let creados = 0;
@@ -173,7 +183,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
           },
         });
         actualizados++;
-        await registrarCostosCompra(db, existente.id, args, datos.otrosConceptos);
+        await registrarCostosCompra(db, existente.id, args, costosDeUnidad(datos, v.niv));
         continue;
       }
       const g = await generalesParaUnidad(db, v, anioFallback);
@@ -198,7 +208,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         select: { id: true },
       });
       creados++;
-      await registrarCostosCompra(db, creado.id, args, datos.otrosConceptos);
+      await registrarCostosCompra(db, creado.id, args, costosDeUnidad(datos, v.niv));
       continue;
     }
 
@@ -250,7 +260,48 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
     creados++;
   }
 
+  // Atribución de costos externos: flete/seguro/accesorios facturados aparte
+  // que mencionan el VIN de una unidad ya en inventario. Idempotente por
+  // (vehiculoId, invoiceId) — igual que los costos de la propia compra.
+  for (const [niv, conceptos] of agrupaPorNiv(costosExternos)) {
+    const unidad = await db.vehiculo.findUnique({
+      where: { companyId_vin: { companyId: args.companyId, vin: niv } },
+      select: { id: true },
+    });
+    if (!unidad) continue; // la unidad no es nuestra (o aún no llega su compra)
+    const agrego = await registrarCostosCompra(db, unidad.id, args, conceptos);
+    if (agrego) {
+      actualizados++;
+      if (!vins.includes(niv)) vins.push(niv);
+    }
+  }
+
   return { creados, actualizados, vins };
+}
+
+type Otros = ReturnType<typeof extraerDatosVehiculoCfdi>["otrosConceptos"];
+
+/**
+ * Costos que van A la unidad `niv` dentro de la factura de compra: los que la
+ * referencian por VIN y — sólo cuando la factura ampara UNA unidad — los que no
+ * mencionan ninguno (en una factura multi-unidad un flete sin VIN es ambiguo y
+ * atribuirlo a todas duplicaría el costo).
+ */
+function costosDeUnidad(datos: ReturnType<typeof extraerDatosVehiculoCfdi>, niv: string): Otros {
+  return datos.otrosConceptos.filter(
+    (c) => c.nivRef === niv || (c.nivRef == null && datos.vehiculos.length === 1)
+  );
+}
+
+function agrupaPorNiv(otros: Otros): Map<string, Otros> {
+  const m = new Map<string, Otros>();
+  for (const c of otros) {
+    if (!c.nivRef) continue;
+    const arr = m.get(c.nivRef) ?? [];
+    arr.push(c);
+    m.set(c.nivRef, arr);
+  }
+  return m;
 }
 
 /**
@@ -263,13 +314,13 @@ async function registrarCostosCompra(
   vehiculoId: string,
   args: DerivarVehiculoArgs,
   otros: ReturnType<typeof extraerDatosVehiculoCfdi>["otrosConceptos"]
-): Promise<void> {
-  if (otros.length === 0) return;
+): Promise<boolean> {
+  if (otros.length === 0) return false;
   const yaHay = await db.vehiculoCosto.findFirst({
     where: { vehiculoId, invoiceId: args.invoiceId },
     select: { id: true },
   });
-  if (yaHay) return;
+  if (yaHay) return false;
 
   await db.vehiculoCosto.createMany({
     data: otros
@@ -283,4 +334,5 @@ async function registrarCostosCompra(
         invoiceId: args.invoiceId,
       })),
   });
+  return true;
 }
