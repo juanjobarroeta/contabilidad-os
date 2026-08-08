@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getPacProvider, type CfdiInput, type StampedCfdi } from "@/lib/pac";
 import { recordTimbrado } from "@/lib/costos/record";
+import { invoiceTaxRowsFromItems } from "./taxes-persist";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Stamp (timbrar) a CFDI via Facturapi. Extracted from POST /api/facturas so it
@@ -134,6 +135,11 @@ async function persistStampedInvoice(
           valorUnitario: it.product.price,
           importe: it.quantity * it.product.price,
         })),
+      },
+      // Igual que POST /api/facturas: sin filas de impuesto la factura no
+      // puede llevar REP y el backfill por rawXml no la alcanza.
+      taxes: {
+        create: invoiceTaxRowsFromItems(items),
       },
     },
   });

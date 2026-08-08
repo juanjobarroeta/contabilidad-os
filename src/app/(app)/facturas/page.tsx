@@ -920,6 +920,17 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
                 />
               </label>
             </div>
+            {/* Dedazo típico dd/mm: un cobro FECHADO ANTES de que existiera la
+                factura casi siempre es el mes equivocado. Aviso, no bloqueo —
+                un REP de un cobro anterior legítimo es raro pero posible. */}
+            {repFecha && new Date(repFecha + "T12:00:00Z") < new Date(inv.fecha) && (
+              <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-cos-amber-ink">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                La fecha del cobro ({fmtFecha(repFecha + "T12:00:00Z")}) es anterior a la emisión de la
+                factura ({fmtFecha(inv.fecha)}). Revisa que no sea el mes equivocado — el IVA se causa
+                en el mes de esta fecha.
+              </p>
+            )}
             <label className="mt-2.5 block text-[12.5px] text-cos-ink-soft">
               Forma de pago
               <select

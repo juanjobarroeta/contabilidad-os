@@ -143,3 +143,48 @@ export function computeRepDoctoRelacionado(input: RepComputeInput): RepComputeRe
     },
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fallback: sintetizar los impuestos del padre desde sus TOTALES.
+//
+// Las facturas timbradas en la app antes de que persistiéramos InvoiceTax no
+// tienen filas de impuesto NI rawXml del cual derivarlas (el XML vive en el
+// PAC). Sin filas, el REP salía con ObjetoImpDR "01" y sin taxes — y Facturapi
+// lo rechaza cuando el padre sí traía IVA. Para esas facturas, la diferencia
+// total − subtotal delata el impuesto: si corresponde EXACTAMENTE a una tasa
+// de IVA del catálogo sobre el subtotal, se sintetiza esa única fila.
+//
+// Deliberadamente conservador: si el delta no cuadra con una tasa conocida
+// (mezcla de tasas, retenciones, IEPS), NO se inventa nada — el caller debe
+// rechazar con un mensaje claro en vez de timbrar un desglose incorrecto.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Tasas de IVA trasladado reconocidas para la síntesis (general y fronteriza). */
+const TASAS_IVA_SINTESIS = [0.16, 0.08] as const;
+
+/**
+ * Deriva las filas de impuesto del padre desde subtotal/total cuando no hay
+ * InvoiceTax persistido. Devuelve:
+ *   - []    si total ≈ subtotal (sin impuestos que desglosar),
+ *   - [fila] si el delta corresponde a UNA tasa de IVA conocida,
+ *   - null  si el delta existe pero no cuadra con ninguna tasa (no inventar).
+ */
+export function sintetizarParentTaxes(
+  parentSubtotal: number,
+  parentTotal: number
+): RepParentTax[] | null {
+  const delta = round2(parentTotal - parentSubtotal);
+  if (Math.abs(delta) <= 0.01) return [];
+  // Delta negativo = retenciones netas: imposible saber cuáles sin las filas.
+  if (delta < 0 || !(parentSubtotal > 0)) return null;
+
+  for (const tasa of TASAS_IVA_SINTESIS) {
+    // Tolerancia de 2 centavos: redondeos por partida pueden desviar 1¢.
+    if (Math.abs(round2(parentSubtotal * tasa) - delta) <= 0.02) {
+      return [
+        { tipo: "IVA", factor: "TASA", tasa, base: round2(parentSubtotal), importe: delta, retencion: false },
+      ];
+    }
+  }
+  return null;
+}

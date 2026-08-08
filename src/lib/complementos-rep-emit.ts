@@ -15,7 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { recordTimbrado } from "@/lib/costos/record";
 import { checkStampReadiness } from "@/lib/facturas/stamp";
-import { computeRepDoctoRelacionado, round2, type RepParentTax, type RepDoctoRelacionado } from "@/lib/complementos-rep";
+import { computeRepDoctoRelacionado, round2, sintetizarParentTaxes, type RepParentTax, type RepDoctoRelacionado } from "@/lib/complementos-rep";
 
 export interface EmitirRepInput {
   companyId: string;
@@ -286,7 +286,7 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
     return { ok: false, status: 400, error: "No hay saldo pendiente para emitir el complemento." };
   }
 
-  const parentTaxes: RepParentTax[] = parentInv.taxes.map((t) => ({
+  let parentTaxes: RepParentTax[] = parentInv.taxes.map((t) => ({
     tipo: t.tipo as RepParentTax["tipo"],
     factor: t.factor as RepParentTax["factor"],
     tasa: t.tasa,
@@ -294,6 +294,22 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
     importe: t.importe,
     retencion: t.retencion,
   }));
+  // Facturas timbradas en la app ANTES de que persistiéramos InvoiceTax: sin
+  // filas ni rawXml, el desglose se sintetiza desde los totales cuando el
+  // delta corresponde a una tasa de IVA conocida. Si no cuadra, mejor rechazar
+  // con un mensaje claro que timbrar un REP con impuestos inventados.
+  if (parentTaxes.length === 0) {
+    const sintetizadas = sintetizarParentTaxes(parentInv.subtotal, parentInv.total);
+    if (sintetizadas === null) {
+      return {
+        ok: false,
+        status: 422,
+        error:
+          "La factura no tiene el desglose de impuestos guardado y no se pudo derivar de sus totales (mezcla de tasas o retenciones). Sube el XML de la factura en Facturas → Subir XML y vuelve a intentar.",
+      };
+    }
+    parentTaxes = sintetizadas;
+  }
 
   const computed = computeRepDoctoRelacionado({
     parentTotal: parentInv.total,

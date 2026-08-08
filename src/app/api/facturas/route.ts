@@ -9,6 +9,7 @@ import { getEffectiveCompanyMembership, requireScope, requireUser, AuthzError } 
 import { registrarBitacora } from "@/lib/audit";
 import { gateEscritura } from "@/lib/subscription";
 import { MAX_LARGO_CUENTA_PREDIAL, normalizarCuentaPredial } from "@/lib/facturas/predial";
+import { invoiceTaxRowsFromItems } from "@/lib/facturas/taxes-persist";
 
 const invoiceItemSchema = z.object({
   quantity: z.number().positive(),
@@ -390,6 +391,14 @@ export async function POST(req: Request) {
         importe: item.quantity * item.product.price,
         cuentaPredial: normalizarCuentaPredial(item.cuentaPredial),
       })),
+    },
+    // Desglose de impuestos del comprobante, derivado de lo que se mandó al
+    // PAC. Sin estas filas, la factura no puede llevar complemento de pago
+    // (el REP arma los impuestos del documento relacionado desde aquí) y los
+    // papeles de IVA la ven sin desglose. El backfill por rawXml no alcanza a
+    // las timbradas en la app: no guardan XML.
+    taxes: {
+      create: invoiceTaxRowsFromItems(items),
     },
   };
 
