@@ -21,6 +21,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   datosGeneralesDesdeCfdi,
+  emisorDesdeCfdi,
   extraerDatosVehiculoCfdi,
   marcaDesdeTexto,
   tipoCostoDesdeConcepto,
@@ -293,6 +294,62 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   }
 
   return { creados, actualizados, vins };
+}
+
+/** Proveedor canónico por el RFC del emisor del CFDI (find-or-create). */
+export async function resolverSupplierDesdeEmisor(
+  db: Db,
+  companyId: string,
+  rawXml: string
+): Promise<string | null> {
+  const emisor = emisorDesdeCfdi(rawXml);
+  if (!emisor) return null;
+  const s = await db.supplier.upsert({
+    where: { companyId_rfc: { companyId, rfc: emisor.rfc } },
+    create: { companyId, rfc: emisor.rfc, razonSocial: emisor.nombre ?? emisor.rfc },
+    update: {},
+    select: { id: true },
+  });
+  return s.id;
+}
+
+// Cache del gate de módulo para la derivación inline: el sync procesa miles de
+// CFDIs por corrida y el módulo de una empresa casi nunca cambia.
+const moduloCache = new Map<string, { habilitado: boolean; t: number }>();
+const MODULO_TTL_MS = 5 * 60_000;
+
+/**
+ * Derivación INLINE (sat-sync / import-cfdi): igual que
+ * derivarVehiculoDesdeCfdiSiAplica pero (a) sólo corre si la empresa tiene el
+ * módulo AUTOMOTRIZ habilitado y (b) resuelve el proveedor por el emisor del
+ * CFDI en compras. El cron vehiculos-backfill queda como red de seguridad.
+ */
+export async function derivarVehiculoInline(
+  db: Db,
+  args: DerivarVehiculoArgs
+): Promise<DerivarVehiculoResultado | null> {
+  const cached = moduloCache.get(args.companyId);
+  let habilitado: boolean;
+  if (cached && Date.now() - cached.t < MODULO_TTL_MS) {
+    habilitado = cached.habilitado;
+  } else {
+    habilitado = !!(await db.companyModule.findFirst({
+      where: { companyId: args.companyId, modulo: "AUTOMOTRIZ", habilitado: true },
+      select: { id: true },
+    }));
+    moduloCache.set(args.companyId, { habilitado, t: Date.now() });
+  }
+  if (!habilitado) return null;
+
+  const { rawXml, companyId } = args;
+  return derivarVehiculoDesdeCfdiSiAplica(db, {
+    ...args,
+    resolverSupplierId:
+      args.resolverSupplierId ??
+      (args.tipo === "EGRESO" && rawXml
+        ? () => resolverSupplierDesdeEmisor(db, companyId, rawXml)
+        : undefined),
+  });
 }
 
 type Otros = ReturnType<typeof extraerDatosVehiculoCfdi>["otrosConceptos"];
