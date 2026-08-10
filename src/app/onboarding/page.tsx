@@ -1067,7 +1067,7 @@ function OnboardingPageInner() {
                   <span className="text-cos-ink-soft truncate">
                     {csd.cerFile ? csd.cerFile.name : "Seleccionar archivo .cer"}
                   </span>
-                  <input type="file" accept=".cer" className="hidden"
+                  <input type="file" accept=".cer,application/x-x509-ca-cert,application/pkix-cert,application/octet-stream" className="hidden"
                     onChange={(e) => setCsd((p) => ({ ...p, cerFile: e.target.files?.[0] ?? null }))} />
                 </label>
               </div>
@@ -1078,7 +1078,7 @@ function OnboardingPageInner() {
                   <span className="text-cos-ink-soft truncate">
                     {csd.keyFile ? csd.keyFile.name : "Seleccionar archivo .key"}
                   </span>
-                  <input type="file" accept=".key" className="hidden"
+                  <input type="file" accept=".key,application/pkcs8,application/octet-stream" className="hidden"
                     onChange={(e) => setCsd((p) => ({ ...p, keyFile: e.target.files?.[0] ?? null }))} />
                 </label>
               </div>
@@ -1143,7 +1143,7 @@ function OnboardingPageInner() {
                   <span className="text-cos-ink-soft truncate">
                     {fiel.cerFile ? fiel.cerFile.name : "Seleccionar archivo .cer"}
                   </span>
-                  <input type="file" accept=".cer" className="hidden"
+                  <input type="file" accept=".cer,application/x-x509-ca-cert,application/pkix-cert,application/octet-stream" className="hidden"
                     onChange={(e) => setFiel((p) => ({ ...p, cerFile: e.target.files?.[0] ?? null }))} />
                 </label>
               </div>
@@ -1154,7 +1154,7 @@ function OnboardingPageInner() {
                   <span className="text-cos-ink-soft truncate">
                     {fiel.keyFile ? fiel.keyFile.name : "Seleccionar archivo .key"}
                   </span>
-                  <input type="file" accept=".key" className="hidden"
+                  <input type="file" accept=".key,application/pkcs8,application/octet-stream" className="hidden"
                     onChange={(e) => setFiel((p) => ({ ...p, keyFile: e.target.files?.[0] ?? null }))} />
                 </label>
               </div>
