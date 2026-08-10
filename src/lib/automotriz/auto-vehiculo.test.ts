@@ -25,6 +25,7 @@ const cfdiVenta = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd
 function fakeDb(catalogo: Record<string, { empresa: string; modelo: string; version: string | null }> = {}) {
   const vehiculos = new Map<string, Record<string, unknown>>();
   const costos: Array<Record<string, unknown>> = [];
+  const expediente: Array<Record<string, unknown>> = [];
   let seq = 1;
   const clean = (d: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined));
@@ -60,6 +61,19 @@ function fakeDb(catalogo: Record<string, { empresa: string; modelo: string; vers
       createMany: async ({ data }: any) => {
         for (const d of data) costos.push({ ...d });
         return { count: data.length };
+      },
+    },
+    _expediente: expediente,
+    vehiculoCfdi: {
+      upsert: async ({ where, create, update }: any) => {
+        const found = expediente.find(
+          (e) =>
+            e.vehiculoId === where.vehiculoId_invoiceId.vehiculoId &&
+            e.invoiceId === where.vehiculoId_invoiceId.invoiceId
+        );
+        if (found) Object.assign(found, update);
+        else expediente.push({ ...create });
+        return found ?? create;
       },
     },
   };
@@ -309,6 +323,44 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — conceptos que MENCIONAN un VIN 
     });
     expect(r?.creados).toBe(1);
     expect([...db._vehiculos.values()][0]).toMatchObject({ vin: VIN, estado: "DISPONIBLE", costoCompra: 445700.05 });
+  });
+});
+
+describe("derivarVehiculoDesdeCfdiSiAplica() — expediente CFDI del VIN", () => {
+  it("compra y venta quedan en el expediente con su rol; el flete como COSTO", async () => {
+    const db = fakeDb();
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-venta", tipo: "INGRESO", rawXml: cfdiVenta(),
+    });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-flete", tipo: "EGRESO",
+      rawXml: `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I"><cfdi:Conceptos>
+        <cfdi:Concepto ClaveProdServ="78181500" Descripcion="TRASLADO VIN ${VIN}" Importe="610"/>
+      </cfdi:Conceptos></cfdi:Comprobante>`,
+    });
+    const roles = Object.fromEntries(db._expediente.map((e: any) => [e.invoiceId, e.rol]));
+    expect(roles).toEqual({ "inv-compra": "COMPRA", "inv-venta": "VENTA", "inv-flete": "COSTO" });
+  });
+
+  it("segunda venta sin relación 04 queda como DUPLICADA; servicio como SERVICIO", async () => {
+    const db = fakeDb();
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-venta", tipo: "INGRESO", rawXml: cfdiVenta(),
+    });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-venta-2", tipo: "INGRESO", rawXml: cfdiVenta(),
+    });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-serv", tipo: "INGRESO",
+      rawXml: `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I"><cfdi:Conceptos>
+        <cfdi:Concepto ClaveProdServ="78181500" Descripcion="SERVICIO 10K VIN ${VIN}" Importe="3500"/>
+      </cfdi:Conceptos></cfdi:Comprobante>`,
+    });
+    const roles = Object.fromEntries(db._expediente.map((e: any) => [e.invoiceId, e.rol]));
+    expect(roles).toEqual({ "inv-venta": "VENTA", "inv-venta-2": "DUPLICADA", "inv-serv": "SERVICIO" });
   });
 });
 

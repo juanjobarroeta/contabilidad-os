@@ -25,6 +25,13 @@ export const GET = withAuthz(
         compraInvoice: { select: { id: true, uuid: true, serie: true, folio: true, total: true, fecha: true, facturapiId: true } },
         ventaInvoice: { select: { id: true, uuid: true, serie: true, folio: true, total: true, fecha: true, facturapiId: true } },
         costos: { orderBy: { fecha: "asc" } },
+        // Expediente CFDI del VIN: toda factura que menciona la unidad, con su
+        // papel (compra/venta/costo/NC/sustituida/duplicada/servicio).
+        expediente: {
+          include: {
+            invoice: { select: { id: true, uuid: true, serie: true, folio: true, fecha: true, total: true, tipo: true, status: true } },
+          },
+        },
       },
     });
     if (!vehiculo) throw new AuthzError(404, "Unidad no encontrada");
