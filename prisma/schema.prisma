@@ -344,6 +344,7 @@ model Company {
   vehiculos          Vehiculo[]
   autoPortalAccounts AutoPortalAccount[]
   automotrizConfig   AutomotrizConfig?
+  pedidosVehiculo    PedidoVehiculo[]
 }
 
 model CompanyMember {
@@ -672,6 +673,7 @@ model Customer {
   // Automotriz
   vehiculos         Vehiculo[]
   autoPortalAccount AutoPortalAccount?
+  pedidosVehiculo   PedidoVehiculo[]
 
   @@unique([companyId, rfc])
 }
@@ -1420,6 +1422,7 @@ model Employee {
   cuadrillaMiembros CuadrillaMiembro[]
   // Automotriz: unidades vendidas por este empleado (comisiones)
   vehiculosVendidos Vehiculo[]
+  pedidosVehiculo   PedidoVehiculo[] @relation("PedidoVehiculoVendedor")
 
   @@unique([companyId, rfc])
 }
@@ -4722,6 +4725,7 @@ model Vehiculo {
   cliente       Customer?       @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   vendedor      Employee?       @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
   costos        VehiculoCosto[]
+  pedidos       PedidoVehiculo[]
 
   @@unique([companyId, vin])
   @@index([companyId, estado])
@@ -4771,6 +4775,52 @@ model ClaveVehicularCatalogo {
   fuente    String // p. ej. "Anexo 15 RMF 2026 (DOF 28-dic-2025)"
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Pedido de unidad (fase 1): captura la negociación — unidad, cliente, precio,
+// enganche/anticipo, toma a cuenta — y el pipeline apartado → factura →
+// entrega. NO postea al ledger: el dinero entra por conciliación bancaria y el
+// asiento de la venta lo hace `vender` (una sola fuente de verdad).
+enum PedidoVehiculoEstado {
+  COTIZACION
+  APARTADO
+  FACTURADO
+  ENTREGADO
+  CANCELADO
+}
+
+model PedidoVehiculo {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehiculoId String
+  clienteId  String
+  vendedorId String?
+
+  estado PedidoVehiculoEstado @default(COTIZACION)
+
+  // Negociación (montos sin IVA, como precioVenta).
+  precio            Float
+  enganche          Float  @default(0)
+  anticipoRecibido  Float  @default(0)
+  // Toma a cuenta de seminuevo (descripción libre + valor acordado).
+  tomaACuentaDesc   String?
+  tomaACuentaMonto  Float?
+  financiamiento    String? // texto libre: financiera, plazo, condiciones
+  notas             String? @db.Text
+
+  apartadoAt  DateTime?
+  facturadoAt DateTime?
+  entregadoAt DateTime?
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vehiculo Vehiculo  @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  cliente  Customer  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  vendedor Employee? @relation("PedidoVehiculoVendedor", fields: [vendedorId], references: [id])
+
+  @@index([companyId, estado])
 }
 
 // Configuración del vertical automotriz por empresa: defaults que los flujos
