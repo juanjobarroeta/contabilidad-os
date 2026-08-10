@@ -127,8 +127,14 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
     const referencias = [
       ...datos.vehiculos.map((v) => ({ niv: v.niv, descripcion: v.descripcion, importe: v.importe })),
       ...datos.otrosConceptos
-        .filter((c) => c.nivRef)
-        .map((c) => ({ niv: c.nivRef!, descripcion: c.descripcion, importe: c.importe })),
+        .filter((c) => c.nivRefs.length > 0)
+        .flatMap((c) =>
+          c.nivRefs.map((niv) => ({
+            niv,
+            descripcion: c.descripcion,
+            importe: c.importe / c.nivRefs.length, // repartido entre las unidades
+          }))
+        ),
     ];
     if (referencias.length === 0) return null;
     for (const [niv, items] of agrupa(referencias)) {
@@ -150,15 +156,26 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   // INGRESO que sólo MENCIONA VINs sin amparar unidades (taller/servicio):
   // no toca inventario, pero sí queda en el expediente del VIN.
   if (esVenta && datos.vehiculos.length === 0) {
-    const nivsServicio = [...new Set(datos.otrosConceptos.filter((c) => c.nivRef).map((c) => c.nivRef!))];
+    let actualizadosServicio = 0;
+    const nivsServicio = [...new Set(datos.otrosConceptos.flatMap((c) => c.nivRefs))];
     for (const niv of nivsServicio) {
       const unidad = await db.vehiculo.findUnique({
         where: { companyId_vin: { companyId: args.companyId, vin: niv } },
-        select: { id: true },
+        select: { id: true, ventaInvoiceId: true },
       });
-      if (unidad) await registrarMencion(db, unidad.id, args.invoiceId, "SERVICIO");
+      if (!unidad) continue;
+      // Reparación: si esta factura HABÍA ligado la venta (reglas viejas) y hoy
+      // ya no califica como unidad, se revierte — era servicio, no venta.
+      if (unidad.ventaInvoiceId === args.invoiceId) {
+        await db.vehiculo.update({
+          where: { id: unidad.id },
+          data: { estado: "DISPONIBLE", ventaInvoiceId: null, precioVenta: null, fechaVenta: null, clienteId: null },
+        });
+        actualizadosServicio++;
+      }
+      await registrarMencion(db, unidad.id, args.invoiceId, "SERVICIO");
     }
-    return null;
+    return actualizadosServicio > 0 ? { creados: 0, actualizados: actualizadosServicio, vins: [] } : null;
   }
 
   // Costos de la unidad facturados APARTE de la compra (flete, seguro,
@@ -166,8 +183,23 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   // Sólo en gastos — un INGRESO que menciona un VIN sin ser la unidad es
   // ingreso de taller/servicio, no toca inventario.
   const vinsDelCfdi = new Set(datos.vehiculos.map((v) => v.niv));
+  // Un concepto puede mencionar VARIOS VINs (preparación de N unidades): el
+  // importe se reparte en partes iguales entre las unidades mencionadas.
   const costosExternos = esCompra
-    ? datos.otrosConceptos.filter((c) => c.nivRef && !vinsDelCfdi.has(c.nivRef))
+    ? datos.otrosConceptos
+        .filter((c) => c.nivRefs.length > 0)
+        .flatMap((c) =>
+          c.nivRefs
+            .filter((niv) => !vinsDelCfdi.has(niv))
+            .map((niv) => ({
+              niv,
+              descripcion: c.descripcion,
+              claveProdServ: c.claveProdServ,
+              noIdentificacion: c.noIdentificacion,
+              importe: c.importe / c.nivRefs.length,
+              nivRefs: [niv],
+            }))
+        )
     : [];
 
   if (datos.vehiculos.length === 0 && costosExternos.length === 0) return null;
@@ -405,15 +437,26 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
     await registrarMencion(db, creadoVenta.id, args.invoiceId, "VENTA");
   }
 
-  // Atribución de costos externos: flete/seguro/accesorios facturados aparte
+  // Atribución de costos externos: flete/seguro/preparación facturados aparte
   // que mencionan el VIN de una unidad ya en inventario. Idempotente por
   // (vehiculoId, invoiceId) — igual que los costos de la propia compra.
-  for (const [niv, conceptos] of agrupaPorNiv(costosExternos)) {
+  for (const [niv, conceptos] of agrupa(costosExternos)) {
     const unidad = await db.vehiculo.findUnique({
       where: { companyId_vin: { companyId: args.companyId, vin: niv } },
-      select: { id: true },
+      select: { id: true, compraInvoiceId: true },
     });
     if (!unidad) continue; // la unidad no es nuestra (o aún no llega su compra)
+    // Reparación: si esta factura HABÍA ligado la compra (reglas viejas —
+    // preparación con clave 2510) y hoy ya no califica como unidad, se
+    // desliga: el costo de compra real llegará de su factura verdadera.
+    if (unidad.compraInvoiceId === args.invoiceId) {
+      await db.vehiculoCosto.deleteMany({ where: { vehiculoId: unidad.id, invoiceId: args.invoiceId } });
+      await db.vehiculo.update({
+        where: { id: unidad.id },
+        data: { compraInvoiceId: null, costoCompra: 0, fechaCompra: null, supplierId: null },
+      });
+      actualizados++;
+    }
     await registrarMencion(db, unidad.id, args.invoiceId, "COSTO");
     const agrego = await registrarCostosCompra(db, unidad.id, args, conceptos);
     if (agrego) {
@@ -544,9 +587,9 @@ type Otros = ReturnType<typeof extraerDatosVehiculoCfdi>["otrosConceptos"];
  * atribuirlo a todas duplicaría el costo).
  */
 function costosDeUnidad(datos: ReturnType<typeof extraerDatosVehiculoCfdi>, niv: string): Otros {
-  return datos.otrosConceptos.filter(
-    (c) => c.nivRef === niv || (c.nivRef == null && datos.vehiculos.length === 1)
-  );
+  return datos.otrosConceptos
+    .filter((c) => c.nivRefs.includes(niv) || (c.nivRefs.length === 0 && datos.vehiculos.length === 1))
+    .map((c) => (c.nivRefs.length > 1 ? { ...c, importe: c.importe / c.nivRefs.length } : c));
 }
 
 function agrupa<T extends { niv: string }>(items: T[]): Map<string, T[]> {
@@ -588,17 +631,6 @@ async function registrarNotaCredito(
     })),
   });
   return true;
-}
-
-function agrupaPorNiv(otros: Otros): Map<string, Otros> {
-  const m = new Map<string, Otros>();
-  for (const c of otros) {
-    if (!c.nivRef) continue;
-    const arr = m.get(c.nivRef) ?? [];
-    arr.push(c);
-    m.set(c.nivRef, arr);
-  }
-  return m;
 }
 
 /**

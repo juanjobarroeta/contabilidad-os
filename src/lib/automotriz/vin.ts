@@ -49,9 +49,26 @@ export interface OtroConcepto {
   claveProdServ: string | null;
   noIdentificacion: string | null;
   importe: number;
-  /** VIN mencionado en el concepto (flete/seguro/accesorio DE una unidad) —
-   *  permite atribuir el costo a esa unidad aunque venga en otra factura. */
-  nivRef: string | null;
+  /** VINs mencionados en el concepto (flete/seguro/preparación DE una o varias
+   *  unidades) — permiten atribuir el costo, repartido entre ellas. */
+  nivRefs: string[];
+}
+
+/**
+ * Piso para tratar un concepto SIN complemento como la unidad misma: por debajo
+ * es preparación/gestoría/accesorio aunque traiga clave de vehículo (caso real:
+ * "PREPARACIÓN DE 5 UNIDADES…" con ClaveProdServ 25101500 y $900 c/u).
+ */
+export const UMBRAL_UNIDAD_SIN_COMPLEMENTO = 50_000;
+
+/** Todos los VINs válidos y distintos mencionados en un texto libre. */
+export function vinsDesdeTexto(texto: string | null | undefined): string[] {
+  if (!texto) return [];
+  const out = new Set<string>();
+  for (const m of texto.toUpperCase().matchAll(/\b([A-HJ-NPR-Z0-9]{17})\b/g)) {
+    if (esVinValido(m[1])) out.add(m[1]);
+  }
+  return [...out];
 }
 
 export interface DatosVehiculoCfdi {
@@ -156,32 +173,39 @@ export function extraerDatosVehiculoCfdi(rawXml: string): DatosVehiculoCfdi {
     const claveProdServ = attrDe(attrs, "ClaveProdServ");
     const noIdentificacion = attrDe(attrs, "NoIdentificacion");
     const importe = num(attrDe(attrs, "Importe")) ?? 0;
+    const cantidad = num(attrDe(attrs, "Cantidad")) ?? 1;
 
     const venta = inner.match(/<(?:[\w-]+:)?VentaVehiculos\b[^>]*\/?>/i)?.[0];
-    let niv = venta ? attrDe(venta, "Niv") : null;
+    const nivComplemento = venta ? attrDe(venta, "Niv") : null;
+    // Todos los VINs mencionados en el texto (puede haber varios: preparación
+    // de N unidades en un solo concepto).
+    const vinsTexto = [...new Set([...vinsDesdeTexto(descripcion), ...vinsDesdeTexto(noIdentificacion)])];
 
-    // Respaldo: VIN en la descripción o en el NoIdentificacion.
-    if (!niv && descripcion) niv = vinDesdeDescripcion(descripcion);
-    if (!niv && noIdentificacion) niv = vinDesdeDescripcion(noIdentificacion);
-    const vinOk = niv && esVinValido(niv) ? niv.trim().toUpperCase() : null;
-
-    // Un concepto ES la unidad sólo si trae el complemento VentaVehiculos o su
-    // ClaveProdServ es de vehículos (25.10.xx — Motor vehicles). Un flete
-    // (78181500), seguro o accesorio que MENCIONA el VIN no es la unidad: es un
-    // costo de ella (nivRef) — tratarlo como unidad inventaba compras/ventas
-    // fantasma con el importe del servicio.
-    const esUnidad = vinOk != null && (venta != null || (claveProdServ ?? "").startsWith("2510"));
+    // Un concepto ES la unidad si trae el complemento VentaVehiculos con NIV
+    // válido. Sin complemento, la clave de vehículo (2510xx) NO basta — los
+    // proveedores la usan también para servicios sobre vehículos. Candados
+    // estructurales: cantidad 1, EXACTAMENTE un VIN en el texto y un importe
+    // de unidad (≥ umbral). Todo lo demás que menciona VINs es COSTO de esas
+    // unidades, repartido entre ellas.
+    const vinComplementoOk =
+      nivComplemento && esVinValido(nivComplemento) ? nivComplemento.trim().toUpperCase() : null;
+    const esUnidad =
+      vinComplementoOk != null ||
+      ((claveProdServ ?? "").startsWith("2510") &&
+        cantidad <= 1 &&
+        vinsTexto.length === 1 &&
+        importe >= UMBRAL_UNIDAD_SIN_COMPLEMENTO);
 
     if (esUnidad) {
       vehiculos.push({
-        niv: vinOk,
+        niv: vinComplementoOk ?? vinsTexto[0],
         claveVehicular: venta ? attrDe(venta, "ClaveVehicular") : null,
         descripcion,
         noIdentificacion,
         importe,
       });
     } else {
-      otrosConceptos.push({ descripcion, claveProdServ, noIdentificacion, importe, nivRef: vinOk });
+      otrosConceptos.push({ descripcion, claveProdServ, noIdentificacion, importe, nivRefs: vinsTexto });
     }
   }
 
