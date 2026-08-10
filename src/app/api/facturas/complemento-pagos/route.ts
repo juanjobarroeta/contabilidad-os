@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { registrarBitacora } from "@/lib/audit";
-import { emitirComplementoPago } from "@/lib/complementos-rep-emit";
+import { emitirComplementoPago, prepararRep } from "@/lib/complementos-rep-emit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Complemento de Pagos (REP — Recibo Electrónico de Pago)
@@ -149,12 +149,34 @@ export async function GET(req: Request) {
 
   const sinRep = pendientes.filter(p => p.needsRep);
 
+  // PPD con saldo insoluto y SIN cobro detectado: los despachos que no cargan
+  // estados de cuenta nunca tendrían filas arriba (todo depende de la
+  // conciliación). Aquí el saldo se deriva de los REPs ya emitidos: lo que
+  // falta por complementar aunque el banco no esté conciliado. El cobro se
+  // registra a mano desde el centro (monto/fecha) y el motor calcula la
+  // parcialidad igual.
+  const conPagoIds = new Set(matchedPayments.map((p) => p.invoiceId));
+  const sinCobroDetectado = ppdInvoices
+    .map((inv) => {
+      const reps = repByParent.get(inv.id) ?? [];
+      const totalReped = reps.reduce((s, r) => s + r.total, 0);
+      return {
+        invoice: inv,
+        totalReped,
+        saldoInsoluto: Math.round((inv.total - totalReped) * 100) / 100,
+      };
+    })
+    .filter((x) => !conPagoIds.has(x.invoice.id) && x.saldoInsoluto > 0.01)
+    .sort((a, b) => new Date(b.invoice.fecha).getTime() - new Date(a.invoice.fecha).getTime());
+
   return NextResponse.json({
     pendientes,
+    sinCobroDetectado,
     stats: {
       totalPpd: ppdInvoices.length,
       conPago: pendientes.length,
       sinRep: sinRep.length,
+      sinCobro: sinCobroDetectado.length,
       montoPendiente: sinRep.reduce((s, p) => s + p.pendingAmount, 0),
     },
   });
@@ -177,6 +199,15 @@ export async function POST(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
+  // preview:true → SOLO calcula la parcialidad y los saldos (prepararRep), sin
+  // timbrar ni escribir nada. Es lo que ve el contador antes de confirmar, así
+  // que no pasa por el gate de escritura ni deja bitácora.
+  if (body.preview === true) {
+    const prev = await prepararRep({ companyId, invoiceId, bankTransactionId, monto, fechaPago, formaPago });
+    if (!prev.ok) return NextResponse.json({ error: prev.error }, { status: prev.status });
+    return NextResponse.json({ ok: true, preview: prev.preview });
   }
 
   // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
