@@ -446,17 +446,34 @@ export async function POST(req: Request) {
   // Persist historical monthly declarations parsed from acuses
   // These are flagged isHistorical=true so they're treated as baseline data
   // by carryover logic but hidden from "periodos pendientes" lists.
+  let declaracionesCreadas = 0;
+  let declaracionesDescartadas = 0;
   if (onboardingPackage?.acusesMensuales?.length) {
     for (const m of onboardingPackage.acusesMensuales) {
-      if (!m || !m.periodoMes || !m.periodoAnio) continue;
+      if (!m || !m.periodoMes || !m.periodoAnio) {
+        declaracionesDescartadas++;
+        console.error("[companies] Acuse mensual descartado: sin periodo parseado", JSON.stringify(m ?? null));
+        continue;
+      }
       const periodo = `${m.periodoAnio}-${String(m.periodoMes).padStart(2, "0")}`;
 
-      // One acuse can cover both IVA and ISR, or just one. We create a row
-      // per impuesto type so the tax module can read them like organic rows.
+      // One acuse can cover both IVA and ISR, or just one. We create a row per
+      // impuesto type so the tax module can read them like organic rows.
+      // Los tipos se derivan de los DATOS presentes, no solo de la etiqueta del
+      // parser: un acuse RESICO/combinado (p. ej. con renglones de IEPS) venía
+      // con tipoImpuesto fuera del set esperado y se descartaba EN SILENCIO —
+      // caso real: onboarding con acuses subidos y cero declaraciones creadas.
+      const tieneDatosIva =
+        m.ivaAPagar != null || m.ivaCausado != null || m.ivaAcreditable != null || m.ivaAFavor != null;
+      const tieneDatosIsr = m.isrAPagar != null || m.isrIngresos != null;
       const tipos: ("IVA_MENSUAL" | "ISR_PROVISIONAL")[] = [];
-      if (m.tipoImpuesto === "IVA" || m.tipoImpuesto === "IVA_ISR") tipos.push("IVA_MENSUAL");
-      if (m.tipoImpuesto === "ISR" || m.tipoImpuesto === "IVA_ISR") tipos.push("ISR_PROVISIONAL");
-      if (tipos.length === 0) continue;
+      if (m.tipoImpuesto === "IVA" || m.tipoImpuesto === "IVA_ISR" || tieneDatosIva) tipos.push("IVA_MENSUAL");
+      if (m.tipoImpuesto === "ISR" || m.tipoImpuesto === "IVA_ISR" || tieneDatosIsr) tipos.push("ISR_PROVISIONAL");
+      if (tipos.length === 0) {
+        declaracionesDescartadas++;
+        console.error("[companies] Acuse mensual descartado: sin datos de IVA ni ISR", JSON.stringify({ periodo, tipoImpuesto: m.tipoImpuesto }));
+        continue;
+      }
 
       for (const tipo of tipos) {
         try {
@@ -479,7 +496,9 @@ export async function POST(req: Request) {
               fechaPresentacion: m.fechaPresentacion ? new Date(m.fechaPresentacion) : null,
             },
           });
+          declaracionesCreadas++;
         } catch (e) {
+          declaracionesDescartadas++;
           console.error("[companies] Historical declaration create failed:", e);
         }
       }
@@ -504,7 +523,9 @@ export async function POST(req: Request) {
           fechaPresentacion: a.fechaPresentacion ? new Date(a.fechaPresentacion) : null,
         },
       });
+      declaracionesCreadas++;
     } catch (e) {
+      declaracionesDescartadas++;
       console.error("[companies] Historical anual create failed:", e);
     }
   }
@@ -543,5 +564,11 @@ export async function POST(req: Request) {
     kickCron("declaraciones-backfill", 90_000);
   }
 
-  return NextResponse.json({ ...company, facturapi, syntage }, { status: 201 });
+  // declaraciones: qué pasó con los acuses subidos en el onboarding. Antes los
+  // descartes eran invisibles (ni log ni respuesta) y el cliente descubría
+  // días después que sus declaraciones "no estaban en el software".
+  return NextResponse.json(
+    { ...company, facturapi, syntage, declaraciones: { creadas: declaracionesCreadas, descartadas: declaracionesDescartadas } },
+    { status: 201 },
+  );
 }
