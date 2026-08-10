@@ -37,6 +37,25 @@ export interface CancelacionesResult {
   canceladosEnSat: number;
 }
 
+/**
+ * Meses (incluyendo el actual) que cubre la ventana LEGAL de cancelación.
+ *
+ * Desde la reforma al CFF de 2022 (Art. 29-A), un CFDI sólo puede cancelarse
+ * hasta el mes en que se debe presentar la anual del ejercicio en que se
+ * emitió (PM: marzo, PF: abril). Por eso:
+ *   • hasta abril: lo emitido desde ENERO DEL EJERCICIO ANTERIOR sigue siendo
+ *     cancelable → la ventana crece hasta 16 meses (en abril);
+ *   • de mayo en adelante: sólo el ejercicio en curso → 5..12 meses.
+ *
+ * La ventana fija de 3 meses que sustituye esto tenía un hueco real: una
+ * factura de enero cancelada en noviembre jamás se detectaba, porque el
+ * periodo de enero ya no se re-consultaba.
+ */
+export function mesesVentanaCancelable(hoy: Date): number {
+  const mes = hoy.getMonth() + 1; // local, igual que la enumeración de periodos del cron
+  return mes <= 4 ? 12 + mes : mes;
+}
+
 /** True si el estatus del SAT indica cancelado. Robusto a "0" o texto "Cancelado". */
 export function esEstatusCancelado(estatus: string | null | undefined): boolean {
   if (estatus == null) return false;
