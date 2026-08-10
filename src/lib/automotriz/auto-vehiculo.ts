@@ -20,11 +20,18 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
+  condicionesDePagoDesdeCfdi,
   datosGeneralesDesdeCfdi,
+  diasCreditoDesdeCondiciones,
+  emisorDesdeCfdi,
   extraerDatosVehiculoCfdi,
   marcaDesdeTexto,
+  numeroMotorDesdeTexto,
+  sustituyeUuidsDesdeCfdi,
+  tipoComprobanteDesdeCfdi,
   tipoCostoDesdeConcepto,
 } from "./vin";
+import { normalizarUuid } from "@/lib/fiscal/uuid";
 import { modeloLimpio } from "./claves";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -38,6 +45,10 @@ export interface DerivarVehiculoArgs {
   rawXml: string | null;
   /** Proveedor canónico (emisor) en una compra, si el import ya lo resolvió. */
   supplierId?: string | null;
+  /** Resolver perezoso del proveedor (find-or-create por RFC del emisor):
+   *  se invoca UNA vez y sólo cuando de verdad se va a ligar una compra —
+   *  así el backfill no crea Suppliers para gastos que no amparan unidades. */
+  resolverSupplierId?: () => Promise<string | null>;
   /** Cliente canónico (receptor) en una venta, si el import ya lo resolvió. */
   clienteId?: string | null;
 }
@@ -99,17 +110,66 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   if (!args.rawXml) return null;
 
   const datos = extraerDatosVehiculoCfdi(args.rawXml);
-  if (datos.vehiculos.length === 0) return null;
 
   const esVenta = args.tipo === "INGRESO";
   const esCompra = args.tipo === "EGRESO";
   // Sólo compra/venta mueven inventario. TRASLADO/NOMINA/PAGO no aplican.
   if (!esVenta && !esCompra) return null;
 
+  // Nota de crédito (TipoDeComprobante "E"): un rebate/descuento del proveedor
+  // que referencia la unidad NETEA su costo (VehiculoCosto negativo) — jamás
+  // crea ni vende unidades. Una nota de crédito emitida A un cliente (lado
+  // INGRESO) no toca inventario.
+  if (tipoComprobanteDesdeCfdi(args.rawXml) === "E") {
+    if (!esCompra) return null;
+    let actualizadosNc = 0;
+    const vinsNc: string[] = [];
+    const referencias = [
+      ...datos.vehiculos.map((v) => ({ niv: v.niv, descripcion: v.descripcion, importe: v.importe })),
+      ...datos.otrosConceptos
+        .filter((c) => c.nivRef)
+        .map((c) => ({ niv: c.nivRef!, descripcion: c.descripcion, importe: c.importe })),
+    ];
+    if (referencias.length === 0) return null;
+    for (const [niv, items] of agrupa(referencias)) {
+      const unidad = await db.vehiculo.findUnique({
+        where: { companyId_vin: { companyId: args.companyId, vin: niv } },
+        select: { id: true },
+      });
+      if (!unidad) continue;
+      const agrego = await registrarNotaCredito(db, unidad.id, args, items);
+      if (agrego) {
+        actualizadosNc++;
+        vinsNc.push(niv);
+      }
+    }
+    return { creados: 0, actualizados: actualizadosNc, vins: vinsNc };
+  }
+
+  // Costos de la unidad facturados APARTE de la compra (flete, seguro,
+  // accesorios que mencionan el VIN): se atribuyen a la unidad existente.
+  // Sólo en gastos — un INGRESO que menciona un VIN sin ser la unidad es
+  // ingreso de taller/servicio, no toca inventario.
+  const vinsDelCfdi = new Set(datos.vehiculos.map((v) => v.niv));
+  const costosExternos = esCompra
+    ? datos.otrosConceptos.filter((c) => c.nivRef && !vinsDelCfdi.has(c.nivRef))
+    : [];
+
+  if (datos.vehiculos.length === 0 && costosExternos.length === 0) return null;
+
   const anioFallback = args.fecha.getUTCFullYear();
   let creados = 0;
   let actualizados = 0;
   const vins: string[] = [];
+
+  // Proveedor: el valor explícito gana; si no, el resolver perezoso (memoizado).
+  let supplierMemo: string | null | undefined = args.supplierId;
+  const supplierId = async (): Promise<string | null> => {
+    if (supplierMemo === undefined) {
+      supplierMemo = (await args.resolverSupplierId?.()) ?? null;
+    }
+    return supplierMemo;
+  };
 
   for (const v of datos.vehiculos) {
     vins.push(v.niv);
@@ -125,8 +185,19 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         autoCreado: true,
         marca: true,
         modelo: true,
+        numeroMotor: true,
       },
     });
+
+    // Número de motor: si la unidad no lo tiene y este CFDI lo menciona,
+    // se completa (misma filosofía que cliente/proveedor faltantes).
+    if (existente && !existente.numeroMotor) {
+      const nm = numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion);
+      if (nm) {
+        await db.vehiculo.update({ where: { id: existente.id }, data: { numeroMotor: nm } });
+        actualizados++;
+      }
+    }
 
     // Reparación de generales: una unidad auto-creada cuando el catálogo de
     // claves aún no estaba ingerido quedó "POR REVISAR". Si la clave ya está en
@@ -155,28 +226,61 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         // la primera pasada le faltó el proveedor (se resolvió después), una
         // re-corrida lo completa sin tocar nada más.
         if (existente.compraInvoiceId) {
-          if (existente.compraInvoiceId === args.invoiceId && args.supplierId && !existente.supplierId) {
-            await db.vehiculo.update({ where: { id: existente.id }, data: { supplierId: args.supplierId } });
+          if (existente.compraInvoiceId === args.invoiceId && !existente.supplierId) {
+            const s = await supplierId();
+            if (s) {
+              await db.vehiculo.update({ where: { id: existente.id }, data: { supplierId: s } });
+              if (args.rawXml) await registrarTermsProveedor(db, s, args.rawXml);
+              actualizados++;
+            }
+            continue;
+          }
+          // Refactura (TipoRelacion 04): este CFDI sustituye al ligado — la
+          // compra vigente es ÉSTA aunque la cancelación no esté marcada aún.
+          if (
+            existente.compraInvoiceId !== args.invoiceId &&
+            (await sustituyeAlLigado(db, args.rawXml, existente.compraInvoiceId))
+          ) {
+            await db.vehiculoCosto.deleteMany({
+              where: { vehiculoId: existente.id, invoiceId: existente.compraInvoiceId },
+            });
+            const sSust = await supplierId();
+            await db.vehiculo.update({
+              where: { id: existente.id },
+              data: {
+                compraInvoiceId: args.invoiceId,
+                costoCompra: v.importe,
+                fechaCompra: args.fecha,
+                supplierId: sSust ?? undefined,
+                claveVehicular: v.claveVehicular ?? undefined,
+              },
+            });
             actualizados++;
+            await registrarCostosCompra(db, existente.id, args, costosDeUnidad(datos, v.niv));
+            continue;
           }
           continue;
         }
+        const supLiga = await supplierId();
+        if (supLiga && args.rawXml) await registrarTermsProveedor(db, supLiga, args.rawXml);
         await db.vehiculo.update({
           where: { id: existente.id },
           data: {
             compraInvoiceId: args.invoiceId,
             costoCompra: v.importe,
             fechaCompra: args.fecha,
-            supplierId: args.supplierId ?? undefined,
+            supplierId: supLiga ?? undefined,
             claveVehicular: v.claveVehicular ?? undefined,
             descripcionCfdi: v.descripcion ?? undefined,
           },
         });
         actualizados++;
-        await registrarCostosCompra(db, existente.id, args, datos.otrosConceptos);
+        await registrarCostosCompra(db, existente.id, args, costosDeUnidad(datos, v.niv));
         continue;
       }
       const g = await generalesParaUnidad(db, v, anioFallback);
+      const supNuevo = await supplierId();
+      if (supNuevo && args.rawXml) await registrarTermsProveedor(db, supNuevo, args.rawXml);
       const creado = await db.vehiculo.create({
         data: {
           companyId: args.companyId,
@@ -190,7 +294,8 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
           costoCompra: v.importe,
           fechaCompra: args.fecha,
           compraInvoiceId: args.invoiceId,
-          supplierId: args.supplierId ?? null,
+          supplierId: supNuevo,
+          numeroMotor: numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion),
           claveVehicular: v.claveVehicular ?? null,
           descripcionCfdi: v.descripcion ?? null,
           autoCreado: true,
@@ -198,7 +303,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         select: { id: true },
       });
       creados++;
-      await registrarCostosCompra(db, creado.id, args, datos.otrosConceptos);
+      await registrarCostosCompra(db, creado.id, args, costosDeUnidad(datos, v.niv));
       continue;
     }
 
@@ -209,6 +314,25 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
       if (existente.ventaInvoiceId) {
         if (existente.ventaInvoiceId === args.invoiceId && args.clienteId && !existente.clienteId) {
           await db.vehiculo.update({ where: { id: existente.id }, data: { clienteId: args.clienteId } });
+          actualizados++;
+          continue;
+        }
+        // Refactura (TipoRelacion 04): esta venta sustituye a la ligada — el
+        // precio/cliente vigentes son los de ÉSTA (la anterior quedó muerta).
+        if (
+          existente.ventaInvoiceId !== args.invoiceId &&
+          (await sustituyeAlLigado(db, args.rawXml, existente.ventaInvoiceId))
+        ) {
+          await db.vehiculo.update({
+            where: { id: existente.id },
+            data: {
+              estado: "VENDIDO",
+              precioVenta: v.importe,
+              ventaInvoiceId: args.invoiceId,
+              fechaVenta: args.fecha,
+              clienteId: args.clienteId ?? undefined,
+            },
+          });
           actualizados++;
         }
         continue;
@@ -242,6 +366,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         ventaInvoiceId: args.invoiceId,
         fechaVenta: args.fecha,
         clienteId: args.clienteId ?? null,
+        numeroMotor: numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion),
         claveVehicular: v.claveVehicular ?? null,
         descripcionCfdi: v.descripcion ?? null,
         autoCreado: true,
@@ -250,7 +375,177 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
     creados++;
   }
 
+  // Atribución de costos externos: flete/seguro/accesorios facturados aparte
+  // que mencionan el VIN de una unidad ya en inventario. Idempotente por
+  // (vehiculoId, invoiceId) — igual que los costos de la propia compra.
+  for (const [niv, conceptos] of agrupaPorNiv(costosExternos)) {
+    const unidad = await db.vehiculo.findUnique({
+      where: { companyId_vin: { companyId: args.companyId, vin: niv } },
+      select: { id: true },
+    });
+    if (!unidad) continue; // la unidad no es nuestra (o aún no llega su compra)
+    const agrego = await registrarCostosCompra(db, unidad.id, args, conceptos);
+    if (agrego) {
+      actualizados++;
+      if (!vins.includes(niv)) vins.push(niv);
+    }
+  }
+
   return { creados, actualizados, vins };
+}
+
+/**
+ * ¿Este CFDI sustituye (TipoRelacion 04) al invoice actualmente ligado?
+ * Sólo consulta la base cuando el CFDI trae la relación — el caso común
+ * (sin CfdiRelacionados) no cuesta nada.
+ */
+async function sustituyeAlLigado(db: Db, rawXml: string, invoiceIdLigado: string): Promise<boolean> {
+  const sustituye = sustituyeUuidsDesdeCfdi(rawXml);
+  if (sustituye.length === 0) return false;
+  const ligado = await db.invoice.findUnique({
+    where: { id: invoiceIdLigado },
+    select: { uuid: true },
+  });
+  if (!ligado?.uuid) return false;
+  const objetivo = normalizarUuid(ligado.uuid);
+  return sustituye.some((u) => normalizarUuid(u) === objetivo);
+}
+
+/**
+ * Términos del proveedor desde CondicionesDePago del CFDI de compra
+ * ("CRÉDITO 30 DÍAS" → SupplierTerms.diasCredito=30). SOLO crea cuando el
+ * proveedor no tiene términos — lo capturado a mano nunca se pisa.
+ */
+async function registrarTermsProveedor(db: Db, supplierId: string, rawXml: string): Promise<void> {
+  const dias = diasCreditoDesdeCondiciones(condicionesDePagoDesdeCfdi(rawXml));
+  if (dias == null) return;
+  const ya = await db.supplierTerms.findUnique({ where: { supplierId }, select: { id: true } });
+  if (ya) return;
+  await db.supplierTerms.create({
+    data: { supplierId, tieneCredito: dias > 0, diasCredito: dias },
+  });
+}
+
+/** Proveedor canónico por el RFC del emisor del CFDI (find-or-create). */
+export async function resolverSupplierDesdeEmisor(
+  db: Db,
+  companyId: string,
+  rawXml: string
+): Promise<string | null> {
+  const emisor = emisorDesdeCfdi(rawXml);
+  if (!emisor) return null;
+  const s = await db.supplier.upsert({
+    where: { companyId_rfc: { companyId, rfc: emisor.rfc } },
+    create: { companyId, rfc: emisor.rfc, razonSocial: emisor.nombre ?? emisor.rfc },
+    update: {},
+    select: { id: true },
+  });
+  return s.id;
+}
+
+// Cache del gate de módulo para la derivación inline: el sync procesa miles de
+// CFDIs por corrida y el módulo de una empresa casi nunca cambia.
+const moduloCache = new Map<string, { habilitado: boolean; t: number }>();
+const MODULO_TTL_MS = 5 * 60_000;
+
+/**
+ * Derivación INLINE (sat-sync / import-cfdi): igual que
+ * derivarVehiculoDesdeCfdiSiAplica pero (a) sólo corre si la empresa tiene el
+ * módulo AUTOMOTRIZ habilitado y (b) resuelve el proveedor por el emisor del
+ * CFDI en compras. El cron vehiculos-backfill queda como red de seguridad.
+ */
+export async function derivarVehiculoInline(
+  db: Db,
+  args: DerivarVehiculoArgs
+): Promise<DerivarVehiculoResultado | null> {
+  const cached = moduloCache.get(args.companyId);
+  let habilitado: boolean;
+  if (cached && Date.now() - cached.t < MODULO_TTL_MS) {
+    habilitado = cached.habilitado;
+  } else {
+    habilitado = !!(await db.companyModule.findFirst({
+      where: { companyId: args.companyId, modulo: "AUTOMOTRIZ", habilitado: true },
+      select: { id: true },
+    }));
+    moduloCache.set(args.companyId, { habilitado, t: Date.now() });
+  }
+  if (!habilitado) return null;
+
+  const { rawXml, companyId } = args;
+  return derivarVehiculoDesdeCfdiSiAplica(db, {
+    ...args,
+    resolverSupplierId:
+      args.resolverSupplierId ??
+      (args.tipo === "EGRESO" && rawXml
+        ? () => resolverSupplierDesdeEmisor(db, companyId, rawXml)
+        : undefined),
+  });
+}
+
+type Otros = ReturnType<typeof extraerDatosVehiculoCfdi>["otrosConceptos"];
+
+/**
+ * Costos que van A la unidad `niv` dentro de la factura de compra: los que la
+ * referencian por VIN y — sólo cuando la factura ampara UNA unidad — los que no
+ * mencionan ninguno (en una factura multi-unidad un flete sin VIN es ambiguo y
+ * atribuirlo a todas duplicaría el costo).
+ */
+function costosDeUnidad(datos: ReturnType<typeof extraerDatosVehiculoCfdi>, niv: string): Otros {
+  return datos.otrosConceptos.filter(
+    (c) => c.nivRef === niv || (c.nivRef == null && datos.vehiculos.length === 1)
+  );
+}
+
+function agrupa<T extends { niv: string }>(items: T[]): Map<string, T[]> {
+  const m = new Map<string, T[]>();
+  for (const it of items) {
+    const arr = m.get(it.niv) ?? [];
+    arr.push(it);
+    m.set(it.niv, arr);
+  }
+  return m;
+}
+
+/**
+ * Nota de crédito del proveedor sobre una unidad: cada concepto que la
+ * referencia se registra como VehiculoCosto NEGATIVO (netea el costo).
+ * Idempotente por (vehiculoId, invoiceId).
+ */
+async function registrarNotaCredito(
+  db: Db,
+  vehiculoId: string,
+  args: DerivarVehiculoArgs,
+  items: Array<{ descripcion: string | null; importe: number }>
+): Promise<boolean> {
+  const conMonto = items.filter((i) => i.importe > 0);
+  if (conMonto.length === 0) return false;
+  const yaHay = await db.vehiculoCosto.findFirst({
+    where: { vehiculoId, invoiceId: args.invoiceId },
+    select: { id: true },
+  });
+  if (yaHay) return false;
+  await db.vehiculoCosto.createMany({
+    data: conMonto.map((i) => ({
+      vehiculoId,
+      tipo: "OTRO" as const,
+      concepto: `Nota de crédito: ${i.descripcion ?? "descuento del proveedor"}`,
+      monto: -i.importe,
+      fecha: args.fecha,
+      invoiceId: args.invoiceId,
+    })),
+  });
+  return true;
+}
+
+function agrupaPorNiv(otros: Otros): Map<string, Otros> {
+  const m = new Map<string, Otros>();
+  for (const c of otros) {
+    if (!c.nivRef) continue;
+    const arr = m.get(c.nivRef) ?? [];
+    arr.push(c);
+    m.set(c.nivRef, arr);
+  }
+  return m;
 }
 
 /**
@@ -263,13 +558,13 @@ async function registrarCostosCompra(
   vehiculoId: string,
   args: DerivarVehiculoArgs,
   otros: ReturnType<typeof extraerDatosVehiculoCfdi>["otrosConceptos"]
-): Promise<void> {
-  if (otros.length === 0) return;
+): Promise<boolean> {
+  if (otros.length === 0) return false;
   const yaHay = await db.vehiculoCosto.findFirst({
     where: { vehiculoId, invoiceId: args.invoiceId },
     select: { id: true },
   });
-  if (yaHay) return;
+  if (yaHay) return false;
 
   await db.vehiculoCosto.createMany({
     data: otros
@@ -283,4 +578,5 @@ async function registrarCostosCompra(
         invoiceId: args.invoiceId,
       })),
   });
+  return true;
 }

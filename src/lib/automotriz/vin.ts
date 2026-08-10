@@ -49,6 +49,9 @@ export interface OtroConcepto {
   claveProdServ: string | null;
   noIdentificacion: string | null;
   importe: number;
+  /** VIN mencionado en el concepto (flete/seguro/accesorio DE una unidad) —
+   *  permite atribuir el costo a esa unidad aunque venga en otra factura. */
+  nivRef: string | null;
 }
 
 export interface DatosVehiculoCfdi {
@@ -56,6 +59,80 @@ export interface DatosVehiculoCfdi {
   vehiculos: ConceptoVehiculo[];
   /** Demás líneas del CFDI, para mapear a VehiculoCosto en una compra. */
   otrosConceptos: OtroConcepto[];
+}
+
+/**
+ * UUIDs que este CFDI SUSTITUYE (CfdiRelacionados TipoRelacion="04").
+ * Una refactura válida apunta así a la factura que reemplaza — señal firme
+ * para re-ligar la unidad aunque la cancelación aún no esté marcada.
+ */
+export function sustituyeUuidsDesdeCfdi(rawXml: string): string[] {
+  const out: string[] = [];
+  const re = /<(?:[\w-]+:)?CfdiRelacionados\b([^>]*)>([\s\S]*?)<\/(?:[\w-]+:)?CfdiRelacionados>/gi;
+  for (const m of rawXml.matchAll(re)) {
+    if (attrDe(m[1] ?? "", "TipoRelacion") !== "04") continue;
+    for (const r of (m[2] ?? "").matchAll(/<(?:[\w-]+:)?CfdiRelacionado\b([^>]*)\/?>/gi)) {
+      const uuid = attrDe(r[1] ?? "", "UUID");
+      if (uuid) out.push(uuid.trim().toUpperCase());
+    }
+  }
+  return out;
+}
+
+/** CondicionesDePago del nodo Comprobante — texto libre ("CRÉDITO 30 DÍAS"). */
+export function condicionesDePagoDesdeCfdi(rawXml: string): string | null {
+  const el = rawXml.match(/<(?:[\w-]+:)?Comprobante\b([^>]*)>/i)?.[1];
+  if (!el) return null;
+  return attrDe(el, "CondicionesDePago");
+}
+
+/**
+ * Días de crédito desde el texto de CondicionesDePago: "CRÉDITO 30 DÍAS" → 30,
+ * "CONTADO" → 0, texto sin señal → null (no se sabe).
+ */
+export function diasCreditoDesdeCondiciones(texto: string | null | undefined): number | null {
+  if (!texto) return null;
+  const t = texto.toUpperCase();
+  const m = t.match(/(\d{1,3})\s*D[ÍI]AS?/);
+  if (m) return Number(m[1]);
+  if (/\bCONTADO\b|UNA\s+SOLA\s+EXHIBICI[ÓO]N/.test(t)) return 0;
+  return null;
+}
+
+/** TipoDeComprobante del CFDI ("I", "E", "P", …) — null si no se encuentra. */
+export function tipoComprobanteDesdeCfdi(rawXml: string): string | null {
+  const el = rawXml.match(/<(?:[\w-]+:)?Comprobante\b([^>]*)>/i)?.[1];
+  if (!el) return null;
+  return attrDe(el, "TipoDeComprobante")?.trim().toUpperCase() ?? null;
+}
+
+/**
+ * Número de motor desde el texto del concepto ("No. Motor:", "NO MOTOR", "MOTOR:").
+ * El complemento VentaVehiculos no lo trae estructurado; las armadoras lo ponen
+ * en la descripción junto al VIN.
+ */
+export function numeroMotorDesdeTexto(texto: string | null | undefined): string | null {
+  if (!texto) return null;
+  const m = texto
+    .toUpperCase()
+    .match(/(?:N[OU]M?\.?\s*(?:DE\s*)?MOTOR|MOTOR)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]{4,19})\b/);
+  if (!m) return null;
+  const valor = m[1];
+  // Un VIN completo no es número de motor (la descripción suele traer ambos).
+  if (valor.length === 17 && esVinValido(valor)) return null;
+  return valor;
+}
+
+/**
+ * Emisor del CFDI (RFC y nombre) — para resolver el proveedor canónico de una
+ * compra sin cargar un parser completo (misma convención regex del repo).
+ */
+export function emisorDesdeCfdi(rawXml: string): { rfc: string; nombre: string | null } | null {
+  const el = rawXml.match(/<(?:[\w-]+:)?Emisor\b([^>]*)\/?>/i)?.[1];
+  if (!el) return null;
+  const rfc = attrDe(el, "Rfc")?.trim().toUpperCase();
+  if (!rfc || rfc.length < 12 || rfc.length > 13) return null;
+  return { rfc, nombre: attrDe(el, "Nombre") };
 }
 
 // Matchea cada <Concepto …/> o <Concepto …>…</Concepto> (con o sin prefijo de
@@ -83,19 +160,28 @@ export function extraerDatosVehiculoCfdi(rawXml: string): DatosVehiculoCfdi {
     const venta = inner.match(/<(?:[\w-]+:)?VentaVehiculos\b[^>]*\/?>/i)?.[0];
     let niv = venta ? attrDe(venta, "Niv") : null;
 
-    // Respaldo: VIN en la descripción si no vino el complemento.
+    // Respaldo: VIN en la descripción o en el NoIdentificacion.
     if (!niv && descripcion) niv = vinDesdeDescripcion(descripcion);
+    if (!niv && noIdentificacion) niv = vinDesdeDescripcion(noIdentificacion);
+    const vinOk = niv && esVinValido(niv) ? niv.trim().toUpperCase() : null;
 
-    if (niv && esVinValido(niv)) {
+    // Un concepto ES la unidad sólo si trae el complemento VentaVehiculos o su
+    // ClaveProdServ es de vehículos (25.10.xx — Motor vehicles). Un flete
+    // (78181500), seguro o accesorio que MENCIONA el VIN no es la unidad: es un
+    // costo de ella (nivRef) — tratarlo como unidad inventaba compras/ventas
+    // fantasma con el importe del servicio.
+    const esUnidad = vinOk != null && (venta != null || (claveProdServ ?? "").startsWith("2510"));
+
+    if (esUnidad) {
       vehiculos.push({
-        niv: niv.trim().toUpperCase(),
+        niv: vinOk,
         claveVehicular: venta ? attrDe(venta, "ClaveVehicular") : null,
         descripcion,
         noIdentificacion,
         importe,
       });
     } else {
-      otrosConceptos.push({ descripcion, claveProdServ, noIdentificacion, importe });
+      otrosConceptos.push({ descripcion, claveProdServ, noIdentificacion, importe, nivRef: vinOk });
     }
   }
 

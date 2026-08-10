@@ -1,4 +1,38 @@
 import { describe, it, expect } from "vitest";
+import { diasCreditoDesdeCondiciones, emisorDesdeCfdi, numeroMotorDesdeTexto, tipoComprobanteDesdeCfdi } from "./vin";
+
+describe("tipoComprobanteDesdeCfdi() y numeroMotorDesdeTexto()", () => {
+  it("extrae el TipoDeComprobante del nodo Comprobante", () => {
+    expect(tipoComprobanteDesdeCfdi(`<cfdi:Comprobante Version="4.0" TipoDeComprobante="E" Total="100">`)).toBe("E");
+    expect(tipoComprobanteDesdeCfdi(`<cfdi:Comprobante Version="4.0">`)).toBeNull();
+  });
+  it("días de crédito desde CondicionesDePago", () => {
+    expect(diasCreditoDesdeCondiciones("CRÉDITO 30 DÍAS")).toBe(30);
+    expect(diasCreditoDesdeCondiciones("Credito a 15 dias fecha factura")).toBe(15);
+    expect(diasCreditoDesdeCondiciones("CONTADO")).toBe(0);
+    expect(diasCreditoDesdeCondiciones("Pago en una sola exhibición")).toBe(0);
+    expect(diasCreditoDesdeCondiciones("TRANSFERENCIA")).toBeNull();
+    expect(diasCreditoDesdeCondiciones(null)).toBeNull();
+  });
+
+  it("número de motor desde el texto libre, sin confundirlo con el VIN", () => {
+    expect(numeroMotorDesdeTexto("JAC FRISON VIN: 3GALD255XTM007338 NO. MOTOR: 4GA3-1234567")).toBe("4GA3-1234567");
+    expect(numeroMotorDesdeTexto("MOTOR HFC4GA3-4D12345678")).toBe("HFC4GA3-4D12345678");
+    expect(numeroMotorDesdeTexto("NUM DE MOTOR 3GALD255XTM007338")).toBeNull(); // es un VIN
+    expect(numeroMotorDesdeTexto("VEHICULO SIN DATO")).toBeNull();
+  });
+});
+
+describe("emisorDesdeCfdi()", () => {
+  it("extrae RFC y nombre del emisor sin importar el orden de atributos", () => {
+    expect(emisorDesdeCfdi(`<cfdi:Emisor Nombre="GIANT MOTORS" Rfc="GML040609615" RegimenFiscal="601"/>`))
+      .toEqual({ rfc: "GML040609615", nombre: "GIANT MOTORS" });
+  });
+  it("null sin emisor o con RFC inválido", () => {
+    expect(emisorDesdeCfdi(`<cfdi:Comprobante/>`)).toBeNull();
+    expect(emisorDesdeCfdi(`<cfdi:Emisor Rfc="XX" Nombre="X"/>`)).toBeNull();
+  });
+});
 import {
   esVinValido,
   extraerDatosVehiculoCfdi,

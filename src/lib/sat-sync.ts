@@ -17,6 +17,7 @@ import {
 import { interpretarCancelaciones, type SatMetadataRow } from "./sat-cancelaciones";
 import { clasificarCfdi } from "./fiscal/clasificar-cfdi";
 import { crearActivoDesdeCfdiSiAplica } from "./fiscal/auto-activo";
+import { derivarVehiculoInline } from "./automotriz/auto-vehiculo";
 import { backfillNominaRegimen } from "./nomina/backfill-regimen";
 import { importarNominaHistorica } from "./nomina/historia-import";
 
@@ -675,6 +676,18 @@ export async function verifyAndImportSatSync(
             usoEsDefault: !cfdi.usoCfdi,
             items: (cfdi.items ?? []).map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
           },
+        });
+
+        // Inventario automotriz inline (complemento VentaVehiculos / clave
+        // 2510xx): la unidad aparece junto con su CFDI. Sólo empresas con el
+        // módulo AUTOMOTRIZ; el cron vehiculos-backfill es la red de seguridad.
+        await derivarVehiculoInline(prisma, {
+          companyId,
+          invoiceId: createdInvoice.id,
+          tipo: invoiceType,
+          fecha: new Date(cfdi.fecha),
+          rawXml: xmlContent,
+          clienteId: invoiceType === "INGRESO" ? customerId : null,
         });
 
         // Persist complemento de pago links (DoctoRelacionado parent UUIDs).
