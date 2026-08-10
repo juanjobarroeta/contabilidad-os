@@ -32,6 +32,7 @@ import {
   tipoCostoDesdeConcepto,
 } from "./vin";
 import { normalizarUuid } from "@/lib/fiscal/uuid";
+import { derivarRefaccionesDesdeCfdiSiAplica } from "./auto-refaccion";
 import { modeloLimpio } from "./claves";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -568,7 +569,7 @@ export async function derivarVehiculoInline(
   if (!habilitado) return null;
 
   const { rawXml, companyId } = args;
-  return derivarVehiculoDesdeCfdiSiAplica(db, {
+  const resultado = await derivarVehiculoDesdeCfdiSiAplica(db, {
     ...args,
     resolverSupplierId:
       args.resolverSupplierId ??
@@ -576,6 +577,15 @@ export async function derivarVehiculoInline(
         ? () => resolverSupplierDesdeEmisor(db, companyId, rawXml)
         : undefined),
   });
+  // Refacciones (fase 4): catálogo + kardex del mismo CFDI, mismo gate.
+  await derivarRefaccionesDesdeCfdiSiAplica(db, {
+    companyId: args.companyId,
+    invoiceId: args.invoiceId,
+    tipo: args.tipo,
+    fecha: args.fecha,
+    rawXml: args.rawXml,
+  });
+  return resultado;
 }
 
 type Otros = ReturnType<typeof extraerDatosVehiculoCfdi>["otrosConceptos"];
