@@ -327,6 +327,9 @@ export const TIPO_DESC: Record<string, string> = {
   ISR_ANUAL: "ISR del ejercicio",
   DIOT: "DIOT mensual",
   RETENCIONES_ISR: "Retenciones de ISR",
+  // IEPS definitivo mensual (Art. 5o LIEPS, día 17 — defaultConfigForTipo ya lo
+  // resuelve como MENSUAL). Por ahora se captura del acuse; el motor va después.
+  IEPS_MENSUAL: "IEPS mensual",
   // Cuotas IMSS (SIPARE) — no derivan del régimen SAT sino de tener nómina:
   // obrero-patronales mensuales y RCV + Infonavit bimestrales (LSS Art. 39),
   // ambas con vencimiento el día 17 (defaultConfigForTipo ya las resuelve).
@@ -357,6 +360,12 @@ export function mapCsfObligacion(descripcion: string): string | null {
   // contains "iva" — so it must be caught before the IVA branch below.
   if (d.includes("diot") || d.includes("operaciones con terceros") || d.includes("proveedores")) {
     return "DIOT";
+  }
+  // IEPS antes que ISR: sus descripciones ("Declaración mensual del impuesto
+  // especial sobre producción y servicios…") no mencionan IVA/ISR, pero sí
+  // pueden traer "pago definitivo" que otras ramas no deben capturar.
+  if (/\bieps\b/.test(d) || d.includes("producción y servicios") || d.includes("produccion y servicios")) {
+    return "IEPS_MENSUAL";
   }
   if (d.includes("valor agregado") || /\biva\b/.test(d)) {
     if (d.includes("bimestral")) return "IVA_BIMESTRAL";

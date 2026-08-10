@@ -1632,6 +1632,10 @@ model TaxDeclaration {
   ivaPagar              Float?
   ivaSaldoFavorAnterior Float? // Carryover from previous months
 
+  // IEPS (definitivo mensual — capturado del acuse; el motor llega después)
+  iepsPagar      Float?
+  iepsSaldoFavor Float?
+
   // ISR
   isrIngresos            Float?
   isrDeducciones         Float?
@@ -1815,6 +1819,10 @@ enum TaxDeclarationType {
   DIOT
   DECLARACION_ANUAL
   CERO
+  // IEPS definitivo mensual (Art. 5o LIEPS, día 17 del mes siguiente). El
+  // saldo a favor sólo se compensa contra IEPS de la MISMA categoría (Art. 5o
+  // 4º pfo) — el arrastre vive por separado del de IVA.
+  IEPS_MENSUAL
   // Cuotas obrero-patronales IMSS (SIPARE) — mensuales (LSS Art. 39, día 17 del
   // mes siguiente) y RCV + Infonavit bimestrales (día 17 del mes siguiente al
   // cierre del bimestre). El periodo bimestral se guarda con el mes que CIERRA

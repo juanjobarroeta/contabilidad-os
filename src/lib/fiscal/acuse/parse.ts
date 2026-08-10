@@ -57,7 +57,7 @@ REGLAS CRÍTICAS:
    - "CSF": Constancia de Situación Fiscal del SAT (dice "Constancia de Situación Fiscal", muestra RFC, régimen fiscal, obligaciones).
    - "TARJETA_IMSS": Tarjeta de Identificación Patronal del IMSS (muestra Registro Patronal, clase, prima, actividad económica IMSS).
    - "ACUSE_ANUAL": Acuse de declaración ANUAL del SAT (dice "Declaración Anual", muestra ejercicio, coeficiente de utilidad, utilidad fiscal, ISR causado). TAMBIÉN es ACUSE_ANUAL el formato largo "DECLARACIÓN DEL EJERCICIO / ISR PERSONAS MORALES" (transcript de 20+ páginas con todos los renglones del formulario: INGRESOS, DEDUCCIONES AUTORIZADAS, DETERMINACIÓN).
-   - "ACUSE_MENSUAL": Acuse de pago mensual / provisional / definitivo (dice "Pago provisional", "Pago definitivo", "Declaración mensual", muestra periodo mes/año, IVA o ISR).
+   - "ACUSE_MENSUAL": Acuse de pago mensual / provisional / definitivo (dice "Pago provisional", "Pago definitivo", "Declaración mensual", muestra periodo mes/año, IVA, ISR o IEPS). Un mismo acuse puede combinar varios impuestos: si trae renglones de IEPS (Impuesto Especial sobre Producción y Servicios — bebidas saborizadas, alcohol, tabacos, botanas, etc.), extrae "iepsAPagar" y "iepsAFavor" ADEMÁS de los campos de IVA/ISR que aparezcan; "tipoImpuesto" describe solo la parte IVA/ISR.
    - "OTRO": cualquier otro documento.
 4. Devuelve los campos correspondientes al type detectado. Los demás quedan como null o arrays vacíos.
 5. Fechas en formato ISO YYYY-MM-DD. Montos como números (no strings, sin símbolos).
@@ -141,6 +141,8 @@ SCHEMA DE RESPUESTA (devuelve exactamente estos campos, null cuando no apliquen)
     "isrPagosAnteriores": number | null,
     "isrAPagar": number | null,
     "coeficienteUtilidadAplicado": number | null,
+    "iepsAPagar": number | null,
+    "iepsAFavor": number | null,
     "lineaCaptura": string | null,
     "fechaPresentacion": string | null
   } | null,
@@ -189,6 +191,10 @@ export interface AcuseMensual {
   isrPagosAnteriores: number | null;
   isrAPagar: number | null;
   coeficienteUtilidadAplicado: number | null;
+  /** Renglones de IEPS del acuse (RESICO/actividad con IEPS los combina en el
+   *  mismo acuse mensual que IVA/ISR). Null si el acuse no trae IEPS. */
+  iepsAPagar: number | null;
+  iepsAFavor: number | null;
   lineaCaptura: string | null;
   fechaPresentacion: string | null;
 }
