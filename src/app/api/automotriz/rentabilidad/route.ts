@@ -52,6 +52,10 @@ export const GET = withAuthz(async (req: Request) => {
     const costosTotal = v.costos.reduce((s, c) => s + c.monto, 0); // NC restan solas
     const interesPiso = v.costos.filter((c) => c.tipo === "INTERES_PISO").reduce((s, c) => s + c.monto, 0);
     const notasCredito = v.costos.filter((c) => c.monto < 0).reduce((s, c) => s + c.monto, 0);
+    // Costo incompleto: la compra quedó fuera del archivo de 5 años del SAT y
+    // nadie ha capturado el costo real — su "utilidad" sería la venta entera.
+    // Se reporta aparte y NO entra a utilidad/margen agregados.
+    const costoIncompleto = v.costoCompra <= 0;
     const utilidad = (v.precioVenta ?? 0) - v.costoCompra - costosTotal - v.comisionMonto;
     return {
       id: v.id,
@@ -68,21 +72,23 @@ export const GET = withAuthz(async (req: Request) => {
       notasCredito: r2(-notasCredito), // positivo = monto acreditado a favor
       interesPiso: r2(interesPiso),
       comision: v.comisionMonto,
-      utilidad: r2(utilidad),
-      margen: v.precioVenta ? r2((utilidad / v.precioVenta) * 100) : null,
+      costoIncompleto,
+      utilidad: costoIncompleto ? null : r2(utilidad),
+      margen: !costoIncompleto && v.precioVenta ? r2((utilidad / v.precioVenta) * 100) : null,
     };
   });
+  const completas = unidades.filter((u) => !u.costoIncompleto);
 
   type Agg = { unidades: number; venta: number; utilidad: number };
   const agrega = (clave: (u: (typeof unidades)[number]) => string | null) => {
     const m = new Map<string, Agg>();
-    for (const u of unidades) {
+    for (const u of completas) {
       const k = clave(u);
       if (k == null) continue;
       const a = m.get(k) ?? { unidades: 0, venta: 0, utilidad: 0 };
       a.unidades++;
       a.venta = r2(a.venta + u.precioVenta);
-      a.utilidad = r2(a.utilidad + u.utilidad);
+      a.utilidad = r2(a.utilidad + (u.utilidad ?? 0));
       m.set(k, a);
     }
     return [...m.entries()]
@@ -90,17 +96,23 @@ export const GET = withAuthz(async (req: Request) => {
       .sort((a, b) => b.utilidad - a.utilidad);
   };
 
-  const totalVenta = r2(unidades.reduce((s, u) => s + u.precioVenta, 0));
-  const totalUtilidad = r2(unidades.reduce((s, u) => s + u.utilidad, 0));
+  const ventaCompletas = r2(completas.reduce((s, u) => s + u.precioVenta, 0));
+  const totalUtilidad = r2(completas.reduce((s, u) => s + (u.utilidad ?? 0), 0));
+  const incompletas = unidades.filter((u) => u.costoIncompleto);
 
   return NextResponse.json({
     year,
     resumen: {
       unidades: unidades.length,
-      venta: totalVenta,
+      venta: r2(unidades.reduce((s, u) => s + u.precioVenta, 0)),
+      // Utilidad y margen SÓLO sobre unidades con costo conocido.
       utilidad: totalUtilidad,
-      margen: totalVenta ? r2((totalUtilidad / totalVenta) * 100) : null,
+      margen: ventaCompletas ? r2((totalUtilidad / ventaCompletas) * 100) : null,
       notasCredito: r2(unidades.reduce((s, u) => s + u.notasCredito, 0)),
+      incompletas: {
+        unidades: incompletas.length,
+        venta: r2(incompletas.reduce((s, u) => s + u.precioVenta, 0)),
+      },
     },
     porMes: agrega((u) => (u.fechaVenta ? `${year}-${String(new Date(u.fechaVenta).getMonth() + 1).padStart(2, "0")}` : null)).sort((a, b) => a.clave.localeCompare(b.clave)),
     porMarca: agrega((u) => u.marca),

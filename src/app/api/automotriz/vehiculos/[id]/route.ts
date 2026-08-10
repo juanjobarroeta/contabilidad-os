@@ -91,24 +91,32 @@ export const PATCH = withAuthz(
 
     const vehiculo = await prisma.vehiculo.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true },
+      select: { id: true, companyId: true, estado: true, autoCreado: true, compraInvoiceId: true },
     });
     if (!vehiculo) throw new AuthzError(404, "Unidad no encontrada");
 
     await requireWriter(vehiculo.companyId, req);
     await requireModule(vehiculo.companyId, "AUTOMOTRIZ", req);
 
+    // Excepción del archivo SAT: una unidad auto-derivada SIN CFDI de compra
+    // (comprada antes de la ventana de 5 años de la descarga masiva) nunca
+    // pasó por recibir/vender — no hay asiento que desalinear. Capturar su
+    // costo real es la única forma de que la utilidad por VIN sea cierta.
+    const sinCompraCfdi = vehiculo.autoCreado && !vehiculo.compraInvoiceId;
+
     // Vendida/entregada: el costo ya se posteó al ledger — corregirlo aquí
     // desalinearía libro e inventario. Sólo notas/número económico.
-    const soloLectura = vehiculo.estado === "VENDIDO" || vehiculo.estado === "ENTREGADO";
+    const soloLectura =
+      (vehiculo.estado === "VENDIDO" || vehiculo.estado === "ENTREGADO") && !sinCompraCfdi;
     if (soloLectura && (parsed.data.costoCompra !== undefined || parsed.data.precioLista !== undefined)) {
       return NextResponse.json(
         { error: `La unidad está ${vehiculo.estado}: los montos ya no se editan (usa una póliza manual)` },
         { status: 422 }
       );
     }
-    // DISPONIBLE en adelante: el inventario ya se posteó con costoCompra.
-    if (vehiculo.estado !== "EN_TRANSITO" && parsed.data.costoCompra !== undefined) {
+    // DISPONIBLE en adelante: el inventario ya se posteó con costoCompra —
+    // salvo la excepción del archivo SAT (sin CFDI de compra, nada posteado).
+    if (vehiculo.estado !== "EN_TRANSITO" && !sinCompraCfdi && parsed.data.costoCompra !== undefined) {
       return NextResponse.json(
         { error: "El costo de compra sólo se edita EN_TRANSITO (ya se posteó el inventario)" },
         { status: 422 }
