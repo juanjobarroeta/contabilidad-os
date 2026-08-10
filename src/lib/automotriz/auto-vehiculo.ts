@@ -137,6 +137,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         select: { id: true },
       });
       if (!unidad) continue;
+      await registrarMencion(db, unidad.id, args.invoiceId, "NOTA_CREDITO");
       const agrego = await registrarNotaCredito(db, unidad.id, args, items);
       if (agrego) {
         actualizadosNc++;
@@ -144,6 +145,20 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
       }
     }
     return { creados: 0, actualizados: actualizadosNc, vins: vinsNc };
+  }
+
+  // INGRESO que sólo MENCIONA VINs sin amparar unidades (taller/servicio):
+  // no toca inventario, pero sí queda en el expediente del VIN.
+  if (esVenta && datos.vehiculos.length === 0) {
+    const nivsServicio = [...new Set(datos.otrosConceptos.filter((c) => c.nivRef).map((c) => c.nivRef!))];
+    for (const niv of nivsServicio) {
+      const unidad = await db.vehiculo.findUnique({
+        where: { companyId_vin: { companyId: args.companyId, vin: niv } },
+        select: { id: true },
+      });
+      if (unidad) await registrarMencion(db, unidad.id, args.invoiceId, "SERVICIO");
+    }
+    return null;
   }
 
   // Costos de la unidad facturados APARTE de la compra (flete, seguro,
@@ -226,21 +241,21 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         // la primera pasada le faltó el proveedor (se resolvió después), una
         // re-corrida lo completa sin tocar nada más.
         if (existente.compraInvoiceId) {
-          if (existente.compraInvoiceId === args.invoiceId && !existente.supplierId) {
-            const s = await supplierId();
-            if (s) {
-              await db.vehiculo.update({ where: { id: existente.id }, data: { supplierId: s } });
-              if (args.rawXml) await registrarTermsProveedor(db, s, args.rawXml);
-              actualizados++;
+          if (existente.compraInvoiceId === args.invoiceId) {
+            await registrarMencion(db, existente.id, args.invoiceId, "COMPRA");
+            if (!existente.supplierId) {
+              const s = await supplierId();
+              if (s) {
+                await db.vehiculo.update({ where: { id: existente.id }, data: { supplierId: s } });
+                if (args.rawXml) await registrarTermsProveedor(db, s, args.rawXml);
+                actualizados++;
+              }
             }
             continue;
           }
           // Refactura (TipoRelacion 04): este CFDI sustituye al ligado — la
           // compra vigente es ÉSTA aunque la cancelación no esté marcada aún.
-          if (
-            existente.compraInvoiceId !== args.invoiceId &&
-            (await sustituyeAlLigado(db, args.rawXml, existente.compraInvoiceId))
-          ) {
+          if (await sustituyeAlLigado(db, args.rawXml, existente.compraInvoiceId)) {
             await db.vehiculoCosto.deleteMany({
               where: { vehiculoId: existente.id, invoiceId: existente.compraInvoiceId },
             });
@@ -255,14 +270,20 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
                 claveVehicular: v.claveVehicular ?? undefined,
               },
             });
+            await registrarMencion(db, existente.id, existente.compraInvoiceId, "SUSTITUIDA");
+            await registrarMencion(db, existente.id, args.invoiceId, "COMPRA");
             actualizados++;
             await registrarCostosCompra(db, existente.id, args, costosDeUnidad(datos, v.niv));
             continue;
           }
+          // Mismo VIN, sin relación 04, y la unidad ya tiene su compra: queda
+          // en el expediente como DUPLICADA (auditable, no liga).
+          await registrarMencion(db, existente.id, args.invoiceId, "DUPLICADA");
           continue;
         }
         const supLiga = await supplierId();
         if (supLiga && args.rawXml) await registrarTermsProveedor(db, supLiga, args.rawXml);
+        await registrarMencion(db, existente.id, args.invoiceId, "COMPRA");
         await db.vehiculo.update({
           where: { id: existente.id },
           data: {
@@ -303,6 +324,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         select: { id: true },
       });
       creados++;
+      await registrarMencion(db, creado.id, args.invoiceId, "COMPRA");
       await registrarCostosCompra(db, creado.id, args, costosDeUnidad(datos, v.niv));
       continue;
     }
@@ -312,17 +334,17 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
       // Idempotente; igual que en compra, una re-corrida completa el cliente si
       // al derivar la venta el CFDI aún no tenía Customer ligado.
       if (existente.ventaInvoiceId) {
-        if (existente.ventaInvoiceId === args.invoiceId && args.clienteId && !existente.clienteId) {
-          await db.vehiculo.update({ where: { id: existente.id }, data: { clienteId: args.clienteId } });
-          actualizados++;
+        if (existente.ventaInvoiceId === args.invoiceId) {
+          await registrarMencion(db, existente.id, args.invoiceId, "VENTA");
+          if (args.clienteId && !existente.clienteId) {
+            await db.vehiculo.update({ where: { id: existente.id }, data: { clienteId: args.clienteId } });
+            actualizados++;
+          }
           continue;
         }
         // Refactura (TipoRelacion 04): esta venta sustituye a la ligada — el
         // precio/cliente vigentes son los de ÉSTA (la anterior quedó muerta).
-        if (
-          existente.ventaInvoiceId !== args.invoiceId &&
-          (await sustituyeAlLigado(db, args.rawXml, existente.ventaInvoiceId))
-        ) {
+        if (await sustituyeAlLigado(db, args.rawXml, existente.ventaInvoiceId)) {
           await db.vehiculo.update({
             where: { id: existente.id },
             data: {
@@ -333,8 +355,13 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
               clienteId: args.clienteId ?? undefined,
             },
           });
+          await registrarMencion(db, existente.id, existente.ventaInvoiceId, "SUSTITUIDA");
+          await registrarMencion(db, existente.id, args.invoiceId, "VENTA");
           actualizados++;
+          continue;
         }
+        // Mismo VIN, sin relación 04 (p. ej. factura a la financiera): expediente.
+        await registrarMencion(db, existente.id, args.invoiceId, "DUPLICADA");
         continue;
       }
       await db.vehiculo.update({
@@ -347,12 +374,13 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
           clienteId: args.clienteId ?? undefined,
         },
       });
+      await registrarMencion(db, existente.id, args.invoiceId, "VENTA");
       actualizados++;
       continue;
     }
     // Venta sin compra previa: crea la unidad ya VENDIDA para no perderla.
     const g = await generalesParaUnidad(db, v, anioFallback);
-    await db.vehiculo.create({
+    const creadoVenta = await db.vehiculo.create({
       data: {
         companyId: args.companyId,
         vin: v.niv,
@@ -371,8 +399,10 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         descripcionCfdi: v.descripcion ?? null,
         autoCreado: true,
       },
+      select: { id: true },
     });
     creados++;
+    await registrarMencion(db, creadoVenta.id, args.invoiceId, "VENTA");
   }
 
   // Atribución de costos externos: flete/seguro/accesorios facturados aparte
@@ -384,6 +414,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
       select: { id: true },
     });
     if (!unidad) continue; // la unidad no es nuestra (o aún no llega su compra)
+    await registrarMencion(db, unidad.id, args.invoiceId, "COSTO");
     const agrego = await registrarCostosCompra(db, unidad.id, args, conceptos);
     if (agrego) {
       actualizados++;
@@ -392,6 +423,28 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   }
 
   return { creados, actualizados, vins };
+}
+
+type MencionRol =
+  | "COMPRA"
+  | "VENTA"
+  | "COSTO"
+  | "NOTA_CREDITO"
+  | "SUSTITUIDA"
+  | "DUPLICADA"
+  | "SERVICIO";
+
+/**
+ * Expediente CFDI del VIN: registra (upsert, idempotente) el papel de esta
+ * factura para la unidad — incluidas las que NO ligan (duplicadas, sustituidas,
+ * servicio), para que el expediente esté completo y auditable.
+ */
+async function registrarMencion(db: Db, vehiculoId: string, invoiceId: string, rol: MencionRol): Promise<void> {
+  await db.vehiculoCfdi.upsert({
+    where: { vehiculoId_invoiceId: { vehiculoId, invoiceId } },
+    create: { vehiculoId, invoiceId, rol },
+    update: { rol },
+  });
 }
 
 /**
