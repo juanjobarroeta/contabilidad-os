@@ -326,6 +326,69 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — conceptos que MENCIONAN un VIN 
   });
 });
 
+describe("derivarVehiculoDesdeCfdiSiAplica() — preparación multi-unidad con clave de vehículo (caso Margom)", () => {
+  const VIN2 = "3GABAC221VM009265";
+  // Caso real: "PREPARACION DE 5 UNIDADES…" con ClaveProdServ 25101500,
+  // Cantidad 5 y los VINs en la descripción — NO es una unidad, es un costo
+  // repartido entre las unidades mencionadas.
+  const cfdiPreparacion = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I">
+    <cfdi:Conceptos>
+      <cfdi:Concepto ClaveProdServ="25101500" Cantidad="2" Descripcion="PREPARACION DE 2 UNIDADES JAC PARA ENTREGA CON NUMERO DE SERIE : ${VIN}, ${VIN2}" Importe="1800.00"/>
+    </cfdi:Conceptos>
+  </cfdi:Comprobante>`;
+
+  it("no crea unidades; reparte el importe como costo entre las unidades existentes", async () => {
+    const db = fakeDb();
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-prep", tipo: "EGRESO", rawXml: cfdiPreparacion(),
+    });
+    expect(r?.creados ?? 0).toBe(0);
+    expect(db._vehiculos.size).toBe(1); // no inventó la unidad del VIN2
+    const costoPrep = db._costos.find((c) => c.invoiceId === "inv-prep");
+    expect(costoPrep?.monto).toBe(900); // 1800 repartido entre 2 VINs
+  });
+
+  it("una compra 2510 sin complemento con importe de servicio (< umbral) tampoco es unidad", async () => {
+    const db = fakeDb();
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-gestoria", tipo: "EGRESO",
+      rawXml: `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I"><cfdi:Conceptos>
+        <cfdi:Concepto ClaveProdServ="25101500" Descripcion="GESTORIA UNIDAD ${VIN}" Importe="4500.00"/>
+      </cfdi:Conceptos></cfdi:Comprobante>`,
+    });
+    expect(r?.creados ?? 0).toBe(0);
+    expect(db._vehiculos.size).toBe(0);
+  });
+
+  it("reparación: una unidad cuya 'compra' era la preparación se desliga y el importe queda como costo", async () => {
+    const db = fakeDb();
+    // Simula el estado viejo: unidad creada por la factura de preparación.
+    await (db as any).vehiculo.create({
+      data: {
+        companyId: "c1", vin: VIN, marca: "JAC", modelo: "X", anio: 2026, tipo: "NUEVO",
+        estado: "DISPONIBLE", costoCompra: 1800, fechaCompra: base.fecha,
+        compraInvoiceId: "inv-prep", autoCreado: true,
+      },
+    });
+    ;(db as any).vehiculoCosto.deleteMany = async ({ where }: any) => {
+      for (let i = db._costos.length - 1; i >= 0; i--) {
+        if (db._costos[i].vehiculoId === where.vehiculoId && db._costos[i].invoiceId === where.invoiceId) db._costos.splice(i, 1);
+      }
+      return { count: 0 };
+    };
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-prep", tipo: "EGRESO", rawXml: cfdiPreparacion(),
+    });
+    expect(r?.actualizados).toBeGreaterThanOrEqual(1);
+    const unidad = [...db._vehiculos.values()][0];
+    expect(unidad).toMatchObject({ compraInvoiceId: null, costoCompra: 0 });
+    expect(db._costos.find((c) => c.invoiceId === "inv-prep")?.monto).toBe(900);
+  });
+});
+
 describe("derivarVehiculoDesdeCfdiSiAplica() — expediente CFDI del VIN", () => {
   it("compra y venta quedan en el expediente con su rol; el flete como COSTO", async () => {
     const db = fakeDb();
