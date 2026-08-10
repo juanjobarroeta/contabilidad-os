@@ -33,6 +33,7 @@ import {
 } from "./vin";
 import { normalizarUuid } from "@/lib/fiscal/uuid";
 import { derivarRefaccionesDesdeCfdiSiAplica } from "./auto-refaccion";
+import { derivarServicioDesdeCfdiSiAplica } from "./auto-servicio";
 import { modeloLimpio } from "./claves";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -52,6 +53,8 @@ export interface DerivarVehiculoArgs {
   resolverSupplierId?: () => Promise<string | null>;
   /** Cliente canónico (receptor) en una venta, si el import ya lo resolvió. */
   clienteId?: string | null;
+  /** Total del CFDI (con IVA) — sólo lo usa la derivación de servicio/taller. */
+  total?: number;
 }
 
 export interface DerivarVehiculoResultado {
@@ -585,6 +588,18 @@ export async function derivarVehiculoInline(
     fecha: args.fecha,
     rawXml: args.rawXml,
   });
+  // Servicio/taller (fase 5, lectura): mismo CFDI, mismo gate.
+  if (args.total != null) {
+    await derivarServicioDesdeCfdiSiAplica(db, {
+      companyId: args.companyId,
+      invoiceId: args.invoiceId,
+      tipo: args.tipo,
+      fecha: args.fecha,
+      total: args.total,
+      rawXml: args.rawXml,
+      clienteId: args.clienteId,
+    });
+  }
   return resultado;
 }
 

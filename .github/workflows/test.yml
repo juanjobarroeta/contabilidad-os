@@ -41,6 +41,10 @@ jobs:
         run: npx prisma generate
       - name: Build Next.js
         run: npm run build
+        env:
+          # El type-check de `next build` revienta el heap default de Node
+          # (~2 GB) con el tamaño actual del código; el runner tiene de sobra.
+          NODE_OPTIONS: --max-old-space-size=6144
 
   # Guardia anti-drift: un PR que toque prisma/schema.prisma SIN su migración
   # correspondiente falla aquí (con prisma migrate, un cambio de schema sin

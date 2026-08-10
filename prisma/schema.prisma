@@ -346,6 +346,7 @@ model Company {
   automotrizConfig   AutomotrizConfig?
   pedidosVehiculo    PedidoVehiculo[]
   refacciones        Refaccion[]
+  serviciosVenta     ServicioVenta[]
 }
 
 model CompanyMember {
@@ -675,6 +676,7 @@ model Customer {
   vehiculos         Vehiculo[]
   autoPortalAccount AutoPortalAccount?
   pedidosVehiculo   PedidoVehiculo[]
+  serviciosVenta    ServicioVenta[]
 
   @@unique([companyId, rfc])
 }
@@ -883,6 +885,7 @@ model Invoice {
   vehiculosVendidos  Vehiculo[]      @relation("VehiculoVentaCfdi")
   vehiculoMenciones  VehiculoCfdi[]
   refaccionMovimientos RefaccionMovimiento[]
+  servicioVenta      ServicioVenta?
   vehiculoCostos     VehiculoCosto[]
 
   // Único por empresa: permite que un CFDI intercompañía viva en las dos
@@ -4738,6 +4741,7 @@ model Vehiculo {
   costos        VehiculoCosto[]
   pedidos       PedidoVehiculo[]
   expediente    VehiculoCfdi[]
+  servicios     ServicioVenta[]
 
   @@unique([companyId, vin])
   @@index([companyId, estado])
@@ -4842,6 +4846,37 @@ model RefaccionMovimiento {
   // líneas repetidas del mismo CFDI se agregan antes de escribir.
   @@unique([refaccionId, invoiceId, tipo])
   @@index([invoiceId])
+}
+
+// ─── Servicio/Taller (fase 5, lado lectura): ventas de servicio derivadas ────
+// Una fila por factura INGRESO de taller/mostrador (no venta de unidad):
+// mano de obra vs refacciones separadas por concepto, cliente y — cuando el
+// CFDI menciona el VIN — la unidad. Base de los reportes de servicio
+// (ticket promedio, clientes que no regresan) ANTES del workflow de órdenes.
+model ServicioVenta {
+  id        String   @id @default(cuid())
+  companyId String
+  invoiceId String   @unique
+  createdAt DateTime @default(now())
+
+  clienteId  String?
+  vehiculoId String?
+  fecha      DateTime
+  total      Float // total del CFDI (con IVA)
+  /** Suma de conceptos de servicio (mano de obra, lavado, mantenimiento), sin IVA. */
+  manoObra    Float @default(0)
+  /** Suma de conceptos con número de parte (refacciones facturadas), sin IVA. */
+  refacciones Float @default(0)
+  /** Primer concepto de servicio — la descripción legible de la orden. */
+  concepto String?
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoice  Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  cliente  Customer? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculo Vehiculo? @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, fecha])
+  @@index([companyId, clienteId])
 }
 
 // Expediente CFDI del VIN: TODA factura que menciona la unidad, con su papel.

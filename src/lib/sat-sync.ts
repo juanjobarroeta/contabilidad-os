@@ -688,6 +688,7 @@ export async function verifyAndImportSatSync(
           fecha: new Date(cfdi.fecha),
           rawXml: xmlContent,
           clienteId: invoiceType === "INGRESO" ? customerId : null,
+          total: cfdi.total,
         });
 
         // Persist complemento de pago links (DoctoRelacionado parent UUIDs).
