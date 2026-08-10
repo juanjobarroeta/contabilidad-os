@@ -56,6 +56,52 @@ export function mesesVentanaCancelable(hoy: Date): number {
   return mes <= 4 ? 12 + mes : mes;
 }
 
+/** Fila mínima de SatSyncRequest FINISHED para decidir el backlog. */
+export interface RequestTerminado {
+  year: number;
+  month: number;
+  tipo: string; // EMITIDOS | RECIBIDOS | METADATA_EMITIDOS | METADATA_RECIBIDOS
+}
+
+/**
+ * Backlog de verificación de cancelaciones, con gate POR MES: un mes es
+ * elegible cuando su XML está COMPLETO (EMITIDOS y RECIBIDOS en FINISHED —
+ * todas sus facturas ya existen en BD) y su metadata aún no termina (falta
+ * algún METADATA_*). Se excluye la ventana rodante (esa la cubre la fase A).
+ *
+ * El gate anterior era por EMPRESA (esperar el backfill de 5 años completo):
+ * una recién onboardeada pasaba DÍAS con historial de cancelaciones vacío
+ * aunque sus meses recientes llevaran días importados. Con el gate por mes,
+ * el estatus de cancelación va un tick detrás de cada mes importado.
+ *
+ * Más nuevo primero: la probabilidad de cancelación relevante decae con la
+ * antigüedad. Función PURA (la consulta vive en el route).
+ */
+export function mesesBacklogCancelaciones(
+  terminados: RequestTerminado[],
+  ventanaRodante: Array<{ year: number; month: number }>,
+): Array<{ year: number; month: number }> {
+  const porMes = new Map<string, Set<string>>();
+  for (const t of terminados) {
+    const k = `${t.year}-${t.month}`;
+    const s = porMes.get(k) ?? new Set<string>();
+    s.add(t.tipo);
+    porMes.set(k, s);
+  }
+  const excluir = new Set(ventanaRodante.map((p) => `${p.year}-${p.month}`));
+
+  const out: Array<{ year: number; month: number }> = [];
+  for (const [k, tipos] of porMes) {
+    if (excluir.has(k)) continue;
+    const xmlCompleto = tipos.has("EMITIDOS") && tipos.has("RECIBIDOS");
+    const metaCompleta = tipos.has("METADATA_EMITIDOS") && tipos.has("METADATA_RECIBIDOS");
+    if (!xmlCompleto || metaCompleta) continue;
+    const [year, month] = k.split("-").map(Number);
+    out.push({ year, month });
+  }
+  return out.sort((a, b) => b.year - a.year || b.month - a.month);
+}
+
 /** True si el estatus del SAT indica cancelado. Robusto a "0" o texto "Cancelado". */
 export function esEstatusCancelado(estatus: string | null | undefined): boolean {
   if (estatus == null) return false;
