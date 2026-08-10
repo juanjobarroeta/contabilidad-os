@@ -381,7 +381,7 @@ export default function EmpresaEditPage() {
             <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-cos-line rounded-md text-xs cursor-pointer hover:bg-cos-paper">
               <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
               <span className="text-cos-ink-soft truncate">{csdCerFile ? csdCerFile.name : "Seleccionar .cer"}</span>
-              <input type="file" accept=".cer" className="hidden"
+              <input type="file" accept=".cer,application/x-x509-ca-cert,application/pkix-cert,application/octet-stream" className="hidden"
                 onChange={(e) => setCsdCerFile(e.target.files?.[0] ?? null)} />
             </label>
           </div>
@@ -390,7 +390,7 @@ export default function EmpresaEditPage() {
             <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-cos-line rounded-md text-xs cursor-pointer hover:bg-cos-paper">
               <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
               <span className="text-cos-ink-soft truncate">{csdKeyFile ? csdKeyFile.name : "Seleccionar .key"}</span>
-              <input type="file" accept=".key" className="hidden"
+              <input type="file" accept=".key,application/pkcs8,application/octet-stream" className="hidden"
                 onChange={(e) => setCsdKeyFile(e.target.files?.[0] ?? null)} />
             </label>
           </div>
@@ -435,7 +435,7 @@ export default function EmpresaEditPage() {
             <label className="flex items-center gap-2 px-3 py-2.5 border border-dashed border-cos-line rounded-md text-xs cursor-pointer hover:bg-cos-paper">
               <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
               <span className="text-cos-ink-soft truncate">{fielCerFile ? fielCerFile.name : "Seleccionar .cer"}</span>
-              <input type="file" accept=".cer" className="hidden"
+              <input type="file" accept=".cer,application/x-x509-ca-cert,application/pkix-cert,application/octet-stream" className="hidden"
                 onChange={(e) => setFielCerFile(e.target.files?.[0] ?? null)} />
             </label>
           </div>
@@ -444,7 +444,7 @@ export default function EmpresaEditPage() {
             <label className="flex items-center gap-2 px-3 py-2.5 border border-dashed border-cos-line rounded-md text-xs cursor-pointer hover:bg-cos-paper">
               <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
               <span className="text-cos-ink-soft truncate">{fielKeyFile ? fielKeyFile.name : "Seleccionar .key"}</span>
-              <input type="file" accept=".key" className="hidden"
+              <input type="file" accept=".key,application/pkcs8,application/octet-stream" className="hidden"
                 onChange={(e) => setFielKeyFile(e.target.files?.[0] ?? null)} />
             </label>
           </div>
