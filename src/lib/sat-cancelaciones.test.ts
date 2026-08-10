@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   esEstatusCancelado,
   interpretarCancelaciones,
+  mesesBacklogCancelaciones,
   mesesVentanaCancelable,
 } from "./sat-cancelaciones";
 
@@ -23,6 +24,41 @@ describe("mesesVentanaCancelable", () => {
     ["2026-12-31", 12],
   ])("%s → %i meses (sólo el ejercicio en curso)", (fecha, esperado) => {
     expect(mesesVentanaCancelable(new Date(`${fecha}T12:00:00`))).toBe(esperado);
+  });
+});
+
+describe("mesesBacklogCancelaciones (gate por mes)", () => {
+  const xml = (y: number, m: number) => [
+    { year: y, month: m, tipo: "EMITIDOS" },
+    { year: y, month: m, tipo: "RECIBIDOS" },
+  ];
+  const meta = (y: number, m: number) => [
+    { year: y, month: m, tipo: "METADATA_EMITIDOS" },
+    { year: y, month: m, tipo: "METADATA_RECIBIDOS" },
+  ];
+
+  it("un mes es elegible en cuanto SU XML está completo — sin esperar el backfill entero", () => {
+    // 2024-05 importado, 2021 todavía bajando (sólo EMITIDOS): elegible únicamente 2024-05.
+    const terminados = [...xml(2024, 5), { year: 2021, month: 3, tipo: "EMITIDOS" }];
+    expect(mesesBacklogCancelaciones(terminados, [])).toEqual([{ year: 2024, month: 5 }]);
+  });
+
+  it("un mes con metadata terminada no se re-consulta ('hecho' es para siempre)", () => {
+    const terminados = [...xml(2024, 5), ...meta(2024, 5), ...xml(2024, 4)];
+    expect(mesesBacklogCancelaciones(terminados, [])).toEqual([{ year: 2024, month: 4 }]);
+  });
+
+  it("metadata a medias (un solo lado) sigue pendiente", () => {
+    const terminados = [...xml(2024, 5), { year: 2024, month: 5, tipo: "METADATA_EMITIDOS" }];
+    expect(mesesBacklogCancelaciones(terminados, [])).toEqual([{ year: 2024, month: 5 }]);
+  });
+
+  it("excluye la ventana rodante y ordena del más nuevo al más viejo", () => {
+    const terminados = [...xml(2026, 7), ...xml(2023, 11), ...xml(2024, 2)];
+    expect(mesesBacklogCancelaciones(terminados, [{ year: 2026, month: 7 }])).toEqual([
+      { year: 2024, month: 2 },
+      { year: 2023, month: 11 },
+    ]);
   });
 });
 

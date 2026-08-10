@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { syncCancelacionesPeriodo } from "@/lib/sat-sync";
-import { mesesVentanaCancelable } from "@/lib/sat-cancelaciones";
+import { mesesBacklogCancelaciones, mesesVentanaCancelable } from "@/lib/sat-cancelaciones";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-cancel-sync
@@ -20,13 +20,14 @@ import { mesesVentanaCancelable } from "@/lib/sat-cancelaciones";
 // TODO lo que el SAT entrega como STAMPED, y los paquetes XML incluyen CFDIs
 // ya cancelados (el XML no trae estatus): una empresa recién onboardeada puede
 // cargar años de facturas canceladas contadas como vigentes. Esta fase recorre
-// una sola vez los periodos desde el PRIMER CFDI de la empresa hasta antes de
-// la ventana rodante, con consultas de metadata. El progreso es durable en
+// una sola vez los meses históricos con consultas de metadata. El gate es POR
+// MES: elegible en cuanto SU XML está completo (EMITIDOS+RECIBIDOS FINISHED —
+// todas sus facturas ya existen), sin esperar a que el backfill de 5 años
+// termine entero; así el estatus de cancelación va un tick detrás de cada mes
+// importado, no días detrás del backfill completo. El progreso es durable en
 // SatSyncRequest (mes hecho ⇔ METADATA_EMITIDOS y METADATA_RECIBIDOS en
-// FINISHED, igual que el backfill de XML), y los años cerrados no pueden
-// recibir cancelaciones nuevas, así que "hecho" es hecho para siempre. Sólo
-// corre cuando el backfill de XML de la empresa ya terminó — antes, faltarían
-// facturas que marcar y el mes quedaría "hecho" en falso.
+// FINISHED), y los años cerrados no pueden recibir cancelaciones nuevas, así
+// que "hecho" es hecho para siempre.
 //
 // `historico=1&companyId=` fuerza el modo backlog PARA UNA EMPRESA en vez de
 // la ventana rodante (drenado manual dirigido); re-llamar converge
@@ -53,51 +54,23 @@ const PERIODS_PER_RUN = 6;
 const TIME_BUDGET_MS = 240_000;
 
 /**
- * Backlog histórico de una empresa: periodos desde su PRIMER CFDI hasta antes
- * de la ventana rodante, cuya verificación de cancelaciones no está terminada
- * (ambos lados METADATA con status FINISHED). Del más reciente al más viejo —
- * la probabilidad de cancelación relevante decae con la antigüedad.
+ * Backlog de la empresa: meses con XML completo pero metadata pendiente,
+ * excluyendo la ventana rodante. La decisión es pura (mesesBacklogCancelaciones);
+ * aquí sólo la consulta.
  */
 async function periodosHistoricosPendientes(
   companyId: string,
-  monthsBack: number,
-  now: Date
+  ventanaRodante: Array<{ year: number; month: number }>,
 ): Promise<Array<{ year: number; month: number }>> {
-  const primera = await prisma.invoice.findFirst({
-    where: { companyId },
-    orderBy: { fecha: "asc" },
-    select: { fecha: true },
-  });
-  if (!primera) return [];
-
   const terminados = await prisma.satSyncRequest.findMany({
     where: {
       companyId,
-      tipo: { in: ["METADATA_EMITIDOS", "METADATA_RECIBIDOS"] },
       status: "FINISHED",
+      tipo: { in: ["EMITIDOS", "RECIBIDOS", "METADATA_EMITIDOS", "METADATA_RECIBIDOS"] },
     },
     select: { year: true, month: true, tipo: true },
   });
-  const porPeriodo = new Map<string, Set<string>>();
-  for (const t of terminados) {
-    const k = `${t.year}-${t.month}`;
-    const s = porPeriodo.get(k) ?? new Set<string>();
-    s.add(t.tipo);
-    porPeriodo.set(k, s);
-  }
-
-  const backlog: Array<{ year: number; month: number }> = [];
-  // Arranca justo antes de la ventana rodante (esa la cubre la fase A).
-  const cursor = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
-  const inicio = new Date(primera.fecha.getFullYear(), primera.fecha.getMonth(), 1);
-  while (cursor >= inicio) {
-    const k = `${cursor.getFullYear()}-${cursor.getMonth() + 1}`;
-    if ((porPeriodo.get(k)?.size ?? 0) < 2) {
-      backlog.push({ year: cursor.getFullYear(), month: cursor.getMonth() + 1 });
-    }
-    cursor.setMonth(cursor.getMonth() - 1);
-  }
-  return backlog;
+  return mesesBacklogCancelaciones(terminados, ventanaRodante);
 }
 
 function isAuthorized(req: Request): boolean {
@@ -133,6 +106,12 @@ async function handle(req: Request) {
     : mesesVentanaCancelable(new Date());
   const onlyCompanyId = url.searchParams.get("companyId");
   const historico = url.searchParams.get("historico") === "1";
+  // periodos= (sólo modo dirigido): meses del backlog por corrida. El default
+  // corto cuida la cuota; un drenado manual supervisado puede pedir más.
+  const periodosParam = parseInt(url.searchParams.get("periodos") ?? "", 10);
+  const periodosPorCorrida = Number.isFinite(periodosParam)
+    ? Math.min(Math.max(periodosParam, 1), 24)
+    : PERIODS_PER_RUN;
   const dryRun = ["1", "true", "yes"].includes((url.searchParams.get("dryRun") ?? "").toLowerCase());
   if (historico && !onlyCompanyId) {
     return NextResponse.json({ error: "historico=1 requiere companyId" }, { status: 400 });
@@ -154,7 +133,7 @@ async function handle(req: Request) {
       fielPassword: { not: null },
       ...(onlyCompanyId ? { id: onlyCompanyId } : {}),
     },
-    select: { id: true, rfc: true, satBackfillCompletedAt: true },
+    select: { id: true, rfc: true },
   });
 
   const now = new Date();
@@ -163,6 +142,9 @@ async function handle(req: Request) {
   let companiesProcessed = 0;
   let totalCancelled = 0;
   let totalWouldCancel = 0;
+  // Renglones de metadata leídos: distingue "no hay cancelaciones" (revisados
+  // altos, cancelados 0) de "el parser no lee nada" (revisados 0 con CFDIs).
+  let totalRevisados = 0;
   let periodosPendientes = 0;
   let histPeriodos = 0;
   let histCompanies = 0;
@@ -173,19 +155,8 @@ async function handle(req: Request) {
     try {
       let delaEmpresa = periods;
       if (historico) {
-        // El backlog sólo es confiable con el backfill de XML terminado: si
-        // faltan facturas por importar, un mes marcado "hecho" hoy dejaría sus
-        // canceladas sin marcar para siempre.
-        if (!company.satBackfillCompletedAt) {
-          errors.push({
-            companyId: company.id,
-            rfc: company.rfc,
-            error: "El backfill de CFDIs aún no termina — el backlog histórico se pospone (corre solo al completarse).",
-          });
-          continue;
-        }
-        const backlog = await periodosHistoricosPendientes(company.id, monthsBack, now);
-        delaEmpresa = backlog.slice(0, PERIODS_PER_RUN);
+        const backlog = await periodosHistoricosPendientes(company.id, periods);
+        delaEmpresa = backlog.slice(0, periodosPorCorrida);
         periodosPendientes += Math.max(0, backlog.length - delaEmpresa.length);
         histPeriodos += delaEmpresa.length;
         if (delaEmpresa.length > 0) histCompanies++;
@@ -194,6 +165,7 @@ async function handle(req: Request) {
         const res = await syncCancelacionesPeriodo(company.id, year, month, dryRun);
         if (res.ok && res.cancelled) totalCancelled += res.cancelled;
         if (res.ok && res.wouldCancel) totalWouldCancel += res.wouldCancel.length;
+        if (res.ok && res.checked) totalRevisados += res.checked;
         if (!res.ok && res.error) {
           errors.push({ companyId: company.id, rfc: company.rfc, error: res.error });
           // Cuota del SAT agotada: frenar — la siguiente corrida retoma.
@@ -213,9 +185,8 @@ async function handle(req: Request) {
   if (!historico && !dryRun) {
     for (const company of companies) {
       if (Date.now() - startedAt > TIME_BUDGET_MS) break;
-      if (!company.satBackfillCompletedAt) continue;
 
-      const backlog = await periodosHistoricosPendientes(company.id, monthsBack, now);
+      const backlog = await periodosHistoricosPendientes(company.id, periods);
       const chunk = backlog.slice(0, PERIODS_PER_RUN);
       periodosPendientes += Math.max(0, backlog.length - chunk.length);
       if (chunk.length === 0) continue;
@@ -227,6 +198,7 @@ async function handle(req: Request) {
           const res = await syncCancelacionesPeriodo(company.id, year, month, false);
           histPeriodos++;
           if (res.ok && res.cancelled) totalCancelled += res.cancelled;
+          if (res.ok && res.checked) totalRevisados += res.checked;
           if (!res.ok && res.error) {
             errors.push({ companyId: company.id, rfc: company.rfc, error: res.error });
             if (res.error.includes("5002")) break;
@@ -246,6 +218,10 @@ async function handle(req: Request) {
     companies: companies.length,
     companiesProcessed,
     ...(dryRun ? { wouldCancelDetected: totalWouldCancel } : { cancelledDetected: totalCancelled }),
+    // Renglones de metadata leídos en los paquetes descargados. 0 con CFDIs en
+    // los periodos = el parser no está leyendo el paquete (formato), no "no
+    // hay cancelaciones".
+    revisados: totalRevisados,
     // Backlog histórico (fase B o modo dirigido): lo tocado en esta corrida y
     // lo que queda DESPUÉS de ella (converge a 0 en corridas sucesivas).
     ...(dryRun
