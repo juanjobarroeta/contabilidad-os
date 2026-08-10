@@ -12,6 +12,7 @@ const TIPO_LABEL: Record<string, string> = {
   DECLARACION_ANUAL: "Anual",
   IVA_MENSUAL: "IVA",
   ISR_PROVISIONAL: "ISR prov.",
+  IEPS_MENSUAL: "IEPS",
 };
 
 export function DeclaracionesList() {
@@ -107,7 +108,7 @@ export function DeclaracionesList() {
               las entierra bajo cientos de mensuales) y búsqueda libre. */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-cos-line bg-cos-card p-1" role="group" aria-label="Filtrar por tipo">
-              {(["TODAS", "DECLARACION_ANUAL", "IVA_MENSUAL", "ISR_PROVISIONAL"] as const).map((t) => (
+              {(["TODAS", "DECLARACION_ANUAL", "IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL"] as const).map((t) => (
                 <button
                   key={t}
                   type="button"

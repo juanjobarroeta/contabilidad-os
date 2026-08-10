@@ -105,7 +105,8 @@ export async function backfillDeclaracionesMensuales(
   const tipos = new Set(company.obligations.map((o) => o.tipo));
   const tieneIVA = tipos.has("IVA_MENSUAL");
   const tieneISR = tipos.has("ISR_PROVISIONAL");
-  if (!tieneIVA && !tieneISR) return { companyId, rfc: company.rfc, mesesCreados: 0, acusesParseados: 0 };
+  const tieneIEPS = tipos.has("IEPS_MENSUAL");
+  if (!tieneIVA && !tieneISR && !tieneIEPS) return { companyId, rfc: company.rfc, mesesCreados: 0, acusesParseados: 0 };
 
   const entity = await client.findEntityByRfc(company.rfc);
   if (!entity) return { companyId, rfc: company.rfc, mesesCreados: 0, acusesParseados: 0, error: "Sin entidad en Syntage" };
@@ -115,7 +116,7 @@ export async function backfillDeclaracionesMensuales(
   );
 
   const decls = await prisma.taxDeclaration.findMany({
-    where: { companyId, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL"] } },
+    where: { companyId, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL"] } },
     select: { tipo: true, periodo: true },
   });
   const have = new Set(decls.map((d) => `${d.tipo}:${d.periodo}`));
@@ -133,7 +134,8 @@ export async function backfillDeclaracionesMensuales(
 
     const needIva = tieneIVA && !have.has(`IVA_MENSUAL:${periodo}`);
     const needIsr = tieneISR && !have.has(`ISR_PROVISIONAL:${periodo}`);
-    if (!needIva && !needIsr) continue; // ya capturado → sin costo de parseo
+    const needIeps = tieneIEPS && !have.has(`IEPS_MENSUAL:${periodo}`);
+    if (!needIva && !needIsr && !needIeps) continue; // ya capturado → sin costo de parseo
 
     // Tope por corrida: cada invocación procesa un chunk acotado (evita timeouts);
     // el resto queda para la siguiente corrida (gap-fill).
@@ -163,6 +165,7 @@ export async function backfillDeclaracionesMensuales(
     const tieneDatosIva =
       acuse.ivaAPagar != null || acuse.ivaCausado != null || acuse.ivaAFavor != null || acuse.ivaAcreditable != null;
     const tieneDatosIsr = acuse.isrAPagar != null || acuse.isrIngresos != null;
+    const tieneDatosIeps = acuse.iepsAPagar != null || acuse.iepsAFavor != null;
 
     if (needIva && tieneDatosIva) {
       await prisma.taxDeclaration.create({
@@ -188,6 +191,18 @@ export async function backfillDeclaracionesMensuales(
         },
       });
       have.add(`ISR_PROVISIONAL:${periodo}`);
+      mesesCreados++;
+    }
+    if (needIeps && tieneDatosIeps) {
+      await prisma.taxDeclaration.create({
+        data: {
+          companyId, tipo: "IEPS_MENSUAL", periodo, status: "FILED", isHistorical: true,
+          iepsPagar: acuse.iepsAPagar, iepsSaldoFavor: acuse.iepsAFavor,
+          lineaCaptura: acuse.lineaCaptura ?? null, fechaPresentacion: fecha,
+          ...(pdf ? { acusePdf: pdf, acusePdfNombre } : {}),
+        },
+      });
+      have.add(`IEPS_MENSUAL:${periodo}`);
       mesesCreados++;
     }
   }

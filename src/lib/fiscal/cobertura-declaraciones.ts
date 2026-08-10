@@ -16,7 +16,7 @@
 
 import { prisma } from "@/lib/prisma";
 
-export type TipoAcuseFaltante = "DECLARACION_ANUAL" | "ISR_PROVISIONAL" | "IVA_MENSUAL";
+export type TipoAcuseFaltante = "DECLARACION_ANUAL" | "ISR_PROVISIONAL" | "IVA_MENSUAL" | "IEPS_MENSUAL";
 
 export interface AcuseFaltante {
   companyId: string;
@@ -62,9 +62,13 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
   const tipos = new Set(company.obligations.map((o) => o.tipo));
   const tieneIVA = tipos.has("IVA_MENSUAL");
   const tieneISR = tipos.has("ISR_PROVISIONAL");
+  // IEPS es definitivo mensual como el IVA: mismo patrón de cobertura (año en
+  // curso + diciembre previo para el arrastre, que sólo compensa contra IEPS).
+  const tieneIEPS = tipos.has("IEPS_MENSUAL");
   // La gran mayoría presenta anual; la pedimos para años cerrados si tiene ISR
   // (provisional o anual). Si la empresa no tiene ninguna obligación de ISR, no.
   const tieneAnual = tieneISR || [...tipos].some((t) => t.includes("ANUAL"));
+  if (!tieneIVA && !tieneISR && !tieneIEPS && !tieneAnual) return [];
 
   const now = new Date();
   const curYear = now.getFullYear();
@@ -119,6 +123,21 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
       });
     }
   }
+  // 2b. Ídem IEPS: definitivo mensual sin anual — diciembre previo trae el
+  // saldo a favor arrastrable (sólo compensable contra IEPS, Art. 5o LIEPS).
+  if (tieneIEPS) {
+    const prev = curYear - 1;
+    if (prev >= startYear && !have.has(`IEPS_MENSUAL:${prev}-12`)) {
+      out.push({
+        companyId,
+        tipo: "IEPS_MENSUAL",
+        periodo: `${prev}-12`,
+        etiqueta: `IEPS diciembre ${prev}`,
+        motivo: "El IEPS no tiene anual — el último mes trae el saldo a favor arrastrable.",
+        critico: true,
+      });
+    }
+  }
 
   // 3. Año en curso → mensuales transcurridos (hasta el mes anterior).
   const fromMonth = startYear === curYear ? startMonth : 1;
@@ -141,6 +160,16 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
         periodo: per,
         etiqueta: `IVA ${MESES[m - 1]} ${curYear}`,
         motivo: "IVA del año en curso (saldo a favor / a cargo).",
+        critico: true,
+      });
+    }
+    if (tieneIEPS && !have.has(`IEPS_MENSUAL:${per}`)) {
+      out.push({
+        companyId,
+        tipo: "IEPS_MENSUAL",
+        periodo: per,
+        etiqueta: `IEPS ${MESES[m - 1]} ${curYear}`,
+        motivo: "IEPS definitivo del año en curso (saldo a favor / a cargo).",
         critico: true,
       });
     }

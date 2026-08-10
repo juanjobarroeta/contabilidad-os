@@ -10,11 +10,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from "react";
+import { BulkAcusesUploader } from "@/components/declaraciones/BulkAcusesUploader";
 import { CheckCircle2, Loader2, UploadCloud, AlertCircle, Building2 } from "lucide-react";
 
 export type Faltante = {
   companyId: string;
-  tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL";
+  tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL" | "IEPS_MENSUAL";
   periodo: string;
   etiqueta: string;
   motivo: string;
@@ -30,6 +31,7 @@ const TIPO_LABEL: Record<string, string> = {
   DECLARACION_ANUAL: "Anual",
   IVA_MENSUAL: "IVA",
   ISR_PROVISIONAL: "ISR prov.",
+  IEPS_MENSUAL: "IEPS",
 };
 const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -73,7 +75,7 @@ function agrupar(companyId: string, faltantes: Faltante[]): Item[] {
       key: `${companyId}:MENSUAL:${periodo}`,
       companyId, periodo,
       etiqueta: `Declaración mensual ${MESES[parseInt(m, 10) - 1] ?? m} ${y}`,
-      motivo: `Acuse mensual — cubre ${cubre}.${fs.length > 1 ? " Un mismo acuse cubre ambos." : ""} Alimenta el arrastre (saldos a favor, pagos provisionales).`,
+      motivo: `Acuse mensual — cubre ${cubre}.${fs.length > 1 ? " Un mismo acuse los cubre todos." : ""} Alimenta el arrastre (saldos a favor, pagos provisionales).`,
       tipos: fs.map((f) => f.tipo), kind: "mensual",
     });
   }
@@ -152,6 +154,14 @@ export function FaltantesUploader({
                 <span className="text-sm font-semibold text-cos-ink">{emp.razonSocial}</span>
                 <span className="font-mono text-[11px] text-cos-ink-faint">{emp.rfc}</span>
                 <span className="ml-auto text-[12px] text-cos-ink-faint">{items.length} por subir</span>
+              </div>
+            )}
+            {/* Bolsa: sueltas todos los PDFs de esta empresa y se clasifican
+                solos (periodo + IVA/ISR/IEPS/anual). Alternativa a subir
+                renglón por renglón. */}
+            {!compact && (
+              <div className="border-b border-cos-line px-4 pb-4">
+                <BulkAcusesUploader companyId={emp.companyId} onUploaded={onUploaded} />
               </div>
             )}
             <ul className="divide-y divide-cos-line">

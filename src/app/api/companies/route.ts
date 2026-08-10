@@ -194,6 +194,8 @@ export async function POST(req: Request) {
         isrRetenciones?: number | null;
         isrPagosAnteriores?: number | null;
         isrAPagar?: number | null;
+        iepsAPagar?: number | null;
+        iepsAFavor?: number | null;
         coeficienteUtilidadAplicado?: number | null;
         lineaCaptura?: string | null;
         fechaPresentacion?: string | null;
@@ -466,9 +468,11 @@ export async function POST(req: Request) {
       const tieneDatosIva =
         m.ivaAPagar != null || m.ivaCausado != null || m.ivaAcreditable != null || m.ivaAFavor != null;
       const tieneDatosIsr = m.isrAPagar != null || m.isrIngresos != null;
-      const tipos: ("IVA_MENSUAL" | "ISR_PROVISIONAL")[] = [];
+      const tieneDatosIeps = m.iepsAPagar != null || m.iepsAFavor != null;
+      const tipos: ("IVA_MENSUAL" | "ISR_PROVISIONAL" | "IEPS_MENSUAL")[] = [];
       if (m.tipoImpuesto === "IVA" || m.tipoImpuesto === "IVA_ISR" || tieneDatosIva) tipos.push("IVA_MENSUAL");
       if (m.tipoImpuesto === "ISR" || m.tipoImpuesto === "IVA_ISR" || tieneDatosIsr) tipos.push("ISR_PROVISIONAL");
+      if (tieneDatosIeps) tipos.push("IEPS_MENSUAL");
       if (tipos.length === 0) {
         declaracionesDescartadas++;
         console.error("[companies] Acuse mensual descartado: sin datos de IVA ni ISR", JSON.stringify({ periodo, tipoImpuesto: m.tipoImpuesto }));
@@ -484,6 +488,8 @@ export async function POST(req: Request) {
               periodo,
               status: "FILED",
               isHistorical: true,
+              iepsPagar: tipo === "IEPS_MENSUAL" ? m.iepsAPagar ?? null : null,
+              iepsSaldoFavor: tipo === "IEPS_MENSUAL" ? m.iepsAFavor ?? null : null,
               ivaTrasladadoCobrado: tipo === "IVA_MENSUAL" ? m.ivaCausado ?? null : null,
               ivaAcreditableGastado: tipo === "IVA_MENSUAL" ? m.ivaAcreditable ?? null : null,
               ivaPagar: tipo === "IVA_MENSUAL" ? m.ivaAPagar ?? null : null,

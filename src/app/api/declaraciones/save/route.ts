@@ -14,7 +14,7 @@ import { gateEscritura } from "@/lib/subscription";
 //
 // Idempotente por (companyId, tipo, periodo): re-subir reemplaza.
 
-type TipoDecl = "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL";
+type TipoDecl = "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL" | "IEPS_MENSUAL";
 
 interface AcuseParsed {
   // mensual
@@ -25,6 +25,8 @@ interface AcuseParsed {
   isrIngresos?: number | null;
   isrAPagar?: number | null;
   coeficienteUtilidadAplicado?: number | null;
+  iepsAPagar?: number | null;
+  iepsAFavor?: number | null;
   // anual
   ejercicio?: number | null;
   coeficienteUtilidad?: number | null;
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Faltan companyId, tipo o periodo" }, { status: 400 });
   }
   const { companyId, tipo, periodo } = body;
-  if (!["DECLARACION_ANUAL", "IVA_MENSUAL", "ISR_PROVISIONAL"].includes(tipo)) {
+  if (!["DECLARACION_ANUAL", "IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL"].includes(tipo)) {
     return NextResponse.json({ error: "tipo inválido" }, { status: 400 });
   }
 
@@ -104,6 +106,9 @@ export async function POST(req: Request) {
     data.isrIngresos = a.isrIngresos ?? null;
     data.isrPagar = a.isrAPagar ?? null;
     data.isrCoeficienteUtilidad = a.coeficienteUtilidadAplicado ?? null;
+  } else if (tipo === "IEPS_MENSUAL") {
+    data.iepsPagar = a.iepsAPagar ?? null;
+    data.iepsSaldoFavor = a.iepsAFavor ?? null;
   } else {
     // DECLARACION_ANUAL
     data.isrIngresos = a.utilidadFiscal ?? null;
