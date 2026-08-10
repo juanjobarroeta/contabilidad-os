@@ -25,26 +25,37 @@ export const GET = withAuthz(async (req: Request) => {
   const estado = searchParams.get("estado");
   const tipo = searchParams.get("tipo");
 
-  const vehiculos = await prisma.vehiculo.findMany({
-    where: {
-      companyId,
-      ...(estado ? { estado: estado as never } : {}),
-      ...(tipo ? { tipo: tipo as never } : {}),
-    },
-    include: {
-      cliente: { select: { id: true, razonSocial: true, rfc: true } },
-      supplier: { select: { id: true, razonSocial: true, rfc: true } },
-      vendedor: { select: { id: true, nombre: true, apellidoPaterno: true } },
-      costos: { select: { tipo: true, monto: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  // Lista LIGERA: sólo los campos que la tabla usa, y los costos como UNA suma
+  // agrupada en vez de todas las filas por unidad — con miles de unidades, el
+  // include de costos multiplicaba el payload y el tiempo de respuesta.
+  const [vehiculos, sumas] = await Promise.all([
+    prisma.vehiculo.findMany({
+      where: {
+        companyId,
+        ...(estado ? { estado: estado as never } : {}),
+        ...(tipo ? { tipo: tipo as never } : {}),
+      },
+      select: {
+        id: true, vin: true, marca: true, modelo: true, version: true, anio: true,
+        tipo: true, estado: true, uso: true, color: true, numeroMotor: true,
+        numeroEconomico: true, costoCompra: true, fechaCompra: true,
+        precioVenta: true, fechaVenta: true, ventaInvoiceId: true, autoCreado: true,
+        compraInvoiceId: true,
+        cliente: { select: { id: true, razonSocial: true } },
+        supplier: { select: { id: true, razonSocial: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.vehiculoCosto.groupBy({
+      by: ["vehiculoId"],
+      where: { vehiculo: { companyId } },
+      _sum: { monto: true },
+    }),
+  ]);
 
+  const costosPorUnidad = new Map(sumas.map((s) => [s.vehiculoId, s._sum.monto ?? 0]));
   return NextResponse.json(
-    vehiculos.map(({ costos, ...v }) => ({
-      ...v,
-      costosTotal: costos.reduce((s, c) => s + c.monto, 0),
-    }))
+    vehiculos.map((v) => ({ ...v, costosTotal: costosPorUnidad.get(v.id) ?? 0 }))
   );
 });
 
