@@ -31,6 +31,7 @@ import {
   UserRound,
   ClipboardCheck,
   LayoutGrid,
+  Truck,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -51,6 +52,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: "/facturas", label: "Facturas", icon: FileText },
       { href: "/clientes", label: "Clientes", icon: Users },
+      { href: "/proveedores", label: "Proveedores", icon: Truck },
       { href: "/bancos", label: "Bancos", icon: Landmark },
     ],
   },

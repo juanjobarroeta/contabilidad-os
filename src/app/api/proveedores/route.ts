@@ -52,7 +52,29 @@ export async function GET(req: Request) {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(proveedores);
+  // CFDIs recibidos por proveedor: los emisores de EGRESOs viven como filas de
+  // Customer (así los importa el sync del SAT); se empatan por RFC. Alimenta
+  // la columna "Facturas" de la pestaña Proveedores.
+  const emisores = await prisma.customer.findMany({
+    where: {
+      companyId,
+      invoices: { some: { companyId, tipo: "EGRESO", status: { not: "CANCELLED" } } },
+    },
+    select: {
+      rfc: true,
+      _count: {
+        select: { invoices: { where: { tipo: "EGRESO", status: { not: "CANCELLED" } } } },
+      },
+    },
+  });
+  const cfdisPorRfc = new Map(emisores.map((e) => [e.rfc.toUpperCase().trim(), e._count.invoices]));
+
+  return NextResponse.json(
+    proveedores.map((p) => ({
+      ...p,
+      cfdisRecibidos: cfdisPorRfc.get(p.rfc.toUpperCase().trim()) ?? 0,
+    })),
+  );
 }
 
 export async function POST(req: Request) {
