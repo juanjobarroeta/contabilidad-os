@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { registrarBitacora } from "@/lib/audit";
-import { emitirComplementoPago } from "@/lib/complementos-rep-emit";
+import { emitirComplementoPago, prepararRep } from "@/lib/complementos-rep-emit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Complemento de Pagos (REP — Recibo Electrónico de Pago)
@@ -177,6 +177,15 @@ export async function POST(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
+  // preview:true → SOLO calcula la parcialidad y los saldos (prepararRep), sin
+  // timbrar ni escribir nada. Es lo que ve el contador antes de confirmar, así
+  // que no pasa por el gate de escritura ni deja bitácora.
+  if (body.preview === true) {
+    const prev = await prepararRep({ companyId, invoiceId, bankTransactionId, monto, fechaPago, formaPago });
+    if (!prev.ok) return NextResponse.json({ error: prev.error }, { status: prev.status });
+    return NextResponse.json({ ok: true, preview: prev.preview });
   }
 
   // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).

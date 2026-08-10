@@ -15,6 +15,7 @@ import {
 } from "@/lib/facturas/periodos";
 import { SelectorPeriodo } from "@/components/facturas/SelectorPeriodo";
 import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
+import { ComplementosPendientes } from "@/components/facturas/ComplementosPendientes";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -432,6 +433,9 @@ export default function FacturasPage() {
           ))}
         </Card>
       )}
+
+      {/* complementos de pago (REP) por emitir — cobros PPD detectados sin REP */}
+      <ComplementosPendientes companyId={activeCompany.id} onToast={showToast} onEmitted={fetchData} />
 
       {/* búsqueda (servidor, sobre todo el historial) + selector de periodo */}
       <div className="mt-[18px] flex flex-wrap items-stretch gap-2.5">
