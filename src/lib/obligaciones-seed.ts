@@ -9,6 +9,7 @@ import {
   defaultConfigForTipo,
   type ObligacionConfig,
 } from "./obligaciones";
+import { esPersonaFisicaRfc, requiereDeclaracionAnual } from "@/lib/fiscal/regimen-anual";
 
 /**
  * Seed a company's recurring fiscal obligations (CompanyObligation rows).
@@ -45,13 +46,25 @@ export async function seedCompanyObligaciones(
   ];
 
   // CSF list wins when it yields at least one mapped obligation.
-  const toSeed: { config: ObligacionConfig; fuente: string }[] =
+  let toSeed: { config: ObligacionConfig; fuente: string }[] =
     csfTipos.length > 0
       ? csfTipos.map((tipo) => ({
           config: regimenByTipo.get(tipo) ?? defaultConfigForTipo(tipo),
           fuente: "CSF",
         }))
       : regimenConfigs.map((config) => ({ config, fuente: "REGIMEN" }));
+
+  // Excepción por régimen: RESICO PF (Art. 113-E, pagos definitivos) NO
+  // presenta anual de ISR aunque su CSF liste la obligación — el padrón del
+  // SAT la sigue mostrando y el nag terminaba cobrando anuales inexistentes.
+  const empresa = await prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } });
+  const anualRequerida = requiereDeclaracionAnual({
+    regimenes: regimenCodes,
+    esPersonaFisica: esPersonaFisicaRfc(empresa?.rfc),
+  });
+  if (!anualRequerida) {
+    toSeed = toSeed.filter(({ config }) => !config.tipo.includes("ANUAL"));
+  }
 
   for (const { config, fuente } of toSeed) {
     await prisma.companyObligation.upsert({

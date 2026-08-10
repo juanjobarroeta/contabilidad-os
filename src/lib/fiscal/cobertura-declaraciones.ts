@@ -15,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { esPersonaFisicaRfc, requiereDeclaracionAnual } from "@/lib/fiscal/regimen-anual";
 
 export type TipoAcuseFaltante = "DECLARACION_ANUAL" | "ISR_PROVISIONAL" | "IVA_MENSUAL" | "IEPS_MENSUAL";
 
@@ -52,9 +53,12 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: {
+      rfc: true,
+      regimenFiscal: true,
       fechaInicioOperaciones: true,
       isActive: true,
       obligations: { where: { activa: true }, select: { tipo: true } },
+      regimenes: { select: { code: true } },
     },
   });
   if (!company || !company.isActive) return [];
@@ -66,8 +70,16 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
   // curso + diciembre previo para el arrastre, que sólo compensa contra IEPS).
   const tieneIEPS = tipos.has("IEPS_MENSUAL");
   // La gran mayoría presenta anual; la pedimos para años cerrados si tiene ISR
-  // (provisional o anual). Si la empresa no tiene ninguna obligación de ISR, no.
-  const tieneAnual = tieneISR || [...tipos].some((t) => t.includes("ANUAL"));
+  // (provisional o anual)… EXCEPTO cuando el régimen la exime: RESICO PF
+  // (Art. 113-E, pagos definitivos) no presenta anual aunque su CSF liste la
+  // obligación y aunque tenga ISR mensual. Caso real: el agente le cobró a una
+  // cliente RESICO una "anual vencida" inexistente.
+  const tieneAnual =
+    (tieneISR || [...tipos].some((t) => t.includes("ANUAL"))) &&
+    requiereDeclaracionAnual({
+      regimenes: [company.regimenFiscal, ...company.regimenes.map((r) => r.code)],
+      esPersonaFisica: esPersonaFisicaRfc(company.rfc),
+    });
   if (!tieneIVA && !tieneISR && !tieneIEPS && !tieneAnual) return [];
 
   const now = new Date();
