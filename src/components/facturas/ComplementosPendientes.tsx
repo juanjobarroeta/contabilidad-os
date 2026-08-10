@@ -43,6 +43,11 @@ interface Pendiente {
   pendingAmount: number;
   needsRep: boolean;
 }
+interface SinCobro {
+  invoice: Pendiente["invoice"];
+  totalReped: number;
+  saldoInsoluto: number;
+}
 interface Preview {
   cliente: string;
   rfc: string;
@@ -75,11 +80,18 @@ export function ComplementosPendientes({
   onEmitted: () => void;
 }) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
+  const [sinCobro, setSinCobro] = useState<SinCobro[]>([]);
+  const [sinCobroAbierto, setSinCobroAbierto] = useState(false);
   const [abierta, setAbierta] = useState<string | null>(null);
-  // Modal de previsualización: qué cobro y qué dice el motor.
-  const [modal, setModal] = useState<{ inv: Pendiente["invoice"]; pago: Pago } | null>(null);
+  // Modal de previsualización. Con `pago` (cobro conciliado) el motor toma
+  // monto/fecha del movimiento; sin él (despacho que no concilia banco) el
+  // cobro se captura a mano y se previsualiza con esos datos.
+  const [modal, setModal] = useState<{ inv: Pendiente["invoice"]; pago?: Pago } | null>(null);
+  const [manualFecha, setManualFecha] = useState("");
+  const [manualMonto, setManualMonto] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewErr, setPreviewErr] = useState("");
+  const [previewBusy, setPreviewBusy] = useState(false);
   const [formaPago, setFormaPago] = useState("03");
   const [busy, setBusy] = useState(false);
 
@@ -89,29 +101,58 @@ export function ComplementosPendientes({
       const data = await res.json();
       const rows: Pendiente[] = Array.isArray(data?.pendientes) ? data.pendientes : [];
       setPendientes(rows.filter((p) => p.needsRep));
+      setSinCobro(Array.isArray(data?.sinCobroDetectado) ? data.sinCobroDetectado : []);
     } catch {
       setPendientes([]);
+      setSinCobro([]);
     }
   }, [companyId]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function abrirPreview(inv: Pendiente["invoice"], pago: Pago) {
-    setModal({ inv, pago });
+  /** Cuerpo del POST según el modo: cobro conciliado o captura manual. */
+  function bodyCobro(m: { inv: Pendiente["invoice"]; pago?: Pago }) {
+    return m.pago
+      ? { companyId, invoiceId: m.inv.id, bankTransactionId: m.pago.id }
+      : {
+          companyId,
+          invoiceId: m.inv.id,
+          ...(manualMonto.trim() ? { monto: Number(manualMonto) } : {}),
+          ...(manualFecha ? { fechaPago: manualFecha } : {}),
+        };
+  }
+
+  async function calcularPreview(m: { inv: Pendiente["invoice"]; pago?: Pago }) {
     setPreview(null);
     setPreviewErr("");
+    setPreviewBusy(true);
     try {
       const res = await fetch("/api/facturas/complemento-pagos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preview: true, companyId, invoiceId: inv.id, bankTransactionId: pago.id }),
+        body: JSON.stringify({ preview: true, ...bodyCobro(m) }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "No se pudo calcular el complemento");
       setPreview(data.preview);
     } catch (e) {
       setPreviewErr(e instanceof Error ? e.message : "No se pudo calcular el complemento");
+    } finally {
+      setPreviewBusy(false);
     }
+  }
+
+  function abrirConciliado(inv: Pendiente["invoice"], pago: Pago) {
+    setModal({ inv, pago });
+    calcularPreview({ inv, pago });
+  }
+
+  function abrirManual(x: SinCobro) {
+    setModal({ inv: x.invoice });
+    setPreview(null);
+    setPreviewErr("");
+    setManualFecha(new Date().toISOString().slice(0, 10));
+    setManualMonto(String(x.saldoInsoluto));
   }
 
   async function emitir() {
@@ -121,12 +162,7 @@ export function ComplementosPendientes({
       const res = await fetch("/api/facturas/complemento-pagos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId,
-          invoiceId: modal.inv.id,
-          bankTransactionId: modal.pago.id,
-          formaPago,
-        }),
+        body: JSON.stringify({ ...bodyCobro(modal), formaPago }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "Error al emitir el complemento");
@@ -141,7 +177,7 @@ export function ComplementosPendientes({
     }
   }
 
-  if (pendientes.length === 0) return null;
+  if (pendientes.length === 0 && sinCobro.length === 0) return null;
 
   const hoy = new Date();
   const vencidos = pendientes.reduce(
@@ -198,7 +234,7 @@ export function ComplementosPendientes({
 
             {abierta === p.invoice.id && (
               <div className="bg-cos-paper px-[18px] py-1.5">
-                {p.payments.map((pg) => {
+                {p.payments.map((pg: Pago) => {
                   const vencido = repVencido(new Date(pg.fecha), hoy);
                   return (
                     <div key={pg.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-cos-line-soft py-2 first:border-0">
@@ -214,7 +250,7 @@ export function ComplementosPendientes({
                           {etiquetaPlazoRep(new Date(pg.fecha), hoy)}
                         </span>
                         <button
-                          onClick={() => abrirPreview(p.invoice, pg)}
+                          onClick={() => abrirConciliado(p.invoice, pg)}
                           className="rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[12px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint"
                         >
                           Previsualizar y emitir
@@ -227,6 +263,52 @@ export function ComplementosPendientes({
             )}
           </div>
         ))}
+
+        {/* PPD con saldo insoluto y sin cobro detectado: para despachos que no
+            concilian banco — el cobro se captura a mano y el motor calcula la
+            parcialidad igual. Colapsado por default: puede ser cartera larga. */}
+        {sinCobro.length > 0 && (
+          <div className="border-t border-cos-line">
+            <button
+              onClick={() => setSinCobroAbierto(!sinCobroAbierto)}
+              className="flex w-full items-center gap-2 px-[18px] py-2.5 text-left hover:bg-cos-paper"
+            >
+              {sinCobroAbierto
+                ? <ChevronDown className="h-4 w-4 flex-none text-cos-ink-faint" />
+                : <ChevronRight className="h-4 w-4 flex-none text-cos-ink-faint" />}
+              <span className="text-[13px] font-medium text-cos-ink">
+                Facturas PPD con saldo insoluto sin cobro registrado{" "}
+                <span className="ml-1 rounded-full bg-cos-slate-tint px-2 py-0.5 font-mono text-[11.5px] text-cos-ink-soft">{sinCobro.length}</span>
+              </span>
+              <span className="ml-auto text-[12px] text-cos-ink-faint">
+                ¿Ya te pagaron alguna? Registra el cobro y emite su REP aquí.
+              </span>
+            </button>
+            {sinCobroAbierto && sinCobro.map((x) => (
+              <div key={x.invoice.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-cos-line-soft bg-cos-paper px-[18px] py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-[13.5px] font-medium text-cos-ink">
+                    {x.invoice.customer?.razonSocial ?? "—"}{" "}
+                    <span className="font-mono text-[11.5px] text-cos-ink-faint">{folioDe(x.invoice)}</span>
+                  </p>
+                  <p className="font-mono text-[11.5px] text-cos-ink-faint">
+                    {x.invoice.customer?.rfc ?? "—"} · factura {fmtFecha(x.invoice.fecha)} · {fmtMoney(x.invoice.total)}
+                    {x.totalReped > 0 ? ` · con REP ${fmtMoney(x.totalReped)}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-none items-center gap-2.5">
+                  <span className="text-[12.5px] font-semibold text-cos-ink">saldo {fmtMoney(x.saldoInsoluto)}</span>
+                  <button
+                    onClick={() => abrirManual(x)}
+                    className="rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[12px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint"
+                  >
+                    Registrar cobro
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       {/* Modal: la previsualización del motor antes de timbrar. */}
@@ -243,13 +325,60 @@ export function ComplementosPendientes({
               {modal.inv.customer?.razonSocial ?? "—"} · {folioDe(modal.inv)}
             </p>
 
+            {/* Cobro manual (sin conciliación): fecha y monto se capturan aquí
+                y el motor calcula la parcialidad con esos datos. */}
+            {!modal.pago && (
+              <>
+                <div className="mt-3 grid grid-cols-2 gap-2.5">
+                  <label className="block text-[12.5px] text-cos-ink-soft">
+                    Fecha del cobro
+                    <input
+                      type="date"
+                      value={manualFecha}
+                      onChange={(e) => { setManualFecha(e.target.value); setPreview(null); }}
+                      className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 text-[13.5px] text-cos-ink outline-none"
+                    />
+                  </label>
+                  <label className="block text-[12.5px] text-cos-ink-soft">
+                    Monto cobrado
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={manualMonto}
+                      onChange={(e) => { setManualMonto(e.target.value); setPreview(null); }}
+                      className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 text-[13.5px] text-cos-ink outline-none"
+                    />
+                  </label>
+                </div>
+                {/* Dedazo típico dd/mm: cobro fechado antes de la factura casi
+                    siempre es el mes equivocado. Aviso, no bloqueo. */}
+                {manualFecha && new Date(manualFecha + "T12:00:00Z") < new Date(modal.inv.fecha) && (
+                  <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-cos-amber-ink">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    La fecha del cobro es anterior a la emisión de la factura ({fmtFecha(modal.inv.fecha)}).
+                    Revisa que no sea el mes equivocado — el IVA se causa en el mes del cobro.
+                  </p>
+                )}
+                {!preview && (
+                  <button
+                    onClick={() => calcularPreview(modal)}
+                    disabled={previewBusy || !manualFecha || !manualMonto.trim()}
+                    className="mt-3 w-full rounded-control border border-cos-line py-2 text-[13px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint disabled:opacity-50"
+                  >
+                    {previewBusy ? "Calculando…" : "Previsualizar complemento"}
+                  </button>
+                )}
+              </>
+            )}
+
             {previewErr && (
               <p className="mt-3 flex items-start gap-1.5 rounded-[10px] bg-cos-red-tint px-3 py-2.5 text-[13px] text-cos-red-ink">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {previewErr}
               </p>
             )}
 
-            {!preview && !previewErr && (
+            {modal.pago && !preview && !previewErr && (
               <p className="mt-4 flex items-center gap-2 text-[13px] text-cos-ink-faint">
                 <Loader2 className="h-4 w-4 animate-spin" /> Calculando parcialidad y saldos…
               </p>

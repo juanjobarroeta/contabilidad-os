@@ -149,12 +149,34 @@ export async function GET(req: Request) {
 
   const sinRep = pendientes.filter(p => p.needsRep);
 
+  // PPD con saldo insoluto y SIN cobro detectado: los despachos que no cargan
+  // estados de cuenta nunca tendrían filas arriba (todo depende de la
+  // conciliación). Aquí el saldo se deriva de los REPs ya emitidos: lo que
+  // falta por complementar aunque el banco no esté conciliado. El cobro se
+  // registra a mano desde el centro (monto/fecha) y el motor calcula la
+  // parcialidad igual.
+  const conPagoIds = new Set(matchedPayments.map((p) => p.invoiceId));
+  const sinCobroDetectado = ppdInvoices
+    .map((inv) => {
+      const reps = repByParent.get(inv.id) ?? [];
+      const totalReped = reps.reduce((s, r) => s + r.total, 0);
+      return {
+        invoice: inv,
+        totalReped,
+        saldoInsoluto: Math.round((inv.total - totalReped) * 100) / 100,
+      };
+    })
+    .filter((x) => !conPagoIds.has(x.invoice.id) && x.saldoInsoluto > 0.01)
+    .sort((a, b) => new Date(b.invoice.fecha).getTime() - new Date(a.invoice.fecha).getTime());
+
   return NextResponse.json({
     pendientes,
+    sinCobroDetectado,
     stats: {
       totalPpd: ppdInvoices.length,
       conPago: pendientes.length,
       sinRep: sinRep.length,
+      sinCobro: sinCobroDetectado.length,
       montoPendiente: sinRep.reduce((s, p) => s + p.pendingAmount, 0),
     },
   });
