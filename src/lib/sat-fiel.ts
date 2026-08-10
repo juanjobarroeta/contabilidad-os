@@ -1,5 +1,5 @@
 import { Fiel } from "@nodecfdi/sat-ws-descarga-masiva";
-import { Certificate } from "@nodecfdi/credentials/node";
+import { Certificate, Credential } from "@nodecfdi/credentials/node";
 import { prisma } from "./prisma";
 import { decryptSecret } from "./crypto";
 import { cuentasPredialesDeConcepto } from "@/lib/facturas/predial";
@@ -84,6 +84,86 @@ export async function getFielVigenciaForCompany(companyId: string): Promise<Fiel
   } catch {
     return { valida: false };
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Validación de credenciales SAT AL SUBIRLAS (sin tocar al SAT).
+//
+// Caso real: una cliente subió su CSD (sello) en el lugar de la e.firma. El
+// badge de vigencia se veía verde ("Vigente hasta 2027" — la fecha del .cer es
+// válida para ambos tipos) pero la descarga masiva fallaba con el genérico
+// "FIEL inválida o expirada" (Fiel.isValid() rechaza certificados de sello).
+// Dos mensajes en conflicto y cero pistas. Aquí se valida TODO al guardar:
+// tipo correcto (e.firma vs sello), vigencia, RFC del certificado, que la
+// llave corresponda al certificado y que la contraseña abra la llave.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ValidacionCredencial =
+  | { ok: true; validoHasta: Date | null }
+  | { ok: false; error: string };
+
+export function validarCredencialSat(args: {
+  cerBase64: string;
+  keyBase64: string;
+  password: string;
+  rfcEsperado?: string;
+  esperado: "FIEL" | "CSD";
+}): ValidacionCredencial {
+  const nombre = args.esperado === "FIEL" ? "e.firma" : "CSD (sello)";
+
+  let cert: Certificate;
+  try {
+    cert = new Certificate(Buffer.from(args.cerBase64, "base64").toString("binary"));
+  } catch {
+    return { ok: false, error: "El archivo .cer no se pudo leer como certificado del SAT. Revisa que sea el .cer correcto." };
+  }
+
+  const tipo = cert.satType();
+  if (args.esperado === "FIEL" && tipo.isCsd()) {
+    return {
+      ok: false,
+      error:
+        "Estos archivos son del CSD (el sello para facturar), no de la e.firma. La e.firma es la que usas para entrar al portal del SAT — sube ese otro par de .cer/.key.",
+    };
+  }
+  if (args.esperado === "CSD" && tipo.isFiel()) {
+    return {
+      ok: false,
+      error:
+        "Estos archivos son de la e.firma, no del CSD (sello). Para timbrar facturas se usa el CSD que se genera en el portal del SAT.",
+    };
+  }
+
+  if (!cert.validOn()) {
+    const hasta = cert.validTo();
+    return {
+      ok: false,
+      error: `El certificado de ${nombre} está vencido${hasta ? ` (venció el ${hasta.toISOString().slice(0, 10)})` : ""}. Renuévalo en el SAT y sube los archivos nuevos.`,
+    };
+  }
+
+  if (args.rfcEsperado) {
+    const rfcCert = (cert.rfc() || "").trim().toUpperCase();
+    if (rfcCert && rfcCert !== args.rfcEsperado.trim().toUpperCase()) {
+      return { ok: false, error: `El certificado pertenece al RFC ${rfcCert}, no al RFC de esta empresa (${args.rfcEsperado}).` };
+    }
+  }
+
+  try {
+    Credential.create(
+      Buffer.from(args.cerBase64, "base64").toString("binary"),
+      Buffer.from(args.keyBase64, "base64").toString("binary"),
+      args.password,
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.toLowerCase() : "";
+    if (msg.includes("belong")) {
+      return { ok: false, error: `La llave .key no corresponde al certificado .cer — parece que se mezclaron archivos de ${nombre} distintos.` };
+    }
+    return { ok: false, error: `La contraseña no abre la llave privada (.key) de tu ${nombre}. Revisa mayúsculas, minúsculas y espacios.` };
+  }
+
+  return { ok: true, validoHasta: cert.validTo() ?? null };
 }
 
 /** Parse key fields from a CFDI XML string */

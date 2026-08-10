@@ -7,6 +7,7 @@ import { kickCron } from "@/lib/cron-scheduler";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
 import { fielStatus, parseCertExpiry } from "@/lib/fiel";
+import { validarCredencialSat } from "@/lib/sat-fiel";
 import { borrarCredencialesEmpresa, borrarEmpresaDefinitivo } from "@/lib/empresas/baja";
 import { liberarSlotSyntage } from "@/lib/fiscal/cumplimiento/syntage/deprovision";
 import { registrarBitacora } from "@/lib/audit";
@@ -102,6 +103,26 @@ export async function PATCH(req: Request, { params }: Params) {
   } = body;
 
   try {
+  // Validar la credencial ANTES de guardar (tipo e.firma vs sello, vigencia,
+  // RFC, llave↔certificado y contraseña). Caso real: un CSD guardado como
+  // e.firma pasaba el guardado con badge verde y reventaba después en la
+  // descarga masiva con un mensaje genérico.
+  if (fielCer && fielKey && fielPassword) {
+    const empresa = await prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } });
+    const v = validarCredencialSat({
+      cerBase64: fielCer, keyBase64: fielKey, password: fielPassword,
+      rfcEsperado: empresa?.rfc, esperado: "FIEL",
+    });
+    if (!v.ok) return NextResponse.json({ error: v.error }, { status: 422 });
+  }
+  if (csdCer && csdKey && csdPassword) {
+    const empresa = await prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } });
+    const v = validarCredencialSat({
+      cerBase64: csdCer, keyBase64: csdKey, password: csdPassword,
+      rfcEsperado: empresa?.rfc, esperado: "CSD",
+    });
+    if (!v.ok) return NextResponse.json({ error: v.error }, { status: 422 });
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: Record<string, any> = {};
   // Encrypt credential material at rest (AES-256-GCM via lib/crypto).

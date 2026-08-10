@@ -11,6 +11,7 @@ import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 import { encryptNullable } from "@/lib/crypto";
 import { parseCertExpiry } from "@/lib/fiel";
+import { validarCredencialSat } from "@/lib/sat-fiel";
 import { sincronizarCantidadDespacho } from "@/lib/billing/sync-cantidad-despacho";
 
 // GET /api/companies — sesión web O token de servicio (Authorization: Bearer),
@@ -330,6 +331,25 @@ export async function POST(req: Request) {
     });
   }
   const regimenCreate = [...regimenByCode.values()];
+
+  // Validar las credenciales ANTES de cifrar/guardar (tipo e.firma vs sello,
+  // vigencia, RFC, llave↔certificado y contraseña). Caso real: un CSD subido
+  // como e.firma en el onboarding pasaba con badge verde y reventaba después
+  // en la descarga masiva con un mensaje genérico.
+  if (fielCer && fielKey && fielPassword) {
+    const v = validarCredencialSat({
+      cerBase64: fielCer, keyBase64: fielKey, password: fielPassword,
+      rfcEsperado: rfcNorm, esperado: "FIEL",
+    });
+    if (!v.ok) return NextResponse.json({ error: `e.firma: ${v.error}` }, { status: 422 });
+  }
+  if (csdCer && csdKey && csdPassword) {
+    const v = validarCredencialSat({
+      cerBase64: csdCer, keyBase64: csdKey, password: csdPassword,
+      rfcEsperado: rfcNorm, esperado: "CSD",
+    });
+    if (!v.ok) return NextResponse.json({ error: `CSD: ${v.error}` }, { status: 422 });
+  }
 
   // Encrypt credential material before persisting. In production
   // encryptSecret/encryptNullable throw if CREDENTIALS_ENCRYPTION_KEY is
