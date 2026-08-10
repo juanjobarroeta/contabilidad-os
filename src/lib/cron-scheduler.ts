@@ -59,6 +59,9 @@ const JOBS: Job[] = [
   // local del rawXml, sin cuota SAT). Desfasado del rawxml-backfill para
   // procesar lo que ese ciclo acaba de traer; sin empresas AUTOMOTRIZ es no-op.
   { name: "vehiculos-backfill", everyMs: 6 * HOUR, firstDelayMs: 30 * MIN },
+  // Costo financiero del plan piso por unidad-mes (local, sin SAT). Diario:
+  // sólo acumula meses vencidos, así que la mayoría de corridas son no-op.
+  { name: "interes-piso", everyMs: 24 * HOUR, firstDelayMs: 40 * MIN },
 ];
 
 const FLAG = Symbol.for("contabilidad-os.cron-scheduler");

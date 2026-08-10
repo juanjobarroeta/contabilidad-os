@@ -30,7 +30,9 @@ const schema = z.object({
   fecha: z.string().datetime().optional(),
   clienteId: z.string().nullable().optional(),
   vendedorId: z.string().nullable().optional(),
-  comisionMonto: z.number().min(0).default(0),
+  // Sin monto explícito, se aplica la regla de AutomotrizConfig (si existe):
+  // comisionFija + % de la utilidad estimada (precio − costo capitalizado).
+  comisionMonto: z.number().min(0).optional(),
 });
 
 export const POST = withAuthz(
@@ -102,6 +104,23 @@ export const POST = withAuthz(
         .filter((c) => c.tipo !== "INTERES_PISO")
         .reduce((s, c) => s + c.monto, 0);
 
+    // Comisión: el monto explícito gana; si no viene, la regla de la empresa
+    // (fija + % de la utilidad estimada). Sin regla → 0, como antes.
+    let comisionMonto = parsed.data.comisionMonto ?? 0;
+    if (parsed.data.comisionMonto == null) {
+      const config = await prisma.automotrizConfig.findUnique({
+        where: { companyId: vehiculo.companyId },
+        select: { comisionPorcentajeUtilidad: true, comisionFija: true },
+      });
+      if (config) {
+        const utilidadEstimada = Math.max(0, parsed.data.precioVenta - costoCapitalizado);
+        comisionMonto =
+          Math.round(
+            ((config.comisionFija ?? 0) + (config.comisionPorcentajeUtilidad ?? 0) * utilidadEstimada) * 100
+          ) / 100;
+      }
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       await postVehiculoVendido(tx, {
         companyId: vehiculo.companyId,
@@ -122,7 +141,7 @@ export const POST = withAuthz(
           fechaVenta: fecha,
           clienteId: parsed.data.clienteId ?? vehiculo.clienteId,
           vendedorId: parsed.data.vendedorId ?? vehiculo.vendedorId,
-          comisionMonto: parsed.data.comisionMonto,
+          comisionMonto,
         },
       });
     });

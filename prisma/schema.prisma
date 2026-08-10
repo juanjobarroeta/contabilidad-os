@@ -343,6 +343,7 @@ model Company {
   // Automotriz
   vehiculos          Vehiculo[]
   autoPortalAccounts AutoPortalAccount[]
+  automotrizConfig   AutomotrizConfig?
 }
 
 model CompanyMember {
@@ -4768,6 +4769,26 @@ model ClaveVehicularCatalogo {
   modelo    String // texto del renglón "Modelo NN : …" del Anexo
   version   String? // descripción de la versión
   fuente    String // p. ej. "Anexo 15 RMF 2026 (DOF 28-dic-2025)"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Configuración del vertical automotriz por empresa: defaults que los flujos
+// aplican cuando la unidad no trae el propio.
+model AutomotrizConfig {
+  id        String  @id @default(cuid())
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Plan piso: tasa anual default para unidades sin tasa propia (0.145 = 14.5%).
+  // El cron interes-piso acumula el costo financiero mensual por unidad en piso.
+  planPisoTasaAnual Float?
+
+  // Comisión del vendedor al vender, cuando la venta no trae monto explícito:
+  // % de la utilidad estimada (precio − costo capitalizado) y/o monto fijo.
+  comisionPorcentajeUtilidad Float?
+  comisionFija               Float?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
