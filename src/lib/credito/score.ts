@@ -49,6 +49,11 @@ export interface InsumosCredito {
     abonosProm: number;
     /** Promedio mensual de cargos (salidas, positivo). */
     cargosProm: number;
+    /** Serie mensual (habilita recencia, mes malo y la tabla de flujo).
+     *  Opcional: snapshots/tests viejos no la traen. */
+    porMes?: Array<{ periodo: string; abonos: number; cargos: number }>;
+    /** Saldo del último movimiento con saldo de cada mes (colchón). */
+    saldosFinMes?: Array<{ periodo: string; saldo: number }>;
   } | null;
   /**
    * Cartera PPD y comportamiento de pago, derivados de los REPs
@@ -130,6 +135,14 @@ export interface ResultadoScore {
      *  - "solo_bancario": sin CFDIs; ingresosProm/gastosProm son entradas y
      *    salidas del banco (expediente delgado). */
     fuenteFlujo?: "fiscal" | "bancario" | "solo_bancario";
+    /** Efectivo declarado no depositado reconocido al 50% (solo con patrón
+     *  público-en-general verificado). Suma al neto bancario en la cota. */
+    efectivoReconocido?: number | null;
+    /** p25 del flujo mensual bancario ajustado — lo que puede pagar en un MES
+     *  MALO. El pago máximo sale del menor entre esto y el flujo libre. */
+    flujoMesMalo?: number | null;
+    /** Saldo promedio de fin de mes (colchón) — null sin saldos. */
+    saldoPromedio?: number | null;
   } | null;
 }
 
@@ -176,6 +189,49 @@ function fechaLimiteConTolerancia(periodo: string): Date | null {
   const [y, m] = periodo.split("-").map(Number);
   if (!y || !m) return null;
   return new Date(Date.UTC(y, m, 17 + TOLERANCIA_DIAS, 23, 59, 59));
+}
+
+/** Meses transcurridos entre dos periodos "YYYY-MM" (a − b). */
+function mesesEntre(a: string, b: string): number {
+  const [ay, am] = a.split("-").map(Number);
+  const [by, bm] = b.split("-").map(Number);
+  return (ay - by) * 12 + (am - bm);
+}
+
+/** Vida media de la ponderación por recencia: el mes de hace 6 meses pesa la
+ *  mitad que el mes más reciente. El buen pagador se predice con lo que el
+ *  negocio hace HOY, no con el promedio plano del año. */
+export const VIDA_MEDIA_MESES = 6;
+
+/**
+ * Promedio ponderado por recencia sobre una serie mensual: peso 0.5^(edad/6)
+ * respecto al periodo más reciente de la serie. Null con serie vacía. PURA.
+ */
+export function promedioPonderadoPorRecencia(
+  serie: Array<{ periodo: string; valor: number }>,
+): number | null {
+  if (serie.length === 0) return null;
+  const ref = serie.reduce((m, s) => (s.periodo > m ? s.periodo : m), serie[0].periodo);
+  let suma = 0;
+  let pesos = 0;
+  for (const s of serie) {
+    const edad = Math.max(0, mesesEntre(ref, s.periodo));
+    const w = Math.pow(0.5, edad / VIDA_MEDIA_MESES);
+    suma += s.valor * w;
+    pesos += w;
+  }
+  return pesos > 0 ? suma / pesos : null;
+}
+
+/** Percentil (interpolación lineal) — p en [0,1]. Null con lista vacía. */
+export function percentil(vals: number[], p: number): number | null {
+  if (vals.length === 0) return null;
+  const orden = [...vals].sort((a, b) => a - b);
+  const idx = (orden.length - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return orden[lo];
+  return orden[lo] + (orden[hi] - orden[lo]) * (idx - lo);
 }
 
 /** Pendiente relativa: compara promedio de la mitad reciente vs la anterior. */
@@ -239,7 +295,7 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     puntos += ptsVol;
     razones.push(cv <= 0.25 ? "Baja volatilidad mensual." : cv <= 0.5 ? "Volatilidad moderada." : "Ingresos muy variables mes a mes.");
 
-    dims.push({ clave: "actividad", etiqueta: "Actividad declarada", peso: 25, puntos: Math.min(100, puntos), razones });
+    dims.push({ clave: "actividad", etiqueta: "Actividad declarada", peso: 20, puntos: Math.min(100, puntos), razones });
   } else {
     cobertura.push("Menos de 3 meses de declaraciones con ingresos — sin base para medir actividad.");
   }
@@ -348,53 +404,130 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     const razones: string[] = [];
     let puntos = 0;
 
-    // Promediar gastos/nómina sobre los MESES CON COBERTURA de CFDIs, no entre
-    // 12 fijos: con el backfill a medias (p. ej. sólo 5 meses descargados),
-    // dividir entre 12 diluía los gastos y sobreestimaba el flujo libre.
-    const mesesCobertura = new Set([
+    // Todos los promedios de capacidad van PONDERADOS POR RECENCIA (vida media
+    // 6 meses): el pago del crédito sale del flujo de los próximos meses, y el
+    // mejor predictor es lo reciente, no el promedio plano del año.
+    const mesesCoberturaSet = new Set([
       ...(insumos.cfdis?.facturadoPorMes ?? []).map((f) => f.periodo),
       ...insumos.gastosPorMes.map((g) => g.periodo),
-    ]).size;
+    ]);
+    const mesesCobertura = mesesCoberturaSet.size;
+    // Gastos: serie mensual sobre la ventana de cobertura, con 0 en los meses
+    // cubiertos sin CFDIs de gasto (ese mes realmente no facturó compras).
+    // Sin serie mensual (insumos viejos que sólo traen el agregado 12m) se
+    // promedia el agregado sobre la cobertura — NUNCA se asume gasto cero.
     const divisor = Math.min(12, Math.max(1, mesesCobertura));
-    const gastosProm = insumos.gastosFacturados12m / divisor;
-    const nominaProm = insumos.nomina12m / divisor;
+    const gastosPorPeriodo = new Map(insumos.gastosPorMes.map((g) => [g.periodo, g.total]));
+    const serieGastos = [...mesesCoberturaSet].map((p) => ({ periodo: p, valor: gastosPorPeriodo.get(p) ?? 0 }));
+    const gastosProm =
+      insumos.gastosPorMes.length > 0
+        ? promedioPonderadoPorRecencia(serieGastos) ?? 0
+        : insumos.gastosFacturados12m / divisor;
+    const nominaProm = insumos.nomina12m / divisor; // sólo hay agregado anual
+    const ingresosPromRec =
+      promedioPonderadoPorRecencia(
+        conIngresos.map((d) => ({ periodo: d.periodo, valor: d.ingresos as number })),
+      ) ?? promedioMensual;
     const impuestosProm =
-      insumos.declaraciones.length > 0
-        ? insumos.declaraciones.reduce((s, d) => s + d.impuestosPagados, 0) / insumos.declaraciones.length
-        : 0;
-    const flujoFiscal = Math.max(0, promedioMensual - gastosProm - nominaProm - impuestosProm);
+      promedioPonderadoPorRecencia(
+        insumos.declaraciones.map((d) => ({ periodo: d.periodo, valor: d.impuestosPagados })),
+      ) ?? 0;
+    const flujoFiscal = Math.max(0, ingresosPromRec - gastosProm - nominaProm - impuestosProm);
+
+    // Neto bancario ponderado por recencia (con serie); sin serie, el simple.
+    const serieNetoBanco = (bancosUsables?.porMes ?? []).map((m) => ({
+      periodo: m.periodo,
+      valor: m.abonos - m.cargos,
+    }));
+    const netoBancarioRec =
+      serieNetoBanco.length > 0 ? promedioPonderadoPorRecencia(serieNetoBanco) : netoBancario;
+    const abonosPromRec =
+      promedioPonderadoPorRecencia(
+        (bancosUsables?.porMes ?? []).map((m) => ({ periodo: m.periodo, valor: m.abonos })),
+      ) ?? bancosUsables?.abonosProm ?? null;
+
+    // Ajuste de EFECTIVO DECLARADO: cuando el patrón público-en-general está
+    // verificado (declara consistentemente MÁS de lo que factura, y paga ISR
+    // sobre ello — señal costosa de que ese ingreso es real), se reconoce el
+    // 50% del ingreso declarado que no se ve en depósitos. Sin ese patrón, el
+    // efectivo no depositado NO cuenta.
+    let efectivoReconocido = 0;
+    if (bancosUsables && abonosPromRec != null) {
+      const declaradoPorMesCap = new Map(conIngresos.map((d) => [d.periodo, d.ingresos as number]));
+      const solapadosCap = (insumos.cfdis?.facturadoPorMes ?? []).filter((f) => declaradoPorMesCap.has(f.periodo));
+      const factCap = solapadosCap.reduce((s, f) => s + f.total, 0);
+      const declCap = solapadosCap.reduce((s, f) => s + (declaradoPorMesCap.get(f.periodo) ?? 0), 0);
+      const patronPublicoGeneral = solapadosCap.length >= 3 && declCap > 0 && factCap / declCap < 0.9;
+      if (patronPublicoGeneral) {
+        efectivoReconocido = 0.5 * Math.max(0, ingresosPromRec - abonosPromRec);
+      }
+    }
+    const netoAjustado = netoBancarioRec != null ? netoBancarioRec + efectivoReconocido : null;
+
     let fuenteFlujo: "fiscal" | "bancario" = "fiscal";
     flujoLibreMensual = flujoFiscal;
-    if (netoBancario != null && netoBancario < flujoFiscal) {
-      flujoLibreMensual = Math.max(0, netoBancario);
+    if (netoAjustado != null && netoAjustado < flujoFiscal) {
+      flujoLibreMensual = Math.max(0, netoAjustado);
       fuenteFlujo = "bancario";
     }
+
+    // MES MALO: p25 del neto bancario mensual ajustado — lo que puede pagar en
+    // un mes flojo, no en el promedio. El pago máximo se acota con esto abajo.
+    const flujoMesMalo =
+      serieNetoBanco.length >= 4
+        ? Math.max(0, (percentil(serieNetoBanco.map((s) => s.valor), 0.25) ?? 0) + efectivoReconocido)
+        : null;
+
+    // Colchón: saldo promedio de fin de mes vs salidas — cuántos días aguanta.
+    const saldos = (bancosUsables?.saldosFinMes ?? []).map((s) => s.saldo);
+    const saldoPromedio = saldos.length > 0 ? saldos.reduce((s, v) => s + v, 0) / saldos.length : null;
+
     capacidadDesglose = {
-      ingresosProm: Math.round(promedioMensual),
+      ingresosProm: Math.round(ingresosPromRec),
       gastosProm: Math.round(gastosProm),
       nominaProm: Math.round(nominaProm),
       impuestosProm: Math.round(impuestosProm),
       flujoLibre: Math.round(flujoLibreMensual),
       theta: 0, // se fija abajo, cuando ya se conoce la banda
-      flujoBancarioNeto: netoBancario != null ? Math.round(netoBancario) : null,
+      flujoBancarioNeto: netoBancarioRec != null ? Math.round(netoBancarioRec) : null,
       fuenteFlujo,
+      efectivoReconocido: efectivoReconocido > 0 ? Math.round(efectivoReconocido) : null,
+      flujoMesMalo: flujoMesMalo != null ? Math.round(flujoMesMalo) : null,
+      saldoPromedio: saldoPromedio != null ? Math.round(saldoPromedio) : null,
     };
-    const margen = flujoLibreMensual / promedioMensual;
+    const margen = ingresosPromRec > 0 ? flujoLibreMensual / ingresosPromRec : 0;
 
     puntos += margen >= 0.35 ? 60 : margen >= 0.2 ? 45 : margen >= 0.1 ? 30 : margen > 0 ? 15 : 5;
     razones.push(
-      `Flujo libre fiscal estimado ${money(flujoFiscal)}/mes (ingresos ${money(promedioMensual)} − gastos facturados ${money(gastosProm)} − nómina ${money(nominaProm)} − impuestos ${money(impuestosProm)}).`,
+      `Flujo libre fiscal estimado ${money(flujoFiscal)}/mes, ponderado por recencia (ingresos ${money(ingresosPromRec)} − gastos facturados ${money(gastosProm)} − nómina ${money(nominaProm)} − impuestos ${money(impuestosProm)}).`,
     );
     if (fuenteFlujo === "bancario") {
       razones.push(
-        `El neto bancario real (${money(netoBancario!)}/mes) es MENOR que la estimación fiscal — el flujo libre se acota al banco: ${money(flujoLibreMensual)}/mes (margen ${pct(margen)}).`,
+        `El neto bancario real (${money(netoBancarioRec!)}/mes${efectivoReconocido > 0 ? ` + ${money(efectivoReconocido)} de efectivo declarado reconocido al 50%` : ""}) es MENOR que la estimación fiscal — el flujo libre se acota al banco: ${money(flujoLibreMensual)}/mes (margen ${pct(margen)}).`,
       );
     } else {
       razones.push(`Margen de flujo libre: ${pct(margen)}.`);
+      if (efectivoReconocido > 0 && netoAjustado != null) {
+        razones.push(
+          `Efectivo declarado no depositado reconocido al 50% (${money(efectivoReconocido)}/mes) — patrón público en general verificado.`,
+        );
+      }
+    }
+    if (flujoMesMalo != null) {
+      razones.push(
+        `Mes malo (p25 del neto bancario ajustado): ${money(flujoMesMalo)}/mes — el pago máximo se calcula sobre el menor entre esto y el flujo libre.`,
+      );
+    }
+    if (saldoPromedio != null && bancosUsables) {
+      const cargosRef = bancosUsables.cargosProm > 0 ? bancosUsables.cargosProm : null;
+      const dias = cargosRef ? Math.round((saldoPromedio / cargosRef) * 30) : null;
+      razones.push(
+        `Colchón bancario: saldo promedio de fin de mes ${money(saldoPromedio)}${dias != null ? ` (~${dias} día(s) de operación sin un solo ingreso)` : ""}.`,
+      );
     }
     if (insumos.gastosFacturados12m === 0) {
       razones.push(
-        netoBancario != null
+        netoBancarioRec != null
           ? "Sin CFDIs de gasto registrados — los gastos reales se leen del banco."
           : "Sin CFDIs de gasto registrados — el margen puede estar sobreestimado (compras sin factura).",
       );
@@ -405,23 +538,10 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
       );
     }
 
-    // Comportamiento de pago a proveedores (REPs recibidos contra sus PPD de
-    // gasto): la evidencia más directa de CÓMO paga sus obligaciones.
-    const pp = insumos.flujosPPD?.pagos;
-    if (pp && pp.monto > 0 && pp.diasPromedio != null) {
+    if (bancosUsables && netoBancarioRec != null) {
+      puntos += netoBancarioRec > 0 ? 40 : netoBancarioRec > -0.05 * bancosUsables.abonosProm ? 25 : 10;
       razones.push(
-        `Paga a sus proveedores en ~${Math.round(pp.diasPromedio)} días en promedio (${pp.facturas} factura(s) PPD por ${money(pp.monto)}, pagado ${pct(pp.pagado / pp.monto)}).`,
-      );
-      if (pp.diasPromedio > 120) {
-        puntos -= 10;
-        razones.push("Paga a más de 120 días — señal de estrés de flujo o mala disciplina de pago.");
-      }
-    }
-
-    if (bancosUsables && netoBancario != null) {
-      puntos += netoBancario > 0 ? 40 : netoBancario > -0.05 * bancosUsables.abonosProm ? 25 : 10;
-      razones.push(
-        `Flujo bancario real (${bancosUsables.mesesConDatos} meses): entradas ${money(bancosUsables.abonosProm)}/mes vs salidas ${money(bancosUsables.cargosProm)}/mes — neto ${money(netoBancario)}.`,
+        `Flujo bancario real (${bancosUsables.mesesConDatos} meses, ponderado por recencia): entradas ${money(bancosUsables.abonosProm)}/mes vs salidas ${money(bancosUsables.cargosProm)}/mes — neto ${money(netoBancarioRec)}.`,
       );
     } else {
       puntos += 20; // neutro
@@ -437,14 +557,28 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     // nómina, por eso no se restan aparte). Las transferencias internas vienen
     // excluidas desde el loader.
     const razones: string[] = [];
-    flujoLibreMensual = Math.max(0, netoBancario);
+    const serieNetoBanco = (bancosUsables.porMes ?? []).map((m) => ({
+      periodo: m.periodo,
+      valor: m.abonos - m.cargos,
+    }));
+    const netoRec = serieNetoBanco.length > 0 ? promedioPonderadoPorRecencia(serieNetoBanco)! : netoBancario;
+    flujoLibreMensual = Math.max(0, netoRec);
+    const flujoMesMalo =
+      serieNetoBanco.length >= 4
+        ? Math.max(0, percentil(serieNetoBanco.map((s) => s.valor), 0.25) ?? 0)
+        : null;
     const base = promedioMensual > 0 ? promedioMensual : bancosUsables.abonosProm;
     const margen = base > 0 ? flujoLibreMensual / base : 0;
     let puntos = margen >= 0.35 ? 60 : margen >= 0.2 ? 45 : margen >= 0.1 ? 30 : margen > 0 ? 15 : 5;
-    puntos += netoBancario > 0 ? 40 : netoBancario > -0.05 * bancosUsables.abonosProm ? 25 : 10;
+    puntos += netoRec > 0 ? 40 : netoRec > -0.05 * bancosUsables.abonosProm ? 25 : 10;
     razones.push(
-      `Capacidad estimada SOLO con flujo bancario (${bancosUsables.mesesConDatos} meses): entradas ${money(bancosUsables.abonosProm)}/mes − salidas ${money(bancosUsables.cargosProm)}/mes = neto ${money(netoBancario)} (margen ${pct(margen)}).`,
+      `Capacidad estimada SOLO con flujo bancario (${bancosUsables.mesesConDatos} meses, ponderado por recencia): entradas ${money(bancosUsables.abonosProm)}/mes − salidas ${money(bancosUsables.cargosProm)}/mes = neto ${money(netoRec)} (margen ${pct(margen)}).`,
     );
+    if (flujoMesMalo != null) {
+      razones.push(`Mes malo (p25 del neto bancario): ${money(flujoMesMalo)}/mes.`);
+    }
+    const saldos = (bancosUsables.saldosFinMes ?? []).map((s) => s.saldo);
+    const saldoPromedio = saldos.length > 0 ? saldos.reduce((s, v) => s + v, 0) / saldos.length : null;
     capacidadDesglose = {
       ingresosProm: Math.round(bancosUsables.abonosProm),
       gastosProm: Math.round(bancosUsables.cargosProm),
@@ -452,8 +586,10 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
       impuestosProm: 0,
       flujoLibre: Math.round(flujoLibreMensual),
       theta: 0,
-      flujoBancarioNeto: Math.round(netoBancario),
+      flujoBancarioNeto: Math.round(netoRec),
       fuenteFlujo: "solo_bancario",
+      flujoMesMalo: flujoMesMalo != null ? Math.round(flujoMesMalo) : null,
+      saldoPromedio: saldoPromedio != null ? Math.round(saldoPromedio) : null,
     };
     dims.push({ clave: "capacidad", etiqueta: "Capacidad de pago", peso: 20, puntos: Math.max(0, Math.min(100, puntos)), razones });
     cobertura.push("CFDIs no disponibles — capacidad estimada únicamente con estados de cuenta.");
@@ -501,6 +637,74 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     cobertura.push("Cartera de clientes no disponible (requiere CFDIs).");
   }
 
+  // ── 4b. Comportamiento de pago (10) ────────────────────────────────────────
+  // La señal que MEJOR predice al buen pagador no es cuánto gana sino cómo ha
+  // cumplido obligaciones recurrentes: a qué plazo paga a sus proveedores, qué
+  // proporción de lo que debe liquida, y si cumple mes a mes con el SAT (una
+  // obligación con fecha fija y consecuencia real). Es lo más parecido a un
+  // historial de buró calculable sin buró. Se excluye si no hay ninguna señal.
+  {
+    const razones: string[] = [];
+    let puntos = 0;
+    let señales = 0;
+
+    const pp = insumos.flujosPPD?.pagos;
+    if (pp && pp.monto > 0 && pp.diasPromedio != null) {
+      señales++;
+      const d = pp.diasPromedio;
+      puntos += d <= 30 ? 40 : d <= 60 ? 32 : d <= 90 ? 22 : d <= 120 ? 12 : 0;
+      const liquidado = pp.pagado / pp.monto;
+      puntos += liquidado >= 0.9 ? 30 : liquidado >= 0.7 ? 22 : liquidado >= 0.5 ? 12 : 5;
+      razones.push(
+        `Paga a sus proveedores en ~${Math.round(d)} días (${pp.facturas} factura(s) PPD por ${money(pp.monto)}, liquidado ${pct(liquidado)}).`,
+      );
+      if (d > 120) razones.push("Paga a más de 120 días — señal de estrés de flujo o mala disciplina de pago.");
+    }
+
+    // Puntualidad RECIENTE (últimos 12 periodos declarados): cumplir con el SAT
+    // mes a mes es la obligación recurrente que ya observamos.
+    const recientes = insumos.declaraciones
+      .filter((d) => d.fechaPresentacion)
+      .sort((a, b) => b.periodo.localeCompare(a.periodo))
+      .slice(0, 12);
+    if (recientes.length >= 3) {
+      señales++;
+      const puntuales = recientes.filter((d) => {
+        const limite = fechaLimiteConTolerancia(d.periodo);
+        return limite != null && new Date(d.fechaPresentacion as string).getTime() <= limite.getTime();
+      }).length;
+      const tasa = puntuales / recientes.length;
+      puntos += tasa >= 0.95 ? 30 : tasa >= 0.8 ? 22 : tasa >= 0.5 ? 10 : 0;
+      razones.push(
+        `Puntualidad reciente: ${puntuales}/${recientes.length} de las últimas declaraciones dentro del plazo.`,
+      );
+    }
+
+    // Estrés observable: meses con banco en rojo dentro de la ventana.
+    const serieNeto = (insumos.bancos?.porMes ?? []).map((m) => m.abonos - m.cargos);
+    if (serieNeto.length >= 4) {
+      const negativos = serieNeto.filter((v) => v < 0).length;
+      if (negativos / serieNeto.length > 0.5) {
+        puntos -= 15;
+        razones.push(
+          `${negativos} de ${serieNeto.length} meses cerraron con salidas mayores que entradas — estrés de flujo recurrente.`,
+        );
+      }
+    }
+
+    if (señales > 0) {
+      dims.push({
+        clave: "comportamiento",
+        etiqueta: "Comportamiento de pago",
+        peso: 10,
+        puntos: Math.max(0, Math.min(100, puntos)),
+        razones,
+      });
+    } else {
+      cobertura.push("Sin historial de pagos observable (ni REPs de proveedores ni fechas de presentación).");
+    }
+  }
+
   // ── 5. Señales duras (10): EFOS ────────────────────────────────────────────
   {
     const razones: string[] = [];
@@ -516,7 +720,9 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
       puntos = 0;
       razones.push(`${insumos.efosAbiertos} hallazgo(s) EFOS abiertos — riesgo directo de deducciones/operaciones simuladas.`);
     }
-    dims.push({ clave: "efos", etiqueta: "Señales duras (69-B)", peso: 10, puntos, razones });
+    // Peso bajo a propósito: un EFOS abierto ya impone techo duro de banda D
+    // más abajo, así que su fuerza no depende del promedio ponderado.
+    dims.push({ clave: "efos", etiqueta: "Señales duras (69-B)", peso: 5, puntos, razones });
   }
 
   // ── Agregación: redistribuir pesos de dimensiones ausentes ────────────────
@@ -532,21 +738,32 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     efosListado ? "D" : score >= 80 ? "A" : score >= 65 ? "B" : score >= 50 ? "C" : "D";
 
   const multiplo = banda === "A" ? 1.0 : banda === "B" ? 0.6 : banda === "C" ? 0.3 : 0;
-  // Límite anclado a CAPACIDAD DE PAGO cuando es estimable: ~3 meses de flujo
-  // libre (con techo de 1.5× el ingreso mensual — el flujo no compra ingreso
+
+  // Base de capacidad: el flujo del MES MALO (p25 de la serie bancaria) cuando
+  // se conoce, acotado por el flujo libre. Un crédito se paga TODOS los meses,
+  // incluidos los flojos — dimensionarlo sobre el promedio es la causa clásica
+  // de la primera mora. Sin serie bancaria, cae al flujo libre promedio.
+  const mesMalo = capacidadDesglose?.flujoMesMalo ?? null;
+  const baseCapacidad =
+    flujoLibreMensual == null
+      ? null
+      : mesMalo != null
+        ? Math.min(flujoLibreMensual, mesMalo)
+        : flujoLibreMensual;
+
+  // Límite anclado a CAPACIDAD DE PAGO cuando es estimable: ~3 meses de esa
+  // base (con techo de 1.5× el ingreso mensual — el flujo no compra ingreso
   // que no existe). Sin datos de gasto, cae al múltiplo del ingreso (y la
   // cobertura ya lo marca como provisional).
   const base =
-    flujoLibreMensual != null
-      ? Math.min(flujoLibreMensual * 3, promedioMensual * 1.5)
+    baseCapacidad != null
+      ? Math.min(baseCapacidad * 3, promedioMensual * 1.5)
       : promedioMensual;
   const limiteSugerido = Math.round((base * multiplo) / 1000) * 1000;
 
-  // Pago mensual máximo: razón de servicio de deuda por banda (A 40% del
-  // flujo libre, B 30%, C 20%, D 0). Insumo del simulador de amortización.
+  // Pago mensual máximo: razón de servicio de deuda por banda sobre esa base.
   const theta = banda === "A" ? 0.4 : banda === "B" ? 0.3 : banda === "C" ? 0.2 : 0;
-  const pagoMensualMax =
-    flujoLibreMensual != null ? Math.round(flujoLibreMensual * theta) : null;
+  const pagoMensualMax = baseCapacidad != null ? Math.round(baseCapacidad * theta) : null;
   if (capacidadDesglose) capacidadDesglose.theta = theta;
 
   return {

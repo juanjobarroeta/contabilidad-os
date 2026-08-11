@@ -22,6 +22,7 @@ Reglas estrictas:
 - SOLO usa los datos que te doy. No inventes cifras, clientes ni hechos.
 - Si un dato falta, dilo como limitación, no lo rellenes.
 - Interpreta el CONTEXTO fiscal mexicano correctamente. En particular: declarar MÁS de lo que se factura es patrón normal de venta a público en general (efectivo declarado sin CFDI individual) — no es señal de fraude. Lo sospechoso es lo inverso. RESICO PF paga ISR sobre ingreso bruto sin deducciones y no presenta anual.
+- La CAPACIDAD viene en \`capacidad\`: \`fuenteFlujo\` dice si el flujo libre salió de la estimación fiscal o quedó acotado por el neto bancario real; \`efectivoReconocido\` es el efectivo declarado no depositado que se reconoció al 50%; \`flujoMesMalo\` es el percentil 25 del flujo bancario (el mes flojo). El pago máximo se dimensiona sobre el MENOR entre el flujo libre y el mes malo, y los promedios van ponderados por recencia. En «Lectura del flujo» explica cuál de esos números mandó y por qué — si la brecha entre lo declarado y lo depositado es grande, dilo explícitamente y trátala como riesgo a verificar, no como fraude.
 - Estructura EXACTA (encabezados en negritas markdown):
 **Perfil del negocio** (2-3 líneas: qué se infiere del giro, volumen y clientes)
 **Fortalezas** (viñetas)

@@ -60,11 +60,21 @@ interface Evaluacion {
       theta: number;
       flujoBancarioNeto?: number | null;
       fuenteFlujo?: "fiscal" | "bancario" | "solo_bancario";
+      efectivoReconocido?: number | null;
+      flujoMesMalo?: number | null;
+      saldoPromedio?: number | null;
     } | null;
     insumos?: {
       declaraciones?: Array<{ periodo: string; ingresos: number | null; impuestosPagados: number }>;
       gastosPorMes?: Array<{ periodo: string; total: number }>;
       cfdis?: { facturadoPorMes?: Array<{ periodo: string; total: number }> } | null;
+      bancos?: {
+        mesesConDatos: number;
+        abonosProm: number;
+        cargosProm: number;
+        porMes?: Array<{ periodo: string; abonos: number; cargos: number }>;
+        saldosFinMes?: Array<{ periodo: string; saldo: number }>;
+      } | null;
       flujosPPD?: {
         cobranza: { facturas: number; monto: number; cobrado: number; saldoInsoluto: number; diasPromedio: number | null };
         pagos: { facturas: number; monto: number; pagado: number; diasPromedio: number | null };
@@ -75,6 +85,112 @@ interface Evaluacion {
   decision: string | null;
   notas: string | null;
   analisis: string | null;
+}
+
+/** Tabla de flujo de efectivo mes a mes: lo fiscal (declarado, facturado,
+ *  gastos con CFDI) junto a lo bancario (entradas, salidas, neto, saldo). Es
+ *  el papel de trabajo del analista — de aquí sale el juicio sobre si el
+ *  negocio genera caja o sólo la declara. Todo del snapshot. */
+function TablaFlujo({ detalle }: { detalle: Evaluacion["detalle"] }) {
+  const ins = detalle.insumos;
+  const decl = new Map((ins?.declaraciones ?? []).map((d) => [d.periodo, d]));
+  const fact = new Map((ins?.cfdis?.facturadoPorMes ?? []).map((f) => [f.periodo, f.total]));
+  const gasto = new Map((ins?.gastosPorMes ?? []).map((g) => [g.periodo, g.total]));
+  const banco = new Map((ins?.bancos?.porMes ?? []).map((b) => [b.periodo, b]));
+  const saldo = new Map((ins?.bancos?.saldosFinMes ?? []).map((s) => [s.periodo, s.saldo]));
+
+  const periodos = [...new Set([...decl.keys(), ...fact.keys(), ...gasto.keys(), ...banco.keys()])].sort();
+  if (periodos.length === 0) {
+    return (
+      <Card className="rounded-card border-cos-line p-6 text-center text-[13px] text-cos-ink-faint shadow-card">
+        Sin series mensuales en este snapshot. Vuelve a evaluar para generarlas.
+      </Card>
+    );
+  }
+
+  const hayBanco = banco.size > 0;
+  const sum = (f: (p: string) => number) => periodos.reduce((s, p) => s + f(p), 0);
+  const totDecl = sum((p) => decl.get(p)?.ingresos ?? 0);
+  const totFact = sum((p) => fact.get(p) ?? 0);
+  const totGasto = sum((p) => gasto.get(p) ?? 0);
+  const totAbonos = sum((p) => banco.get(p)?.abonos ?? 0);
+  const totCargos = sum((p) => banco.get(p)?.cargos ?? 0);
+  const n = periodos.length;
+
+  const celda = "px-3 py-2 text-right font-mono text-[12.5px] whitespace-nowrap";
+  const th = "px-3 py-2 text-right text-[11.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint whitespace-nowrap";
+
+  return (
+    <Card className="overflow-hidden rounded-card border-cos-line shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cos-line px-[18px] py-3">
+        <span className="text-[13px] font-semibold text-cos-ink">Flujo de efectivo mes a mes</span>
+        <span className="text-[11.5px] text-cos-ink-faint">
+          {hayBanco ? "Fiscal vs bancario · el neto bancario es la caja real" : "Sin estados de cuenta en este snapshot"}
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="border-b border-cos-line">
+            <tr>
+              <th className="px-[18px] py-2 text-left text-[11.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Mes</th>
+              <th className={th}>Declarado</th>
+              <th className={th}>Facturado</th>
+              <th className={th}>Gastos CFDI</th>
+              {hayBanco && <th className={th}>Entradas</th>}
+              {hayBanco && <th className={th}>Salidas</th>}
+              {hayBanco && <th className={th}>Neto banco</th>}
+              {saldo.size > 0 && <th className={th}>Saldo fin</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {periodos.map((p) => {
+              const b = banco.get(p);
+              const neto = b ? b.abonos - b.cargos : null;
+              return (
+                <tr key={p} className="border-b border-cos-line-soft last:border-0">
+                  <td className="px-[18px] py-2 text-left font-mono text-[12.5px] text-cos-ink">{p}</td>
+                  <td className={celda + " text-cos-ink-soft"}>{decl.get(p)?.ingresos != null ? fmtMoney(decl.get(p)!.ingresos!) : "—"}</td>
+                  <td className={celda + " text-cos-ink-soft"}>{fact.has(p) ? fmtMoney(fact.get(p)!) : "—"}</td>
+                  <td className={celda + " text-cos-ink-soft"}>{gasto.has(p) ? fmtMoney(gasto.get(p)!) : "—"}</td>
+                  {hayBanco && <td className={celda + " text-cos-ink-soft"}>{b ? fmtMoney(b.abonos) : "—"}</td>}
+                  {hayBanco && <td className={celda + " text-cos-ink-soft"}>{b ? fmtMoney(b.cargos) : "—"}</td>}
+                  {hayBanco && (
+                    <td className={celda + " font-semibold " + (neto == null ? "text-cos-ink-faint" : neto >= 0 ? "text-cos-jade-ink" : "text-cos-red-ink")}>
+                      {neto != null ? fmtMoney(neto) : "—"}
+                    </td>
+                  )}
+                  {saldo.size > 0 && <td className={celda + " text-cos-ink"}>{saldo.has(p) ? fmtMoney(saldo.get(p)!) : "—"}</td>}
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="border-t-2 border-cos-line bg-cos-paper">
+            <tr>
+              <td className="px-[18px] py-2 text-left text-[12px] font-semibold text-cos-ink">Promedio ({n} mes{n === 1 ? "" : "es"})</td>
+              <td className={celda + " font-semibold text-cos-ink"}>{fmtMoney(totDecl / n)}</td>
+              <td className={celda + " font-semibold text-cos-ink"}>{fmtMoney(totFact / n)}</td>
+              <td className={celda + " font-semibold text-cos-ink"}>{fmtMoney(totGasto / n)}</td>
+              {hayBanco && <td className={celda + " font-semibold text-cos-ink"}>{fmtMoney(totAbonos / banco.size)}</td>}
+              {hayBanco && <td className={celda + " font-semibold text-cos-ink"}>{fmtMoney(totCargos / banco.size)}</td>}
+              {hayBanco && (
+                <td className={celda + " font-semibold " + (totAbonos - totCargos >= 0 ? "text-cos-jade-ink" : "text-cos-red-ink")}>
+                  {fmtMoney((totAbonos - totCargos) / banco.size)}
+                </td>
+              )}
+              {saldo.size > 0 && <td className={celda + " text-cos-ink-faint"}>—</td>}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {hayBanco && (
+        <p className="border-t border-cos-line px-[18px] py-2.5 text-[11.5px] leading-relaxed text-cos-ink-faint">
+          «Declarado» es lo que reportó al SAT; «Entradas» es lo que efectivamente cayó al banco. Una brecha
+          sostenida entre ambos es normal en negocios de efectivo (venta a público en general) y sólo se
+          reconoce en la capacidad de pago cuando el patrón está verificado contra los CFDIs.
+        </p>
+      )}
+    </Card>
+  );
 }
 
 /** Serie mensual: ingresos declarados vs gastos facturados (barras) con lo
@@ -244,6 +360,8 @@ function SimuladorPrestamo({
             const soloBanco = desglose.fuenteFlujo === "solo_bancario";
             const acotadoBanco = desglose.fuenteFlujo === "bancario";
             const fiscal = Math.max(0, desglose.ingresosProm - desglose.gastosProm - desglose.nominaProm - desglose.impuestosProm);
+            const mesMalo = desglose.flujoMesMalo ?? null;
+            const baseCapacidad = mesMalo != null ? Math.min(desglose.flujoLibre, mesMalo) : desglose.flujoLibre;
             return (
             <div className="mt-2 rounded-control border border-cos-line bg-cos-paper p-3.5 text-[12.5px]">
               <div className="grid max-w-[420px] grid-cols-[1fr_auto] gap-y-1">
@@ -265,29 +383,52 @@ function SimuladorPrestamo({
                     <span className="border-t border-cos-line pt-1 text-right font-mono text-cos-ink-soft">{fmtMoney(fiscal)}</span>
                     <span className="text-cos-ink-soft">Neto bancario real (se toma el menor)</span>
                     <span className="text-right font-mono text-cos-ink">{fmtMoney(desglose.flujoBancarioNeto ?? desglose.flujoLibre)}</span>
+                    {desglose.efectivoReconocido ? (
+                      <>
+                        <span className="text-cos-ink-soft">+ Efectivo declarado reconocido (50%)</span>
+                        <span className="text-right font-mono text-cos-jade-ink">+{fmtMoney(desglose.efectivoReconocido)}</span>
+                      </>
+                    ) : null}
                   </>
                 ) : null}
                 <span className="border-t border-cos-line pt-1 font-medium text-cos-ink">
                   {soloBanco ? "= Flujo libre (neto bancario) / mes" : "= Flujo libre estimado / mes"}
                 </span>
                 <span className="border-t border-cos-line pt-1 text-right font-mono font-medium text-cos-ink">{fmtMoney(desglose.flujoLibre)}</span>
+                {mesMalo != null && (
+                  <>
+                    <span className="text-cos-ink-soft">Flujo de un MES MALO (p25 bancario)</span>
+                    <span className={"text-right font-mono " + (mesMalo < desglose.flujoLibre ? "font-medium text-cos-amber-ink" : "text-cos-ink")}>
+                      {fmtMoney(mesMalo)}
+                    </span>
+                    <span className="text-cos-ink-soft">Base de capacidad (el menor de los dos)</span>
+                    <span className="text-right font-mono text-cos-ink">{fmtMoney(baseCapacidad)}</span>
+                  </>
+                )}
                 <span className="text-cos-ink-soft">× Razón de servicio de deuda (banda {banda})</span>
                 <span className="text-right font-mono text-cos-ink">{Math.round(desglose.theta * 100)}%</span>
                 <span className="pt-1 font-semibold text-cos-brand-ink">= Pago mensual que puede cubrir</span>
                 <span className="pt-1 text-right font-mono font-semibold text-cos-brand-ink">
-                  {fmtMoney(Math.round(desglose.flujoLibre * desglose.theta))}
+                  {fmtMoney(Math.round(baseCapacidad * desglose.theta))}
                 </span>
               </div>
               <p className="mt-2 text-[11.5px] leading-relaxed text-cos-ink-faint">
-                La razón de servicio de deuda limita cuánto del flujo libre se compromete al crédito según el
+                Los promedios van <b>ponderados por recencia</b> (el mes más reciente pesa el doble que el de
+                hace seis). La razón de servicio de deuda limita cuánto se compromete al crédito según el
                 riesgo: banda A 40%, B 30%, C 20%, D 0%.{" "}
+                {mesMalo != null && mesMalo < desglose.flujoLibre
+                  ? "El pago se dimensiona sobre el mes malo (percentil 25 del flujo bancario), no sobre el promedio: un crédito se paga también en los meses flojos."
+                  : ""}{" "}
                 {soloBanco
                   ? "Sin CFDIs en el snapshot: el flujo sale únicamente de los estados de cuenta (transferencias internas excluidas)."
                   : acotadoBanco
-                    ? "El neto bancario real fue menor que la estimación fiscal, así que el flujo libre se acota a lo que sí se ve en el banco — típico cuando hay compras sin factura."
+                    ? "El neto bancario real fue menor que la estimación fiscal, así que el flujo se acota a lo que sí se ve en el banco — típico cuando hay compras sin factura."
                     : desglose.flujoBancarioNeto != null
                       ? `El banco corrobora: neto bancario real ${fmtMoney(desglose.flujoBancarioNeto)}/mes, por encima de la estimación fiscal.`
                       : "Los promedios salen de los CFDIs y declaraciones del snapshot; sin CFDIs de gasto el flujo puede estar sobreestimado (compras sin factura)."}
+                {desglose.saldoPromedio != null && (
+                  <> Colchón: saldo bancario promedio de fin de mes {fmtMoney(desglose.saldoPromedio)}.</>
+                )}
               </p>
             </div>
             );
@@ -411,6 +552,8 @@ const BANDA_STYLE: Record<string, string> = {
   D: "bg-cos-red-tint text-cos-red-ink",
 };
 
+type TabFicha = "resumen" | "flujo" | "capacidad" | "historial";
+
 function BandaChip({ banda, score }: { banda: string; score: number }) {
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-semibold ${BANDA_STYLE[banda] ?? "bg-cos-slate-tint text-cos-ink-soft"}`}>
@@ -431,6 +574,7 @@ export default function CreditosPage() {
   const [decision, setDecision] = useState("");
   const [notas, setNotas] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [tab, setTab] = useState<TabFicha>("resumen");
 
   const cargarPortafolio = useCallback(async () => {
     setLoading(true);
@@ -450,6 +594,7 @@ export default function CreditosPage() {
     setSel(empresa);
     setLoadingFicha(true);
     setError("");
+    setTab("resumen");
     try {
       const res = await fetch(`/api/creditos?companyId=${empresa.id}`);
       const data = await res.json();
@@ -621,7 +766,7 @@ export default function CreditosPage() {
             </Card>
           ) : (
             <>
-              {/* Resumen de la evaluación vigente */}
+              {/* Cabecera siempre visible: el veredicto y su cobertura */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Card className="rounded-card border-cos-line p-5 shadow-card">
                   <span className="text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Score</span>
@@ -649,19 +794,48 @@ export default function CreditosPage() {
                 </Card>
               </div>
 
-              {/* Serie mensual: ingresos vs gastos con facturado encima */}
-              <SerieMensual detalle={actual.detalle} />
+              {/* Pestañas: la ficha creció más allá de una sola columna
+                  legible — cada pestaña responde una pregunta distinta. */}
+              <div className="flex flex-wrap gap-2 border-b border-cos-line pb-px">
+                {([
+                  ["resumen", "Resumen"],
+                  ["flujo", "Flujo de efectivo"],
+                  ["capacidad", "Capacidad y simulador"],
+                  ["historial", "Historial"],
+                ] as [TabFicha, string][]).map(([k, t]) => (
+                  <button
+                    key={k}
+                    onClick={() => setTab(k)}
+                    className={
+                      "rounded-t-control px-3.5 py-2 text-[13.5px] font-medium " +
+                      (tab === k
+                        ? "border-b-2 border-cos-brand text-cos-brand-ink"
+                        : "border-b-2 border-transparent text-cos-ink-soft hover:text-cos-ink")
+                    }
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
 
-              {/* Simulador: pago que puede cubrir → monto prestable + tabla */}
-              <SimuladorPrestamo
-                pagoInicial={actual.detalle.pagoMensualMax ?? null}
-                desglose={actual.detalle.capacidadDesglose ?? null}
-                banda={actual.banda}
-                limiteSugerido={actual.limiteSugerido}
-              />
+              {tab === "flujo" && (
+                <>
+                  <SerieMensual detalle={actual.detalle} />
+                  <TablaFlujo detalle={actual.detalle} />
+                </>
+              )}
+
+              {tab === "capacidad" && (
+                <SimuladorPrestamo
+                  pagoInicial={actual.detalle.pagoMensualMax ?? null}
+                  desglose={actual.detalle.capacidadDesglose ?? null}
+                  banda={actual.banda}
+                  limiteSugerido={actual.limiteSugerido}
+                />
+              )}
 
               {/* Cartera PPD: cómo le pagan y cómo paga (de los REPs) */}
-              {actual.detalle.insumos?.flujosPPD && (
+              {tab === "resumen" && actual.detalle.insumos?.flujosPPD && (
                 <Card className="rounded-card border-cos-line p-5 shadow-card">
                   <p className="text-[13px] font-semibold text-cos-ink">Cartera PPD y comportamiento de pago (REPs)</p>
                   <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -702,7 +876,7 @@ export default function CreditosPage() {
               )}
 
               {/* Memo de análisis (IA) — parte del snapshot */}
-              {actual.analisis && (
+              {tab === "resumen" && actual.analisis && (
                 <Card className="rounded-card border-cos-line p-5 shadow-card">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-[13px] font-semibold text-cos-ink">Análisis del expediente</span>
@@ -715,7 +889,7 @@ export default function CreditosPage() {
               )}
 
               {/* Desglose por dimensión */}
-              <Card className="overflow-hidden rounded-card border-cos-line shadow-card">
+              <Card className={"overflow-hidden rounded-card border-cos-line shadow-card " + (tab === "resumen" ? "" : "hidden")}>
                 <div className="border-b border-cos-line px-[18px] py-3">
                   <span className="text-[13px] font-semibold text-cos-ink">Desglose del score</span>
                 </div>
@@ -770,7 +944,7 @@ export default function CreditosPage() {
               </Card>
 
               {/* Historial */}
-              {evaluaciones.length > 1 && (
+              {tab === "historial" && evaluaciones.length > 1 && (
                 <Card className="overflow-hidden rounded-card border-cos-line shadow-card">
                   <div className="border-b border-cos-line px-[18px] py-3">
                     <span className="text-[13px] font-semibold text-cos-ink">Historial de evaluaciones</span>
@@ -783,6 +957,14 @@ export default function CreditosPage() {
                       <span className="text-[12.5px] text-cos-ink-soft">{e.decision ?? "—"}</span>
                     </div>
                   ))}
+                </Card>
+              )}
+              {tab === "historial" && evaluaciones.length <= 1 && (
+                <Card className="rounded-card border-cos-line p-8 text-center shadow-card">
+                  <p className="text-[13.5px] text-cos-ink-soft">
+                    Ésta es la primera evaluación. Cada vez que vuelvas a evaluar se guarda un snapshot nuevo
+                    y aquí podrás comparar cómo se movió el score.
+                  </p>
                 </Card>
               )}
             </>

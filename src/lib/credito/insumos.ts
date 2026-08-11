@@ -120,22 +120,41 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
       // entradas y salidas por igual y distorsiona el flujo bancario del score.
       // Impuestos y comisiones SÍ se quedan (son salidas reales).
       where: { companyId, fecha: { gte: hace12m }, NOT: { notes: "INTERNAL_TRANSFER" } },
-      select: { fecha: true, monto: true },
+      select: { fecha: true, monto: true, saldo: true },
+      orderBy: { fecha: "asc" },
     }),
   ]);
 
   let bancos: InsumosCredito["bancos"] = null;
   if (movimientos.length > 0) {
-    const meses = new Set<string>();
-    let abonos = 0;
-    let cargos = 0;
+    // Serie MENSUAL: habilita la ponderación por recencia, el flujo del mes
+    // malo (p25) y la tabla de flujo de efectivo de la ficha.
+    const porMesMap = new Map<string, { abonos: number; cargos: number }>();
+    // Saldo de fin de mes: el saldo del ÚLTIMO movimiento del mes que lo trae
+    // (los movimientos vienen ordenados por fecha ascendente).
+    const saldoMap = new Map<string, number>();
     for (const m of movimientos) {
-      meses.add(`${m.fecha.getUTCFullYear()}-${m.fecha.getUTCMonth() + 1}`);
-      if (m.monto > 0) abonos += m.monto;
-      else cargos += -m.monto;
+      const periodo = `${m.fecha.getUTCFullYear()}-${String(m.fecha.getUTCMonth() + 1).padStart(2, "0")}`;
+      const acc = porMesMap.get(periodo) ?? { abonos: 0, cargos: 0 };
+      if (m.monto > 0) acc.abonos += m.monto;
+      else acc.cargos += -m.monto;
+      porMesMap.set(periodo, acc);
+      if (m.saldo != null) saldoMap.set(periodo, m.saldo);
     }
-    const n = Math.max(1, meses.size);
-    bancos = { mesesConDatos: meses.size, abonosProm: abonos / n, cargosProm: cargos / n };
+    const porMes = [...porMesMap.entries()]
+      .map(([periodo, v]) => ({ periodo, abonos: v.abonos, cargos: v.cargos }))
+      .sort((a, b) => a.periodo.localeCompare(b.periodo));
+    const saldosFinMes = [...saldoMap.entries()]
+      .map(([periodo, saldo]) => ({ periodo, saldo }))
+      .sort((a, b) => a.periodo.localeCompare(b.periodo));
+    const n = Math.max(1, porMes.length);
+    bancos = {
+      mesesConDatos: porMes.length,
+      abonosProm: porMes.reduce((s, m) => s + m.abonos, 0) / n,
+      cargosProm: porMes.reduce((s, m) => s + m.cargos, 0) / n,
+      porMes,
+      saldosFinMes,
+    };
   }
 
   // Gastos por mes — alimenta la gráfica ingresos vs gastos de la ficha.
