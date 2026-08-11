@@ -1650,6 +1650,12 @@ model TaxDeclaration {
   iepsPagar      Float?
   iepsSaldoFavor Float?
 
+  // Último parse COMPLETADO del acuse anual con Claude (aunque no extrajera
+  // nada). Sin esta marca, el centinela isrIngresos==null re-parseaba el mismo
+  // PDF en CADA sync para siempre — caso real: 243 parses/mes (~$750) en una
+  // PF cuyo formato de anual no trae los renglones esperados.
+  acuseParseadoAt DateTime?
+
   // ISR
   isrIngresos            Float?
   isrDeducciones         Float?
