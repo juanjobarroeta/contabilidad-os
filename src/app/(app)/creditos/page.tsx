@@ -58,6 +58,8 @@ interface Evaluacion {
       impuestosProm: number;
       flujoLibre: number;
       theta: number;
+      flujoBancarioNeto?: number | null;
+      fuenteFlujo?: "fiscal" | "bancario" | "solo_bancario";
     } | null;
     insumos?: {
       declaraciones?: Array<{ periodo: string; ingresos: number | null; impuestosPagados: number }>;
@@ -238,18 +240,36 @@ function SimuladorPrestamo({
           >
             {verComoSeCalcula ? "Ocultar cálculo del pago" : "¿Cómo se calcula el pago que puede cubrir?"}
           </button>
-          {verComoSeCalcula && (
+          {verComoSeCalcula && (() => {
+            const soloBanco = desglose.fuenteFlujo === "solo_bancario";
+            const acotadoBanco = desglose.fuenteFlujo === "bancario";
+            const fiscal = Math.max(0, desglose.ingresosProm - desglose.gastosProm - desglose.nominaProm - desglose.impuestosProm);
+            return (
             <div className="mt-2 rounded-control border border-cos-line bg-cos-paper p-3.5 text-[12.5px]">
               <div className="grid max-w-[420px] grid-cols-[1fr_auto] gap-y-1">
-                <span className="text-cos-ink-soft">Ingresos declarados promedio / mes</span>
+                <span className="text-cos-ink-soft">{soloBanco ? "Entradas bancarias promedio / mes" : "Ingresos declarados promedio / mes"}</span>
                 <span className="text-right font-mono text-cos-ink">{fmtMoney(desglose.ingresosProm)}</span>
-                <span className="text-cos-ink-soft">− Gastos facturados promedio / mes</span>
+                <span className="text-cos-ink-soft">{soloBanco ? "− Salidas bancarias promedio / mes" : "− Gastos facturados promedio / mes"}</span>
                 <span className="text-right font-mono text-cos-red-ink">−{fmtMoney(desglose.gastosProm)}</span>
-                <span className="text-cos-ink-soft">− Nómina timbrada promedio / mes</span>
-                <span className="text-right font-mono text-cos-red-ink">−{fmtMoney(desglose.nominaProm)}</span>
-                <span className="text-cos-ink-soft">− Impuestos pagados promedio / mes</span>
-                <span className="text-right font-mono text-cos-red-ink">−{fmtMoney(desglose.impuestosProm)}</span>
-                <span className="border-t border-cos-line pt-1 font-medium text-cos-ink">= Flujo libre estimado / mes</span>
+                {!soloBanco && (
+                  <>
+                    <span className="text-cos-ink-soft">− Nómina timbrada promedio / mes</span>
+                    <span className="text-right font-mono text-cos-red-ink">−{fmtMoney(desglose.nominaProm)}</span>
+                    <span className="text-cos-ink-soft">− Impuestos pagados promedio / mes</span>
+                    <span className="text-right font-mono text-cos-red-ink">−{fmtMoney(desglose.impuestosProm)}</span>
+                  </>
+                )}
+                {acotadoBanco ? (
+                  <>
+                    <span className="border-t border-cos-line pt-1 text-cos-ink-soft">= Flujo libre fiscal estimado</span>
+                    <span className="border-t border-cos-line pt-1 text-right font-mono text-cos-ink-soft">{fmtMoney(fiscal)}</span>
+                    <span className="text-cos-ink-soft">Neto bancario real (se toma el menor)</span>
+                    <span className="text-right font-mono text-cos-ink">{fmtMoney(desglose.flujoBancarioNeto ?? desglose.flujoLibre)}</span>
+                  </>
+                ) : null}
+                <span className="border-t border-cos-line pt-1 font-medium text-cos-ink">
+                  {soloBanco ? "= Flujo libre (neto bancario) / mes" : "= Flujo libre estimado / mes"}
+                </span>
                 <span className="border-t border-cos-line pt-1 text-right font-mono font-medium text-cos-ink">{fmtMoney(desglose.flujoLibre)}</span>
                 <span className="text-cos-ink-soft">× Razón de servicio de deuda (banda {banda})</span>
                 <span className="text-right font-mono text-cos-ink">{Math.round(desglose.theta * 100)}%</span>
@@ -260,11 +280,18 @@ function SimuladorPrestamo({
               </div>
               <p className="mt-2 text-[11.5px] leading-relaxed text-cos-ink-faint">
                 La razón de servicio de deuda limita cuánto del flujo libre se compromete al crédito según el
-                riesgo: banda A 40%, B 30%, C 20%, D 0%. Los promedios salen de los CFDIs y declaraciones del
-                snapshot; sin CFDIs de gasto el flujo puede estar sobreestimado (compras sin factura).
+                riesgo: banda A 40%, B 30%, C 20%, D 0%.{" "}
+                {soloBanco
+                  ? "Sin CFDIs en el snapshot: el flujo sale únicamente de los estados de cuenta (transferencias internas excluidas)."
+                  : acotadoBanco
+                    ? "El neto bancario real fue menor que la estimación fiscal, así que el flujo libre se acota a lo que sí se ve en el banco — típico cuando hay compras sin factura."
+                    : desglose.flujoBancarioNeto != null
+                      ? `El banco corrobora: neto bancario real ${fmtMoney(desglose.flujoBancarioNeto)}/mes, por encima de la estimación fiscal.`
+                      : "Los promedios salen de los CFDIs y declaraciones del snapshot; sin CFDIs de gasto el flujo puede estar sobreestimado (compras sin factura)."}
               </p>
             </div>
-          )}
+            );
+          })()}
         </>
       )}
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">

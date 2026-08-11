@@ -51,6 +51,10 @@ export async function generarAnalisisCredito(args: {
     gastosFacturados12m: insumos.gastosFacturados12m,
     nominaTimbrada12m: insumos.nomina12m,
     flujosBancarios: insumos.bancos,
+    // Capacidad: qué estimación determinó el flujo libre (fiscal vs neto
+    // bancario real) — el memo debe leer la de menor y decir por qué.
+    capacidad: resultado.capacidadDesglose,
+    pagoMensualMax: resultado.pagoMensualMax,
     // Cartera PPD/REP: cobranza (cómo le pagan) y pagos (cómo paga) — el
     // comportamiento de pago observable, clave para el memo.
     carteraPPD: insumos.flujosPPD,

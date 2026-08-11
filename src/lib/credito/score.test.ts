@@ -134,6 +134,71 @@ describe("calcularScoreCredito", () => {
     expect(positivo.cobertura.join(" ")).not.toMatch(/Estados de cuenta/);
   });
 
+  describe("flujo bancario como cota del flujo libre", () => {
+    const cfdis = {
+      ingresosFacturados: 3_000_000,
+      facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0),
+      emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10,
+    };
+
+    it("neto bancario MENOR que la estimación fiscal la acota (min de ambas)", () => {
+      const sinBanco = calcularScoreCredito({ ...BASE, cfdis });
+      const conBanco = calcularScoreCredito({
+        ...BASE, cfdis,
+        bancos: { mesesConDatos: 6, abonosProm: 280_000, cargosProm: 260_000 },
+      });
+      expect(sinBanco.flujoLibreMensual!).toBeGreaterThan(20_000);
+      expect(conBanco.flujoLibreMensual).toBe(20_000); // 280k − 260k
+      expect(conBanco.capacidadDesglose?.fuenteFlujo).toBe("bancario");
+      expect(conBanco.pagoMensualMax!).toBeLessThan(sinBanco.pagoMensualMax!);
+      expect(conBanco.limiteSugerido).toBeLessThan(sinBanco.limiteSugerido);
+    });
+
+    it("neto bancario MAYOR que la fiscal no infla el flujo (la fiscal manda)", () => {
+      const sinBanco = calcularScoreCredito({ ...BASE, cfdis });
+      const conBanco = calcularScoreCredito({
+        ...BASE, cfdis,
+        bancos: { mesesConDatos: 6, abonosProm: 900_000, cargosProm: 100_000 },
+      });
+      expect(conBanco.flujoLibreMensual).toBe(sinBanco.flujoLibreMensual);
+      expect(conBanco.capacidadDesglose?.fuenteFlujo).toBe("fiscal");
+      expect(conBanco.capacidadDesglose?.flujoBancarioNeto).toBe(800_000);
+    });
+
+    it("neto bancario NEGATIVO deja el flujo libre (y el pago máximo) en cero", () => {
+      const r = calcularScoreCredito({
+        ...BASE, cfdis,
+        bancos: { mesesConDatos: 6, abonosProm: 200_000, cargosProm: 280_000 },
+      });
+      expect(r.flujoLibreMensual).toBe(0);
+      expect(r.pagoMensualMax).toBe(0);
+    });
+
+    it("menos de 3 meses de banco NO acota (sigue siendo solo corroboración ausente)", () => {
+      const sinBanco = calcularScoreCredito({ ...BASE, cfdis });
+      const pocosMeses = calcularScoreCredito({
+        ...BASE, cfdis,
+        bancos: { mesesConDatos: 2, abonosProm: 280_000, cargosProm: 260_000 },
+      });
+      expect(pocosMeses.flujoLibreMensual).toBe(sinBanco.flujoLibreMensual);
+      expect(pocosMeses.capacidadDesglose?.fuenteFlujo).toBe("fiscal");
+    });
+
+    it("expediente delgado: sin CFDIs pero con ≥3 meses de banco, capacidad se evalúa del banco", () => {
+      const r = calcularScoreCredito({
+        ...BASE,
+        cfdis: null,
+        bancos: { mesesConDatos: 6, abonosProm: 100_000, cargosProm: 60_000 },
+      });
+      const cap = r.dimensiones.find((d) => d.clave === "capacidad");
+      expect(cap).toBeDefined();
+      expect(r.capacidadDesglose?.fuenteFlujo).toBe("solo_bancario");
+      expect(r.flujoLibreMensual).toBe(40_000);
+      expect(r.pagoMensualMax).not.toBeNull();
+      expect(r.cobertura.join(" ")).toMatch(/únicamente con estados de cuenta/);
+    });
+  });
+
   it("declarar MÁS de lo facturado NO castiga (venta a público en general)", () => {
     const base = { ingresosFacturados: 0, emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10 };
     const igual = calcularScoreCredito({ ...BASE, cfdis: { ...base, facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0) } });

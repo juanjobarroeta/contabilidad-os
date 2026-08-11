@@ -116,7 +116,10 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
       _sum: { total: true },
     }),
     prisma.bankTransaction.findMany({
-      where: { companyId, fecha: { gte: hace12m } },
+      // Transferencias internas fuera: mover dinero entre cuentas propias infla
+      // entradas y salidas por igual y distorsiona el flujo bancario del score.
+      // Impuestos y comisiones SÍ se quedan (son salidas reales).
+      where: { companyId, fecha: { gte: hace12m }, NOT: { notes: "INTERNAL_TRANSFER" } },
       select: { fecha: true, monto: true },
     }),
   ]);
