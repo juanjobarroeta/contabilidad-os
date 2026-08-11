@@ -4781,6 +4781,10 @@ enum VehiculoCostoTipo {
   TRASLADO
   ACCESORIOS
   OTRO
+  // Nota de crédito EMITIDA al cliente sobre la unidad (descuento post-venta):
+  // monto POSITIVO que resta utilidad como menos-ingreso — no es un costo de
+  // inventario. Las NC del proveedor siguen siendo montos negativos en OTRO.
+  NC_CLIENTE
 }
 
 // Costo unitario adicional al costo de compra. Los tipos que capitalizan

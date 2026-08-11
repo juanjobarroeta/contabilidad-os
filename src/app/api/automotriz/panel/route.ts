@@ -26,7 +26,8 @@ export const GET = withAuthz(async (req: Request) => {
   const hoy = new Date();
   const inicioMes = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1));
 
-  const [enPiso, vendidasMes] = await Promise.all([
+  const ABIERTOS_CRM = ["NUEVO", "CONTACTADO", "CITA", "DEMO", "NEGOCIACION"] as const;
+  const [enPiso, vendidasMes, ordenesAbiertas, promesasVencidas, prospectosAbiertos, seguimientosVencidos] = await Promise.all([
     prisma.vehiculo.findMany({
       where: { companyId, estado: { in: ["DISPONIBLE", "APARTADO"] } },
       select: {
@@ -41,6 +42,26 @@ export const GET = withAuthz(async (req: Request) => {
         precioVenta: true, costoCompra: true, comisionMonto: true, isan: true,
         costos: { select: { monto: true } },
       },
+    }),
+    // La operación de HOY: taller y CRM (fases 5b/2) en el mismo vistazo.
+    prisma.ordenServicio.groupBy({
+      by: ["estado"],
+      where: { companyId, estado: { in: ["RECIBIDA", "EN_PROCESO", "LISTA"] } },
+      _count: { _all: true },
+    }),
+    prisma.ordenServicio.findMany({
+      where: {
+        companyId,
+        estado: { in: ["RECIBIDA", "EN_PROCESO"] },
+        prometidaAt: { lt: new Date() },
+      },
+      select: { id: true, folio: true, descripcionUnidad: true, prometidaAt: true },
+      orderBy: { prometidaAt: "asc" },
+      take: 5,
+    }),
+    prisma.prospecto.count({ where: { companyId, estado: { in: [...ABIERTOS_CRM] } } }),
+    prisma.prospecto.count({
+      where: { companyId, estado: { in: [...ABIERTOS_CRM] }, proximaAccion: { lt: new Date() } },
     }),
   ]);
 
@@ -99,6 +120,17 @@ export const GET = withAuthz(async (req: Request) => {
       demos: enPiso.filter((v) => v.uso !== "VENTA").length,
     },
     mes: { vendidas: vendidasMes.length, ingresos: ingresosMes, margen: margenMes, isan: isanMes },
+    taller: {
+      abiertas: ordenesAbiertas.reduce((s, o) => s + o._count._all, 0),
+      porEstado: Object.fromEntries(ordenesAbiertas.map((o) => [o.estado, o._count._all])),
+      promesasVencidas: promesasVencidas.map((o) => ({
+        id: o.id,
+        folio: o.folio,
+        unidad: o.descripcionUnidad,
+        prometidaAt: o.prometidaAt,
+      })),
+    },
+    crm: { abiertos: prospectosAbiertos, vencidos: seguimientosVencidos },
     urgentes,
   });
 });
