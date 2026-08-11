@@ -6,6 +6,7 @@ import { gateEscritura } from "@/lib/subscription";
 import { extractStatementFromDocument } from "@/lib/bancos/vision-statement";
 import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuentes";
 import { persistTransactions } from "@/lib/bancos/import";
+import { pdfEstaProtegido, desencriptarPdf } from "@/lib/bancos/pdf-crypt";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -54,10 +55,13 @@ export async function POST(req: Request, { params }: Params) {
   const force = url.searchParams.get("force") === "1";
 
   let file: File | null = null;
+  let password = "";
   try {
     const formData = await req.formData();
     const f = formData.get("file");
     if (f instanceof File) file = f;
+    const p = formData.get("password");
+    if (typeof p === "string") password = p;
   } catch {
     return NextResponse.json({ error: "Espera multipart/form-data con campo 'file'" }, { status: 400 });
   }
@@ -69,7 +73,25 @@ export async function POST(req: Request, { params }: Params) {
     return NextResponse.json({ error: "Formato no soportado. Usa PDF o imagen (JPG/PNG)." }, { status: 415 });
   }
 
-  const buf = Buffer.from(await file.arrayBuffer());
+  let buf: Buffer = Buffer.from(await file.arrayBuffer());
+
+  // PDFs cifrados (Banamex, Santander, HSBC los mandan con contraseña): la API
+  // de visión los rechaza, así que se desencriptan aquí. Sin contraseña se
+  // intenta con "" (cubre PDFs con solo restricciones de dueño); si hace falta
+  // una, 422 needsPassword para que la UI la pida y reintente.
+  if (mediaType === "application/pdf" && pdfEstaProtegido(buf)) {
+    const res = await desencriptarPdf(buf, password);
+    if (!res.ok) {
+      return NextResponse.json({
+        ok: false,
+        needsPassword: true,
+        error: password
+          ? "La contraseña no abre este PDF. Verifica e intenta de nuevo (los bancos suelen usar el número de tarjeta, el RFC o una fecha)."
+          : "Este estado de cuenta está protegido con contraseña. Escríbela para poder leerlo.",
+      }, { status: 422 });
+    }
+    buf = res.pdf; // desencriptado: alimenta la visión Y la evidencia guardada
+  }
 
   let extraction;
   try {
@@ -82,8 +104,8 @@ export async function POST(req: Request, { params }: Params) {
   }
 
   // Safety gate: don't import when the balance doesn't reconcile, unless forced.
-  // SECURITY/CORRECTNESS: the raw document is NOT persisted — only the
-  // structured rows once the user confirms.
+  // Si el usuario no confirma, el documento se descarta junto con la extracción:
+  // solo persiste (como evidencia del lote) cuando la importación sucede.
   const needsReview = extraction.balanceCheck.cuadra === false;
   if ((needsReview || extraction.transactions.length === 0) && !force) {
     return NextResponse.json({
@@ -109,6 +131,10 @@ export async function POST(req: Request, { params }: Params) {
     // Los saldos que declara el estado: ancla de la conciliación bancaria.
     saldoInicial: extraction.balanceCheck.saldoInicial,
     saldoFinal: extraction.balanceCheck.saldoFinal,
+    // Evidencia de underwriting: el documento original y si su cuadre pasó.
+    // cuadro=false ⇒ el usuario forzó la importación pese al descuadre.
+    archivo: { bytes: buf, nombre: file.name, mime: mediaType },
+    cuadro: extraction.balanceCheck.cuadra ?? null,
   });
 
   return NextResponse.json({

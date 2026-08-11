@@ -38,6 +38,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
     "@auth/prisma-adapter": "^2.7.4",
+    "@jspawn/qpdf-wasm": "^0.0.2",
     "@nodecfdi/credentials": "^3.2.0",
     "@nodecfdi/sat-ws-descarga-masiva": "^2.0.0",
     "@prisma/client": "^6.5.0",

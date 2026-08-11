@@ -97,7 +97,11 @@ async function enriquecerAnualDesdePdf(
     // el detalle del reparse para no depurar a ciegas.
     return `error: ${e instanceof Error ? e.message : String(e)}`;
   }
+  // Parse COMPLETADO (con o sin datos): marcarlo SIEMPRE, o el centinela
+  // isrIngresos==null re-parsea el mismo PDF cada sync para siempre. Un error
+  // de red/Claude (el catch de arriba) NO marca — ese sí debe reintentarse.
   if (parsed.type !== "ACUSE_ANUAL" || !parsed.acuseAnual) {
+    await prisma.taxDeclaration.update({ where: { id: declId }, data: { acuseParseadoAt: new Date() } });
     return `tipo_inesperado: ${parsed.type}`;
   }
   const extraidos = camposAnualDesdeAcuse(parsed.acuseAnual);
@@ -108,9 +112,10 @@ async function enriquecerAnualDesdePdf(
     // Distingue "el PDF no trae nada" (acuse corto sin la tabla de pérdidas) de
     // "trae lo mismo que ya está" — cambia el diagnóstico por completo.
     const vacio = Object.values(extraidos).every((v) => v == null);
+    await prisma.taxDeclaration.update({ where: { id: declId }, data: { acuseParseadoAt: new Date() } });
     return vacio ? "sin_datos_extraibles" : "sin_cambios";
   }
-  await prisma.taxDeclaration.update({ where: { id: declId }, data: { ...merged } });
+  await prisma.taxDeclaration.update({ where: { id: declId }, data: { ...merged, acuseParseadoAt: new Date() } });
   return "actualizada";
 }
 
@@ -139,6 +144,7 @@ async function persistDeclaracionesAnuales(
         isrPerdidaPendiente: true,
         acusePdf: true,
         fechaPresentacion: true,
+        acuseParseadoAt: true,
       },
     });
 
@@ -219,12 +225,16 @@ async function persistDeclaracionesAnuales(
       // así que su null significa "parse nunca completado" (p. ej. la fila
       // nació del onboarding solo con coeficiente). Usar la pérdida como
       // condición re-parsearía cada sync las anuales que legítimamente no
-      // tienen pérdidas. El centinela tiene un punto ciego: una fila con datos
-      // PARCIALES de un parseo viejo (isrIngresos poblado con la cifra
+      // tienen pérdidas. `acuseParseadoAt` acota el reintento a UNA vez: si el
+      // parse ya corrió y el PDF simplemente no trae esos renglones (formato
+      // PF, acuse corto), sin la marca se re-parseaba el mismo PDF cada sync
+      // para siempre — caso real: 243 llamadas a Claude (~$750) en un mes por
+      // una sola empresa. El centinela tiene un punto ciego: una fila con
+      // datos PARCIALES de un parseo viejo (isrIngresos poblado con la cifra
       // equivocada) nunca se re-parsea sola — para eso está `reparseAnuales`
       // (forzado puntual desde el cron con companyId). No toca importes
       // capturados/calculados: sólo las 4 columnas del coeficiente/pérdida.
-      if (pdf && (existing.isrIngresos == null || opts.reparseAnuales)) {
+      if (pdf && ((existing.isrIngresos == null && existing.acuseParseadoAt == null) || opts.reparseAnuales)) {
         const resultado = await enriquecerAnualDesdePdf(existing.id, companyId, pdf, existing);
         if (opts.reparseAnuales) {
           reparse.push({ periodo, resultado, pdfKb: Math.round(pdf.byteLength / 1024) });

@@ -64,6 +64,10 @@ export async function persistTransactions(opts: {
    *  bancaria. El extractor ya los lee; aquí se persisten en vez de tirarse. */
   saldoInicial?: number | null;
   saldoFinal?: number | null;
+  /** Documento original (PDF/imagen) — evidencia de la importación. */
+  archivo?: { bytes: Uint8Array; nombre: string; mime: string } | null;
+  /** Resultado del cuadre de saldos al importar (false = importado con force). */
+  cuadro?: boolean | null;
 }): Promise<{ imported: number; skipped: number; batchId: string | null }> {
   const { bankAccountId, companyId, transactions, source = "UPLOAD" } = opts;
   let imported = 0;
@@ -81,6 +85,16 @@ export async function persistTransactions(opts: {
       periodo: opts.periodo ?? null,
       saldoInicial: opts.saldoInicial ?? null,
       saldoFinal: opts.saldoFinal ?? null,
+      ...(opts.archivo
+        ? {
+            // Copia a un Uint8Array respaldado por ArrayBuffer (Prisma Bytes
+            // no acepta el ArrayBufferLike de Buffer).
+            archivoPdf: new Uint8Array(opts.archivo.bytes),
+            archivoNombre: opts.archivo.nombre,
+            archivoMime: opts.archivo.mime,
+          }
+        : {}),
+      cuadro: opts.cuadro ?? null,
       count: 0,
     },
     select: { id: true },

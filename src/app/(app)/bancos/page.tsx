@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Landmark, Upload, Sparkles, Loader2, Link2, Search, CheckCircle2,
@@ -138,6 +138,12 @@ const fmtFecha = (iso: string) => {
   const d = new Date(iso);
   return `${String(d.getUTCDate()).padStart(2, "0")} ${M[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
+/** "2026-08" → "agosto 2026" (para el selector y los separadores por mes). */
+const fmtMes = (ym: string) => {
+  const M = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const [y, m] = ym.split("-").map(Number);
+  return `${M[(m ?? 1) - 1]} ${y}`;
+};
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -154,6 +160,10 @@ export default function BancosPage() {
   const [txs, setTxs] = useState<BankTx[]>([]);
   const [counts, setCounts] = useState<Counts>({});
   const [filter, setFilter] = useState<Filter>("all");
+  // División por mes: "" = todos (con separadores por mes en la lista);
+  // "YYYY-MM" acota movimientos Y conteos a ese mes (el backend ya lo soporta).
+  const [mes, setMes] = useState("");
+  const [meses, setMeses] = useState<{ mes: string; count: number }[]>([]);
   const [showMore, setShowMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<"" | "auto" | "upload">("");
@@ -200,8 +210,16 @@ export default function BancosPage() {
     posiblesDuplicados: number;
     descartadas: { fila: number; motivo: string }[];
   } | null>(null);
+  // Historial de lotes importados (con su PDF de evidencia cuando lo hay).
+  const [lotes, setLotes] = useState<{
+    id: string; createdAt: string; banco: string | null; periodo: string | null;
+    count: number; cuentaEtiqueta: string; tienePdf: boolean; cuadro: boolean | null;
+  }[]>([]);
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2800); };
+  // Contraseña de PDFs protegidos, recordada durante la sesión de carga (los 12
+  // estados de un año suelen compartirla). Nunca se persiste.
+  const pdfPassRef = useRef("");
 
   const loadAccounts = useCallback(async () => {
     if (!activeCompany) return;
@@ -216,17 +234,30 @@ export default function BancosPage() {
     if (!selectedId) { setTxs([]); return; }
     setLoading(true); setExpandedId(null);
     try {
-      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=80`);
+      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=80${mes ? `&mes=${mes}` : ""}`);
       const data = await res.json();
       setTxs(data.transactions ?? []);
       setCounts(data.statusCounts ?? {});
+      setMeses(Array.isArray(data.meses) ? data.meses : []);
     } finally { setLoading(false); }
-  }, [selectedId, filter]);
+  }, [selectedId, filter, mes]);
+
+  const loadLotes = useCallback(async () => {
+    if (!activeCompany) { setLotes([]); return; }
+    try {
+      const res = await fetch(`/api/bancos/import-batches?companyId=${activeCompany.id}`);
+      const data = await res.json();
+      setLotes(Array.isArray(data) ? data : []);
+    } catch { setLotes([]); }
+  }, [activeCompany]);
 
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
   useEffect(() => { loadTxs(); }, [loadTxs]);
-  // Salir del modo selección al cambiar de cuenta/filtro.
-  useEffect(() => { setPicked(new Set()); }, [selectedId, filter]);
+  useEffect(() => { loadLotes(); }, [loadLotes]);
+  // Salir del modo selección al cambiar de cuenta/filtro/mes.
+  useEffect(() => { setPicked(new Set()); }, [selectedId, filter, mes]);
+  // Al cambiar de cuenta, el mes elegido puede no existir en la otra — reset.
+  useEffect(() => { setMes(""); }, [selectedId]);
 
   // Búsqueda manual de facturas (debounced) para el movimiento expandido.
   useEffect(() => {
@@ -261,28 +292,47 @@ export default function BancosPage() {
   }
 
   /** PDF/imagen del estado de cuenta → extracción con IA (upload-pdf). Si los
-   *  saldos no cuadran, el servidor NO importa y pedimos confirmación (force). */
+   *  saldos no cuadran, el servidor NO importa y pedimos confirmación (force).
+   *  PDFs con contraseña (Banamex, Santander…): el servidor responde 422
+   *  needsPassword, aquí se pide y se reintenta. La contraseña buena se
+   *  recuerda para el resto de la bolsa (12 estados = 1 sola pregunta). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function subirPdf(file: File): Promise<any> {
-    const form = new FormData();
-    form.append("file", file);
-    let res = await fetch(`/api/bancos/${selectedId}/upload-pdf`, { method: "POST", body: form });
-    let data = await res.json();
-    if (res.ok && data?.needsReview) {
-      const n = data?.extraction?.transactions?.length ?? 0;
-      if (
-        n > 0 &&
-        confirm(
-          `Se detectaron ${n} movimientos pero los saldos del estado no cuadran con la suma (posible página faltante o lectura imperfecta). ¿Importar de todos modos?`
-        )
-      ) {
-        const form2 = new FormData();
-        form2.append("file", file);
-        res = await fetch(`/api/bancos/${selectedId}/upload-pdf?force=1`, { method: "POST", body: form2 });
-        data = await res.json();
+    let password = pdfPassRef.current;
+    const enviar = async (qs: string) => {
+      const form = new FormData();
+      form.append("file", file);
+      if (password) form.append("password", password);
+      const res = await fetch(`/api/bancos/${selectedId}/upload-pdf${qs}`, { method: "POST", body: form });
+      return { res, data: await res.json() };
+    };
+
+    for (let intento = 0; intento < 4; intento++) {
+      // eslint-disable-next-line prefer-const
+      let { res, data } = await enviar("");
+      if (res.status === 422 && data?.needsPassword) {
+        const entered = prompt(`${file.name}\n\n${data.error ?? "Este PDF requiere contraseña."}`);
+        if (entered == null || entered === "") {
+          return { ok: false, message: "PDF con contraseña — no se ingresó, se omitió el archivo" };
+        }
+        password = entered;
+        continue;
       }
+      pdfPassRef.current = password; // funcionó (o no hizo falta): recordar para la bolsa
+      if (res.ok && data?.needsReview) {
+        const n = data?.extraction?.transactions?.length ?? 0;
+        if (
+          n > 0 &&
+          confirm(
+            `Se detectaron ${n} movimientos pero los saldos del estado no cuadran con la suma (posible página faltante o lectura imperfecta). ¿Importar de todos modos?`
+          )
+        ) {
+          ({ data } = await enviar("?force=1"));
+        }
+      }
+      return data;
     }
-    return data;
+    return { ok: false, message: "PDF con contraseña — demasiados intentos" };
   }
 
   /** Un solo archivo (CSV/Excel o PDF/imagen) → su resultado de importación. */
@@ -338,7 +388,7 @@ export default function BancosPage() {
           ? { imported, posiblesDuplicados, descartadas }
           : null
       );
-      await Promise.all([loadTxs(), loadAccounts()]);
+      await Promise.all([loadTxs(), loadAccounts(), loadLotes()]);
     } finally { setBusy(""); e.target.value = ""; }
   }
 
@@ -755,6 +805,54 @@ export default function BancosPage() {
             </div>
           )}
 
+          {/* Importaciones recientes: cada lote con su cuadre y, cuando la
+              importación fue por visión (PDF/imagen), el documento original
+              descargable — evidencia de dónde salió cada movimiento. */}
+          {lotes.length > 0 && (
+            <details className="mt-4 rounded-card border border-cos-line bg-cos-card shadow-card">
+              <summary className="cursor-pointer select-none px-5 py-3.5 text-[14px] font-semibold text-cos-ink">
+                Importaciones recientes <span className="font-mono text-[12.5px] font-normal text-cos-ink-faint">({lotes.length})</span>
+              </summary>
+              <div className="overflow-x-auto border-t border-cos-line-soft">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="text-left text-[12px] uppercase tracking-wide text-cos-ink-faint">
+                      <th className="px-5 py-2 font-medium">Fecha</th>
+                      <th className="px-3 py-2 font-medium">Cuenta</th>
+                      <th className="px-3 py-2 font-medium">Periodo</th>
+                      <th className="px-3 py-2 text-right font-medium">Movs.</th>
+                      <th className="px-3 py-2 font-medium">Cuadre</th>
+                      <th className="px-5 py-2 text-right font-medium">Documento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lotes.map((l) => (
+                      <tr key={l.id} className="border-t border-cos-line-soft text-cos-ink-soft">
+                        <td className="px-5 py-2.5 whitespace-nowrap">{new Date(l.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}</td>
+                        <td className="px-3 py-2.5">{l.cuentaEtiqueta}</td>
+                        <td className="px-3 py-2.5 font-mono text-[12.5px]">{l.periodo ?? "—"}</td>
+                        <td className="px-3 py-2.5 text-right font-mono">{l.count}</td>
+                        <td className="px-3 py-2.5">
+                          {l.cuadro === true && <span className="rounded-full bg-cos-green-tint px-2 py-0.5 text-[12px] font-medium text-cos-green-ink">Cuadró</span>}
+                          {l.cuadro === false && <span className="rounded-full bg-cos-amber-tint px-2 py-0.5 text-[12px] font-medium text-cos-amber-ink" title="Importado con confirmación manual: los saldos del estado no cuadraron con la suma de movimientos">Sin cuadrar</span>}
+                          {l.cuadro == null && <span className="text-cos-ink-faint">—</span>}
+                        </td>
+                        <td className="px-5 py-2.5 text-right">
+                          {l.tienePdf ? (
+                            <a href={`/api/bancos/import-batches/${l.id}/pdf`} target="_blank" rel="noreferrer"
+                              className="font-semibold text-cos-brand-ink hover:underline">Ver PDF</a>
+                          ) : (
+                            <span className="text-cos-ink-faint">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+
           {/* filter bar */}
           <div className="mt-5 flex flex-wrap items-center gap-2">
             {([["all","Todos"],["UNMATCHED","Sin conciliar"],["MATCHED","Conciliados"]] as [Filter,string][]).map(([k, t]) => (
@@ -763,6 +861,16 @@ export default function BancosPage() {
                 {t} <span className="font-mono text-[12px] opacity-80">{k === "all" ? (counts.total ?? 0) : k === "UNMATCHED" ? (counts.UNMATCHED ?? 0) : (counts.MATCHED ?? 0)}</span>
               </button>
             ))}
+            {/* División por mes: acota lista Y conteos al mes elegido. */}
+            {meses.length > 0 && (
+              <select value={mes} onChange={(e) => setMes(e.target.value)}
+                className={"cursor-pointer appearance-none rounded-full border px-3.5 py-2 text-[13.5px] font-medium outline-none " + (mes ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
+                <option value="">Todos los meses</option>
+                {meses.map((m) => (
+                  <option key={m.mes} value={m.mes}>{fmtMes(m.mes)} ({m.count})</option>
+                ))}
+              </select>
+            )}
             <button onClick={() => setShowMore((v) => !v)}
               className={"inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13.5px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint " + (showMore ? "bg-cos-brand-tint" : "")}>
               <SlidersHorizontal className="h-3.5 w-3.5" /> Más filtros
@@ -794,12 +902,23 @@ export default function BancosPage() {
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-cos-ink-faint"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</div>
             ) : txs.length === 0 ? (
               <Card className="rounded-card border-cos-line p-10 text-center text-cos-ink-faint shadow-card">No hay movimientos con ese filtro.</Card>
-            ) : txs.map((m) => {
+            ) : txs.map((m, i) => {
               const matched = m.status === "MATCHED";
               const ignored = m.status === "IGNORED";
               const isPicked = picked.has(m.id);
+              // Separador de mes: solo en la vista "Todos los meses" (con un mes
+              // elegido toda la lista es de ese mes y el separador estorba).
+              const mesTx = String(m.fecha).slice(0, 7);
+              const abreMes = !mes && (i === 0 || String(txs[i - 1].fecha).slice(0, 7) !== mesTx);
               return (
-                <Card key={m.id} className={"rounded-card p-4 shadow-card " + (matched ? "border-cos-jade-tint bg-cos-jade-tint/40" : "border-cos-line")}>
+                <Fragment key={m.id}>
+                {abreMes && (
+                  <div className="mt-2 flex items-center gap-3 first:mt-0">
+                    <span className="font-mono text-[11.5px] font-semibold uppercase tracking-[0.08em] text-cos-ink-faint">{fmtMes(mesTx)}</span>
+                    <span className="h-px flex-1 bg-cos-line-soft" />
+                  </div>
+                )}
+                <Card className={"rounded-card p-4 shadow-card " + (matched ? "border-cos-jade-tint bg-cos-jade-tint/40" : "border-cos-line")}>
                   <div className="flex items-start gap-3">
                     {selectMode && (
                       <button onClick={() => togglePick(m.id)} className="mt-1 flex-none">
@@ -1175,6 +1294,7 @@ export default function BancosPage() {
                     </div>
                   </div>
                 </Card>
+                </Fragment>
               );
             })}
           </div>

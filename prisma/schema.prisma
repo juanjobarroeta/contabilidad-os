@@ -1249,6 +1249,16 @@ model ImportBatch {
   saldoInicial Float?
   saldoFinal   Float?
 
+  // El DOCUMENTO original del estado de cuenta (PDF/imagen subido por visión).
+  // Evidencia de underwriting y de conciliación: "lo leímos y lo tiramos" es
+  // indefendible meses después. Null en orígenes sin archivo (CSV pegado,
+  // WhatsApp, ingest externo). `cuadro` = resultado del cuadre saldo inicial +
+  // Σ movimientos ≈ saldo final al importar (false = importado con force).
+  archivoPdf    Bytes?
+  archivoNombre String?
+  archivoMime   String?
+  cuadro        Boolean?
+
   company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankAccount  BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]
@@ -1649,6 +1659,12 @@ model TaxDeclaration {
   // IEPS (definitivo mensual — capturado del acuse; el motor llega después)
   iepsPagar      Float?
   iepsSaldoFavor Float?
+
+  // Último parse COMPLETADO del acuse anual con Claude (aunque no extrajera
+  // nada). Sin esta marca, el centinela isrIngresos==null re-parseaba el mismo
+  // PDF en CADA sync para siempre — caso real: 243 parses/mes (~$750) en una
+  // PF cuyo formato de anual no trae los renglones esperados.
+  acuseParseadoAt DateTime?
 
   // ISR
   isrIngresos            Float?
