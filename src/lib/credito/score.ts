@@ -39,6 +39,10 @@ export interface InsumosCredito {
   /** Métricas de CFDIs de los últimos 12 meses — null si aún no hay descarga. */
   cfdis: {
     ingresosFacturados: number;
+    /** Facturado por mes ("2026-03" → total) para comparar SOLO meses donde
+     *  también hay declaración — un backfill a medias no debe fingir
+     *  subfacturación. */
+    facturadoPorMes: Array<{ periodo: string; total: number }>;
     emitidosVigentes: number;
     emitidosCancelados: number;
     /** % de la facturación concentrada en el cliente top (0-100). */
@@ -198,15 +202,31 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     let puntos = 0;
     const c = insumos.cfdis;
 
-    const declarado12m = promedioMensual * Math.min(12, ingresos.length);
-    if (declarado12m > 0 && c.ingresosFacturados > 0) {
-      const ratio = c.ingresosFacturados / declarado12m;
-      puntos += ratio >= 0.85 && ratio <= 1.2 ? 60 : ratio >= 0.6 ? 35 : 10;
+    // Comparar SOLO los meses con ambos lados presentes: CFDIs y declaración.
+    // Un backfill a medias comparado contra todo lo declarado fingiría
+    // subfacturación (caso real: razón 0.58 con la descarga recién arrancando).
+    const declaradoPorMes = new Map(conIngresos.map((d) => [d.periodo, d.ingresos as number]));
+    const solapados = c.facturadoPorMes.filter((f) => declaradoPorMes.has(f.periodo));
+    const facturadoSolapado = solapados.reduce((s, f) => s + f.total, 0);
+    const declaradoSolapado = solapados.reduce((s, f) => s + (declaradoPorMes.get(f.periodo) ?? 0), 0);
+
+    if (solapados.length >= 3 && declaradoSolapado > 0) {
+      const ratio = facturadoSolapado / declaradoSolapado;
+      // ASIMÉTRICO a propósito: declarar MÁS de lo facturado es el patrón
+      // honesto de quien vende a público en general (efectivo declarado sin
+      // CFDI individual) — no se castiga. La señal de riesgo es la inversa:
+      // facturar más de lo que se declara (ingresos escondidos al SAT).
+      puntos += ratio <= 1.1 ? 60 : ratio <= 1.3 ? 35 : 5;
       razones.push(
-        `Facturado ${money(c.ingresosFacturados)} vs declarado ${money(declarado12m)} en la misma ventana (razón ${ratio.toFixed(2)}).`,
+        `Facturado ${money(facturadoSolapado)} vs declarado ${money(declaradoSolapado)} en ${solapados.length} mes(es) comparables (razón ${ratio.toFixed(2)}).`,
       );
+      if (ratio <= 1.1 && ratio < 0.85) {
+        razones.push("Declara más de lo que factura — patrón consistente con venta a público en general (sin señal de riesgo).");
+      } else if (ratio > 1.3) {
+        razones.push("Factura más de lo que declara — posible subdeclaración de ingresos.");
+      }
     } else {
-      razones.push("Sin base comparable facturado/declarado.");
+      razones.push("Menos de 3 meses con CFDIs y declaración a la vez — comparación aplazada.");
       puntos += 25;
     }
 

@@ -62,11 +62,10 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
   // excluye y marca el score como provisional en vez de castigar.
   const hace12m = new Date();
   hace12m.setUTCFullYear(hace12m.getUTCFullYear() - 1);
-  const [vigentes, cancelados, porCliente] = await Promise.all([
-    prisma.invoice.aggregate({
+  const [vigentesRows, cancelados, porCliente] = await Promise.all([
+    prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: hace12m } },
-      _count: true,
-      _sum: { total: true },
+      select: { fecha: true, total: true },
     }),
     prisma.invoice.count({
       where: { companyId, tipo: "INGRESO", status: "CANCELLED", fecha: { gte: hace12m } },
@@ -78,12 +77,20 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
     }),
   ]);
 
-  const totalFacturado = vigentes._sum.total ?? 0;
+  const totalFacturado = vigentesRows.reduce((s, v) => s + v.total, 0);
+  // Facturado por mes: el motor compara sólo meses con declaración presente
+  // (un backfill a medias no debe leerse como subfacturación).
+  const facturadoMap = new Map<string, number>();
+  for (const v of vigentesRows) {
+    const k = `${v.fecha.getUTCFullYear()}-${String(v.fecha.getUTCMonth() + 1).padStart(2, "0")}`;
+    facturadoMap.set(k, (facturadoMap.get(k) ?? 0) + v.total);
+  }
   const cfdis =
-    vigentes._count + cancelados > 0
+    vigentesRows.length + cancelados > 0
       ? {
           ingresosFacturados: totalFacturado,
-          emitidosVigentes: vigentes._count,
+          facturadoPorMes: [...facturadoMap.entries()].map(([periodo, total]) => ({ periodo, total })),
+          emitidosVigentes: vigentesRows.length,
           emitidosCancelados: cancelados,
           topClientePct:
             totalFacturado > 0 && porCliente.length > 0

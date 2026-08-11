@@ -41,13 +41,18 @@ describe("calcularScoreCredito", () => {
     expect(r.limiteSugerido).toBe(0);
   });
 
+  /** Facturado mensual empatado a los periodos declarados, escalado por un factor. */
+  function facturadoComo(declaraciones: InsumosCredito["declaraciones"], factor: number) {
+    return declaraciones.map((d) => ({ periodo: d.periodo, total: Math.round((d.ingresos ?? 0) * factor) }));
+  }
+
   it("con CFDIs consistentes el score sube y deja de excluir dimensiones", () => {
-    const declarado12m = BASE.declaraciones.slice(0, 12).reduce((s, d) => s + (d.ingresos ?? 0), 0);
     const r = calcularScoreCredito({
       ...BASE,
       opinionSat: "POSITIVA",
       cfdis: {
-        ingresosFacturados: Math.round(declarado12m * 12 / 15), // consistente con el promedio
+        ingresosFacturados: 3_500_000,
+        facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0),
         emitidosVigentes: 190,
         emitidosCancelados: 4,
         topClientePct: 22,
@@ -61,20 +66,35 @@ describe("calcularScoreCredito", () => {
     expect(r.banda).toBe("A");
   });
 
-  it("facturación muy por debajo de lo declarado castiga consistencia", () => {
-    const sano = calcularScoreCredito({
+  it("declarar MÁS de lo facturado NO castiga (venta a público en general)", () => {
+    const base = { ingresosFacturados: 0, emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10 };
+    const igual = calcularScoreCredito({ ...BASE, cfdis: { ...base, facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0) } });
+    const declaraMas = calcularScoreCredito({ ...BASE, cfdis: { ...base, facturadoPorMes: facturadoComo(BASE.declaraciones, 0.58) } });
+    const consIgual = igual.dimensiones.find((d) => d.clave === "consistencia")!;
+    const consDeclaraMas = declaraMas.dimensiones.find((d) => d.clave === "consistencia")!;
+    expect(consDeclaraMas.puntos).toBe(consIgual.puntos);
+  });
+
+  it("facturar MÁS de lo declarado sí castiga (posible subdeclaración)", () => {
+    const base = { ingresosFacturados: 0, emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10 };
+    const sano = calcularScoreCredito({ ...BASE, cfdis: { ...base, facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0) } });
+    const subdeclara = calcularScoreCredito({ ...BASE, cfdis: { ...base, facturadoPorMes: facturadoComo(BASE.declaraciones, 1.6) } });
+    expect(subdeclara.score).toBeLessThan(sano.score);
+  });
+
+  it("meses de CFDIs SIN declaración no entran a la comparación (backfill a medias)", () => {
+    const base = { ingresosFacturados: 0, emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10 };
+    // Facturado sólo en meses fuera de los declarados → sin solape → neutral.
+    const r = calcularScoreCredito({
       ...BASE,
-      cfdis: { ingresosFacturados: 3_500_000, emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10 },
+      cfdis: { ...base, facturadoPorMes: [{ periodo: "2030-01", total: 999_999 }] },
     });
-    const inconsistente = calcularScoreCredito({
-      ...BASE,
-      cfdis: { ingresosFacturados: 500_000, emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10 },
-    });
-    expect(inconsistente.score).toBeLessThan(sano.score);
+    const cons = r.dimensiones.find((d) => d.clave === "consistencia")!;
+    expect(cons.razones.join(" ")).toMatch(/comparación aplazada/);
   });
 
   it("tasa de cancelación alta castiga (perfil refacturador)", () => {
-    const base = { ingresosFacturados: 3_500_000, topClientePct: 30, clientesActivos: 10 };
+    const base = { ingresosFacturados: 0, facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0), topClientePct: 30, clientesActivos: 10 };
     const limpio = calcularScoreCredito({ ...BASE, cfdis: { ...base, emitidosVigentes: 100, emitidosCancelados: 2 } });
     const cancelador = calcularScoreCredito({ ...BASE, cfdis: { ...base, emitidosVigentes: 70, emitidosCancelados: 30 } });
     expect(cancelador.score).toBeLessThan(limpio.score);
