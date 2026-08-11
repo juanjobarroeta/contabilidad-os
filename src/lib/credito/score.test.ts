@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { calcularScoreCredito, desacumularIngresosDeclarados, type InsumosCredito } from "./score";
+import {
+  calcularScoreCredito,
+  desacumularIngresosDeclarados,
+  percentil,
+  promedioPonderadoPorRecencia,
+  type InsumosCredito,
+} from "./score";
 
 // Perfil tipo Mercedes: 15 meses declarados, RESICO, sin CFDIs todavía.
 function mesesDeclarados(n: number, base = 250_000): InsumosCredito["declaraciones"] {
@@ -56,6 +62,37 @@ describe("desacumularIngresosDeclarados (PM Art. 14 / PF 612 Art. 106)", () => {
   });
 });
 
+describe("promedioPonderadoPorRecencia", () => {
+  it("pondera el mes más reciente el doble que el de hace 6 meses", () => {
+    // Serie plana → el promedio ponderado es el mismo valor.
+    const plana = promedioPonderadoPorRecencia([
+      { periodo: "2026-01", valor: 100 }, { periodo: "2026-07", valor: 100 },
+    ]);
+    expect(plana).toBe(100);
+    // Caída reciente: el ponderado queda POR DEBAJO del promedio simple (150).
+    const cayendo = promedioPonderadoPorRecencia([
+      { periodo: "2026-01", valor: 200 }, { periodo: "2026-07", valor: 100 },
+    ])!;
+    expect(cayendo).toBeLessThan(150);
+    // Peso 1 (reciente) y 0.5 (6 meses) → (100·1 + 200·0.5) / 1.5 = 133.3
+    expect(Math.round(cayendo)).toBe(133);
+  });
+
+  it("serie vacía → null", () => {
+    expect(promedioPonderadoPorRecencia([])).toBeNull();
+  });
+});
+
+describe("percentil", () => {
+  it("p25 con interpolación lineal", () => {
+    expect(percentil([10, 20, 30, 40, 50], 0.25)).toBe(20);
+    expect(percentil([0, 100], 0.25)).toBe(25);
+  });
+  it("lista vacía → null", () => {
+    expect(percentil([], 0.25)).toBeNull();
+  });
+});
+
 describe("calcularScoreCredito", () => {
   it("perfil sano sin CFDIs: score alto pero PROVISIONAL con cobertura explicada", () => {
     const r = calcularScoreCredito(BASE);
@@ -63,8 +100,11 @@ describe("calcularScoreCredito", () => {
     expect(r.cobertura.join(" ")).toMatch(/CFDIs/);
     expect(r.score).toBeGreaterThanOrEqual(65); // actividad+cumplimiento sanos
     expect(r.limiteSugerido).toBeGreaterThan(0);
-    // Sólo dimensiones con insumos: actividad, cumplimiento, efos.
-    expect(r.dimensiones.map((d) => d.clave)).toEqual(["actividad", "cumplimiento", "efos"]);
+    // Sólo dimensiones con insumos. Comportamiento entra con las fechas de
+    // presentación (puntualidad observada), aunque no haya REPs de proveedores.
+    expect(r.dimensiones.map((d) => d.clave)).toEqual([
+      "actividad", "cumplimiento", "comportamiento", "efos",
+    ]);
   });
 
   it("EFOS abierto = banda D y límite 0, sin importar el resto", () => {
@@ -92,7 +132,7 @@ describe("calcularScoreCredito", () => {
       },
     });
     expect(r.dimensiones.map((d) => d.clave)).toEqual([
-      "actividad", "cumplimiento", "consistencia", "capacidad", "clientes", "efos",
+      "actividad", "cumplimiento", "consistencia", "capacidad", "clientes", "comportamiento", "efos",
     ]);
     expect(r.score).toBeGreaterThanOrEqual(80);
     expect(r.banda).toBe("A");
@@ -199,6 +239,117 @@ describe("calcularScoreCredito", () => {
     });
   });
 
+  describe("fase A: recencia, mes malo y efectivo declarado", () => {
+    const cfdisIguales = {
+      ingresosFacturados: 3_000_000,
+      facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0),
+      emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10,
+    };
+    /** Serie bancaria mensual a partir de netos (abonos fijos, cargos derivados). */
+    function bancoConNetos(netos: number[], abonos = 300_000) {
+      const porMes = netos.map((neto, i) => ({
+        periodo: `2026-${String(i + 1).padStart(2, "0")}`,
+        abonos,
+        cargos: abonos - neto,
+      }));
+      const n = porMes.length;
+      return {
+        mesesConDatos: n,
+        abonosProm: abonos,
+        cargosProm: porMes.reduce((s, m) => s + m.cargos, 0) / n,
+        porMes,
+      };
+    }
+
+    it("el pago máximo sale del MES MALO: mismo promedio, flujo volátil paga menos", () => {
+      const estable = calcularScoreCredito({
+        ...BASE, cfdis: cfdisIguales,
+        bancos: bancoConNetos([50_000, 50_000, 50_000, 50_000, 50_000, 50_000]),
+      });
+      const volatil = calcularScoreCredito({
+        ...BASE, cfdis: cfdisIguales,
+        bancos: bancoConNetos([150_000, 5_000, 140_000, 10_000, 150_000, 5_000]),
+      });
+      // El volátil tiene MAYOR neto promedio pero peor mes malo.
+      expect(volatil.capacidadDesglose!.flujoBancarioNeto!).toBeGreaterThan(
+        estable.capacidadDesglose!.flujoBancarioNeto!,
+      );
+      expect(volatil.capacidadDesglose!.flujoMesMalo!).toBeLessThan(
+        estable.capacidadDesglose!.flujoMesMalo!,
+      );
+      expect(volatil.pagoMensualMax!).toBeLessThan(estable.pagoMensualMax!);
+    });
+
+    it("la recencia castiga el deterioro reciente aunque el promedio simple sea igual", () => {
+      const mejorando = calcularScoreCredito({
+        ...BASE, cfdis: cfdisIguales,
+        bancos: bancoConNetos([10_000, 20_000, 30_000, 40_000, 50_000, 60_000]),
+      });
+      const deteriorando = calcularScoreCredito({
+        ...BASE, cfdis: cfdisIguales,
+        bancos: bancoConNetos([60_000, 50_000, 40_000, 30_000, 20_000, 10_000]),
+      });
+      expect(deteriorando.capacidadDesglose!.flujoBancarioNeto!).toBeLessThan(
+        mejorando.capacidadDesglose!.flujoBancarioNeto!,
+      );
+    });
+
+    it("efectivo declarado: con patrón público en general se reconoce el 50% no depositado", () => {
+      // Caso Mercedes: declara ~$290k/mes, deposita $87k, gasta $136k del banco.
+      const bancoMercedes = {
+        mesesConDatos: 7,
+        abonosProm: 87_000,
+        cargosProm: 136_000,
+        porMes: Array.from({ length: 7 }, (_, i) => ({
+          periodo: `2026-0${i + 1}`, abonos: 87_000, cargos: 136_000,
+        })),
+      };
+      const conPatron = calcularScoreCredito({
+        ...BASE,
+        cfdis: { ...cfdisIguales, facturadoPorMes: facturadoComo(BASE.declaraciones, 0.5) },
+        bancos: bancoMercedes,
+      });
+      const sinPatron = calcularScoreCredito({
+        ...BASE, cfdis: cfdisIguales, bancos: bancoMercedes,
+      });
+      expect(conPatron.capacidadDesglose!.efectivoReconocido!).toBeGreaterThan(0);
+      expect(sinPatron.capacidadDesglose!.efectivoReconocido).toBeNull();
+      // Sin patrón el banco en rojo deja el flujo en cero; con patrón, no.
+      expect(sinPatron.flujoLibreMensual).toBe(0);
+      expect(conPatron.flujoLibreMensual!).toBeGreaterThan(0);
+    });
+
+    it("el agregado 12m de gastos sigue contando aunque no haya serie mensual", () => {
+      const sinGastos = calcularScoreCredito({ ...BASE, cfdis: cfdisIguales, gastosFacturados12m: 0 });
+      const conGastos = calcularScoreCredito({ ...BASE, cfdis: cfdisIguales, gastosFacturados12m: 2_400_000 });
+      expect(conGastos.capacidadDesglose!.gastosProm).toBeGreaterThan(0);
+      expect(conGastos.flujoLibreMensual!).toBeLessThan(sinGastos.flujoLibreMensual!);
+    });
+
+    it("comportamiento se EXCLUYE sin señales observables (ni REPs ni fechas)", () => {
+      const r = calcularScoreCredito({
+        ...BASE,
+        declaraciones: BASE.declaraciones.map((d) => ({ ...d, fechaPresentacion: null })),
+      });
+      expect(r.dimensiones.map((d) => d.clave)).not.toContain("comportamiento");
+      expect(r.cobertura.join(" ")).toMatch(/historial de pagos observable/);
+    });
+
+    it("mayoría de meses con banco en rojo castiga comportamiento", () => {
+      const sano = calcularScoreCredito({
+        ...BASE, cfdis: cfdisIguales,
+        bancos: bancoConNetos([20_000, 30_000, 25_000, 40_000, 15_000, 35_000]),
+      });
+      const enRojo = calcularScoreCredito({
+        ...BASE, cfdis: cfdisIguales,
+        bancos: bancoConNetos([-20_000, -30_000, 25_000, -40_000, -15_000, 35_000]),
+      });
+      const compSano = sano.dimensiones.find((d) => d.clave === "comportamiento")!;
+      const compRojo = enRojo.dimensiones.find((d) => d.clave === "comportamiento")!;
+      expect(compRojo.puntos).toBeLessThan(compSano.puntos);
+    });
+  });
+
   it("declarar MÁS de lo facturado NO castiga (venta a público en general)", () => {
     const base = { ingresosFacturados: 0, emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10 };
     const igual = calcularScoreCredito({ ...BASE, cfdis: { ...base, facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0) } });
@@ -271,9 +422,12 @@ describe("calcularScoreCredito", () => {
         pagos: { facturas: 8, monto: 400_000, pagado: 150_000, diasPromedio: 150 },
       },
     });
-    const capPuntual = puntual.dimensiones.find((d) => d.clave === "capacidad")!;
-    const capMoroso = moroso.dimensiones.find((d) => d.clave === "capacidad")!;
-    expect(capMoroso.puntos).toBeLessThan(capPuntual.puntos);
+    // El plazo de pago a proveedores vive en la dimensión de COMPORTAMIENTO
+    // (historial observable), no en capacidad (que mide flujo disponible).
+    const compPuntual = puntual.dimensiones.find((d) => d.clave === "comportamiento")!;
+    const compMoroso = moroso.dimensiones.find((d) => d.clave === "comportamiento")!;
+    expect(compMoroso.puntos).toBeLessThan(compPuntual.puntos);
+    expect(moroso.score).toBeLessThan(puntual.score);
   });
 
   it("tasa de cancelación alta castiga (perfil refacturador)", () => {
