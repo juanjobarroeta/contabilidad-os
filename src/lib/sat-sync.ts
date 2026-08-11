@@ -64,9 +64,13 @@ function buildService(fiel: Awaited<ReturnType<typeof getFielForCompany>>): Serv
 }
 
 export function formatSatError(side: string, code: number, msg: string): string {
-  // 5002 = se agotaron las solicitudes de por vida (per-RFC quota hit)
+  // 5002 = "se han agotado las solicitudes de por vida": el SAT limita cuántas
+  // veces se puede pedir EL MISMO parámetro (RFC + rango + tipo). NO es un
+  // límite temporal — esperar no lo libera; hay que variar la consulta (otro
+  // rango de fechas) o usar la vía por UUID (ConsultaCFDIService, cron
+  // sat-vigencia-sync), que no consume esta cuota.
   if (code === 5002) {
-    return `${side}: SAT alcanzó su límite de solicitudes simultáneas (código 5002). Espera 1-3 horas y vuelve a intentar — las solicitudes pendientes se procesarán automáticamente.`;
+    return `${side}: el SAT agotó las solicitudes DE POR VIDA para este período (código 5002). Esperar no lo libera: usa /api/cron/sat-vigencia-sync (consulta por UUID, sin cuota) o pide un rango de fechas distinto.`;
   }
   // 5004 = no hay CFDIs en el rango — not really an error
   if (code === 5004) {
@@ -850,6 +854,7 @@ export async function syncCancelacionesPeriodo(
 
   // 1. Ensure a request per side (reuse within the 24h window, else submit).
   const requestIds: string[] = [];
+  const rechazos: string[] = [];
   for (const side of sides) {
     const existing = await prisma.satSyncRequest.findFirst({
       where: {
@@ -876,12 +881,23 @@ export async function syncCancelacionesPeriodo(
           data: { companyId, year, month, tipo: side.tipo, requestId: reqId, status: "ACCEPTED" },
         });
         requestIds.push(reqId);
+      } else {
+        // Rechazo del SAT (típicamente 5002, cuota vitalicia del período).
+        rechazos.push(formatSatError(side.tipo, res.getStatus().getCode(), res.getStatus().getMessage()));
       }
     } catch (e) {
       console.error("[sat/cancel-sync] query error:", e);
+      rechazos.push(`${side.tipo}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  if (requestIds.length === 0) return { ok: true, status: "pending" };
+  // TODAS las solicitudes rechazadas: es un ERROR, no un "pendiente". Devolverlo
+  // como ok:true hacía que el backlog histórico avanzara de período sin revisar
+  // nada y reportara progreso falso (revisados: 0 con errors: []).
+  if (requestIds.length === 0) {
+    return rechazos.length > 0
+      ? { ok: false, status: "error", error: rechazos.join(" · ") }
+      : { ok: true, status: "pending" };
+  }
 
   // 2. Verify each request; collect ready package IDs.
   const readyPackageIds: string[] = [];

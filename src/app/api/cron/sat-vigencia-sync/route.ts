@@ -59,6 +59,14 @@ async function handle(req: Request) {
     : new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)); // ejercicio en curso
   const startedAt = Date.now();
 
+  // expediente=1: prioriza los CFDIs que deciden la verdad del inventario —
+  // los que están en el expediente de alguna unidad (compra, venta, duplicada,
+  // sustituida…). Con refacturación sin cancelación sincronizada, la unidad
+  // puede estar ligada a la factura MUERTA del par; verificar estos primeros
+  // corrige precio/cliente/fecha de la venta con un barrido corto en vez de
+  // recorrer todo el archivo.
+  const soloExpediente = url.searchParams.get("expediente") === "1";
+
   const invoices = await prisma.invoice.findMany({
     where: {
       ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
@@ -66,6 +74,7 @@ async function handle(req: Request) {
       uuid: { not: null },
       tipo: { in: ["INGRESO", "EGRESO", "PAGO"] },
       fecha: { gte: desde },
+      ...(soloExpediente ? { vehiculoMenciones: { some: {} } } : {}),
     },
     select: {
       id: true,
