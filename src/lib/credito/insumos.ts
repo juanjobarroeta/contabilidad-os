@@ -9,10 +9,27 @@
 //     concentración de clientes. null si aún no hay CFDIs descargados.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
 import { esPersonaFisicaRfc, pagosProvisionalesAcumulan } from "@/lib/fiscal/regimen-anual";
 import { desacumularIngresosDeclarados, type DeclaracionMensualInsumo, type InsumosCredito } from "./score";
+
+/**
+ * Excluye los traspasos entre cuentas propias del flujo bancario del score:
+ * mover dinero entre cuentas propias infla entradas y salidas por igual.
+ * Impuestos y comisiones SÍ se quedan (son salidas reales).
+ *
+ * TRAMPA (costó una evaluación mal calculada): `NOT: { notes: "X" }` NO incluye
+ * las filas con `notes` NULL — en SQL, `NOT (notes = 'X')` es NULL, no TRUE,
+ * cuando la columna es NULL. Escrito así, el filtro se comía TODOS los
+ * movimientos sin categorizar (que son la mayoría) y dejaba sólo las
+ * comisiones etiquetadas: el flujo bancario salía en $0 de entradas. Por eso
+ * el OR explícito — no lo cambies a NOT.
+ */
+export const SIN_TRASPASOS_INTERNOS: Prisma.BankTransactionWhereInput = {
+  OR: [{ notes: null }, { notes: { not: "INTERNAL_TRANSFER" } }],
+};
 
 export async function cargarInsumosCredito(companyId: string): Promise<InsumosCredito> {
   const empresa = await prisma.company.findUnique({
@@ -116,10 +133,7 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
       _sum: { total: true },
     }),
     prisma.bankTransaction.findMany({
-      // Transferencias internas fuera: mover dinero entre cuentas propias infla
-      // entradas y salidas por igual y distorsiona el flujo bancario del score.
-      // Impuestos y comisiones SÍ se quedan (son salidas reales).
-      where: { companyId, fecha: { gte: hace12m }, NOT: { notes: "INTERNAL_TRANSFER" } },
+      where: { companyId, fecha: { gte: hace12m }, ...SIN_TRASPASOS_INTERNOS },
       select: { fecha: true, monto: true, saldo: true },
       orderBy: { fecha: "asc" },
     }),
