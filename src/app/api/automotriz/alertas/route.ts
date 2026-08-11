@@ -23,6 +23,11 @@ import {
 
 const DIAS_ATENCION = 90;
 const DIAS_CRITICO = 180;
+// Umbral de «en piso improbable»: una unidad derivada de CFDIs que lleva 18+
+// meses "disponible" casi seguro se vendió sin factura ligable (público en
+// general sin VIN). Se confirma a mano con «Marcar vendida» — nunca en bulk
+// automático, para no inventar ventas.
+const DIAS_IMPROBABLE = 548;
 const MS_DIA = 86_400_000;
 
 export const GET = withAuthz(async (req: Request) => {
@@ -56,7 +61,11 @@ export const GET = withAuthz(async (req: Request) => {
         uso: "VENTA",
         fechaCompra: { not: null },
       },
-      select: { id: true, vin: true, marca: true, modelo: true, anio: true, fechaCompra: true, costoCompra: true, planPisoTasaAnual: true },
+      select: {
+        id: true, vin: true, marca: true, modelo: true, anio: true, fechaCompra: true,
+        costoCompra: true, planPisoTasaAnual: true, autoCreado: true,
+        pedidos: { where: { estado: { in: ["COTIZACION", "APARTADO", "FACTURADO"] } }, select: { id: true }, take: 1 },
+      },
     }),
     prisma.vehiculo.count({
       where: {
@@ -67,15 +76,24 @@ export const GET = withAuthz(async (req: Request) => {
     }),
   ]);
 
-  const envejecidas = unidadesVivas
-    .map((v) => {
-      const dias = Math.floor((now.getTime() - v.fechaCompra!.getTime()) / MS_DIA);
-      // Costo financiero estimado de tener la unidad parada (si hay tasa piso).
-      const interesEstimado =
-        v.planPisoTasaAnual != null ? Math.round(((v.costoCompra * v.planPisoTasaAnual * dias) / 365) * 100) / 100 : null;
-      return { id: v.id, vin: v.vin, unidad: `${v.marca} ${v.modelo} ${v.anio}`, dias, costoCompra: v.costoCompra, interesEstimado };
-    })
-    .filter((v) => v.dias >= DIAS_ATENCION)
+  const conDias = unidadesVivas.map((v) => {
+    const dias = Math.floor((now.getTime() - v.fechaCompra!.getTime()) / MS_DIA);
+    // Costo financiero estimado de tener la unidad parada (si hay tasa piso).
+    const interesEstimado =
+      v.planPisoTasaAnual != null ? Math.round(((v.costoCompra * v.planPisoTasaAnual * dias) / 365) * 100) / 100 : null;
+    return {
+      id: v.id, vin: v.vin, unidad: `${v.marca} ${v.modelo} ${v.anio}`, dias,
+      costoCompra: v.costoCompra, interesEstimado,
+      improbable: v.autoCreado && v.pedidos.length === 0 && dias >= DIAS_IMPROBABLE,
+    };
+  });
+
+  // Improbables aparte: no son "aging" real — son unidades cuya venta el CFDI
+  // no puede probar. El aging operativo excluye a las improbables para que la
+  // señal de precio no se ahogue en el ruido histórico.
+  const improbables = conDias.filter((v) => v.improbable).sort((a, b) => b.dias - a.dias);
+  const envejecidas = conDias
+    .filter((v) => !v.improbable && v.dias >= DIAS_ATENCION)
     .sort((a, b) => b.dias - a.dias);
 
   return NextResponse.json({
@@ -104,6 +122,12 @@ export const GET = withAuthz(async (req: Request) => {
       totalEnvejecidas: envejecidas.length,
       criticas: envejecidas.filter((v) => v.dias >= DIAS_CRITICO).length,
       porRevisar,
+      improbables: {
+        diasUmbral: DIAS_IMPROBABLE,
+        total: improbables.length,
+        costoTotal: Math.round(improbables.reduce((s, v) => s + v.costoCompra, 0) * 100) / 100,
+        top: improbables.slice(0, 15),
+      },
     },
   });
 });
