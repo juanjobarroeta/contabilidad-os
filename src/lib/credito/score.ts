@@ -120,6 +120,16 @@ export interface ResultadoScore {
     flujoLibre: number;
     /** Razón de servicio de deuda aplicada según la banda (0.4/0.3/0.2/0). */
     theta: number;
+    /** Neto bancario mensual real (abonos − cargos), cuando hay ≥3 meses de
+     *  estados de cuenta. Null/ausente sin datos bancarios (snapshots viejos). */
+    flujoBancarioNeto?: number | null;
+    /** Qué estimación determinó el flujo libre:
+     *  - "fiscal": ingresos declarados − gastos facturados − nómina − impuestos.
+     *  - "bancario": el neto bancario real fue MENOR que la estimación fiscal y
+     *    la acota (prudencia: se presta contra el flujo que sí se ve en banco).
+     *  - "solo_bancario": sin CFDIs; ingresosProm/gastosProm son entradas y
+     *    salidas del banco (expediente delgado). */
+    fuenteFlujo?: "fiscal" | "bancario" | "solo_bancario";
   } | null;
 }
 
@@ -325,9 +335,15 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
   // El límite no debe salir del ingreso bruto: una empresa que factura mucho y
   // gasta igual no tiene con qué pagar. Flujo libre estimado = ingresos
   // declarados − gastos facturados − nómina timbrada − impuestos pagados.
-  // Los estados de cuenta (si hay) corroboran con el flujo bancario real.
+  // Los estados de cuenta, cuando hay ≥3 meses, dejan de ser sólo corroboración:
+  // el neto bancario real ACOTA el flujo libre (min de ambas estimaciones) — la
+  // estimación fiscal sobreestima cuando el cliente compra sin factura (típico
+  // RESICO PF con 0 CFDIs de gasto), y no se presta contra flujo que el banco
+  // no ve. Sin CFDIs, el banco solo alcanza para calificar capacidad.
   let flujoLibreMensual: number | null = null;
   let capacidadDesglose: ResultadoScore["capacidadDesglose"] = null;
+  const bancosUsables = insumos.bancos && insumos.bancos.mesesConDatos >= 3 ? insumos.bancos : null;
+  const netoBancario = bancosUsables ? bancosUsables.abonosProm - bancosUsables.cargosProm : null;
   if (insumos.cfdis && promedioMensual > 0) {
     const razones: string[] = [];
     let puntos = 0;
@@ -346,7 +362,13 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
       insumos.declaraciones.length > 0
         ? insumos.declaraciones.reduce((s, d) => s + d.impuestosPagados, 0) / insumos.declaraciones.length
         : 0;
-    flujoLibreMensual = Math.max(0, promedioMensual - gastosProm - nominaProm - impuestosProm);
+    const flujoFiscal = Math.max(0, promedioMensual - gastosProm - nominaProm - impuestosProm);
+    let fuenteFlujo: "fiscal" | "bancario" = "fiscal";
+    flujoLibreMensual = flujoFiscal;
+    if (netoBancario != null && netoBancario < flujoFiscal) {
+      flujoLibreMensual = Math.max(0, netoBancario);
+      fuenteFlujo = "bancario";
+    }
     capacidadDesglose = {
       ingresosProm: Math.round(promedioMensual),
       gastosProm: Math.round(gastosProm),
@@ -354,15 +376,28 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
       impuestosProm: Math.round(impuestosProm),
       flujoLibre: Math.round(flujoLibreMensual),
       theta: 0, // se fija abajo, cuando ya se conoce la banda
+      flujoBancarioNeto: netoBancario != null ? Math.round(netoBancario) : null,
+      fuenteFlujo,
     };
     const margen = flujoLibreMensual / promedioMensual;
 
     puntos += margen >= 0.35 ? 60 : margen >= 0.2 ? 45 : margen >= 0.1 ? 30 : margen > 0 ? 15 : 5;
     razones.push(
-      `Flujo libre estimado ${money(flujoLibreMensual)}/mes (ingresos ${money(promedioMensual)} − gastos facturados ${money(gastosProm)} − nómina ${money(nominaProm)} − impuestos ${money(impuestosProm)}): margen ${pct(margen)}.`,
+      `Flujo libre fiscal estimado ${money(flujoFiscal)}/mes (ingresos ${money(promedioMensual)} − gastos facturados ${money(gastosProm)} − nómina ${money(nominaProm)} − impuestos ${money(impuestosProm)}).`,
     );
+    if (fuenteFlujo === "bancario") {
+      razones.push(
+        `El neto bancario real (${money(netoBancario!)}/mes) es MENOR que la estimación fiscal — el flujo libre se acota al banco: ${money(flujoLibreMensual)}/mes (margen ${pct(margen)}).`,
+      );
+    } else {
+      razones.push(`Margen de flujo libre: ${pct(margen)}.`);
+    }
     if (insumos.gastosFacturados12m === 0) {
-      razones.push("Sin CFDIs de gasto registrados — el margen puede estar sobreestimado (compras sin factura).");
+      razones.push(
+        netoBancario != null
+          ? "Sin CFDIs de gasto registrados — los gastos reales se leen del banco."
+          : "Sin CFDIs de gasto registrados — el margen puede estar sobreestimado (compras sin factura).",
+      );
     }
     if (mesesCobertura > 0 && mesesCobertura < 6) {
       razones.push(
@@ -383,11 +418,10 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
       }
     }
 
-    if (insumos.bancos && insumos.bancos.mesesConDatos >= 3) {
-      const neto = insumos.bancos.abonosProm - insumos.bancos.cargosProm;
-      puntos += neto > 0 ? 40 : neto > -0.05 * insumos.bancos.abonosProm ? 25 : 10;
+    if (bancosUsables && netoBancario != null) {
+      puntos += netoBancario > 0 ? 40 : netoBancario > -0.05 * bancosUsables.abonosProm ? 25 : 10;
       razones.push(
-        `Flujo bancario real (${insumos.bancos.mesesConDatos} meses): entradas ${money(insumos.bancos.abonosProm)}/mes vs salidas ${money(insumos.bancos.cargosProm)}/mes — neto ${money(neto)}.`,
+        `Flujo bancario real (${bancosUsables.mesesConDatos} meses): entradas ${money(bancosUsables.abonosProm)}/mes vs salidas ${money(bancosUsables.cargosProm)}/mes — neto ${money(netoBancario)}.`,
       );
     } else {
       puntos += 20; // neutro
@@ -396,8 +430,35 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     }
 
     dims.push({ clave: "capacidad", etiqueta: "Capacidad de pago", peso: 20, puntos: Math.max(0, Math.min(100, puntos)), razones });
+  } else if (bancosUsables && netoBancario != null) {
+    // Expediente delgado: sin CFDIs (o sin ingresos declarados), pero CON
+    // estados de cuenta. El banco alcanza para calificar capacidad — entradas
+    // como proxy de ingreso, salidas como gasto total (ya incluyen impuestos y
+    // nómina, por eso no se restan aparte). Las transferencias internas vienen
+    // excluidas desde el loader.
+    const razones: string[] = [];
+    flujoLibreMensual = Math.max(0, netoBancario);
+    const base = promedioMensual > 0 ? promedioMensual : bancosUsables.abonosProm;
+    const margen = base > 0 ? flujoLibreMensual / base : 0;
+    let puntos = margen >= 0.35 ? 60 : margen >= 0.2 ? 45 : margen >= 0.1 ? 30 : margen > 0 ? 15 : 5;
+    puntos += netoBancario > 0 ? 40 : netoBancario > -0.05 * bancosUsables.abonosProm ? 25 : 10;
+    razones.push(
+      `Capacidad estimada SOLO con flujo bancario (${bancosUsables.mesesConDatos} meses): entradas ${money(bancosUsables.abonosProm)}/mes − salidas ${money(bancosUsables.cargosProm)}/mes = neto ${money(netoBancario)} (margen ${pct(margen)}).`,
+    );
+    capacidadDesglose = {
+      ingresosProm: Math.round(bancosUsables.abonosProm),
+      gastosProm: Math.round(bancosUsables.cargosProm),
+      nominaProm: 0,
+      impuestosProm: 0,
+      flujoLibre: Math.round(flujoLibreMensual),
+      theta: 0,
+      flujoBancarioNeto: Math.round(netoBancario),
+      fuenteFlujo: "solo_bancario",
+    };
+    dims.push({ clave: "capacidad", etiqueta: "Capacidad de pago", peso: 20, puntos: Math.max(0, Math.min(100, puntos)), razones });
+    cobertura.push("CFDIs no disponibles — capacidad estimada únicamente con estados de cuenta.");
   } else if (promedioMensual > 0) {
-    cobertura.push("Capacidad de pago sin evaluar (requiere CFDIs para estimar gastos).");
+    cobertura.push("Capacidad de pago sin evaluar (requiere CFDIs o ≥3 meses de estados de cuenta).");
   }
 
   // ── 4. Estabilidad de clientes (15) ────────────────────────────────────────
