@@ -52,6 +52,9 @@ export const GET = withAuthz(async (req: Request) => {
     const costosTotal = v.costos.reduce((s, c) => s + c.monto, 0); // NC restan solas
     const interesPiso = v.costos.filter((c) => c.tipo === "INTERES_PISO").reduce((s, c) => s + c.monto, 0);
     const notasCredito = v.costos.filter((c) => c.monto < 0).reduce((s, c) => s + c.monto, 0);
+    // NC emitidas AL cliente (descuento post-venta): monto positivo que ya
+    // resta en costosTotal, pero se reporta como menos-ingreso, no como costo.
+    const ncClientes = v.costos.filter((c) => c.tipo === "NC_CLIENTE").reduce((s, c) => s + c.monto, 0);
     // Costo incompleto: la compra quedó fuera del archivo de 5 años del SAT y
     // nadie ha capturado el costo real — su "utilidad" sería la venta entera.
     // Se reporta aparte y NO entra a utilidad/margen agregados.
@@ -68,8 +71,9 @@ export const GET = withAuthz(async (req: Request) => {
       vendedor: v.vendedor ? `${v.vendedor.nombre} ${v.vendedor.apellidoPaterno}` : null,
       precioVenta: v.precioVenta ?? 0,
       costoCompra: v.costoCompra,
-      costosAdicionales: r2(costosTotal - notasCredito - interesPiso),
-      notasCredito: r2(-notasCredito), // positivo = monto acreditado a favor
+      costosAdicionales: r2(costosTotal - notasCredito - interesPiso - ncClientes),
+      notasCredito: r2(-notasCredito), // positivo = monto acreditado a favor (proveedor)
+      ncClientes: r2(ncClientes), // positivo = descuento otorgado al cliente
       interesPiso: r2(interesPiso),
       comision: v.comisionMonto,
       costoIncompleto,
@@ -109,6 +113,7 @@ export const GET = withAuthz(async (req: Request) => {
       utilidad: totalUtilidad,
       margen: ventaCompletas ? r2((totalUtilidad / ventaCompletas) * 100) : null,
       notasCredito: r2(unidades.reduce((s, u) => s + u.notasCredito, 0)),
+      ncClientes: r2(unidades.reduce((s, u) => s + u.ncClientes, 0)),
       incompletas: {
         unidades: incompletas.length,
         venta: r2(incompletas.reduce((s, u) => s + u.precioVenta, 0)),

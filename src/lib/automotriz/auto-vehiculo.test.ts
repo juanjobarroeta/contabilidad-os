@@ -548,7 +548,7 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — notas de crédito y número de 
     expect(db._costos.filter((c) => c.invoiceId === "inv-nc")).toHaveLength(1);
   });
 
-  it("nota de crédito emitida a un cliente (INGRESO) no toca inventario", async () => {
+  it("nota de crédito emitida a un cliente (INGRESO): NC_CLIENTE positiva, sin tocar el estado", async () => {
     const db = fakeDb();
     await derivarVehiculoDesdeCfdiSiAplica(db as never, {
       ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
@@ -556,8 +556,18 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — notas de crédito y número de 
     const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
       ...base, invoiceId: "inv-nc-cli", tipo: "INGRESO", rawXml: notaCredito(),
     });
-    expect(r).toBeNull();
+    // Menos-ingreso ligado a la unidad: monto POSITIVO tipo NC_CLIENTE (resta
+    // utilidad), jamás cambia el estado ni crea unidades.
+    expect(r?.actualizados).toBe(1);
+    const nc = db._costos.find((c) => c.invoiceId === "inv-nc-cli");
+    expect(nc).toMatchObject({ monto: 15000, tipo: "NC_CLIENTE" });
     expect([...db._vehiculos.values()][0].estado).toBe("DISPONIBLE");
+    // Idempotente:
+    const r2 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-nc-cli", tipo: "INGRESO", rawXml: notaCredito(),
+    });
+    expect(r2?.actualizados).toBe(0);
+    expect(db._costos.filter((c) => c.invoiceId === "inv-nc-cli")).toHaveLength(1);
   });
 
   it("número de motor: se captura al crear y se completa en re-corridas", async () => {

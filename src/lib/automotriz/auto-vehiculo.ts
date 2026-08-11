@@ -120,12 +120,15 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   // Sólo compra/venta mueven inventario. TRASLADO/NOMINA/PAGO no aplican.
   if (!esVenta && !esCompra) return null;
 
-  // Nota de crédito (TipoDeComprobante "E"): un rebate/descuento del proveedor
-  // que referencia la unidad NETEA su costo (VehiculoCosto negativo) — jamás
-  // crea ni vende unidades. Una nota de crédito emitida A un cliente (lado
-  // INGRESO) no toca inventario.
+  // Nota de crédito (TipoDeComprobante "E") que referencia unidades — jamás
+  // crea ni vende unidades. Dos lados:
+  //   EGRESO  (NC del proveedor): rebate/descuento que NETEA el costo de la
+  //           unidad (VehiculoCosto negativo, tipo OTRO).
+  //   INGRESO (NC emitida al cliente): descuento post-venta que RESTA utilidad
+  //           como menos-ingreso (VehiculoCosto positivo, tipo NC_CLIENTE) —
+  //           no es un costo de inventario, y así el estado de cuenta y la
+  //           rentabilidad lo ven ligado a su unidad.
   if (tipoComprobanteDesdeCfdi(args.rawXml) === "E") {
-    if (!esCompra) return null;
     let actualizadosNc = 0;
     const vinsNc: string[] = [];
     const referencias = [
@@ -148,7 +151,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
       });
       if (!unidad) continue;
       await registrarMencion(db, unidad.id, args.invoiceId, "NOTA_CREDITO");
-      const agrego = await registrarNotaCredito(db, unidad.id, args, items);
+      const agrego = await registrarNotaCredito(db, unidad.id, args, items, esCompra ? "PROVEEDOR" : "CLIENTE");
       if (agrego) {
         actualizadosNc++;
         vinsNc.push(niv);
@@ -628,15 +631,18 @@ function agrupa<T extends { niv: string }>(items: T[]): Map<string, T[]> {
 }
 
 /**
- * Nota de crédito del proveedor sobre una unidad: cada concepto que la
- * referencia se registra como VehiculoCosto NEGATIVO (netea el costo).
+ * Nota de crédito sobre una unidad, por lado:
+ *   PROVEEDOR → VehiculoCosto NEGATIVO tipo OTRO (netea el costo de compra).
+ *   CLIENTE   → VehiculoCosto POSITIVO tipo NC_CLIENTE (menos-ingreso de la
+ *               venta; la rentabilidad lo separa de los costos reales).
  * Idempotente por (vehiculoId, invoiceId).
  */
 async function registrarNotaCredito(
   db: Db,
   vehiculoId: string,
   args: DerivarVehiculoArgs,
-  items: Array<{ descripcion: string | null; importe: number }>
+  items: Array<{ descripcion: string | null; importe: number }>,
+  lado: "PROVEEDOR" | "CLIENTE"
 ): Promise<boolean> {
   const conMonto = items.filter((i) => i.importe > 0);
   if (conMonto.length === 0) return false;
@@ -648,9 +654,12 @@ async function registrarNotaCredito(
   await db.vehiculoCosto.createMany({
     data: conMonto.map((i) => ({
       vehiculoId,
-      tipo: "OTRO" as const,
-      concepto: `Nota de crédito: ${i.descripcion ?? "descuento del proveedor"}`,
-      monto: -i.importe,
+      tipo: lado === "PROVEEDOR" ? ("OTRO" as const) : ("NC_CLIENTE" as const),
+      concepto:
+        lado === "PROVEEDOR"
+          ? `Nota de crédito: ${i.descripcion ?? "descuento del proveedor"}`
+          : `NC a cliente: ${i.descripcion ?? "descuento sobre la venta"}`,
+      monto: lado === "PROVEEDOR" ? -i.importe : i.importe,
       fecha: args.fecha,
       invoiceId: args.invoiceId,
     })),
