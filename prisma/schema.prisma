@@ -347,6 +347,7 @@ model Company {
   pedidosVehiculo    PedidoVehiculo[]
   refacciones        Refaccion[]
   serviciosVenta     ServicioVenta[]
+  ordenesServicio    OrdenServicio[]
 }
 
 model CompanyMember {
@@ -677,6 +678,7 @@ model Customer {
   autoPortalAccount AutoPortalAccount?
   pedidosVehiculo   PedidoVehiculo[]
   serviciosVenta    ServicioVenta[]
+  ordenesServicio   OrdenServicio[]
 
   @@unique([companyId, rfc])
 }
@@ -1429,6 +1431,8 @@ model Employee {
   // Automotriz: unidades vendidas por este empleado (comisiones)
   vehiculosVendidos Vehiculo[]
   pedidosVehiculo   PedidoVehiculo[] @relation("PedidoVehiculoVendedor")
+  ordenesAsesor     OrdenServicio[]  @relation("OrdenServicioAsesor")
+  ordenesTecnico    OrdenServicio[]  @relation("OrdenServicioTecnico")
 
   @@unique([companyId, rfc])
 }
@@ -4742,6 +4746,7 @@ model Vehiculo {
   pedidos       PedidoVehiculo[]
   expediente    VehiculoCfdi[]
   servicios     ServicioVenta[]
+  ordenesServicio OrdenServicio[]
 
   @@unique([companyId, vin])
   @@index([companyId, estado])
@@ -4821,6 +4826,7 @@ model Refaccion {
 
   company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   movimientos RefaccionMovimiento[]
+  lineasOrden OrdenServicioLinea[]
 
   @@unique([companyId, numeroParte])
   @@index([companyId, descripcion])
@@ -4874,9 +4880,97 @@ model ServicioVenta {
   invoice  Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   cliente  Customer? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   vehiculo Vehiculo? @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  orden    OrdenServicio?
 
   @@index([companyId, fecha])
   @@index([companyId, clienteId])
+}
+
+// ─── Órdenes de servicio (fase 5b): el workflow del taller ───────────────────
+// Recepción → técnico asignado → lista → entregada. La orden es el documento
+// operativo (falla reportada, diagnóstico, líneas presupuestadas); el CFDI del
+// cierre llega por el sync y el derivador la liga a su ServicioVenta — la
+// factura NUNCA se captura aquí.
+enum OrdenServicioEstado {
+  RECIBIDA
+  EN_PROCESO
+  LISTA // trabajo terminado, unidad esperando entrega/factura
+  ENTREGADA
+  CANCELADA
+}
+
+enum OrdenServicioLineaTipo {
+  MANO_OBRA
+  REFACCION
+}
+
+model OrdenServicio {
+  id        String   @id @default(cuid())
+  companyId String
+  /** Folio consecutivo por empresa — el número que ve el cliente en el taller. */
+  folio     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  estado OrdenServicioEstado @default(RECIBIDA)
+
+  clienteId  String?
+  /** Unidad del inventario propio (seminuevos/demos) cuando aplica. */
+  vehiculoId String?
+  // Unidad del CLIENTE (el caso normal del taller): datos de recepción.
+  // Si el VIN existe en el inventario, la recepción liga vehiculoId sola.
+  vin               String?
+  descripcionUnidad String? // "NISSAN VERSA 2022 BLANCO"
+  placas            String?
+  kilometraje       Int?
+
+  fallaReportada String  @db.Text // lo que reporta el cliente en recepción
+  diagnostico    String? @db.Text // lo que encuentra el técnico
+  notas          String? @db.Text
+
+  asesorId  String? // asesor de servicio que recibe
+  tecnicoId String? // técnico asignado al iniciar el trabajo
+
+  recibidaAt  DateTime  @default(now())
+  prometidaAt DateTime? // fecha prometida de entrega
+  enProcesoAt DateTime?
+  listaAt     DateTime?
+  entregadaAt DateTime?
+
+  /** Cierre: la venta de servicio derivada del CFDI que amparó esta orden. */
+  servicioVentaId String? @unique
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cliente       Customer?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculo      Vehiculo?      @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  asesor        Employee?      @relation("OrdenServicioAsesor", fields: [asesorId], references: [id], onDelete: SetNull)
+  tecnico       Employee?      @relation("OrdenServicioTecnico", fields: [tecnicoId], references: [id], onDelete: SetNull)
+  servicioVenta ServicioVenta? @relation(fields: [servicioVentaId], references: [id], onDelete: SetNull)
+  lineas        OrdenServicioLinea[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, estado])
+  @@index([companyId, clienteId])
+}
+
+// Línea presupuestada de la orden (mano de obra o refacción). Es el
+// PRESUPUESTO operativo — los importes fiscales reales viven en el CFDI del
+// cierre (ServicioVenta). refaccionId liga al catálogo cuando la parte existe.
+model OrdenServicioLinea {
+  id      String @id @default(cuid())
+  ordenId String
+
+  tipo           OrdenServicioLineaTipo
+  descripcion    String
+  cantidad       Float  @default(1)
+  /** Precio unitario presupuestado, sin IVA. */
+  precioUnitario Float  @default(0)
+  refaccionId    String?
+
+  orden     OrdenServicio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  refaccion Refaccion?    @relation(fields: [refaccionId], references: [id], onDelete: SetNull)
+
+  @@index([ordenId])
 }
 
 // Expediente CFDI del VIN: TODA factura que menciona la unidad, con su papel.
