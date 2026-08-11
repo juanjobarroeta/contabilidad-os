@@ -25,6 +25,7 @@ const BASE: InsumosCredito = {
   gastosPorMes: [],
   nomina12m: 0,
   bancos: null,
+  flujosPPD: null,
   cfdis: null,
 };
 
@@ -158,6 +159,56 @@ describe("calcularScoreCredito", () => {
     });
     const cons = r.dimensiones.find((d) => d.clave === "consistencia")!;
     expect(cons.razones.join(" ")).toMatch(/comparación aplazada/);
+  });
+
+  it("cartera PPD con mucho saldo insoluto castiga estabilidad de clientes", () => {
+    const cfdis = {
+      ingresosFacturados: 3_000_000,
+      facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0),
+      emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10,
+    };
+    const sana = calcularScoreCredito({
+      ...BASE, cfdis,
+      flujosPPD: {
+        cobranza: { facturas: 20, monto: 1_000_000, cobrado: 900_000, saldoInsoluto: 100_000, diasPromedio: 35 },
+        pagos: { facturas: 5, monto: 200_000, pagado: 200_000, diasPromedio: 40 },
+      },
+    });
+    const morosa = calcularScoreCredito({
+      ...BASE, cfdis,
+      flujosPPD: {
+        cobranza: { facturas: 20, monto: 1_000_000, cobrado: 300_000, saldoInsoluto: 700_000, diasPromedio: 120 },
+        pagos: { facturas: 5, monto: 200_000, pagado: 200_000, diasPromedio: 40 },
+      },
+    });
+    const cliSana = sana.dimensiones.find((d) => d.clave === "clientes")!;
+    const cliMorosa = morosa.dimensiones.find((d) => d.clave === "clientes")!;
+    expect(cliMorosa.puntos).toBeLessThan(cliSana.puntos);
+  });
+
+  it("pagar a proveedores a más de 120 días castiga capacidad", () => {
+    const cfdis = {
+      ingresosFacturados: 3_000_000,
+      facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0),
+      emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10,
+    };
+    const puntual = calcularScoreCredito({
+      ...BASE, cfdis,
+      flujosPPD: {
+        cobranza: { facturas: 0, monto: 0, cobrado: 0, saldoInsoluto: 0, diasPromedio: null },
+        pagos: { facturas: 8, monto: 400_000, pagado: 380_000, diasPromedio: 45 },
+      },
+    });
+    const moroso = calcularScoreCredito({
+      ...BASE, cfdis,
+      flujosPPD: {
+        cobranza: { facturas: 0, monto: 0, cobrado: 0, saldoInsoluto: 0, diasPromedio: null },
+        pagos: { facturas: 8, monto: 400_000, pagado: 150_000, diasPromedio: 150 },
+      },
+    });
+    const capPuntual = puntual.dimensiones.find((d) => d.clave === "capacidad")!;
+    const capMoroso = moroso.dimensiones.find((d) => d.clave === "capacidad")!;
+    expect(capMoroso.puntos).toBeLessThan(capPuntual.puntos);
   });
 
   it("tasa de cancelación alta castiga (perfil refacturador)", () => {
