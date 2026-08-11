@@ -90,17 +90,37 @@ export async function extractStatementFromDocument(
       : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response: any = await meteredCreate(anthropic, { subtipo: "bancos.vision_statement", ...costCtx }, {
-    model: MODEL,
-    max_tokens: 8000,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: [docBlock, { type: "text", text: USER_PROMPT }],
-      },
-    ],
-  });
+  let response: any;
+  try {
+    response = await meteredCreate(anthropic, { subtipo: "bancos.vision_statement", ...costCtx }, {
+      model: MODEL,
+      max_tokens: 8000,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: [docBlock, { type: "text", text: USER_PROMPT }],
+        },
+      ],
+    });
+  } catch (e) {
+    // El error crudo de la API (JSON con request_id) es ilegible en un toast:
+    // se traduce a un mensaje accionable y el detalle queda en el log.
+    console.error("vision-statement: error de la API de extracción", e);
+    if (e instanceof Anthropic.APIError) {
+      const msg = String(e.message ?? "");
+      if (/password|encrypted/i.test(msg)) {
+        throw new Error(
+          "El PDF está protegido con contraseña. Súbelo desde Bancos e ingresa la contraseña cuando se te pida."
+        );
+      }
+      if (e.status === 400) {
+        throw new Error("No se pudo leer el documento (¿está dañado o escaneado muy borroso?). Intenta con otro archivo o el CSV del banco.");
+      }
+      throw new Error("El servicio de extracción no está disponible en este momento. Intenta de nuevo en unos minutos.");
+    }
+    throw new Error("No se pudo procesar el documento. Intenta de nuevo.");
+  }
 
   const text =
     response.content.find((b: { type: string }) => b.type === "text")?.text ?? "";

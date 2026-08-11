@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Landmark, Upload, Sparkles, Loader2, Link2, Search, CheckCircle2,
@@ -207,6 +207,9 @@ export default function BancosPage() {
   }[]>([]);
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2800); };
+  // Contraseña de PDFs protegidos, recordada durante la sesión de carga (los 12
+  // estados de un año suelen compartirla). Nunca se persiste.
+  const pdfPassRef = useRef("");
 
   const loadAccounts = useCallback(async () => {
     if (!activeCompany) return;
@@ -276,28 +279,47 @@ export default function BancosPage() {
   }
 
   /** PDF/imagen del estado de cuenta → extracción con IA (upload-pdf). Si los
-   *  saldos no cuadran, el servidor NO importa y pedimos confirmación (force). */
+   *  saldos no cuadran, el servidor NO importa y pedimos confirmación (force).
+   *  PDFs con contraseña (Banamex, Santander…): el servidor responde 422
+   *  needsPassword, aquí se pide y se reintenta. La contraseña buena se
+   *  recuerda para el resto de la bolsa (12 estados = 1 sola pregunta). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function subirPdf(file: File): Promise<any> {
-    const form = new FormData();
-    form.append("file", file);
-    let res = await fetch(`/api/bancos/${selectedId}/upload-pdf`, { method: "POST", body: form });
-    let data = await res.json();
-    if (res.ok && data?.needsReview) {
-      const n = data?.extraction?.transactions?.length ?? 0;
-      if (
-        n > 0 &&
-        confirm(
-          `Se detectaron ${n} movimientos pero los saldos del estado no cuadran con la suma (posible página faltante o lectura imperfecta). ¿Importar de todos modos?`
-        )
-      ) {
-        const form2 = new FormData();
-        form2.append("file", file);
-        res = await fetch(`/api/bancos/${selectedId}/upload-pdf?force=1`, { method: "POST", body: form2 });
-        data = await res.json();
+    let password = pdfPassRef.current;
+    const enviar = async (qs: string) => {
+      const form = new FormData();
+      form.append("file", file);
+      if (password) form.append("password", password);
+      const res = await fetch(`/api/bancos/${selectedId}/upload-pdf${qs}`, { method: "POST", body: form });
+      return { res, data: await res.json() };
+    };
+
+    for (let intento = 0; intento < 4; intento++) {
+      // eslint-disable-next-line prefer-const
+      let { res, data } = await enviar("");
+      if (res.status === 422 && data?.needsPassword) {
+        const entered = prompt(`${file.name}\n\n${data.error ?? "Este PDF requiere contraseña."}`);
+        if (entered == null || entered === "") {
+          return { ok: false, message: "PDF con contraseña — no se ingresó, se omitió el archivo" };
+        }
+        password = entered;
+        continue;
       }
+      pdfPassRef.current = password; // funcionó (o no hizo falta): recordar para la bolsa
+      if (res.ok && data?.needsReview) {
+        const n = data?.extraction?.transactions?.length ?? 0;
+        if (
+          n > 0 &&
+          confirm(
+            `Se detectaron ${n} movimientos pero los saldos del estado no cuadran con la suma (posible página faltante o lectura imperfecta). ¿Importar de todos modos?`
+          )
+        ) {
+          ({ data } = await enviar("?force=1"));
+        }
+      }
+      return data;
     }
-    return data;
+    return { ok: false, message: "PDF con contraseña — demasiados intentos" };
   }
 
   /** Un solo archivo (CSV/Excel o PDF/imagen) → su resultado de importación. */

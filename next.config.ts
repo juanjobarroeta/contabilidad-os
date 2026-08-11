@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
     "luxon",
     "jszip",
     "pdf-parse",
+    // qpdf (WASM) desencripta estados de cuenta con contraseña: carga su .wasm
+    // desde node_modules en runtime, no debe pasar por webpack.
+    "@jspawn/qpdf-wasm",
     // Sentry se carga nativo (usa hooks de require para instrumentar).
     "@sentry/node",
   ],
