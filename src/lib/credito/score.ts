@@ -38,6 +38,8 @@ export interface InsumosCredito {
   efosAbiertos: number | null;
   /** Gastos facturados (CFDIs EGRESO vigentes) de los últimos 12 meses. */
   gastosFacturados12m: number;
+  /** Gastos facturados por mes — alimenta la gráfica de la ficha. */
+  gastosPorMes: Array<{ periodo: string; total: number }>;
   /** Nómina timbrada (CFDIs NOMINA) de los últimos 12 meses. */
   nomina12m: number;
   /** Flujos bancarios (estados de cuenta) — null si no hay movimientos. */
@@ -86,6 +88,16 @@ export interface ResultadoScore {
   flujoLibreMensual: number | null;
   /** Pago mensual máximo recomendado (fracción del flujo libre según banda). */
   pagoMensualMax: number | null;
+  /** Desglose del cálculo del pago máximo — cada variable, para la ficha. */
+  capacidadDesglose: {
+    ingresosProm: number;
+    gastosProm: number;
+    nominaProm: number;
+    impuestosProm: number;
+    flujoLibre: number;
+    /** Razón de servicio de deuda aplicada según la banda (0.4/0.3/0.2/0). */
+    theta: number;
+  } | null;
 }
 
 const r0 = (n: number) => Math.round(n);
@@ -262,6 +274,7 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
   // declarados − gastos facturados − nómina timbrada − impuestos pagados.
   // Los estados de cuenta (si hay) corroboran con el flujo bancario real.
   let flujoLibreMensual: number | null = null;
+  let capacidadDesglose: ResultadoScore["capacidadDesglose"] = null;
   if (insumos.cfdis && promedioMensual > 0) {
     const razones: string[] = [];
     let puntos = 0;
@@ -273,6 +286,14 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
         ? insumos.declaraciones.reduce((s, d) => s + d.impuestosPagados, 0) / insumos.declaraciones.length
         : 0;
     flujoLibreMensual = Math.max(0, promedioMensual - gastosProm - nominaProm - impuestosProm);
+    capacidadDesglose = {
+      ingresosProm: Math.round(promedioMensual),
+      gastosProm: Math.round(gastosProm),
+      nominaProm: Math.round(nominaProm),
+      impuestosProm: Math.round(impuestosProm),
+      flujoLibre: Math.round(flujoLibreMensual),
+      theta: 0, // se fija abajo, cuando ya se conoce la banda
+    };
     const margen = flujoLibreMensual / promedioMensual;
 
     puntos += margen >= 0.35 ? 60 : margen >= 0.2 ? 45 : margen >= 0.1 ? 30 : margen > 0 ? 15 : 5;
@@ -367,6 +388,7 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
   const theta = banda === "A" ? 0.4 : banda === "B" ? 0.3 : banda === "C" ? 0.2 : 0;
   const pagoMensualMax =
     flujoLibreMensual != null ? Math.round(flujoLibreMensual * theta) : null;
+  if (capacidadDesglose) capacidadDesglose.theta = theta;
 
   return {
     score,
@@ -377,5 +399,6 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     cobertura,
     flujoLibreMensual: flujoLibreMensual != null ? Math.round(flujoLibreMensual) : null,
     pagoMensualMax,
+    capacidadDesglose,
   };
 }
