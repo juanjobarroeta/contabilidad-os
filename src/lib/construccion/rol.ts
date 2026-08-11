@@ -100,9 +100,66 @@ const RESIDENTE_RULES: Rule[] = [
   { methods: "all", pattern: "solicitudes-compra/*" },
 ];
 
+/**
+ * CONTABILIDAD: el escritorio de compras/pagos sin ser admin de obra.
+ * Proveedores completos (directorio, alta, condiciones), COMPRAS (capturar
+ * cotizaciones, adjudicar y autorizar requisiciones), PAGOS (cola de cuentas
+ * por pagar: enviar a tesorería y pagar, incl. gastos aprobados) y
+ * PRESUPUESTOS en sólo lectura. No crea requisiciones ni obras, no toca
+ * destajo/caja chica/reportes/usuarios.
+ */
+const CONTABILIDAD_RULES: Rule[] = [
+  // Contexto de obra y presupuesto (lectura)
+  { methods: "read", pattern: "proyectos" },
+  { methods: "read", pattern: "proyectos/*" },
+  { methods: "read", pattern: "presupuestos" },
+  { methods: "read", pattern: "presupuestos/*" },
+  { methods: "read", pattern: "presupuestos/*/*" },
+  { methods: "read", pattern: "apus" },
+  { methods: "read", pattern: "apus/*" },
+  { methods: "read", pattern: "conceptos" },
+  { methods: "read", pattern: "conceptos/*" },
+  { methods: "read", pattern: "insumos" },
+  { methods: "read", pattern: "insumos/*" },
+  // Proveedores: directorio completo, alta y condiciones (el import masivo
+  // de CFDIs sigue siendo OWNER/ADMIN a nivel de ruta)
+  { methods: "all", pattern: "suppliers" },
+  { methods: "all", pattern: "suppliers/*" },
+  { methods: "all", pattern: "suppliers/*/terms" },
+  // Facturas y bancos: contexto de pago (lectura)
+  { methods: "read", pattern: "cfdis" },
+  { methods: "read", pattern: "cfdis/*" },
+  { methods: "read", pattern: "bank-accounts" },
+  { methods: "read", pattern: "bank-transactions" },
+  // Gastos: operar su tramo de pagos (aprobar, enviar a tesorería, pagar)
+  { methods: "read", pattern: "gastos" },
+  { methods: "read", pattern: "gastos/*" },
+  { methods: "read", pattern: "gastos/*/comprobante" },
+  { methods: "all", pattern: "gastos/*/aprobar" },
+  { methods: "all", pattern: "gastos/*/enviar-tesoreria" },
+  { methods: "all", pattern: "gastos/*/aprobar-pagar" },
+  // Compras: leer requisiciones y DECIDIR (cotizar, adjudicar, autorizar)
+  { methods: "read", pattern: "solicitudes-compra" },
+  { methods: "read", pattern: "solicitudes-compra/*" },
+  { methods: "read", pattern: "solicitudes-compra/*/bt-candidates" },
+  { methods: "all", pattern: "solicitudes-compra/*/cotizaciones" },
+  { methods: "all", pattern: "solicitudes-compra/*/adjudicaciones" },
+  { methods: "all", pattern: "solicitudes-compra/*/aprobar" },
+  { methods: "all", pattern: "solicitudes-compra/*/pagar" },
+  { methods: "all", pattern: "solicitudes-compra/*/vincular-bt" },
+  // Pagos: la cola de cuentas por pagar completa
+  { methods: "all", pattern: "cuentas-por-pagar" },
+  { methods: "all", pattern: "cuentas-por-pagar/*" },
+  { methods: "all", pattern: "pagos-proveedor" },
+  { methods: "all", pattern: "pagos-proveedor/*" },
+  { methods: "all", pattern: "adjudicaciones" },
+  { methods: "all", pattern: "adjudicaciones/*" },
+];
+
 const RULES: Partial<Record<ConstruccionRol, Rule[]>> = {
   TESORERIA: TESORERIA_RULES,
   RESIDENTE: RESIDENTE_RULES,
+  CONTABILIDAD: CONTABILIDAD_RULES,
 };
 
 function matches(pattern: string, path: string): boolean {

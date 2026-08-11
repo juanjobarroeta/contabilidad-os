@@ -15,12 +15,13 @@ import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
  * para tu contraseña usa /api/auth/change-password).
  */
 
-const ROL = z.enum(["ADMIN", "TESORERIA", "RESIDENTE"]);
+const ROL = z.enum(["ADMIN", "TESORERIA", "RESIDENTE", "CONTABILIDAD"]);
 
 const MEMBER_ROLE: Record<z.infer<typeof ROL>, "ADMIN" | "ACCOUNTANT"> = {
   ADMIN: "ADMIN",
   TESORERIA: "ACCOUNTANT",
   RESIDENTE: "ACCOUNTANT",
+  CONTABILIDAD: "ACCOUNTANT",
 };
 
 const patchSchema = z

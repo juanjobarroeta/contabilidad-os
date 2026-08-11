@@ -10,7 +10,7 @@ import { enforceConstruccionRol } from "./rol";
 const req = (method: string, path: string) =>
   new Request(`https://x.test${path}`, { method });
 
-const allowed = (rol: "TESORERIA" | "RESIDENTE", method: string, path: string) => {
+const allowed = (rol: "TESORERIA" | "RESIDENTE" | "CONTABILIDAD", method: string, path: string) => {
   try {
     enforceConstruccionRol(rol, req(method, path));
     return true;
@@ -63,6 +63,24 @@ describe("enforceConstruccionRol", () => {
     expect(allowed("RESIDENTE", "POST", "/api/construccion/solicitudes-compra/abc/pagar")).toBe(false);
     expect(allowed("RESIDENTE", "GET", "/api/construccion/bank-transactions")).toBe(false);
     expect(allowed("RESIDENTE", "GET", "/api/construccion/usuarios")).toBe(false);
+  });
+
+  it("contabilidad: proveedores/compras/pagos sí, presupuesto lectura, lo demás no", () => {
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/suppliers")).toBe(true);
+    expect(allowed("CONTABILIDAD", "PATCH", "/api/construccion/suppliers/abc")).toBe(true);
+    expect(allowed("CONTABILIDAD", "PUT", "/api/construccion/suppliers/abc/terms")).toBe(true);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/solicitudes-compra/abc/aprobar")).toBe(true);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/solicitudes-compra/abc/adjudicaciones")).toBe(true);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/solicitudes-compra/abc/cotizaciones")).toBe(true);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/pagos-proveedor")).toBe(true);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/gastos/abc/enviar-tesoreria")).toBe(true);
+    expect(allowed("CONTABILIDAD", "GET", "/api/construccion/presupuestos/abc")).toBe(true);
+    // Lo que NO: crear requisiciones/obras, escribir presupuesto, admin
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/solicitudes-compra")).toBe(false);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/presupuestos")).toBe(false);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/proyectos")).toBe(false);
+    expect(allowed("CONTABILIDAD", "GET", "/api/construccion/reembolsos")).toBe(false);
+    expect(allowed("CONTABILIDAD", "GET", "/api/construccion/usuarios")).toBe(false);
   });
 
   it("fuera de /api/construccion no restringe (p. ej. cambiar contraseña)", () => {
