@@ -18,6 +18,20 @@ const schema = z.object({
   accion: z.enum(["apartar", "facturar", "entregar", "cancelar"]),
   anticipo: z.number().min(0).optional(), // apartar: suma al anticipoRecibido
   fecha: z.string().datetime().optional(), // facturar
+  // facturar con toma a cuenta: datos del usado que entra a inventario como
+  // SEMINUEVO con costoCompra = tomaACuentaMonto (compra a persona física
+  // exenta de IVA — ver docs/AUTOMOTRIZ-SEMINUEVOS.md). Opcional: sin VIN la
+  // unidad se da de alta después desde Inventario.
+  toma: z
+    .object({
+      vin: z.string().length(17),
+      marca: z.string().min(1).max(60),
+      modelo: z.string().min(1).max(60),
+      anio: z.number().int().min(1980).max(new Date().getFullYear() + 2),
+      kilometraje: z.number().int().min(0).nullable().optional(),
+      color: z.string().max(40).nullable().optional(),
+    })
+    .optional(),
 });
 
 export const POST = withAuthz(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -60,20 +74,69 @@ export const POST = withAuthz(async (req: Request, ctx: { params: Promise<{ id: 
     if (pedido.estado !== "COTIZACION" && pedido.estado !== "APARTADO") {
       return NextResponse.json({ error: `Un pedido ${pedido.estado} no se factura` }, { status: 422 });
     }
+
+    // La toma a cuenta se valida ANTES de ejecutar la venta (la venta postea
+    // pólizas — no queremos revertirla por un VIN duplicado).
+    const toma = parsed.data.toma;
+    let tomaVin: string | null = null;
+    if (toma) {
+      if (!pedido.tomaACuentaMonto || pedido.tomaACuentaMonto <= 0) {
+        return NextResponse.json({ error: "El pedido no tiene toma a cuenta registrada" }, { status: 422 });
+      }
+      tomaVin = toma.vin.trim().toUpperCase();
+      const existente = await prisma.vehiculo.findUnique({
+        where: { companyId_vin: { companyId: pedido.companyId, vin: tomaVin } },
+        select: { id: true },
+      });
+      if (existente) {
+        return NextResponse.json({ error: `El VIN ${tomaVin} ya está en el inventario` }, { status: 422 });
+      }
+    }
+
     try {
+      const fechaVenta = parsed.data.fecha ? new Date(parsed.data.fecha) : new Date();
       const venta = await ejecutarVentaUnidad({
         vehiculoId: pedido.vehiculoId,
         precioVenta: pedido.precio,
-        fecha: parsed.data.fecha ? new Date(parsed.data.fecha) : new Date(),
+        fecha: fechaVenta,
         clienteId: pedido.clienteId,
         vendedorId: pedido.vendedorId,
         comisionMonto: null, // regla de la empresa
       });
+
+      // Alta del seminuevo tomado: entra DISPONIBLE con costo = valor de toma
+      // (compra exenta de IVA, sin CFDI — patrón de unidad sin compraInvoiceId,
+      // el costo queda editable). El IVA sobre margen de su reventa está
+      // documentado pero NO activo (docs/AUTOMOTRIZ-SEMINUEVOS.md §3.2).
+      let tomaVehiculoId: string | null = null;
+      if (toma && tomaVin) {
+        const seminuevo = await prisma.vehiculo.create({
+          data: {
+            companyId: pedido.companyId,
+            vin: tomaVin,
+            marca: toma.marca.trim().toUpperCase(),
+            modelo: toma.modelo.trim().toUpperCase(),
+            anio: toma.anio,
+            color: toma.color?.trim() || null,
+            kilometraje: toma.kilometraje ?? null,
+            tipo: "SEMINUEVO",
+            estado: "DISPONIBLE",
+            uso: "VENTA",
+            costoCompra: pedido.tomaACuentaMonto ?? 0,
+            fechaCompra: fechaVenta,
+            autoCreado: false,
+            notas: `Toma a cuenta del pedido (unidad ${pedido.vehiculoId})${pedido.tomaACuentaDesc ? `: ${pedido.tomaACuentaDesc}` : ""}`,
+          },
+          select: { id: true },
+        });
+        tomaVehiculoId = seminuevo.id;
+      }
+
       const updated = await prisma.pedidoVehiculo.update({
         where: { id },
         data: { estado: "FACTURADO", facturadoAt: new Date() },
       });
-      return NextResponse.json({ pedido: updated, ...venta });
+      return NextResponse.json({ pedido: updated, tomaVehiculoId, ...venta });
     } catch (e) {
       if (e instanceof VentaError) return NextResponse.json({ error: e.message }, { status: e.status });
       throw e;
