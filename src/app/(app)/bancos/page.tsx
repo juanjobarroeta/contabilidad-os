@@ -260,18 +260,50 @@ export default function BancosPage() {
     } finally { setBusy(""); }
   }
 
+  /** PDF/imagen del estado de cuenta → extracción con IA (upload-pdf). Si los
+   *  saldos no cuadran, el servidor NO importa y pedimos confirmación (force). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function subirPdf(file: File): Promise<any> {
+    const form = new FormData();
+    form.append("file", file);
+    let res = await fetch(`/api/bancos/${selectedId}/upload-pdf`, { method: "POST", body: form });
+    let data = await res.json();
+    if (res.ok && data?.needsReview) {
+      const n = data?.extraction?.transactions?.length ?? 0;
+      if (
+        n > 0 &&
+        confirm(
+          `Se detectaron ${n} movimientos pero los saldos del estado no cuadran con la suma (posible página faltante o lectura imperfecta). ¿Importar de todos modos?`
+        )
+      ) {
+        const form2 = new FormData();
+        form2.append("file", file);
+        res = await fetch(`/api/bancos/${selectedId}/upload-pdf?force=1`, { method: "POST", body: form2 });
+        data = await res.json();
+      }
+    }
+    return data;
+  }
+
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !selectedId) return;
     setBusy("upload");
     try {
-      const esExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
-      const fileContent = esExcel ? await fileToBase64(file) : await file.text();
-      const res = await fetch(`/api/bancos/${selectedId}/upload`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileContent, filename: file.name, encoding: esExcel ? "base64" : "text" }),
-      });
-      const data = await res.json();
+      const esPdf = /\.(pdf|jpe?g|png)$/i.test(file.name);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
+      if (esPdf) {
+        data = await subirPdf(file);
+      } else {
+        const esExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
+        const fileContent = esExcel ? await fileToBase64(file) : await file.text();
+        const res = await fetch(`/api/bancos/${selectedId}/upload`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileContent, filename: file.name, encoding: esExcel ? "base64" : "text" }),
+        });
+        data = await res.json();
+      }
       showToast(data.message ?? (data.ok ? `Importados ${data.imported}` : "No se pudo importar"));
       const descartadas: { fila: number; motivo: string }[] = data.descartadas ?? [];
       const posiblesDuplicados: number = data.posiblesDuplicados ?? 0;
@@ -644,7 +676,7 @@ export default function BancosPage() {
               <div className="flex flex-wrap gap-2.5">
                 <label className={"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-control border border-cos-line bg-cos-card px-4 py-2.5 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper " + (busy ? "pointer-events-none opacity-50" : "")}>
                   {busy === "upload" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Cargar estado de cuenta
-                  <input type="file" accept=".csv,.txt,.ofx,.xlsx,.xls,.xlsm" className="hidden" onChange={onUpload} disabled={!!busy} />
+                  <input type="file" accept=".csv,.txt,.ofx,.xlsx,.xls,.xlsm,.pdf,application/pdf,.jpg,.jpeg,.png" className="hidden" onChange={onUpload} disabled={!!busy} />
                 </label>
                 <button onClick={autoReconcile} disabled={!!busy}
                   className="flex flex-1 items-center justify-center gap-2 rounded-control bg-cos-brand px-4 py-2.5 text-[14px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
