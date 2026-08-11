@@ -309,6 +309,8 @@ model Company {
   // annual-declaration logic can reason across all of them.
   regimenes CompanyRegimen[]
 
+  creditoEvaluaciones CreditoEvaluacion[]
+
   // PADEL module (only used when PADEL is enabled) — see "Module: Padel" below.
   padelConfig  PadelClubConfig?
   courts       Court[]
@@ -4958,4 +4960,40 @@ model AutoPortalAccount {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Evaluación de crédito (portal del operador — negocio de crédito, NO parte de
+// la operación contable de la empresa). Cada evaluación es un SNAPSHOT
+// INMUTABLE: guarda el score, el desglose por dimensión y los insumos tal como
+// se calcularon ese día — defender una decisión de crédito meses después
+// requiere ver exactamente qué se sabía al otorgarla. Sólo `decision` y
+// `notas` se editan después (registro de la resolución humana).
+// ─────────────────────────────────────────────────────────────────────────────
+model CreditoEvaluacion {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdByUserId String?
+
+  score          Int // 0-100
+  banda          String // "A" | "B" | "C" | "D"
+  limiteSugerido Float
+  /** True cuando faltaron insumos (p. ej. CFDIs sin descargar): score parcial. */
+  provisional Boolean @default(false)
+
+  /** Desglose por dimensión: [{clave, etiqueta, peso, puntos, razones[]}]. */
+  detalle Json
+  /** Insumos faltantes al momento de evaluar (explica `provisional`). */
+  cobertura Json
+
+  // Resolución humana (lo único editable post-snapshot).
+  decision String? // "APROBADO" | "RECHAZADO" | "PENDIENTE" | libre
+  notas    String? @db.Text
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
 }
