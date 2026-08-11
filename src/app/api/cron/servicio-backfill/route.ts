@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { ModuloApp } from "@prisma/client";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
-import { derivarServicioDesdeCfdiSiAplica } from "@/lib/automotriz/auto-servicio";
+import { derivarServicioDesdeCfdiSiAplica, extraerServicioCfdi } from "@/lib/automotriz/auto-servicio";
+import { extraerDatosVehiculoCfdi, tipoComprobanteDesdeCfdi } from "@/lib/automotriz/vin";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/servicio-backfill?companyId=…[&afterId=…]
@@ -35,6 +36,11 @@ async function handle(req: Request) {
 
   const url = new URL(req.url);
   const onlyCompanyId = url.searchParams.get("companyId");
+  // diagnostico=1: NO escribe nada. Clasifica por qué cada CFDI de la cola no
+  // deriva servicio (unidad amparada, nota de crédito, sin línea de servicio…)
+  // con ejemplos de UUID por causa. Es la herramienta para cuando el drenado
+  // reporta 0 derivadas sobre miles de candidatas: dice dónde se van.
+  const diagnostico = url.searchParams.get("diagnostico") === "1";
   const startedAt = Date.now();
 
   const where = {
@@ -50,6 +56,8 @@ async function handle(req: Request) {
   let barridoCompleto = true;
   let scanned = 0;
   let derivadas = 0;
+  const razones: Record<string, number> = {};
+  const ejemplos: Record<string, string[]> = {};
 
   while (true) {
     if (Date.now() - startedAt >= TIME_BUDGET_MS) {
@@ -58,7 +66,7 @@ async function handle(req: Request) {
     }
     const page = await prisma.invoice.findMany({
       where: { ...where, ...(lastId ? { id: { gt: lastId } } : {}) },
-      select: { id: true, companyId: true, tipo: true, fecha: true, total: true, rawXml: true, customerId: true },
+      select: { id: true, companyId: true, tipo: true, fecha: true, total: true, rawXml: true, customerId: true, uuid: true },
       orderBy: { id: "asc" },
       take: PAGE,
     });
@@ -66,6 +74,10 @@ async function handle(req: Request) {
 
     for (const inv of page) {
       scanned++;
+      if (diagnostico) {
+        clasificar(inv.rawXml, inv.uuid ?? inv.id, razones, ejemplos);
+        continue;
+      }
       const creo = await derivarServicioDesdeCfdiSiAplica(prisma, {
         companyId: inv.companyId,
         invoiceId: inv.id,
@@ -86,11 +98,35 @@ async function handle(req: Request) {
     ok: true,
     scanned,
     derivadas,
+    ...(diagnostico ? { diagnostico: true, razones, ejemplos } : {}),
     nextAfterId: !barridoCompleto ? (lastId ?? null) : null,
     elapsedMs: Date.now() - startedAt,
   };
   console.log("[cron/servicio-backfill] done:", JSON.stringify(summary));
   return NextResponse.json(summary);
+}
+
+/** Clasifica por qué un CFDI de la cola no deriva servicio (sólo diagnóstico). */
+function clasificar(
+  rawXml: string | null,
+  ref: string,
+  razones: Record<string, number>,
+  ejemplos: Record<string, string[]>
+): void {
+  const marcar = (razon: string) => {
+    razones[razon] = (razones[razon] ?? 0) + 1;
+    const lista = (ejemplos[razon] ??= []);
+    if (lista.length < 3) lista.push(ref);
+  };
+  if (!rawXml) return marcar("sinRawXml");
+  if (tipoComprobanteDesdeCfdi(rawXml) === "E") return marcar("notaCredito");
+  const unidades = extraerDatosVehiculoCfdi(rawXml).vehiculos.length;
+  if (unidades > 0) return marcar("amparaUnidad");
+  const datos = extraerServicioCfdi(rawXml);
+  if (!datos.esServicio) {
+    return marcar(datos.refacciones > 0 ? "soloRefacciones" : "sinLineaDeServicio");
+  }
+  marcar("derivable");
 }
 
 export async function POST(req: Request) {
