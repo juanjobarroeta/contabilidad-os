@@ -384,6 +384,10 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
                 <TrendingUp className="h-4 w-4 shrink-0" />
                 Rentabilidad
               </Link>
+              <Link href="/creditos" className={navLinkClass(pathname === "/creditos")}>
+                <Banknote className="h-4 w-4 shrink-0" />
+                Créditos
+              </Link>
               <Link href="/operador" className={navLinkClass(pathname === "/operador")}>
                 <Wrench className="h-4 w-4 shrink-0" />
                 Herramientas
