@@ -53,6 +53,8 @@ interface Resumen {
   totalFacturado: number;
   ivaCobrado: number;
   periodos?: ConteoPeriodo[];
+  /** Conteos exactos del periodo (servidor), no de las filas cargadas. */
+  conteos?: Record<FilterKey, number>;
 }
 
 /** Filas por página. La lista se pagina: antes se cargaban 200 y punto, así que
@@ -308,15 +310,22 @@ export default function FacturasPage() {
     }
   }
 
-  // Counts reflect the loaded set (so chips match the table).
-  const counts: Record<FilterKey, number> = {
-    todas: invoices.length,
-    ingreso: invoices.filter((i) => keyOf(i) === "ingreso").length,
-    egreso: invoices.filter((i) => keyOf(i) === "egreso").length,
-    nomina: invoices.filter((i) => keyOf(i) === "nomina").length,
-    pago: invoices.filter((i) => keyOf(i) === "pago").length,
-    cancelada: invoices.filter((i) => keyOf(i) === "cancelada").length,
-  };
+  // Conteos del PERIODO completo (servidor). Calcularlos sobre las filas
+  // cargadas mentía en cuanto había más de una página: con 177k comprobantes y
+  // 200 cargados, "Canceladas 0" significaba "ninguna en las primeras 200",
+  // no "ninguna en la empresa". Sin resumen (o buscando, donde el servidor ya
+  // filtró), se cae al conteo local para que los chips sigan a la tabla.
+  const counts: Record<FilterKey, number> =
+    resumen?.conteos && !qBuscado
+      ? resumen.conteos
+      : {
+          todas: invoices.length,
+          ingreso: invoices.filter((i) => keyOf(i) === "ingreso").length,
+          egreso: invoices.filter((i) => keyOf(i) === "egreso").length,
+          nomina: invoices.filter((i) => keyOf(i) === "nomina").length,
+          pago: invoices.filter((i) => keyOf(i) === "pago").length,
+          cancelada: invoices.filter((i) => keyOf(i) === "cancelada").length,
+        };
 
   // La búsqueda ya la resolvió el servidor sobre TODO el historial (UUID, folio,
   // notas, nombre y RFC), así que aquí sólo queda el filtro por tipo.
