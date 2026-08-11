@@ -53,8 +53,16 @@ async function handle(req: Request) {
   if (cleanup && !onlyCompanyId) {
     return NextResponse.json({ error: "cleanup=1 requiere companyId" }, { status: 400 });
   }
+  // repararCancelados=1: religa las unidades cuyo CFDI ligado resultó CANCELADO
+  // (refacturación) al CFDI vivo de su expediente. Correr DESPUÉS de que
+  // sat-vigencia-sync marque las cancelaciones reales.
+  const reparar = url.searchParams.get("repararCancelados") === "1";
+  if (reparar && !onlyCompanyId) {
+    return NextResponse.json({ error: "repararCancelados=1 requiere companyId" }, { status: 400 });
+  }
   const startedAt = Date.now();
   const limpieza = cleanup && onlyCompanyId ? await limpiarFantasmas(onlyCompanyId) : null;
+  const reparacion = reparar && onlyCompanyId ? await repararCancelados(onlyCompanyId) : null;
 
   const comun = {
     tipo: { in: ["INGRESO", "EGRESO"] as InvoiceType[] },
@@ -183,6 +191,7 @@ async function handle(req: Request) {
     ok: true,
     deep,
     limpieza,
+    reparacion,
     scanned,
     creados,
     actualizados,
@@ -204,6 +213,11 @@ async function handle(req: Request) {
  * sin ella, esta limpieza desharía las compras legítimas sin complemento que
  * el derivador acaba de crear y cada ciclo limpieza+deep se pelearía con el
  * anterior (churn). Sólo toca unidades `autoCreado` — nada capturado a mano.
+ *
+ * NO trata los CFDI CANCELADOS: una compra cancelada suele ser una REFACTURA
+ * (el par vivo ampara la misma unidad), y borrar la unidad perdería su
+ * expediente, sus costos y su venta. Eso lo resuelve `repararCancelados`,
+ * que religa al CFDI vivo antes de decidir si la unidad debe retirarse.
  */
 async function limpiarFantasmas(companyId: string) {
   // 1) Ventas ligadas a un CFDI que no ampara unidad → deshacer la venta.
@@ -214,10 +228,9 @@ async function limpiarFantasmas(companyId: string) {
     FROM "Invoice" i
     WHERE i.id = v."ventaInvoiceId" AND v."companyId" = ${companyId}
       AND v."autoCreado"
-      AND (i."status" = 'CANCELLED'
-           OR (i."rawXml" IS NOT NULL
-               AND i."rawXml" NOT LIKE '%VentaVehiculos%'
-               AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))`;
+      AND i."rawXml" IS NOT NULL
+      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'`;
 
   // 2) Costos fantasma: sólo los que el derivador VIEJO pegó desde la propia
   //    factura de compra fantasma (c.invoiceId = compraInvoiceId). Los costos
@@ -229,10 +242,9 @@ async function limpiarFantasmas(companyId: string) {
     WHERE c."invoiceId" = i.id AND c."vehiculoId" = v.id
       AND c."invoiceId" = v."compraInvoiceId"
       AND v."companyId" = ${companyId} AND v."autoCreado"
-      AND (i."status" = 'CANCELLED'
-           OR (i."rawXml" IS NOT NULL
-               AND i."rawXml" NOT LIKE '%VentaVehiculos%'
-               AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))`;
+      AND i."rawXml" IS NOT NULL
+      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'`;
 
   // 3) Compras fantasma en unidades vendidas de verdad → sólo desligar la compra.
   const compras = await prisma.$executeRaw`
@@ -241,10 +253,9 @@ async function limpiarFantasmas(companyId: string) {
     FROM "Invoice" i
     WHERE i.id = v."compraInvoiceId" AND v."companyId" = ${companyId}
       AND v."autoCreado"
-      AND (i."status" = 'CANCELLED'
-           OR (i."rawXml" IS NOT NULL
-               AND i."rawXml" NOT LIKE '%VentaVehiculos%'
-               AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))
+      AND i."rawXml" IS NOT NULL
+      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'
       AND v."ventaInvoiceId" IS NOT NULL`;
 
   // 4) Costos residuales de las unidades que van a borrarse en 5) y 6).
@@ -255,7 +266,6 @@ async function limpiarFantasmas(companyId: string) {
     WHERE c."vehiculoId" = v.id AND v."companyId" = ${companyId}
       AND v."autoCreado" AND v."ventaInvoiceId" IS NULL
       AND (v."compraInvoiceId" IS NULL
-           OR i."status" = 'CANCELLED'
            OR (i."rawXml" IS NOT NULL
                AND i."rawXml" NOT LIKE '%VentaVehiculos%'
                AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))`;
@@ -266,10 +276,9 @@ async function limpiarFantasmas(companyId: string) {
     USING "Invoice" i
     WHERE i.id = v."compraInvoiceId" AND v."companyId" = ${companyId}
       AND v."autoCreado"
-      AND (i."status" = 'CANCELLED'
-           OR (i."rawXml" IS NOT NULL
-               AND i."rawXml" NOT LIKE '%VentaVehiculos%'
-               AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'))
+      AND i."rawXml" IS NOT NULL
+      AND i."rawXml" NOT LIKE '%VentaVehiculos%'
+      AND i."rawXml" NOT LIKE '%ClaveProdServ="2510%'
       AND v."ventaInvoiceId" IS NULL`;
 
   // 6) Unidades auto-creadas que quedaron sin ningún CFDI (nacieron de una
@@ -280,6 +289,141 @@ async function limpiarFantasmas(companyId: string) {
       AND "compraInvoiceId" IS NULL AND "ventaInvoiceId" IS NULL`;
 
   return { ventasDeshechas: ventas, costosBorrados: costos, comprasDesligadas: compras, unidadesBorradas: unidades + huerfanas };
+}
+
+/**
+ * Repara las unidades ligadas a un CFDI que el SAT reporta CANCELADO.
+ *
+ * El caso real: se factura la unidad, se cancela y se refactura. Si la
+ * cancelación no estaba sincronizada cuando el derivador corrió, la unidad
+ * quedó ligada a la factura MUERTA (precio, cliente y fecha equivocados) y su
+ * gemela viva quedó en el expediente como DUPLICADA. Al llegar las
+ * cancelaciones (sat-vigencia-sync), esta pasada:
+ *
+ *   venta cancelada  → suelta la venta muerta (SUSTITUIDA en el expediente) y
+ *                      re-deriva desde el CFDI vivo del expediente, que vuelve
+ *                      a ligar con el precio/cliente correctos. Sin gemelo
+ *                      vivo, la unidad regresa a piso (su venta se canceló y
+ *                      nunca se refacturó).
+ *   compra cancelada → mismo criterio: suelta la compra y sus costos, re-deriva
+ *                      desde el CFDI vivo. Sin gemelo vivo y sin venta, la
+ *                      unidad NUNCA entró al inventario → estado CANCELADO
+ *                      (sólo unidades autoCreado; las capturadas a mano jamás
+ *                      se retiran solas).
+ *
+ * Idempotente: una unidad ya religada deja de aparecer en la selección.
+ */
+async function repararCancelados(companyId: string) {
+  const vivos = (
+    expediente: Array<{ invoice: { id: string; tipo: string; status: string; tipoSat: string | null; fecha: Date; rawXml: string | null; customerId: string | null } | null }>,
+    tipo: "INGRESO" | "EGRESO",
+    excluir: string | null
+  ) =>
+    expediente
+      .map((e) => e.invoice)
+      .filter(
+        (i): i is NonNullable<typeof i> =>
+          i != null &&
+          i.id !== excluir &&
+          i.tipo === tipo &&
+          i.status !== "CANCELLED" &&
+          (i.tipoSat ?? "I") !== "E" &&
+          i.rawXml != null
+      )
+      .sort((a, b) => b.fecha.getTime() - a.fecha.getTime())[0] ?? null;
+
+  const seleccion = {
+    id: true,
+    estado: true,
+    autoCreado: true,
+    compraInvoiceId: true,
+    ventaInvoiceId: true,
+    expediente: {
+      select: {
+        invoice: {
+          select: { id: true, tipo: true, status: true, tipoSat: true, fecha: true, rawXml: true, customerId: true },
+        },
+      },
+    },
+  } as const;
+
+  let ventasReligadas = 0;
+  let ventasRevertidas = 0;
+  let comprasReligadas = 0;
+  let unidadesRetiradas = 0;
+
+  // ── Ventas ligadas a un CFDI cancelado ────────────────────────────────────
+  const ventaMuerta = await prisma.vehiculo.findMany({
+    where: { companyId, ventaInvoiceId: { not: null }, ventaInvoice: { status: "CANCELLED" } },
+    select: seleccion,
+    take: 500,
+  });
+  for (const u of ventaMuerta) {
+    const muerta = u.ventaInvoiceId!;
+    const viva = vivos(u.expediente, "INGRESO", muerta);
+    await prisma.vehiculo.update({
+      where: { id: u.id },
+      data: { estado: "DISPONIBLE", ventaInvoiceId: null, precioVenta: null, fechaVenta: null, clienteId: null },
+    });
+    await prisma.vehiculoCfdi.updateMany({
+      where: { vehiculoId: u.id, invoiceId: muerta },
+      data: { rol: "SUSTITUIDA" },
+    });
+    if (!viva) {
+      ventasRevertidas++;
+      continue;
+    }
+    const r = await derivarVehiculoDesdeCfdiSiAplica(prisma, {
+      companyId,
+      invoiceId: viva.id,
+      tipo: viva.tipo as InvoiceType,
+      fecha: viva.fecha,
+      rawXml: viva.rawXml,
+      clienteId: viva.customerId,
+    });
+    if (r && r.actualizados > 0) ventasReligadas++;
+    else ventasRevertidas++;
+  }
+
+  // ── Compras ligadas a un CFDI cancelado ───────────────────────────────────
+  const compraMuerta = await prisma.vehiculo.findMany({
+    where: { companyId, compraInvoiceId: { not: null }, compraInvoice: { status: "CANCELLED" } },
+    select: seleccion,
+    take: 500,
+  });
+  for (const u of compraMuerta) {
+    const muerta = u.compraInvoiceId!;
+    const viva = vivos(u.expediente, "EGRESO", muerta);
+    await prisma.vehiculoCfdi.updateMany({
+      where: { vehiculoId: u.id, invoiceId: muerta },
+      data: { rol: "SUSTITUIDA" },
+    });
+    if (viva) {
+      await prisma.vehiculoCosto.deleteMany({ where: { vehiculoId: u.id, invoiceId: muerta } });
+      await prisma.vehiculo.update({
+        where: { id: u.id },
+        data: { compraInvoiceId: null, costoCompra: 0, fechaCompra: null },
+      });
+      const r = await derivarVehiculoDesdeCfdiSiAplica(prisma, {
+        companyId,
+        invoiceId: viva.id,
+        tipo: viva.tipo as InvoiceType,
+        fecha: viva.fecha,
+        rawXml: viva.rawXml,
+        clienteId: null,
+      });
+      if (r) comprasReligadas++;
+      continue;
+    }
+    // Sin compra viva: si además nunca se vendió, la unidad no existió — se
+    // retira conservando el histórico (no se borra) y sale de piso/valuación.
+    if (u.autoCreado && !u.ventaInvoiceId && u.estado !== "CANCELADO") {
+      await prisma.vehiculo.update({ where: { id: u.id }, data: { estado: "CANCELADO" } });
+      unidadesRetiradas++;
+    }
+  }
+
+  return { ventasReligadas, ventasRevertidas, comprasReligadas, unidadesRetiradas };
 }
 
 export async function POST(req: Request) {
