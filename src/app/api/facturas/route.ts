@@ -101,8 +101,15 @@ export async function GET(req: Request) {
   const unmatchedOnly = searchParams.get("unmatchedOnly") === "true";
 
   const where: import("@prisma/client").Prisma.InvoiceWhereInput = { companyId };
-  if (tipo && ["INGRESO", "EGRESO", "TRASLADO", "NOMINA", "PAGO"].includes(tipo)) {
+  // Mismo contrato que /export: "CANCELLED" es un valor especial que trae SÓLO
+  // las canceladas; cualquier otro tipo las EXCLUYE. Una cancelada no es "te
+  // pagaron" ni candidata de conciliación (bancos usa este endpoint), y el
+  // chip de la pantalla de Facturas ya la trata como categoría propia.
+  if (tipo === "CANCELLED") {
+    where.status = "CANCELLED";
+  } else if (tipo && ["INGRESO", "EGRESO", "TRASLADO", "NOMINA", "PAGO"].includes(tipo)) {
     where.tipo = tipo as "INGRESO" | "EGRESO" | "TRASLADO" | "NOMINA" | "PAGO";
+    where.status = { not: "CANCELLED" };
   }
   if (customerId) where.customerId = customerId;
   // Optional fecha window (ISO dates); invalid values are ignored.
