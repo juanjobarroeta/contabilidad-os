@@ -5122,6 +5122,9 @@ model CreditoEvaluacion {
   decision String? // "APROBADO" | "RECHAZADO" | "PENDIENTE" | libre
   notas    String? @db.Text
 
+  /** Memo de análisis generado por IA al evaluar (parte del snapshot). */
+  analisis String? @db.Text
+
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, createdAt])

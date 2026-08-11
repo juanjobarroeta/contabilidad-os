@@ -4,6 +4,7 @@ import { AuthzError, isOperador, requireUser } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
 import { calcularScoreCredito } from "@/lib/credito/score";
 import { cargarInsumosCredito } from "@/lib/credito/insumos";
+import { generarAnalisisCredito } from "@/lib/credito/analisis";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Portal de crédito — SÓLO operador de plataforma. Es el negocio de crédito
@@ -76,11 +77,25 @@ export async function POST(req: Request) {
   const companyId = String(body?.companyId ?? "").trim();
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
-  const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true } });
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { id: true, rfc: true, razonSocial: true, regimenFiscal: true },
+  });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
   const insumos = await cargarInsumosCredito(companyId);
   const resultado = calcularScoreCredito(insumos);
+
+  // Memo de IA: parte del snapshot. Best-effort — si Claude falla, la
+  // evaluación se guarda sin memo (el score numérico no depende de la IA).
+  const analisis = await generarAnalisisCredito({
+    razonSocial: company.razonSocial,
+    rfc: company.rfc,
+    regimenFiscal: company.regimenFiscal,
+    resultado,
+    insumos,
+    companyId,
+  });
 
   const evaluacion = await prisma.creditoEvaluacion.create({
     data: {
@@ -91,8 +106,16 @@ export async function POST(req: Request) {
       limiteSugerido: resultado.limiteSugerido,
       provisional: resultado.provisional,
       // Snapshot íntegro: desglose + insumos tal como se evaluaron hoy.
-      detalle: JSON.parse(JSON.stringify({ dimensiones: resultado.dimensiones, insumos })),
+      detalle: JSON.parse(
+        JSON.stringify({
+          dimensiones: resultado.dimensiones,
+          insumos,
+          flujoLibreMensual: resultado.flujoLibreMensual,
+          pagoMensualMax: resultado.pagoMensualMax,
+        }),
+      ),
       cobertura: resultado.cobertura,
+      analisis,
     },
   });
 
