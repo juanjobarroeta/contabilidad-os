@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Landmark, Upload, Sparkles, Loader2, Link2, Search, CheckCircle2,
@@ -138,6 +138,12 @@ const fmtFecha = (iso: string) => {
   const d = new Date(iso);
   return `${String(d.getUTCDate()).padStart(2, "0")} ${M[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
+/** "2026-08" → "agosto 2026" (para el selector y los separadores por mes). */
+const fmtMes = (ym: string) => {
+  const M = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const [y, m] = ym.split("-").map(Number);
+  return `${M[(m ?? 1) - 1]} ${y}`;
+};
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -154,6 +160,10 @@ export default function BancosPage() {
   const [txs, setTxs] = useState<BankTx[]>([]);
   const [counts, setCounts] = useState<Counts>({});
   const [filter, setFilter] = useState<Filter>("all");
+  // División por mes: "" = todos (con separadores por mes en la lista);
+  // "YYYY-MM" acota movimientos Y conteos a ese mes (el backend ya lo soporta).
+  const [mes, setMes] = useState("");
+  const [meses, setMeses] = useState<{ mes: string; count: number }[]>([]);
   const [showMore, setShowMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<"" | "auto" | "upload">("");
@@ -224,12 +234,13 @@ export default function BancosPage() {
     if (!selectedId) { setTxs([]); return; }
     setLoading(true); setExpandedId(null);
     try {
-      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=80`);
+      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=80${mes ? `&mes=${mes}` : ""}`);
       const data = await res.json();
       setTxs(data.transactions ?? []);
       setCounts(data.statusCounts ?? {});
+      setMeses(Array.isArray(data.meses) ? data.meses : []);
     } finally { setLoading(false); }
-  }, [selectedId, filter]);
+  }, [selectedId, filter, mes]);
 
   const loadLotes = useCallback(async () => {
     if (!activeCompany) { setLotes([]); return; }
@@ -243,8 +254,10 @@ export default function BancosPage() {
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
   useEffect(() => { loadTxs(); }, [loadTxs]);
   useEffect(() => { loadLotes(); }, [loadLotes]);
-  // Salir del modo selección al cambiar de cuenta/filtro.
-  useEffect(() => { setPicked(new Set()); }, [selectedId, filter]);
+  // Salir del modo selección al cambiar de cuenta/filtro/mes.
+  useEffect(() => { setPicked(new Set()); }, [selectedId, filter, mes]);
+  // Al cambiar de cuenta, el mes elegido puede no existir en la otra — reset.
+  useEffect(() => { setMes(""); }, [selectedId]);
 
   // Búsqueda manual de facturas (debounced) para el movimiento expandido.
   useEffect(() => {
@@ -848,6 +861,16 @@ export default function BancosPage() {
                 {t} <span className="font-mono text-[12px] opacity-80">{k === "all" ? (counts.total ?? 0) : k === "UNMATCHED" ? (counts.UNMATCHED ?? 0) : (counts.MATCHED ?? 0)}</span>
               </button>
             ))}
+            {/* División por mes: acota lista Y conteos al mes elegido. */}
+            {meses.length > 0 && (
+              <select value={mes} onChange={(e) => setMes(e.target.value)}
+                className={"cursor-pointer appearance-none rounded-full border px-3.5 py-2 text-[13.5px] font-medium outline-none " + (mes ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
+                <option value="">Todos los meses</option>
+                {meses.map((m) => (
+                  <option key={m.mes} value={m.mes}>{fmtMes(m.mes)} ({m.count})</option>
+                ))}
+              </select>
+            )}
             <button onClick={() => setShowMore((v) => !v)}
               className={"inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13.5px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint " + (showMore ? "bg-cos-brand-tint" : "")}>
               <SlidersHorizontal className="h-3.5 w-3.5" /> Más filtros
@@ -879,12 +902,23 @@ export default function BancosPage() {
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-cos-ink-faint"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</div>
             ) : txs.length === 0 ? (
               <Card className="rounded-card border-cos-line p-10 text-center text-cos-ink-faint shadow-card">No hay movimientos con ese filtro.</Card>
-            ) : txs.map((m) => {
+            ) : txs.map((m, i) => {
               const matched = m.status === "MATCHED";
               const ignored = m.status === "IGNORED";
               const isPicked = picked.has(m.id);
+              // Separador de mes: solo en la vista "Todos los meses" (con un mes
+              // elegido toda la lista es de ese mes y el separador estorba).
+              const mesTx = String(m.fecha).slice(0, 7);
+              const abreMes = !mes && (i === 0 || String(txs[i - 1].fecha).slice(0, 7) !== mesTx);
               return (
-                <Card key={m.id} className={"rounded-card p-4 shadow-card " + (matched ? "border-cos-jade-tint bg-cos-jade-tint/40" : "border-cos-line")}>
+                <Fragment key={m.id}>
+                {abreMes && (
+                  <div className="mt-2 flex items-center gap-3 first:mt-0">
+                    <span className="font-mono text-[11.5px] font-semibold uppercase tracking-[0.08em] text-cos-ink-faint">{fmtMes(mesTx)}</span>
+                    <span className="h-px flex-1 bg-cos-line-soft" />
+                  </div>
+                )}
+                <Card className={"rounded-card p-4 shadow-card " + (matched ? "border-cos-jade-tint bg-cos-jade-tint/40" : "border-cos-line")}>
                   <div className="flex items-start gap-3">
                     {selectMode && (
                       <button onClick={() => togglePick(m.id)} className="mt-1 flex-none">
@@ -1260,6 +1294,7 @@ export default function BancosPage() {
                     </div>
                   </div>
                 </Card>
+                </Fragment>
               );
             })}
           </div>

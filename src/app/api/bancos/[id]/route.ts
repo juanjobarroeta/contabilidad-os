@@ -149,7 +149,7 @@ export async function GET(req: Request, { params }: Params) {
   ]);
 
   // Status counts — group by status, then split IGNORED into its tagged subcategories
-  const [counts, tagCounts] = await Promise.all([
+  const [counts, tagCounts, mesesRaw] = await Promise.all([
     prisma.bankTransaction.groupBy({
       by: ["status"],
       where: scope,
@@ -160,6 +160,15 @@ export async function GET(req: Request, { params }: Params) {
       where: { ...scope, status: "IGNORED" },
       _count: true,
     }),
+    // Meses con movimientos (SIN el filtro de mes — alimenta el selector).
+    // fecha se guarda como instante UTC en columna timestamp, así que to_char
+    // directo coincide con el corte Date.UTC del filtro `mes` de arriba.
+    prisma.$queryRaw<{ mes: string; n: bigint }[]>`
+      SELECT to_char(fecha, 'YYYY-MM') AS mes, COUNT(*) AS n
+      FROM "BankTransaction"
+      WHERE "bankAccountId" = ${bankAccountId}
+      GROUP BY 1
+      ORDER BY 1 DESC`,
   ]);
   const statusCounts = Object.fromEntries(counts.map(c => [c.status, c._count]));
   const tagCountMap = Object.fromEntries(
@@ -231,6 +240,7 @@ export async function GET(req: Request, { params }: Params) {
       sugerenciaDevolucion: sugerenciasDevolucion[t.id] ?? null,
     })),
     pagination: { page, pageSize, total, pages: Math.ceil(total / pageSize) },
+    meses: mesesRaw.map((m) => ({ mes: m.mes, count: Number(m.n) })),
     statusCounts: {
       UNMATCHED: statusCounts.UNMATCHED ?? 0,
       MATCHED:   statusCounts.MATCHED   ?? 0,
