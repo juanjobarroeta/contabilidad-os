@@ -101,10 +101,10 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
       : null;
 
   // Capacidad de pago: gastos facturados, nómina timbrada y flujos bancarios.
-  const [egresos, nomina, movimientos] = await Promise.all([
-    prisma.invoice.aggregate({
+  const [egresosRows, nomina, movimientos] = await Promise.all([
+    prisma.invoice.findMany({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: hace12m } },
-      _sum: { total: true },
+      select: { fecha: true, total: true },
     }),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "NOMINA", status: "STAMPED", fecha: { gte: hace12m } },
@@ -130,10 +130,18 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
     bancos = { mesesConDatos: meses.size, abonosProm: abonos / n, cargosProm: cargos / n };
   }
 
+  // Gastos por mes — alimenta la gráfica ingresos vs gastos de la ficha.
+  const gastosMap = new Map<string, number>();
+  for (const g of egresosRows) {
+    const k = `${g.fecha.getUTCFullYear()}-${String(g.fecha.getUTCMonth() + 1).padStart(2, "0")}`;
+    gastosMap.set(k, (gastosMap.get(k) ?? 0) + g.total);
+  }
+
   const resultadoOpinion = (opinion?.resultado ?? "").toUpperCase();
 
   return {
-    gastosFacturados12m: egresos._sum.total ?? 0,
+    gastosFacturados12m: egresosRows.reduce((s, g) => s + g.total, 0),
+    gastosPorMes: [...gastosMap.entries()].map(([periodo, total]) => ({ periodo, total })),
     nomina12m: nomina._sum.total ?? 0,
     bancos,
     declaraciones: [...porPeriodo.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)),

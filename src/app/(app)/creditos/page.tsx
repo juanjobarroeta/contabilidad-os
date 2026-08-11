@@ -47,11 +47,127 @@ interface Evaluacion {
   banda: string;
   limiteSugerido: number;
   provisional: boolean;
-  detalle: { dimensiones: Dimension[]; flujoLibreMensual?: number | null; pagoMensualMax?: number | null };
+  detalle: {
+    dimensiones: Dimension[];
+    flujoLibreMensual?: number | null;
+    pagoMensualMax?: number | null;
+    capacidadDesglose?: {
+      ingresosProm: number;
+      gastosProm: number;
+      nominaProm: number;
+      impuestosProm: number;
+      flujoLibre: number;
+      theta: number;
+    } | null;
+    insumos?: {
+      declaraciones?: Array<{ periodo: string; ingresos: number | null; impuestosPagados: number }>;
+      gastosPorMes?: Array<{ periodo: string; total: number }>;
+      cfdis?: { facturadoPorMes?: Array<{ periodo: string; total: number }> } | null;
+    };
+  };
   cobertura: string[];
   decision: string | null;
   notas: string | null;
   analisis: string | null;
+}
+
+/** Serie mensual: ingresos declarados vs gastos facturados (barras) con lo
+ *  facturado en CFDIs encima (puntos). Todo del snapshot — SVG puro, sin
+ *  librerías. La tabla colapsable da los números exactos. */
+function SerieMensual({ detalle }: { detalle: Evaluacion["detalle"] }) {
+  const [verTabla, setVerTabla] = useState(false);
+
+  const decls = detalle.insumos?.declaraciones ?? [];
+  const gastosMap = new Map((detalle.insumos?.gastosPorMes ?? []).map((g) => [g.periodo, g.total]));
+  const factMap = new Map((detalle.insumos?.cfdis?.facturadoPorMes ?? []).map((f) => [f.periodo, f.total]));
+
+  // Últimos 15 meses con ingreso declarado, en orden cronológico.
+  const meses = decls
+    .filter((d) => d.ingresos != null)
+    .sort((a, b) => a.periodo.localeCompare(b.periodo))
+    .slice(-15)
+    .map((d) => ({
+      periodo: d.periodo,
+      ingresos: d.ingresos ?? 0,
+      gastos: gastosMap.get(d.periodo) ?? 0,
+      facturado: factMap.get(d.periodo) ?? null,
+      impuestos: d.impuestosPagados,
+    }));
+  if (meses.length < 3) return null;
+
+  const W = 940, H = 210, PAD = 8, baseY = H - 26;
+  const max = Math.max(...meses.map((m) => Math.max(m.ingresos, m.gastos, m.facturado ?? 0)), 1);
+  const slot = (W - PAD * 2) / meses.length;
+  const barW = Math.min(26, slot * 0.32);
+  const y = (v: number) => baseY - (v / max) * (baseY - 18);
+  const etiqueta = (p: string) => {
+    const MES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+    const [yy, mm] = p.split("-");
+    return `${MES[Number(mm) - 1]} ${yy.slice(2)}`;
+  };
+
+  return (
+    <Card className="rounded-card border-cos-line p-5 shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[13px] font-semibold text-cos-ink">Ingresos y gastos por mes</p>
+        <div className="flex items-center gap-3 text-[11.5px] text-cos-ink-soft">
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-cos-brand" /> Ingresos declarados</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-cos-red-ink/70" /> Gastos facturados</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-cos-jade-ink" /> Facturado (CFDI)</span>
+        </div>
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <svg viewBox={`0 0 ${W} ${H}`} className="min-w-[640px] w-full">
+          {[0.25, 0.5, 0.75, 1].map((f) => (
+            <line key={f} x1={PAD} x2={W - PAD} y1={y(max * f)} y2={y(max * f)} stroke="currentColor" strokeOpacity="0.08" />
+          ))}
+          {meses.map((m, i) => {
+            const cx = PAD + slot * i + slot / 2;
+            return (
+              <g key={m.periodo}>
+                <title>{`${etiqueta(m.periodo)} · ingresos ${fmtMoney(m.ingresos)} · gastos ${fmtMoney(m.gastos)}${m.facturado != null ? ` · facturado ${fmtMoney(m.facturado)}` : ""} · impuestos ${fmtMoney(m.impuestos)}`}</title>
+                <rect x={cx - barW - 1} y={y(m.ingresos)} width={barW} height={baseY - y(m.ingresos)} rx="2" className="fill-cos-brand" />
+                <rect x={cx + 1} y={y(m.gastos)} width={barW} height={Math.max(1, baseY - y(m.gastos))} rx="2" className="fill-cos-red-ink" opacity="0.7" />
+                {m.facturado != null && <circle cx={cx} cy={y(m.facturado)} r="3.5" className="fill-cos-jade-ink" />}
+                <text x={cx} y={H - 8} textAnchor="middle" className="fill-cos-ink-faint" fontSize="10">{etiqueta(m.periodo)}</text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <button onClick={() => setVerTabla(!verTabla)} className="mt-2 text-[13px] font-medium text-cos-brand-ink hover:underline">
+        {verTabla ? "Ocultar tabla mensual" : "Ver tabla mensual"}
+      </button>
+      {verTabla && (
+        <div className="mt-2 max-h-[300px] overflow-y-auto rounded-control border border-cos-line">
+          <table className="w-full text-[12.5px]">
+            <thead className="sticky top-0 bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink-faint">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Mes</th>
+                <th className="px-3 py-2 text-right font-medium">Ingresos declarados</th>
+                <th className="px-3 py-2 text-right font-medium">Facturado (CFDI)</th>
+                <th className="px-3 py-2 text-right font-medium">Gastos facturados</th>
+                <th className="px-3 py-2 text-right font-medium">Impuestos pagados</th>
+                <th className="px-3 py-2 text-right font-medium">Flujo estimado</th>
+              </tr>
+            </thead>
+            <tbody className="font-mono">
+              {[...meses].reverse().map((m) => (
+                <tr key={m.periodo} className="border-t border-cos-line-soft">
+                  <td className="px-3 py-1.5 text-cos-ink-soft">{etiqueta(m.periodo)}</td>
+                  <td className="px-3 py-1.5 text-right text-cos-ink">{fmtMoney(m.ingresos)}</td>
+                  <td className="px-3 py-1.5 text-right text-cos-ink-soft">{m.facturado != null ? fmtMoney(m.facturado) : "—"}</td>
+                  <td className="px-3 py-1.5 text-right text-cos-red-ink">{fmtMoney(m.gastos)}</td>
+                  <td className="px-3 py-1.5 text-right text-cos-ink-soft">{fmtMoney(m.impuestos)}</td>
+                  <td className="px-3 py-1.5 text-right font-medium text-cos-ink">{fmtMoney(m.ingresos - m.gastos - m.impuestos)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
 }
 
 /**
@@ -60,11 +176,22 @@ interface Evaluacion {
  * CUÁNTO PRESTARLE (valor presente de la anualidad) — con su tabla de
  * amortización. Todo en vivo, matemática pura del lado del cliente.
  */
-function SimuladorPrestamo({ pagoInicial }: { pagoInicial: number | null }) {
+function SimuladorPrestamo({
+  pagoInicial,
+  desglose,
+  banda,
+  limiteSugerido,
+}: {
+  pagoInicial: number | null;
+  desglose: NonNullable<Evaluacion["detalle"]["capacidadDesglose"]> | null;
+  banda: string;
+  limiteSugerido: number;
+}) {
   const [pago, setPago] = useState(pagoInicial != null ? String(Math.round(pagoInicial)) : "");
   const [tasa, setTasa] = useState("36");
   const [plazo, setPlazo] = useState("12");
   const [verTabla, setVerTabla] = useState(false);
+  const [verComoSeCalcula, setVerComoSeCalcula] = useState(false);
 
   const pagoNum = Number(pago) || 0;
   const tasaNum = (Number(tasa) || 0) / 100;
@@ -89,6 +216,43 @@ function SimuladorPrestamo({ pagoInicial }: { pagoInicial: number | null }) {
         <p className="mt-2 text-[12.5px] text-cos-amber-ink">
           Sin flujo libre estimado en la evaluación — captura el pago mensual a mano.
         </p>
+      )}
+      {desglose && (
+        <>
+          <button
+            onClick={() => setVerComoSeCalcula(!verComoSeCalcula)}
+            className="mt-2 text-[12.5px] font-medium text-cos-brand-ink hover:underline"
+          >
+            {verComoSeCalcula ? "Ocultar cálculo del pago" : "¿Cómo se calcula el pago que puede cubrir?"}
+          </button>
+          {verComoSeCalcula && (
+            <div className="mt-2 rounded-control border border-cos-line bg-cos-paper p-3.5 text-[12.5px]">
+              <div className="grid max-w-[420px] grid-cols-[1fr_auto] gap-y-1">
+                <span className="text-cos-ink-soft">Ingresos declarados promedio / mes</span>
+                <span className="text-right font-mono text-cos-ink">{fmtMoney(desglose.ingresosProm)}</span>
+                <span className="text-cos-ink-soft">− Gastos facturados promedio / mes</span>
+                <span className="text-right font-mono text-cos-red-ink">−{fmtMoney(desglose.gastosProm)}</span>
+                <span className="text-cos-ink-soft">− Nómina timbrada promedio / mes</span>
+                <span className="text-right font-mono text-cos-red-ink">−{fmtMoney(desglose.nominaProm)}</span>
+                <span className="text-cos-ink-soft">− Impuestos pagados promedio / mes</span>
+                <span className="text-right font-mono text-cos-red-ink">−{fmtMoney(desglose.impuestosProm)}</span>
+                <span className="border-t border-cos-line pt-1 font-medium text-cos-ink">= Flujo libre estimado / mes</span>
+                <span className="border-t border-cos-line pt-1 text-right font-mono font-medium text-cos-ink">{fmtMoney(desglose.flujoLibre)}</span>
+                <span className="text-cos-ink-soft">× Razón de servicio de deuda (banda {banda})</span>
+                <span className="text-right font-mono text-cos-ink">{Math.round(desglose.theta * 100)}%</span>
+                <span className="pt-1 font-semibold text-cos-brand-ink">= Pago mensual que puede cubrir</span>
+                <span className="pt-1 text-right font-mono font-semibold text-cos-brand-ink">
+                  {fmtMoney(Math.round(desglose.flujoLibre * desglose.theta))}
+                </span>
+              </div>
+              <p className="mt-2 text-[11.5px] leading-relaxed text-cos-ink-faint">
+                La razón de servicio de deuda limita cuánto del flujo libre se compromete al crédito según el
+                riesgo: banda A 40%, B 30%, C 20%, D 0%. Los promedios salen de los CFDIs y declaraciones del
+                snapshot; sin CFDIs de gasto el flujo puede estar sobreestimado (compras sin factura).
+              </p>
+            </div>
+          )}
+        </>
       )}
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
         <label className="block text-[12.5px] text-cos-ink-soft">
@@ -120,6 +284,14 @@ function SimuladorPrestamo({ pagoInicial }: { pagoInicial: number | null }) {
           <p className="font-mono text-[18px] font-semibold text-cos-brand-ink">{fmtMoney(monto)}</p>
         </div>
       </div>
+      {monto > limiteSugerido && limiteSugerido > 0 && (
+        <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-cos-amber-ink">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Este monto supera el límite sugerido por el score ({fmtMoney(limiteSugerido)}): el pago sale del
+          flujo, pero el límite acota la exposición total. Prestar por encima es decisión manual — déjala en
+          las notas de la resolución.
+        </p>
+      )}
       {monto > 0 && (
         <button
           onClick={() => setVerTabla(!verTabla)}
@@ -437,8 +609,16 @@ export default function CreditosPage() {
                 </Card>
               </div>
 
+              {/* Serie mensual: ingresos vs gastos con facturado encima */}
+              <SerieMensual detalle={actual.detalle} />
+
               {/* Simulador: pago que puede cubrir → monto prestable + tabla */}
-              <SimuladorPrestamo pagoInicial={actual.detalle.pagoMensualMax ?? null} />
+              <SimuladorPrestamo
+                pagoInicial={actual.detalle.pagoMensualMax ?? null}
+                desglose={actual.detalle.capacidadDesglose ?? null}
+                banda={actual.banda}
+                limiteSugerido={actual.limiteSugerido}
+              />
 
               {/* Memo de análisis (IA) — parte del snapshot */}
               {actual.analisis && (

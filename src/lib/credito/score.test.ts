@@ -22,6 +22,7 @@ const BASE: InsumosCredito = {
   opinionSat: null,
   efosAbiertos: 0,
   gastosFacturados12m: 0,
+  gastosPorMes: [],
   nomina12m: 0,
   bancos: null,
   cfdis: null,

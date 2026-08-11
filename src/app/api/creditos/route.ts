@@ -112,6 +112,7 @@ export async function POST(req: Request) {
           insumos,
           flujoLibreMensual: resultado.flujoLibreMensual,
           pagoMensualMax: resultado.pagoMensualMax,
+          capacidadDesglose: resultado.capacidadDesglose,
         }),
       ),
       cobertura: resultado.cobertura,
