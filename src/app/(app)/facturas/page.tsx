@@ -194,9 +194,13 @@ export default function FacturasPage() {
         p.set("to", r.to.toISOString());
       }
       if (qBuscado) p.set("q", qBuscado);
+      // El filtro va al SERVIDOR: antes se aplicaba sobre las filas ya
+      // cargadas, así que "Canceladas" (238 en la empresa) mostraba "no hay
+      // facturas" cuando ninguna caía en las primeras páginas.
+      if (filter !== "todas") p.set("tipo", filter === "cancelada" ? "CANCELLED" : filter.toUpperCase());
       return `/api/facturas?${p.toString()}`;
     },
-    [activeCompany, periodo, qBuscado]
+    [activeCompany, periodo, qBuscado, filter]
   );
 
   const fetchData = useCallback(async () => {
@@ -316,7 +320,7 @@ export default function FacturasPage() {
   // no "ninguna en la empresa". Sin resumen (o buscando, donde el servidor ya
   // filtró), se cae al conteo local para que los chips sigan a la tabla.
   const counts: Record<FilterKey, number> =
-    resumen?.conteos && !qBuscado
+    resumen?.conteos
       ? resumen.conteos
       : {
           todas: invoices.length,
@@ -327,9 +331,9 @@ export default function FacturasPage() {
           cancelada: invoices.filter((i) => keyOf(i) === "cancelada").length,
         };
 
-  // La búsqueda ya la resolvió el servidor sobre TODO el historial (UUID, folio,
-  // notas, nombre y RFC), así que aquí sólo queda el filtro por tipo.
-  const rows = invoices.filter((i) => filter === "todas" || keyOf(i) === filter);
+  // Búsqueda Y filtro los resuelve el servidor sobre TODO el historial, así que
+  // la tabla muestra tal cual lo que llegó (paginado incluido).
+  const rows = invoices;
 
   // Sublabel de las tarjetas: siguen la ventana elegida, no el año fijo.
   const subPeriodo =
