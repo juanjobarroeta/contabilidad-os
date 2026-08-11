@@ -29,6 +29,10 @@ type Job = {
   everyMs: number;
   /** Espera antes del primer tick (escalona el arranque). */
   firstDelayMs: number;
+  /** Query string opcional (sin `?`) — permite dos cadencias del MISMO cron
+   *  con parámetros distintos, p. ej. vigencia del ejercicio en curso vs. del
+   *  histórico. */
+  query?: string;
 };
 
 const MIN = 60_000;
@@ -44,6 +48,28 @@ const JOBS: Job[] = [
   // paso. Aquí va como job propio, desfasado ~30 min del sync para conservar
   // el orden "primero XMLs vigentes, luego cancelaciones" en cada ciclo.
   { name: "sat-cancel-sync", everyMs: 4 * HOUR, firstDelayMs: 35 * MIN },
+  // Vigencia por UUID contra el servicio público del SAT: la RED DE SEGURIDAD
+  // del cancel-sync de arriba, que sólo ve una ventana de meses y consume cuota
+  // vitalicia (5002). Existía sin dispararse — una cancelación fuera de ventana
+  // (emitida en enero, cancelada en marzo al refacturar) no se detectaba nunca.
+  // Sin FIEL y sin cuota; el único costo es tiempo (una llamada por CFDI).
+  //
+  // Dos cadencias sobre el MISMO endpoint, con el mismo candado (una corrida a
+  // la vez; el 409 ocasional sólo salta ese tick — nunca se golpea al SAT en
+  // paralelo):
+  //   · Ejercicio en curso, cada 2 h: es lo único que legalmente todavía puede
+  //     cancelarse (CFF 2022: la cancelación vive hasta la anual del ejercicio).
+  //   · Histórico desde 2015, cada 6 h: drena las NUNCA verificadas — el cursor
+  //     ordena `vigenciaCheckedAt` nulls-first, así que al onboardear una
+  //     empresa su historial recién importado entra primero y, una vez cubierto,
+  //     el job se vuelve una rotación lenta e inofensiva.
+  { name: "sat-vigencia-sync", everyMs: 2 * HOUR, firstDelayMs: 45 * MIN, query: "limit=400" },
+  {
+    name: "sat-vigencia-sync",
+    everyMs: 6 * HOUR,
+    firstDelayMs: 50 * MIN,
+    query: "desde=2015-01-01&limit=500",
+  },
   { name: "sat-rawxml-backfill", everyMs: 6 * HOUR, firstDelayMs: 15 * MIN },
   // Ídem: el workflow de rawxml-backfill encadenaba el desglose de impuestos
   // (parse local del rawXml recién bajado, sin cuota SAT).
@@ -79,11 +105,11 @@ function baseUrl(): string {
 }
 
 /** Un tick: self-fetch al endpoint del cron. 409 = otra corrida en curso (ok). */
-async function tick(name: string): Promise<void> {
+async function tick(name: string, query?: string): Promise<void> {
   const secret = process.env.CRON_SECRET;
   if (!secret) return;
   try {
-    const res = await fetch(`${baseUrl()}/api/cron/${name}`, {
+    const res = await fetch(`${baseUrl()}/api/cron/${name}${query ? `?${query}` : ""}`, {
       method: "POST",
       headers: { "x-cron-secret": secret },
     });
@@ -123,13 +149,15 @@ export function startInAppCron(): void {
 
   for (const job of JOBS) {
     const first = setTimeout(() => {
-      void tick(job.name);
-      const interval = setInterval(() => void tick(job.name), job.everyMs);
+      void tick(job.name, job.query);
+      const interval = setInterval(() => void tick(job.name, job.query), job.everyMs);
       if (typeof interval.unref === "function") interval.unref();
     }, job.firstDelayMs);
     if (typeof first.unref === "function") first.unref();
   }
   console.log(
-    `[cron-scheduler] pipeline en-proceso activo: ${JOBS.map((j) => `${j.name} c/${Math.round(j.everyMs / MIN)}min`).join(", ")}`
+    `[cron-scheduler] pipeline en-proceso activo: ${JOBS.map(
+      (j) => `${j.name}${j.query ? `?${j.query}` : ""} c/${Math.round(j.everyMs / MIN)}min`
+    ).join(", ")}`
   );
 }
