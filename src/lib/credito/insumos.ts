@@ -11,9 +11,14 @@
 
 import { prisma } from "@/lib/prisma";
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
-import type { DeclaracionMensualInsumo, InsumosCredito } from "./score";
+import { esPersonaFisicaRfc, pagosProvisionalesAcumulan } from "@/lib/fiscal/regimen-anual";
+import { desacumularIngresosDeclarados, type DeclaracionMensualInsumo, type InsumosCredito } from "./score";
 
 export async function cargarInsumosCredito(companyId: string): Promise<InsumosCredito> {
+  const empresa = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { rfc: true, regimenFiscal: true, regimenes: { select: { code: true } } },
+  });
   const [decls, faltantes, opinion, efosAbiertos] = await Promise.all([
     prisma.taxDeclaration.findMany({
       where: { companyId, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL"] } },
@@ -139,12 +144,26 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
 
   const resultadoOpinion = (opinion?.resultado ?? "").toUpperCase();
 
+  // PM (Art. 14) y PF 612 (Art. 106) declaran ingresos ACUMULADOS del
+  // ejercicio: desacumular ANTES de puntuar, o el score lee el year-to-date
+  // como ingreso mensual (caso real: PM con límite inflado ~10×).
+  let declaraciones = [...porPeriodo.values()].sort((a, b) => a.periodo.localeCompare(b.periodo));
+  if (
+    empresa &&
+    pagosProvisionalesAcumulan({
+      regimenes: [empresa.regimenFiscal, ...empresa.regimenes.map((r) => r.code)],
+      esPersonaFisica: esPersonaFisicaRfc(empresa.rfc),
+    })
+  ) {
+    declaraciones = desacumularIngresosDeclarados(declaraciones);
+  }
+
   return {
     gastosFacturados12m: egresosRows.reduce((s, g) => s + g.total, 0),
     gastosPorMes: [...gastosMap.entries()].map(([periodo, total]) => ({ periodo, total })),
     nomina12m: nomina._sum.total ?? 0,
     bancos,
-    declaraciones: [...porPeriodo.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)),
+    declaraciones,
     acusesFaltantes: faltantes.length,
     opinionSat: resultadoOpinion.includes("POSITIVA")
       ? "POSITIVA"

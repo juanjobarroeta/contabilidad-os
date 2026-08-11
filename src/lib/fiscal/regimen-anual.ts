@@ -37,3 +37,23 @@ export function requiereDeclaracionAnual(args: {
 export function esPersonaFisicaRfc(rfc: string | null | undefined): boolean {
   return (rfc ?? "").trim().length === 13;
 }
+
+/**
+ * ¿Los pagos provisionales de ISR declaran ingresos ACUMULADOS del ejercicio?
+ *
+ * - PM (Art. 14 LISR): SÍ — ingresos nominales acumulados desde enero. Caso
+ *   real: una PM mostraba "ingresos declarados" subiendo mes a mes hasta
+ *   ~$950k y colapsando a ~$56k en enero — era el acumulado, y el score de
+ *   crédito lo leyó como ingreso mensual (límite inflado ~10×).
+ * - PF actividad empresarial/profesional 612 (Art. 106): SÍ — acumulado.
+ * - PF RESICO 626 (Art. 113-E), arrendamiento 606 (Art. 116) y plataformas
+ *   625: NO — declaran el ingreso DEL MES.
+ * Con regímenes mixtos de PF, basta el 612 para que el formulario acumule.
+ */
+export function pagosProvisionalesAcumulan(args: {
+  regimenes: Array<string | null | undefined>;
+  esPersonaFisica: boolean;
+}): boolean {
+  if (!args.esPersonaFisica) return true;
+  return args.regimenes.some((c) => (c ?? "").trim() === "612");
+}

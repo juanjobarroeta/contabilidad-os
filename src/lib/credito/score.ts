@@ -101,6 +101,36 @@ export interface ResultadoScore {
 }
 
 const r0 = (n: number) => Math.round(n);
+
+/**
+ * Convierte ingresos declarados ACUMULADOS del ejercicio en ingresos DEL MES:
+ * cada mes vale su acumulado menos el acumulado anterior del MISMO ejercicio
+ * (enero, o el primer mes con dato, vale su acumulado tal cual). Un delta
+ * negativo (complementaria que corrigió a la baja, dato chueco) queda en null
+ * en vez de inventar un mes negativo.
+ *
+ * Se aplica ANTES del score cuando el régimen declara acumulado (PM Art. 14,
+ * PF 612 Art. 106 — ver pagosProvisionalesAcumulan). Sin esto, una PM parecía
+ * ingresar ~$950k/mes cuando su ingreso real era el delta (~$60-80k).
+ */
+export function desacumularIngresosDeclarados(
+  declaraciones: DeclaracionMensualInsumo[],
+): DeclaracionMensualInsumo[] {
+  const orden = [...declaraciones].sort((a, b) => a.periodo.localeCompare(b.periodo));
+  const previoPorEjercicio = new Map<string, number>();
+  const porPeriodo = new Map<string, number | null>();
+  for (const d of orden) {
+    if (d.ingresos == null) continue;
+    const ejercicio = d.periodo.slice(0, 4);
+    const previo = previoPorEjercicio.get(ejercicio);
+    const mensual = previo == null ? d.ingresos : d.ingresos - previo;
+    porPeriodo.set(d.periodo, mensual >= 0 ? mensual : null);
+    previoPorEjercicio.set(ejercicio, d.ingresos);
+  }
+  return declaraciones.map((d) =>
+    d.ingresos == null ? d : { ...d, ingresos: porPeriodo.get(d.periodo) ?? null },
+  );
+}
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const money = (n: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
@@ -279,8 +309,16 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     const razones: string[] = [];
     let puntos = 0;
 
-    const gastosProm = insumos.gastosFacturados12m / 12;
-    const nominaProm = insumos.nomina12m / 12;
+    // Promediar gastos/nómina sobre los MESES CON COBERTURA de CFDIs, no entre
+    // 12 fijos: con el backfill a medias (p. ej. sólo 5 meses descargados),
+    // dividir entre 12 diluía los gastos y sobreestimaba el flujo libre.
+    const mesesCobertura = new Set([
+      ...(insumos.cfdis?.facturadoPorMes ?? []).map((f) => f.periodo),
+      ...insumos.gastosPorMes.map((g) => g.periodo),
+    ]).size;
+    const divisor = Math.min(12, Math.max(1, mesesCobertura));
+    const gastosProm = insumos.gastosFacturados12m / divisor;
+    const nominaProm = insumos.nomina12m / divisor;
     const impuestosProm =
       insumos.declaraciones.length > 0
         ? insumos.declaraciones.reduce((s, d) => s + d.impuestosPagados, 0) / insumos.declaraciones.length
@@ -302,6 +340,11 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     );
     if (insumos.gastosFacturados12m === 0) {
       razones.push("Sin CFDIs de gasto registrados — el margen puede estar sobreestimado (compras sin factura).");
+    }
+    if (mesesCobertura > 0 && mesesCobertura < 6) {
+      razones.push(
+        `Cobertura de CFDIs parcial (${mesesCobertura} mes(es)) — gastos promediados sólo sobre esa ventana; la descarga histórica sigue en curso.`,
+      );
     }
 
     if (insumos.bancos && insumos.bancos.mesesConDatos >= 3) {

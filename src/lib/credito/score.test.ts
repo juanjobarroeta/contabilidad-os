@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularScoreCredito, type InsumosCredito } from "./score";
+import { calcularScoreCredito, desacumularIngresosDeclarados, type InsumosCredito } from "./score";
 
 // Perfil tipo Mercedes: 15 meses declarados, RESICO, sin CFDIs todavía.
 function mesesDeclarados(n: number, base = 250_000): InsumosCredito["declaraciones"] {
@@ -27,6 +27,33 @@ const BASE: InsumosCredito = {
   bancos: null,
   cfdis: null,
 };
+
+describe("desacumularIngresosDeclarados (PM Art. 14 / PF 612 Art. 106)", () => {
+  const d = (periodo: string, ingresos: number | null) => ({
+    periodo, ingresos, impuestosPagados: 0, fechaPresentacion: null,
+  });
+
+  it("acumulado del ejercicio → ingreso del mes; enero del año nuevo reinicia", () => {
+    // Caso real: PM con acumulado 402k→469k→…→953k y reinicio a 56k en enero.
+    const out = desacumularIngresosDeclarados([
+      d("2025-11", 895_952), d("2025-12", 953_906), d("2026-01", 56_190), d("2026-02", 181_290),
+    ]);
+    const por = new Map(out.map((x) => [x.periodo, x.ingresos]));
+    expect(por.get("2025-12")).toBe(953_906 - 895_952); // delta del ejercicio
+    expect(por.get("2026-01")).toBe(56_190); // primer mes del año: tal cual
+    expect(por.get("2026-02")).toBe(181_290 - 56_190);
+  });
+
+  it("delta negativo (complementaria a la baja) queda en null, no negativo", () => {
+    const out = desacumularIngresosDeclarados([d("2025-03", 300_000), d("2025-04", 250_000)]);
+    expect(out.find((x) => x.periodo === "2025-04")?.ingresos).toBeNull();
+  });
+
+  it("meses sin dato no rompen la cadena del acumulado", () => {
+    const out = desacumularIngresosDeclarados([d("2025-01", 100_000), d("2025-02", null), d("2025-03", 260_000)]);
+    expect(out.find((x) => x.periodo === "2025-03")?.ingresos).toBe(160_000);
+  });
+});
 
 describe("calcularScoreCredito", () => {
   it("perfil sano sin CFDIs: score alto pero PROVISIONAL con cobertura explicada", () => {
