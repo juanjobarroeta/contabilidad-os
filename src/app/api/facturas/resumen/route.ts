@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   const rango = periodo === PERIODO_TODO ? null : rangoPeriodo(periodo) ?? rangoPeriodo(String(anioActual));
   const ventana = rango ? { gte: rango.from, lte: rango.to } : undefined;
 
-  const [timbradas, facturado, porMes] = await Promise.all([
+  const [timbradas, facturado, porMes, porTipo, canceladas] = await Promise.all([
     // Comprobantes timbrados (emitidos + recibidos) en la ventana.
     prisma.invoice.count({
       where: { companyId, status: "STAMPED", ...(ventana ? { fecha: ventana } : {}) },
@@ -58,7 +58,22 @@ export async function GET(req: Request) {
       WHERE "companyId" = ${companyId}
       GROUP BY 1
       ORDER BY 1 DESC`,
+    // Conteos por tipo y de canceladas EN LA VENTANA. Los chips de la pantalla
+    // se calculaban sobre las filas ya cargadas (200 de decenas de miles), así
+    // que decían "Canceladas 0" aunque la base tuviera cientos: el conteo real
+    // tiene que venir del servidor.
+    prisma.invoice.groupBy({
+      by: ["tipo"],
+      where: { companyId, status: { not: "CANCELLED" }, ...(ventana ? { fecha: ventana } : {}) },
+      _count: { _all: true },
+    }),
+    prisma.invoice.count({
+      where: { companyId, status: "CANCELLED", ...(ventana ? { fecha: ventana } : {}) },
+    }),
   ]);
+
+  const conteoPorTipo = Object.fromEntries(porTipo.map((t) => [t.tipo, t._count._all]));
+  const vivas = porTipo.reduce((s, t) => s + t._count._all, 0);
 
   return NextResponse.json({
     timbradas,
@@ -67,5 +82,14 @@ export async function GET(req: Request) {
     periodo,
     etiquetaPeriodo: etiquetaPeriodo(periodo),
     periodos: porMes.map((r) => ({ periodo: r.periodo, total: Number(r.total) })),
+    // Conteos exactos para los chips (no dependen de cuántas filas se cargaron).
+    conteos: {
+      todas: vivas + canceladas,
+      ingreso: conteoPorTipo.INGRESO ?? 0,
+      egreso: conteoPorTipo.EGRESO ?? 0,
+      nomina: conteoPorTipo.NOMINA ?? 0,
+      pago: conteoPorTipo.PAGO ?? 0,
+      cancelada: canceladas,
+    },
   });
 }
