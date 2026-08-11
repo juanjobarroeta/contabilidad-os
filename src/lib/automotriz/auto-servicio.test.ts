@@ -11,21 +11,41 @@ const cfdiTaller = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cf
   </cfdi:Conceptos>
 </cfdi:Comprobante>`;
 
-function fakeDb(vehiculos: Record<string, string> = {}) {
-  const servicios: Array<Record<string, unknown>> = [];
+function fakeDb(vehiculos: Record<string, string> = {}, ordenes: Array<Record<string, any>> = []) {
+  const servicios: Array<Record<string, any>> = [];
   return {
     _servicios: servicios,
+    _ordenes: ordenes,
     servicioVenta: {
       findUnique: async ({ where }: any) => servicios.find((s) => s.invoiceId === where.invoiceId) ?? null,
       create: async ({ data }: any) => {
-        servicios.push({ ...data });
-        return data;
+        const row = { id: `sv-${servicios.length + 1}`, ...data };
+        servicios.push(row);
+        return row;
       },
     },
     vehiculo: {
       findUnique: async ({ where }: any) => {
         const id = vehiculos[where.companyId_vin.vin];
         return id ? { id } : null;
+      },
+    },
+    ordenServicio: {
+      findFirst: async ({ where }: any) =>
+        ordenes.find(
+          (o) =>
+            o.servicioVentaId == null &&
+            where.OR.some(
+              (f: any) =>
+                (f.vin && f.vin.in.includes(o.vin)) ||
+                (f.vehiculoId && f.vehiculoId === o.vehiculoId) ||
+                (f.clienteId && f.clienteId === o.clienteId)
+            )
+        ) ?? null,
+      update: async ({ where, data }: any) => {
+        const o = ordenes.find((x) => x.id === where.id);
+        if (o) Object.assign(o, data);
+        return o;
       },
     },
   };
@@ -69,6 +89,15 @@ describe("derivarServicioDesdeCfdiSiAplica()", () => {
     });
     expect(otra).toBe(false);
     expect(db._servicios).toHaveLength(1);
+  });
+
+  it("liga la orden de servicio abierta que empata por VIN", async () => {
+    const orden = { id: "os-1", vin: VIN, estado: "LISTA", servicioVentaId: null };
+    const db = fakeDb({}, [orden]);
+    await derivarServicioDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-os", tipo: "INGRESO", rawXml: cfdiTaller(), clienteId: "cli-1",
+    });
+    expect(orden.servicioVentaId).toBe("sv-1");
   });
 
   it("EGRESO y notas de crédito no aplican", async () => {

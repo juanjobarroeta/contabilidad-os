@@ -105,7 +105,7 @@ export async function derivarServicioDesdeCfdiSiAplica(
     }
   }
 
-  await db.servicioVenta.create({
+  const creada = await db.servicioVenta.create({
     data: {
       companyId: args.companyId,
       invoiceId: args.invoiceId,
@@ -118,5 +118,32 @@ export async function derivarServicioDesdeCfdiSiAplica(
       concepto: datos.concepto?.slice(0, 200) ?? null,
     },
   });
+
+  // Workflow (fase 5b): si hay una orden de servicio abierta que empata por
+  // VIN/unidad (o por cliente), este CFDI la ampara — se liga sola y la orden
+  // queda «facturada» sin captura. El estado no se toca: entregar sigue siendo
+  // acción del asesor.
+  const filtros: Prisma.OrdenServicioWhereInput[] = [];
+  if (datos.vins.length) filtros.push({ vin: { in: datos.vins } });
+  if (vehiculoId) filtros.push({ vehiculoId });
+  if (args.clienteId) filtros.push({ clienteId: args.clienteId });
+  if (filtros.length) {
+    const desde = new Date(args.fecha);
+    desde.setDate(desde.getDate() - 60);
+    const orden = await db.ordenServicio.findFirst({
+      where: {
+        companyId: args.companyId,
+        servicioVentaId: null,
+        estado: { in: ["RECIBIDA", "EN_PROCESO", "LISTA"] },
+        recibidaAt: { gte: desde },
+        OR: filtros,
+      },
+      orderBy: { recibidaAt: "asc" },
+      select: { id: true },
+    });
+    if (orden) {
+      await db.ordenServicio.update({ where: { id: orden.id }, data: { servicioVentaId: creada.id } });
+    }
+  }
   return true;
 }
