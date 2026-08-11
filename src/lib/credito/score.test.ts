@@ -21,6 +21,9 @@ const BASE: InsumosCredito = {
   acusesFaltantes: 0,
   opinionSat: null,
   efosAbiertos: 0,
+  gastosFacturados12m: 0,
+  nomina12m: 0,
+  bancos: null,
   cfdis: null,
 };
 
@@ -60,10 +63,46 @@ describe("calcularScoreCredito", () => {
       },
     });
     expect(r.dimensiones.map((d) => d.clave)).toEqual([
-      "actividad", "cumplimiento", "consistencia", "clientes", "efos",
+      "actividad", "cumplimiento", "consistencia", "capacidad", "clientes", "efos",
     ]);
     expect(r.score).toBeGreaterThanOrEqual(80);
     expect(r.banda).toBe("A");
+  });
+
+  it("capacidad de pago: gastos altos comen el margen y bajan el límite", () => {
+    const cfdis = {
+      ingresosFacturados: 3_000_000,
+      facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0),
+      emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10,
+    };
+    const margenAlto = calcularScoreCredito({ ...BASE, cfdis, gastosFacturados12m: 0 });
+    // Gastos ≈ 90% del ingreso: casi sin flujo libre.
+    const margenBajo = calcularScoreCredito({ ...BASE, cfdis, gastosFacturados12m: 2_900_000 });
+    const capAlto = margenAlto.dimensiones.find((d) => d.clave === "capacidad")!;
+    const capBajo = margenBajo.dimensiones.find((d) => d.clave === "capacidad")!;
+    expect(capBajo.puntos).toBeLessThan(capAlto.puntos);
+    expect(margenBajo.limiteSugerido).toBeLessThan(margenAlto.limiteSugerido);
+  });
+
+  it("flujo bancario negativo sostenido baja capacidad; positivo la sube", () => {
+    const cfdis = {
+      ingresosFacturados: 3_000_000,
+      facturadoPorMes: facturadoComo(BASE.declaraciones, 1.0),
+      emitidosVigentes: 100, emitidosCancelados: 2, topClientePct: 30, clientesActivos: 10,
+    };
+    const positivo = calcularScoreCredito({
+      ...BASE, cfdis,
+      bancos: { mesesConDatos: 6, abonosProm: 260_000, cargosProm: 200_000 },
+    });
+    const negativo = calcularScoreCredito({
+      ...BASE, cfdis,
+      bancos: { mesesConDatos: 6, abonosProm: 200_000, cargosProm: 280_000 },
+    });
+    const capPos = positivo.dimensiones.find((d) => d.clave === "capacidad")!;
+    const capNeg = negativo.dimensiones.find((d) => d.clave === "capacidad")!;
+    expect(capNeg.puntos).toBeLessThan(capPos.puntos);
+    // Con bancos presentes, la cobertura ya no reclama estados de cuenta.
+    expect(positivo.cobertura.join(" ")).not.toMatch(/Estados de cuenta/);
   });
 
   it("declarar MÁS de lo facturado NO castiga (venta a público en general)", () => {

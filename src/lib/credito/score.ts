@@ -36,6 +36,18 @@ export interface InsumosCredito {
   opinionSat: "POSITIVA" | "NEGATIVA" | null;
   /** ¿El RFC (o sus contrapartes frecuentes) aparece en 69-B? */
   efosAbiertos: number | null;
+  /** Gastos facturados (CFDIs EGRESO vigentes) de los últimos 12 meses. */
+  gastosFacturados12m: number;
+  /** Nómina timbrada (CFDIs NOMINA) de los últimos 12 meses. */
+  nomina12m: number;
+  /** Flujos bancarios (estados de cuenta) — null si no hay movimientos. */
+  bancos: {
+    mesesConDatos: number;
+    /** Promedio mensual de abonos (entradas). */
+    abonosProm: number;
+    /** Promedio mensual de cargos (salidas, positivo). */
+    cargosProm: number;
+  } | null;
   /** Métricas de CFDIs de los últimos 12 meses — null si aún no hay descarga. */
   cfdis: {
     ingresosFacturados: number;
@@ -148,7 +160,7 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     puntos += ptsVol;
     razones.push(cv <= 0.25 ? "Baja volatilidad mensual." : cv <= 0.5 ? "Volatilidad moderada." : "Ingresos muy variables mes a mes.");
 
-    dims.push({ clave: "actividad", etiqueta: "Actividad declarada", peso: 30, puntos: Math.min(100, puntos), razones });
+    dims.push({ clave: "actividad", etiqueta: "Actividad declarada", peso: 25, puntos: Math.min(100, puntos), razones });
   } else {
     cobertura.push("Menos de 3 meses de declaraciones con ingresos — sin base para medir actividad.");
   }
@@ -193,7 +205,7 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
       cobertura.push("Opinión de cumplimiento del SAT no disponible.");
     }
 
-    dims.push({ clave: "cumplimiento", etiqueta: "Cumplimiento fiscal", peso: 25, puntos: Math.min(100, puntos), razones });
+    dims.push({ clave: "cumplimiento", etiqueta: "Cumplimiento fiscal", peso: 20, puntos: Math.min(100, puntos), razones });
   }
 
   // ── 3. Consistencia CFDI vs declarado (20) ─────────────────────────────────
@@ -235,9 +247,53 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     puntos += tasaCancel <= 0.05 ? 40 : tasaCancel <= 0.15 ? 25 : 5;
     razones.push(`Tasa de cancelación de CFDIs: ${pct(tasaCancel)} (${c.emitidosCancelados}/${totalEmitidos}).`);
 
-    dims.push({ clave: "consistencia", etiqueta: "Consistencia CFDI vs declarado", peso: 20, puntos: Math.min(100, puntos), razones });
+    dims.push({ clave: "consistencia", etiqueta: "Consistencia CFDI vs declarado", peso: 15, puntos: Math.min(100, puntos), razones });
   } else {
     cobertura.push("CFDIs no disponibles todavía — consistencia facturado/declarado sin evaluar.");
+  }
+
+  // ── 3b. Capacidad de pago (20): margen y flujo, no sólo ingreso ────────────
+  // El límite no debe salir del ingreso bruto: una empresa que factura mucho y
+  // gasta igual no tiene con qué pagar. Flujo libre estimado = ingresos
+  // declarados − gastos facturados − nómina timbrada − impuestos pagados.
+  // Los estados de cuenta (si hay) corroboran con el flujo bancario real.
+  let flujoLibreMensual: number | null = null;
+  if (insumos.cfdis && promedioMensual > 0) {
+    const razones: string[] = [];
+    let puntos = 0;
+
+    const gastosProm = insumos.gastosFacturados12m / 12;
+    const nominaProm = insumos.nomina12m / 12;
+    const impuestosProm =
+      insumos.declaraciones.length > 0
+        ? insumos.declaraciones.reduce((s, d) => s + d.impuestosPagados, 0) / insumos.declaraciones.length
+        : 0;
+    flujoLibreMensual = Math.max(0, promedioMensual - gastosProm - nominaProm - impuestosProm);
+    const margen = flujoLibreMensual / promedioMensual;
+
+    puntos += margen >= 0.35 ? 60 : margen >= 0.2 ? 45 : margen >= 0.1 ? 30 : margen > 0 ? 15 : 5;
+    razones.push(
+      `Flujo libre estimado ${money(flujoLibreMensual)}/mes (ingresos ${money(promedioMensual)} − gastos facturados ${money(gastosProm)} − nómina ${money(nominaProm)} − impuestos ${money(impuestosProm)}): margen ${pct(margen)}.`,
+    );
+    if (insumos.gastosFacturados12m === 0) {
+      razones.push("Sin CFDIs de gasto registrados — el margen puede estar sobreestimado (compras sin factura).");
+    }
+
+    if (insumos.bancos && insumos.bancos.mesesConDatos >= 3) {
+      const neto = insumos.bancos.abonosProm - insumos.bancos.cargosProm;
+      puntos += neto > 0 ? 40 : neto > -0.05 * insumos.bancos.abonosProm ? 25 : 10;
+      razones.push(
+        `Flujo bancario real (${insumos.bancos.mesesConDatos} meses): entradas ${money(insumos.bancos.abonosProm)}/mes vs salidas ${money(insumos.bancos.cargosProm)}/mes — neto ${money(neto)}.`,
+      );
+    } else {
+      puntos += 20; // neutro
+      razones.push("Sin estados de cuenta cargados — flujo bancario no corroborado.");
+      cobertura.push("Estados de cuenta bancarios no disponibles — capacidad de pago sin corroborar.");
+    }
+
+    dims.push({ clave: "capacidad", etiqueta: "Capacidad de pago", peso: 20, puntos: Math.min(100, puntos), razones });
+  } else if (promedioMensual > 0) {
+    cobertura.push("Capacidad de pago sin evaluar (requiere CFDIs para estimar gastos).");
   }
 
   // ── 4. Estabilidad de clientes (15) ────────────────────────────────────────
@@ -256,7 +312,7 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     puntos += c.clientesActivos >= 20 ? 40 : c.clientesActivos >= 8 ? 30 : c.clientesActivos >= 3 ? 18 : 8;
     razones.push(`${c.clientesActivos} cliente(s) activos en 12 meses.`);
 
-    dims.push({ clave: "clientes", etiqueta: "Estabilidad de clientes", peso: 15, puntos: Math.min(100, puntos), razones });
+    dims.push({ clave: "clientes", etiqueta: "Estabilidad de clientes", peso: 10, puntos: Math.min(100, puntos), razones });
   } else {
     cobertura.push("Cartera de clientes no disponible (requiere CFDIs).");
   }
@@ -292,7 +348,15 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     efosListado ? "D" : score >= 80 ? "A" : score >= 65 ? "B" : score >= 50 ? "C" : "D";
 
   const multiplo = banda === "A" ? 1.0 : banda === "B" ? 0.6 : banda === "C" ? 0.3 : 0;
-  const limiteSugerido = Math.round((promedioMensual * multiplo) / 1000) * 1000;
+  // Límite anclado a CAPACIDAD DE PAGO cuando es estimable: ~3 meses de flujo
+  // libre (con techo de 1.5× el ingreso mensual — el flujo no compra ingreso
+  // que no existe). Sin datos de gasto, cae al múltiplo del ingreso (y la
+  // cobertura ya lo marca como provisional).
+  const base =
+    flujoLibreMensual != null
+      ? Math.min(flujoLibreMensual * 3, promedioMensual * 1.5)
+      : promedioMensual;
+  const limiteSugerido = Math.round((base * multiplo) / 1000) * 1000;
 
   return {
     score,

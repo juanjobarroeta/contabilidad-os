@@ -100,9 +100,42 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
         }
       : null;
 
+  // Capacidad de pago: gastos facturados, nómina timbrada y flujos bancarios.
+  const [egresos, nomina, movimientos] = await Promise.all([
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: hace12m } },
+      _sum: { total: true },
+    }),
+    prisma.invoice.aggregate({
+      where: { companyId, tipo: "NOMINA", status: "STAMPED", fecha: { gte: hace12m } },
+      _sum: { total: true },
+    }),
+    prisma.bankTransaction.findMany({
+      where: { companyId, fecha: { gte: hace12m } },
+      select: { fecha: true, monto: true },
+    }),
+  ]);
+
+  let bancos: InsumosCredito["bancos"] = null;
+  if (movimientos.length > 0) {
+    const meses = new Set<string>();
+    let abonos = 0;
+    let cargos = 0;
+    for (const m of movimientos) {
+      meses.add(`${m.fecha.getUTCFullYear()}-${m.fecha.getUTCMonth() + 1}`);
+      if (m.monto > 0) abonos += m.monto;
+      else cargos += -m.monto;
+    }
+    const n = Math.max(1, meses.size);
+    bancos = { mesesConDatos: meses.size, abonosProm: abonos / n, cargosProm: cargos / n };
+  }
+
   const resultadoOpinion = (opinion?.resultado ?? "").toUpperCase();
 
   return {
+    gastosFacturados12m: egresos._sum.total ?? 0,
+    nomina12m: nomina._sum.total ?? 0,
+    bancos,
     declaraciones: [...porPeriodo.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)),
     acusesFaltantes: faltantes.length,
     opinionSat: resultadoOpinion.includes("POSITIVA")

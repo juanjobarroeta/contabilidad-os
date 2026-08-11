@@ -50,6 +50,30 @@ interface Evaluacion {
   cobertura: string[];
   decision: string | null;
   notas: string | null;
+  analisis: string | null;
+}
+
+/** Markdown mínimo del memo: **negritas** y viñetas — sin librerías. */
+function MemoIA({ texto }: { texto: string }) {
+  return (
+    <div className="space-y-1">
+      {texto.split("\n").map((linea, i) => {
+        const t = linea.trim();
+        if (!t) return <div key={i} className="h-1.5" />;
+        const negrita = /^\*\*(.+)\*\*$/.exec(t);
+        if (negrita) {
+          return <p key={i} className="pt-1 text-[13px] font-semibold text-cos-ink">{negrita[1]}</p>;
+        }
+        const vineta = /^[-•]\s+(.*)$/.exec(t);
+        const cuerpo = (vineta ? vineta[1] : t).replace(/\*\*(.+?)\*\*/g, "$1");
+        return (
+          <p key={i} className="text-[13px] leading-relaxed text-cos-ink-soft">
+            {vineta ? "· " : ""}{cuerpo}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 const fmtMoney = (n: number) =>
@@ -304,6 +328,19 @@ export default function CreditosPage() {
                   )}
                 </Card>
               </div>
+
+              {/* Memo de análisis (IA) — parte del snapshot */}
+              {actual.analisis && (
+                <Card className="rounded-card border-cos-line p-5 shadow-card">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[13px] font-semibold text-cos-ink">Análisis del expediente</span>
+                    <span className="rounded-full bg-cos-brand-tint px-2 py-0.5 text-[11px] font-medium text-cos-brand-ink">
+                      generado por IA · {fmtFecha(actual.createdAt)}
+                    </span>
+                  </div>
+                  <MemoIA texto={actual.analisis} />
+                </Card>
+              )}
 
               {/* Desglose por dimensión */}
               <Card className="overflow-hidden rounded-card border-cos-line shadow-card">
