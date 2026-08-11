@@ -51,6 +51,9 @@ export async function generarAnalisisCredito(args: {
     gastosFacturados12m: insumos.gastosFacturados12m,
     nominaTimbrada12m: insumos.nomina12m,
     flujosBancarios: insumos.bancos,
+    // Cartera PPD/REP: cobranza (cómo le pagan) y pagos (cómo paga) — el
+    // comportamiento de pago observable, clave para el memo.
+    carteraPPD: insumos.flujosPPD,
   };
 
   try {

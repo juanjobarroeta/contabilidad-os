@@ -63,6 +63,10 @@ interface Evaluacion {
       declaraciones?: Array<{ periodo: string; ingresos: number | null; impuestosPagados: number }>;
       gastosPorMes?: Array<{ periodo: string; total: number }>;
       cfdis?: { facturadoPorMes?: Array<{ periodo: string; total: number }> } | null;
+      flujosPPD?: {
+        cobranza: { facturas: number; monto: number; cobrado: number; saldoInsoluto: number; diasPromedio: number | null };
+        pagos: { facturas: number; monto: number; pagado: number; diasPromedio: number | null };
+      } | null;
     };
   };
   cobertura: string[];
@@ -78,6 +82,8 @@ function SerieMensual({ detalle }: { detalle: Evaluacion["detalle"] }) {
   const [verTabla, setVerTabla] = useState(false);
 
   const decls = detalle.insumos?.declaraciones ?? [];
+  // Snapshot viejo (previo a gastosPorMes): mostrar "—", no un $0 que miente.
+  const gastosDisponibles = detalle.insumos?.gastosPorMes != null;
   const gastosMap = new Map((detalle.insumos?.gastosPorMes ?? []).map((g) => [g.periodo, g.total]));
   const factMap = new Map((detalle.insumos?.cfdis?.facturadoPorMes ?? []).map((f) => [f.periodo, f.total]));
 
@@ -135,6 +141,11 @@ function SerieMensual({ detalle }: { detalle: Evaluacion["detalle"] }) {
           })}
         </svg>
       </div>
+      {!gastosDisponibles && (
+        <p className="mt-2 text-[12px] text-cos-amber-ink">
+          Este snapshot es anterior al desglose de gastos por mes — vuelve a evaluar para verlos.
+        </p>
+      )}
       <button onClick={() => setVerTabla(!verTabla)} className="mt-2 text-[13px] font-medium text-cos-brand-ink hover:underline">
         {verTabla ? "Ocultar tabla mensual" : "Ver tabla mensual"}
       </button>
@@ -157,9 +168,11 @@ function SerieMensual({ detalle }: { detalle: Evaluacion["detalle"] }) {
                   <td className="px-3 py-1.5 text-cos-ink-soft">{etiqueta(m.periodo)}</td>
                   <td className="px-3 py-1.5 text-right text-cos-ink">{fmtMoney(m.ingresos)}</td>
                   <td className="px-3 py-1.5 text-right text-cos-ink-soft">{m.facturado != null ? fmtMoney(m.facturado) : "—"}</td>
-                  <td className="px-3 py-1.5 text-right text-cos-red-ink">{fmtMoney(m.gastos)}</td>
+                  <td className="px-3 py-1.5 text-right text-cos-red-ink">{gastosDisponibles ? fmtMoney(m.gastos) : "—"}</td>
                   <td className="px-3 py-1.5 text-right text-cos-ink-soft">{fmtMoney(m.impuestos)}</td>
-                  <td className="px-3 py-1.5 text-right font-medium text-cos-ink">{fmtMoney(m.ingresos - m.gastos - m.impuestos)}</td>
+                  <td className="px-3 py-1.5 text-right font-medium text-cos-ink">
+                    {gastosDisponibles ? fmtMoney(m.ingresos - m.gastos - m.impuestos) : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -619,6 +632,47 @@ export default function CreditosPage() {
                 banda={actual.banda}
                 limiteSugerido={actual.limiteSugerido}
               />
+
+              {/* Cartera PPD: cómo le pagan y cómo paga (de los REPs) */}
+              {actual.detalle.insumos?.flujosPPD && (
+                <Card className="rounded-card border-cos-line p-5 shadow-card">
+                  <p className="text-[13px] font-semibold text-cos-ink">Cartera PPD y comportamiento de pago (REPs)</p>
+                  <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="rounded-control border border-cos-line bg-cos-paper p-3.5">
+                      <p className="text-[12px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Cobranza — cómo le pagan sus clientes</p>
+                      {(() => {
+                        const c = actual.detalle.insumos!.flujosPPD!.cobranza;
+                        return c.monto > 0 ? (
+                          <div className="mt-2 space-y-1 text-[13px] text-cos-ink-soft">
+                            <p>{c.facturas} factura(s) PPD por <span className="font-mono text-cos-ink">{fmtMoney(c.monto)}</span></p>
+                            <p>Cobrado: <span className="font-mono text-cos-ink">{fmtMoney(c.cobrado)}</span> ({Math.round((c.cobrado / c.monto) * 100)}%)</p>
+                            <p>Saldo insoluto: <span className={`font-mono ${c.saldoInsoluto / c.monto > 0.5 ? "text-cos-red-ink" : "text-cos-ink"}`}>{fmtMoney(c.saldoInsoluto)}</span></p>
+                            <p>Días promedio de cobro: <span className="font-mono text-cos-ink">{c.diasPromedio != null ? Math.round(c.diasPromedio) : "—"}</span></p>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-[13px] text-cos-ink-faint">Sin facturas PPD emitidas en 12 meses.</p>
+                        );
+                      })()}
+                    </div>
+                    <div className="rounded-control border border-cos-line bg-cos-paper p-3.5">
+                      <p className="text-[12px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Pagos — cómo paga a sus proveedores</p>
+                      {(() => {
+                        const p = actual.detalle.insumos!.flujosPPD!.pagos;
+                        return p.monto > 0 ? (
+                          <div className="mt-2 space-y-1 text-[13px] text-cos-ink-soft">
+                            <p>{p.facturas} factura(s) PPD recibidas por <span className="font-mono text-cos-ink">{fmtMoney(p.monto)}</span></p>
+                            <p>Pagado (con REP): <span className="font-mono text-cos-ink">{fmtMoney(p.pagado)}</span> ({Math.round((p.pagado / p.monto) * 100)}%)</p>
+                            <p>Días promedio de pago: <span className={`font-mono ${p.diasPromedio != null && p.diasPromedio > 120 ? "text-cos-red-ink" : "text-cos-ink"}`}>{p.diasPromedio != null ? Math.round(p.diasPromedio) : "—"}</span></p>
+                            <p className="text-[11.5px] text-cos-ink-faint">Lo más cercano a un historial de buró calculable con datos fiscales.</p>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-[13px] text-cos-ink-faint">Sin facturas PPD recibidas en 12 meses.</p>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </Card>
+              )}
 
               {/* Memo de análisis (IA) — parte del snapshot */}
               {actual.analisis && (

@@ -11,9 +11,14 @@
 
 import { prisma } from "@/lib/prisma";
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
-import type { DeclaracionMensualInsumo, InsumosCredito } from "./score";
+import { esPersonaFisicaRfc, pagosProvisionalesAcumulan } from "@/lib/fiscal/regimen-anual";
+import { desacumularIngresosDeclarados, type DeclaracionMensualInsumo, type InsumosCredito } from "./score";
 
 export async function cargarInsumosCredito(companyId: string): Promise<InsumosCredito> {
+  const empresa = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { rfc: true, regimenFiscal: true, regimenes: { select: { code: true } } },
+  });
   const [decls, faltantes, opinion, efosAbiertos] = await Promise.all([
     prisma.taxDeclaration.findMany({
       where: { companyId, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL"] } },
@@ -137,14 +142,100 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
     gastosMap.set(k, (gastosMap.get(k) ?? 0) + g.total);
   }
 
+  // Cartera PPD y comportamiento de pago: los REPs (PagoDoctoRelacionado)
+  // dicen QUÉ factura PPD se pagó, CUÁNTO y en QUÉ FECHA legal. Cobranza =
+  // sus PPD emitidas; pagos = sus PPD recibidas (cómo paga a proveedores).
+  const [ppdFacturas, doctos] = await Promise.all([
+    prisma.invoice.findMany({
+      where: {
+        companyId,
+        tipo: { in: ["INGRESO", "EGRESO"] },
+        status: "STAMPED",
+        metodoPago: "PPD",
+        fecha: { gte: hace12m },
+        uuid: { not: null },
+      },
+      select: { uuid: true, tipo: true, fecha: true, total: true },
+    }),
+    prisma.pagoDoctoRelacionado.findMany({
+      where: { pagoInvoice: { companyId } },
+      select: { parentUuid: true, impPagado: true, fechaPago: true },
+    }),
+  ]);
+
+  let flujosPPD: InsumosCredito["flujosPPD"] = null;
+  if (ppdFacturas.length > 0) {
+    const pagosPorUuid = new Map<string, { monto: number; fecha: Date | null }[]>();
+    for (const d of doctos) {
+      const k = d.parentUuid.trim().toUpperCase();
+      const arr = pagosPorUuid.get(k) ?? [];
+      arr.push({ monto: d.impPagado ?? 0, fecha: d.fechaPago });
+      pagosPorUuid.set(k, arr);
+    }
+    const lado = (tipo: "INGRESO" | "EGRESO") => {
+      const facturas = ppdFacturas.filter((f) => f.tipo === tipo);
+      let monto = 0;
+      let pagado = 0;
+      let diasPonderados = 0;
+      let montoConFecha = 0;
+      for (const f of facturas) {
+        monto += f.total;
+        const pagos = pagosPorUuid.get((f.uuid as string).trim().toUpperCase()) ?? [];
+        for (const p of pagos) {
+          pagado += p.monto;
+          if (p.fecha && p.monto > 0) {
+            const dias = (p.fecha.getTime() - f.fecha.getTime()) / 86_400_000;
+            if (dias >= 0 && dias < 720) {
+              diasPonderados += dias * p.monto;
+              montoConFecha += p.monto;
+            }
+          }
+        }
+      }
+      return {
+        facturas: facturas.length,
+        monto,
+        pagado: Math.min(pagado, monto), // sobre-REPs no inflan el % cobrado
+        diasPromedio: montoConFecha > 0 ? diasPonderados / montoConFecha : null,
+      };
+    };
+    const cob = lado("INGRESO");
+    const pag = lado("EGRESO");
+    flujosPPD = {
+      cobranza: {
+        facturas: cob.facturas,
+        monto: cob.monto,
+        cobrado: cob.pagado,
+        saldoInsoluto: Math.max(0, cob.monto - cob.pagado),
+        diasPromedio: cob.diasPromedio,
+      },
+      pagos: { facturas: pag.facturas, monto: pag.monto, pagado: pag.pagado, diasPromedio: pag.diasPromedio },
+    };
+  }
+
   const resultadoOpinion = (opinion?.resultado ?? "").toUpperCase();
+
+  // PM (Art. 14) y PF 612 (Art. 106) declaran ingresos ACUMULADOS del
+  // ejercicio: desacumular ANTES de puntuar, o el score lee el year-to-date
+  // como ingreso mensual (caso real: PM con límite inflado ~10×).
+  let declaraciones = [...porPeriodo.values()].sort((a, b) => a.periodo.localeCompare(b.periodo));
+  if (
+    empresa &&
+    pagosProvisionalesAcumulan({
+      regimenes: [empresa.regimenFiscal, ...empresa.regimenes.map((r) => r.code)],
+      esPersonaFisica: esPersonaFisicaRfc(empresa.rfc),
+    })
+  ) {
+    declaraciones = desacumularIngresosDeclarados(declaraciones);
+  }
 
   return {
     gastosFacturados12m: egresosRows.reduce((s, g) => s + g.total, 0),
     gastosPorMes: [...gastosMap.entries()].map(([periodo, total]) => ({ periodo, total })),
     nomina12m: nomina._sum.total ?? 0,
     bancos,
-    declaraciones: [...porPeriodo.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)),
+    flujosPPD,
+    declaraciones,
     acusesFaltantes: faltantes.length,
     opinionSat: resultadoOpinion.includes("POSITIVA")
       ? "POSITIVA"

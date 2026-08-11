@@ -50,6 +50,29 @@ export interface InsumosCredito {
     /** Promedio mensual de cargos (salidas, positivo). */
     cargosProm: number;
   } | null;
+  /**
+   * Cartera PPD y comportamiento de pago, derivados de los REPs
+   * (PagoDoctoRelacionado): cuánto tardan SUS CLIENTES en pagarle (cobranza)
+   * y cuánto tarda ELLA en pagar a proveedores (lo más parecido a un historial
+   * de buró que se puede calcular con datos fiscales). Null sin facturas PPD.
+   */
+  flujosPPD: {
+    cobranza: {
+      facturas: number;
+      monto: number;
+      cobrado: number;
+      saldoInsoluto: number;
+      /** Días promedio de cobro (fechaPago REP − fecha factura), ponderado por monto. */
+      diasPromedio: number | null;
+    };
+    pagos: {
+      facturas: number;
+      monto: number;
+      pagado: number;
+      /** Días promedio en que paga a sus proveedores. */
+      diasPromedio: number | null;
+    };
+  } | null;
   /** Métricas de CFDIs de los últimos 12 meses — null si aún no hay descarga. */
   cfdis: {
     ingresosFacturados: number;
@@ -101,6 +124,36 @@ export interface ResultadoScore {
 }
 
 const r0 = (n: number) => Math.round(n);
+
+/**
+ * Convierte ingresos declarados ACUMULADOS del ejercicio en ingresos DEL MES:
+ * cada mes vale su acumulado menos el acumulado anterior del MISMO ejercicio
+ * (enero, o el primer mes con dato, vale su acumulado tal cual). Un delta
+ * negativo (complementaria que corrigió a la baja, dato chueco) queda en null
+ * en vez de inventar un mes negativo.
+ *
+ * Se aplica ANTES del score cuando el régimen declara acumulado (PM Art. 14,
+ * PF 612 Art. 106 — ver pagosProvisionalesAcumulan). Sin esto, una PM parecía
+ * ingresar ~$950k/mes cuando su ingreso real era el delta (~$60-80k).
+ */
+export function desacumularIngresosDeclarados(
+  declaraciones: DeclaracionMensualInsumo[],
+): DeclaracionMensualInsumo[] {
+  const orden = [...declaraciones].sort((a, b) => a.periodo.localeCompare(b.periodo));
+  const previoPorEjercicio = new Map<string, number>();
+  const porPeriodo = new Map<string, number | null>();
+  for (const d of orden) {
+    if (d.ingresos == null) continue;
+    const ejercicio = d.periodo.slice(0, 4);
+    const previo = previoPorEjercicio.get(ejercicio);
+    const mensual = previo == null ? d.ingresos : d.ingresos - previo;
+    porPeriodo.set(d.periodo, mensual >= 0 ? mensual : null);
+    previoPorEjercicio.set(ejercicio, d.ingresos);
+  }
+  return declaraciones.map((d) =>
+    d.ingresos == null ? d : { ...d, ingresos: porPeriodo.get(d.periodo) ?? null },
+  );
+}
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const money = (n: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
@@ -279,8 +332,16 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     const razones: string[] = [];
     let puntos = 0;
 
-    const gastosProm = insumos.gastosFacturados12m / 12;
-    const nominaProm = insumos.nomina12m / 12;
+    // Promediar gastos/nómina sobre los MESES CON COBERTURA de CFDIs, no entre
+    // 12 fijos: con el backfill a medias (p. ej. sólo 5 meses descargados),
+    // dividir entre 12 diluía los gastos y sobreestimaba el flujo libre.
+    const mesesCobertura = new Set([
+      ...(insumos.cfdis?.facturadoPorMes ?? []).map((f) => f.periodo),
+      ...insumos.gastosPorMes.map((g) => g.periodo),
+    ]).size;
+    const divisor = Math.min(12, Math.max(1, mesesCobertura));
+    const gastosProm = insumos.gastosFacturados12m / divisor;
+    const nominaProm = insumos.nomina12m / divisor;
     const impuestosProm =
       insumos.declaraciones.length > 0
         ? insumos.declaraciones.reduce((s, d) => s + d.impuestosPagados, 0) / insumos.declaraciones.length
@@ -303,6 +364,24 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     if (insumos.gastosFacturados12m === 0) {
       razones.push("Sin CFDIs de gasto registrados — el margen puede estar sobreestimado (compras sin factura).");
     }
+    if (mesesCobertura > 0 && mesesCobertura < 6) {
+      razones.push(
+        `Cobertura de CFDIs parcial (${mesesCobertura} mes(es)) — gastos promediados sólo sobre esa ventana; la descarga histórica sigue en curso.`,
+      );
+    }
+
+    // Comportamiento de pago a proveedores (REPs recibidos contra sus PPD de
+    // gasto): la evidencia más directa de CÓMO paga sus obligaciones.
+    const pp = insumos.flujosPPD?.pagos;
+    if (pp && pp.monto > 0 && pp.diasPromedio != null) {
+      razones.push(
+        `Paga a sus proveedores en ~${Math.round(pp.diasPromedio)} días en promedio (${pp.facturas} factura(s) PPD por ${money(pp.monto)}, pagado ${pct(pp.pagado / pp.monto)}).`,
+      );
+      if (pp.diasPromedio > 120) {
+        puntos -= 10;
+        razones.push("Paga a más de 120 días — señal de estrés de flujo o mala disciplina de pago.");
+      }
+    }
 
     if (insumos.bancos && insumos.bancos.mesesConDatos >= 3) {
       const neto = insumos.bancos.abonosProm - insumos.bancos.cargosProm;
@@ -316,7 +395,7 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
       cobertura.push("Estados de cuenta bancarios no disponibles — capacidad de pago sin corroborar.");
     }
 
-    dims.push({ clave: "capacidad", etiqueta: "Capacidad de pago", peso: 20, puntos: Math.min(100, puntos), razones });
+    dims.push({ clave: "capacidad", etiqueta: "Capacidad de pago", peso: 20, puntos: Math.max(0, Math.min(100, puntos)), razones });
   } else if (promedioMensual > 0) {
     cobertura.push("Capacidad de pago sin evaluar (requiere CFDIs para estimar gastos).");
   }
@@ -337,7 +416,26 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     puntos += c.clientesActivos >= 20 ? 40 : c.clientesActivos >= 8 ? 30 : c.clientesActivos >= 3 ? 18 : 8;
     razones.push(`${c.clientesActivos} cliente(s) activos en 12 meses.`);
 
-    dims.push({ clave: "clientes", etiqueta: "Estabilidad de clientes", peso: 10, puntos: Math.min(100, puntos), razones });
+    // Cobranza PPD (de los REPs): ¿sus clientes le pagan, y qué tan rápido?
+    // Una cartera con mucho saldo insoluto o cobro lento es riesgo directo
+    // sobre el flujo con el que pagaría el crédito.
+    const cob = insumos.flujosPPD?.cobranza;
+    if (cob && cob.monto > 0) {
+      const pctInsoluto = cob.saldoInsoluto / cob.monto;
+      razones.push(
+        `Cartera PPD 12m: ${cob.facturas} factura(s) por ${money(cob.monto)} — cobrado ${money(cob.cobrado)} (${pct(cob.cobrado / cob.monto)}), saldo insoluto ${money(cob.saldoInsoluto)}${cob.diasPromedio != null ? `, cobro promedio ${Math.round(cob.diasPromedio)} días` : ""}.`,
+      );
+      if (pctInsoluto > 0.5) {
+        puntos -= 20;
+        razones.push("Más de la mitad de la cartera PPD sigue sin cobrar — riesgo de cobranza.");
+      }
+      if (cob.diasPromedio != null && cob.diasPromedio > 90) {
+        puntos -= 10;
+        razones.push("Cobro promedio mayor a 90 días — ciclo de conversión lento.");
+      }
+    }
+
+    dims.push({ clave: "clientes", etiqueta: "Estabilidad de clientes", peso: 10, puntos: Math.max(0, Math.min(100, puntos)), razones });
   } else {
     cobertura.push("Cartera de clientes no disponible (requiere CFDIs).");
   }

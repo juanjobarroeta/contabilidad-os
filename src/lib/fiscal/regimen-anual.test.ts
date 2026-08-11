@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { esPersonaFisicaRfc, requiereDeclaracionAnual } from "./regimen-anual";
+import { esPersonaFisicaRfc, pagosProvisionalesAcumulan, requiereDeclaracionAnual } from "./regimen-anual";
+
+describe("pagosProvisionalesAcumulan", () => {
+  it("PM siempre acumula (Art. 14)", () => {
+    expect(pagosProvisionalesAcumulan({ regimenes: ["601"], esPersonaFisica: false })).toBe(true);
+    expect(pagosProvisionalesAcumulan({ regimenes: [], esPersonaFisica: false })).toBe(true);
+  });
+  it("PF 612 acumula (Art. 106); RESICO y arrendamiento declaran el mes", () => {
+    expect(pagosProvisionalesAcumulan({ regimenes: ["612"], esPersonaFisica: true })).toBe(true);
+    expect(pagosProvisionalesAcumulan({ regimenes: ["626"], esPersonaFisica: true })).toBe(false);
+    expect(pagosProvisionalesAcumulan({ regimenes: ["606"], esPersonaFisica: true })).toBe(false);
+    expect(pagosProvisionalesAcumulan({ regimenes: ["626", "612"], esPersonaFisica: true })).toBe(true);
+  });
+});
 
 describe("requiereDeclaracionAnual", () => {
   it("RESICO PF puro (626) NO presenta anual — Art. 113-E, pagos definitivos", () => {
