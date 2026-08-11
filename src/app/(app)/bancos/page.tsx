@@ -200,6 +200,11 @@ export default function BancosPage() {
     posiblesDuplicados: number;
     descartadas: { fila: number; motivo: string }[];
   } | null>(null);
+  // Historial de lotes importados (con su PDF de evidencia cuando lo hay).
+  const [lotes, setLotes] = useState<{
+    id: string; createdAt: string; banco: string | null; periodo: string | null;
+    count: number; cuentaEtiqueta: string; tienePdf: boolean; cuadro: boolean | null;
+  }[]>([]);
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2800); };
 
@@ -223,8 +228,18 @@ export default function BancosPage() {
     } finally { setLoading(false); }
   }, [selectedId, filter]);
 
+  const loadLotes = useCallback(async () => {
+    if (!activeCompany) { setLotes([]); return; }
+    try {
+      const res = await fetch(`/api/bancos/import-batches?companyId=${activeCompany.id}`);
+      const data = await res.json();
+      setLotes(Array.isArray(data) ? data : []);
+    } catch { setLotes([]); }
+  }, [activeCompany]);
+
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
   useEffect(() => { loadTxs(); }, [loadTxs]);
+  useEffect(() => { loadLotes(); }, [loadLotes]);
   // Salir del modo selección al cambiar de cuenta/filtro.
   useEffect(() => { setPicked(new Set()); }, [selectedId, filter]);
 
@@ -338,7 +353,7 @@ export default function BancosPage() {
           ? { imported, posiblesDuplicados, descartadas }
           : null
       );
-      await Promise.all([loadTxs(), loadAccounts()]);
+      await Promise.all([loadTxs(), loadAccounts(), loadLotes()]);
     } finally { setBusy(""); e.target.value = ""; }
   }
 
@@ -753,6 +768,54 @@ export default function BancosPage() {
                 </button>
               </div>
             </div>
+          )}
+
+          {/* Importaciones recientes: cada lote con su cuadre y, cuando la
+              importación fue por visión (PDF/imagen), el documento original
+              descargable — evidencia de dónde salió cada movimiento. */}
+          {lotes.length > 0 && (
+            <details className="mt-4 rounded-card border border-cos-line bg-cos-card shadow-card">
+              <summary className="cursor-pointer select-none px-5 py-3.5 text-[14px] font-semibold text-cos-ink">
+                Importaciones recientes <span className="font-mono text-[12.5px] font-normal text-cos-ink-faint">({lotes.length})</span>
+              </summary>
+              <div className="overflow-x-auto border-t border-cos-line-soft">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="text-left text-[12px] uppercase tracking-wide text-cos-ink-faint">
+                      <th className="px-5 py-2 font-medium">Fecha</th>
+                      <th className="px-3 py-2 font-medium">Cuenta</th>
+                      <th className="px-3 py-2 font-medium">Periodo</th>
+                      <th className="px-3 py-2 text-right font-medium">Movs.</th>
+                      <th className="px-3 py-2 font-medium">Cuadre</th>
+                      <th className="px-5 py-2 text-right font-medium">Documento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lotes.map((l) => (
+                      <tr key={l.id} className="border-t border-cos-line-soft text-cos-ink-soft">
+                        <td className="px-5 py-2.5 whitespace-nowrap">{new Date(l.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}</td>
+                        <td className="px-3 py-2.5">{l.cuentaEtiqueta}</td>
+                        <td className="px-3 py-2.5 font-mono text-[12.5px]">{l.periodo ?? "—"}</td>
+                        <td className="px-3 py-2.5 text-right font-mono">{l.count}</td>
+                        <td className="px-3 py-2.5">
+                          {l.cuadro === true && <span className="rounded-full bg-cos-green-tint px-2 py-0.5 text-[12px] font-medium text-cos-green-ink">Cuadró</span>}
+                          {l.cuadro === false && <span className="rounded-full bg-cos-amber-tint px-2 py-0.5 text-[12px] font-medium text-cos-amber-ink" title="Importado con confirmación manual: los saldos del estado no cuadraron con la suma de movimientos">Sin cuadrar</span>}
+                          {l.cuadro == null && <span className="text-cos-ink-faint">—</span>}
+                        </td>
+                        <td className="px-5 py-2.5 text-right">
+                          {l.tienePdf ? (
+                            <a href={`/api/bancos/import-batches/${l.id}/pdf`} target="_blank" rel="noreferrer"
+                              className="font-semibold text-cos-brand-ink hover:underline">Ver PDF</a>
+                          ) : (
+                            <span className="text-cos-ink-faint">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
           )}
 
           {/* filter bar */}

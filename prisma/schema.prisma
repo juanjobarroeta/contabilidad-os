@@ -1249,6 +1249,16 @@ model ImportBatch {
   saldoInicial Float?
   saldoFinal   Float?
 
+  // El DOCUMENTO original del estado de cuenta (PDF/imagen subido por visión).
+  // Evidencia de underwriting y de conciliación: "lo leímos y lo tiramos" es
+  // indefendible meses después. Null en orígenes sin archivo (CSV pegado,
+  // WhatsApp, ingest externo). `cuadro` = resultado del cuadre saldo inicial +
+  // Σ movimientos ≈ saldo final al importar (false = importado con force).
+  archivoPdf    Bytes?
+  archivoNombre String?
+  archivoMime   String?
+  cuadro        Boolean?
+
   company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankAccount  BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]

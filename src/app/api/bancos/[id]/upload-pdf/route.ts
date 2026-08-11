@@ -82,8 +82,8 @@ export async function POST(req: Request, { params }: Params) {
   }
 
   // Safety gate: don't import when the balance doesn't reconcile, unless forced.
-  // SECURITY/CORRECTNESS: the raw document is NOT persisted — only the
-  // structured rows once the user confirms.
+  // Si el usuario no confirma, el documento se descarta junto con la extracción:
+  // solo persiste (como evidencia del lote) cuando la importación sucede.
   const needsReview = extraction.balanceCheck.cuadra === false;
   if ((needsReview || extraction.transactions.length === 0) && !force) {
     return NextResponse.json({
@@ -109,6 +109,10 @@ export async function POST(req: Request, { params }: Params) {
     // Los saldos que declara el estado: ancla de la conciliación bancaria.
     saldoInicial: extraction.balanceCheck.saldoInicial,
     saldoFinal: extraction.balanceCheck.saldoFinal,
+    // Evidencia de underwriting: el documento original y si su cuadre pasó.
+    // cuadro=false ⇒ el usuario forzó la importación pese al descuadre.
+    archivo: { bytes: buf, nombre: file.name, mime: mediaType },
+    cuadro: extraction.balanceCheck.cuadra ?? null,
   });
 
   return NextResponse.json({

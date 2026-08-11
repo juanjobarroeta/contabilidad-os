@@ -32,6 +32,10 @@ export interface LoteImportado {
   borrables: number;
   /** Movimientos ya conciliados que se conservarían. */
   conciliados: number;
+  /** Si el lote guarda el estado de cuenta original (evidencia descargable). */
+  tienePdf: boolean;
+  /** Resultado del cuadre de saldos al importar (null = no aplica/CSV). */
+  cuadro: boolean | null;
 }
 
 /** Últimos 4 dígitos de un número (para etiquetar la cuenta). */
@@ -61,6 +65,7 @@ export async function findUltimoLoteImportado(companyId: string): Promise<LoteIm
     orderBy: { createdAt: "desc" },
     select: {
       id: true, createdAt: true, banco: true, periodo: true, count: true, bankAccountId: true,
+      archivoNombre: true, cuadro: true,
       bankAccount: { select: { banco: true, nombre: true, numeroCuenta: true, clabe: true } },
     },
   });
@@ -85,6 +90,8 @@ export async function findUltimoLoteImportado(companyId: string): Promise<LoteIm
     cuentaEtiqueta,
     borrables,
     conciliados: total - borrables,
+    tienePdf: batch.archivoNombre != null,
+    cuadro: batch.cuadro,
   };
 }
 
@@ -100,6 +107,7 @@ export async function listarLotesImportados(companyId: string, take = 10): Promi
     take,
     select: {
       id: true, createdAt: true, banco: true, periodo: true, count: true, bankAccountId: true,
+      archivoNombre: true, cuadro: true,
       bankAccount: { select: { banco: true, nombre: true, numeroCuenta: true, clabe: true } },
     },
   });
@@ -122,6 +130,8 @@ export async function listarLotesImportados(companyId: string, take = 10): Promi
           `${batch.bankAccount.banco} ${batch.bankAccount.nombre}` + (t ? ` (terminación ${t})` : ""),
         borrables,
         conciliados: total - borrables,
+        tienePdf: batch.archivoNombre != null,
+        cuadro: batch.cuadro,
       };
     })
   );
@@ -176,6 +186,8 @@ async function materializarClusterSinLote(companyId: string): Promise<LoteImport
       `${ultimo.bankAccount.banco} ${ultimo.bankAccount.nombre}` + (t ? ` (terminación ${t})` : ""),
     borrables,
     conciliados: total - borrables,
+    tienePdf: false,
+    cuadro: null,
   };
 }
 
