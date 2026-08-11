@@ -4,6 +4,12 @@ import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { derivarServicioDesdeCfdiSiAplica, extraerServicioCfdi } from "@/lib/automotriz/auto-servicio";
 import { extraerDatosVehiculoCfdi, tipoComprobanteDesdeCfdi } from "@/lib/automotriz/vin";
+import {
+  empresasPendientes,
+  guardarProgreso,
+  leerProgreso,
+  reiniciarProgreso,
+} from "@/lib/automotriz/backfill-progreso";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/servicio-backfill?companyId=…[&afterId=…]
@@ -41,7 +47,15 @@ async function handle(req: Request) {
   // con ejemplos de UUID por causa. Es la herramienta para cuando el drenado
   // reporta 0 derivadas sobre miles de candidatas: dice dónde se van.
   const diagnostico = url.searchParams.get("diagnostico") === "1";
+  // reiniciar=1: vuelve a barrer desde cero (tras cambiar reglas de extracción).
+  const reiniciar = url.searchParams.get("reiniciar") === "1";
   const startedAt = Date.now();
+
+  // Sin companyId explícito, el cron elige solo a quién le falta carga inicial:
+  // así una empresa que sube su e.firma el viernes termina de cargar sola.
+  const objetivo =
+    onlyCompanyId ?? (diagnostico ? null : (await empresasPendientes(prisma, "servicio", 1))[0] ?? null);
+  if (objetivo && reiniciar) await reiniciarProgreso(prisma, objetivo, "servicio");
 
   const where = {
     tipo: "INGRESO" as const,
@@ -49,10 +63,13 @@ async function handle(req: Request) {
     rawXml: { not: null },
     servicioVenta: null,
     company: { modules: { some: { modulo: "AUTOMOTRIZ" as ModuloApp, habilitado: true } } },
-    ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
+    ...(objetivo ? { companyId: objetivo } : {}),
   };
 
-  let lastId: string | undefined = url.searchParams.get("afterId") ?? undefined;
+  // El cursor viene del parámetro (operación manual) o de la base (automático).
+  const guardado = objetivo && !diagnostico ? await leerProgreso(prisma, objetivo, "servicio") : null;
+  let lastId: string | undefined =
+    url.searchParams.get("afterId") ?? (guardado && !guardado.completado ? (guardado.cursor ?? undefined) : undefined);
   let barridoCompleto = true;
   let scanned = 0;
   let derivadas = 0;
@@ -94,10 +111,23 @@ async function handle(req: Request) {
     if (page.length < PAGE) break;
   }
 
+  // Progreso durable: la próxima corrida (cron o manual) retoma sin que nadie
+  // tenga que acordarse del cursor.
+  if (objetivo && !diagnostico) {
+    await guardarProgreso(prisma, objetivo, "servicio", {
+      cursor: lastId ?? null,
+      procesados: scanned,
+      derivados: derivadas,
+      completado: barridoCompleto,
+    });
+  }
+
   const summary = {
     ok: true,
+    companyId: objetivo,
     scanned,
     derivadas,
+    completado: barridoCompleto,
     ...(diagnostico ? { diagnostico: true, razones, ejemplos } : {}),
     nextAfterId: !barridoCompleto ? (lastId ?? null) : null,
     elapsedMs: Date.now() - startedAt,

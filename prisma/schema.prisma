@@ -351,6 +351,7 @@ model Company {
   serviciosVenta     ServicioVenta[]
   ordenesServicio    OrdenServicio[]
   prospectos         Prospecto[]
+  backfillProgreso   BackfillProgreso[]
 }
 
 model CompanyMember {
@@ -5138,6 +5139,30 @@ model Prospecto {
 
   @@index([companyId, estado])
   @@index([companyId, proximaAccion])
+}
+
+// ─── Progreso de la carga inicial (onboarding) ───────────────────────────────
+// Los drenados históricos (refacciones, servicio) recorren TODO el archivo de
+// CFDIs con un cursor. Si el cursor vive en la consola del operador, la carga
+// inicial depende de que alguien la maneje a mano: la empresa que sube su
+// e.firma un viernes se queda a medias. Aquí el cursor es DURABLE, así que el
+// scheduler retoma solo hasta terminar, y la pantalla puede mostrar avance.
+model BackfillProgreso {
+  id        String   @id @default(cuid())
+  companyId String
+  /** Trabajo: "refacciones" | "servicio" (los que barren todo el archivo). */
+  job       String
+  /** Último Invoice.id procesado; null = aún no empieza. */
+  cursor    String?
+  procesados Int     @default(0)
+  /** Resultado acumulado del drenado (movimientos/ventas creadas). */
+  derivados  Int     @default(0)
+  completadoAt DateTime?
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, job])
 }
 
 // Configuración del vertical automotriz por empresa: defaults que los flujos
