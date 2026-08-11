@@ -16,7 +16,7 @@ import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
  *                     con su rol de construcción
  */
 
-const ROL = z.enum(["ADMIN", "TESORERIA", "RESIDENTE"]);
+const ROL = z.enum(["ADMIN", "TESORERIA", "RESIDENTE", "CONTABILIDAD"]);
 
 // Rol de construcción → MemberRole de plataforma. Los restringidos entran
 // como ACCOUNTANT (pueden escribir donde su allowlist lo permita, y quedan
@@ -25,6 +25,7 @@ const MEMBER_ROLE: Record<z.infer<typeof ROL>, "ADMIN" | "ACCOUNTANT"> = {
   ADMIN: "ADMIN",
   TESORERIA: "ACCOUNTANT",
   RESIDENTE: "ACCOUNTANT",
+  CONTABILIDAD: "ACCOUNTANT",
 };
 
 export const GET = withAuthz(async (req: Request) => {

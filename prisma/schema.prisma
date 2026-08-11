@@ -409,6 +409,7 @@ enum ConstruccionRol {
   ADMIN
   TESORERIA
   RESIDENTE
+  CONTABILIDAD
 }
 
 // ─── Despacho (multi-user organization) ─────────────────────────────────────
