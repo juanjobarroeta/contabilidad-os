@@ -350,6 +350,7 @@ model Company {
   refacciones        Refaccion[]
   serviciosVenta     ServicioVenta[]
   ordenesServicio    OrdenServicio[]
+  prospectos         Prospecto[]
 }
 
 model CompanyMember {
@@ -681,6 +682,7 @@ model Customer {
   pedidosVehiculo   PedidoVehiculo[]
   serviciosVenta    ServicioVenta[]
   ordenesServicio   OrdenServicio[]
+  prospectos        Prospecto[]
 
   @@unique([companyId, rfc])
 }
@@ -1435,6 +1437,7 @@ model Employee {
   pedidosVehiculo   PedidoVehiculo[] @relation("PedidoVehiculoVendedor")
   ordenesAsesor     OrdenServicio[]  @relation("OrdenServicioAsesor")
   ordenesTecnico    OrdenServicio[]  @relation("OrdenServicioTecnico")
+  prospectos        Prospecto[]      @relation("ProspectoVendedor")
 
   @@unique([companyId, rfc])
 }
@@ -4749,6 +4752,7 @@ model Vehiculo {
   expediente    VehiculoCfdi[]
   servicios     ServicioVenta[]
   ordenesServicio OrdenServicio[]
+  prospectos    Prospecto[]
 
   @@unique([companyId, vin])
   @@index([companyId, estado])
@@ -5042,12 +5046,77 @@ model PedidoVehiculo {
   facturadoAt DateTime?
   entregadoAt DateTime?
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  vehiculo Vehiculo  @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
-  cliente  Customer  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  vendedor Employee? @relation("PedidoVehiculoVendedor", fields: [vendedorId], references: [id])
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vehiculo  Vehiculo   @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  cliente   Customer   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  vendedor  Employee?  @relation("PedidoVehiculoVendedor", fields: [vendedorId], references: [id])
+  prospecto Prospecto?
 
   @@index([companyId, estado])
+}
+
+// ─── CRM de piso (fase 2): prospectos con pipeline y seguimiento ─────────────
+// El registro de guardia del piso de ventas: cada visita/llamada/lead entra
+// como prospecto y avanza NUEVO → CONTACTADO → CITA → DEMO → NEGOCIACION →
+// GANADO/PERDIDO. proximaAccion es el motor del seguimiento: las vencidas son
+// la lista de llamadas del vendedor (y del bot de WhatsApp después). Al ganar,
+// el prospecto liga el pedido (pipeline de venta) y el cliente canónico.
+enum ProspectoMedio {
+  PISO
+  TELEFONO
+  DIGITAL
+  REFERIDO
+  OTRO
+}
+
+enum ProspectoEstado {
+  NUEVO
+  CONTACTADO
+  CITA
+  DEMO
+  NEGOCIACION
+  GANADO
+  PERDIDO
+}
+
+model Prospecto {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombre   String
+  telefono String?
+  email    String?
+
+  medio  ProspectoMedio  @default(PISO)
+  estado ProspectoEstado @default(NUEVO)
+
+  /** Lo que busca, texto libre: "Frontier 2026 blanca, contado". */
+  interes    String?
+  /** Unidad concreta del inventario cuando la hay (aparta el interés real). */
+  vehiculoId String?
+  vendedorId String?
+
+  /** Siguiente seguimiento programado — vencida = llamada pendiente. */
+  proximaAccion DateTime?
+  proximaNota   String?
+  notas         String? @db.Text
+
+  clienteId     String? // Customer canónico cuando ya existe (o al ganar)
+  pedidoId      String? @unique // PedidoVehiculo cuando la venta arranca
+  perdidoMotivo String?
+  ganadoAt      DateTime?
+  perdidoAt     DateTime?
+
+  company  Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vehiculo Vehiculo?       @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  vendedor Employee?       @relation("ProspectoVendedor", fields: [vendedorId], references: [id], onDelete: SetNull)
+  cliente  Customer?       @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  pedido   PedidoVehiculo? @relation(fields: [pedidoId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, estado])
+  @@index([companyId, proximaAccion])
 }
 
 // Configuración del vertical automotriz por empresa: defaults que los flujos
