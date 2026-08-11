@@ -82,6 +82,10 @@ export interface ResultadoScore {
   dimensiones: DimensionScore[];
   /** Insumos ausentes que dejaron el score parcial. */
   cobertura: string[];
+  /** Flujo libre estimado por mes (null si no hay datos de gasto). Insumo del simulador de préstamo. */
+  flujoLibreMensual: number | null;
+  /** Pago mensual máximo recomendado (fracción del flujo libre según banda). */
+  pagoMensualMax: number | null;
 }
 
 const r0 = (n: number) => Math.round(n);
@@ -358,6 +362,12 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
       : promedioMensual;
   const limiteSugerido = Math.round((base * multiplo) / 1000) * 1000;
 
+  // Pago mensual máximo: razón de servicio de deuda por banda (A 40% del
+  // flujo libre, B 30%, C 20%, D 0). Insumo del simulador de amortización.
+  const theta = banda === "A" ? 0.4 : banda === "B" ? 0.3 : banda === "C" ? 0.2 : 0;
+  const pagoMensualMax =
+    flujoLibreMensual != null ? Math.round(flujoLibreMensual * theta) : null;
+
   return {
     score,
     banda,
@@ -365,5 +375,7 @@ export function calcularScoreCredito(insumos: InsumosCredito): ResultadoScore {
     provisional: cobertura.length > 0,
     dimensiones: dims,
     cobertura,
+    flujoLibreMensual: flujoLibreMensual != null ? Math.round(flujoLibreMensual) : null,
+    pagoMensualMax,
   };
 }

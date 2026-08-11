@@ -10,11 +10,12 @@
 // aquí sólo se captura la resolución humana (decisión + notas).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle, Banknote, ChevronLeft, Loader2, RefreshCw, ShieldAlert,
 } from "lucide-react";
 import { Card } from "@/components/ui";
+import { montoPorPago, tablaAmortizacion } from "@/lib/credito/amortizacion";
 
 interface UltimaEval {
   score: number;
@@ -46,11 +47,118 @@ interface Evaluacion {
   banda: string;
   limiteSugerido: number;
   provisional: boolean;
-  detalle: { dimensiones: Dimension[] };
+  detalle: { dimensiones: Dimension[]; flujoLibreMensual?: number | null; pagoMensualMax?: number | null };
   cobertura: string[];
   decision: string | null;
   notas: string | null;
   analisis: string | null;
+}
+
+/**
+ * Simulador de préstamo: parte de CUÁNTO PUEDE PAGAR el cliente al mes (del
+ * snapshot: fracción del flujo libre según banda) y con tasa + plazo deriva
+ * CUÁNTO PRESTARLE (valor presente de la anualidad) — con su tabla de
+ * amortización. Todo en vivo, matemática pura del lado del cliente.
+ */
+function SimuladorPrestamo({ pagoInicial }: { pagoInicial: number | null }) {
+  const [pago, setPago] = useState(pagoInicial != null ? String(Math.round(pagoInicial)) : "");
+  const [tasa, setTasa] = useState("36");
+  const [plazo, setPlazo] = useState("12");
+  const [verTabla, setVerTabla] = useState(false);
+
+  const pagoNum = Number(pago) || 0;
+  const tasaNum = (Number(tasa) || 0) / 100;
+  const plazoNum = Math.max(0, Math.round(Number(plazo) || 0));
+
+  const monto = useMemo(() => montoPorPago(pagoNum, tasaNum, plazoNum), [pagoNum, tasaNum, plazoNum]);
+  const tabla = useMemo(
+    () => (verTabla && monto > 0 ? tablaAmortizacion(monto, tasaNum, plazoNum) : []),
+    [verTabla, monto, tasaNum, plazoNum],
+  );
+  const interesTotal = useMemo(() => tabla.reduce((s, f) => s + f.interes, 0), [tabla]);
+
+  return (
+    <Card className="rounded-card border-cos-line p-5 shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[13px] font-semibold text-cos-ink">Simulador de préstamo</p>
+        <p className="text-[12px] text-cos-ink-faint">
+          del pago mensual que puede cubrir → cuánto prestarle (sistema francés)
+        </p>
+      </div>
+      {pagoInicial == null && (
+        <p className="mt-2 text-[12.5px] text-cos-amber-ink">
+          Sin flujo libre estimado en la evaluación — captura el pago mensual a mano.
+        </p>
+      )}
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <label className="block text-[12.5px] text-cos-ink-soft">
+          Pago mensual que puede cubrir
+          <input
+            type="number" min="0" step="500" value={pago}
+            onChange={(e) => setPago(e.target.value)}
+            className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 font-mono text-[13.5px] text-cos-ink outline-none"
+          />
+        </label>
+        <label className="block text-[12.5px] text-cos-ink-soft">
+          Tasa anual (%)
+          <input
+            type="number" min="0" step="1" value={tasa}
+            onChange={(e) => setTasa(e.target.value)}
+            className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 font-mono text-[13.5px] text-cos-ink outline-none"
+          />
+        </label>
+        <label className="block text-[12.5px] text-cos-ink-soft">
+          Plazo (meses)
+          <input
+            type="number" min="1" step="1" value={plazo}
+            onChange={(e) => setPlazo(e.target.value)}
+            className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-2 font-mono text-[13.5px] text-cos-ink outline-none"
+          />
+        </label>
+        <div className="rounded-control bg-cos-brand-tint px-3 py-2">
+          <p className="text-[11.5px] font-medium uppercase tracking-[0.02em] text-cos-brand-ink">Monto prestable</p>
+          <p className="font-mono text-[18px] font-semibold text-cos-brand-ink">{fmtMoney(monto)}</p>
+        </div>
+      </div>
+      {monto > 0 && (
+        <button
+          onClick={() => setVerTabla(!verTabla)}
+          className="mt-3 text-[13px] font-medium text-cos-brand-ink hover:underline"
+        >
+          {verTabla ? "Ocultar tabla de amortización" : "Ver tabla de amortización"}
+        </button>
+      )}
+      {verTabla && tabla.length > 0 && (
+        <div className="mt-2 max-h-[320px] overflow-y-auto rounded-control border border-cos-line">
+          <table className="w-full text-[12.5px]">
+            <thead className="sticky top-0 bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink-faint">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Mes</th>
+                <th className="px-3 py-2 text-right font-medium">Pago</th>
+                <th className="px-3 py-2 text-right font-medium">Interés</th>
+                <th className="px-3 py-2 text-right font-medium">Capital</th>
+                <th className="px-3 py-2 text-right font-medium">Saldo</th>
+              </tr>
+            </thead>
+            <tbody className="font-mono">
+              {tabla.map((f) => (
+                <tr key={f.mes} className="border-t border-cos-line-soft">
+                  <td className="px-3 py-1.5 text-cos-ink-soft">{f.mes}</td>
+                  <td className="px-3 py-1.5 text-right text-cos-ink">{fmtMoney(f.pago)}</td>
+                  <td className="px-3 py-1.5 text-right text-cos-ink-soft">{fmtMoney(f.interes)}</td>
+                  <td className="px-3 py-1.5 text-right text-cos-ink-soft">{fmtMoney(f.capital)}</td>
+                  <td className="px-3 py-1.5 text-right text-cos-ink-faint">{fmtMoney(f.saldo)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="border-t border-cos-line bg-cos-paper px-3 py-2 text-right text-[12px] text-cos-ink-soft">
+            Interés total del crédito: <span className="font-mono font-medium text-cos-ink">{fmtMoney(interesTotal)}</span>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
 }
 
 /** Markdown mínimo del memo: **negritas** y viñetas — sin librerías. */
@@ -328,6 +436,9 @@ export default function CreditosPage() {
                   )}
                 </Card>
               </div>
+
+              {/* Simulador: pago que puede cubrir → monto prestable + tabla */}
+              <SimuladorPrestamo pagoInicial={actual.detalle.pagoMensualMax ?? null} />
 
               {/* Memo de análisis (IA) — parte del snapshot */}
               {actual.analisis && (

@@ -106,7 +106,14 @@ export async function POST(req: Request) {
       limiteSugerido: resultado.limiteSugerido,
       provisional: resultado.provisional,
       // Snapshot íntegro: desglose + insumos tal como se evaluaron hoy.
-      detalle: JSON.parse(JSON.stringify({ dimensiones: resultado.dimensiones, insumos })),
+      detalle: JSON.parse(
+        JSON.stringify({
+          dimensiones: resultado.dimensiones,
+          insumos,
+          flujoLibreMensual: resultado.flujoLibreMensual,
+          pagoMensualMax: resultado.pagoMensualMax,
+        }),
+      ),
       cobertura: resultado.cobertura,
       analisis,
     },
