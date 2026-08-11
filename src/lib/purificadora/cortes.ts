@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { categoriaGastoSchema, descripcionGasto } from "@/lib/purificadora/categorias";
 
 export const corteInclude = {
   rutas: { include: { ruta: { select: { id: true, nombre: true } } } },
@@ -53,24 +54,21 @@ const lineasSchema = {
   gastos: z
     .array(
       z.object({
-        categoria: z.enum([
-          "AGUA_CRUDA",
-          "ELECTRICIDAD",
-          "FILTROS_INSUMOS",
-          "MANTENIMIENTO",
-          "SUELDOS",
-          "RENTA",
-          "COMBUSTIBLE",
-          "OTRO",
-        ]),
-        descripcion: z.string().trim().min(1).max(200),
+        categoria: categoriaGastoSchema,
+        // Opcional: sin texto, el gasto se nombra por su categoría (el chofer
+        // suele anotar sólo "gasolina $200"). Antes exigir descripción hacía
+        // que el renglón se perdiera en silencio.
+        descripcion: z.string().trim().max(200).default(""),
         monto: z.number().positive(),
         formaPago: z
           .enum(["EFECTIVO", "TRANSFERENCIA", "TARJETA", "CREDITO"])
           .default("EFECTIVO"),
       })
     )
-    .default([]),
+    .default([])
+    .transform((gastos) =>
+      gastos.map((g) => ({ ...g, descripcion: descripcionGasto(g.descripcion, g.categoria) }))
+    ),
   cortesiasGarrafones: z.number().int().min(0).default(0),
   cortesiasImporte: z.number().min(0).default(0),
   notas: z.string().trim().max(500).nullish(),

@@ -5,17 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { registrarBitacora } from "@/lib/audit";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { postGastoPurificadora } from "@/lib/accounting/postings";
-
-const CATEGORIAS = [
-  "AGUA_CRUDA",
-  "ELECTRICIDAD",
-  "FILTROS_INSUMOS",
-  "MANTENIMIENTO",
-  "SUELDOS",
-  "RENTA",
-  "COMBUSTIBLE",
-  "OTRO",
-] as const;
+import { categoriaGastoSchema, esCategoriaGasto } from "@/lib/purificadora/categorias";
 
 // GET /api/purificadora/gastos?companyId=xxx&from=&to=&categoria=&take=&skip=
 export const GET = withAuthz(async (req: Request) => {
@@ -29,8 +19,8 @@ export const GET = withAuthz(async (req: Request) => {
   const where: Prisma.PurifGastoWhereInput = { companyId };
 
   const categoria = searchParams.get("categoria");
-  if (categoria && (CATEGORIAS as readonly string[]).includes(categoria)) {
-    where.categoria = categoria as (typeof CATEGORIAS)[number];
+  if (esCategoriaGasto(categoria)) {
+    where.categoria = categoria;
   }
 
   const from = searchParams.get("from") ? new Date(searchParams.get("from")!) : null;
@@ -58,7 +48,7 @@ export const GET = withAuthz(async (req: Request) => {
 const createSchema = z.object({
   companyId: z.string().min(1),
   fecha: z.string().datetime().optional(),
-  categoria: z.enum(CATEGORIAS),
+  categoria: categoriaGastoSchema,
   descripcion: z.string().trim().min(1).max(200),
   monto: z.number().positive(),
   formaPago: z.enum(["EFECTIVO", "TRANSFERENCIA", "TARJETA", "CREDITO"]).default("EFECTIVO"),
