@@ -3,6 +3,12 @@ import type { InvoiceType, ModuloApp } from "@prisma/client";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { derivarRefaccionesDesdeCfdiSiAplica } from "@/lib/automotriz/auto-refaccion";
+import {
+  empresasPendientes,
+  guardarProgreso,
+  leerProgreso,
+  reiniciarProgreso,
+} from "@/lib/automotriz/backfill-progreso";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/refacciones-backfill?companyId=…[&afterId=…]
@@ -36,17 +42,25 @@ async function handle(req: Request) {
 
   const url = new URL(req.url);
   const onlyCompanyId = url.searchParams.get("companyId");
+  const reiniciar = url.searchParams.get("reiniciar") === "1";
   const startedAt = Date.now();
+
+  // Sin companyId, el cron elige solo a quién le falta la carga inicial: el
+  // drenado histórico deja de depender de que alguien encadene cursores.
+  const objetivo = onlyCompanyId ?? (await empresasPendientes(prisma, "refacciones", 1))[0] ?? null;
+  if (objetivo && reiniciar) await reiniciarProgreso(prisma, objetivo, "refacciones");
 
   const where = {
     tipo: { in: ["INGRESO", "EGRESO"] as InvoiceType[] },
     status: { not: "CANCELLED" as const },
     rawXml: { contains: 'NoIdentificacion="' },
     company: { modules: { some: { modulo: "AUTOMOTRIZ" as ModuloApp, habilitado: true } } },
-    ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
+    ...(objetivo ? { companyId: objetivo } : {}),
   };
 
-  let lastId: string | undefined = url.searchParams.get("afterId") ?? undefined;
+  const guardado = objetivo ? await leerProgreso(prisma, objetivo, "refacciones") : null;
+  let lastId: string | undefined =
+    url.searchParams.get("afterId") ?? (guardado && !guardado.completado ? (guardado.cursor ?? undefined) : undefined);
   let barridoCompleto = true;
   let scanned = 0;
   let partes = 0;
@@ -84,11 +98,22 @@ async function handle(req: Request) {
     if (page.length < PAGE) break;
   }
 
+  if (objetivo) {
+    await guardarProgreso(prisma, objetivo, "refacciones", {
+      cursor: lastId ?? null,
+      procesados: scanned,
+      derivados: movimientos,
+      completado: barridoCompleto,
+    });
+  }
+
   const summary = {
     ok: true,
+    companyId: objetivo,
     scanned,
     partes,
     movimientos,
+    completado: barridoCompleto,
     nextAfterId: !barridoCompleto ? (lastId ?? null) : null,
     elapsedMs: Date.now() - startedAt,
   };

@@ -88,6 +88,12 @@ const JOBS: Job[] = [
   // Costo financiero del plan piso por unidad-mes (local, sin SAT). Diario:
   // sólo acumula meses vencidos, así que la mayoría de corridas son no-op.
   { name: "interes-piso", everyMs: 24 * HOUR, firstDelayMs: 40 * MIN },
+  // Carga inicial del vertical automotriz: ambos drenan TODO el archivo con
+  // cursor durable (BackfillProgreso) y, sin companyId, eligen solos a la
+  // empresa que aún no termina — una agencia nueva queda cargada sin que nadie
+  // encadene llamadas. Al terminar el barrido, cada tick es un no-op barato.
+  { name: "refacciones-backfill", everyMs: 30 * MIN, firstDelayMs: 55 * MIN },
+  { name: "servicio-backfill", everyMs: 30 * MIN, firstDelayMs: 60 * MIN },
 ];
 
 const FLAG = Symbol.for("contabilidad-os.cron-scheduler");
