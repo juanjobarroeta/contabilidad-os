@@ -6,17 +6,21 @@
 // («actividades de promoción y desarrollo de negocios»). Sin esta clasificación
 // ese dinero no aparecía en NINGUNA línea del estado de resultados.
 //
-// Dos hallazgos que obligan a separarlos, y que la clave del SAT NO distingue —
-// las dos viven bajo 80141600/80141601:
+// Dos conceptos distintos que la clave del SAT NO distingue — ambos viven bajo
+// 80141600/80141601:
 //
-//   • BONOS del distribuidor (flotillas, incremental por volumen): ingreso del
-//     FRONT END. Se gana por vender unidades, no por operar el taller, así que
-//     va arriba de la absorción: contarlo como back end inflaría la absorción
-//     con dinero que no produce el taller.
-//   • USO DE INSTALACIONES (UDI) que pagan las aseguradoras —GNP, Quálitas,
-//     INBURSA— por meter sus siniestros a hojalatería y pintura: ingreso del
-//     BACK END. Lo produce la capacidad del taller, así que SÍ entra en la
-//     absorción.
+//   • BONOS del distribuidor (flotillas, incremental por volumen): se ganan
+//     vendiendo unidades.
+//   • UDI que pagan las aseguradoras —GNP, Quálitas, INBURSA—: pese al nombre
+//     «uso de instalaciones», es la CONTRAPRESTACIÓN POR COLOCAR PÓLIZAS, o
+//     sea comisión de F&I. No la produce el taller.
+//
+// Los dos son ingreso del FRONT END y NINGUNO entra en la absorción. El nombre
+// del UDI es una trampa: suena a que la aseguradora paga por ocupar
+// hojalatería, y meterlo en la absorción diría que el taller se paga solo
+// cuando en realidad lo pagó la venta de seguros — justo la lectura que la
+// absorción existe para evitar. Si algún día aparece un ingreso que SÍ produzca
+// el taller, ése sí va en la absorción; éstos no.
 //
 // Se clasifica por DESCRIPCIÓN, no por clave, porque la clave mezcla las dos —
 // y lo que no empata cae en «Otros ingresos» a la vista, en vez de repartirse
@@ -31,9 +35,8 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 /** Bonos y apoyos del distribuidor: se ganan vendiendo unidades. */
 const RE_BONO = /\bbono|apoyo|incentiv/i;
 /**
- * Uso de instalaciones: lo que paga la aseguradora por ocupar el taller de
- * hojalatería. «UDI» como palabra suelta — no dentro de otra (p. ej. «UDIS» de
- * indexación financiera sí empata, pero en este contexto es el mismo concepto).
+ * UDI: lo que paga la aseguradora por las pólizas colocadas. «UDI» como palabra
+ * suelta — no dentro de otra («cuidado», «estudio» no cuentan).
  */
 const RE_UDI = /\budis?\b|uso\s+de\s+instalaci/i;
 
@@ -42,8 +45,6 @@ export type BucketIngreso = "bonos" | "uso_instalaciones" | "otros";
 export interface OtroIngreso {
   clave: BucketIngreso;
   nombre: string;
-  /** true = lo produce el taller; cuenta para la absorción. */
-  backEnd: boolean;
   importe: number;
   conceptos: number;
 }
@@ -51,14 +52,11 @@ export interface OtroIngreso {
 export interface OtrosIngresosResultado {
   lineas: OtroIngreso[];
   total: number;
-  /** Parte que sí es back end (uso de instalaciones): entra a la absorción. */
-  backEnd: number;
 }
 
 export function clasificarIngreso(descripcion: string | null | undefined): BucketIngreso {
   const d = descripcion ?? "";
-  // El orden importa: «BONO por uso de instalaciones» sería un bono, pero en la
-  // práctica el UDI es el concepto más específico y se nombra primero.
+  // El orden importa: el UDI es el concepto más específico y se nombra primero.
   if (RE_UDI.test(d)) return "uso_instalaciones";
   if (RE_BONO.test(d)) return "bonos";
   return "otros";
@@ -66,7 +64,7 @@ export function clasificarIngreso(descripcion: string | null | undefined): Bucke
 
 const NOMBRES: Record<BucketIngreso, string> = {
   bonos: "Bonos y apoyos del distribuidor",
-  uso_instalaciones: "Uso de instalaciones (aseguradoras)",
+  uso_instalaciones: "Comisiones de seguros (UDI)",
   otros: "Otros ingresos",
 };
 
@@ -100,18 +98,12 @@ export async function otrosIngresos(
     const clave = clasificarIngreso(f.descripcion);
     // Nota de crédito emitida: resta del ingreso, igual que en el resto del motor.
     const signo = f.tipoSat === "E" ? -1 : 1;
-    const linea =
-      acc.get(clave) ??
-      { clave, nombre: NOMBRES[clave], backEnd: clave === "uso_instalaciones", importe: 0, conceptos: 0 };
+    const linea = acc.get(clave) ?? { clave, nombre: NOMBRES[clave], importe: 0, conceptos: 0 };
     linea.importe = r2(linea.importe + signo * f.importe);
     linea.conceptos++;
     acc.set(clave, linea);
   }
 
   const lineas = [...acc.values()].sort((a, b) => b.importe - a.importe);
-  return {
-    lineas,
-    total: r2(lineas.reduce((s, l) => s + l.importe, 0)),
-    backEnd: r2(lineas.filter((l) => l.backEnd).reduce((s, l) => s + l.importe, 0)),
-  };
+  return { lineas, total: r2(lineas.reduce((s, l) => s + l.importe, 0)) };
 }

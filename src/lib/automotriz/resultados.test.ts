@@ -83,26 +83,26 @@ describe("armar() — absorción de servicio", () => {
     expect(r.absorcion.porcentaje).toBeNull();
   });
 
-  it("el uso de instalaciones SÍ cuenta; el bono del distribuidor NO", () => {
+  it("ni el bono ni el UDI entran: los dos son front end", () => {
     const r = armar(
       base({
         nomina: [nom("ADMIN", 100_000)],
         otros: {
           total: 150_000,
-          backEnd: 50_000,
           lineas: [
-            { clave: "uso_instalaciones", nombre: "Uso de instalaciones (aseguradoras)", backEnd: true, importe: 50_000, conceptos: 3 },
-            { clave: "bonos", nombre: "Bonos y apoyos del distribuidor", backEnd: false, importe: 100_000, conceptos: 7 },
+            { clave: "uso_instalaciones", nombre: "Comisiones de seguros (UDI)", importe: 50_000, conceptos: 3 },
+            { clave: "bonos", nombre: "Bonos y apoyos del distribuidor", importe: 100_000, conceptos: 7 },
           ],
         },
       })
     );
-    // Los dos suman a la utilidad bruta: no tienen costo directo.
+    // Los dos suman a la utilidad bruta: no tienen costo directo…
     expect(r.totales.utilidadBruta).toBe(150_000);
-    // Pero sólo el que produce el taller entra a la absorción. Si el bono
-    // entrara, la absorción diría 150% cuando el taller no produjo nada.
-    expect(r.absorcion.utilidadFixedOps).toBe(50_000);
-    expect(r.absorcion.porcentaje).toBe(50);
+    // …pero NINGUNO al back end. El UDI engaña por el nombre («uso de
+    // instalaciones») y en realidad es comisión por colocar pólizas: si
+    // entrara, la absorción diría 50% de un taller que no produjo nada.
+    expect(r.absorcion.utilidadFixedOps).toBe(0);
+    expect(r.absorcion.porcentaje).toBe(0);
   });
 
   it("la venta de unidades NO entra en la absorción — sólo el back end", () => {

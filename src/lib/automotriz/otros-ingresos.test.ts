@@ -11,7 +11,7 @@ describe("clasificarIngreso()", () => {
     expect(clasificarIngreso("Apoyo publicitario 2026")).toBe("bonos");
   });
 
-  it("uso de instalaciones que pagan las aseguradoras: back end", () => {
+  it("UDI de las aseguradoras: comisión por pólizas", () => {
     expect(clasificarIngreso("Pago de UDI DICIEMBRE 2025 GNP, Quálitas e INBURSA Proceso N")).toBe(
       "uso_instalaciones"
     );
