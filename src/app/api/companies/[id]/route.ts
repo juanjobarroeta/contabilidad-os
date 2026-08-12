@@ -220,6 +220,11 @@ export async function PATCH(req: Request, { params }: Params) {
     // envío de solicitudes al SAT) en vez de esperar al siguiente tick.
     kickCron("sat-backfill");
     kickCron("declaraciones-backfill", 90_000);
+    // Cancelaciones: el XML del SAT no trae estatus, así que el historial que
+    // acaba de entrar necesita la pasada de metadata y la de UUID. Ver el
+    // mismo par en POST /api/companies (alta con e.firma).
+    kickCron("sat-cancel-sync", 10 * 60_000);
+    kickCron("sat-vigencia-sync", 15 * 60_000);
   }
 
   return NextResponse.json({ ok: true, facturapi, syntage });

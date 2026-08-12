@@ -4,6 +4,7 @@ import {
   interpretarCancelaciones,
   mesesBacklogCancelaciones,
   mesesVentanaCancelable,
+  ordenEmpresasPorAntiguedad,
 } from "./sat-cancelaciones";
 
 describe("mesesVentanaCancelable", () => {
@@ -104,5 +105,50 @@ describe("interpretarCancelaciones", () => {
   it("los vigentes no generan cancelaciones", () => {
     const r = interpretarCancelaciones([{ uuid: "AAAA-1111", estatus: "1" }], owned);
     expect(r.toCancel).toEqual([]);
+  });
+});
+
+describe("ordenEmpresasPorAntiguedad", () => {
+  const e = (id: string) => ({ id });
+
+  it("las NUNCA consultadas van primero — la empresa recién onboardeada no se queda sin turno", () => {
+    const empresas = [e("vieja"), e("nueva"), e("media")];
+    const ultima = new Map<string, Date | null>([
+      ["vieja", new Date("2026-08-01T00:00:00Z")],
+      ["media", new Date("2026-08-10T00:00:00Z")],
+      // "nueva" no aparece: jamás se le consultó metadata.
+    ]);
+    expect(ordenEmpresasPorAntiguedad(empresas, ultima).map((x) => x.id)).toEqual([
+      "nueva", "vieja", "media",
+    ]);
+  });
+
+  it("entre consultadas, primero la más antigua (rotación entre corridas)", () => {
+    const empresas = [e("b"), e("a")];
+    const ultima = new Map<string, Date | null>([
+      ["a", new Date("2026-08-11T00:00:00Z")],
+      ["b", new Date("2026-08-09T00:00:00Z")],
+    ]);
+    expect(ordenEmpresasPorAntiguedad(empresas, ultima).map((x) => x.id)).toEqual(["b", "a"]);
+  });
+
+  it("un valor null explícito cuenta como nunca consultada", () => {
+    const ultima = new Map<string, Date | null>([
+      ["x", new Date("2026-08-01T00:00:00Z")],
+      ["y", null],
+    ]);
+    expect(ordenEmpresasPorAntiguedad([e("x"), e("y")], ultima).map((v) => v.id)).toEqual(["y", "x"]);
+  });
+
+  it("empate → orden determinista por id (recorrido reproducible)", () => {
+    const t = new Date("2026-08-10T00:00:00Z");
+    const ultima = new Map<string, Date | null>([["b", t], ["a", t]]);
+    expect(ordenEmpresasPorAntiguedad([e("b"), e("a")], ultima).map((v) => v.id)).toEqual(["a", "b"]);
+  });
+
+  it("no muta el arreglo original", () => {
+    const empresas = [e("z"), e("a")];
+    ordenEmpresasPorAntiguedad(empresas, new Map());
+    expect(empresas.map((v) => v.id)).toEqual(["z", "a"]);
   });
 });

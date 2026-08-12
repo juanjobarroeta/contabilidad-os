@@ -588,6 +588,15 @@ export async function POST(req: Request) {
     // Acuses mensuales: espera a que el aprovisionamiento de Syntage asiente
     // (la extracción de declaraciones es asíncrona) y arranca el backfill.
     kickCron("declaraciones-backfill", 90_000);
+    // Estatus de cancelación: los paquetes XML del SAT NO traen el estatus, así
+    // que sin esto una empresa nueva carga como vigentes años de facturas
+    // canceladas. Se disparan con retraso para que el backfill ya haya
+    // importado los primeros meses (ambos son gap-driven: si aún no hay nada
+    // que revisar, el tick es un no-op barato).
+    kickCron("sat-cancel-sync", 10 * 60_000);
+    // Vía por UUID: sin cuota del SAT y sin ventana de meses — es la que
+    // alcanza el historial completo, incluidas las cancelaciones viejas.
+    kickCron("sat-vigencia-sync", 15 * 60_000);
   }
 
   // declaraciones: qué pasó con los acuses subidos en el onboarding. Antes los
