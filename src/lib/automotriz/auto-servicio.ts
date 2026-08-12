@@ -14,6 +14,16 @@ type Db = PrismaClient | Prisma.TransactionClient;
 const SERVICIO_TEXTO_RE =
   /\b(SERVICIO|MANTENIMIENTO|REPARACI[OÓ]N|MANO DE OBRA|LAVADO|AFINACI[OÓ]N|ALINEACI[OÓ]N|BALANCEO|DIAGN[OÓ]STICO|HOJALATER[IÍ]A|PINTURA)\b/i;
 
+// ANTICIPOS: el SAT los factura con clave 84111506 y la descripción canónica
+// «Anticipo del bien o servicio» (guía de anticipos, Anexo 20). Esa frase
+// contiene la palabra SERVICIO, así que el filtro de texto los tomaba por
+// órdenes de taller: en Margom un anticipo de $278,000 por una camioneta
+// aparecía como la orden de servicio más cara del año. Un anticipo no es venta
+// de taller ni refacción — es un cobro a cuenta que la factura final aplica
+// (TipoRelacion 07).
+const CLAVE_ANTICIPO = "84111506";
+const ANTICIPO_TEXTO_RE = /\bANTICIPO\b/i;
+
 const CONCEPTO_RE =
   /<(?:[\w-]+:)?Concepto\b([^>]*?)(\/>|>([\s\S]*?)<\/(?:[\w-]+:)?Concepto>)/gi;
 
@@ -52,6 +62,10 @@ export function extraerServicioCfdi(rawXml: string): DatosServicioCfdi {
     const importe = Number(attr(attrs, "Importe") ?? "0") || 0;
 
     for (const v of vinsDesdeTexto(descripcion)) vins.add(v);
+
+    // Un anticipo no es mano de obra ni refacción: se descarta antes de
+    // clasificar (si no, «Anticipo del bien o SERVICIO» entra como taller).
+    if (clave === CLAVE_ANTICIPO || (descripcion != null && ANTICIPO_TEXTO_RE.test(descripcion))) continue;
 
     const esLineaServicio = clave.startsWith("7818") || (descripcion != null && SERVICIO_TEXTO_RE.test(descripcion));
     if (esLineaServicio) {

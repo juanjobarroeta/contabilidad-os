@@ -62,8 +62,25 @@ export interface PerfilContacto {
     repPendienteFacturas: number;
     /** Notas de crédito de este lado (restan a lo facturado). */
     totalNotasCredito: number;
+    /** Suma de anticipos: incluida en totalFacturado, pero también dentro de
+     *  la factura final — lo que el contador debe conciliar. */
+    totalAnticipos: number;
   };
   facturas: FacturaPerfil[];
+  /**
+   * Anticipos (clave 84111506): cobros a cuenta que la factura final vuelve a
+   * incluir. Contarlos como facturación aparte duplica el ingreso y deja un
+   * saldo fantasma por el mismo monto — se reportan por separado.
+   */
+  anticipos: Array<{
+    id: string;
+    uuid: string | null;
+    serie: string | null;
+    folio: string | null;
+    facturapiId: string | null;
+    fecha: Date;
+    total: number;
+  }>;
   /** Notas de crédito (tipoSat "E") de este lado: restan a lo facturado. */
   notasCredito: Array<{
     id: string;
@@ -157,13 +174,36 @@ export async function perfilContacto(
       metodoPago: true,
       tipoSat: true,
       facturapiId: true,
+      // Prefiltro barato para detectar anticipos (clave 84111506); el rawXml
+      // no se trae completo — sólo se pregunta si contiene la clave.
+      rawXml: true,
       conciliacionDetalles: { select: { montoAsignado: true } },
     },
     orderBy: { fecha: "desc" },
   });
   // Las notas de crédito viajan como INGRESO/EGRESO con tipoSat "E": contarlas
   // junto a las facturas inflaba «facturado» y su saldo. Van aparte y restan.
+  // Anticipo: CFDI cuyo ÚNICO concepto es la clave 84111506 del SAT. Se marca
+  // sin sacarlo de `facturas` (fiscalmente es un ingreso timbrado y así lo ve
+  // el motor de IVA); lo que cambia es que la pantalla lo señala y el contador
+  // ve el monto que está contado dos veces: aquí y dentro de la factura final.
+  const esAnticipo = (raw: string | null) =>
+    raw != null &&
+    raw.includes('ClaveProdServ="84111506"') &&
+    (raw.match(/<(?:[\w-]+:)?Concepto\b/gi) ?? []).length === 1;
+
   const facturasDb = todasDb.filter((f) => (f.tipoSat ?? "I") !== "E");
+  const anticipos = facturasDb
+    .filter((f) => esAnticipo(f.rawXml))
+    .map((f) => ({
+      id: f.id,
+      uuid: f.uuid,
+      serie: f.serie,
+      folio: f.folio,
+      facturapiId: f.facturapiId,
+      fecha: f.fecha,
+      total: f.total,
+    }));
   const notasCredito = todasDb
     .filter((f) => (f.tipoSat ?? "I") === "E")
     .map((f) => ({
@@ -310,8 +350,10 @@ export async function perfilContacto(
       repPendienteMonto: r2(conRepPendiente.reduce((s, f) => s + f.repPendiente, 0)),
       repPendienteFacturas: conRepPendiente.length,
       totalNotasCredito: r2(notasCredito.reduce((s, n) => s + n.total, 0)),
+      totalAnticipos: r2(anticipos.reduce((s, a) => s + a.total, 0)),
     },
     facturas,
+    anticipos,
     notasCredito,
     unidades,
     rentabilidad: {

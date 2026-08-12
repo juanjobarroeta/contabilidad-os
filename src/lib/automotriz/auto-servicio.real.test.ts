@@ -39,6 +39,34 @@ const REAL = `<?xml version="1.0" encoding="utf-8"?>
   </cfdi:Conceptos>
 </cfdi:Comprobante>`;
 
+// Anticipo REAL de Margom: clave 84111506 y la descripción canónica del SAT.
+// La frase contiene «SERVICIO», así que el filtro de texto lo tomaba por orden
+// de taller: $278,000 de enganche de una camioneta aparecían como la orden más
+// cara del año en el perfil del cliente.
+const ANTICIPO = `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I" Total="278000.00">
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1.000000" ClaveUnidad="ACT" Descripcion="ANTICIPO DEL BIEN O SERVICIO" ValorUnitario="239655.17" ObjetoImp="02" Importe="239655.17"/>
+  </cfdi:Conceptos>
+</cfdi:Comprobante>`;
+
+describe("extraerServicioCfdi() — anticipos", () => {
+  it("un anticipo NO es orden de taller (aunque su descripción diga SERVICIO)", () => {
+    const d = extraerServicioCfdi(ANTICIPO);
+    expect(d.esServicio).toBe(false);
+    expect(d.manoObra).toBe(0);
+  });
+
+  it("un anticipo mezclado con mano de obra real no infla la orden", () => {
+    const mixto = ANTICIPO.replace(
+      "</cfdi:Conceptos>",
+      `<cfdi:Concepto ClaveProdServ="78181500" Cantidad="1" Descripcion="Mano de obra" Importe="1500.00"/></cfdi:Conceptos>`
+    );
+    const d = extraerServicioCfdi(mixto);
+    expect(d.esServicio).toBe(true);
+    expect(d.manoObra).toBe(1500); // sólo la mano de obra, sin los 239,655.17
+  });
+});
+
 describe("extraerServicioCfdi() sobre un CFDI REAL de taller", () => {
   it("lo reconoce como servicio y separa mano de obra de refacciones", () => {
     const d = extraerServicioCfdi(REAL);
