@@ -75,19 +75,24 @@ async function handle(req: Request) {
     onlyCompanyId ?? (diagnostico ? null : (await empresasPendientes(prisma, "servicio", 1))[0] ?? null);
   if (objetivo && (reiniciar || recalcular)) await reiniciarProgreso(prisma, objetivo, "servicio");
 
-  // El borrado deja `OrdenServicio.servicioVentaId` en null (onDelete: SetNull)
-  // y la re-derivación vuelve a ligar la orden con su nueva venta, así que el
-  // taller no pierde el vínculo con su documento operativo.
+  // El borrado va POR PÁGINA, no de golpe al principio: si se borran las 38,996
+  // ventas de servicio antes de empezar, el taller reporta cero durante toda la
+  // re-derivación y la pantalla no dice que el dato está a medio reconstruir.
+  // Un tablero a medias miente peor que uno viejo, porque parece terminado.
+  //
+  // Borrar deja `OrdenServicio.servicioVentaId` en null (onDelete: SetNull) y la
+  // re-derivación vuelve a ligar la orden con su nueva venta, así que el taller
+  // no pierde el vínculo con su documento operativo.
   let borradas = 0;
-  if (objetivo && recalcular && !diagnostico) {
-    borradas = (await prisma.servicioVenta.deleteMany({ where: { companyId: objetivo } })).count;
-  }
 
   const where = {
     tipo: "INGRESO" as const,
     status: { not: "CANCELLED" as const },
     rawXml: { not: null },
-    servicioVenta: null,
+    // Al recalcular hay que MIRAR las que ya derivaron — son justamente las que
+    // se van a rehacer. Con el filtro puesto, el barrido las excluiría y el
+    // borrado por página no tendría nada que rederivar.
+    ...(recalcular ? {} : { servicioVenta: null }),
     company: { modules: { some: { modulo: "AUTOMOTRIZ" as ModuloApp, habilitado: true } } },
     ...(objetivo ? { companyId: objetivo } : {}),
   };
@@ -114,6 +119,12 @@ async function handle(req: Request) {
       take: PAGE,
     });
     if (page.length === 0) break;
+
+    if (recalcular && !diagnostico) {
+      borradas += (
+        await prisma.servicioVenta.deleteMany({ where: { invoiceId: { in: page.map((p) => p.id) } } })
+      ).count;
+    }
 
     for (const inv of page) {
       scanned++;
