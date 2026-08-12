@@ -68,17 +68,18 @@ async function handle(req: Request) {
   const objetivo = onlyCompanyId ?? (await empresasPendientes(prisma, "refacciones", 1))[0] ?? null;
   if (objetivo && (reiniciar || recalcular)) await reiniciarProgreso(prisma, objetivo, "refacciones");
 
+  // El borrado va POR PÁGINA, no de golpe al principio.
+  //
+  // Borrar los 143,932 movimientos de una empresa antes de empezar deja el
+  // kardex casi vacío durante toda la re-derivación — que en Margom son más de
+  // veinte corridas de cuatro minutos. Durante esa hora larga el estado de
+  // resultados reporta refacciones al 2% de su costo real y NADA en la pantalla
+  // dice que el dato está a medio reconstruir. Un tablero a medias miente peor
+  // que uno viejo, porque parece terminado.
+  //
+  // Borrando la página justo antes de rederivarla, lo único inconsistente son
+  // las ~400 facturas en vuelo, y sólo por los segundos que tarda ese lote.
   let borrados = 0;
-  if (objetivo && recalcular) {
-    borrados = (
-      await prisma.refaccionMovimiento.deleteMany({
-        where: {
-          refaccion: { companyId: objetivo },
-          tipo: { in: ["ENTRADA_COMPRA", "SALIDA_VENTA"] },
-        },
-      })
-    ).count;
-  }
 
   const where = {
     tipo: { in: ["INGRESO", "EGRESO"] as InvoiceType[] },
@@ -108,6 +109,19 @@ async function handle(req: Request) {
       take: PAGE,
     });
     if (page.length === 0) break;
+
+    // Los AJUSTE se respetan siempre: son el conteo físico capturado a mano y
+    // no se pueden re-derivar de ningún CFDI.
+    if (recalcular) {
+      borrados += (
+        await prisma.refaccionMovimiento.deleteMany({
+          where: {
+            invoiceId: { in: page.map((p) => p.id) },
+            tipo: { in: ["ENTRADA_COMPRA", "SALIDA_VENTA"] },
+          },
+        })
+      ).count;
+    }
 
     for (const inv of page) {
       scanned++;
