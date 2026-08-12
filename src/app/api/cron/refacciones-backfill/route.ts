@@ -43,12 +43,42 @@ async function handle(req: Request) {
   const url = new URL(req.url);
   const onlyCompanyId = url.searchParams.get("companyId");
   const reiniciar = url.searchParams.get("reiniciar") === "1";
+  // recalcular=1: BORRA los movimientos derivados antes de volver a barrer.
+  //
+  // `reiniciar` sólo mueve el cursor y el kardex es idempotente por
+  // @@unique([refaccionId, invoiceId, tipo]), así que re-barrer devuelve
+  // «movimientos: 0» — el catálogo se actualiza (partes) pero el kardex viejo
+  // queda intacto. Sin esto, arreglar la ClaveUnidad no cambia un solo
+  // movimiento ya escrito.
+  //
+  // Los AJUSTE NO se borran: son el conteo físico que alguien capturó a mano y
+  // no se pueden volver a derivar de ningún CFDI. Sólo se rehace lo que nació
+  // de una factura.
+  const recalcular = url.searchParams.get("recalcular") === "1";
+  if (recalcular && !onlyCompanyId) {
+    return NextResponse.json(
+      { error: "recalcular=1 requiere companyId explícito (borra los movimientos derivados del kardex)" },
+      { status: 400 }
+    );
+  }
   const startedAt = Date.now();
 
   // Sin companyId, el cron elige solo a quién le falta la carga inicial: el
   // drenado histórico deja de depender de que alguien encadene cursores.
   const objetivo = onlyCompanyId ?? (await empresasPendientes(prisma, "refacciones", 1))[0] ?? null;
-  if (objetivo && reiniciar) await reiniciarProgreso(prisma, objetivo, "refacciones");
+  if (objetivo && (reiniciar || recalcular)) await reiniciarProgreso(prisma, objetivo, "refacciones");
+
+  let borrados = 0;
+  if (objetivo && recalcular) {
+    borrados = (
+      await prisma.refaccionMovimiento.deleteMany({
+        where: {
+          refaccion: { companyId: objetivo },
+          tipo: { in: ["ENTRADA_COMPRA", "SALIDA_VENTA"] },
+        },
+      })
+    ).count;
+  }
 
   const where = {
     tipo: { in: ["INGRESO", "EGRESO"] as InvoiceType[] },
@@ -113,6 +143,7 @@ async function handle(req: Request) {
     scanned,
     partes,
     movimientos,
+    ...(recalcular ? { borrados } : {}),
     completado: barridoCompleto,
     nextAfterId: !barridoCompleto ? (lastId ?? null) : null,
     elapsedMs: Date.now() - startedAt,
