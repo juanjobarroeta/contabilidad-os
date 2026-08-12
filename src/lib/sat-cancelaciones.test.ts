@@ -4,6 +4,7 @@ import {
   interpretarCancelaciones,
   mesesBacklogCancelaciones,
   mesesVentanaCancelable,
+  mesesConMetadataAgotada,
   ordenEmpresasPorAntiguedad,
 } from "./sat-cancelaciones";
 
@@ -150,5 +151,44 @@ describe("ordenEmpresasPorAntiguedad", () => {
     const empresas = [e("z"), e("a")];
     ordenEmpresasPorAntiguedad(empresas, new Map());
     expect(empresas.map((v) => v.id)).toEqual(["z", "a"]);
+  });
+});
+
+describe("mesesConMetadataAgotada", () => {
+  it("marca el mes cuando un tipo llegó al tope de fallos", () => {
+    const agotados = mesesConMetadataAgotada([
+      { year: 2026, month: 3, tipo: "METADATA_EMITIDOS", fallos: 3 },
+    ]);
+    expect(agotados.has("2026-3")).toBe(true);
+  });
+
+  it("un mes con fallos por DEBAJO del tope sigue reintentándose", () => {
+    const agotados = mesesConMetadataAgotada([
+      { year: 2026, month: 4, tipo: "METADATA_EMITIDOS", fallos: 2 },
+    ]);
+    expect(agotados.has("2026-4")).toBe(false);
+  });
+
+  it("agotar UN lado agota el mes: sin ambos nunca queda completo", () => {
+    // Sólo recibidos agotado — pedir emitidos otra vez quemaría cuota en vano.
+    const agotados = mesesConMetadataAgotada([
+      { year: 2026, month: 5, tipo: "METADATA_RECIBIDOS", fallos: 5 },
+      { year: 2026, month: 5, tipo: "METADATA_EMITIDOS", fallos: 1 },
+    ]);
+    expect(agotados.has("2026-5")).toBe(true);
+  });
+
+  it("los fallos del XML no cuentan: sólo frenamos la metadata", () => {
+    const agotados = mesesConMetadataAgotada([
+      { year: 2026, month: 6, tipo: "EMITIDOS", fallos: 20 },
+      { year: 2026, month: 6, tipo: "RECIBIDOS", fallos: 20 },
+    ]);
+    expect(agotados.size).toBe(0);
+  });
+
+  it("el tope es configurable", () => {
+    const f = [{ year: 2026, month: 7, tipo: "METADATA_EMITIDOS", fallos: 2 }];
+    expect(mesesConMetadataAgotada(f, 2).has("2026-7")).toBe(true);
+    expect(mesesConMetadataAgotada(f, 5).has("2026-7")).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { syncCancelacionesPeriodo } from "@/lib/sat-sync";
 import {
   mesesBacklogCancelaciones,
+  mesesConMetadataAgotada,
   mesesVentanaCancelable,
   ordenEmpresasPorAntiguedad,
 } from "@/lib/sat-cancelaciones";
@@ -77,7 +78,31 @@ async function periodosHistoricosPendientes(
     },
     select: { year: true, month: true, tipo: true },
   });
-  return mesesBacklogCancelaciones(terminados, ventanaRodante);
+  const backlog = mesesBacklogCancelaciones(terminados, ventanaRodante);
+  const agotados = await periodosMetadataAgotada(companyId);
+  return backlog.filter((p) => !agotados.has(`${p.year}-${p.month}`));
+}
+
+/**
+ * Periodos cuya metadata ya agotó sus intentos. Una solicitud FAILED no se
+ * reutiliza, así que cada corrida mandaría solicitudes NUEVAS al SAT — y la
+ * cuota por parámetro es VITALICIA. Sin este freno, un periodo que siempre
+ * falla se reintenta cada 4 h para siempre y termina quemando de por vida los
+ * intentos de ese mes (visto en producción: 23 fallos, cero éxitos).
+ */
+async function periodosMetadataAgotada(companyId: string): Promise<Set<string>> {
+  const fallidos = await prisma.satSyncRequest.groupBy({
+    by: ["year", "month", "tipo"],
+    where: {
+      companyId,
+      status: "FAILED",
+      tipo: { in: ["METADATA_EMITIDOS", "METADATA_RECIBIDOS"] },
+    },
+    _count: { _all: true },
+  });
+  return mesesConMetadataAgotada(
+    fallidos.map((f) => ({ year: f.year, month: f.month, tipo: f.tipo, fallos: f._count._all })),
+  );
 }
 
 function isAuthorized(req: Request): boolean {
@@ -170,6 +195,8 @@ async function handle(req: Request) {
   let periodosPendientes = 0;
   let histPeriodos = 0;
   let histCompanies = 0;
+  // Meses que se dejaron de pedir por metadata agotada: los cubre la vía UUID.
+  let periodosAgotados = 0;
   const errors: Array<{ companyId: string; rfc: string; error: string }> = [];
 
   // ── FASE A: ventana legal rodante (o el backlog dirigido con historico=1) ──
@@ -191,6 +218,15 @@ async function handle(req: Request) {
         periodosPendientes += Math.max(0, backlog.length - delaEmpresa.length);
         histPeriodos += delaEmpresa.length;
         if (delaEmpresa.length > 0) histCompanies++;
+      } else {
+        // También en la ventana rodante: un mes que ya agotó sus intentos no
+        // se vuelve a pedir — cada reintento consume cuota VITALICIA del SAT.
+        const agotados = await periodosMetadataAgotada(company.id);
+        if (agotados.size > 0) {
+          const antes = delaEmpresa.length;
+          delaEmpresa = delaEmpresa.filter((p) => !agotados.has(`${p.year}-${p.month}`));
+          periodosAgotados += antes - delaEmpresa.length;
+        }
       }
       for (const { year, month } of delaEmpresa) {
         const res = await syncCancelacionesPeriodo(company.id, year, month, dryRun);
@@ -251,6 +287,9 @@ async function handle(req: Request) {
     // La fase A se cortó por presupuesto: la siguiente corrida retoma por las
     // empresas más atrasadas (el orden es por antigüedad de consulta).
     faseATruncada,
+    // Meses que YA NO se piden por metadata (agotaron sus intentos). No es una
+    // pérdida de cobertura: los cubre sat-vigencia-sync por UUID, sin cuota.
+    periodosAgotados,
     ...(dryRun ? { wouldCancelDetected: totalWouldCancel } : { cancelledDetected: totalCancelled }),
     // Renglones de metadata leídos en los paquetes descargados. 0 con CFDIs en
     // los periodos = el parser no está leyendo el paquete (formato), no "no

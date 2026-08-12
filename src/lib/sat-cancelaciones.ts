@@ -63,6 +63,43 @@ export interface RequestTerminado {
   tipo: string; // EMITIDOS | RECIBIDOS | METADATA_EMITIDOS | METADATA_RECIBIDOS
 }
 
+/** Intentos FALLIDOS de metadata por periodo (uno por cada tipo/mes). */
+export interface IntentoFallido {
+  year: number;
+  month: number;
+  tipo: string;
+  fallos: number;
+}
+
+/**
+ * Tope de intentos por periodo antes de rendirse con la metadata. Cada intento
+ * son solicitudes NUEVAS al SAT (una solicitud FAILED no se reutiliza), y la
+ * cuota del SAT para un mismo parámetro es VITALICIA: reintentar en bucle un
+ * periodo que siempre falla no lo arregla, sólo consume para siempre los
+ * intentos que quedan. Tres es suficiente para descartar un fallo transitorio.
+ */
+export const MAX_INTENTOS_METADATA = 3;
+
+/**
+ * Periodos donde la metadata ya agotó sus intentos: hay que DEJAR de pedirla
+ * y cubrirlos por la vía de UUID (sin cuota). Devuelve claves "year-month".
+ *
+ * Si un lado del mes (emitidos o recibidos) se agotó, el mes entero se excluye:
+ * sin ambos lados nunca podrá quedar completo, así que seguir pidiendo el otro
+ * sólo quemaría más cuota a cambio de nada. PURA.
+ */
+export function mesesConMetadataAgotada(
+  fallidos: IntentoFallido[],
+  maxIntentos = MAX_INTENTOS_METADATA,
+): Set<string> {
+  const out = new Set<string>();
+  for (const f of fallidos) {
+    if (!f.tipo.startsWith("METADATA_")) continue;
+    if (f.fallos >= maxIntentos) out.add(`${f.year}-${f.month}`);
+  }
+  return out;
+}
+
 /**
  * Backlog de verificación de cancelaciones, con gate POR MES: un mes es
  * elegible cuando su XML está COMPLETO (EMITIDOS y RECIBIDOS en FINISHED —
