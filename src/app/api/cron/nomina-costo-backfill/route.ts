@@ -21,6 +21,10 @@ import {
 //
 // Cursor durable en BackfillProgreso: sin companyId elige solo a la empresa que
 // aún no termina, y el scheduler lo drena sin que nadie encadene llamadas.
+//
+// recalcular=1 borra lo ya derivado de esa empresa y lo vuelve a leer del XML
+// —para cuando cambia la extracción (p. ej. un atributo que antes se leía del
+// nodo equivocado)— respetando las líneas corregidas a mano (lineaManual).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const dynamic = "force-dynamic";
@@ -44,10 +48,18 @@ async function handle(req: Request) {
   const url = new URL(req.url);
   const onlyCompanyId = url.searchParams.get("companyId");
   const reiniciar = url.searchParams.get("reiniciar") === "1";
+  const recalcular = url.searchParams.get("recalcular") === "1";
   const startedAt = Date.now();
 
   const objetivo = onlyCompanyId ?? (await empresasPendientes(prisma, "nomina", 1))[0] ?? null;
-  if (objetivo && reiniciar) await reiniciarProgreso(prisma, objetivo, "nomina");
+  if (objetivo && (reiniciar || recalcular)) await reiniciarProgreso(prisma, objetivo, "nomina");
+  let borrados = 0;
+  if (objetivo && recalcular) {
+    const { count } = await prisma.nominaCosto.deleteMany({
+      where: { companyId: objetivo, lineaManual: false },
+    });
+    borrados = count;
+  }
 
   const where = {
     tipo: "NOMINA" as const,
@@ -109,6 +121,7 @@ async function handle(req: Request) {
     companyId: objetivo,
     scanned,
     derivados,
+    ...(recalcular ? { borrados } : {}),
     completado: barridoCompleto,
     nextAfterId: !barridoCompleto ? (lastId ?? null) : null,
     elapsedMs: Date.now() - startedAt,

@@ -59,6 +59,9 @@ export interface DatosNominaCfdi {
   esNomina: boolean;
   puesto: string | null;
   sucursal: string | null;
+  /** Nombre y RFC del receptor: el empleado que cobró el recibo. */
+  empleado: string | null;
+  rfcEmpleado: string | null;
   percepciones: number;
   /** Salario base de cotización diario (SalarioBaseCotApor del complemento). */
   sbcDiario: number | null;
@@ -72,7 +75,14 @@ export interface DatosNominaCfdi {
  * comprobante es el neto depositado, que subestima el costo real.
  */
 export function extraerNominaCfdi(rawXml: string, subtotalFallback = 0): DatosNominaCfdi {
-  const receptor = rawXml.match(/<(?:[\w-]+:)?Receptor\b([^>]*)>/i)?.[1] ?? "";
+  // Un CFDI de nómina trae DOS nodos «Receptor» con el mismo nombre local:
+  // el del comprobante (Rfc/Nombre del empleado) y el del complemento
+  // (Puesto/Departamento/SalarioBaseCotApor). Tomar el primero a ciegas deja
+  // el puesto vacío y manda toda la nómina a ADMIN, así que se separan por los
+  // atributos que sólo uno de los dos tiene.
+  const receptores = [...rawXml.matchAll(/<(?:[\w-]+:)?Receptor\b([^>]*?)\/?>/gi)].map((m) => m[1] ?? "");
+  const receptor = receptores.find((r) => /\bPuesto=|\bSalarioBaseCotApor=|\bNumEmpleado=/i.test(r)) ?? "";
+  const receptorComprobante = receptores.find((r) => /\bNombre=/i.test(r) && !/\bPuesto=/i.test(r)) ?? receptor;
   const percepcionesNodo = rawXml.match(/<(?:[\w-]+:)?Percepciones\b([^>]*)>/i)?.[1] ?? "";
   const esNomina = /<(?:[\w-]+:)?Nomina\b/i.test(rawXml);
 
@@ -88,6 +98,8 @@ export function extraerNominaCfdi(rawXml: string, subtotalFallback = 0): DatosNo
     esNomina,
     puesto: attrDe(receptor, "Puesto"),
     sucursal: attrDe(receptor, "Departamento"),
+    empleado: attrDe(receptorComprobante, "Nombre") ?? attrDe(receptor, "Nombre"),
+    rfcEmpleado: attrDe(receptorComprobante, "Rfc") ?? attrDe(receptor, "Rfc"),
     percepciones: Math.round(percepciones * 100) / 100,
     sbcDiario: Number.isFinite(sbc) && sbc > 0 ? sbc : null,
     diasPagados: Number.isFinite(dias) && dias > 0 ? dias : null,
@@ -144,6 +156,8 @@ export async function derivarNominaCostoSiAplica(db: Db, args: DerivarNominaArgs
       fecha: args.fecha,
       sucursal: datos.sucursal?.trim() || null,
       puesto: datos.puesto?.trim() || null,
+      empleado: datos.empleado?.trim() || null,
+      rfcEmpleado: datos.rfcEmpleado?.trim().toUpperCase() || null,
       linea: clasificarPuesto(datos.puesto),
       percepciones: datos.percepciones,
       cuotasPatronales: estimarCuotasPatronales(datos, args.fecha),

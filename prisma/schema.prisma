@@ -5167,6 +5167,14 @@ model NominaCosto {
 
   /** Atributo Departamento del CFDI: en la práctica, la sucursal/plaza. */
   sucursal String?
+  /**
+   * Nombre y RFC del receptor del recibo: el empleado. Se copian al renglón
+   * para poder desglosar la nómina por persona sin releer 16 mil XMLs — y
+   * porque el nombre del CFDI es el dato auditable del periodo (si alguien se
+   * casa y cambia de apellidos, cada recibo conserva el suyo).
+   */
+  empleado    String?
+  rfcEmpleado String?
   /** Atributo Puesto del CFDI, tal cual viene (auditable). */
   puesto   String?
   /** Clasificación derivada del puesto; editable cuando la regla se equivoca. */
@@ -5193,6 +5201,7 @@ model NominaCosto {
 
   @@index([companyId, fecha])
   @@index([companyId, linea])
+  @@index([companyId, rfcEmpleado])
 }
 
 // ─── Progreso de la carga inicial (onboarding) ───────────────────────────────

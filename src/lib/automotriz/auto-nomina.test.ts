@@ -38,7 +38,10 @@ describe("clasificarPuesto() — puestos reales de la agencia", () => {
   });
 });
 
+// Recibo con los DOS nodos «Receptor» que trae un CFDI de nómina real: el del
+// comprobante (empleado) y el del complemento (puesto y base de cotización).
 const RECIBO = `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="N" SubTotal="12000.00" Total="10250.00">
+  <cfdi:Receptor Rfc="gome850312hd4" Nombre="GONZALEZ MENDEZ JOSE" UsoCFDI="CN01"/>
   <cfdi:Complemento>
     <nomina12:Nomina xmlns:nomina12="http://www.sat.gob.mx/nomina12" Version="1.2" TipoNomina="O" FechaPago="2026-07-15" NumDiasPagados="15">
       <nomina12:Receptor Curp="XAXX010101HDFRRR00" NumSeguridadSocial="12345678901" TipoContrato="01" TipoRegimen="02" NumEmpleado="42" Departamento="TEHUACAN" Puesto="TECNICO" RiesgoPuesto="2" PeriodicidadPago="04" SalarioBaseCotApor="400.00" SalarioDiarioIntegrado="420.00"/>
@@ -51,6 +54,11 @@ describe("extraerNominaCfdi()", () => {
   it("lee puesto, sucursal y percepciones BRUTAS (no el neto depositado)", () => {
     const d = extraerNominaCfdi(RECIBO, 12000);
     expect(d).toMatchObject({ esNomina: true, puesto: "TECNICO", sucursal: "TEHUACAN" });
+    // El puesto vive en el Receptor del COMPLEMENTO y el nombre en el del
+    // COMPROBANTE: si se lee el primer «Receptor» a ciegas, el puesto queda
+    // vacío y toda la nómina se clasifica como ADMIN.
+    expect(d.empleado).toBe("GONZALEZ MENDEZ JOSE");
+    expect(d.rfcEmpleado).toBe("gome850312hd4");
     expect(d.percepciones).toBe(12000); // gravado + exento, no el Total de 10,250
     // La base para estimar el costo patronal SÍ viene en el recibo.
     expect(d.sbcDiario).toBe(400);
@@ -76,7 +84,7 @@ describe("estimarCuotasPatronales()", () => {
   });
 
   it("sin SBC en el recibo no inventa un costo", () => {
-    const sinSbc = { esNomina: true, puesto: "TECNICO", sucursal: null, percepciones: 1000, sbcDiario: null, diasPagados: 15, riesgoPuesto: "1" };
+    const sinSbc = { esNomina: true, puesto: "TECNICO", sucursal: null, empleado: null, rfcEmpleado: null, percepciones: 1000, sbcDiario: null, diasPagados: 15, riesgoPuesto: "1" };
     expect(estimarCuotasPatronales(sinSbc, new Date("2026-07-15T00:00:00Z"))).toBe(0);
   });
 });
@@ -106,6 +114,7 @@ describe("derivarNominaCostoSiAplica()", () => {
     ).toBe(true);
     expect(db._filas[0]).toMatchObject({
       invoiceId: "n1", sucursal: "TEHUACAN", puesto: "TECNICO", linea: "TALLER", percepciones: 12000,
+      empleado: "GONZALEZ MENDEZ JOSE", rfcEmpleado: "GOME850312HD4",
     });
     expect(
       await derivarNominaCostoSiAplica(db as never, { ...base, invoiceId: "n1", tipo: "NOMINA", rawXml: RECIBO })
