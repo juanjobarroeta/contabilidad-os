@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { checklistDeclaracion } from "@/lib/fiscal/checklist-declaracion";
+import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/automotriz/fiscal?companyId=…&year=2026&month=7
@@ -35,10 +36,17 @@ export const GET = withAuthz(async (req: Request) => {
 
   // El checklist ya corre el motor por dentro para sus banderas; la corrida
   // extra trae el desglose completo. Paralelo para no sumar latencia.
-  const [pos, checklist] = await Promise.all([
+  const [pos, checklist, retenciones] = await Promise.all([
     computeTaxPosition(companyId, year, month),
     checklistDeclaracion(companyId, year, month, hoy),
+    retencionesDelPeriodo(companyId, year, month),
   ]);
+
+  // Lo que realmente sale del banco el día 17: impuesto propio (IVA + ISR
+  // provisional) MÁS las retenciones, que no son de la empresa pero las entera
+  // ella. Verlos separados y sumados evita las dos sorpresas clásicas: creer
+  // que sólo se debe el IVA, o contar la retención como si fuera gasto propio.
+  const totalSat = Math.round((Math.max(pos.iva.pagar, 0) + Math.max(pos.isr.isrPagar ?? 0, 0) + retenciones.aEnterar) * 100) / 100;
 
   return NextResponse.json({
     periodo: pos.periodo,
@@ -49,6 +57,8 @@ export const GET = withAuthz(async (req: Request) => {
     vencida: checklist.vencida,
     iva: pos.iva,
     isr: pos.isr,
+    retenciones,
+    totalSat,
     efos: pos.efos ?? null,
     advertencias: pos.advertencias,
     checklist: { items: checklist.items, resumen: checklist.resumen },

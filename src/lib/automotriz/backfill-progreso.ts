@@ -10,7 +10,7 @@
 
 import type { PrismaClient } from "@prisma/client";
 
-export type BackfillJob = "refacciones" | "servicio";
+export type BackfillJob = "refacciones" | "servicio" | "nomina";
 
 export interface ProgresoActual {
   cursor: string | null;

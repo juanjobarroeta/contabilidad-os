@@ -98,6 +98,9 @@ const JOBS: Job[] = [
   // encadene llamadas. Al terminar el barrido, cada tick es un no-op barato.
   { name: "refacciones-backfill", everyMs: 30 * MIN, firstDelayMs: 55 * MIN },
   { name: "servicio-backfill", everyMs: 30 * MIN, firstDelayMs: 60 * MIN },
+  // Costo de nómina por línea de negocio: sin él, el taller reporta ingreso
+  // sin costo y su margen es una ficción.
+  { name: "nomina-costo-backfill", everyMs: 30 * MIN, firstDelayMs: 65 * MIN },
 ];
 
 const FLAG = Symbol.for("contabilidad-os.cron-scheduler");

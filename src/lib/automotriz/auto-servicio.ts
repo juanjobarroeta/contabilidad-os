@@ -14,6 +14,24 @@ type Db = PrismaClient | Prisma.TransactionClient;
 const SERVICIO_TEXTO_RE =
   /\b(SERVICIO|MANTENIMIENTO|REPARACI[OÓ]N|MANO DE OBRA|LAVADO|AFINACI[OÓ]N|ALINEACI[OÓ]N|BALANCEO|DIAGN[OÓ]STICO|HOJALATER[IÍ]A|PINTURA)\b/i;
 
+// ANTICIPOS: el SAT los factura con clave 84111506 y la descripción canónica
+// «Anticipo del bien o servicio» (guía de anticipos, Anexo 20). Esa frase
+// contiene la palabra SERVICIO, así que el filtro de texto los tomaba por
+// órdenes de taller: en Margom un anticipo de $278,000 por una camioneta
+// aparecía como la orden de servicio más cara del año. Un anticipo no es venta
+// de taller ni refacción — es un cobro a cuenta que la factura final aplica
+// (TipoRelacion 07).
+const CLAVE_ANTICIPO = "84111506";
+const ANTICIPO_TEXTO_RE = /\bANTICIPO\b/i;
+
+// Descripciones que NO dicen qué se hizo: nombrar la orden con ellas deja al
+// taller lleno de renglones «mano de obra». En los CFDIs reales conviven una
+// línea genérica (a veces de $0.01, de relleno) con las que sí describen el
+// trabajo — «instalacion de balatas delanteras», «mantenimiento de sistema de
+// urea». La orden se nombra con esas.
+const DESCRIPCION_GENERICA_RE =
+  /^\s*(mano de obra|m\.?\s*de\s*obra|servicio|servicios|mantenimiento|reparaci[oó]n|otros?)\s*$/i;
+
 const CONCEPTO_RE =
   /<(?:[\w-]+:)?Concepto\b([^>]*?)(\/>|>([\s\S]*?)<\/(?:[\w-]+:)?Concepto>)/gi;
 
@@ -40,9 +58,9 @@ export function extraerServicioCfdi(rawXml: string): DatosServicioCfdi {
 
   let manoObra = 0;
   let refacciones = 0;
-  let concepto: string | null = null;
   const vins = new Set<string>();
   let tieneServicio = false;
+  const lineasServicio: Array<{ descripcion: string; importe: number }> = [];
 
   for (const m of rawXml.matchAll(CONCEPTO_RE)) {
     const attrs = m[1] ?? "";
@@ -53,18 +71,49 @@ export function extraerServicioCfdi(rawXml: string): DatosServicioCfdi {
 
     for (const v of vinsDesdeTexto(descripcion)) vins.add(v);
 
+    // Un anticipo no es mano de obra ni refacción: se descarta antes de
+    // clasificar (si no, «Anticipo del bien o SERVICIO» entra como taller).
+    if (clave === CLAVE_ANTICIPO || (descripcion != null && ANTICIPO_TEXTO_RE.test(descripcion))) continue;
+
     const esLineaServicio = clave.startsWith("7818") || (descripcion != null && SERVICIO_TEXTO_RE.test(descripcion));
     if (esLineaServicio) {
       tieneServicio = true;
       manoObra += importe;
-      if (!concepto && descripcion) concepto = descripcion;
+      if (descripcion) lineasServicio.push({ descripcion: descripcion.trim(), importe });
     } else if (noIdent) {
       refacciones += importe;
     }
   }
 
   const r2 = (n: number) => Math.round(n * 100) / 100;
-  return { esServicio: tieneServicio, manoObra: r2(manoObra), refacciones: r2(refacciones), concepto, vins: [...vins] };
+  return {
+    esServicio: tieneServicio,
+    manoObra: r2(manoObra),
+    refacciones: r2(refacciones),
+    concepto: nombrarOrden(lineasServicio),
+    vins: [...vins],
+  };
+}
+
+/**
+ * Nombre legible de la orden: las dos líneas de servicio más caras que SÍ
+ * describen el trabajo. Con la regla anterior (primera línea) las órdenes se
+ * llamaban «mano de obra» — y en los CFDIs de Margom esa línea llega a valer
+ * $0.01, mientras el trabajo real («instalacion de balatas delanteras») queda
+ * escondido. Si todas son genéricas, se conserva la primera para no dejarla
+ * sin nombre.
+ */
+function nombrarOrden(lineas: Array<{ descripcion: string; importe: number }>): string | null {
+  if (lineas.length === 0) return null;
+  const descriptivas = lineas
+    .filter((l) => !DESCRIPCION_GENERICA_RE.test(l.descripcion))
+    .sort((a, b) => b.importe - a.importe);
+  if (descriptivas.length === 0) return lineas[0].descripcion.slice(0, 200);
+  return descriptivas
+    .slice(0, 2)
+    .map((l) => l.descripcion)
+    .join(" + ")
+    .slice(0, 200);
 }
 
 export interface DerivarServicioArgs {

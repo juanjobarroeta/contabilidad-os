@@ -169,6 +169,7 @@ export async function importCfdiFromXml(opts: {
     rawXml: xml,
     clienteId: tipo === "INGRESO" ? customerId : null,
     total: cfdi.total,
+    subtotal: cfdi.subtotal,
   });
 
   // Complemento de pago links (DoctoRelacionado), same as SAT import.
