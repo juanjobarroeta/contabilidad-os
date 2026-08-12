@@ -12,6 +12,10 @@ CREATE TABLE "NominaCosto" (
     "puesto" TEXT,
     "linea" "LineaNegocio" NOT NULL,
     "percepciones" DOUBLE PRECISION NOT NULL,
+    "cuotasPatronales" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "sbcDiario" DOUBLE PRECISION,
+    "diasPagados" INTEGER,
+    "riesgoPuesto" TEXT,
     "lineaManual" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "NominaCosto_pkey" PRIMARY KEY ("id")

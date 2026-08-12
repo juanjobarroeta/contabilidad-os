@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { clasificarPuesto, derivarNominaCostoSiAplica, extraerNominaCfdi } from "./auto-nomina";
+import {
+  clasificarPuesto,
+  derivarNominaCostoSiAplica,
+  estimarCuotasPatronales,
+  extraerNominaCfdi,
+} from "./auto-nomina";
 
 // Puestos REALES del roster de Margom (los que salieron del archivo de nómina).
 describe("clasificarPuesto() — puestos reales de la agencia", () => {
@@ -35,7 +40,7 @@ describe("clasificarPuesto() — puestos reales de la agencia", () => {
 
 const RECIBO = `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="N" SubTotal="12000.00" Total="10250.00">
   <cfdi:Complemento>
-    <nomina12:Nomina xmlns:nomina12="http://www.sat.gob.mx/nomina12" Version="1.2" TipoNomina="O" FechaPago="2026-07-15">
+    <nomina12:Nomina xmlns:nomina12="http://www.sat.gob.mx/nomina12" Version="1.2" TipoNomina="O" FechaPago="2026-07-15" NumDiasPagados="15">
       <nomina12:Receptor Curp="XAXX010101HDFRRR00" NumSeguridadSocial="12345678901" TipoContrato="01" TipoRegimen="02" NumEmpleado="42" Departamento="TEHUACAN" Puesto="TECNICO" RiesgoPuesto="2" PeriodicidadPago="04" SalarioBaseCotApor="400.00" SalarioDiarioIntegrado="420.00"/>
       <nomina12:Percepciones TotalSueldos="11000.00" TotalGravado="10000.00" TotalExento="2000.00"/>
     </nomina12:Nomina>
@@ -47,11 +52,32 @@ describe("extraerNominaCfdi()", () => {
     const d = extraerNominaCfdi(RECIBO, 12000);
     expect(d).toMatchObject({ esNomina: true, puesto: "TECNICO", sucursal: "TEHUACAN" });
     expect(d.percepciones).toBe(12000); // gravado + exento, no el Total de 10,250
+    // La base para estimar el costo patronal SÍ viene en el recibo.
+    expect(d.sbcDiario).toBe(400);
+    expect(d.diasPagados).toBe(15);
+    expect(d.riesgoPuesto).toBe("2");
   });
 
   it("sin totales en el complemento cae al SubTotal del comprobante", () => {
     const sinTotales = RECIBO.replace(/<nomina12:Percepciones[^>]*\/>/, "");
     expect(extraerNominaCfdi(sinTotales, 9500).percepciones).toBe(9500);
+  });
+});
+
+describe("estimarCuotasPatronales()", () => {
+  it("reconstruye el costo patronal que el CFDI NO declara (IMSS + 5% INFONAVIT)", () => {
+    const d = extraerNominaCfdi(RECIBO, 12000);
+    const cuotas = estimarCuotasPatronales(d, new Date("2026-07-15T00:00:00Z"));
+    // SBC 400 × 15 días = 6,000 de base. El patronal ronda 25-30% de la base;
+    // el INFONAVIT solo ya son 300. Se acota el rango en vez de fijar el
+    // centavo: las tasas cambian por ejercicio (CEAV es progresiva).
+    expect(cuotas).toBeGreaterThan(1000);
+    expect(cuotas).toBeLessThan(2500);
+  });
+
+  it("sin SBC en el recibo no inventa un costo", () => {
+    const sinSbc = { esNomina: true, puesto: "TECNICO", sucursal: null, percepciones: 1000, sbcDiario: null, diasPagados: 15, riesgoPuesto: "1" };
+    expect(estimarCuotasPatronales(sinSbc, new Date("2026-07-15T00:00:00Z"))).toBe(0);
   });
 });
 

@@ -76,20 +76,25 @@ export const GET = withAuthz(async (req: Request) => {
     prisma.nominaCosto.groupBy({
       by: ["linea"],
       where: { companyId, fecha: { gte: desde, lt: hasta } },
-      _sum: { percepciones: true },
+      _sum: { percepciones: true, cuotasPatronales: true },
       _count: { _all: true },
     }),
     // Y por sucursal: el Departamento del CFDI de nómina es la plaza.
     prisma.nominaCosto.groupBy({
       by: ["sucursal"],
       where: { companyId, fecha: { gte: desde, lt: hasta } },
-      _sum: { percepciones: true },
+      _sum: { percepciones: true, cuotasPatronales: true },
       orderBy: { _sum: { percepciones: "desc" } },
     }),
   ]);
 
-  const nominaDe = (linea: string) =>
-    r2(nomina.find((n) => n.linea === linea)?._sum.percepciones ?? 0);
+  // Costo patronal = percepciones + cuotas patronales estimadas (IMSS/RCV +
+  // 5% INFONAVIT). El CFDI no declara las cuotas, pero sí el SBC, así que el
+  // costo real se reconstruye en vez de subestimarse ~25-30%.
+  const nominaDe = (linea: string) => {
+    const n = nomina.find((x) => x.linea === linea);
+    return r2((n?._sum.percepciones ?? 0) + (n?._sum.cuotasPatronales ?? 0));
+  };
 
   // ── Unidades: nuevas y seminuevas, con su utilidad real por VIN ───────────
   const porTipo = (tipo: "NUEVO" | "SEMINUEVO") => {
@@ -222,21 +227,28 @@ export const GET = withAuthz(async (req: Request) => {
       { clave: "nomina_admin", nombre: "Nómina de administración", monto: nominaAdmin },
     ],
     nomina: {
-      total: r2(nomina.reduce((s, n) => s + (n._sum.percepciones ?? 0), 0)),
+      percepciones: r2(nomina.reduce((s, n) => s + (n._sum.percepciones ?? 0), 0)),
+      cuotasPatronales: r2(nomina.reduce((s, n) => s + (n._sum.cuotasPatronales ?? 0), 0)),
+      total: r2(
+        nomina.reduce((s, n) => s + (n._sum.percepciones ?? 0) + (n._sum.cuotasPatronales ?? 0), 0)
+      ),
       recibos: nomina.reduce((s, n) => s + n._count._all, 0),
       porLinea: nomina.map((n) => ({
         linea: n.linea,
-        monto: r2(n._sum.percepciones ?? 0),
+        percepciones: r2(n._sum.percepciones ?? 0),
+        cuotasPatronales: r2(n._sum.cuotasPatronales ?? 0),
+        monto: r2((n._sum.percepciones ?? 0) + (n._sum.cuotasPatronales ?? 0)),
         recibos: n._count._all,
       })),
       porSucursal: nominaPorSucursal.map((s) => ({
         sucursal: s.sucursal ?? "(sin plaza)",
-        monto: r2(s._sum.percepciones ?? 0),
+        monto: r2((s._sum.percepciones ?? 0) + (s._sum.cuotasPatronales ?? 0)),
       })),
     },
     porMes: meses,
     notas: [
-      "El costo de la mano de obra es la nómina de quienes producen el servicio (técnicos, lavadores, asesores), clasificada desde el Puesto del CFDI de nómina. No incluye cuotas patronales (IMSS/INFONAVIT), así que el costo real es mayor.",
+      "El costo de la mano de obra es la nómina de quienes producen el servicio (técnicos, lavadores, asesores), clasificada desde el Puesto del CFDI de nómina.",
+      "Las cuotas patronales (IMSS/RCV + 5% INFONAVIT) NO vienen en el CFDI — sólo la cuota obrera. Se estiman con el SBC y los días de cada recibo; la liquidación real la emite el IMSS por SUA y puede diferir. El ISN estatal no está incluido.",
       "El costo de refacciones es estimado con el último costo conocido de cada parte.",
       "Las unidades sin costo de compra (anteriores al archivo de 5 años del SAT) quedan fuera del margen y se reportan aparte.",
       "Vista de operación derivada de CFDIs — el estado de resultados fiscal sale del ledger en ContabilidadOS.",

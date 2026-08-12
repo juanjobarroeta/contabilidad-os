@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { LineaNegocio, Prisma, PrismaClient } from "@prisma/client";
+import { calcularImss } from "@/lib/nomina/imss";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -59,6 +60,10 @@ export interface DatosNominaCfdi {
   puesto: string | null;
   sucursal: string | null;
   percepciones: number;
+  /** Salario base de cotización diario (SalarioBaseCotApor del complemento). */
+  sbcDiario: number | null;
+  diasPagados: number | null;
+  riesgoPuesto: string | null;
 }
 
 /**
@@ -75,12 +80,41 @@ export function extraerNominaCfdi(rawXml: string, subtotalFallback = 0): DatosNo
   const exento = Number(attrDe(percepcionesNodo, "TotalExento") ?? "0") || 0;
   const percepciones = gravado + exento > 0 ? gravado + exento : subtotalFallback;
 
+  const nominaNodo = rawXml.match(/<(?:[\w-]+:)?Nomina\b([^>]*)>/i)?.[1] ?? "";
+  const sbc = Number(attrDe(receptor, "SalarioBaseCotApor") ?? "");
+  const dias = Number(attrDe(nominaNodo, "NumDiasPagados") ?? "");
+
   return {
     esNomina,
     puesto: attrDe(receptor, "Puesto"),
     sucursal: attrDe(receptor, "Departamento"),
     percepciones: Math.round(percepciones * 100) / 100,
+    sbcDiario: Number.isFinite(sbc) && sbc > 0 ? sbc : null,
+    diasPagados: Number.isFinite(dias) && dias > 0 ? dias : null,
+    riesgoPuesto: attrDe(receptor, "RiesgoPuesto"),
   };
+}
+
+/**
+ * Costo patronal estimado del recibo: cuotas IMSS+RCV a cargo del patrón más
+ * el 5% de INFONAVIT. Se calcula con el SBC y los días del propio recibo, así
+ * que respeta topes (25 UMA) y el riesgo de puesto de cada trabajador.
+ *
+ * Es una ESTIMACIÓN: la liquidación real la emite el IMSS por SUA y puede
+ * diferir por incidencias, ajustes o el factor de riesgo autorizado. Sirve
+ * para que el estado de resultados no ignore un costo que en México ronda el
+ * 25-30% de la nómina — no para pagar cuotas.
+ */
+export function estimarCuotasPatronales(datos: DatosNominaCfdi, fecha: Date): number {
+  if (!datos.sbcDiario || !datos.diasPagados) return 0;
+  const imss = calcularImss({
+    salarioBaseCotizacion: datos.sbcDiario,
+    diasPagados: datos.diasPagados,
+    riesgoPuesto: datos.riesgoPuesto ?? "1",
+    ejercicio: fecha.getUTCFullYear(),
+  });
+  const infonavit = datos.sbcDiario * datos.diasPagados * 0.05; // aportación patronal
+  return Math.round((imss.patronal.total + infonavit) * 100) / 100;
 }
 
 export interface DerivarNominaArgs {
@@ -112,6 +146,10 @@ export async function derivarNominaCostoSiAplica(db: Db, args: DerivarNominaArgs
       puesto: datos.puesto?.trim() || null,
       linea: clasificarPuesto(datos.puesto),
       percepciones: datos.percepciones,
+      cuotasPatronales: estimarCuotasPatronales(datos, args.fecha),
+      sbcDiario: datos.sbcDiario,
+      diasPagados: datos.diasPagados,
+      riesgoPuesto: datos.riesgoPuesto?.trim() || null,
     },
   });
   return true;

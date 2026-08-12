@@ -5171,9 +5171,20 @@ model NominaCosto {
   puesto   String?
   /** Clasificación derivada del puesto; editable cuando la regla se equivoca. */
   linea    LineaNegocio
-  /** Percepciones del recibo (gravado + exento): el costo bruto del periodo.
-   *  NO incluye cuotas patronales — el módulo no las reparte. */
+  /** Percepciones del recibo (gravado + exento): el costo bruto del periodo. */
   percepciones Float
+  /**
+   * Cuotas PATRONALES estimadas del periodo (IMSS + RCV + 5% INFONAVIT),
+   * calculadas con el SBC y los días del propio recibo. El CFDI de nómina NO
+   * las declara — sólo trae la cuota OBRERA como deducción — pero sí trae la
+   * base (SalarioBaseCotApor), así que el costo real del patrón es
+   * reconstruible en vez de quedar fuera del estado de resultados.
+   */
+  cuotasPatronales Float @default(0)
+  /** Insumos de la estimación, para auditarla sin volver a abrir el XML. */
+  sbcDiario    Float?
+  diasPagados  Int?
+  riesgoPuesto String?
   /** true = alguien corrigió la línea a mano; el derivador ya no la pisa. */
   lineaManual  Boolean @default(false)
 
