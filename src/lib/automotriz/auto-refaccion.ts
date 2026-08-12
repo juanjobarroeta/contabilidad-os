@@ -42,6 +42,13 @@ export interface LineaRefaccion {
   claveProdServ: string | null;
   cantidad: number;
   montoUnitario: number | null;
+  /**
+   * ClaveUnidad del SAT de la línea. Sin esto el kardex compara peras con
+   * manzanas: los lubricantes se COMPRAN por tambo (208 L) y se VENDEN por
+   * litro, así que el «último costo» de la compra es 208 veces el costo real
+   * de lo que sale. Guardarla permite saber cuándo el costo NO es comparable.
+   */
+  claveUnidad: string | null;
 }
 
 const attr = (attrs: string, name: string): string | null => {
@@ -88,6 +95,7 @@ export function extraerRefaccionesCfdi(rawXml: string): LineaRefaccion[] {
       numeroParte: noIdent,
       descripcion,
       claveProdServ,
+      claveUnidad: attr(attrs, "ClaveUnidad"),
       cantidad,
       montoUnitario: Number.isFinite(valorUnitario)
         ? valorUnitario
@@ -141,6 +149,7 @@ export async function derivarRefaccionesDesdeCfdiSiAplica(
       prev.cantidad += l.cantidad;
       prev.montoUnitario = prev.cantidad > 0 ? Math.round((total / prev.cantidad) * 100) / 100 : null;
       prev.descripcion = prev.descripcion ?? l.descripcion;
+      prev.claveUnidad = prev.claveUnidad ?? l.claveUnidad;
     }
   }
 
@@ -156,11 +165,13 @@ export async function derivarRefaccionesDesdeCfdiSiAplica(
         numeroParte: l.numeroParte,
         descripcion: (l.descripcion ?? l.numeroParte).slice(0, 200),
         claveProdServ: l.claveProdServ,
-        ...(esCompra ? { ultimoCosto: l.montoUnitario ?? 0 } : { ultimoPrecio: l.montoUnitario }),
+        ...(esCompra
+          ? { ultimoCosto: l.montoUnitario ?? 0, unidadCosto: l.claveUnidad }
+          : { ultimoPrecio: l.montoUnitario, unidadPrecio: l.claveUnidad }),
       },
       update: esCompra
-        ? { ultimoCosto: l.montoUnitario ?? undefined }
-        : { ultimoPrecio: l.montoUnitario ?? undefined },
+        ? { ultimoCosto: l.montoUnitario ?? undefined, unidadCosto: l.claveUnidad ?? undefined }
+        : { ultimoPrecio: l.montoUnitario ?? undefined, unidadPrecio: l.claveUnidad ?? undefined },
       select: { id: true },
     });
     partes++;
