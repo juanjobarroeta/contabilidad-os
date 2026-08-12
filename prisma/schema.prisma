@@ -353,6 +353,7 @@ model Company {
   prospectos         Prospecto[]
   backfillProgreso   BackfillProgreso[]
   nominaCostos       NominaCosto[]
+  reglasClasificacion ReglaClasificacion[]
 }
 
 model CompanyMember {
@@ -5324,4 +5325,64 @@ model CreditoEvaluacion {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, createdAt])
+}
+
+// ─── Reglas de clasificación aprendidas (fase 7) ─────────────────────────────
+// El motor determinista (classifyEgreso por clave del SAT, clasificarIngreso
+// por descripción) resuelve la mayor parte del archivo, pero SIEMPRE queda un
+// residuo: conceptos que el catálogo del SAT no distingue. El caso que lo
+// enseñó en Margom: bajo la MISMA clave 80141600 conviven el bono del
+// distribuidor y el «uso de instalaciones» que paga la aseguradora — uno se
+// gana vendiendo coches y el otro colocando pólizas, y ninguna clave los separa.
+//
+// Aquí vive lo que el distribuidor confirmó una vez para que no se le vuelva a
+// preguntar. Una regla NO clasifica CFDIs por sí sola: el reporte de cobertura
+// (lib/automotriz/cobertura) agrupa el residuo en «clusters» por clave +
+// descripción normalizada, alguien confirma qué es cada cluster, y la
+// confirmación se guarda aquí. A partir de ese momento la clasificación vuelve
+// a ser determinista y reproducible — la regla es código, no un juicio que haya
+// que repetir.
+//
+// `origen`/`confianza`/`razon` existen para el paso siguiente: un modelo puede
+// PROPONER reglas (activa=false) leyendo los clusters, y el distribuidor las
+// confirma o corrige. Lo que se guarda es siempre la regla, nunca la respuesta
+// suelta del modelo — así el número del estado de resultados se puede explicar
+// sin volver a llamar a nadie.
+model ReglaClasificacion {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Tipo de CFDI al que aplica: INGRESO | EGRESO | NOMINA.
+  ambito       String
+  /// Prefijo de ClaveProdServ que debe cumplir el concepto dominante (null = cualquiera).
+  clavePrefijo String?
+  /// Regex (case-insensitive) contra la descripción del concepto (null = cualquiera).
+  /// Al menos uno de clavePrefijo/patron debe venir: una regla sin ninguno
+  /// atraparía el archivo entero.
+  patron       String?
+
+  /// Bucket destino del reporte de cobertura (p. ej. "otros_ingresos") o cuenta
+  /// COE cuando el destino es un gasto (p. ej. "601.57").
+  destino  String
+  /// Etiqueta legible que se muestra en el estado de resultados.
+  etiqueta String
+
+  /// MANUAL (la capturó una persona) | AI (la propuso un modelo) | SISTEMA.
+  origen    String  @default("MANUAL")
+  /// Confianza 0..1 que reportó el modelo; null cuando la escribió una persona.
+  confianza Float?
+  /// Por qué se propuso — se conserva para auditar la regla, no para re-decidir.
+  razon     String?
+
+  /// Una regla sólo clasifica cuando está activa. Las propuestas nacen en
+  /// false: nada entra al estado de resultados sin que alguien lo confirme.
+  activa        Boolean   @default(false)
+  confirmadaPor String?
+  confirmadaAt  DateTime?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, ambito, activa])
 }
