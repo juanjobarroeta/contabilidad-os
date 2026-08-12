@@ -2,18 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
-
-const CATEGORIAS = [
-  "AGUA_CRUDA",
-  "ELECTRICIDAD",
-  "FILTROS_INSUMOS",
-  "MANTENIMIENTO",
-  "SUELDOS",
-  "RENTA",
-  "COMBUSTIBLE",
-  "ESTACIONAMIENTO",
-  "OTRO",
-] as const;
+import { categoriaGastoSchema } from "@/lib/purificadora/categorias";
 
 // GET /api/purificadora/insumos?companyId=xxx[&all=true]
 export const GET = withAuthz(async (req: Request) => {
@@ -36,7 +25,7 @@ const createSchema = z.object({
   companyId: z.string().min(1),
   nombre: z.string().trim().min(1).max(120),
   unidad: z.string().trim().min(1).max(30).default("pieza"),
-  categoria: z.enum(CATEGORIAS).default("FILTROS_INSUMOS"),
+  categoria: categoriaGastoSchema.default("FILTROS_INSUMOS"),
 });
 
 // POST /api/purificadora/insumos — alta al catálogo de insumos.

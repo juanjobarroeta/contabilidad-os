@@ -2,25 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { categoriaGastoSchema } from "@/lib/purificadora/categorias";
 
 type Params = { params: Promise<{ id: string }> };
 
 const patchSchema = z.object({
   nombre: z.string().trim().min(1).max(120).optional(),
   unidad: z.string().trim().min(1).max(30).optional(),
-  categoria: z
-    .enum([
-      "AGUA_CRUDA",
-      "ELECTRICIDAD",
-      "FILTROS_INSUMOS",
-      "MANTENIMIENTO",
-      "SUELDOS",
-      "RENTA",
-      "COMBUSTIBLE",
-      "ESTACIONAMIENTO",
-      "OTRO",
-    ])
-    .optional(),
+  categoria: categoriaGastoSchema.optional(),
   activo: z.boolean().optional(),
 });
 

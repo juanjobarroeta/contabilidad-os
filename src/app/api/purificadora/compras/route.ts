@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { registrarBitacora } from "@/lib/audit";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { postCompraPurificadora } from "@/lib/accounting/postings";
+import { categoriaGastoSchema } from "@/lib/purificadora/categorias";
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -63,19 +64,7 @@ const createSchema = z.object({
   companyId: z.string().min(1),
   fecha: z.string().datetime().optional(),
   supplierId: z.string().min(1).nullish(),
-  categoria: z
-    .enum([
-      "AGUA_CRUDA",
-      "ELECTRICIDAD",
-      "FILTROS_INSUMOS",
-      "MANTENIMIENTO",
-      "SUELDOS",
-      "RENTA",
-      "COMBUSTIBLE",
-      "ESTACIONAMIENTO",
-      "OTRO",
-    ])
-    .default("FILTROS_INSUMOS"),
+  categoria: categoriaGastoSchema.default("FILTROS_INSUMOS"),
   formaPago: z.enum(["EFECTIVO", "TRANSFERENCIA", "TARJETA", "CREDITO"]),
   items: z.array(itemSchema).min(1),
   invoiceId: z.string().min(1).nullish(),
