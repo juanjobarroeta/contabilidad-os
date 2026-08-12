@@ -343,16 +343,16 @@ model Company {
   purifEntregas       PurifEntrega[]
 
   // Automotriz
-  vehiculos          Vehiculo[]
-  autoPortalAccounts AutoPortalAccount[]
-  automotrizConfig   AutomotrizConfig?
-  pedidosVehiculo    PedidoVehiculo[]
-  refacciones        Refaccion[]
-  serviciosVenta     ServicioVenta[]
-  ordenesServicio    OrdenServicio[]
-  prospectos         Prospecto[]
-  backfillProgreso   BackfillProgreso[]
-  nominaCostos       NominaCosto[]
+  vehiculos           Vehiculo[]
+  autoPortalAccounts  AutoPortalAccount[]
+  automotrizConfig    AutomotrizConfig?
+  pedidosVehiculo     PedidoVehiculo[]
+  refacciones         Refaccion[]
+  serviciosVenta      ServicioVenta[]
+  ordenesServicio     OrdenServicio[]
+  prospectos          Prospecto[]
+  backfillProgreso    BackfillProgreso[]
+  nominaCostos        NominaCosto[]
   reglasClasificacion ReglaClasificacion[]
 }
 
@@ -900,13 +900,13 @@ model Invoice {
 
   // Automotriz: unidades cuya compra/venta ampara este CFDI, y costos
   // unitarios (acondicionamiento, accesorios…) soportados por él.
-  vehiculosComprados Vehiculo[]      @relation("VehiculoCompraCfdi")
-  vehiculosVendidos  Vehiculo[]      @relation("VehiculoVentaCfdi")
-  vehiculoMenciones  VehiculoCfdi[]
+  vehiculosComprados   Vehiculo[]            @relation("VehiculoCompraCfdi")
+  vehiculosVendidos    Vehiculo[]            @relation("VehiculoVentaCfdi")
+  vehiculoMenciones    VehiculoCfdi[]
   refaccionMovimientos RefaccionMovimiento[]
-  servicioVenta      ServicioVenta?
-  nominaCosto        NominaCosto?
-  vehiculoCostos     VehiculoCosto[]
+  servicioVenta        ServicioVenta?
+  nominaCosto          NominaCosto?
+  vehiculoCostos       VehiculoCosto[]
 
   // Único por empresa: permite que un CFDI intercompañía viva en las dos
   // empresas (emisor + receptor) sin chocar, y evita duplicados dentro de una.
@@ -1053,6 +1053,11 @@ model InvoiceItem {
   cuentaPredial String?
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
+  // cada búsqueda por factura recorre la tabla entera — y el borrado en
+  // cascada de un Invoice también.
+  @@index([invoiceId])
 }
 
 model InvoiceTax {
@@ -1069,6 +1074,11 @@ model InvoiceTax {
   retencion Boolean   @default(false)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
+  // cada búsqueda por factura recorre la tabla entera — y el borrado en
+  // cascada de un Invoice también.
+  @@index([invoiceId])
 }
 
 enum InvoiceType {
@@ -1111,6 +1121,10 @@ model FacturaBorrador {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([companyId, status])
+  // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
+  // cada búsqueda por factura recorre la tabla entera — y el borrado en
+  // cascada de un Invoice también.
+  @@index([invoiceId])
 }
 
 enum TaxType {
@@ -1239,6 +1253,10 @@ model BankTransaction {
   @@index([taxDeclarationId])
   // "Deshacer última importación": último lote por empresa/cuenta y borrado del lote.
   @@index([importBatchId])
+  // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
+  // cada búsqueda por factura recorre la tabla entera — y el borrado en
+  // cascada de un Invoice también.
+  @@index([invoiceId])
 }
 
 // Lote de importación de estado de cuenta — agrupa los movimientos que entraron
@@ -1458,10 +1476,10 @@ model Employee {
   cuadrillaMiembros CuadrillaMiembro[]
   // Automotriz: unidades vendidas por este empleado (comisiones)
   vehiculosVendidos Vehiculo[]
-  pedidosVehiculo   PedidoVehiculo[] @relation("PedidoVehiculoVendedor")
-  ordenesAsesor     OrdenServicio[]  @relation("OrdenServicioAsesor")
-  ordenesTecnico    OrdenServicio[]  @relation("OrdenServicioTecnico")
-  prospectos        Prospecto[]      @relation("ProspectoVendedor")
+  pedidosVehiculo   PedidoVehiculo[]   @relation("PedidoVehiculoVendedor")
+  ordenesAsesor     OrdenServicio[]    @relation("OrdenServicioAsesor")
+  ordenesTecnico    OrdenServicio[]    @relation("OrdenServicioTecnico")
+  prospectos        Prospecto[]        @relation("ProspectoVendedor")
 
   @@unique([companyId, rfc])
 }
@@ -2414,6 +2432,10 @@ model Estimacion {
   company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([proyectoId, numero])
+  // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
+  // cada búsqueda por factura recorre la tabla entera — y el borrado en
+  // cascada de un Invoice también.
+  @@index([invoiceId])
 }
 
 enum EstimacionEstado {
@@ -4007,6 +4029,10 @@ model RestOrden {
   @@unique([companyId, folio])
   @@index([companyId, estado])
   @@index([companyId, createdAt])
+  // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
+  // cada búsqueda por factura recorre la tabla entera — y el borrado en
+  // cascada de un Invoice también.
+  @@index([invoiceId])
 }
 
 /// Partida de la comanda. `estadoCocina` es el flujo del KDS; `precioUnitario`
@@ -4333,6 +4359,10 @@ model PurifVenta {
   @@index([companyId, fecha])
   @@index([companyId, estado])
   @@index([companyId, customerId])
+  // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
+  // cada búsqueda por factura recorre la tabla entera — y el borrado en
+  // cascada de un Invoice también.
+  @@index([invoiceId])
 }
 
 model PurifVentaItem {
@@ -4436,6 +4466,10 @@ model PurifCompra {
   @@index([companyId, fecha])
   @@index([companyId, estado])
   @@index([companyId, supplierId])
+  // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
+  // cada búsqueda por factura recorre la tabla entera — y el borrado en
+  // cascada de un Invoice también.
+  @@index([invoiceId])
 }
 
 enum PurifEntregaTipo {
@@ -4771,18 +4805,18 @@ model Vehiculo {
 
   notas String?
 
-  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  compraInvoice Invoice?        @relation("VehiculoCompraCfdi", fields: [compraInvoiceId], references: [id], onDelete: SetNull)
-  ventaInvoice  Invoice?        @relation("VehiculoVentaCfdi", fields: [ventaInvoiceId], references: [id], onDelete: SetNull)
-  supplier      Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  cliente       Customer?       @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  vendedor      Employee?       @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
-  costos        VehiculoCosto[]
-  pedidos       PedidoVehiculo[]
-  expediente    VehiculoCfdi[]
-  servicios     ServicioVenta[]
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  compraInvoice   Invoice?         @relation("VehiculoCompraCfdi", fields: [compraInvoiceId], references: [id], onDelete: SetNull)
+  ventaInvoice    Invoice?         @relation("VehiculoVentaCfdi", fields: [ventaInvoiceId], references: [id], onDelete: SetNull)
+  supplier        Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  cliente         Customer?        @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vendedor        Employee?        @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
+  costos          VehiculoCosto[]
+  pedidos         PedidoVehiculo[]
+  expediente      VehiculoCfdi[]
+  servicios       ServicioVenta[]
   ordenesServicio OrdenServicio[]
-  prospectos    Prospecto[]
+  prospectos      Prospecto[]
 
   @@unique([companyId, vin])
   @@index([companyId, estado])
@@ -4820,6 +4854,10 @@ model VehiculoCosto {
   invoice  Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
   @@index([vehiculoId, tipo])
+  // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
+  // cada búsqueda por factura recorre la tabla entera — y el borrado en
+  // cascada de un Invoice también.
+  @@index([invoiceId])
 }
 
 // Catálogo global (SAT) del Código de Claves Vehiculares — Anexo 15 RMF,
@@ -4858,9 +4896,13 @@ model Refaccion {
   numeroParte   String // NoIdentificacion del CFDI
   descripcion   String
   claveProdServ String?
-  /** Último costo unitario de compra visto (sin IVA). */
+  /**
+   * Último costo unitario de compra visto (sin IVA).
+   */
   ultimoCosto   Float   @default(0)
-  /** Último precio unitario de venta visto (sin IVA). */
+  /**
+   * Último precio unitario de venta visto (sin IVA).
+   */
   ultimoPrecio  Float?
   /**
    * ClaveUnidad del SAT en que vienen expresados el costo y el precio. Los
@@ -4882,17 +4924,23 @@ model Refaccion {
 }
 
 model RefaccionMovimiento {
-  id          String           @id @default(cuid())
-  refaccionId String
-  /** CFDI que ampara el movimiento; null en ajustes manuales. */
-  invoiceId   String?
-  tipo        RefaccionMovTipo
-  /** Positiva en entradas, negativa en salidas/ajustes a la baja. */
-  cantidad    Float
-  /** Costo unitario (entradas) o precio unitario (salidas), sin IVA. */
+  id            String           @id @default(cuid())
+  refaccionId   String
+  /**
+   * CFDI que ampara el movimiento; null en ajustes manuales.
+   */
+  invoiceId     String?
+  tipo          RefaccionMovTipo
+  /**
+   * Positiva en entradas, negativa en salidas/ajustes a la baja.
+   */
+  cantidad      Float
+  /**
+   * Costo unitario (entradas) o precio unitario (salidas), sin IVA.
+   */
   montoUnitario Float?
-  fecha       DateTime
-  createdAt   DateTime         @default(now())
+  fecha         DateTime
+  createdAt     DateTime         @default(now())
 
   refaccion Refaccion @relation(fields: [refaccionId], references: [id], onDelete: Cascade)
   invoice   Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
@@ -4914,21 +4962,27 @@ model ServicioVenta {
   invoiceId String   @unique
   createdAt DateTime @default(now())
 
-  clienteId  String?
-  vehiculoId String?
-  fecha      DateTime
-  total      Float // total del CFDI (con IVA)
-  /** Suma de conceptos de servicio (mano de obra, lavado, mantenimiento), sin IVA. */
-  manoObra    Float @default(0)
-  /** Suma de conceptos con número de parte (refacciones facturadas), sin IVA. */
-  refacciones Float @default(0)
-  /** Primer concepto de servicio — la descripción legible de la orden. */
-  concepto String?
+  clienteId   String?
+  vehiculoId  String?
+  fecha       DateTime
+  total       Float // total del CFDI (con IVA)
+  /**
+   * Suma de conceptos de servicio (mano de obra, lavado, mantenimiento), sin IVA.
+   */
+  manoObra    Float    @default(0)
+  /**
+   * Suma de conceptos con número de parte (refacciones facturadas), sin IVA.
+   */
+  refacciones Float    @default(0)
+  /**
+   * Primer concepto de servicio — la descripción legible de la orden.
+   */
+  concepto    String?
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  invoice  Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  cliente  Customer? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  vehiculo Vehiculo? @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  company  Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoice  Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  cliente  Customer?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculo Vehiculo?      @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
   orden    OrdenServicio?
 
   @@index([companyId, fecha])
@@ -4956,16 +5010,20 @@ enum OrdenServicioLineaTipo {
 model OrdenServicio {
   id        String   @id @default(cuid())
   companyId String
-  /** Folio consecutivo por empresa — el número que ve el cliente en el taller. */
+  /**
+   * Folio consecutivo por empresa — el número que ve el cliente en el taller.
+   */
   folio     Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   estado OrdenServicioEstado @default(RECIBIDA)
 
-  clienteId  String?
-  /** Unidad del inventario propio (seminuevos/demos) cuando aplica. */
-  vehiculoId String?
+  clienteId         String?
+  /**
+   * Unidad del inventario propio (seminuevos/demos) cuando aplica.
+   */
+  vehiculoId        String?
   // Unidad del CLIENTE (el caso normal del taller): datos de recepción.
   // Si el VIN existe en el inventario, la recepción liga vehiculoId sola.
   vin               String?
@@ -4986,15 +5044,17 @@ model OrdenServicio {
   listaAt     DateTime?
   entregadaAt DateTime?
 
-  /** Cierre: la venta de servicio derivada del CFDI que amparó esta orden. */
+  /**
+   * Cierre: la venta de servicio derivada del CFDI que amparó esta orden.
+   */
   servicioVentaId String? @unique
 
-  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  cliente       Customer?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  vehiculo      Vehiculo?      @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
-  asesor        Employee?      @relation("OrdenServicioAsesor", fields: [asesorId], references: [id], onDelete: SetNull)
-  tecnico       Employee?      @relation("OrdenServicioTecnico", fields: [tecnicoId], references: [id], onDelete: SetNull)
-  servicioVenta ServicioVenta? @relation(fields: [servicioVentaId], references: [id], onDelete: SetNull)
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cliente       Customer?            @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculo      Vehiculo?            @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  asesor        Employee?            @relation("OrdenServicioAsesor", fields: [asesorId], references: [id], onDelete: SetNull)
+  tecnico       Employee?            @relation("OrdenServicioTecnico", fields: [tecnicoId], references: [id], onDelete: SetNull)
+  servicioVenta ServicioVenta?       @relation(fields: [servicioVentaId], references: [id], onDelete: SetNull)
   lineas        OrdenServicioLinea[]
 
   @@unique([companyId, folio])
@@ -5011,9 +5071,11 @@ model OrdenServicioLinea {
 
   tipo           OrdenServicioLineaTipo
   descripcion    String
-  cantidad       Float  @default(1)
-  /** Precio unitario presupuestado, sin IVA. */
-  precioUnitario Float  @default(0)
+  cantidad       Float                  @default(1)
+  /**
+   * Precio unitario presupuestado, sin IVA.
+   */
+  precioUnitario Float                  @default(0)
   refaccionId    String?
 
   orden     OrdenServicio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
@@ -5076,14 +5138,14 @@ model PedidoVehiculo {
   estado PedidoVehiculoEstado @default(COTIZACION)
 
   // Negociación (montos sin IVA, como precioVenta).
-  precio            Float
-  enganche          Float  @default(0)
-  anticipoRecibido  Float  @default(0)
+  precio           Float
+  enganche         Float   @default(0)
+  anticipoRecibido Float   @default(0)
   // Toma a cuenta de seminuevo (descripción libre + valor acordado).
-  tomaACuentaDesc   String?
-  tomaACuentaMonto  Float?
-  financiamiento    String? // texto libre: financiera, plazo, condiciones
-  notas             String? @db.Text
+  tomaACuentaDesc  String?
+  tomaACuentaMonto Float?
+  financiamiento   String? // texto libre: financiera, plazo, condiciones
+  notas            String? @db.Text
 
   apartadoAt  DateTime?
   facturadoAt DateTime?
@@ -5135,19 +5197,25 @@ model Prospecto {
   medio  ProspectoMedio  @default(PISO)
   estado ProspectoEstado @default(NUEVO)
 
-  /** Lo que busca, texto libre: "Frontier 2026 blanca, contado". */
+  /**
+   * Lo que busca, texto libre: "Frontier 2026 blanca, contado".
+   */
   interes    String?
-  /** Unidad concreta del inventario cuando la hay (aparta el interés real). */
+  /**
+   * Unidad concreta del inventario cuando la hay (aparta el interés real).
+   */
   vehiculoId String?
   vendedorId String?
 
-  /** Siguiente seguimiento programado — vencida = llamada pendiente. */
+  /**
+   * Siguiente seguimiento programado — vencida = llamada pendiente.
+   */
   proximaAccion DateTime?
   proximaNota   String?
-  notas         String? @db.Text
+  notas         String?   @db.Text
 
   clienteId     String? // Customer canónico cuando ya existe (o al ganar)
-  pedidoId      String? @unique // PedidoVehiculo cuando la venta arranca
+  pedidoId      String?   @unique // PedidoVehiculo cuando la venta arranca
   perdidoMotivo String?
   ganadoAt      DateTime?
   perdidoAt     DateTime?
@@ -5179,27 +5247,37 @@ enum LineaNegocio {
 model NominaCosto {
   id        String   @id @default(cuid())
   companyId String
-  /** Un renglón por recibo timbrado. */
+  /**
+   * Un renglón por recibo timbrado.
+   */
   invoiceId String   @unique
   fecha     DateTime
   createdAt DateTime @default(now())
 
-  /** Atributo Departamento del CFDI: en la práctica, la sucursal/plaza. */
-  sucursal String?
+  /**
+   * Atributo Departamento del CFDI: en la práctica, la sucursal/plaza.
+   */
+  sucursal         String?
   /**
    * Nombre y RFC del receptor del recibo: el empleado. Se copian al renglón
    * para poder desglosar la nómina por persona sin releer 16 mil XMLs — y
    * porque el nombre del CFDI es el dato auditable del periodo (si alguien se
    * casa y cambia de apellidos, cada recibo conserva el suyo).
    */
-  empleado    String?
-  rfcEmpleado String?
-  /** Atributo Puesto del CFDI, tal cual viene (auditable). */
-  puesto   String?
-  /** Clasificación derivada del puesto; editable cuando la regla se equivoca. */
-  linea    LineaNegocio
-  /** Percepciones del recibo (gravado + exento): el costo bruto del periodo. */
-  percepciones Float
+  empleado         String?
+  rfcEmpleado      String?
+  /**
+   * Atributo Puesto del CFDI, tal cual viene (auditable).
+   */
+  puesto           String?
+  /**
+   * Clasificación derivada del puesto; editable cuando la regla se equivoca.
+   */
+  linea            LineaNegocio
+  /**
+   * Percepciones del recibo (gravado + exento): el costo bruto del periodo.
+   */
+  percepciones     Float
   /**
    * Cuotas PATRONALES estimadas del periodo (IMSS + RCV + 5% INFONAVIT),
    * calculadas con el SBC y los días del propio recibo. El CFDI de nómina NO
@@ -5207,13 +5285,17 @@ model NominaCosto {
    * base (SalarioBaseCotApor), así que el costo real del patrón es
    * reconstruible en vez de quedar fuera del estado de resultados.
    */
-  cuotasPatronales Float @default(0)
-  /** Insumos de la estimación, para auditarla sin volver a abrir el XML. */
-  sbcDiario    Float?
-  diasPagados  Int?
-  riesgoPuesto String?
-  /** true = alguien corrigió la línea a mano; el derivador ya no la pisa. */
-  lineaManual  Boolean @default(false)
+  cuotasPatronales Float        @default(0)
+  /**
+   * Insumos de la estimación, para auditarla sin volver a abrir el XML.
+   */
+  sbcDiario        Float?
+  diasPagados      Int?
+  riesgoPuesto     String?
+  /**
+   * true = alguien corrigió la línea a mano; el derivador ya no la pisa.
+   */
+  lineaManual      Boolean      @default(false)
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -5230,17 +5312,23 @@ model NominaCosto {
 // e.firma un viernes se queda a medias. Aquí el cursor es DURABLE, así que el
 // scheduler retoma solo hasta terminar, y la pantalla puede mostrar avance.
 model BackfillProgreso {
-  id        String   @id @default(cuid())
-  companyId String
-  /** Trabajo: "refacciones" | "servicio" (los que barren todo el archivo). */
-  job       String
-  /** Último Invoice.id procesado; null = aún no empieza. */
-  cursor    String?
-  procesados Int     @default(0)
-  /** Resultado acumulado del drenado (movimientos/ventas creadas). */
-  derivados  Int     @default(0)
+  id           String    @id @default(cuid())
+  companyId    String
+  /**
+   * Trabajo: "refacciones" | "servicio" (los que barren todo el archivo).
+   */
+  job          String
+  /**
+   * Último Invoice.id procesado; null = aún no empieza.
+   */
+  cursor       String?
+  procesados   Int       @default(0)
+  /**
+   * Resultado acumulado del drenado (movimientos/ventas creadas).
+   */
+  derivados    Int       @default(0)
   completadoAt DateTime?
-  updatedAt DateTime @updatedAt
+  updatedAt    DateTime  @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -5307,19 +5395,27 @@ model CreditoEvaluacion {
   score          Int // 0-100
   banda          String // "A" | "B" | "C" | "D"
   limiteSugerido Float
-  /** True cuando faltaron insumos (p. ej. CFDIs sin descargar): score parcial. */
-  provisional Boolean @default(false)
+  /**
+   * True cuando faltaron insumos (p. ej. CFDIs sin descargar): score parcial.
+   */
+  provisional    Boolean @default(false)
 
-  /** Desglose por dimensión: [{clave, etiqueta, peso, puntos, razones[]}]. */
-  detalle Json
-  /** Insumos faltantes al momento de evaluar (explica `provisional`). */
+  /**
+   * Desglose por dimensión: [{clave, etiqueta, peso, puntos, razones[]}].
+   */
+  detalle   Json
+  /**
+   * Insumos faltantes al momento de evaluar (explica `provisional`).
+   */
   cobertura Json
 
   // Resolución humana (lo único editable post-snapshot).
   decision String? // "APROBADO" | "RECHAZADO" | "PENDIENTE" | libre
   notas    String? @db.Text
 
-  /** Memo de análisis generado por IA al evaluar (parte del snapshot). */
+  /**
+   * Memo de análisis generado por IA al evaluar (parte del snapshot).
+   */
   analisis String? @db.Text
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
