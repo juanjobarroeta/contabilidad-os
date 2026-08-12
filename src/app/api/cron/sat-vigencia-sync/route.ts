@@ -8,6 +8,12 @@ import {
   datosConsultaDesdeXml,
   esCancelado,
 } from "@/lib/fiscal/vigencia-cfdi";
+import {
+  cupoPorEmpresa,
+  empresasDelTurno,
+  horasParaSiguienteTurno,
+  inicioVentanaCancelable,
+} from "@/lib/fiscal/vigencia-plan";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/sat-vigencia-sync   [?companyId=<id>][&limit=N][&desde=YYYY-MM-DD]
@@ -92,26 +98,64 @@ async function handle(req: Request) {
     fecha: { gte: desde },
     ...(soloExpediente ? { vehiculoMenciones: { some: {} } } : {}),
     // recheckDays=0 desactiva la ventana (re-verifica todo, como antes).
+    //
+    // La re-verificación se limita a lo que TODAVÍA puede cancelarse: por el
+    // CFF desde 2022 un CFDI sólo es cancelable hasta la anual de su ejercicio,
+    // así que una factura ya verificada y fuera de esa ventana no puede cambiar
+    // nunca más — queda SELLADA. Sin esto, el pase histórico volvía a preguntar
+    // por el archivo completo cada `recheckDays` para siempre: un costo
+    // recurrente O(todas las facturas) que no escala. Con el sello, el trabajo
+    // recurrente es O(ventana legal) y lo viejo se pregunta UNA vez.
     ...(recheckDays > 0
-      ? { OR: [{ vigenciaCheckedAt: null }, { vigenciaCheckedAt: { lt: cutoff } }] }
+      ? {
+          OR: [
+            { vigenciaCheckedAt: null },
+            { vigenciaCheckedAt: { lt: cutoff }, fecha: { gte: inicioVentanaCancelable(new Date()) } },
+          ],
+        }
       : {}),
   };
 
-  const invoices = await prisma.invoice.findMany({
-    where,
-    select: {
-      id: true,
-      companyId: true,
-      uuid: true,
-      total: true,
-      tipo: true,
-      rawXml: true,
-      company: { select: { rfc: true } },
-      customer: { select: { rfc: true } },
-    },
-    orderBy: { vigenciaCheckedAt: { sort: "asc", nulls: "first" } },
-    take: limit,
+  // ── REPARTO JUSTO POR EMPRESA ────────────────────────────────────────────
+  // Un cursor GLOBAL (tomar las `limit` más atrasadas del portafolio entero)
+  // converge con pocas empresas, pero la espera de UNA empresa crece con el
+  // número total de FACTURAS: la empresa con 136k CFDIs acapara cada corrida y
+  // las demás se quedan sin turno (reporte real: 73% del portafolio verificado
+  // y 0% de una empresa recién onboardeada). Con el reparto, cada corrida
+  // atiende a las empresas de barrido más antiguo y a cada una le da una
+  // rebanada del cupo, así la espera depende del número de EMPRESAS —acotada y
+  // predecible— y no del tamaño del archivo de la más grande.
+  const empresasPorCorrida = onlyCompanyId ? 1 : empresasDelTurno(limit);
+  const empresas = await prisma.company.findMany({
+    where: { isActive: true, ...(onlyCompanyId ? { id: onlyCompanyId } : {}) },
+    // Nunca barridas primero: una empresa nueva entra al frente de la fila.
+    orderBy: { vigenciaBarridoAt: { sort: "asc", nulls: "first" } },
+    take: empresasPorCorrida,
+    select: { id: true },
   });
+  const cupo = cupoPorEmpresa(limit, empresas.length);
+
+  const SELECT_CANDIDATA = {
+    id: true,
+    companyId: true,
+    uuid: true,
+    total: true,
+    tipo: true,
+    rawXml: true,
+    company: { select: { rfc: true } },
+    customer: { select: { rfc: true } },
+  } as const;
+
+  const invoices: Array<Prisma.InvoiceGetPayload<{ select: typeof SELECT_CANDIDATA }>> = [];
+  for (const emp of empresas) {
+    const suyas = await prisma.invoice.findMany({
+      where: { ...where, companyId: emp.id },
+      select: SELECT_CANDIDATA,
+      orderBy: { vigenciaCheckedAt: { sort: "asc", nulls: "first" } },
+      take: cupo,
+    });
+    invoices.push(...suyas);
+  }
 
   let checked = 0;
   let skipped = 0;
@@ -178,11 +222,32 @@ async function handle(req: Request) {
     });
   }
 
+  // Las empresas atendidas van al final de la fila: así rota el reparto.
+  if (empresas.length > 0) {
+    await prisma.company.updateMany({
+      where: { id: { in: empresas.map((e) => e.id) } },
+      data: { vigenciaBarridoAt: new Date() },
+    });
+  }
+
   // Cuánto falta DE VERDAD, para no confundir «sigue corriendo» con «avanza».
   const pendientes = await prisma.invoice.count({ where });
+  const empresasTotales = onlyCompanyId
+    ? 1
+    : await prisma.company.count({ where: { isActive: true } });
 
   const summary = {
     ok: true,
+    empresasAtendidas: empresas.length,
+    cupoPorEmpresa: cupo,
+    // Métrica de ESCALA: cuánto tarda una empresa en volver a tener turno. Es
+    // lo que hay que vigilar al sumar clientes — si crece de más, se sube
+    // limit, carriles o cadencia. No depende del tamaño del archivo.
+    horasParaSiguienteTurno: horasParaSiguienteTurno({
+      empresasTotales,
+      empresasPorCorrida: empresas.length,
+      corridasPorDia: 16, // dos cadencias en el scheduler: c/2 h y c/6 h
+    }),
     candidatas: invoices.length,
     checked,
     skipped,
