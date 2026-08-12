@@ -16,6 +16,7 @@
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { gastosDeOperacion, type GastosResultado } from "./resultados-gastos";
+import { otrosIngresos, type OtrosIngresosResultado } from "./otros-ingresos";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const margen = (utilidad: number, ingreso: number) => (ingreso > 0 ? r2((utilidad / ingreso) * 100) : null);
@@ -34,6 +35,10 @@ export interface LineaResultado {
   piezas?: number;
   costoEstimado: boolean;
   costoEsNomina?: boolean;
+  /** Ingreso que no consume inventario ni horas: su utilidad ES el ingreso. */
+  sinCostoDirecto?: boolean;
+  /** Lo produce el taller → cuenta para la absorción. */
+  backEnd?: boolean;
 }
 
 export type UnidadVendida = {
@@ -92,7 +97,7 @@ export async function calcularResultados(
   desde: Date,
   hasta: Date
 ): Promise<ResultadosPeriodo> {
-  const [unidades, servicios, refaccionesRaw, nomina, nominaPorSucursal, gastos] = await Promise.all([
+  const [unidades, servicios, refaccionesRaw, nomina, nominaPorSucursal, gastos, otros] = await Promise.all([
     db.vehiculo.findMany({
       where: {
         companyId,
@@ -138,9 +143,13 @@ export async function calcularResultados(
       orderBy: { _sum: { percepciones: "desc" } },
     }),
     gastosDeOperacion(db, companyId, desde, hasta),
+    otrosIngresos(db, companyId, desde, hasta),
   ]);
 
-  return armar({ unidades: unidades as UnidadVendida[], servicios, refaccionesRaw, nomina, nominaPorSucursal, gastos });
+  return armar({
+    unidades: unidades as UnidadVendida[],
+    servicios, refaccionesRaw, nomina, nominaPorSucursal, gastos, otros,
+  });
 }
 
 type NominaGrupo = {
@@ -156,6 +165,7 @@ export interface InsumosResultados {
   nomina: NominaGrupo[];
   nominaPorSucursal: Array<{ sucursal: string | null; _sum: { percepciones: number | null; cuotasPatronales: number | null } }>;
   gastos: GastosResultado;
+  otros?: OtrosIngresosResultado;
 }
 
 /** Armado puro del estado de resultados — sin DB, para poder fijarlo con casos. */
@@ -238,6 +248,21 @@ export function armar(d: InsumosResultados): ResultadosPeriodo {
     },
     lineaRefacciones(refEnOrden, "Refacciones en órdenes de taller", "refacciones_taller"),
     lineaRefacciones(refMostrador, "Refacciones de mostrador / mayoreo", "refacciones_mostrador"),
+    // Ingresos sin costo directo: el bono del distribuidor y el uso de
+    // instalaciones no consumen inventario ni horas facturables, así que su
+    // utilidad ES el ingreso. Se listan aparte para que nadie los confunda con
+    // margen de operación.
+    ...(d.otros?.lineas ?? []).map((l) => ({
+      clave: `otros_${l.clave}`,
+      nombre: l.nombre,
+      ingreso: l.importe,
+      costo: 0,
+      utilidad: l.importe,
+      margen: l.importe > 0 ? 100 : null,
+      costoEstimado: false,
+      sinCostoDirecto: true,
+      backEnd: l.backEnd,
+    })),
   ];
 
   const ingresoTotal = r2(lineas.reduce((s, l) => s + l.ingreso, 0));
@@ -253,9 +278,12 @@ export function armar(d: InsumosResultados): ResultadosPeriodo {
   // Absorción: utilidad bruta del back end (taller + refacciones) contra la
   // estructura completa. 100% = el back end paga solo toda la operación y cada
   // coche vendido es utilidad; es el estándar con el que se mide una agencia.
+  // El uso de instalaciones que pagan las aseguradoras SÍ cuenta: lo produce la
+  // capacidad del taller. El bono del distribuidor NO: se gana vendiendo
+  // unidades, y meterlo aquí inflaría la absorción con dinero del front end.
   const utilidadFixedOps = r2(
     lineas
-      .filter((l) => l.clave === "mano_obra" || l.clave.startsWith("refacciones_"))
+      .filter((l) => l.clave === "mano_obra" || l.clave.startsWith("refacciones_") || l.backEnd)
       .reduce((s, l) => s + l.utilidad, 0)
   );
 
@@ -333,7 +361,7 @@ export async function absorcionPorMes(
   type Fila = { mes: Date; valor: number };
   const mesClave = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 
-  const [manoObra, nominaFilas, refacciones, gastoFilas] = await Promise.all([
+  const [manoObra, nominaFilas, refacciones, gastoFilas, udiFilas] = await Promise.all([
     db.$queryRaw<Fila[]>(Prisma.sql`
       SELECT date_trunc('month', sv."fecha") AS mes, COALESCE(SUM(sv."manoObra"), 0)::float8 AS valor
       FROM "ServicioVenta" sv
@@ -372,6 +400,22 @@ export async function absorcionPorMes(
         AND NOT EXISTS (SELECT 1 FROM "RefaccionMovimiento" rm WHERE rm."invoiceId" = i.id)
       GROUP BY 1
     `),
+    // Uso de instalaciones por mes: ingreso del back end, cuenta en la
+    // absorción. Se empata por descripción porque la clave del SAT lo mezcla
+    // con los bonos del distribuidor, que NO son back end.
+    db.$queryRaw<Fila[]>(Prisma.sql`
+      SELECT date_trunc('month', i."fecha") AS mes,
+             COALESCE(SUM(CASE WHEN i."tipoSat" = 'E' THEN -ii."importe" ELSE ii."importe" END), 0)::float8 AS valor
+      FROM "Invoice" i
+      JOIN "InvoiceItem" ii ON ii."invoiceId" = i.id
+      WHERE i."companyId" = ${companyId}
+        AND i."tipo" = 'INGRESO' AND i."status" <> 'CANCELLED'
+        AND i."fecha" >= ${desde} AND i."fecha" < ${hasta}
+        AND ii."claveProdServ" LIKE '8014%'
+        AND ii."descripcion" ~* '\\yudis?\\y|uso\\s+de\\s+instalaci'
+        AND NOT EXISTS (SELECT 1 FROM "Vehiculo" v WHERE v."ventaInvoiceId" = i.id)
+      GROUP BY 1
+    `),
   ]);
 
   const meses = new Map<string, AbsorcionMes>();
@@ -383,6 +427,7 @@ export async function absorcionPorMes(
   };
 
   for (const r of manoObra) fila(r.mes).utilidadFixedOps += r.valor;
+  for (const r of udiFilas) fila(r.mes).utilidadFixedOps += r.valor;
   for (const r of refacciones) fila(r.mes).utilidadFixedOps += r.ingreso - r.costo;
   for (const r of nominaFilas) {
     // La nómina del taller es COSTO de la mano de obra; la demás es estructura.
@@ -406,6 +451,7 @@ export const NOTAS_RESULTADOS = [
   "Las cuotas patronales (IMSS/RCV + 5% INFONAVIT) NO vienen en el CFDI — sólo la cuota obrera. Se estiman con el SBC y los días de cada recibo; la liquidación real la emite el IMSS por SUA y puede diferir. El ISN estatal no está incluido.",
   "El costo de refacciones es estimado con el último costo conocido de cada parte.",
   "Las unidades sin costo de compra (anteriores al archivo de 5 años del SAT) quedan fuera del margen y se reportan aparte.",
-  "La absorción compara la utilidad bruta de taller y refacciones contra TODA la estructura: 100% significa que el back end paga solo la operación.",
+  "La absorción compara la utilidad bruta del back end contra TODA la estructura: 100% significa que el taller paga solo la operación. Incluye el uso de instalaciones que pagan las aseguradoras (lo produce el taller) y NO los bonos del distribuidor (ésos se ganan vendiendo unidades).",
+  "Los bonos, el uso de instalaciones y «otros ingresos» se clasifican por la DESCRIPCIÓN del CFDI, no por la clave del SAT: la clave 8014xx mezcla las tres. Lo que no empata con ninguna regla cae en «Otros ingresos» a la vista, en vez de repartirse a ojo.",
   "Vista de operación derivada de CFDIs — el estado de resultados fiscal sale del ledger en ContabilidadOS.",
 ];
