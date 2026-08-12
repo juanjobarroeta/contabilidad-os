@@ -911,7 +911,17 @@ export async function syncCancelacionesPeriodo(
     try {
       const verify = await service.verify(id);
       if (!verify.getStatus().isAccepted()) {
-        await prisma.satSyncRequest.updateMany({ where: { requestId: id }, data: { status: "FAILED", lastVerifiedAt: new Date() } });
+        // Guardar el MOTIVO: sin esto una solicitud de metadata quedaba en
+        // FAILED sin rastro de por qué (visto en producción: 23 fallos y cero
+        // diagnóstico), a diferencia del camino de XML que sí lo persiste.
+        await prisma.satSyncRequest.updateMany({
+          where: { requestId: id },
+          data: {
+            status: "FAILED",
+            errorMessage: `${verify.getStatus().getMessage()} (código ${verify.getStatus().getCode()})`,
+            lastVerifiedAt: new Date(),
+          },
+        });
         continue;
       }
       const codeRequest = verify.getCodeRequest().getValue();
