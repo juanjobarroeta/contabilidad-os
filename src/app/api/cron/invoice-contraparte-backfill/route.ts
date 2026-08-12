@@ -54,6 +54,10 @@ async function handle(req: Request) {
   }
 
   const url = new URL(req.url);
+  // Acotable a UNA empresa: así el orquestador de carga inicial puede darle
+  // prioridad a la recién onboardeada en vez de esperar a que el barrido
+  // general llegue a sus filas.
+  const onlyCompanyId = url.searchParams.get("companyId");
   const limitParam = parseInt(url.searchParams.get("limit") ?? "", 10);
   const limit = Number.isFinite(limitParam)
     ? Math.min(Math.max(limitParam, 1), MAX_LIMIT)
@@ -71,6 +75,7 @@ async function handle(req: Request) {
     const where: Prisma.InvoiceWhereInput = {
       contraparteNombre: null,
       rawXml: { not: null },
+      ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
       ...(cursorId ? { id: { gt: cursorId } } : {}),
     };
     const lote = await prisma.invoice.findMany({
@@ -128,7 +133,11 @@ async function handle(req: Request) {
   }
 
   const restantes = await prisma.invoice.count({
-    where: { contraparteNombre: null, rawXml: { not: null } },
+    where: {
+      contraparteNombre: null,
+      rawXml: { not: null },
+      ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
+    },
   });
 
   const summary = {
