@@ -28,6 +28,8 @@ export interface FacturaPerfil {
   uuid: string | null;
   serie: string | null;
   folio: string | null;
+  /** Presente sólo si el CFDI lo timbró el PAC desde aquí: habilita el PDF. */
+  facturapiId: string | null;
   fecha: Date;
   total: number;
   metodoPago: string;
@@ -65,8 +67,10 @@ export interface PerfilContacto {
   /** Notas de crédito (tipoSat "E") de este lado: restan a lo facturado. */
   notasCredito: Array<{
     id: string;
+    uuid: string | null;
     serie: string | null;
     folio: string | null;
+    facturapiId: string | null;
     fecha: Date;
     total: number;
   }>;
@@ -101,7 +105,18 @@ export interface PerfilContacto {
     manoObra: number;
     refacciones: number;
     ultimaVisita: Date | null;
-    ultimas: Array<{ id: string; fecha: Date; concepto: string | null; total: number; vehiculoId: string | null }>;
+    ultimas: Array<{
+      id: string;
+      fecha: Date;
+      concepto: string | null;
+      total: number;
+      manoObra: number;
+      refacciones: number;
+      /** Unidad atendida cuando el CFDI trae el VIN (liga al expediente). */
+      vehiculo: { id: string; vin: string; marca: string; modelo: string; anio: number } | null;
+      /** El CFDI que amparó la orden — para ver/descargar XML y PDF. */
+      invoice: { id: string; uuid: string | null; serie: string | null; folio: string | null; facturapiId: string | null };
+    }>;
   };
   /** Refacciones que le hemos vendido (kardex ligado a sus CFDIs). */
   refacciones: {
@@ -141,6 +156,7 @@ export async function perfilContacto(
       total: true,
       metodoPago: true,
       tipoSat: true,
+      facturapiId: true,
       conciliacionDetalles: { select: { montoAsignado: true } },
     },
     orderBy: { fecha: "desc" },
@@ -150,7 +166,15 @@ export async function perfilContacto(
   const facturasDb = todasDb.filter((f) => (f.tipoSat ?? "I") !== "E");
   const notasCredito = todasDb
     .filter((f) => (f.tipoSat ?? "I") === "E")
-    .map((f) => ({ id: f.id, serie: f.serie, folio: f.folio, fecha: f.fecha, total: f.total }));
+    .map((f) => ({
+      id: f.id,
+      uuid: f.uuid,
+      serie: f.serie,
+      folio: f.folio,
+      facturapiId: f.facturapiId,
+      fecha: f.fecha,
+      total: f.total,
+    }));
 
   // REPs que amparan estas facturas, empatadas por UUID normalizado — cubre
   // REP en mayúsculas vs PAC en minúsculas, igual que rep-faltante.ts.
@@ -181,6 +205,7 @@ export async function perfilContacto(
       uuid: f.uuid,
       serie: f.serie,
       folio: f.folio,
+      facturapiId: f.facturapiId,
       fecha: f.fecha,
       total: f.total,
       metodoPago: f.metodoPago,
@@ -228,7 +253,11 @@ export async function perfilContacto(
   // Taller: las ventas de servicio derivadas de SUS CFDIs (fase 5).
   const serviciosDb = await db.servicioVenta.findMany({
     where: { companyId, clienteId: customerId },
-    select: { id: true, fecha: true, concepto: true, total: true, manoObra: true, refacciones: true, vehiculoId: true },
+    select: {
+      id: true, fecha: true, concepto: true, total: true, manoObra: true, refacciones: true,
+      vehiculo: { select: { id: true, vin: true, marca: true, modelo: true, anio: true } },
+      invoice: { select: { id: true, uuid: true, serie: true, folio: true, facturapiId: true } },
+    },
     orderBy: { fecha: "desc" },
   });
 
@@ -298,12 +327,15 @@ export async function perfilContacto(
       manoObra: r2(serviciosDb.reduce((s, x) => s + x.manoObra, 0)),
       refacciones: r2(serviciosDb.reduce((s, x) => s + x.refacciones, 0)),
       ultimaVisita: serviciosDb[0]?.fecha ?? null,
-      ultimas: serviciosDb.slice(0, 10).map((s) => ({
+      ultimas: serviciosDb.slice(0, 25).map((s) => ({
         id: s.id,
         fecha: s.fecha,
         concepto: s.concepto,
         total: s.total,
-        vehiculoId: s.vehiculoId,
+        manoObra: s.manoObra,
+        refacciones: s.refacciones,
+        vehiculo: s.vehiculo ?? null,
+        invoice: s.invoice,
       })),
     },
     refacciones: {
