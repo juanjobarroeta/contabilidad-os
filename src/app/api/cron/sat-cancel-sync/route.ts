@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { syncCancelacionesPeriodo } from "@/lib/sat-sync";
-import { mesesBacklogCancelaciones, mesesVentanaCancelable } from "@/lib/sat-cancelaciones";
+import {
+  mesesBacklogCancelaciones,
+  mesesVentanaCancelable,
+  ordenEmpresasPorAntiguedad,
+} from "@/lib/sat-cancelaciones";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-cancel-sync
@@ -50,6 +54,9 @@ export const maxDuration = 300;
 // Backlog: periodos por corrida y por empresa — cada periodo son 2 solicitudes
 // de metadata al SAT; un tope corto evita quemar la cuota (5002) de un jalón.
 const PERIODS_PER_RUN = 6;
+// Presupuesto de la fase A. La fase B (histórico de empresas nuevas) corre
+// DESPUÉS, así que sin un tope aquí se quedaba sin tiempo y no avanzaba nunca.
+const FASE_A_BUDGET_MS = 120_000;
 /** Presupuesto de tiempo: dejar margen bajo maxDuration para responder. */
 const TIME_BUDGET_MS = 240_000;
 
@@ -125,7 +132,7 @@ async function handle(req: Request) {
   }
   const startedAt = Date.now();
 
-  const companies = await prisma.company.findMany({
+  const empresasSinOrden = await prisma.company.findMany({
     where: {
       isActive: true,
       fielCer: { not: null },
@@ -135,6 +142,21 @@ async function handle(req: Request) {
     },
     select: { id: true, rfc: true },
   });
+
+  // Orden JUSTO: primero las empresas nunca consultadas, luego las más
+  // antiguas. Recorrer siempre en el mismo orden dejaba a las últimas sin
+  // turno cuando se agotaba el presupuesto de tiempo — y una empresa recién
+  // onboardeada, que es justo la que más metadata necesita, se quedaba en cero
+  // para siempre. Con esto, la empresa nueva va al frente.
+  const ultimaMetadata = await prisma.satSyncRequest.groupBy({
+    by: ["companyId"],
+    where: { tipo: { in: ["METADATA_EMITIDOS", "METADATA_RECIBIDOS"] } },
+    _max: { createdAt: true },
+  });
+  const ultimaPorEmpresa = new Map<string, Date | null>(
+    ultimaMetadata.map((r) => [r.companyId, r._max.createdAt ?? null]),
+  );
+  const companies = ordenEmpresasPorAntiguedad(empresasSinOrden, ultimaPorEmpresa);
 
   const now = new Date();
   const periods = periodosHaciaAtras(now, monthsBack);
@@ -151,7 +173,16 @@ async function handle(req: Request) {
   const errors: Array<{ companyId: string; rfc: string; error: string }> = [];
 
   // ── FASE A: ventana legal rodante (o el backlog dirigido con historico=1) ──
+  // Con presupuesto propio: sin él, la fase A (todas las empresas × la ventana
+  // completa) consumía el tiempo entero y la fase B —el histórico de las
+  // empresas nuevas— nunca llegaba a correr. Lo que quede sin cubrir lo retoma
+  // la siguiente corrida, que además arranca por las empresas más atrasadas.
+  let faseATruncada = false;
   for (const company of companies) {
+    if (!onlyCompanyId && Date.now() - startedAt > FASE_A_BUDGET_MS) {
+      faseATruncada = true;
+      break;
+    }
     try {
       let delaEmpresa = periods;
       if (historico) {
@@ -217,6 +248,9 @@ async function handle(req: Request) {
     modoHistorico: historico,
     companies: companies.length,
     companiesProcessed,
+    // La fase A se cortó por presupuesto: la siguiente corrida retoma por las
+    // empresas más atrasadas (el orden es por antigüedad de consulta).
+    faseATruncada,
     ...(dryRun ? { wouldCancelDetected: totalWouldCancel } : { cancelledDetected: totalCancelled }),
     // Renglones de metadata leídos en los paquetes descargados. 0 con CFDIs en
     // los periodos = el parser no está leyendo el paquete (formato), no "no

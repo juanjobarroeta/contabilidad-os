@@ -77,6 +77,34 @@ export interface RequestTerminado {
  * Más nuevo primero: la probabilidad de cancelación relevante decae con la
  * antigüedad. Función PURA (la consulta vive en el route).
  */
+/**
+ * Orden JUSTO de empresas para el barrido de cancelaciones: primero las que
+ * NUNCA se han consultado, luego las de consulta más antigua.
+ *
+ * Por qué importa: el barrido va acotado por tiempo, y recorriendo siempre en
+ * el mismo orden las últimas de la lista se quedaban sin turno para siempre —
+ * justo el caso de una empresa recién onboardeada, cuyo historial completo
+ * depende de esa fase. Con este orden, la empresa nueva es la PRIMERA.
+ *
+ * PURA: recibe la última consulta por empresa (null = nunca) y devuelve los
+ * ids ordenados. Empate → por id, para que el recorrido sea determinista.
+ */
+export function ordenEmpresasPorAntiguedad<T extends { id: string }>(
+  empresas: T[],
+  ultimaConsulta: Map<string, Date | null>,
+): T[] {
+  return [...empresas].sort((a, b) => {
+    const ta = ultimaConsulta.get(a.id) ?? null;
+    const tb = ultimaConsulta.get(b.id) ?? null;
+    if (ta === null && tb !== null) return -1;
+    if (tb === null && ta !== null) return 1;
+    if (ta !== null && tb !== null && ta.getTime() !== tb.getTime()) {
+      return ta.getTime() - tb.getTime();
+    }
+    return a.id.localeCompare(b.id);
+  });
+}
+
 export function mesesBacklogCancelaciones(
   terminados: RequestTerminado[],
   ventanaRodante: Array<{ year: number; month: number }>,
