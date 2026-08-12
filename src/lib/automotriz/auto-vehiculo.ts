@@ -34,6 +34,7 @@ import {
 import { normalizarUuid } from "@/lib/fiscal/uuid";
 import { derivarRefaccionesDesdeCfdiSiAplica } from "./auto-refaccion";
 import { derivarServicioDesdeCfdiSiAplica } from "./auto-servicio";
+import { derivarNominaCostoSiAplica } from "./auto-nomina";
 import { modeloLimpio } from "./claves";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -55,6 +56,8 @@ export interface DerivarVehiculoArgs {
   clienteId?: string | null;
   /** Total del CFDI (con IVA) — sólo lo usa la derivación de servicio/taller. */
   total?: number;
+  /** SubTotal del CFDI — respaldo de percepciones en la derivación de nómina. */
+  subtotal?: number;
 }
 
 export interface DerivarVehiculoResultado {
@@ -603,6 +606,16 @@ export async function derivarVehiculoInline(
       clienteId: args.clienteId,
     });
   }
+  // Nómina: costo por línea de negocio (taller/ventas/refacciones/admin) del
+  // mismo CFDI — sin esto la mano de obra del taller se reporta sin costo.
+  await derivarNominaCostoSiAplica(db, {
+    companyId: args.companyId,
+    invoiceId: args.invoiceId,
+    tipo: args.tipo,
+    fecha: args.fecha,
+    rawXml: args.rawXml,
+    subtotal: args.subtotal,
+  });
   return resultado;
 }
 

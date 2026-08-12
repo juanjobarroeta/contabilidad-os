@@ -41,7 +41,7 @@ export const GET = withAuthz(async (req: Request) => {
   const desde = new Date(year, 0, 1);
   const hasta = new Date(year + 1, 0, 1);
 
-  const [unidades, servicios, refaccionesRaw] = await Promise.all([
+  const [unidades, servicios, refaccionesRaw, nomina, nominaPorSucursal] = await Promise.all([
     prisma.vehiculo.findMany({
       where: {
         companyId,
@@ -72,7 +72,24 @@ export const GET = withAuthz(async (req: Request) => {
         AND m."fecha" >= ${desde} AND m."fecha" < ${hasta}
       GROUP BY 1
     `),
+    // Costo de nómina del ejercicio, ya clasificado por línea de negocio.
+    prisma.nominaCosto.groupBy({
+      by: ["linea"],
+      where: { companyId, fecha: { gte: desde, lt: hasta } },
+      _sum: { percepciones: true },
+      _count: { _all: true },
+    }),
+    // Y por sucursal: el Departamento del CFDI de nómina es la plaza.
+    prisma.nominaCosto.groupBy({
+      by: ["sucursal"],
+      where: { companyId, fecha: { gte: desde, lt: hasta } },
+      _sum: { percepciones: true },
+      orderBy: { _sum: { percepciones: "desc" } },
+    }),
   ]);
+
+  const nominaDe = (linea: string) =>
+    r2(nomina.find((n) => n.linea === linea)?._sum.percepciones ?? 0);
 
   // ── Unidades: nuevas y seminuevas, con su utilidad real por VIN ───────────
   const porTipo = (tipo: "NUEVO" | "SEMINUEVO") => {
@@ -144,11 +161,14 @@ export const GET = withAuthz(async (req: Request) => {
       clave: "mano_obra",
       nombre: "Mano de obra (taller)",
       ingreso: manoObra,
-      costo: null, // la nómina de técnicos no se reparte aquí
-      utilidad: null,
-      margen: null,
+      // Costo = nómina de quienes producen el servicio (técnicos, lavadores,
+      // asesores de servicio), clasificada desde el Puesto del CFDI de nómina.
+      costo: nominaDe("TALLER"),
+      utilidad: r2(manoObra - nominaDe("TALLER")),
+      margen: margen(manoObra - nominaDe("TALLER"), manoObra),
       ordenes: servicios.length,
       costoEstimado: false,
+      costoEsNomina: true,
     },
     lineaRefacciones(refaccionesEnOrden, "Refacciones en órdenes de taller", "refacciones_taller"),
     lineaRefacciones(refaccionesMostrador, "Refacciones de mostrador / mayoreo", "refacciones_mostrador"),
@@ -175,21 +195,48 @@ export const GET = withAuthz(async (req: Request) => {
   }
 
   const ingresoTotal = r2(lineas.reduce((s, l) => s + l.ingreso, 0));
-  const utilidadTotal = r2(lineas.reduce((s, l) => s + (l.utilidad ?? 0), 0));
+  const utilidadBruta = r2(lineas.reduce((s, l) => s + (l.utilidad ?? 0), 0));
+  // Nómina que NO produce ingreso directo: ventas y refacciones cargan a su
+  // línea; administración es gasto de estructura, debajo del margen bruto.
+  const nominaVentas = nominaDe("VENTAS");
+  const nominaRefacciones = nominaDe("REFACCIONES");
+  const nominaAdmin = nominaDe("ADMIN");
+  const utilidadTotal = r2(utilidadBruta - nominaVentas - nominaRefacciones - nominaAdmin);
 
   return NextResponse.json({
     year,
     lineas,
     totales: {
       ingreso: ingresoTotal,
+      utilidadBruta,
+      margenBruto: margen(utilidadBruta, ingresoTotal),
       utilidad: utilidadTotal,
       margen: margen(utilidadTotal, ingresoTotal),
       // Ingreso de unidades cuyo costo no se conoce: fuera del margen, visible.
       ingresoSinCosto: r2(nuevas.ingresoSinCosto + seminuevas.ingresoSinCosto),
     },
+    // Nómina bajo el margen bruto: la estructura que sostiene la operación.
+    gastos: [
+      { clave: "nomina_ventas", nombre: "Nómina de ventas", monto: nominaVentas },
+      { clave: "nomina_refacciones", nombre: "Nómina de refacciones", monto: nominaRefacciones },
+      { clave: "nomina_admin", nombre: "Nómina de administración", monto: nominaAdmin },
+    ],
+    nomina: {
+      total: r2(nomina.reduce((s, n) => s + (n._sum.percepciones ?? 0), 0)),
+      recibos: nomina.reduce((s, n) => s + n._count._all, 0),
+      porLinea: nomina.map((n) => ({
+        linea: n.linea,
+        monto: r2(n._sum.percepciones ?? 0),
+        recibos: n._count._all,
+      })),
+      porSucursal: nominaPorSucursal.map((s) => ({
+        sucursal: s.sucursal ?? "(sin plaza)",
+        monto: r2(s._sum.percepciones ?? 0),
+      })),
+    },
     porMes: meses,
     notas: [
-      "La mano de obra no lleva costo: el costo del taller es la nómina de técnicos, que este módulo no reparte.",
+      "El costo de la mano de obra es la nómina de quienes producen el servicio (técnicos, lavadores, asesores), clasificada desde el Puesto del CFDI de nómina. No incluye cuotas patronales (IMSS/INFONAVIT), así que el costo real es mayor.",
       "El costo de refacciones es estimado con el último costo conocido de cada parte.",
       "Las unidades sin costo de compra (anteriores al archivo de 5 años del SAT) quedan fuera del margen y se reportan aparte.",
       "Vista de operación derivada de CFDIs — el estado de resultados fiscal sale del ledger en ContabilidadOS.",

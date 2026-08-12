@@ -352,6 +352,7 @@ model Company {
   ordenesServicio    OrdenServicio[]
   prospectos         Prospecto[]
   backfillProgreso   BackfillProgreso[]
+  nominaCostos       NominaCosto[]
 }
 
 model CompanyMember {
@@ -894,6 +895,7 @@ model Invoice {
   vehiculoMenciones  VehiculoCfdi[]
   refaccionMovimientos RefaccionMovimiento[]
   servicioVenta      ServicioVenta?
+  nominaCosto        NominaCosto?
   vehiculoCostos     VehiculoCosto[]
 
   // Único por empresa: permite que un CFDI intercompañía viva en las dos
@@ -5139,6 +5141,47 @@ model Prospecto {
 
   @@index([companyId, estado])
   @@index([companyId, proximaAccion])
+}
+
+// ─── Costo de nómina por línea de negocio (estado de resultados) ─────────────
+// El CFDI de nómina trae, por recibo, el Puesto y el Departamento del
+// trabajador. En Margom el Departamento es la PLAZA (Puebla, Tehuacán,
+// Oaxaca…) y el Puesto es la función (TECNICO, LAVADOR, ASESOR DE SERV,
+// AUXILIAR DE CONTABILIDAD). Con eso el costo de la nómina se reparte solo
+// entre taller, ventas, refacciones y administración — sin lo cual la mano de
+// obra del taller se reporta sin costo y su margen es una ficción.
+enum LineaNegocio {
+  TALLER
+  VENTAS
+  REFACCIONES
+  ADMIN
+}
+
+model NominaCosto {
+  id        String   @id @default(cuid())
+  companyId String
+  /** Un renglón por recibo timbrado. */
+  invoiceId String   @unique
+  fecha     DateTime
+  createdAt DateTime @default(now())
+
+  /** Atributo Departamento del CFDI: en la práctica, la sucursal/plaza. */
+  sucursal String?
+  /** Atributo Puesto del CFDI, tal cual viene (auditable). */
+  puesto   String?
+  /** Clasificación derivada del puesto; editable cuando la regla se equivoca. */
+  linea    LineaNegocio
+  /** Percepciones del recibo (gravado + exento): el costo bruto del periodo.
+   *  NO incluye cuotas patronales — el módulo no las reparte. */
+  percepciones Float
+  /** true = alguien corrigió la línea a mano; el derivador ya no la pisa. */
+  lineaManual  Boolean @default(false)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, fecha])
+  @@index([companyId, linea])
 }
 
 // ─── Progreso de la carga inicial (onboarding) ───────────────────────────────
