@@ -43,6 +43,14 @@ const HOUR = 60 * MIN;
 // cuota por corrida (MAX_NEW_SUBMITS) mantienen el gasto SAT acotado.
 const JOBS: Job[] = [
   { name: "sat-backfill", everyMs: 10 * MIN, firstDelayMs: 2 * MIN },
+  // ORQUESTADOR de la carga inicial. El pipeline de una empresa nueva es una
+  // cadena (XML → impuestos → contraparte → vigencia) y cada eslabón vive en un
+  // cron que corre cada 6 h repartiendo su cupo entre TODO el portafolio: una
+  // empresa recién onboardeada tardaba días en quedar al corriente y alguien
+  // terminaba empujando los crons a mano, cliente por cliente. Éste encuentra a
+  // las más atrasadas y les empuja su siguiente eslabón, por empresa. Cadencia
+  // agresiva porque cuando nadie está cargando es un no-op de una consulta.
+  { name: "onboarding-drive", everyMs: 10 * MIN, firstDelayMs: 4 * MIN },
   { name: "sat-sync", everyMs: 4 * HOUR, firstDelayMs: 5 * MIN },
   // El workflow de Actions de sat-sync encadenaba cancel-sync como segundo
   // paso. Aquí va como job propio, desfasado ~30 min del sync para conservar

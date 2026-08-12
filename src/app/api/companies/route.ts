@@ -597,6 +597,10 @@ export async function POST(req: Request) {
     // Vía por UUID: sin cuota del SAT y sin ventana de meses — es la que
     // alcanza el historial completo, incluidas las cancelaciones viejas.
     kickCron("sat-vigencia-sync", 15 * 60_000);
+    // Y el orquestador toma el relevo: de aquí en adelante él empuja la cadena
+    // (XML → impuestos → contraparte → vigencia) hasta que la empresa quede al
+    // corriente, sin que nadie tenga que hacerlo a mano.
+    kickCron("onboarding-drive", 20 * 60_000);
   }
 
   // declaraciones: qué pasó con los acuses subidos en el onboarding. Antes los
