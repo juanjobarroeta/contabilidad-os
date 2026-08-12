@@ -11,6 +11,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
+import { absorcionPorMes, calcularResultados } from "@/lib/automotriz/resultados";
+import { computeTaxPosition } from "@/lib/impuestos";
+import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -24,22 +27,25 @@ export const GET = withAuthz(async (req: Request) => {
   await requireModule(companyId, "AUTOMOTRIZ", req);
 
   const hoy = new Date();
-  const inicioMes = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1));
+  const year = hoy.getFullYear();
+  const month = hoy.getMonth() + 1;
+  // El mismo rango que usa el estado de resultados, para que la utilidad del
+  // mes del panel y la del reporte sean el MISMO número.
+  const inicioMes = new Date(year, month - 1, 1);
+  const finMes = new Date(year, month, 1);
+  // Doce meses hacia atrás, cerrando en el mes en curso: la serie de absorción.
+  const inicioSerie = new Date(year, month - 12, 1);
 
   const ABIERTOS_CRM = ["NUEVO", "CONTACTADO", "CITA", "DEMO", "NEGOCIACION"] as const;
-  const [enPiso, vendidasMes, ordenesAbiertas, promesasVencidas, prospectosAbiertos, seguimientosVencidos] = await Promise.all([
+  const [
+    enPiso, ordenesAbiertas, promesasVencidas, prospectosAbiertos, seguimientosVencidos,
+    resultados, serieAbsorcion, ordenesFacturadas, refaccionesMostrador, fiscal, retenciones,
+  ] = await Promise.all([
     prisma.vehiculo.findMany({
       where: { companyId, estado: { in: ["DISPONIBLE", "APARTADO"] } },
       select: {
-        id: true, vin: true, marca: true, modelo: true, anio: true, estado: true, uso: true,
+        id: true, vin: true, marca: true, modelo: true, anio: true, estado: true, uso: true, tipo: true,
         costoCompra: true, fechaCompra: true,
-        costos: { select: { monto: true } },
-      },
-    }),
-    prisma.vehiculo.findMany({
-      where: { companyId, estado: { in: ["VENDIDO", "ENTREGADO"] }, fechaVenta: { gte: inicioMes } },
-      select: {
-        precioVenta: true, costoCompra: true, comisionMonto: true, isan: true,
         costos: { select: { monto: true } },
       },
     }),
@@ -63,6 +69,33 @@ export const GET = withAuthz(async (req: Request) => {
     prisma.prospecto.count({
       where: { companyId, estado: { in: [...ABIERTOS_CRM] }, proximaAccion: { lt: new Date() } },
     }),
+    // El estado de resultados del mes en curso: MISMO cálculo que el reporte.
+    calcularResultados(prisma, companyId, inicioMes, finMes),
+    absorcionPorMes(prisma, companyId, inicioSerie, finMes),
+    // Órdenes de servicio FACTURADAS del mes (no las abiertas en piso).
+    prisma.servicioVenta.aggregate({
+      where: { companyId, fecha: { gte: inicioMes, lt: finMes } },
+      _sum: { manoObra: true, refacciones: true, total: true },
+      _count: { _all: true },
+    }),
+    // Refacciones de mostrador/mayoreo: salidas del kardex que NO van dentro de
+    // una orden de taller (ésas ya las cuenta la línea de servicio).
+    prisma.$queryRaw<Array<{ facturas: number; importe: number; piezas: number }>>`
+      SELECT COUNT(DISTINCT m."invoiceId")::int                                          AS facturas,
+             COALESCE(SUM(ABS(m."cantidad") * COALESCE(m."montoUnitario", 0)), 0)::float8 AS importe,
+             COALESCE(SUM(ABS(m."cantidad")), 0)::float8                                  AS piezas
+      FROM "RefaccionMovimiento" m
+      JOIN "Refaccion" r ON r.id = m."refaccionId"
+      WHERE r."companyId" = ${companyId}
+        AND m."tipo" = 'SALIDA_VENTA'
+        AND m."fecha" >= ${inicioMes} AND m."fecha" < ${finMes}
+        AND NOT EXISTS (SELECT 1 FROM "ServicioVenta" sv WHERE sv."invoiceId" = m."invoiceId")
+    `,
+    // Impuestos PROYECTADOS: el mes en curso va a la mitad, así que el motor
+    // fiscal corre sobre lo facturado hasta hoy. Es una proyección con lo que
+    // ya existe, no la declaración — ésa se arma con el mes cerrado.
+    computeTaxPosition(companyId, year, month),
+    retencionesDelPeriodo(companyId, year, month),
   ]);
 
   const dias = (v: { fechaCompra: Date | null }) =>
@@ -75,6 +108,9 @@ export const GET = withAuthz(async (req: Request) => {
   const enVenta = enPiso.filter((v) => v.uso === "VENTA");
   const masDe90 = enVenta.filter((v) => (dias(v) ?? 0) > 90);
 
+  // Ventas de unidades del mes: salen del MISMO cálculo que el estado de
+  // resultados, para que el panel no cuente una utilidad y el reporte otra.
+  const vendidasMes = resultados.fuentes.unidades;
   const ingresosMes = r2(vendidasMes.reduce((s, v) => s + (v.precioVenta ?? 0), 0));
   const margenMes = r2(
     vendidasMes.reduce(
@@ -85,6 +121,10 @@ export const GET = withAuthz(async (req: Request) => {
     )
   );
   const isanMes = r2(vendidasMes.reduce((s, v) => s + v.isan, 0));
+  const porTipoMes = (tipo: string) => {
+    const del = vendidasMes.filter((v) => v.tipo === tipo);
+    return { unidades: del.length, monto: r2(del.reduce((s, v) => s + (v.precioVenta ?? 0), 0)) };
+  };
 
   // Urgentes: primero las unidades con más días en piso, luego apartadas.
   const urgentes = [
@@ -108,8 +148,10 @@ export const GET = withAuthz(async (req: Request) => {
       })),
   ];
 
+  const mostrador = refaccionesMostrador[0] ?? { facturas: 0, importe: 0, piezas: 0 };
+
   return NextResponse.json({
-    periodo: { year: hoy.getUTCFullYear(), month: hoy.getUTCMonth() + 1 },
+    periodo: { year, month },
     piso: {
       unidades: enPiso.length,
       valorPiso,
@@ -118,8 +160,48 @@ export const GET = withAuthz(async (req: Request) => {
         ? Math.round(enVenta.reduce((s, v) => s + (dias(v) ?? 0), 0) / enVenta.length)
         : 0,
       demos: enPiso.filter((v) => v.uso !== "VENTA").length,
+      // Piso partido por tipo: un seminuevo parado no se lee igual que uno nuevo.
+      nuevas: enPiso.filter((v) => v.tipo === "NUEVO").length,
+      seminuevas: enPiso.filter((v) => v.tipo === "SEMINUEVO").length,
     },
-    mes: { vendidas: vendidasMes.length, ingresos: ingresosMes, margen: margenMes, isan: isanMes },
+    mes: {
+      vendidas: vendidasMes.length,
+      ingresos: ingresosMes,
+      margen: margenMes,
+      isan: isanMes,
+      nuevas: porTipoMes("NUEVO"),
+      seminuevas: porTipoMes("SEMINUEVO"),
+      // Utilidad del negocio COMPLETO en el mes, no sólo de las unidades:
+      // bruta = todas las líneas; neta = después de la estructura.
+      utilidadBruta: resultados.totales.utilidadBruta,
+      utilidadNeta: resultados.totales.utilidad,
+      ingresoTotal: resultados.totales.ingreso,
+      estructura: resultados.estructura,
+    },
+    // Back end del mes: lo que el taller y el mostrador realmente facturaron.
+    servicio: {
+      ordenesFacturadas: ordenesFacturadas._count._all,
+      monto: r2(ordenesFacturadas._sum.total ?? 0),
+      manoObra: r2(ordenesFacturadas._sum.manoObra ?? 0),
+      refacciones: r2(ordenesFacturadas._sum.refacciones ?? 0),
+    },
+    refacciones: {
+      facturas: mostrador.facturas,
+      monto: r2(mostrador.importe),
+      piezas: r2(mostrador.piezas),
+    },
+    // Absorción: qué tanto de la estructura pagan solos el taller y refacciones.
+    absorcion: { ...resultados.absorcion, serie: serieAbsorcion },
+    // Impuestos PROYECTADOS del mes en curso — con lo facturado hasta hoy, no
+    // la declaración (ésa se arma con el mes cerrado, en Impuestos).
+    impuestos: {
+      proyectado: true,
+      iva: r2(Math.max(fiscal.iva.pagar, 0)),
+      ivaSaldoAFavor: r2(fiscal.iva.saldoAFavor),
+      isr: r2(Math.max(fiscal.isr.isrPagar ?? 0, 0)),
+      retenciones: retenciones.aEnterar,
+      total: r2(Math.max(fiscal.iva.pagar, 0) + Math.max(fiscal.isr.isrPagar ?? 0, 0) + retenciones.aEnterar),
+    },
     taller: {
       abiertas: ordenesAbiertas.reduce((s, o) => s + o._count._all, 0),
       porEstado: Object.fromEntries(ordenesAbiertas.map((o) => [o.estado, o._count._all])),

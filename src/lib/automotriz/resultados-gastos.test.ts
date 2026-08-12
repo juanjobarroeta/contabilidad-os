@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gastosDeOperacion } from "./gastos";
+import { gastosDeOperacion } from "./resultados-gastos";
 
 const cfdi = (claves: Array<[string, number]>) =>
   `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4"><cfdi:Conceptos>${claves
