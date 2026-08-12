@@ -95,46 +95,58 @@ async function handle(req: Request) {
   const cancelados: { id: string; uuid: string; companyId: string }[] = [];
   const errores: { uuid: string; error: string }[] = [];
 
-  for (const inv of invoices) {
-    // Datos de la expresión: del rawXml (Total VERBATIM, la comparación del SAT
-    // es textual) o, para emitidas sin XML guardado, del par empresa/cliente.
-    const datos = inv.rawXml
-      ? datosConsultaDesdeXml(inv.rawXml, inv.uuid!)
-      : inv.tipo === "INGRESO" && inv.customer?.rfc
-        ? { re: inv.company.rfc, rr: inv.customer.rfc, tt: inv.total.toFixed(2), id: inv.uuid! }
-        : null;
-    if (!datos) {
-      // Sin datos para consultar (p. ej. recibida legacy sin XML). También
-      // avanza el cursor: si no, estas facturas se quedan clavadas al frente
-      // del orden (vigenciaCheckedAt null) y cada pasada las re-evalúa,
-      // desperdiciando cupo del `limit` (visto en producción: 140+ saltadas
-      // por pasada). Cuando el backfill les consiga el rawXml, la rotación
-      // normal del cursor las vuelve a intentar.
-      skipped++;
-      await prisma.invoice.update({
-        where: { id: inv.id },
-        data: { vigenciaCheckedAt: new Date() },
-      });
-      continue;
-    }
-
-    try {
-      const estado = await consultarEstadoCfdi(construirExpresion(datos));
-      checked++;
-      if (estado && esCancelado(estado)) {
-        cancelados.push({ id: inv.id, uuid: inv.uuid!, companyId: inv.companyId });
+  // Consultas en paralelo acotado: la latencia del servicio del SAT (~300 ms)
+  // dominaba la corrida en serie, así que una empresa recién onboardeada
+  // tardaba SEMANAS en verificar su archivo (136k CFDIs a ~500 por tick). Con
+  // un pool chico el rendimiento sube ~4x sin volverse agresivo: se mantiene la
+  // pausa entre llamadas DENTRO de cada carril, así que el ritmo hacia el SAT
+  // sigue siendo modesto y predecible.
+  const CARRILES = 4;
+  const carril = async (desde: number): Promise<void> => {
+    for (let i = desde; i < invoices.length; i += CARRILES) {
+      const inv = invoices[i];
+      // Datos de la expresión: del rawXml (Total VERBATIM, la comparación del
+      // SAT es textual) o, para emitidas sin XML guardado, del par
+      // empresa/cliente.
+      const datos = inv.rawXml
+        ? datosConsultaDesdeXml(inv.rawXml, inv.uuid!)
+        : inv.tipo === "INGRESO" && inv.customer?.rfc
+          ? { re: inv.company.rfc, rr: inv.customer.rfc, tt: inv.total.toFixed(2), id: inv.uuid! }
+          : null;
+      if (!datos) {
+        // Sin datos para consultar (p. ej. recibida legacy sin XML). También
+        // avanza el cursor: si no, estas facturas se quedan clavadas al frente
+        // del orden (vigenciaCheckedAt null) y cada pasada las re-evalúa,
+        // desperdiciando cupo del `limit` (visto en producción: 140+ saltadas
+        // por pasada). Cuando el backfill les consiga el rawXml, la rotación
+        // normal del cursor las vuelve a intentar.
+        skipped++;
+        await prisma.invoice.update({
+          where: { id: inv.id },
+          data: { vigenciaCheckedAt: new Date() },
+        });
+        continue;
       }
-      // "No Encontrado" o respuesta rara: NO se toca la factura (conservador) —
-      // sólo avanza el cursor para que el barrido no se atore en ella.
-      await prisma.invoice.update({
-        where: { id: inv.id },
-        data: { vigenciaCheckedAt: new Date() },
-      });
-    } catch (e) {
-      errores.push({ uuid: inv.uuid!, error: e instanceof Error ? e.message : String(e) });
+
+      try {
+        const estado = await consultarEstadoCfdi(construirExpresion(datos));
+        checked++;
+        if (estado && esCancelado(estado)) {
+          cancelados.push({ id: inv.id, uuid: inv.uuid!, companyId: inv.companyId });
+        }
+        // "No Encontrado" o respuesta rara: NO se toca la factura (conservador)
+        // — sólo avanza el cursor para que el barrido no se atore en ella.
+        await prisma.invoice.update({
+          where: { id: inv.id },
+          data: { vigenciaCheckedAt: new Date() },
+        });
+      } catch (e) {
+        errores.push({ uuid: inv.uuid!, error: e instanceof Error ? e.message : String(e) });
+      }
+      await sleep(PAUSA_MS);
     }
-    await sleep(PAUSA_MS);
-  }
+  };
+  await Promise.all(Array.from({ length: CARRILES }, (_, k) => carril(k)));
 
   if (cancelados.length > 0) {
     await prisma.invoice.updateMany({
