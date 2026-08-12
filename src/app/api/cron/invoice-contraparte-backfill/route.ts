@@ -29,8 +29,15 @@ import { parseCfdiXml } from "@/lib/sat-fiel";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const PAGE = 200;
+const PAGE = 500;
 const TIME_BUDGET_MS = 240_000;
+// El trabajo es puramente LOCAL (parsear el rawXml ya guardado + un UPDATE):
+// no toca al SAT, no cuesta y no consume cuota. Medido en producción va a
+// ~200 filas/segundo, así que el tope real lo pone el presupuesto de tiempo,
+// no un límite conservador. Con el default anterior (2000 c/6 h) un rezago de
+// 212 mil facturas tardaba 26 días en drenarse; con éste, un par de días.
+const DEFAULT_LIMIT = 20_000;
+const MAX_LIMIT = 100_000;
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -48,7 +55,9 @@ async function handle(req: Request) {
 
   const url = new URL(req.url);
   const limitParam = parseInt(url.searchParams.get("limit") ?? "", 10);
-  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 5000) : 2000;
+  const limit = Number.isFinite(limitParam)
+    ? Math.min(Math.max(limitParam, 1), MAX_LIMIT)
+    : DEFAULT_LIMIT;
   const startedAt = Date.now();
 
   let actualizadas = 0;
@@ -75,15 +84,27 @@ async function handle(req: Request) {
 
     for (const inv of lote) {
       procesadas++;
+      // MARCA DE INTENTO. El filtro de este barrido es `contraparteNombre:
+      // null`, así que una fila cuyo XML no rinda nombre tiene que quedar
+      // marcada de todos modos: si no, vuelve a entrar en cada corrida y el
+      // barrido gira sobre las mismas filas para siempre (el mismo bucle que
+      // costó 243 re-parseos de acuses anuales). Cadena vacía = "ya se
+      // intentó y el comprobante no lo trae"; la UI la trata como ausente
+      // (ver nombreContraparte en lib/facturas/contraparte.ts).
+      const marcarIntentado = () =>
+        prisma.invoice.update({ where: { id: inv.id }, data: { contraparteNombre: "" } });
+
       let cfdi;
       try {
         cfdi = parseCfdiXml(inv.rawXml as string);
       } catch {
         sinNombre++;
+        await marcarIntentado();
         continue;
       }
       if (!cfdi) {
         sinNombre++;
+        await marcarIntentado();
         continue;
       }
       // La contraparte depende del lado: receptor si la empresa emitió.
@@ -92,11 +113,14 @@ async function handle(req: Request) {
       const rfc = esEmisor ? cfdi.rfcReceptor : cfdi.rfcEmisor;
       if (!nombre && !rfc) {
         sinNombre++;
+        await marcarIntentado();
         continue;
       }
       await prisma.invoice.update({
         where: { id: inv.id },
-        data: { contraparteNombre: nombre ?? null, contraparteRfc: rfc ?? null },
+        // Sin nombre pero con RFC: se marca igual (cadena vacía) para que la
+        // fila salga del barrido y el RFC quede visible en la lista.
+        data: { contraparteNombre: nombre ?? "", contraparteRfc: rfc ?? null },
       });
       if (nombre) actualizadas++;
       else sinNombre++;
