@@ -752,6 +752,15 @@ model Invoice {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  // Contraparte tal como viene en el CFDI (receptor si la emitimos, emisor si
+  // la recibimos). Se denormaliza porque a público en general (XAXX010101000) y
+  // extranjeros (XEXX010101000) NO se les crea Customer —un registro por
+  // comprador de mostrador ensuciaría el catálogo y fusionarlos falsearía la
+  // concentración de clientes—, y sin esto la lista mostraba "—" aunque el
+  // nombre estuviera en el comprobante. `customer` sigue mandando cuando existe.
+  contraparteNombre String?
+  contraparteRfc    String?
+
   // CFDI data
   tipo       InvoiceType // INGRESO, EGRESO, TRASLADO, NOMINA, PAGO
   serie      String?

@@ -93,6 +93,11 @@ export async function importCfdiFromXml(opts: {
     data: {
       companyId,
       customerId,
+      // Contraparte del comprobante: se guarda SIEMPRE, haya Customer o no
+      // (público en general y extranjeros no lo tienen, y su nombre sí viene
+      // en el XML).
+      contraparteNombre: cpName ?? null,
+      contraparteRfc: cpRfc ?? null,
       tipo,
       fecha: new Date(cfdi.fecha),
       serie: cfdi.serie ?? null,

@@ -8,6 +8,7 @@ import { DEDUCCION_CIEGA_ARRENDAMIENTO } from "@/lib/fiscal/isr-arrendamiento";
 import { sumIsrPagar } from "@/lib/isr-provisional";
 import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
 
 // GET /api/papeles/isr?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -234,8 +235,8 @@ export async function GET(req: Request) {
       uuid: inv.uuid,
       serie: inv.serie,
       folio: inv.folio,
-      contraparte: inv.customer?.razonSocial ?? "—",
-      rfc: inv.customer?.rfc ?? "—",
+      contraparte: nombreContraparte(inv),
+      rfc: rfcContraparte(inv),
       subtotal: inv.subtotal,
     })),
     calculo: esPfPlataformas && enginePos
