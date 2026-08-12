@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import {
@@ -32,6 +33,8 @@ export const maxDuration = 300;
 
 const DEFAULT_LIMIT = 200;
 const PAUSA_MS = 150;
+/** Cada cuánto vuelve a preguntarse por un UUID ya verificado. */
+const DEFAULT_RECHECK_DAYS = 90;
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -67,15 +70,35 @@ async function handle(req: Request) {
   // recorrer todo el archivo.
   const soloExpediente = url.searchParams.get("expediente") === "1";
 
+  // Ventana de re-verificación. Sin ella el barrido NUNCA termina: el orden es
+  // por vigenciaCheckedAt asc (nulls first) y no excluye lo ya verificado, así
+  // que al acabar la primera pasada vuelve a empezar por la más vieja y
+  // `candidatas` se queda pegada en el límite para siempre — quemando llamadas
+  // al SAT en UUIDs que ya se preguntaron hoy.
+  //
+  // Una factura SÍ se puede cancelar después, así que re-verificar es correcto;
+  // lo que faltaba era el «cada cuánto». Con la ventana, la primera pasada
+  // termina de verdad (candidatas < limit) y la re-verificación entra sola
+  // cuando el dato envejece.
+  const recheckParam = parseInt(url.searchParams.get("recheckDays") ?? "", 10);
+  const recheckDays = Number.isFinite(recheckParam) ? Math.max(recheckParam, 0) : DEFAULT_RECHECK_DAYS;
+  const cutoff = new Date(Date.now() - recheckDays * 24 * 60 * 60 * 1000);
+
+  const where: Prisma.InvoiceWhereInput = {
+    ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
+    status: "STAMPED",
+    uuid: { not: null },
+    tipo: { in: ["INGRESO", "EGRESO", "PAGO"] },
+    fecha: { gte: desde },
+    ...(soloExpediente ? { vehiculoMenciones: { some: {} } } : {}),
+    // recheckDays=0 desactiva la ventana (re-verifica todo, como antes).
+    ...(recheckDays > 0
+      ? { OR: [{ vigenciaCheckedAt: null }, { vigenciaCheckedAt: { lt: cutoff } }] }
+      : {}),
+  };
+
   const invoices = await prisma.invoice.findMany({
-    where: {
-      ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
-      status: "STAMPED",
-      uuid: { not: null },
-      tipo: { in: ["INGRESO", "EGRESO", "PAGO"] },
-      fecha: { gte: desde },
-      ...(soloExpediente ? { vehiculoMenciones: { some: {} } } : {}),
-    },
+    where,
     select: {
       id: true,
       companyId: true,
@@ -155,15 +178,25 @@ async function handle(req: Request) {
     });
   }
 
+  // Cuánto falta DE VERDAD, para no confundir «sigue corriendo» con «avanza».
+  const pendientes = await prisma.invoice.count({ where });
+
   const summary = {
     ok: true,
     candidatas: invoices.length,
     checked,
     skipped,
+    pendientes,
+    completado: pendientes === 0,
+    desde: desde.toISOString().slice(0, 10),
+    recheckDays,
     cancelados: cancelados.map((c) => c.uuid),
     errores,
     elapsedMs: Date.now() - startedAt,
-    nota: "Barrido incremental por vigenciaCheckedAt: re-ejecuta hasta que candidatas < limit para cubrir todo.",
+    nota:
+      pendientes === 0
+        ? `Barrido completo del periodo desde ${desde.toISOString().slice(0, 10)}. Se re-verifica al cumplir ${recheckDays} días.`
+        : `Faltan ${pendientes} por verificar desde ${desde.toISOString().slice(0, 10)}. Re-ejecuta hasta pendientes = 0.`,
   };
   console.log("[cron/sat-vigencia-sync] done:", JSON.stringify({ ...summary, cancelados: cancelados.length }));
   return NextResponse.json(summary);
