@@ -354,6 +354,12 @@ model Company {
   backfillProgreso   BackfillProgreso[]
   nominaCostos       NominaCosto[]
   reglasClasificacion ReglaClasificacion[]
+
+  // Última vez que el barrido de vigencia (cancelaciones por UUID) atendió a
+  // esta empresa. Es el cursor del REPARTO JUSTO: cada corrida atiende a las
+  // de barrido más antiguo, así la espera de una empresa depende del número de
+  // EMPRESAS y no del tamaño total del portafolio de facturas.
+  vigenciaBarridoAt  DateTime?
 }
 
 model CompanyMember {
@@ -918,6 +924,9 @@ model Invoice {
   // Forma dominante de agregados fiscales: igualdad en companyId+tipo+status
   // y rango sobre fecha (dashboard, impuestos.computeTaxPosition, auto-conciliar).
   @@index([companyId, tipo, status, fecha])
+  // Barrido de vigencia: elegir las pendientes de UNA empresa sin recorrer su
+  // archivo completo (ver src/lib/fiscal/vigencia-plan.ts).
+  @@index([companyId, vigenciaCheckedAt])
 }
 
 // Vínculo operativo de un CFDI con su requisición / gasto / estimación, más el
