@@ -58,8 +58,18 @@ export interface PerfilContacto {
     /** Monto PPD pagado que aún no ampara un complemento. */
     repPendienteMonto: number;
     repPendienteFacturas: number;
+    /** Notas de crédito de este lado (restan a lo facturado). */
+    totalNotasCredito: number;
   };
   facturas: FacturaPerfil[];
+  /** Notas de crédito (tipoSat "E") de este lado: restan a lo facturado. */
+  notasCredito: Array<{
+    id: string;
+    serie: string | null;
+    folio: string | null;
+    fecha: Date;
+    total: number;
+  }>;
   unidades: Array<{
     id: string;
     vin: string;
@@ -71,7 +81,35 @@ export interface PerfilContacto {
     fechaVenta: Date | null;
     costoCompra: number;
     precioVenta: number | null;
+    /** Utilidad de ESA unidad (venta − costo − costos − comisión). Null si el
+     *  costo de compra no se conoce (compra fuera del archivo del SAT). */
+    utilidad: number | null;
   }>;
+  /** Cuánto dejó este cliente en unidades (sólo las de costo conocido). */
+  rentabilidad: {
+    unidades: number;
+    venta: number;
+    utilidad: number;
+    margen: number | null;
+    /** Unidades sin costo conocido: excluidas del cálculo, reportadas aparte. */
+    sinCosto: number;
+  };
+  /** Historial de taller (ServicioVenta derivadas de sus CFDIs). */
+  servicio: {
+    ordenes: number;
+    total: number;
+    manoObra: number;
+    refacciones: number;
+    ultimaVisita: Date | null;
+    ultimas: Array<{ id: string; fecha: Date; concepto: string | null; total: number; vehiculoId: string | null }>;
+  };
+  /** Refacciones que le hemos vendido (kardex ligado a sus CFDIs). */
+  refacciones: {
+    partes: number;
+    piezas: number;
+    importe: number;
+    top: Array<{ numeroParte: string; descripcion: string; piezas: number; importe: number }>;
+  };
 }
 
 /**
@@ -92,7 +130,7 @@ export async function perfilContacto(
   if (!contacto || contacto.companyId !== companyId) return null;
 
   const tipo = direccion === "CLIENTE" ? "INGRESO" : "EGRESO";
-  const facturasDb = await db.invoice.findMany({
+  const todasDb = await db.invoice.findMany({
     where: { companyId, customerId, tipo, status: { not: "CANCELLED" } },
     select: {
       id: true,
@@ -102,10 +140,17 @@ export async function perfilContacto(
       fecha: true,
       total: true,
       metodoPago: true,
+      tipoSat: true,
       conciliacionDetalles: { select: { montoAsignado: true } },
     },
     orderBy: { fecha: "desc" },
   });
+  // Las notas de crédito viajan como INGRESO/EGRESO con tipoSat "E": contarlas
+  // junto a las facturas inflaba «facturado» y su saldo. Van aparte y restan.
+  const facturasDb = todasDb.filter((f) => (f.tipoSat ?? "I") !== "E");
+  const notasCredito = todasDb
+    .filter((f) => (f.tipoSat ?? "I") === "E")
+    .map((f) => ({ id: f.id, serie: f.serie, folio: f.folio, fecha: f.fecha, total: f.total }));
 
   // REPs que amparan estas facturas, empatadas por UUID normalizado — cubre
   // REP en mayúsculas vs PAC en minúsculas, igual que rep-faltante.ts.
@@ -156,9 +201,67 @@ export async function perfilContacto(
     select: {
       id: true, vin: true, marca: true, modelo: true, anio: true, estado: true,
       fechaCompra: true, fechaVenta: true, costoCompra: true, precioVenta: true,
+      comisionMonto: true,
+      costos: { select: { monto: true } },
     },
     orderBy: { createdAt: "desc" },
   });
+
+  // Utilidad por unidad: misma fórmula que el reporte de rentabilidad —
+  // venta − costo de compra − costos capitalizados/financieros − comisión. Las
+  // unidades sin costo conocido (compra anterior al archivo de 5 años del SAT)
+  // NO entran al agregado: inventarían una utilidad igual a la venta entera.
+  const unidades = unidadesDb.map((v) => {
+    const costos = v.costos.reduce((s, c) => s + c.monto, 0);
+    const sinCosto = v.costoCompra <= 0;
+    const utilidad =
+      v.precioVenta == null || sinCosto
+        ? null
+        : r2(v.precioVenta - v.costoCompra - costos - v.comisionMonto);
+    const { costos: _costos, comisionMonto: _com, ...resto } = v;
+    return { ...resto, utilidad };
+  });
+  const conUtilidad = unidades.filter((u) => u.utilidad != null);
+  const ventaConUtilidad = r2(conUtilidad.reduce((s, u) => s + (u.precioVenta ?? 0), 0));
+  const utilidadTotal = r2(conUtilidad.reduce((s, u) => s + (u.utilidad ?? 0), 0));
+
+  // Taller: las ventas de servicio derivadas de SUS CFDIs (fase 5).
+  const serviciosDb = await db.servicioVenta.findMany({
+    where: { companyId, clienteId: customerId },
+    select: { id: true, fecha: true, concepto: true, total: true, manoObra: true, refacciones: true, vehiculoId: true },
+    orderBy: { fecha: "desc" },
+  });
+
+  // Refacciones vendidas (o compradas, del lado proveedor): kardex ligado a
+  // los CFDIs de este contacto. Se agrega por número de parte.
+  const movs = await db.refaccionMovimiento.findMany({
+    where: {
+      tipo: direccion === "CLIENTE" ? "SALIDA_VENTA" : "ENTRADA_COMPRA",
+      refaccion: { companyId },
+      invoice: { customerId },
+    },
+    select: {
+      cantidad: true,
+      montoUnitario: true,
+      refaccion: { select: { numeroParte: true, descripcion: true } },
+    },
+    take: 5000,
+  });
+  const porParte = new Map<string, { numeroParte: string; descripcion: string; piezas: number; importe: number }>();
+  for (const m of movs) {
+    const clave = m.refaccion.numeroParte;
+    const acc = porParte.get(clave) ?? {
+      numeroParte: clave,
+      descripcion: m.refaccion.descripcion,
+      piezas: 0,
+      importe: 0,
+    };
+    const piezas = Math.abs(m.cantidad);
+    acc.piezas += piezas;
+    acc.importe = r2(acc.importe + piezas * (m.montoUnitario ?? 0));
+    porParte.set(clave, acc);
+  }
+  const partes = [...porParte.values()].sort((a, b) => b.importe - a.importe);
 
   const conRepPendiente = facturas.filter((f) => f.repPendiente > 1); // tolerancia de centavos
   return {
@@ -177,8 +280,37 @@ export async function perfilContacto(
       saldo: r2(facturas.reduce((s, f) => s + f.saldo, 0)),
       repPendienteMonto: r2(conRepPendiente.reduce((s, f) => s + f.repPendiente, 0)),
       repPendienteFacturas: conRepPendiente.length,
+      totalNotasCredito: r2(notasCredito.reduce((s, n) => s + n.total, 0)),
     },
     facturas,
-    unidades: unidadesDb,
+    notasCredito,
+    unidades,
+    rentabilidad: {
+      unidades: conUtilidad.length,
+      venta: ventaConUtilidad,
+      utilidad: utilidadTotal,
+      margen: ventaConUtilidad > 0 ? r2((utilidadTotal / ventaConUtilidad) * 100) : null,
+      sinCosto: unidades.filter((u) => u.precioVenta != null && u.utilidad == null).length,
+    },
+    servicio: {
+      ordenes: serviciosDb.length,
+      total: r2(serviciosDb.reduce((s, x) => s + x.total, 0)),
+      manoObra: r2(serviciosDb.reduce((s, x) => s + x.manoObra, 0)),
+      refacciones: r2(serviciosDb.reduce((s, x) => s + x.refacciones, 0)),
+      ultimaVisita: serviciosDb[0]?.fecha ?? null,
+      ultimas: serviciosDb.slice(0, 10).map((s) => ({
+        id: s.id,
+        fecha: s.fecha,
+        concepto: s.concepto,
+        total: s.total,
+        vehiculoId: s.vehiculoId,
+      })),
+    },
+    refacciones: {
+      partes: partes.length,
+      piezas: r2(partes.reduce((s, p) => s + p.piezas, 0)),
+      importe: r2(partes.reduce((s, p) => s + p.importe, 0)),
+      top: partes.slice(0, 15),
+    },
   };
 }

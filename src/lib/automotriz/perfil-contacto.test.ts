@@ -30,7 +30,8 @@ function fakeDb() {
     { id: "v1", companyId: "c1", clienteId: "cust1", supplierRfc: null, compraCustomerId: null,
       vin: "3GALD255XTM007338", marca: "JAC", modelo: "FRISON T9", anio: 2026, estado: "VENDIDO",
       fechaCompra: new Date("2026-02-12"), fechaVenta: new Date("2026-07-23"),
-      costoCompra: 445700.05, precioVenta: 542241.38 },
+      costoCompra: 445700.05, precioVenta: 542241.38,
+      comisionMonto: 5000, costos: [{ monto: 12000 }] },
   ];
   return {
     customer: { findUnique: async ({ where }: any) => (where.id === contacto.id ? contacto : null) },
@@ -48,6 +49,9 @@ function fakeDb() {
           where.clienteId ? v.clienteId === where.clienteId : true
         ),
     },
+    // Taller y kardex del contacto (perfil 360°): sin movimientos en este fake.
+    servicioVenta: { findMany: async () => [] },
+    refaccionMovimiento: { findMany: async () => [] },
   };
 }
 
@@ -110,6 +114,8 @@ describe("perfilContacto() — evidencia de pago sin conciliación bancaria", ()
         findMany: async ({ where }: any) => reps.filter((r) => where.parentUuid.in.includes(r.parentUuid)),
       },
       vehiculo: { findMany: async () => [] },
+      servicioVenta: { findMany: async () => [] },
+      refaccionMovimiento: { findMany: async () => [] },
     };
   }
 
@@ -120,6 +126,29 @@ describe("perfilContacto() — evidencia de pago sin conciliación bancaria", ()
     expect(por["f-ppd-rep"]).toMatchObject({ pagado: 150000, amparadoRep: 150000, saldo: 50000, repPendiente: 0 });
     expect(por["f-ppd-abierta"]).toMatchObject({ pagado: 0, saldo: 300000 });
     expect(p!.resumen).toMatchObject({ totalFacturado: 600000, totalPagado: 250000, saldo: 350000 });
+  });
+});
+
+describe("perfilContacto() — cuánto dejó el cliente", () => {
+  it("utilidad por unidad = venta − costo − costos − comisión, y agrega el margen", async () => {
+    const p = await perfilContacto(fakeDb() as never, "c1", "cust1", "CLIENTE");
+    // 542,241.38 − 445,700.05 − 12,000 (costos) − 5,000 (comisión) = 79,541.33
+    expect(p!.unidades[0].utilidad).toBeCloseTo(79541.33, 2);
+    expect(p!.rentabilidad).toMatchObject({ unidades: 1, sinCosto: 0 });
+    expect(p!.rentabilidad.utilidad).toBeCloseTo(79541.33, 2);
+    expect(p!.rentabilidad.margen).toBeCloseTo(14.67, 1);
+  });
+
+  it("una unidad sin costo conocido NO inventa utilidad: queda fuera del agregado", async () => {
+    const db = fakeDb() as never as { vehiculo: { findMany: () => Promise<unknown[]> } };
+    db.vehiculo.findMany = async () => [
+      { id: "v2", clienteId: "cust1", vin: "X", marca: "JAC", modelo: "JS4", anio: 2022,
+        estado: "VENDIDO", fechaCompra: null, fechaVenta: new Date("2026-03-01"),
+        costoCompra: 0, precioVenta: 300000, comisionMonto: 0, costos: [] },
+    ];
+    const p = await perfilContacto(db as never, "c1", "cust1", "CLIENTE");
+    expect(p!.unidades[0].utilidad).toBeNull();
+    expect(p!.rentabilidad).toMatchObject({ unidades: 0, utilidad: 0, sinCosto: 1 });
   });
 });
 
