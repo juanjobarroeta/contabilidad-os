@@ -4861,6 +4861,15 @@ model Refaccion {
   ultimoCosto   Float   @default(0)
   /** Último precio unitario de venta visto (sin IVA). */
   ultimoPrecio  Float?
+  /**
+   * ClaveUnidad del SAT en que vienen expresados el costo y el precio. Los
+   * lubricantes se COMPRAN por tambo (208 L) y se VENDEN por litro: si las
+   * unidades difieren, el costo unitario NO es comparable con el precio ni
+   * con la cantidad que sale del kardex, y usarlo infla el costo de ventas
+   * ~208x. Null en filas derivadas antes de guardar la unidad.
+   */
+  unidadCosto   String?
+  unidadPrecio  String?
   autoCreado    Boolean @default(true)
 
   company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)

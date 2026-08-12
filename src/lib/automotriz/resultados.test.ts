@@ -118,3 +118,44 @@ describe("armar() — absorción de servicio", () => {
     expect(r.totales.utilidad).toBe(400_000);
   });
 });
+
+describe("armar() — costo de refacciones no comparable (tambo vs litro)", () => {
+  // Caso REAL de Margom: el aceite se compra por TAMBO (208 L) y se vende por
+  // LITRO. El «último costo» es el del tambo, así que aplicarlo a los litros
+  // que salen multiplica el costo por 208 y el estado de resultados reportó
+  // −$838M de utilidad en una línea que en realidad gana ~30%.
+  it("deja fuera del margen lo que no se puede costear, y lo reporta", () => {
+    const r = armar(
+      base({
+        refaccionesRaw: [
+          {
+            en_orden: true,
+            ingreso: 100_000, // salidas SÍ costeables
+            costo: 70_000,
+            piezas: 500,
+            ingreso_sin_costo: 29_000, // lubricantes: unidad de compra ≠ venta
+          },
+        ],
+      })
+    );
+    const linea = r.lineas.find((l) => l.clave === "refacciones_taller")!;
+    expect(linea.ingreso).toBe(100_000);
+    expect(linea.costo).toBe(70_000);
+    expect(linea.utilidad).toBe(30_000);
+    expect(linea.margen).toBe(30);
+    // Lo no costeable no se inventa ni se esconde: se reporta aparte.
+    expect(linea.ingresoSinCosto).toBe(29_000);
+    expect(r.totales.ingresoSinCosto).toBe(29_000);
+    // Y NUNCA produce una utilidad negativa absurda.
+    expect(r.totales.utilidadBruta).toBe(30_000);
+  });
+
+  it("sin ingreso_sin_costo se comporta como antes", () => {
+    const r = armar(
+      base({ refaccionesRaw: [{ en_orden: false, ingreso: 1_000, costo: 600, piezas: 10 }] })
+    );
+    const linea = r.lineas.find((l) => l.clave === "refacciones_mostrador")!;
+    expect(linea.utilidad).toBe(400);
+    expect(linea.ingresoSinCosto).toBe(0);
+  });
+});

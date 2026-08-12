@@ -116,16 +116,35 @@ export async function calcularResultados(
     }),
     // Kardex de salidas del periodo, partido por origen: dentro de una orden
     // de taller vs mostrador. El costo va con el último costo conocido.
-    db.$queryRaw<Array<{ en_orden: boolean; ingreso: number; costo: number; piezas: number }>>(Prisma.sql`
-      SELECT EXISTS (SELECT 1 FROM "ServicioVenta" sv WHERE sv."invoiceId" = m."invoiceId") AS en_orden,
-             COALESCE(SUM(ABS(m."cantidad") * COALESCE(m."montoUnitario", 0)), 0)::float8 AS ingreso,
-             COALESCE(SUM(ABS(m."cantidad") * COALESCE(r."ultimoCosto", 0)), 0)::float8   AS costo,
-             COALESCE(SUM(ABS(m."cantidad")), 0)::float8                                   AS piezas
-      FROM "RefaccionMovimiento" m
-      JOIN "Refaccion" r ON r.id = m."refaccionId"
-      WHERE r."companyId" = ${companyId}
-        AND m."tipo" = 'SALIDA_VENTA'
-        AND m."fecha" >= ${desde} AND m."fecha" < ${hasta}
+    // El costo sólo se aplica cuando ES COMPARABLE con lo que sale. Un
+    // lubricante comprado por TAMBO (208 L) y vendido por LITRO tiene un
+    // «último costo» 208 veces mayor que el costo de un litro: aplicarlo
+    // convertía $29M de venta de refacciones en $868M de costo y un margen de
+    // −2853%. Se descarta cuando la unidad del SAT de la compra difiere de la
+    // de la venta, o —para filas aún sin unidad guardada— cuando el costo
+    // supera al doble del precio, que en una refacción no ocurre por negocio.
+    db.$queryRaw<
+      Array<{ en_orden: boolean; ingreso: number; costo: number; piezas: number; ingreso_sin_costo: number }>
+    >(Prisma.sql`
+      WITH mov AS (
+        SELECT m."invoiceId", m."cantidad", m."montoUnitario", r."ultimoCosto",
+               (r."ultimoCosto" > 0
+                AND (r."unidadCosto" IS NULL OR r."unidadPrecio" IS NULL
+                     OR r."unidadCosto" = r."unidadPrecio")
+                AND NOT (COALESCE(r."ultimoPrecio", 0) > 0
+                         AND r."ultimoCosto" > r."ultimoPrecio" * 2)) AS comparable
+        FROM "RefaccionMovimiento" m
+        JOIN "Refaccion" r ON r.id = m."refaccionId"
+        WHERE r."companyId" = ${companyId}
+          AND m."tipo" = 'SALIDA_VENTA'
+          AND m."fecha" >= ${desde} AND m."fecha" < ${hasta}
+      )
+      SELECT EXISTS (SELECT 1 FROM "ServicioVenta" sv WHERE sv."invoiceId" = mov."invoiceId") AS en_orden,
+             COALESCE(SUM(ABS("cantidad") * COALESCE("montoUnitario", 0)) FILTER (WHERE comparable), 0)::float8     AS ingreso,
+             COALESCE(SUM(ABS("cantidad") * COALESCE("ultimoCosto", 0)) FILTER (WHERE comparable), 0)::float8       AS costo,
+             COALESCE(SUM(ABS("cantidad") * COALESCE("montoUnitario", 0)) FILTER (WHERE NOT comparable), 0)::float8 AS ingreso_sin_costo,
+             COALESCE(SUM(ABS("cantidad")), 0)::float8                                                              AS piezas
+      FROM mov
       GROUP BY 1
     `),
     db.nominaCosto.groupBy({
@@ -159,7 +178,9 @@ type NominaGrupo = {
 export interface InsumosResultados {
   unidades: UnidadVendida[];
   servicios: Array<{ fecha: Date; manoObra: number; refacciones: number }>;
-  refaccionesRaw: Array<{ en_orden: boolean; ingreso: number; costo: number; piezas: number }>;
+  refaccionesRaw: Array<{
+    en_orden: boolean; ingreso: number; costo: number; piezas: number; ingreso_sin_costo?: number;
+  }>;
   nomina: NominaGrupo[];
   nominaPorSucursal: Array<{ sucursal: string | null; _sum: { percepciones: number | null; cuotasPatronales: number | null } }>;
   gastos: GastosResultado;
@@ -200,12 +221,12 @@ export function armar(d: InsumosResultados): ResultadosPeriodo {
 
   const manoObra = r2(d.servicios.reduce((s, x) => s + x.manoObra, 0));
   const costoManoObra = nominaDe("TALLER");
-  const vacio = { ingreso: 0, costo: 0, piezas: 0 };
+  const vacio = { ingreso: 0, costo: 0, piezas: 0, ingreso_sin_costo: 0 };
   const refEnOrden = d.refaccionesRaw.find((r) => r.en_orden) ?? vacio;
   const refMostrador = d.refaccionesRaw.find((r) => !r.en_orden) ?? vacio;
 
   const lineaRefacciones = (
-    fuente: { ingreso: number; costo: number; piezas: number },
+    fuente: { ingreso: number; costo: number; piezas: number; ingreso_sin_costo?: number },
     nombre: string,
     clave: string
   ): LineaResultado => ({
@@ -216,6 +237,9 @@ export function armar(d: InsumosResultados): ResultadosPeriodo {
     utilidad: r2(fuente.ingreso - fuente.costo),
     margen: margen(fuente.ingreso - fuente.costo, fuente.ingreso),
     piezas: r2(fuente.piezas),
+    // Salidas cuyo costo no es comparable (unidad de compra ≠ unidad de venta):
+    // quedan FUERA del margen y se reportan, como las unidades sin costo.
+    ingresoSinCosto: r2(fuente.ingreso_sin_costo ?? 0),
     costoEstimado: true,
   });
 
@@ -294,7 +318,12 @@ export function armar(d: InsumosResultados): ResultadosPeriodo {
       margenBruto: margen(utilidadBruta, ingresoTotal),
       utilidad: utilidadTotal,
       margen: margen(utilidadTotal, ingresoTotal),
-      ingresoSinCosto: r2(nuevas.ingresoSinCosto + seminuevas.ingresoSinCosto),
+      ingresoSinCosto: r2(
+        nuevas.ingresoSinCosto +
+          seminuevas.ingresoSinCosto +
+          (refEnOrden.ingreso_sin_costo ?? 0) +
+          (refMostrador.ingreso_sin_costo ?? 0)
+      ),
     },
     gastos: [
       { clave: "nomina_ventas", nombre: "Nómina de ventas", monto: nominaVentas },
