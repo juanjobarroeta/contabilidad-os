@@ -360,6 +360,10 @@ model Company {
   // de barrido más antiguo, así la espera de una empresa depende del número de
   // EMPRESAS y no del tamaño total del portafolio de facturas.
   vigenciaBarridoAt  DateTime?
+
+  // Orden de rotación del barrido de vigencia (nulls primero: las empresas
+  // nunca barridas van al frente de la fila).
+  @@index([vigenciaBarridoAt])
 }
 
 model CompanyMember {
