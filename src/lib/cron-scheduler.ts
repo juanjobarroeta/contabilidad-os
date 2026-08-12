@@ -74,6 +74,10 @@ const JOBS: Job[] = [
   // Ídem: el workflow de rawxml-backfill encadenaba el desglose de impuestos
   // (parse local del rawXml recién bajado, sin cuota SAT).
   { name: "invoice-taxes-backfill", everyMs: 6 * HOUR, firstDelayMs: 25 * MIN },
+  // Ídem, del mismo rawXml: nombre/RFC de la contraparte. Sin esto, los CFDIs a
+  // público en general (que no llevan Customer a propósito) salían como "—" en
+  // la lista aunque el nombre venga en el comprobante. Gap-driven: converge.
+  { name: "invoice-contraparte-backfill", everyMs: 6 * HOUR, firstDelayMs: 40 * MIN },
   { name: "compliance-provision", everyMs: 24 * HOUR, firstDelayMs: 3 * MIN },
   { name: "compliance-sync", everyMs: 6 * HOUR, firstDelayMs: 8 * MIN },
   // Acuses MENSUALES desde Syntage (PDF + parse con Claude). Corría SÓLO en el

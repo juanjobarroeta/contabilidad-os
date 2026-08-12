@@ -619,6 +619,10 @@ export async function verifyAndImportSatSync(
           data: {
             companyId,
             customerId,
+            // Contraparte del comprobante: se guarda SIEMPRE, haya Customer o
+            // no (público en general y extranjeros no lo tienen a propósito).
+            contraparteNombre: counterpartyName ?? null,
+            contraparteRfc: counterpartyRfc ?? null,
             tipo: invoiceType,
             // TipoDeComprobante crudo del SAT: "E" marca nota de credito y el
             // motor fiscal la netea con signo negativo dentro de su tipo.

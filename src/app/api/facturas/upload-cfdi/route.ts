@@ -117,6 +117,9 @@ export async function POST(req: Request) {
     data: {
       companyId,
       customerId,
+      // Contraparte del comprobante, haya Customer o no (público en general).
+      contraparteNombre: cpName ?? null,
+      contraparteRfc: cpRfc ?? null,
       tipo,
       fecha: p.fecha ? new Date(p.fecha) : new Date(),
       formaPago: p.formaPago ?? "99",

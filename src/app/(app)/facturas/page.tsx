@@ -36,6 +36,10 @@ interface Invoice {
   regimenNomina: string | null;
   isrRetenidoNomina: number | null;
   customer: { razonSocial: string; rfc: string } | null;
+  // Contraparte del propio comprobante — el respaldo cuando no hay Customer
+  // (público en general XAXX010101000 y extranjeros XEXX010101000).
+  contraparteNombre?: string | null;
+  contraparteRfc?: string | null;
   // REP (tipo PAGO): montos reales del complemento (el comprobante trae 0).
   pagoMonto?: number | null;
   pagoIva?: number | null;
@@ -524,9 +528,19 @@ export default function FacturasPage() {
                     <span className="mt-1 block text-[11px] font-medium text-cos-ink-faint">Asimilados</span>
                   )}
                 </span>
+                {/* La contraparte sale del Customer cuando existe; si no (público
+                    en general y extranjeros, que no llevan Customer), del nombre
+                    que trae el propio comprobante. */}
                 <span className="min-w-0">
-                  <span className="block truncate text-[14.5px] font-medium text-cos-ink">{inv.customer?.razonSocial ?? "—"}</span>
-                  <span className="mt-0.5 block truncate font-mono text-[12px] text-cos-ink-faint">{inv.customer?.rfc ?? "—"}</span>
+                  <span className="block truncate text-[14.5px] font-medium text-cos-ink">
+                    {inv.customer?.razonSocial ?? inv.contraparteNombre ?? "—"}
+                  </span>
+                  <span className="mt-0.5 block truncate font-mono text-[12px] text-cos-ink-faint">
+                    {inv.customer?.rfc ?? inv.contraparteRfc ?? "—"}
+                    {!inv.customer && inv.contraparteRfc === "XAXX010101000" && (
+                      <span className="ml-1.5 font-sans text-cos-ink-faint">· público en general</span>
+                    )}
+                  </span>
                 </span>
                 <span className="text-right">
                   {signed ? (

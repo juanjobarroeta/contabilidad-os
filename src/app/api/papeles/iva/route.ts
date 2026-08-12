@@ -8,6 +8,7 @@ import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from
 import { repIvaAcreditableDe } from "@/lib/impuestos";
 import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import { esConceptoExcluido, UMBRAL_MONTO } from "@/lib/fiscal/audit/ingreso-no-facturado";
+import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
 
 // GET /api/papeles/iva?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -181,8 +182,8 @@ export async function GET(req: Request) {
         uuid: inv.uuid,
         serie: inv.serie,
         folio: inv.folio,
-        contraparte: inv.customer?.razonSocial ?? "—",
-        rfc: inv.customer?.rfc ?? "—",
+        contraparte: nombreContraparte(inv),
+        rfc: rfcContraparte(inv),
         subtotal: inv.subtotal,
         tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
         importe: t,
@@ -198,8 +199,8 @@ export async function GET(req: Request) {
         uuid: inv.uuid,
         serie: inv.serie,
         folio: inv.folio,
-        contraparte: inv.customer?.razonSocial ?? "—",
-        rfc: inv.customer?.rfc ?? "—",
+        contraparte: nombreContraparte(inv),
+        rfc: rfcContraparte(inv),
         subtotal: inv.subtotal,
         tasa: inv.subtotal > 0 ? +(r / inv.subtotal).toFixed(4) : null,
         importe: r,
@@ -225,8 +226,8 @@ export async function GET(req: Request) {
       uuid: parent.uuid,
       serie: parent.serie,
       folio: parent.folio,
-      contraparte: parent.customer?.razonSocial ?? "—",
-      rfc: parent.customer?.rfc ?? "—",
+      contraparte: nombreContraparte(parent),
+      rfc: rfcContraparte(parent),
       subtotal: +(iva / 0.16).toFixed(2),
       tasa: 0.16,
       importe: iva,
@@ -272,8 +273,8 @@ export async function GET(req: Request) {
       uuid: inv.uuid,
       serie: inv.serie,
       folio: inv.folio,
-      contraparte: inv.customer?.razonSocial ?? "—",
-      rfc: inv.customer?.rfc ?? "—",
+      contraparte: nombreContraparte(inv),
+      rfc: rfcContraparte(inv),
       subtotal: inv.subtotal,
       tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
       importe: t,
@@ -306,8 +307,8 @@ export async function GET(req: Request) {
         uuid: inv.uuid,
         serie: inv.serie,
         folio: inv.folio,
-        contraparte: inv.customer?.razonSocial ?? "—",
-        rfc: inv.customer?.rfc ?? "—",
+        contraparte: nombreContraparte(inv),
+        rfc: rfcContraparte(inv),
         subtotal: inv.subtotal,
         tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
         importe,
@@ -324,8 +325,8 @@ export async function GET(req: Request) {
         uuid: inv.uuid,
         serie: inv.serie,
         folio: inv.folio,
-        contraparte: inv.customer?.razonSocial ?? "—",
-        rfc: inv.customer?.rfc ?? "—",
+        contraparte: nombreContraparte(inv),
+        rfc: rfcContraparte(inv),
         subtotal: inv.subtotal,
         tasa: inv.subtotal > 0 ? +(r / inv.subtotal).toFixed(4) : null,
         importe: r,

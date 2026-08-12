@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
+import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
 
 // GET /api/papeles/retenciones?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -86,8 +87,8 @@ export async function GET(req: Request) {
           uuid: inv.uuid,
           serie: inv.serie,
           folio: inv.folio,
-          contraparte: inv.customer?.razonSocial ?? "—",
-          rfc: inv.customer?.rfc ?? "—",
+          contraparte: nombreContraparte(inv),
+          rfc: rfcContraparte(inv),
           subtotal: inv.subtotal,
           tipoRetencion: (t.tipo as "IVA" | "ISR" | "IEPS") ?? "ISR",
           tasa: inv.subtotal > 0 ? +(t.importe / inv.subtotal).toFixed(4) : null,
@@ -106,8 +107,8 @@ export async function GET(req: Request) {
           uuid: inv.uuid,
           serie: inv.serie,
           folio: inv.folio,
-          contraparte: inv.customer?.razonSocial ?? "—",
-          rfc: inv.customer?.rfc ?? "—",
+          contraparte: nombreContraparte(inv),
+          rfc: rfcContraparte(inv),
           subtotal: inv.subtotal,
           tipoRetencion: "ISR",
           tasa: inv.subtotal > 0 ? +(-ti / inv.subtotal).toFixed(4) : null,

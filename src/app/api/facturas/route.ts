@@ -130,6 +130,10 @@ export async function GET(req: Request) {
       { notas: { contains: q, mode: "insensitive" } },
       { customer: { razonSocial: { contains: q, mode: "insensitive" } } },
       { customer: { rfc: { contains: q, mode: "insensitive" } } },
+      // Contraparte del comprobante: hace buscables por nombre los CFDIs a
+      // público en general, que no tienen Customer.
+      { contraparteNombre: { contains: q, mode: "insensitive" } },
+      { contraparteRfc: { contains: q, mode: "insensitive" } },
     ];
   }
 
