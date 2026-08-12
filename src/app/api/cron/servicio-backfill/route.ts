@@ -49,13 +49,39 @@ async function handle(req: Request) {
   const diagnostico = url.searchParams.get("diagnostico") === "1";
   // reiniciar=1: vuelve a barrer desde cero (tras cambiar reglas de extracción).
   const reiniciar = url.searchParams.get("reiniciar") === "1";
+  // recalcular=1: BORRA lo ya derivado antes de volver a barrer.
+  //
+  // `reiniciar` sólo mueve el cursor, y el barrido filtra `servicioVenta: null`
+  // — así que una factura ya derivada NUNCA se vuelve a mirar por más veces que
+  // se reinicie. En Margom eso devolvió «derivadas: 0» en 5 segundos sobre
+  // 38,996 órdenes que arrastraban el defecto de los anticipos: el arreglo del
+  // extractor estaba desplegado y no tocaba un solo renglón viejo.
+  //
+  // Para que un cambio en las reglas de extracción alcance a los datos viejos
+  // hay que borrarlos. Exige companyId explícito: es destructivo y no debe
+  // caerle a la empresa que el cron eligió solo.
+  const recalcular = url.searchParams.get("recalcular") === "1";
+  if (recalcular && !onlyCompanyId) {
+    return NextResponse.json(
+      { error: "recalcular=1 requiere companyId explícito (borra las ventas de servicio derivadas)" },
+      { status: 400 }
+    );
+  }
   const startedAt = Date.now();
 
   // Sin companyId explícito, el cron elige solo a quién le falta carga inicial:
   // así una empresa que sube su e.firma el viernes termina de cargar sola.
   const objetivo =
     onlyCompanyId ?? (diagnostico ? null : (await empresasPendientes(prisma, "servicio", 1))[0] ?? null);
-  if (objetivo && reiniciar) await reiniciarProgreso(prisma, objetivo, "servicio");
+  if (objetivo && (reiniciar || recalcular)) await reiniciarProgreso(prisma, objetivo, "servicio");
+
+  // El borrado deja `OrdenServicio.servicioVentaId` en null (onDelete: SetNull)
+  // y la re-derivación vuelve a ligar la orden con su nueva venta, así que el
+  // taller no pierde el vínculo con su documento operativo.
+  let borradas = 0;
+  if (objetivo && recalcular && !diagnostico) {
+    borradas = (await prisma.servicioVenta.deleteMany({ where: { companyId: objetivo } })).count;
+  }
 
   const where = {
     tipo: "INGRESO" as const,
@@ -127,6 +153,7 @@ async function handle(req: Request) {
     companyId: objetivo,
     scanned,
     derivadas,
+    ...(recalcular ? { borradas } : {}),
     completado: barridoCompleto,
     ...(diagnostico ? { diagnostico: true, razones, ejemplos } : {}),
     nextAfterId: !barridoCompleto ? (lastId ?? null) : null,
