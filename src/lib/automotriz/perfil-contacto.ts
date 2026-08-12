@@ -135,11 +135,21 @@ export interface PerfilContacto {
       invoice: { id: string; uuid: string | null; serie: string | null; folio: string | null; facturapiId: string | null };
     }>;
   };
-  /** Refacciones que le hemos vendido (kardex ligado a sus CFDIs). */
+  /**
+   * Refacciones que le hemos vendido (kardex ligado a sus CFDIs). OJO: NO es
+   * ingreso adicional — estas piezas ya están dentro de las facturas, sea
+   * como parte de una orden de taller o como venta de mostrador. El desglose
+   * `enOrdenes`/`mostrador` dice de dónde viene cada peso para que nadie sume
+   * taller + refacciones y se invente ventas.
+   */
   refacciones: {
     partes: number;
     piezas: number;
     importe: number;
+    /** Importe que va dentro de una orden de taller (ya contado en servicio). */
+    enOrdenes: number;
+    /** Importe de ventas de mostrador (facturas sin línea de servicio). */
+    mostrador: number;
     top: Array<{ numeroParte: string; descripcion: string; piezas: number; importe: number }>;
   };
 }
@@ -313,9 +323,14 @@ export async function perfilContacto(
       cantidad: true,
       montoUnitario: true,
       refaccion: { select: { numeroParte: true, descripcion: true } },
+      // ¿La factura que ampara la pieza es una orden de taller? Eso decide si
+      // el importe ya está contado dentro de `servicio` o es mostrador puro.
+      invoice: { select: { servicioVenta: { select: { id: true } } } },
     },
     take: 5000,
   });
+  let importeEnOrdenes = 0;
+  let importeMostrador = 0;
   const porParte = new Map<string, { numeroParte: string; descripcion: string; piezas: number; importe: number }>();
   for (const m of movs) {
     const clave = m.refaccion.numeroParte;
@@ -326,9 +341,12 @@ export async function perfilContacto(
       importe: 0,
     };
     const piezas = Math.abs(m.cantidad);
+    const importe = piezas * (m.montoUnitario ?? 0);
     acc.piezas += piezas;
-    acc.importe = r2(acc.importe + piezas * (m.montoUnitario ?? 0));
+    acc.importe = r2(acc.importe + importe);
     porParte.set(clave, acc);
+    if (m.invoice?.servicioVenta) importeEnOrdenes += importe;
+    else importeMostrador += importe;
   }
   const partes = [...porParte.values()].sort((a, b) => b.importe - a.importe);
 
@@ -384,6 +402,8 @@ export async function perfilContacto(
       partes: partes.length,
       piezas: r2(partes.reduce((s, p) => s + p.piezas, 0)),
       importe: r2(partes.reduce((s, p) => s + p.importe, 0)),
+      enOrdenes: r2(importeEnOrdenes),
+      mostrador: r2(importeMostrador),
       top: partes.slice(0, 15),
     },
   };

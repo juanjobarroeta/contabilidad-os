@@ -67,6 +67,36 @@ describe("extraerServicioCfdi() — anticipos", () => {
   });
 });
 
+// Factura SVS-427 real: la línea «mano de obra» de $0.01 es de relleno, y el
+// trabajo verdadero son las otras dos líneas 78181500.
+const SVS427 = `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I" Total="8200.00">
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="78181500" Cantidad="1.000000" Descripcion="mano de obra" ValorUnitario="0.01" Importe="0.01"/>
+    <cfdi:Concepto ClaveProdServ="15111700" NoIdentificacion="MAUX002948" Cantidad="8.000000" Descripcion="ULTRA CLEAR PLUS CJ-4 SAE" ValorUnitario="92.24" Importe="737.93"/>
+    <cfdi:Concepto ClaveProdServ="26101726" NoIdentificacion="1010320FE010" Cantidad="1.000000" Descripcion="FILTRO ACEITE" ValorUnitario="267.24" Importe="267.24"/>
+    <cfdi:Concepto ClaveProdServ="78181500" Cantidad="1.000000" Descripcion="instalacion de balatas delanteras" ValorUnitario="517.24" Importe="517.24"/>
+    <cfdi:Concepto ClaveProdServ="78181500" Cantidad="1.000000" Descripcion="mantenimiento de sistema de urea" ValorUnitario="1034.48" Importe="1034.48"/>
+    <cfdi:Concepto ClaveProdServ="78181500" Cantidad="1.000000" Descripcion="MANO DE OBRA" ValorUnitario="1975.35" Importe="1975.35"/>
+  </cfdi:Conceptos>
+</cfdi:Comprobante>`;
+
+describe("extraerServicioCfdi() — nombre de la orden", () => {
+  it("nombra la orden con el trabajo real, no con «mano de obra»", () => {
+    const d = extraerServicioCfdi(SVS427);
+    expect(d.concepto).toBe("mantenimiento de sistema de urea + instalacion de balatas delanteras");
+    // La mano de obra sigue sumando TODAS las líneas de servicio.
+    expect(d.manoObra).toBeCloseTo(3527.08, 2);
+    expect(d.refacciones).toBeCloseTo(1005.17, 2);
+  });
+
+  it("si todas las líneas son genéricas conserva la primera", () => {
+    const generico = `<cfdi:Comprobante TipoDeComprobante="I"><cfdi:Conceptos>
+      <cfdi:Concepto ClaveProdServ="78181500" Cantidad="1" Descripcion="MANO DE OBRA" Importe="1500.00"/>
+    </cfdi:Conceptos></cfdi:Comprobante>`;
+    expect(extraerServicioCfdi(generico).concepto).toBe("MANO DE OBRA");
+  });
+});
+
 describe("extraerServicioCfdi() sobre un CFDI REAL de taller", () => {
   it("lo reconoce como servicio y separa mano de obra de refacciones", () => {
     const d = extraerServicioCfdi(REAL);
