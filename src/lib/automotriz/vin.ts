@@ -158,13 +158,93 @@ export function emisorDesdeCfdi(rawXml: string): { rfc: string; nombre: string |
 const CONCEPTO_RE =
   /<(?:[\w-]+:)?Concepto\b([^>]*?)(\/>|>([\s\S]*?)<\/(?:[\w-]+:)?Concepto>)/gi;
 
+/** Cada candado que un concepto puede no pasar para contar como unidad. */
+export type MotivoNoUnidad =
+  | "clave_no_2510"
+  | "cantidad_mayor_1"
+  | "sin_vin_en_texto"
+  | "varios_vins_en_texto"
+  | "bajo_umbral";
+
+export interface VeredictoUnidad {
+  esUnidad: boolean;
+  /** NIV elegido cuando esUnidad; null si no. */
+  niv: string | null;
+  /** true si entró por el complemento VentaVehiculos (ruta sin candados). */
+  porComplemento: boolean;
+  /**
+   * TODOS los candados que falla, no sólo el primero. Contar «falla varios_vins»
+   * y «falla SÓLO varios_vins» son preguntas distintas, y con el primer motivo
+   * nada más no se pueden distinguir.
+   */
+  fallas: MotivoNoUnidad[];
+}
+
+/**
+ * El veredicto de si un concepto ES la unidad. Vive aparte para que el
+ * diagnóstico mida exactamente lo que decide producción: si esto se duplicara,
+ * el reporte acabaría explicando un derivador que no es el que corre.
+ *
+ * Un concepto ES la unidad si trae el complemento VentaVehiculos con NIV
+ * válido. Sin complemento, la clave de vehículo (2510xx) NO basta — los
+ * proveedores la usan también para servicios sobre vehículos. Candados
+ * estructurales: cantidad 1, EXACTAMENTE un VIN en el texto y un importe de
+ * unidad (≥ umbral). Todo lo demás que menciona VINs es COSTO de esas unidades,
+ * repartido entre ellas.
+ */
+export function evaluarUnidad(args: {
+  claveProdServ: string | null;
+  cantidad: number;
+  importe: number;
+  vinsTexto: string[];
+  nivComplemento: string | null;
+}): VeredictoUnidad {
+  const { claveProdServ, cantidad, importe, vinsTexto, nivComplemento } = args;
+
+  const vinComplementoOk =
+    nivComplemento && esVinValido(nivComplemento) ? nivComplemento.trim().toUpperCase() : null;
+  if (vinComplementoOk != null) {
+    return { esUnidad: true, niv: vinComplementoOk, porComplemento: true, fallas: [] };
+  }
+
+  const fallas: MotivoNoUnidad[] = [];
+  if (!(claveProdServ ?? "").startsWith("2510")) fallas.push("clave_no_2510");
+  if (!(cantidad <= 1)) fallas.push("cantidad_mayor_1");
+  if (vinsTexto.length === 0) fallas.push("sin_vin_en_texto");
+  else if (vinsTexto.length > 1) fallas.push("varios_vins_en_texto");
+  if (!(importe >= UMBRAL_UNIDAD_SIN_COMPLEMENTO)) fallas.push("bajo_umbral");
+
+  return {
+    esUnidad: fallas.length === 0,
+    niv: fallas.length === 0 ? vinsTexto[0] : null,
+    porComplemento: false,
+    fallas,
+  };
+}
+
 /**
  * Extrae las unidades (por su NIV en el complemento) y los demás conceptos de un
  * CFDI. Devuelve listas vacías si el CFDI no ampara vehículos.
  */
-export function extraerDatosVehiculoCfdi(rawXml: string): DatosVehiculoCfdi {
-  const vehiculos: ConceptoVehiculo[] = [];
-  const otrosConceptos: OtroConcepto[] = [];
+/** Un concepto del CFDI ya parseado, con el veredicto que le tocó. */
+export interface ConceptoConVeredicto {
+  descripcion: string | null;
+  claveProdServ: string | null;
+  noIdentificacion: string | null;
+  importe: number;
+  cantidad: number;
+  claveVehicular: string | null;
+  vinsTexto: string[];
+  veredicto: VeredictoUnidad;
+}
+
+/**
+ * Parsea los conceptos y les aplica el veredicto. Es la ÚNICA pasada: tanto la
+ * derivación como el diagnóstico salen de aquí, para que el reporte no pueda
+ * describir un derivador distinto del que corre.
+ */
+export function conceptosConVeredicto(rawXml: string): ConceptoConVeredicto[] {
+  const out: ConceptoConVeredicto[] = [];
 
   for (const m of rawXml.matchAll(CONCEPTO_RE)) {
     const attrs = m[1] ?? "";
@@ -181,31 +261,42 @@ export function extraerDatosVehiculoCfdi(rawXml: string): DatosVehiculoCfdi {
     // de N unidades en un solo concepto).
     const vinsTexto = [...new Set([...vinsDesdeTexto(descripcion), ...vinsDesdeTexto(noIdentificacion)])];
 
-    // Un concepto ES la unidad si trae el complemento VentaVehiculos con NIV
-    // válido. Sin complemento, la clave de vehículo (2510xx) NO basta — los
-    // proveedores la usan también para servicios sobre vehículos. Candados
-    // estructurales: cantidad 1, EXACTAMENTE un VIN en el texto y un importe
-    // de unidad (≥ umbral). Todo lo demás que menciona VINs es COSTO de esas
-    // unidades, repartido entre ellas.
-    const vinComplementoOk =
-      nivComplemento && esVinValido(nivComplemento) ? nivComplemento.trim().toUpperCase() : null;
-    const esUnidad =
-      vinComplementoOk != null ||
-      ((claveProdServ ?? "").startsWith("2510") &&
-        cantidad <= 1 &&
-        vinsTexto.length === 1 &&
-        importe >= UMBRAL_UNIDAD_SIN_COMPLEMENTO);
+    out.push({
+      descripcion,
+      claveProdServ,
+      noIdentificacion,
+      importe,
+      cantidad,
+      claveVehicular: venta ? attrDe(venta, "ClaveVehicular") : null,
+      vinsTexto,
+      veredicto: evaluarUnidad({ claveProdServ, cantidad, importe, vinsTexto, nivComplemento }),
+    });
+  }
 
-    if (esUnidad) {
+  return out;
+}
+
+export function extraerDatosVehiculoCfdi(rawXml: string): DatosVehiculoCfdi {
+  const vehiculos: ConceptoVehiculo[] = [];
+  const otrosConceptos: OtroConcepto[] = [];
+
+  for (const c of conceptosConVeredicto(rawXml)) {
+    if (c.veredicto.esUnidad) {
       vehiculos.push({
-        niv: vinComplementoOk ?? vinsTexto[0],
-        claveVehicular: venta ? attrDe(venta, "ClaveVehicular") : null,
-        descripcion,
-        noIdentificacion,
-        importe,
+        niv: c.veredicto.niv!,
+        claveVehicular: c.claveVehicular,
+        descripcion: c.descripcion,
+        noIdentificacion: c.noIdentificacion,
+        importe: c.importe,
       });
     } else {
-      otrosConceptos.push({ descripcion, claveProdServ, noIdentificacion, importe, nivRefs: vinsTexto });
+      otrosConceptos.push({
+        descripcion: c.descripcion,
+        claveProdServ: c.claveProdServ,
+        noIdentificacion: c.noIdentificacion,
+        importe: c.importe,
+        nivRefs: c.vinsTexto,
+      });
     }
   }
 

@@ -5,6 +5,7 @@ import { calcularCobertura, NOTAS_COBERTURA } from "@/lib/automotriz/cobertura";
 import { invariantes } from "@/lib/automotriz/invariantes";
 import { senales, type LineaEvaluable } from "@/lib/automotriz/senales";
 import { calcularResultados } from "@/lib/automotriz/resultados";
+import { diagnosticarUnidades } from "@/lib/automotriz/diagnostico-unidades";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/automotriz/cobertura?companyId=…&year=2026[&month=7]
@@ -42,6 +43,14 @@ export const GET = withAuthz(async (req: Request) => {
   const desde = month ? new Date(year, month - 1, 1) : new Date(year, 0, 1);
   const hasta = month ? new Date(year, month, 1) : new Date(year + 1, 0, 1);
   const periodo = month ? `${year}-${String(month).padStart(2, "0")}` : String(year);
+
+  // ?diagnostico=unidades — por qué las compras 2510xx no se volvieron unidad.
+  // Va aparte del cuerpo normal porque lee el XML íntegro de cada factura y no
+  // se quiere pagar ese costo en cada carga del tablero.
+  if (searchParams.get("diagnostico") === "unidades") {
+    const diagnostico = await diagnosticarUnidades(prisma, companyId, desde, hasta);
+    return NextResponse.json({ year, periodo, diagnostico });
+  }
 
   const [cobertura, violaciones, resultados] = await Promise.all([
     calcularCobertura(prisma, companyId, desde, hasta, { maxClusters: 50 }),
