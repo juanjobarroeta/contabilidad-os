@@ -1,0 +1,54 @@
+name: Sincronizar cumplimiento de una empresa (manual)
+
+# Corre compliance-sync para UNA empresa. Sirve para dos cosas que hoy sólo
+# ocurren por cron programado:
+#
+#   • ARRANQUE DE CONTABILIDAD ELECTRÓNICA. El bootstrap sólo dispara si
+#     `ceBootstrapAt == null` — es de una sola vez por diseño, para no
+#     sobreescribir el libro vivo con la balanza del SAT. Después de mejorar el
+#     filtro de hojas y el alta de cuentas huérfanas hay que volver a correrlo o
+#     la apertura sigue como estaba.
+#   • Refrescar opinión de cumplimiento, CSF y declaraciones de esa empresa.
+#
+# Existe como workflow por lo mismo que los demás: el endpoint se autentica con
+# CRON_SECRET y aquí el secreto ya vive en el repo. No hace falta Railway.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa"
+        required: true
+        type: string
+      reparseAnuales:
+        description: "Re-parsear los acuses anuales con Claude (cuesta tokens)"
+        required: false
+        default: false
+        type: boolean
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Correr compliance-sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          REPARSE: ${{ inputs.reparseAnuales }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q="companyId=${COMPANY_ID}"
+          if [ "${REPARSE}" = "true" ]; then Q="${Q}&reparseAnuales=1"; fi
+
+          curl -fsS --max-time 900 "${URL}/api/cron/compliance-sync?${Q}" \
+            -H "x-cron-secret: ${CRON_SECRET}" | jq .
