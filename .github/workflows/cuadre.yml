@@ -31,6 +31,11 @@ on:
         required: false
         default: true
         type: boolean
+      jqFiltro:
+        description: "Filtro jq sobre la respuesta (ej: .resultados[0].estructura.lineas[0])"
+        required: false
+        default: "."
+        type: string
       baseUrl:
         description: "URL del despliegue a golpear"
         required: false
@@ -49,6 +54,7 @@ jobs:
           COMPANY_ID: ${{ inputs.companyId }}
           ANIO: ${{ inputs.anio }}
           CON_GASTOS: ${{ inputs.gastos }}
+          JQ_FILTRO: ${{ inputs.jqFiltro }}
         run: |
           set -euo pipefail
           URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
@@ -58,5 +64,8 @@ jobs:
           if [ -n "${COMPANY_ID}" ]; then Q="${Q}&companyId=${COMPANY_ID}"; fi
           if [ "${CON_GASTOS}" = "true" ]; then Q="${Q}&gastos=1"; fi
 
+          # El desglose por clave hace que la respuesta completa pase de 900
+          # líneas. Un filtro jq deja pedir sólo el renglón que se está
+          # auditando en vez de volcarlo todo.
           curl -fsS --max-time 300 "${URL}/api/cron/cuadre?${Q}" \
-            -H "x-cron-secret: ${CRON_SECRET}" | jq .
+            -H "x-cron-secret: ${CRON_SECRET}" | jq "${JQ_FILTRO:-.}"
