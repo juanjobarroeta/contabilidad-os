@@ -52,18 +52,61 @@ function masReciente(a: Json, b: Json): Json {
   return pa.mes >= pb.mes ? a : b;
 }
 
-/**
- * Primera referencia descargable (`@id` de un `/files/{id}`) de un registro de
- * Contabilidad Electrónica. Los XML del SAT vienen como `text/xml`; preferimos
- * ése y caemos al primer archivo disponible.
- */
-function fileRefDe(rec: Json): string | null {
+// Cada registro de Contabilidad Electrónica trae CUATRO archivos: acuse de
+// recibo (PDF), acuse de procesamiento (PDF), el documento del SAT (XML) y el
+// SELLO DIGITAL — que también es XML. Elegir "el primer archivo con mimeType
+// xml" es una apuesta al orden del arreglo: si el sello viene primero, se
+// descarga `<SelloDigitalContElec>`, que no tiene una sola cuenta, el parser
+// devuelve 0 y el arranque reporta vacío sin error. Ése es el modo de falla
+// que dejó a MARGOM con 69 registros en Syntage y la apertura en cero.
+//
+// Aquí no se adivina el orden ni el nombre: se descartan los PDF, se prueban
+// los XML restantes y se acepta el primero cuyo CONTENIDO sea el documento que
+// se está importando. Verificar el contenido es lo único que no depende de
+// cómo Syntage acomode o nombre los archivos.
+
+export interface CandidatoXml {
+  ref: string;
+  nombre: string;
+}
+
+/** Refs XML descargables del registro (los acuses son PDF y quedan fuera). */
+export function refsXmlDe(rec: Json): CandidatoXml[] {
   const files = Array.isArray(rec.files) ? (rec.files as Json[]) : [];
-  if (files.length === 0) return null;
-  const xml = files.find((f) => String(f.mimeType ?? "").toLowerCase().includes("xml"));
-  const elegido = xml ?? files[0];
-  const id = elegido["@id"] ?? elegido.id;
-  return id ? String(id) : null;
+  return files
+    .filter((f) => {
+      const huella = `${f.mimeType ?? ""} ${f.filename ?? ""} ${f.extension ?? ""}`.toLowerCase();
+      return !huella.includes("pdf");
+    })
+    .map((f) => ({
+      ref: String(f["@id"] ?? f.id ?? ""),
+      nombre: String(f.filename ?? f.id ?? ""),
+    }))
+    .filter((c) => c.ref !== "");
+}
+
+/**
+ * ¿Este XML es el documento que buscamos? El sello digital comparte RFC y
+ * namespace de ContabilidadE con la balanza, así que se descarta por su raíz
+ * y el documento se confirma por la suya (`…:Catalogo` / `…:Balanza`).
+ */
+export function esDocumentoCe(xml: string, tipo: "CT" | "B"): boolean {
+  if (/SelloDigitalContElec/i.test(xml)) return false;
+  return tipo === "CT" ? /<[A-Za-z0-9]*:?Catalogo\b/i.test(xml) : /<[A-Za-z0-9]*:?Balanza\b/i.test(xml);
+}
+
+/** Descarga el primer XML del registro cuyo contenido sea el documento pedido. */
+async function descargarDocumentoCe(
+  client: { downloadAcuse(ref: string): Promise<{ data: ArrayBuffer }> },
+  rec: Json,
+  tipo: "CT" | "B",
+): Promise<{ xml: string; nombre: string } | null> {
+  for (const cand of refsXmlDe(rec)) {
+    const xml = await descargarXmlDeRef(client, cand.ref);
+    if (esDocumentoCe(xml, tipo)) return { xml, nombre: cand.nombre };
+    console.warn(`[ce-syntage] ${cand.nombre}: no es el documento ${tipo}; probando el siguiente`);
+  }
+  return null;
 }
 
 /**
@@ -107,11 +150,13 @@ export async function leerEImportarContabilidadElectronicaSyntage(
   let catalogo: ImportarCeSyntageResult["catalogo"] = null;
   if (catalogos.length > 0) {
     const rec = catalogos.reduce(masReciente);
-    const ref = fileRefDe(rec);
-    if (ref) {
-      // Los CE del SAT vienen como .zip — descargarXmlDeRef los abre.
-      const xml = await descargarXmlDeRef(client, ref);
-      catalogo = await importarCatalogo(companyId, xml);
+    // descargarXmlDeRef abre el .zip si el SAT lo entregó comprimido.
+    const doc = await descargarDocumentoCe(client, rec, "CT");
+    if (doc) {
+      catalogo = await importarCatalogo(companyId, doc.xml);
+      console.info(`[ce-syntage] ${companyId} catálogo ${doc.nombre}: ${catalogo?.total ?? 0} cuentas`);
+    } else {
+      console.error(`[ce-syntage] ${companyId}: ningún archivo del registro CT es el catálogo`);
     }
   }
 
@@ -121,11 +166,16 @@ export async function leerEImportarContabilidadElectronicaSyntage(
   let balanzaPeriodo: { anio: number; mes: number } | null = null;
   if (balanzas.length > 0) {
     const rec = balanzas.reduce(masReciente);
-    const ref = fileRefDe(rec);
-    if (ref) {
-      const xml = await descargarXmlDeRef(client, ref);
-      balanza = await importarBalanza(companyId, xml, { usar: "final" });
+    const doc = await descargarDocumentoCe(client, rec, "B");
+    if (doc) {
+      balanza = await importarBalanza(companyId, doc.xml, { usar: "final" });
       balanzaPeriodo = periodoDe(rec);
+      console.info(
+        `[ce-syntage] ${companyId} balanza ${balanzaPeriodo.anio}-${balanzaPeriodo.mes} ` +
+          `${doc.nombre}: ${balanza?.entries ?? 0} asientos`,
+      );
+    } else {
+      console.error(`[ce-syntage] ${companyId}: ningún archivo del registro B es la balanza`);
     }
   }
 
