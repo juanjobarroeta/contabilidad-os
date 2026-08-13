@@ -100,6 +100,42 @@ export function priceIdForPlan(
   return v && v.trim() !== "" ? v.trim() : null;
 }
 
+// ─── Complementos (add-ons) ──────────────────────────────────────────────────
+// Módulos a la medida que se cobran EN LA MISMA suscripción que el plan, como
+// una segunda partida. El cliente pide el complemento por CLAVE, nunca por
+// Price ID: el id sale del entorno, así que un satélite no puede inyectar un
+// precio arbitrario en el checkout.
+//
+// El webhook no se entera: deriva el plan de metadata.plan, no de las
+// partidas, así que agregar complementos no altera el tier aplicado.
+export const COMPLEMENTOS = ["PURIFICADORA"] as const;
+export type Complemento = (typeof COMPLEMENTOS)[number];
+
+const COMPLEMENTO_ENV_VAR: Record<Complemento, string> = {
+  PURIFICADORA: "STRIPE_PRICE_PURIFICADORA",
+};
+
+/** Parsea la lista de complementos del body; ignora claves desconocidas. */
+export function parseComplementos(v: unknown): Complemento[] {
+  if (!Array.isArray(v)) return [];
+  return [
+    ...new Set(
+      v.filter((x): x is Complemento =>
+        typeof x === "string" && (COMPLEMENTOS as readonly string[]).includes(x),
+      ),
+    ),
+  ];
+}
+
+/** Price ID del complemento, o null si no está configurado en el entorno. */
+export function priceIdForComplemento(
+  complemento: Complemento,
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const v = env[COMPLEMENTO_ENV_VAR[complemento]];
+  return v && v.trim() !== "" ? v.trim() : null;
+}
+
 /**
  * Price IDs configurados del plan DESPACHO (mensual y anual). Sirve para
  * reconocer el item per-unit dentro de una suscripción de Stripe al

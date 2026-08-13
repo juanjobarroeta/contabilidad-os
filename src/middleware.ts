@@ -76,6 +76,8 @@ export const config = {
     "/api/onboarding/:path*",
     "/api/billing/checkout",
     "/api/billing/portal",
+    // PurificadoraOS muestra y contrata la suscripción desde su propia app.
+    "/api/billing/suscripcion",
     "/api/companies/:path*",
     "/api/construccion/:path*",
     "/api/padel/:path*",
