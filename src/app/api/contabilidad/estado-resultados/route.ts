@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { AuthzError, requireMembership } from "@/lib/authz";
 import { estadoResultados, estadoResultadosPreview } from "@/lib/contabilidad/posting";
+import { clavePeriodo, hojaEstadoResultados } from "@/lib/contabilidad/reportes-xlsx";
+import { headersDescargaXlsx, toXlsx } from "@/lib/export/xlsx";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/contabilidad/estado-resultados?companyId=xxx&year=2026&month=3
@@ -30,13 +32,18 @@ export async function GET(req: Request) {
 
     const isPosted = period?.status === "POSTED" || period?.status === "CLOSED";
 
-    if (isPosted) {
-      const result = await estadoResultados(companyId, year, month);
-      return NextResponse.json({ ...result, preliminar: false });
+    const result = isPosted
+      ? await estadoResultados(companyId, year, month)
+      : await estadoResultadosPreview(companyId, year, month);
+
+    if (url.searchParams.get("format") === "xlsx") {
+      const nombre = `Estado de resultados ${clavePeriodo(year, month)}${isPosted ? "" : " (preliminar)"}.xlsx`;
+      return new NextResponse(new Uint8Array(toXlsx([hojaEstadoResultados(result)])), {
+        headers: headersDescargaXlsx(nombre),
+      });
     }
 
-    const preview = await estadoResultadosPreview(companyId, year, month);
-    return NextResponse.json({ ...preview, preliminar: true });
+    return NextResponse.json({ ...result, preliminar: !isPosted });
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
     throw e;

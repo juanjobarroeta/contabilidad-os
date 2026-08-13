@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
-import {
-  operacionesEgresoFlujo,
-  type EgresoDelMes,
-  type PpdParentEgreso,
-} from "@/lib/fiscal/iva-flujo";
-import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 import { archivoDiot2025, archivoDiotLegacy } from "@/lib/fiscal/diot";
+import { cargarProveedoresDiot, totalesDiot } from "@/lib/fiscal/diot-datos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/impuestos/diot?companyId=xxx&month=4&year=2026
@@ -54,178 +48,10 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const from = new Date(year, month - 1, 1);
-  const to = new Date(year, month, 1);
-
-  // Proveedores 69-B definitivos: su IVA NO es acreditable (Art. 69-B CFF) —
-  // la operación sí se reporta, pero el IVA va como no acreditable, igual que
-  // el motor mensual lo excluye del acreditable.
-  const efosBloqueados = await efosRfcsBloqueados(companyId);
-  const esEfos = (rfc?: string | null) =>
-    efosBloqueados.size > 0 && !!rfc && efosBloqueados.has(rfc.toUpperCase().trim());
-
-  const taxesSelect = {
-    select: { tipo: true, factor: true, tasa: true, base: true, importe: true, retencion: true },
-  } as const;
-
-  // 1) Egresos EMITIDOS en el mes: sólo los PUE cuentan (pagados por emisión).
-  //    Los PPD se filtran dentro del helper — entran únicamente vía REP.
-  // 2) Pagos de REP (complemento de pago) con FechaPago dentro del mes.
-  const [egresosDelMes, repLinksDelMes] = await Promise.all([
-    prisma.invoice.findMany({
-      where: {
-        companyId,
-        tipo: "EGRESO",
-        status: "STAMPED",
-        fecha: { gte: from, lt: to },
-      },
-      select: {
-        metodoPago: true,
-        subtotal: true,
-        total: true,
-        totalImpuestos: true,
-        ivaNoAcreditable: true,
-        taxes: taxesSelect,
-        customer: { select: { rfc: true, razonSocial: true } },
-      },
-    }),
-    prisma.pagoDoctoRelacionado.findMany({
-      where: {
-        fechaPago: { gte: from, lt: to },
-        pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
-      },
-      select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
-    }),
-  ]);
-
-  // 3) Facturas madre PPD (EGRESO) de esos pagos — mismos filtros que el motor.
-  const parentUuids = [...new Set(repLinksDelMes.map((l) => l.parentUuid))];
-  const ppdParentsRaw = parentUuids.length
-    ? await prisma.invoice.findMany({
-        where: {
-          companyId,
-          tipo: "EGRESO",
-          uuid: { in: parentUuids },
-          metodoPago: "PPD",
-          status: "STAMPED",
-        },
-        select: {
-          uuid: true,
-          metodoPago: true,
-          subtotal: true,
-          total: true,
-          totalImpuestos: true,
-          ivaNoAcreditable: true,
-          taxes: taxesSelect,
-          customer: { select: { rfc: true, razonSocial: true } },
-        },
-      })
-    : [];
-
-  const egresos: EgresoDelMes[] = egresosDelMes.map((inv) => ({
-    metodoPago: inv.metodoPago,
-    subtotal: inv.subtotal,
-    total: inv.total,
-    totalImpuestos: inv.totalImpuestos,
-    taxes: inv.taxes,
-    ivaNoAcreditable: inv.ivaNoAcreditable || esEfos(inv.customer?.rfc),
-    rfc: inv.customer?.rfc ?? null,
-    razonSocial: inv.customer?.razonSocial ?? null,
-  }));
-  const ppdParents: PpdParentEgreso[] = ppdParentsRaw
-    .filter((p) => p.uuid != null)
-    .map((p) => ({
-      uuid: p.uuid!,
-      metodoPago: p.metodoPago,
-      subtotal: p.subtotal,
-      total: p.total,
-      totalImpuestos: p.totalImpuestos,
-      taxes: p.taxes,
-      ivaNoAcreditable: p.ivaNoAcreditable || esEfos(p.customer?.rfc),
-      rfc: p.customer?.rfc ?? null,
-      razonSocial: p.customer?.razonSocial ?? null,
-    }));
-
-  // Operaciones efectivamente pagadas en el mes (helper puro compartido con el
-  // motor mensual — ver src/lib/fiscal/iva-flujo.ts).
-  const operaciones = operacionesEgresoFlujo({
-    egresosDelMes: egresos,
-    repLinksDelMes,
-    ppdParents,
-  });
-
-  // Aggregate by supplier RFC
-  type SupplierRow = {
-    rfc: string;
-    razonSocial: string;
-    tipoTercero: "04" | "05" | "15"; // Nacional, Extranjero, Global
-    operaciones: number; // count of paid operations (facturas PUE + pagos REP)
-    valorActosGravados16: number; // base pagada gravada 16%
-    ivaTrasladadoPagado16: number; // IVA acreditable (efectivamente pagado)
-    valorActosGravados0: number; // base pagada gravada a tasa 0%
-    valorActosExentos: number; // actos exentos pagados (≠ tasa 0%)
-    ivaNoAcreditable: number; // IVA pagado no acreditable (bandera / 69-B)
-    ivaRetenido: number;
-    totalPagado: number;
-  };
-
-  const byRfc = new Map<string, SupplierRow>();
-
-  for (const op of operaciones) {
-    const rfc = op.rfc ?? "XAXX010101000";
-    const razonSocial = op.razonSocial ?? "PUBLICO EN GENERAL";
-
-    if (!byRfc.has(rfc)) {
-      // Determine tipo tercero
-      let tipoTercero: "04" | "05" | "15" = "04"; // Nacional
-      if (rfc === "XEXX010101000" || rfc.length < 12) {
-        tipoTercero = "05"; // Extranjero
-      } else if (rfc === "XAXX010101000") {
-        tipoTercero = "15"; // Global (sin RFC)
-      }
-
-      byRfc.set(rfc, {
-        rfc,
-        razonSocial,
-        tipoTercero,
-        operaciones: 0,
-        valorActosGravados16: 0,
-        ivaTrasladadoPagado16: 0,
-        valorActosGravados0: 0,
-        valorActosExentos: 0,
-        ivaNoAcreditable: 0,
-        ivaRetenido: 0,
-        totalPagado: 0,
-      });
-    }
-
-    const row = byRfc.get(rfc)!;
-    row.operaciones++;
-    row.totalPagado += op.totalPagado;
-    row.valorActosGravados16 += op.base16Pagada;
-    row.ivaTrasladadoPagado16 += op.ivaAcreditable;
-    row.valorActosGravados0 += op.base0Pagada;
-    row.valorActosExentos += op.exentosPagados;
-    row.ivaNoAcreditable += op.ivaNoAcreditable;
-    row.ivaRetenido += op.ivaRetenido;
-  }
-
-  const rows = Array.from(byRfc.values()).sort((a, b) =>
-    b.ivaTrasladadoPagado16 - a.ivaTrasladadoPagado16
-  );
-
-  // Totals
-  const totals = {
-    operaciones: rows.reduce((s, r) => s + r.operaciones, 0),
-    valorActosGravados16: rows.reduce((s, r) => s + r.valorActosGravados16, 0),
-    ivaTrasladadoPagado16: rows.reduce((s, r) => s + r.ivaTrasladadoPagado16, 0),
-    valorActosGravados0: rows.reduce((s, r) => s + r.valorActosGravados0, 0),
-    valorActosExentos: rows.reduce((s, r) => s + r.valorActosExentos, 0),
-    ivaNoAcreditable: rows.reduce((s, r) => s + r.ivaNoAcreditable, 0),
-    ivaRetenido: rows.reduce((s, r) => s + r.ivaRetenido, 0),
-    totalPagado: rows.reduce((s, r) => s + r.totalPagado, 0),
-    proveedores: rows.length,
-  };
+  // Carga y agregación por proveedor (base de flujo) — compartida con el
+  // paquete mensual: src/lib/fiscal/diot-datos.ts
+  const rows = await cargarProveedoresDiot(companyId, year, month);
+  const totals = totalesDiot(rows);
 
   // SAT TXT — por defecto el layout DIOT 2025 de la nueva plataforma (54
   // campos, pesos enteros); ?layout=legacy conserva el layout DEM anterior de

@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { consultarPorLotes } from "@/lib/prisma-lotes";
 import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import type { Hallazgo } from "./types";
 
@@ -46,11 +47,17 @@ export async function cargarRepFechaPagoAnterior(companyId: string): Promise<Rep
   });
   if (links.length === 0) return [];
 
+  // POR LOTES a la fuerza: el `uuid: { in: ... }` de una empresa grande pasa el
+  // tope de parámetros de Postgres, y el `status: { not: ... }` le impide a
+  // Prisma partir la consulta sola. Sin esto, el auditor completo reventaba
+  // para la empresa más grande y esa empresa se quedaba sin hallazgos.
   const parentUuids = variantesUuid(links.map((l) => l.parentUuid));
-  const parents = await prisma.invoice.findMany({
-    where: { companyId, uuid: { in: parentUuids }, status: { not: "CANCELLED" } },
-    select: { id: true, uuid: true, fecha: true, serie: true, folio: true },
-  });
+  const parents = await consultarPorLotes(parentUuids, (lote) =>
+    prisma.invoice.findMany({
+      where: { companyId, uuid: { in: lote }, status: { not: "CANCELLED" } },
+      select: { id: true, uuid: true, fecha: true, serie: true, folio: true },
+    })
+  );
   const byUuid = new Map(parents.map((p) => [normalizarUuid(p.uuid!), p]));
 
   const items: RepFechaAnterior[] = [];

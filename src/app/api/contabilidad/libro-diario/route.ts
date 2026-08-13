@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, withAuthz } from "@/lib/authz";
 import { libroDiario, type EntryForLibro } from "@/lib/contabilidad/libro";
+import { clavePeriodo, hojaLibroDiario } from "@/lib/contabilidad/reportes-xlsx";
+import { headersDescargaXlsx, toXlsx } from "@/lib/export/xlsx";
 
 // GET /api/contabilidad/libro-diario?companyId=&year=&month= — pólizas del
 // periodo agrupadas EXACTAMENTE como el XML del Anexo 24 (mismo folio).
@@ -40,6 +42,12 @@ export const GET = withAuthz(async (req: Request) => {
   }));
 
   const polizas = libroDiario(forLibro);
+
+  if (searchParams.get("format") === "xlsx") {
+    return new NextResponse(new Uint8Array(toXlsx([hojaLibroDiario(polizas)])), {
+      headers: headersDescargaXlsx(`Libro diario ${clavePeriodo(year, month)}.xlsx`),
+    });
+  }
 
   // Enlaces profundos: UUID de CFDI → id de Invoice (para abrir la factura).
   const uuids = [...new Set(polizas.filter((p) => p.referenciaTipo === "CFDI" && p.referencia).map((p) => p.referencia!))];

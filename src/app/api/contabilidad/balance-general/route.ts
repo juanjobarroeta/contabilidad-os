@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireMembership, withAuthz } from "@/lib/authz";
 import { balanza } from "@/lib/contabilidad/posting";
 import { balanceGeneralDesdeBalanza } from "@/lib/contabilidad/libro";
+import { clavePeriodo, hojaBalanceGeneral } from "@/lib/contabilidad/reportes-xlsx";
+import { headersDescargaXlsx, toXlsx } from "@/lib/export/xlsx";
 
 // GET /api/contabilidad/balance-general?companyId=&year=&month= — balance
 // general canónico para la UI de contabilidad (cualquier miembro; sin gate de
@@ -19,5 +21,13 @@ export const GET = withAuthz(async (req: Request) => {
   await requireMembership(companyId, undefined, req);
 
   const rows = await balanza(companyId, year, month);
-  return NextResponse.json({ year, month, ...balanceGeneralDesdeBalanza(rows) });
+  const bg = balanceGeneralDesdeBalanza(rows);
+
+  if (searchParams.get("format") === "xlsx") {
+    return new NextResponse(new Uint8Array(toXlsx([hojaBalanceGeneral(bg)])), {
+      headers: headersDescargaXlsx(`Balance general ${clavePeriodo(year, month)}.xlsx`),
+    });
+  }
+
+  return NextResponse.json({ year, month, ...bg });
 });
