@@ -129,9 +129,17 @@ export function tipoUnidadDesdeCfdi(v: {
   descripcion?: string | null;
   claveVehicular?: string | null;
 }): "NUEVO" | "SEMINUEVO" {
-  // Con complemento de la armadora no hay duda: es unidad nueva.
-  if (v.claveVehicular) return "NUEVO";
-  return SEMINUEVO_TEXTO_RE.test(v.descripcion ?? "") ? "SEMINUEVO" : "NUEVO";
+  // El TEXTO manda. Nadie escribe «AUTO USADO» en la factura de un coche nuevo.
+  //
+  // La primera versión de esta regla salía antes por claveVehicular, dando por
+  // hecho que sólo aparece en el complemento VentaVehiculos que la armadora le
+  // emite al distribuidor. No es cierto: la factura de un seminuevo también
+  // declara la clave vehicular EN EL TEXTO —«AUTO USADO MARCA JAC… CLAVE
+  // VEHICULAR 0622304»— y el extractor la levanta de ahí. El atajo pisaba
+  // justo la frase que decía «usado»: 321 unidades de Margom con USADO en su
+  // descripción seguían marcadas NUEVO después de correr la reparación.
+  if (SEMINUEVO_TEXTO_RE.test(v.descripcion ?? "")) return "SEMINUEVO";
+  return "NUEVO";
 }
 
 export async function derivarVehiculoDesdeCfdiSiAplica(

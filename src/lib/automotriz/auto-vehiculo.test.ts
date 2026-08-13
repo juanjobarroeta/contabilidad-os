@@ -671,10 +671,17 @@ describe("tipoUnidadDesdeCfdi() — el seminuevo existe", () => {
     }
   });
 
-  it("con complemento de la armadora es nueva por definición", () => {
-    // La clave vehicular sale del complemento VentaVehiculos, que sólo emite la
-    // armadora al distribuidor.
-    expect(tipoUnidadDesdeCfdi({ descripcion: "AUTO USADO…", claveVehicular: "0622304" })).toBe("NUEVO");
+  it("la clave vehicular NO convierte en nueva a una unidad usada", () => {
+    // La factura de un seminuevo también declara la clave vehicular, en el
+    // texto: «AUTO USADO MARCA JAC… CLAVE VEHICULAR 0622304». Un atajo por
+    // claveVehicular pisaba la frase que dice «usado» y dejó 321 unidades de
+    // Margom marcadas NUEVO.
+    expect(
+      tipoUnidadDesdeCfdi({
+        descripcion: "AUTO USADO MARCA JAC, VERSION SEI4 PRO CONNECT, CLAVE VEHICULAR 0622304.",
+        claveVehicular: "0622304",
+      })
+    ).toBe("SEMINUEVO");
   });
 
   it("sin señal de usado, se asume nueva", () => {
