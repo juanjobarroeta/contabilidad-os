@@ -62,6 +62,14 @@ async function handle(req: Request) {
       }
     } catch (e) {
       errores++;
+      // Se contaba el error y se devolvía ok:true, sin dejar rastro en los
+      // logs: una empresa podía llevar meses sin auditarse y verse igual que
+      // una sin hallazgos. Si falla, que se vea.
+      console.error(
+        "[cron/fiscal-audit] auditoría falló:",
+        c.id,
+        e instanceof Error ? e.message : e
+      );
       resultados.push({ companyId: c.id, error: e instanceof Error ? e.message : String(e) });
     }
   }

@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "../prisma";
+import { consultarPorLotes } from "../prisma-lotes";
 import { normalizarUuid, variantesUuid } from "../fiscal/uuid";
 
 export type DescargaRecibo = {
@@ -30,16 +31,25 @@ export async function descargasPorUuid(
   const uuids = Array.from(cfdiUuids).filter((u): u is string => !!u);
   if (uuids.length === 0) return new Map();
 
-  const where = {
-    companyId,
-    tipo: "NOMINA" as const,
-    uuid: { in: variantesUuid(uuids) },
-  };
+  const variantes = variantesUuid(uuids);
+  const base = { companyId, tipo: "NOMINA" as const };
   // Dos consultas ligeras en vez de traer rawXml completo (10 KB+ por recibo)
   // sólo para saber si existe.
+  //
+  // La segunda va POR LOTES: lleva una negación (`rawXml: { not: null }`), y con
+  // eso Prisma ya no puede partir sola un `IN` que pase el tope de parámetros
+  // de Postgres. Es el mismo patrón que tenía roto al auditor.
   const [invoices, conXml] = await Promise.all([
-    prisma.invoice.findMany({ where, select: { id: true, uuid: true, facturapiId: true } }),
-    prisma.invoice.findMany({ where: { ...where, rawXml: { not: null } }, select: { uuid: true } }),
+    prisma.invoice.findMany({
+      where: { ...base, uuid: { in: variantes } },
+      select: { id: true, uuid: true, facturapiId: true },
+    }),
+    consultarPorLotes(variantes, (lote) =>
+      prisma.invoice.findMany({
+        where: { ...base, uuid: { in: lote }, rawXml: { not: null } },
+        select: { uuid: true },
+      })
+    ),
   ]);
   const xmlSet = new Set(conXml.map((f) => normalizarUuid(f.uuid ?? "")));
 
