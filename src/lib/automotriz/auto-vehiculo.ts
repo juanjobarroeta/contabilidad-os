@@ -24,6 +24,7 @@ import {
   datosGeneralesDesdeCfdi,
   diasCreditoDesdeCondiciones,
   emisorDesdeCfdi,
+  esConversionDeCarroceria,
   extraerDatosVehiculoCfdi,
   marcaDesdeTexto,
   numeroMotorDesdeTexto,
@@ -348,6 +349,28 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
             await registrarMencion(db, existente.id, args.invoiceId, "COMPRA");
             actualizados++;
             await registrarCostosCompra(db, existente.id, args, costosDeUnidad(datos, v.niv));
+            continue;
+          }
+          // Conversión de carrocería sobre una unidad que YA es nuestra: no es
+          // una segunda compra, es COSTO que capitaliza a esa unidad. El
+          // carrocero factura con clave 2510xx y el VIN del chasis, así que
+          // llega hasta aquí pareciendo compra duplicada; archivarla como
+          // DUPLICADA mandaba su costo a «Otros gastos» y dejaba la unidad
+          // convertida con el costo del chasis pelón contra el precio de venta
+          // ya convertido (utilidad falsa). Ver esConversionDeCarroceria.
+          if (esConversionDeCarroceria(v.descripcion)) {
+            await registrarMencion(db, existente.id, args.invoiceId, "COSTO");
+            const agregoConversion = await registrarCostosCompra(db, existente.id, args, [
+              {
+                descripcion: v.descripcion,
+                claveProdServ: null,
+                noIdentificacion: v.noIdentificacion,
+                importe: v.importe,
+                nivRefs: [v.niv],
+              },
+              ...costosDeUnidad(datos, v.niv),
+            ]);
+            if (agregoConversion) actualizados++;
             continue;
           }
           // Mismo VIN, sin relación 04, y la unidad ya tiene su compra: queda
