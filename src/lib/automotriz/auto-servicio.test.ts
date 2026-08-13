@@ -29,6 +29,12 @@ function fakeDb(vehiculos: Record<string, string> = {}, ordenes: Array<Record<st
         const id = vehiculos[where.companyId_vin.vin];
         return id ? { id } : null;
       },
+      // La unidad se busca por (companyId, vin) ordenando por ciclo: el stub
+      // guarda una sola por VIN, que es la vigente.
+      findFirst: async ({ where }: any) => {
+        const id = vehiculos[where.vin];
+        return id ? { id } : null;
+      },
     },
     ordenServicio: {
       findFirst: async ({ where }: any) =>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { unidadVigentePorVin } from "@/lib/automotriz/unidad-vigente";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET/POST /api/automotriz/ordenes — órdenes de servicio del taller (fase 5b):
@@ -111,10 +112,7 @@ export const POST = withAuthz(async (req: Request) => {
   const vin = d.vin?.trim().toUpperCase() || null;
   let vehiculoId: string | null = null;
   if (vin && vin.length === 17) {
-    const unidad = await prisma.vehiculo.findUnique({
-      where: { companyId_vin: { companyId: d.companyId, vin } },
-      select: { id: true },
-    });
+    const unidad = await unidadVigentePorVin(prisma, d.companyId, vin, { id: true });
     vehiculoId = unidad?.id ?? null;
   }
 

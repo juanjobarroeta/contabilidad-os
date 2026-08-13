@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { unidadVigentePorVin } from "@/lib/automotriz/unidad-vigente";
 
 export const GET = withAuthz(async (req: Request) => {
   const { searchParams } = new URL(req.url);
@@ -93,10 +94,10 @@ export const POST = withAuthz(async (req: Request) => {
   await requireWriter(companyId, req);
   await requireModule(companyId, "AUTOMOTRIZ", req);
 
-  const dup = await prisma.vehiculo.findUnique({
-    where: { companyId_vin: { companyId, vin: data.vin } },
-    select: { id: true },
-  });
+  // Alta manual: sigue bloqueando si el VIN ya existe en la empresa. Los
+  // ciclos de recompra los abre HOY sólo la derivación automática; permitir
+  // abrirlos a mano es una decisión de producto aparte.
+  const dup = await unidadVigentePorVin(prisma, companyId, data.vin, { id: true });
   if (dup) {
     return NextResponse.json(
       { error: `Ya existe una unidad con VIN ${data.vin}` },
