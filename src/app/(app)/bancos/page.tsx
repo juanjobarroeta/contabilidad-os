@@ -214,7 +214,9 @@ export default function BancosPage() {
   const [lotes, setLotes] = useState<{
     id: string; createdAt: string; banco: string | null; periodo: string | null;
     count: number; cuentaEtiqueta: string; tienePdf: boolean; cuadro: boolean | null;
+    borrables: number; conciliados: number;
   }[]>([]);
+  const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2800); };
   // Contraseña de PDFs protegidos, recordada durante la sesión de carga (los 12
@@ -241,6 +243,43 @@ export default function BancosPage() {
       setMeses(Array.isArray(data.meses) ? data.meses : []);
     } finally { setLoading(false); }
   }, [selectedId, filter, mes]);
+
+  /** Deshace un lote: borra sus movimientos SIN conciliar y conserva los que ya
+   *  se casaron con un CFDI — deshacer nunca destruye trabajo fiscal hecho. */
+  async function deshacerLote(lote: (typeof lotes)[number]) {
+    if (!activeCompany) return;
+    if (lote.borrables === 0) {
+      showToast("Este lote ya no tiene movimientos por borrar (todos están conciliados).");
+      return;
+    }
+    const aviso =
+      `Se borrarán ${lote.borrables} movimiento(s) sin conciliar de esta importación` +
+      (lote.conciliados > 0
+        ? `.\n\n${lote.conciliados} ya conciliado(s) con factura se CONSERVAN.`
+        : ".") +
+      "\n\n¿Continuar?";
+    if (!confirm(aviso)) return;
+    setDeshaciendo(lote.id);
+    try {
+      const res = await fetch(`/api/bancos/import-batches/${lote.id}/undo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data?.error ?? "No se pudo deshacer la importación");
+        return;
+      }
+      showToast(
+        `✓ ${data.borrados} movimiento(s) borrados` +
+          (data.conservados > 0 ? ` · ${data.conservados} conservados por estar conciliados` : "")
+      );
+      await Promise.all([loadTxs(), loadAccounts(), loadLotes()]);
+    } finally {
+      setDeshaciendo(null);
+    }
+  }
 
   const loadLotes = useCallback(async () => {
     if (!activeCompany) { setLotes([]); return; }
@@ -822,7 +861,8 @@ export default function BancosPage() {
                       <th className="px-3 py-2 font-medium">Periodo</th>
                       <th className="px-3 py-2 text-right font-medium">Movs.</th>
                       <th className="px-3 py-2 font-medium">Cuadre</th>
-                      <th className="px-5 py-2 text-right font-medium">Documento</th>
+                      <th className="px-3 py-2 text-right font-medium">Documento</th>
+                      <th className="px-5 py-2 text-right font-medium">Deshacer</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -837,12 +877,35 @@ export default function BancosPage() {
                           {l.cuadro === false && <span className="rounded-full bg-cos-amber-tint px-2 py-0.5 text-[12px] font-medium text-cos-amber-ink" title="Importado con confirmación manual: los saldos del estado no cuadraron con la suma de movimientos">Sin cuadrar</span>}
                           {l.cuadro == null && <span className="text-cos-ink-faint">—</span>}
                         </td>
-                        <td className="px-5 py-2.5 text-right">
+                        <td className="px-3 py-2.5 text-right">
                           {l.tienePdf ? (
                             <a href={`/api/bancos/import-batches/${l.id}/pdf`} target="_blank" rel="noreferrer"
                               className="font-semibold text-cos-brand-ink hover:underline">Ver PDF</a>
                           ) : (
                             <span className="text-cos-ink-faint">—</span>
+                          )}
+                        </td>
+                        {/* Deshacer POR LOTE: borra sólo lo que sigue sin conciliar
+                            y conserva lo ya casado con factura. El conteo se ve
+                            antes de decidir — sin sorpresas. */}
+                        <td className="px-5 py-2.5 text-right whitespace-nowrap">
+                          {l.borrables > 0 ? (
+                            <button
+                              onClick={() => deshacerLote(l)}
+                              disabled={deshaciendo === l.id}
+                              title={
+                                `Borra ${l.borrables} movimiento(s) sin conciliar` +
+                                (l.conciliados > 0 ? ` y conserva ${l.conciliados} ya conciliado(s)` : "")
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-2.5 py-1 text-[12.5px] font-medium text-cos-red-ink hover:bg-cos-red-tint disabled:opacity-50"
+                            >
+                              {deshaciendo === l.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              {l.borrables}
+                            </button>
+                          ) : (
+                            <span className="text-[12px] text-cos-ink-faint" title="Todos sus movimientos ya están conciliados">
+                              conciliado
+                            </span>
                           )}
                         </td>
                       </tr>
