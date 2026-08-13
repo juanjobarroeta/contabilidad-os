@@ -151,10 +151,25 @@ export async function importarBalanza(
     porCodigo.set(codigo, { naturaleza: nat });
   }
 
+  // Sólo cuentas de DETALLE (hojas). La balanza del SAT trae el mayor Y sus
+  // subcuentas — «601» junto a 601.01…601.84 — y el saldo del mayor YA es la
+  // suma de sus hijas: postear ambos duplica el subárbol entero y la apertura
+  // no cuadra. Caso real (AMA170817NK1, balanza 2026-06): 31 mayores con 1,388
+  // hojas, cargos 1,204,754,136.18 vs abonos 1,163,763,593.32.
+  // Una cuenta es hoja si ninguna otra de la MISMA balanza cuelga de ella.
+  const codigosBalanza = new Set(bal.cuentas.map((c) => c.numCta));
+  const esPadre = new Set<string>();
+  for (const codigo of codigosBalanza) {
+    const partes = codigo.split(".");
+    for (let i = 1; i < partes.length; i++) esPadre.add(partes.slice(0, i).join("."));
+  }
+  const esDetalle = (numCta: string) => !esPadre.has(numCta);
+
   const cuentasSinCatalogo: string[] = [];
   for (const c of bal.cuentas) {
     const magnitud = usar === "inicial" ? c.saldoIni : c.saldoFin;
     if (Math.abs(magnitud) < 0.005) continue;
+    if (!esDetalle(c.numCta)) continue; // un mayor sin catálogo no es un faltante
     if (!porCodigo.has(c.numCta)) cuentasSinCatalogo.push(c.numCta);
   }
 
@@ -162,8 +177,18 @@ export async function importarBalanza(
     cuentas: bal.cuentas,
     usar,
     naturalezaPorCodigo: (numCta) => porCodigo.get(numCta)?.naturaleza,
-    incluir: (numCta) => porCodigo.has(numCta),
+    incluir: (numCta) => esDetalle(numCta) && porCodigo.has(numCta),
   });
+
+  // Si la apertura no cuadra, el desglose es lo primero que se pregunta.
+  // postApertura lanza sin escribir nada, así que este log es la única pista.
+  if (cuentasSinCatalogo.length > 0) {
+    console.warn(
+      `[ce-apertura] ${companyId}: ${cuentasSinCatalogo.length} cuentas de detalle con saldo ` +
+        `fuera del catálogo (el catálogo puede ser más viejo que la balanza): ` +
+        cuentasSinCatalogo.slice(0, 15).join(", "),
+    );
+  }
 
   const fechaISO = opts.fechaISO ?? fechaAperturaPorDefecto(bal.anio, bal.mes);
 

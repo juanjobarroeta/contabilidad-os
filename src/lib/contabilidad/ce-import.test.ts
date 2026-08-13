@@ -103,6 +103,42 @@ describe("balanzaASaldosApertura — balanza → líneas {codigo, saldo}", () =>
     expect(activos).toBe(pasivoCapital);
   });
 
+  // La balanza del SAT trae el mayor Y sus subcuentas, y el saldo del mayor YA
+  // es la suma de las hijas. Postear ambos duplica el subárbol: es lo que dejó
+  // la apertura de MARGOM descuadrada por $40,990,542.86. El filtro de detalle
+  // vive en el llamador (ce-import-apply) y esto fija el contrato que asume.
+  it("con mayor + subcuentas, sólo las HOJAS cuadran la apertura", () => {
+    const conMayores = [
+      { numCta: "102", saldoIni: 0, debe: 0, haber: 0, saldoFin: 58000 }, // mayor = suma
+      { numCta: "102.01", saldoIni: 0, debe: 0, haber: 0, saldoFin: 50000 },
+      { numCta: "102.02", saldoIni: 0, debe: 0, haber: 0, saldoFin: 8000 },
+      { numCta: "201.01", saldoIni: 0, debe: 0, haber: 0, saldoFin: 28000 },
+      { numCta: "301.01", saldoIni: 0, debe: 0, haber: 0, saldoFin: 30000 },
+    ];
+    const esPadre = new Set<string>();
+    for (const c of conMayores) {
+      const p = c.numCta.split(".");
+      for (let i = 1; i < p.length; i++) esPadre.add(p.slice(0, i).join("."));
+    }
+
+    const sinFiltro = balanzaASaldosApertura({ cuentas: conMayores, usar: "final", naturalezaPorCodigo: natur });
+    const sum = (ls: { codigo: string; saldo: number }[], n: "D" | "A") =>
+      ls.filter((l) => natur(l.codigo) === n).reduce((s, l) => s + l.saldo, 0);
+    // Sin filtro el activo se cuenta dos veces: 58k del mayor + 58k de las hijas.
+    expect(sum(sinFiltro, "D")).toBe(116000);
+    expect(sum(sinFiltro, "D")).not.toBe(sum(sinFiltro, "A"));
+
+    const soloHojas = balanzaASaldosApertura({
+      cuentas: conMayores,
+      usar: "final",
+      naturalezaPorCodigo: natur,
+      incluir: (numCta) => !esPadre.has(numCta),
+    });
+    expect(soloHojas.map((l) => l.codigo)).toEqual(["102.01", "102.02", "201.01", "301.01"]);
+    expect(sum(soloHojas, "D")).toBe(58000);
+    expect(sum(soloHojas, "D")).toBe(sum(soloHojas, "A")); // ahora sí cuadra
+  });
+
   it("usa SaldoIni cuando se pide 'inicial'", () => {
     const lineas = balanzaASaldosApertura({ cuentas, usar: "inicial", naturalezaPorCodigo: natur });
     expect(lineas).toContainEqual({ codigo: "102.01", saldo: 50000 });
