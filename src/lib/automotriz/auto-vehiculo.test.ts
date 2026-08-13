@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { tipoUnidadDesdeCfdi } from "./auto-vehiculo";
 import { derivarVehiculoDesdeCfdiSiAplica, derivarVehiculoInline } from "./auto-vehiculo";
 
 const VIN = "3GALD255XTM007338";
@@ -654,5 +655,29 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — no aplica", () => {
     expect(await derivarVehiculoDesdeCfdiSiAplica(db as never, {
       ...base, invoiceId: "x", tipo: "PAGO", rawXml: cfdiCompra(),
     })).toBeNull();
+  });
+});
+
+describe("tipoUnidadDesdeCfdi() — el seminuevo existe", () => {
+  it("el CFDI dice que es usado y el tablero debe creerle", () => {
+    // Margom compraba $7.8M de autos usados al año y el tablero reportaba
+    // «Seminuevos: 0 unidades»: el tipo estaba escrito a mano como NUEVO.
+    for (const descripcion of [
+      "AUTO USADO MARCA JAC, VERSION SEI4 PRO CONNECT, MODELO 2024",
+      "UNIDAD SEMINUEVA EN LAS CONDICIONES EN LAS QUE SE ENCUENTRA",
+      "VEHICULO USADO PICK UP JAC FRISON T9 AT LUXURY 4X4",
+    ]) {
+      expect(tipoUnidadDesdeCfdi({ descripcion })).toBe("SEMINUEVO");
+    }
+  });
+
+  it("con complemento de la armadora es nueva por definición", () => {
+    // La clave vehicular sale del complemento VentaVehiculos, que sólo emite la
+    // armadora al distribuidor.
+    expect(tipoUnidadDesdeCfdi({ descripcion: "AUTO USADO…", claveVehicular: "0622304" })).toBe("NUEVO");
+  });
+
+  it("sin señal de usado, se asume nueva", () => {
+    expect(tipoUnidadDesdeCfdi({ descripcion: "JAC SEI7 PRO LIMITED 2026" })).toBe("NUEVO");
   });
 });

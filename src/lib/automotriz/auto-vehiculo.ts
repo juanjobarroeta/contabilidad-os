@@ -110,6 +110,30 @@ async function generalesParaUnidad(
  * Deriva/actualiza el inventario de una factura. Devuelve null si el CFDI no
  * ampara vehículos o no hay rawXml para parsear.
  */
+/**
+ * NUEVO o SEMINUEVO, leído del propio CFDI.
+ *
+ * Estaba escrito «NUEVO» a mano en los dos puntos donde nace una unidad, así
+ * que el tablero de Margom reportaba «Seminuevos: $0, 0 unidades» mientras la
+ * agencia compraba $7.8M de autos usados al año: una línea de negocio entera
+ * invisible, y su margen —que es MAYOR que el del nuevo— sumado al del nuevo.
+ *
+ * El CFDI sí lo dice, y de forma bastante explícita: «AUTO USADO MARCA JAC…»,
+ * «UNIDAD SEMINUEVA EN LAS CONDICIONES EN LAS QUE SE ENCUENTRA», «VEHICULO
+ * USADO PICK UP…». El complemento VentaVehiculos, en cambio, sólo lo emite la
+ * armadora al distribuidor: si viene, la unidad es nueva por definición.
+ */
+const SEMINUEVO_TEXTO_RE = /\b(USAD[OA]|SEMINUEV[OA]|PRE[\s-]?OWNED)\b/i;
+
+export function tipoUnidadDesdeCfdi(v: {
+  descripcion?: string | null;
+  claveVehicular?: string | null;
+}): "NUEVO" | "SEMINUEVO" {
+  // Con complemento de la armadora no hay duda: es unidad nueva.
+  if (v.claveVehicular) return "NUEVO";
+  return SEMINUEVO_TEXTO_RE.test(v.descripcion ?? "") ? "SEMINUEVO" : "NUEVO";
+}
+
 export async function derivarVehiculoDesdeCfdiSiAplica(
   db: Db,
   args: DerivarVehiculoArgs
@@ -352,7 +376,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
           modelo: g.modelo,
           version: g.version,
           anio: g.anio,
-          tipo: "NUEVO",
+          tipo: tipoUnidadDesdeCfdi({ descripcion: v.descripcion, claveVehicular: v.claveVehicular }),
           estado: "DISPONIBLE",
           costoCompra: v.importe,
           fechaCompra: args.fecha,
@@ -430,7 +454,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         modelo: g.modelo,
         version: g.version,
         anio: g.anio,
-        tipo: "NUEVO",
+        tipo: tipoUnidadDesdeCfdi({ descripcion: v.descripcion, claveVehicular: v.claveVehicular }),
         estado: "VENDIDO",
         precioVenta: v.importe,
         ventaInvoiceId: args.invoiceId,

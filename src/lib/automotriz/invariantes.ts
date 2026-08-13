@@ -232,8 +232,14 @@ async function sumaDerivadosSobreCfdi(
 ): Promise<Violacion | null> {
   const condicion = Prisma.sql`
     FROM "Invoice" i
+    -- SÓLO la mano de obra. ServicioVenta.refacciones es el RESUMEN de las
+    -- mismas líneas que el kardex guarda en detalle: sumar las dos contaba las
+    -- refacciones dos veces por construcción y este cheque reportaba x1.9 en
+    -- 5,424 facturas sanas. El estado de resultados tampoco usa ese campo —
+    -- toma la mano de obra de aquí y las refacciones del kardex— así que el
+    -- invariante ahora suma exactamente lo que el tablero consume.
     JOIN LATERAL (
-      SELECT COALESCE(SUM(s."manoObra" + s."refacciones"), 0) AS monto
+      SELECT COALESCE(SUM(s."manoObra"), 0) AS monto
       FROM "ServicioVenta" s WHERE s."invoiceId" = i.id
     ) sv ON TRUE
     JOIN LATERAL (
@@ -272,7 +278,7 @@ async function sumaDerivadosSobreCfdi(
     clave: "suma_derivados_excede_cfdi",
     titulo: "CFDIs contados dos veces entre líneas del tablero",
     explicacion:
-      "Sumando TODO lo que reclama esta factura —mano de obra, refacciones del kardex y unidades vendidas— se pasa de su propio subtotal. El mismo peso está apareciendo en dos líneas del estado de resultados a la vez. Pasa cuando un concepto trae número de parte y clave de servicio al mismo tiempo: el derivador de taller lo cuenta como mano de obra y el del kardex como refacción.",
+      "Sumando lo que el estado de resultados toma de esta factura —mano de obra del taller, refacciones del kardex y unidades vendidas— se pasa de su propio subtotal. El mismo peso está en dos líneas a la vez. Pasa cuando un concepto es reclamado por dos derivadores: una refacción que se llama «KIT DE REPARACIÓN» entraba como mano de obra por su nombre y como pieza por su número de parte.",
     documentos: resumen.documentos,
     exceso: redondear(resumen.exceso),
     ejemplos: ejemplos.map(aEjemplo),
