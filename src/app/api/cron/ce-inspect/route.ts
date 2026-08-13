@@ -139,14 +139,21 @@ function informeBalanza(
   }
 
   // ── 3: jerarquía ───────────────────────────────────────────────────────────
+  // Tres reglas candidatas, medidas sobre la MISMA balanza. La de hoy y dos
+  // que podrían sustituirla; el informe dice cuál hace falta.
   const codigos = bal.cuentas.map((c) => c.numCta);
+
+  // (a) La de HOY: parte por punto. Con códigos de guion no encuentra nada.
   const padresPorPunto = new Set<string>();
   for (const codigo of codigos) {
     const partes = codigo.split(".");
     for (let i = 1; i < partes.length; i++) padresPorPunto.add(partes.slice(0, i).join("."));
   }
-  // Regla generalizada: A es padre de B si B empieza con A seguido de un
-  // separador. No supone cuál es el separador ni cuántos niveles hay.
+
+  // (b) Prefijo + separador: A es padre de B si B empieza con A seguido de un
+  // separador. Sirve para «102» → «102.01» sin suponer cuál es el separador.
+  // NO sirve para el relleno de ceros: «1101-0101-0000» no empieza con
+  // «1101-0000-0000», que es como se escribe su mayor.
   const padresPorPrefijo = new Set<string>();
   const ordenados = [...codigos].sort();
   for (const a of ordenados) {
@@ -157,6 +164,30 @@ function informeBalanza(
       }
     }
   }
+
+  // (c) Por grupos, ignorando el relleno de ceros. Se parte el código en grupos
+  // por cualquier separador y se tiran los grupos finales que son todo ceros:
+  //   1101-0101-0000 → [1101, 0101]      102.01 → [102, 01]
+  //   1101-0000-0000 → [1101]            102    → [102]
+  // A es padre de B si sus grupos son prefijo estricto de los de B. Así el
+  // mayor se reconoce lo escriba como lo escriba la empresa.
+  const gruposDe = (codigo: string): string[] => {
+    const g = codigo.split(/[.\-/]/);
+    while (g.length > 1 && /^0+$/.test(g[g.length - 1])) g.pop();
+    return g;
+  };
+  const clavesPadre = new Set<string>();
+  for (const codigo of codigos) {
+    const g = gruposDe(codigo);
+    // Cada ancestro propio de este código, por su clave de grupos.
+    for (let i = 1; i < g.length; i++) clavesPadre.add(g.slice(0, i).join(" "));
+  }
+  // Un código de la balanza es padre si su clave de grupos aparece como
+  // ancestro de algún otro.
+  const padresPorGrupos = new Set(
+    codigos.filter((c) => clavesPadre.has(gruposDe(c).join(" "))),
+  );
+
   const separadores = {
     punto: codigos.filter((c) => c.includes(".")).length,
     guion: codigos.filter((c) => c.includes("-")).length,
@@ -179,10 +210,13 @@ function informeBalanza(
     jerarquia: {
       padresPorPunto: padresPorPunto.size,
       padresPorPrefijo: padresPorPrefijo.size,
-      // Cuentas que HOY se postean como si fueran hojas y no lo son: el bug
-      // del subárbol duplicado, medido.
-      padresInvisiblesHoy: [...padresPorPrefijo].filter((p) => !padresPorPunto.has(p)).length,
-      ejemplosInvisibles: [...padresPorPrefijo].filter((p) => !padresPorPunto.has(p)).slice(0, 15),
+      padresPorGrupos: padresPorGrupos.size,
+      // Cuentas que HOY se postean como si fueran hojas y no lo son: el bug del
+      // subárbol duplicado, medido con la mejor de las reglas candidatas.
+      padresInvisiblesHoy: [...padresPorGrupos].filter((p) => !padresPorPunto.has(p)).length,
+      ejemplosInvisibles: [...padresPorGrupos].filter((p) => !padresPorPunto.has(p)).slice(0, 15),
+      // Lo que la regla de grupos ve y la de prefijo no: el relleno de ceros.
+      soloGrupos: [...padresPorGrupos].filter((p) => !padresPorPrefijo.has(p)).slice(0, 15),
     },
   };
 }
