@@ -97,6 +97,35 @@ function resultadoDeBalanza(xml: string, nombrePorCodigo: Map<string, string> = 
   // negocio la ve el tablero o no. El nombre vive en el catálogo, que ya está en
   // ChartAccount. Sin cruzarlo sólo quedaría adivinar qué es cada cuenta, y
   // adivinar es lo que ha fallado toda la sesión.
+  //
+  // Se hace igual para el 6 (gastos): la brecha de gasto son $22.1M —el 70% de
+  // lo que queda tras limpiar el fan-out— y saber el total no dice QUÉ cuenta
+  // sobra. `contrario` recoge las de saldo del lado opuesto al de su familia:
+  // en el 4 es contra-ingreso (descuentos, devoluciones) y en el 6 sería un
+  // gasto acreditado.
+  const detalleFamilia = (digito: string, ladoNormal: "D" | "A") => {
+    const cuentas = bal.cuentas
+      .filter((c) => !padres.has(c.numCta) && c.numCta.trim().charAt(0) === digito)
+      .map((c) => ({
+        numCta: c.numCta,
+        nombre: nombrePorCodigo.get(c.numCta) ?? null,
+        saldo: r2(c.saldoFin),
+      }))
+      .filter((c) => Math.abs(c.saldo) >= 0.005);
+    // Deudora normal (gastos) → lo contrario es saldo negativo; acreedora
+    // normal (ingresos) → lo contrario es saldo positivo.
+    const contrario = cuentas.filter((c) => (ladoNormal === "D" ? c.saldo < 0 : c.saldo > 0));
+    return {
+      cuentas: cuentas.length,
+      mayores: [...cuentas].sort((a, b) => Math.abs(b.saldo) - Math.abs(a.saldo)).slice(0, 30),
+      contrario: {
+        cuentas: contrario.length,
+        total: r2(contrario.reduce((s, c) => s + c.saldo, 0)),
+        detalle: [...contrario].sort((a, b) => Math.abs(b.saldo) - Math.abs(a.saldo)).slice(0, 15),
+      },
+    };
+  };
+
   const cuentasIngreso = bal.cuentas
     .filter((c) => !padres.has(c.numCta) && c.numCta.trim().charAt(0) === "4")
     .map((c) => ({
@@ -127,6 +156,8 @@ function resultadoDeBalanza(xml: string, nombrePorCodigo: Map<string, string> = 
         detalle: contraIngreso.sort((a, b) => b.saldo - a.saldo).slice(0, 15),
       },
     },
+    // Los 6xxx con nombre: aquí vive el 70% de la brecha que queda.
+    detalleGastos: detalleFamilia("6", "D"),
   };
 }
 
