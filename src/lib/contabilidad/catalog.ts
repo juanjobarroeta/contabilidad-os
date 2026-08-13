@@ -57,6 +57,20 @@ export const COE_CODES = {
   RESULTADOS_ACUMULADOS: "304.01",  // Utilidad de ejercicios anteriores
   RESULTADO_EJERCICIO:  "305.01",   // Utilidad del ejercicio
   // Ingresos
+  // Inventario y costo de lo vendido. Los nombres son los OFICIALES del código
+  // agrupador (codigo-agrupador.ts los cotejа letra por letra en su test).
+  //
+  // UNA sola cuenta de inventario, no cuatro: el subledger (Vehiculo,
+  // Refaccion) ya distingue unidad nueva de seminueva y de refacción. El mayor
+  // guarda el SALDO y el subledger el detalle; separarlos aquí duplicaría la
+  // dimensión y obligaría a mantener las dos de acuerdo.
+  INVENTARIO:           "115.01",  // Inventario (unidades y refacciones)
+  COSTO_VENTA:          "501.01",  // Costo de venta (unidades y refacciones)
+  COSTO_SERVICIO:       "501.02",  // Costo de servicios (Mano de obra)
+  // ISAN: impuesto de la operación que el distribuidor cobra al comprador y
+  // entera. No es gasto de operación ni margen — es un pasivo hasta enterarlo.
+  ISAN_POR_PAGAR:       "213.07",  // Otros impuestos por pagar
+
   VENTAS_GENERAL:       "401.01",
   OTROS_INGRESOS:       "403.01",
   // Gastos

@@ -88,7 +88,9 @@ export const GET = withAuthz(async (req: Request) => {
             unidad: `${u.marca} ${u.modelo} ${u.anio}`,
             tipo: u.tipo,
             fecha: u.fechaVenta,
-            cliente: u.cliente?.razonSocial ?? null,
+            // El Customer manda cuando existe; si la venta fue a público en
+            // general, el nombre del receptor del CFDI es lo que hay.
+            cliente: u.cliente?.razonSocial ?? u.ventaInvoice?.contraparteNombre ?? null,
             clienteId: u.cliente?.id ?? null,
             precioVenta: u.precioVenta ?? 0,
             costo: sinCosto ? null : r2(u.costoCompra + costos + u.comisionMonto),
