@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Money } from "@/components/ui";
+import { AjusteInflacionPanel } from "./AjusteInflacionPanel";
 import {
   Calculator, Loader2, CheckCircle2, AlertCircle, Save,
   FileText, TrendingUp, TrendingDown, Pencil, X,
@@ -180,6 +181,23 @@ export function DeclaracionAnualView() {
             </div>
           </div>
 
+          {/* El ajuste por inflación aplica a las PM del Título II. Se calcula
+              del ledger y llena los dos campos que antes se capturaban a mano
+              (y que en la práctica se quedaban en cero). */}
+          {result.tipoPersona === "PM" && (
+            <AjusteInflacionPanel
+              companyId={activeCompany.id}
+              ejercicio={ejercicio}
+              onAplicar={(acumulable, deducible) => {
+                setOverrides((p) => ({
+                  ...p,
+                  ajusteInflacionAcumulable: String(Math.round(acumulable * 100) / 100),
+                  ajusteInflacionDeducible: String(Math.round(deducible * 100) / 100),
+                }));
+              }}
+            />
+          )}
+
           {/* Toggle manual overrides */}
           <button onClick={() => setEditMode(!editMode)}
             className="flex items-center gap-2 text-xs text-cos-brand-ink hover:underline">
@@ -196,8 +214,8 @@ export function DeclaracionAnualView() {
                   ["depreciacion", "Depreciación de activos fijos"],
                   ["otrasDeduccionesAutorizadas", "Otras deducciones autorizadas"],
                   ["aportacionesInfonavitSar", "Aportaciones Infonavit / SAR patronal"],
-                  ["ajusteInflacionAcumulable", "Ajuste anual por inflación acumulable"],
-                  ["ajusteInflacionDeducible", "Ajuste anual por inflación deducible"],
+                  ["ajusteInflacionAcumulable", "Ajuste anual por inflación acumulable (lo llena el panel de arriba)"],
+                  ["ajusteInflacionDeducible", "Ajuste anual por inflación deducible (lo llena el panel de arriba)"],
                   ["perdidasAnteriores", "Pérdidas de ejercicios anteriores"],
                   ["isrRetenidoPorTerceros", "ISR retenido por terceros (clientes)"],
                 ] as const).map(([key, label]) => (

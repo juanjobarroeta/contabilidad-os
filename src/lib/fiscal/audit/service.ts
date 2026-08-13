@@ -25,6 +25,7 @@ import { cargarCobrosSinRep, auditarCobrosSinRep } from "./rep-faltante";
 import { cargarCredencialesVigencia, auditarCredencialesVigencia } from "./credenciales-vigencia";
 import { cargarObligacionProxima, auditarObligacionProxima } from "./obligacion-proxima";
 import { cargarResicoLimite, auditarResicoLimite } from "./resico-limite";
+import { cargarAjusteInflacionPendiente, auditarAjusteInflacion } from "./ajuste-inflacion";
 import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
 import type { CfdiNormalizado, Direccion, Hallazgo } from "./types";
@@ -205,6 +206,7 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
   const credenciales = await cargarCredencialesVigencia(companyId);
   const obligacionProxima = await cargarObligacionProxima(companyId, hoy);
   const resicoLimite = await cargarResicoLimite(companyId, hoy);
+  const ajusteInflacion = await cargarAjusteInflacionPendiente(companyId, hoy);
 
   const hallazgos = [
     ...auditar(cfdis, ctx),
@@ -219,6 +221,7 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
     ...auditarCredencialesVigencia(credenciales, hoy),
     ...auditarObligacionProxima(obligacionProxima, hoy),
     ...auditarResicoLimite(resicoLimite),
+    ...auditarAjusteInflacion(ajusteInflacion),
   ];
 
   const vigentes = new Set<string>();
