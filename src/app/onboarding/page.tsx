@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X, ListChecks, RefreshCw, CreditCard, ExternalLink } from "lucide-react";
 import { mapCsfObligacion, TIPO_DESC } from "@/lib/obligaciones";
+import { rutaRetornoSegura } from "@/lib/ruta-retorno";
 
 // ── Types for the multi-document onboarding package ───────────────────────
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
@@ -161,12 +162,8 @@ export default function OnboardingPage() {
 
 // Safe relative path allowlist — we only honor internal paths in returnTo to
 // prevent open redirects.
-function safeReturnTo(raw: string | null): string | null {
-  if (!raw) return null;
-  if (!raw.startsWith("/")) return null;
-  if (raw.startsWith("//")) return null; // protocol-relative
-  return raw;
-}
+// Ruta de retorno validada — compartida con login/signup (open redirect).
+const safeReturnTo = rutaRetornoSegura;
 
 function OnboardingPageInner() {
   const router = useRouter();
@@ -212,6 +209,23 @@ function OnboardingPageInner() {
     fetch("/api/onboarding/contexto")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (vivo && d) setInvitacion(d); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  // Red de rescate: invitaciones de CLIENTE pendientes para este correo. Quien
+  // llegó aquí con una invitación sin aceptar (se registró sin volver al
+  // enlace) NO necesita crear una empresa ni contratar un plan — su despacho ya
+  // paga la empresa a la que lo invitaron. Sin este aviso, el wizard le pedía
+  // elegir plan y pagar (caso real).
+  const [invitacionesCliente, setInvitacionesCliente] = useState<
+    { empresa: string; despacho: string | null }[]
+  >([]);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/invitations/pendientes")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (vivo && Array.isArray(d)) setInvitacionesCliente(d); })
       .catch(() => {});
     return () => { vivo = false; };
   }, []);
@@ -540,6 +554,23 @@ function OnboardingPageInner() {
               >
                 Cerrar sesión
               </button>
+            </div>
+          )}
+          {/* Invitado con invitación sin aceptar: que NO siga el wizard. El
+              enlace es el factor de posesión (sólo se guarda su hash), así que
+              aquí se orienta — aceptar sigue requiriendo abrir el enlace. */}
+          {!fromEmpresas && invitacionesCliente.length > 0 && (
+            <div className="mb-4 rounded-xl border border-cos-jade-ink/25 bg-cos-jade-tint px-4 py-3">
+              <p className="text-[13.5px] font-semibold text-cos-jade-ink">
+                Te invitaron a {invitacionesCliente[0].empresa}
+                {invitacionesCliente.length > 1 ? ` (y ${invitacionesCliente.length - 1} más)` : ""}
+              </p>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-cos-jade-ink/90">
+                No necesitas crear una empresa ni contratar un plan: esa empresa ya está
+                configurada y pagada{invitacionesCliente[0].despacho ? ` por ${invitacionesCliente[0].despacho}` : " por tu despacho"}.
+                Abre el enlace de invitación que te compartieron y acepta ahí — si ya no lo
+                tienes, pide que te lo reenvíen.
+              </p>
             </div>
           )}
           <h1 className="text-xl font-bold text-cos-ink mb-1">

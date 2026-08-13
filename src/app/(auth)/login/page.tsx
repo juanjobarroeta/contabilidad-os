@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BrandMark, ThemeToggle } from "@/components/ui";
+import { rutaRetornoSegura } from "@/lib/ruta-retorno";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
@@ -13,6 +14,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // La página de aceptación de invitación manda aquí con
+  // `?callbackUrl=/invitacion/<token>`. Ignorarlo (como pasaba) rompía el
+  // círculo: el invitado iniciaba sesión, caía en /dashboard sin membresía y el
+  // layout lo mandaba al wizard a "contratar un plan". Sólo rutas internas —
+  // validado — porque un callbackUrl abierto en el login es un open redirect.
+  const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
+  useEffect(() => {
+    setCallbackUrl(rutaRetornoSegura(new URLSearchParams(window.location.search).get("callbackUrl")));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,7 +38,7 @@ export default function LoginPage() {
       );
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      router.push(callbackUrl ?? "/dashboard");
     }
   }
 
