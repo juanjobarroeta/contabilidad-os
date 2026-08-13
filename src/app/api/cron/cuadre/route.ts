@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { cuadreDeCfdis } from "@/lib/automotriz/cuadre";
+import { cuadreDeCfdis, cuadreDeIngresos } from "@/lib/automotriz/cuadre";
 import { gastosDeOperacion } from "@/lib/automotriz/resultados-gastos";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,6 +62,14 @@ async function handle(req: Request) {
       // Al barrer todas las empresas sólo interesan los totales.
       peores: companyId ? peores : 3,
     });
+    // El espejo del ingreso. El gasto se calcula tomando TODOS los EGRESO y
+    // clasificándolos, así que nada se pierde; el ingreso NO se suma de los
+    // CFDIs sino de Vehiculo.precioVenta, ServicioVenta y otrosIngresos —que
+    // además sólo mira claves 8014%—. Un CFDI de venta que ningún derivador
+    // reclama no se cuenta en ningún lado, y eso es lo que explica que «tenemos
+    // todos los CFDIs» y aun así el ingreso quede corto.
+    Object.assign(r, { ingreso: await cuadreDeIngresos(prisma, e.id, desde, hasta) });
+
     if (conGastos) {
       const g = await gastosDeOperacion(prisma, e.id, desde, hasta);
       Object.assign(r, {
