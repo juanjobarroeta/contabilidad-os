@@ -72,6 +72,9 @@ type Filter =
   | "LOAN_GIVEN" | "CAPITAL_CONTRIBUTION" | "NON_DEDUCTIBLE" | "INTERNAL_TRANSFER";
 
 // Categorías "sin factura" → tag de notes que persiste (PATCH ignore). null = ignorar simple.
+/** Movimientos por página. La lista crece con «Cargar más». */
+const PAGE_SIZE = 80;
+
 const CATEGORIAS: { tag: string | null; label: string; icon: typeof Banknote }[] = [
   { tag: "TAX_PAYMENT",          label: "Pago de impuestos",        icon: Building2 },
   { tag: "PAYROLL_NO_CFDI",      label: "Nómina sin CFDI",          icon: Users },
@@ -164,6 +167,10 @@ export default function BancosPage() {
   // "YYYY-MM" acota movimientos Y conteos a ese mes (el backend ya lo soporta).
   const [mes, setMes] = useState("");
   const [meses, setMeses] = useState<{ mes: string; count: number }[]>([]);
+  // Paginación de la lista: se carga de a poco y se puede seguir hacia atrás.
+  const [pagina, setPagina] = useState(1);
+  const [paginas, setPaginas] = useState(1);
+  const [cargandoMas, setCargandoMas] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<"" | "auto" | "upload">("");
@@ -236,13 +243,31 @@ export default function BancosPage() {
     if (!selectedId) { setTxs([]); return; }
     setLoading(true); setExpandedId(null);
     try {
-      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=80${mes ? `&mes=${mes}` : ""}`);
+      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}`);
       const data = await res.json();
       setTxs(data.transactions ?? []);
       setCounts(data.statusCounts ?? {});
       setMeses(Array.isArray(data.meses) ? data.meses : []);
+      // La lista traía sólo la primera página y NUNCA ofrecía la siguiente: con
+      // más movimientos que el tamaño de página, los meses viejos simplemente
+      // no existían para quien mira. El API ya devolvía `pagination`.
+      setPagina(1);
+      setPaginas(data.pagination?.pages ?? 1);
     } finally { setLoading(false); }
   }, [selectedId, filter, mes]);
+
+  /** Trae la página siguiente y la AGREGA (no reemplaza): la lista crece. */
+  const cargarMas = useCallback(async () => {
+    if (!selectedId || cargandoMas || pagina >= paginas) return;
+    setCargandoMas(true);
+    try {
+      const sig = pagina + 1;
+      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=${sig}&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}`);
+      const data = await res.json();
+      setTxs((prev) => [...prev, ...(data.transactions ?? [])]);
+      setPagina(sig);
+    } finally { setCargandoMas(false); }
+  }, [selectedId, filter, mes, pagina, paginas, cargandoMas]);
 
   /** Deshace un lote: borra sus movimientos SIN conciliar y conserva los que ya
    *  se casaron con un CFDI — deshacer nunca destruye trabajo fiscal hecho. */
@@ -1361,6 +1386,25 @@ export default function BancosPage() {
               );
             })}
           </div>
+
+          {/* Seguir hacia atrás en el historial. Sin esto la lista se quedaba
+              en la primera página y los meses viejos no existían para quien
+              mira, aunque estuvieran importados. */}
+          {!loading && txs.length > 0 && pagina < paginas && (
+            <div className="mt-4 flex flex-col items-center gap-1.5">
+              <button
+                onClick={cargarMas}
+                disabled={cargandoMas}
+                className="inline-flex items-center gap-2 rounded-control border border-cos-line bg-cos-card px-4 py-2.5 text-[13.5px] font-medium text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink disabled:opacity-50"
+              >
+                {cargandoMas && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {cargandoMas ? "Cargando…" : "Cargar más movimientos"}
+              </button>
+              <span className="text-[12px] text-cos-ink-faint">
+                {txs.length.toLocaleString("es-MX")} movimientos cargados · página {pagina} de {paginas}
+              </span>
+            </div>
+          )}
 
           {/* bulk action bar (sticky, only in select mode) */}
           {selectMode && picked.size > 0 && (
