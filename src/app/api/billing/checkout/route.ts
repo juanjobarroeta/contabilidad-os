@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { AuthzError, requireUser } from "@/lib/authz";
 import { appBaseUrl, getStripe, resolveStripeCustomerId } from "@/lib/billing/stripe";
 import {
+  parseComplementos,
   parseIntervaloFacturable,
   parsePlanFacturable,
+  priceIdForComplemento,
   priceIdForPlan,
 } from "@/lib/billing/planes-stripe";
 import { cantidadDespacho } from "@/lib/billing/cantidad-despacho";
@@ -76,6 +78,16 @@ export async function POST(req: Request) {
       ? returnBaseRaw
       : null;
 
+  // Ruta de regreso DENTRO del satélite. Por defecto /onboarding (wizard de
+  // Automotriz); PurificadoraOS regresa a su propia pantalla de suscripción.
+  // Sólo se acepta una ruta relativa simple: nunca "//host" ni un absoluto,
+  // que convertirían el regreso en un open redirect.
+  const returnPathRaw = (body as { returnPath?: unknown } | null)?.returnPath;
+  const returnPath =
+    typeof returnPathRaw === "string" && /^\/[A-Za-z0-9\-_/]*$/.test(returnPathRaw)
+      ? returnPathRaw
+      : "/onboarding";
+
   try {
     const customerId = await resolveStripeCustomerId(session.user.id);
     const base = appBaseUrl();
@@ -88,10 +100,20 @@ export async function POST(req: Request) {
         ? cantidadDespacho(await contarEmpresasFacturables(session.user.id))
         : 1;
 
+    // Complementos pedidos por clave (p. ej. PurificadoraOS): se cobran como
+    // partidas adicionales de la MISMA suscripción, así el cliente paga todo
+    // en un solo cargo. Los no configurados en el entorno simplemente no van.
+    const complementos = parseComplementos((body as { addons?: unknown } | null)?.addons)
+      .map((c) => priceIdForComplemento(c))
+      .filter((p): p is string => p !== null);
+
     const checkout = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      line_items: [{ price: priceId, quantity: cantidad }],
+      line_items: [
+        { price: priceId, quantity: cantidad },
+        ...complementos.map((price) => ({ price, quantity: 1 })),
+      ],
       // Redundancia deliberada: el webhook resuelve al usuario por
       // metadata.userId / client_reference_id y por stripeCustomerId.
       client_reference_id: session.user.id,
@@ -100,10 +122,10 @@ export async function POST(req: Request) {
       allow_promotion_codes: true,
       locale: "es-419",
       success_url: returnBase
-        ? `${returnBase}/onboarding?checkout=exito`
+        ? `${returnBase}${returnPath}?checkout=exito`
         : `${base}/configuracion/facturacion?checkout=exito`,
       cancel_url: returnBase
-        ? `${returnBase}/onboarding?checkout=cancelado`
+        ? `${returnBase}${returnPath}?checkout=cancelado`
         : `${base}/configuracion/facturacion?checkout=cancelado`,
     });
 

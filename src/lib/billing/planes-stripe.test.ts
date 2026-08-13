@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   PLAN_A_TIER,
   despachoPriceIds,
+  parseComplementos,
   parseIntervaloFacturable,
   parsePlanFacturable,
+  priceIdForComplemento,
   priceIdForPlan,
 } from "./planes-stripe";
 
@@ -115,6 +117,36 @@ describe("despachoPriceIds", () => {
   it("omite intervalos no configurados", () => {
     expect(despachoPriceIds({ STRIPE_PRICE_DESPACHO: "price_d" })).toEqual(["price_d"]);
     expect(despachoPriceIds({})).toEqual([]);
+  });
+});
+
+describe("parseComplementos", () => {
+  it("acepta las claves conocidas y deduplica", () => {
+    expect(parseComplementos(["PURIFICADORA"])).toEqual(["PURIFICADORA"]);
+    expect(parseComplementos(["PURIFICADORA", "PURIFICADORA"])).toEqual(["PURIFICADORA"]);
+  });
+
+  // El cliente pide por CLAVE: nunca debe poder colar un price arbitrario ni
+  // basura en las partidas del checkout.
+  it("ignora claves desconocidas, price ids y valores que no son arreglo", () => {
+    expect(parseComplementos(["price_1Malicioso"])).toEqual([]);
+    expect(parseComplementos(["OTRO_MODULO"])).toEqual([]);
+    expect(parseComplementos(["PURIFICADORA", 42, null])).toEqual(["PURIFICADORA"]);
+    expect(parseComplementos("PURIFICADORA")).toEqual([]);
+    expect(parseComplementos(undefined)).toEqual([]);
+  });
+});
+
+describe("priceIdForComplemento", () => {
+  it("resuelve el price del entorno", () => {
+    expect(priceIdForComplemento("PURIFICADORA", { STRIPE_PRICE_PURIFICADORA: "price_p" })).toBe(
+      "price_p",
+    );
+  });
+
+  it("null si no está configurado (el checkout simplemente lo omite)", () => {
+    expect(priceIdForComplemento("PURIFICADORA", {})).toBeNull();
+    expect(priceIdForComplemento("PURIFICADORA", { STRIPE_PRICE_PURIFICADORA: "  " })).toBeNull();
   });
 });
 
