@@ -19,7 +19,7 @@ const base = (o: Partial<InsumosResultados> = {}): InsumosResultados => ({
   refaccionesRaw: [],
   nomina: [],
   nominaPorSucursal: [],
-  gastos: { total: 0, lineas: [], sinClasificar: { facturas: 0, monto: 0 } },
+  gastos: { total: 0, lineas: [], sinClasificar: { facturas: 0, monto: 0 }, anticipos: { facturas: 0, monto: 0 } },
   ...o,
 });
 
@@ -55,7 +55,7 @@ describe("armar() — margen por línea", () => {
   });
 
   it("la nómina que no produce baja a estructura, no al costo de una línea", () => {
-    const r = armar(base({ nomina: [nom("VENTAS", 10_000), nom("ADMIN", 30_000)], gastos: { total: 20_000, lineas: [], sinClasificar: { facturas: 0, monto: 0 } } }));
+    const r = armar(base({ nomina: [nom("VENTAS", 10_000), nom("ADMIN", 30_000)], gastos: { total: 20_000, lineas: [], sinClasificar: { facturas: 0, monto: 0 }, anticipos: { facturas: 0, monto: 0 } } }));
     expect(r.estructura).toBe(60_000);
     expect(r.totales.utilidadBruta).toBe(0);
     expect(r.totales.utilidad).toBe(-60_000);
@@ -69,7 +69,7 @@ describe("armar() — absorción de servicio", () => {
         servicios: [{ fecha: new Date("2026-07-05"), manoObra: 100_000, refacciones: 0 }],
         refaccionesRaw: [{ en_orden: false, ingreso: 50_000, costo: 20_000, piezas: 10 }],
         nomina: [nom("TALLER", 40_000), nom("ADMIN", 40_000)],
-        gastos: { total: 50_000, lineas: [], sinClasificar: { facturas: 0, monto: 0 } },
+        gastos: { total: 50_000, lineas: [], sinClasificar: { facturas: 0, monto: 0 }, anticipos: { facturas: 0, monto: 0 } },
       })
     );
     // Fixed ops: (100k − 40k de taller) + (50k − 20k) = 90k. Estructura: 90k.
