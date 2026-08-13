@@ -19,6 +19,7 @@ import { fromJsonSchema } from "@modelcontextprotocol/server";
 import { prisma } from "@/lib/prisma";
 import { registrarBitacora } from "@/lib/audit";
 import { evaluarEtapas, cronsPendientes, type ConteosEmpresa } from "@/lib/onboarding/estado";
+import { cargarAjusteInflacion } from "@/lib/fiscal/ajuste-inflacion-ledger";
 import { cargarInsumosCredito } from "@/lib/credito/insumos";
 import { calcularScoreCredito } from "@/lib/credito/score";
 import { generarAnalisisCredito } from "@/lib/credito/analisis";
@@ -154,6 +155,67 @@ export function registrarToolsOperador(server: McpServerLike): void {
         empresa: { rfc: e.rfc, razonSocial: e.razonSocial },
         etapas: etapas.map((x) => ({ etapa: x.etiqueta, pct: x.pct, completa: x.completa, cron: x.cron })),
         siguienteEmpuje: cronsPendientes(etapas),
+      });
+    },
+  );
+
+  server.registerTool(
+    "estado_contable",
+    {
+      title: "Estado contable del ejercicio",
+      description:
+        "Cierres mensuales de un ejercicio (qué meses están posteados y cuáles no) y, para personas morales, el ajuste anual por inflación calculado del ledger (Arts. 44-46 LISR) con sus promedios y factor. Responde '¿por qué esta empresa no tiene tal cifra?' sin abrir la app.",
+      inputSchema: fromJsonSchema<{ empresa: string; ejercicio?: number }>({
+        type: "object",
+        properties: {
+          empresa: { type: "string", description: "id o RFC" },
+          ejercicio: { type: "number", description: "año (default: el anterior al actual)" },
+        },
+        required: ["empresa"],
+        additionalProperties: false,
+      }),
+    },
+    async ({ empresa, ejercicio }: { empresa: string; ejercicio?: number }) => {
+      const e = await resolverEmpresa(empresa);
+      const year = ejercicio ?? new Date().getFullYear() - 1;
+      const esPM = e.rfc.trim().length === 12;
+
+      const periodos = await prisma.accountingPeriod.findMany({
+        where: { companyId: e.id, year },
+        select: { month: true, status: true },
+        orderBy: { month: "asc" },
+      });
+      const posteados = periodos
+        .filter((p) => p.status === "POSTED" || p.status === "CLOSED")
+        .map((p) => p.month);
+      const sinPostear = Array.from({ length: 12 }, (_, i) => i + 1).filter(
+        (m) => !posteados.includes(m),
+      );
+
+      // El ajuste sólo aplica a PM (Título II) y sólo es confiable con los 12
+      // cierres: es justo la condición que hace callar al hallazgo del auditor.
+      const ajuste = esPM ? (await cargarAjusteInflacion(e.id, year)).resultado : null;
+
+      return texto({
+        empresa: { rfc: e.rfc, razonSocial: e.razonSocial, tipoPersona: esPM ? "PM" : "PF" },
+        ejercicio: year,
+        cierres: {
+          posteados,
+          sinPostear,
+          detalle: periodos.map((p) => ({ mes: p.month, status: p.status })),
+        },
+        ajusteInflacion: ajuste
+          ? {
+              calculable: ajuste.calculable,
+              factor: ajuste.factorAjuste.factor,
+              promedioCreditos: ajuste.promedioCreditos,
+              promedioDeudas: ajuste.promedioDeudas,
+              acumulable: ajuste.acumulable,
+              deducible: ajuste.deducible,
+              advertencias: ajuste.advertencias,
+              cuentasConSaldo: ajuste.cuentas.filter((c) => c.clase !== "EXCLUIDA" && c.promedio !== 0).length,
+            }
+          : "No aplica: el ajuste anual por inflación es del Título II (personas morales).",
       });
     },
   );
