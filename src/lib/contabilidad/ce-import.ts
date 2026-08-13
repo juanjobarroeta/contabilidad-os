@@ -187,6 +187,55 @@ export function parseBalanza(xml: string): BalanzaParseResult {
   };
 }
 
+// ── Naturaleza deducida de la propia balanza (PURA) ──────────────────────────
+
+/**
+ * Naturaleza (D/A) de una cuenta DEDUCIDA de la aritmética de su renglón en la
+ * balanza, sin consultar el catálogo.
+ *
+ * El problema: el catálogo de cuentas que presenta la empresa suele ser MÁS
+ * VIEJO que la balanza (una cuenta abierta a media vida no vuelve a mandar el
+ * catálogo). Esas cuentas llegan con saldo y sin naturaleza, se caen de la
+ * apertura y el asiento no cuadra. En MARGOM son 119 cuentas.
+ *
+ * La tentación es adivinar por el primer dígito del código (1=activo, 2=pasivo…).
+ * Medido contra las 6,337 cuentas que SÍ traen naturaleza del SAT, esa regla se
+ * equivoca en 486 —el 7.7%—: el dígito 4 es 35% deudor (devoluciones sobre
+ * ventas), el 7 es 33% acreedor y el 9 es una moneda al aire (las cuentas de
+ * orden viven en pares D/A por definición). Una naturaleza invertida en la
+ * apertura no es un error de un renglón: cambia el saldo de lado, así que mueve
+ * el asiento el DOBLE del saldo. Es peor que la cuenta faltante.
+ *
+ * La balanza, en cambio, se delata sola. El Anexo 24 pide los cuatro importes
+ * como MAGNITUD, y el movimiento del periodo sólo cuadra de una manera:
+ *
+ *     deudora:   SaldoIni + Debe − Haber = SaldoFin
+ *     acreedora: SaldoIni − Debe + Haber = SaldoFin
+ *
+ * Cuando Debe ≠ Haber las dos identidades no pueden cumplirse a la vez, así que
+ * la que cuadra determina la naturaleza con certeza — es aritmética del propio
+ * documento, no una convención del contador. Cuando Debe = Haber (incluido el
+ * caso sin movimientos) las dos cuadran y no hay nada que deducir: devuelve
+ * null y que decida el llamador.
+ */
+export function naturalezaPorAritmetica(
+  c: Pick<BalanzaCuentaParsed, "saldoIni" | "debe" | "haber" | "saldoFin">,
+  tolerancia = 0.01,
+): Naturaleza | null {
+  // Sin movimiento las dos identidades colapsan en SaldoIni = SaldoFin: la
+  // balanza no dice de qué lado está el saldo. Cortamos aquí para no llamar
+  // "deudora" a toda cuenta inactiva por el orden en que se prueban.
+  if (Math.abs(c.debe - c.haber) < tolerancia) return null;
+
+  const cuadraD = Math.abs(c.saldoIni + c.debe - c.haber - c.saldoFin) <= tolerancia;
+  const cuadraA = Math.abs(c.saldoIni - c.debe + c.haber - c.saldoFin) <= tolerancia;
+
+  // Ninguna cuadra: el renglón no es consistente (saldo inicial con signo,
+  // redondeos gruesos, cuenta acumulada). No inventamos.
+  if (cuadraD === cuadraA) return null;
+  return cuadraD ? "D" : "A";
+}
+
 // ── Conversión balanza → saldos de apertura (PURA) ───────────────────────────
 
 export interface AperturaLineaCodigo {

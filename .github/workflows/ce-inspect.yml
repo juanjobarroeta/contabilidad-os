@@ -1,0 +1,54 @@
+name: Inspeccionar Contabilidad Electrónica (manual, por empresa)
+
+# Diagnóstico de SOLO LECTURA de la CE de una empresa: qué entidades de Syntage
+# matchean su RFC, cuántos registros hay y de qué tipo y —con `balanza: true`—
+# un informe agregado de la última balanza: cuántas cuentas traen saldo sin
+# estar en el catálogo, si la aritmética de la propia balanza acierta la
+# naturaleza (contrastada contra las cuentas donde el SAT ya la dijo) y si el
+# filtro de cuentas de detalle ve la jerarquía cuando los códigos usan guion.
+#
+# Existe como workflow por lo mismo que el backfill: el endpoint se autentica
+# con CRON_SECRET y aquí el secreto ya vive en el repo.
+#
+# No escribe nada. Salen conteos y códigos de cuenta — nunca importes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa"
+        required: true
+        type: string
+      balanza:
+        description: "Bajar la última balanza y medirla (tarda más)"
+        required: false
+        default: true
+        type: boolean
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Pedir el diagnóstico
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          CON_BALANZA: ${{ inputs.balanza }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q="companyId=${COMPANY_ID}"
+          if [ "${CON_BALANZA}" = "true" ]; then Q="${Q}&balanza=1"; fi
+
+          # El endpoint baja XML del SAT vía Syntage: 120s de presupuesto propio.
+          curl -fsS --max-time 300 "${URL}/api/cron/ce-inspect?${Q}" \
+            -H "x-cron-secret: ${CRON_SECRET}" | jq .
