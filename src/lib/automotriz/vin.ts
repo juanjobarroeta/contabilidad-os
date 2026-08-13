@@ -389,10 +389,37 @@ export function datosGeneralesDesdeCfdi(
 export function tipoCostoDesdeConcepto(
   claveProdServ: string | null,
   descripcion: string | null
-): "TRASLADO" | "ACCESORIOS" | "OTRO" {
+): "TRASLADO" | "ACCESORIOS" | "ACONDICIONAMIENTO" | "OTRO" {
   const d = (descripcion ?? "").toUpperCase();
   // 78101803 = servicios de traslado de vehículos; texto "TRASLADO"/"FLETE".
   if (claveProdServ === "78101803" || /\bTRASLAD|FLETE\b/.test(d)) return "TRASLADO";
+  // La conversión va ANTES que accesorios: «CONVERSIÓN … CON EQUIPAMIENTO
+  // MÉDICO» es una carrocería completa, no un juego de tapetes.
+  if (esConversionDeCarroceria(d)) return "ACONDICIONAMIENTO";
   if (/\bACCESORIO|EQUIPAMIENTO|POLARIZAD|TAPET|RINES?\b/.test(d)) return "ACCESORIOS";
   return "OTRO";
+}
+
+/**
+ * ¿El texto describe una CONVERSIÓN de carrocería sobre una unidad, en vez de
+ * la compra de una unidad?
+ *
+ * El negocio: la agencia compra el chasis, le paga a un tercero la conversión
+ * (ambulancia, patrulla, unidad médica, blindaje) y vende la unidad convertida
+ * —típicamente a gobierno—. Esa factura del carrocero llega con clave 2510xx y
+ * el VIN del chasis, así que parece una segunda compra de la MISMA unidad: sin
+ * este candado el derivador la archivaba como DUPLICADA y su costo terminaba en
+ * «Otros gastos» ($17.5M en Margom, 6 conceptos, medido 2026-08).
+ *
+ * Sólo aplica cuando la unidad YA es nuestra (ver el llamador): comprar una
+ * unidad que ya venía convertida SÍ es una compra, y ese caso —6 conceptos,
+ * $2.3M— no debe tocarse.
+ */
+export function esConversionDeCarroceria(texto: string | null | undefined): boolean {
+  if (!texto) return false;
+  const d = texto.toUpperCase();
+  // «AUTO USADO» manda: una recompra de seminueva no es una conversión, aunque
+  // el texto mencione el equipamiento que trae.
+  if (/AUTO USADO|VEH[IÍ]CULO USADO/.test(d)) return false;
+  return /CONVERSI[OÓ]N|BLINDAJ|BLINDAD|AMBULANCI|CARROCER[IÍ]A|PATRULL|ADAPTACI[OÓ]N|TRANSFORMACI[OÓ]N/.test(d);
 }

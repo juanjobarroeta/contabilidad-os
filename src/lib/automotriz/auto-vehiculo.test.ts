@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { tipoUnidadDesdeCfdi } from "./auto-vehiculo";
 import { derivarVehiculoDesdeCfdiSiAplica, derivarVehiculoInline } from "./auto-vehiculo";
+import { esConversionDeCarroceria } from "./vin";
 
 const VIN = "3GALD255XTM007338";
 
@@ -686,5 +687,91 @@ describe("tipoUnidadDesdeCfdi() — el seminuevo existe", () => {
 
   it("sin señal de usado, se asume nueva", () => {
     expect(tipoUnidadDesdeCfdi({ descripcion: "JAC SEI7 PRO LIMITED 2026" })).toBe("NUEVO");
+  });
+});
+
+describe("conversión de carrocería sobre unidad propia — es COSTO, no compra duplicada", () => {
+  // El negocio (Margom): compra el chasis, le paga a un carrocero la conversión
+  // —ambulancia, patrulla, unidad médica— y vende la unidad convertida, casi
+  // siempre a gobierno. El carrocero factura con clave 2510xx y el VIN del
+  // chasis, así que llegaba al derivador pareciendo una SEGUNDA compra de la
+  // misma unidad: quedaba DUPLICADA, su costo caía en «Otros gastos» y la
+  // unidad se vendía convertida contra el costo del chasis pelón.
+  // Medido en producción (2026-08): 6 conceptos, $17,535,141.
+  const VIN_CHASIS = "3GAPJ1A94SM016533";
+  const cfdiConversion = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I">
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="25101503" NoIdentificacion="CONV" Descripcion="Conversión de Unidad Médica Móvil unidad de la mujer (Mastografía) con blindaje, montada sobre camión marca JAC X350, número de serie ${VIN_CHASIS}" Importe="5358620.86"/>
+  </cfdi:Conceptos>
+</cfdi:Comprobante>`;
+
+  it("capitaliza la conversión a la unidad existente en vez de archivarla DUPLICADA", async () => {
+    const db = fakeDb();
+    // La unidad ya es nuestra: chasis comprado en su momento.
+    await db.vehiculo.create({
+      data: {
+        companyId: base.companyId, vin: VIN_CHASIS, marca: "JAC", modelo: "X350",
+        anio: 2025, costoCompra: 419228, compraInvoiceId: "inv_chasis", estado: "DISPONIBLE",
+      },
+    } as never);
+
+    const res = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv_conversion", tipo: "EGRESO", rawXml: cfdiConversion(),
+    });
+
+    // No se crea una segunda unidad fantasma de $5.36M.
+    expect(db._vehiculos.size).toBe(1);
+    expect(res?.creados ?? 0).toBe(0);
+
+    // La conversión queda como COSTO de la unidad, capitalizado.
+    const costos = db._costos.filter((c) => c.invoiceId === "inv_conversion");
+    expect(costos).toHaveLength(1);
+    expect(costos[0].monto).toBeCloseTo(5358620.86, 2);
+    expect(costos[0].tipo).toBe("ACONDICIONAMIENTO");
+
+    // Y el expediente lo dice: COSTO, no DUPLICADA.
+    const mencion = db._expediente.find((e) => e.invoiceId === "inv_conversion");
+    expect(mencion?.rol).toBe("COSTO");
+  });
+
+  it("si la unidad NO es nuestra, comprar una ya convertida SIGUE siendo compra", async () => {
+    // 6 conceptos / $2.3M en producción: unidades que llegaron ya convertidas.
+    // El candado exige que el VIN ya tenga compra ligada, así que éstas no se
+    // tocan y se derivan como la unidad que son.
+    const db = fakeDb();
+    const res = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv_convertida", tipo: "EGRESO", rawXml: cfdiConversion(),
+    });
+    expect(res?.creados).toBe(1);
+    expect(db._vehiculos.size).toBe(1);
+  });
+});
+
+describe("esConversionDeCarroceria() — la regla, validada contra el corpus real", () => {
+  it("reconoce las conversiones que Margom paga a terceros", () => {
+    for (const d of [
+      "Conversión de Unidad Médica Móvil unidad de la mujer (Mastografía) con blindaje de acuerdo con la Nom 229-2020",
+      "Venta de ambulancia tipo II, en chasis Jac Sunray de su propiedad con número de serie LJ11",
+      "CARROCERIA PARA PATRULLA CON TORRETA Y ROTULACION",
+      "BLINDAJE NIVEL III SOBRE UNIDAD",
+    ]) {
+      expect(esConversionDeCarroceria(d)).toBe(true);
+    }
+  });
+
+  it("NO se confunde con la recompra de un seminuevo", () => {
+    // «AUTO USADO» manda aunque el texto mencione equipamiento: son los 94
+    // conceptos / $29.2M de recompras, que son un ciclo nuevo, no un costo.
+    for (const d of [
+      "AUTO USADO MARCA JAC, VERSION PICK UP JAC FRISON T9 AT LUXURY 4X4 DOBLE CABINA",
+      "VEHICULO USADO EN LAS CONDICIONES QUE SE ENCUENTRA CON ADAPTACIONES",
+    ]) {
+      expect(esConversionDeCarroceria(d)).toBe(false);
+    }
+  });
+
+  it("no marca una compra normal de unidad nueva", () => {
+    expect(esConversionDeCarroceria("VEHICULO NUEVO JAC FRISON T9 4X4 Modelo:2026")).toBe(false);
+    expect(esConversionDeCarroceria(null)).toBe(false);
   });
 });
