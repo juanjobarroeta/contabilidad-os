@@ -30,6 +30,17 @@ export interface GastoLinea {
   label: string;
   monto: number;
   facturas: number;
+  /**
+   * Qué claves del SAT alimentan esta cuenta, de mayor a menor.
+   *
+   * Un renglón de gasto agregado no se puede auditar: «Publicidad y marketing
+   * $54,836,842» suena plausible y nadie lo cuestiona — que es exactamente lo
+   * que pasó cuando el prefijo 8013 mandó $17M de RENTA a «Servicios
+   * notariales». Con las claves a la vista, un mapeo demasiado ancho se ve de
+   * inmediato: si dentro de publicidad aparece 80141615, que en los propios
+   * CFDIs de MARGOM ampara «Unidad BMW X4 M40i», el prefijo está mal.
+   */
+  claves?: Array<{ clave: string; monto: number; facturas: number; ejemplo: string | null }>;
 }
 
 export interface GastosResultado {
@@ -110,6 +121,7 @@ export async function gastosDeOperacion(
   });
 
   const porCuenta = new Map<string, GastoLinea>();
+  const claves = new Map<string, Map<string, { monto: number; facturas: number; ejemplo: string | null }>>();
   let sinXml = 0;
   let montoSinXml = 0;
   let anticipos = 0;
@@ -148,9 +160,29 @@ export async function gastosDeOperacion(
     acc.monto = r2(acc.monto + signo * f.subtotal);
     acc.facturas++;
     porCuenta.set(cuenta, acc);
+
+    // La clave DOMINANTE es la que decidió la clasificación, así que es la que
+    // hay que poder auditar.
+    if (dominante) {
+      const porClave = claves.get(cuenta) ?? new Map<string, { monto: number; facturas: number; ejemplo: string | null }>();
+      const k = porClave.get(dominante.claveProdServ) ?? { monto: 0, facturas: 0, ejemplo: null };
+      k.monto = r2(k.monto + signo * f.subtotal);
+      k.facturas++;
+      if (k.ejemplo == null && dominante.descripcion) k.ejemplo = dominante.descripcion.slice(0, 70);
+      porClave.set(dominante.claveProdServ, k);
+      claves.set(cuenta, porClave);
+    }
   }
 
-  const lineas = [...porCuenta.values()].sort((a, b) => b.monto - a.monto);
+  const lineas = [...porCuenta.values()]
+    .sort((a, b) => b.monto - a.monto)
+    .map((l) => ({
+      ...l,
+      claves: [...(claves.get(l.cuenta) ?? new Map()).entries()]
+        .map(([clave, v]) => ({ clave, ...v }))
+        .sort((a, b) => b.monto - a.monto)
+        .slice(0, 8),
+    }));
   return {
     // Los anticipos NO entran al total: no son gasto del periodo.
     total: r2(lineas.reduce((s, l) => s + l.monto, 0) + montoSinXml),
