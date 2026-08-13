@@ -283,6 +283,21 @@ export interface CuadreIngreso {
    * esquema A.
    */
   relaciones: Array<{ tipoRelacion: string; facturas: number; monto: number }>;
+  /**
+   * Relaciones leídas del XML, no de la columna.
+   *
+   * `Invoice.tipoRelacion` sólo lo escribe nota-credito.ts, que es el módulo
+   * que EMITE notas de crédito desde la app. Nada lo puebla al importar del
+   * SAT: medido, las 27,336 facturas de ingreso de MARGOM lo tienen en null,
+   * incluidas 6,129 notas de crédito y 5,052 anticipos. El campo existe para
+   * las facturas que la app genera, no para las que ingiere.
+   *
+   * La relación sí viene en el CFDI (`CfdiRelacionados TipoRelacion=…`), así
+   * que se pregunta al XML. Es lo único que puede decir cuál de los dos
+   * esquemas de anticipo del Anexo 20 usan, y por lo tanto si el tablero está
+   * perdiendo ~$155M o ya acierta.
+   */
+  relacionesEnXml: Array<{ tipoRelacion: string; facturas: number; monto: number }>;
 }
 
 export async function cuadreDeIngresos(
@@ -315,6 +330,7 @@ export async function cuadreDeIngresos(
     notasDeCredito: b(),
     sinReclamar: { facturas: 0, monto: 0, porClave: [] },
     relaciones: [],
+    relacionesEnXml: [],
   };
   const porClave = new Map<string, { monto: number; facturas: number; ejemplo: string | null }>();
   const porRelacion = new Map<string, { facturas: number; monto: number }>();
@@ -349,6 +365,27 @@ export async function cuadreDeIngresos(
       porClave.set(clave, k);
     }
   }
+
+  // Las relaciones que de verdad trae el CFDI. Se cuentan en la base con
+  // `contains` para no traerse 27 mil rawXml a memoria.
+  //   01 nota de crédito · 04 sustitución · 07 aplicación de anticipo
+  const TIPOS = ["01", "02", "03", "04", "05", "06", "07"] as const;
+  const enXml: Array<{ tipoRelacion: string; facturas: number; monto: number }> = [];
+  for (const t of TIPOS) {
+    const where = {
+      companyId,
+      tipo: "INGRESO" as const,
+      status: { not: "CANCELLED" as const },
+      fecha: { gte: desde, lt: hasta },
+      rawXml: { contains: `TipoRelacion="${t}"` },
+    };
+    const [n, agg] = await Promise.all([
+      db.invoice.count({ where }),
+      db.invoice.aggregate({ where, _sum: { subtotal: true } }),
+    ]);
+    if (n > 0) enXml.push({ tipoRelacion: t, facturas: n, monto: r2(agg._sum.subtotal ?? 0) });
+  }
+  res.relacionesEnXml = enXml.sort((a, b2) => b2.monto - a.monto);
 
   res.relaciones = [...porRelacion.entries()]
     .map(([tipoRelacion, v]) => ({ tipoRelacion, ...v }))
