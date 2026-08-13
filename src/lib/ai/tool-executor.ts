@@ -14,6 +14,9 @@ import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
 import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
 import { stageChatPendingAction } from "@/lib/ai/pending-action";
 import { contarSimilaresSinConciliar } from "@/lib/bancos/reglas-categorizacion";
+import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
+import { saldoInsolutoPpd } from "@/lib/facturas/saldo-ppd";
+import { parseRepresentacion } from "@/lib/facturas/representacion";
 import {
   computeEmpresasBriefing,
   empresasConEstadoCuentaVencido,
@@ -78,6 +81,12 @@ export async function executeToolCall(
       return proponerMarcarPendiente(input, companyId, context);
     case "query_invoices":
       return queryInvoices(input, companyId);
+    case "get_invoice_detail":
+      return getInvoiceDetail(input, companyId);
+    case "query_cancelaciones":
+      return queryCancelaciones(input, companyId);
+    case "query_ppd_cartera":
+      return queryPpdCartera(input, companyId);
     case "query_bank_transactions":
       return queryBankTransactions(input, companyId);
     case "query_tax_declarations":
@@ -585,6 +594,20 @@ async function queryInvoices(input: ToolInput, companyId: string) {
   if (input.customer_rfc) {
     where.customer = { rfc: input.customer_rfc };
   }
+  if (input.metodo_pago) where.metodoPago = input.metodo_pago;
+  // Búsqueda libre: folio, UUID, nombre o RFC de la contraparte — incluyendo la
+  // denormalizada del comprobante (público en general no tiene Customer).
+  if (input.q) {
+    const q = String(input.q);
+    where.OR = [
+      { uuid: { contains: q, mode: "insensitive" } },
+      { folio: { contains: q, mode: "insensitive" } },
+      { contraparteNombre: { contains: q, mode: "insensitive" } },
+      { contraparteRfc: { contains: q, mode: "insensitive" } },
+      { customer: { razonSocial: { contains: q, mode: "insensitive" } } },
+      { customer: { rfc: { contains: q, mode: "insensitive" } } },
+    ];
+  }
 
   if (input.summary_only) {
     const [agg, count] = await Promise.all([
@@ -638,8 +661,10 @@ async function queryInvoices(input: ToolInput, companyId: string) {
         direccion, // EMITIDO = tú lo expediste · RECIBIDO = te lo expidieron
         interpretacion: interpret(inv.tipo, direccion),
         fecha: inv.fecha.toISOString().substring(0, 10),
-        contraparte: inv.customer?.razonSocial ?? "—",
-        contraparteRfc: inv.customer?.rfc ?? "—",
+        // Customer cuando existe; si no, lo que trae el propio comprobante
+        // (público en general y extranjeros no llevan Customer a propósito).
+        contraparte: nombreContraparte(inv),
+        contraparteRfc: rfcContraparte(inv),
         subtotal: inv.subtotal,
         total: inv.total,
         status: inv.status,
@@ -648,6 +673,318 @@ async function queryInvoices(input: ToolInput, companyId: string) {
         metodoPago: inv.metodoPago,
       };
     }),
+  });
+}
+
+// ─── get_invoice_detail ──────────────────────────────────────────────────────
+
+/**
+ * Detalle COMPLETO de un CFDI: conceptos, desglose de impuestos, contraparte
+ * con régimen (del XML), estatus de cancelación con sustitución, y saldo PPD
+ * con sus complementos de pago. Es la herramienta que quita la venda al
+ * asistente: antes sólo veía encabezados.
+ */
+async function getInvoiceDetail(input: ToolInput, companyId: string): Promise<string> {
+  const uuid = input.uuid ? String(input.uuid).toUpperCase() : null;
+  const folio = input.folio ? String(input.folio) : null;
+  if (!uuid && !folio) {
+    return JSON.stringify({ error: "Indica uuid (folio fiscal) o folio interno de la factura." });
+  }
+
+  const invoice = await prisma.invoice.findFirst({
+    where: uuid
+      ? { companyId, uuid: { equals: uuid, mode: "insensitive" } }
+      : { companyId, folio: { equals: folio as string, mode: "insensitive" } },
+    include: {
+      customer: { select: { razonSocial: true, rfc: true, regimenFiscal: true } },
+      items: true,
+      taxes: true,
+      doctosRelacionados: true,
+    },
+    orderBy: { fecha: "desc" }, // con folio repetido, la más reciente
+  });
+  if (!invoice) {
+    return JSON.stringify({
+      error: `No encontré la factura ${uuid ?? folio}. Prueba con query_invoices y el parámetro q para buscarla.`,
+    });
+  }
+
+  // Vista del XML: régimen y uso que las columnas no guardan, y el respaldo de
+  // conceptos/impuestos para CFDIs importados antes de que se parsearan.
+  let delXml: Record<string, unknown> | null = null;
+  if (invoice.rawXml) {
+    try {
+      const rep = parseRepresentacion(invoice.rawXml);
+      delXml = {
+        emisor: rep.emisor,
+        receptor: rep.receptor,
+        ...(invoice.items.length === 0 && rep.conceptos.length > 0
+          ? { conceptos: rep.conceptos }
+          : {}),
+        ...(invoice.taxes.length === 0
+          ? { traslados: rep.traslados, retenciones: rep.retenciones }
+          : {}),
+      };
+    } catch {
+      /* XML ilegible: el detalle de BD sigue siendo válido */
+    }
+  }
+
+  // PPD: complementos que la pagan y saldo vivo.
+  let ppd: Record<string, unknown> | null = null;
+  if (invoice.metodoPago === "PPD" && invoice.uuid && invoice.tipo !== "PAGO") {
+    const doctos = await prisma.pagoDoctoRelacionado.findMany({
+      // parentUuid indexa CROSS-empresa: el filtro por pagoInvoice.companyId
+      // es obligatorio para no leer complementos de otra empresa.
+      where: {
+        parentUuid: { equals: invoice.uuid, mode: "insensitive" },
+        pagoInvoice: { companyId, status: { not: "CANCELLED" } },
+      },
+      include: { pagoInvoice: { select: { uuid: true, fecha: true, status: true } } },
+      orderBy: { fechaPago: "asc" },
+    });
+    const s = saldoInsolutoPpd(invoice.total, doctos);
+    ppd = {
+      saldoInsoluto: s.saldo,
+      cobrado: s.pagado,
+      parcialidades: s.parcialidades,
+      ultimoPagoLegal: s.ultimoPago?.toISOString().slice(0, 10) ?? null,
+      complementos: doctos.map((d) => ({
+        repUuid: d.pagoInvoice.uuid,
+        fechaPago: d.fechaPago?.toISOString().slice(0, 10) ?? null,
+        parcialidad: d.numParcialidad,
+        pagado: d.impPagado,
+        saldoDespues: d.impSaldoInsoluto,
+      })),
+    };
+  }
+
+  // Cancelación: motivo, y si otra factura VIVA la sustituye (refacturación —
+  // el ingreso no desapareció, sólo cambió de UUID).
+  let cancelacion: Record<string, unknown> | null = null;
+  if (invoice.status === "CANCELLED" && invoice.uuid) {
+    const sustituta = await prisma.invoice.findFirst({
+      where: {
+        companyId,
+        status: { not: "CANCELLED" },
+        cfdiRelacionadoUuid: { equals: invoice.uuid, mode: "insensitive" },
+      },
+      select: { uuid: true, folio: true, fecha: true, total: true },
+    });
+    cancelacion = {
+      canceladaAt: invoice.canceladaAt?.toISOString().slice(0, 10) ?? null,
+      motivo: invoice.cancelMotivo,
+      sustituidaPor: sustituta,
+      interpretacion: sustituta
+        ? "Refacturación: existe una factura viva que la sustituye — el ingreso no desapareció, sólo cambió de UUID."
+        : "Cancelada SIN sustituta: si su mes ya se declaró, ese ingreso/gasto salió de la base y puede ameritar revisar el periodo.",
+    };
+  }
+
+  return JSON.stringify({
+    uuid: invoice.uuid,
+    tipo: invoice.tipo,
+    status: invoice.status,
+    fecha: invoice.fecha.toISOString().slice(0, 10),
+    serie: invoice.serie,
+    folio: invoice.folio,
+    contraparte: nombreContraparte(invoice),
+    contraparteRfc: rfcContraparte(invoice),
+    regimenContraparte: invoice.customer?.regimenFiscal ?? null,
+    metodoPago: invoice.metodoPago,
+    formaPago: invoice.formaPago,
+    usoCfdi: invoice.usoCfdi,
+    moneda: invoice.moneda,
+    subtotal: invoice.subtotal,
+    descuento: invoice.descuento,
+    totalImpuestos: invoice.totalImpuestos,
+    total: invoice.total,
+    naturaleza: invoice.naturaleza,
+    conceptos: invoice.items.map((it) => ({
+      descripcion: it.descripcion,
+      claveProdServ: it.claveProdServ,
+      cantidad: it.cantidad,
+      valorUnitario: it.valorUnitario,
+      importe: it.importe,
+      descuento: it.descuento,
+    })),
+    impuestos: invoice.taxes.map((t) => ({
+      tipo: t.tipo,
+      factor: t.factor,
+      tasa: t.tasa,
+      base: t.base,
+      importe: t.importe,
+      retencion: t.retencion,
+    })),
+    // REP (tipo PAGO): a qué facturas aplica este complemento.
+    ...(invoice.tipo === "PAGO" && invoice.doctosRelacionados.length > 0
+      ? {
+          pagaA: invoice.doctosRelacionados.map((d) => ({
+            facturaUuid: d.parentUuid,
+            fechaPago: d.fechaPago?.toISOString().slice(0, 10) ?? null,
+            pagado: d.impPagado,
+            parcialidad: d.numParcialidad,
+          })),
+        }
+      : {}),
+    ...(ppd ? { ppd } : {}),
+    ...(cancelacion ? { cancelacion } : {}),
+    ...(delXml ? { delXml } : {}),
+    vigenciaVerificadaAt: invoice.vigenciaCheckedAt?.toISOString().slice(0, 10) ?? null,
+  });
+}
+
+// ─── query_cancelaciones ─────────────────────────────────────────────────────
+
+/**
+ * Facturas canceladas del periodo con análisis de SUSTITUCIÓN: la pregunta que
+ * importa no es cuántas se cancelaron sino cuáles NO tienen factura sustituta —
+ * ésas sacaron ingreso/gasto de una base posiblemente ya declarada.
+ */
+async function queryCancelaciones(input: ToolInput, companyId: string): Promise<string> {
+  const where: Record<string, unknown> = { companyId, status: "CANCELLED" };
+  // `por`: emision (default) filtra por fecha del CFDI; cancelacion, por cuándo
+  // se canceló (canceladaAt puede ser null en detecciones del barrido).
+  const campo = input.por === "cancelacion" ? "canceladaAt" : "fecha";
+  if (input.date_from || input.date_to) {
+    where[campo] = {
+      ...(input.date_from ? { gte: new Date(String(input.date_from)) } : {}),
+      ...(input.date_to ? { lte: new Date(`${input.date_to}T23:59:59`) } : {}),
+    };
+  }
+
+  const canceladas = await prisma.invoice.findMany({
+    where,
+    select: {
+      uuid: true, tipo: true, fecha: true, canceladaAt: true, cancelMotivo: true,
+      total: true, contraparteNombre: true, contraparteRfc: true,
+      customer: { select: { razonSocial: true, rfc: true } },
+    },
+    orderBy: { fecha: "desc" },
+    take: Math.min((input.limit as number) || 50, 100),
+  });
+  if (canceladas.length === 0) {
+    return JSON.stringify({ n: 0, mensaje: "Sin facturas canceladas en ese filtro." });
+  }
+
+  // Sustitución en UNA consulta: qué canceladas tienen una factura viva que las
+  // referencia como CFDI relacionado.
+  const uuids = canceladas.map((c) => c.uuid).filter((u): u is string => u != null);
+  const sustitutas = await prisma.invoice.findMany({
+    where: { companyId, status: { not: "CANCELLED" }, cfdiRelacionadoUuid: { in: uuids, mode: "insensitive" } },
+    select: { cfdiRelacionadoUuid: true, uuid: true, total: true },
+  });
+  const porSustituida = new Map(sustitutas.map((s) => [s.cfdiRelacionadoUuid!.toUpperCase(), s]));
+
+  const filas = canceladas.map((c) => {
+    const sust = c.uuid ? porSustituida.get(c.uuid.toUpperCase()) ?? null : null;
+    return {
+      uuid: c.uuid,
+      tipo: c.tipo,
+      fecha: c.fecha.toISOString().slice(0, 10),
+      canceladaAt: c.canceladaAt?.toISOString().slice(0, 10) ?? null,
+      motivo: c.cancelMotivo,
+      total: c.total,
+      contraparte: nombreContraparte(c),
+      conSustituta: sust != null,
+      sustitutaUuid: sust?.uuid ?? null,
+    };
+  });
+
+  const sinSustituta = filas.filter((f) => !f.conSustituta && f.tipo !== "PAGO");
+  return JSON.stringify({
+    n: filas.length,
+    totalCancelado: filas.reduce((s, f) => s + f.total, 0),
+    conSustituta: filas.filter((f) => f.conSustituta).length,
+    sinSustituta: sinSustituta.length,
+    montoSinSustituta: sinSustituta.reduce((s, f) => s + f.total, 0),
+    facturas: filas,
+    _nota:
+      "conSustituta=true es refacturación (el ingreso sigue vivo bajo otro UUID — sin efecto en lo declarado). Las SIN sustituta en meses ya declarados son las que pueden ameritar revisar/corregir ese periodo. Los REPs (tipo PAGO) cancelados afectan el IVA en flujo del mes del pago, no el ingreso.",
+  });
+}
+
+// ─── query_ppd_cartera ───────────────────────────────────────────────────────
+
+/**
+ * Cartera PPD: facturas a crédito con su saldo vivo, calculado desde los
+ * complementos de pago. Responde "¿quién me debe y desde cuándo?".
+ */
+async function queryPpdCartera(input: ToolInput, companyId: string): Promise<string> {
+  const soloConSaldo = input.solo_con_saldo !== false; // default: sólo lo vivo
+  const parents = await prisma.invoice.findMany({
+    where: {
+      companyId,
+      tipo: "INGRESO",
+      metodoPago: "PPD",
+      status: "STAMPED",
+      uuid: { not: null },
+      ...(input.date_from || input.date_to
+        ? {
+            fecha: {
+              ...(input.date_from ? { gte: new Date(String(input.date_from)) } : {}),
+              ...(input.date_to ? { lte: new Date(`${input.date_to}T23:59:59`) } : {}),
+            },
+          }
+        : {}),
+    },
+    select: {
+      uuid: true, serie: true, folio: true, fecha: true, total: true,
+      contraparteNombre: true, contraparteRfc: true,
+      customer: { select: { razonSocial: true, rfc: true } },
+    },
+    orderBy: { fecha: "desc" },
+    take: 200,
+  });
+  if (parents.length === 0) {
+    return JSON.stringify({ n: 0, mensaje: "Sin facturas PPD en ese filtro." });
+  }
+
+  const doctos = await prisma.pagoDoctoRelacionado.findMany({
+    where: {
+      parentUuid: { in: parents.map((p) => p.uuid as string) },
+      pagoInvoice: { companyId, status: { not: "CANCELLED" } },
+    },
+    select: {
+      parentUuid: true, numParcialidad: true, impPagado: true,
+      impSaldoInsoluto: true, fechaPago: true,
+    },
+  });
+  const porParent = new Map<string, typeof doctos>();
+  for (const d of doctos) {
+    const k = d.parentUuid.toUpperCase();
+    (porParent.get(k) ?? porParent.set(k, []).get(k)!).push(d);
+  }
+
+  const hoy = Date.now();
+  const filas = parents
+    .map((p) => {
+      const s = saldoInsolutoPpd(p.total, porParent.get((p.uuid as string).toUpperCase()) ?? []);
+      return {
+        uuid: p.uuid,
+        folio: [p.serie, p.folio].filter(Boolean).join("") || null,
+        fecha: p.fecha.toISOString().slice(0, 10),
+        cliente: nombreContraparte(p),
+        clienteRfc: rfcContraparte(p),
+        total: p.total,
+        cobrado: s.pagado,
+        saldo: s.saldo,
+        parcialidades: s.parcialidades,
+        ultimoPago: s.ultimoPago?.toISOString().slice(0, 10) ?? null,
+        diasDesdeEmision: Math.floor((hoy - p.fecha.getTime()) / 86_400_000),
+      };
+    })
+    .filter((f) => !soloConSaldo || f.saldo > 1);
+
+  filas.sort((a, b) => b.saldo - a.saldo);
+  return JSON.stringify({
+    n: filas.length,
+    totalFacturado: filas.reduce((s, f) => s + f.total, 0),
+    totalCobrado: filas.reduce((s, f) => s + f.cobrado, 0),
+    saldoTotal: filas.reduce((s, f) => s + f.saldo, 0),
+    facturas: filas.slice(0, Math.min((input.limit as number) || 30, 60)),
+    _nota:
+      "saldo viene del ImpSaldoInsoluto del complemento más avanzado (o total − cobrado si no hay). diasDesdeEmision alto con saldo > 0 = cobranza atorada.",
   });
 }
 

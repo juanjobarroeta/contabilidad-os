@@ -13,6 +13,12 @@ export const tools: Anthropic.Tool[] = [
         tipo: { type: "string", enum: ["INGRESO", "EGRESO", "TRASLADO", "NOMINA", "PAGO"] },
         status: { type: "string", enum: ["DRAFT", "STAMPED", "CANCELLED"] },
         customer_rfc: { type: "string", description: "RFC del cliente para filtrar" },
+        q: {
+          type: "string",
+          description:
+            "Búsqueda libre: folio, UUID, o nombre/RFC de la contraparte (incluye ventas a público en general)",
+        },
+        metodo_pago: { type: "string", enum: ["PUE", "PPD"] },
         summary_only: {
           type: "boolean",
           description: "Si es true, devuelve solo conteos y totales agregados en vez de la lista",
@@ -171,6 +177,56 @@ export const tools: Anthropic.Tool[] = [
         },
       },
       required: ["items"],
+    },
+  },
+  {
+    name: "get_invoice_detail",
+    description:
+      "Detalle COMPLETO de un CFDI por UUID (folio fiscal) o folio interno: conceptos (descripción, clave SAT, cantidades, importes), desglose de impuestos (IVA/ISR/IEPS, tasas, retenciones), contraparte con régimen fiscal, uso CFDI, y — cuando aplica — saldo PPD con sus complementos de pago, o análisis de cancelación (¿tiene factura sustituta?). Úsala siempre que el usuario pregunte QUÉ contiene una factura, qué se vendió/compró, sus impuestos, o cuánto le deben de ella.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        uuid: { type: "string", description: "UUID (folio fiscal) exacto" },
+        folio: { type: "string", description: "Folio interno (si no tienes el UUID)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "query_cancelaciones",
+    description:
+      "Facturas CANCELADAS con análisis de sustitución: cuáles tienen factura sustituta viva (refacturación — sin efecto en lo declarado) y cuáles NO (sacaron ingreso/gasto de una base posiblemente ya declarada; pueden ameritar revisar el periodo). Filtra por fecha de emisión o de cancelación. Úsala para '¿qué se me canceló?', '¿afecta mis declaraciones?'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        date_from: { type: "string", description: "Fecha inicio ISO (YYYY-MM-DD)" },
+        date_to: { type: "string", description: "Fecha fin ISO" },
+        por: {
+          type: "string",
+          enum: ["emision", "cancelacion"],
+          description: "Filtrar por fecha del CFDI (default) o por cuándo se canceló",
+        },
+        limit: { type: "number" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "query_ppd_cartera",
+    description:
+      "Cartera de facturas PPD (a crédito): quién debe, cuánto, desde cuándo, y qué complementos de pago la han abonado. El saldo sale de los propios REPs (ImpSaldoInsoluto). Úsala para '¿quién me debe?', '¿cuánto ha pagado X?', 'facturas vencidas sin cobrar'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        date_from: { type: "string", description: "Emitidas desde (YYYY-MM-DD)" },
+        date_to: { type: "string", description: "Emitidas hasta" },
+        solo_con_saldo: {
+          type: "boolean",
+          description: "default true: sólo facturas con saldo vivo; false incluye ya cobradas",
+        },
+        limit: { type: "number" },
+      },
+      required: [],
     },
   },
   {
