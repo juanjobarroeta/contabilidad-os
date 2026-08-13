@@ -66,7 +66,20 @@ async function handle(req: Request) {
   // Sin companyId, el cron elige solo a quién le falta la carga inicial: el
   // drenado histórico deja de depender de que alguien encadene cursores.
   const objetivo = onlyCompanyId ?? (await empresasPendientes(prisma, "refacciones", 1))[0] ?? null;
-  if (objetivo && (reiniciar || recalcular)) await reiniciarProgreso(prisma, objetivo, "refacciones");
+  // El progreso se LEE antes de decidir si se reinicia: `recalcular` que cae a
+  // mitad de un barrido debe CONTINUARLO, no empezarlo de cero.
+  //
+  // Sin esto no había forma de terminar un recalcular. Con la bandera, el
+  // cursor volvía al principio en cada ronda (bucle infinito); sin ella, el
+  // barrido cambiaba de semántica a media corrida y saltaba justo lo que
+  // faltaba por rehacer — y reportaba «completado: true». Visto en producción:
+  // 66,200 escaneadas con completado:false, y la siguiente ronda sin bandera
+  // cerró el barrido con «derivadas: 0» dejando la cola con datos viejos.
+  const previo = objetivo ? await leerProgreso(prisma, objetivo, "refacciones") : null;
+  const continuandoRecalculo = recalcular && previo != null && !previo.completado;
+  if (objetivo && (reiniciar || (recalcular && !continuandoRecalculo))) {
+    await reiniciarProgreso(prisma, objetivo, "refacciones");
+  }
 
   // El borrado va POR PÁGINA, no de golpe al principio.
   //
@@ -89,7 +102,7 @@ async function handle(req: Request) {
     ...(objetivo ? { companyId: objetivo } : {}),
   };
 
-  const guardado = objetivo ? await leerProgreso(prisma, objetivo, "refacciones") : null;
+  const guardado = continuandoRecalculo ? previo : (objetivo ? await leerProgreso(prisma, objetivo, "refacciones") : null);
   let lastId: string | undefined =
     url.searchParams.get("afterId") ?? (guardado && !guardado.completado ? (guardado.cursor ?? undefined) : undefined);
   let barridoCompleto = true;

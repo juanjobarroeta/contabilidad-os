@@ -73,7 +73,20 @@ async function handle(req: Request) {
   // así una empresa que sube su e.firma el viernes termina de cargar sola.
   const objetivo =
     onlyCompanyId ?? (diagnostico ? null : (await empresasPendientes(prisma, "servicio", 1))[0] ?? null);
-  if (objetivo && (reiniciar || recalcular)) await reiniciarProgreso(prisma, objetivo, "servicio");
+  // El progreso se LEE antes de decidir si se reinicia: `recalcular` que cae a
+  // mitad de un barrido debe CONTINUARLO, no empezarlo de cero.
+  //
+  // Sin esto no había forma de terminar un recalcular. Con la bandera, el
+  // cursor volvía al principio en cada ronda (bucle infinito); sin ella, el
+  // barrido cambiaba de semántica a media corrida y saltaba justo lo que
+  // faltaba por rehacer — y reportaba «completado: true». Visto en producción:
+  // 66,200 escaneadas con completado:false, y la siguiente ronda sin bandera
+  // cerró el barrido con «derivadas: 0» dejando la cola con datos viejos.
+  const previo = objetivo && !diagnostico ? await leerProgreso(prisma, objetivo, "servicio") : null;
+  const continuandoRecalculo = recalcular && previo != null && !previo.completado;
+  if (objetivo && (reiniciar || (recalcular && !continuandoRecalculo))) {
+    await reiniciarProgreso(prisma, objetivo, "servicio");
+  }
 
   // El borrado va POR PÁGINA, no de golpe al principio: si se borran las 38,996
   // ventas de servicio antes de empezar, el taller reporta cero durante toda la
@@ -98,7 +111,7 @@ async function handle(req: Request) {
   };
 
   // El cursor viene del parámetro (operación manual) o de la base (automático).
-  const guardado = objetivo && !diagnostico ? await leerProgreso(prisma, objetivo, "servicio") : null;
+  const guardado = continuandoRecalculo ? previo : (objetivo && !diagnostico ? await leerProgreso(prisma, objetivo, "servicio") : null);
   let lastId: string | undefined =
     url.searchParams.get("afterId") ?? (guardado && !guardado.completado ? (guardado.cursor ?? undefined) : undefined);
   let barridoCompleto = true;
