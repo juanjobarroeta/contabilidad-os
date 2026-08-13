@@ -20,6 +20,7 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { extraerDatosVehiculoCfdi, tipoComprobanteDesdeCfdi } from "./vin";
+import { clasificarConcepto } from "./concepto-linea";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -27,14 +28,7 @@ export const MIN_LINEAS_REFACCION = 3;
 
 // Claves de SERVICIO (transporte, mantenimiento, financieros, etc.) — un
 // NoIdentificacion en estas clases es folio interno, no número de parte.
-const CLAVE_SERVICIO_RE = /^(7[89]|8[0-9]|9[0-5])/;
 
-// Identificadores genéricos que los emisores usan como NoIdentificacion sin
-// ser partes.
-const NO_IDENT_RUIDO = new Set([
-  "TRASLADO", "SEGURO", "FLETE", "SERVICIO", "MO", "MANO DE OBRA", "N/A",
-  "NA", "S/N", "SN", "GENERICO", "VARIOS", "01010101",
-]);
 
 export interface LineaRefaccion {
   numeroParte: string;
@@ -71,12 +65,18 @@ export function extraerRefaccionesCfdi(rawXml: string): LineaRefaccion[] {
   for (const m of rawXml.matchAll(CONCEPTO_RE)) {
     const attrs = m[1] ?? "";
     const noIdent = attr(attrs, "NoIdentificacion")?.trim();
-    if (!noIdent || noIdent.length < 2 || noIdent.length > 40) continue;
-    if (NO_IDENT_RUIDO.has(noIdent.toUpperCase())) continue;
-
     const descripcion = attr(attrs, "Descripcion");
     const claveProdServ = attr(attrs, "ClaveProdServ");
-    if (claveProdServ && CLAVE_SERVICIO_RE.test(claveProdServ)) continue;
+
+    // Misma decisión que usa el derivador de taller (concepto-linea.ts): sólo
+    // entra al kardex lo que ese criterio compartido llama REFACCION. Antes
+    // cada lado filtraba por su cuenta y los conceptos que cumplían ambas
+    // reglas —«KIT DE REPARACIÓN DE CALIPER» y sus parientes— acababan en las
+    // dos líneas del tablero a la vez.
+    if (clasificarConcepto({ claveProdServ, noIdentificacion: noIdent, descripcion }) !== "REFACCION") {
+      continue;
+    }
+    if (!noIdent) continue; // ya garantizado por la clasificación; ayuda a TS
 
     // Unidades y costos por VIN no son refacciones.
     const texto = `${descripcion ?? ""} ${noIdent}`.toUpperCase();

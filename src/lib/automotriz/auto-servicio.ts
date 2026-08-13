@@ -8,6 +8,7 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { extraerDatosVehiculoCfdi, tipoComprobanteDesdeCfdi, vinsDesdeTexto } from "./vin";
+import { clasificarConcepto } from "./concepto-linea";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -71,16 +72,21 @@ export function extraerServicioCfdi(rawXml: string): DatosServicioCfdi {
 
     for (const v of vinsDesdeTexto(descripcion)) vins.add(v);
 
-    // Un anticipo no es mano de obra ni refacción: se descarta antes de
-    // clasificar (si no, «Anticipo del bien o SERVICIO» entra como taller).
-    if (clave === CLAVE_ANTICIPO || (descripcion != null && ANTICIPO_TEXTO_RE.test(descripcion))) continue;
+    // La decisión vive en concepto-linea.ts, compartida con el derivador del
+    // kardex. Cuando cada uno tenía su propio criterio, un «KIT DE REPARACIÓN
+    // DE CALIPER» —parte real, con número de parte— entraba como mano de obra
+    // aquí y como refacción allá: el mismo peso en dos líneas del tablero.
+    const linea = clasificarConcepto({
+      claveProdServ: clave,
+      noIdentificacion: noIdent,
+      descripcion,
+    });
 
-    const esLineaServicio = clave.startsWith("7818") || (descripcion != null && SERVICIO_TEXTO_RE.test(descripcion));
-    if (esLineaServicio) {
+    if (linea === "MANO_OBRA") {
       tieneServicio = true;
       manoObra += importe;
       if (descripcion) lineasServicio.push({ descripcion: descripcion.trim(), importe });
-    } else if (noIdent) {
+    } else if (linea === "REFACCION") {
       refacciones += importe;
     }
   }
