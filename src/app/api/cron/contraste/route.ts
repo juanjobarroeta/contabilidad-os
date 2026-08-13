@@ -53,7 +53,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  * trae el mayor Y sus hijas, y sumar ambos duplica el subárbol (ver
  * padresDeBalanza — en MARGOM son 103 mayores).
  */
-function resultadoDeBalanza(xml: string) {
+function resultadoDeBalanza(xml: string, nombrePorCodigo: Map<string, string> = new Map()) {
   const bal = parseBalanza(xml);
   const padres = padresDeBalanza(bal.cuentas.map((c) => c.numCta));
   const porFamilia = new Map<string, { cuentas: number; saldo: number }>();
@@ -91,9 +91,19 @@ function resultadoDeBalanza(xml: string) {
   // Se separan las de saldo deudor: en la familia 4 un saldo del lado contrario
   // es contra-ingreso (devoluciones, descuentos, bonificaciones sobre ventas) y
   // sumarlo junto con las demás esconde justo lo que se está buscando.
+  //
+  // El NOMBRE es indispensable. La balanza sólo trae NumCta y saldo, así que
+  // «4131-0013 = −$445,049,433» no dice NADA: no se puede saber si esa línea de
+  // negocio la ve el tablero o no. El nombre vive en el catálogo, que ya está en
+  // ChartAccount. Sin cruzarlo sólo quedaría adivinar qué es cada cuenta, y
+  // adivinar es lo que ha fallado toda la sesión.
   const cuentasIngreso = bal.cuentas
     .filter((c) => !padres.has(c.numCta) && c.numCta.trim().charAt(0) === "4")
-    .map((c) => ({ numCta: c.numCta, saldo: r2(c.saldoFin) }))
+    .map((c) => ({
+      numCta: c.numCta,
+      nombre: nombrePorCodigo.get(c.numCta) ?? null,
+      saldo: r2(c.saldoFin),
+    }))
     .filter((c) => Math.abs(c.saldo) >= 0.005);
   const contraIngreso = cuentasIngreso.filter((c) => c.saldo > 0);
 
@@ -195,6 +205,15 @@ async function handle(req: Request) {
     if (!entity) {
       libros = { error: "sin entidad en Syntage para el RFC" };
     } else {
+      // Catálogo de la empresa: pone NOMBRE a los códigos de la balanza.
+      const cuentasBd = await prisma.chartAccount.findMany({
+        where: { companyId },
+        select: { cuentaSAT: true, subcuenta: true, nombre: true },
+      });
+      const nombrePorCodigo = new Map(
+        cuentasBd.map((a) => [a.subcuenta ?? a.cuentaSAT, a.nombre]),
+      );
+
       const records = await client.getEntityElectronicAccounting(entity.id);
       // La balanza de DICIEMBRE del ejercicio: su SaldoFin es el acumulado.
       const delAnio = records.filter((r) => String(r.fileType ?? "") === "B" && Number(r.year) === anio);
@@ -204,7 +223,7 @@ async function handle(req: Request) {
       } else {
         const doc = await descargarDocumentoCe(client, dic, "B");
         libros = doc
-          ? { ...resultadoDeBalanza(doc.xml), archivo: doc.nombre, registro: periodoDe(dic) }
+          ? { ...resultadoDeBalanza(doc.xml, nombrePorCodigo), archivo: doc.nombre, registro: periodoDe(dic) }
           : { error: "ningún archivo del registro B resultó ser la balanza" };
       }
     }
