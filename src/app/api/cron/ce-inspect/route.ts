@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SyntageClient } from "@/lib/fiscal/cumplimiento/syntage/client";
+import {
+  descargarDocumentoCe,
+  masReciente,
+  periodoDe,
+} from "@/lib/contabilidad/ce-import-syntage";
+import { naturalezaPorAritmetica, parseBalanza } from "@/lib/contabilidad/ce-import";
+import { naturalezaPorTipo, type Naturaleza } from "@/lib/contabilidad/coe-saldos";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET/POST /api/cron/ce-inspect?companyId=<id>[&peek=1]
+// GET/POST /api/cron/ce-inspect?companyId=<id>[&peek=1][&balanza=1]
 //
 // Diagnóstico de SOLO LECTURA para la Contabilidad Electrónica vía Syntage.
 // El arranque automático (`ceBootstrap` del compliance-sync) degrada en
@@ -18,8 +25,15 @@ import { SyntageClient } from "@/lib/fiscal/cumplimiento/syntage/client";
 //   • Con `peek=1`: descarga el primer archivo del registro más reciente y
 //     devuelve los primeros bytes, para confirmar que el contenido es el XML
 //     del SAT y no otra cosa.
+//   • Con `balanza=1`: baja la ÚLTIMA balanza y devuelve un informe AGREGADO
+//     (ver `informeBalanza`) para decidir con números, no con corazonadas, qué
+//     hacer con las cuentas que traen saldo y no están en el catálogo.
 //
 // No escribe nada (ni en la BD ni en Syntage). Auth: CRON_SECRET.
+//
+// Sólo salen CONTEOS y códigos de cuenta: ni razones sociales de terceros ni
+// importes por cuenta. Los saldos de una empresa no tienen por qué viajar en un
+// diagnóstico para responder «¿cuántas cuentas se caen y por qué?».
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const dynamic = "force-dynamic";
@@ -50,11 +64,135 @@ function filesMeta(rec: Json): Json[] {
   }));
 }
 
+/** Naturaleza que ADIVINARÍA la regla del primer dígito del código. */
+function naturalezaPorPrimerDigito(numCta: string): Naturaleza | null {
+  switch (numCta.trim().charAt(0)) {
+    case "1":
+    case "5":
+    case "6":
+    case "7":
+    case "8":
+      return "D";
+    case "2":
+    case "3":
+    case "4":
+      return "A";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Informe AGREGADO de la última balanza. Contesta tres preguntas que hoy se
+ * responden a ojo, y que deciden si la apertura automática es segura:
+ *
+ *   1. ¿Cuántas cuentas con saldo NO están en el catálogo? (las que se caen hoy)
+ *   2. ¿La aritmética de la balanza acierta la naturaleza? Se contrasta contra
+ *      las cuentas que SÍ están en el catálogo, donde el SAT ya dijo cuál es —
+ *      ahí hay verdad conocida. Se compara también la regla del primer dígito,
+ *      para saber cuál de las dos merece confianza.
+ *   3. ¿El filtro de cuentas de detalle ve la jerarquía? Hoy parte por punto, y
+ *      hay empresas cuyos códigos usan guion (MARGOM: 1313 de 1419 cuentas).
+ *      Si no ve los padres, postea el mayor Y sus hijas: el subárbol doble.
+ *
+ * No devuelve importes ni cuentas una por una: sólo conteos y unos pocos
+ * códigos de ejemplo para poder rastrear un caso raro.
+ */
+function informeBalanza(
+  xml: string,
+  catalogo: Array<{ codigo: string; naturaleza: Naturaleza }>,
+) {
+  const bal = parseBalanza(xml);
+  const conocida = new Map(catalogo.map((c) => [c.codigo, c.naturaleza]));
+
+  // ── 1 y 2 ──────────────────────────────────────────────────────────────────
+  const conSaldo = bal.cuentas.filter((c) => Math.abs(c.saldoFin) >= 0.005);
+
+  // Verdad conocida: cuentas del catálogo. Aquí se AUDITAN los dos métodos.
+  const aritmetica = { acierta: 0, falla: 0, sinOpinion: 0 };
+  const primerDigito = { acierta: 0, falla: 0, sinOpinion: 0 };
+  const fallasAritmetica: string[] = [];
+  for (const c of bal.cuentas) {
+    const real = conocida.get(c.numCta);
+    if (!real) continue;
+    const a = naturalezaPorAritmetica(c);
+    if (a == null) aritmetica.sinOpinion++;
+    else if (a === real) aritmetica.acierta++;
+    else {
+      aritmetica.falla++;
+      if (fallasAritmetica.length < 20) fallasAritmetica.push(c.numCta);
+    }
+    const p = naturalezaPorPrimerDigito(c.numCta);
+    if (p == null) primerDigito.sinOpinion++;
+    else if (p === real) primerDigito.acierta++;
+    else primerDigito.falla++;
+  }
+
+  // Cuentas huérfanas: traen saldo y el catálogo no las conoce. ¿A cuántas les
+  // puede poner naturaleza la aritmética?
+  const huerfanas = conSaldo.filter((c) => !conocida.has(c.numCta));
+  const huerfanasPorMetodo = { aritmetica: 0, soloPrimerDigito: 0, ninguno: 0 };
+  for (const c of huerfanas) {
+    if (naturalezaPorAritmetica(c) != null) huerfanasPorMetodo.aritmetica++;
+    else if (naturalezaPorPrimerDigito(c.numCta) != null) huerfanasPorMetodo.soloPrimerDigito++;
+    else huerfanasPorMetodo.ninguno++;
+  }
+
+  // ── 3: jerarquía ───────────────────────────────────────────────────────────
+  const codigos = bal.cuentas.map((c) => c.numCta);
+  const padresPorPunto = new Set<string>();
+  for (const codigo of codigos) {
+    const partes = codigo.split(".");
+    for (let i = 1; i < partes.length; i++) padresPorPunto.add(partes.slice(0, i).join("."));
+  }
+  // Regla generalizada: A es padre de B si B empieza con A seguido de un
+  // separador. No supone cuál es el separador ni cuántos niveles hay.
+  const padresPorPrefijo = new Set<string>();
+  const ordenados = [...codigos].sort();
+  for (const a of ordenados) {
+    for (const b of ordenados) {
+      if (b.length > a.length && b.startsWith(a) && /[.\-/]/.test(b.charAt(a.length))) {
+        padresPorPrefijo.add(a);
+        break;
+      }
+    }
+  }
+  const separadores = {
+    punto: codigos.filter((c) => c.includes(".")).length,
+    guion: codigos.filter((c) => c.includes("-")).length,
+    ninguno: codigos.filter((c) => !/[.\-/]/.test(c)).length,
+  };
+
+  return {
+    periodo: { anio: bal.anio, mes: bal.mes },
+    cuentas: bal.cuentas.length,
+    cuentasConSaldo: conSaldo.length,
+    catalogoEnBd: catalogo.length,
+    separadores,
+    // ¿Acierta la aritmética donde el SAT ya nos dijo la respuesta?
+    auditoriaContraCatalogo: { aritmetica, primerDigito, ejemplosFallaAritmetica: fallasAritmetica },
+    huerfanas: {
+      total: huerfanas.length,
+      porMetodo: huerfanasPorMetodo,
+      ejemplos: huerfanas.slice(0, 25).map((c) => c.numCta),
+    },
+    jerarquia: {
+      padresPorPunto: padresPorPunto.size,
+      padresPorPrefijo: padresPorPrefijo.size,
+      // Cuentas que HOY se postean como si fueran hojas y no lo son: el bug
+      // del subárbol duplicado, medido.
+      padresInvisiblesHoy: [...padresPorPrefijo].filter((p) => !padresPorPunto.has(p)).length,
+      ejemplosInvisibles: [...padresPorPrefijo].filter((p) => !padresPorPunto.has(p)).slice(0, 15),
+    },
+  };
+}
+
 async function handle(req: Request) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const params = new URL(req.url).searchParams;
   const companyId = params.get("companyId");
   const peek = params.get("peek") === "1";
+  const conBalanza = params.get("balanza") === "1";
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
   const company = await prisma.company.findUnique({
@@ -98,6 +236,37 @@ async function handle(req: Request) {
         }
       }
 
+      // Informe de la última balanza (sólo si se pidió y esta entidad tiene).
+      let balanza: Record<string, unknown> | null = null;
+      if (conBalanza) {
+        const balanzas = records.filter((r) => String(r.fileType ?? "") === "B");
+        if (balanzas.length === 0) {
+          balanza = { error: "la entidad no tiene registros fileType=B" };
+        } else {
+          const rec = balanzas.reduce(masReciente);
+          const doc = await descargarDocumentoCe(client, rec, "B");
+          if (!doc) {
+            balanza = { error: "ningún archivo del registro B resultó ser la balanza" };
+          } else {
+            const accounts = await prisma.chartAccount.findMany({
+              where: { companyId, isActive: true },
+              select: { cuentaSAT: true, subcuenta: true, tipo: true, naturaleza: true },
+            });
+            balanza = {
+              ...informeBalanza(
+                doc.xml,
+                accounts.map((a) => ({
+                  codigo: a.subcuenta ?? a.cuentaSAT,
+                  naturaleza: (a.naturaleza as Naturaleza | null) ?? naturalezaPorTipo(a.tipo),
+                })),
+              ),
+              archivo: doc.nombre,
+              registro: periodoDe(rec),
+            };
+          }
+        }
+      }
+
       reporte.push({
         entityId,
         name: e.name ?? null,
@@ -112,6 +281,7 @@ async function handle(req: Request) {
           files: filesMeta(r),
         })),
         ...(muestraContenido != null ? { muestraContenido } : {}),
+        ...(balanza != null ? { balanza } : {}),
       });
     }
 

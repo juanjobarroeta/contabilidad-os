@@ -42,10 +42,10 @@ export interface ImportarCeSyntageResult {
 }
 
 /** Año/mes de un registro de Contabilidad Electrónica (orden cronológico). */
-function periodoDe(rec: Json): { anio: number; mes: number } {
+export function periodoDe(rec: Json): { anio: number; mes: number } {
   return { anio: Number(rec.year ?? 0), mes: Number(rec.month ?? 0) };
 }
-function masReciente(a: Json, b: Json): Json {
+export function masReciente(a: Json, b: Json): Json {
   const pa = periodoDe(a);
   const pb = periodoDe(b);
   if (pa.anio !== pb.anio) return pa.anio > pb.anio ? a : b;
@@ -96,7 +96,7 @@ export function esDocumentoCe(xml: string, tipo: "CT" | "B"): boolean {
 }
 
 /** Descarga el primer XML del registro cuyo contenido sea el documento pedido. */
-async function descargarDocumentoCe(
+export async function descargarDocumentoCe(
   client: { downloadAcuse(ref: string): Promise<{ data: ArrayBuffer }> },
   rec: Json,
   tipo: "CT" | "B",

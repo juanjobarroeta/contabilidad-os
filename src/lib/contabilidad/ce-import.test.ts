@@ -3,6 +3,7 @@ import {
   parseCatalogoCuentas,
   parseBalanza,
   balanzaASaldosApertura,
+  naturalezaPorAritmetica,
   tipoPorCodAgrup,
 } from "./ce-import";
 
@@ -30,6 +31,48 @@ describe("tipoPorCodAgrup — primer dígito del código agrupador SAT", () => {
     expect(tipoPorCodAgrup("501")).toBe("COSTO");
     expect(tipoPorCodAgrup("601.01")).toBe("GASTO");
     expect(tipoPorCodAgrup("704")).toBe("GASTO");
+  });
+});
+
+describe("naturalezaPorAritmetica — la balanza se delata sola", () => {
+  it("deduce deudora cuando el movimiento sólo cuadra sumando el Debe", () => {
+    // 50,000 + 10,000 − 2,000 = 58,000 (la identidad acreedora daría 42,000).
+    expect(naturalezaPorAritmetica({ saldoIni: 50000, debe: 10000, haber: 2000, saldoFin: 58000 })).toBe("D");
+  });
+
+  it("deduce acreedora cuando sólo cuadra sumando el Haber", () => {
+    expect(naturalezaPorAritmetica({ saldoIni: 20000, debe: 0, haber: 8000, saldoFin: 28000 })).toBe("A");
+  });
+
+  it("no deduce nada sin movimiento: las dos identidades cuadran", () => {
+    // Es el caso de MARGOM que importa: una cuenta con saldo y sin movimientos
+    // del mes NO dice de qué lado está. Devolver "D" aquí llamaría deudora a
+    // toda cuenta inactiva.
+    expect(naturalezaPorAritmetica({ saldoIni: 30000, debe: 0, haber: 0, saldoFin: 30000 })).toBeNull();
+  });
+
+  it("no deduce nada cuando Debe = Haber aunque haya movimiento", () => {
+    expect(naturalezaPorAritmetica({ saldoIni: 100, debe: 500, haber: 500, saldoFin: 100 })).toBeNull();
+  });
+
+  it("no inventa cuando el renglón no es consistente por ningún lado", () => {
+    expect(naturalezaPorAritmetica({ saldoIni: 1000, debe: 300, haber: 100, saldoFin: 5000 })).toBeNull();
+  });
+
+  it("tolera el redondeo de centavos del XML", () => {
+    expect(naturalezaPorAritmetica({ saldoIni: 1000, debe: 300, haber: 100, saldoFin: 1200.004 })).toBe("D");
+  });
+
+  it("clasifica una contra-cuenta de activo por su aritmética, no por su primer dígito", () => {
+    // Depreciación acumulada (1240-0000-0000): código de activo, naturaleza
+    // ACREEDORA. Es exactamente la familia que la regla del primer dígito
+    // reprueba — 128 cuentas medidas en producción.
+    expect(naturalezaPorAritmetica({ saldoIni: 800000, debe: 0, haber: 45000, saldoFin: 845000 })).toBe("A");
+  });
+
+  it("lee la naturaleza de cada renglón de una balanza real parseada", () => {
+    const bal = parseBalanza(BALANZA_XML);
+    expect(bal.cuentas.map((c) => naturalezaPorAritmetica(c))).toEqual(["D", "A", null]);
   });
 });
 
