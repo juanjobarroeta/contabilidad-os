@@ -191,32 +191,38 @@ export function parseBalanza(xml: string): BalanzaParseResult {
 
 /**
  * Naturaleza (D/A) de una cuenta DEDUCIDA de la aritmética de su renglón en la
- * balanza, sin consultar el catálogo.
+ * balanza. Vale como CONTRASTE, no como regla primaria — ver la medición.
  *
- * El problema: el catálogo de cuentas que presenta la empresa suele ser MÁS
- * VIEJO que la balanza (una cuenta abierta a media vida no vuelve a mandar el
- * catálogo). Esas cuentas llegan con saldo y sin naturaleza, se caen de la
- * apertura y el asiento no cuadra. En MARGOM son 119 cuentas.
+ * El problema que venía a resolver: el catálogo que presenta la empresa suele
+ * ser MÁS VIEJO que la balanza (una cuenta abierta a media vida no obliga a
+ * remandar el catálogo). Esas cuentas llegan con saldo y sin naturaleza, se
+ * caen de la apertura y el asiento no cuadra. En MARGOM son 119.
  *
- * La tentación es adivinar por el primer dígito del código (1=activo, 2=pasivo…).
- * Medido contra las 6,337 cuentas que SÍ traen naturaleza del SAT, esa regla se
- * equivoca en 486 —el 7.7%—: el dígito 4 es 35% deudor (devoluciones sobre
- * ventas), el 7 es 33% acreedor y el 9 es una moneda al aire (las cuentas de
- * orden viven en pares D/A por definición). Una naturaleza invertida en la
- * apertura no es un error de un renglón: cambia el saldo de lado, así que mueve
- * el asiento el DOBLE del saldo. Es peor que la cuenta faltante.
- *
- * La balanza, en cambio, se delata sola. El Anexo 24 pide los cuatro importes
- * como MAGNITUD, y el movimiento del periodo sólo cuadra de una manera:
+ * La idea era que la balanza se delata sola: el Anexo 24 pide los cuatro
+ * importes como MAGNITUD y el movimiento del periodo sólo cuadra de una manera,
  *
  *     deudora:   SaldoIni + Debe − Haber = SaldoFin
  *     acreedora: SaldoIni − Debe + Haber = SaldoFin
  *
- * Cuando Debe ≠ Haber las dos identidades no pueden cumplirse a la vez, así que
- * la que cuadra determina la naturaleza con certeza — es aritmética del propio
- * documento, no una convención del contador. Cuando Debe = Haber (incluido el
- * caso sin movimientos) las dos cuadran y no hay nada que deducir: devuelve
- * null y que decida el llamador.
+ * así que con Debe ≠ Haber la que cuadra determinaría la naturaleza con certeza.
+ *
+ * NO SE SOSTUVO. Auditada contra las cuentas de la balanza real donde el SAT ya
+ * dijo la respuesta (AMA170817NK1, 2026-06), la aritmética acierta 240 y falla
+ * 58 —80.5%—, mientras que adivinar por el primer dígito del código acierta 393
+ * y falla 24 —94.2%—. El primer dígito GANA. Las fallas de la aritmética se
+ * concentran en cuentas 2xxx: en los pasivos la convención de magnitud del
+ * documento no se comporta como supone la identidad.
+ *
+ * (Una versión anterior de este comentario citaba un 7.7% de error del primer
+ * dígito. Esa cifra salía de agregar ChartAccount de las 17 empresas, no de la
+ * balanza que se está importando; sobre la que importa es 5.8%.)
+ *
+ * Por eso la regla primaria es naturalezaPorTipo(tipoPorCodAgrup(numCta)) y
+ * esta función se usa para CONTRASTAR: donde ambas coinciden hay confianza
+ * alta; donde discrepan, se marca para revisión en vez de adivinar.
+ *
+ * Devuelve null cuando Debe = Haber (incluida la cuenta sin movimientos): ahí
+ * las dos identidades cuadran y no hay nada que deducir.
  */
 export function naturalezaPorAritmetica(
   c: Pick<BalanzaCuentaParsed, "saldoIni" | "debe" | "haber" | "saldoFin">,
@@ -234,6 +240,55 @@ export function naturalezaPorAritmetica(
   // redondeos gruesos, cuenta acumulada). No inventamos.
   if (cuadraD === cuadraA) return null;
   return cuadraD ? "D" : "A";
+}
+
+// ── Jerarquía del catálogo: qué cuenta es de DETALLE (PURA) ──────────────────
+
+/**
+ * Grupos significativos de un código de cuenta, ignorando el relleno de ceros.
+ *
+ *   1101-0101-0000 → ["1101","0101"]      102.01 → ["102","01"]
+ *   1101-0000-0000 → ["1101"]             102    → ["102"]
+ *
+ * Se parte por cualquier separador y se tiran los grupos finales que son todo
+ * ceros, que es como las empresas escriben un mayor en un código de ancho fijo.
+ */
+function gruposDeCodigo(codigo: string): string[] {
+  const g = codigo.trim().split(/[.\-/]/);
+  while (g.length > 1 && /^0+$/.test(g[g.length - 1])) g.pop();
+  return g;
+}
+
+/**
+ * Códigos de la balanza que son PADRE de algún otro código de la misma balanza.
+ *
+ * Importa porque la balanza del SAT trae el mayor Y sus subcuentas, y el saldo
+ * del mayor YA es la suma de sus hijas: postear ambos duplica el subárbol
+ * entero y la apertura no cuadra.
+ *
+ * La regla anterior partía por punto. Medida sobre la balanza real de MARGOM
+ * —544 cuentas, TODAS con guion y ninguna con punto— encontraba 0 padres, así
+ * que 103 mayores se posteaban como si fueran hojas junto con sus propias
+ * hijas. Una regla de «prefijo + separador» tampoco sirve: 1101-0101-0000 no
+ * empieza con 1101-0000-0000, que es como se escribe su mayor. Medida, también
+ * encontraba 0.
+ *
+ * Comparar por GRUPOS resuelve las dos formas a la vez y no supone cuál es el
+ * separador ni cuántos niveles hay. Medida sobre la misma balanza: 103 padres.
+ */
+export function padresDeBalanza(codigos: Iterable<string>): Set<string> {
+  const lista = [...codigos];
+  // Claves de todos los ancestros propios que aparecen implícitos en algún código.
+  const ancestros = new Set<string>();
+  for (const codigo of lista) {
+    const g = gruposDeCodigo(codigo);
+    for (let i = 1; i < g.length; i++) ancestros.add(g.slice(0, i).join(" "));
+  }
+  const padres = new Set<string>();
+  for (const codigo of lista) {
+    if (ancestros.has(gruposDeCodigo(codigo).join(" "))) padres.add(codigo);
+  }
+  return padres;
 }
 
 // ── Conversión balanza → saldos de apertura (PURA) ───────────────────────────

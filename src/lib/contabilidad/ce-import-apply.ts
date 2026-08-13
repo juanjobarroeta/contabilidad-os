@@ -25,6 +25,8 @@ import {
   parseCatalogoCuentas,
   parseBalanza,
   balanzaASaldosApertura,
+  naturalezaPorAritmetica,
+  padresDeBalanza,
   tipoPorCodAgrup,
   type CatalogoCuentaParsed,
 } from "./ce-import";
@@ -156,13 +158,12 @@ export async function importarBalanza(
   // suma de sus hijas: postear ambos duplica el subárbol entero y la apertura
   // no cuadra. Caso real (AMA170817NK1, balanza 2026-06): 31 mayores con 1,388
   // hojas, cargos 1,204,754,136.18 vs abonos 1,163,763,593.32.
-  // Una cuenta es hoja si ninguna otra de la MISMA balanza cuelga de ella.
-  const codigosBalanza = new Set(bal.cuentas.map((c) => c.numCta));
-  const esPadre = new Set<string>();
-  for (const codigo of codigosBalanza) {
-    const partes = codigo.split(".");
-    for (let i = 1; i < partes.length; i++) esPadre.add(partes.slice(0, i).join("."));
-  }
+  //
+  // La jerarquía se decide en padresDeBalanza (ce-import.ts), comparando por
+  // grupos e ignorando el relleno de ceros. La regla anterior partía por punto
+  // y sobre esa misma balanza —544 cuentas, TODAS con guion— encontraba 0
+  // padres: 103 mayores entraban a la apertura junto con sus propias hijas.
+  const esPadre = padresDeBalanza(bal.cuentas.map((c) => c.numCta));
   const esDetalle = (numCta: string) => !esPadre.has(numCta);
 
   const cuentasSinCatalogo: string[] = [];
@@ -171,6 +172,52 @@ export async function importarBalanza(
     if (Math.abs(magnitud) < 0.005) continue;
     if (!esDetalle(c.numCta)) continue; // un mayor sin catálogo no es un faltante
     if (!porCodigo.has(c.numCta)) cuentasSinCatalogo.push(c.numCta);
+  }
+
+  // Cuentas de detalle con saldo que el catálogo no conoce: se dan de alta.
+  // Resolver la naturaleza no basta — postApertura LANZA si el código no existe
+  // en ChartAccount (apertura.ts), así que sin esto la apertura entera se cae
+  // por 119 cuentas de MARGOM.
+  //
+  // La naturaleza sale del primer dígito del código de la empresa, vía
+  // tipoPorCodAgrup + naturalezaPorTipo. Auditado contra las cuentas de la
+  // balanza donde el SAT ya la dijo: acierta 393 y falla 24 (94.2%), contra
+  // 240/58 (80.5%) de deducirla de la aritmética del renglón. La aritmética se
+  // usa sólo para CONTRASTAR: si discrepa, la cuenta queda marcada.
+  const enDisputa: string[] = [];
+  for (const numCta of cuentasSinCatalogo) {
+    const fila = bal.cuentas.find((c) => c.numCta === numCta);
+    const tipo = tipoPorCodAgrup(numCta);
+    const naturaleza = naturalezaPorTipo(tipo);
+    const contraste = fila ? naturalezaPorAritmetica(fila) : null;
+    if (contraste && contraste !== naturaleza) enDisputa.push(numCta);
+
+    const { cuentaSAT, subcuenta } = descomponerCodigo(numCta);
+    if (!cuentaSAT) continue;
+    const ya = await prisma.chartAccount.findFirst({
+      where: { companyId, cuentaSAT, subcuenta },
+      select: { id: true },
+    });
+    if (ya) continue;
+    await prisma.chartAccount.create({
+      data: {
+        companyId,
+        cuentaSAT,
+        subcuenta,
+        nombre: numCta, // el nombre real llega cuando la empresa remande el catálogo
+        tipo,
+        nivel: numCta.split(/[.\-/]/).length,
+        naturaleza,
+      },
+    });
+    porCodigo.set(numCta, { naturaleza });
+  }
+  if (enDisputa.length > 0) {
+    console.warn(
+      `[ce-apertura] ${companyId}: ${enDisputa.length} cuentas donde el primer dígito y ` +
+        `la aritmética de la balanza no coinciden (se usó el primer dígito): ` +
+        enDisputa.slice(0, 15).join(", "),
+    );
   }
 
   const lineas = balanzaASaldosApertura({
