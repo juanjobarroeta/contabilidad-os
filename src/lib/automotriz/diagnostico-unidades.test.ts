@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { armarDiagnostico, enmascarar } from "./diagnostico-unidades";
-import { evaluarUnidad, conceptosConVeredicto } from "./vin";
+import { evaluarUnidad, conceptosConVeredicto, vinsDesdeTexto } from "./vin";
 
 const VIN = "1C6RR6KG1RS180916";
 const VIN2 = "3GALD255XTM007338";
@@ -69,19 +69,49 @@ describe("evaluarUnidad() — reporta TODOS los candados que fallan", () => {
 });
 
 describe("conceptosConVeredicto() — el VIN pegado al texto siguiente", () => {
-  // La hipótesis que originó el diagnóstico. Se fija como TEST, no como
-  // suposición: si el VIN va pegado a la palabra que sigue, el \b de la regex
-  // no cierra y ESA aparición no se extrae.
-  it("un VIN pegado a la siguiente palabra no se cuenta; el delimitado sí", () => {
+  // El patrón real de los seminuevos de Margom (74 conceptos / $41.4M en
+  // 2025): el proveedor pega el VIN a la palabra siguiente y no hay segunda
+  // aparición delimitada. La extracción acepta el prefijo de 17 sólo cuando
+  // la cola es una palabra pegada conocida (VENTA…) — ver COLA_PEGADA_RE.
+  it("un VIN pegado a «VENTA…» sin segunda aparición SÍ se extrae y deriva", () => {
+    const xml = cfdi(
+      concepto(
+        `ClaveProdServ="25101611" Cantidad="1" Importe="900000" Descripcion="VENTA VEHICULO RAM ${VIN}VENTA DE VEHICULO USADO EN LAS CONDICIONES QUE SE ENCUENTRA"`
+      )
+    );
+    const [c] = conceptosConVeredicto(xml);
+    expect(c.vinsTexto).toEqual([VIN]);
+    expect(c.veredicto.esUnidad).toBe(true);
+  });
+
+  it("pegado + delimitado del MISMO VIN colapsan a uno (Set)", () => {
     const xml = cfdi(
       concepto(
         `ClaveProdServ="25101611" Cantidad="1" Importe="900000" Descripcion="RAM 1500 ${VIN}VENTA DE VEHICULO USADO NO. SERIE: ${VIN}"`
       )
     );
     const [c] = conceptosConVeredicto(xml);
-    // Set-deduplicado: la aparición pegada no matchea, la delimitada sí ⇒ 1 VIN.
     expect(c.vinsTexto).toEqual([VIN]);
     expect(c.veredicto.esUnidad).toBe(true);
+  });
+
+  // Los tres cortes que NO deben hacerse — cada uno inventaría un VIN
+  // plausible pero equivocado (los tres vienen de datos reales de producción).
+  it("VIN con un dígito de más no se corta a 17: la cola «1» no es palabra pegada", () => {
+    // «Núm de VIN 3GALD2555TM0007571» — 18 caracteres: capturar los primeros
+    // 17 produciría un VIN que se ve bien y es falso.
+    expect(vinsDesdeTexto("Instalación de Película para JAC Frison T9 Núm de VIN 3GALD2555TM0007571")).toEqual([]);
+  });
+
+  it("referencias largas (NRU, peajes) no producen VINs", () => {
+    expect(vinsDesdeTexto("NRU 017932000249835816D4498967FEB060 (20/03/2026)")).toEqual([]);
+    expect(vinsDesdeTexto("PEAJE-2111206728920260121082535VIA1122196")).toEqual([]);
+  });
+
+  it("una corrida que empieza con basura de clase VIN no se corta por en medio", () => {
+    // El vecino izquierdo alfanumérico anula el ancla izquierda: no hay
+    // ventana válida y no se extrae nada.
+    expect(vinsDesdeTexto(`XX${VIN}`)).toEqual([]);
   });
 
   it("dos VINs distintos en el texto sí bloquean la derivación", () => {
