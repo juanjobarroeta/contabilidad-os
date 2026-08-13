@@ -493,8 +493,9 @@ export default function FacturasPage() {
         </Card>
       </div>
 
-      {/* complementos de pago (REP) por emitir — cobros PPD detectados sin REP */}
-      <ComplementosPendientes companyId={activeCompany.id} onToast={showToast} onEmitted={fetchData} />
+      {/* Los cobros PPD sin REP viven en el submenú «Complementos de pago»:
+          tenerlos también aquí duplicaba el bloque y le robaba el arranque a la
+          lista de comprobantes, que es lo que se viene a ver en esta pestaña. */}
 
       {/* búsqueda (servidor, sobre todo el historial) + selector de periodo */}
       <div className="mt-[18px] flex flex-wrap items-stretch gap-2.5">
