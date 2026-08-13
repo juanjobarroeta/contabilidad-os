@@ -61,6 +61,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.503.0",
     "luxon": "^3.7.2",
+    "mcp-handler": "^2.1.0",
     "next": "^15.2.4",
     "next-auth": "^5.0.0-beta.25",
     "pdf-parse": "^2.4.5",
