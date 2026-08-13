@@ -16,6 +16,7 @@ import {
 import { SelectorPeriodo } from "@/components/facturas/SelectorPeriodo";
 import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
 import { ComplementosPendientes } from "@/components/facturas/ComplementosPendientes";
+import { estadoRepFactura } from "@/lib/facturas/complementos-vista";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -156,6 +157,43 @@ interface Prefactura {
   pdfUrl: string;
 }
 
+// ── Submenús de la página ─────────────────────────────────────────────────────
+type Vista = "comprobantes" | "complementos" | "prefacturas";
+
+/** Fila del listado de complementos (GET /api/facturas/complementos). */
+interface ComplementoRow extends Invoice {
+  parcialidades: number[];
+  paga: {
+    invoiceId: string | null;
+    uuid: string;
+    cliente: string | null;
+    totalFactura: number | null;
+    montoPagado: number | null;
+    numParcialidad: number | null;
+  }[];
+}
+
+/** Respuesta de GET /api/facturas/[id]/complementos (puente factura ↔ REP). */
+interface ComplementosDeFactura {
+  tipo: string;
+  // Factura → REPs que la pagan
+  complementos?: {
+    rep: Invoice;
+    montoPagado: number;
+    parcialidades: number[];
+    fechaPago: string | null;
+  }[];
+  saldo?: { saldo: number; pagado: number; parcialidades: number; ultimoPago: string | null } | null;
+  // REP → facturas que paga
+  facturasPagadas?: {
+    parentUuid: string;
+    montoPagado: number | null;
+    numParcialidad: number | null;
+    fechaPago: string | null;
+    factura: Invoice | null;
+  }[];
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function FacturasPage() {
   const { activeCompany } = useCompany();
@@ -167,6 +205,9 @@ export default function FacturasPage() {
   const [filter, setFilter] = useState<FilterKey>("todas");
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<Invoice | null>(null);
+  // Submenú activo: comprobantes (la lista de siempre) · complementos de pago
+  // (emitidos/recibidos, con enlace a la factura que pagan) · prefacturas.
+  const [vista, setVista] = useState<Vista>("comprobantes");
   const [toast, setToast] = useState("");
   const [checkingCancel, setCheckingCancel] = useState(false);
   // Periodo elegido en el selector ("todo" | "YYYY" | "YYYY-MM") + los meses
@@ -393,6 +434,46 @@ export default function FacturasPage() {
           hasta que el timbrado falle. */}
       <ManifiestoBanner companyId={activeCompany.id} />
 
+      {/* Submenús: comprobantes · complementos de pago · prefacturas. Antes los
+          REP vivían sólo como chip "Pagos" (emitidos y recibidos revueltos) y
+          las prefacturas sólo como tarjeta que aparecía si había pendientes. */}
+      <div className="mt-4 flex flex-wrap gap-1 rounded-control border border-cos-line bg-cos-card p-1">
+        {([
+          ["comprobantes", "Comprobantes", resumen?.conteos?.todas ?? null],
+          ["complementos", "Complementos de pago", resumen?.conteos?.pago ?? null],
+          ["prefacturas", "Prefacturas", prefacturas.length || null],
+        ] as [Vista, string, number | null][]).map(([v, t, n]) => (
+          <button
+            key={v}
+            onClick={() => setVista(v)}
+            className={
+              "flex-1 min-w-[140px] rounded-[9px] px-3 py-2 text-[13.5px] font-medium transition-colors " +
+              (vista === v ? "bg-cos-brand text-white" : "text-cos-ink-soft hover:bg-cos-paper")
+            }
+          >
+            {t}
+            {n != null && n > 0 && (
+              <span className={"ml-1.5 font-mono text-[11.5px] " + (vista === v ? "opacity-85" : "opacity-70")}>{n}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {vista === "complementos" && (
+        <ComplementosView
+          companyId={activeCompany.id}
+          onOpen={(inv) => setSel(inv)}
+          onIrAFactura={(uuid) => { setVista("comprobantes"); setFilter("todas"); setQ(uuid); }}
+          onToast={showToast}
+          onEmitted={fetchData}
+        />
+      )}
+
+      {vista === "prefacturas" && (
+        <PrefacturasView prefacturas={prefacturas} busy={prefBusy} onAccion={prefAccion} onToast={showToast} />
+      )}
+
+      {vista === "comprobantes" && (<>
       {/* stat cards */}
       <div className="mt-4 grid grid-cols-1 gap-4 min-[680px]:grid-cols-3">
         <Card className="rounded-card border-cos-line p-5 shadow-card">
@@ -411,45 +492,6 @@ export default function FacturasPage() {
           <span className="text-[12.5px] text-cos-ink-faint">trasladado a clientes</span>
         </Card>
       </div>
-
-      {/* prefacturas pendientes de timbrar */}
-      {prefacturas.length > 0 && (
-        <Card className="mt-4 overflow-hidden rounded-card border-cos-line shadow-card">
-          <div className="flex items-center justify-between border-b border-cos-line px-[18px] py-3">
-            <span className="text-[13px] font-semibold text-cos-ink">
-              Prefacturas por timbrar <span className="ml-1 rounded-full bg-cos-amber-tint px-2 py-0.5 font-mono text-[11.5px] text-cos-amber-ink">{prefacturas.length}</span>
-            </span>
-            <span className="text-[12px] text-cos-ink-faint">El PDF sale con marca BORRADOR — no consume timbre hasta que la timbras.</span>
-          </div>
-          {prefacturas.map((p) => (
-            <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-cos-line px-[18px] py-2.5 last:border-0">
-              <div className="min-w-0">
-                <p className="truncate text-[13.5px] font-medium text-cos-ink">{p.cliente}</p>
-                <p className="font-mono text-[11.5px] text-cos-ink-faint">
-                  {p.rfc} · {fmtFecha(p.createdAt)}{p.enviadaAt ? ` · enviada ${fmtFecha(p.enviadaAt)}` : ""}
-                </p>
-              </div>
-              <div className="flex flex-none items-center gap-2">
-                <span className="mr-1 font-mono text-[13.5px] font-semibold text-cos-ink">
-                  {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(p.total)}
-                </span>
-                <a href={p.pdfUrl} target="_blank" rel="noopener noreferrer"
-                  className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">PDF</a>
-                <button onClick={() => { navigator.clipboard.writeText(p.pdfUrl); showToast("✓ Enlace copiado (vigente 7 días)"); }}
-                  className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">Copiar enlace</button>
-                <button onClick={() => prefAccion(p, "enviar")} disabled={prefBusy === p.id}
-                  className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint disabled:opacity-50">Enviar</button>
-                <button onClick={() => prefAccion(p, "timbrar")} disabled={prefBusy === p.id}
-                  className="rounded-control bg-cos-jade-ink px-2.5 py-1.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
-                  {prefBusy === p.id ? "…" : "Timbrar"}
-                </button>
-                <button onClick={() => prefAccion(p, "descartar")} disabled={prefBusy === p.id}
-                  className="rounded-control border border-cos-red-ink/20 px-2.5 py-1.5 text-[12px] font-medium text-cos-red-ink hover:bg-cos-red-tint disabled:opacity-50">✕</button>
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
 
       {/* complementos de pago (REP) por emitir — cobros PPD detectados sin REP */}
       <ComplementosPendientes companyId={activeCompany.id} onToast={showToast} onEmitted={fetchData} />
@@ -574,8 +616,19 @@ export default function FacturasPage() {
           </div>
         )}
       </Card>
+      </>)}
 
-      {sel && <FacturaModal inv={sel} onClose={() => setSel(null)} onCancelled={() => { setSel(null); fetchData(); showToast("Factura cancelada"); }} />}
+      {/* key: al navegar factura → REP → factura el modal debe rearmar su
+          estado interno; sin key, el swap conserva formularios a medias. */}
+      {sel && (
+        <FacturaModal
+          key={sel.id}
+          inv={sel}
+          onClose={() => setSel(null)}
+          onVer={(otra) => setSel(otra)}
+          onCancelled={() => { setSel(null); fetchData(); showToast("Factura cancelada"); }}
+        />
+      )}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-cos-ink px-5 py-3 text-sm font-medium text-white shadow-lg">
@@ -672,9 +725,24 @@ function NaturalezaRow({ inv }: { inv: Invoice }) {
 }
 
 // ── Detail modal (+ Cancelar CFDI, preserved from the old screen) ─────────────
-function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: () => void; onCancelled: () => void }) {
+function FacturaModal({ inv, onClose, onVer, onCancelled }: { inv: Invoice; onClose: () => void; onVer?: (otra: Invoice) => void; onCancelled: () => void }) {
   const k = keyOf(inv);
   const meta = TIPO_META[k];
+
+  // Puente factura ↔ REP: qué complementos pagan esta factura (o, si ESTO es un
+  // REP, qué facturas paga). Es lo que permite dejar de ofrecer "Emitir
+  // complemento" cuando ya existe, y navegar del comprobante a su pareja.
+  const [comp, setComp] = useState<ComplementosDeFactura | null>(null);
+  useEffect(() => {
+    if (inv.status === "DRAFT") return;
+    if (inv.tipo !== "PAGO" && (!inv.uuid || (inv.tipo !== "INGRESO" && inv.tipo !== "EGRESO"))) return;
+    let vivo = true;
+    fetch(`/api/facturas/${inv.id}/complementos`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (vivo && d) setComp(d); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [inv.id, inv.status, inv.tipo, inv.uuid]);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [motivo, setMotivo] = useState("02");
   const [sustituye, setSustituye] = useState("");
@@ -905,17 +973,93 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
 
         {repOpen && <RepresentacionImpresa invoiceId={inv.id} onClose={() => setRepOpen(false)} />}
 
+        {/* Complementos que YA pagan esta factura — el enlace que faltaba: el
+            botón decía "Emitir complemento" aunque el REP ya existiera. */}
+        {comp?.complementos && comp.complementos.length > 0 && (
+          <div className="mt-3 rounded-[10px] border border-cos-line-soft px-3 py-2.5">
+            <p className="text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">
+              Complementos de pago ({comp.complementos.length})
+            </p>
+            {comp.complementos.map((c) => (
+              <div key={c.rep.id} className="mt-1.5 flex items-center justify-between gap-2 text-[13px]">
+                <span className="min-w-0 truncate text-cos-ink-soft">
+                  {c.parcialidades.length > 0 ? `Parcialidad ${c.parcialidades.join(", ")}` : "REP"}
+                  {c.fechaPago ? ` · pagado ${fmtFecha(c.fechaPago)}` : ""}
+                </span>
+                <span className="flex flex-none items-center gap-2">
+                  <Money value={c.montoPagado} size={13} weight={600} />
+                  {onVer && (
+                    <button onClick={() => onVer(c.rep)}
+                      className="rounded-control border border-cos-line px-2 py-1 text-[12px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint">
+                      Ver
+                    </button>
+                  )}
+                </span>
+              </div>
+            ))}
+            {comp.saldo && (
+              <p className="mt-2 border-t border-cos-line-soft pt-2 text-[12px] text-cos-ink-faint">
+                Pagado {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(comp.saldo.pagado)} ·
+                saldo {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(comp.saldo.saldo)}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Si esto ES un REP: las facturas que paga, con salto directo. */}
+        {comp?.facturasPagadas && comp.facturasPagadas.length > 0 && (
+          <div className="mt-3 rounded-[10px] border border-cos-line-soft px-3 py-2.5">
+            <p className="text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">
+              Factura{comp.facturasPagadas.length === 1 ? "" : "s"} que paga
+            </p>
+            {comp.facturasPagadas.map((f, i) => (
+              <div key={`${f.parentUuid}-${i}`} className="mt-1.5 flex items-center justify-between gap-2 text-[13px]">
+                <span className="min-w-0 truncate text-cos-ink-soft">
+                  {f.factura?.customer?.razonSocial ?? `…${f.parentUuid.slice(-8).toUpperCase()}`}
+                  {f.numParcialidad != null ? ` · parcialidad ${f.numParcialidad}` : ""}
+                </span>
+                <span className="flex flex-none items-center gap-2">
+                  <Money value={f.montoPagado ?? 0} size={13} weight={600} />
+                  {f.factura && onVer ? (
+                    <button onClick={() => onVer(f.factura!)}
+                      className="rounded-control border border-cos-line px-2 py-1 text-[12px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint">
+                      Ver
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-cos-ink-faint" title="La factura pagada no está en el sistema (posiblemente anterior al historial descargado).">fuera del historial</span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {repOkMsg && (
           <p className="mt-3 rounded-[10px] bg-cos-jade-tint px-3 py-2.5 text-[13px] text-cos-jade-ink">✓ {repOkMsg}</p>
         )}
-        {canEmitRep && !repEmitOpen && !repOkMsg && (
-          <button
-            onClick={() => setRepEmitOpen(true)}
-            className="mt-3 w-full rounded-control border border-cos-line py-2 text-[13px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint"
-          >
-            Emitir complemento de pago (REP)
-          </button>
-        )}
+        {canEmitRep && !repEmitOpen && !repOkMsg && (() => {
+          // "Pagada por completo" NO es un estado desde el que se invita a
+          // emitir otro complemento (el bug reportado: el botón fijo confundía
+          // aunque el REP ya estuviera emitido). Sin datos aún (comp null), el
+          // botón original — mejor ofrecerlo de más que esconderlo por error.
+          const n = comp?.complementos?.length ?? 0;
+          const estado = comp?.saldo ? estadoRepFactura(comp.saldo.saldo, n) : estadoRepFactura(inv.total, 0);
+          if (!estado.emitible) {
+            return (
+              <p className="mt-3 rounded-[10px] bg-cos-jade-tint px-3 py-2.5 text-[13px] text-cos-jade-ink">
+                ✓ {estado.nota}
+              </p>
+            );
+          }
+          return (
+            <button
+              onClick={() => setRepEmitOpen(true)}
+              className="mt-3 w-full rounded-control border border-cos-line py-2 text-[13px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint"
+            >
+              {estado.etiqueta}
+            </button>
+          );
+        })()}
         {repEmitOpen && (
           <div className="mt-3 rounded-[12px] border border-cos-line bg-cos-paper p-3.5">
             <p className="text-[13px] font-medium text-cos-ink">Emitir complemento de pago</p>
@@ -1045,5 +1189,198 @@ function FacturaModal({ inv, onClose, onCancelled }: { inv: Invoice; onClose: ()
         )}
       </div>
     </div>
+  );
+}
+
+// ── Vista: complementos de pago (emitidos / recibidos) ────────────────────────
+function ComplementosView({
+  companyId, onOpen, onIrAFactura, onToast, onEmitted,
+}: {
+  companyId: string;
+  onOpen: (inv: Invoice) => void;
+  onIrAFactura: (uuid: string) => void;
+  onToast: (m: string) => void;
+  onEmitted: () => void;
+}) {
+  const [dir, setDir] = useState<"emitidos" | "recibidos">("emitidos");
+  const [rows, setRows] = useState<ComplementoRow[]>([]);
+  const [conteos, setConteos] = useState<{ emitidos: number; recibidos: number; sinClasificar: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [hayMas, setHayMas] = useState(false);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  const TAKE_REP = 50;
+
+  const cargar = useCallback(async (skip: number) => {
+    const res = await fetch(`/api/facturas/complementos?companyId=${companyId}&dir=${dir}&take=${TAKE_REP}&skip=${skip}`);
+    return res.json();
+  }, [companyId, dir]);
+
+  useEffect(() => {
+    let vivo = true;
+    setLoading(true);
+    cargar(0)
+      .then((d) => {
+        if (!vivo) return;
+        setRows(Array.isArray(d.rows) ? d.rows : []);
+        setConteos(d.conteos ?? null);
+        setHayMas(Boolean(d.hayMas));
+      })
+      .finally(() => { if (vivo) setLoading(false); });
+    return () => { vivo = false; };
+  }, [cargar]);
+
+  async function masFilas() {
+    setCargandoMas(true);
+    try {
+      const d = await cargar(rows.length);
+      setRows((prev) => [...prev, ...(Array.isArray(d.rows) ? d.rows : [])]);
+      setHayMas(Boolean(d.hayMas));
+    } finally {
+      setCargandoMas(false);
+    }
+  }
+
+  return (
+    <div>
+      {/* Cobros PPD detectados que aún no tienen REP: su casa natural es aquí. */}
+      <ComplementosPendientes companyId={companyId} onToast={onToast} onEmitted={onEmitted} />
+
+      <div className="mt-[18px] flex flex-wrap items-center gap-2">
+        {([["emitidos", "Emitidos", conteos?.emitidos], ["recibidos", "Recibidos", conteos?.recibidos]] as const).map(([d, t, n]) => (
+          <button key={d} onClick={() => setDir(d)}
+            className={
+              "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium transition-colors " +
+              (dir === d
+                ? "border-cos-brand bg-cos-brand text-white"
+                : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")
+            }>
+            {t} {n != null && <span className="font-mono text-[12px] opacity-80">{n}</span>}
+          </button>
+        ))}
+        {conteos != null && conteos.sinClasificar > 0 && (
+          <span className="text-[12px] text-cos-ink-faint" title="REPs cuyas facturas relacionadas no están en el sistema — no se puede saber su dirección.">
+            {conteos.sinClasificar} sin clasificar
+          </span>
+        )}
+      </div>
+
+      <Card className="mt-3 overflow-hidden rounded-card border-cos-line shadow-card">
+        <div className="grid grid-cols-[minmax(0,1fr)_150px] gap-3 border-b border-cos-line px-[18px] py-3.5 text-[12px] font-semibold uppercase tracking-[0.05em] text-cos-ink-faint">
+          <span>{dir === "emitidos" ? "Cliente · factura que paga" : "Proveedor · factura que paga"}</span>
+          <span className="text-right">Monto del pago</span>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-cos-ink-faint">
+            <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="px-10 py-10 text-center text-cos-ink-faint">
+            {dir === "emitidos"
+              ? "No has emitido complementos de pago."
+              : "No has recibido complementos de pago de tus proveedores."}
+          </div>
+        ) : (
+          rows.map((r) => (
+            <div key={r.id} className="grid grid-cols-[minmax(0,1fr)_150px] items-center gap-3 border-t border-cos-line-soft px-[18px] py-3.5 first:border-t-0 hover:bg-cos-paper">
+              <div className="min-w-0">
+                <button onClick={() => onOpen(r)} className="block max-w-full truncate text-left text-[14.5px] font-medium text-cos-ink hover:underline">
+                  {r.customer?.razonSocial ?? r.contraparteNombre ?? "—"}
+                </button>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="font-mono text-[12px] text-cos-ink-faint">
+                    {r.parcialidades.length > 0 ? `Parcialidad ${r.parcialidades.join(", ")}` : "REP"}
+                  </span>
+                  {r.paga.map((p, i) => (
+                    <button key={`${p.uuid}-${i}`} onClick={() => onIrAFactura(p.uuid)}
+                      title={p.cliente ? `Ver la factura de ${p.cliente}` : "Ver la factura pagada"}
+                      className="inline-flex items-center gap-1 rounded-full bg-cos-brand-tint px-2 py-0.5 text-[11.5px] font-medium text-cos-brand-ink hover:opacity-80">
+                      paga …{p.uuid.slice(-8).toUpperCase()}
+                      {p.totalFactura != null && p.montoPagado != null && p.montoPagado < p.totalFactura - 0.01 && " (parcial)"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="text-right">
+                <Money value={r.pagoMonto ?? 0} size={15} />
+                <span className="mt-0.5 block text-[12px] text-cos-ink-faint">
+                  {r.pagoFecha ? fmtFecha(r.pagoFecha) : fmtFecha(r.fecha)}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+
+        {!loading && rows.length > 0 && hayMas && (
+          <div className="flex justify-center border-t border-cos-line px-[18px] py-3">
+            <Button variant="soft" size="md" onClick={masFilas} loading={cargandoMas}>Cargar más</Button>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── Vista: prefacturas guardadas ──────────────────────────────────────────────
+function PrefacturasView({
+  prefacturas, busy, onAccion, onToast,
+}: {
+  prefacturas: Prefactura[];
+  busy: string | null;
+  onAccion: (p: Prefactura, a: "timbrar" | "enviar" | "descartar") => void;
+  onToast: (m: string) => void;
+}) {
+  if (prefacturas.length === 0) {
+    return (
+      <Card className="mt-4 rounded-card border-cos-line p-10 text-center shadow-card">
+        <FileText className="mx-auto mb-3 h-10 w-10 text-cos-ink-soft opacity-30" />
+        <p className="text-sm text-cos-ink-soft">No tienes prefacturas guardadas.</p>
+        <p className="mt-1 text-xs text-cos-ink-faint">
+          Al crear una factura elige «Guardar como prefactura»: el PDF sale con marca BORRADOR y no
+          consume timbre hasta que la timbras.
+        </p>
+        <Link href="/facturas/nueva" className="mt-4 inline-block">
+          <Button variant="brand" size="md"><Plus className="h-4 w-4" /> Nueva factura</Button>
+        </Link>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="mt-4 overflow-hidden rounded-card border-cos-line shadow-card">
+      <div className="flex items-center justify-between border-b border-cos-line px-[18px] py-3">
+        <span className="text-[13px] font-semibold text-cos-ink">
+          Prefacturas por timbrar <span className="ml-1 rounded-full bg-cos-amber-tint px-2 py-0.5 font-mono text-[11.5px] text-cos-amber-ink">{prefacturas.length}</span>
+        </span>
+        <span className="text-[12px] text-cos-ink-faint">El PDF sale con marca BORRADOR — no consume timbre hasta que la timbras.</span>
+      </div>
+      {prefacturas.map((p) => (
+        <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-cos-line px-[18px] py-2.5 last:border-0">
+          <div className="min-w-0">
+            <p className="truncate text-[13.5px] font-medium text-cos-ink">{p.cliente}</p>
+            <p className="font-mono text-[11.5px] text-cos-ink-faint">
+              {p.rfc} · {fmtFecha(p.createdAt)}{p.enviadaAt ? ` · enviada ${fmtFecha(p.enviadaAt)}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-none items-center gap-2">
+            <span className="mr-1 font-mono text-[13.5px] font-semibold text-cos-ink">
+              {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(p.total)}
+            </span>
+            <a href={p.pdfUrl} target="_blank" rel="noopener noreferrer"
+              className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">PDF</a>
+            <button onClick={() => { navigator.clipboard.writeText(p.pdfUrl); onToast("✓ Enlace copiado (vigente 7 días)"); }}
+              className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">Copiar enlace</button>
+            <button onClick={() => onAccion(p, "enviar")} disabled={busy === p.id}
+              className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint disabled:opacity-50">Enviar</button>
+            <button onClick={() => onAccion(p, "timbrar")} disabled={busy === p.id}
+              className="rounded-control bg-cos-jade-ink px-2.5 py-1.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
+              {busy === p.id ? "…" : "Timbrar"}
+            </button>
+            <button onClick={() => onAccion(p, "descartar")} disabled={busy === p.id}
+              className="rounded-control border border-cos-red-ink/20 px-2.5 py-1.5 text-[12px] font-medium text-cos-red-ink hover:bg-cos-red-tint disabled:opacity-50">✕</button>
+          </div>
+        </div>
+      ))}
+    </Card>
   );
 }
