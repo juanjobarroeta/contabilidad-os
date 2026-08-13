@@ -4,6 +4,7 @@ import {
   parseBalanza,
   balanzaASaldosApertura,
   naturalezaPorAritmetica,
+  padresDeBalanza,
   tipoPorCodAgrup,
 } from "./ce-import";
 
@@ -34,7 +35,42 @@ describe("tipoPorCodAgrup — primer dígito del código agrupador SAT", () => {
   });
 });
 
-describe("naturalezaPorAritmetica — la balanza se delata sola", () => {
+describe("padresDeBalanza — qué cuenta es mayor y cuál es hoja", () => {
+  it("reconoce el mayor escrito con relleno de ceros (el caso de MARGOM)", () => {
+    // La regla vieja partía por punto y sobre las 544 cuentas de esa balanza
+    // —todas con guion— encontraba CERO padres: 103 mayores se posteaban junto
+    // con sus hijas y el subárbol se duplicaba.
+    const padres = padresDeBalanza([
+      "1101-0000-0000",
+      "1101-0101-0000",
+      "1101-0102-0000",
+      "1200-0000-0000",
+    ]);
+    expect(padres.has("1101-0000-0000")).toBe(true);
+    expect(padres.has("1101-0101-0000")).toBe(false);
+    // Un mayor sin hijas en la balanza es hoja: su saldo no está repetido.
+    expect(padres.has("1200-0000-0000")).toBe(false);
+  });
+
+  it("sigue reconociendo la jerarquía por punto", () => {
+    const padres = padresDeBalanza(["102", "102.01", "102.02", "201.01"]);
+    expect([...padres]).toEqual(["102"]);
+  });
+
+  it("no confunde códigos que sólo comparten prefijo de texto", () => {
+    // 1101 no es padre de 11010 — son grupos distintos, no un nivel más.
+    const padres = padresDeBalanza(["1101-0000-0000", "11010-0000-0000"]);
+    expect(padres.size).toBe(0);
+  });
+
+  it("maneja varios niveles", () => {
+    const padres = padresDeBalanza(["6000-0000-0000", "6100-0000-0000", "6100-0001-0000"]);
+    expect(padres.has("6100-0000-0000")).toBe(true);
+    expect(padres.has("6000-0000-0000")).toBe(false);
+  });
+});
+
+describe("naturalezaPorAritmetica — contraste, no regla primaria", () => {
   it("deduce deudora cuando el movimiento sólo cuadra sumando el Debe", () => {
     // 50,000 + 10,000 − 2,000 = 58,000 (la identidad acreedora daría 42,000).
     expect(naturalezaPorAritmetica({ saldoIni: 50000, debe: 10000, haber: 2000, saldoFin: 58000 })).toBe("D");
