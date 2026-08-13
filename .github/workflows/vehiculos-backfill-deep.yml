@@ -1,0 +1,71 @@
+name: Backfill profundo de unidades (manual, por empresa)
+
+# La pasada profunda de vehiculos-backfill (deep=1) es la ÚNICA que ve las
+# compras cuyo CFDI no trae el complemento VentaVehiculos — las que sólo
+# mencionan el VIN en la descripción. El barrido normal las prefiltra, así que
+# después de mejorar el derivador hay que correr esto una vez por empresa o la
+# historia no se corrige sola.
+#
+# Existe como workflow porque el endpoint se autentica con CRON_SECRET: aquí el
+# secreto ya vive en el repo y nadie tiene que copiarlo a ningún lado.
+#
+# Es idempotente y paginado: cada llamada procesa una página y devuelve
+# `nextAfterId`; el job encadena hasta que ese cursor viene null. Todo lo que
+# devuelve el endpoint se imprime, así que el propio log es la verificación.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa (obligatorio; deep=1 lo exige)"
+        required: true
+        type: string
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+      maxPaginas:
+        description: "Tope de páginas por corrida (cada una ~4 min de presupuesto)"
+        required: false
+        default: "40"
+        type: string
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    # El endpoint tiene un presupuesto de 240s por página; 40 páginas encadenadas
+    # pueden tardar. El tope del job evita que un cursor que no avanza gire para siempre.
+    timeout-minutes: 90
+    steps:
+      - name: Correr la pasada profunda encadenando el cursor
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          MAX_PAGINAS: ${{ inputs.maxPaginas }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          AFTER=""
+          for i in $(seq 1 "${MAX_PAGINAS}"); do
+            Q="companyId=${COMPANY_ID}&deep=1"
+            if [ -n "$AFTER" ]; then Q="${Q}&afterId=${AFTER}"; fi
+
+            echo "── página ${i} ─────────────────────────────────────────────"
+            RESP="$(curl -fsS "${URL}/api/cron/vehiculos-backfill?${Q}" \
+              -H "x-cron-secret: ${CRON_SECRET}")"
+            echo "$RESP"
+
+            NEXT="$(printf '%s' "$RESP" | jq -r '.nextAfterId // empty')"
+            if [ -z "$NEXT" ]; then
+              echo "── barrido completo en la página ${i} ──"
+              exit 0
+            fi
+            AFTER="$NEXT"
+          done
+
+          echo "::warning::Se alcanzó el tope de ${MAX_PAGINAS} páginas sin terminar."
+          echo "::warning::Vuelve a lanzar el workflow — el barrido continúa donde quedó."
