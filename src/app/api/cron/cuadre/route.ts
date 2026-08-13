@@ -1,0 +1,82 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { cuadreDeCfdis } from "@/lib/automotriz/cuadre";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET/POST /api/cron/cuadre?companyId=<id>&anio=<YYYY>[&peores=N]
+//
+// Diagnóstico de SOLO LECTURA: ¿cada peso facturado está contado exactamente
+// una vez? Devuelve, por empresa y ejercicio, cuánto dinero se le cargó de más
+// a las facturas (sobre-atribución), cuánto se pierde en residuos de facturas
+// atribuidas a medias, y cuánto llega legítimamente al gasto.
+//
+// Sin companyId recorre TODAS las empresas y devuelve sólo los totales de cada
+// una — así se ve de un vistazo si el problema es de una agencia o del motor.
+//
+// No escribe nada. Auth: CRON_SECRET. Salen importes agregados e IDs de
+// factura; ni clientes, ni proveedores, ni conceptos de terceros más allá del
+// que explica cada descuadre.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+function isAuthorized(req: Request): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const auth = req.headers.get("authorization");
+  if (auth && auth === `Bearer ${secret}`) return true;
+  return req.headers.get("x-cron-secret") === secret;
+}
+
+async function handle(req: Request) {
+  if (!isAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const params = new URL(req.url).searchParams;
+  const companyId = params.get("companyId");
+  const anio = Number(params.get("anio") ?? new Date().getFullYear());
+  if (!Number.isFinite(anio) || anio < 2000 || anio > 2100) {
+    return NextResponse.json({ error: "anio inválido" }, { status: 400 });
+  }
+  const peores = Math.min(Number(params.get("peores") ?? 15) || 15, 50);
+
+  const desde = new Date(Date.UTC(anio, 0, 1));
+  const hasta = new Date(Date.UTC(anio + 1, 0, 1));
+
+  const empresas = companyId
+    ? [{ id: companyId }]
+    : await prisma.company.findMany({ select: { id: true }, orderBy: { id: "asc" } });
+
+  const resultados = [];
+  for (const e of empresas) {
+    const r = await cuadreDeCfdis(prisma, e.id, desde, hasta, {
+      // Al barrer todas las empresas sólo interesan los totales.
+      peores: companyId ? peores : 3,
+    });
+    resultados.push(r);
+  }
+
+  // Ordenadas por el dinero inventado: la peor arriba.
+  resultados.sort((a, b) => b.egreso.sobreAtribuidas.exceso - a.egreso.sobreAtribuidas.exceso);
+
+  const totalExceso = resultados.reduce((s, r) => s + r.egreso.sobreAtribuidas.exceso, 0);
+  const totalResiduo = resultados.reduce((s, r) => s + r.egreso.parciales.residuo, 0);
+  const summary = {
+    ok: true,
+    anio,
+    empresas: resultados.length,
+    excesoTotal: Math.round(totalExceso * 100) / 100,
+    residuoTotal: Math.round(totalResiduo * 100) / 100,
+    todasCuadran: resultados.every((r) => r.cuadra),
+  };
+  console.log("[cron/cuadre]", JSON.stringify(summary));
+
+  return NextResponse.json({ ...summary, resultados });
+}
+
+export async function POST(req: Request) {
+  return handle(req);
+}
+export async function GET(req: Request) {
+  return handle(req);
+}
