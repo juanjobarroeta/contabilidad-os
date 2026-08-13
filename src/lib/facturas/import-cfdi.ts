@@ -102,6 +102,11 @@ export async function importCfdiFromXml(opts: {
       fecha: new Date(cfdi.fecha),
       serie: cfdi.serie ?? null,
       folio: cfdi.folio ?? null,
+      // Igual que en la descarga masiva del SAT: la relación viene en el XML y
+      // hasta ahora se descartaba. Un CFDI puede traer varias; en las columnas
+      // cabe una y el resto queda en el rawXml.
+      tipoRelacion: cfdi.relacionados[0]?.tipoRelacion ?? null,
+      cfdiRelacionadoUuid: cfdi.relacionados[0]?.uuids[0] ?? null,
       formaPago: cfdi.formaPago ?? "99",
       metodoPago: cfdi.metodoPago ?? "PUE",
       usoCfdi: cfdi.usoCfdi ?? "G03",

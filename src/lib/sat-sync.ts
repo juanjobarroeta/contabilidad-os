@@ -627,6 +627,14 @@ export async function verifyAndImportSatSync(
             // TipoDeComprobante crudo del SAT: "E" marca nota de credito y el
             // motor fiscal la netea con signo negativo dentro de su tipo.
             tipoSat: cfdi.tipo ?? null,
+            // A qué comprobante apunta éste. Hasta ahora estas dos columnas
+            // sólo las escribía el módulo que EMITE notas de crédito desde la
+            // app, así que todo lo importado del SAT las tenía en null y
+            // cualquier regla que dependiera de la relación quedaba inerte.
+            // Un CFDI puede traer varias relaciones; en las columnas cabe una,
+            // y el resto sigue disponible en el rawXml que se guarda íntegro.
+            tipoRelacion: cfdi.relacionados[0]?.tipoRelacion ?? null,
+            cfdiRelacionadoUuid: cfdi.relacionados[0]?.uuids[0] ?? null,
             fecha: new Date(cfdi.fecha),
             serie: cfdi.serie ?? null,
             folio: cfdi.folio ?? null,
