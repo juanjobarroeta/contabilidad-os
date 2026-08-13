@@ -88,11 +88,22 @@ async function handle(req: Request) {
     company: { modules: { some: { modulo: "AUTOMOTRIZ" as ModuloApp, habilitado: true } } },
     ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
   };
-  // CFDIs que amparan un vehículo, aún sin ligar a un Vehiculo. `rawXml
-  // contains` es un prefiltro barato; el parser confirma el complemento.
+  // CFDIs que amparan un vehículo, aún sin ligar a un Vehiculo. Prefiltros
+  // baratos; el parser confirma. El complemento VentaVehiculos solo NO basta:
+  // los seminuevos comprados a terceros vienen SIN complemento, con la clave
+  // 2510xx y el VIN en el texto — con el prefiltro viejo eran INVISIBLES al
+  // barrido normal para siempre (74 compras / $41.4M en Margom 2025, que solo
+  // una corrida deep=1 manual habría alcanzado). El OR por clave abre la
+  // segunda puerta; los candados de extraerDatosVehiculoCfdi siguen decidiendo.
   const wherePendientes = {
     ...comun,
-    rawXml: { contains: "VentaVehiculos" },
+    // Sin rawXml no hay nada que parsear: fuera de la cola (antes lo implicaba
+    // el `contains`; el brazo por clave no lo implica).
+    rawXml: { not: null },
+    OR: [
+      { rawXml: { contains: "VentaVehiculos" } },
+      { items: { some: { claveProdServ: { startsWith: "2510" } } } },
+    ],
     vehiculosComprados: { none: {} },
     vehiculosVendidos: { none: {} },
   };

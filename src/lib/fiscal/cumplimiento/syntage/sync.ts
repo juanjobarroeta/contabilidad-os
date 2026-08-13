@@ -329,7 +329,7 @@ export async function syncCompanyComplianceSyntage(
   // sync posterior reintente. Una vez fijada, NUNCA se vuelve a importar la
   // balanza del SAT como apertura (sobreescribiría el libro vivo). Aislado en
   // try/catch para no romper la sincronización de opinión/CSF.
-  let ceBootstrap: { importado: boolean } | null = null;
+  let ceBootstrap: { importado: boolean; motivo?: string } | null = null;
   if (company.ceBootstrapAt == null && planIncluyeSyntage(company.tier)) {
     try {
       const ce = await leerEImportarContabilidadElectronicaSyntage(companyId, client);
@@ -342,10 +342,19 @@ export async function syncCompanyComplianceSyntage(
         });
         ceBootstrap = { importado: true };
       } else {
-        ceBootstrap = { importado: false };
+        // Vacío NO es éxito: Syntage puede tener decenas de balanzas y aun así
+        // llegar aquí (entidad no resuelta, cero registros CT/B, ref sin
+        // archivo). Sin este log, el arranque de la CE falla en silencio cada
+        // 6 horas para siempre — nos pasó: 69 archivos en Syntage y apertura
+        // en cero sin una sola línea que dijera por qué.
+        const motivo = ce.error ?? "sin registros CT/B importables en Syntage";
+        console.error(`[ce-bootstrap] ${companyId} (${company.rfc}): vacío — ${motivo}`);
+        ceBootstrap = { importado: false, motivo };
       }
-    } catch {
-      ceBootstrap = null;
+    } catch (e) {
+      const motivo = e instanceof Error ? e.message : String(e);
+      console.error(`[ce-bootstrap] ${companyId} (${company.rfc}): error — ${motivo}`);
+      ceBootstrap = { importado: false, motivo };
     }
   }
 
