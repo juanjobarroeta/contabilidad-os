@@ -83,5 +83,12 @@ export async function GET(req: Request) {
     updatedAt: h.updatedAt.toISOString(),
   }));
 
-  return NextResponse.json({ hallazgos, resumen });
+  // Lectura ejecutiva (síntesis del auditor): la genera el cron/corrida manual;
+  // aquí sólo se lee. hallazgosAbiertos vs resumen.ABIERTO delata brief viejo.
+  const brief = await prisma.auditBrief.findUnique({
+    where: { companyId },
+    select: { resumen: true, grupos: true, hallazgosAbiertos: true, generadoAt: true },
+  });
+
+  return NextResponse.json({ hallazgos, resumen, brief });
 }

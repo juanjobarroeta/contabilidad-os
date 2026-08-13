@@ -3499,6 +3499,26 @@ model FiscalChunk {
 // model is fully additive and touches no existing model. `dedupeKey` (checkClave
 // + sorted referencias) makes re-runs idempotent: the same finding upserts in
 // place and keeps its `estado` instead of duplicating.
+// Lectura EJECUTIVA del auditor: los checks producen cientos de hallazgos
+// granulares (uno por CFDI, por par duplicado, por mes faltante…) y nadie los
+// puede leer así. Este brief los agrupa por causa raíz y los prioriza — la
+// narrativa la escribe Claude, los GRUPOS los calcula código determinista.
+// Uno por empresa, siempre el más reciente (upsert).
+model AuditBrief {
+  id        String @id @default(cuid())
+  companyId String @unique
+
+  /** Narrativa priorizada en markdown (generada por IA, best-effort). */
+  resumen String @db.Text
+  /** Grupos deterministas: [{clave, etiqueta, severidad, n, fundamento, accion}]. */
+  grupos Json
+  /** Hallazgos ABIERTOS al momento de la síntesis (para detectar brief viejo). */
+  hallazgosAbiertos Int
+
+  generadoAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model FiscalHallazgo {
   id        String @id @default(cuid())
   companyId String
