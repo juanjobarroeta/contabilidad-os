@@ -52,6 +52,7 @@ export type UnidadVendida = {
   comisionMonto: number;
   isan: number;
   cliente: { id: string; razonSocial: string } | null;
+  ventaInvoice?: { contraparteNombre: string | null } | null;
   costos: Array<{ monto: number }>;
 };
 
@@ -107,6 +108,13 @@ export async function calcularResultados(
         id: true, vin: true, marca: true, modelo: true, anio: true,
         tipo: true, fechaVenta: true, precioVenta: true, costoCompra: true, comisionMonto: true, isan: true,
         cliente: { select: { id: true, razonSocial: true } },
+        // A público en general (XAXX010101000) y a extranjeros NO se les crea
+        // Customer a propósito —un registro por comprador de mostrador ensucia
+        // el catálogo y fusionarlos falsea la concentración de clientes— así
+        // que `cliente` viene null y la venta se mostraba como «—» aunque el
+        // CFDI SÍ trae el nombre en el receptor. Por eso se denormalizó
+        // contraparteNombre: es el respaldo para nombrar la venta.
+        ventaInvoice: { select: { contraparteNombre: true } },
         costos: { select: { monto: true } },
       },
     }),
