@@ -268,6 +268,21 @@ export interface CuadreIngreso {
     monto: number;
     porClave: Array<{ clave: string; monto: number; facturas: number; ejemplo: string | null }>;
   };
+  /**
+   * Cómo se aplican los anticipos, que es lo que decide si el tablero los está
+   * perdiendo o no. El Anexo 20 admite dos esquemas:
+   *
+   *   A) anticipo $X → CFDI por el TOTAL $Y (relación 07) → nota de crédito $X
+   *      Neto = $Y. El tablero YA acierta: excluye anticipo y NC, cuenta $Y.
+   *   B) anticipo $X → CFDI sólo por el REMANENTE $Y−$X (relación 07)
+   *      Neto = $Y. El tablero se queda corto por $X.
+   *
+   * Los totales permiten los dos (anticipos $253.1M contra NC $272.4M), así que
+   * hay que mirar las relaciones. Un CFDI que aplica anticipo lleva
+   * TipoRelacion 07; si además existe la NC por el mismo importe, es el
+   * esquema A.
+   */
+  relaciones: Array<{ tipoRelacion: string; facturas: number; monto: number }>;
 }
 
 export async function cuadreDeIngresos(
@@ -282,6 +297,7 @@ export async function cuadreDeIngresos(
       id: true,
       subtotal: true,
       tipoSat: true,
+      tipoRelacion: true,
       items: { select: { claveProdServ: true, importe: true, descripcion: true } },
       vehiculosVendidos: { select: { id: true }, take: 1 },
       servicioVenta: { select: { id: true } },
@@ -298,11 +314,18 @@ export async function cuadreDeIngresos(
     anticipos: b(),
     notasDeCredito: b(),
     sinReclamar: { facturas: 0, monto: 0, porClave: [] },
+    relaciones: [],
   };
   const porClave = new Map<string, { monto: number; facturas: number; ejemplo: string | null }>();
+  const porRelacion = new Map<string, { facturas: number; monto: number }>();
 
   for (const f of facturas) {
     res.subtotal = r2(res.subtotal + f.subtotal);
+    const rel = f.tipoRelacion ?? "(sin relación)";
+    const pr = porRelacion.get(rel) ?? { facturas: 0, monto: 0 };
+    pr.facturas++;
+    pr.monto = r2(pr.monto + f.subtotal);
+    porRelacion.set(rel, pr);
     // La clave DOMINANTE decide, igual que en el gasto.
     const dom = [...f.items].sort((a, b2) => b2.importe - a.importe)[0];
     const clave = dom?.claveProdServ ?? "";
@@ -327,6 +350,9 @@ export async function cuadreDeIngresos(
     }
   }
 
+  res.relaciones = [...porRelacion.entries()]
+    .map(([tipoRelacion, v]) => ({ tipoRelacion, ...v }))
+    .sort((a, b2) => b2.monto - a.monto);
   res.sinReclamar.porClave = [...porClave.entries()]
     .map(([clave, v]) => ({ clave, ...v }))
     .sort((a, b2) => b2.monto - a.monto)
