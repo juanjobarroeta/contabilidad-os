@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { InvoiceType, ModuloApp } from "@prisma/client";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
+import { tipoUnidadDesdeCfdi } from "@/lib/automotriz/auto-vehiculo";
 import { derivarVehiculoDesdeCfdiSiAplica } from "@/lib/automotriz/auto-vehiculo";
 import { emisorDesdeCfdi } from "@/lib/automotriz/vin";
 
@@ -57,8 +58,23 @@ async function handle(req: Request) {
   // (refacturación) al CFDI vivo de su expediente. Correr DESPUÉS de que
   // sat-vigencia-sync marque las cancelaciones reales.
   const reparar = url.searchParams.get("repararCancelados") === "1";
+  // repararTipo=1: recalcula NUEVO/SEMINUEVO en las unidades YA derivadas.
+  //
+  // El tipo estuvo escrito a mano como "NUEVO" en los dos puntos donde nace una
+  // unidad, así que el tablero reportaba «Seminuevos: 0 unidades» mientras la
+  // agencia compraba millones en autos usados al año. Arreglar el derivador NO
+  // alcanza a lo que ya existe: el barrido normal salta las facturas que ya
+  // tienen unidad, y por eso una corrida completa reporta «creados: 0» sin
+  // corregir un solo renglón.
+  //
+  // No hace falta releer el XML: descripcionCfdi guarda el texto original de la
+  // línea, que es justo donde el CFDI dice «AUTO USADO…» o «UNIDAD SEMINUEVA…».
+  const repararTipo = url.searchParams.get("repararTipo") === "1";
   if (reparar && !onlyCompanyId) {
     return NextResponse.json({ error: "repararCancelados=1 requiere companyId" }, { status: 400 });
+  }
+  if (repararTipo && !onlyCompanyId) {
+    return NextResponse.json({ error: "repararTipo=1 requiere companyId" }, { status: 400 });
   }
   const startedAt = Date.now();
   const limpieza = cleanup && onlyCompanyId ? await limpiarFantasmas(onlyCompanyId) : null;
@@ -187,8 +203,29 @@ async function handle(req: Request) {
     duplicados: Number(detalle?.duplicados ?? 0),
     nivInvalido: Number(detalle?.niv_invalido ?? 0),
   };
+  // Sólo unidades autoCreado: si alguien capturó el tipo a mano, manda su
+  // criterio — el mismo respeto que se le tiene a NominaCosto.lineaManual.
+  let tipoCorregido = 0;
+  if (onlyCompanyId && repararTipo) {
+    const candidatas = await prisma.vehiculo.findMany({
+      where: { companyId: onlyCompanyId, autoCreado: true, descripcionCfdi: { not: null } },
+      select: { id: true, tipo: true, descripcionCfdi: true, claveVehicular: true },
+    });
+    for (const v of candidatas) {
+      const esperado = tipoUnidadDesdeCfdi({
+        descripcion: v.descripcionCfdi,
+        claveVehicular: v.claveVehicular,
+      });
+      if (v.tipo !== esperado) {
+        await prisma.vehiculo.update({ where: { id: v.id }, data: { tipo: esperado } });
+        tipoCorregido++;
+      }
+    }
+  }
+
   const summary = {
     ok: true,
+    ...(repararTipo ? { tipoCorregido } : {}),
     deep,
     limpieza,
     reparacion,
