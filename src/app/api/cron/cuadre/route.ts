@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cuadreDeCfdis } from "@/lib/automotriz/cuadre";
+import { gastosDeOperacion } from "@/lib/automotriz/resultados-gastos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET/POST /api/cron/cuadre?companyId=<id>&anio=<YYYY>[&peores=N]
@@ -47,12 +48,35 @@ async function handle(req: Request) {
     ? [{ id: companyId }]
     : await prisma.company.findMany({ select: { id: true }, orderBy: { id: "asc" } });
 
+  // La pérdida de MARGOM no está en las unidades: la utilidad BRUTA es positiva
+  // los dos años (+$103.1M en 2024, +$158.5M en 2025) y el número negativo
+  // aparece entero DEBAJO de la línea bruta, en la estructura ($133.0M y
+  // $192.5M). Con `gastos=1` se devuelve esa estructura desglosada por cuenta —
+  // que hasta ahora nadie había medido— para poder ver si es gasto real o
+  // inventario mal clasificado, que es el mismo defecto de P1 del otro lado.
+  const conGastos = params.get("gastos") === "1";
+
   const resultados = [];
   for (const e of empresas) {
     const r = await cuadreDeCfdis(prisma, e.id, desde, hasta, {
       // Al barrer todas las empresas sólo interesan los totales.
       peores: companyId ? peores : 3,
     });
+    if (conGastos) {
+      const g = await gastosDeOperacion(prisma, e.id, desde, hasta);
+      Object.assign(r, {
+        estructura: {
+          total: g.total,
+          // Ordenadas de mayor a menor: el problema, si lo hay, está arriba.
+          lineas: g.lineas.slice(0, 25),
+          sinClasificar: g.sinClasificar,
+          // Ni los anticipos ni el ISAN entran al total; se reportan porque son
+          // los dos que más veces se han contado mal.
+          anticipos: g.anticipos,
+          isan: g.isan,
+        },
+      });
+    }
     resultados.push(r);
   }
 

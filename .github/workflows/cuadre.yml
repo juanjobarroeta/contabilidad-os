@@ -26,6 +26,11 @@ on:
         required: false
         default: ""
         type: string
+      gastos:
+        description: "Desglosar también la estructura por cuenta (donde vive la pérdida)"
+        required: false
+        default: true
+        type: boolean
       baseUrl:
         description: "URL del despliegue a golpear"
         required: false
@@ -43,6 +48,7 @@ jobs:
           BASE_URL: ${{ inputs.baseUrl }}
           COMPANY_ID: ${{ inputs.companyId }}
           ANIO: ${{ inputs.anio }}
+          CON_GASTOS: ${{ inputs.gastos }}
         run: |
           set -euo pipefail
           URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
@@ -50,6 +56,7 @@ jobs:
 
           Q="anio=${ANIO}"
           if [ -n "${COMPANY_ID}" ]; then Q="${Q}&companyId=${COMPANY_ID}"; fi
+          if [ "${CON_GASTOS}" = "true" ]; then Q="${Q}&gastos=1"; fi
 
           curl -fsS --max-time 300 "${URL}/api/cron/cuadre?${Q}" \
             -H "x-cron-secret: ${CRON_SECRET}" | jq .
