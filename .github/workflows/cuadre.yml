@@ -1,0 +1,55 @@
+name: Cuadre de CFDIs (manual)
+
+# ¿Cada peso facturado está contado exactamente una vez? Este diagnóstico mide
+# dos cosas que el tablero da por hechas:
+#
+#   • sobre-atribución: lo que se le carga a una factura no puede valer más que
+#     la factura. Cuando pasa, ese exceso es dinero inventado que sale del
+#     margen de alguna unidad.
+#   • residuos perdidos: gastosDeOperacion excluye la factura ENTERA si tiene
+#     cualquier liga, así que una factura atribuida a medias pierde su
+#     remanente — no lo cuenta nadie.
+#
+# Sin companyId barre todas las empresas y las ordena por el exceso, para ver
+# si el problema es de una agencia o del motor. No escribe nada.
+
+on:
+  workflow_dispatch:
+    inputs:
+      anio:
+        description: "Ejercicio a cuadrar (YYYY)"
+        required: true
+        default: "2025"
+        type: string
+      companyId:
+        description: "Empresa (vacío = todas, sólo totales)"
+        required: false
+        default: ""
+        type: string
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  cuadre:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Pedir el cuadre
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          ANIO: ${{ inputs.anio }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q="anio=${ANIO}"
+          if [ -n "${COMPANY_ID}" ]; then Q="${Q}&companyId=${COMPANY_ID}"; fi
+
+          curl -fsS --max-time 300 "${URL}/api/cron/cuadre?${Q}" \
+            -H "x-cron-secret: ${CRON_SECRET}" | jq .
