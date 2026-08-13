@@ -37,7 +37,23 @@ export interface GastosResultado {
   lineas: GastoLinea[];
   /** CFDIs de egreso sin XML: no se pueden clasificar, se reportan aparte. */
   sinClasificar: { facturas: number; monto: number };
+  /** Anticipos a proveedores: NO son gasto. Se reportan para poder auditarlos. */
+  anticipos: { facturas: number; monto: number };
 }
+
+/**
+ * Anticipo del bien o servicio (clave 84111506, guía de anticipos del Anexo 20).
+ *
+ * Un anticipo NO es un gasto: es dinero entregado a cuenta que la factura final
+ * viene a sustituir, y el CFDI de aplicación lo descuenta. Contarlo como gasto
+ * carga dos veces la misma compra.
+ *
+ * En Margom eran $72,165,217 en 406 facturas —el 47% de «Otros gastos»— casi
+ * todo anticipos a Yutong por camiones eléctricos que todavía no llegan. Con
+ * ellos dentro, la agencia reportaba $77M de pérdida de operación teniendo
+ * utilidad. Del lado de los INGRESOS ya se excluían; del lado del gasto, no.
+ */
+const CLAVE_ANTICIPO = "84111506";
 
 /** Conceptos de un CFDI para el clasificador (clave + importe por línea). */
 function conceptosDe(rawXml: string): Array<{ claveProdServ: string; importe: number }> {
@@ -76,6 +92,8 @@ export async function gastosDeOperacion(
   const porCuenta = new Map<string, GastoLinea>();
   let sinXml = 0;
   let montoSinXml = 0;
+  let anticipos = 0;
+  let montoAnticipos = 0;
 
   for (const f of facturas) {
     // Nota de crédito recibida: resta del gasto (devolución/descuento).
@@ -85,7 +103,19 @@ export async function gastosDeOperacion(
       montoSinXml = r2(montoSinXml + signo * f.subtotal);
       continue;
     }
-    const { cuenta, label } = classifyInvoice(conceptosDe(f.rawXml));
+    const conceptos = conceptosDe(f.rawXml);
+
+    // El anticipo se decide por el concepto DOMINANTE, igual que la
+    // clasificación: una factura mixta con una línea chica de anticipo sigue
+    // siendo gasto por lo que realmente ampara.
+    const dominante = [...conceptos].sort((a, b) => b.importe - a.importe)[0];
+    if (dominante?.claveProdServ === CLAVE_ANTICIPO) {
+      anticipos++;
+      montoAnticipos = r2(montoAnticipos + signo * f.subtotal);
+      continue;
+    }
+
+    const { cuenta, label } = classifyInvoice(conceptos);
     const acc = porCuenta.get(cuenta) ?? { cuenta, label, monto: 0, facturas: 0 };
     acc.monto = r2(acc.monto + signo * f.subtotal);
     acc.facturas++;
@@ -94,8 +124,10 @@ export async function gastosDeOperacion(
 
   const lineas = [...porCuenta.values()].sort((a, b) => b.monto - a.monto);
   return {
+    // Los anticipos NO entran al total: no son gasto del periodo.
     total: r2(lineas.reduce((s, l) => s + l.monto, 0) + montoSinXml),
     lineas,
     sinClasificar: { facturas: sinXml, monto: montoSinXml },
+    anticipos: { facturas: anticipos, monto: montoAnticipos },
   };
 }

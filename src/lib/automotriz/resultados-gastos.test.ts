@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { gastosDeOperacion } from "./resultados-gastos";
+import { classifyEgreso } from "@/lib/contabilidad/classify-egreso";
+import { COE_CODES } from "@/lib/contabilidad/catalog";
 
 const cfdi = (claves: Array<[string, number]>) =>
   `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4"><cfdi:Conceptos>${claves
@@ -51,5 +53,79 @@ describe("gastosDeOperacion()", () => {
     expect(g.sinClasificar).toEqual({ facturas: 1, monto: 7000 });
     // Sigue contando en el total — omitirlo subestimaría el gasto del periodo.
     expect(g.total).toBe(8000);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Anticipos: el 47% de «Otros gastos» de Margom ($72,165,217 en 406 facturas),
+// casi todo anticipos a Yutong por camiones que todavía no llegan. Con ellos
+// dentro, la agencia reportaba $77M de pérdida de operación teniendo utilidad.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("gastosDeOperacion() — el anticipo no es gasto", () => {
+  const cfdi = (clave: string, importe: number, tipoSat = "I") => ({
+    id: `i-${clave}-${importe}`,
+    subtotal: importe,
+    tipoSat,
+    rawXml: `<cfdi:Comprobante><cfdi:Conceptos><cfdi:Concepto ClaveProdServ="${clave}" Importe="${importe}"/></cfdi:Conceptos></cfdi:Comprobante>`,
+  });
+
+  const correr = async (facturas: ReturnType<typeof cfdi>[]) => {
+    const db = { invoice: { findMany: async () => facturas } } as never;
+    return gastosDeOperacion(db, "c1", new Date("2026-01-01"), new Date("2027-01-01"));
+  };
+
+  it("el anticipo se reporta aparte y NO entra al total del gasto", async () => {
+    const r = await correr([
+      cfdi("84111506", 56_034_483), // anticipo camiones Yutong
+      cfdi("81112501", 100_000),    // gasto real (servicios de TI)
+    ]);
+    expect(r.anticipos.facturas).toBe(1);
+    expect(r.anticipos.monto).toBe(56_034_483);
+    // El total del gasto es SÓLO el gasto real.
+    expect(r.total).toBe(100_000);
+    expect(r.lineas.some((l) => l.monto === 56_034_483)).toBe(false);
+  });
+
+  it("la aplicación del anticipo (nota de crédito) también sale del gasto", async () => {
+    // Si el anticipo se excluye pero su aplicación no, el gasto queda NEGATIVO.
+    const r = await correr([
+      cfdi("84111506", 27_879_310),
+      cfdi("84111506", 27_879_310, "E"),
+    ]);
+    expect(r.total).toBe(0);
+    expect(r.anticipos.monto).toBe(0);
+    expect(r.anticipos.facturas).toBe(2);
+  });
+
+  it("una factura mixta sigue siendo gasto por lo que realmente ampara", async () => {
+    // El anticipo se decide por el concepto DOMINANTE: una línea chica de
+    // anticipo dentro de una factura de renta no la vuelve anticipo.
+    const mixta = {
+      id: "mix",
+      subtotal: 500_000,
+      tipoSat: "I",
+      rawXml:
+        `<cfdi:Concepto ClaveProdServ="80131500" Importe="480000"/>` +
+        `<cfdi:Concepto ClaveProdServ="84111506" Importe="20000"/>`,
+    };
+    const r = await correr([mixta]);
+    expect(r.anticipos.facturas).toBe(0);
+    expect(r.total).toBe(500_000);
+  });
+});
+
+describe("classifyEgreso() — 8013 es inmobiliario, no notarías", () => {
+  it("el arrendamiento se clasifica como renta", () => {
+    // $17M de renta aparecían como «Servicios notariales»: un renglón que nadie
+    // cuestiona porque suena plausible. Las notarías son 80121.
+    expect(classifyEgreso("80131500").label).toBe("Arrendamiento");
+    expect(classifyEgreso("80131502").label).toBe("Arrendamiento");
+    expect(classifyEgreso("80121500").label).toBe("Honorarios legales");
+  });
+
+  it("las familias que caían en «Otros gastos» ya tienen nombre", () => {
+    for (const clave of ["82101500", "80151504", "72102900", "85101701", "84121500"]) {
+      expect(classifyEgreso(clave).cuenta).not.toBe(COE_CODES.OTROS_GASTOS);
+    }
   });
 });

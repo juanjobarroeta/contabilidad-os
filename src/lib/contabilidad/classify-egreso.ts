@@ -75,7 +75,12 @@ const MAPPING: EgresoCategory[] = [
   { prefix: "80101", cuenta: COE_CODES.HONORARIOS, label: "Honorarios" },  // Business admin
   { prefix: "80111", cuenta: COE_CODES.HONORARIOS, label: "Honorarios" },  // Management consulting
   { prefix: "80121", cuenta: COE_CODES.HONORARIOS, label: "Honorarios legales" },  // Legal
-  { prefix: "80131", cuenta: COE_CODES.HONORARIOS_PF, label: "Servicios notariales" }, // Notarios (PF)
+  // 8013 es SERVICIOS INMOBILIARIOS, no notarías: 801315 «Alquiler y
+  // arrendamiento de propiedades», 801316 «Administración de bienes raíces».
+  // Estaba mapeado a honorarios notariales y en Margom eso puso $17M de RENTA
+  // bajo «Servicios notariales» — un renglón que nadie iba a cuestionar porque
+  // suena plausible. Las notarías son 80121 (servicios legales).
+  { prefix: "80131", cuenta: COE_CODES.RENTAS, label: "Arrendamiento" },
   { prefix: "80141", cuenta: "601.61", label: "Publicidad y marketing" },  // Propaganda y publicidad
   { prefix: "80161", cuenta: COE_CODES.HONORARIOS, label: "Gestión de negocios" },
   { prefix: "80171", cuenta: COE_CODES.HONORARIOS, label: "Servicios de consultoría" },
@@ -117,6 +122,20 @@ const MAPPING: EgresoCategory[] = [
 
   // ── Seguros y financieros ────────────────────────────────────────────
   { prefix: "84131", cuenta: "601.57", label: "Seguros y fianzas" },
+  { prefix: "84101", cuenta: "601.57", label: "Seguros y fianzas" },
+  // Intereses y servicios bancarios: gasto FINANCIERO, no de operación.
+  { prefix: "84121", cuenta: COE_CODES.COMISIONES_BANCARIAS, label: "Intereses y servicios bancarios" },
+  // Segmento 82 = publicidad y diseño. Sin esto, cada espectacular y cada
+  // paquete publicitario caía en «Otros gastos» ($6.8M en Margom).
+  { prefix: "82",    cuenta: "601.61", label: "Publicidad y marketing" },
+  // 8015 = mercadotecnia y promoción comercial ($10.3M en Margom).
+  { prefix: "80151", cuenta: "601.61", label: "Promoción comercial" },
+  // 7210 = mantenimiento y remodelación de inmuebles. Ya estaban 7214/7215/7216
+  // pero no la familia que usa el proveedor de obra ($8.8M en Margom).
+  { prefix: "7210",  cuenta: "601.56", label: "Mantenimiento y remodelación" },
+  // Cuotas obrero-patronales facturadas (IMSS/RCV) — mismo destino que la
+  // provisión de nómina, para que no aparezcan como gasto sin nombre.
+  { prefix: "85101", cuenta: COE_CODES.CUOTAS_IMSS_PATRONAL, label: "Cuotas IMSS / RCV" },
   { prefix: "84121", cuenta: COE_CODES.COMISIONES_BANCARIAS, label: "Servicios bancarios" },
 
   // ── Material de oficina / papelería (601.55) ─────────────────────────

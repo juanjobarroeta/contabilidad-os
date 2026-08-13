@@ -330,8 +330,12 @@ function clasificarPendiente(
     return regla.destino in NOMBRE_BUCKET ? (regla.destino as BucketCobertura) : "pendiente";
   }
 
+  // El anticipo se netea de los DOS lados. Sólo estaba contemplado en ingresos,
+  // y por eso $72.2M de anticipos a proveedores aparecían como gasto sin
+  // clasificar: el 47% del residuo de egresos de Margom.
+  if (concepto.clave === CLAVE_ANTICIPO) return "anticipo";
+
   if (concepto.tipo === "INGRESO") {
-    if (concepto.clave === CLAVE_ANTICIPO) return "anticipo";
     if (concepto.clave.startsWith("8014")) {
       // clasificarIngreso devuelve «otros» cuando la descripción no empata ni
       // con bono ni con UDI. Eso NO es una clasificación: es el residuo con otro
