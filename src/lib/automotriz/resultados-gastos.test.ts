@@ -129,3 +129,38 @@ describe("classifyEgreso() — 8013 es inmobiliario, no notarías", () => {
     }
   });
 });
+
+describe("gastosDeOperacion() — el ISAN es impuesto, no gasto", () => {
+  const conIsan = (clave: string, descripcion: string, importe: number) => ({
+    id: `i-${descripcion}`,
+    subtotal: importe,
+    tipoSat: "I",
+    rawXml: `<cfdi:Concepto ClaveProdServ="${clave}" Descripcion="${descripcion}" Importe="${importe}"/>`,
+  });
+
+  const correr = async (facturas: ReturnType<typeof conIsan>[]) => {
+    const db = { invoice: { findMany: async () => facturas } } as never;
+    return gastosDeOperacion(db, "c1", new Date("2026-01-01"), new Date("2027-01-01"));
+  };
+
+  it("el ISAN sale del gasto y se reporta aparte", async () => {
+    // El distribuidor lo cobra al comprador y lo entera: no compra nada. En
+    // Margom hundía la utilidad de operación ~$14.8M al año.
+    const r = await correr([
+      conIsan("93161700", "P.PROV. I.S.A.N. FABRIC.NAC. FRANJA FRONT.", 5_475_045),
+      conIsan("93161700", "DEL ISAN PAGOS PROVISIONALES", 4_427_457),
+      conIsan("81112501", "Exchange Online", 100_000),
+    ]);
+    expect(r.isan.facturas).toBe(2);
+    expect(r.isan.monto).toBe(9_902_502);
+    expect(r.total).toBe(100_000);
+  });
+
+  it("otros pagos bajo la misma clave SÍ siguen siendo gasto", async () => {
+    // 93161700 es «administración de impuestos» y la usan para más cosas: el
+    // texto es lo que distingue al ISAN.
+    const r = await correr([conIsan("93161700", "DERECHOS DE AGUA POTABLE", 524_119)]);
+    expect(r.isan.facturas).toBe(0);
+    expect(r.total).toBe(524_119);
+  });
+});

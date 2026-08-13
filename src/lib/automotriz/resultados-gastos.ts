@@ -39,7 +39,26 @@ export interface GastosResultado {
   sinClasificar: { facturas: number; monto: number };
   /** Anticipos a proveedores: NO son gasto. Se reportan para poder auditarlos. */
   anticipos: { facturas: number; monto: number };
+  /** ISAN enterado: impuesto de la operación, va a la pestaña de impuestos. */
+  isan: { facturas: number; monto: number };
 }
+
+/**
+ * ISAN — Impuesto Sobre Automóviles Nuevos.
+ *
+ * El distribuidor lo cobra al comprador dentro del precio y lo entera al SAT:
+ * es un impuesto de la OPERACIÓN, no un costo de operar la agencia. No pertenece
+ * al margen (no es costo de la unidad) ni al gasto de estructura (no compra
+ * nada) — pertenece junto al IVA y al ISR, que es donde el director lo busca.
+ *
+ * Dejarlo en gastos hundía la utilidad de operación ~$14.8M al año en Margom por
+ * una salida de efectivo que nunca fue suya.
+ *
+ * Clave 93161700 del catálogo del SAT («Administración de impuestos») más el
+ * texto, porque esa clave la usan también para otros pagos de derechos.
+ */
+const CLAVE_IMPUESTOS = "93161700";
+const ISAN_TEXTO_RE = /\bI\.?\s?S\.?\s?A\.?\s?N\.?\b/i;
 
 /**
  * Anticipo del bien o servicio (clave 84111506, guía de anticipos del Anexo 20).
@@ -56,13 +75,14 @@ export interface GastosResultado {
 const CLAVE_ANTICIPO = "84111506";
 
 /** Conceptos de un CFDI para el clasificador (clave + importe por línea). */
-function conceptosDe(rawXml: string): Array<{ claveProdServ: string; importe: number }> {
-  const out: Array<{ claveProdServ: string; importe: number }> = [];
+function conceptosDe(rawXml: string): Array<{ claveProdServ: string; importe: number; descripcion: string }> {
+  const out: Array<{ claveProdServ: string; importe: number; descripcion: string }> = [];
   for (const m of rawXml.matchAll(CONCEPTO_RE)) {
     const attrs = m[1] ?? "";
     out.push({
       claveProdServ: attr(attrs, "ClaveProdServ") ?? "",
       importe: Number(attr(attrs, "Importe") ?? "0") || 0,
+      descripcion: attr(attrs, "Descripcion") ?? "",
     });
   }
   return out;
@@ -94,6 +114,8 @@ export async function gastosDeOperacion(
   let montoSinXml = 0;
   let anticipos = 0;
   let montoAnticipos = 0;
+  let isanFacturas = 0;
+  let montoIsan = 0;
 
   for (const f of facturas) {
     // Nota de crédito recibida: resta del gasto (devolución/descuento).
@@ -115,6 +137,12 @@ export async function gastosDeOperacion(
       continue;
     }
 
+    if (dominante?.claveProdServ === CLAVE_IMPUESTOS && ISAN_TEXTO_RE.test(dominante.descripcion)) {
+      isanFacturas++;
+      montoIsan = r2(montoIsan + signo * f.subtotal);
+      continue;
+    }
+
     const { cuenta, label } = classifyInvoice(conceptos);
     const acc = porCuenta.get(cuenta) ?? { cuenta, label, monto: 0, facturas: 0 };
     acc.monto = r2(acc.monto + signo * f.subtotal);
@@ -129,5 +157,6 @@ export async function gastosDeOperacion(
     lineas,
     sinClasificar: { facturas: sinXml, monto: montoSinXml },
     anticipos: { facturas: anticipos, monto: montoAnticipos },
+    isan: { facturas: isanFacturas, monto: montoIsan },
   };
 }
