@@ -238,17 +238,33 @@ export function calcularAjusteInflacion(entrada: EntradaAjuste): ResultadoAjuste
   const mesesEjercicio = Math.max(0, ultimoMes - primerMes + 1);
   const overrides = entrada.overrides ?? {};
 
+  // Cuentas de AGRUPACIÓN con hijas: su saldo ya viene sumado en las
+  // subcuentas. Si se cuentan las dos, cada peso entra DOS veces — y como el
+  // ajuste sale de la DIFERENCIA entre promedios, el error no se cancela: se
+  // amplifica. Es la misma razón por la que el balance general se queda con
+  // `nivel >= 3`. Sólo se excluye la madre cuando alguna hija trae saldo, para
+  // no tirar una cuenta legítima que viva únicamente a nivel de grupo.
+  const conSaldoPorGrupo = new Set(
+    entrada.cuentas
+      .filter((c) => c.subcuenta != null && c.saldosMensuales.some((s) => s !== 0))
+      .map((c) => c.cuentaSAT)
+  );
+
   const cuentas: CuentaAjuste[] = entrada.cuentas.map((c) => {
     const clave = claveCuenta(c.cuentaSAT, c.subcuenta);
     const regla = clasificacionPorDefecto(c.cuentaSAT, c.subcuenta);
+    const esAgrupacion = c.subcuenta == null && conSaldoPorGrupo.has(c.cuentaSAT);
     const override = overrides[clave];
+    const claseBase = esAgrupacion ? "EXCLUIDA" : regla.clase;
     return {
       ...c,
       clave,
-      clase: override ?? regla.clase,
-      fundamento: regla.fundamento,
-      revisar: regla.revisar,
-      sobreescrita: override != null && override !== regla.clase,
+      clase: override ?? claseBase,
+      fundamento: esAgrupacion
+        ? "Cuenta de agrupación: su saldo ya está contado en las subcuentas"
+        : regla.fundamento,
+      revisar: esAgrupacion ? false : regla.revisar,
+      sobreescrita: override != null && override !== claseBase,
       promedio: saldoPromedioAnual(c.saldosMensuales),
     };
   });

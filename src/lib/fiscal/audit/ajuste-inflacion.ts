@@ -12,6 +12,8 @@
 // e INPC disponible. Sin eso, callar es mejor que un falso positivo.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { balanceGeneralDesdeBalanza } from "@/lib/contabilidad/libro";
+import { balanza } from "@/lib/contabilidad/posting";
 import { cargarAjusteInflacion } from "@/lib/fiscal/ajuste-inflacion-ledger";
 import { inferTipoPersona } from "@/lib/fiscal/rules/sector";
 import { prisma } from "@/lib/prisma";
@@ -32,7 +34,19 @@ export interface AjusteInflacionPendiente {
   mesesSinPostear: number[];
   /** Estado de la anual guardada, si existe. */
   statusDeclaracion: string | null;
+  /**
+   * |descuadre| ÷ activo total al cierre. null si no se pudo evaluar.
+   *
+   * El ajuste sale de los saldos del balance: si la ecuación contable no
+   * cuadra, esos saldos no describen a la empresa y la cifra no significa
+   * nada. Salió de mirar producción — una empresa con el libro descuadrado
+   * producía un ajuste de ocho cifras a partir de cuatro cuentas.
+   */
+  descuadreRelativo: number | null;
 }
+
+/** Descuadre máximo tolerado para creerle a los saldos del balance. */
+export const TOLERANCIA_DESCUADRE = 0.01;
 
 /**
  * Carga el ajuste del ÚLTIMO ejercicio cerrado (el que ya toca declarar).
@@ -57,16 +71,24 @@ export async function cargarAjusteInflacionPendiente(
     deducible: 0,
     mesesSinPostear: [],
     statusDeclaracion: null,
+    descuadreRelativo: null,
   };
   if (tipoPersona !== "PM") return vacio;
 
-  const [{ resultado, mesesSinPostear }, declaracion] = await Promise.all([
+  const [{ resultado, mesesSinPostear }, declaracion, filasDic] = await Promise.all([
     cargarAjusteInflacion(companyId, ejercicio),
     prisma.taxDeclaration.findFirst({
       where: { companyId, tipo: "DECLARACION_ANUAL", periodo: String(ejercicio) },
       select: { status: true },
     }),
+    balanza(companyId, ejercicio, 12),
   ]);
+
+  // Ecuación contable al cierre: la prueba de que los saldos que alimentan el
+  // promedio anual describen a una empresa real.
+  const bg = balanceGeneralDesdeBalanza(filasDic);
+  const base = Math.abs(bg.totalActivo);
+  const descuadreRelativo = base > 0 ? Math.abs(bg.descuadre) / base : null;
 
   return {
     ...vacio,
@@ -75,6 +97,7 @@ export async function cargarAjusteInflacionPendiente(
     deducible: resultado.deducible,
     mesesSinPostear,
     statusDeclaracion: declaracion?.status ?? null,
+    descuadreRelativo,
   };
 }
 
@@ -85,6 +108,11 @@ export function auditarAjusteInflacion(data: AjusteInflacionPendiente): Hallazgo
   // Con meses sin postear el saldo promedio anual del Art. 44 frac. I sale
   // incompleto; reclamar una cifra mal formada es peor que no reclamar nada.
   if (data.mesesSinPostear.length > 0) return [];
+  // Si el balance no cuadra, sus saldos no describen a la empresa: el promedio
+  // anual que sale de ahí no es una cifra fiscal, es ruido con dos decimales.
+  // Callar es obligatorio — este hallazgo puede mandar a alguien a presentar
+  // una complementaria.
+  if (data.descuadreRelativo == null || data.descuadreRelativo > TOLERANCIA_DESCUADRE) return [];
 
   const acumulable = data.acumulable > 0;
   const monto = acumulable ? data.acumulable : data.deducible;
