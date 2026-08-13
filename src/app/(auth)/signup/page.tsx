@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BrandMark, ThemeToggle } from "@/components/ui";
+import { rutaRetornoSegura } from "@/lib/ruta-retorno";
 import { Loader2, ShieldCheck, CreditCard, CalendarClock, Gift, Sparkles } from "lucide-react";
 
 type InvitePreview =
@@ -24,10 +25,21 @@ export default function SignupPage() {
   const [inviteToken, setInviteToken] = useState("");
   const [codeInput, setCodeInput] = useState("");
   const [preview, setPreview] = useState<InvitePreview | null>(null);
+  // A dónde volver tras crear la cuenta. La página de invitación de CLIENTE
+  // manda `?callbackUrl=/invitacion/<token>`: ignorarlo (como pasaba) dejaba al
+  // invitado sin aceptar su invitación, sin membresía, y el wizard le pedía
+  // crear una empresa y contratar un plan que su despacho ya paga.
+  const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get("invite");
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("invite");
     if (t) { setInviteToken(t); setCodeInput(t); }
+    setCallbackUrl(rutaRetornoSegura(params.get("callbackUrl")));
+    // El correo invitado llega prellenado — la invitación sólo la puede aceptar
+    // ese correo, así que teclear otro es garantía de rebote.
+    const em = params.get("email");
+    if (em) setEmail(em);
   }, []);
 
   useEffect(() => {
@@ -65,7 +77,9 @@ export default function SignupPage() {
       setLoading(false);
       return;
     }
-    router.push("/onboarding");
+    // Con callbackUrl (p. ej. aceptar una invitación de cliente) se vuelve ahí;
+    // sin él, el destino de siempre: configurar la primera empresa.
+    router.push(callbackUrl ?? "/onboarding");
   }
 
   // Input compartido: usa tokens de tema (fondo/tinta) para que SIEMPRE
