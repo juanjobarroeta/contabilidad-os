@@ -129,3 +129,37 @@ describe("derivarNominaCostoSiAplica()", () => {
     ).toBe(false);
   });
 });
+
+describe("extraerNominaCfdi() — SBC cuando el emisor no manda SalarioBaseCotApor", () => {
+  const recibo = (attrsReceptor: string) => `<?xml version="1.0"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Total="10000">
+  <cfdi:Receptor Rfc="XAXX010101000" Nombre="JUAN PEREZ"/>
+  <cfdi:Complemento>
+    <nomina12:Nomina xmlns:nomina12="http://www.sat.gob.mx/nomina12" NumDiasPagados="15" TotalPercepciones="10000">
+      <nomina12:Receptor ${attrsReceptor}/>
+      <nomina12:Percepciones TotalGravado="10000" TotalExento="0"/>
+    </nomina12:Nomina>
+  </cfdi:Complemento>
+</cfdi:Comprobante>`;
+
+  it("usa SalarioDiarioIntegrado cuando falta SalarioBaseCotApor", () => {
+    // Caso real de Margom: 0 de 4,494 recibos traen SalarioBaseCotApor y los
+    // 4,494 traen SalarioDiarioIntegrado. Sin respaldo, las cuotas patronales
+    // de toda la plantilla salían en cero.
+    const d = extraerNominaCfdi(recibo('Puesto="TECNICO" Departamento="TALLER" SalarioDiarioIntegrado="450.75"'));
+    expect(d.sbcDiario).toBe(450.75);
+    expect(d.diasPagados).toBe(15);
+  });
+
+  it("prefiere SalarioBaseCotApor cuando sí viene: es el valor declarado al IMSS", () => {
+    const d = extraerNominaCfdi(
+      recibo('Puesto="TECNICO" SalarioBaseCotApor="400.00" SalarioDiarioIntegrado="450.75"')
+    );
+    expect(d.sbcDiario).toBe(400);
+  });
+
+  it("sin ninguno de los dos, no se inventa un salario", () => {
+    const d = extraerNominaCfdi(recibo('Puesto="TECNICO"'));
+    expect(d.sbcDiario).toBeNull();
+  });
+});

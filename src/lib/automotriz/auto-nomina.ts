@@ -63,7 +63,10 @@ export interface DatosNominaCfdi {
   empleado: string | null;
   rfcEmpleado: string | null;
   percepciones: number;
-  /** Salario base de cotización diario (SalarioBaseCotApor del complemento). */
+  /**
+   * Salario base de cotización diario. Se toma de SalarioBaseCotApor y, cuando
+   * el emisor no lo manda, de SalarioDiarioIntegrado.
+   */
   sbcDiario: number | null;
   diasPagados: number | null;
   riesgoPuesto: string | null;
@@ -91,7 +94,22 @@ export function extraerNominaCfdi(rawXml: string, subtotalFallback = 0): DatosNo
   const percepciones = gravado + exento > 0 ? gravado + exento : subtotalFallback;
 
   const nominaNodo = rawXml.match(/<(?:[\w-]+:)?Nomina\b([^>]*)>/i)?.[1] ?? "";
-  const sbc = Number(attrDe(receptor, "SalarioBaseCotApor") ?? "");
+  // SalarioBaseCotApor es OPCIONAL en el complemento de nómina 1.2 y hay
+  // emisores que sencillamente no lo mandan: en los 4,494 recibos de Margom de
+  // 2026 no aparece ni una vez, mientras que SalarioDiarioIntegrado está en
+  // todos. Sin respaldo, las cuotas patronales salían en CERO para toda la
+  // plantilla — el taller reportaba su mano de obra a puro sueldo, sin la
+  // carga social, y su margen se veía ~7 puntos mejor de lo que es.
+  //
+  // Los dos atributos son el mismo número: el SBC del Art. 27 LSS ES el salario
+  // diario integrado (sueldo por el factor de integración de aguinaldo,
+  // vacaciones y prima), sujeto al tope de 25 UMA que aplica calcularImss. Se
+  // prefiere SalarioBaseCotApor cuando viene, porque es el valor que el patrón
+  // declaró ante el IMSS.
+  const sbcDeclarado = Number(attrDe(receptor, "SalarioBaseCotApor") ?? "");
+  const sbc = Number.isFinite(sbcDeclarado) && sbcDeclarado > 0
+    ? sbcDeclarado
+    : Number(attrDe(receptor, "SalarioDiarioIntegrado") ?? "");
   const dias = Number(attrDe(nominaNodo, "NumDiasPagados") ?? "");
 
   return {
