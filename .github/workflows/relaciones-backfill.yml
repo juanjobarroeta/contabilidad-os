@@ -1,0 +1,66 @@
+name: Backfill de relaciones CFDI (manual)
+
+# Rellena Invoice.tipoRelacion / cfdiRelacionadoUuid de todo lo importado antes
+# de que el parser leyera el nodo <cfdi:CfdiRelacionados>.
+#
+# Hasta ahora la única escritura de esas columnas venía del módulo que EMITE
+# notas de crédito desde la app, así que todo lo descargado del SAT las tenía en
+# null: 27,336 facturas de ingreso de Margom, con 6,129 notas de crédito y 5,052
+# anticipos entre ellas, sin una sola liga. Este barrido las reconstruye desde
+# el rawXml que ya está guardado — sin viaje al SAT y sin costo.
+#
+# Idempotente: sólo mira CFDIs que traen el nodo y aún no tienen la columna,
+# así que `restantes` converge a 0 y se puede volver a correr sin daño.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "Empresa (vacío = todas)"
+        required: false
+        default: ""
+        type: string
+      limit:
+        description: "Tope de filas por corrida"
+        required: false
+        default: "20000"
+        type: string
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Rellenar las relaciones
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q="limit=${LIMIT}"
+          if [ -n "${COMPANY_ID}" ]; then Q="${Q}&companyId=${COMPANY_ID}"; fi
+
+          # Cada corrida tiene presupuesto de 4 minutos del lado del servidor.
+          # Se repite hasta que `restantes` llegue a 0 o deje de bajar — un
+          # estancamiento significa que no queda nada que este barrido pueda
+          # resolver, y seguir insistiendo sólo gasta el turno.
+          previo=""
+          for i in $(seq 1 12); do
+            RESP="$(curl -fsS --max-time 300 -X POST "${URL}/api/cron/relaciones-backfill?${Q}" \
+              -H "x-cron-secret: ${CRON_SECRET}")"
+            echo "$RESP" | jq '{procesadas, actualizadas, sinRelacionUtil, restantes, porTipo}'
+            REST="$(echo "$RESP" | jq -r '.restantes')"
+            if [ "$REST" = "0" ]; then echo "Sin pendientes."; break; fi
+            if [ "$REST" = "$previo" ]; then echo "::warning::restantes estancado en ${REST}"; break; fi
+            previo="$REST"
+          done
