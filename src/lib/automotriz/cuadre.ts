@@ -232,3 +232,104 @@ export async function cuadreDeCfdis(
     cuadra: Math.abs(sumaPartes - subtotal) < 1,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUADRE DEL INGRESO — ¿qué CFDI de venta no lo reclama nadie?
+//
+// El gasto y el ingreso se calculan al revés uno del otro, y por eso uno está
+// completo y el otro no:
+//
+//   • gastosDeOperacion toma TODOS los EGRESO y los clasifica. Nada se pierde:
+//     lo que no cae en una cuenta cae en «Otros gastos».
+//   • El ingreso NO se suma de los CFDIs. Sale de `Vehiculo.precioVenta` (y
+//     sólo de las unidades con costo de compra conocido), de `ServicioVenta`, y
+//     de otrosIngresos —que además sólo mira claves 8014%—. Un CFDI de venta
+//     que ningún derivador reclama no se va a otro renglón: NO SE CUENTA.
+//
+// Por eso «tenemos todos los CFDIs» y aun así el ingreso queda corto: tener el
+// documento no es lo mismo que reconocerlo. Esto mide exactamente cuánto se
+// queda sin reclamar, y con qué claves, que es lo que dice qué derivador falta.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Anticipo del bien o servicio (Anexo 20): cobro a cuenta, no ingreso. */
+const CLAVE_ANTICIPO_INGRESO = "84111506";
+
+export interface CuadreIngreso {
+  facturas: number;
+  subtotal: number;
+  ventaDeUnidad: { facturas: number; monto: number };
+  servicio: { facturas: number; monto: number };
+  otrosIngresos: { facturas: number; monto: number };
+  anticipos: { facturas: number; monto: number };
+  notasDeCredito: { facturas: number; monto: number };
+  /** Lo que ningún derivador reclama — el ingreso que el tablero no ve. */
+  sinReclamar: {
+    facturas: number;
+    monto: number;
+    porClave: Array<{ clave: string; monto: number; facturas: number; ejemplo: string | null }>;
+  };
+}
+
+export async function cuadreDeIngresos(
+  db: PrismaClient,
+  companyId: string,
+  desde: Date,
+  hasta: Date,
+): Promise<CuadreIngreso> {
+  const facturas = await db.invoice.findMany({
+    where: { companyId, tipo: "INGRESO", status: { not: "CANCELLED" }, fecha: { gte: desde, lt: hasta } },
+    select: {
+      id: true,
+      subtotal: true,
+      tipoSat: true,
+      items: { select: { claveProdServ: true, importe: true, descripcion: true } },
+      vehiculosVendidos: { select: { id: true }, take: 1 },
+      servicioVenta: { select: { id: true } },
+    },
+  });
+
+  const b = () => ({ facturas: 0, monto: 0 });
+  const res: CuadreIngreso = {
+    facturas: facturas.length,
+    subtotal: 0,
+    ventaDeUnidad: b(),
+    servicio: b(),
+    otrosIngresos: b(),
+    anticipos: b(),
+    notasDeCredito: b(),
+    sinReclamar: { facturas: 0, monto: 0, porClave: [] },
+  };
+  const porClave = new Map<string, { monto: number; facturas: number; ejemplo: string | null }>();
+
+  for (const f of facturas) {
+    res.subtotal = r2(res.subtotal + f.subtotal);
+    // La clave DOMINANTE decide, igual que en el gasto.
+    const dom = [...f.items].sort((a, b2) => b2.importe - a.importe)[0];
+    const clave = dom?.claveProdServ ?? "";
+
+    const meter = (k: { facturas: number; monto: number }) => {
+      k.facturas++;
+      k.monto = r2(k.monto + f.subtotal);
+    };
+
+    if ((f.tipoSat ?? "I") === "E") meter(res.notasDeCredito);
+    else if (f.vehiculosVendidos.length > 0) meter(res.ventaDeUnidad);
+    else if (f.servicioVenta) meter(res.servicio);
+    else if (clave === CLAVE_ANTICIPO_INGRESO) meter(res.anticipos);
+    else if (clave.startsWith("8014")) meter(res.otrosIngresos);
+    else {
+      meter(res.sinReclamar);
+      const k = porClave.get(clave) ?? { monto: 0, facturas: 0, ejemplo: null };
+      k.monto = r2(k.monto + f.subtotal);
+      k.facturas++;
+      if (k.ejemplo == null && dom?.descripcion) k.ejemplo = dom.descripcion.slice(0, 70);
+      porClave.set(clave, k);
+    }
+  }
+
+  res.sinReclamar.porClave = [...porClave.entries()]
+    .map(([clave, v]) => ({ clave, ...v }))
+    .sort((a, b2) => b2.monto - a.monto)
+    .slice(0, 20);
+  return res;
+}
