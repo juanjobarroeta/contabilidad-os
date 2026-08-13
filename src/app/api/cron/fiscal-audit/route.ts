@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runAuditForCompany } from "@/lib/fiscal/audit/service";
+import { generarSintesisAuditoria } from "@/lib/fiscal/audit/sintesis";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/fiscal-audit
@@ -40,9 +41,25 @@ async function handle(req: Request) {
 
   const resultados = [];
   let errores = 0;
+  let sintesis = 0;
   for (const c of companies) {
     try {
-      resultados.push(await runAuditForCompany(c.id));
+      const r = await runAuditForCompany(c.id);
+      resultados.push(r);
+      // Síntesis ejecutiva: sólo cuando la corrida CAMBIÓ algo (o no existe
+      // brief) — una corrida sin cambios no gasta tokens en re-narrar lo mismo.
+      const cambio = r.nuevos > 0 || r.autoResueltos > 0;
+      const tieneBrief = cambio
+        ? true
+        : (await prisma.auditBrief.count({ where: { companyId: c.id } })) > 0;
+      if (cambio || !tieneBrief) {
+        try {
+          await generarSintesisAuditoria(c.id);
+          sintesis++;
+        } catch (e) {
+          console.error("[cron/fiscal-audit] síntesis falló:", c.id, e instanceof Error ? e.message : e);
+        }
+      }
     } catch (e) {
       errores++;
       resultados.push({ companyId: c.id, error: e instanceof Error ? e.message : String(e) });
@@ -53,6 +70,7 @@ async function handle(req: Request) {
     ok: true,
     empresas: companies.length,
     errores,
+    sintesisGeneradas: sintesis,
     resultados,
   });
 }

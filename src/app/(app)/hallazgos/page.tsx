@@ -28,6 +28,21 @@ interface Hallazgo {
 type Estado = "ABIERTO" | "RESUELTO" | "IGNORADO";
 type Filtro = Estado | "POSPUESTO";
 
+interface BriefGrupo {
+  clave: string;
+  severidad: string;
+  n: number;
+  fundamento: string;
+  accion: string;
+  ejemplos: string[];
+}
+interface Brief {
+  resumen: string;
+  grupos: BriefGrupo[];
+  hallazgosAbiertos: number;
+  generadoAt: string;
+}
+
 const SEV: Record<string, { tone: BadgeTone; label: string; icon: typeof AlertTriangle; rank: number }> = {
   error: { tone: "danger", label: "Error", icon: AlertCircle, rank: 0 },
   warn: { tone: "warning", label: "Advertencia", icon: AlertTriangle, rank: 1 },
@@ -59,6 +74,7 @@ export default function HallazgosPage() {
   const { activeCompany } = useCompany();
   const [tab, setTab] = useState<Filtro>("ABIERTO");
   const [hallazgos, setHallazgos] = useState<Hallazgo[] | null>(null);
+  const [brief, setBrief] = useState<Brief | null>(null);
   const [resumen, setResumen] = useState<Record<string, number>>({ ABIERTO: 0, POSPUESTO: 0, RESUELTO: 0, IGNORADO: 0 });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
@@ -72,6 +88,7 @@ export default function HallazgosPage() {
       if (!res.ok) throw new Error();
       const data = await res.json();
       setHallazgos(data.hallazgos ?? []);
+      setBrief(data.brief ?? null);
       setResumen(data.resumen ?? { ABIERTO: 0, POSPUESTO: 0, RESUELTO: 0, IGNORADO: 0 });
     } catch {
       setError("No se pudieron cargar los hallazgos.");
@@ -170,6 +187,58 @@ export default function HallazgosPage() {
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {error}
         </div>
+      )}
+
+      {/* Lectura del auditor: la síntesis priorizada de TODO lo abierto —
+          qué atender primero, qué cae en lote con una sola acción. La lista
+          granular sigue abajo; esto es el mapa para no perderse en ella. */}
+      {tab === "ABIERTO" && brief && brief.hallazgosAbiertos > 0 && hallazgos !== null && hallazgos.length > 0 && (
+        <Card className="mt-5 rounded-card border-cos-line p-5 shadow-card">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[13px] font-semibold text-cos-ink">Lectura del auditor</span>
+            <span className="rounded-full bg-cos-brand-tint px-2 py-0.5 text-[11px] font-medium text-cos-brand-ink">
+              {brief.hallazgosAbiertos} hallazgo(s) en {brief.grupos.length} grupo(s) · {fmtFechaCorta(brief.generadoAt)}
+              {brief.hallazgosAbiertos !== (resumen.ABIERTO ?? 0) ? " · desactualizada, corre el auditor" : ""}
+            </span>
+          </div>
+          {brief.resumen && (
+            <div className="space-y-1.5">
+              {brief.resumen.split("\n").filter((l) => l.trim()).map((linea, i) => {
+                const t = linea.trim();
+                const encabezado = /^\*\*(.+)\*\*$/.exec(t);
+                const vineta = /^[-•]\s+(.*)$/.exec(t);
+                const cuerpo = (vineta ? vineta[1] : t).replace(/\*\*(.+?)\*\*/g, "$1");
+                return encabezado ? (
+                  <p key={i} className="pt-1 text-[12.5px] font-semibold uppercase tracking-[0.02em] text-cos-ink-faint">
+                    {encabezado[1]}
+                  </p>
+                ) : (
+                  <p key={i} className="text-[13.5px] leading-relaxed text-cos-ink-soft">
+                    {vineta ? "· " : ""}{cuerpo}
+                  </p>
+                );
+              })}
+            </div>
+          )}
+          {/* Grupos deterministas: el conteo por causa raíz aunque la narrativa falle. */}
+          <div className="mt-3 flex flex-wrap gap-1.5 border-t border-cos-line-soft pt-3">
+            {brief.grupos.map((g) => (
+              <span
+                key={g.clave}
+                title={`${g.accion} (${g.fundamento})`}
+                className={`rounded-full px-2.5 py-1 text-[11.5px] font-medium ${
+                  g.severidad === "error"
+                    ? "bg-cos-red-tint text-cos-red-ink"
+                    : g.severidad === "warn"
+                      ? "bg-cos-amber-tint text-cos-amber-ink"
+                      : "bg-cos-slate-tint text-cos-ink-soft"
+                }`}
+              >
+                {catLabel(g.clave.split(".")[0] || "otros")} · {g.clave.split(".").slice(1).join(".") || g.clave} <b>{g.n}</b>
+              </span>
+            ))}
+          </div>
+        </Card>
       )}
 
       {hallazgos === null ? (

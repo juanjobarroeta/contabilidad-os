@@ -137,6 +137,8 @@ export interface AuditResult {
   evaluados: number;
   hallazgos: number;
   nuevos: number;
+  /** Abiertos que dejaron de disparar y se auto-resolvieron en esta corrida. */
+  autoResueltos: number;
 }
 
 /**
@@ -265,5 +267,11 @@ export async function runAuditForCompany(companyId: string, fechaIso?: string): 
     });
   }
 
-  return { companyId, evaluados: cfdis.length, hallazgos: hallazgos.length, nuevos };
+  return {
+    companyId,
+    evaluados: cfdis.length,
+    hallazgos: hallazgos.length,
+    nuevos,
+    autoResueltos: obsoletos.length,
+  };
 }
