@@ -1,0 +1,55 @@
+name: Contraste tablero vs declarado vs libros (manual)
+
+# ¿Cuál de los tres números es el real?
+#
+# El tablero dice que MARGOM pierde $34M en 2025 con utilidad BRUTA positiva de
+# $158M: la pérdida entera vive debajo de la línea bruta, en una estructura de
+# $192M. Desde los CFDIs no se distingue si eso es gasto de verdad o inventario
+# mal clasificado — y esa inferencia ya falló varias veces hoy.
+#
+# Hay dos fuentes que NO son inferencia, porque son lo que la empresa YA le dijo
+# al SAT: las declaraciones (ingresos y deducciones del ejercicio, firmadas) y
+# la balanza de diciembre (4xxx/5xxx/6xxx, la contabilidad del contador).
+#
+# Si los libros y lo declarado también dan pérdida, el software tiene razón y el
+# problema es del negocio. Si no, el software está mal y aquí sale la diferencia.
+#
+# No escribe nada.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa"
+        required: true
+        type: string
+      anio:
+        description: "Ejercicio a contrastar (YYYY)"
+        required: true
+        default: "2025"
+        type: string
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  contraste:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Pedir el contraste
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          ANIO: ${{ inputs.anio }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          curl -fsS --max-time 300 \
+            "${URL}/api/cron/contraste?companyId=${COMPANY_ID}&anio=${ANIO}" \
+            -H "x-cron-secret: ${CRON_SECRET}" | jq .
