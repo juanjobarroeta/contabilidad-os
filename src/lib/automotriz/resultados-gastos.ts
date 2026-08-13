@@ -181,7 +181,10 @@ export async function gastosDeOperacion(
       claves: [...(claves.get(l.cuenta) ?? new Map()).entries()]
         .map(([clave, v]) => ({ clave, ...v }))
         .sort((a, b) => b.monto - a.monto)
-        .slice(0, 8),
+        // 8 claves no alcanzan: en «Otros gastos» de MARGOM son 3,412 facturas
+        // y las 8 mayores cubrían el 40% — $15.6M sin ver, justo en la cubeta
+        // de descarte, que es donde hay que mirar.
+        .slice(0, 25),
     }));
   return {
     // Los anticipos NO entran al total: no son gasto del periodo.
