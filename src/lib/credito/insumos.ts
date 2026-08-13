@@ -11,6 +11,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { saldosFinDeMes } from "./saldos-banco";
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
 import { esPersonaFisicaRfc, pagosProvisionalesAcumulan } from "@/lib/fiscal/regimen-anual";
 import { desacumularIngresosDeclarados, type DeclaracionMensualInsumo, type InsumosCredito } from "./score";
@@ -123,7 +124,7 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
       : null;
 
   // Capacidad de pago: gastos facturados, nómina timbrada y flujos bancarios.
-  const [egresosRows, nomina, movimientos] = await Promise.all([
+  const [egresosRows, nomina, movimientos, lotesSaldo] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: hace12m } },
       select: { fecha: true, total: true },
@@ -136,6 +137,11 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
       where: { companyId, fecha: { gte: hace12m }, ...SIN_TRASPASOS_INTERNOS },
       select: { fecha: true, monto: true, saldo: true },
       orderBy: { fecha: "asc" },
+    }),
+    // Saldos declarados por los estados de cuenta subidos (el dato bueno).
+    prisma.importBatch.findMany({
+      where: { companyId, undoneAt: null, saldoFinal: { not: null } },
+      select: { periodo: true, bankAccountId: true, saldoFinal: true, createdAt: true },
     }),
   ]);
 
@@ -158,9 +164,14 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
     const porMes = [...porMesMap.entries()]
       .map(([periodo, v]) => ({ periodo, abonos: v.abonos, cargos: v.cargos }))
       .sort((a, b) => a.periodo.localeCompare(b.periodo));
-    const saldosFinMes = [...saldoMap.entries()]
-      .map(([periodo, saldo]) => ({ periodo, saldo }))
-      .sort((a, b) => a.periodo.localeCompare(b.periodo));
+    // El saldo de fin de mes sale del ESTADO DE CUENTA (ImportBatch), sumando
+    // todas las cuentas del periodo. El saldo corrido del último movimiento
+    // sólo cubre los meses sin estado: es opcional en el PDF y, con varias
+    // cuentas, reportaba el saldo de una sola — de ahí salían los negativos.
+    const saldosFinMes = saldosFinDeMes(lotesSaldo, saldoMap).map(({ periodo, saldo }) => ({
+      periodo,
+      saldo,
+    }));
     const n = Math.max(1, porMes.length);
     bancos = {
       mesesConDatos: porMes.length,
