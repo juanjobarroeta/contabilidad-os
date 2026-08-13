@@ -312,6 +312,26 @@ export interface AperturaLineaCodigo {
  *     Las cuentas agregadas de mayor/subcuenta duplicarían los saldos: el filtro
  *     de detalle se delega al llamador vía `incluir`.
  */
+/**
+ * Cómo se lee el importe de la balanza. NO es una preferencia: es una propiedad
+ * del archivo, y las dos convenciones existen en la práctica.
+ *
+ *   • "natural" — el importe es MAGNITUD y cada cuenta va de su propio lado.
+ *     Un pasivo de 100 se escribe 100 y es abono porque es acreedora.
+ *   • "signo"   — el importe ya trae el lado en el signo, independiente de la
+ *     naturaleza: positivo es cargo y negativo es abono. Un pasivo de 100 se
+ *     escribe −100.
+ *
+ * Elegir mal no descuadra un poco: descuadra por el DOBLE de todo lo que corre
+ * contra su naturaleza. Medido en MARGOM (balanza 2026-06, 438 hojas): 101
+ * cuentas contrarias — $27,860,445.33 deudoras con saldo acreedor y
+ * $3,701,389.84 acreedoras con saldo deudor— dan 2×27,860,445.33 −
+ * 2×3,701,389.84 = $48,318,110.98, que es el descuadre que reportaba el
+ * importador ($48,318,111.11) salvo redondeo. Leída por el signo, esa misma
+ * balanza cuadra a $0.13.
+ */
+export type ConvencionSaldo = "natural" | "signo";
+
 export function balanzaASaldosApertura(args: {
   cuentas: BalanzaCuentaParsed[];
   usar: "inicial" | "final";
@@ -319,20 +339,80 @@ export function balanzaASaldosApertura(args: {
   naturalezaPorCodigo: (numCta: string) => Naturaleza | null | undefined;
   /** Filtro opcional: incluir esta cuenta (p.ej. sólo cuentas de detalle). */
   incluir?: (numCta: string) => boolean;
+  /** Convención del archivo. Por defecto "natural", el comportamiento
+   *  histórico; `convencionQueCuadra` la deduce del propio documento. */
+  convencion?: ConvencionSaldo;
 }): AperturaLineaCodigo[] {
+  const convencion = args.convencion ?? "natural";
   const lineas: AperturaLineaCodigo[] = [];
   for (const c of args.cuentas) {
     if (args.incluir && !args.incluir(c.numCta)) continue;
     const nat = args.naturalezaPorCodigo(c.numCta);
     if (nat !== "D" && nat !== "A") continue;
 
-    const magnitud = args.usar === "inicial" ? c.saldoIni : c.saldoFin;
-    if (Math.abs(magnitud) < 0.005) continue;
+    const s = args.usar === "inicial" ? c.saldoIni : c.saldoFin;
+    if (Math.abs(s) < 0.005) continue;
 
-    lineas.push({ codigo: c.numCta, saldo: Math.abs(magnitud) });
+    // `construirApertura` recibe el saldo en signo NATURAL y decide el lado con
+    // (naturaleza === "D") === (saldo >= 0). Para que el lado lo mande el signo
+    // del documento basta invertir el de las acreedoras: así un saldo positivo
+    // acaba en cargo y uno negativo en abono, sea cual sea la naturaleza.
+    const saldo = convencion === "signo" ? (nat === "D" ? s : -s) : Math.abs(s);
+    lineas.push({ codigo: c.numCta, saldo });
   }
   return lineas;
 }
+
+/**
+ * Deduce del propio documento cuál de las dos convenciones usa: la que hace
+ * CUADRAR la partida doble. No hay que configurarla por empresa ni reconocer el
+ * sistema contable que la emitió — un balance cuadra o no cuadra, y esa es una
+ * propiedad aritmética que vale igual para cualquier distribuidor.
+ *
+ * Devuelve `elegida: null` cuando ninguna cuadra; entonces el problema no está
+ * en la lectura del signo, y se devuelven los totales de las dos para poder
+ * diagnosticarlo en vez de fingir un cuadre.
+ */
+export function convencionQueCuadra(args: {
+  cuentas: BalanzaCuentaParsed[];
+  usar: "inicial" | "final";
+  naturalezaPorCodigo: (numCta: string) => Naturaleza | null | undefined;
+  incluir?: (numCta: string) => boolean;
+  /** Tolerancia en pesos. El redondeo de una balanza real ronda el centavo. */
+  tolerancia?: number;
+}): {
+  elegida: ConvencionSaldo | null;
+  natural: { cargos: number; abonos: number; diferencia: number };
+  signo: { cargos: number; abonos: number; diferencia: number };
+} {
+  const tol = args.tolerancia ?? 1;
+  const totales = (convencion: ConvencionSaldo) => {
+    let cargos = 0;
+    let abonos = 0;
+    for (const l of balanzaASaldosApertura({ ...args, convencion })) {
+      const nat = args.naturalezaPorCodigo(l.codigo);
+      // Mismo criterio que construirApertura, para medir lo que de verdad se
+      // va a postear y no una aproximación.
+      if ((nat === "D") === (l.saldo >= 0)) cargos = redondea2(cargos + Math.abs(l.saldo));
+      else abonos = redondea2(abonos + Math.abs(l.saldo));
+    }
+    return { cargos, abonos, diferencia: redondea2(cargos - abonos) };
+  };
+
+  const natural = totales("natural");
+  const signo = totales("signo");
+  const cuadra = (t: { diferencia: number }) => Math.abs(t.diferencia) <= tol;
+  // Si las dos cuadran son la misma (pasa cuando no hay ningún saldo negativo);
+  // se prefiere "natural" por ser el comportamiento histórico.
+  const elegida: ConvencionSaldo | null = cuadra(natural)
+    ? "natural"
+    : cuadra(signo)
+      ? "signo"
+      : null;
+  return { elegida, natural, signo };
+}
+
+const redondea2 = (n: number) => Math.round(n * 100) / 100;
 
 // ── Diagnóstico del asiento de apertura (PURO) ───────────────────────────────
 
