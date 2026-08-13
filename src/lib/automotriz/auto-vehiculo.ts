@@ -747,11 +747,11 @@ async function registrarNotaCredito(
 ): Promise<boolean> {
   const conMonto = items.filter((i) => i.importe > 0);
   if (conMonto.length === 0) return false;
-  const yaHay = await db.vehiculoCosto.findFirst({
-    where: { vehiculoId, invoiceId: args.invoiceId },
-    select: { id: true },
+  // Mismo reemplazo que en registrarCostosCompra: saltarse la factura cuando ya
+  // tiene filas congela el resultado del parseo que corrió primero.
+  await db.vehiculoCosto.deleteMany({
+    where: { vehiculoId, invoiceId: args.invoiceId, autoCreado: true },
   });
-  if (yaHay) return false;
   await db.vehiculoCosto.createMany({
     data: conMonto.map((i) => ({
       vehiculoId,
@@ -763,6 +763,7 @@ async function registrarNotaCredito(
       monto: lado === "PROVEEDOR" ? -i.importe : i.importe,
       fecha: args.fecha,
       invoiceId: args.invoiceId,
+      autoCreado: true,
     })),
   });
   return true;
@@ -770,8 +771,10 @@ async function registrarNotaCredito(
 
 /**
  * Registra traslado/seguro/accesorios de una factura de compra como
- * VehiculoCosto. Idempotente por (vehiculoId, invoiceId): si ya hay costos de
- * ese CFDI en la unidad, no duplica.
+ * VehiculoCosto. Idempotente por (vehiculoId, invoiceId) POR REEMPLAZO: vuelve
+ * a derivar la factura y sustituye lo que el propio derivador había escrito, de
+ * modo que una mejora del parseo corrige la historia en vez de sedimentar
+ * encima. Los costos capturados a mano no se tocan.
  */
 async function registrarCostosCompra(
   db: Db,
@@ -780,11 +783,25 @@ async function registrarCostosCompra(
   otros: ReturnType<typeof extraerDatosVehiculoCfdi>["otrosConceptos"]
 ): Promise<boolean> {
   if (otros.length === 0) return false;
-  const yaHay = await db.vehiculoCosto.findFirst({
-    where: { vehiculoId, invoiceId: args.invoiceId },
-    select: { id: true },
+
+  // REEMPLAZA, no se salta. El candado anterior era «si ya hay una fila de esta
+  // unidad para esta factura, no toques nada», y con eso una mejora del parseo
+  // nunca corregía la historia: escribía filas correctas en las unidades que no
+  // tenían y dejaba intactas las mal repartidas. Medido en MARGOM: 86 facturas
+  // con $31.2M atribuidos de más, y los importes delatan tres generaciones de
+  // extracción de VIN sobre la MISMA factura de $25,810,344.83 —una fila con la
+  // factura entera (halló 1 VIN), otras de $1,720,689.65 (halló 15) y las de
+  // hoy de $860,344.83 (halla 30).
+  //
+  // El reparto en sí siempre estuvo bien: una sola pasada nunca sobre-atribuye,
+  // reparta entre 1 o entre 30. Lo que faltaba era poder repetir la pasada.
+  //
+  // Sólo se borran las filas que escribió el derivador (autoCreado). Un costo
+  // capturado a mano puede traer invoiceId —la UI deja ligarlo a un CFDI— y
+  // borrarlo sería tirar trabajo de una persona.
+  await db.vehiculoCosto.deleteMany({
+    where: { vehiculoId, invoiceId: args.invoiceId, autoCreado: true },
   });
-  if (yaHay) return false;
 
   await db.vehiculoCosto.createMany({
     data: otros
@@ -796,6 +813,7 @@ async function registrarCostosCompra(
         monto: c.importe,
         fecha: args.fecha,
         invoiceId: args.invoiceId,
+        autoCreado: true,
       })),
   });
   return true;

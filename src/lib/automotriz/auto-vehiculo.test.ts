@@ -75,6 +75,20 @@ function fakeDb(catalogo: Record<string, { empresa: string; modelo: string; vers
         for (const d of data) costos.push({ ...d });
         return { count: data.length };
       },
+      // El derivador REEMPLAZA sus propias filas al volver a derivar una
+      // factura; respeta autoCreado para no tirar costos capturados a mano.
+      deleteMany: async ({ where }: any) => {
+        let n = 0;
+        for (let i = costos.length - 1; i >= 0; i--) {
+          const c = costos[i];
+          if (where.vehiculoId != null && c.vehiculoId !== where.vehiculoId) continue;
+          if (where.invoiceId != null && c.invoiceId !== where.invoiceId) continue;
+          if (where.autoCreado != null && (c.autoCreado ?? false) !== where.autoCreado) continue;
+          costos.splice(i, 1);
+          n++;
+        }
+        return { count: n };
+      },
     },
     _expediente: expediente,
     vehiculoCfdi: {
@@ -307,7 +321,7 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — conceptos que MENCIONAN un VIN 
     const r3 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
       ...base, invoiceId: "inv-flete", tipo: "EGRESO", rawXml: cfdiFlete(),
     });
-    expect(r3?.actualizados ?? 0).toBe(0);
+    // Idempotente POR REEMPLAZO: reporta trabajo pero no duplica.
     expect(db._costos.filter((c) => c.invoiceId === "inv-flete")).toHaveLength(1);
   });
 
@@ -553,11 +567,13 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — notas de crédito y número de 
     const nc = db._costos.find((c) => c.invoiceId === "inv-nc");
     expect(nc).toMatchObject({ monto: -15000, tipo: "OTRO" });
     // La utilidad reconstruida ya incluye el rebate (costos suman negativo).
-    // Idempotente:
+    // Idempotente POR REEMPLAZO: volver a derivar sustituye la fila del
+    // derivador en vez de saltarse la factura. Reporta trabajo —eso es lo que
+    // permite que una mejora del parseo corrija la historia— pero NO duplica,
+    // que es el invariante que importa.
     const r2 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
       ...base, invoiceId: "inv-nc", tipo: "EGRESO", rawXml: notaCredito(),
     });
-    expect(r2?.actualizados).toBe(0);
     expect(db._costos.filter((c) => c.invoiceId === "inv-nc")).toHaveLength(1);
   });
 
@@ -575,11 +591,10 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — notas de crédito y número de 
     const nc = db._costos.find((c) => c.invoiceId === "inv-nc-cli");
     expect(nc).toMatchObject({ monto: 15000, tipo: "NC_CLIENTE" });
     expect([...db._vehiculos.values()][0].estado).toBe("DISPONIBLE");
-    // Idempotente:
-    const r2 = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+    // Idempotente POR REEMPLAZO (ver arriba): no duplica.
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
       ...base, invoiceId: "inv-nc-cli", tipo: "INGRESO", rawXml: notaCredito(),
     });
-    expect(r2?.actualizados).toBe(0);
     expect(db._costos.filter((c) => c.invoiceId === "inv-nc-cli")).toHaveLength(1);
   });
 

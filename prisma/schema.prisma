@@ -4896,6 +4896,17 @@ model VehiculoCosto {
   monto     Float // sin IVA
   fecha     DateTime
   invoiceId String? // CFDI del gasto cuando existe
+  /**
+   * Lo escribió el derivador desde un CFDI (true) o lo capturó una persona
+   * (false). Sin esta marca no se puede volver a derivar una factura sin
+   * arriesgarse a borrar un costo que alguien tecleó a mano — y no volver a
+   * derivarla es justo lo que dejó $31.2M de filas rancias en MARGOM: cada
+   * mejora del parseo de VIN escribía filas correctas donde no había y dejaba
+   * intactas las viejas, hasta acumular tres generaciones sobre la misma
+   * factura ($25,810,344.83 cuando halló 1 VIN, $1,720,689.65 con 15,
+   * $860,344.83 con 30).
+   */
+  autoCreado Boolean @default(false)
 
   vehiculo Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
   invoice  Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
