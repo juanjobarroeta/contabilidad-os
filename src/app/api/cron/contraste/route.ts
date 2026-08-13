@@ -81,6 +81,22 @@ function resultadoDeBalanza(xml: string) {
   const ingresos = mag("4");
   const costos = mag("5");
   const gastos = mag("6");
+
+  // Las cuentas de INGRESO una por una. La brecha contra el tablero es de
+  // $189.2M —casi el 9% de las ventas— y saber que «faltan ingresos» no dice
+  // CUÁLES. Aquí es donde se ve si lo que falta son devoluciones y descuentos
+  // (contra-ingreso, que el contador netea y el tablero no), anticipos, o una
+  // línea de negocio entera que el derivador no reconoce.
+  //
+  // Se separan las de saldo deudor: en la familia 4 un saldo del lado contrario
+  // es contra-ingreso (devoluciones, descuentos, bonificaciones sobre ventas) y
+  // sumarlo junto con las demás esconde justo lo que se está buscando.
+  const cuentasIngreso = bal.cuentas
+    .filter((c) => !padres.has(c.numCta) && c.numCta.trim().charAt(0) === "4")
+    .map((c) => ({ numCta: c.numCta, saldo: r2(c.saldoFin) }))
+    .filter((c) => Math.abs(c.saldo) >= 0.005);
+  const contraIngreso = cuentasIngreso.filter((c) => c.saldo > 0);
+
   return {
     periodo: { anio: bal.anio, mes: bal.mes },
     porFamilia: Object.fromEntries(
@@ -91,6 +107,16 @@ function resultadoDeBalanza(xml: string) {
     gastos,
     utilidadBruta: r2(ingresos - costos),
     utilidadOperacion: r2(ingresos - costos - gastos),
+    detalleIngresos: {
+      cuentas: cuentasIngreso.length,
+      // De mayor a menor por magnitud: las que mueven la aguja van arriba.
+      mayores: [...cuentasIngreso].sort((a, b) => Math.abs(b.saldo) - Math.abs(a.saldo)).slice(0, 30),
+      contraIngreso: {
+        cuentas: contraIngreso.length,
+        total: r2(contraIngreso.reduce((s, c) => s + c.saldo, 0)),
+        detalle: contraIngreso.sort((a, b) => b.saldo - a.saldo).slice(0, 15),
+      },
+    },
   };
 }
 
