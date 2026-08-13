@@ -61,7 +61,9 @@ export interface DiagnosticoUnidades {
   sinXml: number;
 }
 
-const VIN_RE = /\b[A-HJ-NPR-Z0-9]{17}\b/g;
+// Corridas de 17+ (no \b…\b): un VIN pegado a la palabra siguiente también
+// debe quedar enmascarado en las muestras, no sólo el delimitado.
+const VIN_RE = /[A-HJ-NPR-Z0-9]{17,}/g;
 
 /**
  * Enmascara VINs y recorta. Las descripciones vienen de facturas de terceros;

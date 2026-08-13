@@ -61,12 +61,37 @@ export interface OtroConcepto {
  */
 export const UMBRAL_UNIDAD_SIN_COMPLEMENTO = 50_000;
 
+// Corrida máxima de caracteres de clase VIN, anclada a la izquierda como \b
+// (el vecino izquierdo no puede ser alfanumérico) pero SIN frontera derecha.
+// Por qué: los CFDIs de seminuevos de Margom pegan el VIN a la palabra
+// siguiente — «RAM 3C6LRVCG6RE119028VENTA DE VEHICULO USADO…» — y con \b…\b
+// esa aparición no cierra nunca: 74 conceptos / $41.4M en 2025 extraían CERO
+// VINs por esto (medido en producción, 2026-08).
+const VIN_RUN_RE = /(?<![A-Z0-9_])[A-HJ-NPR-Z0-9]{17,}/g;
+
+// Corrida más larga que 17: se acepta el prefijo de 17 SOLO si la cola es una
+// palabra pegada conocida. Validado contra producción (2026-08): recupera
+// 74/74 conceptos pegados con CERO falsos positivos sobre las 742 líneas de
+// riesgo (NRU de CFE, peajes, cuentas prediales — corridas largas que un corte
+// ciego a 17 aceptaría). La alternativa por dígito verificador (ISO 3779) se
+// probó y se descartó: 316 falsos aceptes en ese mismo corpus. La cola «1»
+// de un VIN con dígito de más («…TM0007571») NO está en la lista a propósito:
+// cortar ahí inventaría un VIN plausible pero equivocado.
+const COLA_PEGADA_RE = /^(VENTA|VEHICULO|CAMION|USADO|UNIDAD|SERIE|MOTOR)/;
+
 /** Todos los VINs válidos y distintos mencionados en un texto libre. */
 export function vinsDesdeTexto(texto: string | null | undefined): string[] {
   if (!texto) return [];
   const out = new Set<string>();
-  for (const m of texto.toUpperCase().matchAll(/\b([A-HJ-NPR-Z0-9]{17})\b/g)) {
-    if (esVinValido(m[1])) out.add(m[1]);
+  for (const m of texto.toUpperCase().matchAll(VIN_RUN_RE)) {
+    const corrida = m[0];
+    const candidato =
+      corrida.length === 17
+        ? corrida
+        : COLA_PEGADA_RE.test(corrida.slice(17))
+          ? corrida.slice(0, 17)
+          : null;
+    if (candidato && esVinValido(candidato)) out.add(candidato);
   }
   return [...out];
 }
