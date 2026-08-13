@@ -67,10 +67,20 @@ function resultadoDeBalanza(xml: string) {
     porFamilia.set(familia, acc);
   }
 
-  const f = (d: string) => r2(porFamilia.get(d)?.saldo ?? 0);
-  const ingresos = f("4");
-  const costos = f("5");
-  const gastos = f("6");
+  // La balanza trae los saldos CON SIGNO por naturaleza: las cuentas
+  // acreedoras (2 pasivo, 3 capital, 4 ingresos) salen negativas y las deudoras
+  // (1 activo, 5 costos, 6 gastos) positivas. Medido en AMA170817NK1 2025-12:
+  //   1: +485,326,593   2: −453,437,767   3: −18,992,047
+  //   4: −2,131,817,385  5: +1,932,421,872  6: +170,488,523
+  //
+  // La primera versión de esto restaba el costo POSITIVO de un ingreso NEGATIVO
+  // y publicaba una «utilidad bruta» de −$4,064,239,257, que no es un número de
+  // nada. Se toma la MAGNITUD de cada familia y el signo se pone aquí, que
+  // además aguanta si otra empresa entrega la balanza sin signo.
+  const mag = (d: string) => r2(Math.abs(porFamilia.get(d)?.saldo ?? 0));
+  const ingresos = mag("4");
+  const costos = mag("5");
+  const gastos = mag("6");
   return {
     periodo: { anio: bal.anio, mes: bal.mes },
     porFamilia: Object.fromEntries(
@@ -176,6 +186,34 @@ async function handle(req: Request) {
     libros = { error: e instanceof Error ? e.message : String(e) };
   }
 
+  // La brecha, desglosada. Sin esto hay que restar a mano y ahí es donde se
+  // cuelan los errores — el primero fue mío, publicando una utilidad bruta de
+  // −$4,064M por no mirar el signo.
+  //
+  // Medido en MARGOM 2025: los libros dan +$28,906,990 y la anual presentada
+  // una base gravable de +$24,351,324, mientras el tablero muestra
+  // −$34,046,291. Los libros y lo declarado coinciden en que hubo UTILIDAD; el
+  // tablero es el que está mal, por $62.9M. Y el motivo no es el gasto: al
+  // tablero le faltan $189.2M de INGRESO, y sólo $22.1M de la brecha vienen de
+  // estructura de más.
+  const L = libros as { ingresos?: number; costos?: number; gastos?: number; utilidadOperacion?: number };
+  const brecha =
+    typeof L?.ingresos === "number"
+      ? {
+          ingreso: r2(tablero.ingreso - L.ingresos),
+          costo: r2(tablero.ingreso - tablero.utilidadBruta - (L.costos ?? 0)),
+          gasto: r2(tablero.estructura - (L.gastos ?? 0)),
+          utilidadOperacion: r2(tablero.utilidadOperacion - (L.utilidadOperacion ?? 0)),
+          // Quién tiene razón, dicho sin rodeos.
+          veredicto:
+            (L.utilidadOperacion ?? 0) > 0 && tablero.utilidadOperacion < 0
+              ? "LIBROS DAN UTILIDAD Y EL TABLERO PÉRDIDA — el tablero está mal"
+              : (L.utilidadOperacion ?? 0) < 0 && tablero.utilidadOperacion < 0
+                ? "los dos dan pérdida — el problema es del negocio, no del software"
+                : "revisar caso por caso",
+        }
+      : null;
+
   return NextResponse.json({
     ok: true,
     companyId,
@@ -186,6 +224,7 @@ async function handle(req: Request) {
     tablero,
     declarado,
     libros,
+    brecha,
   });
 }
 
