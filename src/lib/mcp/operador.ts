@@ -213,7 +213,20 @@ export function registrarToolsOperador(server: McpServerLike): void {
               acumulable: ajuste.acumulable,
               deducible: ajuste.deducible,
               advertencias: ajuste.advertencias,
-              cuentasConSaldo: ajuste.cuentas.filter((c) => c.clase !== "EXCLUIDA" && c.promedio !== 0).length,
+              // Las cuentas que MUEVEN la cifra, para poder cotejarla sin abrir
+              // la app: un ajuste grande casi siempre se explica por dos o tres
+              // saldos, y si alguno no debería estar ahí se ve de inmediato.
+              topCuentas: ajuste.cuentas
+                .filter((c) => c.clase !== "EXCLUIDA" && c.promedio !== 0)
+                .sort((a, b) => Math.abs(b.promedio) - Math.abs(a.promedio))
+                .slice(0, 15)
+                .map((c) => ({
+                  cuenta: c.clave,
+                  nombre: c.nombre,
+                  clase: c.clase,
+                  promedio: Math.round(c.promedio),
+                  revisar: c.revisar,
+                })),
             }
           : "No aplica: el ajuste anual por inflación es del Título II (personas morales).",
       });

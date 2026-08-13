@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   auditarAjusteInflacion,
+  TOLERANCIA_DESCUADRE,
   UMBRAL_MONTO,
   type AjusteInflacionPendiente,
 } from "./ajuste-inflacion";
@@ -14,6 +15,7 @@ const base: AjusteInflacionPendiente = {
   deducible: 0,
   mesesSinPostear: [],
   statusDeclaracion: null,
+  descuadreRelativo: 0,
 };
 
 const con = (over: Partial<AjusteInflacionPendiente>) => auditarAjusteInflacion({ ...base, ...over });
@@ -45,6 +47,23 @@ describe("auditarAjusteInflacion", () => {
     // Preferimos no decir nada a levantar un hallazgo con una cifra mal formada
     // — un falso positivo aquí manda a alguien a presentar una complementaria.
     expect(con({ mesesSinPostear: [11, 12] })).toEqual([]);
+  });
+
+  it("con el balance descuadrado NO habla, por grande que sea la cifra", () => {
+    // Salió de producción: una empresa con el libro descuadrado producía un
+    // ajuste de ocho cifras a partir de cuatro cuentas con saldos de miles de
+    // millones. Si la ecuación contable no cuadra, esos saldos no describen a
+    // la empresa y el "ajuste" es ruido con dos decimales — y este hallazgo
+    // puede mandar a alguien a presentar una complementaria.
+    expect(con({ descuadreRelativo: 0.5, acumulable: 15_649_058 })).toEqual([]);
+    expect(con({ descuadreRelativo: null })).toEqual([]);
+  });
+
+  it("un descuadre de redondeo no impide el hallazgo", () => {
+    // La tolerancia existe para el centavo, no para tapar un libro roto.
+    expect(con({ descuadreRelativo: 0.0001 })).toHaveLength(1);
+    expect(con({ descuadreRelativo: TOLERANCIA_DESCUADRE })).toHaveLength(1);
+    expect(con({ descuadreRelativo: TOLERANCIA_DESCUADRE * 2 })).toEqual([]);
   });
 
   it("por debajo del umbral es ruido, no hallazgo", () => {

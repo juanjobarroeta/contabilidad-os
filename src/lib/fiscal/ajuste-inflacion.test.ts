@@ -223,6 +223,48 @@ describe("calcularAjusteInflacion (Art. 44)", () => {
     expect(limpia.advertencias.join(" ")).not.toMatch(/hechos fuera del catálogo/i);
   });
 
+  it("no cuenta DOS VECES la cuenta madre y sus subcuentas", () => {
+    // El caso que salió al mirar producción: si el catálogo trae la cuenta de
+    // agrupación (201, sin subcuenta) CON saldo además de sus hijas, cada peso
+    // entra dos veces. Y como el ajuste sale de la DIFERENCIA entre promedios,
+    // el error no se cancela: se amplifica.
+    const r = calcularAjusteInflacion({
+      year: 2025,
+      factorAjuste: factorFijo,
+      cuentas: [
+        plana("102", "102.01", 100_000),
+        plana("201", null, 300_000), // madre, con el saldo agregado
+        plana("201", "201.01", 300_000), // hija, con el mismo saldo
+      ],
+    });
+    expect(r.promedioDeudas).toBe(300_000); // no 600,000
+    expect(r.acumulable).toBeCloseTo(10_000, 6);
+    const madre = r.cuentas.find((c) => c.clave === "201")!;
+    expect(madre.clase).toBe("EXCLUIDA");
+    expect(madre.fundamento).toMatch(/agrupación/i);
+  });
+
+  it("una cuenta que sólo existe a nivel de grupo SÍ cuenta", () => {
+    // Excluir toda cuenta sin subcuenta tiraría saldos legítimos: sólo se
+    // excluye la madre cuando alguna hija trae saldo.
+    const r = calcularAjusteInflacion({
+      year: 2025,
+      factorAjuste: factorFijo,
+      cuentas: [plana("102", "102.01", 100_000), plana("201", null, 300_000)],
+    });
+    expect(r.promedioDeudas).toBe(300_000);
+    expect(r.cuentas.find((c) => c.clave === "201")!.clase).toBe("DEUDA");
+  });
+
+  it("una hija en CERO no desactiva a su madre", () => {
+    const r = calcularAjusteInflacion({
+      year: 2025,
+      factorAjuste: factorFijo,
+      cuentas: [plana("201", null, 300_000), plana("201", "201.01", 0)],
+    });
+    expect(r.promedioDeudas).toBe(300_000);
+  });
+
   it("caso realista: el ajuste NO es cero, que es justo lo que hoy se declara", () => {
     // Empresa apalancada típica: se financia con proveedores y créditos
     // bancarios. Hoy la anual sale con ajuste 0 y pierde ingreso acumulable.
