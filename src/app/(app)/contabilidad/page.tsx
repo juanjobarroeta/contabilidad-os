@@ -803,6 +803,24 @@ function ContabilidadElectronicaPanel({
         mesLabel={`${MESES[month - 1]} ${year}`}
       />
 
+      {/* La entrega completa en un archivo. Antes había que bajar cada pieza de
+          su propia pantalla y armar la carpeta a mano, mes por mes. */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-card border border-cos-brand/30 bg-cos-brand-tint px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-cos-ink">Paquete del mes</p>
+          <p className="text-[13px] text-cos-ink-soft">
+            Los XML del SAT, los estados financieros en Excel y la DIOT en un solo zip, con un
+            LEEME que dice qué trae y qué falta.
+          </p>
+        </div>
+        <a
+          href={`/api/contabilidad/paquete?${qs}`}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-medium text-white hover:bg-cos-brand-deep"
+        >
+          <Download className="h-3.5 w-3.5" /> Descargar paquete
+        </a>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {entregables.map(({ key, label, desc, Icon, href, note }) => (
           <div key={key} className="flex flex-col rounded-card border border-cos-line bg-cos-card p-4">
