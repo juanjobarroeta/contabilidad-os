@@ -6,7 +6,12 @@ import {
   masReciente,
   periodoDe,
 } from "@/lib/contabilidad/ce-import-syntage";
-import { naturalezaPorAritmetica, parseBalanza } from "@/lib/contabilidad/ce-import";
+import {
+  diagnosticoApertura,
+  naturalezaPorAritmetica,
+  padresDeBalanza,
+  parseBalanza,
+} from "@/lib/contabilidad/ce-import";
 import { naturalezaPorTipo, type Naturaleza } from "@/lib/contabilidad/coe-saldos";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -227,6 +232,10 @@ async function handle(req: Request) {
   const companyId = params.get("companyId");
   const peek = params.get("peek") === "1";
   const conBalanza = params.get("balanza") === "1";
+  // El desglose del descuadre de la apertura SÍ lleva importes (es todo el
+  // punto: decir dónde se van los pesos). Es contabilidad agregada de la
+  // propia empresa, no datos de terceros, y va detrás del mismo CRON_SECRET.
+  const conApertura = params.get("apertura") === "1";
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
   const company = await prisma.company.findUnique({
@@ -286,17 +295,30 @@ async function handle(req: Request) {
               where: { companyId, isActive: true },
               select: { cuentaSAT: true, subcuenta: true, tipo: true, naturaleza: true },
             });
+            const catalogo = accounts.map((a) => ({
+              codigo: a.subcuenta ?? a.cuentaSAT,
+              naturaleza: (a.naturaleza as Naturaleza | null) ?? naturalezaPorTipo(a.tipo),
+            }));
             balanza = {
-              ...informeBalanza(
-                doc.xml,
-                accounts.map((a) => ({
-                  codigo: a.subcuenta ?? a.cuentaSAT,
-                  naturaleza: (a.naturaleza as Naturaleza | null) ?? naturalezaPorTipo(a.tipo),
-                })),
-              ),
+              ...informeBalanza(doc.xml, catalogo),
               archivo: doc.nombre,
               registro: periodoDe(rec),
             };
+            if (conApertura) {
+              // Se reproduce EXACTAMENTE la selección de importarBalanza: misma
+              // regla de jerarquía y mismo catálogo. Si aquí cuadra y allá no,
+              // la diferencia está en el importador, no en los datos.
+              const bal = parseBalanza(doc.xml);
+              const padres = padresDeBalanza(bal.cuentas.map((c) => c.numCta));
+              const nat = new Map(catalogo.map((c) => [c.codigo, c.naturaleza]));
+              balanza.apertura = diagnosticoApertura({
+                cuentas: bal.cuentas,
+                usar: "final",
+                esPadre: (c) => padres.has(c),
+                enCatalogo: (c) => nat.has(c),
+                naturalezaPorCodigo: (c) => nat.get(c),
+              });
+            }
           }
         }
       }

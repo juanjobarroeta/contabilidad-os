@@ -10,7 +10,13 @@ name: Inspeccionar Contabilidad Electrónica (manual, por empresa)
 # Existe como workflow por lo mismo que el backfill: el endpoint se autentica
 # con CRON_SECRET y aquí el secreto ya vive en el repo.
 #
-# No escribe nada. Salen conteos y códigos de cuenta — nunca importes.
+# Con `apertura: true` añade el desglose del descuadre del asiento de apertura:
+# reproduce la MISMA selección de cuentas que hace importarBalanza y reparte la
+# diferencia en cubetas con nombre (excluidas por padre, por catálogo, por
+# naturaleza; y saldos que corren contra su naturaleza, que el valor absoluto
+# postea del lado equivocado). Ése sí lleva importes: es todo el punto.
+#
+# No escribe nada. Sin `apertura` salen conteos y códigos de cuenta, sin importes.
 
 on:
   workflow_dispatch:
@@ -24,6 +30,16 @@ on:
         required: false
         default: true
         type: boolean
+      apertura:
+        description: "Desglosar por qué NO cuadra el asiento de apertura (lleva importes)"
+        required: false
+        default: false
+        type: boolean
+      jqFiltro:
+        description: "Filtro jq sobre la respuesta (ej: .entidades[0].balanza.apertura)"
+        required: false
+        default: "."
+        type: string
       baseUrl:
         description: "URL del despliegue a golpear"
         required: false
@@ -41,6 +57,8 @@ jobs:
           BASE_URL: ${{ inputs.baseUrl }}
           COMPANY_ID: ${{ inputs.companyId }}
           CON_BALANZA: ${{ inputs.balanza }}
+          CON_APERTURA: ${{ inputs.apertura }}
+          JQ_FILTRO: ${{ inputs.jqFiltro }}
         run: |
           set -euo pipefail
           URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
@@ -48,7 +66,8 @@ jobs:
 
           Q="companyId=${COMPANY_ID}"
           if [ "${CON_BALANZA}" = "true" ]; then Q="${Q}&balanza=1"; fi
+          if [ "${CON_APERTURA}" = "true" ]; then Q="${Q}&apertura=1"; fi
 
           # El endpoint baja XML del SAT vía Syntage: 120s de presupuesto propio.
           curl -fsS --max-time 300 "${URL}/api/cron/ce-inspect?${Q}" \
-            -H "x-cron-secret: ${CRON_SECRET}" | jq .
+            -H "x-cron-secret: ${CRON_SECRET}" | jq "${JQ_FILTRO:-.}"

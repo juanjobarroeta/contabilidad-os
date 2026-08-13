@@ -333,3 +333,124 @@ export function balanzaASaldosApertura(args: {
   }
   return lineas;
 }
+
+// ── Diagnóstico del asiento de apertura (PURO) ───────────────────────────────
+
+export interface DiagnosticoApertura {
+  cuentas: number;
+  /** Suma que vería postApertura HOY, con la regla de magnitud absoluta. */
+  seleccion: { lineas: number; cargos: number; abonos: number; diferencia: number };
+  /** La misma suma respetando el signo del saldo. Si ésta cuadra y la otra no,
+   *  el defecto es el valor absoluto, no la selección de cuentas. */
+  conSigno: { cargos: number; abonos: number; diferencia: number };
+  /** Cuentas cuyo saldo corre CONTRA su naturaleza (saldo negativo en la
+   *  balanza). Son las únicas en las que las dos sumas de arriba difieren. */
+  contrarias: {
+    cuentas: number;
+    /** Σ|saldo| de las de naturaleza D y de las A: la diferencia entre ambas,
+     *  por dos, es exactamente lo que el valor absoluto descuadra. */
+    montoD: number;
+    montoA: number;
+    ejemplos: Array<{ codigo: string; naturaleza: Naturaleza; saldo: number }>;
+  };
+  /** Dinero que NO llega al asiento, por el motivo que lo deja fuera. */
+  excluidas: {
+    porPadre: { cuentas: number; monto: number };
+    porCatalogo: { cuentas: number; monto: number; ejemplos: string[] };
+    porNaturaleza: { cuentas: number; monto: number; ejemplos: string[] };
+  };
+  /** Lo incluido, por familia (primer dígito). Localiza el hueco de un vistazo. */
+  porFamilia: Array<{ familia: string; cuentas: number; cargos: number; abonos: number }>;
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Explica, peso por peso, por qué el asiento de apertura no cuadra.
+ *
+ * `postApertura` sólo dice «cargos X vs abonos Y»; con eso no se puede saber si
+ * sobran cuentas, si faltan, o si están del lado equivocado. Esta función
+ * reproduce la MISMA selección que hace `importarBalanza` y reparte el descuadre
+ * en cubetas con nombre, para no tener que adivinar cuál de los candidatos es.
+ *
+ * Función PURA: no toca la BD ni la red. El llamador le pasa la jerarquía y el
+ * catálogo ya resueltos.
+ */
+export function diagnosticoApertura(args: {
+  cuentas: BalanzaCuentaParsed[];
+  usar: "inicial" | "final";
+  esPadre: (numCta: string) => boolean;
+  enCatalogo: (numCta: string) => boolean;
+  naturalezaPorCodigo: (numCta: string) => Naturaleza | null | undefined;
+}): DiagnosticoApertura {
+  const sel = { lineas: 0, cargos: 0, abonos: 0 };
+  const firmado = { cargos: 0, abonos: 0 };
+  const contra = { cuentas: 0, montoD: 0, montoA: 0 };
+  const ejemplosContra: Array<{ codigo: string; naturaleza: Naturaleza; saldo: number }> = [];
+  const exPadre = { cuentas: 0, monto: 0 };
+  const exCatalogo = { cuentas: 0, monto: 0, ejemplos: [] as string[] };
+  const exNaturaleza = { cuentas: 0, monto: 0, ejemplos: [] as string[] };
+  const familias = new Map<string, { cuentas: number; cargos: number; abonos: number }>();
+
+  for (const c of args.cuentas) {
+    const saldo = args.usar === "inicial" ? c.saldoIni : c.saldoFin;
+    if (Math.abs(saldo) < 0.005) continue;
+
+    if (args.esPadre(c.numCta)) {
+      exPadre.cuentas++;
+      exPadre.monto = r2(exPadre.monto + Math.abs(saldo));
+      continue;
+    }
+    if (!args.enCatalogo(c.numCta)) {
+      exCatalogo.cuentas++;
+      exCatalogo.monto = r2(exCatalogo.monto + Math.abs(saldo));
+      if (exCatalogo.ejemplos.length < 20) exCatalogo.ejemplos.push(c.numCta);
+      continue;
+    }
+    const nat = args.naturalezaPorCodigo(c.numCta);
+    if (nat !== "D" && nat !== "A") {
+      exNaturaleza.cuentas++;
+      exNaturaleza.monto = r2(exNaturaleza.monto + Math.abs(saldo));
+      if (exNaturaleza.ejemplos.length < 20) exNaturaleza.ejemplos.push(c.numCta);
+      continue;
+    }
+
+    // Lo que hace HOY: la magnitud va siempre del lado de la naturaleza.
+    sel.lineas++;
+    const mag = Math.abs(saldo);
+    if (nat === "D") sel.cargos = r2(sel.cargos + mag);
+    else sel.abonos = r2(sel.abonos + mag);
+
+    // Lo que debería hacer: un saldo negativo corre contra la naturaleza y va
+    // del lado contrario.
+    const debe = (nat === "D") === saldo >= 0;
+    if (debe) firmado.cargos = r2(firmado.cargos + mag);
+    else firmado.abonos = r2(firmado.abonos + mag);
+
+    if (saldo < 0) {
+      contra.cuentas++;
+      if (nat === "D") contra.montoD = r2(contra.montoD + mag);
+      else contra.montoA = r2(contra.montoA + mag);
+      if (ejemplosContra.length < 20)
+        ejemplosContra.push({ codigo: c.numCta, naturaleza: nat, saldo: r2(saldo) });
+    }
+
+    const fam = c.numCta.trim().charAt(0) || "?";
+    const f = familias.get(fam) ?? { cuentas: 0, cargos: 0, abonos: 0 };
+    f.cuentas++;
+    if (nat === "D") f.cargos = r2(f.cargos + mag);
+    else f.abonos = r2(f.abonos + mag);
+    familias.set(fam, f);
+  }
+
+  return {
+    cuentas: args.cuentas.length,
+    seleccion: { ...sel, diferencia: r2(sel.cargos - sel.abonos) },
+    conSigno: { ...firmado, diferencia: r2(firmado.cargos - firmado.abonos) },
+    contrarias: { ...contra, ejemplos: ejemplosContra },
+    excluidas: { porPadre: exPadre, porCatalogo: exCatalogo, porNaturaleza: exNaturaleza },
+    porFamilia: [...familias.entries()]
+      .map(([familia, v]) => ({ familia, ...v }))
+      .sort((a, b) => a.familia.localeCompare(b.familia)),
+  };
+}
