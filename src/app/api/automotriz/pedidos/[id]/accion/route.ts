@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { ejecutarVentaUnidad, VentaError } from "@/lib/automotriz/venta";
+import { unidadVigentePorVin } from "@/lib/automotriz/unidad-vigente";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/automotriz/pedidos/[id]/accion — transiciones del pipeline:
@@ -84,10 +85,7 @@ export const POST = withAuthz(async (req: Request, ctx: { params: Promise<{ id: 
         return NextResponse.json({ error: "El pedido no tiene toma a cuenta registrada" }, { status: 422 });
       }
       tomaVin = toma.vin.trim().toUpperCase();
-      const existente = await prisma.vehiculo.findUnique({
-        where: { companyId_vin: { companyId: pedido.companyId, vin: tomaVin } },
-        select: { id: true },
-      });
+      const existente = await unidadVigentePorVin(prisma, pedido.companyId, tomaVin, { id: true });
       if (existente) {
         return NextResponse.json({ error: `El VIN ${tomaVin} ya está en el inventario` }, { status: 422 });
       }

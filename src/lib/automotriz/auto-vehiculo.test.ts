@@ -44,9 +44,20 @@ function fakeDb(catalogo: Record<string, { empresa: string; modelo: string; vers
           if (v.companyId === companyId && v.vin === vin) return { ...v };
         return null;
       },
+      // unidadVigentePorVin: la del ciclo MÁS ALTO de ese VIN.
+      findFirst: async ({ where, select }: any) => {
+        const hits = [...vehiculos.values()].filter(
+          (v) => v.companyId === where.companyId && v.vin === where.vin
+        );
+        if (hits.length === 0) return null;
+        hits.sort((a, b) => ((b.ciclo as number) ?? 1) - ((a.ciclo as number) ?? 1));
+        const row = { ...hits[0] };
+        if (!select) return row;
+        return Object.fromEntries(Object.keys(select).map((k) => [k, row[k]]));
+      },
       create: async ({ data }: any) => {
         const id = `veh_${seq++}`;
-        const row = { id, ...clean(data) };
+        const row = { id, ciclo: 1, ...clean(data) };
         vehiculos.set(id, row);
         return row;
       },
@@ -773,5 +784,104 @@ describe("esConversionDeCarroceria() — la regla, validada contra el corpus rea
   it("no marca una compra normal de unidad nueva", () => {
     expect(esConversionDeCarroceria("VEHICULO NUEVO JAC FRISON T9 4X4 Modelo:2026")).toBe(false);
     expect(esConversionDeCarroceria(null)).toBe(false);
+  });
+});
+
+describe("recompra de seminueva — segundo ciclo de vida del mismo VIN", () => {
+  // Margom vende una unidad, el cliente la regresa años después, la agencia la
+  // recompra usada y la vuelve a vender. Con el unique en (companyId, vin) eso
+  // era imposible: la segunda compra chocaba con la unidad ya vendida, se
+  // archivaba DUPLICADA, su costo caía en «Otros gastos», y la unidad conservaba
+  // el costo de la PRIMERA compra contra el precio de la SEGUNDA venta.
+  // Medido en producción (2026-08): 94 conceptos, $29,170,088.
+  const cfdiRecompra = () => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" TipoDeComprobante="I">
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="25101611" NoIdentificacion="USADO" Descripcion="AUTO USADO MARCA JAC, VERSION FRISON T9, MOD. 2024, NUM. SERIE ${VIN}" Importe="170000.00"/>
+  </cfdi:Conceptos>
+</cfdi:Comprobante>`;
+
+  async function unidadDelPrimerCiclo(db: ReturnType<typeof fakeDb>) {
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra-1", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-venta-1", tipo: "INGRESO", rawXml: cfdiVenta(),
+    });
+  }
+
+  it("crea un renglón NUEVO en ciclo 2 y deja intacta la historia del ciclo 1", async () => {
+    const db = fakeDb();
+    await unidadDelPrimerCiclo(db);
+    expect(db._vehiculos.size).toBe(1);
+
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, fecha: new Date("2026-05-02T00:00:00Z"),
+      invoiceId: "inv-recompra", tipo: "EGRESO", rawXml: cfdiRecompra(),
+    });
+
+    expect(r?.creados).toBe(1);
+    expect(db._vehiculos.size).toBe(2);
+
+    const ciclos = [...db._vehiculos.values()].sort(
+      (a, b) => (a.ciclo as number) - (b.ciclo as number)
+    );
+    // Ciclo 1: su compra y su venta originales, sin tocar.
+    expect(ciclos[0]).toMatchObject({
+      ciclo: 1, compraInvoiceId: "inv-compra-1", ventaInvoiceId: "inv-venta-1",
+      costoCompra: 445700.05,
+    });
+    // Ciclo 2: la recompra, disponible otra vez y ya marcada SEMINUEVO.
+    expect(ciclos[1]).toMatchObject({
+      ciclo: 2, vin: VIN, compraInvoiceId: "inv-recompra", costoCompra: 170000,
+      estado: "DISPONIBLE", tipo: "SEMINUEVO",
+    });
+    expect(ciclos[1].ventaInvoiceId).toBeUndefined();
+  });
+
+  it("la venta posterior cae en el ciclo 2, no en el 1", async () => {
+    const db = fakeDb();
+    await unidadDelPrimerCiclo(db);
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-recompra", tipo: "EGRESO", rawXml: cfdiRecompra(),
+    });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, fecha: new Date("2026-06-01T00:00:00Z"),
+      invoiceId: "inv-venta-2", tipo: "INGRESO", rawXml: cfdiVenta(),
+    });
+
+    const ciclos = [...db._vehiculos.values()].sort(
+      (a, b) => (a.ciclo as number) - (b.ciclo as number)
+    );
+    expect(ciclos[0].ventaInvoiceId).toBe("inv-venta-1"); // el ciclo viejo no se toca
+    expect(ciclos[1]).toMatchObject({ ciclo: 2, ventaInvoiceId: "inv-venta-2", estado: "VENDIDO" });
+    // La utilidad del segundo ciclo sale de SU propio costo: 542,241 − 170,000.
+    expect((ciclos[1].precioVenta as number) - (ciclos[1].costoCompra as number)).toBeCloseTo(372241.38, 2);
+  });
+
+  it("una factura repetida sobre unidad vendida SIGUE siendo DUPLICADA si no dice usado", async () => {
+    // El candado no es «el ciclo está cerrado» sino «el ciclo está cerrado Y el
+    // texto dice usado». Una segunda factura de unidad nueva sobre un VIN ya
+    // vendido es una duplicada, no una recompra.
+    const db = fakeDb();
+    await unidadDelPrimerCiclo(db);
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-repetida", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    expect(r?.creados).toBe(0);
+    expect(db._vehiculos.size).toBe(1);
+    expect(db._expediente.find((e) => e.invoiceId === "inv-repetida")?.rol).toBe("DUPLICADA");
+  });
+
+  it("no abre ciclo si la unidad aún NO se ha vendido", async () => {
+    // Comprada y en piso: una segunda factura no es recompra, es duplicada.
+    const db = fakeDb();
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra-1", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-recompra", tipo: "EGRESO", rawXml: cfdiRecompra(),
+    });
+    expect(r?.creados).toBe(0);
+    expect(db._vehiculos.size).toBe(1);
   });
 });

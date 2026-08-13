@@ -37,6 +37,7 @@ import { derivarRefaccionesDesdeCfdiSiAplica } from "./auto-refaccion";
 import { derivarServicioDesdeCfdiSiAplica } from "./auto-servicio";
 import { derivarNominaCostoSiAplica } from "./auto-nomina";
 import { modeloLimpio } from "./claves";
+import { siguienteCiclo, unidadVigentePorVin } from "./unidad-vigente";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -181,10 +182,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
     ];
     if (referencias.length === 0) return null;
     for (const [niv, items] of agrupa(referencias)) {
-      const unidad = await db.vehiculo.findUnique({
-        where: { companyId_vin: { companyId: args.companyId, vin: niv } },
-        select: { id: true },
-      });
+      const unidad = await unidadVigentePorVin(db, args.companyId, niv, { id: true });
       if (!unidad) continue;
       await registrarMencion(db, unidad.id, args.invoiceId, "NOTA_CREDITO");
       const agrego = await registrarNotaCredito(db, unidad.id, args, items, esCompra ? "PROVEEDOR" : "CLIENTE");
@@ -202,9 +200,9 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
     let actualizadosServicio = 0;
     const nivsServicio = [...new Set(datos.otrosConceptos.flatMap((c) => c.nivRefs))];
     for (const niv of nivsServicio) {
-      const unidad = await db.vehiculo.findUnique({
-        where: { companyId_vin: { companyId: args.companyId, vin: niv } },
-        select: { id: true, ventaInvoiceId: true },
+      const unidad = await unidadVigentePorVin(db, args.companyId, niv, {
+        id: true,
+        ventaInvoiceId: true,
       });
       if (!unidad) continue;
       // Reparación: si esta factura HABÍA ligado la venta (reglas viejas) y hoy
@@ -263,20 +261,17 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
 
   for (const v of datos.vehiculos) {
     vins.push(v.niv);
-    const existente = await db.vehiculo.findUnique({
-      where: { companyId_vin: { companyId: args.companyId, vin: v.niv } },
-      select: {
-        id: true,
-        estado: true,
-        compraInvoiceId: true,
-        ventaInvoiceId: true,
-        supplierId: true,
-        clienteId: true,
-        autoCreado: true,
-        marca: true,
-        modelo: true,
-        numeroMotor: true,
-      },
+    const existente = await unidadVigentePorVin(db, args.companyId, v.niv, {
+      id: true,
+      estado: true,
+      compraInvoiceId: true,
+      ventaInvoiceId: true,
+      supplierId: true,
+      clienteId: true,
+      autoCreado: true,
+      marca: true,
+      modelo: true,
+      numeroMotor: true,
     });
 
     // Número de motor: si la unidad no lo tiene y este CFDI lo menciona,
@@ -371,6 +366,44 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
               ...costosDeUnidad(datos, v.niv),
             ]);
             if (agregoConversion) actualizados++;
+            continue;
+          }
+          // RECOMPRA: la unidad ya cumplió su ciclo (se compró Y se vendió) y
+          // ahora vuelve al piso como seminueva. No es una compra duplicada:
+          // es un SEGUNDO ciclo de vida del mismo VIN, con su propio costo y
+          // su propia venta. Se crea un renglón de inventario nuevo y la
+          // unidad vieja se queda intacta con su historia.
+          //
+          // Se exige que el texto diga «usado/seminueva» —no basta con que el
+          // ciclo esté cerrado— porque una factura repetida del proveedor
+          // sobre una unidad ya vendida sigue siendo una duplicada, no una
+          // recompra. Medido en Margom (2026-08): 94 conceptos, $29,170,088.
+          if (existente.ventaInvoiceId && tipoUnidadDesdeCfdi(v) === "SEMINUEVO") {
+            const g = await generalesParaUnidad(db, v, anioFallback);
+            const supRecompra = await supplierId();
+            if (supRecompra && args.rawXml) await registrarTermsProveedor(db, supRecompra, args.rawXml);
+            const nuevoCiclo = await siguienteCiclo(db, args.companyId, v.niv);
+            const recomprada = await db.vehiculo.create({
+              data: {
+                companyId: args.companyId,
+                vin: v.niv,
+                ciclo: nuevoCiclo,
+                ...g,
+                tipo: "SEMINUEVO",
+                estado: "DISPONIBLE",
+                costoCompra: v.importe,
+                fechaCompra: args.fecha,
+                compraInvoiceId: args.invoiceId,
+                supplierId: supRecompra ?? undefined,
+                claveVehicular: v.claveVehicular ?? undefined,
+                descripcionCfdi: v.descripcion ?? undefined,
+                numeroMotor: numeroMotorDesdeTexto(v.descripcion) ?? undefined,
+                autoCreado: true,
+              },
+            });
+            await registrarMencion(db, recomprada.id, args.invoiceId, "COMPRA");
+            await registrarCostosCompra(db, recomprada.id, args, costosDeUnidad(datos, v.niv));
+            creados++;
             continue;
           }
           // Mismo VIN, sin relación 04, y la unidad ya tiene su compra: queda
@@ -506,9 +539,9 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   // que mencionan el VIN de una unidad ya en inventario. Idempotente por
   // (vehiculoId, invoiceId) — igual que los costos de la propia compra.
   for (const [niv, conceptos] of agrupa(costosExternos)) {
-    const unidad = await db.vehiculo.findUnique({
-      where: { companyId_vin: { companyId: args.companyId, vin: niv } },
-      select: { id: true, compraInvoiceId: true },
+    const unidad = await unidadVigentePorVin(db, args.companyId, niv, {
+      id: true,
+      compraInvoiceId: true,
     });
     if (!unidad) continue; // la unidad no es nuestra (o aún no llega su compra)
     // Reparación: si esta factura HABÍA ligado la compra (reglas viejas —

@@ -4851,7 +4851,21 @@ model Vehiculo {
   ordenesServicio OrdenServicio[]
   prospectos      Prospecto[]
 
-  @@unique([companyId, vin])
+  // Ciclo de vida de ESTE VIN en la agencia: 1 = la primera vez que se compró
+  // y se vendió; 2 = se recompró usada y se volvió a vender, etc. Una unidad
+  // física puede pasar por el piso varias veces y cada pasada es un renglón de
+  // inventario distinto, con su propio costo y su propia venta.
+  //
+  // Antes el unique era (companyId, vin) y eso hacía imposible la recompra: la
+  // segunda compra chocaba con la unidad ya vendida, se archivaba DUPLICADA y
+  // su costo caía en «Otros gastos», mientras la unidad conservaba el costo de
+  // la PRIMERA compra contra el precio de la SEGUNDA venta — utilidad falsa.
+  // Medido en Margom (2026-08): 94 conceptos, $29,170,088.
+  ciclo Int @default(1)
+
+  @@unique([companyId, vin, ciclo])
+  // La búsqueda «¿cuál es la unidad vigente de este VIN?» ordena por ciclo desc.
+  @@index([companyId, vin])
   @@index([companyId, estado])
   @@index([companyId, tipo, estado])
 }

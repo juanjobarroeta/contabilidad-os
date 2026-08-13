@@ -9,6 +9,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { extraerDatosVehiculoCfdi, tipoComprobanteDesdeCfdi, vinsDesdeTexto } from "./vin";
 import { clasificarConcepto } from "./concepto-linea";
+import { unidadVigentePorVin } from "./unidad-vigente";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -150,10 +151,7 @@ export async function derivarServicioDesdeCfdiSiAplica(
   // Unidad: el primer VIN mencionado que exista en el inventario.
   let vehiculoId: string | null = null;
   for (const vin of datos.vins) {
-    const unidad = await db.vehiculo.findUnique({
-      where: { companyId_vin: { companyId: args.companyId, vin } },
-      select: { id: true },
-    });
+    const unidad = await unidadVigentePorVin(db, args.companyId, vin, { id: true });
     if (unidad) {
       vehiculoId = unidad.id;
       break;
