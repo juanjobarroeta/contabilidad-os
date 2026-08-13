@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireMembership, withAuthz } from "@/lib/authz";
 import { auxiliarCuenta, type EntryForLibro } from "@/lib/contabilidad/libro";
 import { balanza } from "@/lib/contabilidad/posting";
+import { clavePeriodo, hojaAuxiliar } from "@/lib/contabilidad/reportes-xlsx";
+import { headersDescargaXlsx, toXlsx } from "@/lib/export/xlsx";
 
 // GET /api/contabilidad/auxiliar?companyId=&year=&month=&cuenta=102.01 —
 // movimientos de UNA cuenta en el periodo con saldo corrido (drill-down de la
@@ -52,6 +54,13 @@ export const GET = withAuthz(async (req: Request) => {
   }));
 
   const aux = auxiliarCuenta(forLibro, balRow?.saldoInicial ?? 0);
+  const numCta = account.subcuenta ?? account.cuentaSAT;
+
+  if (searchParams.get("format") === "xlsx") {
+    return new NextResponse(new Uint8Array(toXlsx([hojaAuxiliar(aux, numCta, account.nombre)])), {
+      headers: headersDescargaXlsx(`Auxiliar ${numCta} ${clavePeriodo(year, month)}.xlsx`),
+    });
+  }
 
   const uuids = [...new Set(aux.movimientos.filter((m) => m.referenciaTipo === "CFDI" && m.referencia).map((m) => m.referencia!))];
   const invoices = uuids.length

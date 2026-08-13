@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { ActivoFijoView } from "@/components/contabilidad/ActivoFijoView";
 import { LibroDiarioPanel, BalanceGeneralPanel, AuxiliarCuentaModal } from "@/components/contabilidad/LibroPanels";
+import { BotonExcel } from "@/components/contabilidad/BotonExcel";
 import { ConciliacionBancariaPanel } from "@/components/contabilidad/ConciliacionBancariaPanel";
 import { evaluarCierreEjercicio } from "@/lib/contabilidad/ejercicio";
 
@@ -959,6 +960,13 @@ function BalanzaPanel({
     <div>
       <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
 
+      <div className="mb-3 flex justify-end">
+        <BotonExcel
+          href={`/api/contabilidad/balanza?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}
+          label="Balanza en Excel"
+        />
+      </div>
+
       {!loading && preliminar && nonZero.length > 0 && <PreliminarBanner />}
 
       {loading ? (
@@ -1037,6 +1045,13 @@ function EstadoResultadosPanel({
   return (
     <div>
       <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
+
+      <div className="mb-3 flex justify-end">
+        <BotonExcel
+          href={`/api/contabilidad/estado-resultados?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}
+          label="Estado de resultados en Excel"
+        />
+      </div>
 
       {!loading && data?.preliminar && (data.ingresos.length > 0 || data.gastos.length > 0 || data.costos.length > 0) && <PreliminarBanner />}
 

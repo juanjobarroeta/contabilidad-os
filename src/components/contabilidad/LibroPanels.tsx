@@ -12,6 +12,7 @@ import { ChevronDown, ChevronRight, Loader2, Scale, ScrollText, CheckCircle2, Al
 import { Money } from "@/components/ui";
 import { formatCurrency } from "@/lib/utils";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
+import { BotonExcel } from "@/components/contabilidad/BotonExcel";
 
 const FUENTE_LABEL: Record<string, string> = {
   CFDI: "CFDI", NOMINA: "Nómina", BANCO: "Banco", MANUAL: "Manual",
@@ -125,7 +126,13 @@ export function LibroDiarioPanel({ companyId, year, month }: { companyId: string
           {polizas.length} póliza{polizas.length === 1 ? "" : "s"} · el folio coincide con el XML de Pólizas del Periodo (Anexo 24)
           · cargos {formatCurrency(totalCargos)} · abonos {formatCurrency(totalAbonos)}
         </p>
-        {botonNueva}
+        <div className="flex items-center gap-2">
+          <BotonExcel
+            href={`/api/contabilidad/libro-diario?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}
+            label="Libro diario en Excel"
+          />
+          {botonNueva}
+        </div>
       </div>
       <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
         {polizas.map((p) => {
@@ -542,6 +549,13 @@ export function BalanceGeneralPanel({ companyId, year, month }: { companyId: str
 
   return (
     <div>
+      <div className="mb-3 flex justify-end">
+        <BotonExcel
+          href={`/api/contabilidad/balance-general?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}
+          label="Balance general en Excel"
+        />
+      </div>
+
       <div className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm ${
         cuadra ? "border-cos-jade-ink/25 bg-cos-jade-tint text-cos-jade-ink" : "border-cos-amber-ink/25 bg-cos-amber-tint text-cos-amber-ink"
       }`}>
