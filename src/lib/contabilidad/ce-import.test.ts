@@ -7,6 +7,7 @@ import {
   padresDeBalanza,
   tipoPorCodAgrup,
   diagnosticoApertura,
+  convencionQueCuadra,
 } from "./ce-import";
 
 const CATALOGO_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -319,5 +320,67 @@ describe("diagnosticoApertura", () => {
       { familia: "1", cuentas: 1, cargos: 500, abonos: 0 },
       { familia: "2", cuentas: 1, cargos: 0, abonos: 500 },
     ]);
+  });
+});
+
+// ─── convencionQueCuadra ─────────────────────────────────────────────────────
+// Hay dos formas de escribir el importe en una balanza y las dos existen:
+// magnitud (cada cuenta de su lado) o con el lado ya en el signo. Elegir mal no
+// descuadra un poco — descuadra por el DOBLE de todo lo que corre contra su
+// naturaleza. En MARGOM eso eran $48,318,111.11.
+
+describe("convencionQueCuadra", () => {
+  const cta = (numCta: string, saldoFin: number) => ({
+    numCta, saldoIni: 0, debe: 0, haber: 0, saldoFin,
+  });
+  const natPorFamilia = (c: string): "D" | "A" => (c.charAt(0) === "1" ? "D" : "A");
+  const args = (cuentas: ReturnType<typeof cta>[]) => ({
+    cuentas, usar: "final" as const, naturalezaPorCodigo: natPorFamilia,
+  });
+
+  it("elige 'natural' cuando el archivo trae magnitudes", () => {
+    // Activo 58,000 = Pasivo 28,000 + Capital 30,000, todo positivo.
+    const r = convencionQueCuadra(args([cta("1101", 58000), cta("2101", 28000), cta("3101", 30000)]));
+    expect(r.elegida).toBe("natural");
+    expect(r.natural.diferencia).toBe(0);
+  });
+
+  it("reproduce el descuadre de MARGOM y lo resuelve por el signo", () => {
+    // Las dos clases que el valor absoluto manda al lado equivocado: deudora
+    // con saldo acreedor (sobregiro, estimación de incobrables) y acreedora con
+    // saldo deudor. Los importes son los medidos en la balanza real.
+    // La fixture CUADRA leída por signo — si no, no reproduce nada. El activo
+    // normal sale de despejar: X = contrariaD + pasivo − contrariaA.
+    const r = convencionQueCuadra(args([
+      cta("1101", 25_159_055.49),
+      cta("1200", -27_860_445.33),  // deudora CONTRARIA (saldo acreedor)
+      cta("2101", -1_000_000),
+      cta("2202", 3_701_389.84),    // acreedora CONTRARIA (saldo deudor)
+    ]));
+    // Con el lado por naturaleza: 2×contrariasD − 2×contrariasA.
+    expect(r.natural.diferencia).toBeCloseTo(2 * 27_860_445.33 - 2 * 3_701_389.84, 2);
+    expect(r.natural.diferencia).toBeCloseTo(48_318_110.98, 2);
+    // Con el lado por signo, cuadra.
+    expect(r.signo.diferencia).toBeCloseTo(0, 2);
+    expect(r.elegida).toBe("signo");
+  });
+
+  it("devuelve elegida=null cuando el descuadre no es del signo", () => {
+    // Falta capital: no hay lectura del signo que cuadre esto, y fingir que sí
+    // sería inventar un asiento.
+    const r = convencionQueCuadra(args([cta("1101", 58000), cta("2101", 28000)]));
+    expect(r.elegida).toBeNull();
+    expect(r.natural.diferencia).not.toBe(0);
+    expect(r.signo.diferencia).not.toBe(0);
+  });
+
+  it("balanzaASaldosApertura sigue en 'natural' si no se le dice otra cosa", () => {
+    const lineas = balanzaASaldosApertura({
+      cuentas: [cta("2101", -28000)],
+      usar: "final",
+      naturalezaPorCodigo: natPorFamilia,
+    });
+    // Comportamiento histórico intacto: magnitud, lado natural.
+    expect(lineas).toEqual([{ codigo: "2101", saldo: 28000 }]);
   });
 });

@@ -28,6 +28,7 @@ import {
   naturalezaPorAritmetica,
   padresDeBalanza,
   tipoPorCodAgrup,
+  convencionQueCuadra,
   type CatalogoCuentaParsed,
 } from "./ce-import";
 
@@ -220,11 +221,41 @@ export async function importarBalanza(
     );
   }
 
-  const lineas = balanzaASaldosApertura({
+  const seleccion = {
     cuentas: bal.cuentas,
     usar,
-    naturalezaPorCodigo: (numCta) => porCodigo.get(numCta)?.naturaleza,
-    incluir: (numCta) => esDetalle(numCta) && porCodigo.has(numCta),
+    naturalezaPorCodigo: (numCta: string) => porCodigo.get(numCta)?.naturaleza,
+    incluir: (numCta: string) => esDetalle(numCta) && porCodigo.has(numCta),
+  };
+
+  // Cómo leer el importe NO es una preferencia nuestra: es una propiedad del
+  // archivo. Hay balanzas que traen magnitud (cada cuenta va de su lado) y
+  // balanzas que ya traen el lado en el signo. Elegir mal descuadra por el
+  // DOBLE de todo lo que corre contra su naturaleza — en MARGOM, exactamente
+  // los $48,318,111.11 que reportaba postApertura.
+  //
+  // No se configura por empresa ni se reconoce al sistema que la emitió: se
+  // prueban las dos y se toma la que CUADRA. Un balance cuadra o no cuadra, y
+  // eso vale igual para cualquier distribuidor.
+  const conv = convencionQueCuadra(seleccion);
+  if (conv.elegida === null) {
+    console.warn(
+      `[ce-apertura] ${companyId}: ninguna convención cuadra la balanza ` +
+        `(natural: ${conv.natural.diferencia}, signo: ${conv.signo.diferencia}). ` +
+        `El descuadre no está en la lectura del signo.`,
+    );
+  } else if (conv.elegida === "signo") {
+    console.log(
+      `[ce-apertura] ${companyId}: la balanza trae el lado en el SIGNO ` +
+        `(leída como magnitud descuadraba por ${conv.natural.diferencia}).`,
+    );
+  }
+
+  const lineas = balanzaASaldosApertura({
+    ...seleccion,
+    // Sin veredicto se conserva el comportamiento histórico y postApertura
+    // lanza con el desglose, que es lo correcto: no inventamos un cuadre.
+    convencion: conv.elegida ?? "natural",
   });
 
   // Si la apertura no cuadra, el desglose es lo primero que se pregunta.
