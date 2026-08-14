@@ -83,11 +83,21 @@ async function coberturaDe(
   periodos: Array<{ year: number; month: number }>,
 ): Promise<CoberturaPeriodo[]> {
   const [solicitudes, facturas] = await Promise.all([
-    prisma.satSyncRequest.groupBy({
-      by: ["year", "month"],
-      where: { companyId, status: "FINISHED" },
-      _sum: { cfdisFound: true },
-    }),
+    // Una fila por RANGO distinto: sumar todas las FINISHED cuenta el mes
+    // tantas veces como se haya pedido (submitSatSync crea fila nueva pasada la
+    // ventana de 24h). Con tramos hay varias filas legítimas, una por rango
+    // disjunto, y ésas sí suman. Ver sat-cobertura para la medición que lo cazó.
+    prisma.$queryRaw<Array<{ year: number; month: number; cfdis: bigint }>>`
+      SELECT year, month, SUM("cfdisFound")::bigint AS cfdis
+      FROM (
+        SELECT DISTINCT ON ("year", "month", "tipo", "desde", "hasta")
+               "year", "month", "cfdisFound"
+        FROM "SatSyncRequest"
+        WHERE "companyId" = ${companyId} AND "status" = 'FINISHED'
+        ORDER BY "year", "month", "tipo", "desde", "hasta", "createdAt" DESC
+      ) ultima
+      GROUP BY year, month
+    `,
     prisma.$queryRaw<Array<{ year: number; month: number; n: bigint }>>`
       SELECT EXTRACT(YEAR FROM "fecha")::int AS year,
              EXTRACT(MONTH FROM "fecha")::int AS month,
@@ -98,7 +108,7 @@ async function coberturaDe(
     `,
   ]);
 
-  const satPor = new Map(solicitudes.map((r) => [`${r.year}-${r.month}`, r._sum.cfdisFound ?? 0]));
+  const satPor = new Map(solicitudes.map((r) => [`${r.year}-${r.month}`, Number(r.cfdis ?? 0)]));
   const nuestrasPor = new Map(facturas.map((r) => [`${r.year}-${r.month}`, Number(r.n)]));
 
   return periodos.map(({ year, month }) => ({
