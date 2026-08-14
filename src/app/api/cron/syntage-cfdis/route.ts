@@ -54,7 +54,7 @@ export const maxDuration = 300;
 const TIME_BUDGET_MS = 200_000;
 // Syntage tope 100 por página, así que 9 años son ~811 páginas. Listar es
 // rápido; quien manda de verdad es TIME_BUDGET_MS, y lo que no alcance se
-// retoma con `siguientePagina`.
+// retoma con `siguienteCursor`.
 const MAX_PAGINAS = 900;
 
 /**
@@ -143,9 +143,10 @@ async function handle(req: Request) {
   // `importar=1` sí escribe: baja el XML de cada folio que nos falte y lo mete
   // por `importarCfdiXml`, el MISMO camino que la descarga masiva del SAT.
   const importar = params.get("importar") === "1";
-  // Página por la que empezar. Listar 9 años no cabe en una corrida, así que la
-  // ruta devuelve `siguientePagina` y el workflow la vuelve a llamar hasta null.
-  const paginaInicial = Math.max(1, Math.trunc(Number(params.get("pagina") ?? 1)) || 1);
+  // Cursor por el que retomar. Nueve años no caben en una corrida, así que la
+  // ruta devuelve `siguienteCursor` y el workflow la vuelve a llamar hasta null.
+  // Este endpoint SÓLO acepta cursor: `page` lo rechaza con 400.
+  const cursorInicial = params.get("cursor")?.trim() || undefined;
   const startedAt = Date.now();
 
   const client = new SyntageClient();
@@ -184,7 +185,8 @@ async function handle(req: Request) {
   let totalSyntage = 0;
   let truncado = false;
   // Dónde retomar. null = se acabó la colección.
-  let siguientePagina: number | null = null;
+  let siguienteCursor: string | null = null;
+  let cursor: string | undefined = cursorInicial;
   const imp: Importacion = {
     intentados: 0,
     importados: 0,
@@ -196,17 +198,19 @@ async function handle(req: Request) {
   };
 
   for (let i = 0; i < MAX_PAGINAS; i++) {
-    const pagina = paginaInicial + i;
     if (Date.now() - startedAt > TIME_BUDGET_MS) {
       truncado = true;
-      siguientePagina = pagina;
+      siguienteCursor = cursor ?? null;
       break;
     }
-    const { facturas, hayMas } = await client.listEntityInvoices(entityId, {
+    // El cursor de ESTA página, para poder retomarla si se acaba el tiempo a
+    // media importación.
+    const cursorDeEstaPagina = cursor;
+    const { facturas, siguienteCursor: proximo } = await client.listEntityInvoices(entityId, {
       desde,
       hasta,
       porPagina: MAX_ITEMS_POR_PAGINA,
-      pagina,
+      cursor,
     });
     paginas++;
     if (facturas.length === 0) break;
@@ -250,7 +254,7 @@ async function handle(req: Request) {
           truncado = true;
           // La MISMA página: lo ya importado vuelve como «existente», que sólo
           // cuesta una consulta por uuid — no se re-baja ningún XML.
-          siguientePagina = pagina;
+          siguienteCursor = cursorDeEstaPagina ?? null;
           break;
         }
         const uuid = String(f.uuid ?? "").toUpperCase();
@@ -291,9 +295,10 @@ async function handle(req: Request) {
       if (truncado) break;
     }
 
-    if (!hayMas) break;
+    if (!proximo) break;
+    cursor = proximo;
     // Se acabó el presupuesto de páginas, no la colección.
-    if (i === MAX_PAGINAS - 1) siguientePagina = pagina + 1;
+    if (i === MAX_PAGINAS - 1) siguienteCursor = proximo;
   }
 
   const filas = [...porAnio.values()].sort((a, b) => b.anio - a.anio);
@@ -314,10 +319,10 @@ async function handle(req: Request) {
     },
     importacion: importar ? imp : undefined,
     paginas,
-    paginaInicial,
-    // null = se acabó la colección. Si trae número, vuelve a llamar con
-    // `pagina=<ese número>` — el workflow hace ese bucle solo.
-    siguientePagina,
+    cursorInicial: cursorInicial ?? null,
+    // null = se acabó la colección. Si trae valor, vuelve a llamar con
+    // `cursor=<ese valor>` — el workflow hace ese bucle solo.
+    siguienteCursor,
     truncado,
     elapsedMs: Date.now() - startedAt,
     nota:
@@ -329,7 +334,7 @@ async function handle(req: Request) {
       "`extraer` en unos minutos para ver qué llegó. `faltan` es el número que decide " +
       "si vale la pena importar. Con `importar=1` sí escribe: baja el XML de cada folio " +
       "que falte y lo mete por el MISMO importador que la descarga masiva del SAT. " +
-      "Si `siguientePagina` no es null, vuelve a llamar con `pagina=<ese número>`.",
+      "Si `siguienteCursor` no es null, vuelve a llamar con `cursor=<ese valor>`.",
   };
 
   console.log(
@@ -339,7 +344,7 @@ async function handle(req: Request) {
       rfc: empresa.rfc,
       ...resp.totales,
       paginas,
-      siguientePagina,
+      siguienteCursor,
       truncado,
       ...(importar ? { importados: imp.importados, errores: imp.errores } : {}),
     }),
