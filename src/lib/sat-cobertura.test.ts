@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { esCoberturaSospechosa, coberturaSospechosa, UMBRAL_COBERTURA } from "./sat-cobertura";
+import { esCoberturaSospechosa, coberturaSospechosa, periodoCerrado, UMBRAL_COBERTURA } from "./sat-cobertura";
 
 // Los ocho meses de MARGOM pasaron el control anterior —«las dos solicitudes
 // llegaron a FINISHED»— con 63, 49, 80, 47 y 3 facturas. Estos casos fijan qué
@@ -65,5 +65,46 @@ describe("coberturaSospechosa", () => {
         { year: 2026, month: 2, satDijo: 0, tenemos: 0 },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("periodoCerrado", () => {
+  const hoy = new Date(Date.UTC(2026, 7, 14)); // 2026-08-14
+
+  it("el mes en curso NO está cerrado", () => {
+    expect(periodoCerrado({ year: 2026, month: 8 }, hoy)).toBe(false);
+  });
+
+  it("el mes pasado sí", () => {
+    expect(periodoCerrado({ year: 2026, month: 7 }, hoy)).toBe(true);
+  });
+
+  it("un mes futuro tampoco", () => {
+    expect(periodoCerrado({ year: 2026, month: 9 }, hoy)).toBe(false);
+  });
+
+  it("cualquier mes de un año anterior sí", () => {
+    expect(periodoCerrado({ year: 2025, month: 12 }, hoy)).toBe(true);
+  });
+});
+
+describe("coberturaSospechosa y el mes en curso", () => {
+  const hoy = new Date(Date.UTC(2026, 7, 14));
+
+  it("no acusa al mes en curso por ir a medias", () => {
+    // Medido en MARGOM el 2026-08-14: satDijo 6,894 / tenemos 2,087. No le
+    // falta nada — le faltan 17 días. Repescarlo gastaría cuota vitalicia en un
+    // rango que de todos modos hay que volver a pedir cuando cierre.
+    const r = coberturaSospechosa(
+      [
+        { year: 2026, month: 8, satDijo: 6894, tenemos: 2087 },
+        { year: 2025, month: 4, satDijo: 4453, tenemos: 1725 },
+        { year: 2024, month: 1, satDijo: 2690, tenemos: 57 },
+      ],
+      UMBRAL_COBERTURA,
+      hoy,
+    );
+    expect(r.map((x) => x.periodo)).toEqual(["2025-04", "2024-01"]);
+    expect(r.reduce((s, x) => s + x.faltanCuandoMenos, 0)).toBe(5361);
   });
 });
