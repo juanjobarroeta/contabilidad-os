@@ -11,11 +11,17 @@ import { prisma } from "@/lib/prisma";
 // cuatro veces, y ninguna diferencia de fecha explica eso: sobran unidades que
 // seguimos contando en piso.
 //
-// La sospecha es el espejo del defecto de las unidades sin CFDI de compra: ahí
-// faltaba la compra, aquí falta la SALIDA. Una unidad que se vendió pero cuya
-// venta nunca empató con el VIN se queda en piso para siempre e infla el
-// inventario. Por eso el desglose va por AÑO DE COMPRA: una unidad comprada en
-// 2023 que sigue «disponible» no es piso, es un empate que no ocurrió.
+// El desglose va por AÑO DE COMPRA porque ahí se ve solo: 934 unidades
+// ($388,982,154.11, el 70% del valor) se compraron en 2025 o antes y siguen
+// «disponibles». Una agencia no guarda coches de 2022 tres años.
+//
+// Tres causas candidatas, y midiendo se cayeron dos:
+//
+//   · cancelaciones que no revertían  → candidatas 0, nunca derivaron nada
+//   · el empate con el VIN            → 98 ventas huérfanas en toda la historia
+//   · CFDIs que faltan (ingesta)      → el SAT dice que 2021-2023 está completo
+//
+// Queda la cuarta, que es la que mide `ciclosFantasma`: filas de más.
 //
 // Sólo lee. Devuelve conteos e importes agregados de la propia empresa — ni
 // VINs, ni clientes, ni proveedores. Auth: CRON_SECRET.
@@ -156,6 +162,43 @@ async function handle(req: Request) {
     ORDER BY 1 DESC NULLS LAST
   `;
 
+  // ── 5. Ciclos viejos que se quedaron en el piso ────────────────────────────
+  // El padrón permite el MISMO VIN varias veces: `@@unique([companyId, vin,
+  // ciclo])`. Es a propósito —una unidad se vende, se recompra y se revende, y
+  // cada vuelta es un ciclo— pero de ahí sale una regla dura:
+  //
+  //   un VIN sólo puede estar en piso en su ÚLTIMO ciclo.
+  //
+  // Si el ciclo 1 sigue «disponible» y ya existe un ciclo 2, la salida del
+  // ciclo 1 nunca se registró: es un fantasma que infla el piso y NO es un CFDI
+  // que falte ni un empate que falló — es una fila de más.
+  //
+  // Se mide porque las otras dos causas ya se descartaron midiendo: las
+  // canceladas no derivaban nada (candidatas 0) y las ventas sin empatar son 98
+  // facturas en toda la historia.
+  const ciclosFantasma = await prisma.$queryRaw<
+    Array<{ anio_compra: number | null; unidades: bigint; costo: number | null }>
+  >`
+    WITH ultimo AS (
+      SELECT "vin", MAX("ciclo") AS ciclo_max
+      FROM "Vehiculo"
+      WHERE "companyId" = ${companyId}
+      GROUP BY "vin"
+      HAVING COUNT(*) > 1
+    )
+    SELECT EXTRACT(YEAR FROM COALESCE(i."fecha", v."createdAt"))::int AS anio_compra,
+           COUNT(*)                     AS unidades,
+           SUM(v."costoCompra")::float8  AS costo
+    FROM "Vehiculo" v
+    JOIN ultimo u ON u."vin" = v."vin"
+    LEFT JOIN "Invoice" i ON i."id" = v."compraInvoiceId"
+    WHERE v."companyId" = ${companyId}
+      AND v."ventaInvoiceId" IS NULL
+      AND v."ciclo" < u.ciclo_max
+    GROUP BY 1
+    ORDER BY 1 DESC NULLS LAST
+  `;
+
   const num = (v: number | null) => r2(v ?? 0);
   const n = (v: bigint) => Number(v);
   const ladoCfdi = (t: string) => {
@@ -197,6 +240,16 @@ async function handle(req: Request) {
       costo: num(r.costo),
     })),
     cfdisClaveVehiculo: { ventas: ladoCfdi("INGRESO"), compras: ladoCfdi("EGRESO") },
+    // Ciclos viejos en piso: la salida de esa vuelta nunca se registró.
+    ciclosFantasma: ciclosFantasma.map((r) => ({
+      anioCompra: r.anio_compra,
+      unidades: n(r.unidades),
+      costo: num(r.costo),
+    })),
+    ciclosFantasmaTotal: {
+      unidades: ciclosFantasma.reduce((s2, r) => s2 + n(r.unidades), 0),
+      costo: r2(ciclosFantasma.reduce((s2, r) => s2 + (r.costo ?? 0), 0)),
+    },
     // Ventas facturadas que nunca sacaron una unidad del piso, por año.
     ventasHuerfanas: ventasHuerfanas.map((r) => ({
       anio: r.anio,
@@ -206,8 +259,10 @@ async function handle(req: Request) {
     nota:
       "costoEnPiso se compara contra la suma de las familias 1301/1302/1312 de la balanza. " +
       "La clave 2510xx no distingue nuevo de seminuevo: eso sólo lo sabe el padrón. " +
-      "ventasHuerfanas distingue las dos causas del piso inflado: si sale casi vacío, " +
-      "faltan CFDIs (ingesta); si sale grande, la venta está y falló el empate con el VIN.",
+      "ventasHuerfanas: ventas facturadas que ninguna unidad apunta (medido: 98 en toda la " +
+      "historia, así que el empate con el VIN NO es la causa). ciclosFantasma: un VIN sólo " +
+      "puede estar en piso en su último ciclo; los ciclos viejos «disponibles» son filas de " +
+      "más, no CFDIs que falten.",
   };
 
   console.log(

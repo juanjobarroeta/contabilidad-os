@@ -13,17 +13,16 @@ import { parsePeriodos } from "./parse-periodos";
 // (`if (done.has(...)) continue`), y `finishedPeriods` lo marca hecho cuando las
 // dos solicitudes llegan a FINISHED — SIN IMPORTAR cuántas facturas entraron.
 //
-// Así se quedaron ocho meses de MARGOM, medidos contra sus vecinos:
+// Yo creí que eran ocho meses de MARGOM, comparando cada mes contra sus vecinos.
+// El dato del propio SAT (cfdisFound, ver /api/cron/sat-cobertura) dice que son
+// DOS, y que seis de aquellos ocho tienen lo que el SAT dice que existe:
 //
-//   2022-01  63 fact  $27,304.54     2023-08  AUSENTE
-//   2022-02  49       $27,337.65     2024-01  36 fact  $1,482,667.27
-//   2022-03  80       $35,500.62     2025-04  AUSENTE
-//   2022-05  47       $21,878.58
-//   2022-06   3       $2,078.37
+//   2025-04   SAT 4,453   tenemos 1,725   38.7%   faltan 2,728
+//   2024-01   SAT 2,690   tenemos    57    2.1%   faltan 2,633
 //
-// ~$500M de ingreso y ~5,200 facturas. Cada mes se pidió, volvió FINISHED,
-// importó casi nada y quedó «hecho» para siempre. Las unidades vendidas en esos
-// meses nunca se dieron de baja: es una de las dos causas del piso inflado.
+// 5,361 facturas. Comparar contra los vecinos era una corazonada; el conteo del
+// SAT es el dato. Saca la lista de `sat-cobertura` (campo `paraRepescar`), no a
+// ojo: cada periodo inventado quema cuota vitalicia.
 //
 // AVISO DE CUOTA (5002). El SAT limita las solicitudes DE POR VIDA por
 // (RFC + rango + tipo), y esperar NO la libera. `force` salta el reúso de 24h
