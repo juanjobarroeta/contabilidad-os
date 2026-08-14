@@ -18,6 +18,10 @@ name: Repescar meses del SAT (manual)
 #
 # CUIDADO CON LA CUOTA. El SAT limita las solicitudes DE POR VIDA por
 # (RFC + rango + tipo) y esperar NO la libera. Corre primero con dryRun.
+#
+# MEDIDO: el mes COMPLETO de 2025-04 devuelve 5002 en emitidos y en recibidos.
+# Por eso `tramos` viene en 2 por default — la cuota se cuenta por rango, así que
+# medio mes es otra llave. Cuesta 2 solicitudes por tramo.
 
 on:
   workflow_dispatch:
@@ -30,6 +34,11 @@ on:
         description: "Meses a repescar, separados por coma (YYYY-MM)"
         required: true
         default: "2025-04,2023-08,2024-01"
+        type: string
+      tramos:
+        description: "Partir cada mes en N rangos (la cuota 5002 es por rango). 1 = mes completo"
+        required: false
+        default: "2"
         type: string
       dryRun:
         description: "Sólo decir qué haría, sin gastar solicitudes"
@@ -53,6 +62,7 @@ jobs:
           BASE_URL: ${{ inputs.baseUrl }}
           COMPANY_ID: ${{ inputs.companyId }}
           PERIODOS: ${{ inputs.periodos }}
+          TRAMOS: ${{ inputs.tramos }}
           DRY_RUN: ${{ inputs.dryRun }}
         run: |
           set -euo pipefail
@@ -60,6 +70,7 @@ jobs:
           if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
 
           Q="companyId=${COMPANY_ID}&periodos=$(printf '%s' "${PERIODOS}" | tr -d '[:space:]')"
+          Q="${Q}&tramos=$(printf '%s' "${TRAMOS:-1}" | tr -d '[:space:]')"
           if [ "${DRY_RUN}" = "true" ]; then Q="${Q}&dryRun=1"; fi
 
           RESP="$(curl -fsS --max-time 300 -X POST "${URL}/api/cron/sat-repesca?${Q}" \
@@ -69,5 +80,5 @@ jobs:
           # La cuota vitalicia no se libera esperando: si se agotó, avisar fuerte
           # para no volver a intentarlo por la misma vía.
           if [ "$(echo "$RESP" | jq -r '.cuotaAgotada')" = "true" ]; then
-            echo "::warning::SAT 5002 — cuota DE POR VIDA agotada. Varía el rango o usa Syntage."
+            echo "::warning::SAT 5002 — cuota agotada en algún rango. Sube tramos, o usa Syntage."
           fi

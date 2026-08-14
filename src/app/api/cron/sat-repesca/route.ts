@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
+import { partirMes, etiquetaTramo } from "@/lib/sat-tramos";
 import { parsePeriodos } from "./parse-periodos";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,16 +26,28 @@ import { parsePeriodos } from "./parse-periodos";
 // meses nunca se dieron de baja: es una de las dos causas del piso inflado.
 //
 // AVISO DE CUOTA (5002). El SAT limita las solicitudes DE POR VIDA por
-// (RFC + rango + tipo). Estos periodos pueden tenerla quemada, y esperar NO la
-// libera. `force` salta el reúso de 24h pero no la cuota vitalicia.
+// (RFC + rango + tipo), y esperar NO la libera. `force` salta el reúso de 24h
+// pero no la cuota vitalicia.
 //
-// Si sale 5002, esta ruta se detiene y lo reporta en vez de insistir. Quedan dos
-// salidas, ninguna implementada aquí todavía: variar el rango de fechas (la que
-// documenta el propio código del SAT — pedir el mes en tramos diarios es una
-// llave de cuota distinta, a costa de ~30 solicitudes en vez de 2) o ir por
-// Syntage, cuyo cliente ya tiene el extractor "invoice".
+// MEDIDO el 2026-08-14 con MARGOM 2025-04: el mes completo devuelve 5002 en
+// emitidos Y en recibidos. La vía mensual está muerta para estos periodos.
 //
-// `dryRun=1` dice qué haría sin gastar una sola solicitud.
+// De ahí `tramos=N`: parte el mes en N rangos contiguos. La cuota se cuenta por
+// RANGO, así que un tramo es otra llave — es lo que el propio mensaje del SAT
+// sugiere («pide un rango de fechas distinto»). Cuesta 2 solicitudes por tramo
+// (emitidos + recibidos), así que tramos=2 son 4 y tramos=31 son 62. Empieza
+// con tramos=2 y sube sólo si vuelve a salir 5002.
+//
+// Con más de un tramo NO se fuerza el reúso: la solicitud queda guardada con su
+// `desde`/`hasta`, así que una segunda corrida reutiliza el MISMO tramo en vez
+// de quemar cuota otra vez. Si aun con tramos sale 5002 en todos los rangos,
+// queda Syntage, cuyo cliente ya tiene el extractor "invoice".
+//
+// Un tramo quemado NO detiene los demás: la cuota es por rango, así que lo que
+// falle en 04-01→04-15 no dice nada de 04-16→04-30.
+//
+// `dryRun=1` dice qué haría —incluida la lista de tramos— sin gastar una sola
+// solicitud.
 //
 // Auth: CRON_SECRET (Bearer o x-cron-secret), igual que los otros crons.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,12 +66,22 @@ function isAuthorized(req: Request): boolean {
   return req.headers.get("x-cron-secret") === secret;
 }
 
+interface ResultadoTramo {
+  /** "04-01→04-15" */
+  tramo: string;
+  importadas?: number;
+  cuotaAgotada?: boolean;
+  error?: string;
+}
+
 interface ResultadoPeriodo {
   periodo: string;
   /** Facturas de INGRESO que ya teníamos de ese mes, antes de repescar. */
   facturasAntes: number;
   facturasDespues?: number;
   importadas?: number;
+  /** Un renglón por rango pedido: con tramos=1 es el mes completo. */
+  tramos?: ResultadoTramo[];
   cuotaAgotada?: boolean;
   error?: string;
 }
@@ -92,6 +115,10 @@ async function handle(req: Request) {
     return NextResponse.json({ error: "ningún periodo válido en `periodos`" }, { status: 400 });
   }
   const dryRun = params.get("dryRun") === "1";
+  // Partir el mes en tramos. Medido: el mes completo de 2025-04 devuelve 5002 en
+  // los dos lados, así que la vía mensual está muerta para estos periodos y la
+  // única salida por descarga masiva es pedir rangos DISTINTOS.
+  const tramosPedidos = Number(params.get("tramos") ?? 1);
   const startedAt = Date.now();
 
   const empresa = await prisma.company.findUnique({
@@ -108,43 +135,59 @@ async function handle(req: Request) {
     const periodo = `${year}-${String(month).padStart(2, "0")}`;
     const facturasAntes = await contarIngresos(companyId, year, month);
 
+    const tramos = partirMes(year, month, tramosPedidos);
+
     if (dryRun) {
-      resultados.push({ periodo, facturasAntes });
+      resultados.push({
+        periodo,
+        facturasAntes,
+        tramos: tramos.map((t) => ({ tramo: etiquetaTramo(t) })),
+      });
       continue;
     }
 
-    try {
-      // force=true: sin esto reutiliza la solicitud de las últimas 24h, que es
-      // justo la que ya volvió vacía.
-      const sub = await submitSatSync(companyId, year, month, true);
-      if (!sub.ok) {
-        const esCuota = sub.error.includes("5002");
-        if (esCuota) cuotaAgotada = true;
-        resultados.push({ periodo, facturasAntes, cuotaAgotada: esCuota, error: sub.error });
-        // La cuota vitalicia no se libera esperando: no vale la pena seguir
-        // pidiendo los demás meses por la vía mensual.
-        if (esCuota) break;
-        continue;
+    const detalle: ResultadoTramo[] = [];
+    let importadas = 0;
+    for (const t of tramos) {
+      if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+      const tramo = etiquetaTramo(t);
+      try {
+        // force=true: sin esto reutiliza la solicitud de las últimas 24h, que es
+        // justo la que ya volvió vacía. Con más de un tramo NO se fuerza: la
+        // solicitud guardada trae su rango, así que reutilizarla es reutilizar
+        // ESE tramo, y re-pedirlo sólo quemaría cuota del rango nuevo.
+        const rango = tramos.length > 1 ? t : undefined;
+        const sub = await submitSatSync(companyId, year, month, !rango, rango);
+        if (!sub.ok) {
+          const esCuota = sub.error.includes("5002");
+          if (esCuota) cuotaAgotada = true;
+          detalle.push({ tramo, cuotaAgotada: esCuota, error: sub.error });
+          // La cuota es por rango: que este tramo esté quemado no dice nada de
+          // los demás, así que se sigue. Lo que no vale la pena es insistir en
+          // el MISMO rango — y eso ya no pasa, cada tramo se pide una vez.
+          continue;
+        }
+        const ver = await verifyAndImportSatSync(
+          companyId,
+          sub.emitidosRequestId,
+          sub.recibidosRequestId,
+        );
+        const imp = ver.ok && typeof ver.imported === "number" ? ver.imported : 0;
+        importadas += imp;
+        detalle.push({ tramo, importadas: imp, error: ver.ok ? undefined : ver.error });
+      } catch (e) {
+        detalle.push({ tramo, error: e instanceof Error ? e.message : String(e) });
       }
-      const ver = await verifyAndImportSatSync(
-        companyId,
-        sub.emitidosRequestId,
-        sub.recibidosRequestId,
-      );
-      resultados.push({
-        periodo,
-        facturasAntes,
-        facturasDespues: await contarIngresos(companyId, year, month),
-        importadas: ver.ok && typeof ver.imported === "number" ? ver.imported : 0,
-        error: ver.ok ? undefined : ver.error,
-      });
-    } catch (e) {
-      resultados.push({
-        periodo,
-        facturasAntes,
-        error: e instanceof Error ? e.message : String(e),
-      });
     }
+
+    resultados.push({
+      periodo,
+      facturasAntes,
+      facturasDespues: await contarIngresos(companyId, year, month),
+      importadas,
+      tramos: detalle,
+      cuotaAgotada: detalle.some((d) => d.cuotaAgotada) || undefined,
+    });
   }
 
   const summary = {
@@ -157,8 +200,10 @@ async function handle(req: Request) {
     cuotaAgotada,
     elapsedMs: Date.now() - startedAt,
     nota: cuotaAgotada
-      ? "El SAT agotó la cuota DE POR VIDA de algún periodo (5002). Esperar no la libera: " +
-        "hay que variar el rango de fechas o usar Syntage (extractor \"invoice\")."
+      ? "El SAT agotó la cuota DE POR VIDA de algún RANGO (5002). Esperar no la libera. " +
+        "Si se pidió el mes completo, vuelve a intentar con tramos=2 (o más): la cuota se " +
+        "cuenta por rango, así que un tramo es otra llave. Si ya venía en tramos y aun así " +
+        "sale 5002, esos rangos también están quemados y queda Syntage (extractor \"invoice\")."
       : "El SAT es asíncrono: un periodo puede quedar pendiente y resolverse en otra corrida. " +
         "Re-ejecutable; compara facturasAntes con facturasDespues.",
   };
