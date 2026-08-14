@@ -40,6 +40,11 @@ on:
         required: false
         default: "2"
         type: string
+      saltarTramos:
+        description: "Saltar los primeros N tramos (un tramo ya completo se come el presupuesto)"
+        required: false
+        default: "0"
+        type: string
       dryRun:
         description: "Sólo decir qué haría, sin gastar solicitudes"
         required: false
@@ -63,6 +68,7 @@ jobs:
           COMPANY_ID: ${{ inputs.companyId }}
           PERIODOS: ${{ inputs.periodos }}
           TRAMOS: ${{ inputs.tramos }}
+          SALTAR: ${{ inputs.saltarTramos }}
           DRY_RUN: ${{ inputs.dryRun }}
         run: |
           set -euo pipefail
@@ -71,6 +77,7 @@ jobs:
 
           Q="companyId=${COMPANY_ID}&periodos=$(printf '%s' "${PERIODOS}" | tr -d '[:space:]')"
           Q="${Q}&tramos=$(printf '%s' "${TRAMOS:-1}" | tr -d '[:space:]')"
+          Q="${Q}&saltarTramos=$(printf '%s' "${SALTAR:-0}" | tr -d '[:space:]')"
           if [ "${DRY_RUN}" = "true" ]; then Q="${Q}&dryRun=1"; fi
 
           RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/cron/sat-repesca?${Q}" \
