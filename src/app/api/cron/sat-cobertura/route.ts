@@ -65,18 +65,35 @@ async function handle(req: Request) {
     // Con tramos SÍ hay varias filas legítimas por mes, una por rango, y esas
     // deben sumarse: los rangos son disjuntos. Por eso la llave es
     // (tipo, desde, hasta) y de cada una se toma la solicitud más reciente.
-    // Las filas viejas traen desde/hasta nulos (son de antes de #632): ahí la
-    // llave cae en "mes completo", que es lo que eran.
+    //
+    // Y una vuelta más: los rangos se TRASLAPAN entre generaciones. 2024-01 se
+    // pidió primero como mes completo (fila vieja, desde/hasta nulos) y después
+    // en dos tramos. Son llaves distintas pero cubren los MISMOS días, así que
+    // sumarlas volvía a dar exactamente 2× (5,380 contra 2,690 que tenemos).
+    // Cuando un (mes, tipo) llegó a pedirse en tramos, los tramos SON el mes y
+    // la fila del mes completo se descarta.
     prisma.$queryRaw<Array<{ year: number; month: number; cfdis: bigint }>>`
-      SELECT year, month, SUM("cfdisFound")::bigint AS cfdis
-      FROM (
+      WITH ultima_por_rango AS (
+        -- Una fila por rango pedido: la más reciente.
         SELECT DISTINCT ON ("year", "month", "tipo", "desde", "hasta")
-               "year", "month", "cfdisFound"
+               "year", "month", "tipo", "cfdisFound",
+               ("desde" IS NOT NULL) AS con_rango
         FROM "SatSyncRequest"
         WHERE "companyId" = ${companyId} AND "status" = 'FINISHED'
         ORDER BY "year", "month", "tipo", "desde", "hasta", "createdAt" DESC
-      ) ultima
-      GROUP BY year, month
+      ), hay_tramos AS (
+        -- ¿Ese (mes, tipo) llegó a pedirse en tramos?
+        SELECT "year", "month", "tipo", bool_or(con_rango) AS con_tramos
+        FROM ultima_por_rango GROUP BY "year", "month", "tipo"
+      )
+      SELECT u."year", u."month", SUM(u."cfdisFound")::bigint AS cfdis
+      FROM ultima_por_rango u
+      JOIN hay_tramos h
+        ON h."year" = u."year" AND h."month" = u."month" AND h."tipo" = u."tipo"
+      -- Si hubo tramos, los tramos SON el mes: la fila del mes completo (sin
+      -- rango) cubre los mismos días y sumarla lo cuenta dos veces.
+      WHERE u.con_rango = h.con_tramos
+      GROUP BY u."year", u."month"
     `,
     prisma.$queryRaw<Array<{ year: number; month: number; n: bigint }>>`
       SELECT EXTRACT(YEAR FROM "fecha")::int AS year,
