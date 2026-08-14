@@ -8,6 +8,7 @@ import {
   datosConsultaDesdeXml,
   esCancelado,
 } from "@/lib/fiscal/vigencia-cfdi";
+import { revertirDerivadosDeCancelada } from "@/lib/automotriz/revertir-cancelada";
 import {
   cupoPorEmpresa,
   empresasDelTurno,
@@ -215,11 +216,33 @@ async function handle(req: Request) {
   };
   await Promise.all(Array.from({ length: CARRILES }, (_, k) => carril(k)));
 
+  const reversiones: Array<Record<string, unknown>> = [];
   if (cancelados.length > 0) {
     await prisma.invoice.updateMany({
       where: { id: { in: cancelados.map((c) => c.id) } },
       data: { status: "CANCELLED", canceladaAt: new Date() },
     });
+
+    // Marcar la factura NO basta. El motor fiscal filtra por status al leer,
+    // pero la capa de operación MATERIALIZA filas —unidades, costos, kardex,
+    // órdenes, nómina— y ningún filtro deshace una fila escrita. Sin esto una
+    // compra cancelada deja la unidad en el piso con su costo y una venta
+    // cancelada la deja marcada vendida, con su precio contado como ingreso.
+    //
+    // Va después del updateMany y una por una: si una reversión falla, la
+    // factura ya quedó CANCELLED (que es lo fiscalmente urgente) y el error se
+    // reporta para reintentar, en vez de tirar el barrido entero.
+    for (const c of cancelados) {
+      try {
+        const rev = await revertirDerivadosDeCancelada(prisma, c.id);
+        if (rev.huboCambios) reversiones.push({ uuid: c.uuid, ...rev });
+      } catch (e) {
+        errores.push({
+          uuid: c.uuid,
+          error: `reversión falló: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+    }
   }
 
   // Las empresas atendidas van al final de la fila: así rota el reparto.
@@ -256,6 +279,9 @@ async function handle(req: Request) {
     desde: desde.toISOString().slice(0, 10),
     recheckDays,
     cancelados: cancelados.map((c) => c.uuid),
+    // Lo que se deshizo en la capa de operación, para poder cuadrar el antes
+    // con el después: sin esto una reversión es invisible.
+    reversiones,
     errores,
     elapsedMs: Date.now() - startedAt,
     nota:

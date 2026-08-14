@@ -20,6 +20,7 @@ import { crearActivoDesdeCfdiSiAplica } from "./fiscal/auto-activo";
 import { derivarVehiculoInline } from "./automotriz/auto-vehiculo";
 import { backfillNominaRegimen } from "./nomina/backfill-regimen";
 import { importarNominaHistorica } from "./nomina/historia-import";
+import { revertirDerivadosDeCancelada } from "./automotriz/revertir-cancelada";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared, session-free SAT Descarga Masiva logic.
@@ -830,6 +831,13 @@ export interface CancelSyncResult {
   checked?: number;
   /** Sólo en dryRun: los UUIDs que SE cancelarían (sin escribir). */
   wouldCancel?: { id: string; uuid: string }[];
+  /**
+   * Cuántas de las canceladas tenían efectos DERIVADOS vivos que se
+   * deshicieron (unidades en piso, costos, kardex, órdenes, nómina). Marcar la
+   * factura no basta: la capa de operación materializa filas y ningún filtro
+   * por status deshace una fila escrita.
+   */
+  revertidas?: number;
   error?: string;
 }
 
@@ -994,11 +1002,28 @@ export async function syncCancelacionesPeriodo(
       wouldCancel: toCancel.map((t) => ({ id: t.id, uuid: t.uuid })),
     };
   }
+  let revertidas = 0;
   if (toCancel.length > 0) {
     await prisma.invoice.updateMany({
       where: { id: { in: toCancel.map((t) => t.id) } },
       data: { status: "CANCELLED" },
     });
+    // Marcar la factura no deshace lo que derivó. El motor fiscal filtra por
+    // status al leer, pero la capa de operación materializa filas —unidades,
+    // costos, kardex, órdenes, nómina— y ningún filtro borra una fila escrita.
+    // Una por una y con try: la cancelación fiscal ya quedó aplicada, y una
+    // reversión que falle no debe tirar el resto.
+    for (const t of toCancel) {
+      try {
+        const rev = await revertirDerivadosDeCancelada(prisma, t.id);
+        if (rev.huboCambios) revertidas++;
+      } catch (e) {
+        console.warn(
+          `[sat-cancel-sync] ${companyId}: reversión de ${t.uuid} falló:`,
+          e instanceof Error ? e.message : String(e),
+        );
+      }
+    }
   }
-  return { ok: true, status: "done", cancelled: toCancel.length, checked: rows.length };
+  return { ok: true, status: "done", cancelled: toCancel.length, checked: rows.length, revertidas };
 }
