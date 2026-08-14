@@ -32,6 +32,18 @@ import { recordSyntageExtraction } from "@/lib/costos/record";
 // `extraer=1` dispara la extracción (CUESTA: ~$10–23 MXN según el tarifario de
 // Syntage). Sin esa bandera sólo lista lo que ya esté extraído, que es gratis.
 //
+// UNA SOLA EMPRESA. `EMPRESAS_HABILITADAS` es una lista blanca cerrada por RFC.
+// Cada extracción cuesta y esta ruta puede disparar una por empresa: sin la
+// lista, un companyId equivocado gasta presupuesto en un cliente que nadie pidió
+// migrar. Abrirla es un cambio de código, revisable en el diff.
+//
+// NO SE DUPLICAN FACTURAS, y no depende de que este código lo haga bien: el
+// esquema tiene `@@unique([companyId, uuid])`, así que un folio fiscal repetido
+// lo rechaza Postgres — venga del SAT, de Syntage o de dos corridas encimadas.
+// Aquí además se pregunta por lote qué UUIDs ya tenemos, pero eso es para no
+// gastar descargas de más, no para evitar el duplicado: el duplicado ya es
+// imposible.
+//
 // Auth: CRON_SECRET (Bearer o x-cron-secret).
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -40,6 +52,21 @@ export const maxDuration = 300;
 
 const TIME_BUDGET_MS = 200_000;
 const MAX_PAGINAS = 60;
+
+/**
+ * SÓLO estas empresas. Lista blanca por RFC, no por id: el RFC es lo que
+ * factura Syntage (un slot del plan por RFC vinculado) y es legible al revisar.
+ *
+ * Está cerrada a propósito. Cada extracción cuesta y esta ruta puede disparar
+ * una por empresa: sin la lista, un `for` sobre todas las empresas —o un dedo
+ * pegado en un companyId equivocado— gasta presupuesto en clientes que nadie
+ * pidió migrar. Abrirla es un cambio de código deliberado, revisable en el
+ * diff, no una variable de entorno que se toca en caliente.
+ *
+ * MARGOM va primero porque es el único caso con el problema que esto resuelve:
+ * opera desde 2017 y la descarga masiva del SAT no llega antes de 2021.
+ */
+const EMPRESAS_HABILITADAS = new Set<string>(["AMA170817NK1"]);
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -75,6 +102,19 @@ async function handle(req: Request) {
     select: { rfc: true, razonSocial: true, fechaInicioOperaciones: true },
   });
   if (!empresa) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+
+  if (!EMPRESAS_HABILITADAS.has(empresa.rfc)) {
+    return NextResponse.json(
+      {
+        error: `${empresa.rfc} no está habilitada para CFDIs de Syntage`,
+        habilitadas: [...EMPRESAS_HABILITADAS],
+        nota:
+          "Lista blanca cerrada a propósito: cada extracción cuesta. Para habilitar otra " +
+          "empresa hay que agregarla a EMPRESAS_HABILITADAS en el código y revisarlo en el PR.",
+      },
+      { status: 403 },
+    );
+  }
 
   // Desde: lo que pidan, o el inicio de operaciones, o 2015 (antes de eso no
   // hay CFDI 3.3 que valga la pena). NO se inventa una ventana de N años: el
@@ -192,6 +232,8 @@ async function handle(req: Request) {
     truncado,
     elapsedMs: Date.now() - startedAt,
     nota:
+      "Sólo esta empresa (lista blanca por RFC). Duplicados imposibles: " +
+      "@@unique([companyId, uuid]) los rechaza en la base. " +
       "Esto NO importa nada: sólo compara UUIDs. `extraer=1` dispara la extracción " +
       "(cuesta ~$10–23 MXN y es UNA aunque cubra emitidas + recibidas + años). La " +
       "extracción es asíncrona: si acabas de dispararla, vuelve a correr esto sin " +
