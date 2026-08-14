@@ -1,0 +1,77 @@
+name: Revertir efectos de CFDIs cancelados (manual)
+
+# Cancelar un CFDI sólo cambiaba `Invoice.status`. El motor fiscal aguanta
+# porque filtra por status al leer, pero la capa de operación MATERIALIZA filas
+# —unidades, costos, kardex, órdenes, nómina— y ningún filtro deshace una fila
+# escrita.
+#
+# Medido en MARGOM: 3,695 CFDIs de ingreso cancelados y 4 de egreso, con todo su
+# efecto vivo. Una compra cancelada deja la unidad en el piso con su costo; una
+# venta cancelada la deja marcada vendida y su precio contado como ingreso.
+#
+# De aquí en adelante lo previenen sat-vigencia-sync (consulta por UUID, sin
+# cuota del SAT) y el cancel-sync de metadata. Este barrido limpia lo anterior.
+#
+# CORRER PRIMERO CON dryRun: mueve inventario.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa"
+        required: true
+        type: string
+      dryRun:
+        description: "Reportar sin escribir (recomendado la primera vez)"
+        required: false
+        default: true
+        type: boolean
+      limit:
+        description: "Tope de facturas por corrida"
+        required: false
+        default: "200"
+        type: string
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  revertir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Revertir
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          DRY_RUN: ${{ inputs.dryRun }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q="companyId=${COMPANY_ID}&limit=${LIMIT}"
+          if [ "${DRY_RUN}" = "true" ]; then Q="${Q}&dryRun=1"; fi
+
+          # En seco es una sola pasada. Aplicando, se repite hasta que
+          # `restantes` llegue a 0 o deje de bajar.
+          if [ "${DRY_RUN}" = "true" ]; then
+            curl -fsS --max-time 300 -X POST "${URL}/api/cron/revertir-canceladas?${Q}" \
+              -H "x-cron-secret: ${CRON_SECRET}" | jq '{candidatas, restantes, nota}'
+            exit 0
+          fi
+
+          previo=""
+          for i in $(seq 1 12); do
+            RESP="$(curl -fsS --max-time 300 -X POST "${URL}/api/cron/revertir-canceladas?${Q}" \
+              -H "x-cron-secret: ${CRON_SECRET}")"
+            echo "$RESP" | jq '{procesadas, totales, restantes, errores}'
+            REST="$(echo "$RESP" | jq -r '.restantes')"
+            if [ "$REST" = "0" ]; then echo "Sin pendientes."; break; fi
+            if [ "$REST" = "$previo" ]; then echo "::warning::restantes estancado en ${REST}"; break; fi
+            previo="$REST"
+          done

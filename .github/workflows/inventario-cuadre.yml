@@ -1,0 +1,58 @@
+name: Cuadre de inventario (manual)
+
+# ¿El inventario que decimos tener es el que dicen los libros?
+#
+# La balanza de MARGOM suma $147,888,997.17 entre 1301 (nuevos), 1302 (demos) y
+# 1312 (usados). El padrón dice $558,533,750.55 en piso — cuatro veces, y
+# ninguna diferencia de fecha explica eso.
+#
+# La sospecha es el espejo del defecto de las unidades sin CFDI de compra: ahí
+# faltaba la compra, aquí falta la SALIDA. Una unidad vendida cuya venta nunca
+# empató con el VIN se queda en piso para siempre. Por eso el desglose va por
+# año de compra: lo comprado en 2023 y todavía «disponible» no es piso.
+#
+# No escribe nada. Salen conteos e importes agregados de la propia empresa.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa"
+        required: true
+        type: string
+      anio:
+        description: "Ejercicio para los CFDIs con clave de vehículo (YYYY)"
+        required: false
+        default: "2025"
+        type: string
+      jqFiltro:
+        description: "Filtro jq sobre la respuesta (ej: .enPisoPorAnio)"
+        required: false
+        default: "."
+        type: string
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  cuadre:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Pedir el cuadre de inventario
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          ANIO: ${{ inputs.anio }}
+          JQ_FILTRO: ${{ inputs.jqFiltro }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          curl -fsS --max-time 300 \
+            "${URL}/api/cron/inventario-cuadre?companyId=${COMPANY_ID}&anio=${ANIO}" \
+            -H "x-cron-secret: ${CRON_SECRET}" | jq "${JQ_FILTRO:-.}"
