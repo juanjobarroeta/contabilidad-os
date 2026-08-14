@@ -92,6 +92,11 @@ interface PorAnio {
   yaTenemos: number;
   faltan: number;
   conXml: number;
+  /** Los que Syntage marca CANCELADO. */
+  canceladas: number;
+  /** Cancelados en el SAT que NOSOTROS tenemos como vivos. Cada uno es un peso
+   *  contado que no debería estarlo. */
+  canceladasNoRegistradas: number;
 }
 
 interface Importacion {
@@ -181,6 +186,13 @@ async function handle(req: Request) {
 
   // ── 2. Lo que Syntage ya tiene, contra lo nuestro ──────────────────────────
   const porAnio = new Map<number, PorAnio>();
+  // Muestra de folios que el SAT tiene por cancelados y nosotros por vivos.
+  const canceladasPendientes: string[] = [];
+  // La FORMA cruda del primer renglón. `conXml` se cuenta con `f.xml === true`,
+  // y si ese campo resultara ser una URL o un objeto la cuenta saldría baja sin
+  // avisar — que es exactamente el error que ya se cometió buscando el VIN en un
+  // campo que no lo tenía. Esto deja ver el campo en vez de suponerlo.
+  let muestraCruda: Record<string, unknown> | null = null;
   let paginas = 0;
   let totalSyntage = 0;
   let truncado = false;
@@ -215,6 +227,16 @@ async function handle(req: Request) {
     paginas++;
     if (facturas.length === 0) break;
     totalSyntage += facturas.length;
+    if (!muestraCruda && facturas[0]) {
+      const f0 = facturas[0] as Record<string, unknown>;
+      muestraCruda = {
+        llaves: Object.keys(f0),
+        xml: f0.xml,
+        tipoDeXml: typeof f0.xml,
+        status: f0.status,
+        type: f0.type,
+      };
+    }
 
     // Los UUIDs que Syntage reporta, contra los que ya guardamos. Se pregunta
     // por lote —no una consulta por factura— y sólo por uuid, que es la llave
@@ -222,13 +244,18 @@ async function handle(req: Request) {
     const uuids = facturas
       .map((f) => String((f as Record<string, unknown>).uuid ?? "").toUpperCase())
       .filter(Boolean);
-    const nuestros = new Set(
-      (
-        await prisma.invoice.findMany({
-          where: { companyId, uuid: { in: uuids } },
-          select: { uuid: true },
-        })
-      ).map((r) => (r.uuid ?? "").toUpperCase()),
+    // Se trae también `canceladaAt`: un CFDI que el SAT dio por cancelado y
+    // nosotros seguimos contando como vivo es un peso de más en los libros, y
+    // esto es la ÚNICA forma de saberlo para 2017–2021 (la descarga masiva no
+    // llega, y el XML de un cancelado ya no se puede bajar — pero el estatus
+    // del listado sí viene).
+    const nuestrasFilas = await prisma.invoice.findMany({
+      where: { companyId, uuid: { in: uuids } },
+      select: { uuid: true, canceladaAt: true },
+    });
+    const nuestros = new Set(nuestrasFilas.map((r) => (r.uuid ?? "").toUpperCase()));
+    const vivasNuestras = new Set(
+      nuestrasFilas.filter((r) => r.canceladaAt == null).map((r) => (r.uuid ?? "").toUpperCase()),
     );
 
     for (const f of facturas as Array<Record<string, unknown>>) {
@@ -236,11 +263,23 @@ async function handle(req: Request) {
       const emitido = String(f.issuedAt ?? "");
       const anio = Number(emitido.slice(0, 4));
       if (!Number.isFinite(anio) || anio < 2000) continue;
-      const fila = porAnio.get(anio) ?? { anio, enSyntage: 0, yaTenemos: 0, faltan: 0, conXml: 0 };
+      const fila =
+        porAnio.get(anio) ??
+        { anio, enSyntage: 0, yaTenemos: 0, faltan: 0, conXml: 0, canceladas: 0, canceladasNoRegistradas: 0 };
       fila.enSyntage++;
       if (f.xml === true) fila.conXml++;
       if (uuid && nuestros.has(uuid)) fila.yaTenemos++;
       else fila.faltan++;
+      // El estatus viene aunque el XML ya no: un cancelado pierde el archivo
+      // descargable, no el renglón.
+      const cancelado = String(f.status ?? "").toUpperCase().includes("CANCEL");
+      if (cancelado) {
+        fila.canceladas++;
+        if (uuid && vivasNuestras.has(uuid)) {
+          fila.canceladasNoRegistradas++;
+          if (canceladasPendientes.length < 50) canceladasPendientes.push(uuid);
+        }
+      }
       porAnio.set(anio, fila);
     }
 
@@ -316,7 +355,13 @@ async function handle(req: Request) {
       enSyntage: totalSyntage,
       faltan: faltanTotal,
       conXml: filas.reduce((s, f) => s + f.conXml, 0),
+      canceladas: filas.reduce((s, f) => s + f.canceladas, 0),
+      canceladasNoRegistradas: filas.reduce((s, f) => s + f.canceladasNoRegistradas, 0),
     },
+    // Folios vivos para nosotros y cancelados para el SAT. Muestra, no lista
+    // completa: lo que importa aquí es si el número es cero o no.
+    canceladasPendientes,
+    muestraCruda,
     importacion: importar ? imp : undefined,
     paginas,
     cursorInicial: cursorInicial ?? null,
@@ -334,7 +379,10 @@ async function handle(req: Request) {
       "`extraer` en unos minutos para ver qué llegó. `faltan` es el número que decide " +
       "si vale la pena importar. Con `importar=1` sí escribe: baja el XML de cada folio " +
       "que falte y lo mete por el MISMO importador que la descarga masiva del SAT. " +
-      "Si `siguienteCursor` no es null, vuelve a llamar con `cursor=<ese valor>`.",
+      "Si `siguienteCursor` no es null, vuelve a llamar con `cursor=<ese valor>`. " +
+      "`canceladasNoRegistradas` son folios que el SAT da por cancelados y nosotros " +
+      "seguimos contando como vivos: el listado trae el estatus aunque el XML de un " +
+      "cancelado ya no se pueda bajar, y para 2017–2021 es la única vía a ese dato.",
   };
 
   console.log(
