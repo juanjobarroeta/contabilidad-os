@@ -282,7 +282,25 @@ export interface CuadreIngreso {
    * TipoRelacion 07; si además existe la NC por el mismo importe, es el
    * esquema A.
    */
-  relaciones: Array<{ tipoRelacion: string; facturas: number; monto: number }>;
+  relaciones: Array<{
+    tipoRelacion: string;
+    facturas: number;
+    monto: number;
+    /**
+     * Del total de arriba, cuánto es CFDI de EGRESO (tipoSat "E", nota de
+     * crédito). Es el número que decide el esquema de anticipo del Anexo 20:
+     *
+     *   • Si el grueso del bucket 07 es EGRESO, son las notas de crédito que
+     *     CANCELAN el anticipo — esquema A, donde el CFDI de venta ya ampara
+     *     el total y el tablero acierta al excluir anticipo y NC.
+     *   • Si el grueso es INGRESO por importes pequeños, son facturas por el
+     *     REMANENTE — esquema B, y entonces el tablero se queda corto por el
+     *     anticipo que nunca se sumó.
+     *
+     * Sin este corte los dos esquemas se ven igual en el agregado.
+     */
+    egreso: { facturas: number; monto: number };
+  }>;
   /**
    * Relaciones leídas del XML, no de la columna.
    *
@@ -333,7 +351,10 @@ export async function cuadreDeIngresos(
     relacionesEnXml: [],
   };
   const porClave = new Map<string, { monto: number; facturas: number; ejemplo: string | null }>();
-  const porRelacion = new Map<string, { facturas: number; monto: number }>();
+  const porRelacion = new Map<
+    string,
+    { facturas: number; monto: number; egreso: { facturas: number; monto: number } }
+  >();
 
   for (const f of facturas) {
     res.subtotal = r2(res.subtotal + f.subtotal);
@@ -342,9 +363,13 @@ export async function cuadreDeIngresos(
     // reporte es lo mismo que no traer relación; sin esto aparecería un
     // renglón con clave vacía que no significa nada para quien lo lee.
     const rel = f.tipoRelacion ? f.tipoRelacion : "(sin relación)";
-    const pr = porRelacion.get(rel) ?? { facturas: 0, monto: 0 };
+    const pr = porRelacion.get(rel) ?? { facturas: 0, monto: 0, egreso: { facturas: 0, monto: 0 } };
     pr.facturas++;
     pr.monto = r2(pr.monto + f.subtotal);
+    if ((f.tipoSat ?? "I") === "E") {
+      pr.egreso.facturas++;
+      pr.egreso.monto = r2(pr.egreso.monto + f.subtotal);
+    }
     porRelacion.set(rel, pr);
     // La clave DOMINANTE decide, igual que en el gasto.
     const dom = [...f.items].sort((a, b2) => b2.importe - a.importe)[0];
