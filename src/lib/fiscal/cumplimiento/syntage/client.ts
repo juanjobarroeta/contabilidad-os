@@ -52,6 +52,12 @@ export class SyntageError extends Error {
 
 type Json = Record<string, unknown>;
 
+/**
+ * Tope de `itemsPerPage` que acepta Syntage. Pasarse devuelve **400** — no una
+ * página recortada. Es el mismo tope que muestra el paginador de su UI.
+ */
+export const MAX_ITEMS_POR_PAGINA = 100;
+
 export class SyntageClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
@@ -75,7 +81,12 @@ export class SyntageClient {
     const text = await res.text();
     const parsed: unknown = text ? safeJson(text) : null;
     if (!res.ok) {
-      throw new SyntageError(`Syntage ${method} ${path} → ${res.status}`, res.status, parsed);
+      // El cuerpo VA en el mensaje, no sólo en la propiedad `body`. Un 400 de
+      // esta API dice exactamente qué parámetro no le gustó, pero al loguear el
+      // error salía como «body: [Object]» y hubo que adivinarlo — era un
+      // itemsPerPage por encima del tope. Recortado para no volcar un HTML.
+      const detalle = text ? ` — ${text.slice(0, 300)}` : "";
+      throw new SyntageError(`Syntage ${method} ${path} → ${res.status}${detalle}`, res.status, parsed);
     }
     return parsed as T;
   }
@@ -353,12 +364,17 @@ export class SyntageClient {
    * Campos por factura: `id` (el de Syntage, para pedir el CFDI), `uuid` (folio
    * fiscal), `type` (I/E/P/N/T), `issuedAt`, `total`, `status`
    * (VIGENTE/CANCELADO), `isIssuer`/`isReceiver` y `xml`/`pdf`.
+   *
+   * OJO CON `itemsPerPage`: pedir 1000 devuelve **400**, no una página recortada
+   * en silencio. El tope real es 100 — el mismo que muestra el paginador de su
+   * UI («100 / page», 811 páginas para 81,001 renglones). Pasarse no degrada:
+   * truena.
    */
   async listEntityInvoices(
     entityId: string,
     opts: { desde?: string; hasta?: string; soloConXml?: boolean; porPagina?: number; pagina?: number } = {},
   ): Promise<{ facturas: Json[]; hayMas: boolean }> {
-    const porPagina = Math.min(opts.porPagina ?? 1000, 1000);
+    const porPagina = Math.min(opts.porPagina ?? MAX_ITEMS_POR_PAGINA, MAX_ITEMS_POR_PAGINA);
     const q = new URLSearchParams();
     q.set("itemsPerPage", String(porPagina));
     q.set("page", String(opts.pagina ?? 1));

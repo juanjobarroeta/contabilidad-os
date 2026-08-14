@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
-import { SyntageClient } from "@/lib/fiscal/cumplimiento/syntage/client";
+import { SyntageClient, MAX_ITEMS_POR_PAGINA } from "@/lib/fiscal/cumplimiento/syntage/client";
 import { recordSyntageExtraction } from "@/lib/costos/record";
 import { importarCfdiXml } from "@/lib/cfdi-import";
 
@@ -52,7 +52,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const TIME_BUDGET_MS = 200_000;
-const MAX_PAGINAS = 60;
+// Syntage tope 100 por página, así que 9 años son ~811 páginas. Listar es
+// rápido; quien manda de verdad es TIME_BUDGET_MS, y lo que no alcance se
+// retoma con `siguientePagina`.
+const MAX_PAGINAS = 900;
 
 /**
  * SÓLO estas empresas. Lista blanca por RFC, no por id: el RFC es lo que
@@ -202,7 +205,7 @@ async function handle(req: Request) {
     const { facturas, hayMas } = await client.listEntityInvoices(entityId, {
       desde,
       hasta,
-      porPagina: 1000,
+      porPagina: MAX_ITEMS_POR_PAGINA,
       pagina,
     });
     paginas++;
