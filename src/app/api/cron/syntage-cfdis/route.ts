@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
-import { SyntageClient } from "@/lib/fiscal/cumplimiento/syntage/client";
+import { SyntageClient, MAX_ITEMS_POR_PAGINA } from "@/lib/fiscal/cumplimiento/syntage/client";
 import { recordSyntageExtraction } from "@/lib/costos/record";
+import { importarCfdiXml } from "@/lib/cfdi-import";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST/GET /api/cron/syntage-cfdis?companyId=<id>[&desde=YYYY-MM-DD][&extraer=1]
@@ -51,7 +52,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const TIME_BUDGET_MS = 200_000;
-const MAX_PAGINAS = 60;
+// Syntage tope 100 por página, así que 9 años son ~811 páginas. Listar es
+// rápido; quien manda de verdad es TIME_BUDGET_MS, y lo que no alcance se
+// retoma con `siguientePagina`.
+const MAX_PAGINAS = 900;
 
 /**
  * SÓLO estas empresas. Lista blanca por RFC, no por id: el RFC es lo que
@@ -90,6 +94,16 @@ interface PorAnio {
   conXml: number;
 }
 
+interface Importacion {
+  intentados: number;
+  importados: number;
+  existentes: number;
+  invalidos: number;
+  sinXml: number;
+  errores: number;
+  primerError: string | null;
+}
+
 async function handle(req: Request) {
   if (!isAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -126,6 +140,12 @@ async function handle(req: Request) {
       : "2015-01-01");
   const hasta = parseFecha(params.get("hasta")) ?? new Date().toISOString().slice(0, 10);
   const extraer = params.get("extraer") === "1";
+  // `importar=1` sí escribe: baja el XML de cada folio que nos falte y lo mete
+  // por `importarCfdiXml`, el MISMO camino que la descarga masiva del SAT.
+  const importar = params.get("importar") === "1";
+  // Página por la que empezar. Listar 9 años no cabe en una corrida, así que la
+  // ruta devuelve `siguientePagina` y el workflow la vuelve a llamar hasta null.
+  const paginaInicial = Math.max(1, Math.trunc(Number(params.get("pagina") ?? 1)) || 1);
   const startedAt = Date.now();
 
   const client = new SyntageClient();
@@ -163,17 +183,30 @@ async function handle(req: Request) {
   let paginas = 0;
   let totalSyntage = 0;
   let truncado = false;
+  // Dónde retomar. null = se acabó la colección.
+  let siguientePagina: number | null = null;
+  const imp: Importacion = {
+    intentados: 0,
+    importados: 0,
+    existentes: 0,
+    invalidos: 0,
+    sinXml: 0,
+    errores: 0,
+    primerError: null,
+  };
 
   for (let i = 0; i < MAX_PAGINAS; i++) {
+    const pagina = paginaInicial + i;
     if (Date.now() - startedAt > TIME_BUDGET_MS) {
       truncado = true;
+      siguientePagina = pagina;
       break;
     }
     const { facturas, hayMas } = await client.listEntityInvoices(entityId, {
       desde,
       hasta,
-      porPagina: 1000,
-      pagina: i + 1,
+      porPagina: MAX_ITEMS_POR_PAGINA,
+      pagina,
     });
     paginas++;
     if (facturas.length === 0) break;
@@ -207,7 +240,60 @@ async function handle(req: Request) {
       porAnio.set(anio, fila);
     }
 
+    // ── 3. Importar los que falten ───────────────────────────────────────────
+    // Sólo con `importar=1`. Baja el XML de Syntage —el comprobante tal cual lo
+    // timbró el SAT— y lo mete por `importarCfdiXml`, exactamente la misma
+    // función que usa la descarga masiva. No hay un segundo juego de reglas.
+    if (importar) {
+      for (const f of facturas as Array<Record<string, unknown>>) {
+        if (Date.now() - startedAt > TIME_BUDGET_MS) {
+          truncado = true;
+          // La MISMA página: lo ya importado vuelve como «existente», que sólo
+          // cuesta una consulta por uuid — no se re-baja ningún XML.
+          siguientePagina = pagina;
+          break;
+        }
+        const uuid = String(f.uuid ?? "").toUpperCase();
+        if (!uuid || nuestros.has(uuid)) continue;
+        // Sin XML no hay comprobante que guardar: el JSON parseado de Syntage
+        // no es el CFDI, y guardar una factura sin su archivo original rompe
+        // todo lo que re-parsea rawXml (nómina, vehículos, impuestos).
+        if (f.xml !== true) {
+          imp.sinXml++;
+          continue;
+        }
+        const syntageId = String(f.id ?? "");
+        if (!syntageId) {
+          imp.sinXml++;
+          continue;
+        }
+        imp.intentados++;
+        try {
+          const xml = await client.getInvoiceCfdiXml(syntageId);
+          const r = await importarCfdiXml({
+            companyId,
+            rfcEmpresa: empresa.rfc,
+            // Syntage devuelve emitidas y recibidas en la MISMA colección, así
+            // que el lado lo decide el RFC del emisor contra el nuestro.
+            tipo: null,
+            rawUuid: uuid,
+            xmlContent: xml,
+            origen: "Syntage",
+          });
+          if (r.resultado === "importado") imp.importados++;
+          else if (r.resultado === "existente") imp.existentes++;
+          else imp.invalidos++;
+        } catch (e) {
+          imp.errores++;
+          if (!imp.primerError) imp.primerError = e instanceof Error ? e.message : String(e);
+        }
+      }
+      if (truncado) break;
+    }
+
     if (!hayMas) break;
+    // Se acabó el presupuesto de páginas, no la colección.
+    if (i === MAX_PAGINAS - 1) siguientePagina = pagina + 1;
   }
 
   const filas = [...porAnio.values()].sort((a, b) => b.anio - a.anio);
@@ -226,7 +312,12 @@ async function handle(req: Request) {
       faltan: faltanTotal,
       conXml: filas.reduce((s, f) => s + f.conXml, 0),
     },
+    importacion: importar ? imp : undefined,
     paginas,
+    paginaInicial,
+    // null = se acabó la colección. Si trae número, vuelve a llamar con
+    // `pagina=<ese número>` — el workflow hace ese bucle solo.
+    siguientePagina,
     truncado,
     elapsedMs: Date.now() - startedAt,
     nota:
@@ -236,12 +327,22 @@ async function handle(req: Request) {
       "(cuesta ~$10–23 MXN y es UNA aunque cubra emitidas + recibidas + años). La " +
       "extracción es asíncrona: si acabas de dispararla, vuelve a correr esto sin " +
       "`extraer` en unos minutos para ver qué llegó. `faltan` es el número que decide " +
-      "si vale la pena construir el importador.",
+      "si vale la pena importar. Con `importar=1` sí escribe: baja el XML de cada folio " +
+      "que falte y lo mete por el MISMO importador que la descarga masiva del SAT. " +
+      "Si `siguientePagina` no es null, vuelve a llamar con `pagina=<ese número>`.",
   };
 
   console.log(
     "[cron/syntage-cfdis]",
-    JSON.stringify({ companyId, rfc: empresa.rfc, ...resp.totales, paginas, truncado }),
+    JSON.stringify({
+      companyId,
+      rfc: empresa.rfc,
+      ...resp.totales,
+      paginas,
+      siguientePagina,
+      truncado,
+      ...(importar ? { importados: imp.importados, errores: imp.errores } : {}),
+    }),
   );
   return NextResponse.json(resp);
 }
