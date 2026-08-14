@@ -83,18 +83,40 @@ describe("balanceGeneralDesdeBalanza", () => {
   });
 
   it("cuadra la ecuación contable con el resultado en curso como renglón virtual", () => {
-    // Venta de 100+16 IVA cobrada: banco 116 / ingreso -100 / IVA -16.
+    // Venta de 100+16 IVA cobrada: banco 116 / ingreso 100 / IVA 16.
+    // Los tres en signo NATURAL, que es lo que produce saldosCoe: la acreedora
+    // con saldo acreedor llega POSITIVA, no negativa.
     const rows: BalanzaRow[] = [
       row({ saldoFinal: 116 }),
-      row({ cuentaSAT: "208", subcuenta: "208.01", nombre: "IVA trasladado cobrado", tipo: "PASIVO", saldoFinal: -16 }),
-      row({ cuentaSAT: "401", subcuenta: "401.01", nombre: "Ventas", tipo: "INGRESO", saldoFinal: -100 }),
+      row({ cuentaSAT: "208", subcuenta: "208.01", nombre: "IVA trasladado cobrado", tipo: "PASIVO", saldoFinal: 16 }),
+      row({ cuentaSAT: "401", subcuenta: "401.01", nombre: "Ventas", tipo: "INGRESO", saldoFinal: 100 }),
     ];
     const bg = balanceGeneralDesdeBalanza(rows);
     expect(bg.totalActivo).toBe(116);
-    expect(bg.totalPasivo).toBe(16); // presentación: positivo
+    expect(bg.totalPasivo).toBe(16);
     expect(bg.totalCapital).toBe(0);
     expect(bg.resultadoEnCurso).toBe(100); // utilidad
     expect(bg.descuadre).toBe(0);
+  });
+
+  it("un pasivo con saldo normal NO se presenta en negativo", () => {
+    // El defecto que enseñaba «Proveedores nacionales $-5,815,719,699.32».
+    const bg = balanceGeneralDesdeBalanza([
+      row({ cuentaSAT: "201", subcuenta: "201.01", nombre: "Proveedores nacionales", tipo: "PASIVO", saldoFinal: 5000 }),
+    ]);
+    expect(bg.pasivo[0].monto).toBe(5000);
+    expect(bg.totalPasivo).toBe(5000);
+  });
+
+  it("el resultado en curso RESTA los gastos, no los suma", () => {
+    // Sumarlos y cambiar el signo daba −(ingresos + gastos): a MARGOM le salía
+    // −$10,910,475,873.36 de resultado del ejercicio.
+    const bg = balanceGeneralDesdeBalanza([
+      row({ cuentaSAT: "401", subcuenta: "401.01", nombre: "Ventas", tipo: "INGRESO", saldoFinal: 1000 }),
+      row({ cuentaSAT: "601", subcuenta: "601.84", nombre: "Otros gastos", tipo: "GASTO", saldoFinal: 400 }),
+      row({ cuentaSAT: "501", subcuenta: "501.01", nombre: "Costo de ventas", tipo: "COSTO", saldoFinal: 350 }),
+    ]);
+    expect(bg.resultadoEnCurso).toBe(250);
   });
 
   it("los niveles 1-2 y saldos ~0 no aparecen en el detalle", () => {
