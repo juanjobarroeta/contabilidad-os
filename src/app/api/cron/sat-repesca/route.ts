@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
+import { parsePeriodos } from "./parse-periodos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/sat-repesca?companyId=<id>&periodos=YYYY-MM,YYYY-MM[&dryRun=1]
@@ -50,20 +51,6 @@ function isAuthorized(req: Request): boolean {
   const auth = req.headers.get("authorization");
   if (auth && auth === `Bearer ${secret}`) return true;
   return req.headers.get("x-cron-secret") === secret;
-}
-
-/** "2025-04,2023-08" → [{año,mes}]. Ignora lo que no parsea, sin adivinar. */
-export function parsePeriodos(raw: string): Array<{ year: number; month: number }> {
-  const out: Array<{ year: number; month: number }> = [];
-  for (const tok of raw.split(",")) {
-    const m = tok.trim().match(/^(\d{4})-(\d{1,2})$/);
-    if (!m) continue;
-    const year = Number(m[1]);
-    const month = Number(m[2]);
-    if (year < 2000 || year > 2100 || month < 1 || month > 12) continue;
-    if (!out.some((p) => p.year === year && p.month === month)) out.push({ year, month });
-  }
-  return out;
 }
 
 interface ResultadoPeriodo {

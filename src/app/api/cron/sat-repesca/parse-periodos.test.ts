@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parsePeriodos } from "./route";
+import { parsePeriodos } from "./parse-periodos";
 
 // El parámetro `periodos` se teclea a mano para repescar meses concretos, así
 // que la regla es NO ADIVINAR: lo que no parsea se ignora en silencio y la ruta
