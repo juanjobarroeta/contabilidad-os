@@ -37,6 +37,12 @@ export interface LineaResultado {
   costoEsNomina?: boolean;
   /** Ingreso que no consume inventario ni horas: su utilidad ES el ingreso. */
   sinCostoDirecto?: boolean;
+  /**
+   * Línea cuyo COSTO no viene de CFDIs sino de cuadrar contra los libros. Hoy
+   * sólo la de unidades sin CFDI de compra: su ingreso es real (la venta sí se
+   * facturó) y su costo sale por diferencia contra la Contabilidad Electrónica.
+   */
+  costoDesdeLibros?: boolean;
 }
 
 export type UnidadVendida = {
@@ -65,6 +71,13 @@ export interface ResultadosPeriodo {
     utilidad: number;
     margen: number | null;
     ingresoSinCosto: number;
+    /** Presente sólo cuando se ancló a los libros: las tres cifras con las que
+     *  se armó la línea de unidades sin CFDI, para poder auditarla. */
+    ancla?: {
+      costoDeVentasLibros: number;
+      costoExplicadoPorCfdis: number;
+      ingresoSinCfdiDeCompra: number;
+    };
   };
   gastos: Array<{ clave: string; nombre: string; monto: number; cuenta?: string; facturas?: number }>;
   estructura: number;
@@ -174,7 +187,61 @@ export async function calcularResultados(
   return armar({
     unidades: unidades as UnidadVendida[],
     servicios, refaccionesRaw, nomina, nominaPorSucursal, gastos, otros,
+    anclaCE: await anclaDeLibros(db, companyId, desde, hasta),
   });
+}
+
+/**
+ * Costo de ventas del ejercicio SEGÚN LOS LIBROS, para anclar el tablero.
+ *
+ * Devuelve undefined —y entonces el tablero se queda exactamente como estaba—
+ * salvo que se cumplan las dos condiciones que lo hacen correcto:
+ *
+ *   1. El periodo pedido es un EJERCICIO COMPLETO. El asiento de apertura es
+ *      una FOTO a una fecha: su saldo de familia 5 es el costo acumulado del
+ *      ejercicio que cierra, no el de un mes ni el de medio año. Aplicarlo a
+ *      un trimestre daría un número seguro de sí mismo y equivocado, que es
+ *      peor que no dar ninguno.
+ *   2. Existe apertura importada que ampare justo ese ejercicio. La apertura se
+ *      fecha el primer día del mes siguiente al de la balanza, así que la que
+ *      cierra el ejercicio N cae en enero de N+1.
+ *
+ * La familia 5 es «costo de ventas» en el código agrupador del SAT — misma
+ * convención para cualquier distribuidor, no algo afinado a esta agencia.
+ */
+async function anclaDeLibros(
+  db: PrismaClient,
+  companyId: string,
+  desde: Date,
+  hasta: Date,
+): Promise<{ costoDeVentas: number } | undefined> {
+  const anio = desde.getUTCFullYear();
+  const ejercicioCompleto =
+    desde.getUTCMonth() === 0 &&
+    desde.getUTCDate() === 1 &&
+    hasta.getUTCFullYear() === anio + 1 &&
+    hasta.getUTCMonth() === 0 &&
+    hasta.getUTCDate() === 1;
+  if (!ejercicioCompleto) return undefined;
+
+  const asientos = await db.accountingEntry.findMany({
+    where: {
+      companyId,
+      fuente: "APERTURA",
+      year: anio + 1,
+      chartAccount: { cuentaSAT: { startsWith: "5" } },
+    },
+    select: { monto: true, tipo: true },
+  });
+  if (asientos.length === 0) return undefined;
+
+  const costoDeVentas = r2(
+    asientos.reduce((s, a) => s + (a.tipo === "CARGO" ? a.monto : -a.monto), 0),
+  );
+  // Un costo de ventas negativo o en cero no es un ancla: es una señal de que
+  // la apertura de esta empresa no trae la familia 5 como se espera. Mejor
+  // dejar el tablero como estaba que colgarle un número sin sentido.
+  return costoDeVentas > 0 ? { costoDeVentas } : undefined;
 }
 
 type NominaGrupo = {
@@ -193,6 +260,20 @@ export interface InsumosResultados {
   nominaPorSucursal: Array<{ sucursal: string | null; _sum: { percepciones: number | null; cuotasPatronales: number | null } }>;
   gastos: GastosResultado;
   otros?: OtrosIngresosResultado;
+  /**
+   * Ancla a los libros. Sin esto el tablero se queda como estaba: cuenta sólo
+   * las unidades cuyo CFDI de compra tenemos y deja fuera el ingreso de las
+   * demás — que es de donde salía la brecha de $188.1M contra la balanza.
+   *
+   * Con esto, las unidades sin CFDI de compra ENTRAN con su ingreso real (la
+   * venta sí se facturó) y su costo se obtiene por DIFERENCIA contra el costo
+   * de ventas de la balanza. Los dos lados quedan sobre los libros y el residuo
+   * deja de ser un error invisible para volverse un renglón con nombre.
+   */
+  anclaCE?: {
+    /** Costo de ventas del periodo según la balanza (familia 5). */
+    costoDeVentas: number;
+  };
 }
 
 /** Armado puro del estado de resultados — sin DB, para poder fijarlo con casos. */
@@ -294,6 +375,46 @@ export function armar(d: InsumosResultados): ResultadosPeriodo {
     })),
   ];
 
+  // ── Unidades sin CFDI de compra ────────────────────────────────────────────
+  // Se vendieron y se facturaron, pero su compra no está en nuestro archivo:
+  // o no se encontró, o es anterior a la ventana de visibilidad (2021). Hasta
+  // ahora quedaban FUERA por los dos lados —ni ingreso ni costo—, que es de
+  // donde salía la brecha contra la balanza: −$188.1M de ingreso y −$178.6M de
+  // costo, casi cancelándose.
+  //
+  // Dejarlas fuera no es neutral: el ingreso ES real y está facturado. Entran
+  // con su ingreso, y su costo sale por DIFERENCIA contra el costo de ventas de
+  // los libros. Va en su PROPIA línea para que los márgenes de las demás sigan
+  // siendo comparables y para que el residuo se vea, en vez de repartirlo a
+  // prorrata sobre unidades que sí tienen su costo.
+  const ingresoSinCFDI = r2(nuevas.ingresoSinCosto + seminuevas.ingresoSinCosto);
+  if (d.anclaCE) {
+    // Todo el costo que YA explicamos con CFDIs y que los libros meten en el
+    // costo de ventas: unidades y refacciones. La mano de obra no — ésa vive en
+    // nómina, no en la familia 5.
+    const costoExplicado = r2(
+      nuevas.costo +
+        seminuevas.costo +
+        (refEnOrden.costo ?? 0) +
+        (refMostrador.costo ?? 0)
+    );
+    // El residuo puede salir negativo si los libros registran MENOS costo del
+    // que ya atribuimos. Eso no es el costo de estas unidades: es un descuadre,
+    // y se reporta como está en vez de recortarlo a cero y fingir que cuadra.
+    const costoPorDiferencia = r2(d.anclaCE.costoDeVentas - costoExplicado);
+    lineas.push({
+      clave: "unidades_sin_cfdi_compra",
+      nombre: "Unidades sin CFDI de compra (costo desde libros)",
+      ingreso: ingresoSinCFDI,
+      costo: costoPorDiferencia,
+      utilidad: r2(ingresoSinCFDI - costoPorDiferencia),
+      margen: margen(ingresoSinCFDI - costoPorDiferencia, ingresoSinCFDI),
+      unidades: nuevas.sinCosto + seminuevas.sinCosto,
+      costoEstimado: true,
+      costoDesdeLibros: true,
+    });
+  }
+
   const ingresoTotal = r2(lineas.reduce((s, l) => s + l.ingreso, 0));
   const utilidadBruta = r2(lineas.reduce((s, l) => s + l.utilidad, 0));
   // Nómina que NO produce ingreso directo: ventas y refacciones cargan a su
@@ -327,11 +448,24 @@ export function armar(d: InsumosResultados): ResultadosPeriodo {
       utilidad: utilidadTotal,
       margen: margen(utilidadTotal, ingresoTotal),
       ingresoSinCosto: r2(
-        nuevas.ingresoSinCosto +
-          seminuevas.ingresoSinCosto +
+        // Con el ancla puesta, el ingreso de las unidades sin CFDI ya ENTRÓ en
+        // su propia línea: seguir reportándolo aquí lo contaría dos veces para
+        // quien lea este campo como «ingreso que se quedó fuera».
+        (d.anclaCE ? 0 : nuevas.ingresoSinCosto + seminuevas.ingresoSinCosto) +
           (refEnOrden.ingreso_sin_costo ?? 0) +
           (refMostrador.ingreso_sin_costo ?? 0)
       ),
+      ...(d.anclaCE
+        ? {
+            ancla: {
+              costoDeVentasLibros: r2(d.anclaCE.costoDeVentas),
+              costoExplicadoPorCfdis: r2(
+                nuevas.costo + seminuevas.costo + (refEnOrden.costo ?? 0) + (refMostrador.costo ?? 0)
+              ),
+              ingresoSinCfdiDeCompra: ingresoSinCFDI,
+            },
+          }
+        : {}),
     },
     gastos: [
       { clave: "nomina_ventas", nombre: "Nómina de ventas", monto: nominaVentas },

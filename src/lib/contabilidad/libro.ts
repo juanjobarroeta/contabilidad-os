@@ -163,33 +163,49 @@ export interface BalanceGeneral {
 }
 
 /**
- * Balance general puro desde la balanza acumulada. Convenio de signo de
- * BalanzaRow.saldoFinal: cargos positivos — activo queda positivo, pasivo y
- * capital negativos (se presentan en valor de presentación: pasivo/capital
- * con signo invertido).
+ * Balance general puro desde la balanza acumulada.
+ *
+ * Convenio de signo de `BalanzaRow.saldoFinal`: NATURAL de cada cuenta, tal
+ * como lo produce `saldosCoe`. Un activo con saldo deudor llega positivo y un
+ * pasivo con saldo acreedor TAMBIÉN llega positivo — cada uno en su lado. Aquí
+ * no se invierte nada; los montos ya salen listos para presentar.
  */
 export function balanceGeneralDesdeBalanza(rows: BalanzaRow[]): BalanceGeneral {
-  const detalle = (tipo: string, invertir: boolean) =>
+  // `saldoFinal` viene en signo NATURAL de la cuenta (ver saldosCoe: dir = −1
+  // para las acreedoras), así que un pasivo con saldo normal ya llega POSITIVO
+  // y no hay que invertir nada. Invertirlo —como se hacía— pintaba los pasivos
+  // en negativo: MARGOM mostraba «Proveedores nacionales $-5,815,719,699.32»,
+  // que no significa nada, y metía el doble de cada saldo acreedor al
+  // descuadre.
+  const detalle = (tipo: string) =>
     rows
       .filter((r) => r.tipo === tipo && r.nivel >= 3 && Math.abs(r.saldoFinal) >= 0.01)
       .map((r) => ({
         cuenta: r.subcuenta ?? r.cuentaSAT,
         nombre: r.nombre,
-        monto: r2(invertir ? -r.saldoFinal : r.saldoFinal),
+        monto: r2(r.saldoFinal),
       }));
 
-  const activo = detalle("ACTIVO", false);
-  const pasivo = detalle("PASIVO", true);
-  const capital = detalle("CAPITAL", true);
+  const activo = detalle("ACTIVO");
+  const pasivo = detalle("PASIVO");
+  const capital = detalle("CAPITAL");
   const sum = (xs: { monto: number }[]) => r2(xs.reduce((s, x) => s + x.monto, 0));
 
   // Resultado en curso: cuentas de resultados aún no traspasadas a capital.
-  // saldoFinal firmado (cargos +): ingresos quedan negativos, gastos positivos.
-  const resultadoEnCurso = r2(
-    -rows
-      .filter((r) => ["INGRESO", "GASTO", "COSTO"].includes(r.tipo) && r.nivel >= 3)
-      .reduce((s, r) => s + r.saldoFinal, 0)
-  );
+  // En signo natural el ingreso llega POSITIVO y el gasto también, así que el
+  // resultado es la RESTA. Sumarlos y cambiarles el signo —como se hacía—
+  // daba −(ingresos + gastos): a MARGOM le salía −$10,910,475,873.36 de
+  // «resultado del ejercicio», que es la suma de todo lo que facturó y todo lo
+  // que gastó, en negativo.
+  const esResultado = (r: BalanzaRow, tipos: string[]) =>
+    tipos.includes(r.tipo) && r.nivel >= 3;
+  const ingresos = rows
+    .filter((r) => esResultado(r, ["INGRESO"]))
+    .reduce((s, r) => s + r.saldoFinal, 0);
+  const gastos = rows
+    .filter((r) => esResultado(r, ["GASTO", "COSTO"]))
+    .reduce((s, r) => s + r.saldoFinal, 0);
+  const resultadoEnCurso = r2(ingresos - gastos);
 
   const totalActivo = sum(activo);
   const totalPasivo = sum(pasivo);
