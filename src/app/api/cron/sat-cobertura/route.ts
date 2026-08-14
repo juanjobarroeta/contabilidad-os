@@ -53,11 +53,31 @@ async function handle(req: Request) {
   // Todos los periodos que el SAT nos contestó alguna vez, no una ventana fija:
   // la pregunta es sobre lo que dijimos tener.
   const [solicitudes, facturas] = await Promise.all([
-    prisma.satSyncRequest.groupBy({
-      by: ["year", "month"],
-      where: { companyId, status: "FINISHED" },
-      _sum: { cfdisFound: true },
-    }),
+    // UNA fila por RANGO distinto, no todas.
+    //
+    // `submitSatSync` crea una fila NUEVA cada vez que un periodo se vuelve a
+    // pedir pasada la ventana de 24h, así que sumar todas las FINISHED cuenta
+    // el mismo mes tantas veces como se haya pedido. Medido el 2026-08-14:
+    // 2026-06, 2026-07 y 2024-01 daban cobertura EXACTAMENTE 0.5 —satDijo justo
+    // al doble— y 2026-06/07 nunca se tocaron con tramos: son meses que el cron
+    // normal pidió dos veces.
+    //
+    // Con tramos SÍ hay varias filas legítimas por mes, una por rango, y esas
+    // deben sumarse: los rangos son disjuntos. Por eso la llave es
+    // (tipo, desde, hasta) y de cada una se toma la solicitud más reciente.
+    // Las filas viejas traen desde/hasta nulos (son de antes de #632): ahí la
+    // llave cae en "mes completo", que es lo que eran.
+    prisma.$queryRaw<Array<{ year: number; month: number; cfdis: bigint }>>`
+      SELECT year, month, SUM("cfdisFound")::bigint AS cfdis
+      FROM (
+        SELECT DISTINCT ON ("year", "month", "tipo", "desde", "hasta")
+               "year", "month", "cfdisFound"
+        FROM "SatSyncRequest"
+        WHERE "companyId" = ${companyId} AND "status" = 'FINISHED'
+        ORDER BY "year", "month", "tipo", "desde", "hasta", "createdAt" DESC
+      ) ultima
+      GROUP BY year, month
+    `,
     prisma.$queryRaw<Array<{ year: number; month: number; n: bigint }>>`
       SELECT EXTRACT(YEAR FROM "fecha")::int AS year,
              EXTRACT(MONTH FROM "fecha")::int AS month,
@@ -73,7 +93,7 @@ async function handle(req: Request) {
     .map((r) => ({
       year: r.year,
       month: r.month,
-      satDijo: r._sum.cfdisFound ?? 0,
+      satDijo: Number(r.cfdis ?? 0),
       tenemos: nuestrasPor.get(`${r.year}-${r.month}`) ?? 0,
     }))
     .sort((a, b) => b.year - a.year || b.month - a.month);
