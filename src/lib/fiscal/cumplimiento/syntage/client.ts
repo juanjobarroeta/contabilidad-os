@@ -335,6 +335,66 @@ export class SyntageClient {
     return new TextDecoder("utf-8").decode(new Uint8Array(data));
   }
 
+  /**
+   * Facturas (CFDIs) ya extraídas de la entidad. Pagina por CURSOR, no por
+   * `page`: la colección puede traer decenas de miles y el cursor es lo que
+   * documenta Syntage para recorrerla (`id[lt]` + header X-Pagination-Style).
+   *
+   * `hasXml=true` filtra a las que tienen XML descargable — que son las únicas
+   * que sirven para importar como las del SAT (el rawXml es lo que re-parsean
+   * nómina, vehículos y el motor fiscal).
+   *
+   * Campos por factura: `id` (el de Syntage, para pedir el CFDI), `uuid` (folio
+   * fiscal), `type` (I/E/P/N/T), `issuedAt`, `total`, `status`
+   * (VIGENTE/CANCELADO), `isIssuer`/`isReceiver` y `xml`/`pdf`.
+   */
+  async listEntityInvoices(
+    entityId: string,
+    opts: { desde?: string; hasta?: string; soloConXml?: boolean; porPagina?: number; cursor?: string } = {},
+  ): Promise<{ facturas: Json[]; siguienteCursor: string | null }> {
+    const q = new URLSearchParams();
+    q.set("itemsPerPage", String(Math.min(opts.porPagina ?? 1000, 1000)));
+    q.set("order[issuedAt]", "desc");
+    if (opts.desde) q.set("issuedAt[after]", opts.desde);
+    if (opts.hasta) q.set("issuedAt[before]", opts.hasta);
+    if (opts.soloConXml) q.set("hasXml", "true");
+    if (opts.cursor) q.set("id[lt]", opts.cursor);
+
+    const res = await fetch(`${this.baseUrl}/entities/${entityId}/invoices?${q.toString()}`, {
+      headers: {
+        "X-Api-Key": this.apiKey,
+        Accept: "application/ld+json, application/json",
+        "X-Pagination-Style": "cursor",
+      },
+    });
+    const text = await res.text();
+    const parsed: unknown = text ? safeJson(text) : null;
+    if (!res.ok) {
+      throw new SyntageError(`Syntage GET /entities/${entityId}/invoices → ${res.status}`, res.status, parsed);
+    }
+    const facturas = asArray(parsed as Json);
+    // El cursor de la siguiente página es el id de la última fila: con
+    // order[issuedAt]=desc e id[lt] se avanza hacia atrás en el tiempo.
+    const ultima = facturas[facturas.length - 1];
+    const siguienteCursor = facturas.length > 0 && ultima ? String(ultima.id ?? "") || null : null;
+    return { facturas, siguienteCursor };
+  }
+
+  /**
+   * XML ORIGINAL del CFDI. Por default el endpoint devuelve el comprobante ya
+   * parseado a JSON; `Accept: text/xml` es lo que trae el archivo tal cual lo
+   * timbró el SAT, que es el que hay que guardar en `Invoice.rawXml`.
+   */
+  async getInvoiceCfdiXml(invoiceId: string): Promise<string> {
+    const res = await fetch(`${this.baseUrl}/invoices/${invoiceId}/cfdi`, {
+      headers: { "X-Api-Key": this.apiKey, Accept: "text/xml" },
+    });
+    if (!res.ok) {
+      throw new SyntageError(`Syntage GET /invoices/${invoiceId}/cfdi → ${res.status}`, res.status);
+    }
+    return res.text();
+  }
+
   /** Sondea una extracción hasta que termina o falla. */
   async waitForExtraction(id: string, opts: { timeoutMs?: number; intervalMs?: number } = {}): Promise<Json> {
     const timeoutMs = opts.timeoutMs ?? 120_000;
