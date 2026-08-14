@@ -135,6 +135,42 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — compra", () => {
     expect(db._vehiculos.size).toBe(1);
     expect(db._costos).toHaveLength(2);
   });
+
+  it("la unidad RETIRADA por cancelación vuelve al piso cuando llega su compra buena", async () => {
+    const db = fakeDb();
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-muerta", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    // Se cancela la compra: la reversión desliga y retira (no estuvo en piso).
+    const veh = [...db._vehiculos.values()][0];
+    Object.assign(veh, { compraInvoiceId: null, costoCompra: 0, estado: "CANCELADO" });
+
+    // Llega la sustituta. El orden importa: la cancelación se detecta ANTES de
+    // descargar el CFDI nuevo, así que este caso es el normal, no el raro.
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-viva", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    expect(r).toMatchObject({ creados: 0, actualizados: 1 });
+    expect(db._vehiculos.size).toBe(1); // no duplica el VIN
+    expect(veh).toMatchObject({
+      estado: "DISPONIBLE", compraInvoiceId: "inv-viva", costoCompra: 445700.05,
+    });
+  });
+
+  it("una compra normal NO revive nada: el estado no se pisa", async () => {
+    const db = fakeDb();
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    const veh = [...db._vehiculos.values()][0];
+    // Vendida y desligada de su compra (p.ej. la preparación se desligó): que
+    // llegue la compra buena no la debe sacar de VENDIDO.
+    Object.assign(veh, { compraInvoiceId: null, estado: "VENDIDO", ventaInvoiceId: "inv-venta" });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-compra-2", tipo: "EGRESO", rawXml: cfdiCompra(),
+    });
+    expect(veh.estado).toBe("VENDIDO");
+  });
 });
 
 describe("derivarVehiculoDesdeCfdiSiAplica() — venta y round-trip", () => {

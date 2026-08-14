@@ -6,18 +6,24 @@
 // NO lee facturas: MATERIALIZA filas —unidades, costos, movimientos de kardex,
 // órdenes de servicio, nómina— y ningún filtro deshace una fila ya escrita.
 //
-// El resultado medido en MARGOM: 3,695 CFDIs de ingreso cancelados y 4 de
-// egreso, con todo lo que derivaron intacto. Una compra cancelada deja la
-// unidad en el piso con su costo; una venta cancelada deja la unidad marcada
-// vendida y su precio contado como ingreso.
+// MARGOM tiene 3,699 CFDIs cancelados, pero se midió en producción
+// (2026-08-14, dryRun) que NINGUNO tiene efectos vivos: `candidatas: 0`. No es
+// un hueco de la consulta, es el diseño — la cola de `vehiculos-backfill` filtra
+// `status <> 'CANCELLED'`, así que un CFDI cancelado nunca derivó nada, y
+// `repararCancelados=1` ya religa lo que se canceló DESPUÉS de derivarse.
+// Conclusión que corrige la hipótesis con que se escribió este módulo: las
+// cancelaciones NO son causa del piso inflado de MARGOM.
 //
-// Esto lo repara. Es IDEMPOTENTE (correrlo dos veces no hace nada la segunda) y
-// NO BORRA UNIDADES a propósito:
+// Sigue valiendo como seguro del camino nuevo: la cancelación por UUID detecta
+// una cancelación en el momento, y aquí se deshace lo derivado. Es IDEMPOTENTE
+// (correrlo dos veces no hace nada la segunda) y NO BORRA UNIDADES:
 //
-//   • Si se canceló la COMPRA, se le quita el costo y la liga, pero la unidad
-//     se queda. Casi siempre la cancelación es por refacturación, y el CFDI
-//     nuevo vuelve a derivarla con el costo correcto; borrar la fila perdería
-//     el VIN, su expediente y cualquier costo capturado a mano.
+//   • Si se canceló la COMPRA, se le quita el costo y la liga. La fila se
+//     conserva —borrarla perdería el VIN, su expediente y los costos capturados
+//     a mano—, pero si la unidad nunca se vendió y la creamos nosotros, se
+//     RETIRA (estado CANCELADO): sin compra que la respalde no estuvo en piso.
+//     Mismo criterio que `repararCancelados`; si luego llega la sustituta, la
+//     liga de compra la devuelve a DISPONIBLE.
 //   • Si se canceló la VENTA, la unidad vuelve a DISPONIBLE — mismo criterio
 //     que la reparación de auto-vehiculo.ts cuando una factura deja de
 //     calificar como venta.
@@ -35,7 +41,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export interface ReversionCancelada {
   invoiceId: string;
   /** Unidades cuya COMPRA amparaba este CFDI: pierden costo y liga. */
-  compras: { unidades: number; costoLiberado: number };
+  compras: { unidades: number; costoLiberado: number; retiradas: number };
   /** Unidades cuya VENTA amparaba este CFDI: vuelven a piso. */
   ventas: { unidades: number; ingresoLiberado: number };
   /** VehiculoCosto derivados de este CFDI. Los manuales se conservan. */
@@ -63,7 +69,7 @@ export async function revertirDerivadosDeCancelada(
   const [comprasAntes, ventasAntes, costosAntes] = await Promise.all([
     db.vehiculo.findMany({
       where: { compraInvoiceId: invoiceId },
-      select: { id: true, costoCompra: true },
+      select: { id: true, costoCompra: true, ventaInvoiceId: true, autoCreado: true, estado: true },
     }),
     db.vehiculo.findMany({
       where: { ventaInvoiceId: invoiceId },
@@ -78,11 +84,19 @@ export async function revertirDerivadosDeCancelada(
   const costosDerivados = costosAntes.filter((c) => c.autoCreado);
   const costosManuales = costosAntes.length - costosDerivados.length;
 
+  // Sin compra que la respalde y sin venta, la unidad no estuvo en piso. Se
+  // retira sólo si la creamos nosotros: una alta manual la escribió una persona
+  // y no se retira por una cancelación ajena.
+  const aRetirar = comprasAntes.filter(
+    (v) => v.autoCreado && !v.ventaInvoiceId && v.estado !== "CANCELADO",
+  );
+
   const res: ReversionCancelada = {
     invoiceId,
     compras: {
       unidades: comprasAntes.length,
       costoLiberado: r2(comprasAntes.reduce((s, v) => s + v.costoCompra, 0)),
+      retiradas: aRetirar.length,
     },
     ventas: {
       unidades: ventasAntes.length,
@@ -123,6 +137,14 @@ export async function revertirDerivadosDeCancelada(
         where: { compraInvoiceId: invoiceId },
         data: { compraInvoiceId: null, costoCompra: 0 },
       });
+      // Se retira DESPUÉS de desligar para que el estado sea lo último que
+      // cambia: si algo falla, la transacción deja todo como estaba.
+      if (aRetirar.length > 0) {
+        await tx.vehiculo.updateMany({
+          where: { id: { in: aRetirar.map((v) => v.id) } },
+          data: { estado: "CANCELADO" },
+        });
+      }
     }
 
     // ── Costos derivados del CFDI ────────────────────────────────────────────

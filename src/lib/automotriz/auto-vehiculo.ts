@@ -423,6 +423,11 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
             supplierId: supLiga ?? undefined,
             claveVehicular: v.claveVehicular ?? undefined,
             descripcionCfdi: v.descripcion ?? undefined,
+            // Se retiró por cancelación y ahora llega su compra buena: vuelve al
+            // piso. Sin esto la unidad se queda CANCELADA con costo válido —
+            // invisible en inventario para siempre. Pasa de verdad, porque la
+            // cancelación se detecta ANTES de que se descargue la sustituta.
+            ...(existente.estado === "CANCELADO" ? { estado: "DISPONIBLE" as const } : {}),
           },
         });
         actualizados++;
