@@ -45,6 +45,12 @@ import { parsePeriodos } from "./parse-periodos";
 // Un tramo quemado NO detiene los demás: la cuota es por rango, así que lo que
 // falle en 04-01→04-15 no dice nada de 04-16→04-30.
 //
+// `saltarTramos=N` salta los primeros N tramos del mes. Hace falta porque un
+// tramo YA COMPLETO se sigue re-verificando —descarga su paquete aunque importe
+// 0 por dedup— y se come el presupuesto, dejando al siguiente en `pendiente`
+// corrida tras corrida. Medido en 2024-01: el tramo 1 terminado bloqueaba al 2
+// indefinidamente. Con `saltarTramos=1` se le apunta al que falta.
+//
 // `dryRun=1` dice qué haría —incluida la lista de tramos— sin gastar una sola
 // solicitud.
 //
@@ -91,6 +97,8 @@ interface ResultadoPeriodo {
   importadas?: number;
   /** Un renglón por rango pedido: con tramos=1 es el mes completo. */
   tramos?: ResultadoTramo[];
+  /** Cuántos tramos se saltaron con `saltarTramos`. */
+  saltados?: number;
   cuotaAgotada?: boolean;
   error?: string;
 }
@@ -128,6 +136,13 @@ async function handle(req: Request) {
   // los dos lados, así que la vía mensual está muerta para estos periodos y la
   // única salida por descarga masiva es pedir rangos DISTINTOS.
   const tramosPedidos = Number(params.get("tramos") ?? 1);
+  // Saltar los primeros N tramos de cada mes.
+  //
+  // MEDIDO en 2024-01: el tramo 1 ya estaba completo (importadas 0, todo dedup)
+  // pero re-verificarlo IGUAL descarga su paquete y se come el presupuesto, así
+  // que el tramo 2 salía `pendiente` en cada corrida — para siempre. Re-correr
+  // NO converge solo; hay que poder apuntarle al tramo que falta.
+  const saltar = Math.max(0, Math.trunc(Number(params.get("saltarTramos") ?? 0)) || 0);
   const startedAt = Date.now();
 
   const empresa = await prisma.company.findUnique({
@@ -144,13 +159,15 @@ async function handle(req: Request) {
     const periodo = `${year}-${String(month).padStart(2, "0")}`;
     const facturasAntes = await contarIngresos(companyId, year, month);
 
-    const tramos = partirMes(year, month, tramosPedidos);
+    const todosLosTramos = partirMes(year, month, tramosPedidos);
+    const tramos = todosLosTramos.slice(saltar);
 
     if (dryRun) {
       resultados.push({
         periodo,
         facturasAntes,
         tramos: tramos.map((t) => ({ tramo: etiquetaTramo(t) })),
+        saltados: saltar || undefined,
       });
       continue;
     }
@@ -170,7 +187,7 @@ async function handle(req: Request) {
         // justo la que ya volvió vacía. Con más de un tramo NO se fuerza: la
         // solicitud guardada trae su rango, así que reutilizarla es reutilizar
         // ESE tramo, y re-pedirlo sólo quemaría cuota del rango nuevo.
-        const rango = tramos.length > 1 ? t : undefined;
+        const rango = todosLosTramos.length > 1 ? t : undefined;
         const sub = await submitSatSync(companyId, year, month, !rango, rango);
         if (!sub.ok) {
           const esCuota = sub.error.includes("5002");
@@ -207,6 +224,7 @@ async function handle(req: Request) {
       facturasDespues: await contarIngresos(companyId, year, month),
       importadas,
       tramos: detalle,
+      saltados: saltar || undefined,
       cuotaAgotada: detalle.some((d) => d.cuotaAgotada) || undefined,
     });
   }
