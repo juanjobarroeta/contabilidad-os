@@ -229,3 +229,32 @@ describe("armar() — ancla a los libros", () => {
     });
   });
 });
+
+// ─── El ancla sólo vale con la apertura DEL CIERRE ───────────────────────────
+// El guard original miraba el AÑO de la apertura pero no el MES. La apertura de
+// MARGOM viene de la balanza de junio de 2026 (fechada 2026-07-01), así que
+// empataba con `year: 2026` al pedir el ejercicio 2025 y le colgaba a 2025 el
+// costo acumulado de enero–junio de 2026: $510,100,635.37 contra ~$1,732,595,264
+// propios, o sea un residuo de −$1,222,494,629. Un costo negativo de mil
+// doscientos millones se presenta como UTILIDAD.
+
+describe("armar() — el ancla con residuo negativo grande", () => {
+  it("un costo por diferencia NEGATIVO se ve como tal, no se disfraza de utilidad", () => {
+    // Los libros dicen 100,000 de costo pero ya atribuimos 900,000 con CFDIs:
+    // eso no es el costo de esas unidades, es un descuadre de −800,000.
+    const r = armar(
+      base({
+        unidades: [unidad({ costoCompra: 900_000, precioVenta: 1_000_000 })],
+        anclaCE: { costoDeVentas: 100_000 },
+      }),
+    );
+    const l = r.lineas.find((x) => x.clave === "unidades_sin_cfdi_compra")!;
+    expect(l.costo).toBe(-800_000);
+    // Y queda auditable de dónde salió, en vez de aparecer como margen.
+    expect(r.totales.ancla).toEqual({
+      costoDeVentasLibros: 100_000,
+      costoExplicadoPorCfdis: 900_000,
+      ingresoSinCfdiDeCompra: 0,
+    });
+  });
+});
