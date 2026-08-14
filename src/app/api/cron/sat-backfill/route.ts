@@ -88,15 +88,27 @@ async function coberturaDe(
     // ventana de 24h). Con tramos hay varias filas legítimas, una por rango
     // disjunto, y ésas sí suman. Ver sat-cobertura para la medición que lo cazó.
     prisma.$queryRaw<Array<{ year: number; month: number; cfdis: bigint }>>`
-      SELECT year, month, SUM("cfdisFound")::bigint AS cfdis
-      FROM (
+      WITH ultima_por_rango AS (
+        -- Una fila por rango pedido: la más reciente.
         SELECT DISTINCT ON ("year", "month", "tipo", "desde", "hasta")
-               "year", "month", "cfdisFound"
+               "year", "month", "tipo", "cfdisFound",
+               ("desde" IS NOT NULL) AS con_rango
         FROM "SatSyncRequest"
         WHERE "companyId" = ${companyId} AND "status" = 'FINISHED'
         ORDER BY "year", "month", "tipo", "desde", "hasta", "createdAt" DESC
-      ) ultima
-      GROUP BY year, month
+      ), hay_tramos AS (
+        -- ¿Ese (mes, tipo) llegó a pedirse en tramos?
+        SELECT "year", "month", "tipo", bool_or(con_rango) AS con_tramos
+        FROM ultima_por_rango GROUP BY "year", "month", "tipo"
+      )
+      SELECT u."year", u."month", SUM(u."cfdisFound")::bigint AS cfdis
+      FROM ultima_por_rango u
+      JOIN hay_tramos h
+        ON h."year" = u."year" AND h."month" = u."month" AND h."tipo" = u."tipo"
+      -- Si hubo tramos, los tramos SON el mes: la fila del mes completo (sin
+      -- rango) cubre los mismos días y sumarla lo cuenta dos veces.
+      WHERE u.con_rango = h.con_tramos
+      GROUP BY u."year", u."month"
     `,
     prisma.$queryRaw<Array<{ year: number; month: number; n: bigint }>>`
       SELECT EXTRACT(YEAR FROM "fecha")::int AS year,
