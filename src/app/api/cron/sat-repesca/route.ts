@@ -55,7 +55,14 @@ import { parsePeriodos } from "./parse-periodos";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const TIME_BUDGET_MS = 240_000;
+// Margen REAL contra maxDuration=300s. El presupuesto anterior (240s) sólo se
+// miraba ENTRE tramos, así que un verify+import largo se lo saltaba: la corrida
+// de 2025-04 con tramos=2 se pasó de 300s y el cliente cortó con curl(28) sin
+// recibir una sola respuesta — o sea, sin veredicto. Ahora se mira también antes
+// de verificar, y se corta antes para que la ruta SIEMPRE alcance a contestar.
+const TIME_BUDGET_MS = 180_000;
+/** Un submit+verify puede tardar; no lo empieces si no cabe. */
+const MARGEN_POR_TRAMO_MS = 60_000;
 const MAX_PERIODOS = 24;
 
 function isAuthorized(req: Request): boolean {
@@ -71,6 +78,9 @@ interface ResultadoTramo {
   tramo: string;
   importadas?: number;
   cuotaAgotada?: boolean;
+  /** No alcanzó el tiempo: la solicitud queda viva y la siguiente corrida sigue. */
+  pendiente?: boolean;
+  nota?: string;
   error?: string;
 }
 
@@ -149,7 +159,12 @@ async function handle(req: Request) {
     const detalle: ResultadoTramo[] = [];
     let importadas = 0;
     for (const t of tramos) {
-      if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+      // Con margen: entrar a un tramo que no va a caber es como no entrar, pero
+      // además deja al cliente esperando hasta que lo mate el timeout.
+      if (Date.now() - startedAt > TIME_BUDGET_MS - MARGEN_POR_TRAMO_MS) {
+        detalle.push({ tramo: etiquetaTramo(t), pendiente: true });
+        continue;
+      }
       const tramo = etiquetaTramo(t);
       try {
         // force=true: sin esto reutiliza la solicitud de las últimas 24h, que es
@@ -165,6 +180,13 @@ async function handle(req: Request) {
           // La cuota es por rango: que este tramo esté quemado no dice nada de
           // los demás, así que se sigue. Lo que no vale la pena es insistir en
           // el MISMO rango — y eso ya no pasa, cada tramo se pide una vez.
+          continue;
+        }
+        // El submit ya quedó guardado con su rango: si no hay tiempo para
+        // verificar, NO se pierde nada — la siguiente corrida reutiliza esa
+        // misma solicitud (sin gastar cuota) y sólo verifica e importa.
+        if (Date.now() - startedAt > TIME_BUDGET_MS) {
+          detalle.push({ tramo, pendiente: true, nota: "solicitado; falta verificar" });
           continue;
         }
         const ver = await verifyAndImportSatSync(
@@ -205,7 +227,9 @@ async function handle(req: Request) {
         "cuenta por rango, así que un tramo es otra llave. Si ya venía en tramos y aun así " +
         "sale 5002, esos rangos también están quemados y queda Syntage (extractor \"invoice\")."
       : "El SAT es asíncrono: un periodo puede quedar pendiente y resolverse en otra corrida. " +
-        "Re-ejecutable; compara facturasAntes con facturasDespues.",
+        "Re-ejecutar es GRATIS para los tramos ya solicitados —la solicitud queda guardada con " +
+        "su rango y se reutiliza sin gastar cuota—, así que si algo sale `pendiente`, vuelve a " +
+        "correrlo. Compara facturasAntes con facturasDespues.",
   };
   console.log("[cron/sat-repesca]", JSON.stringify(summary));
   return NextResponse.json(summary);
