@@ -1,0 +1,65 @@
+name: CFDIs de Syntage (manual)
+
+# ¿Qué CFDIs tiene Syntage que nosotros no?
+#
+# La descarga masiva del SAT topa los CFDIs a CINCO AÑOS: lo anterior no se
+# puede pedir. MARGOM opera desde 2017-08, así que 2017-2021 es inalcanzable por
+# nuestra vía — y Syntage no documenta ese tope.
+#
+# CUESTA sólo con `extraer: true` (~$10-23 MXN, UNA extraccion aunque cubra
+# emitidas + recibidas + todos los años). Sin esa bandera sólo lista lo ya
+# extraído, que es gratis.
+#
+# NO importa nada todavía: compara UUIDs y reporta el hueco por año.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa"
+        required: true
+        type: string
+      desde:
+        description: "Desde (YYYY-MM-DD). Vacío = inicio de operaciones de la empresa"
+        required: false
+        default: ""
+        type: string
+      extraer:
+        description: "Disparar la extracción (CUESTA ~$10-23 MXN). Sin esto sólo lista"
+        required: false
+        default: false
+        type: boolean
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  cfdis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Comparar Syntage contra lo nuestro
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          DESDE: ${{ inputs.desde }}
+          EXTRAER: ${{ inputs.extraer }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q="companyId=${COMPANY_ID}"
+          if [ -n "${DESDE}" ]; then Q="${Q}&desde=$(printf '%s' "${DESDE}" | tr -d '[:space:]')"; fi
+          if [ "${EXTRAER}" = "true" ]; then Q="${Q}&extraer=1"; fi
+
+          RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/cron/syntage-cfdis?${Q}" \
+            -H "x-cron-secret: ${CRON_SECRET}")"
+          echo "$RESP" | jq '{rfc, periodo, extraccion, totales, porAnio, paginas, truncado}'
+
+          if [ "$(echo "$RESP" | jq -r '.extraccion != null')" = "true" ]; then
+            echo "::warning::Extracción disparada (asíncrona). Vuelve a correr SIN extraer en unos minutos."
+          fi
