@@ -15,9 +15,7 @@ import {
   MetadataPackageReader,
 } from "@nodecfdi/sat-ws-descarga-masiva";
 import { interpretarCancelaciones, type SatMetadataRow } from "./sat-cancelaciones";
-import { clasificarCfdi } from "./fiscal/clasificar-cfdi";
-import { crearActivoDesdeCfdiSiAplica } from "./fiscal/auto-activo";
-import { derivarVehiculoInline } from "./automotriz/auto-vehiculo";
+import { importarCfdiXml } from "./cfdi-import";
 import { backfillNominaRegimen } from "./nomina/backfill-regimen";
 import { importarNominaHistorica } from "./nomina/historia-import";
 import { revertirDerivadosDeCancelada } from "./automotriz/revertir-cancelada";
@@ -515,253 +513,26 @@ export async function verifyAndImportSatSync(
 
     for await (const cfdiMap of reader.cfdis()) {
       for (const [rawUuid, xmlContent] of cfdiMap) {
-        // Folio fiscal canónico en MAYÚSCULAS. La dedup empata sin distinguir
-        // caja (mode: insensitive) para reconocer copias previas guardadas en
-        // minúsculas (p.ej. timbradas por el PAC) y NO duplicarlas.
-        const uuid = rawUuid.trim().toUpperCase();
-        // Already in DB: skip — but backfill rawXml and the per-tax desglose if
-        // they're missing, so a re-sync repairs CFDIs imported before we stored
-        // the file / parsed the <cfdi:Impuestos> node.
-        const existing = await prisma.invoice.findFirst({
-          where: { companyId, uuid: { equals: uuid, mode: "insensitive" } },
-          select: { id: true, tipo: true, rawXml: true, regimenNomina: true, _count: { select: { taxes: true, doctosRelacionados: true } } },
-        });
-        if (existing) {
-          if (!existing.rawXml) {
-            await prisma.invoice.update({ where: { id: existing.id }, data: { rawXml: xmlContent } });
-          }
-          // Repara el régimen/ISR retenido de nómina de filas importadas antes de
-          // parsear el complemento (incl. las que no tenían rawXml): así un re-sync
-          // del periodo las reconoce como asimilados sin pasos manuales.
-          if (existing.tipo === "NOMINA" && existing.regimenNomina == null) {
-            const parsed = parseCfdiXml(xmlContent);
-            if (parsed.nomina?.tipoRegimen) {
-              await prisma.invoice.update({
-                where: { id: existing.id },
-                data: {
-                  regimenNomina: parsed.nomina.tipoRegimen,
-                  tipoNomina: parsed.nomina.tipoNomina ?? null,
-                  isrRetenidoNomina: parsed.nomina.isrRetenido ?? null,
-                },
-              });
-            }
-          }
-          if (existing._count.taxes === 0) {
-            const parsed = parseCfdiXml(xmlContent);
-            if (parsed.taxes.length > 0) {
-              await prisma.invoiceTax.createMany({
-                data: parsed.taxes.map((t) => ({ invoiceId: existing.id, ...t })),
-              });
-            }
-          }
-          // Backfill de los links del complemento de pago (DoctoRelacionado) de un
-          // REP importado antes de que parseáramos el complemento (o si su creación
-          // falló). Sin estos links, el IVA del pago — que para PPD se causa al
-          // cobrarse — nunca se reconoce. Idempotente: sólo cuando no hay ninguno.
-          if (existing.tipo === "PAGO" && existing._count.doctosRelacionados === 0) {
-            const parsed = parseCfdiXml(xmlContent);
-            if (parsed.doctosRelacionados?.length) {
-              await prisma.pagoDoctoRelacionado.createMany({
-                data: parsed.doctosRelacionados.map((d) => ({
-                  pagoInvoiceId: existing.id,
-                  parentUuid: d.uuid,
-                  impPagado: d.impPagado,
-                  numParcialidad: d.numParcialidad != null ? Math.trunc(d.numParcialidad) : null,
-                  impSaldoAnterior: d.impSaldoAnterior,
-                  impSaldoInsoluto: d.impSaldoInsoluto,
-                  fechaPago: d.fechaPago ? new Date(d.fechaPago) : null,
-                  baseTraslado: d.baseTraslado,
-                  ivaTrasladado: d.ivaTrasladado,
-                  ivaDerivado: d.ivaDerivado,
-                })),
-                skipDuplicates: true,
-              });
-            }
-          }
-          skipped++;
-          continue;
-        }
-
-        const cfdi = parseCfdiXml(xmlContent);
-        if (!cfdi.uuid || !cfdi.fecha) {
-          skipped++;
-          continue;
-        }
-
-        // Map SAT TipoDeComprobante (I/E/N/P/T) to our InvoiceType enum.
-        // If for some reason it's missing, fall back to direction-based guess.
-        const isEmisor = tipo === "emitidos" || cfdi.rfcEmisor === company?.rfc;
-        const SAT_TIPO_MAP: Record<string, "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO"> = {
-          I: "INGRESO",
-          E: "EGRESO",
-          N: "NOMINA",
-          P: "PAGO",
-          T: "TRASLADO",
-        };
-        const mappedType = cfdi.tipo ? SAT_TIPO_MAP[cfdi.tipo] : undefined;
-        // TipoDeComprobante I/E is the ISSUER's perspective — a supplier's
-        // "I" sales invoice in our RECIBIDOS bucket is OUR expense. Only N/P/T
-        // are standalone categories; for I/E follow emisor-vs-receptor.
-        const invoiceType: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO" =
-          mappedType === "NOMINA" || mappedType === "PAGO" || mappedType === "TRASLADO"
-            ? mappedType
-            : isEmisor ? "INGRESO" : "EGRESO";
-
-        // Find or create counterparty customer record
-        const counterpartyRfc = isEmisor ? cfdi.rfcReceptor : cfdi.rfcEmisor;
-        const counterpartyName = isEmisor ? cfdi.nombreReceptor : cfdi.nombreEmisor;
-
-        let customerId: string | null = null;
-        if (
-          counterpartyRfc &&
-          counterpartyRfc !== "XAXX010101000" &&
-          counterpartyRfc !== "XEXX010101000"
-        ) {
-          const existingCustomer = await prisma.customer.findFirst({
-            where: { companyId, rfc: counterpartyRfc },
-          });
-          if (existingCustomer) {
-            customerId = existingCustomer.id;
-          } else if (counterpartyName) {
-            try {
-              const newCustomer = await prisma.customer.create({
-                data: {
-                  companyId,
-                  rfc: counterpartyRfc,
-                  razonSocial: counterpartyName,
-                  regimenFiscal: isEmisor ? "616" : (cfdi.regimenEmisor ?? "616"),
-                },
-              });
-              customerId = newCustomer.id;
-            } catch {
-              /* ignore duplicate RFC */
-            }
-          }
-        }
-
-        const clasif = clasificarCfdi({
-          tipo: invoiceType,
-          usoCfdi: cfdi.usoCfdi ?? null,
-          usoEsDefault: !cfdi.usoCfdi,
-          items: (cfdi.items ?? []).map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
-        });
-
-        const createdInvoice = await prisma.invoice.create({
-          data: {
-            companyId,
-            customerId,
-            // Contraparte del comprobante: se guarda SIEMPRE, haya Customer o
-            // no (público en general y extranjeros no lo tienen a propósito).
-            contraparteNombre: counterpartyName ?? null,
-            contraparteRfc: counterpartyRfc ?? null,
-            tipo: invoiceType,
-            // TipoDeComprobante crudo del SAT: "E" marca nota de credito y el
-            // motor fiscal la netea con signo negativo dentro de su tipo.
-            tipoSat: cfdi.tipo ?? null,
-            // A qué comprobante apunta éste. Hasta ahora estas dos columnas
-            // sólo las escribía el módulo que EMITE notas de crédito desde la
-            // app, así que todo lo importado del SAT las tenía en null y
-            // cualquier regla que dependiera de la relación quedaba inerte.
-            // Un CFDI puede traer varias relaciones; en las columnas cabe una,
-            // y el resto sigue disponible en el rawXml que se guarda íntegro.
-            tipoRelacion: cfdi.relacionados[0]?.tipoRelacion ?? null,
-            cfdiRelacionadoUuid: cfdi.relacionados[0]?.uuids[0] ?? null,
-            fecha: new Date(cfdi.fecha),
-            serie: cfdi.serie ?? null,
-            folio: cfdi.folio ?? null,
-            formaPago: cfdi.formaPago ?? "99",
-            metodoPago: cfdi.metodoPago ?? "PUE",
-            usoCfdi: cfdi.usoCfdi ?? "G03",
-            naturaleza: clasif.fuente === "no_aplica" ? null : clasif.naturaleza,
-            naturalezaRevision: clasif.requiereRevision,
-            // Complemento de nómina (CFDI tipo "N"): régimen del receptor + ISR
-            // retenido — null para CFDIs que no son nómina.
-            regimenNomina: cfdi.nomina?.tipoRegimen ?? null,
-            tipoNomina: cfdi.nomina?.tipoNomina ?? null,
-            isrRetenidoNomina: cfdi.nomina?.isrRetenido ?? null,
-            moneda: cfdi.moneda ?? "MXN",
-            subtotal: cfdi.subtotal,
-            total: cfdi.total,
-            totalImpuestos: cfdi.ivaTotal,
-            status: "STAMPED",
-            uuid,
-            rawXml: xmlContent, // keep the authentic CFDI so we can re-send it
-            notas: `SAT — ${tipo}`,
-            items:
-              cfdi.items && cfdi.items.length > 0
-                ? {
-                    create: cfdi.items.map((it) => ({
-                      cantidad: it.cantidad,
-                      claveUnidad: it.claveUnidad,
-                      unidad: it.unidad,
-                      claveProdServ: it.claveProdServ,
-                      descripcion: it.descripcion,
-                      valorUnitario: it.valorUnitario,
-                      importe: it.importe,
-                      descuento: it.descuento,
-                    })),
-                  }
-                : undefined,
-            // Desglose real del nodo <cfdi:Impuestos> (traslados con factor
-            // Tasa/Exento + retenciones IVA/ISR) — alimenta retenciones
-            // acreditadas y la proporción de acreditamiento (Art. 5 LIVA).
-            taxes: cfdi.taxes.length > 0 ? { create: cfdi.taxes } : undefined,
-          },
-        });
-
-        // Auto-registro de activo fijo si el CFDI es inversión (naturaleza
-        // INVERSION) — depreciación sin captura manual; el contador sólo revisa.
-        await crearActivoDesdeCfdiSiAplica(prisma, {
+        // El cuerpo de esto vivía aquí, inline. Se movió a `importarCfdiXml`
+        // SIN cambiarlo, para que los CFDIs que lleguen por Syntage —única vía
+        // a 2017–2021, que la descarga masiva no alcanza— entren EXACTAMENTE
+        // por el mismo camino: mismo mapeo de TipoDeComprobante, misma
+        // contraparte, misma clasificación, mismo activo fijo, mismo vehículo,
+        // mismos links de complemento de pago. Un segundo importador parecido
+        // habría sido un segundo juego de reglas divergiendo en silencio.
+        const r = await importarCfdiXml({
           companyId,
-          invoiceId: createdInvoice.id,
-          subtotal: cfdi.subtotal,
-          fecha: new Date(cfdi.fecha),
-          descripcion: cfdi.items?.[0]?.descripcion,
-          clasifInput: {
-            tipo: invoiceType,
-            usoCfdi: cfdi.usoCfdi ?? null,
-            usoEsDefault: !cfdi.usoCfdi,
-            items: (cfdi.items ?? []).map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
-          },
+          rfcEmpresa: company?.rfc ?? null,
+          tipo,
+          rawUuid,
+          xmlContent,
+          origen: "SAT",
         });
-
-        // Inventario automotriz inline (complemento VentaVehiculos / clave
-        // 2510xx): la unidad aparece junto con su CFDI. Sólo empresas con el
-        // módulo AUTOMOTRIZ; el cron vehiculos-backfill es la red de seguridad.
-        await derivarVehiculoInline(prisma, {
-          companyId,
-          invoiceId: createdInvoice.id,
-          tipo: invoiceType,
-          fecha: new Date(cfdi.fecha),
-          rawXml: xmlContent,
-          clienteId: invoiceType === "INGRESO" ? customerId : null,
-          total: cfdi.total,
-          subtotal: cfdi.subtotal,
-        });
-
-        // Persist complemento de pago links (DoctoRelacionado parent UUIDs).
-        if (invoiceType === "PAGO" && cfdi.doctosRelacionados?.length) {
-          await prisma.pagoDoctoRelacionado.createMany({
-            data: cfdi.doctosRelacionados.map((d) => ({
-              pagoInvoiceId: createdInvoice.id,
-              parentUuid: d.uuid,
-              impPagado: d.impPagado,
-              numParcialidad: d.numParcialidad != null ? Math.trunc(d.numParcialidad) : null,
-              impSaldoAnterior: d.impSaldoAnterior,
-              impSaldoInsoluto: d.impSaldoInsoluto,
-              fechaPago: d.fechaPago ? new Date(d.fechaPago) : null,
-              baseTraslado: d.baseTraslado,
-              ivaTrasladado: d.ivaTrasladado,
-              ivaDerivado: d.ivaDerivado,
-            })),
-            skipDuplicates: true,
-          });
-        }
-        imported++;
-        // Sólo los tipos que el motor de posteo consume disparan auto-cierre.
-        if (invoiceType === "INGRESO" || invoiceType === "EGRESO" || invoiceType === "NOMINA") {
-          const f = new Date(cfdi.fecha);
-          affectedPeriods.add(`${f.getUTCFullYear()}-${f.getUTCMonth() + 1}`);
+        if (r.resultado === "importado") {
+          imported++;
+          if (r.periodoAfectado) affectedPeriods.add(r.periodoAfectado);
+        } else {
+          skipped++;
         }
       }
     }
