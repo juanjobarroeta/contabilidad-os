@@ -1,0 +1,73 @@
+name: Repescar meses del SAT (manual)
+
+# Vuelve a pedirle al SAT los CFDIs de periodos ESPECÍFICOS.
+#
+# sat-backfill no puede: salta cualquier mes ya marcado hecho, y lo marca hecho
+# cuando las dos solicitudes llegan a FINISHED — sin importar cuántas facturas
+# entraron. Así se quedaron ocho meses de MARGOM, cada uno pedido, devuelto
+# FINISHED, importado casi vacío y marcado «hecho» para siempre:
+#
+#   2022-01  63 fact  $27,304.54     2023-08  AUSENTE
+#   2022-02  49       $27,337.65     2024-01  36 fact  $1,482,667.27
+#   2022-03  80       $35,500.62     2025-04  AUSENTE
+#   2022-05  47       $21,878.58
+#   2022-06   3       $2,078.37
+#
+# ~$500M de ingreso y ~5,200 facturas. Las unidades vendidas en esos meses nunca
+# se dieron de baja: es una de las dos causas del piso inflado.
+#
+# CUIDADO CON LA CUOTA. El SAT limita las solicitudes DE POR VIDA por
+# (RFC + rango + tipo) y esperar NO la libera. Corre primero con dryRun.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa"
+        required: true
+        type: string
+      periodos:
+        description: "Meses a repescar, separados por coma (YYYY-MM)"
+        required: true
+        default: "2025-04,2023-08,2024-01"
+        type: string
+      dryRun:
+        description: "Sólo decir qué haría, sin gastar solicitudes"
+        required: false
+        default: true
+        type: boolean
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  repesca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Repescar
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          PERIODOS: ${{ inputs.periodos }}
+          DRY_RUN: ${{ inputs.dryRun }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q="companyId=${COMPANY_ID}&periodos=$(printf '%s' "${PERIODOS}" | tr -d '[:space:]')"
+          if [ "${DRY_RUN}" = "true" ]; then Q="${Q}&dryRun=1"; fi
+
+          RESP="$(curl -fsS --max-time 300 -X POST "${URL}/api/cron/sat-repesca?${Q}" \
+            -H "x-cron-secret: ${CRON_SECRET}")"
+          echo "$RESP" | jq '{dryRun, periodosPedidos, resultados, cuotaAgotada, nota}'
+
+          # La cuota vitalicia no se libera esperando: si se agotó, avisar fuerte
+          # para no volver a intentarlo por la misma vía.
+          if [ "$(echo "$RESP" | jq -r '.cuotaAgotada')" = "true" ]; then
+            echo "::warning::SAT 5002 — cuota DE POR VIDA agotada. Varía el rango o usa Syntage."
+          fi
