@@ -358,9 +358,10 @@ export async function cuadreDeIngresos(
 
   for (const f of facturas) {
     res.subtotal = r2(res.subtotal + f.subtotal);
-    // Cadena vacía = relaciones-backfill ya miró este CFDI y su nodo no rindió
-    // un par (tipo, uuid) usable. Para este reporte es lo mismo que no traer
-    // relación; sin esto saldría un renglón con clave vacía que no dice nada.
+    // Cadena vacía = el barrido de relaciones-backfill ya miró este CFDI y su
+    // nodo CfdiRelacionados no rindió un par (tipo, uuid) usable. Para este
+    // reporte es lo mismo que no traer relación; sin esto aparecería un
+    // renglón con clave vacía que no significa nada para quien lo lee.
     const rel = f.tipoRelacion ? f.tipoRelacion : "(sin relación)";
     const pr = porRelacion.get(rel) ?? { facturas: 0, monto: 0, egreso: { facturas: 0, monto: 0 } };
     pr.facturas++;

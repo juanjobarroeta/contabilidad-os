@@ -6,6 +6,7 @@ import {
   naturalezaPorAritmetica,
   padresDeBalanza,
   tipoPorCodAgrup,
+  diagnosticoApertura,
 } from "./ce-import";
 
 const CATALOGO_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -244,5 +245,79 @@ describe("balanzaASaldosApertura — balanza → líneas {codigo, saldo}", () =>
       incluir: (c) => c === "102.01",
     });
     expect(lineas).toEqual([{ codigo: "102.01", saldo: 58000 }]);
+  });
+});
+
+// ─── diagnosticoApertura ─────────────────────────────────────────────────────
+// El asiento de apertura de MARGOM se cae por $48,318,111.11 y postApertura
+// sólo sabe decir «cargos X vs abonos Y». Esta función reparte el descuadre en
+// cubetas con nombre para no tener que adivinar cuál de los candidatos es.
+
+describe("diagnosticoApertura", () => {
+  const cta = (numCta: string, saldoFin: number) => ({
+    numCta, saldoIni: 0, debe: 0, haber: 0, saldoFin,
+  });
+  const base = {
+    usar: "final" as const,
+    esPadre: () => false,
+    enCatalogo: () => true,
+  };
+  // 1 activo (D), 2 pasivo (A), 3 capital (A).
+  const natPorFamilia = (c: string): "D" | "A" => (c.charAt(0) === "1" ? "D" : "A");
+
+  it("una balanza que cuadra sale sin diferencia por los dos métodos", () => {
+    const d = diagnosticoApertura({
+      ...base,
+      cuentas: [cta("1101", 58000), cta("2101", 28000), cta("3101", 30000)],
+      naturalezaPorCodigo: natPorFamilia,
+    });
+    expect(d.seleccion).toEqual({ lineas: 3, cargos: 58000, abonos: 58000, diferencia: 0 });
+    expect(d.conSigno.diferencia).toBe(0);
+    expect(d.contrarias.cuentas).toBe(0);
+  });
+
+  it("un saldo contrario a su naturaleza descuadra por EL DOBLE con valor absoluto", () => {
+    // Capital (A) con pérdidas acumuladas: saldo negativo. Con Math.abs se
+    // postea como abono cuando debería ser cargo — error de 2× el saldo.
+    const d = diagnosticoApertura({
+      ...base,
+      cuentas: [cta("1101", 58000), cta("2101", 68000), cta("3101", -10000)],
+      naturalezaPorCodigo: natPorFamilia,
+    });
+    // Respetando el signo, la balanza cuadra: 58,000 + 10,000 = 68,000.
+    expect(d.conSigno.diferencia).toBe(0);
+    // Con la regla de hoy, no: el abono de 10,000 debería haber sido cargo.
+    expect(d.seleccion.diferencia).toBe(-20000);
+    expect(d.contrarias.cuentas).toBe(1);
+    expect(d.contrarias.montoA).toBe(10000);
+    expect(d.contrarias.ejemplos[0]).toEqual({ codigo: "3101", naturaleza: "A", saldo: -10000 });
+  });
+
+  it("separa el dinero que se queda fuera por cada motivo", () => {
+    const d = diagnosticoApertura({
+      cuentas: [cta("1101", 1000), cta("1102", 2000), cta("1103", 3000), cta("1104", 4000)],
+      usar: "final",
+      esPadre: (c) => c === "1102",
+      enCatalogo: (c) => c !== "1103",
+      naturalezaPorCodigo: (c) => (c === "1104" ? null : "D"),
+    });
+    expect(d.seleccion.lineas).toBe(1);
+    expect(d.excluidas.porPadre).toEqual({ cuentas: 1, monto: 2000 });
+    expect(d.excluidas.porCatalogo.monto).toBe(3000);
+    expect(d.excluidas.porCatalogo.ejemplos).toEqual(["1103"]);
+    expect(d.excluidas.porNaturaleza.monto).toBe(4000);
+  });
+
+  it("ignora los saldos en cero y agrupa por familia", () => {
+    const d = diagnosticoApertura({
+      ...base,
+      cuentas: [cta("1101", 500), cta("1102", 0), cta("2101", 500)],
+      naturalezaPorCodigo: natPorFamilia,
+    });
+    expect(d.seleccion.lineas).toBe(2);
+    expect(d.porFamilia).toEqual([
+      { familia: "1", cuentas: 1, cargos: 500, abonos: 0 },
+      { familia: "2", cuentas: 1, cargos: 0, abonos: 500 },
+    ]);
   });
 });
