@@ -159,3 +159,73 @@ describe("armar() — costo de refacciones no comparable (tambo vs litro)", () =
     expect(linea.ingresoSinCosto).toBe(0);
   });
 });
+
+// ─── Ancla a la Contabilidad Electrónica ─────────────────────────────────────
+// Una unidad sin CFDI de compra se vendió y se facturó: su ingreso es REAL.
+// Dejarla fuera por los dos lados es lo que producía la brecha contra la
+// balanza —−$188.1M de ingreso y −$178.6M de costo, casi cancelándose— y hacía
+// que los libros dieran utilidad y el tablero pérdida.
+
+describe("armar() — ancla a los libros", () => {
+  const dos = [unidad(), unidad({ id: "v2", costoCompra: 0, precioVenta: 400_000 })];
+
+  it("sin ancla se comporta igual que siempre", () => {
+    const r = armar(base({ unidades: dos }));
+    expect(r.lineas.find((l) => l.clave === "unidades_sin_cfdi_compra")).toBeUndefined();
+    expect(r.totales.ingreso).toBe(300_000);
+    expect(r.totales.ingresoSinCosto).toBe(400_000);
+    expect(r.totales.ancla).toBeUndefined();
+  });
+
+  it("con ancla, la unidad sin CFDI entra con su ingreso y su costo por diferencia", () => {
+    // Los libros dicen que el costo de ventas fue 570,000. Ya explicamos
+    // 250,000 con CFDIs, así que los 320,000 restantes son de esa unidad.
+    const r = armar(base({ unidades: dos, anclaCE: { costoDeVentas: 570_000 } }));
+    const l = r.lineas.find((x) => x.clave === "unidades_sin_cfdi_compra")!;
+    expect(l.ingreso).toBe(400_000);
+    expect(l.costo).toBe(320_000);
+    expect(l.utilidad).toBe(80_000);
+    expect(l.unidades).toBe(1);
+    expect(l.costoDesdeLibros).toBe(true);
+
+    // El ingreso total ya incluye la venta que antes se caía.
+    expect(r.totales.ingreso).toBe(700_000);
+    // Y el costo total queda EXACTAMENTE sobre los libros: 250,000 + 320,000.
+    const costoTotal = r.lineas.reduce((sum, x) => sum + x.costo, 0);
+    expect(costoTotal).toBe(570_000);
+  });
+
+  it("los márgenes de las demás líneas no se contaminan", () => {
+    const r = armar(base({ unidades: dos, anclaCE: { costoDeVentas: 570_000 } }));
+    const nuevas = r.lineas.find((l) => l.clave === "unidades_nuevas")!;
+    // Sigue midiendo sólo lo que tiene su costo real: 300,000 − 250,000.
+    expect(nuevas.ingreso).toBe(300_000);
+    expect(nuevas.utilidad).toBe(50_000);
+    expect(nuevas.margen).toBeCloseTo(16.67, 1);
+  });
+
+  it("no cuenta dos veces el ingreso sin costo", () => {
+    const r = armar(base({ unidades: dos, anclaCE: { costoDeVentas: 570_000 } }));
+    // Ya entró en su propia línea; seguir reportándolo como «se quedó fuera»
+    // haría que quien sume las dos cosas lo contara dos veces.
+    expect(r.totales.ingresoSinCosto).toBe(0);
+  });
+
+  it("un residuo NEGATIVO se reporta como está, no se recorta a cero", () => {
+    // Los libros registran MENOS costo del que ya atribuimos: eso no es el
+    // costo de esas unidades, es un descuadre, y esconderlo sería fingir que
+    // cuadra. Aquí se ve.
+    const r = armar(base({ unidades: dos, anclaCE: { costoDeVentas: 200_000 } }));
+    const l = r.lineas.find((x) => x.clave === "unidades_sin_cfdi_compra")!;
+    expect(l.costo).toBe(-50_000);
+  });
+
+  it("deja auditables las tres cifras con las que se armó", () => {
+    const r = armar(base({ unidades: dos, anclaCE: { costoDeVentas: 570_000 } }));
+    expect(r.totales.ancla).toEqual({
+      costoDeVentasLibros: 570_000,
+      costoExplicadoPorCfdis: 250_000,
+      ingresoSinCfdiDeCompra: 400_000,
+    });
+  });
+});
