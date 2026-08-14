@@ -160,7 +160,6 @@ async function handle(req: Request) {
 
   // ── 2. Lo que Syntage ya tiene, contra lo nuestro ──────────────────────────
   const porAnio = new Map<number, PorAnio>();
-  let cursor: string | undefined;
   let paginas = 0;
   let totalSyntage = 0;
   let truncado = false;
@@ -170,11 +169,11 @@ async function handle(req: Request) {
       truncado = true;
       break;
     }
-    const { facturas, siguienteCursor } = await client.listEntityInvoices(entityId, {
+    const { facturas, hayMas } = await client.listEntityInvoices(entityId, {
       desde,
       hasta,
       porPagina: 1000,
-      cursor,
+      pagina: i + 1,
     });
     paginas++;
     if (facturas.length === 0) break;
@@ -208,8 +207,7 @@ async function handle(req: Request) {
       porAnio.set(anio, fila);
     }
 
-    if (!siguienteCursor || facturas.length < 1000) break;
-    cursor = siguienteCursor;
+    if (!hayMas) break;
   }
 
   const filas = [...porAnio.values()].sort((a, b) => b.anio - a.anio);
