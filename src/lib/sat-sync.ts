@@ -21,6 +21,7 @@ import { derivarVehiculoInline } from "./automotriz/auto-vehiculo";
 import { backfillNominaRegimen } from "./nomina/backfill-regimen";
 import { importarNominaHistorica } from "./nomina/historia-import";
 import { revertirDerivadosDeCancelada } from "./automotriz/revertir-cancelada";
+import { etiquetaTramo, isoLocal, type Tramo } from "./sat-tramos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared, session-free SAT Descarga Masiva logic.
@@ -112,12 +113,22 @@ export async function submitSatSync(
   companyId: string,
   year: number,
   month: number,
-  force = false
+  force = false,
+  // Rango explícito, para pedir un TRAMO del mes en vez del mes completo. La
+  // cuota 5002 se cuenta por (RFC + rango + tipo), así que un tramo es otra
+  // llave: es la única salida por descarga masiva cuando el mes ya está quemado.
+  // Las filas de bookkeeping siguen llevando (year, month) — más `desde`/`hasta`,
+  // que es lo que distingue un tramo de otro.
+  rango?: Tramo
 ): Promise<SubmitSatSyncResult> {
   // ── Reuse path ──────────────────────────────────────────────────────────
   // Check if we already have recent requests for this period that we can reuse.
   // This is the FIX for SAT error 5002 ("se han agotado las solicitudes de
   // por vida"): every click was creating new requests, hitting SAT's quota.
+  //
+  // Con `rango`, el reúso tiene que empatar el MISMO tramo: (year, month) ya no
+  // identifica la solicitud, y reutilizar el tramo de al lado dejaría un hueco.
+  const mismoRango = rango ? { desde: rango.desde, hasta: rango.hasta } : {};
   if (!force) {
     const cutoff = new Date(Date.now() - REUSE_WINDOW_HOURS * 60 * 60 * 1000);
     const [reEmitidos, reRecibidos] = await Promise.all([
@@ -127,6 +138,7 @@ export async function submitSatSync(
           year,
           month,
           tipo: "EMITIDOS",
+          ...mismoRango,
           status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
           createdAt: { gte: cutoff },
         },
@@ -138,6 +150,7 @@ export async function submitSatSync(
           year,
           month,
           tipo: "RECIBIDOS",
+          ...mismoRango,
           status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
           createdAt: { gte: cutoff },
         },
@@ -182,23 +195,32 @@ export async function submitSatSync(
   const lastDay = new Date(year, month, 0).getDate();
   const pad = (n: number) => String(n).padStart(2, "0");
 
-  const requestedEnd = new Date(year, month - 1, lastDay, 23, 59, 59);
+  const requestedEnd = rango ? rango.hasta : new Date(year, month - 1, lastDay, 23, 59, 59);
   const now = new Date();
   // Yesterday at 23:59:59 in local time
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
   const effectiveEnd = requestedEnd > yesterday ? yesterday : requestedEnd;
 
   // Guard: if the effective end is before the month's start, there's no data to sync yet
-  const monthStart = new Date(year, month - 1, 1);
+  const monthStart = rango ? rango.desde : new Date(year, month - 1, 1);
   if (effectiveEnd < monthStart) {
     return {
       ok: false,
       status: 400,
-      error: `El mes ${month}/${year} aún no tiene días completos para consultar al SAT. Intenta mañana.`,
+      error: rango
+        ? `El tramo ${etiquetaTramo(rango)} de ${month}/${year} aún no tiene días completos para consultar al SAT. Intenta mañana.`
+        : `El mes ${month}/${year} aún no tiene días completos para consultar al SAT. Intenta mañana.`,
     };
   }
 
-  const startIso = `${year}-${pad(month)}-01T00:00:00`;
+  // Lo que realmente se le pide al SAT, que es lo que se guarda: con tramo, el
+  // tramo; sin tramo, el mes. `effectiveEnd` ya viene recortado a ayer.
+  const periodDesde = monthStart;
+  const periodHasta = effectiveEnd;
+
+  const startIso = rango
+    ? isoLocal(rango.desde)
+    : `${year}-${pad(month)}-01T00:00:00`;
   const endIso =
     [effectiveEnd.getFullYear(), pad(effectiveEnd.getMonth() + 1), pad(effectiveEnd.getDate())].join(
       "-"
@@ -221,6 +243,7 @@ export async function submitSatSync(
         year,
         month,
         tipo: "EMITIDOS",
+        ...mismoRango,
         status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
         createdAt: { gte: cutoff },
       },
@@ -232,6 +255,7 @@ export async function submitSatSync(
         year,
         month,
         tipo: "RECIBIDOS",
+        ...mismoRango,
         status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
         createdAt: { gte: cutoff },
       },
@@ -263,7 +287,10 @@ export async function submitSatSync(
       if (emitidosResult.getStatus().isAccepted()) {
         emitidosRequestId = emitidosResult.getRequestId();
         await prisma.satSyncRequest.create({
-          data: { companyId, year, month, tipo: "EMITIDOS", requestId: emitidosRequestId, status: "ACCEPTED" },
+          data: {
+            companyId, year, month, tipo: "EMITIDOS", requestId: emitidosRequestId,
+            desde: periodDesde, hasta: periodHasta, status: "ACCEPTED",
+          },
         });
       } else {
         const code = emitidosResult.getStatus().getCode();
@@ -294,7 +321,10 @@ export async function submitSatSync(
       if (recibidosResult.getStatus().isAccepted()) {
         recibidosRequestId = recibidosResult.getRequestId();
         await prisma.satSyncRequest.create({
-          data: { companyId, year, month, tipo: "RECIBIDOS", requestId: recibidosRequestId, status: "ACCEPTED" },
+          data: {
+            companyId, year, month, tipo: "RECIBIDOS", requestId: recibidosRequestId,
+            desde: periodDesde, hasta: periodHasta, status: "ACCEPTED",
+          },
         });
       } else {
         const code = recibidosResult.getStatus().getCode();
