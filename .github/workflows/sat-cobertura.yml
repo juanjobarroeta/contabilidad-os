@@ -1,0 +1,63 @@
+name: Cobertura de la ingesta del SAT (manual)
+
+# ¿Qué meses dijimos tener y no tenemos?
+#
+# El SAT reporta cuántos CFDIs encontró en cada solicitud (cfdisFound). Esto lo
+# compara contra las facturas que realmente guardamos de ese mes.
+#
+# SÓLO LEE: no le pide nada al SAT, así que NO gasta cuota vitalicia (5002).
+# Los ocho meses que encontramos a ojo pueden no ser todos — esto los cuenta con
+# el dato del propio SAT. La salida trae `paraRepescar`, lista para pegarse en el
+# input `periodos` de sat-repesca.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa"
+        required: true
+        type: string
+      umbral:
+        description: "Fracción de lo que el SAT dijo que basta (0.5 = la mitad)"
+        required: false
+        default: "0.5"
+        type: string
+      todos:
+        description: "Incluir el detalle de TODOS los meses, sanos incluidos"
+        required: false
+        default: false
+        type: boolean
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  cobertura:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Medir la cobertura
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          UMBRAL: ${{ inputs.umbral }}
+          TODOS: ${{ inputs.todos }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q="companyId=${COMPANY_ID}&umbral=$(printf '%s' "${UMBRAL:-0.5}" | tr -d '[:space:]')"
+          if [ "${TODOS}" = "true" ]; then Q="${Q}&todos=1"; fi
+
+          RESP="$(curl -fsS --max-time 120 -X POST "${URL}/api/cron/sat-cobertura?${Q}" \
+            -H "x-cron-secret: ${CRON_SECRET}")"
+          echo "$RESP" | jq '{rfc, umbral, periodosEvaluados, satDijoTotal, tenemosTotal, faltanCuandoMenos, sospechosos, paraRepescar}'
+
+          N="$(echo "$RESP" | jq -r '.sospechosos | length')"
+          if [ "$N" != "0" ]; then
+            echo "::warning::${N} periodos con cobertura dudosa. Pásalos a sat-repesca con tramos=2."
+          fi

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
+import { coberturaSospechosa, type CoberturaPeriodo } from "@/lib/sat-cobertura";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-backfill
@@ -71,6 +72,43 @@ async function finishedPeriods(companyId: string): Promise<Set<string>> {
   return done;
 }
 
+/**
+ * Lo que el SAT dijo tener contra lo que tenemos, por periodo.
+ *
+ * Dos consultas agrupadas por empresa —NO una por mes—: con 30 periodos y 25
+ * empresas por corrida, una consulta por mes serían 750 idas a la base.
+ */
+async function coberturaDe(
+  companyId: string,
+  periodos: Array<{ year: number; month: number }>,
+): Promise<CoberturaPeriodo[]> {
+  const [solicitudes, facturas] = await Promise.all([
+    prisma.satSyncRequest.groupBy({
+      by: ["year", "month"],
+      where: { companyId, status: "FINISHED" },
+      _sum: { cfdisFound: true },
+    }),
+    prisma.$queryRaw<Array<{ year: number; month: number; n: bigint }>>`
+      SELECT EXTRACT(YEAR FROM "fecha")::int AS year,
+             EXTRACT(MONTH FROM "fecha")::int AS month,
+             COUNT(*) AS n
+      FROM "Invoice"
+      WHERE "companyId" = ${companyId}
+      GROUP BY 1, 2
+    `,
+  ]);
+
+  const satPor = new Map(solicitudes.map((r) => [`${r.year}-${r.month}`, r._sum.cfdisFound ?? 0]));
+  const nuestrasPor = new Map(facturas.map((r) => [`${r.year}-${r.month}`, Number(r.n)]));
+
+  return periodos.map(({ year, month }) => ({
+    year,
+    month,
+    satDijo: satPor.get(`${year}-${month}`) ?? 0,
+    tenemos: nuestrasPor.get(`${year}-${month}`) ?? 0,
+  }));
+}
+
 async function handle(req: Request) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -106,7 +144,14 @@ async function handle(req: Request) {
   let totalSubmitted = 0;
   let totalImported = 0;
   let companiesCompleted = 0;
-  const perCompany: Array<{ rfc: string; touched: number; remaining: number; done: boolean }> = [];
+  const perCompany: Array<{
+    rfc: string; touched: number; remaining: number; done: boolean; coberturaDudosa?: number;
+  }> = [];
+  // Meses marcados «hechos» que no cuadran con lo que el SAT dijo tener.
+  const coberturaDudosa: Array<{
+    rfc: string;
+    periodos: Array<{ periodo: string; satDijo: number; tenemos: number; faltanCuandoMenos: number }>;
+  }> = [];
   const errors: Array<{ companyId: string; rfc: string; error: string }> = [];
 
   for (const company of companies) {
@@ -118,6 +163,30 @@ async function handle(req: Request) {
       });
 
       const done = await finishedPeriods(company.id);
+
+      // ¿Los meses «hechos» realmente trajeron facturas? Se evalúa ANTES de
+      // cualquier salida temprana: la empresa que importa es justo la que ya
+      // está marcada completa —MARGOM lo estaba, con ocho meses vacíos—, y si
+      // esto viviera después del `continue` de «no queda nada» nunca correría
+      // donde hace falta.
+      //
+      // REPORTA, no desmarca: un mes con la cuota 5002 quemada no se puede
+      // rellenar por esta vía, y reintentarlo en automático se comería el
+      // presupuesto de solicitudes de cada corrida sin traer nada. Rellenarlo es
+      // un acto deliberado con sat-repesca (que pide el mes en tramos).
+      const sospechas = coberturaSospechosa(await coberturaDe(company.id, allPeriods));
+      if (sospechas.length > 0) {
+        coberturaDudosa.push({
+          rfc: company.rfc,
+          periodos: sospechas.map((s) => ({
+            periodo: s.periodo,
+            satDijo: s.satDijo,
+            tenemos: s.tenemos,
+            faltanCuandoMenos: s.faltanCuandoMenos,
+          })),
+        });
+      }
+      const dudosas = sospechas.length || undefined;
 
       // Read the REAL outstanding gap and let it drive everything, overriding a
       // stale completed flag in either direction.
@@ -132,7 +201,9 @@ async function handle(req: Request) {
           });
           companiesCompleted++;
         }
-        perCompany.push({ rfc: company.rfc, touched: 0, remaining: 0, done: true });
+        perCompany.push({
+          rfc: company.rfc, touched: 0, remaining: 0, done: true, coberturaDudosa: dudosas,
+        });
         continue;
       }
       // There is a gap. If the company was flagged complete (e.g. satBackfillYears
@@ -196,7 +267,13 @@ async function handle(req: Request) {
         });
         companiesCompleted++;
       }
-      perCompany.push({ rfc: company.rfc, touched, remaining, done: isDone });
+      perCompany.push({
+        rfc: company.rfc,
+        touched,
+        remaining,
+        done: isDone,
+        coberturaDudosa: dudosas,
+      });
     } catch (e) {
       console.error(`[cron/sat-backfill] company ${company.id} failed:`, e);
       errors.push({
@@ -214,8 +291,15 @@ async function handle(req: Request) {
     submitted: totalSubmitted,
     imported: totalImported,
     perCompany,
+    coberturaDudosa,
     errors,
     elapsedMs: Date.now() - startedAt,
+    nota:
+      coberturaDudosa.length > 0
+        ? "Hay meses marcados «hechos» con muchas menos facturas de las que el SAT dijo tener. " +
+          "NO se re-piden en automático (la cuota 5002 es vitalicia y se gastaría en vano): " +
+          "rellénalos con sat-repesca, que pide el mes en tramos."
+        : undefined,
   };
   console.log("[cron/sat-backfill] done:", JSON.stringify(summary));
   return NextResponse.json(summary);
