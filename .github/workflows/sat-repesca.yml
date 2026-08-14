@@ -73,9 +73,15 @@ jobs:
           Q="${Q}&tramos=$(printf '%s' "${TRAMOS:-1}" | tr -d '[:space:]')"
           if [ "${DRY_RUN}" = "true" ]; then Q="${Q}&dryRun=1"; fi
 
-          RESP="$(curl -fsS --max-time 300 -X POST "${URL}/api/cron/sat-repesca?${Q}" \
+          RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/cron/sat-repesca?${Q}" \
             -H "x-cron-secret: ${CRON_SECRET}")"
           echo "$RESP" | jq '{dryRun, periodosPedidos, resultados, cuotaAgotada, nota}'
+
+          # Un tramo `pendiente` no es un fallo: la solicitud quedó viva y
+          # re-correr no gasta cuota. Avisar para que se vuelva a lanzar.
+          if [ "$(echo "$RESP" | jq -r '[.resultados[].tramos[]?|select(.pendiente)]|length')" != "0" ]; then
+            echo "::warning::Quedaron tramos pendientes de verificar. Vuelve a correrlo: es gratis."
+          fi
 
           # La cuota vitalicia no se libera esperando: si se agotó, avisar fuerte
           # para no volver a intentarlo por la misma vía.
