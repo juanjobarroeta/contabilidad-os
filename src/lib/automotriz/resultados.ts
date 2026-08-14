@@ -224,11 +224,25 @@ async function anclaDeLibros(
     hasta.getUTCDate() === 1;
   if (!ejercicioCompleto) return undefined;
 
+  // `month: 1` NO es decorativo: es lo que ata la apertura al CIERRE del
+  // ejercicio. La fecha de apertura es el primer día del mes SIGUIENTE al de la
+  // balanza (fechaAperturaPorDefecto), así que sólo una balanza de DICIEMBRE de
+  // N produce una apertura en enero de N+1 — y sólo ésa acumula el costo de
+  // ventas del ejercicio completo.
+  //
+  // Sin este filtro, la apertura de MARGOM —que viene de la balanza de JUNIO de
+  // 2026, o sea fechada 2026-07-01— empataba con `year: 2026` al pedir el
+  // ejercicio 2025 y le colgaba a 2025 el costo acumulado de enero a junio de
+  // 2026: $510,100,635.37 contra un costo de ventas propio de ~$1,732,595,264,
+  // o sea un residuo de −$1,222,494,629. Un costo NEGATIVO de mil doscientos
+  // millones se presenta como utilidad, y el tablero de 2025 mostraba mil
+  // millones de ganancia inventada.
   const asientos = await db.accountingEntry.findMany({
     where: {
       companyId,
       fuente: "APERTURA",
       year: anio + 1,
+      month: 1,
       chartAccount: { cuentaSAT: { startsWith: "5" } },
     },
     select: { monto: true, tipo: true },
