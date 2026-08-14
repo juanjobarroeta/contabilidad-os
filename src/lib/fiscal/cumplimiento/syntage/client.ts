@@ -349,13 +349,18 @@ export class SyntageClient {
   /**
    * Facturas (CFDIs) ya extraídas de la entidad.
    *
-   * Pagina por `page`, como el resto de este cliente (`requestAllPages`), que
-   * es lo probado contra esta API. La primera versión mezcló el cursor
-   * (`id[lt]` + header X-Pagination-Style) CON `order[issuedAt]=desc` y devolvía
-   * CERO facturas mientras la UI de Syntage mostraba 7,519: el cursor avanza por
-   * `id`, así que ordenar por otra columna lo deja inconsistente. Cuando una
-   * consulta devuelve exactamente nada y la fuente sí tiene datos, el filtro es
-   * el sospechoso — no la fuente.
+   * PAGINA POR CURSOR, y no es opcional: este endpoint RECHAZA `page` con un
+   * 400 que lo dice con todas sus letras — «Only cursor pagination is available
+   * for this endpoint». Costó dos intentos averiguarlo.
+   *
+   * El primero mezcló el cursor CON `order[issuedAt]=desc` y devolvió CERO
+   * facturas mientras la UI mostraba 7,519. Ese diagnóstico era correcto —el
+   * cursor avanza por `id`, así que ordenar por otra columna lo deja
+   * inconsistente— pero el arreglo se fue por el lado equivocado: cambió a
+   * paginación por página en vez de quitar el `order`. Lo correcto es cursor
+   * SIN reordenar, que es esto.
+   *
+   * `id[lt]=<id de la última fila>` es el cursor: se avanza hacia ids menores.
    *
    * `hasXml=true` filtra a las que tienen XML descargable — que son las únicas
    * que sirven para importar como las del SAT (el rawXml es lo que re-parsean
@@ -367,25 +372,44 @@ export class SyntageClient {
    *
    * OJO CON `itemsPerPage`: pedir 1000 devuelve **400**, no una página recortada
    * en silencio. El tope real es 100 — el mismo que muestra el paginador de su
-   * UI («100 / page», 811 páginas para 81,001 renglones). Pasarse no degrada:
-   * truena.
+   * UI («100 / page», 811 páginas para 81,001 renglones).
    */
   async listEntityInvoices(
     entityId: string,
-    opts: { desde?: string; hasta?: string; soloConXml?: boolean; porPagina?: number; pagina?: number } = {},
-  ): Promise<{ facturas: Json[]; hayMas: boolean }> {
+    opts: { desde?: string; hasta?: string; soloConXml?: boolean; porPagina?: number; cursor?: string } = {},
+  ): Promise<{ facturas: Json[]; siguienteCursor: string | null }> {
     const porPagina = Math.min(opts.porPagina ?? MAX_ITEMS_POR_PAGINA, MAX_ITEMS_POR_PAGINA);
     const q = new URLSearchParams();
     q.set("itemsPerPage", String(porPagina));
-    q.set("page", String(opts.pagina ?? 1));
     if (opts.desde) q.set("issuedAt[after]", opts.desde);
     if (opts.hasta) q.set("issuedAt[before]", opts.hasta);
     if (opts.soloConXml) q.set("hasXml", "true");
+    if (opts.cursor) q.set("id[lt]", opts.cursor);
 
-    const r = await this.request<Json>("GET", `/entities/${entityId}/invoices?${q.toString()}`);
-    const facturas = asArray(r);
-    // Página corta = última. Mismo criterio que requestAllPages.
-    return { facturas, hayMas: facturas.length >= porPagina };
+    const res = await fetch(`${this.baseUrl}/entities/${entityId}/invoices?${q.toString()}`, {
+      headers: {
+        "X-Api-Key": this.apiKey,
+        Accept: "application/ld+json, application/json",
+        "X-Pagination-Style": "cursor",
+      },
+    });
+    const text = await res.text();
+    const parsed: unknown = text ? safeJson(text) : null;
+    if (!res.ok) {
+      // El cuerpo VA en el mensaje: es quien dijo «Only cursor pagination».
+      const detalle = text ? ` — ${text.slice(0, 300)}` : "";
+      throw new SyntageError(
+        `Syntage GET /entities/${entityId}/invoices → ${res.status}${detalle}`,
+        res.status,
+        parsed,
+      );
+    }
+    const facturas = asArray(parsed as Json);
+    // Página corta = última: ya no hay a dónde avanzar.
+    if (facturas.length < porPagina) return { facturas, siguienteCursor: null };
+    const ultima = facturas[facturas.length - 1];
+    const siguienteCursor = ultima ? String(ultima.id ?? "") || null : null;
+    return { facturas, siguienteCursor };
   }
 
   /**
