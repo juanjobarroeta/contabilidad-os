@@ -10,7 +10,12 @@ name: CFDIs de Syntage (manual)
 # emitidas + recibidas + todos los años). Sin esa bandera sólo lista lo ya
 # extraído, que es gratis.
 #
-# NO importa nada todavía: compara UUIDs y reporta el hueco por año.
+# `importar: true` SÍ ESCRIBE: baja el XML de cada folio que falte y lo mete por
+# `importarCfdiXml`, el mismo importador que la descarga masiva del SAT.
+#
+# La colección son ~1,100 páginas de 100 y una corrida sola alcanza ~113 antes
+# de su presupuesto de tiempo, así que esto ITERA con el cursor hasta que la ruta
+# devuelve `siguienteCursor: null`, y suma el `porAnio` de todas las vueltas.
 
 on:
   workflow_dispatch:
@@ -29,6 +34,11 @@ on:
         required: false
         default: false
         type: boolean
+      importar:
+        description: "ESCRIBE: importa los CFDIs que falten (baja su XML)"
+        required: false
+        default: false
+        type: boolean
       baseUrl:
         description: "URL del despliegue a golpear"
         required: false
@@ -38,7 +48,7 @@ on:
 jobs:
   cfdis:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 90
     steps:
       - name: Comparar Syntage contra lo nuestro
         env:
@@ -47,6 +57,7 @@ jobs:
           COMPANY_ID: ${{ inputs.companyId }}
           DESDE: ${{ inputs.desde }}
           EXTRAER: ${{ inputs.extraer }}
+          IMPORTAR: ${{ inputs.importar }}
         run: |
           set -euo pipefail
           URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
@@ -54,12 +65,57 @@ jobs:
 
           Q="companyId=${COMPANY_ID}"
           if [ -n "${DESDE}" ]; then Q="${Q}&desde=$(printf '%s' "${DESDE}" | tr -d '[:space:]')"; fi
-          if [ "${EXTRAER}" = "true" ]; then Q="${Q}&extraer=1"; fi
+          if [ "${IMPORTAR}" = "true" ]; then Q="${Q}&importar=1"; fi
 
-          RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/cron/syntage-cfdis?${Q}" \
-            -H "x-cron-secret: ${CRON_SECRET}")"
-          echo "$RESP" | jq '{rfc, periodo, extraccion, totales, porAnio, paginas, truncado}'
+          ACUM="$(mktemp)"
+          CURSOR=""
+          # Tope de vueltas: ~1,100 páginas / ~113 por corrida ≈ 10, con margen
+          # de sobra. Es un seguro contra un cursor que no avance, no una meta.
+          for i in $(seq 1 40); do
+            Q2="${Q}"
+            # `extraer` SÓLO en la primera vuelta: cada extracción se cobra, y
+            # dispararla en cada iteración cobraría diez veces por lo mismo.
+            if [ "${EXTRAER}" = "true" ] && [ "$i" = "1" ]; then Q2="${Q2}&extraer=1"; fi
+            if [ -n "${CURSOR}" ]; then Q2="${Q2}&cursor=${CURSOR}"; fi
 
-          if [ "$(echo "$RESP" | jq -r '.extraccion != null')" = "true" ]; then
-            echo "::warning::Extracción disparada (asíncrona). Vuelve a correr SIN extraer en unos minutos."
+            RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/cron/syntage-cfdis?${Q2}" \
+              -H "x-cron-secret: ${CRON_SECRET}")"
+
+            echo "── vuelta ${i}"
+            echo "$RESP" | jq -c '{paginas, truncado, totales, importacion, siguienteCursor}'
+            echo "$RESP" | jq -c '.porAnio[]' >> "$ACUM"
+
+            if [ "$(echo "$RESP" | jq -r '.extraccion != null')" = "true" ]; then
+              echo "::warning::Extracción disparada (asíncrona). Es normal que ahora liste poco: vuelve a correr en unos minutos."
+            fi
+
+            CURSOR="$(echo "$RESP" | jq -r '.siguienteCursor // empty')"
+            if [ -z "${CURSOR}" ]; then echo "── colección completa"; break; fi
+          done
+
+          if [ -n "${CURSOR}" ]; then
+            echo "::warning::Se acabaron las vueltas y AÚN queda cursor (${CURSOR}). Lo reportado NO es la colección completa."
           fi
+
+          echo "── por año (suma de todas las vueltas)"
+          jq -s '
+            group_by(.anio)
+            | map({
+                anio: .[0].anio,
+                enSyntage: (map(.enSyntage) | add),
+                yaTenemos: (map(.yaTenemos) | add),
+                faltan:    (map(.faltan)    | add),
+                conXml:    (map(.conXml)    | add),
+                canceladas: (map(.canceladas // 0) | add),
+                canceladasNoRegistradas: (map(.canceladasNoRegistradas // 0) | add)
+              })
+            | sort_by(-.anio)
+          ' "$ACUM"
+
+          echo "── totales"
+          jq -s '{
+            enSyntage: (map(.enSyntage) | add),
+            yaTenemos: (map(.yaTenemos) | add),
+            faltan:    (map(.faltan)    | add),
+            canceladasNoRegistradas: (map(.canceladasNoRegistradas // 0) | add)
+          }' "$ACUM"

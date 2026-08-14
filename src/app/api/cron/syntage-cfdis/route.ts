@@ -188,6 +188,11 @@ async function handle(req: Request) {
   const porAnio = new Map<number, PorAnio>();
   // Muestra de folios que el SAT tiene por cancelados y nosotros por vivos.
   const canceladasPendientes: string[] = [];
+  // La FORMA cruda del primer renglón. `conXml` se cuenta con `f.xml === true`,
+  // y si ese campo resultara ser una URL o un objeto la cuenta saldría baja sin
+  // avisar — que es exactamente el error que ya se cometió buscando el VIN en un
+  // campo que no lo tenía. Esto deja ver el campo en vez de suponerlo.
+  let muestraCruda: Record<string, unknown> | null = null;
   let paginas = 0;
   let totalSyntage = 0;
   let truncado = false;
@@ -222,6 +227,16 @@ async function handle(req: Request) {
     paginas++;
     if (facturas.length === 0) break;
     totalSyntage += facturas.length;
+    if (!muestraCruda && facturas[0]) {
+      const f0 = facturas[0] as Record<string, unknown>;
+      muestraCruda = {
+        llaves: Object.keys(f0),
+        xml: f0.xml,
+        tipoDeXml: typeof f0.xml,
+        status: f0.status,
+        type: f0.type,
+      };
+    }
 
     // Los UUIDs que Syntage reporta, contra los que ya guardamos. Se pregunta
     // por lote —no una consulta por factura— y sólo por uuid, que es la llave
@@ -346,6 +361,7 @@ async function handle(req: Request) {
     // Folios vivos para nosotros y cancelados para el SAT. Muestra, no lista
     // completa: lo que importa aquí es si el número es cero o no.
     canceladasPendientes,
+    muestraCruda,
     importacion: importar ? imp : undefined,
     paginas,
     cursorInicial: cursorInicial ?? null,
