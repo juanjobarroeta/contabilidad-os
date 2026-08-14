@@ -120,6 +120,42 @@ async function handle(req: Request) {
     FROM lineas GROUP BY tipo
   `;
 
+  // ── 4. Ventas con clave de vehículo que NUNCA empataron con una unidad ─────
+  // El renglón que decide entre las dos causas posibles del piso inflado.
+  //
+  // Si el piso está inflado porque FALTAN CFDIs (los ocho meses que el SAT no
+  // entregó), aquí no debería salir casi nada: la venta que no existe no puede
+  // aparecer sin empatar. Si en cambio salen muchas, la venta SÍ está en la base
+  // y lo que falló fue el empate con el VIN — otra causa, otro arreglo.
+  //
+  // Va por año y sin límite de ejercicio: la pregunta es histórica.
+  const ventasHuerfanas = await prisma.$queryRaw<
+    Array<{ anio: number | null; facturas: bigint; importe: number | null }>
+  >`
+    WITH ventas AS (
+      SELECT i."id", i."fecha",
+             SUM(it."importe" - it."descuento") AS importe
+      FROM "Invoice" i
+      JOIN "InvoiceItem" it ON it."invoiceId" = i."id"
+      WHERE i."companyId" = ${companyId}
+        AND i."tipo" = 'INGRESO'
+        AND i."status" <> 'CANCELLED'
+        AND i."tipoSat" <> 'E'
+        AND it."claveProdServ" LIKE '2510%'
+      GROUP BY i."id", i."fecha"
+    )
+    SELECT EXTRACT(YEAR FROM v."fecha")::int AS anio,
+           COUNT(*)                  AS facturas,
+           SUM(v."importe")::float8   AS importe
+    FROM ventas v
+    WHERE NOT EXISTS (
+      SELECT 1 FROM "Vehiculo" ve
+      WHERE ve."companyId" = ${companyId} AND ve."ventaInvoiceId" = v."id"
+    )
+    GROUP BY 1
+    ORDER BY 1 DESC NULLS LAST
+  `;
+
   const num = (v: number | null) => r2(v ?? 0);
   const n = (v: bigint) => Number(v);
   const ladoCfdi = (t: string) => {
@@ -161,9 +197,17 @@ async function handle(req: Request) {
       costo: num(r.costo),
     })),
     cfdisClaveVehiculo: { ventas: ladoCfdi("INGRESO"), compras: ladoCfdi("EGRESO") },
+    // Ventas facturadas que nunca sacaron una unidad del piso, por año.
+    ventasHuerfanas: ventasHuerfanas.map((r) => ({
+      anio: r.anio,
+      facturas: n(r.facturas),
+      importe: num(r.importe),
+    })),
     nota:
       "costoEnPiso se compara contra la suma de las familias 1301/1302/1312 de la balanza. " +
-      "La clave 2510xx no distingue nuevo de seminuevo: eso sólo lo sabe el padrón.",
+      "La clave 2510xx no distingue nuevo de seminuevo: eso sólo lo sabe el padrón. " +
+      "ventasHuerfanas distingue las dos causas del piso inflado: si sale casi vacío, " +
+      "faltan CFDIs (ingesta); si sale grande, la venta está y falló el empate con el VIN.",
   };
 
   console.log(
