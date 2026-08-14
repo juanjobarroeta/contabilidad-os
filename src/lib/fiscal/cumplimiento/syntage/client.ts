@@ -336,9 +336,15 @@ export class SyntageClient {
   }
 
   /**
-   * Facturas (CFDIs) ya extraídas de la entidad. Pagina por CURSOR, no por
-   * `page`: la colección puede traer decenas de miles y el cursor es lo que
-   * documenta Syntage para recorrerla (`id[lt]` + header X-Pagination-Style).
+   * Facturas (CFDIs) ya extraídas de la entidad.
+   *
+   * Pagina por `page`, como el resto de este cliente (`requestAllPages`), que
+   * es lo probado contra esta API. La primera versión mezcló el cursor
+   * (`id[lt]` + header X-Pagination-Style) CON `order[issuedAt]=desc` y devolvía
+   * CERO facturas mientras la UI de Syntage mostraba 7,519: el cursor avanza por
+   * `id`, así que ordenar por otra columna lo deja inconsistente. Cuando una
+   * consulta devuelve exactamente nada y la fuente sí tiene datos, el filtro es
+   * el sospechoso — no la fuente.
    *
    * `hasXml=true` filtra a las que tienen XML descargable — que son las únicas
    * que sirven para importar como las del SAT (el rawXml es lo que re-parsean
@@ -350,34 +356,20 @@ export class SyntageClient {
    */
   async listEntityInvoices(
     entityId: string,
-    opts: { desde?: string; hasta?: string; soloConXml?: boolean; porPagina?: number; cursor?: string } = {},
-  ): Promise<{ facturas: Json[]; siguienteCursor: string | null }> {
+    opts: { desde?: string; hasta?: string; soloConXml?: boolean; porPagina?: number; pagina?: number } = {},
+  ): Promise<{ facturas: Json[]; hayMas: boolean }> {
+    const porPagina = Math.min(opts.porPagina ?? 1000, 1000);
     const q = new URLSearchParams();
-    q.set("itemsPerPage", String(Math.min(opts.porPagina ?? 1000, 1000)));
-    q.set("order[issuedAt]", "desc");
+    q.set("itemsPerPage", String(porPagina));
+    q.set("page", String(opts.pagina ?? 1));
     if (opts.desde) q.set("issuedAt[after]", opts.desde);
     if (opts.hasta) q.set("issuedAt[before]", opts.hasta);
     if (opts.soloConXml) q.set("hasXml", "true");
-    if (opts.cursor) q.set("id[lt]", opts.cursor);
 
-    const res = await fetch(`${this.baseUrl}/entities/${entityId}/invoices?${q.toString()}`, {
-      headers: {
-        "X-Api-Key": this.apiKey,
-        Accept: "application/ld+json, application/json",
-        "X-Pagination-Style": "cursor",
-      },
-    });
-    const text = await res.text();
-    const parsed: unknown = text ? safeJson(text) : null;
-    if (!res.ok) {
-      throw new SyntageError(`Syntage GET /entities/${entityId}/invoices → ${res.status}`, res.status, parsed);
-    }
-    const facturas = asArray(parsed as Json);
-    // El cursor de la siguiente página es el id de la última fila: con
-    // order[issuedAt]=desc e id[lt] se avanza hacia atrás en el tiempo.
-    const ultima = facturas[facturas.length - 1];
-    const siguienteCursor = facturas.length > 0 && ultima ? String(ultima.id ?? "") || null : null;
-    return { facturas, siguienteCursor };
+    const r = await this.request<Json>("GET", `/entities/${entityId}/invoices?${q.toString()}`);
+    const facturas = asArray(r);
+    // Página corta = última. Mismo criterio que requestAllPages.
+    return { facturas, hayMas: facturas.length >= porPagina };
   }
 
   /**
