@@ -66,13 +66,29 @@ export function esCoberturaSospechosa(p: CoberturaPeriodo, umbral = UMBRAL_COBER
   return p.tenemos < p.satDijo * umbral;
 }
 
+/**
+ * ¿Este periodo ya terminó?
+ *
+ * El mes EN CURSO está a medio ingerir por definición: el SAT reporta lo que
+ * lleva y nosotros vamos detrás. Medido el 2026-08-14, MARGOM salió con
+ * satDijo=6,894 y tenemos=2,087 (30%) — y no le falta nada, le faltan 17 días.
+ * Marcarlo sospechoso manda a repescar un mes que se está llenando solo, y peor:
+ * gasta cuota vitalicia en un rango que de todos modos hay que volver a pedir.
+ */
+export function periodoCerrado(p: { year: number; month: number }, hoy: Date): boolean {
+  const anioHoy = hoy.getUTCFullYear();
+  const mesHoy = hoy.getUTCMonth() + 1;
+  return p.year < anioHoy || (p.year === anioHoy && p.month < mesHoy);
+}
+
 /** Los periodos que el SAT dijo tener y nosotros no. Ordenados por hueco. */
 export function coberturaSospechosa(
   periodos: CoberturaPeriodo[],
   umbral = UMBRAL_COBERTURA,
+  hoy = new Date(),
 ): Sospecha[] {
   return periodos
-    .filter((p) => esCoberturaSospechosa(p, umbral))
+    .filter((p) => periodoCerrado(p, hoy) && esCoberturaSospechosa(p, umbral))
     .map((p) => ({
       ...p,
       periodo: clave(p.year, p.month),
