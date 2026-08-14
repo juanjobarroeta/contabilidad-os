@@ -193,6 +193,19 @@ async function handle(req: Request) {
   // avisar — que es exactamente el error que ya se cometió buscando el VIN en un
   // campo que no lo tenía. Esto deja ver el campo en vez de suponerlo.
   let muestraCruda: Record<string, unknown> | null = null;
+  // UUIDs ya vistos EN ESTA CORRIDA, para detectar si las páginas se traslapan.
+  //
+  // Por qué: la suma de `enSyntage` de doce vueltas dio 158,100 contra una
+  // colección de 109,646. Un total que se pasa del total conocido es la firma
+  // del doble conteo — ya van tres hoy. La sospecha es el orden: se manda
+  // `id[lt]=<id de la última fila>` sin declarar `order`, así que si la
+  // colección no viene ordenada por `id` descendente, «la última fila» no es la
+  // de id menor y las páginas se encabalgan en vez de embonar.
+  //
+  // Esto lo MIDE en vez de suponerlo: si `duplicados` sale 0 el orden está bien
+  // y el exceso es otra cosa; si sale grande, es el orden.
+  const vistosEnCorrida = new Set<string>();
+  let duplicados = 0;
   let paginas = 0;
   let totalSyntage = 0;
   let truncado = false;
@@ -266,6 +279,10 @@ async function handle(req: Request) {
       const fila =
         porAnio.get(anio) ??
         { anio, enSyntage: 0, yaTenemos: 0, faltan: 0, conXml: 0, canceladas: 0, canceladasNoRegistradas: 0 };
+      if (uuid) {
+        if (vistosEnCorrida.has(uuid)) duplicados++;
+        else vistosEnCorrida.add(uuid);
+      }
       fila.enSyntage++;
       if (f.xml === true) fila.conXml++;
       if (uuid && nuestros.has(uuid)) fila.yaTenemos++;
@@ -357,6 +374,10 @@ async function handle(req: Request) {
       conXml: filas.reduce((s, f) => s + f.conXml, 0),
       canceladas: filas.reduce((s, f) => s + f.canceladas, 0),
       canceladasNoRegistradas: filas.reduce((s, f) => s + f.canceladasNoRegistradas, 0),
+      // Folios distintos contra renglones devueltos. Si no coinciden, las
+      // páginas se traslapan y CUALQUIER suma de estas corridas está inflada.
+      uuidsDistintos: vistosEnCorrida.size,
+      duplicados,
     },
     // Folios vivos para nosotros y cancelados para el SAT. Muestra, no lista
     // completa: lo que importa aquí es si el número es cero o no.
@@ -393,6 +414,7 @@ async function handle(req: Request) {
       ...resp.totales,
       paginas,
       siguienteCursor,
+      duplicados,
       truncado,
       ...(importar ? { importados: imp.importados, errores: imp.errores } : {}),
     }),
