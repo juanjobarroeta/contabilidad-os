@@ -25,7 +25,13 @@ function fakeDb(seed: {
   let nomina = seed.nomina ?? [];
 
   const coincide = (row: Record<string, unknown>, where: Record<string, unknown>) =>
-    Object.entries(where).every(([k, v]) => row[k] === v);
+    Object.entries(where).every(([k, v]) => {
+      // Sólo el operador que usa la reversión: `{ id: { in: [...] } }`.
+      if (v && typeof v === "object" && "in" in (v as Record<string, unknown>)) {
+        return ((v as { in: unknown[] }).in ?? []).includes(row[k]);
+      }
+      return row[k] === v;
+    });
 
   const tabla = <T extends Record<string, unknown>>(
     get: () => T[],
@@ -86,15 +92,37 @@ describe("revertirDerivadosDeCancelada", () => {
 
   it("una COMPRA cancelada deja la unidad SIN borrarla, con costo en cero", async () => {
     const db = fakeDb({
-      vehiculos: [{ id: "v1", compraInvoiceId: INV, costoCompra: 445_700.05, ventaInvoiceId: null }],
+      vehiculos: [
+        { id: "v1", compraInvoiceId: INV, costoCompra: 445_700.05, ventaInvoiceId: null, autoCreado: true, estado: "DISPONIBLE" },
+      ],
     });
     const r = await revertirDerivadosDeCancelada(db, INV);
-    expect(r.compras).toEqual({ unidades: 1, costoLiberado: 445_700.05 });
+    expect(r.compras).toEqual({ unidades: 1, costoLiberado: 445_700.05, retiradas: 1 });
     // Casi siempre es refacturación: borrar la fila perdería el VIN y su
     // expediente, y el CFDI nuevo la vuelve a derivar con el costo correcto.
     expect(db._vehiculos).toHaveLength(1);
     expect(db._vehiculos[0].compraInvoiceId).toBeNull();
     expect(db._vehiculos[0].costoCompra).toBe(0);
+    // Pero sale de piso: sin compra que la respalde no estuvo en inventario, y
+    // dejarla DISPONIBLE a costo 0 infla el conteo de unidades.
+    expect(db._vehiculos[0].estado).toBe("CANCELADO");
+  });
+
+  it("NO retira una unidad capturada a mano ni una que ya se vendió", async () => {
+    const db = fakeDb({
+      vehiculos: [
+        // La escribió una persona: no se retira por una cancelación ajena.
+        { id: "manual", compraInvoiceId: INV, costoCompra: 100, ventaInvoiceId: null, autoCreado: false, estado: "DISPONIBLE" },
+        // Se vendió: existió de sobra, aunque su compra se haya cancelado.
+        { id: "vendida", compraInvoiceId: INV, costoCompra: 200, ventaInvoiceId: "otra-venta", autoCreado: true, estado: "VENDIDO" },
+      ],
+    });
+    const r = await revertirDerivadosDeCancelada(db, INV);
+    expect(r.compras).toEqual({ unidades: 2, costoLiberado: 300, retiradas: 0 });
+    expect(db._vehiculos.map((v: Record<string, unknown>) => v.estado)).toEqual([
+      "DISPONIBLE",
+      "VENDIDO",
+    ]);
   });
 
   it("CONSERVA los costos capturados a mano y borra sólo los derivados", async () => {

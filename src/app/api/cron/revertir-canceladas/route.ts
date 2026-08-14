@@ -59,6 +59,8 @@ async function handle(req: Request) {
 
   const totales = {
     unidadesDescompradas: 0,
+    /** De las descompradas, las que además salen de piso (nunca se vendieron). */
+    unidadesRetiradas: 0,
     costoLiberado: 0,
     unidadesDevueltasAPiso: 0,
     ingresoLiberado: 0,
@@ -86,6 +88,7 @@ async function handle(req: Request) {
       const rev = await revertirDerivadosDeCancelada(prisma, invoiceId);
       if (!rev.huboCambios) continue;
       totales.unidadesDescompradas += rev.compras.unidades;
+      totales.unidadesRetiradas += rev.compras.retiradas;
       totales.costoLiberado = r2(totales.costoLiberado + rev.compras.costoLiberado);
       totales.unidadesDevueltasAPiso += rev.ventas.unidades;
       totales.ingresoLiberado = r2(totales.ingresoLiberado + rev.ventas.ingresoLiberado);
