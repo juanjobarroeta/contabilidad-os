@@ -222,6 +222,46 @@ async function handle(req: Request) {
     primerError: null,
   };
 
+  /**
+   * Deja constancia de un folio que EXISTE y cuyo documento no tenemos.
+   *
+   * No entra a `Invoice` a propósito: una factura sin XML ahí suma pesos que
+   * nadie puede documentar. Aquí queda apartada, contable-mente inerte y
+   * auditable — y para 2017–2021 es la única memoria posible, porque el SAT ya
+   * no sirve nada de esos años.
+   */
+  async function anotarFaltante(
+    f: Record<string, unknown>,
+    uuid: string,
+    motivo: "sin_xml" | "descarga_fallo" | "sin_id",
+  ): Promise<void> {
+    const emitido = String(f.issuedAt ?? "");
+    const fecha = new Date(emitido);
+    if (!uuid || Number.isNaN(fecha.getTime())) return;
+    const total = Number(f.total);
+    try {
+      await prisma.cfdiFaltante.upsert({
+        where: { companyId_uuid: { companyId: companyId as string, uuid } },
+        // Un reintento no crea otro renglón: sube el contador y la fecha. Si
+        // antes falló la descarga y ahora resulta que no está, el motivo se
+        // corrige al de hoy.
+        update: { motivo, intentos: { increment: 1 }, ultimoIntento: new Date() },
+        create: {
+          companyId: companyId as string,
+          uuid,
+          fecha,
+          tipoSat: f.type ? String(f.type) : null,
+          total: Number.isFinite(total) ? total : null,
+          estatus: f.status ? String(f.status) : null,
+          origen: "Syntage",
+          motivo,
+        },
+      });
+    } catch {
+      /* anotar el hueco nunca debe tumbar la importación */
+    }
+  }
+
   for (let i = 0; i < MAX_PAGINAS; i++) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) {
       truncado = true;
@@ -314,19 +354,28 @@ async function handle(req: Request) {
           break;
         }
         const uuid = String(f.uuid ?? "").toUpperCase();
+        // Ya lo tenemos: se descarta sin tocar la red. Es la razón de que esto
+        // cueste ~21 mil descargas y no 200 mil.
         if (!uuid || nuestros.has(uuid)) continue;
-        // Sin XML no hay comprobante que guardar: el JSON parseado de Syntage
-        // no es el CFDI, y guardar una factura sin su archivo original rompe
-        // todo lo que re-parsea rawXml (nómina, vehículos, impuestos).
-        if (f.xml !== true) {
-          imp.sinXml++;
-          continue;
-        }
+
         const syntageId = String(f.id ?? "");
         if (!syntageId) {
+          await anotarFaltante(f, uuid, "sin_id");
           imp.sinXml++;
           continue;
         }
+
+        // NO se consulta la bandera `xml`. Se INTENTA bajar el archivo y el
+        // resultado decide.
+        //
+        // Antes había aquí un `if (f.xml !== true) continue`, y era un hueco
+        // callado: si la bandera significa «se pidió XML en esta extracción» y
+        // no «hay XML disponible», ese `continue` dejaba fuera miles de
+        // comprobantes sin que nadie se enterara. El propio listado la reportó
+        // en 12,700/12,700 en una vuelta y 229/13,100 en la siguiente, y en la
+        // UI los XML se ven activos en filas que la bandera daba por vacías.
+        // Un hecho medido (el endpoint respondió que no) vale más que un campo
+        // interpretado.
         imp.intentados++;
         try {
           const xml = await client.getInvoiceCfdiXml(syntageId);
@@ -340,12 +389,25 @@ async function handle(req: Request) {
             xmlContent: xml,
             origen: "Syntage",
           });
-          if (r.resultado === "importado") imp.importados++;
-          else if (r.resultado === "existente") imp.existentes++;
+          if (r.resultado === "importado") {
+            imp.importados++;
+            // Si estaba anotado como faltante, ya no lo está.
+            await prisma.cfdiFaltante
+              .deleteMany({ where: { companyId, uuid } })
+              .catch(() => undefined);
+          } else if (r.resultado === "existente") imp.existentes++;
           else imp.invalidos++;
         } catch (e) {
-          imp.errores++;
-          if (!imp.primerError) imp.primerError = e instanceof Error ? e.message : String(e);
+          // 404 = el proveedor no tiene el documento. Cualquier otra cosa es un
+          // fallo de descarga, que sí vale la pena reintentar después.
+          const status = (e as { status?: number })?.status;
+          const noEstá = status === 404 || status === 410;
+          await anotarFaltante(f, uuid, noEstá ? "sin_xml" : "descarga_fallo");
+          if (noEstá) imp.sinXml++;
+          else {
+            imp.errores++;
+            if (!imp.primerError) imp.primerError = e instanceof Error ? e.message : String(e);
+          }
         }
       }
       if (truncado) break;

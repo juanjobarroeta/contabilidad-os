@@ -253,6 +253,7 @@ model Company {
   accounts          ChartAccount[]
   accountingPeriods AccountingPeriod[]
   satSyncRequests   SatSyncRequest[]
+  cfdisFaltantes    CfdiFaltante[]
 
   // Module gating (SaaS): which features this company has contracted
   modules CompanyModule[]
@@ -2028,6 +2029,51 @@ model SatSyncRequest {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, year, month, tipo])
+}
+
+/// Folios que EXISTEN en el SAT y de los que NO tenemos el documento.
+///
+/// Por qué no es un `Invoice`. Una factura sin XML metida en `Invoice` entra a
+/// los totales, al motor de posteo y a la balanza: suma pesos que nadie puede
+/// documentar, que es exactamente lo contrario de lo que se busca. Aquí vive
+/// aparte, se puede reportar («existen $X que sabemos que existen y no podemos
+/// documentar») y no contamina un solo total contable.
+///
+/// Por qué existe. Para 2017–2021 el SAT ya no sirve NADA —la descarga masiva
+/// topa a cinco años— así que si un folio de esos no queda anotado, desaparece
+/// en silencio. El censo de Syntage trae fecha, tipo, importe y estatus aunque
+/// el XML ya no se pueda bajar: es la única memoria posible de ese tramo.
+///
+/// Se borra sola: cuando el documento por fin se consigue, el importador crea
+/// el `Invoice` y quita el renglón de aquí.
+model CfdiFaltante {
+  id        String   @id @default(cuid())
+  companyId String
+  /// Folio fiscal, SIEMPRE en mayúsculas.
+  uuid      String
+  fecha     DateTime
+  /// TipoDeComprobante crudo del SAT (I/E/N/P/T), tal cual lo reporta el censo.
+  tipoSat   String?
+  total     Float?
+  /// VIGENTE | CANCELADO, según el censo. Un cancelado pierde el XML pero no
+  /// el renglón, así que este suele ser el motivo de que esté aquí.
+  estatus   String?
+  /// De dónde salió el censo que lo reportó.
+  origen    String   @default("Syntage")
+  /// Por qué no se pudo guardar el documento: "sin_xml" (el proveedor no lo
+  /// tiene) o "descarga_fallo" (lo tiene y la descarga falló — reintentable).
+  motivo    String
+  /// Cuántas veces se ha intentado bajar. Un motivo "descarga_fallo" con pocos
+  /// intentos vale la pena reintentarlo; "sin_xml" no.
+  intentos  Int      @default(1)
+  detectadoAt   DateTime @default(now())
+  ultimoIntento DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, uuid])
+  @@index([companyId, motivo])
+  @@index([companyId, fecha])
 }
 
 enum SatRequestType {
