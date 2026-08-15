@@ -1,8 +1,7 @@
-# Handoff — piso inflado e ingesta de CFDIs (MARGOM)
+# Handoff — inventario y archivo de CFDIs (MARGOM)
 
-Estado al **2026-08-14 20:15 UTC**. Escrito para que una sesión nueva —en
-terminal, con `psql`— arranque sabiendo lo que ya se midió y, sobre todo, lo que
-ya se descartó.
+Estado al **2026-08-15**. La recuperación de documentos **terminó**. Lo que queda
+ya no es un problema de datos faltantes; es de conciliación contra los libros.
 
 `companyId = cmsjf1wna003kn70fb68bqhm4` · `RFC = AMA170817NK1` · opera desde
 **2017-08**.
@@ -14,167 +13,278 @@ ya se descartó.
 > «the numbers must be right, not duplicated, every cfdi accounted for and
 > catalogued the right way.»
 
-Lo que se repite en cada medición: **los libros del contador tienen razón; el
-padrón está mal.** La balanza (Anexo 24, presentada al SAT) cuadra al centavo.
-El inventario derivado de CFDIs no.
+---
+
+## Dónde estamos
+
+| | mañana del 2026-08-14 | ahora |
+|---|---:|---:|
+| CFDIs en la base | 182,800 | **198,162** |
+| El archivo empieza en | 2021-09-01 | **2017-11-01** |
+| Cobertura de EMITIDAS | (se midió mal: «100%») | **99.92%** — faltan 93 |
+| Cobertura de RECIBIDAS vigentes en ventana SAT | sin medir | **100%** |
+| Piso (hoy) | 1,032 u / $420,305,915 | **539 u / ~$228.7M** |
+| Piso al corte de la balanza (2026-06-30) | — | **448 u / $180,677,546** |
+| Libros (balanza 2026-06, cuentas 1301+1302+1312) | $147,524,850 | $147,524,850 |
+| **Hueco** | **~$272,780,000** | **$33,152,697** |
+
+**Salieron 493 unidades y ~$191.6M del piso**, todas porque llegó su documento
+de venta. No se editó ni un renglón de inventario.
 
 ---
 
-## Dónde está el piso hoy
+## Qué estaba roto (y ya no)
 
-| | unidades | costo |
-|---|---|---|
-| Piso en la mañana | 1,324 | $558,533,750.55 |
-| Ventas empatadas hoy | −368 | −$168,397,763.53 |
-| Compras nuevas de hoy | +76 | +$30,169,927.52 |
-| **Piso ahora** | **1,032** | **$420,305,914.54** |
-| Libros (1301/1302/1312) | — | ~$147,524,849.52 |
-| **Hueco** | — | **~$272,780,000** |
+El padrón no estaba inflado por mala lógica: **faltaban meses enteros de CFDIs
+emitidos**. Recuperados el 2026-08-15 vía `sat-repesca`:
 
-Las dos definiciones de «en piso» coinciden exactamente (1,032 / $420,305,914.54):
-`ventaInvoiceId IS NULL` y `fechaVenta IS NULL`. No hay ventas a medio ligar.
+| mes | emitidas que faltaban | hoy |
+|---|---:|---|
+| 2021-08 | 126 (el mes completo) | completo |
+| 2022-01 | 289 | completo |
+| 2022-02 | 386 | completo |
+| 2022-03 | 558 | completo |
+| 2022-05 | 409 | completo |
+| 2022-06 | 504 | completo |
+| 2023-08 | 1,086 | completo |
+| 2024-02 | 344 | completo |
+| 2025-04 | 1,206 (todo del 16 al 30) | completo |
 
-**El piso bajó $138.2M solo hoy** y nadie lo estaba midiendo: la repesca del SAT
-(2024-01 de 57 a 2,690 facturas; +1,484 en 2025-04) trajo CFDIs de VENTA de
-unidades que seguían en piso, y `derivarVehiculoInline` las empató. O sea que el
-padrón se infla **porque faltan documentos**, no por mala lógica de empate.
-
-Composición del piso (todas, sin excepción, `estado = DISPONIBLE` y
-`autoCreado = true` — nada capturado a mano, `estado` no se mantiene como ciclo
-de vida):
-
-| año compra | unidades | costo |
-|---|---|---|
-| 2026 | 385 | $168,010,098.24 |
-| 2025 | 110 | $43,017,339.35 |
-| 2024 | 109 | $65,261,931.04 |
-| 2023 | 135 | $44,269,879.98 |
-| 2022 | 256 | $87,302,234.60 |
-| 2021 | 37 | $12,444,431.32 |
-
-El renglón que grita es **2022: 256 unidades, $87.3M, cuatro años «disponibles»**.
-Una agencia no guarda inventario de 2022.
+Y 2017-11 → 2021-08 entró desde Syntage (~10,600 CFDIs) — el único tramo que el
+SAT no da nunca.
 
 ---
 
-## Causas DESCARTADAS midiendo (no re-proponer)
+## Lo que NO se puede recuperar (no volver a intentarlo)
 
-| hipótesis | resultado |
-|---|---|
-| Cancelaciones sin revertir | `candidatas: 0` |
-| Ocho meses de ingesta rotos | seis estaban sanos; sólo 2 lo estaban de verdad |
-| Empate con el VIN | 98 huérfanas / $39,384,431.92 — no alcanza |
-| Ciclos duplicados (mismo VIN, varios `ciclo`) | **0 unidades** |
+| qué | cuánto | por qué |
+|---|---:|---|
+| Emitidas 2018-06, 2018-10, 2020-06 | 93 | fuera de la ventana de 5 años y Syntage nunca capturó su XML |
+| Recibidas vigentes pre-2021-08 | 2,012 · $67.4M | igual |
+| Recibidas **canceladas** | 3,916 | **no son un hueco**: la descarga masiva del SAT no entrega recibidas canceladas. Es el residuo parejo de 3-8% en TODOS los meses. Una recibida cancelada no es deducción ni crea inventario. **No importarlas.** |
 
-La quinta —**faltan CFDIs de venta**— es la que sí tiene evidencia: 368 unidades
-se resolvieron hoy justo por eso.
+**Syntage está agotado como fuente.** Tiene los folios pero no los XML de
+2022-2025 (`xml: false` → `GET /invoices/{id}/cfdi` da **404**). Comprobado
+descargando: de 32 XMLs que entrega, ya teníamos los 32. Los PDFs **no traen el
+NIV** — traen `No Motor:`, que sí sirve como llave (580 de 653 unidades del piso
+tienen `numeroMotor`).
 
 ---
 
-## Cuidado con esta trampa (ya costó tres errores)
+## La llave que destrabó todo: `tramos`
 
-Escribir la consulta antes de leer de dónde sale el dato. Tres veces hoy:
+La cuota 5002 del SAT es **vitalicia y por (RFC + rango + tipo)**. Un mes
+quemado se reabre pidiéndolo en **rangos distintos**:
 
-1. `satDijo` sumaba **todas** las solicitudes FINISHED del mes; `submitSatSync`
-   crea una fila nueva por re-pedido → doble conteo.
-2. La fila del mes completo **y** sus tramos cubren los mismos días → doble
+```
+sat-repesca?companyId=…&periodos=2025-04&tramos=2                 # dos quincenas
+sat-repesca?companyId=…&periodos=2025-04&tramos=4&saltarTramos=2  # apunta al tramo 3
+```
+
+Tres cosas aprendidas peleándose con esto:
+
+- **`importadas: 0` no es fallo.** Puede ser que ese rango ya esté completo, o
+  que el paquete siga preparándose (`IN_PROGRESS` en `SatSyncRequest`). El SAT
+  tarda **minutos u horas**; correr rondas con 4 min de pausa, no seguidas.
+- **`saltarTramos` es obligatorio para el segundo tramo.** Re-verificar el
+  tramo 1 vuelve a bajar su paquete y se come el presupuesto de 300s, así que
+  el tramo 2 queda `pendiente` para siempre.
+- **La cuota se gasta fuera de nuestro sistema.** `SatSyncRequest` registra lo
+  que pedimos *nosotros*; el SAT cuenta lo que pidió *cualquiera* con esa FIEL
+  (Syntage la tiene). Hubo meses sin ninguna fila nuestra que ya venían con
+  5002. **Nunca inferir «cuota intacta» de nuestra tabla — preguntar.**
+
+---
+
+## Las cinco trampas que costaron horas
+
+1. **`satDijo` sumando todas las solicitudes FINISHED del mes** → doble conteo
+   (`submitSatSync` crea fila por re-pedido).
+2. **La fila del mes completo y sus tramos** cubren los mismos días → doble
    conteo otra vez.
-3. Se buscó el VIN en `InvoiceItem.descripcion`. **Las facturas de VENTA no
-   traen el VIN ahí** — lo traen en el complemento `ventavehiculos:VentaVehiculos`
-   dentro del `rawXml`. Está documentado en `src/lib/automotriz/vin.ts:10-12`.
+3. **Buscar el VIN en `InvoiceItem.descripcion`.** Las ventas lo traen en el
+   complemento `ventavehiculos:VentaVehiculos` del `rawXml`
+   (`src/lib/automotriz/vin.ts:10-12`).
+4. **Medir emitidas con `tipo IN ('INGRESO','PAGO')`.** `Invoice.tipo` es el
+   tipo de comprobante, **no la dirección**: deja fuera las 16,837 de nómina y
+   pinta ~10% de falso faltante en todos los meses. La dirección sólo está en
+   el XML: `Emisor Rfc = 'AMA170817NK1'`.
+5. **La peor: el `JOIN` contra `SatSyncRequest`.** Un mes que nunca se pidió no
+   tiene fila, así que desaparece de los DOS lados de la comparación y se lee
+   como mes inexistente. Dio «100% de cobertura» y sirvió para declarar por
+   escrito que no había hueco. Había nueve meses. **Para medir lo que falta, el
+   eje de períodos lo genera uno (`generate_series`), NO la tabla auditada.**
 
-Regla que salió de esto: **cuando un cociente sale exacto (0.5, 2.0), no son
-datos, es aritmética.** Y: leer la fuente **antes** de la consulta, no después
-de un resultado sospechoso.
+Bonus, al leer la balanza: **el XML trae el mayor Y sus subcuentas**
+(`1301-0000-0000` junto a `1301-0004-0000`). Sumar ambos duplica todo — dio
+$1.9 mil millones. Sólo mayores, o sólo hojas. Ver `padresDeBalanza`.
+
+Y: **la balanza más reciente es 2026-06, no 2026-07.** El importador la postea
+como asiento de APERTURA del mes siguiente, así que en `AccountingEntry` aparece
+con `month=7`. Comparar el piso al **2026-06-30**, no al 31 de julio (esa
+diferencia sola valía $24M en unidades compradas en julio).
 
 ---
 
-## Consultas que sirven (probadas en psql)
+## El objetivo: la balanza presentada
 
-Piso por año, con la composición que importa:
+42 balanzas presentadas y aceptadas (2023-01 → 2026-06) + 27 catálogos
+(2023-01 → 2025-03), todas en Syntage (`electronic-accounting-records`).
 
-```sql
-SELECT EXTRACT(YEAR FROM COALESCE(v."fechaCompra", i."fecha", v."createdAt"))::int AS anio,
-       v."estado", v."tipo", v."autoCreado",
-       COUNT(*) AS unidades, SUM(v."costoCompra")::numeric(16,2) AS costo
-FROM "Vehiculo" v
-LEFT JOIN "Invoice" i ON i."id" = v."compraInvoiceId"
-WHERE v."companyId" = 'cmsjf1wna003kn70fb68bqhm4' AND v."ventaInvoiceId" IS NULL
-GROUP BY 1,2,3,4 ORDER BY 1 DESC, unidades DESC;
+**El plan de cuentas cambió en 2024-10.** Antes se presentaba con el **código
+agrupador del SAT** (inventario = `115`); desde entonces con la numeración
+propia (`1301-0000-0000`). Cualquier serie histórica tiene que manejar las dos.
+
+Serie mensual de inventario en libros (extraída de las balanzas):
+
+- 2023-01 → 2024-09: banda sana de **$57M a $129M**.
+- **2024-12: $966,947,239** — un salto de **+$867M en un mes**.
+- Luego baja ~**$148M mensuales** seis meses seguidos hasta 2025-06.
+- 2025-07 en adelante: normal otra vez ($147M–$197M).
+
+Una agencia con ~$100M de piso no compró $867M en un mes, y seis decrementos
+casi idénticos son la firma de un asiento que se amortiza, no de autos que se
+venden. Cae justo en el cambio de plan de cuentas. **Pregunta concreta para el
+contador: ¿qué se posteó a inventario en diciembre 2024 y qué lo desarmó
+mensualmente hasta junio 2025?** Hasta que eso se explique, los $147.5M no son
+terreno firme.
+
+---
+
+## Los $33.2M que quedan (448 unidades al 2026-06-30)
+
+Ya no es un problema de datos. Pistas concretas, en orden de tamaño:
+
+1. **23 unidades `POR REVISAR`** ($5.3M): el derivador no pudo leer marca/modelo
+   (caen ahí los autobuses Yutong ZK6126BEVGS, $9.29M c/u).
+2. **JAC6 y JAC8 salen NEGATIVOS** (~$3.4M): los libros cargan **más**
+   inventario que el padrón. Eso apunta a **compras faltantes**, no a ventas —
+   es la reparación contraria.
+3. **16 cuentas del catálogo sin nombre** (`nombre = cuentaSAT`). Rompen
+   cualquier conciliación por familia: mandan dinero bien contabilizado al
+   bucket «sin explicar». `1301-0028-0000` ($6.98M) es casi con seguridad
+   TRAVELER ($6.81M en piso). **Los nombres están en los catálogos CT de
+   2024-10 → 2025-03** (la numeración nueva sólo aparece desde 2024-10).
+4. **Diferencias estructurales que NO van a cerrar al centavo**: el padrón
+   guarda `costoCompra` (subtotal del CFDI) y los libros capitalizan flete,
+   ISAN y preparación (para eso existe `VehiculoCosto`); la cuenta de inventario
+   incluye refacciones y motos; y los seminuevos comprados a persona física
+   pueden no tener CFDI. **El objetivo realista no es cero, es explicar cada
+   bloque hasta que el contador esté de acuerdo.**
+
+---
+
+## Cómo conectarse
+
+`claude_ro` **no sirve**: `DATABASE_URL_RO` trae un password que el servidor ya
+no acepta. Mientras no se resincronice, entrar con la URL pública **forzando la
+sesión a sólo lectura**:
+
+```sh
+PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=900000' \
+  psql "$(railway variables --json | jq -r .DATABASE_PUBLIC_URL)"
 ```
 
-¿La unidad se vendió y no se ligó? El VIN va en el **complemento**, no en la
-descripción:
+No hace falta `railway connect` interactivo. `CRON_SECRET` y `SYNTAGE_API_KEY`
+salen de `railway variables --service contabilidad-os --json`.
+
+---
+
+## Consultas que sirven
+
+**Meses que nunca se le pidieron al SAT** — la que destapó todo. El eje lo
+genera `generate_series`, no la tabla auditada. Cambiar `EMITIDOS` por
+`RECIBIDOS` para el otro lado:
 
 ```sql
-WITH nivs_vendidos AS (
-  SELECT DISTINCT (regexp_matches(i."rawXml", '(?i)niv="([A-HJ-NPR-Z0-9]{17})"', 'g'))[1] AS vin
-  FROM "Invoice" i
-  WHERE i."companyId" = 'cmsjf1wna003kn70fb68bqhm4'
-    AND i."tipo" = 'INGRESO' AND i."rawXml" ILIKE '%VentaVehiculos%'
+WITH meses AS (
+  SELECT generate_series('2021-08-01'::date, date_trunc('month', now()), '1 month') AS m
+),
+req AS (
+  SELECT year y, month mm, bool_or(status = 'FINISHED') AS ok
+  FROM "SatSyncRequest"
+  WHERE "companyId" = 'cmsjf1wna003kn70fb68bqhm4' AND tipo = 'EMITIDOS'
+  GROUP BY 1,2
+),
+mias AS (
+  SELECT date_trunc('month', fecha)::date m, COUNT(*) n
+  FROM "Invoice"
+  WHERE "companyId" = 'cmsjf1wna003kn70fb68bqhm4'
+    AND "rawXml" ~* '<[a-z0-9-]*:?Emisor[^>]*Rfc="AMA170817NK1"'   -- dirección: trampa 4
+  GROUP BY 1
 )
-SELECT COUNT(*) FILTER (WHERE n.vin IS NOT NULL) AS vendido_no_ligado,
-       COUNT(*) FILTER (WHERE n.vin IS NULL)     AS sin_venta
-FROM "Vehiculo" v
-LEFT JOIN nivs_vendidos n ON n.vin = v."vin"
-WHERE v."companyId" = 'cmsjf1wna003kn70fb68bqhm4' AND v."ventaInvoiceId" IS NULL;
+SELECT to_char(meses.m,'YYYY-MM') mes, COALESCE(i.n,0) AS tenemos
+FROM meses
+LEFT JOIN req r ON r.y = EXTRACT(YEAR FROM meses.m) AND r.mm = EXTRACT(MONTH FROM meses.m)
+LEFT JOIN mias i ON i.m = meses.m
+WHERE r.ok IS DISTINCT FROM true
+ORDER BY 1;
 ```
+
+**Piso contra libros, en la fecha correcta:**
+
+```sql
+SELECT COUNT(*) unidades, SUM(v."costoCompra")::numeric(14,2) padron
+FROM "Vehiculo" v
+WHERE v."companyId" = 'cmsjf1wna003kn70fb68bqhm4'
+  AND COALESCE(v."fechaCompra", v."createdAt")::date <= '2026-06-30'
+  AND (v."fechaVenta" IS NULL OR v."fechaVenta"::date > '2026-06-30');
+```
+
+**Inventario en libros** (mayores, sin duplicar subcuentas):
+
+```sql
+SELECT SUM(CASE WHEN ae.tipo='CARGO' THEN ae.monto ELSE -ae.monto END)::numeric(16,2)
+FROM "AccountingEntry" ae JOIN "ChartAccount" ca ON ca.id = ae."chartAccountId"
+WHERE ae."companyId" = 'cmsjf1wna003kn70fb68bqhm4'
+  AND ca."cuentaSAT" IN ('1301-0000-0000','1302-0000-0000','1312-0000-0000');
+```
+
+**Rendimiento:** extraer todos los NIVs de los 492 MB de `rawXml` de INGRESO con
+`regexp_matches` corre en **~13 s**. No hace falta bajar XMLs ni escribir un
+script: extraer del lado del servidor y sacar con `\copy … TO 'x.csv' CSV HEADER`
+para cruzar en local sin volver a escanear.
 
 ---
 
-## Ingesta de CFDIs
+## Auditoría externa: el censo de Syntage
 
-**SAT (descarga masiva).** 181,423 facturas nuestras contra 187,995 que el SAT
-dice que existen en los 58 meses que cubre = **~96.5%**. El 5002 («solicitudes
-de por vida») se cuenta por **(RFC + rango + tipo)**, así que partir el mes en
-tramos es otra llave — es la salida cuando un mes ya está quemado
-(`src/lib/sat-tramos.ts`, cron `sat-repesca` con `tramos=2`). Tope duro: **cinco
-años**. 2017–2021 no se puede pedir.
+El listado de Syntage (`/entities/{id}/invoices`, gratis) es el **único testigo
+del archivo independiente del SAT**, y es lo que permitió medir la cobertura de
+verdad. Trae `uuid`, `status`, `total`, `isIssuer`, `xml`, `pdf` e `items` con
+`productIdentification` — pero **no trae complementos**, así que el NIV no se
+puede sacar de ahí.
 
-**Syntage.** Extracción completa terminada: **109,646 CFDIs**, de 2017-11 a hoy.
-Menos que los nuestros en total, así que **no es un superconjunto**: su valor
-está concentrado en el hueco pre-2021.
-
-Tres cosas que costaron un PR cada una:
-
-- El endpoint `/entities/{id}/invoices` **sólo acepta paginación por cursor**
-  (`id[lt]` + header `X-Pagination-Style: cursor`), y **sin** `order[...]` — el
-  cursor avanza por `id`. `page` devuelve 400.
-- `itemsPerPage` topa en **100**. Pedir 1000 devuelve 400.
-- Un CFDI **cancelado pierde el XML pero no el renglón**: el listado sigue
-  trayendo su `status`. Es la única vía a las cancelaciones de 2017–2021.
-
-`/api/cron/syntage-cfdis` — lista gratis; `extraer=1` cuesta (~$10–23 MXN);
-`importar=1` escribe. Lista blanca cerrada por RFC (**sólo AMA170817NK1**).
-Duplicados imposibles por `@@unique([companyId, uuid])`.
-
-**Un solo importador:** `importarCfdiXml` (`src/lib/cfdi-import.ts`). Lo usan la
-descarga masiva y Syntage. No escribir un segundo.
+Caveats del endpoint, cada uno costó un PR:
+- Sólo acepta paginación por **cursor** (`id[lt]` + header
+  `X-Pagination-Style: cursor`), **sin** `order[...]`. `page` devuelve 400.
+- `itemsPerPage` topa en **100**.
+- Un CFDI cancelado pierde el XML pero **no el renglón**: el `status` sigue
+  viniendo.
 
 ---
 
 ## Restricciones vigentes
 
 - **No abrir la red ni crear un endpoint SQL genérico.** La base tiene facturas,
-  clientes y nómina de personas reales. El acceso desde terminal va por el túnel
-  de `railway connect`, con credenciales en la máquina del usuario.
-- Usar el rol **`claude_ro`** (sólo lectura) para explorar.
-- **Pendiente del usuario (no lo puede hacer Claude):** rotar `CRON_SECRET`, el
-  password de Postgres y el de `claude_ro` — los tres se expusieron en el hilo.
+  clientes y nómina de personas reales.
+- **Pendiente del usuario:** rotar `CRON_SECRET`, el password de Postgres y el
+  de `claude_ro`, y volver a poner el nuevo en `DATABASE_URL_RO`.
 - Las reparaciones se envían **como código, en PRs con pruebas**. Desde la
-  terminal se lee y se diagnostica; no se escribe a producción por shell.
+  terminal se lee y se diagnostica.
 
 ---
 
 ## Lo que sigue
 
-1. Correr la consulta del complemento (arriba) y partir el piso en dos:
-   **vendido-no-ligado** (defecto de empate, se arregla en código) contra
-   **sin documento de venta** (hueco de ingesta → decide si vale la pena
-   importar 2017–2021 de Syntage).
-2. Si queda residuo grande, **leer historias de VINs concretos de punta a punta**
-   — no otro agregado. La cohorte 2022 es por donde empezar.
-3. `porAnio` de `syntage-cfdis`: `enSyntage` vs `yaTenemos` vs `faltan`, con
-   `canceladasNoRegistradas`.
-4. Plan CE-first aprobado y sin empezar (`docs/` + tareas #16/#13/#10): los
-   estados financieros deben leer la balanza presentada, no el motor de posteo.
+1. **Nombrar las 16 cuentas** desde los catálogos CT de 2024-10 → 2025-03. Sin
+   eso, toda conciliación por familia manda dinero real al bucket «sin explicar».
+2. **Preguntarle al contador por diciembre 2024** (+$867M y su desarme mensual).
+3. **Las 23 unidades `POR REVISAR`** y las familias JAC6/JAC8 en negativo.
+4. **Alarma para que esto no vuelva a pasar en silencio.** El hueco vivió años
+   porque nada compara la serie de meses contra un censo externo. La consulta de
+   `generate_series` de arriba es un cron de tres líneas: cualquier mes de la
+   ventana sin solicitud FINISHED —o con <20% de las emitidas de sus vecinos—
+   debería gritar.
+5. Plan CE-first (`docs/` + tareas #16/#13/#10): los estados financieros deben
+   leer la balanza presentada, no el motor de posteo.
