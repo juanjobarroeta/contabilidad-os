@@ -29,6 +29,11 @@ on:
         required: false
         default: ""
         type: string
+      hasta:
+        description: "Hasta (YYYY-MM-DD). Vacío = hoy. Úsalo para acotar un canario a un mes"
+        required: false
+        default: ""
+        type: string
       extraer:
         description: "Disparar la extracción (CUESTA ~$10-23 MXN). Sin esto sólo lista"
         required: false
@@ -56,6 +61,7 @@ jobs:
           BASE_URL: ${{ inputs.baseUrl }}
           COMPANY_ID: ${{ inputs.companyId }}
           DESDE: ${{ inputs.desde }}
+          HASTA: ${{ inputs.hasta }}
           EXTRAER: ${{ inputs.extraer }}
           IMPORTAR: ${{ inputs.importar }}
         run: |
@@ -65,6 +71,7 @@ jobs:
 
           Q="companyId=${COMPANY_ID}"
           if [ -n "${DESDE}" ]; then Q="${Q}&desde=$(printf '%s' "${DESDE}" | tr -d '[:space:]')"; fi
+          if [ -n "${HASTA}" ]; then Q="${Q}&hasta=$(printf '%s' "${HASTA}" | tr -d '[:space:]')"; fi
           if [ "${IMPORTAR}" = "true" ]; then Q="${Q}&importar=1"; fi
 
           ACUM="$(mktemp)"
