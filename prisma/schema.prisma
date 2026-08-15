@@ -2066,6 +2066,18 @@ model CfdiFaltante {
   /// Cuántas veces se ha intentado bajar. Un motivo "descarga_fallo" con pocos
   /// intentos vale la pena reintentarlo; "sin_xml" no.
   intentos  Int      @default(1)
+  /// ¿Hay PDF aunque no haya XML? Un PDF NO es un CFDI —no se re-timbra, no se
+  /// manda al SAT, y sacarle números por OCR sería fabricar datos contables a
+  /// partir de una imagen— así que nunca alimenta totales ni impuestos.
+  ///
+  /// Pero como EVIDENCIA vale: para el contador y para una auditoría, «aquí
+  /// está el documento, sólo que no es legible por máquina» es muy distinto de
+  /// «sabemos que existe y no tenemos nada». La bandera viene en el listado, así
+  /// que saber dónde hay evidencia no cuesta una sola descarga.
+  tienePdf  Boolean  @default(false)
+  /// Id del comprobante en el proveedor, para poder pedir ese PDF cuando alguien
+  /// lo necesite — bajo demanda, no en bloque.
+  origenId  String?
   detectadoAt   DateTime @default(now())
   ultimoIntento DateTime @default(now())
 
