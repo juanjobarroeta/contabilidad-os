@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { importCfdiFromXml } from "@/lib/facturas/import-cfdi";
+import { REGIMEN_PLACEHOLDER } from "@/lib/facturas/identidad-receptor";
 import { meteredCreate } from "@/lib/costos/anthropic";
 
 export const runtime = "nodejs";
@@ -107,7 +108,12 @@ export async function POST(req: Request) {
     if (found) customerId = found.id;
     else if (cpName) {
       try {
-        const c = await prisma.customer.create({ data: { companyId, rfc: cpRfc, razonSocial: cpName, regimenFiscal: "616" } });
+        // Este camino es el de FOTO/PDF escaneado: los campos los extrae un
+        // modelo mirando la imagen, no el XML. A propósito NO se rellenan aquí
+        // CP ni régimen del cliente: un CP adivinado rompe el timbrado igual
+        // que uno ausente, y la tripleta RFC+Nombre+CP la valida el padrón.
+        // Los XML sí entran por importCfdiFromXml, que los toma del comprobante.
+        const c = await prisma.customer.create({ data: { companyId, rfc: cpRfc, razonSocial: cpName, regimenFiscal: REGIMEN_PLACEHOLDER } });
         customerId = c.id;
       } catch { /* ignore */ }
     }

@@ -92,7 +92,13 @@ export async function POST(req: Request) {
     select: { facturapiApiKey: true, codigoPostal: true },
   });
 
-  if (company?.facturapiApiKey) {
+  // Sin CP del cliente NO se sincroniza. Antes caía a `company.codigoPostal`:
+  // se registraba NUESTRO domicilio como el fiscal del cliente, y el SAT
+  // rechaza el timbre porque valida la tripleta RFC + Nombre + CP contra el
+  // padrón. Un cliente sin CP no es facturable de todas formas; se guarda
+  // local y se sincroniza al capturarlo (o cuando el backfill lo saque de un
+  // CFDI). Mejor faltar que mentir.
+  if (company?.facturapiApiKey && codigoPostal) {
     try {
       const fp = getFacturapiClient(company.facturapiApiKey);
       const fpCustomer = await fp.customers.create({
@@ -102,7 +108,7 @@ export async function POST(req: Request) {
         email: email || undefined,
         phone: phone || undefined,
         address: {
-          zip: codigoPostal || company.codigoPostal,
+          zip: codigoPostal,
           street: domicilio || undefined,
         },
       });
