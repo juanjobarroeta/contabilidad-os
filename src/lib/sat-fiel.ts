@@ -166,29 +166,93 @@ export function validarCredencialSat(args: {
   return { ok: true, validoHasta: cert.validTo() ?? null };
 }
 
+/**
+ * Mapa de `tipoDeComprobante` de CFDI 3.2 a la letra de 3.3/4.0.
+ *
+ * 3.2 usaba PALABRAS y sólo tenía tres: no existían "P" (complemento de pago,
+ * llegó con 3.3) ni "N" (la nómina de 3.2 era un complemento sobre "egreso").
+ */
+const TIPO_32: Record<string, "I" | "E" | "T"> = {
+  ingreso: "I",
+  egreso: "E",
+  traslado: "T",
+};
+
+/**
+ * Clave del catálogo ClaveProdServ para «No existe en el catálogo».
+ *
+ * CFDI 3.2 es ANTERIOR al catálogo (llegó con 3.3), así que sus conceptos no
+ * traen clave y no hay ninguna que sea la correcta. Ponerle ésta es decir la
+ * verdad: no hay clave. Inventar una plausible —25101500 -«vehículos»— sería
+ * fabricar un dato fiscal, y de ahí cuelgan el inventario automotriz y la
+ * clasificación de gastos.
+ */
+const CLAVE_PROD_SERV_SIN_CATALOGO = "01010101";
+
 /** Parse key fields from a CFDI XML string */
 export function parseCfdiXml(xml: string) {
   const attr = (name: string) => new RegExp(`\\b${name}="([^"]+)"`).exec(xml)?.[1] ?? null;
-  const attrIn = (tag: string, name: string) => {
+  /** Primer nombre que exista, para atributos que cambiaron de caja entre 3.2 y 3.3. */
+  const attrAny = (...names: string[]) => {
+    for (const n of names) {
+      const v = attr(n);
+      if (v != null) return v;
+    }
+    return null;
+  };
+  const attrIn = (tag: string, ...names: string[]) => {
     const tagMatch = new RegExp(`<[^>]*:${tag}[^>]+>`).exec(xml);
     if (!tagMatch) return null;
-    return new RegExp(`\\b${name}="([^"]+)"`).exec(tagMatch[0])?.[1] ?? null;
+    for (const n of names) {
+      const v = new RegExp(`\\b${n}="([^"]+)"`).exec(tagMatch[0])?.[1];
+      if (v != null) return v;
+    }
+    return null;
   };
+
+  // ── ¿Qué versión de CFDI es esto? ─────────────────────────────────────────
+  // Se lee del nodo raíz y no de todo el XML: el Timbre Fiscal Digital trae su
+  // PROPIA `Version`/`version`, y buscar suelto agarraría la del timbre.
+  //
+  // 3.2 (vigente hasta el 2017-11-30) escribe los atributos en minúscula
+  // —`fecha`, `total`, `subTotal`, `rfc`— y `tipoDeComprobante` con palabras.
+  // Sin esto, un 3.2 se parsea a NADA: `fecha` sale null, el importador lo da
+  // por inválido y el comprobante desaparece sin ruido.
+  const rootAttrs = /<(?:[a-zA-Z0-9]+:)?Comprobante\b([^>]*)>/.exec(xml)?.[1] ?? "";
+  const rootAttr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(rootAttrs)?.[1] ?? null;
+  const version = rootAttr("Version") ?? rootAttr("version");
+  const es32 = version != null && version.startsWith("3.2");
 
   // UUID from TimbreFiscalDigital. Normalizamos a MAYÚSCULAS: el folio fiscal
   // es case-insensitive, pero distintas fuentes (PAC vs descarga SAT) lo traen
   // con distinta caja. Si no canonizamos, el mismo CFDI se duplica y las
   // cancelaciones no empatan. La forma canónica del SAT es mayúsculas.
+  // (El TFD 1.0 de 3.2 también lo trae en mayúsculas, así que no cambia.)
   const uuid = attr("UUID")?.toUpperCase() ?? null;
-  const fecha = attr("Fecha");
-  const tipo = attr("TipoDeComprobante"); // I, E, T, N, P
-  const subtotal = parseFloat(attr("SubTotal") ?? "0");
-  const total = parseFloat(attr("Total") ?? "0");
-  const formaPago = attr("FormaPago") ?? "99";
-  const metodoPago = attr("MetodoPago") ?? "PUE";
+  const fecha = rootAttr("Fecha") ?? rootAttr("fecha");
+  const tipoCrudo = rootAttr("TipoDeComprobante") ?? rootAttr("tipoDeComprobante");
+  const subtotal = parseFloat(rootAttr("SubTotal") ?? rootAttr("subTotal") ?? "0");
+  const total = parseFloat(rootAttr("Total") ?? rootAttr("total") ?? "0");
+  // 3.2 traía `formaDePago`/`metodoDePago` como TEXTO LIBRE («PAGO EN UNA SOLA
+  // EXHIBICION»), no como clave del catálogo. Un texto ahí rompería cualquier
+  // regla que compare contra las claves, así que se deja el default de «por
+  // definir» — que es exactamente lo que sabemos.
+  const formaPago = (es32 ? null : attr("FormaPago")) ?? "99";
+  const metodoPago = (es32 ? null : attr("MetodoPago")) ?? "PUE";
+  // UsoCFDI no existe en 3.2.
   const usoCfdi = attrIn("Receptor", "UsoCFDI") ?? "G03";
-  const moneda = attr("Moneda") ?? "MXN";
+  const moneda = rootAttr("Moneda") ?? rootAttr("moneda") ?? "MXN";
   const numOf = (v: string | null) => (v != null && v !== "" ? parseFloat(v) : null);
+
+  // La nómina de 3.2 viajaba como COMPLEMENTO sobre un "egreso": no había tipo
+  // "N". Si se deja como E, el recibo entra como gasto y `importarNominaHistorica`
+  // nunca lo ve. Se reconoce por la presencia del complemento.
+  const traeComplementoNomina = /<(?:[a-zA-Z0-9]+:)?Nomina\b/.test(xml);
+  const tipo = es32
+    ? traeComplementoNomina
+      ? "N"
+      : (TIPO_32[(tipoCrudo ?? "").toLowerCase()] ?? null)
+    : tipoCrudo; // I, E, T, N, P
 
   // ── Desglose de impuestos a nivel comprobante ──────────────────────────────
   // The invoice-level <cfdi:Impuestos> node — the one AFTER </cfdi:Conceptos> —
@@ -198,7 +262,16 @@ export function parseCfdiXml(xml: string) {
   // Traslado/Retencion nodes are excluded by scoping to the tail after the
   // Conceptos block. The (Traslado|Retencion)\b boundary skips the plural
   // container tags and the complemento-de-pago TrasladoDR/TrasladoP variants.
-  const IMPUESTO_MAP: Record<string, "ISR" | "IVA" | "IEPS"> = { "001": "ISR", "002": "IVA", "003": "IEPS" };
+  // 3.3/4.0 identifican el impuesto por CLAVE ("002"); 3.2 lo hacía por NOMBRE
+  // ("IVA"). Se aceptan ambos para que el desglose de un 3.2 no salga vacío.
+  const IMPUESTO_MAP: Record<string, "ISR" | "IVA" | "IEPS"> = {
+    "001": "ISR",
+    "002": "IVA",
+    "003": "IEPS",
+    ISR: "ISR",
+    IVA: "IVA",
+    IEPS: "IEPS",
+  };
   const FACTOR_MAP: Record<string, "TASA" | "CUOTA" | "EXENTO"> = { tasa: "TASA", cuota: "CUOTA", exento: "EXENTO" };
   const taxes: Array<{
     tipo: "ISR" | "IVA" | "IEPS";
@@ -221,15 +294,24 @@ export function parseCfdiXml(xml: string) {
       while ((txm = nodeRe.exec(impuestosBlock)) !== null) {
         const attrs = txm[2];
         const get = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
-        const tipoImp = IMPUESTO_MAP[get("Impuesto") ?? ""];
+        // 3.2 escribe `impuesto`/`importe`/`tasa` en minúscula.
+        const tipoImp = IMPUESTO_MAP[(get("Impuesto") ?? get("impuesto") ?? "").toUpperCase()];
         if (!tipoImp) continue;
         taxes.push({
           tipo: tipoImp,
           // Retenciones a nivel comprobante no traen TipoFactor/TasaOCuota.
+          // 3.2 tampoco: no existía el concepto de TipoFactor.
           factor: FACTOR_MAP[(get("TipoFactor") ?? "Tasa").toLowerCase()] ?? "TASA",
-          tasa: numOf(get("TasaOCuota")) ?? 0,
+          // En 3.2 la tasa venía en PORCENTAJE ("16.00"); en 3.3/4.0 en tanto
+          // por uno ("0.160000"). Se normaliza a tanto por uno.
+          tasa: (() => {
+            const t = numOf(get("TasaOCuota") ?? get("tasa"));
+            if (t == null) return 0;
+            return es32 && t > 1 ? t / 100 : t;
+          })(),
+          // 3.2 no tenía Base a nivel impuesto.
           base: numOf(get("Base")),
-          importe: numOf(get("Importe")) ?? 0,
+          importe: numOf(get("Importe") ?? get("importe")) ?? 0,
           retencion: txm[1] === "Retencion",
         });
       }
@@ -239,7 +321,7 @@ export function parseCfdiXml(xml: string) {
   // IVA trasladado total. Prefer the parsed IVA-only sum: the legacy
   // TotalImpuestosTrasladados attr includes IEPS, and the total−subtotal
   // fallback is wrong when there are retenciones.
-  const ivaMatch = /TotalImpuestosTrasladados="([^"]+)"/.exec(xml);
+  const ivaMatch = /\b[Tt]otalImpuestosTrasladados="([^"]+)"/.exec(xml);
   const ivaTotal = impuestosNode
     ? taxes.filter((t) => t.tipo === "IVA" && !t.retencion).reduce((s, t) => s + t.importe, 0)
     : ivaMatch
@@ -247,17 +329,21 @@ export function parseCfdiXml(xml: string) {
       : total - subtotal;
 
   // Emisor
-  const rfcEmisor = attrIn("Emisor", "Rfc");
-  const nombreEmisor = attrIn("Emisor", "Nombre");
-  const regimenEmisor = attrIn("Emisor", "RegimenFiscal");
+  const rfcEmisor = attrIn("Emisor", "Rfc", "rfc");
+  const nombreEmisor = attrIn("Emisor", "Nombre", "nombre");
+  // En 3.2 el régimen es un NODO HIJO con texto libre («Régimen General de Ley
+  // Personas Morales»), no una clave del catálogo. Se deja null a propósito:
+  // guardar ese texto donde va una clave de tres dígitos sería peor que no
+  // guardar nada — el default (616) al menos es una clave válida.
+  const regimenEmisor = es32 ? null : attrIn("Emisor", "RegimenFiscal");
 
   // Receptor
-  const rfcReceptor = attrIn("Receptor", "Rfc");
-  const nombreReceptor = attrIn("Receptor", "Nombre");
+  const rfcReceptor = attrIn("Receptor", "Rfc", "rfc");
+  const nombreReceptor = attrIn("Receptor", "Nombre", "nombre");
 
   // Folio / Serie (optional, root attrs)
-  const serie = attr("Serie");
-  const folio = attr("Folio");
+  const serie = rootAttr("Serie") ?? rootAttr("serie");
+  const folio = rootAttr("Folio") ?? rootAttr("folio");
 
   // Conceptos — extract each <cfdi:Concepto ... /> or <cfdi:Concepto>...</cfdi:Concepto>
   const items: Array<{
@@ -286,17 +372,28 @@ export function parseCfdiXml(xml: string) {
       cuerpoConcepto = cierre === -1 ? "" : resto.slice(0, cierre);
     }
     const getAttr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
+    const get2 = (...names: string[]) => {
+      for (const n of names) {
+        const v = getAttr(n);
+        if (v != null) return v;
+      }
+      return null;
+    };
     const cps = getAttr("ClaveProdServ");
-    if (!cps) continue;
+    // Un 3.3/4.0 SIN ClaveProdServ está malformado y se descarta, como antes.
+    // Un 3.2 nunca la trae —el catálogo no existía— así que descartarlo por eso
+    // borraba TODOS los conceptos del comprobante: quedaba una factura con
+    // total y sin una sola línea.
+    if (!cps && !es32) continue;
     items.push({
-      claveProdServ: cps,
-      claveUnidad: getAttr("ClaveUnidad") ?? "E48",
-      unidad: getAttr("Unidad"),
-      cantidad: parseFloat(getAttr("Cantidad") ?? "1"),
-      descripcion: getAttr("Descripcion") ?? "",
-      valorUnitario: parseFloat(getAttr("ValorUnitario") ?? "0"),
-      importe: parseFloat(getAttr("Importe") ?? "0"),
-      descuento: parseFloat(getAttr("Descuento") ?? "0"),
+      claveProdServ: cps ?? CLAVE_PROD_SERV_SIN_CATALOGO,
+      claveUnidad: get2("ClaveUnidad") ?? "E48",
+      unidad: get2("Unidad", "unidad"),
+      cantidad: parseFloat(get2("Cantidad", "cantidad") ?? "1"),
+      descripcion: get2("Descripcion", "descripcion") ?? "",
+      valorUnitario: parseFloat(get2("ValorUnitario", "valorUnitario") ?? "0"),
+      importe: parseFloat(get2("Importe", "importe") ?? "0"),
+      descuento: parseFloat(get2("Descuento", "descuento") ?? "0"),
       cuentasPrediales: cuentasPredialesDeConcepto(cuerpoConcepto),
     });
   }

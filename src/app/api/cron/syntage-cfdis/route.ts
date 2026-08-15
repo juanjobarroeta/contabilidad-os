@@ -245,7 +245,13 @@ async function handle(req: Request) {
         // Un reintento no crea otro renglón: sube el contador y la fecha. Si
         // antes falló la descarga y ahora resulta que no está, el motivo se
         // corrige al de hoy.
-        update: { motivo, intentos: { increment: 1 }, ultimoIntento: new Date() },
+        update: {
+          motivo,
+          intentos: { increment: 1 },
+          ultimoIntento: new Date(),
+          tienePdf: f.pdf === true,
+          origenId: String(f.id ?? "") || null,
+        },
         create: {
           companyId: companyId as string,
           uuid,
@@ -255,6 +261,11 @@ async function handle(req: Request) {
           estatus: f.status ? String(f.status) : null,
           origen: "Syntage",
           motivo,
+          // Un XML que no está no significa que no haya NADA: el PDF suele
+          // seguir ahí, y es evidencia válida para el contador aunque no sea
+          // un dato contable. Se anota dónde está; no se descarga en bloque.
+          tienePdf: f.pdf === true,
+          origenId: String(f.id ?? "") || null,
         },
       });
     } catch {
