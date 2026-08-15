@@ -233,7 +233,7 @@ async function handle(req: Request) {
   async function anotarFaltante(
     f: Record<string, unknown>,
     uuid: string,
-    motivo: "sin_xml" | "descarga_fallo" | "sin_id",
+    motivo: "sin_xml" | "descarga_fallo" | "sin_id" | "xml_no_parseable",
   ): Promise<void> {
     const emitido = String(f.issuedAt ?? "");
     const fecha = new Date(emitido);
@@ -396,7 +396,20 @@ async function handle(req: Request) {
               .deleteMany({ where: { companyId, uuid } })
               .catch(() => undefined);
           } else if (r.resultado === "existente") imp.existentes++;
-          else imp.invalidos++;
+          else {
+            // El XML SÍ se bajó y aun así no se pudo guardar: el parser no le
+            // sacó folio o fecha. Se anota igual, porque un comprobante que
+            // existe y no pudimos leer es tan hueco como uno que no llegó — y
+            // hasta ahora se perdía en un contador sin nombre.
+            //
+            // Caso conocido: CFDI 3.2 (vigente hasta el 2017-11-30, que es el
+            // arranque de MARGOM). Ese esquema trae los atributos en minúscula
+            // —`fecha`, `total`, `subTotal`, `rfc`— y `tipoDeComprobante` con
+            // palabras («ingreso») en vez de letras, así que `parseCfdiXml`,
+            // que busca los capitalizados de 3.3/4.0, no encuentra nada.
+            imp.invalidos++;
+            await anotarFaltante(f, uuid, "xml_no_parseable");
+          }
         } catch (e) {
           // 404 = el proveedor no tiene el documento. Cualquier otra cosa es un
           // fallo de descarga, que sí vale la pena reintentar después.
