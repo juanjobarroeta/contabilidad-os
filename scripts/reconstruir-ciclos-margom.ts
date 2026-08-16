@@ -51,7 +51,7 @@ const DEFAULTS: Partial<Record<(typeof CAMPOS_MANUALES)[number], unknown>> = {
 };
 
 const esDatoManual = (campo: (typeof CAMPOS_MANUALES)[number], valor: unknown) =>
-  valor != null && valor !== DEFAULTS[campo];
+  valor != null && valor !== "" && valor !== DEFAULTS[campo];
 
 type FilaVehiculo = Record<string, unknown> & { id: string };
 
@@ -243,7 +243,12 @@ async function main() {
             (v.ventaInvoiceId && n.ventaInvoiceId === v.ventaInvoiceId),
         );
       for (const v of viejas) {
-        if (!gemelo(v) && CAMPOS_MANUALES.some((c) => esDatoManual(c, (v as Record<string, unknown>)[c]))) {
+        // color no bloquea: lo puso el backfill desde el propio CFDI y el
+        // derivador lo re-deriva al recrear — es reproducible, no capturado.
+        if (
+          !gemelo(v) &&
+          CAMPOS_MANUALES.some((c) => c !== "color" && esDatoManual(c, (v as Record<string, unknown>)[c]))
+        ) {
           razones.push(`ciclo ${v.ciclo} espurio trae datos manuales`);
           break;
         }
@@ -262,6 +267,16 @@ async function main() {
         saltados++;
         console.log(`SALTADO  ${vin}: ${razones.join("; ")}`);
         console.log(`         antes: ${antes}\n         sim:   ${despues}\n`);
+        continue;
+      }
+
+      // Si la re-derivación produce EXACTAMENTE el estado guardado, la historia
+      // real es así (p.ej. venta antes de la factura de compra: consignación /
+      // plan piso). No hay nada que reparar: no se borra ni se recrea.
+      const clave = (r: Record<string, unknown>) =>
+        `${r.ciclo}|${r.compraInvoiceId ?? ""}|${r.ventaInvoiceId ?? ""}|${r.estado}`;
+      if (viejas.length === nuevas.length && viejas.every((v2, i) => clave(v2) === clave(nuevas[i]))) {
+        console.log(`ESTABLE  ${vin}: la historia según sus CFDIs es así (${antes})`);
         continue;
       }
 

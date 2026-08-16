@@ -23,10 +23,10 @@ ya no es un problema de datos faltantes; es de conciliación contra los libros.
 | El archivo empieza en | 2021-09-01 | **2017-11-01** |
 | Cobertura de EMITIDAS | (se midió mal: «100%») | **99.92%** — faltan 93 |
 | Cobertura de RECIBIDAS vigentes en ventana SAT | sin medir | **100%** |
-| Piso (hoy) | 1,032 u / $420,305,915 | **539 u / ~$228.7M** |
-| Piso al corte de la balanza (2026-06-30) | — | **448 u / $180,677,546** |
+| Piso (hoy) | 1,032 u / $420,305,915 | **537 u / $225,714,600** |
+| Piso al corte de la balanza (2026-06-30) | — | **441 u / $176,218,547** |
 | Libros (balanza 2026-06, cuentas 1301+1302+1312) | $147,524,850 | $147,524,850 |
-| **Hueco** | **~$272,780,000** | **$33,152,697** |
+| **Hueco** | **~$272,780,000** | **$28,693,697** |
 
 **Salieron 493 unidades y ~$191.6M del piso**, todas porque llegó su documento
 de venta. No se editó ni un renglón de inventario.
