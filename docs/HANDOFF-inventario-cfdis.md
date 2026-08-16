@@ -297,6 +297,30 @@ Dos hallazgos laterales del mismo barrido:
 
 ---
 
+## La serie CE y la divergencia mensual (2026-08-16)
+
+`CeBalanzaMes` guarda las 42 balanzas presentadas (16,053 filas, 2023-01 →
+2026-06; `scripts/importar-serie-ce-margom.ts`, FORCE=1 para complementarias).
+Tres hallazgos al estrenarla:
+
+- **Diciembre 2024 RESUELTO** (ver arriba): la primera consulta de divergencia
+  lo destapó en minutos.
+- **El contador rutea ~$1.4 mil millones A TRAVÉS de las cuentas de
+  inventario** (desde 2024-10: exceso de debe $1,360M y de haber $1,412M,
+  simétricos ±4%): traspasos/estadías que inflan ambos lados y no mueven
+  saldos. Por eso la conciliación por SALDOS siempre fue inmune, y por eso la
+  divergencia mensual se mide en flujo NETO (debe − haber), donde los
+  traspasos se cancelan — el debe bruto no señala nada
+  (`scripts/divergencia-ce-margom.ts`, sólo lectura, UMBRAL configurable).
+- **SEI4 (1301-0010) confirma el ciclo completo fuera de su cuenta**: en los
+  meses en que el padrón compra JS4 la cuenta recibe $0, y en los meses en que
+  los vende tampoco sale $0 — las unidades viven en OTRA cuenta de principio a
+  fin. Misma firma en T5 ($43.3M comprados desde 2024-10, 157 unidades, sin
+  cuenta) y los HFC1037-EV. La pregunta al contador ya trae el mes y el monto
+  exactos.
+
+---
+
 ## Cómo conectarse
 
 `claude_ro` **no sirve**: `DATABASE_URL_RO` trae un password que el servidor ya
