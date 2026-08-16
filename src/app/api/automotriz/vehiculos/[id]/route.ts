@@ -60,7 +60,18 @@ export const GET = withAuthz(
           }
         : null;
 
-    return NextResponse.json({ ...vehiculo, costosTotal, interesPiso, rentabilidad });
+    // Otros CICLOS del mismo VIN: una unidad física puede pasar por el piso
+    // varias veces (compra → venta → recompra usada). El detalle enseña en qué
+    // vida está parado y liga a las demás.
+    const otrosCiclos = vehiculo.vin
+      ? await prisma.vehiculo.findMany({
+          where: { companyId: vehiculo.companyId, vin: vehiculo.vin, id: { not: vehiculo.id } },
+          select: { id: true, ciclo: true, estado: true, fechaCompra: true, fechaVenta: true },
+          orderBy: { ciclo: "asc" },
+        })
+      : [];
+
+    return NextResponse.json({ ...vehiculo, costosTotal, interesPiso, rentabilidad, otrosCiclos });
   }
 );
 

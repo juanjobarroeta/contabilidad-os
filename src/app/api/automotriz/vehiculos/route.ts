@@ -39,7 +39,7 @@ export const GET = withAuthz(async (req: Request) => {
       select: {
         id: true, vin: true, marca: true, modelo: true, version: true, anio: true,
         tipo: true, estado: true, uso: true, color: true, numeroMotor: true,
-        numeroEconomico: true, costoCompra: true, fechaCompra: true,
+        numeroEconomico: true, ciclo: true, costoCompra: true, fechaCompra: true,
         precioVenta: true, fechaVenta: true, ventaInvoiceId: true, autoCreado: true,
         compraInvoiceId: true,
         cliente: { select: { id: true, razonSocial: true } },
