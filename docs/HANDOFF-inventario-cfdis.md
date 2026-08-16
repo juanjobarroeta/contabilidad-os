@@ -142,12 +142,16 @@ Serie mensual de inventario en libros (extraída de las balanzas):
 - Luego baja ~**$148M mensuales** seis meses seguidos hasta 2025-06.
 - 2025-07 en adelante: normal otra vez ($147M–$197M).
 
-Una agencia con ~$100M de piso no compró $867M en un mes, y seis decrementos
-casi idénticos son la firma de un asiento que se amortiza, no de autos que se
-venden. Cae justo en el cambio de plan de cuentas. **Pregunta concreta para el
-contador: ¿qué se posteó a inventario en diciembre 2024 y qué lo desarmó
-mensualmente hasta junio 2025?** Hasta que eso se explique, los $147.5M no son
-terreno firme.
+**RESUELTO el 2026-08-16, con la serie CE + el padrón**: diciembre 2024 fue
+una MEGA-COMPRA real a Giant Motors — ~1,470 unidades / $941.9M en CFDIs que
+tenemos (795 SUNRAY de pasajeros $462M, 380 X350 $159M, 95 X12000 $85M, 26
+tracto K7 $55.6M, más FRISON/CARGO). Se vendieron entre enero y julio 2025 —
+prácticamente todas (quedan 4 sin vender) — y ESO son los «seis decrementos
+casi idénticos»: no era un asiento amortizándose, eran camiones saliendo.
+La diferencia contra el pico de libros ($966.9M) es del tamaño de la
+capitalización/tiempos, no de un misterio. **Los $147.5M sí son terreno
+firme.** La pregunta al contador ya no es «¿qué es esto?» sino sólo el
+detalle de su capitalización.
 
 ---
 
