@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { diasCreditoDesdeCondiciones, emisorDesdeCfdi, numeroMotorDesdeTexto, tipoComprobanteDesdeCfdi } from "./vin";
+import {
+  datosGeneralesDesdeCfdi,
+  diasCreditoDesdeCondiciones,
+  emisorDesdeCfdi,
+  marcaDesdeTexto,
+  modeloDesdeTexto,
+  numeroMotorDesdeTexto,
+  tipoComprobanteDesdeCfdi,
+} from "./vin";
 
 describe("tipoComprobanteDesdeCfdi() y numeroMotorDesdeTexto()", () => {
   it("extrae el TipoDeComprobante del nodo Comprobante", () => {
@@ -20,6 +28,99 @@ describe("tipoComprobanteDesdeCfdi() y numeroMotorDesdeTexto()", () => {
     expect(numeroMotorDesdeTexto("MOTOR HFC4GA3-4D12345678")).toBe("HFC4GA3-4D12345678");
     expect(numeroMotorDesdeTexto("NUM DE MOTOR 3GALD255XTM007338")).toBeNull(); // es un VIN
     expect(numeroMotorDesdeTexto("VEHICULO SIN DATO")).toBeNull();
+  });
+});
+
+// Descripciones REALES de CFDIs de Margom (VIN redactado), medidas 2026-08:
+// las 101 unidades POR REVISAR del piso caían en estos machotes.
+describe("modeloDesdeTexto() — el modelo desde la descripción libre", () => {
+  it("«MODELO X» cuando X no es un año (autobús Yutong, $9.29M c/u)", () => {
+    expect(
+      modeloDesdeTexto(
+        "25101502  AUTOBUS MODELO ZK6126BEVGS AÑO 2026 MARCA YUTONG, PAIS ORIGEN CHINA, DIMENSION 12280*2550*4170",
+      ),
+    ).toBe("ZK6126BEVGS");
+    expect(modeloDesdeTexto("AUTO USADO. MODELO VITARA GLX 6TA 1.6 LT MARCA SUZUKI COLOR: RASCACIELOS")).toBe(
+      "VITARA GLX 6TA 1.6 LT",
+    );
+    expect(
+      modeloDesdeTexto("MARCA: MG MOTORS MODELO: MG ZS-SUB 1.5L COM EXCITE AT AÑO: 2022 TIPO:AUTOMOVIL"),
+    ).toBe("MG ZS-SUB 1.5L COM EXCITE AT");
+  });
+
+  it("el nombre pegado DESPUÉS del año («MODELO 2021 SWIFT GLX…»)", () => {
+    expect(
+      modeloDesdeTexto("AUTO USADO EN LAS CONDICIONES QUE SE ENCUENTRA MARCA: SUZUKI MODELO 2021 SWIFT GLX L4 IMP AUT 5 ABS, SERIE: X"),
+    ).toBe("SWIFT GLX L4 IMP AUT 5 ABS");
+  });
+
+  it("«TIPO:» cuando trae el modelo, pero NO cuando es la carrocería", () => {
+    expect(
+      modeloDesdeTexto("AUTO USADO MARCA: CHEVROLET MODELO:2019 CILINDROS: 4 CUATRO TIPO: SPARK NG/LT A PTAS COLOR EXT:MAGENTA"),
+    ).toBe("SPARK NG/LT A PTAS");
+    expect(
+      modeloDesdeTexto("UN AUTOMÓVIL USADO, MARCA NISSAN MODELO 2019, TIPO VERSA ADVANC E MT COLOR GRAFITO"),
+    ).toBe("VERSA ADVANC E MT");
+    expect(modeloDesdeTexto("Automóvil Usado Marca KIA, Tipo KIA Optima 2.0L, Turbo SXL A_T, modelo 2018")).toBe(
+      "KIA OPTIMA 2.0L",
+    );
+  });
+
+  it("«VERSION X» — el machote de seminuevos más común", () => {
+    expect(
+      modeloDesdeTexto("AUTO USADO MARCA CHEVROLET, VERSION CHEYENNE, MODELO 2018, COLOR BLANCO PLATINO"),
+    ).toBe("CHEYENNE");
+    expect(
+      modeloDesdeTexto("AUTO USADO MARCA JAC VERSION PICK UP JAC FRISON T8 MODELO 2023 COLOR NEGRO"),
+    ).toBe("PICK UP JAC FRISON T8");
+  });
+
+  it("lo que sigue a la marca, como último recurso", () => {
+    expect(
+      modeloDesdeTexto("UNIDAD SEMINUEVA EN LAS CONDICIONES EN LAS QUE SE ENCUENTRA: RENAULT OROCH OUTSIDER TM, MODELO: 2024, COLOR GRIS"),
+    ).toBe("OROCH OUTSIDER TM");
+    expect(modeloDesdeTexto("Unidad GML T6 FRISON MT DOBLE CABINA 2.0 LTS Modelo:2023 No Motor:N3010337")).toBe(
+      "T6 FRISON MT DOBLE CABINA 2.0 LTS",
+    );
+  });
+
+  it("null cuando no hay nada rescatable: POR REVISAR es más honesto", () => {
+    expect(modeloDesdeTexto("VEHICULO SIN MAYOR DATO")).toBeNull();
+    expect(modeloDesdeTexto(null)).toBeNull();
+  });
+});
+
+describe("datosGeneralesDesdeCfdi() — SKU numérico y marcas nuevas", () => {
+  it("un NoIdentificacion puramente numérico NO es modelo: se lee la descripción", () => {
+    const g = datosGeneralesDesdeCfdi(
+      "25101502  AUTOBUS MODELO ZK6126BEVGS AÑO 2026 MARCA YUTONG, PAIS ORIGEN CHINA",
+      "25101502",
+      2026,
+    );
+    expect(g).toEqual({ marca: "YUTONG", modelo: "ZK6126BEVGS", anio: 2026 });
+  });
+
+  it("un SKU con letras se respeta tal cual (comportamiento de siempre)", () => {
+    const g = datosGeneralesDesdeCfdi("VEHICULO NUEVO CAMION K7", "TRACTOCAMION K7 CBU", 2024);
+    expect(g.modelo).toBe("TRACTOCAMION K7 CBU");
+  });
+
+  it("GML y YUTONG ya cuentan como marca", () => {
+    expect(marcaDesdeTexto("VEHICULO NUEVO SEI 2 SMART BY GML 5 PUERTAS")).toBe("GML");
+    expect(marcaDesdeTexto("AUTOBUS MARCA YUTONG")).toBe("YUTONG");
+    // y no le ganan a la marca del fabricante cuando ambas aparecen
+    expect(marcaDesdeTexto("PICK UP JAC FRISON BY GML")).toBe("JAC");
+  });
+
+  it("seminuevo de particular sin SKU: el modelo sale del machote", () => {
+    const g = datosGeneralesDesdeCfdi(
+      "AUTO USADO MARCA HYUNDAI, VERSION ACCENT GL MID 1.6L 4 CIL, MODELO 2022, COLOR PLATA",
+      null,
+      2025,
+    );
+    expect(g.marca).toBe("HYUNDAI");
+    expect(g.modelo).toBe("ACCENT GL MID 1.6L 4 CIL");
+    expect(g.anio).toBe(2022);
   });
 });
 

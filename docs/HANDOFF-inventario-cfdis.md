@@ -155,8 +155,10 @@ terreno firme.
 
 Ya no es un problema de datos. Pistas concretas, en orden de tamaño:
 
-1. **23 unidades `POR REVISAR`** ($5.3M): el derivador no pudo leer marca/modelo
-   (caen ahí los autobuses Yutong ZK6126BEVGS, $9.29M c/u).
+1. **Unidades `POR REVISAR`** — medido bien el 2026-08-16, era más grande de lo
+   que decía aquí: 26 u / $5.8M sin modelo en el piso al corte, 72 u más sólo
+   sin marca, y los 3 autobuses Yutong ($27.9M, comprados 2026-07, post-corte)
+   con la ClaveProdServ como modelo. Ver «Reparación del derivador» abajo.
 2. **JAC6 y JAC8 salen NEGATIVOS** (~$3.4M): los libros cargan **más**
    inventario que el padrón. Eso apunta a **compras faltantes**, no a ventas —
    es la reparación contraria.
@@ -215,6 +217,34 @@ está decodificada — llevar esto a la conversación:
   en 2026-H1.
 - `6602-0001` es hermana de `6602-0002 AMORTIZACIÓN DE SOFTWARE` — otra
   amortización, la única activa de su mayor en 2026.
+
+---
+
+## Reparación del derivador de generales (2026-08-16)
+
+Las unidades `POR REVISAR` no eran un problema de datos: **la marca y el modelo
+estaban escritos en la descripción de su propio CFDI** y la heurística no los
+leía. Tres huecos, ya cerrados en `vin.ts` (con los machotes reales como tests):
+
+- `GML` y `YUTONG` no estaban en la lista de marcas (70+ unidades «MARCA GML»).
+- Un `NoIdentificacion` numérico (la ClaveProdServ: «25101502», «78181500»,
+  «0001») entraba tal cual como modelo. Ahora se lee la descripción.
+- Sin SKU (seminuevos de particulares) no había fallback: ahora
+  `modeloDesdeTexto` recorre los machotes — `MODELO X` (no-año), el nombre
+  después del año, `TIPO:` (si no es carrocería), `VERSION`, lo que sigue a la
+  marca.
+
+`scripts/reparar-generales-margom.ts` re-pasa las unidades rotas por el
+derivador de producción (`generalesParaUnidad`, catálogo Anexo 15 primero — que
+resuelve varios SKUs numéricos: «3661» → SUNRAY Pass 17 pasajeros). Dry-run
+verificado contra prod: **443 reparables, 231 sin mejora posible** (su CFDI no
+trae más; quedan para confirmación manual en la UI), 1 sin CFDI legible.
+Se corre igual que nombrar-stubs, con `TS_NODE_BASEURL=. -r tsconfig-paths/register`.
+
+Los 3 Yutong (298AR03) no están en el Anexo 15 ingerido (las claves de mitad de
+año salen en las *modificaciones* del DOF): su modelo sale del texto
+(«ZK6126BEVGS»). Cuando se publique la modificación 2026, re-correr
+`automotriz:ingest-claves` los pone con dato autoritativo.
 
 ---
 

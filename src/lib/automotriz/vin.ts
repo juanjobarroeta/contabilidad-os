@@ -338,18 +338,99 @@ export function vinDesdeDescripcion(descripcion: string): string | null {
 }
 
 // Marcas comunes en México (para heurística de marca desde texto libre).
+// GML (Giant Motors) y YUTONG venían en los CFDIs de Margom como «MARCA GML» /
+// «MARCA YUTONG» y no estaban en la lista: 70+ unidades del piso quedaron
+// POR REVISAR con la marca escrita en su propia descripción (medido 2026-08).
 const MARCAS = [
   "JAC", "NISSAN", "TOYOTA", "VOLKSWAGEN", "VW", "CHEVROLET", "FORD", "KIA",
   "HYUNDAI", "MAZDA", "HONDA", "SEAT", "RENAULT", "PEUGEOT", "JEEP", "RAM",
   "DODGE", "MITSUBISHI", "SUZUKI", "BMW", "MERCEDES", "AUDI", "GMC", "CHIREY",
   "BYD", "MG", "GWM", "CHANGAN", "GEELY", "OMODA", "JETOUR", "BAIC", "FIAT",
   "ACURA", "BUICK", "CADILLAC", "LINCOLN", "MINI", "VOLVO", "SUBARU", "CUPRA",
+  "GML", "YUTONG",
 ];
 
 /** Primera marca conocida encontrada en un texto libre (o null). */
 export function marcaDesdeTexto(texto: string | null | undefined): string | null {
   const t = (texto ?? "").toUpperCase();
   return MARCAS.find((m) => new RegExp(`\\b${m}\\b`).test(t)) ?? null;
+}
+
+// Dónde TERMINA la frase del modelo dentro de una descripción libre: puntuación
+// o la siguiente etiqueta del machote («AÑO», «COLOR», «NUMERO DE SERIE»…).
+const FIN_MODELO_RE =
+  /[,;(]|\bA[ÑN]O\b|\bMODELO\b|\bMARCA\b|\bCOLOR\b|\bN[UÚ]M(?:ERO)?\b|\bNO\.?\s+MOTOR\b|\bMOTOR\b|\bSERIE\b|\bCLAVE\b|\bTIPO\b|\bVIN\b|\bNIV\b|\bCILINDROS\b|\bTRANSMISI[OÓ]N\b|\bPA[IÍ]S\b|\bDIMENSION\b|\bCAPACIDAD\b|\bVERSION\b/;
+
+// «TIPO:» a veces trae el modelo («TIPO: SPARK NG/LT») y a veces la carrocería
+// («TIPO:AUTOMOVIL») — la carrocería no nombra a la unidad.
+const TIPO_GENERICO_RE =
+  /^(AUTOM[OÓ]VIL|AUTO|CAMIONETA|PICK\s?-?UP|SUV|SEDAN|HATCHBACK|VAGONETA|CHASIS|CAMI[OÓ]N|AUTOB[UÚ]S|MOTOCICLETA)\b\s*$/;
+
+const ANIO_RE = /^(?:19|20)\d{2}\b/;
+
+/** Recorta una captura hasta el fin de frase; null si no queda nada con letras. */
+function fraseModelo(captura: string): string | null {
+  const corte = captura.search(FIN_MODELO_RE);
+  const frase = (corte >= 0 ? captura.slice(0, corte) : captura)
+    .replace(/[.:#]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+  return frase.length >= 2 && /[A-Z]/.test(frase) ? frase : null;
+}
+
+/**
+ * Modelo desde el TEXTO del CFDI, para cuando NoIdentificacion no sirve (vacío,
+ * o un código numérico como la ClaveProdServ). Los machotes reales de Margom
+ * traen el modelo en lugares distintos, y en ese orden se busca:
+ *
+ *   1. «MODELO ZK6126BEVGS» — MODELO seguido de algo que NO es año.
+ *   2. «MODELO 2021 SWIFT GLX…» — el nombre pegado después del año.
+ *   3. «TIPO: SPARK NG/LT» — si no es carrocería genérica (TIPO:AUTOMOVIL).
+ *   4. «VERSION CHEYENNE» — el machote de seminuevos más común.
+ *   5. «RENAULT OROCH OUTSIDER TM» — lo que sigue a la marca conocida.
+ *
+ * Devuelve null si ningún patrón deja algo con letras: POR REVISAR es más
+ * honesto que un pedazo de machote.
+ */
+export function modeloDesdeTexto(texto: string | null | undefined): string | null {
+  const t = (texto ?? "").toUpperCase();
+  if (!t) return null;
+
+  for (const m of t.matchAll(/\bMODELO\s*[:#.]?\s*(.+)/g)) {
+    const resto = m[1];
+    if (!ANIO_RE.test(resto)) {
+      const f = fraseModelo(resto);
+      if (f) return f;
+    } else {
+      // El nombre puede venir DESPUÉS del año: «MODELO 2021 SWIFT GLX L4…».
+      const f = fraseModelo(resto.replace(ANIO_RE, "").trim());
+      if (f) return f;
+    }
+  }
+
+  const tipo = t.match(/\bTIPO\s*[:#.]?\s*(.+)/);
+  if (tipo) {
+    const f = fraseModelo(tipo[1]);
+    if (f && !TIPO_GENERICO_RE.test(f)) return f;
+  }
+
+  const version = t.match(/\bVERSION\s*[:#.]?\s*(.+)/);
+  if (version) {
+    const f = fraseModelo(version[1]);
+    if (f) return f;
+  }
+
+  const marca = marcaDesdeTexto(t);
+  if (marca) {
+    const trasMarca = t.match(new RegExp(`\\b${marca}\\b[\\s.:,]*(.+)`));
+    if (trasMarca) {
+      const f = fraseModelo(trasMarca[1]);
+      if (f) return f;
+    }
+  }
+
+  return null;
 }
 
 export interface DatosGeneralesVehiculo {
@@ -366,6 +447,9 @@ export interface DatosGeneralesVehiculo {
  * - marca: primera marca conocida encontrada en la descripción.
  * - modelo: NoIdentificacion (SKU del distribuidor, p.ej. "FRISON T9 AT 4X4"),
  *   que suele traer modelo + versión más limpio que la descripción larga.
+ *   Un SKU puramente numérico NO es un modelo (los autobuses Yutong traían la
+ *   ClaveProdServ ahí: modelo «25101502») y los seminuevos de particulares no
+ *   traen SKU: en ambos casos se lee la descripción (modeloDesdeTexto).
  * - año: "Modelo:AAAA" o un año de 4 dígitos en la descripción; si no, el del CFDI.
  */
 export function datosGeneralesDesdeCfdi(
@@ -376,7 +460,8 @@ export function datosGeneralesDesdeCfdi(
   const d = (descripcion ?? "").toUpperCase();
   const marca = marcaDesdeTexto(d);
 
-  const modelo = (noIdentificacion ?? "").trim().slice(0, 60) || null;
+  const sku = (noIdentificacion ?? "").trim().slice(0, 60);
+  const modelo = (sku && !/^\d{4,}$/.test(sku) ? sku : null) ?? modeloDesdeTexto(d);
 
   const mModelo = d.match(/MODELO\s*[:#]?\s*((?:19|20)\d{2})/);
   const mSuelto = d.match(/\b((?:19|20)\d{2})\b/);

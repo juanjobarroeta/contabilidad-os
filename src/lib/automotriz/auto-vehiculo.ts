@@ -73,8 +73,11 @@ export interface DerivarVehiculoResultado {
  * vehiculares (Anexo 15 — autoritativo) vía la clave del complemento; si la
  * clave aún no está ingerida, la heurística de texto. En ambos casos la unidad
  * nace `autoCreado` y el distribuidor confirma.
+ *
+ * Exportada para que la reparación por lotes (scripts/reparar-generales-margom)
+ * use EXACTAMENTE el derivador que corre en producción, no una copia.
  */
-async function generalesParaUnidad(
+export async function generalesParaUnidad(
   db: Db,
   v: { claveVehicular: string | null; descripcion: string | null; noIdentificacion: string | null },
   anioFallback: number
