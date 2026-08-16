@@ -251,6 +251,7 @@ model Company {
   coeEnvios         CoeEnvio[]
   accountingEntries AccountingEntry[]
   accounts          ChartAccount[]
+  ceBalanzas        CeBalanzaMes[]
   accountingPeriods AccountingPeriod[]
   satSyncRequests   SatSyncRequest[]
   cfdisFaltantes    CfdiFaltante[]
@@ -5603,4 +5604,34 @@ model ReglaClasificacion {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, ambito, activa])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La serie mensual de las balanzas PRESENTADAS al SAT (Contabilidad
+// Electrónica, Anexo 24). Una fila por (empresa, período, cuenta) con los
+// cuatro importes del XML tal cual se presentaron. Es la fuente CE-first de
+// los estados financieros —lo que el contador declaró, no lo que nuestro motor
+// derivó— y el eje del conciliador por montos (¿a qué cuenta entró el cargo de
+// esta unidad?). Se alimenta re-descargando los registros B de Syntage; una
+// balanza re-presentada (complementaria) REEMPLAZA su período completo.
+// ─────────────────────────────────────────────────────────────────────────────
+model CeBalanzaMes {
+  id        String   @id @default(cuid())
+  companyId String
+  anio      Int
+  mes       Int
+  numCta    String
+  saldoIni  Float
+  debe      Float
+  haber     Float
+  saldoFin  Float
+  /// true = cuenta de mayor cuyo saldo YA es la suma de sus hijas (padresDeBalanza):
+  /// sumar padres e hijas duplica — los reportes filtran por esto.
+  esPadre   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, anio, mes, numCta])
+  @@index([companyId, numCta])
 }
