@@ -39,23 +39,40 @@ export interface BalanzaMensual {
  * XML de balanza → filas de la serie, con `esPadre` decidido por
  * padresDeBalanza (el saldo de un mayor YA suma sus hijas: los reportes que
  * suman deben filtrar hojas). Pura; null si el XML no trae Anio/Mes.
+ *
+ * Un mismo NumCta puede venir VARIAS veces: la era agrupador presenta cada
+ * subcuenta interna como su propio renglón bajo el código compartido —
+ * «102.01» (bancos) aparece 19 veces en la balanza 2023-01 de MARGOM, una por
+ * banco. Son cuentas distintas del mismo código: se SUMAN (guardarlas tal cual
+ * revienta el unique por período+cuenta, que fue como se descubrió).
  */
 export function balanzaASerie(xml: string): BalanzaMensual | null {
   const bal = parseBalanza(xml);
   if (!bal.anio || !bal.mes) return null;
-  const padres = padresDeBalanza(bal.cuentas.map((c) => c.numCta));
-  return {
-    anio: bal.anio,
-    mes: bal.mes,
-    filas: bal.cuentas.map((c) => ({
-      numCta: c.numCta,
-      saldoIni: c.saldoIni,
-      debe: c.debe,
-      haber: c.haber,
-      saldoFin: c.saldoFin,
-      esPadre: padres.has(c.numCta),
-    })),
-  };
+
+  const porCta = new Map<string, FilaSerie>();
+  for (const c of bal.cuentas) {
+    const ya = porCta.get(c.numCta);
+    if (ya) {
+      ya.saldoIni += c.saldoIni;
+      ya.debe += c.debe;
+      ya.haber += c.haber;
+      ya.saldoFin += c.saldoFin;
+    } else {
+      porCta.set(c.numCta, {
+        numCta: c.numCta,
+        saldoIni: c.saldoIni,
+        debe: c.debe,
+        haber: c.haber,
+        saldoFin: c.saldoFin,
+        esPadre: false,
+      });
+    }
+  }
+  const padres = padresDeBalanza(porCta.keys());
+  for (const f of porCta.values()) f.esPadre = padres.has(f.numCta);
+
+  return { anio: bal.anio, mes: bal.mes, filas: [...porCta.values()] };
 }
 
 /** Reemplaza el período completo (una complementaria pisa a la normal). */

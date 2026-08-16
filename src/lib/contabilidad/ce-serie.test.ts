@@ -37,4 +37,19 @@ describe("balanzaASerie() — XML presentado → filas de la serie", () => {
     const sinMes = BALANZA_XML.replace(' Mes="6"', "").replace(' Anio="2026"', "");
     expect(balanzaASerie(sinMes)).toBeNull();
   });
+
+  it("un NumCta repetido se SUMA: la era agrupador trae una fila por subcuenta interna", () => {
+    // Forma real de la balanza 2023-01 (agrupador): «102.01» una vez por banco.
+    const AGRUPADOR_XML = `<?xml version="1.0" encoding="utf-8"?>
+<BCE:Balanza xmlns:BCE="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/BalanzaComprobacion" Version="1.3" RFC="AMA170817NK1" Mes="1" Anio="2023" TipoEnvio="N">
+  <BCE:Ctas NumCta="102" SaldoIni="100" Debe="10" Haber="5" SaldoFin="105"/>
+  <BCE:Ctas NumCta="102.01" SaldoIni="60" Debe="6" Haber="3" SaldoFin="63"/>
+  <BCE:Ctas NumCta="102.01" SaldoIni="40" Debe="4" Haber="2" SaldoFin="42"/>
+</BCE:Balanza>`;
+    const s = balanzaASerie(AGRUPADOR_XML)!;
+    expect(s.filas).toHaveLength(2);
+    const bancos = s.filas.find((f) => f.numCta === "102.01")!;
+    expect(bancos).toMatchObject({ saldoIni: 100, debe: 10, haber: 5, saldoFin: 105, esPadre: false });
+    expect(s.filas.find((f) => f.numCta === "102")!.esPadre).toBe(true);
+  });
 });
