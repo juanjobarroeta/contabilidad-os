@@ -20,6 +20,7 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
+  colorDesdeTexto,
   condicionesDePagoDesdeCfdi,
   datosGeneralesDesdeCfdi,
   diasCreditoDesdeCondiciones,
@@ -275,6 +276,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
   const SELECT_UNIDAD = {
     id: true,
     estado: true,
+    color: true,
     compraInvoiceId: true,
     ventaInvoiceId: true,
     supplierId: true,
@@ -304,12 +306,15 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
     });
     const existente = ligado ?? (await unidadVigentePorVin(db, args.companyId, v.niv, SELECT_UNIDAD));
 
-    // Número de motor: si la unidad no lo tiene y este CFDI lo menciona,
-    // se completa (misma filosofía que cliente/proveedor faltantes).
-    if (existente && !existente.numeroMotor) {
-      const nm = numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion);
-      if (nm) {
-        await db.vehiculo.update({ where: { id: existente.id }, data: { numeroMotor: nm } });
+    // Número de motor y color: si la unidad no los tiene y este CFDI los
+    // menciona, se completan (misma filosofía que cliente/proveedor faltantes).
+    if (existente && (!existente.numeroMotor || !existente.color)) {
+      const nm = existente.numeroMotor
+        ? undefined
+        : (numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion) ?? undefined);
+      const col = existente.color ? undefined : (colorDesdeTexto(v.descripcion) ?? undefined);
+      if (nm || col) {
+        await db.vehiculo.update({ where: { id: existente.id }, data: { numeroMotor: nm, color: col } });
         actualizados++;
       }
     }
@@ -427,6 +432,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
                 supplierId: supRecompra ?? undefined,
                 claveVehicular: v.claveVehicular ?? undefined,
                 descripcionCfdi: v.descripcion ?? undefined,
+                color: colorDesdeTexto(v.descripcion) ?? undefined,
                 numeroMotor: numeroMotorDesdeTexto(v.descripcion) ?? undefined,
                 autoCreado: true,
               },
@@ -481,6 +487,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
           fechaCompra: args.fecha,
           compraInvoiceId: args.invoiceId,
           supplierId: supNuevo,
+          color: colorDesdeTexto(v.descripcion),
           numeroMotor: numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion),
           claveVehicular: v.claveVehicular ?? null,
           descripcionCfdi: v.descripcion ?? null,
@@ -559,6 +566,7 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
         ventaInvoiceId: args.invoiceId,
         fechaVenta: args.fecha,
         clienteId: args.clienteId ?? null,
+        color: colorDesdeTexto(v.descripcion),
         numeroMotor: numeroMotorDesdeTexto(v.descripcion) ?? numeroMotorDesdeTexto(v.noIdentificacion),
         claveVehicular: v.claveVehicular ?? null,
         descripcionCfdi: v.descripcion ?? null,

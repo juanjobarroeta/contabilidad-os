@@ -3,6 +3,7 @@ import {
   datosGeneralesDesdeCfdi,
   diasCreditoDesdeCondiciones,
   emisorDesdeCfdi,
+  colorDesdeTexto,
   marcaDesdeTexto,
   marcaDesdeVin,
   modeloDesdeTexto,
@@ -88,6 +89,31 @@ describe("modeloDesdeTexto() — el modelo desde la descripción libre", () => {
   it("null cuando no hay nada rescatable: POR REVISAR es más honesto", () => {
     expect(modeloDesdeTexto("VEHICULO SIN MAYOR DATO")).toBeNull();
     expect(modeloDesdeTexto(null)).toBeNull();
+  });
+});
+
+describe("colorDesdeTexto() — el color exterior desde el machote", () => {
+  it("colores simples y compuestos, con o sin etiqueta EXT", () => {
+    expect(colorDesdeTexto("MODELO 2018, COLOR BLANCO PLATINO, NUMERO DE SERIE X")).toBe("BLANCO PLATINO");
+    expect(colorDesdeTexto("TIPO: SPARK COLOR EXT:MAGENTA ORCHID COLOR INT: NEGRO")).toBe("MAGENTA ORCHID");
+    expect(colorDesdeTexto("Color Snow White Pear, Num de Serie X")).toBe("SNOW WHITE PEAR");
+    expect(colorDesdeTexto("COLOR ROJO/NEGRO")).toBe("ROJO/NEGRO");
+    expect(colorDesdeTexto("COLOR: RASCACIELOS MOTOR:M16A")).toBe("RASCACIELOS");
+    expect(colorDesdeTexto("COLOR PLATA ROCIO METALIZADO")).toBe("PLATA ROCIO METALIZADO");
+  });
+
+  it("corta el ruido del machote: dígitos, serie, combustible, puertas", () => {
+    expect(colorDesdeTexto("COLOR GRIS 1.6 LTS 4 CIL")).toBe("GRIS");
+    expect(colorDesdeTexto("COLOR NEGRO OPALO NO.DE SERIE X")).toBe("NEGRO OPALO");
+    expect(colorDesdeTexto("COLOR BLANCO BRILL/NEGRO/GRIS2253811 JT")).toBe("BLANCO BRILL/NEGRO/GRIS");
+    expect(colorDesdeTexto("COLOR ROJO 5 PUERTAS NO. DE SERIE X")).toBe("ROJO");
+    expect(colorDesdeTexto("COLOR VINO COMBUSTIBLE GASOLINA")).toBe("VINO");
+    expect(colorDesdeTexto("COLOR ROJO COMBUSTIBLE GASOLINA PEDIMENTO 2351")).toBe("ROJO");
+  });
+
+  it("null cuando no hay color en el texto", () => {
+    expect(colorDesdeTexto("VEHICULO NUEVO SEI 2 SMART BY GML 5 PUERTAS")).toBeNull();
+    expect(colorDesdeTexto(null)).toBeNull();
   });
 });
 

@@ -204,20 +204,29 @@ async function main() {
       );
       if (eventos.length === 0) razones.push("sin CFDIs re-derivables");
 
+      // Los rawXml se cargan ANTES de cualquier transacción: la descarga por la
+      // red no puede contar contra el timeout de la transacción (el primer
+      // intento murió con P2028 exactamente por esto).
+      const xmlPorInvoice = new Map<string, string>();
+      for (const e of eventos) {
+        const inv = await prisma.invoice.findUnique({ where: { id: e.id }, select: { rawXml: true } });
+        if (inv?.rawXml) xmlPorInvoice.set(e.id, inv.rawXml);
+      }
+
       // 3) Simulación SIEMPRE (el dry-run del VIN), contra memoria.
       const sim = memDb(prisma);
       const supplierPorInvoice = new Map(
         viejas.filter((v) => v.compraInvoiceId && v.supplierId).map((v) => [v.compraInvoiceId!, v.supplierId!]),
       );
       for (const e of eventos) {
-        const inv = await prisma.invoice.findUnique({ where: { id: e.id }, select: { rawXml: true } });
-        if (!inv?.rawXml) continue;
+        const rawXml = xmlPorInvoice.get(e.id);
+        if (!rawXml) continue;
         await derivarVehiculoDesdeCfdiSiAplica(sim as never, {
           companyId: COMPANY,
           invoiceId: e.id,
           tipo: e.tipo,
           fecha: e.fecha,
-          rawXml: inv.rawXml,
+          rawXml,
           clienteId: e.tipo === "INGRESO" ? e.customerId : null,
           supplierId: supplierPorInvoice.get(e.id) ?? undefined,
         });
@@ -263,21 +272,24 @@ async function main() {
       console.log(`         antes: ${antes}\n         nuevo: ${despues}\n`);
 
       // 4) APPLY: transacción por VIN — borrar y re-derivar contra la base real.
+      // Los XML ya están en memoria; adentro sólo quedan lecturas chicas
+      // (catálogo, uuid del sustituido) y las escrituras. Timeout amplio por si
+      // la latencia a la base pública suma.
       if (APPLY) {
         await prisma.$transaction(async (tx) => {
           await tx.vehiculo.deleteMany({ where: { companyId: COMPANY, vin } });
           for (const e of eventos) {
-            const inv = await tx.invoice.findUnique({ where: { id: e.id }, select: { rawXml: true } });
-            if (!inv?.rawXml) continue;
+            const rawXml = xmlPorInvoice.get(e.id);
+            if (!rawXml) continue;
             await derivarVehiculoDesdeCfdiSiAplica(tx, {
               companyId: COMPANY,
               invoiceId: e.id,
               tipo: e.tipo,
               fecha: e.fecha,
-              rawXml: inv.rawXml,
+              rawXml,
               clienteId: e.tipo === "INGRESO" ? e.customerId : null,
               supplierId: supplierPorInvoice.get(e.id) ?? undefined,
-              resolverSupplierId: () => resolverSupplierDesdeEmisor(tx, COMPANY, inv.rawXml!),
+              resolverSupplierId: () => resolverSupplierDesdeEmisor(tx, COMPANY, rawXml),
             });
           }
           // Acarreo de campos manuales al renglón que comparte factura.
@@ -298,7 +310,7 @@ async function main() {
               await tx.vehiculo.update({ where: { id: destino.id }, data });
             }
           }
-        });
+        }, { timeout: 120_000, maxWait: 30_000 });
         aplicados++;
       }
     }

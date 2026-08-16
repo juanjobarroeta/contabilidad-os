@@ -465,6 +465,32 @@ export function marcaDesdeVin(vin: string | null | undefined): string | null {
   return WMI_MARCA[v.slice(0, 3)] ?? null;
 }
 
+// Dónde termina la frase del COLOR: la siguiente etiqueta del machote, o el
+// primer dígito — «GRIS 1.6 LTS», «ROJO 5 PUERTAS» y el serial pegado
+// («GRIS2253811») son ruido, no color. Los compuestos con «/» sí son color
+// («ROJO/NEGRO», «BLANCO BRILL/NEGRO/GRIS»).
+const FIN_COLOR_RE =
+  /\d|\bNUM\b|\bNO\.\s?|\bN[UÚ]MERO\b|\bSERIE\b|\bCLAVE\b|\bMOD\b|\bMODELO\b|\bCOMBUSTIBLE\b|\bPEDIMENTO\b|\bMOTOR\b|\bINT(?:ERIOR)?\b|\bTELA\b|\bIMITACION\b|\bCIL\b|\bLTS?\b|\bTRANSMISI[OÓ]N\b|\bPUERTAS?\b|\bVIN\b|\bNIV\b|\bA[ÑN]O\b|\bMARCA\b|\bVERSION\b|\bTIPO\b|\bEQUIPO\b|\bCOLOR\b/;
+
+/**
+ * Color exterior desde el texto del CFDI («COLOR BLANCO PLATINO», «COLOR
+ * EXT:MAGENTA ORCHID», «Color Snow White Pear»). Sólo ~6% de los CFDIs lo
+ * traen (casi todos seminuevos): null honesto para el resto.
+ */
+export function colorDesdeTexto(texto: string | null | undefined): string | null {
+  const t = (texto ?? "").toUpperCase();
+  const m = t.match(/\bCOLOR\s*(?:EXT(?:ERIOR)?)?\s*[:#.]?\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ /.-]{1,50})/);
+  if (!m) return null;
+  const captura = m[1];
+  const corte = captura.search(FIN_COLOR_RE);
+  const color = (corte >= 0 ? captura.slice(0, corte) : captura)
+    .replace(/[/.\-\s]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+  return /[A-ZÁÉÍÓÚÑ]{3}/.test(color) ? color : null;
+}
+
 export interface DatosGeneralesVehiculo {
   marca: string | null;
   modelo: string | null;
