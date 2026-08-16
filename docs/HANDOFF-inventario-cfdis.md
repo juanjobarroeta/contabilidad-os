@@ -1,6 +1,6 @@
 # Handoff — inventario y archivo de CFDIs (MARGOM)
 
-Estado al **2026-08-15**. La recuperación de documentos **terminó**. Lo que queda
+Estado al **2026-08-16**. La recuperación de documentos **terminó**. Lo que queda
 ya no es un problema de datos faltantes; es de conciliación contra los libros.
 
 `companyId = cmsjf1wna003kn70fb68bqhm4` · `RFC = AMA170817NK1` · opera desde
@@ -162,15 +162,59 @@ Ya no es un problema de datos. Pistas concretas, en orden de tamaño:
    es la reparación contraria.
 3. **16 cuentas del catálogo sin nombre** (`nombre = cuentaSAT`). Rompen
    cualquier conciliación por familia: mandan dinero bien contabilizado al
-   bucket «sin explicar». `1301-0028-0000` ($6.98M) es casi con seguridad
-   TRAVELER ($6.81M en piso). **Los nombres están en los catálogos CT de
-   2024-10 → 2025-03** (la numeración nueva sólo aparece desde 2024-10).
+   bucket «sin explicar». Resuelto a medias el 2026-08-16 — ver la sección
+   siguiente: 4 confirmadas (familia 28 = TRAVELER, cuadrada al centavo), y
+   las otras 12 **no están en ningún CT presentado** — sólo el contador las
+   tiene.
 4. **Diferencias estructurales que NO van a cerrar al centavo**: el padrón
    guarda `costoCompra` (subtotal del CFDI) y los libros capitalizan flete,
    ISAN y preparación (para eso existe `VehiculoCosto`); la cuenta de inventario
    incluye refacciones y motos; y los seminuevos comprados a persona física
    pueden no tener CFDI. **El objetivo realista no es cero, es explicar cada
    bloque hasta que el contador esté de acuerdo.**
+
+---
+
+## Las 16 cuentas sin nombre: lo que se averiguó (2026-08-16)
+
+Se descargaron los seis CT de numeración nueva (2024-10 → 2025-03) desde
+Syntage. **Ninguno de los 16 códigos aparece en ningún CT presentado** — la
+versión anterior de este documento decía que ahí estaban los nombres, y es
+falso. Dos razones, ambas del contador:
+
+- **Dejó de presentar el catálogo después de 2025-03.** Las balanzas siguen
+  hasta 2026-06; los CT no. No es hueco de extracción: la extracción
+  `electronic_accounting` del 2026-08-08 cubrió 2015 → 2026-08 y terminó
+  `finished`. **No re-disparar: no hay nada más que traer.**
+- **Los CT que sí presentó omiten cuentas EN USO.** `9200-0007`, `6602-0001`,
+  `6700-2002` y `6600-2004` traían saldo en la balanza 2025-03 y no están en el
+  CT de 2025-03. El catálogo presentado nunca estuvo completo (Anexo 24 obliga
+  a re-presentarlo cuando se modifica).
+
+**Confirmado con evidencia — familia 28 = TRAVELER.** Ventas TRAVELER 2025 en
+el padrón: $6,049,258.62 = acumulado de `4101-0028` en la balanza 2025-12, al
+centavo. Primera compra 2025-06-30, justo cuando la familia aparece en las
+balanzas. Piso al corte: 10 u / $6.81M vs $6.98M en libros (flete/prep
+capitalizados). Los nombres siguen la plantilla del propio CT
+(`INVENTARIO VEHICULOS NUEVOS X` / `VENTA NUEVOS X` / `COSTO NUEVOS X` /
+`DESCUENTO NUEVOS X`); `4201-0028` es contra-ingreso y el stub la tenía con
+naturaleza A — se corrige a D. **La reparación está en
+`scripts/nombrar-stubs-margom.ts`** (idempotente, `DRY_RUN=1` para previsualizar;
+lógica y evidencia en `src/lib/contabilidad/nombrar-stubs.ts`).
+
+**Las otras 12 sólo las tiene el contador**, pero su POSICIÓN en la plantilla ya
+está decodificada — llevar esto a la conversación:
+
+- Los cinco mayores de gasto (6100/6300/6400/6600/6700) comparten plantilla de
+  subcuentas idéntica. Todos saltan de `2001 CUOTAS Y SUSCRIPCIONES` a
+  `2005 AGUA`: **los códigos en uso `-2002/-2003/-2004` son exactamente los
+  huecos** (servicios entre suscripciones y agua; `6700-2002` tiene saldo desde
+  al menos 2025-03).
+- `9200-0007` está entre `INTERESES PLAN PISO UNIDADES` (0006) y
+  `EXCEDENTE PLAN PISO` (0008); las 0009–0012 son intereses por banco. $539,638
+  en 2026-H1.
+- `6602-0001` es hermana de `6602-0002 AMORTIZACIÓN DE SOFTWARE` — otra
+  amortización, la única activa de su mayor en 2026.
 
 ---
 
@@ -277,9 +321,14 @@ Caveats del endpoint, cada uno costó un PR:
 
 ## Lo que sigue
 
-1. **Nombrar las 16 cuentas** desde los catálogos CT de 2024-10 → 2025-03. Sin
-   eso, toda conciliación por familia manda dinero real al bucket «sin explicar».
-2. **Preguntarle al contador por diciembre 2024** (+$867M y su desarme mensual).
+1. **Correr `scripts/nombrar-stubs-margom.ts`** (familia 28 = TRAVELER; con
+   `DRY_RUN=1` primero). Con eso, 4 de las 16 cuentas quedan con nombre y el
+   bloque de $6.98M de inventario se concilia por familia.
+2. **Dos preguntas para el contador**, ya con evidencia lista:
+   - **Diciembre 2024**: +$867M a inventario y su desarme en seis mensualidades.
+   - **El catálogo vigente de su ERP** (export de CONTPAQ o equivalente): las
+     12 cuentas restantes no están en ningún CT presentado, y de paso el CT no
+     se re-presenta desde 2025-03 aunque hubo altas (Anexo 24).
 3. **Las 23 unidades `POR REVISAR`** y las familias JAC6/JAC8 en negativo.
 4. **Alarma para que esto no vuelva a pasar en silencio.** El hueco vivió años
    porque nada compara la serie de meses contra un censo externo. La consulta de
