@@ -21,6 +21,44 @@ export const GET = withAuthz(async (req: Request) => {
   }
   await requireMembership(companyId, undefined, req);
 
+  // ?periodos=1 — los períodos PRESENTADOS (para el selector del panel: sólo
+  // se puede elegir lo que existe, no un calendario abstracto).
+  if (searchParams.get("periodos") === "1") {
+    const periodos = await prisma.ceBalanzaMes.groupBy({
+      by: ["anio", "mes"],
+      where: { companyId },
+      orderBy: [{ anio: "asc" }, { mes: "asc" }],
+    });
+    return NextResponse.json({ periodos: periodos.map((p) => ({ anio: p.anio, mes: p.mes })) });
+  }
+
+  // ?anio=&mes= — el estado del período: todas las HOJAS con sus cuatro
+  // importes y su nombre del catálogo. Es la balanza tal cual se presentó.
+  const anio = Number(searchParams.get("anio"));
+  const mes = Number(searchParams.get("mes"));
+  if (anio && mes) {
+    const [filas, nombres] = await Promise.all([
+      prisma.ceBalanzaMes.findMany({
+        where: { companyId, anio, mes, esPadre: false },
+        select: { numCta: true, saldoIni: true, debe: true, haber: true, saldoFin: true },
+        orderBy: { numCta: "asc" },
+      }),
+      prisma.chartAccount.findMany({
+        where: { companyId },
+        select: { cuentaSAT: true, subcuenta: true, nombre: true },
+      }),
+    ]);
+    if (filas.length === 0) {
+      return NextResponse.json({ error: `Sin balanza presentada para ${anio}-${mes}` }, { status: 404 });
+    }
+    const nombrePorCodigo = new Map(nombres.map((n) => [n.subcuenta ?? n.cuentaSAT, n.nombre]));
+    return NextResponse.json({
+      anio,
+      mes,
+      cuentas: filas.map((f) => ({ ...f, nombre: nombrePorCodigo.get(f.numCta) ?? null })),
+    });
+  }
+
   const cuenta = searchParams.get("cuenta");
   if (cuenta) {
     const serie = await prisma.ceBalanzaMes.findMany({

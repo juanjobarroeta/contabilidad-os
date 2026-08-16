@@ -14,6 +14,7 @@ import { ActivoFijoView } from "@/components/contabilidad/ActivoFijoView";
 import { LibroDiarioPanel, BalanceGeneralPanel, AuxiliarCuentaModal } from "@/components/contabilidad/LibroPanels";
 import { BotonExcel } from "@/components/contabilidad/BotonExcel";
 import { ConciliacionBancariaPanel } from "@/components/contabilidad/ConciliacionBancariaPanel";
+import { CePresentadoPanel } from "@/components/contabilidad/CePresentadoPanel";
 import { evaluarCierreEjercicio } from "@/lib/contabilidad/ejercicio";
 
 // ── Readiness CE (tipos espejo de /api/contabilidad/ce-readiness) ──────────────
@@ -98,9 +99,9 @@ interface SaldoRow {
   neto: number;
 }
 
-type TabId = "periods" | "coe" | "libro" | "balanza" | "conciliacion" | "estado" | "balance" | "saldos" | "activo-fijo";
+type TabId = "periods" | "coe" | "ce-presentado" | "libro" | "balanza" | "conciliacion" | "estado" | "balance" | "saldos" | "activo-fijo";
 
-const TAB_IDS: readonly TabId[] = ["periods", "coe", "libro", "balanza", "conciliacion", "estado", "balance", "saldos", "activo-fijo"];
+const TAB_IDS: readonly TabId[] = ["periods", "coe", "ce-presentado", "libro", "balanza", "conciliacion", "estado", "balance", "saldos", "activo-fijo"];
 
 export default function ContabilidadPage() {
   const { activeCompany } = useCompany();
@@ -302,6 +303,7 @@ export default function ContabilidadPage() {
           {([
             ["periods", "Cierres mensuales", Calendar],
             ["coe", "Contabilidad Electrónica", Landmark],
+            ["ce-presentado", "Presentado (CE)", FileCheck2],
             ["libro", "Libro diario", ScrollText],
             ["balanza", "Balanza", BookOpen],
             ["conciliacion", "Conciliación bancaria", Landmark],
@@ -349,6 +351,10 @@ export default function ContabilidadPage() {
           month={selectedMonth}
           onChangePeriod={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }}
         />
+      )}
+
+      {tab === "ce-presentado" && (
+        <CePresentadoPanel companyId={activeCompany.id} />
       )}
 
       {tab === "libro" && (
