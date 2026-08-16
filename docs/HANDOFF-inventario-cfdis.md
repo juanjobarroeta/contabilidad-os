@@ -270,12 +270,18 @@ compra (fila imposible), 42 con la misma venta ligada a dos ciclos, 9 con la
 misma compra en dos ciclos. Arreglado en `auto-vehiculo.ts` (busca la factura
 en TODOS los ciclos del VIN antes de decidir; tests con el escenario real).
 
-**Pendiente — la reconstrucción de los 153 VINs dañados**: el fix evita que se
-generen más, pero las filas corruptas siguen. Reconstruir = por VIN, re-derivar
-su historia en ORDEN CRONOLÓGICO desde sus CFDIs y re-parear compras↔ventas;
-toca borrar/fusionar ciclos espurios con sus VehiculoCosto y menciones, así que
-merece su propio PR con dry-run. Hasta entonces, el piso trae ~$7.5M de más al
-corte (y las familias SEI2/SEI4/SEI6/SEI7 lo cargan casi todo).
+**La reconstrucción: `scripts/reconstruir-ciclos-margom.ts`** (dry-run por
+default; `APPLY=1` aplica, transacción por VIN). Re-deriva la historia de cada
+VIN dañado en orden cronológico desde sus CFDIs con el derivador de producción
+— contra una base EN MEMORIA en dry-run, contra la real en apply — y acarrea
+los campos no derivables (número económico, kilometraje…) al renglón que
+comparte factura; los DEFAULTS del schema (uso=VENTA, isan=0) no cuentan como
+dato manual. Dry-run verificado 2026-08-16: **153/153 reconstruibles, 0
+saltados**; las parejas cruzadas se descruzan, el «Sei4 de $2.4M» resulta ser
+un ciclo real de 2020 + uno de 2023 y su renglón fantasma desaparece. Ojo: el
+daño iba en LAS DOS direcciones — el piso de esos VINs pasa de 6 a 9 renglones
+HOY (unidades escondidas por ventas replay que robaron su ciclo) — así que la
+conciliación por familia se re-mide después de aplicar.
 
 Dos hallazgos laterales del mismo barrido:
 - **Ventas de seminuevos SIN complemento facturadas con clave 8014xx** (un
