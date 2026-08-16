@@ -304,7 +304,8 @@ describe("derivarVehiculoDesdeCfdiSiAplica() — catálogo de claves vehiculares
     db.claveVehicularCatalogo.findUnique = (async () => null) as never; // catálogo aún no ingerido
     const args = { ...base, invoiceId: "inv-venta", tipo: "INGRESO", rawXml };
     await derivarVehiculoDesdeCfdiSiAplica(db as never, args);
-    expect([...db._vehiculos.values()][0]).toMatchObject({ marca: "POR REVISAR", modelo: "POR REVISAR" });
+    // La marca ya la da el WMI del VIN (3GA = planta León); el modelo sigue roto.
+    expect([...db._vehiculos.values()][0]).toMatchObject({ marca: "JAC", modelo: "POR REVISAR" });
 
     // Se ingiere el catálogo; la corrida profunda re-procesa el mismo CFDI.
     db.claveVehicularCatalogo.findUnique = async ({ where }: any) => (catalogo as any)[where.clave] ?? null;

@@ -4,6 +4,7 @@ import {
   diasCreditoDesdeCondiciones,
   emisorDesdeCfdi,
   marcaDesdeTexto,
+  marcaDesdeVin,
   modeloDesdeTexto,
   numeroMotorDesdeTexto,
   tipoComprobanteDesdeCfdi,
@@ -110,6 +111,18 @@ describe("datosGeneralesDesdeCfdi() — SKU numérico y marcas nuevas", () => {
     expect(marcaDesdeTexto("AUTOBUS MARCA YUTONG")).toBe("YUTONG");
     // y no le ganan a la marca del fabricante cuando ambas aparecen
     expect(marcaDesdeTexto("PICK UP JAC FRISON BY GML")).toBe("JAC");
+  });
+
+  it("la marca desde el WMI del VIN cuando el texto no la dice", () => {
+    // Factura real de Giant Motors: «VEHICULO PICK UP T5 CABINA REGULAR…» —
+    // ninguna marca en el texto; el VIN 3GA… es la planta de León.
+    expect(marcaDesdeVin("3GALD1547TM033896")).toBe("JAC");
+    expect(marcaDesdeVin("LZYTMGJW2T1002137")).toBe("YUTONG");
+    expect(marcaDesdeVin("JS2ZC63S1P6402136")).toBe("SUZUKI");
+    expect(marcaDesdeVin("LJ18R8CL3R3300460")).toBe("JAC");
+    expect(marcaDesdeVin("WAUZZZ4M0KD018683")).toBeNull(); // WMI no curado
+    expect(marcaDesdeVin("NO-ES-UN-VIN")).toBeNull();
+    expect(marcaDesdeVin(null)).toBeNull();
   });
 
   it("seminuevo de particular sin SKU: el modelo sale del machote", () => {

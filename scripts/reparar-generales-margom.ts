@@ -85,6 +85,7 @@ async function main() {
           claveVehicular: concepto.claveVehicular ?? u.claveVehicular,
           descripcion: concepto.descripcion,
           noIdentificacion: concepto.noIdentificacion,
+          niv: u.vin,
         },
         u.anio ?? new Date().getFullYear(),
       );

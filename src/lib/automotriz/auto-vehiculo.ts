@@ -27,6 +27,7 @@ import {
   esConversionDeCarroceria,
   extraerDatosVehiculoCfdi,
   marcaDesdeTexto,
+  marcaDesdeVin,
   numeroMotorDesdeTexto,
   sustituyeUuidsDesdeCfdi,
   tipoComprobanteDesdeCfdi,
@@ -79,7 +80,13 @@ export interface DerivarVehiculoResultado {
  */
 export async function generalesParaUnidad(
   db: Db,
-  v: { claveVehicular: string | null; descripcion: string | null; noIdentificacion: string | null },
+  v: {
+    claveVehicular: string | null;
+    descripcion: string | null;
+    noIdentificacion: string | null;
+    /** VIN de la unidad: su WMI da la marca cuando texto y catálogo no la dicen. */
+    niv?: string | null;
+  },
   anioFallback: number
 ): Promise<{ marca: string; modelo: string; version: string | null; anio: number }> {
   const heur = datosGeneralesDesdeCfdi(v.descripcion, v.noIdentificacion, anioFallback);
@@ -95,6 +102,9 @@ export async function generalesParaUnidad(
           marcaDesdeTexto(`${cat.modelo} ${cat.version ?? ""}`) ??
           marcaDesdeTexto(cat.empresa) ??
           heur.marca ??
+          // El WMI antes que la razón social: «Empresas ensambladoras e
+          // importadoras de camiones nuevos» no es una marca.
+          marcaDesdeVin(v.niv) ??
           cat.empresa.slice(0, 60),
         modelo: modeloLimpio(cat.modelo).slice(0, 60) || heur.modelo || "POR REVISAR",
         version: cat.version ? cat.version.slice(0, 80) : null,
@@ -104,7 +114,7 @@ export async function generalesParaUnidad(
   }
 
   return {
-    marca: heur.marca ?? "POR REVISAR",
+    marca: heur.marca ?? marcaDesdeVin(v.niv) ?? "POR REVISAR",
     modelo: heur.modelo ?? "POR REVISAR",
     version: null,
     anio: heur.anio ?? anioFallback,

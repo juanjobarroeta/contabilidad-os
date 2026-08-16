@@ -433,6 +433,38 @@ export function modeloDesdeTexto(texto: string | null | undefined): string | nul
   return null;
 }
 
+// WMI (primeros 3 del VIN, ISO 3780) → marca. La factura de fábrica a veces no
+// dice la marca en el TEXTO por ningún lado —«VEHICULO PICK UP T5 CABINA
+// REGULAR…» de Giant Motors, $285K— y la clave vehicular de mitad de año aún no
+// está en el Anexo 15 publicado. El VIN sí lo dice siempre. Tabla curada del
+// propio padrón de Margom (2026-08): cada prefijo con ≥5 unidades cuya marca ya
+// se conocía por otra vía, con el voto mayoritario (3GA = planta Giant Motors
+// León: 6,688 unidades dicen JAC).
+const WMI_MARCA: Record<string, string> = {
+  "3GA": "JAC", // Giant Motors León (JAC ensamblado en México)
+  LJ1: "JAC", // JAC Anhui (importados)
+  "3GE": "GML",
+  LZY: "YUTONG",
+  "3N1": "NISSAN", "3N6": "NISSAN", "3N8": "NISSAN",
+  JS2: "SUZUKI", TSM: "SUZUKI", MHY: "SUZUKI", MBH: "SUZUKI",
+  "1C6": "RAM", "3C6": "RAM",
+  "3KP": "KIA", MZB: "KIA",
+  "93Y": "RENAULT",
+  LSG: "CHEVROLET", KL8: "CHEVROLET",
+  MB2: "HYUNDAI",
+  "9BW": "VOLKSWAGEN", MEX: "VOLKSWAGEN", "3VW": "VOLKSWAGEN",
+  LSJ: "MG",
+  "9BD": "FIAT",
+  VSS: "SEAT",
+};
+
+/** Marca desde el WMI del VIN (fallback cuando ni el texto ni el catálogo la dan). */
+export function marcaDesdeVin(vin: string | null | undefined): string | null {
+  const v = (vin ?? "").trim().toUpperCase();
+  if (!esVinValido(v)) return null;
+  return WMI_MARCA[v.slice(0, 3)] ?? null;
+}
+
 export interface DatosGeneralesVehiculo {
   marca: string | null;
   modelo: string | null;
