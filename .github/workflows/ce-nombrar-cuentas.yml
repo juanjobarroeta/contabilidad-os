@@ -1,0 +1,65 @@
+name: Nombrar cuentas del catálogo (manual, por empresa)
+
+# Le pone NOMBRE a las cuentas que se quedaron con su propio código.
+#
+# Una cuenta cuyo `nombre` es su número rompe cualquier conciliación por
+# familia: el dinero está bien contabilizado y aun así cae en «sin explicar»,
+# porque no hay con qué agruparlo. Medido en MARGOM: 16 cuentas así, y
+# `1301-0028-0000` sola trae $6.98M.
+#
+# Los nombres salen de los catálogos (fileType "CT") ya presentados al SAT y
+# guardados en Syntage. El importador de CE toma sólo el más reciente y descarta
+# los demás —MARGOM tiene 27—, así que una cuenta sin `Desc` en ése se quedó sin
+# nombre. Esto los recorre del más nuevo al más viejo y para cuando ya no queda
+# nada pendiente.
+#
+# SÓLO ACTUALIZA, NUNCA CREA: el plan de cuentas cambió de numeración en 2024-10
+# y crear desde un catálogo viejo duplicaría el catálogo.
+#
+# Idempotente: en la segunda corrida `sinNombreAntes` sale 0 y no baja un XML.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa"
+        required: true
+        type: string
+      maxCatalogos:
+        description: "Tope de catálogos a leer (del más nuevo al más viejo)"
+        required: false
+        default: "40"
+        type: string
+      baseUrl:
+        description: "URL del despliegue a golpear"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  nombrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Rellenar nombres desde los catálogos presentados
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          MAX_CATALOGOS: ${{ inputs.maxCatalogos }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q="companyId=${COMPANY_ID}&maxCatalogos=$(printf '%s' "${MAX_CATALOGOS}" | tr -d '[:space:]')"
+
+          # Baja XML del SAT vía Syntage: el endpoint tiene 300s de presupuesto.
+          RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/cron/ce-nombrar-cuentas?${Q}" \
+            -H "x-cron-secret: ${CRON_SECRET}")"
+
+          echo "$RESP" | jq '{rfc, sinNombreAntes, nombradas, siguenSinNombre, catalogosLeidos}'
+
+          if [ "$(echo "$RESP" | jq -r '.siguenSinNombre | length')" != "0" ]; then
+            echo "::warning::Quedan cuentas sin nombre en NINGÚN catálogo presentado. Ésas van con el contador."
+          fi
