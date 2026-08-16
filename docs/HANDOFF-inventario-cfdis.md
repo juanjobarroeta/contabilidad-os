@@ -318,6 +318,14 @@ Tres hallazgos al estrenarla:
   fin. Misma firma en T5 ($43.3M comprados desde 2024-10, 157 unidades, sin
   cuenta) y los HFC1037-EV. La pregunta al contador ya trae el mes y el monto
   exactos.
+- **El absorbedor es FRISON (1301-0004)**: su residual neto de la era es
+  +$11.45M ≈ el neto sin casa de T5 ($7.74M) + lo aún sin mapear ($1.4M) +
+  holgura de capitalización. Tiene toda la lógica: los T5 son pickups JAC,
+  hermanos de FRISON — el contador postea la línea de pickups completa en
+  0004. Si lo confirma, el bloque «T5 sin cuenta» y el «FRISON cargado de
+  más» se cancelan entre sí. Misma firma: los K7 rígidos salen de 0025
+  (−$3.9M), y el −$6.5M de PASS es del tamaño de la capitalización sobre
+  $460M de autobuses vendidos (1.4%).
 
 ---
 
