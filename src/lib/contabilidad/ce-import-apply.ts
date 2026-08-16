@@ -86,22 +86,33 @@ async function upsertCuenta(
   if (!cuentaSAT) return "omitida";
 
   const tipo = tipoPorCodAgrup(c.codAgrup);
-  const data = {
-    nombre: c.desc || c.numCta,
-    tipo,
-    nivel: c.nivel,
-    naturaleza: c.natur,
-  };
+  const desc = c.desc.trim();
 
   const existing = await prisma.chartAccount.findFirst({
     where: { companyId, cuentaSAT, subcuenta },
-    select: { id: true },
+    select: { id: true, nombre: true },
   });
 
   if (existing) {
-    await prisma.chartAccount.update({ where: { id: existing.id }, data: { ...data, isActive: true } });
+    // Un catálogo SIN `Desc` no debe borrar un nombre real.
+    //
+    // Antes se escribía `nombre: c.desc || c.numCta` en el update, así que un
+    // catálogo que trajera la cuenta sin descripción machacaba el nombre bueno
+    // con el propio código. Queda una fila que PARECE nombrada —`nombre` no es
+    // null— pero cuyo nombre es el número, y toda conciliación por familia le
+    // manda su dinero al bucket «sin explicar». Medido en MARGOM: 16 cuentas
+    // así, una de ellas (1301-0028-0000) con $6.98M.
+    const nombre = desc || existing.nombre;
+    await prisma.chartAccount.update({
+      where: { id: existing.id },
+      data: { nombre, tipo, nivel: c.nivel, naturaleza: c.natur, isActive: true },
+    });
     return "actualizada";
   }
+
+  // Al CREAR no hay alternativa: `nombre` es obligatorio en el esquema. El
+  // código queda de marcador hasta que un catálogo traiga la descripción.
+  const data = { nombre: desc || c.numCta, tipo, nivel: c.nivel, naturaleza: c.natur };
 
   await prisma.chartAccount.create({
     data: { companyId, cuentaSAT, subcuenta, ...data },
