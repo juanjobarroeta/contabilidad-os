@@ -272,20 +272,37 @@ export async function derivarVehiculoDesdeCfdiSiAplica(
     return supplierMemo;
   };
 
+  const SELECT_UNIDAD = {
+    id: true,
+    estado: true,
+    compraInvoiceId: true,
+    ventaInvoiceId: true,
+    supplierId: true,
+    clienteId: true,
+    autoCreado: true,
+    marca: true,
+    modelo: true,
+    numeroMotor: true,
+  } as const;
+
   for (const v of datos.vehiculos) {
     vins.push(v.niv);
-    const existente = await unidadVigentePorVin(db, args.companyId, v.niv, {
-      id: true,
-      estado: true,
-      compraInvoiceId: true,
-      ventaInvoiceId: true,
-      supplierId: true,
-      clienteId: true,
-      autoCreado: true,
-      marca: true,
-      modelo: true,
-      numeroMotor: true,
+    // Idempotencia a TRAVÉS de ciclos, no sólo contra el vigente. La repesca
+    // reprocesa CFDIs viejos en cualquier orden: si esta factura YA creó o ligó
+    // un renglón —aunque ya no sea el ciclo vigente— el destino es ESE renglón.
+    // Compararla sólo contra el vigente convertía cada replay de una compra
+    // vieja en una «recompra» que paría un ciclo fantasma, y cada replay de una
+    // venta en una segunda liga sobre otro ciclo: 153 VINs con ventas
+    // anteriores a su compra o la misma venta en dos ciclos, $7.5M de piso
+    // fantasma al corte 2026-06 (medido 2026-08-16).
+    const ligado = await db.vehiculo.findFirst({
+      where: esCompra
+        ? { companyId: args.companyId, vin: v.niv, compraInvoiceId: args.invoiceId }
+        : { companyId: args.companyId, vin: v.niv, ventaInvoiceId: args.invoiceId },
+      orderBy: { ciclo: "desc" },
+      select: SELECT_UNIDAD,
     });
+    const existente = ligado ?? (await unidadVigentePorVin(db, args.companyId, v.niv, SELECT_UNIDAD));
 
     // Número de motor: si la unidad no lo tiene y este CFDI lo menciona,
     // se completa (misma filosofía que cliente/proveedor faltantes).

@@ -246,6 +246,45 @@ año salen en las *modificaciones* del DOF): su modelo sale del texto
 («ZK6126BEVGS»). Cuando se publique la modificación 2026, re-correr
 `automotriz:ingest-claves` los pone con dato autoritativo.
 
+Tras esa pasada quedó el último hueco: facturas de fábrica que no dicen la
+marca en NINGÚN texto (un T5 de $285K de Giant Motors) con clave aún no
+publicada. **El WMI del VIN (ISO 3780) siempre la dice**: `marcaDesdeVin`,
+tabla curada del propio padrón (3GA = planta León, avalado por 6,688 unidades).
+
+---
+
+## Los ciclos fantasma ($7.5M del piso al corte)
+
+Barriendo los VINs del piso contra TODOS los CFDIs emitidos no cancelados
+aparecieron **18 renglones / $7.48M al corte con una venta emitida antes del
+corte** — piso que no existe. La consulta y el diagnóstico por CFDI están en
+`scripts/diagnostico-fantasmas-margom.ts` (sólo lectura).
+
+**La causa no era el gate de venta: era la idempotencia.** La repesca
+reprocesó CFDIs viejos en cualquier orden, y el derivador comparaba «¿esta
+factura ya se procesó?» sólo contra el ciclo VIGENTE. Cada replay de una
+compra vieja sobre un vigente ya vendido con texto «usado» paría una
+«recompra» fantasma; cada replay de una venta vieja se colgaba del ciclo
+abierto que encontrara. Saldo: **153 VINs** — 129 con venta anterior a su
+compra (fila imposible), 42 con la misma venta ligada a dos ciclos, 9 con la
+misma compra en dos ciclos. Arreglado en `auto-vehiculo.ts` (busca la factura
+en TODOS los ciclos del VIN antes de decidir; tests con el escenario real).
+
+**Pendiente — la reconstrucción de los 153 VINs dañados**: el fix evita que se
+generen más, pero las filas corruptas siguen. Reconstruir = por VIN, re-derivar
+su historia en ORDEN CRONOLÓGICO desde sus CFDIs y re-parear compras↔ventas;
+toca borrar/fusionar ciclos espurios con sus VehiculoCosto y menciones, así que
+merece su propio PR con dry-run. Hasta entonces, el piso trae ~$7.5M de más al
+corte (y las familias SEI2/SEI4/SEI6/SEI7 lo cargan casi todo).
+
+Dos hallazgos laterales del mismo barrido:
+- **Ventas de seminuevos SIN complemento facturadas con clave 8014xx** (un
+  Versa de $221K, clave 80141615): el candado `clave_no_2510` las rechaza y la
+  venta queda sin ligar. Medir con `diagnostico-unidades` antes de aflojar.
+- La balanza dice que **el contador también los tiene vendidos**: los libros
+  cargan MENOS que el padrón justo en esas familias — al reconstruir, el
+  padrón se acerca a libros sin tocar la contabilidad.
+
 ---
 
 ## Cómo conectarse

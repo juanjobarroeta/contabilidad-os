@@ -44,10 +44,16 @@ function fakeDb(catalogo: Record<string, { empresa: string; modelo: string; vers
           if (v.companyId === companyId && v.vin === vin) return { ...v };
         return null;
       },
-      // unidadVigentePorVin: la del ciclo MÁS ALTO de ese VIN.
+      // unidadVigentePorVin: la del ciclo MÁS ALTO de ese VIN. La búsqueda por
+      // compraInvoiceId/ventaInvoiceId (idempotencia a través de ciclos) filtra
+      // igual que Prisma cuando el where trae esos campos.
       findFirst: async ({ where, select }: any) => {
         const hits = [...vehiculos.values()].filter(
-          (v) => v.companyId === where.companyId && v.vin === where.vin
+          (v) =>
+            v.companyId === where.companyId &&
+            v.vin === where.vin &&
+            (where.compraInvoiceId == null || v.compraInvoiceId === where.compraInvoiceId) &&
+            (where.ventaInvoiceId == null || v.ventaInvoiceId === where.ventaInvoiceId)
         );
         if (hits.length === 0) return null;
         hits.sort((a, b) => ((b.ciclo as number) ?? 1) - ((a.ciclo as number) ?? 1));
@@ -908,6 +914,53 @@ describe("recompra de seminueva — segundo ciclo de vida del mismo VIN", () => 
     expect(ciclos[1]).toMatchObject({ ciclo: 2, ventaInvoiceId: "inv-venta-2", estado: "VENDIDO" });
     // La utilidad del segundo ciclo sale de SU propio costo: 542,241 − 170,000.
     expect((ciclos[1].precioVenta as number) - (ciclos[1].costoCompra as number)).toBeCloseTo(372241.38, 2);
+  });
+
+  it("REPLAY de la recompra: no pare un tercer ciclo (idempotencia a través de ciclos)", async () => {
+    // La repesca reprocesa CFDIs viejos en cualquier orden. Antes, el replay se
+    // comparaba sólo contra el ciclo VIGENTE: como el vigente ya estaba vendido
+    // y el texto dice «usado», cada replay paría una «recompra» fantasma. En
+    // producción: 153 VINs con ventas anteriores a su compra o la misma venta
+    // en dos ciclos, $7.5M de piso fantasma al corte 2026-06.
+    const db = fakeDb();
+    await unidadDelPrimerCiclo(db);
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-recompra", tipo: "EGRESO", rawXml: cfdiRecompra(),
+    });
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, fecha: new Date("2026-06-01T00:00:00Z"),
+      invoiceId: "inv-venta-2", tipo: "INGRESO", rawXml: cfdiVenta(),
+    });
+    expect(db._vehiculos.size).toBe(2); // ciclo 1 y 2, ambos cerrados
+
+    const r = await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-recompra", tipo: "EGRESO", rawXml: cfdiRecompra(),
+    });
+    expect(r?.creados ?? 0).toBe(0);
+    expect(db._vehiculos.size).toBe(2); // ningún ciclo 3
+  });
+
+  it("REPLAY de una venta vieja: no se liga a OTRO ciclo", async () => {
+    // El otro lado del mismo bug: ciclo 1 vendido con inv-venta-1, la recompra
+    // abre el ciclo 2, y el replay de inv-venta-1 encontraba al vigente (ciclo
+    // 2, abierto) y le colgaba la venta VIEJA — la misma venta en dos ciclos, y
+    // el piso pierde una unidad que sí está.
+    const db = fakeDb();
+    await unidadDelPrimerCiclo(db);
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-recompra", tipo: "EGRESO", rawXml: cfdiRecompra(),
+    });
+
+    await derivarVehiculoDesdeCfdiSiAplica(db as never, {
+      ...base, invoiceId: "inv-venta-1", tipo: "INGRESO", rawXml: cfdiVenta(),
+    });
+
+    const ciclos = [...db._vehiculos.values()].sort(
+      (a, b) => (a.ciclo as number) - (b.ciclo as number)
+    );
+    expect(ciclos[0].ventaInvoiceId).toBe("inv-venta-1"); // sigue en el ciclo 1
+    expect(ciclos[1].ventaInvoiceId).toBeUndefined(); // el ciclo 2 sigue en piso
+    expect(ciclos[1].estado).toBe("DISPONIBLE");
   });
 
   it("una factura repetida sobre unidad vendida SIGUE siendo DUPLICADA si no dice usado", async () => {
