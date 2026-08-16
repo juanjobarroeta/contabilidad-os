@@ -140,6 +140,12 @@ async function main() {
           OR COUNT(DISTINCT "compraInvoiceId") FILTER (WHERE "compraInvoiceId" IS NOT NULL) < COUNT(*) FILTER (WHERE "compraInvoiceId" IS NOT NULL)
           OR COUNT(DISTINCT "ventaInvoiceId") FILTER (WHERE "ventaInvoiceId" IS NOT NULL) < COUNT(*) FILTER (WHERE "ventaInvoiceId" IS NOT NULL)
           OR COUNT(*) FILTER (WHERE "fechaVenta" IS NULL) > 1
+          -- Un renglón EN PISO comprado ANTES de la última venta del VIN: los
+          -- ciclos son vidas secuenciales, así que esto sólo lo produce un
+          -- replay con el derivador viejo usando la factura gemela de la compra
+          -- (el cron de producción respawneó 8 así el 2026-08-16 antes del
+          -- deploy del fix; sus facturas distintas esquivaban los otros flags).
+          OR MIN("fechaCompra") FILTER (WHERE "fechaVenta" IS NULL) < MAX("fechaVenta")
       ORDER BY vin
     `);
     console.log(`${dañados.length} VINs dañados\n`);
