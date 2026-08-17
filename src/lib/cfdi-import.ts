@@ -1,6 +1,8 @@
 import { prisma } from "./prisma";
 import { parseCfdiXml } from "./sat-fiel";
 import { clasificarCfdi } from "./fiscal/clasificar-cfdi";
+import { parchearClienteDesdeCfdi } from "./facturas/cliente-fiscal-repo";
+import { identidadDesdeCfdi, regimenParaAlta } from "./facturas/identidad-receptor";
 import { crearActivoDesdeCfdiSiAplica } from "./fiscal/auto-activo";
 import { derivarVehiculoInline } from "./automotriz/auto-vehiculo";
 
@@ -181,14 +183,28 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
     });
     if (existingCustomer) {
       customerId = existingCustomer.id;
+      // Rellena CP/régimen faltantes con los del comprobante, sin pisar nunca
+      // lo capturado a mano. Así el padrón de clientes se completa solo
+      // conforme entra el histórico.
+      await parchearClienteDesdeCfdi(existingCustomer.id, cfdi, isEmisor);
     } else if (counterpartyName) {
       try {
+        // Identidad fiscal EXACTA del receptor: un CFDI timbrado ya pasó la
+        // validación del padrón (RFC + Nombre + DomicilioFiscalReceptor). Antes
+        // se guardaba régimen "616" y sin CP, y después no se le podía facturar
+        // a ese cliente sin capturar sus datos a mano.
+        const ident = identidadDesdeCfdi(cfdi, isEmisor);
         const newCustomer = await prisma.customer.create({
           data: {
             companyId,
             rfc: counterpartyRfc,
             razonSocial: counterpartyName,
-            regimenFiscal: isEmisor ? "616" : (cfdi.regimenEmisor ?? "616"),
+            regimenFiscal: regimenParaAlta({
+              esEmitida: isEmisor,
+              regimenFiscalReceptor: cfdi.regimenFiscalReceptor,
+              regimenEmisor: cfdi.regimenEmisor,
+            }),
+            ...(ident.codigoPostal ? { codigoPostal: ident.codigoPostal } : {}),
           },
         });
         customerId = newCustomer.id;

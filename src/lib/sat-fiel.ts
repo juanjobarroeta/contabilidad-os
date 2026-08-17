@@ -337,9 +337,20 @@ export function parseCfdiXml(xml: string) {
   // guardar nada — el default (616) al menos es una clave válida.
   const regimenEmisor = es32 ? null : attrIn("Emisor", "RegimenFiscal");
 
-  // Receptor
+  // Receptor. En CFDI 4.0 el nodo lleva CUATRO atributos de identidad fiscal y
+  // los cuatro son obligatorios: Rfc, Nombre, DomicilioFiscalReceptor (CP) y
+  // RegimenFiscalReceptor. Se leían sólo los dos primeros y los otros dos se
+  // tiraban — siendo que un CFDI TIMBRADO ya pasó la validación del padrón, así
+  // que son, por definición, los datos exactos del cliente ante el SAT.
+  //
+  // Los dos últimos NO tienen variante en minúsculas porque NO EXISTEN en 3.2
+  // ni en 3.3: llegaron con 4.0. En un comprobante viejo salen null, y de ahí
+  // no se llena nada — que es lo correcto.
   const rfcReceptor = attrIn("Receptor", "Rfc", "rfc");
   const nombreReceptor = attrIn("Receptor", "Nombre", "nombre");
+  const cpRec = attrIn("Receptor", "DomicilioFiscalReceptor");
+  const domicilioFiscalReceptor = cpRec && /^\d{5}$/.test(cpRec.trim()) ? cpRec.trim() : null;
+  const regimenFiscalReceptor = attrIn("Receptor", "RegimenFiscalReceptor");
 
   // Folio / Serie (optional, root attrs)
   const serie = rootAttr("Serie") ?? rootAttr("serie");
@@ -567,6 +578,8 @@ export function parseCfdiXml(xml: string) {
     regimenEmisor,
     rfcReceptor,
     nombreReceptor,
+    domicilioFiscalReceptor,
+    regimenFiscalReceptor,
     items,
     taxes,
     doctosRelacionados,

@@ -118,8 +118,9 @@ const JOBS: Job[] = [
     minMs: MIN_SAT,
   },
   { name: "sat-rawxml-backfill", everyMs: 6 * HOUR, firstDelayMs: 15 * MIN, minMs: MIN_SAT,
-    // El XML recién bajado alimenta impuestos y contraparte: se derivan ya.
-    encadena: ["invoice-taxes-backfill", "invoice-contraparte-backfill"] },
+    // El XML recién bajado alimenta impuestos, contraparte y la identidad
+    // fiscal del cliente: se derivan ya.
+    encadena: ["invoice-taxes-backfill", "invoice-contraparte-backfill", "cliente-fiscal-backfill"] },
   // Ídem: el workflow de rawxml-backfill encadenaba el desglose de impuestos
   // (parse local del rawXml recién bajado, sin cuota SAT).
   { name: "invoice-taxes-backfill", everyMs: 6 * HOUR, firstDelayMs: 25 * MIN, minMs: MIN_LOCAL },
@@ -127,6 +128,10 @@ const JOBS: Job[] = [
   // público en general (que no llevan Customer a propósito) salían como "—" en
   // la lista aunque el nombre venga en el comprobante. Gap-driven: converge.
   { name: "invoice-contraparte-backfill", everyMs: 6 * HOUR, firstDelayMs: 40 * MIN, minMs: MIN_LOCAL },
+  // Del MISMO rawXml: CP y régimen del cliente, que los importadores dejaban en
+  // "616" y sin CP. Sin esto, facturarle a un cliente importado exigía capturar
+  // sus datos fiscales a mano. Gap-driven: converge y se apaga solo.
+  { name: "cliente-fiscal-backfill", everyMs: 6 * HOUR, firstDelayMs: 45 * MIN, minMs: MIN_LOCAL },
   { name: "compliance-provision", everyMs: 24 * HOUR, firstDelayMs: 3 * MIN, minMs: MIN_CARO },
   { name: "compliance-sync", everyMs: 6 * HOUR, firstDelayMs: 8 * MIN, minMs: MIN_CARO },
   // Acuses MENSUALES desde Syntage (PDF + parse con Claude). Corría SÓLO en el

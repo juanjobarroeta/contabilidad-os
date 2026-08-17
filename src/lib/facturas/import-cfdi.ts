@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { parseCfdiXml } from "@/lib/sat-fiel";
+import { parchearClienteDesdeCfdi } from "./cliente-fiscal-repo";
+import { identidadDesdeCfdi, regimenParaAlta } from "./identidad-receptor";
 import { clasificarCfdi } from "@/lib/fiscal/clasificar-cfdi";
 import { crearActivoDesdeCfdiSiAplica } from "@/lib/fiscal/auto-activo";
 import { derivarVehiculoInline } from "@/lib/automotriz/auto-vehiculo";
@@ -71,11 +73,29 @@ export async function importCfdiFromXml(opts: {
   let customerId: string | null = null;
   if (cpRfc && cpRfc !== "XAXX010101000" && cpRfc !== "XEXX010101000") {
     const found = await prisma.customer.findFirst({ where: { companyId, rfc: cpRfc }, select: { id: true } });
-    if (found) customerId = found.id;
-    else if (cpName) {
+    if (found) {
+      customerId = found.id;
+      // Cliente ya existente: rellena huecos (CP ausente, régimen de relleno)
+      // sin pisar nunca lo capturado a mano.
+      await parchearClienteDesdeCfdi(found.id, cfdi, isEmisor);
+    } else if (cpName) {
       try {
+        // El CFDI trae la identidad fiscal EXACTA del receptor (validada por el
+        // padrón al timbrarse). Antes se guardaba régimen "616" y sin CP, y
+        // luego no se le podía facturar sin capturarlo a mano.
+        const ident = identidadDesdeCfdi(cfdi, isEmisor);
         const created = await prisma.customer.create({
-          data: { companyId, rfc: cpRfc, razonSocial: cpName, regimenFiscal: isEmisor ? "616" : (cfdi.regimenEmisor ?? "616") },
+          data: {
+            companyId,
+            rfc: cpRfc,
+            razonSocial: cpName,
+            regimenFiscal: regimenParaAlta({
+              esEmitida: isEmisor,
+              regimenFiscalReceptor: cfdi.regimenFiscalReceptor,
+              regimenEmisor: cfdi.regimenEmisor,
+            }),
+            ...(ident.codigoPostal ? { codigoPostal: ident.codigoPostal } : {}),
+          },
         });
         customerId = created.id;
       } catch { /* ignore duplicate */ }
