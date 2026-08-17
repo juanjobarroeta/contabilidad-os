@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // El release del navegador tiene que ser EL MISMO que el del servidor para
+  // que un error de React y la excepción que lo causó caigan en el mismo
+  // deploy. Railway expone el SHA; aquí lo horneamos al bundle del cliente.
+  ...(process.env.RAILWAY_GIT_COMMIT_SHA
+    ? { env: { NEXT_PUBLIC_SENTRY_RELEASE: process.env.RAILWAY_GIT_COMMIT_SHA } }
+    : {}),
   experimental: {
     serverActions: {
       allowedOrigins: ["localhost:3000", "contabilidad-os-production.up.railway.app"],
@@ -47,4 +54,46 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// withSentryConfig envuelve la config para: (a) subir los source maps al
+// build, sin los cuales un stack trace de producción es una sopa de letras
+// minificada; (b) instrumentar el server bundle; (c) crear el "túnel".
+//
+// Todo esto es OPCIONAL en el sentido correcto: sin SENTRY_AUTH_TOKEN el build
+// NO falla, solo se salta la subida de source maps. Así un clon del repo sin
+// credenciales de Sentry sigue compilando.
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG ?? "cumplo-id",
+  project: process.env.SENTRY_PROJECT ?? "contabilidad-os",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Silencioso en local; ruidoso en CI, donde sí queremos ver si la subida falló.
+  silent: !process.env.CI,
+
+  sourcemaps: {
+    // Sin token no hay a dónde subirlos: apagar explícitamente evita el
+    // warning ruidoso en cada build local.
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+    // No dejar los .map servidos públicamente después de subirlos a Sentry:
+    // exponen el código fuente del producto a cualquiera.
+    deleteSourcemapsAfterUpload: true,
+  },
+
+  // Cubre también los chunks fuera de /_next/static, para que los stack traces
+  // de código en workers y rutas dinámicas también se desminifiquen.
+  widenClientFileUpload: true,
+
+  // Los bloqueadores de anuncios tiran las peticiones a ingest.sentry.io, y con
+  // ellas una parte nada despreciable de los errores del navegador. El túnel
+  // las manda a nuestro propio dominio y de ahí a Sentry. La ruta /monitoring
+  // no la toca el matcher del middleware, así que no necesita CORS ni auth.
+  tunnelRoute: "/monitoring",
+
+  webpack: {
+    treeshake: {
+      // Quita el logger de debug del SDK del bundle de producción.
+      removeDebugLogging: true,
+    },
+    // No estamos en Vercel (esto corre en Railway): no crear cron monitors ahí.
+    automaticVercelMonitors: false,
+  },
+});

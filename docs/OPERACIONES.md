@@ -61,15 +61,19 @@ Validadas al arranque por `src/lib/env-check.ts` (producción):
 | `CREDENTIALS_ENCRYPTION_KEY` | **no arranca** | 32 bytes base64; si se pierde, los secretos cifrados son irrecuperables — guárdala en un gestor de secretos aparte de Railway |
 | `AUTH_SECRET` / `NEXTAUTH_SECRET` | **no arranca** | basta una; mantener ambas iguales |
 | `CRON_SECRET` | advertencia | los crons responden 401 y ninguna tarea corre |
-| `SENTRY_DSN` | advertencia | sin monitoreo de errores |
+| `SENTRY_DSN` | advertencia | sin monitoreo de errores del servidor |
+| `NEXT_PUBLIC_SENTRY_DSN` | advertencia (si `SENTRY_DSN` sí está) | sin monitoreo del **navegador**: un React roto se ve como silencio |
 
 Rotación de la llave de cifrado: `npm run rotate:key` (ver script; requiere
 la llave vieja y la nueva).
 
 ## 4. Señales de que algo anda mal
 
-- **Sentry** (cuando `SENTRY_DSN` esté configurada): errores no manejados de
-  rutas y render llegan solos vía `onRequestError`.
+- **Sentry** (cuando las DSN estén configuradas): errores no manejados del
+  servidor, del middleware edge y del navegador llegan solos. Las trazas
+  cruzan hacia los satélites, así que un error del SPA Automotriz y la
+  excepción del hub que lo causó aparecen como un solo hilo. Montaje completo,
+  variables y el ciclo de PRs automáticos: **[docs/SENTRY.md](./SENTRY.md)**.
 - **Crons**: corren desde GitHub Actions (`.github/workflows/*.yml`) contra
   producción; un run rojo en Actions = fallo de transporte. Los fallos
   lógicos por-empresa se ven en los logs de Railway y, para FIEL vencida,

@@ -40,23 +40,43 @@ export async function register() {
     const { startInAppCron } = await import("./lib/cron-scheduler");
     startInAppCron();
   }
+
+  // 5) Runtime EDGE (src/middleware.ts). Hasta ahora corría sin instrumentar:
+  //    todo error del middleware —el que decide auth y redirecciones, o sea el
+  //    que puede dejar fuera a TODOS los usuarios— moría en logs efímeros.
+  //    Aquí no va env-check ni cron: el edge no tiene acceso a esas APIs.
+  if (process.env.NEXT_RUNTIME === "edge") {
+    const Sentry = await import("@sentry/nextjs");
+    const shared = await import("./lib/sentry-shared");
+    const dsn = process.env.SENTRY_DSN;
+    if (dsn) {
+      Sentry.init({
+        dsn,
+        environment: shared.sentryEnvironment(),
+        release: shared.sentryRelease(),
+        tracesSampleRate: shared.tracesSampleRate(),
+        sendDefaultPii: false,
+        ignoreErrors: shared.IGNORED_ERRORS,
+        beforeSend: (event) => shared.scrubEvent(event),
+        beforeSendTransaction: (event) => shared.scrubEvent(event),
+      });
+    }
+  }
 }
 
 // Hook de Next 15: se invoca por cada error no manejado en el servidor
-// (rutas de API, server components, server actions). Sin SENTRY_DSN es un
-// no-op (reportError solo hace console.error).
+// (rutas de API, server components, server actions) en cualquier runtime.
+//
+// `captureRequestError` del SDK de Next es lo correcto aquí (y no un
+// captureException a mano): adjunta el contexto de la petición y —lo que
+// importa para depurar entre proyectos— reconstruye la traza que venía en los
+// headers, de modo que este error queda colgado de la MISMA traza que originó
+// el click en el satélite Automotriz.
+//
+// Sin SENTRY_DSN, Sentry.init nunca corrió y esto es un no-op.
 export async function onRequestError(
-  error: unknown,
-  request: { path: string; method: string },
-  context: { routerKind: string; routePath: string; routeType: string }
+  ...args: Parameters<typeof import("@sentry/nextjs").captureRequestError>
 ) {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { reportError } = await import("./lib/observability");
-    reportError(error, {
-      path: request.path,
-      method: request.method,
-      routePath: context.routePath,
-      routeType: context.routeType,
-    });
-  }
+  const { captureRequestError } = await import("@sentry/nextjs");
+  captureRequestError(...args);
 }
