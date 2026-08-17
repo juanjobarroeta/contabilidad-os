@@ -38,13 +38,17 @@ de resolución del motor; re-posteo de la historia al activarlo.
 
 38 códigos usa el motor. **16 resuelven ÚNICOS ya** — entre ellos IVA
 acreditable 118.01 ($772M posteados) y toda la familia de activo fijo 171.xx —
-y se flipan al plan propio con el siguiente re-posteo. **Los cuatro gigantes
-son AMBIGUOS por construcción**: 105.01 clientes ($6.9B, 22 candidatas),
-401.01 ventas ($6.0B, 130 — una por familia/depto), 201.01 proveedores
-($5.9B, 10) y 601.84 otros gastos ($4.8B, 48). Ésos son ~10 decisiones de
-override del contador (clientes/proveedores tienen UNA cuenta general obvia
-que la CE puede validar por montos antes de proponerla) más la Fase 2 para
-ventas/costo/inventario por familia. **Sin candidata** (el CT no declara ese
+y se flipan al plan propio con el siguiente re-posteo.
+
+**Los cuatro gigantes, resueltos con evidencia (2026-08-16).** Medido contra
+CeBalanzaMes (flujos 2024-10 → 2026-06) antes de decidir:
+
+| gigante | motor empuja | veredicto |
+|---|---|---|
+| 201.01 proveedores | $3.71B abonos | **override → 2002-0001 CXP PLANTA VEHICULOS** (~$4.07B/lado en CE, 91% de coincidencia; la otra grande, CXP FINANCIERA, es plan piso — flujo bancario, no CFDIs). Aplicado con `scripts/override-proveedores-margom.ts`. |
+| 105.01 clientes | $4.75B cargos | **ningún override es honesto**: la CE lo reparte en tres (FI ~$1.95B, UNIDADES NUEVAS ~$1.66B, INTERCAMBIOS ~$0.95B) sin dominante. Va por resolución de MÓDULO: la venta de unidad ya sabe su CXC (1206-0001), refacciones → 1217, servicio → 1214. |
+| 401.01 ventas | — | resuelto por FAMILIA (Fase 2); el resto genérico es refacciones/servicio/TOT → misma resolución de módulo. |
+| 601.84 otros gastos | $456M (era $4.8B antes de que las unidades se fueran a 1301) | sin contraparte dominante en la CE (48 candidatas, la mayor $5M): refinamiento del clasificador + export del contador, no override. | **Sin candidata** (el CT no declara ese
 agrupador): 701.10 ($39.6M), 601.32 ($9.9M), 601.50 ($0.7M) — se quedan en
 stub hasta el export del contador.
 
