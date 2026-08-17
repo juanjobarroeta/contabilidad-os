@@ -87,6 +87,13 @@ export const config = {
     // PurificadoraOS muestra y contrata la suscripción desde su propia app.
     "/api/billing/suscripcion",
     "/api/companies/:path*",
+    // La CE presentada (balanzas declaradas al SAT). El satélite Automotriz la
+    // lee desde su pestaña Contabilidad — ver AUTOMOTRIZ-2 en Sentry: sin este
+    // renglón el preflight no lleva Access-Control-Allow-Origin, Safari tira la
+    // respuesta y el fetch truena con «Load failed» sin status. La ruta ya
+    // resuelve bearer + requireMembership como el resto de superficies de
+    // satélite, así que lo único que faltaba era dejar correr el CORS.
+    "/api/contabilidad/:path*",
     "/api/construccion/:path*",
     "/api/padel/:path*",
     "/api/purificadora/:path*",
