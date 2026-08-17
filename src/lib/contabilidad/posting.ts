@@ -819,7 +819,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       },
     });
     return { updated, periodCargos, periodAbonos, entriesCount };
-  });
+    // El default de Prisma (5s) alcanza en la red interna de Railway, pero un
+    // mes grande re-posteado desde fuera (proxy público, ~100ms por viaje) lo
+    // rebasa y la transacción expira A MEDIO WIPE — el rollback salva los
+    // datos, pero el re-posteo se vuelve imposible desde terminal. Esto es un
+    // cierre mensual, no un hot path: presupuesto generoso.
+  }, { maxWait: 30_000, timeout: 300_000 });
 
   return {
     period: period.updated,
