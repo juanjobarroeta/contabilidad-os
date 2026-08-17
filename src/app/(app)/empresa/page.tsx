@@ -56,7 +56,7 @@ interface CompanyDetail {
   email?: string;
   telefono?: string;
   facturapiOrgId?: string;
-  facturapiApiKey?: string;
+  facturapiConfigured?: boolean;
   csdCer?: string;
   csdKey?: string;
   fielCer?: string;
@@ -581,7 +581,7 @@ export default function EmpresaPage() {
     }
   }
 
-  const isConnected = !!(companyDetail?.facturapiApiKey);
+  const isConnected = !!(companyDetail?.facturapiConfigured);
   const hasCsd = !!(companyDetail?.csdCer && companyDetail?.csdKey);
   const hasFiel = !!(companyDetail?.fielCer && companyDetail?.fielKey);
   // Vigencia de la e.firma: "Configurada" ya no basta — un certificado vencido
@@ -907,17 +907,9 @@ export default function EmpresaPage() {
                       )}
                       <div>
                         <span className="text-xs text-cos-ink-soft">API Key</span>
-                        <div className="flex items-center gap-2">
-                          <p className="font-mono text-xs">
-                            {showKey
-                              ? companyDetail?.facturapiApiKey
-                              : companyDetail?.facturapiApiKey?.substring(0, 12) + "••••••••••••"}
-                          </p>
-                          <button onClick={() => setShowKey((v) => !v)}
-                            className="text-cos-ink-soft hover:text-cos-ink">
-                            {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                          </button>
-                        </div>
+                        <p className="text-xs font-medium text-cos-jade-ink">
+                          ✓ Configurada — se usa solo en el servidor
+                        </p>
                       </div>
                       <div>
                         <span className="text-xs text-cos-ink-soft">CSD</span>

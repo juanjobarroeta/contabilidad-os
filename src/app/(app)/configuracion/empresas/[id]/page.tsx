@@ -33,7 +33,7 @@ type CompanyDetail = {
   actividadEconomica: string | null;
   registroPatronal: string | null;
   facturapiOrgId: string | null;
-  facturapiApiKey: string | null;
+  facturapiConfigured?: boolean;
   csdCer: string | null;
   csdKey: string | null;
   fielCer: string | null;

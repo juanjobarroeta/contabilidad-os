@@ -67,9 +67,13 @@ export async function GET(_req: Request, { params }: Params) {
   // en vivo (empresas cargadas antes de que existiera el campo — sin backfill).
   const fiel = fielStatus({ fielCer: company.fielCer, fielVigencia: company.fielVigencia });
 
-  // Mask the actual cert content for security — just signal presence
+  // Mask the actual cert content for security — just signal presence. La API
+  // key de Facturapi tampoco sale del servidor (ni cifrada): el cliente solo
+  // necesita saber si existe.
+  const { facturapiApiKey, ...companySinSecretos } = company;
   return NextResponse.json({
-    ...company,
+    ...companySinSecretos,
+    facturapiConfigured: Boolean(facturapiApiKey),
     csdCer: company.csdCer ? "[stored]" : null,
     csdKey: company.csdKey ? "[stored]" : null,
     fielCer: company.fielCer ? "[stored]" : null,
