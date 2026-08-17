@@ -907,25 +907,6 @@ export default function NuevaFacturaPage() {
               />
             </div>
 
-            {/* Retención local del 5 al millar — obra pública. Va aquí (datos
-                del comprobante) y no por partida: se retiene sobre el importe
-                del contrato, no sobre un concepto. */}
-            <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-md border border-cos-line p-3">
-              <input
-                type="checkbox"
-                checked={cincoAlMillar}
-                onChange={(e) => setCincoAlMillar(e.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-cos-brand"
-              />
-              <span className="text-sm">
-                <span className="font-medium">Retener 5 al millar (0.5%)</span>
-                <span className="mt-0.5 block text-xs text-cos-ink-soft">
-                  Inspección, vigilancia y control de obra pública (Art. 191 LFD). Se calcula sobre
-                  el subtotal y viaja como retención local en el CFDI. Sólo aplica a contratos con
-                  dependencias.
-                </span>
-              </span>
-            </label>
           </div>
         )}
 
@@ -1112,8 +1093,32 @@ export default function NuevaFacturaPage() {
               Agregar concepto
             </button>
 
+            {/* Retención del 5 al millar — obra pública (Art. 191 LFD).
+                Va JUNTO A LOS TOTALES, no en el paso del receptor: es donde se
+                ve el dinero y donde uno se acuerda de que la dependencia
+                retiene. Estaba al final del paso 1, debajo de Notas, y en la
+                práctica nadie la encontraba (caso real: una estimación del
+                INIFED capturada sin ella). No va por partida: se retiene sobre
+                el importe del contrato, no sobre un concepto. */}
+            <label className="mt-6 flex cursor-pointer items-start gap-2.5 rounded-lg border border-cos-line p-3">
+              <input
+                type="checkbox"
+                checked={cincoAlMillar}
+                onChange={(e) => setCincoAlMillar(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-cos-brand"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Retener 5 al millar (0.5%)</span>
+                <span className="mt-0.5 block text-xs text-cos-ink-soft">
+                  Inspección, vigilancia y control de obra pública (Art. 191 LFD). Se calcula sobre
+                  el subtotal y viaja como retención local en el CFDI. Sólo aplica a contratos con
+                  dependencias.
+                </span>
+              </span>
+            </label>
+
             {/* Subtotals preview */}
-            <div className="mt-6 bg-cos-slate-tint rounded-lg p-4 text-sm space-y-1.5 text-right">
+            <div className="mt-3 bg-cos-slate-tint rounded-lg p-4 text-sm space-y-1.5 text-right">
               <div className="flex justify-between text-cos-ink-soft">
                 <span>Subtotal</span><span><Money value={subtotal} /></span>
               </div>
@@ -1197,6 +1202,14 @@ export default function NuevaFacturaPage() {
                 <div className="flex justify-between text-cos-ink-soft">
                   <span>IVA 16%</span><span><Money value={ivaTotal} /></span>
                 </div>
+                {/* Sin este renglón, el Total del resumen ya venía con la
+                    retención restada pero sin decir por qué — justo antes de
+                    timbrar, que es el peor momento para un número inexplicado. */}
+                {retencionLocal > 0 && (
+                  <div className="flex justify-between text-cos-ink-soft">
+                    <span>Ret. 5 al millar (0.5%)</span><span>−<Money value={retencionLocal} /></span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-lg pt-1.5 border-t border-cos-line">
                   <span>Total</span><span><Money value={total} /></span>
                 </div>
