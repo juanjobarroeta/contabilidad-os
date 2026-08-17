@@ -161,6 +161,12 @@ En scripts de `scripts/` que terminan con `process.exit`, llama
 
 ## 6. El ciclo de mantenimiento automático
 
+> **Estado**: los prompts están escritos y versionados en
+> **[docs/sentry-routines.md](./sentry-routines.md)**, pero las rutinas
+> **todavía no están creadas**. Hay que crearlas desde claude.ai → Routines,
+> porque una rutina creada por API no hereda los conectores MCP y despertaría
+> sin poder leer Sentry ni abrir PRs. El archivo explica el paso a paso.
+
 La rutina `sentry-triage` corre cada 4 horas en una sesión nueva de Claude Code
 y hace esto:
 
