@@ -19,15 +19,29 @@
 import { prisma } from "../prisma";
 import { agruparUnidadesAmparadas, type UnidadResuelta } from "./familia-vehiculo";
 
-/** Códigos del motor que la familia desambigua (los tres de unidades). */
-export const MOTOR_VENTAS_UNIDAD = "401.01";
-export const MOTOR_COSTO_UNIDAD = "501.01";
-export const MOTOR_INVENTARIO_UNIDAD = "115.04";
+/**
+ * Códigos del motor que la familia desambigua, CON su serie base. El sufijo
+ * solo NO alcanza: el contador repite la familia en varias series bajo el
+ * MISMO agrupador (4101 nuevos / 4111 demo / 4131 intercambio / 4141 flotilla,
+ * todas 401.01; 1312 usados junto a 1301, ambas 115.04). Medido en MARGOM: con
+ * el índice por (agrupador:sufijo) las ventas salían TODAS ambiguas — cero
+ * resoluciones a 4101 y cero costos de venta en 23 períodos re-posteados.
+ *
+ * El flujo de unidades NUEVAS de este módulo apunta a la serie base — la misma
+ * 1301 que ya fijaba el script de divergencia. Demo/flotilla/intercambio son
+ * refinamiento posterior (override del contador). Una empresa sin estas series
+ * no produce candidatas → fallback → cero cambio de conducta.
+ */
+export const MOTOR_VENTAS_UNIDAD = { codigo: "401.01", serie: "4101" } as const;
+export const MOTOR_COSTO_UNIDAD = { codigo: "501.01", serie: "5101" } as const;
+export const MOTOR_INVENTARIO_UNIDAD = { codigo: "115.04", serie: "1301" } as const;
 export const CODIGOS_MOTOR_FAMILIA = [
-  MOTOR_VENTAS_UNIDAD,
-  MOTOR_COSTO_UNIDAD,
-  MOTOR_INVENTARIO_UNIDAD,
+  MOTOR_VENTAS_UNIDAD.codigo,
+  MOTOR_COSTO_UNIDAD.codigo,
+  MOTOR_INVENTARIO_UNIDAD.codigo,
 ] as const;
+
+export type MotorFamilia = { codigo: string; serie: string };
 
 export interface CuentaFamilia {
   id: string;
@@ -40,21 +54,23 @@ export interface CuentaFamilia {
 
 export type IndiceFamilia = Map<string, CuentaFamilia | null>;
 
-// El sufijo de familia en la numeración del contador: "4101-0004-0000" → 0004.
-const SUFIJO_RE = /^\d{4}-(\d{4})-/;
+// Serie y sufijo de familia en la numeración del contador: "4101-0004-0000".
+const SERIE_SUFIJO_RE = /^(\d{4})-(\d{4})-/;
 
 /**
- * Índice (codAgrup:sufijo) → cuenta propia. Un sufijo repetido bajo el mismo
- * agrupador se marca ambiguo (null) y nunca resuelve — misma filosofía que la
- * inversión de Fase 1: en la duda, fallback, no adivinanza.
+ * Índice (codAgrup:serie:sufijo) → cuenta propia. Una llave repetida se marca
+ * ambigua (null) y nunca resuelve — misma filosofía que la inversión de
+ * Fase 1: en la duda, fallback, no adivinanza. El codAgrup sigue en la llave:
+ * la cuenta debe estar DECLARADA bajo el agrupador que el motor emite, no
+ * basta con que el número se parezca.
  */
 export function indexarCuentasFamilia(cuentas: CuentaFamilia[]): IndiceFamilia {
   const idx: IndiceFamilia = new Map();
   for (const c of cuentas) {
     if (!c.codAgrup) continue;
-    const m = SUFIJO_RE.exec(c.cuentaSAT);
+    const m = SERIE_SUFIJO_RE.exec(c.cuentaSAT);
     if (!m) continue;
-    const key = `${c.codAgrup}:${m[1]}`;
+    const key = `${c.codAgrup}:${m[1]}:${m[2]}`;
     idx.set(key, idx.has(key) ? null : c);
   }
   return idx;
@@ -63,10 +79,10 @@ export function indexarCuentasFamilia(cuentas: CuentaFamilia[]): IndiceFamilia {
 /** La cuenta propia de la familia para un código del motor, o null (fallback). */
 export function cuentaDeFamilia(
   idx: IndiceFamilia,
-  codigoMotor: string,
+  motor: MotorFamilia,
   sufijo: string,
 ): CuentaFamilia | null {
-  return idx.get(`${codigoMotor}:${sufijo}`) ?? null;
+  return idx.get(`${motor.codigo}:${motor.serie}:${sufijo}`) ?? null;
 }
 
 /** Las cuentas por familia de la empresa, indexadas. Una consulta por posteo. */
