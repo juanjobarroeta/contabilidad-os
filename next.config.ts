@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import { SECURITY_HEADERS } from "./src/lib/security-headers";
 
 const nextConfig: NextConfig = {
+  // P0-5: headers de seguridad en TODA respuesta (páginas y API). La lista
+  // vive en src/lib/security-headers.ts (módulo puro, con test); quitarle un
+  // header pone la suite en rojo antes de llegar al deploy.
+  async headers() {
+    return [{ source: "/(.*)", headers: SECURITY_HEADERS }];
+  },
   // El release del navegador tiene que ser EL MISMO que el del servidor para
   // que un error de React y la excepción que lo causó caigan en el mismo
   // deploy. Railway expone el SHA; aquí lo horneamos al bundle del cliente.

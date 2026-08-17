@@ -58,6 +58,11 @@ export const RUTAS_PUBLICAS: EntradaAllowlist[] = [
     razon:
       "Preview pública de invitación por token hasheado; responde difuminado y nunca revela el token ni datos internos.",
   },
+  {
+    ruta: "api/csp-report/route.ts",
+    razon:
+      "Receptor de violaciones del CSP Report-Only (P0-5): los navegadores postean sin sesión. Rate limit por IP, tope de tamaño, sólo loguea un resumen y responde 204.",
+  },
 ];
 
 /**
