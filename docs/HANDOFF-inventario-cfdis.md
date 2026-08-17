@@ -1,6 +1,6 @@
 # Handoff — inventario y archivo de CFDIs (MARGOM)
 
-Estado al **2026-08-16**. La recuperación de documentos **terminó**. Lo que queda
+Estado al **2026-08-17**. La recuperación de documentos **terminó**. Lo que queda
 ya no es un problema de datos faltantes; es de conciliación contra los libros.
 
 `companyId = cmsjf1wna003kn70fb68bqhm4` · `RFC = AMA170817NK1` · opera desde
@@ -155,29 +155,43 @@ detalle de su capitalización.
 
 ---
 
-## Los $33.2M que quedan (448 unidades al 2026-06-30)
+## El excedente, particionado por completo (2026-08-17)
 
-Ya no es un problema de datos. Pistas concretas, en orden de tamaño:
+El inventario derivado contra libros ya no tiene masa anónima: cada peso tiene
+categoría y dueño. Motor al plan propio: Fase 2 (familia), Fase 2b (CxC/CxP
+por módulo) y el override de proveedores están FUSIONADOS y re-posteados — ver
+docs/PLAN-motor-plan-propio.md. Divergencia 1301 derivado↔CE: de ~$1.6B de
+ruido a −$44.1M netos con nombre.
 
-1. **Unidades `POR REVISAR`** — medido bien el 2026-08-16, era más grande de lo
-   que decía aquí: 26 u / $5.8M sin modelo en el piso al corte, 72 u más sólo
-   sin marca, y los 3 autobuses Yutong ($27.9M, comprados 2026-07, post-corte)
-   con la ClaveProdServ como modelo. Ver «Reparación del derivador» abajo.
-2. **JAC6 y JAC8 salen NEGATIVOS** (~$3.4M): los libros cargan **más**
-   inventario que el padrón. Eso apunta a **compras faltantes**, no a ventas —
-   es la reparación contraria.
-3. **16 cuentas del catálogo sin nombre** (`nombre = cuentaSAT`). Rompen
-   cualquier conciliación por familia: mandan dinero bien contabilizado al
-   bucket «sin explicar». Resuelto a medias el 2026-08-16 — ver la sección
-   siguiente: 4 confirmadas (familia 28 = TRAVELER, cuadrada al centavo), y
-   las otras 12 **no están en ningún CT presentado** — sólo el contador las
-   tiene.
-4. **Diferencias estructurales que NO van a cerrar al centavo**: el padrón
-   guarda `costoCompra` (subtotal del CFDI) y los libros capitalizan flete,
-   ISAN y preparación (para eso existe `VehiculoCosto`); la cuenta de inventario
-   incluye refacciones y motos; y los seminuevos comprados a persona física
-   pueden no tener CFDI. **El objetivo realista no es cero, es explicar cada
-   bloque hasta que el contador esté de acuerdo.**
+| bloque | monto | veredicto |
+|---|---:|---|
+| T5 (28 u) | $7.7M | **piso REAL**: 162 compradas desde 2025-10, 134 vendidas y ligadas, línea viva (última compra 2026-08-06). Sólo falta el mapeo de cuenta CE (absorbedor 0004). |
+| HFC1037 (14 u) | $5.0M | 506 compradas 2021-23, 492 vendidas y ligadas. Las 14 llevan 2.5+ años sin venderse y SIN documento por ninguna llave → pregunta al contador (traspaso/merma/venta sin CFDI). |
+| K7 rígidos (3 u) | $5.8M | **UNA venta vigente sin ligar encontrada** ($2,137,746, 2025-04-29, sin VIN ni motor). Tres unidades compiten por ella: falta que un humano diga QUÉ VIN se entregó. |
+| Swaps (17 u) | $6.5M | la refactura existe pero está ligada a OTRA unidad — lectura caso por caso, no script. |
+| Canceladas sin rastro (17 u) | $8.0M | venta cancelada y ninguna refactura por ninguna firma → contador. |
+| Seminuevas | +$3.7M | padrón 41 u/$13.8M vs 1312 $10.1M. Intercambios de PF no generan CFDI de compra: el padrón ni los ve — fuera de alcance documentado. |
+| Ligadas HOY | −$0.9M | 4 ventas existentes ligadas por motor/texto (scripts/ligar-ventas-huerfanas-margom.ts, #664). 2 candidatas REFACT esperan FORZAR=1. |
+
+Llaves que SÍ encuentran ventas sin VIN (el derivador sólo ve el Niv):
+número de MOTOR en el texto, VIN suelto en texto con importe de unidad
+(≥$50k — un servicio que menciona el VIN no es su venta), y la firma de
+refactura (mismo RFC, mismo subtotal ±$1, ±45 días de la cancelación). Todo
+set-based en el servidor; un LIKE por unidad sobre 1GB de XML no termina.
+
+## Paquete del contador (actualizado 2026-08-17)
+
+1. **Export del ERP**: 11 cuentas sin codAgrup que ninguna unanimidad de serie
+   cubre (las series de gasto 6x00 declaran 40+ agrupadores cada una), y los
+   nombres que faltan.
+2. **Diciembre 2024**: la mega-compra $941.9M ya está explicada como real;
+   confirmar el asiento espejo.
+3. **Tres respuestas de clasificación**: ¿T5 completos van a 1301-0004?
+   ¿destino de los HFC1037-EV viejos (14 VINs)? ¿qué VIN fue el K7 de la venta
+   2025-04-29?
+4. **DEMOS**: 1302 en −$364K — el padrón no modela demos.
+5. **Overrides restantes**: 105.01 ya NO necesita decisión (resuelve por
+   módulo, Fase 2b); FI/intercambios se quedan en fallback hasta tener señal.
 
 ---
 
