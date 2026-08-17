@@ -105,14 +105,15 @@ async function upsertCuenta(
     const nombre = desc || existing.nombre;
     await prisma.chartAccount.update({
       where: { id: existing.id },
-      data: { nombre, tipo, nivel: c.nivel, naturaleza: c.natur, isActive: true },
+      // codAgrup sólo cuando el CT lo trae: un catálogo sin él no borra la llave.
+      data: { nombre, tipo, nivel: c.nivel, naturaleza: c.natur, isActive: true, codAgrup: c.codAgrup || undefined },
     });
     return "actualizada";
   }
 
   // Al CREAR no hay alternativa: `nombre` es obligatorio en el esquema. El
   // código queda de marcador hasta que un catálogo traiga la descripción.
-  const data = { nombre: desc || c.numCta, tipo, nivel: c.nivel, naturaleza: c.natur };
+  const data = { nombre: desc || c.numCta, tipo, nivel: c.nivel, naturaleza: c.natur, codAgrup: c.codAgrup || null };
 
   await prisma.chartAccount.create({
     data: { companyId, cuentaSAT, subcuenta, ...data },

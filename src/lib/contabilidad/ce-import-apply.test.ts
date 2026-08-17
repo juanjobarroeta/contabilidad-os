@@ -21,6 +21,7 @@ type Cuenta = {
   tipo: string;
   nivel: number;
   naturaleza: string | null;
+  codAgrup?: string | null;
   isActive?: boolean;
 };
 
@@ -97,5 +98,28 @@ describe("importarCatalogo — el nombre de una cuenta no se pierde", () => {
     expect(state.rows[0].nombre).toBe("JAC SUNRAY");
     // Y sigue siendo UNA cuenta: el upsert empata, no duplica.
     expect(state.rows).toHaveLength(1);
+  });
+});
+
+
+describe("upsertCuenta — codAgrup se persiste (la llave del motor → plan propio)", () => {
+  beforeEach(() => {
+    state.rows = [];
+    state.seq = 0;
+  });
+
+  it("al crear guarda el agrupador del CT, y al re-importar lo conserva", async () => {
+    const { importarCatalogo } = await import("./ce-import-apply");
+    const XML = `<?xml version="1.0"?>
+<catalogocuentas:Catalogo xmlns:catalogocuentas="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/CatalogoCuentas" Version="1.3" RFC="AMA170817NK1" Mes="3" Anio="2025">
+  <catalogocuentas:Ctas CodAgrup="401.01" NumCta="4101-0027-0000" Desc="VENTA NUEVOS EX450" Nivel="2" Natur="A"/>
+</catalogocuentas:Catalogo>`;
+    await importarCatalogo("c1", XML);
+    expect(state.rows[0]).toMatchObject({ cuentaSAT: "4101-0027-0000", codAgrup: "401.01" });
+
+    // Un CT posterior sin CodAgrup no borra la llave.
+    const SIN = XML.replace(' CodAgrup="401.01"', ' CodAgrup=""');
+    await importarCatalogo("c1", SIN);
+    expect(state.rows[0].codAgrup).toBe("401.01");
   });
 });

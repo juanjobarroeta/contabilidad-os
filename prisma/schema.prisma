@@ -1931,6 +1931,11 @@ model ChartAccount {
   // Naturaleza COE: "D" (deudora) | "A" (acreedora). Null = derivar del tipo.
   // Explícita para contra-cuentas (p.ej. depreciación acumulada = "A" en ACTIVO).
   naturaleza String?
+  // Código agrupador del SAT que el CT de la empresa declara para ESTA cuenta
+  // (4101-0027 → "401.01"). Llave de la resolución del motor al plan propio:
+  // se invierte agrupador → cuenta de la empresa. Null = el CT no la trae
+  // (stubs de balanza) o el catálogo se importó antes de persistirla.
+  codAgrup   String?
   isActive   Boolean     @default(true)
 
   company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
