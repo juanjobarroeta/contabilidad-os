@@ -37,6 +37,20 @@ const itemSchema = z.object({
         })
       )
       .optional(),
+    // Retenciones locales (complemento implocal): el 5 al millar de obra
+    // pública, por ejemplo. La prefactura NO las aceptaba, así que guardar el
+    // borrador las tiraba en silencio y al timbrarlo salía sin retención — con
+    // un total distinto al que el cliente ya había visto en el PDF.
+    local_taxes: z
+      .array(
+        z.object({
+          type: z.string(),
+          rate: z.number(),
+          withholding: z.boolean().default(false),
+          base: z.number().optional(),
+        })
+      )
+      .optional(),
   }),
 });
 
@@ -91,7 +105,15 @@ export async function POST(req: Request) {
           (t, tax) => t + (tax.withholding ? -1 : 1) * base * tax.rate,
           0
         );
-        return s + base + iva;
+        // Retenciones locales: RESTAN del total. Llevan su propia base cuando
+        // van consolidadas en una partida (el 5 al millar se calcula sobre el
+        // subtotal del comprobante, no sobre el importe de esa partida). Sin
+        // esto, el total del borrador salía más alto que el CFDI timbrado.
+        const local = (it.product.local_taxes ?? []).reduce(
+          (t, tax) => t + (tax.withholding ? -1 : 1) * (tax.base ?? base) * tax.rate,
+          0
+        );
+        return s + base + iva + local;
       }, 0)
       .toFixed(2);
 
