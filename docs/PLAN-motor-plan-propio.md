@@ -48,12 +48,35 @@ ventas/costo/inventario por familia. **Sin candidata** (el CT no declara ese
 agrupador): 701.10 ($39.6M), 601.32 ($9.9M), 601.50 ($0.7M) — se quedan en
 stub hasta el export del contador.
 
-## Fase 2 — resolución por módulo (AUTOMOTRIZ)
+## Fase 2 — resolución por módulo (AUTOMOTRIZ) (hecha)
 
 La venta/costo/inventario de una unidad resuelve por su FAMILIA a la subcuenta
-exacta (4101-00XX / 5101-00XX / 1301-00XX): el mapa modelo→familia ya existe
-(divergencia-ce). Aquí el derivado por familia se vuelve comparable renglón a
-renglón contra la CE — la conciliación de inventario, pero automática y mensual.
+exacta (4101-00XX / 5101-00XX / 1301-00XX). Aquí el derivado por familia se
+vuelve comparable renglón a renglón contra la CE — la conciliación de
+inventario, pero automática y mensual.
+
+Implementada (2026-08-16):
+
+- **El mapa modelo→familia es módulo canónico**
+  (`src/lib/contabilidad/familia-vehiculo.ts`); el script de divergencia
+  importa de ahí. Los patrones quedan en dialecto Postgres (`\m`/`\M`) y
+  `regexJs()` los traduce — un solo origen para SQL y JS.
+- **`resolver-familia.ts`**: índice (codAgrup:sufijo) → cuenta propia, con la
+  misma filosofía de Fase 1 — sufijo duplicado bajo un agrupador = ambiguo =
+  fallback. Empresa sin CT o sin numeración por familia → índice vacío → CERO
+  cambio de conducta.
+- **En `postMonth` (y sus dos previews, mismas reglas)**: un CFDI que ampara
+  una unidad NUEVA de venta postea la venta en 4101-00XX y su costo como
+  DR 5101-00XX / CR 1301-00XX (sólo si las TRES cuentas de la familia
+  resuelven); la compra de unidad carga a 1301-00XX en vez de gasto por
+  clasificador. `overrideCuenta` e INVERSION mandan sobre la familia. Un CFDI
+  multi-unidad sólo resuelve si TODAS sus unidades son de una misma familia.
+- **El costo derivado es `costoCompra`**, no incluye los costos capitalizados
+  (`VehiculoCosto`): esos CFDIs hoy postean como gasto y moverlos a inventario
+  es fase posterior. La divergencia mensual contra CE lista ese delta.
+- Falta para verla en números: **re-posteo histórico** (postMonth idempotente,
+  por período — lo corre el usuario) y comparar la serie 1301/4101/5101
+  derivada contra `CeBalanzaMes`.
 
 ## Fase 3 — rubros exactos, cada uno con su checksum CE
 
