@@ -34,6 +34,20 @@ ambiguas; las ambiguas las decide el contador UNA vez). Sin mapeo → fallback a
 stub agrupador de hoy (adopción gradual, cero big-bang). Shim en el único punto
 de resolución del motor; re-posteo de la historia al activarlo.
 
+### Cobertura medida (MARGOM, 2026-08-16)
+
+38 códigos usa el motor. **16 resuelven ÚNICOS ya** — entre ellos IVA
+acreditable 118.01 ($772M posteados) y toda la familia de activo fijo 171.xx —
+y se flipan al plan propio con el siguiente re-posteo. **Los cuatro gigantes
+son AMBIGUOS por construcción**: 105.01 clientes ($6.9B, 22 candidatas),
+401.01 ventas ($6.0B, 130 — una por familia/depto), 201.01 proveedores
+($5.9B, 10) y 601.84 otros gastos ($4.8B, 48). Ésos son ~10 decisiones de
+override del contador (clientes/proveedores tienen UNA cuenta general obvia
+que la CE puede validar por montos antes de proponerla) más la Fase 2 para
+ventas/costo/inventario por familia. **Sin candidata** (el CT no declara ese
+agrupador): 701.10 ($39.6M), 601.32 ($9.9M), 601.50 ($0.7M) — se quedan en
+stub hasta el export del contador.
+
 ## Fase 2 — resolución por módulo (AUTOMOTRIZ)
 
 La venta/costo/inventario de una unidad resuelve por su FAMILIA a la subcuenta
