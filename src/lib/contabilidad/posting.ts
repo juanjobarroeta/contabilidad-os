@@ -17,6 +17,14 @@ import { resolveAccount } from "./seed-catalog";
 import { COE_CODES } from "./catalog";
 import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { classifyInvoice } from "./classify-egreso";
+import {
+  cargarIndiceFamilia,
+  cuentaDeFamilia,
+  unidadesAmparadas,
+  MOTOR_VENTAS_UNIDAD,
+  MOTOR_COSTO_UNIDAD,
+  MOTOR_INVENTARIO_UNIDAD,
+} from "./resolver-familia";
 import { calcularDepreciacionMes, CUENTA_ACTIVO_FIJO } from "./depreciacion-contable";
 import { tipoActivoDesdeSubtipo } from "../fiscal/depreciacion";
 import { assertPeriodoAbierto } from "./candado";
@@ -182,6 +190,15 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     },
   });
 
+  // FASE 2 (plan propio por FAMILIA): si el CFDI ampara una unidad NUEVA de
+  // venta, la venta cae en la subcuenta de su familia (4101-00XX) y el costo
+  // sale del inventario de la misma familia (DR 5101-00XX / CR 1301-00XX por
+  // el costo de compra) — las MISMAS cuentas que declara la balanza. Sin
+  // familia, sin CT o con ambigüedad → exactamente el flujo de siempre.
+  // Ver docs/PLAN-motor-plan-propio.md y resolver-familia.ts.
+  const idxFamilia = await cargarIndiceFamilia(companyId);
+  const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
+
   for (const inv of ingresos) {
     const ref = inv.uuid ?? inv.id;
     const base = {
@@ -198,6 +215,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     //   delta < 0  → ISR retenido a favor (cliente nos retuvo más de lo que cobramos en IVA)
     const delta = inv.total - inv.subtotal;
 
+    const unidad = ventasUnidad.get(inv.id);
+    const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
+
     drafts.push({
       ...base,
       chartAccountId: accClientes.id,
@@ -206,10 +226,23 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     });
     drafts.push({
       ...base,
-      chartAccountId: accVentas.id,
+      chartAccountId: (ctaVentaFam ?? accVentas).id,
       monto: inv.subtotal,
       tipo: "ABONO",
     });
+
+    // Costo de venta de la unidad: sólo cuando las TRES cuentas de la familia
+    // existen (venta, costo, inventario). Aliviar un inventario que no se
+    // cargó — o al revés — desbalancearía la serie 1301 contra la CE.
+    if (unidad && ctaVentaFam && unidad.costo > 0.005) {
+      const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
+      const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);
+      if (ctaCostoFam && ctaInvFam) {
+        const baseCosto = { ...base, descripcion: `Costo de venta VIN ${unidad.vin}` };
+        drafts.push({ ...baseCosto, chartAccountId: ctaCostoFam.id, monto: unidad.costo, tipo: "CARGO" });
+        drafts.push({ ...baseCosto, chartAccountId: ctaInvFam.id, monto: unidad.costo, tipo: "ABONO" });
+      }
+    }
     if (delta > 0.005) {
       drafts.push({
         ...base,
@@ -392,6 +425,13 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     }
   }
 
+  // FASE 2: la compra de una unidad NUEVA carga al INVENTARIO de su familia
+  // (1301-00XX), no a gasto por clasificador — así la serie 1301 derivada se
+  // vuelve comparable renglón a renglón contra la balanza presentada, y el
+  // costo se reconoce al VENDER (ver el costo de venta en el flujo de
+  // ingresos), no al comprar.
+  const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
+
   for (const inv of egresos) {
     const ref = inv.uuid ?? inv.id;
     const base = {
@@ -409,7 +449,14 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     // resolveCached will raise an error if it doesn't exist, which is what
     // we want — it means a user-supplied bad override, which shouldn't
     // silently fall back to Otros gastos. Los CFDIs INVERSION van al activo
-    // fijo (15x) salvo override manual explícito.
+    // fijo (15x) salvo override manual explícito. La FAMILIA (inventario de la
+    // unidad amparada) va después del override y de INVERSION: la decisión
+    // humana y la de activo fijo mandan sobre la derivación automática.
+    const unidadComprada =
+      !inv.overrideCuenta && inv.naturaleza !== "INVERSION" ? comprasUnidad.get(inv.id) : undefined;
+    const ctaInvFam = unidadComprada
+      ? cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidadComprada.sufijo)
+      : null;
     const classification = inv.overrideCuenta
       ? { cuenta: inv.overrideCuenta, label: "manual" }
       : inv.naturaleza === "INVERSION"
@@ -417,7 +464,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         : classifyInvoice(
             inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
           );
-    const gastoAccountId = await resolveCached(classification.cuenta);
+    const gastoAccountId = ctaInvFam ? ctaInvFam.id : await resolveCached(classification.cuenta);
 
     drafts.push({
       ...base,
@@ -971,14 +1018,29 @@ export async function balanzaPreview(
   // ── INGRESO (mismas reglas que postMonth) ────────────────────────────────
   const ingresos = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    select: { subtotal: true, total: true },
+    select: { id: true, subtotal: true, total: true },
   });
+  // FASE 2: mismas reglas de familia que postMonth (venta a 4101-00XX y costo
+  // DR 5101-00XX / CR 1301-00XX), para que la balanza preliminar no difiera
+  // del cierre.
+  const idxFamilia = await cargarIndiceFamilia(companyId);
+  const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
   for (const inv of ingresos) {
     const delta = inv.total - inv.subtotal;
+    const unidad = ventasUnidad.get(inv.id);
+    const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
     addMov(accClientes.id, "CARGO", inv.total);
-    addMov(accVentas.id, "ABONO", inv.subtotal);
+    addMov((ctaVentaFam ?? accVentas).id, "ABONO", inv.subtotal);
     if (delta > 0.005) addMov(accIvaTrasladado.id, "ABONO", delta);
     else if (delta < -0.005) addMov(accIsrPagadoTerceros.id, "CARGO", -delta);
+    if (unidad && ctaVentaFam && unidad.costo > 0.005) {
+      const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
+      const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);
+      if (ctaCostoFam && ctaInvFam) {
+        addMov(ctaCostoFam.id, "CARGO", unidad.costo);
+        addMov(ctaInvFam.id, "ABONO", unidad.costo);
+      }
+    }
   }
 
   // ── NOMINA ────────────────────────────────────────────────────────────────
@@ -999,6 +1061,7 @@ export async function balanzaPreview(
     where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
     include: { items: { select: { claveProdServ: true, importe: true } } },
   });
+  const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
   const accCache = new Map<string, string | null>();
   async function resolveCachedSafe(code: string): Promise<string | null> {
     if (accCache.has(code)) return accCache.get(code) ?? null;
@@ -1013,12 +1076,19 @@ export async function balanzaPreview(
   }
   for (const inv of egresos) {
     const delta = inv.total - inv.subtotal;
+    // FASE 2: compra de unidad NUEVA → inventario de su familia (1301-00XX),
+    // igual que postMonth. Override manual e INVERSION mandan.
+    const unidadComprada =
+      !inv.overrideCuenta && inv.naturaleza !== "INVERSION" ? comprasUnidad.get(inv.id) : undefined;
+    const ctaInvFam = unidadComprada
+      ? cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidadComprada.sufijo)
+      : null;
     const classification = inv.overrideCuenta
       ? { cuenta: inv.overrideCuenta }
       : classifyInvoice(
           inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
         );
-    const gastoId = await resolveCachedSafe(classification.cuenta);
+    const gastoId = ctaInvFam ? ctaInvFam.id : await resolveCachedSafe(classification.cuenta);
     if (!gastoId) continue;
     addMov(gastoId, "CARGO", inv.subtotal);
     if (delta > 0.005) addMov(accIvaAcreditable.id, "CARGO", delta);
@@ -1276,16 +1346,37 @@ export async function estadoResultadosPreview(
   // ── INGRESO → Ventas (subtotal) ──────────────────────────────────────────
   const ingresos = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    select: { subtotal: true },
+    select: { id: true, subtotal: true },
   });
+  // FASE 2: la venta de una unidad aporta a la cuenta de su FAMILIA y su costo
+  // de compra aporta al COSTO de la familia (5101-00XX) — el preview refleja
+  // la utilidad bruta real de unidades, no ingreso sin costo.
+  const idxFamilia = await cargarIndiceFamilia(companyId);
+  const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
   for (const inv of ingresos) {
+    const unidad = ventasUnidad.get(inv.id);
+    const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
+    const ctaVenta = ctaVentaFam ?? accVentas;
     contributions.push({
-      tipo: accVentas.tipo,
-      cuentaSAT: accVentas.cuentaSAT,
-      subcuenta: accVentas.subcuenta,
-      nombre: accVentas.nombre,
+      tipo: ctaVenta.tipo,
+      cuentaSAT: ctaVenta.cuentaSAT,
+      subcuenta: ctaVenta.subcuenta,
+      nombre: ctaVenta.nombre,
       monto: inv.subtotal,
     });
+    if (unidad && ctaVentaFam && unidad.costo > 0.005) {
+      const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
+      const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);
+      if (ctaCostoFam && ctaInvFam) {
+        contributions.push({
+          tipo: ctaCostoFam.tipo,
+          cuentaSAT: ctaCostoFam.cuentaSAT,
+          subcuenta: ctaCostoFam.subcuenta,
+          nombre: ctaCostoFam.nombre,
+          monto: unidad.costo,
+        });
+      }
+    }
   }
 
   // ── NOMINA → Sueldos y salarios (subtotal = percepciones brutas) ─────────
@@ -1324,7 +1415,16 @@ export async function estadoResultadosPreview(
     }
   }
 
+  // FASE 2: la compra de una unidad NUEVA es inventario (activo), no gasto —
+  // no aporta al estado de resultados. Su costo aparece al VENDER (arriba).
+  const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
+
   for (const inv of egresos) {
+    const unidadComprada =
+      !inv.overrideCuenta && inv.naturaleza !== "INVERSION" ? comprasUnidad.get(inv.id) : undefined;
+    if (unidadComprada && cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidadComprada.sufijo)) {
+      continue;
+    }
     const classification = inv.overrideCuenta
       ? { cuenta: inv.overrideCuenta }
       : classifyInvoice(

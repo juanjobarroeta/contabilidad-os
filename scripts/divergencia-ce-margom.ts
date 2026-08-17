@@ -17,47 +17,12 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/divergencia-ce-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { FAMILIAS } from "../src/lib/contabilidad/familia-vehiculo";
 
 const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const DESDE = "2024-10-01"; // numeración nueva (1301-00XX = familias)
 const UMBRAL = Number(process.env.UMBRAL ?? 500_000);
 
-/**
- * familia → (subcuenta 1301, regex sobre modelo+versión+marca en MAYÚSCULAS).
- * El ORDEN importa (primer match gana). «PASS|PASAJEROS»: los 454 SUNRAY
- * PASAJEROS CBU de la mega-compra de dic-2024 van a PASS (0013) — mapearlos a
- * CARGO desbalanceó ambos lados por $263.8M en el primer intento.
- */
-const FAMILIAS: [string, string, string][] = [
-  ["TRAVELER", "0028", "TRAVELER"],
-  ["E10X", "0001", "E ?10X"],
-  ["E30X", "0002", "E ?30X"],
-  ["EJ7", "0003", "EJ ?7"],
-  ["X12000", "0022", "X ?12000"],
-  ["EX650", "0024", "EX ?650"],
-  ["EX450", "0027", "EX ?450"],
-  ["X350", "0016", "X ?350"],
-  ["X250", "0015", "X ?250"],
-  ["X200", "0014", "X ?200"],
-  ["FRISON", "0004", "FRIS"],
-  ["TRACTO K7", "0025", "K7"],
-  ["SUNRAY PASS", "0013", "SUNRAY.*(PASS|PASAJEROS)|(PASS|PASAJEROS).*SUNRAY"],
-  ["SUNRAY CHASIS", "0026", "SUNRAY.*CHASIS|CHASIS.*SUNRAY"],
-  ["E SUNRAY", "0017", "\\mE[ -]?SUNRAY"],
-  ["SUNRAY CARGO", "0018", "SUNRAY"],
-  ["JAC6", "0021", "JAC ?6"],
-  ["JAC8", "0023", "JAC ?8"],
-  ["JAC2", "0019", "JAC ?2\\M"],
-  ["JAC4", "0020", "JAC ?4\\M"],
-  ["SEI2", "0008", "JS ?2|SEI ?2"],
-  ["SEI3", "0009", "JS ?3|SEI ?3"],
-  ["SEI4", "0010", "JS ?4|SEI ?4"],
-  ["SEI6", "0011", "JS ?6|SEI ?6"],
-  ["SEI7", "0012", "SEI ?7"],
-  ["SEI1", "0007", "SEI ?1\\M"],
-  ["J7", "0006", "\\mJ7\\M"],
-  ["J4", "0005", "\\mJ4\\M"],
-];
 
 async function main() {
   const prisma = new PrismaClient();
