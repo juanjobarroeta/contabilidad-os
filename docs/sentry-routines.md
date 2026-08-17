@@ -13,14 +13,48 @@ tiene las herramientas de Sentry (no puede leer los issues) ni las de GitHub
 (no puede abrir el PR), o sea que no puede hacer nada de su trabajo.
 
 La única forma de que una rutina tenga conectores es crearla desde
-**claude.ai → Routines**, donde se le adjuntan explícitamente. Ahí hay que
-marcar:
+**claude.ai → Routines**, donde se le adjuntan explícitamente.
 
-- **Sentry** — para leer issues, stack traces y comentar los hallazgos.
-- **GitHub** — para abrir los PRs en draft.
+### Los dos accesos vienen de lugares distintos
 
-Al crearlas, elegir que cada disparo **abra una sesión nueva** (no que continúe
-una conversación existente), y activar las notificaciones push/email.
+Esto es lo que más confunde al configurarla:
+
+| Acceso | De dónde sale | Cómo se activa |
+|---|---|---|
+| **Sentry** (leer issues, stack traces, comentar) | Conector MCP | Marcarlo en la lista de **Connectors** |
+| **GitHub** (abrir el PR en draft) | **NO es un conector** | Elegir el repo en **"Select a repository"** |
+
+**No existe un conector de GitHub** — ni instalado ni disponible en el
+directorio. Buscarlo en la lista de conectores es perder el tiempo. Las
+herramientas de GitHub aparecen porque la sesión tiene un **repositorio
+adjunto**; el mismo mecanismo por el que una sesión de Claude Code puede
+abrir PRs sin que nadie conecte nada.
+
+O sea: dejar "Select a repository" vacío no solo deja a la rutina sin código
+que leer — la deja sin poder abrir el PR, que es su único entregable.
+
+### Conectores: solo los que hacen falta
+
+La UI advierte, con razón, que *"Claude puede usar todas las herramientas de
+estos conectores —incluidas las de escritura— sin pedir permiso durante las
+corridas"*. Con eso en mente, adjuntar **solo Sentry**.
+
+En particular **no adjuntar Stripe**: las reglas duras de esta rutina le
+prohíben tocar cobro y facturación, así que darle acceso de escritura sin
+supervisión a Stripe es exactamente al revés. Gmail, Calendar, Drive y Mobbin
+tampoco los usa. Railway es opcional y yo lo dejaría fuera del triage: sirve
+para leer logs, pero también puede reescribir variables y redesplegar
+producción sola.
+
+### Lo demás
+
+- Cada disparo debe **abrir una sesión nueva**, no continuar una conversación.
+- Activar notificaciones push/email.
+- Si el selector solo admite **un** repositorio, elegir `contabilidad-os` (ahí
+  vive `docs/SENTRY.md`) y agregar al prompt una primera instrucción para que
+  adjunte el satélite en tiempo de corrida con `add_repo`
+  (`juanjobarroeta/Automotriz`). La alternativa limpia es tener **dos rutinas**,
+  una por repo.
 
 ---
 
@@ -42,6 +76,12 @@ Sentry org: `cumplo-id` (region `https://us.sentry.io`).
 | `automotriz` | `juanjobarroeta/Automotriz` | `claude/car-dealership-erp-hjapfc` | React/Vite SPA satellite. No backend of its own — every call goes to the hub. |
 
 **Read `docs/SENTRY.md` in contabilidad-os before anything else.** It explains how the two are wired, why the trace headers matter, and which failure modes are silent.
+
+## Step 0 — verify your own access before doing anything
+
+Confirm you can (a) call the Sentry tools, and (b) see the repo checked out with GitHub tools available. If either is missing, **stop immediately** and report exactly which one — do not proceed to triage and do not report "nothing to do". A run that silently can't open PRs looks identical to a quiet week, and that confusion is expensive.
+
+If only `contabilidad-os` is attached, attach the satellite too with `add_repo` for `juanjobarroeta/Automotriz` before continuing.
 
 ## Steps
 
