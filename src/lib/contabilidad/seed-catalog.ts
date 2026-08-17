@@ -1,4 +1,5 @@
 import { prisma } from "../prisma";
+import { resolverCuentaPropia } from "./resolver-plan-propio";
 import { SAT_STARTER_CATALOG } from "./catalog";
 import { EXTRA_ACCOUNTS_FOR_CLASSIFICATION } from "./classify-egreso";
 import { naturalezaPorTipo } from "./coe-saldos";
@@ -57,6 +58,14 @@ export async function seedChartOfAccounts(companyId: string) {
  * Sólo lanza para códigos desconocidos.
  */
 export async function resolveAccount(companyId: string, code: string) {
+  // FASE 1 (plan propio): si la empresa tiene su CT importado con codAgrup y
+  // este código resuelve SIN ambigüedad (o hay override del contador), el
+  // asiento cae en la cuenta PROPIA — la misma que declara la balanza. Si no,
+  // el fallback de abajo postea exactamente como siempre. Ver
+  // docs/PLAN-motor-plan-propio.md y resolver-plan-propio.ts.
+  const propia = await resolverCuentaPropia(companyId, code);
+  if (propia) return propia;
+
   // `code` may be a parent code ("102") or subaccount ("102.01").
   // We always match on subcuenta (the most specific) first.
   // SÓLO cuentas ACTIVAS: durante la reparación de códigos conviven dos filas

@@ -252,6 +252,7 @@ model Company {
   accountingEntries AccountingEntry[]
   accounts          ChartAccount[]
   ceBalanzas        CeBalanzaMes[]
+  postingOverrides  PostingCuentaOverride[]
   accountingPeriods AccountingPeriod[]
   satSyncRequests   SatSyncRequest[]
   cfdisFaltantes    CfdiFaltante[]
@@ -1940,8 +1941,10 @@ model ChartAccount {
 
   company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   entries AccountingEntry[]
+  postingOverrides PostingCuentaOverride[]
 
   @@unique([companyId, cuentaSAT, subcuenta])
+  @@index([companyId, codAgrup])
 }
 
 model AccountingEntry {
@@ -5639,4 +5642,25 @@ model CeBalanzaMes {
 
   @@unique([companyId, anio, mes, numCta])
   @@index([companyId, numCta])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Override de resolución del motor al plan PROPIO (Fase 1 del plan
+// docs/PLAN-motor-plan-propio.md). El motor emite códigos agrupador
+// ("601.48"); la inversión codAgrup → cuenta propia resuelve sola cuando hay
+// UNA candidata. Cuando hay varias (los agrupadores de gasto existen por
+// departamento), el contador decide UNA vez y queda aquí.
+// ─────────────────────────────────────────────────────────────────────────────
+model PostingCuentaOverride {
+  id             String @id @default(cuid())
+  companyId      String
+  /// El código que emite el motor (agrupador: "601.48", "105", "115.04"…).
+  codigoMotor    String
+  chartAccountId String
+  createdAt      DateTime @default(now())
+
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cuenta  ChartAccount @relation(fields: [chartAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, codigoMotor])
 }
