@@ -25,6 +25,13 @@ import {
   MOTOR_COSTO_UNIDAD,
   MOTOR_INVENTARIO_UNIDAD,
 } from "./resolver-familia";
+import {
+  cargarCuentasCxc,
+  conjuntosModulo,
+  moduloDeInvoice,
+  kindPorInvoice,
+  kindComun,
+} from "./cxc-cxp-modulo";
 import { calcularDepreciacionMes, CUENTA_ACTIVO_FIJO } from "./depreciacion-contable";
 import { tipoActivoDesdeSubtipo } from "../fiscal/depreciacion";
 import { assertPeriodoAbierto } from "./candado";
@@ -156,6 +163,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accCapitalSocial,
     accImssPatronalGasto,
     accImssPorPagar,
+    accAcreedoresDiv,
   ] = await Promise.all([
     resolveAccount(companyId, COE_CODES.BANCOS),
     resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
@@ -175,6 +183,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.CAPITAL_SOCIAL),
     resolveAccount(companyId, COE_CODES.CUOTAS_IMSS_PATRONAL),
     resolveAccount(companyId, COE_CODES.IMSS_POR_PAGAR),
+    resolveAccount(companyId, COE_CODES.ACREEDORES_DIVERSOS),
   ]);
 
   // ─── 1. CFDIs emitted (INGRESO) ────────────────────────────────────────
@@ -198,6 +207,10 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // Ver docs/PLAN-motor-plan-propio.md y resolver-familia.ts.
   const idxFamilia = await cargarIndiceFamilia(companyId);
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
+  // FASE 2b: la CxC también resuelve por módulo (unidades → 1206, refacciones
+  // → 1217, servicio → 1214). Ver cxc-cxp-modulo.ts.
+  const cuentasCxc = await cargarCuentasCxc(companyId);
+  const modulosIngreso = await conjuntosModulo(companyId, ingresos.map((i) => i.id));
 
   for (const inv of ingresos) {
     const ref = inv.uuid ?? inv.id;
@@ -217,10 +230,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
 
     const unidad = ventasUnidad.get(inv.id);
     const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
+    const moduloCxc = moduloDeInvoice(inv.id, modulosIngreso);
+    const ctaCxc = moduloCxc ? cuentasCxc[moduloCxc] : null;
 
     drafts.push({
       ...base,
-      chartAccountId: accClientes.id,
+      chartAccountId: (ctaCxc ?? accClientes).id,
       monto: inv.total,
       tipo: "CARGO",
     });
@@ -326,10 +341,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         tipo: "CARGO",
       });
     }
-    // Acreedor por el neto al empleado (lo cierra el bank tx cuando se pague)
+    // Acreedor por el neto al empleado (lo cierra el bank tx cuando se pague).
+    // ACREEDORES (205.02 → 2207-0001 vía Fase 1), no proveedores: la nómina no
+    // es un proveedor, y el override de CXP PLANTA volvió visible el error.
     drafts.push({
       ...base,
-      chartAccountId: accProveedores.id,
+      chartAccountId: accAcreedoresDiv.id,
       monto: inv.total,
       tipo: "ABONO",
     });
@@ -571,9 +588,22 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       // Conciliación uno-a-varios: un movimiento MATCHED sin invoiceId puede
       // estar conciliado con varias facturas vía ConciliacionDetalle — su
       // póliza de liquidación es la misma que la del match 1:1.
-      conciliacionDetalles: { select: { id: true }, take: 1 },
+      // ...y el invoiceId de cada porción: la liquidación resuelve mirando LA
+      // FACTURA (nómina → acreedores; módulo → su CxC), no sólo el sentido.
+      conciliacionDetalles: { select: { invoiceId: true } },
     },
   });
+
+  // FASE 2b: a qué liquida cada match — nómina a acreedores, módulo a su CxC.
+  const idsConciliados = [
+    ...new Set(
+      bankTxs.flatMap((tx) => [
+        ...(tx.invoiceId ? [tx.invoiceId] : []),
+        ...tx.conciliacionDetalles.map((d) => d.invoiceId).filter((x): x is string => !!x),
+      ]),
+    ),
+  ];
+  const kindsLiquidacion = await kindPorInvoice(companyId, idsConciliados);
 
   // Strict mode: refuse to close the month if any bank tx is still UNMATCHED.
   // Every movement must be either matched to a CFDI or categorized (taxes,
@@ -633,13 +663,19 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       // Aplica igual al match 1:1 (invoiceId) que a la conciliación
       // uno-a-varios (ConciliacionDetalle): la cuenta de liquidación no
       // depende de qué factura(s), sólo del sentido del movimiento.
+      const idsDelMatch = tx.invoiceId
+        ? [tx.invoiceId]
+        : tx.conciliacionDetalles.map((d) => d.invoiceId).filter((x): x is string => !!x);
+      const kind = kindComun(kindsLiquidacion, idsDelMatch);
       if (isCredit) {
-        // Cobro de factura: debit bank, credit clientes
+        // Cobro: abona LA MISMA CxC que el CFDI cargó (módulo o stub).
+        const ctaCobro = kind && kind !== "NOMINA" ? (cuentasCxc[kind] ?? accClientes) : accClientes;
         drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: accClientes.id, monto: absAmount, tipo: "ABONO" });
+        drafts.push({ ...base, chartAccountId: ctaCobro.id, monto: absAmount, tipo: "ABONO" });
       } else {
-        // Pago a proveedor: debit proveedores, credit bank
-        drafts.push({ ...base, chartAccountId: accProveedores.id, monto: absAmount, tipo: "CARGO" });
+        // Pago: nómina liquida ACREEDORES (donde provisionó); lo demás, proveedores.
+        const ctaPago = kind === "NOMINA" ? accAcreedoresDiv : accProveedores;
+        drafts.push({ ...base, chartAccountId: ctaPago.id, monto: absAmount, tipo: "CARGO" });
         drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "ABONO" });
       }
       continue;
@@ -996,6 +1032,7 @@ export async function balanzaPreview(
   let accSueldos: Awaited<ReturnType<typeof resolveAccount>>;
   let accIsrPagadoTerceros: Awaited<ReturnType<typeof resolveAccount>>;
   let accIsrRetenidoHonorarios: Awaited<ReturnType<typeof resolveAccount>>;
+  let accAcreedoresDiv: Awaited<ReturnType<typeof resolveAccount>>;
   try {
     [
       accClientes,
@@ -1006,6 +1043,7 @@ export async function balanzaPreview(
       accSueldos,
       accIsrPagadoTerceros,
       accIsrRetenidoHonorarios,
+      accAcreedoresDiv,
     ] = await Promise.all([
       resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
       resolveAccount(companyId, COE_CODES.PROVEEDORES),
@@ -1015,6 +1053,7 @@ export async function balanzaPreview(
       resolveAccount(companyId, COE_CODES.SUELDOS_SALARIOS),
       resolveAccount(companyId, COE_CODES.ISR_PAGADO_TERCEROS),
       resolveAccount(companyId, COE_CODES.ISR_RETENIDO_HONORARIOS),
+      resolveAccount(companyId, COE_CODES.ACREEDORES_DIVERSOS),
     ]);
   } catch {
     return balanza(companyId, year, month);
@@ -1030,11 +1069,14 @@ export async function balanzaPreview(
   // del cierre.
   const idxFamilia = await cargarIndiceFamilia(companyId);
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
+  const cuentasCxc = await cargarCuentasCxc(companyId);
+  const modulosIngreso = await conjuntosModulo(companyId, ingresos.map((i) => i.id));
   for (const inv of ingresos) {
     const delta = inv.total - inv.subtotal;
     const unidad = ventasUnidad.get(inv.id);
     const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
-    addMov(accClientes.id, "CARGO", inv.total);
+    const moduloCxc = moduloDeInvoice(inv.id, modulosIngreso);
+    addMov(((moduloCxc ? cuentasCxc[moduloCxc] : null) ?? accClientes).id, "CARGO", inv.total);
     addMov((ctaVentaFam ?? accVentas).id, "ABONO", inv.subtotal);
     if (delta > 0.005) addMov(accIvaTrasladado.id, "ABONO", delta);
     else if (delta < -0.005) addMov(accIsrPagadoTerceros.id, "CARGO", -delta);
@@ -1058,7 +1100,7 @@ export async function balanzaPreview(
     addMov(accSueldos.id, "CARGO", inv.subtotal);
     if (delta < -0.005) addMov(accIsrRetenidoHonorarios.id, "ABONO", -delta);
     else if (delta > 0.005) addMov(accSueldos.id, "CARGO", delta);
-    addMov(accProveedores.id, "ABONO", inv.total);
+    addMov(accAcreedoresDiv.id, "ABONO", inv.total); // provisión de nómina: acreedores
   }
 
   // ── EGRESO ────────────────────────────────────────────────────────────────
