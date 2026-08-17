@@ -52,6 +52,13 @@ export function checkProductionEnv(
     warnings.push(
       "SENTRY_DSN no está definida: los errores del servidor no se reportarán a Sentry."
     );
+  } else if (!env.NEXT_PUBLIC_SENTRY_DSN) {
+    // Media instrumentación es la peor: el servidor reporta y el navegador no,
+    // así que un render roto en React se ve como "silencio" en Sentry y es
+    // fácil concluir que no hay errores cuando sí los hay.
+    warnings.push(
+      "NEXT_PUBLIC_SENTRY_DSN no está definida aunque SENTRY_DSN sí: los errores del NAVEGADOR (React) no se reportarán. Usa la misma DSN del proyecto en ambas."
+    );
   }
 
   return { fatal, warnings };

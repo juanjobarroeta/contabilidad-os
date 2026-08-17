@@ -11,6 +11,7 @@ const fullEnv = {
   NEXTAUTH_SECRET: "s3cret",
   CRON_SECRET: "cron",
   SENTRY_DSN: "https://x@sentry.example/1",
+  NEXT_PUBLIC_SENTRY_DSN: "https://x@sentry.example/1",
 };
 
 describe("checkProductionEnv", () => {
@@ -50,8 +51,24 @@ describe("checkProductionEnv", () => {
       ...fullEnv,
       CRON_SECRET: undefined,
       SENTRY_DSN: undefined,
+      NEXT_PUBLIC_SENTRY_DSN: undefined,
     });
     expect(r.fatal).toEqual([]);
     expect(r.warnings).toHaveLength(2);
+  });
+
+  it("con SENTRY_DSN pero sin la del navegador advierte la instrumentación a medias", () => {
+    const r = checkProductionEnv({ ...fullEnv, NEXT_PUBLIC_SENTRY_DSN: undefined });
+    expect(r.fatal).toEqual([]);
+    expect(r.warnings.some((m) => m.includes("NEXT_PUBLIC_SENTRY_DSN"))).toBe(true);
+  });
+
+  it("sin Sentry del todo no advierte dos veces por lo mismo", () => {
+    const r = checkProductionEnv({
+      ...fullEnv,
+      SENTRY_DSN: undefined,
+      NEXT_PUBLIC_SENTRY_DSN: undefined,
+    });
+    expect(r.warnings.filter((m) => m.includes("SENTRY_DSN"))).toHaveLength(1);
   });
 });

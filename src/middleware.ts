@@ -36,10 +36,18 @@ function withCors(res: NextResponse, origin: string | null): NextResponse {
       "Access-Control-Allow-Methods",
       "GET,POST,PUT,PATCH,DELETE,OPTIONS"
     );
+    // `sentry-trace` y `baggage` son los headers con los que el navegador del
+    // satélite (Automotriz) pasa el ID de traza al hub. Sin permitirlos aquí,
+    // el preflight los rechaza y el SDK los descarta EN SILENCIO: los errores
+    // siguen llegando a Sentry, pero desconectados —el click en el satélite y
+    // la excepción del hub quedan como dos incidentes sin relación—. Es
+    // exactamente la correlación entre proyectos que queremos, así que van.
     res.headers.set(
       "Access-Control-Allow-Headers",
-      "Authorization, Content-Type"
+      "Authorization, Content-Type, sentry-trace, baggage"
     );
+    // Permite que el satélite LEA el header de traza de la respuesta.
+    res.headers.set("Access-Control-Expose-Headers", "sentry-trace, baggage");
     res.headers.set("Access-Control-Max-Age", "86400");
   }
   return res;
