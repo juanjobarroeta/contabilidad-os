@@ -1,0 +1,17 @@
+# Hooks de git vía lefthook (npm install registra los hooks en .git/hooks).
+# Saltar UNA vez en emergencia: LEFTHOOK=0 git commit ...
+pre-commit:
+  commands:
+    gitleaks:
+      # Escaneo de secretos sobre lo staged, ANTES de que el commit exista.
+      # Si falta el binario local avisa fuerte pero deja pasar: el job `secrets`
+      # de CI (.github/workflows/test.yml) es el que bloquea siempre.
+      run: |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks git --pre-commit --staged --redact
+        else
+          echo "⚠️  gitleaks no está instalado — el escaneo local de secretos NO corrió." >&2
+          echo "    Instálalo: brew install gitleaks, o baja el binario de" >&2
+          echo "    github.com/gitleaks/gitleaks/releases a un dir del PATH." >&2
+          echo "    (CI lo corre de todos modos.)" >&2
+        fi

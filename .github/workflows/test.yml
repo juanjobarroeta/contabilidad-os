@@ -46,6 +46,19 @@ jobs:
           # (~2 GB) con el tamaño actual del código; el runner tiene de sobra.
           NODE_OPTIONS: --max-old-space-size=6144
 
+  # Escaneo de secretos sobre TODO el historial en cada PR (23 MB, <1s: barato).
+  # Complementa el hook local de lefthook — este es el que nadie puede saltarse.
+  # Historial base auditado limpio el 2026-08-16 (docs/security/secret-scan-2026-08-16.md).
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Guardia anti-drift: un PR que toque prisma/schema.prisma SIN su migración
   # correspondiente falla aquí (con prisma migrate, un cambio de schema sin
   # migración se "aplica" en generate pero nunca llega a la base → drift
