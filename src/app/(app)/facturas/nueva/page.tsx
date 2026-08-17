@@ -9,6 +9,11 @@ import { SatCodePicker } from "@/components/ui/SatCodePicker";
 import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
 import { contradiccionIva } from "@/lib/fiscal/iva-esperado";
 import {
+  aplicarRetencionLocal,
+  montoRetencionLocal,
+  TASA_CINCO_AL_MILLAR,
+} from "@/lib/facturas/retencion-local";
+import {
   MAX_LARGO_CUENTA_PREDIAL,
   avisoCuentaPredial,
   esClaveArrendamiento,
@@ -180,6 +185,10 @@ export default function NuevaFacturaPage() {
   const [metodoPago, setMetodoPago] = useState("PUE");
   const [usoCfdi, setUsoCfdi] = useState("G03");
   const [notas, setNotas] = useState("");
+  // Retención local del 5 al millar (obra pública, Art. 191 LFD). Opcional y
+  // apagada por omisión: sólo aplica a contratos con dependencias, no a un
+  // cliente privado.
+  const [cincoAlMillar, setCincoAlMillar] = useState(false);
   // Información Global (required for XAXX010101000)
   const [globalPeriodicity, setGlobalPeriodicity] = useState("month");
   const [globalMonth, setGlobalMonth] = useState(String(new Date().getMonth() + 1).padStart(2, "0"));
@@ -375,7 +384,10 @@ export default function NuevaFacturaPage() {
   const ivaTotal = items
     .filter((it) => it.iva === "16")
     .reduce((sum, it) => sum + it.quantity * it.price * 0.16, 0);
-  const total = subtotal + ivaTotal;
+  // La retención local se calcula sobre el SUBTOTAL (importe contratado antes
+  // de IVA) y RESTA del total — el mismo motor que arma el nodo del CFDI.
+  const retencionLocal = cincoAlMillar ? montoRetencionLocal(subtotal, TASA_CINCO_AL_MILLAR) : 0;
+  const total = subtotal + ivaTotal - retencionLocal;
 
   // ── Item helpers ──────────────────────────────────────────────────────────
 
@@ -440,7 +452,9 @@ export default function NuevaFacturaPage() {
           year: globalYear,
         },
       }),
-      items: items.map((it) => ({
+      // La retención local va CONSOLIDADA en la primera partida, con base = el
+      // subtotal del comprobante. Ver lib/facturas/retencion-local.ts.
+      items: aplicarRetencionLocal(items.map((it) => ({
         quantity: it.quantity,
         // Cuenta predial va en la PARTIDA (nodo CuentaPredial del concepto),
         // no dentro del producto.
@@ -461,7 +475,7 @@ export default function NuevaFacturaPage() {
                 ? [{ type: "IVA", rate: 0, factor: "Tasa", withholding: false }]
                 : [{ type: "IVA", rate: 0, factor: "Exento", withholding: false }],
         },
-      })),
+      })), { activa: cincoAlMillar }),
     };
   }
 
@@ -892,6 +906,26 @@ export default function NuevaFacturaPage() {
                 className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
               />
             </div>
+
+            {/* Retención local del 5 al millar — obra pública. Va aquí (datos
+                del comprobante) y no por partida: se retiene sobre el importe
+                del contrato, no sobre un concepto. */}
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-md border border-cos-line p-3">
+              <input
+                type="checkbox"
+                checked={cincoAlMillar}
+                onChange={(e) => setCincoAlMillar(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-cos-brand"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Retener 5 al millar (0.5%)</span>
+                <span className="mt-0.5 block text-xs text-cos-ink-soft">
+                  Inspección, vigilancia y control de obra pública (Art. 191 LFD). Se calcula sobre
+                  el subtotal y viaja como retención local en el CFDI. Sólo aplica a contratos con
+                  dependencias.
+                </span>
+              </span>
+            </label>
           </div>
         )}
 
@@ -1086,6 +1120,11 @@ export default function NuevaFacturaPage() {
               <div className="flex justify-between text-cos-ink-soft">
                 <span>IVA 16%</span><span><Money value={ivaTotal} /></span>
               </div>
+              {retencionLocal > 0 && (
+                <div className="flex justify-between text-cos-ink-soft">
+                  <span>Ret. 5 al millar (0.5%)</span><span>−<Money value={retencionLocal} /></span>
+                </div>
+              )}
               <div className="flex justify-between font-semibold text-base pt-1 border-t border-cos-line">
                 <span>Total</span><span><Money value={total} /></span>
               </div>

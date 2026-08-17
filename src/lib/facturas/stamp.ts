@@ -22,6 +22,13 @@ export interface StampItem {
     unit_key?: string;
     tax_included?: boolean;
     taxes?: Array<{ type: string; rate: number; factor: string; withholding?: boolean }>;
+    /**
+     * Retenciones LOCALES (complemento implocal) — p. ej. el 5 al millar de
+     * obra pública, que no cabe en el nodo federal <Retenciones> porque ése
+     * sólo admite ISR, IVA e IEPS. `base` viaja explícita cuando la retención
+     * va consolidada en una sola partida sobre el subtotal del comprobante.
+     */
+    local_taxes?: Array<{ type: string; rate: number; withholding?: boolean; base?: number }>;
   };
 }
 
