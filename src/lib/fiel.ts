@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { decryptSecret } from "./crypto";
+import { descifrarCerParaVigencia } from "./vault";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIEL (e.firma) expiry. The .cer is an X.509 certificate; its `validTo` is the
@@ -13,7 +13,7 @@ const POR_VENCER_DIAS = 30;
  *  raw base64 DER; returns null if unparseable / key not configured. */
 export function parseCertExpiry(storedOrRawCer: string): Date | null {
   try {
-    const der = Buffer.from(decryptSecret(storedOrRawCer), "base64");
+    const der = Buffer.from(descifrarCerParaVigencia(storedOrRawCer), "base64");
     const cert = new crypto.X509Certificate(der);
     const d = new Date(cert.validTo); // e.g. "Jun 10 23:59:59 2030 GMT"
     return Number.isNaN(d.getTime()) ? null : d;

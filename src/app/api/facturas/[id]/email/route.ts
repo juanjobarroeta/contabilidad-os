@@ -55,7 +55,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     try {
-      const fp = getFacturapiClient(invoice.company.facturapiApiKey);
+      const fp = getFacturapiClient(invoice.company.facturapiApiKey, {
+        companyId: invoice.companyId,
+        actor: "route:factura-email",
+      });
       await fp.invoices.sendByEmail(invoice.facturapiId, { email });
     } catch (e) {
       return NextResponse.json(

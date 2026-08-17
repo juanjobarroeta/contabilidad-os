@@ -171,7 +171,10 @@ export async function stampInvoice(input: StampInput): Promise<StampResult> {
   ]);
 
   const cfdi = toCfdiInput(input, customer!.facturapiId!, customer!);
-  const out = await getPacProvider().createCfdi(company!.facturapiApiKey!, cfdi);
+  const out = await getPacProvider().createCfdi(
+    { apiKey: company!.facturapiApiKey!, companyId, actor: "timbrado" },
+    cfdi
+  );
   if (!out.ok) {
     return { ok: false, status: out.status, error: out.message, needsReconfigure: out.needsReconfigure };
   }
@@ -210,7 +213,10 @@ export async function createDraftInvoice(input: StampInput): Promise<DraftResult
   ]);
 
   const cfdi = toCfdiInput(input, customer!.facturapiId!, customer!);
-  const out = await getPacProvider().createDraft(company!.facturapiApiKey!, cfdi);
+  const out = await getPacProvider().createDraft(
+    { apiKey: company!.facturapiApiKey!, companyId, actor: "timbrado" },
+    cfdi
+  );
   if (!out.ok) {
     return { ok: false, status: out.status, error: out.message, needsReconfigure: out.needsReconfigure };
   }
@@ -226,7 +232,10 @@ export async function stampDraftFromPending(input: StampInput, draftId: string):
     return { ok: false, status: 422, error: "La empresa ya no está lista para timbrar." };
   }
 
-  const out = await getPacProvider().stampDraft(company.facturapiApiKey, draftId);
+  const out = await getPacProvider().stampDraft(
+    { apiKey: company.facturapiApiKey, companyId: input.companyId, actor: "timbrado" },
+    draftId
+  );
   if (!out.ok) {
     return { ok: false, status: out.status, error: out.message, needsReconfigure: out.needsReconfigure };
   }
@@ -241,5 +250,8 @@ export async function discardDraft(companyId: string, draftId: string): Promise<
     select: { facturapiApiKey: true },
   });
   if (!company?.facturapiApiKey) return;
-  await getPacProvider().discardDraft(company.facturapiApiKey, draftId);
+  await getPacProvider().discardDraft(
+    { apiKey: company.facturapiApiKey, companyId, actor: "timbrado" },
+    draftId
+  );
 }

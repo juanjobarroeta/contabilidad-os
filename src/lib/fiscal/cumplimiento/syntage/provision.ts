@@ -11,7 +11,7 @@
 
 import type { CompanyPlan } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { decryptSecret } from "@/lib/crypto";
+import { abrirCredencial } from "@/lib/vault";
 import { recordSyntageExtraction } from "@/lib/costos/record";
 import { planIncluyeSyntage } from "@/lib/planes";
 import { nivelPagoEmpresas, type NivelPago } from "@/lib/billing/pagadores";
@@ -188,10 +188,19 @@ async function provisionOne(
 
   let credencial: "valida" | "creada" = "valida";
   if (!hasValidCredential(creds, c.rfc)) {
+    // La e.firma COMPLETA (llave privada incluida) sale en claro hacia
+    // Syntage: la bóveda deja constancia del uso en la bitácora.
+    const fiel = abrirCredencial({
+      companyId: c.id,
+      tipo: "fiel",
+      proposito: "syntage-provision",
+      actor: "cron:compliance-provision",
+      valores: { cer: c.fielCer, key: c.fielKey, password: c.fielPassword },
+    });
     await client.createEfirmaCredential({
-      certificate: decryptSecret(c.fielCer),
-      privateKey: decryptSecret(c.fielKey),
-      password: decryptSecret(c.fielPassword),
+      certificate: fiel.cer,
+      privateKey: fiel.key,
+      password: fiel.password,
     });
     credencial = "creada";
   }

@@ -22,7 +22,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ data: [], error: "Empresa sin clave Facturapi" }, { status: 422 });
     }
 
-    const client = getFacturapiClient(company.facturapiApiKey);
+    const client = getFacturapiClient(company.facturapiApiKey, {
+      companyId,
+      actor: "route:sat-catalogs",
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const catalogs = (client as any).catalogs;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

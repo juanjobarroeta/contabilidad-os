@@ -21,7 +21,7 @@ describe("swSapienPacProvider (guarda de seguridad)", () => {
   });
 
   it("sin credenciales NO timbra: devuelve needsReconfigure (nunca un CFDI a ciegas)", async () => {
-    const r = await swSapienPacProvider.createCfdi("k", SAMPLE);
+    const r = await swSapienPacProvider.createCfdi({ apiKey: "k", companyId: "empresa-test" }, SAMPLE);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.needsReconfigure).toBe(true);
@@ -30,7 +30,7 @@ describe("swSapienPacProvider (guarda de seguridad)", () => {
   });
 
   it("cancelar sin credenciales también se rehúsa", async () => {
-    const r = await swSapienPacProvider.cancelCfdi("k", "uuid", "02");
+    const r = await swSapienPacProvider.cancelCfdi({ apiKey: "k", companyId: "empresa-test" }, "uuid", "02");
     expect(r.ok).toBe(false);
   });
 });

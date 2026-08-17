@@ -19,6 +19,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { registrarBitacora } from "@/lib/audit";
 import { PLAN_BORRADO_EMPRESA } from "./plan-borrado";
 
 type Tx = Prisma.TransactionClient;
@@ -53,6 +54,17 @@ export async function borrarCredencialesEmpresa(companyId: string): Promise<void
   await prisma.padelClubConfig.updateMany({
     where: { companyId },
     data: { playtomicApiKey: null, playtomicTenantId: null, playtomicEnabled: false },
+  });
+
+  // Bitácora: hasta hoy el borrado de credenciales era invisible — la fila de
+  // "empresa.baja" sólo se escribe si la fase 2 completa. Ésta sobrevive al
+  // borrado (AuditLog.companyId es columna plana, sin FK).
+  registrarBitacora({
+    companyId,
+    accion: "credenciales.borrar",
+    entidad: "Company",
+    entidadId: companyId,
+    detalle: { tipos: ["fiel", "csd", "facturapi", "playtomic"], motivo: "baja-empresa" },
   });
 }
 

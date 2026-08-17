@@ -118,7 +118,7 @@ function toStamped(d: any): StampedCfdi {
 export const swSapienPacProvider: PacProvider = {
   name: "swsapien",
 
-  async createCfdi(_apiKey, input): Promise<PacOutcome<StampedCfdi>> {
+  async createCfdi(_pac, input): Promise<PacOutcome<StampedCfdi>> {
     if (!swConfigured()) return noConfigurado();
     // Validación contra catálogos SAT ANTES de gastar el timbre (SW no valida
     // como Facturapi; le damos el mismo cinturón de seguridad).
@@ -146,13 +146,13 @@ export const swSapienPacProvider: PacProvider = {
 
   // SW no tiene borradores en servidor (flujo issue). Emulamos: el "borrador" es
   // el propio input codificado; stampDraft lo emite. discardDraft es no-op.
-  async createDraft(_apiKey, input): Promise<PacOutcome<{ draftId: string }>> {
+  async createDraft(_pac, input): Promise<PacOutcome<{ draftId: string }>> {
     if (!swConfigured()) return noConfigurado();
     const draftId = Buffer.from(JSON.stringify(input), "utf-8").toString("base64");
     return { ok: true, data: { draftId } };
   },
 
-  async stampDraft(apiKey, draftId): Promise<PacOutcome<StampedCfdi>> {
+  async stampDraft(pac, draftId): Promise<PacOutcome<StampedCfdi>> {
     if (!swConfigured()) return noConfigurado();
     let input: CfdiInput;
     try {
@@ -160,14 +160,14 @@ export const swSapienPacProvider: PacProvider = {
     } catch {
       return fail(400, "Borrador SW inválido.", "validation");
     }
-    return this.createCfdi(apiKey, input);
+    return this.createCfdi(pac, input);
   },
 
   async discardDraft(): Promise<void> {
     // No-op: el borrador de SW es local (no consume recursos del PAC).
   },
 
-  async cancelCfdi(_apiKey, pacId, motivo, sustituyeUuid): Promise<PacOutcome<void>> {
+  async cancelCfdi(_pac, pacId, motivo, sustituyeUuid): Promise<PacOutcome<void>> {
     if (!swConfigured()) return noConfigurado();
     const token = await getToken();
     if (!token) return fail(401, "No se pudo autenticar con SW sapien.", "auth");

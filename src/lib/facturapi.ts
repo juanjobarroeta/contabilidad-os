@@ -1,7 +1,8 @@
 import Facturapi from "facturapi";
 import { Readable } from "stream";
 import { prisma } from "./prisma";
-import { decryptSecret, encryptSecret } from "./crypto";
+import { encryptSecret } from "./crypto";
+import { abrirCredencial } from "./vault";
 import { emisorNombreDesdeXml, sinRegimenSocietario } from "./fiscal/nombre-fiscal";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,10 +38,21 @@ export const facturapiAdmin = new Proxy({} as Facturapi, {
 });
 
 // Per-company Facturapi client using the company's own org-scoped API key.
-// The key is stored encrypted at rest; decrypt here so all callers can pass the
-// raw stored value (legacy plaintext passes through unchanged).
-export function getFacturapiClient(companyApiKey: string) {
-  return new Facturapi(decryptSecret(companyApiKey));
+// The key is stored encrypted at rest; the decrypt goes through the vault so
+// the use lands in the bitácora (grouped per hour — pac-call is high volume).
+// `uso.companyId` is REQUIRED so the audit row knows whose key was opened.
+export function getFacturapiClient(
+  companyApiKey: string,
+  uso: { companyId: string; actor?: string }
+) {
+  const { apiKey } = abrirCredencial({
+    companyId: uso.companyId,
+    tipo: "facturapi-key",
+    proposito: "pac-call",
+    actor: uso.actor,
+    valores: { apiKey: companyApiKey },
+  });
+  return new Facturapi(apiKey);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -181,11 +193,20 @@ export async function provisionFacturapiOrg(companyId: string): Promise<Provisio
       company.csdPassword
     ) {
       try {
+        // El CSD completo (llave privada de timbrado) sale en claro hacia
+        // Facturapi: la bóveda deja constancia del uso en la bitácora.
+        const csd = abrirCredencial({
+          companyId: company.id,
+          tipo: "csd",
+          proposito: "facturapi-upload",
+          actor: "provision-facturapi",
+          valores: { cer: company.csdCer, key: company.csdKey, password: company.csdPassword },
+        });
         await admin.organizations.uploadCertificate(
           orgId,
-          base64ToStream(decryptSecret(company.csdCer)),
-          base64ToStream(decryptSecret(company.csdKey)),
-          decryptSecret(company.csdPassword)
+          base64ToStream(csd.cer),
+          base64ToStream(csd.key),
+          csd.password
         );
         csdUploaded = true;
 

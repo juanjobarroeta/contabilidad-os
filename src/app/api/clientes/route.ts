@@ -100,7 +100,10 @@ export async function POST(req: Request) {
   // CFDI). Mejor faltar que mentir.
   if (company?.facturapiApiKey && codigoPostal) {
     try {
-      const fp = getFacturapiClient(company.facturapiApiKey);
+      const fp = getFacturapiClient(company.facturapiApiKey, {
+        companyId,
+        actor: "clientes-sync",
+      });
       const fpCustomer = await fp.customers.create({
         legal_name: razonSocial,
         tax_id: rfc.toUpperCase(),

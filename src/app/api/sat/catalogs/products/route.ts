@@ -24,7 +24,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ data: [], error: "Empresa sin clave Facturapi" }, { status: 422 });
     }
 
-    const client = getFacturapiClient(company.facturapiApiKey);
+    const client = getFacturapiClient(company.facturapiApiKey, {
+      companyId,
+      actor: "route:sat-catalogs",
+    });
     // The Facturapi node SDK has `catalogs` at runtime but it's missing from
     // the TS types. Cast through any to access it.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

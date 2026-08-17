@@ -88,7 +88,7 @@ export async function DELETE(
   // Stamped CFDI → must cancel at SAT via the PAC, with the motivo.
   if (invoice.facturapiId && invoice.company.facturapiApiKey) {
     const out = await getPacProvider().cancelCfdi(
-      invoice.company.facturapiApiKey,
+      { apiKey: invoice.company.facturapiApiKey, companyId: invoice.companyId, actor: "factura-cancelar" },
       invoice.facturapiId,
       motivo,
       sustituyeUuid ?? undefined

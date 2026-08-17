@@ -96,25 +96,37 @@ export type PacOutcome<T> =
       needsReconfigure: boolean;
     };
 
+/**
+ * Credencial del PAC de la empresa. `apiKey` viaja CIFRADA tal como está en
+ * reposo; el provider la abre vía la bóveda (src/lib/vault.ts, V-1) — por eso
+ * el companyId viaja junto: sin él no hay bitácora de a QUIÉN se le usó la
+ * llave. `actor` es opcional ("timbrado", "route:...", default "sistema").
+ */
+export interface PacCredencial {
+  apiKey: string;
+  companyId: string;
+  actor?: string;
+}
+
 export interface PacProvider {
   /** Nombre del PAC activo (para logs/telemetría). */
   readonly name: string;
 
   /** Timbra un CFDI de ingreso directamente. */
-  createCfdi(apiKey: string, input: CfdiInput): Promise<PacOutcome<StampedCfdi>>;
+  createCfdi(pac: PacCredencial, input: CfdiInput): Promise<PacOutcome<StampedCfdi>>;
 
   /** Crea un borrador (no consume timbre) para previsualizar antes de timbrar. */
-  createDraft(apiKey: string, input: CfdiInput): Promise<PacOutcome<{ draftId: string }>>;
+  createDraft(pac: PacCredencial, input: CfdiInput): Promise<PacOutcome<{ draftId: string }>>;
 
   /** Promueve un borrador existente a CFDI timbrado. */
-  stampDraft(apiKey: string, draftId: string): Promise<PacOutcome<StampedCfdi>>;
+  stampDraft(pac: PacCredencial, draftId: string): Promise<PacOutcome<StampedCfdi>>;
 
   /** Borra un borrador sin timbrar (best-effort, nunca lanza). */
-  discardDraft(apiKey: string, draftId: string): Promise<void>;
+  discardDraft(pac: PacCredencial, draftId: string): Promise<void>;
 
   /** Cancela un CFDI timbrado ante el SAT, con motivo (y sustitución si motivo 01). */
   cancelCfdi(
-    apiKey: string,
+    pac: PacCredencial,
     pacId: string,
     motivo: string,
     sustituyeUuid?: string

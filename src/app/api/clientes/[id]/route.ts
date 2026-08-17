@@ -77,7 +77,10 @@ export async function PATCH(
     });
     if (company?.facturapiApiKey) {
       try {
-        const fp = getFacturapiClient(company.facturapiApiKey);
+        const fp = getFacturapiClient(company.facturapiApiKey, {
+          companyId: customer.companyId,
+          actor: "clientes-sync",
+        });
         await fp.customers.update(existing.facturapiId, {
           legal_name: razonSocial,
           tax_system: regimenFiscal,
@@ -128,7 +131,10 @@ export async function POST(
   }
 
   try {
-    const fp = getFacturapiClient(company.facturapiApiKey);
+    const fp = getFacturapiClient(company.facturapiApiKey, {
+      companyId: customerMeta.companyId,
+      actor: "clientes-sync",
+    });
 
     let facturapiId = customer.facturapiId;
 

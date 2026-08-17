@@ -22,7 +22,7 @@
 // per the public docs — the cron batches a single window per club per run.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { decryptSecret } from "./crypto";
+import { abrirCredencial } from "./vault";
 
 const DEFAULT_BASE_URL = "https://api.playtomic.io";
 
@@ -59,16 +59,20 @@ export type PlaytomicBooking = {
  * (callers treat null as "skip, not configured").
  */
 export function resolveCreds(config: {
+  companyId: string;
   playtomicEnabled: boolean;
   playtomicTenantId: string | null;
   playtomicApiKey: string | null;
 }): PlaytomicCreds | null {
   if (!config.playtomicEnabled) return null;
   if (!config.playtomicTenantId || !config.playtomicApiKey) return null;
-  return {
-    tenantId: config.playtomicTenantId,
-    apiKey: decryptSecret(config.playtomicApiKey),
-  };
+  const { apiKey } = abrirCredencial({
+    companyId: config.companyId,
+    tipo: "playtomic-key",
+    proposito: "playtomic-call",
+    valores: { apiKey: config.playtomicApiKey },
+  });
+  return { tenantId: config.playtomicTenantId, apiKey };
 }
 
 async function playtomicFetch<T>(

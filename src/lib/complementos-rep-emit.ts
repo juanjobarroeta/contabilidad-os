@@ -82,7 +82,10 @@ export async function emitirComplementoPago(input: EmitirRepInput): Promise<Emit
   if (!ctx.ok) return ctx;
   const { company, parentInv, docto, paymentAmount, paymentDate, formaPago } = ctx;
 
-  const facturapi = getFacturapiClient(company.facturapiApiKey!);
+  const facturapi = getFacturapiClient(company.facturapiApiKey!, {
+    companyId: input.companyId,
+    actor: "rep-emit",
+  });
 
   // Sólo los campos documentados por Facturapi para el DoctoRelacionado del
   // complemento de pago: uuid, amount, installment, last_balance, taxes. El

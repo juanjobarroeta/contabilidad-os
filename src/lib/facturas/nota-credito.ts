@@ -77,7 +77,9 @@ export async function emitirNotaCredito(input: NotaCreditoInput): Promise<NotaCr
     select: { facturapiApiKey: true },
   });
 
-  const out = await getPacProvider().createCfdi(company!.facturapiApiKey!, {
+  const out = await getPacProvider().createCfdi(
+    { apiKey: company!.facturapiApiKey!, companyId: input.companyId, actor: "nota-credito" },
+    {
     type: "E",
     relations: { relationship: "01", documents: [parent.uuid] },
     customerRef: parent.customer!.facturapiId!,

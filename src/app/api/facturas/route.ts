@@ -250,7 +250,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const facturapi = getFacturapiClient(company.facturapiApiKey);
+  const facturapi = getFacturapiClient(company.facturapiApiKey, {
+    companyId,
+    actor: "timbrado",
+  });
 
   // CFDI 4.0: Información Global is mandatory when RFC = XAXX010101000
   const isPublicoGeneral = customer.rfc === "XAXX010101000";

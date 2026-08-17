@@ -93,7 +93,10 @@ export async function POST(req: Request, { params }: Params) {
         return NextResponse.json({ error: "Facturapi no configurado" }, { status: 422 });
       }
       try {
-        const fp = getFacturapiClient(company.facturapiApiKey);
+        const fp = getFacturapiClient(company.facturapiApiKey, {
+          companyId: borrador.companyId,
+          actor: "route:borrador-email",
+        });
         await fp.invoices.sendByEmail(borrador.draftId, { email });
       } catch (e) {
         return NextResponse.json(

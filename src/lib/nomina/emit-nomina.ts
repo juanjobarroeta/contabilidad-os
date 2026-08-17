@@ -291,7 +291,10 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
         }).subsidio;
 
   // ── Construir el payload Facturapi ─────────────────────────────────────
-  const facturapi = getFacturapiClient(company.facturapiApiKey);
+  const facturapi = getFacturapiClient(company.facturapiApiKey, {
+    companyId: company.id,
+    actor: "nomina-emit",
+  });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const payload: any = {

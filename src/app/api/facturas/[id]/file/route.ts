@@ -27,7 +27,7 @@ export async function GET(req: Request, { params }: Params) {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: {
-      uuid: true, rawXml: true, facturapiId: true,
+      uuid: true, rawXml: true, facturapiId: true, companyId: true,
       company: { select: { facturapiApiKey: true } },
     },
   });
@@ -58,7 +58,10 @@ export async function GET(req: Request, { params }: Params) {
     );
   }
   try {
-    const fp = getFacturapiClient(invoice.company.facturapiApiKey);
+    const fp = getFacturapiClient(invoice.company.facturapiApiKey, {
+      companyId: invoice.companyId,
+      actor: "route:factura-file",
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stream: any = await (fp as any).invoices.downloadPdf(invoice.facturapiId);
     const chunks: Buffer[] = [];

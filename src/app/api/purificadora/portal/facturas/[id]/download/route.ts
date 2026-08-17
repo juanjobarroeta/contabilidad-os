@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withAuthz } from "@/lib/authz";
 import { requirePortalAccount } from "@/lib/purificadora/portal";
-import { decryptSecret } from "@/lib/crypto";
+import { abrirCredencial } from "@/lib/vault";
 
 const FACTURAPI_BASE = "https://www.facturapi.io/v2";
 
@@ -55,8 +55,15 @@ export const GET = withAuthz(
       return NextResponse.json({ error: "Descarga no disponible" }, { status: 422 });
     }
 
+    const { apiKey } = abrirCredencial({
+      companyId: invoice.companyId,
+      tipo: "facturapi-key",
+      proposito: "pac-call",
+      actor: "route:portal-purificadora-download",
+      valores: { apiKey: invoice.company.facturapiApiKey },
+    });
     const fpRes = await fetch(`${FACTURAPI_BASE}/invoices/${invoice.facturapiId}/${format}`, {
-      headers: { Authorization: `Bearer ${decryptSecret(invoice.company.facturapiApiKey)}` },
+      headers: { Authorization: `Bearer ${apiKey}` },
     });
     if (!fpRes.ok) {
       return NextResponse.json({ error: "No se pudo descargar la factura" }, { status: 502 });

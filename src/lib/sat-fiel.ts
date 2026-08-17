@@ -1,10 +1,10 @@
 import { Fiel } from "@nodecfdi/sat-ws-descarga-masiva";
 import { Certificate, Credential } from "@nodecfdi/credentials/node";
 import { prisma } from "./prisma";
-import { decryptSecret } from "./crypto";
+import { abrirCredencial, descifrarCerParaVigencia } from "./vault";
 import { cuentasPredialesDeConcepto } from "@/lib/facturas/predial";
 
-export async function getFielForCompany(companyId: string): Promise<Fiel> {
+export async function getFielForCompany(companyId: string, actor = "cron:sat"): Promise<Fiel> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: { fielCer: true, fielKey: true, fielPassword: true, rfc: true },
@@ -16,14 +16,22 @@ export async function getFielForCompany(companyId: string): Promise<Fiel> {
     );
   }
 
-  // Stored encrypted at rest — decrypt before use (legacy plaintext passes through).
-  const cerBuffer = Buffer.from(decryptSecret(company.fielCer), "base64");
-  const keyBuffer = Buffer.from(decryptSecret(company.fielKey), "base64");
+  // Cifrada en reposo — el descifrado pasa por la bóveda, que deja bitácora
+  // del uso (legacy en claro sigue pasando, igual que antes).
+  const abierta = abrirCredencial({
+    companyId,
+    tipo: "fiel",
+    proposito: "sat-descarga",
+    actor,
+    valores: { cer: company.fielCer, key: company.fielKey, password: company.fielPassword },
+  });
+  const cerBuffer = Buffer.from(abierta.cer, "base64");
+  const keyBuffer = Buffer.from(abierta.key, "base64");
 
   const fiel = Fiel.create(
     cerBuffer.toString("binary"),
     keyBuffer.toString("binary"),
-    decryptSecret(company.fielPassword)
+    abierta.password
   );
 
   if (!fiel.isValid()) {
@@ -80,7 +88,7 @@ export async function getFielVigenciaForCompany(companyId: string): Promise<Fiel
       select: { fielCer: true },
     });
     if (!company?.fielCer) return null;
-    return parseFielVigencia(decryptSecret(company.fielCer));
+    return parseFielVigencia(descifrarCerParaVigencia(company.fielCer));
   } catch {
     return { valida: false };
   }

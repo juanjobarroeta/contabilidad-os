@@ -32,7 +32,10 @@ export async function GET(req: Request, { params }: Params) {
   }
 
   try {
-    const fp = getFacturapiClient(company.facturapiApiKey);
+    const fp = getFacturapiClient(company.facturapiApiKey, {
+      companyId,
+      actor: "route:draft-pdf",
+    });
     const stream = await fp.invoices.downloadPdf(draftId);
     const chunks: Buffer[] = [];
     for await (const c of stream as AsyncIterable<Buffer>) chunks.push(Buffer.from(c));

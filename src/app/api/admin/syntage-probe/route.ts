@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { decryptSecret } from "@/lib/crypto";
+import { abrirCredencial } from "@/lib/vault";
 import {
   SyntageClient,
   mapTaxCompliance,
@@ -62,11 +62,11 @@ export async function POST(req: Request) {
       const c = body.companyId
         ? await prisma.company.findUnique({
             where: { id: body.companyId },
-            select: { rfc: true, razonSocial: true, fielCer: true, fielKey: true, fielPassword: true },
+            select: { id: true, rfc: true, razonSocial: true, fielCer: true, fielKey: true, fielPassword: true },
           })
         : await prisma.company.findFirst({
             where: { razonSocial: { contains: body.buscar!, mode: "insensitive" } },
-            select: { rfc: true, razonSocial: true, fielCer: true, fielKey: true, fielPassword: true },
+            select: { id: true, rfc: true, razonSocial: true, fielCer: true, fielKey: true, fielPassword: true },
           });
       if (!c) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
       rfc = c.rfc;
@@ -75,11 +75,18 @@ export async function POST(req: Request) {
       if (body.ciec) {
         cred = { type: "ciec", password: body.ciec };
       } else if (c.fielCer && c.fielKey && c.fielPassword) {
+        const fiel = abrirCredencial({
+          companyId: c.id,
+          tipo: "fiel",
+          proposito: "syntage-provision",
+          actor: "operador:syntage-probe",
+          valores: { cer: c.fielCer, key: c.fielKey, password: c.fielPassword },
+        });
         cred = {
           type: "efirma",
-          certificate: decryptSecret(c.fielCer),
-          privateKey: decryptSecret(c.fielKey),
-          password: decryptSecret(c.fielPassword),
+          certificate: fiel.cer,
+          privateKey: fiel.key,
+          password: fiel.password,
         };
         pasos.push({ paso: "credencial_fuente", tipo: "efirma (guardada)" });
       } else {

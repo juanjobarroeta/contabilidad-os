@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, AuthzError, getEffectiveCompanyMembership } from "@/lib/authz";
-import { decryptSecret } from "@/lib/crypto";
+import { abrirCredencial } from "@/lib/vault";
 
 const FACTURAPI_BASE = "https://www.facturapi.io/v2";
 
@@ -69,14 +69,18 @@ export async function GET(
     return NextResponse.json({ error: "Facturapi no configurado" }, { status: 422 });
   }
 
-  // Proxy the download from Facturapi (key is encrypted at rest — decrypt here)
+  // Proxy the download from Facturapi (key encrypted at rest — the vault
+  // decrypts and audits the use)
+  const { apiKey } = abrirCredencial({
+    companyId: invoice.companyId,
+    tipo: "facturapi-key",
+    proposito: "pac-call",
+    actor: "route:facturas-download",
+    valores: { apiKey: invoice.company.facturapiApiKey },
+  });
   const fpRes = await fetch(
     `${FACTURAPI_BASE}/invoices/${invoice.facturapiId}/${format}`,
-    {
-      headers: {
-        Authorization: `Bearer ${decryptSecret(invoice.company.facturapiApiKey)}`,
-      },
-    }
+    { headers: { Authorization: `Bearer ${apiKey}` } }
   );
 
   if (!fpRes.ok) {

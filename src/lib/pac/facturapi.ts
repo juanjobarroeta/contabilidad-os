@@ -69,18 +69,18 @@ function fail(e: any): Extract<PacOutcome<never>, { ok: false }> {
 export const facturapiPacProvider: PacProvider = {
   name: "facturapi",
 
-  async createCfdi(apiKey, input): Promise<PacOutcome<StampedCfdi>> {
+  async createCfdi(pac, input): Promise<PacOutcome<StampedCfdi>> {
     try {
-      const fp = await getFacturapiClient(apiKey).invoices.create(buildInvoiceBody(input));
+      const fp = await getFacturapiClient(pac.apiKey, { companyId: pac.companyId, actor: pac.actor }).invoices.create(buildInvoiceBody(input));
       return { ok: true, data: toStamped(fp) };
     } catch (e) {
       return fail(e);
     }
   },
 
-  async createDraft(apiKey, input): Promise<PacOutcome<{ draftId: string }>> {
+  async createDraft(pac, input): Promise<PacOutcome<{ draftId: string }>> {
     try {
-      const fp = await getFacturapiClient(apiKey).invoices.create({
+      const fp = await getFacturapiClient(pac.apiKey, { companyId: pac.companyId, actor: pac.actor }).invoices.create({
         ...buildInvoiceBody(input),
         status: "draft",
       });
@@ -90,28 +90,28 @@ export const facturapiPacProvider: PacProvider = {
     }
   },
 
-  async stampDraft(apiKey, draftId): Promise<PacOutcome<StampedCfdi>> {
+  async stampDraft(pac, draftId): Promise<PacOutcome<StampedCfdi>> {
     try {
-      const fp = await getFacturapiClient(apiKey).invoices.stampDraft(draftId);
+      const fp = await getFacturapiClient(pac.apiKey, { companyId: pac.companyId, actor: pac.actor }).invoices.stampDraft(draftId);
       return { ok: true, data: toStamped(fp) };
     } catch (e) {
       return fail(e);
     }
   },
 
-  async discardDraft(apiKey, draftId): Promise<void> {
+  async discardDraft(pac, draftId): Promise<void> {
     try {
-      await getFacturapiClient(apiKey).invoices.cancel(draftId);
+      await getFacturapiClient(pac.apiKey, { companyId: pac.companyId, actor: pac.actor }).invoices.cancel(draftId);
     } catch (e) {
       console.error("[pac:facturapi] discardDraft falló", e);
     }
   },
 
-  async cancelCfdi(apiKey, pacId, motivo, sustituyeUuid): Promise<PacOutcome<void>> {
+  async cancelCfdi(pac, pacId, motivo, sustituyeUuid): Promise<PacOutcome<void>> {
     try {
       // Facturapi params: { motive, substitution? }.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (getFacturapiClient(apiKey) as any).invoices.cancel(pacId, {
+      await (getFacturapiClient(pac.apiKey, { companyId: pac.companyId, actor: pac.actor }) as any).invoices.cancel(pacId, {
         motive: motivo,
         ...(sustituyeUuid ? { substitution: sustituyeUuid } : {}),
       });

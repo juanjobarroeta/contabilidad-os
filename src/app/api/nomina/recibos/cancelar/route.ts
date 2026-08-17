@@ -94,7 +94,7 @@ export async function POST(req: Request) {
   // Cancelación real ante el SAT. Igual que facturas: si el PAC no confirma,
   // NO tocamos nada local — el CFDI sigue vigente.
   const out = await getPacProvider().cancelCfdi(
-    company.facturapiApiKey,
+    { apiKey: company.facturapiApiKey, companyId, actor: "nomina-cancelar" },
     invoice.facturapiId,
     motivo,
     sustituyeUuid ?? undefined
