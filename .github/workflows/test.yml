@@ -51,6 +51,15 @@ jobs:
   # Historial base auditado limpio el 2026-08-16 (docs/security/secret-scan-2026-08-16.md).
   secrets:
     runs-on: ubuntu-latest
+    # En un PR, gitleaks-action lista los commits del PR por la API
+    # (GET /repos/{owner}/{repo}/pulls/{n}/commits) para saber qué escanear.
+    # El GITHUB_TOKEN de este repo viene restringido por default, así que sin
+    # este bloque la llamada responde 403 «Resource not accessible by
+    # integration» y el job truena ANTES de escanear nada — rojo en todos los
+    # PRs, y peor: un rojo que parece un hallazgo de secretos sin serlo.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
