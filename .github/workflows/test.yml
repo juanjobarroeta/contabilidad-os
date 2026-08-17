@@ -59,6 +59,46 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # P0-2b: el choke point del multi-tenant (src/lib/authz.ts) probado contra
+  # Postgres REAL — membresía directa, capa despacho, scoping por miembro,
+  # operador, pisos de rol y camino bearer completo. Corre aparte de `test`
+  # para que la suite pura siga sin dependencias. REQUIRE_DB_TESTS=1 convierte
+  # cualquier skip silencioso en error del job.
+  authz-db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: prueba
+          POSTGRES_DB: contabilidad_os_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:prueba@localhost:5432/contabilidad_os_test
+      REQUIRE_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Preparar la base de prueba (extensión + esquema)
+        run: |
+          psql "$TEST_DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector'
+          npx prisma generate
+          npx prisma db push --skip-generate
+        env:
+          DATABASE_URL: postgresql://postgres:prueba@localhost:5432/contabilidad_os_test
+      - name: Tests de integración de authz
+        run: npm run test:db
+
   # Guardia anti-drift: un PR que toque prisma/schema.prisma SIN su migración
   # correspondiente falla aquí (con prisma migrate, un cambio de schema sin
   # migración se "aplica" en generate pero nunca llega a la base → drift

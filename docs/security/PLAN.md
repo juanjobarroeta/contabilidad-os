@@ -12,6 +12,7 @@ Versión web (misma info, para leer del teléfono): artifact "Plan Bóveda" en c
 | S-1 API key de Facturapi al navegador | **Fusionada en main** (2026-08-16) |
 | S-2 cron sin auth | **RETIRADA** — falso positivo: `ce-inspect` sí valida `CRON_SECRET` (guard propio, `route.ts:49-55`). Verificado: los 44 crons están protegidos. |
 | P0-1 Escaneo de secretos | **Fusionada en main** (2026-08-16). Historial limpio (1,154 commits, 0 hallazgos). |
+| P0-2a/b Aislamiento de tenants | **Fusionada en main** (2026-08-17): test estático de guardias sobre las 446 rutas (con allowlist razonada) + 20 tests de `authz.ts` contra Postgres real (job `authz-db` en CI). Verificado rompiendo un guard y el scoping: rojo, luego verde. **Hallazgos pendientes de decisión**: (1) `api/verificador` duplica `empresasAccesiblesIds` SIN respetar `DespachoMemberCompany` — un miembro de despacho restringido ve terceros de empresas hermanas; propuesta: usar `empresasAccesiblesIds` (toca no-go, decide owner). (2) `api/push/subscribe` guarda `companyId` del body sin validar membresía — inerte hoy (los senders seleccionan por userId), footgun futuro; follow-up: validar o dejar de guardar. |
 | Resto | Pendiente, en orden abajo |
 
 ---
