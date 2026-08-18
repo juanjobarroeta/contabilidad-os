@@ -52,12 +52,20 @@ async function handle(req: Request) {
   const resultados = [];
   let errores = 0;
   let totalMatched = 0;
+  // Por qué SÍ o por qué NO concilió impuestos por línea de captura. La primera
+  // corrida global dio cero y hubo que adivinar la causa; estos contadores
+  // convierten la próxima pregunta en una lectura.
+  const impuestosLc = { candidatos: 0, conciliados: 0, sinDeclaracion: 0, ambiguos: 0 };
   let sinCfdiHallazgos = 0;
   let sinCfdiResueltos = 0;
   for (const c of companies) {
     try {
       const res = await autoConciliarEmpresa(c.id);
       totalMatched += res.matched;
+      impuestosLc.candidatos += res.impuestosLc.candidatos;
+      impuestosLc.conciliados += res.impuestosLc.conciliados;
+      impuestosLc.sinDeclaracion += res.impuestosLc.sinDeclaracion;
+      impuestosLc.ambiguos += res.impuestosLc.ambiguos;
       // Tras conciliar, cruzar banco↔CFDI en ambos sentidos sobre los datos
       // recién conciliados. Best-effort: un error aquí no debe tirar el cron.
       let sinCfdi: { abierto: boolean; resuelto: boolean; error?: string };
@@ -82,6 +90,7 @@ async function handle(req: Request) {
     ok: true,
     companies: companies.length,
     totalMatched,
+    impuestosLc,
     periodo,
     sinCfdiHallazgos,
     sinCfdiResueltos,
