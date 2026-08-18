@@ -1,7 +1,0 @@
-node_modules/
-.next/
-.env
-next-env.d.ts
-tsconfig.tsbuildinfo
-/export/
-/media/
