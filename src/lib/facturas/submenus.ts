@@ -15,7 +15,7 @@
 // volumen es la información correcta.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type VistaFacturas = "comprobantes" | "complementos" | "prefacturas";
+export type VistaFacturas = "comprobantes" | "complementos" | "prefacturas" | "recurrentes";
 
 export type TonoSubmenu = "neutral" | "amber" | "red";
 
@@ -34,6 +34,8 @@ export type EntradaSubmenus = {
   comprobantes: number | null;
   /** Prefacturas guardadas sin timbrar. */
   prefacturas: number;
+  /** Series recurrentes ACTIVAS (las pausadas no cuentan como agenda viva). */
+  recurrentesActivas: number;
   /** Cobros PPD sin REP; `vencidos` son los que ya pasaron el día 5. */
   repPorEmitir: { sinRep: number; vencidos: number } | null;
 };
@@ -69,6 +71,19 @@ export function submenusFacturas(e: EntradaSubmenus): Submenu[] {
         e.prefacturas > 0
           ? `${e.prefacturas} prefactura(s) guardadas sin timbrar.`
           : "Borradores guardados que aún no consumen timbre.",
+    },
+    {
+      v: "recurrentes",
+      t: "Recurrentes",
+      n: e.recurrentesActivas || null,
+      // Neutral a propósito: una serie activa es configuración que trabaja
+      // sola, no un pendiente. Lo que sí pide atención son las prefacturas que
+      // genera, y ésas ya se cuentan en su propia pestaña.
+      tono: "neutral",
+      hint:
+        e.recurrentesActivas > 0
+          ? `${e.recurrentesActivas} serie(s) activas generando prefacturas en su fecha.`
+          : "Series que generan una prefactura sola en su fecha.",
     },
   ];
 }

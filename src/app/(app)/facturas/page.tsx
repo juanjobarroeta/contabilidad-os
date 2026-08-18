@@ -17,6 +17,7 @@ import { SelectorPeriodo } from "@/components/facturas/SelectorPeriodo";
 import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
 import { ComplementosPendientes } from "@/components/facturas/ComplementosPendientes";
 import { repVencido } from "@/lib/facturas/rep-plazo";
+import { RecurrentesView } from "@/components/facturas/RecurrentesView";
 import { submenusFacturas, type VistaFacturas } from "@/lib/facturas/submenus";
 import { estadoRepFactura } from "@/lib/facturas/complementos-vista";
 
@@ -226,6 +227,24 @@ export default function FacturasPage() {
   // vivía escondida dentro de la pestaña. Se resuelve aquí para que la
   // urgencia (y su vencimiento legal) se vea desde fuera.
   const [repPorEmitir, setRepPorEmitir] = useState<{ sinRep: number; vencidos: number } | null>(null);
+
+  // Series recurrentes ACTIVAS, sólo para la insignia del submenú.
+  const [recurrentesActivas, setRecurrentesActivas] = useState(0);
+  const cargarRecurrentes = useCallback(async () => {
+    if (!activeCompany) return;
+    try {
+      const res = await fetch(`/api/facturas/recurrentes?companyId=${activeCompany.id}`);
+      if (!res.ok) return;
+      const d = await res.json();
+      const activas = (Array.isArray(d.series) ? d.series : []).filter(
+        (x: { activa: boolean }) => x.activa
+      ).length;
+      setRecurrentesActivas(activas);
+    } catch {
+      // Insignia accesoria: si falla, simplemente no se pinta.
+    }
+  }, [activeCompany]);
+  useEffect(() => { cargarRecurrentes(); }, [cargarRecurrentes]);
 
   // La búsqueda va al SERVIDOR (antes filtraba sólo sobre lo ya cargado, así que
   // no encontraba nada fuera de las últimas 200 filas). Debounce para no
@@ -474,6 +493,7 @@ export default function FacturasPage() {
         {submenusFacturas({
           comprobantes: resumen?.conteos?.todas ?? null,
           prefacturas: prefacturas.length,
+          recurrentesActivas,
           repPorEmitir,
         }).map((m) => (
           <button
@@ -518,6 +538,14 @@ export default function FacturasPage() {
 
       {vista === "prefacturas" && (
         <PrefacturasView prefacturas={prefacturas} busy={prefBusy} onAccion={prefAccion} onToast={showToast} />
+      )}
+
+      {vista === "recurrentes" && (
+        <RecurrentesView
+          companyId={activeCompany.id}
+          onToast={showToast}
+          onCambio={cargarRecurrentes}
+        />
       )}
 
       {vista === "comprobantes" && (<>

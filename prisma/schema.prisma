@@ -235,27 +235,28 @@ model Company {
   isActive Boolean @default(true)
 
   // Relations
-  members           CompanyMember[]
-  invoices          Invoice[]
-  customers         Customer[]
-  facturaBorradores FacturaBorrador[]
-  suppliers         Supplier[]
-  bankAccounts      BankAccount[]
-  bankTransactions  BankTransaction[]
-  employees         Employee[]
-  payrollRuns       PayrollRun[]
-  taxDeclarations   TaxDeclaration[]
-  obligations       CompanyObligation[]
-  perdidasFiscales  PerdidaFiscal[]
-  costEvents        CostEvent[]
-  coeEnvios         CoeEnvio[]
-  accountingEntries AccountingEntry[]
-  accounts          ChartAccount[]
-  ceBalanzas        CeBalanzaMes[]
-  postingOverrides  PostingCuentaOverride[]
-  accountingPeriods AccountingPeriod[]
-  satSyncRequests   SatSyncRequest[]
-  cfdisFaltantes    CfdiFaltante[]
+  members             CompanyMember[]
+  invoices            Invoice[]
+  customers           Customer[]
+  facturaBorradores   FacturaBorrador[]
+  facturasRecurrentes FacturaRecurrente[]
+  suppliers           Supplier[]
+  bankAccounts        BankAccount[]
+  bankTransactions    BankTransaction[]
+  employees           Employee[]
+  payrollRuns         PayrollRun[]
+  taxDeclarations     TaxDeclaration[]
+  obligations         CompanyObligation[]
+  perdidasFiscales    PerdidaFiscal[]
+  costEvents          CostEvent[]
+  coeEnvios           CoeEnvio[]
+  accountingEntries   AccountingEntry[]
+  accounts            ChartAccount[]
+  ceBalanzas          CeBalanzaMes[]
+  postingOverrides    PostingCuentaOverride[]
+  accountingPeriods   AccountingPeriod[]
+  satSyncRequests     SatSyncRequest[]
+  cfdisFaltantes      CfdiFaltante[]
 
   // Module gating (SaaS): which features this company has contracted
   modules CompanyModule[]
@@ -362,7 +363,7 @@ model Company {
   // esta empresa. Es el cursor del REPARTO JUSTO: cada corrida atiende a las
   // de barrido más antiguo, así la espera de una empresa depende del número de
   // EMPRESAS y no del tamaño total del portafolio de facturas.
-  vigenciaBarridoAt  DateTime?
+  vigenciaBarridoAt DateTime?
 
   // Orden de rotación del barrido de vigencia (nulls primero: las empresas
   // nunca barridas van al frente de la fila).
@@ -683,6 +684,7 @@ model Customer {
   company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   invoices            Invoice[]
   borradores          FacturaBorrador[]
+  recurrentes         FacturaRecurrente[]
   proyectos           Proyecto[]
   clubMembers         ClubMember[]
   restOrdenes         RestOrden[]
@@ -1141,6 +1143,57 @@ model FacturaBorrador {
   // cada búsqueda por factura recorre la tabla entera — y el borrado en
   // cascada de un Invoice también.
   @@index([invoiceId])
+}
+
+/// Factura recurrente — una plantilla que genera PREFACTURAS en su fecha.
+///
+/// NO timbra: un CFDI timbrado es un documento legal que consume timbre y sólo
+/// se deshace cancelándolo ante el SAT, así que la serie deja un borrador para
+/// que alguien lo revise y lo timbre. Reusa el flujo de FacturaBorrador entero.
+model FacturaRecurrente {
+  id         String @id @default(cuid())
+  companyId  String
+  customerId String
+
+  /// Cómo la reconoce el usuario en la lista ("Renta oficina", "Retainer ACME").
+  nombre String
+
+  /// StampInput serializado — el MISMO cuerpo que arma la prefactura manual,
+  /// para que el cron reuse createDraftInvoice y no exista una segunda forma
+  /// de construir un CFDI que pueda divergir de la primera.
+  payload Json
+  /// Total estimado con IVA; se guarda para listar sin recalcular partidas.
+  total   Float
+
+  /// SEMANAL | MENSUAL | BIMESTRAL | TRIMESTRAL | SEMESTRAL | ANUAL.
+  /// La lógica de calendario vive en lib/facturas/recurrentes.ts.
+  periodicidad String
+  /// Día del mes al que se ancla la serie (1-31). Anclar —en vez de sumar un
+  /// mes a la última fecha— es lo que evita que una serie del 31 se desfase
+  /// para siempre al pasar por febrero.
+  diaMes       Int
+
+  /// Próxima fecha en que toca generar (medianoche UTC).
+  proximaEmision DateTime
+  /// Opcional: deja de generar cuando proximaEmision la rebasa.
+  fin            DateTime?
+
+  activa        Boolean   @default(true)
+  ultimaEmision DateTime?
+  /// Cuántas prefacturas lleva generadas (el progreso de la serie).
+  generadas     Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, activa])
+  /// El cron barre por (activa, proximaEmision) sobre TODAS las empresas.
+  @@index([activa, proximaEmision])
+  /// FK sin índice: Prisma no los crea en PostgreSQL.
+  @@index([customerId])
 }
 
 enum TaxType {
@@ -1939,8 +1992,8 @@ model ChartAccount {
   codAgrup   String?
   isActive   Boolean     @default(true)
 
-  company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  entries AccountingEntry[]
+  company          Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries          AccountingEntry[]
   postingOverrides PostingCuentaOverride[]
 
   @@unique([companyId, cuentaSAT, subcuenta])
@@ -2056,25 +2109,25 @@ model SatSyncRequest {
 /// Se borra sola: cuando el documento por fin se consigue, el importador crea
 /// el `Invoice` y quita el renglón de aquí.
 model CfdiFaltante {
-  id        String   @id @default(cuid())
-  companyId String
+  id            String   @id @default(cuid())
+  companyId     String
   /// Folio fiscal, SIEMPRE en mayúsculas.
-  uuid      String
-  fecha     DateTime
+  uuid          String
+  fecha         DateTime
   /// TipoDeComprobante crudo del SAT (I/E/N/P/T), tal cual lo reporta el censo.
-  tipoSat   String?
-  total     Float?
+  tipoSat       String?
+  total         Float?
   /// VIGENTE | CANCELADO, según el censo. Un cancelado pierde el XML pero no
   /// el renglón, así que este suele ser el motivo de que esté aquí.
-  estatus   String?
+  estatus       String?
   /// De dónde salió el censo que lo reportó.
-  origen    String   @default("Syntage")
+  origen        String   @default("Syntage")
   /// Por qué no se pudo guardar el documento: "sin_xml" (el proveedor no lo
   /// tiene) o "descarga_fallo" (lo tiene y la descarga falló — reintentable).
-  motivo    String
+  motivo        String
   /// Cuántas veces se ha intentado bajar. Un motivo "descarga_fallo" con pocos
   /// intentos vale la pena reintentarlo; "sin_xml" no.
-  intentos  Int      @default(1)
+  intentos      Int      @default(1)
   /// ¿Hay PDF aunque no haya XML? Un PDF NO es un CFDI —no se re-timbra, no se
   /// manda al SAT, y sacarle números por OCR sería fabricar datos contables a
   /// partir de una imagen— así que nunca alimenta totales ni impuestos.
@@ -2083,10 +2136,10 @@ model CfdiFaltante {
   /// está el documento, sólo que no es legible por máquina» es muy distinto de
   /// «sabemos que existe y no tenemos nada». La bandera viene en el listado, así
   /// que saber dónde hay evidencia no cuesta una sola descarga.
-  tienePdf  Boolean  @default(false)
+  tienePdf      Boolean  @default(false)
   /// Id del comprobante en el proveedor, para poder pedir ese PDF cuando alguien
   /// lo necesite — bajo demanda, no en bloque.
-  origenId  String?
+  origenId      String?
   detectadoAt   DateTime @default(now())
   ultimoIntento DateTime @default(now())
 
@@ -3581,11 +3634,17 @@ model AuditBrief {
   id        String @id @default(cuid())
   companyId String @unique
 
-  /** Narrativa priorizada en markdown (generada por IA, best-effort). */
-  resumen String @db.Text
-  /** Grupos deterministas: [{clave, etiqueta, severidad, n, fundamento, accion}]. */
-  grupos Json
-  /** Hallazgos ABIERTOS al momento de la síntesis (para detectar brief viejo). */
+  /**
+   * Narrativa priorizada en markdown (generada por IA, best-effort).
+   */
+  resumen           String @db.Text
+  /**
+   * Grupos deterministas: [{clave, etiqueta, severidad, n, fundamento, accion}].
+   */
+  grupos            Json
+  /**
+   * Hallazgos ABIERTOS al momento de la síntesis (para detectar brief viejo).
+   */
   hallazgosAbiertos Int
 
   generadoAt DateTime @default(now())
@@ -4964,11 +5023,11 @@ model VehiculoCosto {
   vehiculoId String
   createdAt  DateTime @default(now())
 
-  tipo      VehiculoCostoTipo
-  concepto  String
-  monto     Float // sin IVA
-  fecha     DateTime
-  invoiceId String? // CFDI del gasto cuando existe
+  tipo       VehiculoCostoTipo
+  concepto   String
+  monto      Float // sin IVA
+  fecha      DateTime
+  invoiceId  String? // CFDI del gasto cuando existe
   /**
    * Lo escribió el derivador desde un CFDI (true) o lo capturó una persona
    * (false). Sin esta marca no se puede volver a derivar una factura sin
@@ -4979,7 +5038,7 @@ model VehiculoCosto {
    * factura ($25,810,344.83 cuando halló 1 VIN, $1,720,689.65 con 15,
    * $860,344.83 con 30).
    */
-  autoCreado Boolean @default(false)
+  autoCreado Boolean           @default(false)
 
   vehiculo Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
   invoice  Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
@@ -5652,7 +5711,7 @@ model CeBalanzaMes {
 // departamento), el contador decide UNA vez y queda aquí.
 // ─────────────────────────────────────────────────────────────────────────────
 model PostingCuentaOverride {
-  id             String @id @default(cuid())
+  id             String   @id @default(cuid())
   companyId      String
   /// El código que emite el motor (agrupador: "601.48", "105", "115.04"…).
   codigoMotor    String

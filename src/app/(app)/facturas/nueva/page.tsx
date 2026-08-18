@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Money } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import Link from "next/link";
+import { GuardarRecurrenteModal } from "@/components/facturas/GuardarRecurrenteModal";
 import { formatCurrency } from "@/lib/utils";
 import { SatCodePicker } from "@/components/ui/SatCodePicker";
 import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
@@ -20,7 +22,7 @@ import {
 } from "@/lib/facturas/predial";
 import {
   ChevronRight, ChevronLeft, Plus, Trash2, Loader2,
-  CheckCircle2, Search, FileText, AlertCircle, History, Sparkles,
+  CheckCircle2, Search, FileText, AlertCircle, History, Sparkles, Repeat,
 } from "lucide-react";
 
 // ── SAT Catalogs ────────────────────────────────────────────────────────────
@@ -170,6 +172,10 @@ export default function NuevaFacturaPage() {
   const [submitError, setSubmitError] = useState("");
   const [needsReconfigure, setNeedsReconfigure] = useState(false);
   const [successId, setSuccessId] = useState<string | null>(null);
+  // Alta de serie recurrente desde este mismo compositor.
+  const [recurrenteOpen, setRecurrenteOpen] = useState(false);
+  const [recurrenteOk, setRecurrenteOk] = useState("");
+
   // Prefactura guardada: enlace del PDF BORRADOR (7 días) + envío por correo.
   const [prefOk, setPrefOk] = useState<{ id: string; pdfUrl: string } | null>(null);
   const [savingPref, setSavingPref] = useState(false);
@@ -1266,6 +1272,12 @@ export default function NuevaFacturaPage() {
             </button>
           ) : (
             <div className="flex items-center gap-2">
+              <button onClick={() => setRecurrenteOpen(true)} disabled={savingPref || submitting}
+                title="Repite esta factura en automático: en cada fecha se guarda una prefactura para revisar (nunca se timbra sola)"
+                className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper disabled:opacity-50">
+                <Repeat className="h-4 w-4" />
+                Recurrente
+              </button>
               <button onClick={handlePrefactura} disabled={savingPref || submitting}
                 title="Guarda un BORRADOR (sin timbre) para compartirlo con el cliente y timbrarlo después"
                 className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper disabled:opacity-50">
@@ -1281,6 +1293,26 @@ export default function NuevaFacturaPage() {
           )}
         </div>
       </div>
+
+      {recurrenteOpen && activeCompany && selectedCliente && (
+        <GuardarRecurrenteModal
+          companyId={activeCompany.id}
+          clienteNombre={selectedCliente.razonSocial}
+          payload={buildPayload()}
+          onClose={() => setRecurrenteOpen(false)}
+          onGuardada={(nombre) => {
+            setRecurrenteOpen(false);
+            setRecurrenteOk(nombre);
+          }}
+        />
+      )}
+
+      {recurrenteOk && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-control bg-cos-ink px-4 py-2.5 text-[13.5px] font-medium text-white shadow-lg">
+          Serie «{recurrenteOk}» guardada — generará prefacturas en su fecha.{" "}
+          <Link href="/facturas" className="underline">Ver recurrentes</Link>
+        </div>
+      )}
     </div>
   );
 }

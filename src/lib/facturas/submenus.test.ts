@@ -1,11 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { submenusFacturas, type Submenu } from "./submenus";
+import { submenusFacturas, type EntradaSubmenus, type Submenu } from "./submenus";
 
 const find = (ms: Submenu[], v: string) => ms.find((m) => m.v === v)!;
 
+/** Entrada vacía: cada prueba sobreescribe sólo el campo que le importa. */
+function entrada(p: Partial<EntradaSubmenus> = {}): EntradaSubmenus {
+  return { comprobantes: 0, prefacturas: 0, recurrentesActivas: 0, repPorEmitir: null, ...p };
+}
+
 describe("submenusFacturas", () => {
   it("Comprobantes conserva el total: esa pestaña es el archivo", () => {
-    const m = find(submenusFacturas({ comprobantes: 184, prefacturas: 0, repPorEmitir: null }), "comprobantes");
+    const m = find(submenusFacturas(entrada({ comprobantes: 184, prefacturas: 0, repPorEmitir: null })), "comprobantes");
     expect(m.n).toBe(184);
     expect(m.tono).toBe("neutral");
   });
@@ -14,7 +19,7 @@ describe("submenusFacturas", () => {
     // 184 REP en el archivo, pero sólo 3 cobros esperan complemento: la
     // insignia debe decir 3. Ese era justo el número que engañaba.
     const m = find(
-      submenusFacturas({ comprobantes: 184, prefacturas: 0, repPorEmitir: { sinRep: 3, vencidos: 0 } }),
+      submenusFacturas(entrada({ comprobantes: 184, prefacturas: 0, repPorEmitir: { sinRep: 3, vencidos: 0 } })),
       "complementos"
     );
     expect(m.n).toBe(3);
@@ -22,7 +27,7 @@ describe("submenusFacturas", () => {
 
   it("con cobros dentro de plazo el tono es ámbar", () => {
     const m = find(
-      submenusFacturas({ comprobantes: 10, prefacturas: 0, repPorEmitir: { sinRep: 2, vencidos: 0 } }),
+      submenusFacturas(entrada({ comprobantes: 10, prefacturas: 0, repPorEmitir: { sinRep: 2, vencidos: 0 } })),
       "complementos"
     );
     expect(m.tono).toBe("amber");
@@ -31,7 +36,7 @@ describe("submenusFacturas", () => {
 
   it("un solo vencido pinta la pestaña en rojo y lo dice en el tooltip", () => {
     const m = find(
-      submenusFacturas({ comprobantes: 10, prefacturas: 0, repPorEmitir: { sinRep: 4, vencidos: 1 } }),
+      submenusFacturas(entrada({ comprobantes: 10, prefacturas: 0, repPorEmitir: { sinRep: 4, vencidos: 1 } })),
       "complementos"
     );
     expect(m.tono).toBe("red");
@@ -40,7 +45,7 @@ describe("submenusFacturas", () => {
 
   it("sin cobros pendientes no hay insignia ni urgencia", () => {
     const m = find(
-      submenusFacturas({ comprobantes: 10, prefacturas: 0, repPorEmitir: { sinRep: 0, vencidos: 0 } }),
+      submenusFacturas(entrada({ comprobantes: 10, prefacturas: 0, repPorEmitir: { sinRep: 0, vencidos: 0 } })),
       "complementos"
     );
     expect(m.n).toBeNull();
@@ -48,25 +53,43 @@ describe("submenusFacturas", () => {
   });
 
   it("sin datos de REP todavía (carga en vuelo) la pestaña no inventa un número", () => {
-    const m = find(submenusFacturas({ comprobantes: 10, prefacturas: 0, repPorEmitir: null }), "complementos");
+    const m = find(submenusFacturas(entrada({ comprobantes: 10, prefacturas: 0, repPorEmitir: null })), "complementos");
     expect(m.n).toBeNull();
     expect(m.tono).toBe("neutral");
   });
 
   it("las prefacturas guardadas van en ámbar: esperan, no incumplen", () => {
-    const m = find(submenusFacturas({ comprobantes: 0, prefacturas: 2, repPorEmitir: null }), "prefacturas");
+    const m = find(submenusFacturas(entrada({ comprobantes: 0, prefacturas: 2, repPorEmitir: null })), "prefacturas");
     expect(m.n).toBe(2);
     expect(m.tono).toBe("amber");
   });
 
   it("cero prefacturas no pinta insignia", () => {
-    const m = find(submenusFacturas({ comprobantes: 0, prefacturas: 0, repPorEmitir: null }), "prefacturas");
+    const m = find(submenusFacturas(entrada({ comprobantes: 0, prefacturas: 0, repPorEmitir: null })), "prefacturas");
     expect(m.n).toBeNull();
     expect(m.tono).toBe("neutral");
   });
 
-  it("siempre devuelve las tres pestañas en orden", () => {
-    const ms = submenusFacturas({ comprobantes: null, prefacturas: 0, repPorEmitir: null });
-    expect(ms.map((m) => m.v)).toEqual(["comprobantes", "complementos", "prefacturas"]);
+  it("una serie recurrente activa se cuenta, pero en neutral", () => {
+    // Es configuración que trabaja sola, no un pendiente: lo que sí pide
+    // atención son las prefacturas que genera, y ésas van en su propia pestaña.
+    const m = find(submenusFacturas(entrada({ recurrentesActivas: 3 })), "recurrentes");
+    expect(m.n).toBe(3);
+    expect(m.tono).toBe("neutral");
+  });
+
+  it("series pausadas no llegan aquí: el conteo es de activas", () => {
+    const m = find(submenusFacturas(entrada({ recurrentesActivas: 0 })), "recurrentes");
+    expect(m.n).toBeNull();
+  });
+
+  it("siempre devuelve las cuatro pestañas en orden", () => {
+    const ms = submenusFacturas(entrada({ comprobantes: null }));
+    expect(ms.map((m) => m.v)).toEqual([
+      "comprobantes",
+      "complementos",
+      "prefacturas",
+      "recurrentes",
+    ]);
   });
 });
