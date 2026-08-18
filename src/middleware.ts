@@ -77,7 +77,12 @@ export function middleware(req: NextRequest) {
  */
 export const config = {
   matcher: [
+    // :path* para cubrir también /api/auth/token/refresh — ver AUTOMOTRIZ-4 en
+    // Sentry: sin la subruta, el preflight de la renovación de sesión no lleva
+    // Access-Control-Allow-Origin y Safari tira el fetch con «Load failed» sin
+    // status, el mismo modo de falla que AUTOMOTRIZ-2 más abajo.
     "/api/auth/token",
+    "/api/auth/token/:path*",
     // Onboarding desde satélites (wizard Automotriz): alta de cuenta, parseo
     // de la CSF y checkout de Stripe se llaman cross-origin con bearer token.
     "/api/auth/signup",
