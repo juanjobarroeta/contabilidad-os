@@ -13,8 +13,10 @@ import {
 // pueda usarse tanto desde la ruta (un click del usuario) como desde el cron
 // diario (toda la cartera). NO cambia el umbral ni el scoring.
 //
-// Idempotente: sólo toca transacciones UNMATCHED; nunca des-concilia ni toca
-// las IGNORED. Best-effort.
+// Idempotente: toca transacciones UNMATCHED y una sola clase de IGNORED — los
+// pagos de impuestos auto-ignorados por el categorizador (nota TAX_PAYMENT)
+// cuya línea de captura identifica a su declaración. Nunca des-concilia, y un
+// IGNORED puesto por el usuario no se toca. Best-effort.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const WINDOW_DAYS = 14;
@@ -235,6 +237,30 @@ export async function autoConciliarCuenta(accountId: string): Promise<{ matched:
   });
 
   let matched = 0;
+
+  // PAGOS DE IMPUESTOS AUTO-IGNORADOS. El import los manda a IGNORED con nota
+  // TAX_PAYMENT *antes* de que la conciliación corra, así que el camino por
+  // línea de captura nunca los veía — por eso la primera corrida global dio
+  // cero. Pasarlos a MATCHED + declaración PAID es estrictamente mejor que
+  // IGNORED: siguen fuera de la bandeja, pero ahora con la evidencia de QUÉ
+  // declaración pagaron. Sólo la nota exacta del categorizador — un movimiento
+  // que el USUARIO ignoró a mano no se toca.
+  const impuestosIgnorados = await prisma.bankTransaction.findMany({
+    where: {
+      bankAccountId: accountId,
+      status: "IGNORED",
+      notes: "TAX_PAYMENT",
+      lineaCaptura: { not: null },
+      taxDeclarationId: null,
+    },
+  });
+  for (const tx of impuestosIgnorados) {
+    try {
+      if (await conciliarImpuestoPorLineaCaptura(tx)) matched++;
+    } catch {
+      // best-effort
+    }
+  }
 
   for (const tx of unmatched) {
     // IMPUESTOS PRIMERO, por línea de captura: es identidad, no inferencia. Si
