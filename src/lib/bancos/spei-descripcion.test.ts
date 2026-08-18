@@ -243,3 +243,51 @@ describe("esSpeiInterbancario", () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Descripciones DAÑADAS. Los meses importados antes de la corrección de
+// codificación quedaron con U+FFFD donde iba el acento. El motor tiene que
+// funcionar sobre ellas: son la mayor parte de la historia guardada.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const R = "�";
+const BAJIO_IVA_DANADO = `IVA Comisi${R}n por Transferencia - Env${R}o ; (SPEI; Banca por Internet) | N${R}mero de Referencia: BB4251954020513 REF. 4251954 | N${R}mero de Autorizaci${R}n: 4242167020513`;
+const BAJIO_COMISION_DANADA = `Comisi${R}n por Transferencia - Env${R}o ; (SPEI; Banca por Internet) | Referencia: 4251954 | Clave de Rastreo: BB4251954020513`;
+
+describe("descripciones dañadas por el bug de codificación", () => {
+  it("reconoce la comisión aunque diga 'Comisi<?>n'", () => {
+    // El regex /COMISI[OÓ]N/ fallaba contra el texto dañado, así que el vínculo
+    // comisión→transferencia nunca se disparaba sobre la historia guardada.
+    expect(esComisionDeTransferencia(BAJIO_COMISION_DANADA)).toBe(true);
+    expect(esComisionDeTransferencia(BAJIO_IVA_DANADO)).toBe(true);
+  });
+
+  it("NO manda una comisión dañada a consultar CEP", () => {
+    // Antes daba true: habríamos pagado una consulta por un cobro del banco.
+    expect(esSpeiInterbancario(BAJIO_COMISION_DANADA)).toBe(false);
+    expect(esSpeiInterbancario(BAJIO_IVA_DANADO)).toBe(false);
+  });
+
+  it("rescata la clave de rastreo de 'Número de Referencia'", () => {
+    // Bajío la etiqueta así en los renglones de comisión e IVA. Es la MISMA
+    // clave que el envío trae bajo "Clave de Rastreo".
+    expect(parseSpei(BAJIO_IVA_DANADO).claveRastreo).toBe("BB4251954020513");
+    expect(parseSpei(BAJIO_COMISION_DANADA).claveRastreo).toBe("BB4251954020513");
+  });
+
+  it("no confunde el 'REF. 4251954' pegado con una línea de captura", () => {
+    // Una línea de captura son 20 posiciones; ésta es un folio de 7 dígitos.
+    expect(parseSpei(BAJIO_IVA_DANADO).lineaCaptura).toBeUndefined();
+  });
+});
+
+describe("pago de impuestos con línea de captura real", () => {
+  it("saca línea de captura, beneficiario y hora", () => {
+    const d = parseSpei(
+      "Retiro de Recursos Pago de impuestos RFC | Pago Referenciado | Folio: 19431958825 por BajioNet | por (93.00) mxn | REF. 04265F9X250050618418 | Beneficiario | TESOFE INGRESOS FEDERALES REC | Hora: 11:16:14 | Recibo # 7119283919431"
+    );
+    expect(d.lineaCaptura).toBe("04265F9X250050618418");
+    expect(d.contraparteNombre).toBe("TESOFE INGRESOS FEDERALES REC");
+    expect(d.hora).toBe("11:16:14");
+  });
+});

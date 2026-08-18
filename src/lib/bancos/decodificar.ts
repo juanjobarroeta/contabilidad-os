@@ -69,6 +69,66 @@ export function tieneMojibake(texto: string): boolean {
   return texto.includes(REEMPLAZO);
 }
 
+// ── Reparación de lo ya dañado ───────────────────────────────────────────────
+
+/**
+ * Vocales acentuadas que el U+FFFD pudo haber reemplazado, para escribir reglas
+ * que empaten con el texto sano Y con el dañado. Sin esto, cualquier regla que
+ * mencione un acento —"COMISIÓN", "ENVÍO"— falla en todos los meses importados
+ * antes de la corrección de codificación, que es justo donde más se necesita.
+ */
+export const O_ACENTO = "[oó�]";
+export const I_ACENTO = "[ií�]";
+export const U_ACENTO = "[uú�]";
+
+/**
+ * Palabras del vocabulario bancario donde el U+FFFD tiene UNA sola lectura
+ * posible. "Comisi<?>n" sólo puede ser "Comisión": no existe otra palabra que
+ * encaje. Por eso esta reparación es determinista y no una adivinanza.
+ *
+ * IMPORTANTE — esto NO edita lo que escribió el banco: repara lo que NOSOTROS
+ * rompimos al decodificar mal el archivo. El byte que el banco mandó decía "ó";
+ * leerlo como UTF-8 lo convirtió en U+FFFD. Devolverlo a "ó" restaura el
+ * original, no lo altera.
+ *
+ * La lista es CERRADA y explícita a propósito. Una reparación por heurística
+ * ("si hay <?> entre consonantes, prueba una vocal") acabaría inventando
+ * nombres propios de contrapartes, y ahí sí estaríamos falsificando el estado
+ * de cuenta.
+ */
+const REPARACIONES: ReadonlyArray<{ re: RegExp; acento: string }> = [
+  { re: /(comisi)�(n)/gi, acento: "ó" },
+  { re: /(env)�(o)/gi, acento: "í" },
+  { re: /(n)�(mero)/gi, acento: "ú" },
+  { re: /(autorizaci)�(n)/gi, acento: "ó" },
+  { re: /(instituci)�(n)/gi, acento: "ó" },
+  { re: /(dep)�(sito)/gi, acento: "ó" },
+  { re: /(cr)�(dito)/gi, acento: "é" },
+  { re: /(d)�(bito)/gi, acento: "é" },
+  { re: /(devoluci)�(n)/gi, acento: "ó" },
+  { re: /(operaci)�(n)/gi, acento: "ó" },
+  { re: /(aplicaci)�(n)/gi, acento: "ó" },
+  { re: /(descripci)�(n)/gi, acento: "ó" },
+];
+
+/**
+ * Repara el mojibake de las palabras conocidas, respetando MAYÚSCULAS.
+ *
+ * Lo que no está en la lista se queda con su U+FFFD: preferible un carácter
+ * roto y honesto a un nombre inventado.
+ */
+export function repararMojibake(texto: string): string {
+  if (!texto || !texto.includes(REEMPLAZO)) return texto;
+  let out = texto;
+  for (const { re, acento } of REPARACIONES) {
+    out = out.replace(re, (m: string, a: string, b: string) => {
+      const enMayusculas = m === m.toUpperCase();
+      return a + (enMayusculas ? acento.toUpperCase() : acento) + b;
+    });
+  }
+  return out;
+}
+
 // ── Sniffing de formato ──────────────────────────────────────────────────────
 
 /**

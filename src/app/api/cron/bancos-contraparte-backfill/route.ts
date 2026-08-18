@@ -4,6 +4,7 @@ import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { camposContraparte, parseSpei, tieneContraparte } from "@/lib/bancos/spei-descripcion";
 import { vincularComisionesDeCuenta } from "@/lib/bancos/comisiones-repo";
+import { repararMojibake, tieneMojibake } from "@/lib/bancos/decodificar";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/bancos-contraparte-backfill   [?limit=N][&companyId=]
@@ -73,6 +74,8 @@ async function handle(req: Request) {
   let conRfc = 0;
   let conClaveRastreo = 0;
   let conLineaCaptura = 0;
+  let reparadas = 0;
+  let sinReparar = 0;
   // Cursor por id: las filas resueltas salen del filtro (quedan selladas), así
   // que paginar por id evita re-leerlas.
   let cursorId: string | null = null;
@@ -98,12 +101,28 @@ async function handle(req: Request) {
       // sólo la descripción guardada. Los bancos que etiquetan la clave de
       // rastreo dentro del texto (Bajío) sí la rinden aquí; los que la mandan
       // en columna aparte la ganarán al reimportar.
-      const campos = camposContraparte(parseSpei(tx.descripcion));
+      // Repara el mojibake que NOSOTROS causamos al decodificar mal el CSV
+      // (el front leía UTF-8 a fuerza sobre archivos Windows-1252). No es
+      // editar lo que escribió el banco: el byte original decía "ó" y esto lo
+      // devuelve a "ó". Sólo palabras con una sola lectura posible.
+      const reparada = repararMojibake(tx.descripcion);
+      if (reparada !== tx.descripcion) reparadas++;
+
+      const campos = camposContraparte(parseSpei(reparada));
       const sello = new Date();
 
       await prisma.bankTransaction
-        .update({ where: { id: tx.id }, data: { ...campos, contraparteAt: sello } })
+        .update({
+          where: { id: tx.id },
+          data: {
+            ...campos,
+            ...(reparada !== tx.descripcion ? { descripcion: reparada } : {}),
+            contraparteAt: sello,
+          },
+        })
         .catch(() => {}); // best-effort: una fila no debe tumbar el barrido
+
+      if (tieneMojibake(reparada)) sinReparar++;
 
       if (tieneContraparte(campos)) conContraparte++;
       if (campos.contraparteRfc) conRfc++;
@@ -151,6 +170,10 @@ async function handle(req: Request) {
     // Los que traen clave de rastreo pero no RFC son los candidatos a CEP.
     conClaveRastreo,
     conLineaCaptura,
+    // Descripciones cuyos acentos se restauraron, y las que siguen con daño
+    // fuera del vocabulario conocido (ahí sí hay que reimportar el mes).
+    reparadas,
+    sinReparar,
     comisionesVinculadas,
     restantes,
     ms: Date.now() - startedAt,

@@ -3,6 +3,7 @@ import {
   decodificarEstadoDeCuenta,
   esExcelBinario,
   esSpreadsheetML,
+  repararMojibake,
   tieneMojibake,
 } from "./decodificar";
 
@@ -98,5 +99,46 @@ describe("esSpreadsheetML", () => {
 
   it("no confunde un CSV normal", () => {
     expect(esSpreadsheetML("FECHA,CONCEPTO,MONTO\n01/07/2026,SPEI,100")).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reparación de lo YA dañado. Renglones reales de Bajío tal como se ven hoy
+// en la app, con el U+FFFD donde iba el acento.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("repararMojibake", () => {
+  it("repara el renglón real de la comisión", () => {
+    expect(
+      repararMojibake("Comisi�n por Transferencia - Env�o ; (SPEI; Banca por Internet)")
+    ).toBe("Comisión por Transferencia - Envío ; (SPEI; Banca por Internet)");
+  });
+
+  it("repara el renglón real del IVA, con sus tres palabras dañadas", () => {
+    expect(
+      repararMojibake(
+        "IVA Comisi�n por Transferencia | N�mero de Referencia: BB4251954020513 | N�mero de Autorizaci�n: 4242167020513"
+      )
+    ).toBe(
+      "IVA Comisión por Transferencia | Número de Referencia: BB4251954020513 | Número de Autorización: 4242167020513"
+    );
+  });
+
+  it("respeta MAYÚSCULAS", () => {
+    expect(repararMojibake("COMISI�N POR TRANSFERENCIA")).toBe("COMISIÓN POR TRANSFERENCIA");
+    expect(repararMojibake("DEP�SITO EN EFECTIVO")).toBe("DEPÓSITO EN EFECTIVO");
+  });
+
+  it("NO inventa: lo que no está en la lista conserva su daño", () => {
+    // Un nombre propio dañado tiene varias lecturas posibles. Adivinarlo sería
+    // falsificar el estado de cuenta; un carácter roto y honesto es mejor.
+    const nombre = "JOS� MAR�A GONZ�LEZ";
+    expect(repararMojibake(nombre)).toBe(nombre);
+    expect(tieneMojibake(repararMojibake(nombre))).toBe(true);
+  });
+
+  it("no toca texto sano ni vacío", () => {
+    expect(repararMojibake("Comisión por Transferencia")).toBe("Comisión por Transferencia");
+    expect(repararMojibake("")).toBe("");
   });
 });
