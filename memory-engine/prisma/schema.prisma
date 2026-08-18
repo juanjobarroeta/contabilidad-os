@@ -1,0 +1,195 @@
+// Memory Engine — the v0 spine.
+//
+// One rule dominates every choice here: `episodes` is APPEND-ONLY. It is never
+// updated and never deleted, not by the app and not by hand. That is enforced
+// in the database (see the init migration), not by convention, because the
+// realistic failure mode for a personal archive is a careless migration that
+// eats four unrecoverable years.
+//
+// Deliberately absent in Phase 1: embeddings. The outline sketched
+// `embedding vector(1536)` on `episodes` but also said to keep embeddings in a
+// separate table so a later move to client-side encryption never touches the
+// spine. Those two can't both be true, so the spine wins: embeddings arrive in
+// Phase 2 as `episode_embeddings`, and Phase 1 runs on plain Postgres with no
+// pgvector required.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// How sure we are of WHEN, not of WHAT. Half the archive is "sometime in
+/// 2014"; a nullable date alone would force false precision and you'd stop
+/// logging. `occurredAt`/`occurredEnd` always bracket the real span, and
+/// `precision` says how wide the bracket is meant to be read.
+enum Precision {
+  day
+  month
+  season
+  year
+  unknown
+}
+
+enum Source {
+  typed
+  photo_prompt
+  import
+}
+
+enum EntityKind {
+  person
+  place
+  period
+  thing
+}
+
+/// "I was with her" and "I thought about her" are different edges.
+enum EpisodeRole {
+  present
+  mentioned
+  about
+}
+
+enum AnnotationAuthor {
+  user
+  ai
+}
+
+/// The immutable spine. Never written or edited by AI, never UPDATEd by
+/// anyone. Corrections are new episodes or annotations.
+model Episode {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// First person, what happened. Free text.
+  body String
+
+  /// Start of the span the episode occupies. Null only when precision is
+  /// `unknown` — an episode you know happened but cannot place at all.
+  occurredAt DateTime? @map("occurred_at") @db.Date
+
+  /// Inclusive end of the span. Derived from `precision` on write, so a
+  /// year-precision episode is a band across the whole year rather than a
+  /// point on January 1st.
+  occurredEnd DateTime? @map("occurred_end") @db.Date
+
+  precision Precision
+
+  /// 1–5, how sure you are of the DATING. Null when precision is `unknown`.
+  confidence Int? @db.SmallInt
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  source Source @default(typed)
+
+  entities    EpisodeEntity[]
+  annotations Annotation[]
+  media       Media[]
+
+  @@index([occurredAt])
+  @@index([occurredAt, occurredEnd])
+  @@index([createdAt])
+  @@map("episodes")
+}
+
+model Entity {
+  id            String     @id @default(uuid()) @db.Uuid
+  kind          EntityKind
+  canonicalName String     @map("canonical_name")
+  firstSeen     DateTime?  @map("first_seen") @db.Date
+  notes         String?
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  aliases  EntityAlias[]
+  episodes EpisodeEntity[]
+
+  @@unique([kind, canonicalName])
+  @@map("entities")
+}
+
+/// The same person shows up under four or more labels across twenty years —
+/// full name, nickname, an initial, a bare "ella". Without this the graph
+/// fractures later and there is no way back.
+///
+/// Note what is NOT unique here: an alias is unique only within an entity.
+/// "ella" legitimately points at several people, and resolving that ambiguity
+/// is a human decision (Phase 3), not a database constraint.
+model EntityAlias {
+  id       String @id @default(uuid()) @db.Uuid
+  entityId String @map("entity_id") @db.Uuid
+  alias    String
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, alias])
+  @@index([alias])
+  @@map("entity_aliases")
+}
+
+model EpisodeEntity {
+  episodeId String      @map("episode_id") @db.Uuid
+  entityId  String      @map("entity_id") @db.Uuid
+  role      EpisodeRole
+
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Restrict)
+  entity  Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@id([episodeId, entityId, role])
+  @@index([entityId])
+  @@map("episode_entities")
+}
+
+/// Versioned interpretation, namespaced per satellite. Superseding, never
+/// overwriting: reading how your reading of 2019 changed between 2026 and 2030
+/// is the highest-value output in the system, and it costs one column.
+model Annotation {
+  id        String   @id @default(uuid()) @db.Uuid
+  episodeId String   @map("episode_id") @db.Uuid
+  namespace String
+  body      String
+  writtenAt DateTime @default(now()) @map("written_at") @db.Timestamptz(6)
+
+  /// The annotation this one replaces. Unique, so the chain stays linear: an
+  /// annotation can be superseded once and never forks into two "current"
+  /// readings.
+  supersedes String? @unique @db.Uuid
+
+  author AnnotationAuthor
+
+  episode      Episode     @relation(fields: [episodeId], references: [id], onDelete: Restrict)
+  superseded   Annotation? @relation("AnnotationChain", fields: [supersedes], references: [id], onDelete: Restrict)
+  supersededBy Annotation? @relation("AnnotationChain")
+
+  @@index([episodeId, namespace])
+  @@index([namespace, writtenAt])
+  @@map("annotations")
+}
+
+/// Unlinked rows are the backfill queue: `episodeId IS NULL AND NOT processed`
+/// sorted by `exifTakenAt` is exactly the Phase 4 ritual.
+model Media {
+  id   String @id @default(uuid()) @db.Uuid
+  path String @unique
+
+  /// Dating evidence. An EXIF timestamp gives a day-precision episode free.
+  exifTakenAt DateTime? @map("exif_taken_at") @db.Timestamptz(6)
+
+  /// The outline said `point`; Prisma has no point type and a bare point is
+  /// awkward to index anyway, so it is two columns. Reverse-geocoding into a
+  /// place entity is Phase 4's job.
+  exifGpsLat Float? @map("exif_gps_lat")
+  exifGpsLon Float? @map("exif_gps_lon")
+
+  episodeId String?  @map("episode_id") @db.Uuid
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  episode Episode? @relation(fields: [episodeId], references: [id], onDelete: SetNull)
+
+  @@index([exifTakenAt])
+  @@index([processed, exifTakenAt])
+  @@map("media")
+}
