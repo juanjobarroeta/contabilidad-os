@@ -707,7 +707,7 @@ export default function FacturasPage() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-cos-ink px-5 py-3 text-sm font-medium text-white shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-cos-ink px-5 py-3 text-sm font-medium text-cos-canvas shadow-lg">
           {toast}
         </div>
       )}

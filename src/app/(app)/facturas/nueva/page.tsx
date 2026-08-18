@@ -1308,7 +1308,7 @@ export default function NuevaFacturaPage() {
       )}
 
       {recurrenteOk && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-control bg-cos-ink px-4 py-2.5 text-[13.5px] font-medium text-white shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-control bg-cos-ink px-4 py-2.5 text-[13.5px] font-medium text-cos-canvas shadow-lg">
           Serie «{recurrenteOk}» guardada — generará prefacturas en su fecha.{" "}
           <Link href="/facturas" className="underline">Ver recurrentes</Link>
         </div>

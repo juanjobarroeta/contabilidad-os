@@ -352,6 +352,7 @@ export function registrarToolsOperador(server: McpServerLike): void {
         empresa?: string;
         limit?: number;
         desde?: string;
+        reparse?: boolean;
       }>({
         type: "object",
         properties: {
@@ -359,12 +360,17 @@ export function registrarToolsOperador(server: McpServerLike): void {
           empresa: { type: "string", description: "id o RFC (omitir = corrida global)" },
           limit: { type: "integer", minimum: 1, maximum: 100000 },
           desde: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "sólo sat-vigencia-sync" },
+          reparse: {
+            type: "boolean",
+            description:
+              "sólo bancos-contraparte-backfill: vuelve a barrer lo ya procesado. Se usa cuando el parser aprende un banco nuevo — las filas viejas se sellaron sin extraer nada porque no sabíamos leer su formato.",
+          },
         },
         required: ["cron"],
         additionalProperties: false,
       }),
     },
-    async ({ cron, empresa, limit, desde }: { cron: (typeof CRONS_PERMITIDOS)[number]; empresa?: string; limit?: number; desde?: string }) => {
+    async ({ cron, empresa, limit, desde, reparse }: { cron: (typeof CRONS_PERMITIDOS)[number]; empresa?: string; limit?: number; desde?: string; reparse?: boolean }) => {
       const secret = process.env.CRON_SECRET;
       if (!secret) return texto({ error: "CRON_SECRET no configurado en el servidor." });
       const e = empresa ? await resolverEmpresa(empresa) : null;
@@ -372,6 +378,7 @@ export function registrarToolsOperador(server: McpServerLike): void {
       if (e) params.set("companyId", e.id);
       if (limit) params.set("limit", String(limit));
       if (desde) params.set("desde", desde);
+      if (reparse) params.set("reparse", "1");
       const base = `http://127.0.0.1:${process.env.PORT ?? 3000}`;
       const res = await fetch(`${base}/api/cron/${cron}?${params}`, {
         method: "POST",
@@ -385,7 +392,7 @@ export function registrarToolsOperador(server: McpServerLike): void {
           accion: "mcp.empujar_cron",
           entidad: "Company",
           entidadId: e.id,
-          detalle: { cron, limit: limit ?? null, desde: desde ?? null, status: res.status },
+          detalle: { cron, limit: limit ?? null, desde: desde ?? null, reparse: reparse ?? false, status: res.status },
         });
       }
       return texto({ cron, empresa: e ? { rfc: e.rfc } : "global", httpStatus: res.status, resultado: body });
