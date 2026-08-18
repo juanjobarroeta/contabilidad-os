@@ -110,6 +110,42 @@ export function pareceClaveRastreo(token: string): boolean {
   return /\d/.test(t);
 }
 
+// ── Bancos por nombre ────────────────────────────────────────────────────────
+
+/**
+ * Nombres de instituciones tal como los escriben los estados de cuenta.
+ *
+ * BBVA NO etiqueta el banco: lo pega al concepto ("SPEI ENVIADO SANTANDER"),
+ * así que la única forma de reconocerlo es por nombre. Aquí van SÓLO nombres —
+ * el código de 3 dígitos NUNCA se infiere de esta lista, siempre sale de una
+ * CLABE validada o de un "BCO:xxxx" explícito. Adivinar códigos de memoria es
+ * exactamente el tipo de dato inventado que esta clase no debe producir.
+ *
+ * Los más largos primero: "NU MEXICO" antes que "NU", o el corto se lo come.
+ */
+export const BANCOS_MX: readonly string[] = [
+  "BBVA BANCOMER", "CITIBANAMEX", "SCOTIABANK", "BANCOPPEL", "BANCO DEL BAJIO",
+  "NU MEXICO", "SANTANDER", "BANORTE", "BANAMEX", "BANREGIO", "BANCOMER",
+  "INBURSA", "HSBC", "AFIRME", "MIFEL", "AZTECA", "BAJIO", "BANBAJIO",
+  "AUTOFIN", "AMERICAN EXPRESS", "AMEX", "AKALA", "AlBO", "BBVA", "STP",
+  "NVIO", "KLAR", "HEY BANCO", "SPIN", "MERCADO PAGO", "OPENBANK",
+];
+
+const RE_BANCO_SUELTO = new RegExp(`\\b(${BANCOS_MX.join("|")})\\b`, "i");
+
+/**
+ * BBVA escribe el destino sin etiqueta: "SPEI ENVIADO SANTANDER",
+ * "SPEI RECIBIDO NU MEXICO Cocina vital". Lo que sigue al nombre del banco es
+ * el concepto que capturó quien mandó el dinero.
+ */
+const RE_SPEI_POSICIONAL = /\bSPEI\s+(?:ENVIADO|RECIBIDO)\b\s*(.*)$/i;
+
+/** BBVA: "PAGO CUENTA DE TERCERO BNET 0547714750 TECNOLOGIAS NARCIS". */
+const RE_PAGO_TERCERO = /PAGO\s+CUENTA\s+DE\s+TERCERO(?:\s+BNET)?\s+\d+\s+(.+)$/i;
+
+/** Banamex: "TRANSFERENCIA A RHC BANAMEX". */
+const RE_TRANSFERENCIA_A = /\bTRANSFERENCIA\s+A\s+(.+)$/i;
+
 // ── Escáner de etiquetas ─────────────────────────────────────────────────────
 
 type Campo =
@@ -122,7 +158,12 @@ type Campo =
   | "claveRastreo"
   | "concepto"
   | "hora"
-  | "lineaCaptura";
+  | "lineaCaptura"
+  // No se guarda: existe para que el valor de la etiqueta ANTERIOR sepa dónde
+  // termina. Banamex escribe "Referencia Númerica: 0000645277 Autorización:
+  // 00645277" en una sola línea; sin esta frontera, la referencia se llevaría
+  // pegado el número de autorización y fallaría la validación.
+  | "autorizacion";
 
 /**
  * Tabla de etiquetas. EL ORDEN IMPORTA: la alternancia se resuelve por posición
@@ -135,6 +176,8 @@ const ETIQUETAS: ReadonlyArray<{ campo: Campo; re: string }> = [
   { campo: "clabe", re: String.raw`CTA\s*\/\s*CLABE\s*:` },
   { campo: "clabe", re: String.raw`CLABE\s*:` },
   { campo: "rfc", re: String.raw`RFC\s+(?:Beneficiario|Ordenante|Receptor|Emisor)\s*:` },
+  // BBVA lo etiqueta a secas y lo parte con un espacio: "RFC: DME 180122DU4".
+  { campo: "rfc", re: String.raw`\bRFC\s*:` },
   { campo: "banco", re: `Instituci${O_ACENTO}n\\s+(?:Receptora|Emisora|Beneficiaria)\\s*:` },
   { campo: "bancoConCodigo", re: String.raw`BCO\s*:` },
   { campo: "claveRastreo", re: String.raw`Clave\s+de\s+Rastreo\s*:` },
@@ -146,7 +189,12 @@ const ETIQUETAS: ReadonlyArray<{ campo: Campo; re: string }> = [
   { campo: "claveRastreo", re: `N${U_ACENTO}mero\\s+de\\s+Referencia\\s*:` },
   { campo: "concepto", re: String.raw`Concepto\s+del\s+Pago\s*:` },
   { campo: "concepto", re: String.raw`Concepto\s*:` },
-  { campo: "referencia", re: String.raw`Referencia\s+Num[eé]rica\s*:` },
+  // Banamex escribe "Númerica" — con el acento en la vocal equivocada. No es
+  // un typo nuestro: así lo exporta el banco, y sin contemplarlo su columna de
+  // referencia no se reconoce en ningún movimiento.
+  { campo: "referencia", re: String.raw`Referencia\s+N[uú]m[eé]rica\s*:` },
+  { campo: "autorizacion", re: `Autorizaci${O_ACENTO}n\\s*:` },
+  { campo: "autorizacion", re: String.raw`\bAUT\s*:` },
   { campo: "referencia", re: String.raw`Referencia\s*:` },
   { campo: "hora", re: String.raw`Hora\s*:` },
   { campo: "lineaCaptura", re: String.raw`REF\.\s*` },
@@ -235,7 +283,67 @@ export function parseSpei(descripcion: string, columnaCriptica?: string): DatosS
     if (m) out.contraparteRfc = m[1];
   }
 
+  // 4. FORMATOS POSICIONALES. BBVA y Banamex no etiquetan la contraparte: la
+  //    pegan al concepto. Van al FINAL y sólo rellenan huecos — una etiqueta
+  //    explícita siempre le gana a una posición.
+  //
+  //    Se les da SÓLO el tramo anterior a la primera etiqueta. Ahí vive lo
+  //    posicional, y acotarlo evita que un ".+$" se lleve pegadas las etiquetas
+  //    de más adelante: "TRANSFERENCIA A RHC BANAMEX Referencia Númerica: …"
+  //    guardaba como nombre la línea entera.
+  const finPrefijo = hits.length > 0 ? hits[0].ini : texto.length;
+  posicionales(texto.slice(0, finPrefijo).trim(), out);
+
   return out;
+}
+
+/**
+ * Contraparte y banco cuando el estado de cuenta no los etiqueta.
+ *
+ * Esto es lo que abre BBVA y Banamex, que entre los dos son la mayoría de las
+ * cuentas. Sin esto el motor rendía CERO campos en sus movimientos: no porque
+ * no tuvieran la información, sino porque la escriben sin etiqueta.
+ *
+ * Se mantiene conservador: sólo dispara con un prefijo reconocido
+ * ("SPEI ENVIADO", "PAGO CUENTA DE TERCERO", "TRANSFERENCIA A") y el nombre
+ * sale de lo que sigue. Nada de tomar "la primera palabra en mayúsculas".
+ */
+function posicionales(texto: string, out: DatosSpei): void {
+  // BBVA: "SPEI ENVIADO SANTANDER" / "SPEI RECIBIDO NU MEXICO Cocina vital"
+  const spei = RE_SPEI_POSICIONAL.exec(texto);
+  if (spei) {
+    const resto = spei[1].trim();
+    const banco = RE_BANCO_SUELTO.exec(resto);
+    if (banco && resto.toUpperCase().startsWith(banco[1].toUpperCase())) {
+      out.bancoContraparteNombre ??= banco[1].toUpperCase();
+      // Lo que sigue al banco es el concepto de quien mandó el dinero.
+      const cola = resto.slice(banco[1].length).trim();
+      if (cola && !/^\d+$/.test(cola)) out.concepto ??= cola;
+    } else if (resto && !/^\d+$/.test(resto)) {
+      out.concepto ??= resto;
+    }
+    return;
+  }
+
+  // BBVA: "PAGO CUENTA DE TERCERO BNET 0547714750 TECNOLOGIAS NARCIS"
+  const tercero = RE_PAGO_TERCERO.exec(texto);
+  if (tercero) {
+    const nombre = tercero[1].trim();
+    if (nombre.length >= 3) out.contraparteNombre ??= nombre.toUpperCase();
+    return;
+  }
+
+  // Banamex: "TRANSFERENCIA A RHC BANAMEX" — el banco va al final, pegado.
+  const transf = RE_TRANSFERENCIA_A.exec(texto);
+  if (transf) {
+    let nombre = transf[1].trim();
+    const banco = RE_BANCO_SUELTO.exec(nombre);
+    if (banco && nombre.toUpperCase().endsWith(banco[1].toUpperCase())) {
+      out.bancoContraparteNombre ??= banco[1].toUpperCase();
+      nombre = nombre.slice(0, nombre.length - banco[1].length).trim();
+    }
+    if (nombre.length >= 3) out.contraparteNombre ??= nombre.toUpperCase();
+  }
 }
 
 /** Asigna un valor ya limpio al campo que le toca, validando lo validable. */
@@ -251,8 +359,11 @@ function asignar(out: DatosSpei, campo: Campo, valor: string): void {
       return;
     }
     case "rfc": {
-      const v = valor.toUpperCase();
-      if (RE_RFC.test(v)) out.contraparteRfc ??= v;
+      // BBVA lo parte: "DME 180122DU4". Se junta antes de validar; el resto del
+      // valor (hora, autorización) se ignora.
+      const v = valor.toUpperCase().replace(/\s+/g, "");
+      const m = /^([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})/.exec(v);
+      if (m) out.contraparteRfc ??= m[1];
       return;
     }
     case "banco":
@@ -270,10 +381,16 @@ function asignar(out: DatosSpei, campo: Campo, valor: string): void {
       out.contraparteNombre ??= valor.toUpperCase();
       return;
     case "referencia": {
-      if (!/^\d{1,7}$/.test(valor)) return;
-      out.referenciaNumerica ??= valor.replace(/^0+/, "") || "0";
+      // Banamex la rellena con ceros a 10 posiciones ("0000645277"), así que el
+      // tope de 7 (el del SPEI) descartaba TODAS sus referencias.
+      const token = valor.split(/\s+/)[0];
+      if (!/^\d{1,12}$/.test(token)) return;
+      out.referenciaNumerica ??= token.replace(/^0+/, "") || "0";
       return;
     }
+    case "autorizacion":
+      // Sólo sirve como frontera del valor anterior; no se guarda.
+      return;
     case "claveRastreo": {
       const token = valor.split(/\s+/)[0].toUpperCase();
       if (pareceClaveRastreo(token)) out.claveRastreo ??= token;

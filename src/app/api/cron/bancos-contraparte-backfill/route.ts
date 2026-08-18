@@ -63,6 +63,12 @@ async function handle(req: Request) {
   // Acotable a UNA empresa: el orquestador de carga inicial le da prioridad a
   // la recién onboardeada en vez de esperar al barrido general.
   const onlyCompanyId = url.searchParams.get("companyId");
+  // `reparse=1` IGNORA el centinela y vuelve a barrer lo ya sellado. Es lo que
+  // se corre cuando el motor aprende un banco nuevo: las filas viejas se
+  // sellaron sin extraer nada porque no sabíamos leer su formato, no porque no
+  // tuvieran contraparte. NO es el default —dejarlo prendido reproduce el bucle
+  // que este centinela existe para evitar—: hay que pedirlo explícitamente.
+  const reparse = url.searchParams.get("reparse") === "1";
   const limitParam = parseInt(url.searchParams.get("limit") ?? "", 10);
   const limit = Number.isFinite(limitParam)
     ? Math.min(Math.max(limitParam, 1), MAX_LIMIT)
@@ -82,7 +88,7 @@ async function handle(req: Request) {
 
   while (procesadas < limit && Date.now() - startedAt < TIME_BUDGET_MS) {
     const where: Prisma.BankTransactionWhereInput = {
-      contraparteAt: null,
+      ...(reparse ? {} : { contraparteAt: null }),
       ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
       ...(cursorId ? { id: { gt: cursorId } } : {}),
     };

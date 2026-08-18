@@ -174,7 +174,7 @@ export default function HallazgosPage() {
             }`}
           >
             {t.label}
-            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[11px] ${tab === t.key ? "bg-cos-ink text-white" : "bg-cos-slate-tint text-cos-ink-soft"}`}>
+            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[11px] ${tab === t.key ? "bg-cos-ink text-cos-canvas" : "bg-cos-slate-tint text-cos-ink-soft"}`}>
               {resumen[t.key] ?? 0}
             </span>
             {tab === t.key && <span className="absolute inset-x-0 -bottom-px h-0.5 bg-cos-ink" />}

@@ -983,7 +983,7 @@ export default function BancosPage() {
             </button>
             <span className="flex-1" />
             <button onClick={() => { setSelectMode((v) => !v); setPicked(new Set()); }}
-              className={"inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13.5px] font-semibold " + (selectMode ? "bg-cos-ink text-white" : "text-cos-ink-soft hover:bg-cos-paper")}>
+              className={"inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13.5px] font-semibold " + (selectMode ? "bg-cos-ink text-cos-canvas" : "text-cos-ink-soft hover:bg-cos-paper")}>
               <CheckSquare className="h-4 w-4" /> {selectMode ? "Salir de selección" : "Seleccionar"}
             </button>
           </div>
@@ -1497,7 +1497,7 @@ export default function BancosPage() {
 
           {/* bulk action bar (sticky, only in select mode) */}
           {selectMode && picked.size > 0 && (
-            <div className="sticky bottom-5 z-[80] mt-5 flex flex-wrap items-center justify-between gap-3 rounded-card bg-cos-ink px-5 py-3.5 text-white shadow-[0_18px_40px_-16px_oklch(0.2_0.05_258/0.6)]">
+            <div className="sticky bottom-5 z-[80] mt-5 flex flex-wrap items-center justify-between gap-3 rounded-card bg-cos-ink px-5 py-3.5 text-cos-canvas shadow-[0_18px_40px_-16px_oklch(0.2_0.05_258/0.6)]">
               <span className="text-[14px] font-semibold">{picked.size} movimiento(s) · <span className="font-mono">${pickedSum.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></span>
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => bulkCategorizar("TAX_PAYMENT", "Pago de impuestos")} disabled={acting === "__bulk__"}
@@ -1554,7 +1554,7 @@ export default function BancosPage() {
         />
       )}
 
-      {toast && <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-cos-ink px-5 py-3 text-sm font-medium text-white shadow-lg">{toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-cos-ink px-5 py-3 text-sm font-medium text-cos-canvas shadow-lg">{toast}</div>}
       {repSugerido && (
         <div className="fixed bottom-6 right-6 z-[89] w-[340px] rounded-card border border-cos-line bg-cos-card p-4 shadow-[0_18px_40px_-16px_oklch(0.2_0.05_258_/_0.5)]">
           <p className="text-[13.5px] font-semibold text-cos-ink">Este cobro necesita complemento de pago</p>

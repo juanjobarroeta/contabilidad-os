@@ -291,3 +291,87 @@ describe("pago de impuestos con línea de captura real", () => {
     expect(d.hora).toBe("11:16:14");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BBVA y BANAMEX: los dos formatos que NO etiquetan la contraparte.
+//
+// Entre los dos son la mayoría de las cuentas del portafolio, y contra ellos el
+// motor rendía CERO campos — no porque les faltara información, sino porque la
+// escriben pegada al concepto en vez de con etiqueta. Renglones reales.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("BBVA — el banco va pegado a 'SPEI ENVIADO/RECIBIDO'", () => {
+  it("saca el banco destino sin etiqueta", () => {
+    expect(parseSpei("SPEI ENVIADO SANTANDER").bancoContraparteNombre).toBe("SANTANDER");
+  });
+
+  it("lo que sigue al banco es el concepto de quien mandó el dinero", () => {
+    const d = parseSpei("SPEI RECIBIDO NU MEXICO Cocina vital");
+    expect(d.bancoContraparteNombre).toBe("NU MEXICO");
+    expect(d.concepto).toBe("Cocina vital");
+  });
+
+  it("prefiere el nombre LARGO: 'NU MEXICO', no 'NU'", () => {
+    expect(parseSpei("SPEI RECIBIDO NU MEXICO").bancoContraparteNombre).toBe("NU MEXICO");
+  });
+
+  it("saca el nombre del pago a tercero", () => {
+    expect(
+      parseSpei("PAGO CUENTA DE TERCERO BNET 0547714750 TECNOLOGIAS NARCIS").contraparteNombre
+    ).toBe("TECNOLOGIAS NARCIS");
+  });
+
+  it("junta el RFC que BBVA parte con un espacio", () => {
+    // "RFC: DME 180122DU4" — sin juntarlo, el RFC del proveedor se perdía.
+    expect(parseSpei("UBER EATS RFC: DME 180122DU4 09:53 AUT: 619705").contraparteRfc).toBe(
+      "DME180122DU4"
+    );
+  });
+});
+
+describe("BANAMEX — 'Referencia Númerica', con el acento en la vocal equivocada", () => {
+  it("reconoce la etiqueta tal como el banco la escribe mal", () => {
+    // No es un typo nuestro: así lo exporta Banamex. Sin contemplarlo, NINGUNA
+    // de sus referencias se reconocía.
+    expect(
+      parseSpei("PAGO DE SERVICIO 645277 PAGO DE IMPUE Referencia Númerica: 0000645277 Autorización: 00645277")
+        .referenciaNumerica
+    ).toBe("645277");
+  });
+
+  it("acepta la referencia rellenada a 10 posiciones", () => {
+    // El tope de 7 (el del SPEI) descartaba todas las de Banamex.
+    expect(parseSpei("Referencia Númerica: 0002288173").referenciaNumerica).toBe("2288173");
+  });
+
+  it("'Autorización:' corta el valor de la referencia", () => {
+    // Sin esa frontera, la referencia se llevaba pegado el número de
+    // autorización y fallaba la validación de numérico.
+    const d = parseSpei("Referencia Númerica: 0000645277 Autorización: 00645277");
+    expect(d.referenciaNumerica).toBe("645277");
+  });
+
+  it("separa contraparte y banco en 'TRANSFERENCIA A RHC BANAMEX'", () => {
+    const d = parseSpei("TRANSFERENCIA A RHC BANAMEX Referencia Númerica: D INT 1335159 Autorización: 03151247");
+    expect(d.contraparteNombre).toBe("RHC");
+    expect(d.bancoContraparteNombre).toBe("BANAMEX");
+  });
+
+  it("lo posicional NO se traga las etiquetas que vienen después", () => {
+    // El bug al construirlo: ".+$" se llevaba la línea entera como nombre.
+    const d = parseSpei("TRANSFERENCIA A RHC BANAMEX Referencia Númerica: D INT 1335159");
+    expect(d.contraparteNombre).not.toContain("Referencia");
+    expect(d.contraparteNombre).not.toContain("1335159");
+  });
+});
+
+describe("posicionales — la etiqueta explícita siempre gana", () => {
+  it("no pisa un banco que vino etiquetado", () => {
+    const d = parseSpei("SPEI RECIBIDO SANTANDER | Institucion Emisora: BBVA");
+    expect(d.bancoContraparteNombre).toBe("BBVA");
+  });
+
+  it("no inventa contraparte cuando no hay prefijo reconocido", () => {
+    expect(parseSpei("COBRO IMP TPV GPRS A NOM EVOPA0002288173").contraparteNombre).toBeUndefined();
+  });
+});
