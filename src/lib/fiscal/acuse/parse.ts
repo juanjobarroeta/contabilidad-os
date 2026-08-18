@@ -233,9 +233,27 @@ export interface ParsedSatDocument {
 }
 
 /**
+ * Error de parseo DESPUÉS de pagar la llamada: la respuesta llegó (y su costo
+ * quedó registrado en CostEvent) pero no se pudo interpretar. El llamador debe
+ * tratarlo distinto de un fallo de red — reintentarlo en cada corrida vuelve a
+ * pagar por el mismo documento indefinidamente. Caso real: 3 acuses anuales de
+ * una empresa cuya respuesta no validaba → 249 llamadas / ~$45 USD en 10 días
+ * (el guard de acuseParseadoAt no marcaba porque el catch "reintenta la
+ * próxima corrida" asumía errores gratuitos).
+ */
+export class SatParsePagadoError extends Error {
+  readonly pagado = true;
+  constructor(message: string, readonly crudo?: string) {
+    super(message);
+    this.name = "SatParsePagadoError";
+  }
+}
+
+/**
  * Clasifica + extrae un documento SAT/IMSS (PDF en base64) con una sola llamada
- * a Claude. Lanza si Anthropic falla o si la respuesta no es JSON válido — el
- * llamador decide cómo degradar.
+ * a Claude. Un fallo de Anthropic (red/API) lanza el error original — GRATIS,
+ * reintentable. Una respuesta pagada que no se puede interpretar lanza
+ * SatParsePagadoError — el llamador decide, sabiendo que ya costó.
  */
 export async function parseSatDocument(base64: string, cost?: CostCtx): Promise<ParsedSatDocument> {
   const model = "claude-sonnet-4-5";
@@ -265,5 +283,24 @@ export async function parseSatDocument(base64: string, cost?: CostCtx): Promise<
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/```\s*$/i, "")
     .trim();
-  return JSON.parse(cleaned) as ParsedSatDocument;
+  try {
+    return JSON.parse(cleaned) as ParsedSatDocument;
+  } catch {
+    // Rescate barato antes de rendirse: el modelo a veces antepone una frase
+    // al JSON ("Aquí está el análisis: {...}"). El primer bloque {...} externo
+    // suele ser el documento completo.
+    const desde = cleaned.indexOf("{");
+    const hasta = cleaned.lastIndexOf("}");
+    if (desde >= 0 && hasta > desde) {
+      try {
+        return JSON.parse(cleaned.slice(desde, hasta + 1)) as ParsedSatDocument;
+      } catch {
+        /* cae al error pagado */
+      }
+    }
+    throw new SatParsePagadoError(
+      `respuesta pagada no interpretable (${cleaned.length} chars)`,
+      cleaned.slice(0, 300),
+    );
+  }
 }
