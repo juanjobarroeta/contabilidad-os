@@ -240,6 +240,7 @@ model Company {
   customers           Customer[]
   facturaBorradores   FacturaBorrador[]
   facturasRecurrentes FacturaRecurrente[]
+  recurrentesIgnoradas RecurrenteSugerenciaIgnorada[]
   suppliers           Supplier[]
   bankAccounts        BankAccount[]
   bankTransactions    BankTransaction[]
@@ -1183,6 +1184,13 @@ model FacturaRecurrente {
   /// Cuántas prefacturas lleva generadas (el progreso de la serie).
   generadas     Int       @default(0)
 
+  /// Firma de la forma de factura (cliente + conceptos), igual que la que usa
+  /// el detector de sugerencias. Sirve para que una serie ya creada silencie
+  /// la sugerencia que la propuso — sin esto el sistema seguiría proponiendo
+  /// automatizar algo que ya está automatizado. Nullable: las series dadas de
+  /// alta antes del detector no la traen.
+  firma String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1192,8 +1200,28 @@ model FacturaRecurrente {
   @@index([companyId, activa])
   /// El cron barre por (activa, proximaEmision) sobre TODAS las empresas.
   @@index([activa, proximaEmision])
+  /// Cruce contra las sugerencias detectadas.
+  @@index([companyId, firma])
   /// FK sin índice: Prisma no los crea en PostgreSQL.
   @@index([customerId])
+}
+
+/// Sugerencia de serie recurrente que el usuario descartó.
+///
+/// Sin esto, una forma de factura que alguien decidió NO automatizar volvería a
+/// proponerse cada mes al detectarse otra vez — el detector no tiene memoria
+/// propia. Se guarda la firma, no la factura: lo que se descarta es la FORMA.
+model RecurrenteSugerenciaIgnorada {
+  id        String   @id @default(cuid())
+  companyId String
+  /// Misma firma que calcula lib/facturas/sugerencias (cliente + conceptos).
+  firma     String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// Descartar dos veces la misma forma es idempotente.
+  @@unique([companyId, firma])
 }
 
 enum TaxType {

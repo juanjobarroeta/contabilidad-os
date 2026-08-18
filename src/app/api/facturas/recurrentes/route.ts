@@ -5,6 +5,7 @@ import { AuthzError, requireMembership, requireWriter } from "@/lib/authz";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import { registrarBitacora } from "@/lib/audit";
 import { siguienteEmision, type Periodicidad } from "@/lib/facturas/recurrentes";
+import { firmaDe } from "@/lib/facturas/sugerencias";
 import type { StampInput } from "@/lib/facturas/stamp";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -181,6 +182,16 @@ export async function POST(req: Request) {
         diaMes: d.diaMes,
         proximaEmision: inicio,
         fin,
+        // Firma de la FORMA (cliente + conceptos): con ella, la sugerencia que
+        // propuso esta serie deja de aparecer. Sin esto el detector seguiría
+        // proponiendo automatizar algo que ya quedó automatizado.
+        firma: firmaDe(
+          d.customerId,
+          d.items.map((it) => ({
+            claveProdServ: it.product.product_key,
+            descripcion: it.product.description,
+          }))
+        ),
       },
       select: { id: true, nombre: true, proximaEmision: true },
     });

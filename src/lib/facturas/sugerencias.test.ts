@@ -7,6 +7,8 @@ import {
   tratamientoPorClave,
   type RawItem,
   type RawTax,
+  firmaDe,
+  itemsAStampInput,
 } from "./sugerencias";
 
 function item(p: Partial<RawItem> & { fecha: Date }): RawItem {
@@ -313,5 +315,96 @@ describe("agruparFacturasRecurrentes — facturas sin cliente", () => {
     const r = agruparFacturasRecurrentes([sinCliente, conCliente]);
     expect(r).toHaveLength(1);
     expect(r[0].cliente).toBe("Ana Rentera");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fechas del grupo + conversión a partidas del alta de series recurrentes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("agruparFacturasRecurrentes — fechas del grupo", () => {
+  const item = { claveProdServ: "80101500", descripcion: "Renta", cantidad: 1, valorUnitario: 1000, claveUnidad: "E48" };
+  const f = (id: string, y: number, m: number, d: number) => ({
+    id,
+    fecha: new Date(Date.UTC(y, m - 1, d)),
+    total: 1160,
+    customerId: "cli-1",
+    cliente: "ACME",
+    items: [item],
+  });
+
+  it("conserva TODAS las fechas, ascendentes — sin ellas no hay cadencia", () => {
+    const [g] = agruparFacturasRecurrentes([
+      f("c", 2026, 7, 1),
+      f("a", 2026, 5, 1),
+      f("b", 2026, 6, 1),
+    ]);
+    expect(g.fechas.map((x) => x.slice(0, 10))).toEqual([
+      "2026-05-01",
+      "2026-06-01",
+      "2026-07-01",
+    ]);
+    expect(g.veces).toBe(3);
+  });
+
+  it("las fechas acompañan a la plantilla más reciente", () => {
+    const [g] = agruparFacturasRecurrentes([f("a", 2026, 5, 1), f("b", 2026, 6, 1)]);
+    expect(g.facturaId).toBe("b");
+    expect(g.fechas).toHaveLength(2);
+  });
+});
+
+describe("firmaDe", () => {
+  const items = [
+    { claveProdServ: "80101500", descripcion: "Renta oficina" },
+    { claveProdServ: "81111500", descripcion: "Soporte" },
+  ];
+
+  it("no depende del orden de los conceptos", () => {
+    expect(firmaDe("cli-1", items)).toBe(firmaDe("cli-1", [...items].reverse()));
+  });
+
+  it("distingue clientes distintos con los mismos conceptos", () => {
+    expect(firmaDe("cli-1", items)).not.toBe(firmaDe("cli-2", items));
+  });
+
+  it("normaliza espacios y mayúsculas de la descripción", () => {
+    expect(firmaDe("cli-1", [{ claveProdServ: "1", descripcion: "  Renta   Oficina " }])).toBe(
+      firmaDe("cli-1", [{ claveProdServ: "1", descripcion: "renta oficina" }])
+    );
+  });
+});
+
+describe("itemsAStampInput", () => {
+  const items = [
+    { claveProdServ: "80101500", descripcion: "Renta", cantidad: 2, valorUnitario: 500, claveUnidad: "E48" },
+  ];
+
+  it("mapea cantidad, precio y unidad a la partida del alta", () => {
+    const [p] = itemsAStampInput(items, "16");
+    expect(p.quantity).toBe(2);
+    expect(p.product.price).toBe(500);
+    expect(p.product.unit_key).toBe("E48");
+    expect(p.product.product_key).toBe("80101500");
+  });
+
+  it("IVA 16 lleva su nodo con tasa 0.16", () => {
+    expect(itemsAStampInput(items, "16")[0].product.taxes).toEqual([
+      { type: "IVA", rate: 0.16, factor: "Tasa", withholding: false },
+    ]);
+  });
+
+  it("tasa 0 y exento SÍ llevan nodo de IVA — omitirlo no es ninguna de las dos", () => {
+    expect(itemsAStampInput(items, "0")[0].product.taxes).toEqual([
+      { type: "IVA", rate: 0, factor: "Tasa", withholding: false },
+    ]);
+    expect(itemsAStampInput(items, "EXENTO")[0].product.taxes).toEqual([
+      { type: "IVA", rate: 0, factor: "Exento", withholding: false },
+    ]);
+  });
+
+  it("cada partida lleva su PROPIA copia del impuesto", () => {
+    const dos = itemsAStampInput([...items, ...items], "16");
+    expect(dos[0].product.taxes).not.toBe(dos[1].product.taxes);
   });
 });

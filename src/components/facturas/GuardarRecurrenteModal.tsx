@@ -40,18 +40,27 @@ export function GuardarRecurrenteModal({
   clienteNombre,
   /** El mismo cuerpo que se timbraría; la serie lo guarda tal cual. */
   payload,
+  inicial,
   onClose,
   onGuardada,
 }: {
   companyId: string;
   clienteNombre: string;
   payload: Record<string, unknown>;
+  /**
+   * Valores de arranque cuando el alta viene de una cadencia DETECTADA: el
+   * sistema ya midió el ritmo, así que abrir el diálogo en "cada mes, hoy"
+   * obligaría a re-capturar lo que acaba de deducir. Siguen siendo editables.
+   */
+  inicial?: { nombre?: string; periodicidad?: Periodicidad; inicio?: string };
   onClose: () => void;
   onGuardada: (nombre: string) => void;
 }) {
-  const [nombre, setNombre] = useState(`Recurrente · ${clienteNombre}`);
-  const [periodicidad, setPeriodicidad] = useState<Periodicidad>("MENSUAL");
-  const [inicio, setInicio] = useState(hoyISO());
+  const [nombre, setNombre] = useState(inicial?.nombre ?? `Recurrente · ${clienteNombre}`);
+  const [periodicidad, setPeriodicidad] = useState<Periodicidad>(
+    inicial?.periodicidad ?? "MENSUAL"
+  );
+  const [inicio, setInicio] = useState(inicial?.inicio ?? hoyISO());
   const [fin, setFin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

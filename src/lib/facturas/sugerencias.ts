@@ -233,6 +233,13 @@ export interface FacturaRecurrente {
   /** Cuántas veces se ha facturado esta misma forma. */
   veces: number;
   ultimoUso: string; // ISO
+  /**
+   * TODAS las fechas del grupo, ascendentes (ISO). Antes sólo se guardaba
+   * `ultimoUso`, así que se sabía que una forma se repitió 11 veces pero no
+   * que fue el día 1 de cada mes — sin las fechas no hay cadencia que inferir
+   * (ver lib/facturas/cadencia.ts).
+   */
+  fechas: string[];
   items: ItemRecurrente[];
   ivaTratamiento: IvaTratamiento;
 }
@@ -241,11 +248,26 @@ export interface FacturaRecurrente {
  *  el orden en que se capturaron ni el espaciado/mayúsculas de la descripción).
  *  Las facturas sin cliente no llegan aquí (ver agruparFacturasRecurrentes). */
 export function firmaFactura(f: FacturaParaAgrupar): string {
-  const conceptos = f.items
+  return firmaDe(f.customerId, f.items);
+}
+
+/**
+ * La misma firma, calculable desde CUALQUIER lista de conceptos — no sólo
+ * desde una factura ya emitida.
+ *
+ * La necesita el alta de una serie recurrente: al guardarla se calcula su firma
+ * desde el payload, y así la sugerencia que la propuso deja de aparecer. Sin
+ * esto el sistema seguiría proponiendo automatizar algo que ya automatizaste.
+ */
+export function firmaDe(
+  customerId: string | null,
+  items: { claveProdServ: string; descripcion: string }[]
+): string {
+  const conceptos = items
     .map((it) => conceptoKey(it.claveProdServ, it.descripcion))
     .sort()
     .join("|");
-  return `${f.customerId ?? "sin-cliente"}::${conceptos}`;
+  return `${customerId ?? "sin-cliente"}::${conceptos}`;
 }
 
 /**
@@ -257,7 +279,10 @@ export function agruparFacturasRecurrentes(
   facturas: FacturaParaAgrupar[],
   top = 6
 ): FacturaRecurrente[] {
-  const grupos = new Map<string, { plantilla: FacturaParaAgrupar; veces: number; ultimoUso: Date }>();
+  const grupos = new Map<
+    string,
+    { plantilla: FacturaParaAgrupar; veces: number; ultimoUso: Date; fechas: Date[] }
+  >();
 
   for (const f of facturas) {
     if (f.items.length === 0) continue;
@@ -269,10 +294,11 @@ export function agruparFacturasRecurrentes(
     const key = firmaFactura(f);
     const g = grupos.get(key);
     if (!g) {
-      grupos.set(key, { plantilla: f, veces: 1, ultimoUso: f.fecha });
+      grupos.set(key, { plantilla: f, veces: 1, ultimoUso: f.fecha, fechas: [f.fecha] });
       continue;
     }
     g.veces += 1;
+    g.fechas.push(f.fecha);
     if (f.fecha > g.ultimoUso) {
       g.ultimoUso = f.fecha;
       g.plantilla = f; // la plantilla es SIEMPRE la más reciente (precios al día)
@@ -293,9 +319,55 @@ export function agruparFacturasRecurrentes(
       total: g.plantilla.total,
       veces: g.veces,
       ultimoUso: g.ultimoUso.toISOString(),
+      fechas: [...g.fechas]
+        .sort((a, b) => a.getTime() - b.getTime())
+        .map((d) => d.toISOString()),
       items: g.plantilla.items,
       // Ante ambigüedad (comprobante mixto o sin filas de IVA) se conserva 16%,
       // igual que en el prellenado desde una factura previa.
       ivaTratamiento: g.plantilla.ivaTratamiento ?? "16",
     }));
+}
+
+/**
+ * Convierte los conceptos de una sugerencia en las partidas que espera el alta
+ * de una serie (el mismo shape de StampInput).
+ *
+ * El mapeo de IVA replica el del compositor a propósito: tasa 0 y exento
+ * llevan SIEMPRE su nodo de IVA (rate 0) — omitir el impuesto por completo no
+ * es ninguna de las dos cosas y deja el CFDI mal clasificado.
+ */
+export function itemsAStampInput(
+  items: ItemRecurrente[],
+  ivaTratamiento: IvaTratamiento
+): {
+  quantity: number;
+  product: {
+    description: string;
+    product_key: string;
+    price: number;
+    unit_key: string;
+    tax_included: boolean;
+    taxes: { type: string; rate: number; factor: string; withholding: boolean }[];
+  };
+}[] {
+  const taxes =
+    ivaTratamiento === "16"
+      ? [{ type: "IVA", rate: 0.16, factor: "Tasa", withholding: false }]
+      : ivaTratamiento === "0"
+        ? [{ type: "IVA", rate: 0, factor: "Tasa", withholding: false }]
+        : [{ type: "IVA", rate: 0, factor: "Exento", withholding: false }];
+
+  return items.map((it) => ({
+    quantity: it.cantidad,
+    product: {
+      description: it.descripcion,
+      product_key: it.claveProdServ,
+      price: it.valorUnitario,
+      unit_key: it.claveUnidad,
+      tax_included: false,
+      // Cada partida lleva su copia: el alta valida partida por partida.
+      taxes: taxes.map((t) => ({ ...t })),
+    },
+  }));
 }
