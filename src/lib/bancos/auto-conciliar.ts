@@ -177,14 +177,20 @@ export async function clabesConocidasPorRfc(companyId: string, clabe: string): P
  * cargado y fecha de pago del movimiento si estaba vacía. Si dos declaraciones
  * comparten la línea (corrupción de datos: no debería existir), NO se adivina.
  */
+export type ResultadoImpuestoLC =
+  | "conciliado"
+  | "no_aplica" // sin línea de captura o es un depósito
+  | "sin_declaracion" // ninguna declaración del sistema trae esa línea
+  | "ambiguo"; // más de una la trae (corrupción): no se adivina
+
 async function conciliarImpuestoPorLineaCaptura(tx: {
   id: string;
   companyId: string;
   monto: number;
   fecha: Date;
   lineaCaptura: string | null;
-}): Promise<boolean> {
-  if (!tx.lineaCaptura || tx.monto >= 0) return false;
+}): Promise<ResultadoImpuestoLC> {
+  if (!tx.lineaCaptura || tx.monto >= 0) return "no_aplica";
 
   const decls = await prisma.taxDeclaration.findMany({
     where: {
@@ -202,10 +208,11 @@ async function conciliarImpuestoPorLineaCaptura(tx: {
   const candidatas = decls.filter(
     (d) => esTipoImpuestoConciliable(d.tipo) && mismaLineaCaptura(d.lineaCaptura, tx.lineaCaptura)
   );
-  if (candidatas.length !== 1) return false;
+  if (candidatas.length === 0) return "sin_declaracion";
+  if (candidatas.length > 1) return "ambiguo";
 
   const decl = candidatas[0];
-  if (!esTipoImpuestoConciliable(decl.tipo)) return false; // narrowing para TS
+  if (!esTipoImpuestoConciliable(decl.tipo)) return "sin_declaracion"; // narrowing para TS
   const montoPagado = Math.round(Math.abs(tx.monto) * 100) / 100;
   await prisma.$transaction([
     prisma.bankTransaction.update({
@@ -221,15 +228,31 @@ async function conciliarImpuestoPorLineaCaptura(tx: {
       },
     }),
   ]);
-  return true;
+  return "conciliado";
 }
 
 // Auto-concilia una cuenta bancaria: recorre sus transacciones UNMATCHED y
 // aplica únicamente las coincidencias de alta confianza y sin ambigüedad.
 // Devuelve cuántas concilió. Best-effort por transacción.
-export async function autoConciliarCuenta(accountId: string): Promise<{ matched: number; total: number }> {
+export interface ImpuestosLcStats {
+  /** Movimientos con línea de captura que se intentaron. */
+  candidatos: number;
+  conciliados: number;
+  /** El movimiento trae la línea pero NINGUNA declaración del sistema la trae:
+   *  la contraparte del empate no existe (acuse sin parsear, periodo previo al
+   *  alta, o declaración llevada fuera de la app). Este contador es el que
+   *  distingue "el motor falla" de "no hay contra qué empatar". */
+  sinDeclaracion: number;
+  ambiguos: number;
+}
+
+export async function autoConciliarCuenta(
+  accountId: string,
+): Promise<{ matched: number; total: number; impuestosLc: ImpuestosLcStats }> {
+  const vacio: ImpuestosLcStats = { candidatos: 0, conciliados: 0, sinDeclaracion: 0, ambiguos: 0 };
   const account = await prisma.bankAccount.findUnique({ where: { id: accountId } });
-  if (!account) return { matched: 0, total: 0 };
+  if (!account) return { matched: 0, total: 0, impuestosLc: vacio };
+  const impuestosLc = vacio;
 
   const companyId = account.companyId;
   const unmatched = await prisma.bankTransaction.findMany({
@@ -256,7 +279,13 @@ export async function autoConciliarCuenta(accountId: string): Promise<{ matched:
   });
   for (const tx of impuestosIgnorados) {
     try {
-      if (await conciliarImpuestoPorLineaCaptura(tx)) matched++;
+      const r = await conciliarImpuestoPorLineaCaptura(tx);
+      if (r !== "no_aplica") impuestosLc.candidatos++;
+      if (r === "conciliado") {
+        impuestosLc.conciliados++;
+        matched++;
+      } else if (r === "sin_declaracion") impuestosLc.sinDeclaracion++;
+      else if (r === "ambiguo") impuestosLc.ambiguos++;
     } catch {
       // best-effort
     }
@@ -266,10 +295,15 @@ export async function autoConciliarCuenta(accountId: string): Promise<{ matched:
     // IMPUESTOS PRIMERO, por línea de captura: es identidad, no inferencia. Si
     // aplica, este movimiento ya quedó conciliado y no compite con facturas.
     try {
-      if (await conciliarImpuestoPorLineaCaptura(tx)) {
+      const r = await conciliarImpuestoPorLineaCaptura(tx);
+      if (r !== "no_aplica") impuestosLc.candidatos++;
+      if (r === "conciliado") {
+        impuestosLc.conciliados++;
         matched++;
         continue;
       }
+      if (r === "sin_declaracion") impuestosLc.sinDeclaracion++;
+      else if (r === "ambiguo") impuestosLc.ambiguos++;
     } catch {
       // best-effort: si el match de impuestos falla, se sigue con facturas
     }
@@ -360,28 +394,33 @@ export async function autoConciliarCuenta(accountId: string): Promise<{ matched:
     }
   }
 
-  return { matched, total: unmatched.length };
+  return { matched, total: unmatched.length, impuestosLc };
 }
 
 // Auto-concilia todas las cuentas bancarias de una empresa. Best-effort: un
 // error en una cuenta no detiene las demás.
 export async function autoConciliarEmpresa(
   companyId: string,
-): Promise<{ matched: number; accounts: number }> {
+): Promise<{ matched: number; accounts: number; impuestosLc: ImpuestosLcStats }> {
   const accounts = await prisma.bankAccount.findMany({
     where: { companyId },
     select: { id: true },
   });
 
   let matched = 0;
+  const impuestosLc: ImpuestosLcStats = { candidatos: 0, conciliados: 0, sinDeclaracion: 0, ambiguos: 0 };
   for (const acc of accounts) {
     try {
       const res = await autoConciliarCuenta(acc.id);
       matched += res.matched;
+      impuestosLc.candidatos += res.impuestosLc.candidatos;
+      impuestosLc.conciliados += res.impuestosLc.conciliados;
+      impuestosLc.sinDeclaracion += res.impuestosLc.sinDeclaracion;
+      impuestosLc.ambiguos += res.impuestosLc.ambiguos;
     } catch {
       // best-effort: continuar con las demás cuentas
     }
   }
 
-  return { matched, accounts: accounts.length };
+  return { matched, accounts: accounts.length, impuestosLc };
 }
