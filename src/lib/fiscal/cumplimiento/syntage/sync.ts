@@ -19,7 +19,7 @@ import {
   type CamposAnualAcuse,
 } from "./map";
 import { fileRefDe } from "./declaraciones-backfill";
-import { parseSatDocument } from "@/lib/fiscal/acuse/parse";
+import { parseSatDocument, SatParsePagadoError } from "@/lib/fiscal/acuse/parse";
 import { leerEImportarContabilidadElectronicaSyntage } from "@/lib/contabilidad/ce-import-syntage";
 
 export interface SyncOptions {
@@ -93,8 +93,15 @@ async function enriquecerAnualDesdePdf(
       subtipo: "declaraciones.anual.coeficiente",
     });
   } catch (e) {
-    // No rompemos el sync; se reintenta la próxima corrida. El motivo viaja en
-    // el detalle del reparse para no depurar a ciegas.
+    // Un fallo PAGADO (la respuesta llegó y costó, pero no validó) se marca
+    // como parseado: reintentarlo cada sync paga el mismo documento para
+    // siempre (caso Canales: 249 llamadas / ~$45 en 10 días). El reintento
+    // manual sigue disponible con `reparseAnuales`. Un fallo de red/API — que
+    // no costó nada — sí se deja para la próxima corrida.
+    if (e instanceof SatParsePagadoError) {
+      await prisma.taxDeclaration.update({ where: { id: declId }, data: { acuseParseadoAt: new Date() } });
+      return `error_pagado (marcado, reintento sólo con reparseAnuales): ${e.message}`;
+    }
     return `error: ${e instanceof Error ? e.message : String(e)}`;
   }
   // Parse COMPLETADO (con o sin datos): marcarlo SIEMPRE, o el centinela
