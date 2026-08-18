@@ -6,6 +6,9 @@ import {
   Users, Plus, Search, Pencil, Trash2, Loader2,
   FileText, X, RefreshCw,
 } from "lucide-react";
+import {
+  TableContainer, Table, THead, TBody, TR, TH, TD,
+} from "@/components/ui";
 
 const REGIMENES_FISCALES = [
   { value: "601", label: "601 – General de Ley Personas Morales" },
@@ -225,46 +228,46 @@ export default function ClientesPage() {
           )}
         </div>
       ) : (
-        <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
-          <table className="w-full text-sm">
-            <thead className="bg-cos-paper text-[12px] uppercase tracking-[0.02em] text-cos-ink-faint">
-              <tr>
-                <th className="px-4 py-2.5 text-left font-medium">RFC</th>
-                <th className="px-4 py-2.5 text-left font-medium">Razón Social</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium md:table-cell">Régimen</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium lg:table-cell">Correo</th>
-                <th className="hidden px-4 py-2.5 text-center font-medium sm:table-cell">Facturas</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium sm:table-cell">Facturapi</th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
+        <TableContainer className="mt-5 shadow-card">
+          <Table>
+            <THead>
+              <TR>
+                <TH>RFC</TH>
+                <TH>Razón Social</TH>
+                <TH className="hidden md:table-cell">Régimen</TH>
+                <TH className="hidden lg:table-cell">Correo</TH>
+                <TH center className="hidden sm:table-cell">Facturas</TH>
+                <TH className="hidden sm:table-cell">Facturapi</TH>
+                <TH />
+              </TR>
+            </THead>
+            <TBody>
               {clientes.map((c) => (
-                <tr
+                <TR
                   key={c.id}
                   onClick={() => openEdit(c)}
-                  className="cursor-pointer border-t border-cos-line transition-colors hover:bg-cos-paper/60"
+                  interactive
                 >
-                  <td className="px-4 py-3 font-mono text-[12px] font-medium text-cos-ink">{c.rfc}</td>
-                  <td className="px-4 py-3 font-medium text-cos-ink">{c.razonSocial}</td>
-                  <td className="hidden px-4 py-3 md:table-cell">
+                  <TD className="font-mono text-[12px] font-medium text-cos-ink">{c.rfc}</TD>
+                  <TD className="font-medium text-cos-ink">{c.razonSocial}</TD>
+                  <TD className="hidden md:table-cell">
                     <span
                       title={regimenLabel(c.regimenFiscal)}
                       className="inline-flex items-center gap-1 rounded-full bg-cos-slate-tint px-2 py-0.5 text-[12px] text-cos-ink-soft"
                     >
                       {c.regimenFiscal}
                     </span>
-                  </td>
-                  <td className="hidden px-4 py-3 text-[12px] text-cos-ink-soft lg:table-cell">
+                  </TD>
+                  <TD className="hidden text-[12px] text-cos-ink-soft lg:table-cell">
                     {c.email ?? "—"}
-                  </td>
-                  <td className="hidden px-4 py-3 text-center sm:table-cell">
+                  </TD>
+                  <TD center className="hidden sm:table-cell">
                     <span className="inline-flex items-center gap-1 text-[12px] text-cos-ink-soft">
                       <FileText className="h-3.5 w-3.5" />
                       {c._count.invoices}
                     </span>
-                  </td>
-                  <td className="hidden px-4 py-3 sm:table-cell">
+                  </TD>
+                  <TD className="hidden sm:table-cell">
                     {c.facturapiId ? (
                       <span className="rounded-full bg-cos-jade-tint px-2 py-0.5 text-[12px] font-medium text-cos-jade-ink">
                         Sincronizado
@@ -274,8 +277,8 @@ export default function ClientesPage() {
                         Pendiente
                       </span>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
+                  </TD>
+                  <TD>
                     <div className="flex items-center justify-end gap-1">
                       {!c.facturapiId && (
                         <button
@@ -304,12 +307,12 @@ export default function ClientesPage() {
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </TD>
+                </TR>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TBody>
+          </Table>
+        </TableContainer>
       )}
 
       {/* ── Create / Edit Modal ── */}
