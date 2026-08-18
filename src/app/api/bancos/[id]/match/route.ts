@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
-import { autoConciliarCuenta } from "@/lib/bancos/auto-conciliar";
+import { autoConciliarCuenta, clabesConocidasPorRfc, scoreCandidate } from "@/lib/bancos/auto-conciliar";
 import {
   TIPOS_IMPUESTO_CONCILIABLES,
   confianzaImpuesto,
@@ -102,19 +102,43 @@ export async function GET(req: Request, { params }: Params) {
     take: 10,
   });
 
+  // Memoria de CLABEs: sólo se consulta si el movimiento trae CLABE extraída.
+  const clabesPorRfc = tx.contraparteClabe
+    ? await clabesConocidasPorRfc(companyId, tx.contraparteClabe)
+    : new Set<string>();
+  const senales = {
+    fecha: tx.fecha,
+    descripcion: tx.descripcion,
+    contraparteRfc: tx.contraparteRfc,
+    contraparteNombre: tx.contraparteNombre,
+    contraparteClabe: tx.contraparteClabe,
+  };
+
   const scored = candidates.map(inv => {
-    let score = 0;
+    // MISMA fórmula que la auto-conciliación (antes era una copia que divergió:
+    // esta ruta no conocía las señales de identidad). Identidad efectiva: el
+    // Customer si existe; si no, la contraparte del propio CFDI — los EGRESO
+    // sincronizados del SAT casi nunca tienen Customer.
+    const rfcFactura = inv.customer?.rfc ?? inv.contraparteRfc ?? null;
+    const nombreFactura = inv.customer?.razonSocial ?? inv.contraparteNombre ?? null;
+    let score = scoreCandidate(
+      {
+        total: inv.total,
+        fecha: inv.fecha,
+        customerRfc: rfcFactura,
+        customerNombre: nombreFactura,
+        clabesConocidas:
+          rfcFactura && clabesPorRfc.has(rfcFactura) && tx.contraparteClabe
+            ? [tx.contraparteClabe]
+            : [],
+      },
+      senales,
+      absAmount,
+    );
+    // Banda ancha PROPIA de las sugerencias (no existe en el auto-match): un
+    // monto a 1–5% todavía se ofrece al humano, sólo que con poco puntaje.
     const diff = Math.abs(Math.abs(inv.total) - absAmount);
-    if (diff < 0.01)                          score += 100;
-    else if (diff / absAmount < 0.005)         score += 70;
-    else if (diff / absAmount < 0.01)          score += 40;
-    else if (diff / absAmount < TOLERANCE)     score += 20;
-    const daysDiff = Math.abs(inv.fecha.getTime() - tx.fecha.getTime()) / 86400000;
-    if (daysDiff <= 1)       score += 30;
-    else if (daysDiff <= 3)  score += 20;
-    else if (daysDiff <= 7)  score += 10;
-    const rfc = inv.customer?.rfc ?? "";
-    if (rfc && tx.descripcion.toUpperCase().includes(rfc)) score += 25;
+    if (diff / absAmount >= 0.01 && diff / absAmount < TOLERANCE) score += 20;
     const alreadyMatched = inv.bankTransactions.length > 0 || inv.conciliacionDetalles.length > 0;
     // Neto firmado: un reembolso (cargo) resta de lo cobrado. Las porciones
     // asignadas (conciliación múltiple) suman por su monto asignado.
@@ -129,8 +153,8 @@ export async function GET(req: Request, { params }: Params) {
       serie:       inv.serie,
       metodoPago:  inv.metodoPago,
       total:       inv.total,
-      cliente:     inv.customer?.razonSocial ?? "—",
-      rfc:         inv.customer?.rfc ?? "—",
+      cliente:     inv.customer?.razonSocial ?? inv.contraparteNombre ?? "—",
+      rfc:         inv.customer?.rfc ?? inv.contraparteRfc ?? "—",
       score,
       confidence:  score >= 100 ? "alta" : score >= 50 ? "media" : "baja",
       alreadyMatched,
