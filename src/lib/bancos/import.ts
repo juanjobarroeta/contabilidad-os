@@ -31,6 +31,7 @@ import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuen
 import { primeraReglaQueEmpata, signoDeMonto, type FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 import { decodificarEstadoDeCuenta, esExcelBinario } from "@/lib/bancos/decodificar";
 import { camposContraparte, parseSpei } from "@/lib/bancos/spei-descripcion";
+import { vincularComisionesDeCuenta } from "@/lib/bancos/comisiones-repo";
 
 export type ImportResult = {
   ok: boolean;
@@ -267,6 +268,14 @@ export async function persistTransactions(opts: {
   // sólo toca transacciones UNMATCHED. Best-effort: una falla aquí nunca rompe
   // la importación.
   if (imported > 0) {
+    // ANTES de auto-conciliar: colgar cada comisión de la transferencia que la
+    // generó. Así el conciliador ya no las ve como egresos sueltos buscando
+    // factura — que es puro ruido, un renglón por cada SPEI del mes.
+    try {
+      await vincularComisionesDeCuenta(bankAccountId);
+    } catch (e) {
+      console.error(`[bancos/import] vincular comisiones falló para ${bankAccountId}:`, e);
+    }
     try {
       await autoConciliarEmpresa(companyId);
     } catch (e) {

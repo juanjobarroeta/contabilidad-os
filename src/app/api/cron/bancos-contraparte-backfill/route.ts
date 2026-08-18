@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { camposContraparte, parseSpei, tieneContraparte } from "@/lib/bancos/spei-descripcion";
+import { vincularComisionesDeCuenta } from "@/lib/bancos/comisiones-repo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/bancos-contraparte-backfill   [?limit=N][&companyId=]
@@ -39,6 +40,9 @@ const TIME_BUDGET_MS = 240_000;
 // tope real lo pone el presupuesto de tiempo, no un límite conservador.
 const DEFAULT_LIMIT = 50_000;
 const MAX_LIMIT = 200_000;
+// El vínculo de comisiones mira más atrás que la ventana normal: aquí se está
+// arreglando historia, no procesando el mes en curso.
+const VENTANA_BACKFILL = new Date("2020-01-01T00:00:00Z");
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -108,6 +112,28 @@ async function handle(req: Request) {
     }
   }
 
+  // Con la clave de rastreo ya extraída, cuelga cada comisión de la
+  // transferencia que la generó. Va DESPUÉS del desglose (necesita la clave) y
+  // sólo sobre las cuentas que este barrido tocó, para no repasar la cartera
+  // entera en cada corrida.
+  let comisionesVinculadas = 0;
+  if (procesadas > 0) {
+    const cuentas = await prisma.bankAccount.findMany({
+      where: onlyCompanyId ? { companyId: onlyCompanyId } : {},
+      select: { id: true },
+      take: 500,
+    });
+    for (const c of cuentas) {
+      if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+      try {
+        const r = await vincularComisionesDeCuenta(c.id, { desde: VENTANA_BACKFILL });
+        comisionesVinculadas += r.vinculadas;
+      } catch {
+        // best-effort: una cuenta no debe tumbar el barrido
+      }
+    }
+  }
+
   const restantes = await prisma.bankTransaction.count({
     where: {
       contraparteAt: null,
@@ -125,6 +151,7 @@ async function handle(req: Request) {
     // Los que traen clave de rastreo pero no RFC son los candidatos a CEP.
     conClaveRastreo,
     conLineaCaptura,
+    comisionesVinculadas,
     restantes,
     ms: Date.now() - startedAt,
   });

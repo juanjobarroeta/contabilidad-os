@@ -12,6 +12,8 @@ import {
   scoreCandidatoImpuesto,
   statusTrasDesconciliar,
   TIPOS_IMPUESTO_CONCILIABLES,
+  mismaLineaCaptura,
+  PUNTOS_LINEA_CAPTURA,
 } from "./conciliacion-impuestos";
 
 // Decisiones PURAS de la conciliación de pagos de impuestos (SIPARE / línea
@@ -283,5 +285,77 @@ describe("elegirMovimientoSugerido", () => {
   it("null sin objetivo (> 0) o sin candidatos", () => {
     expect(elegirMovimientoSugerido(0, limite, [mov("a", -10, "2026-02-17")])).toBeNull();
     expect(elegirMovimientoSugerido(10_000, limite, [])).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Línea de captura: identidad emitida por el SAT, no una coincidencia inferida.
+// El renglón real que la destapó (Banco del Bajío):
+//   "Retiro de Recursos Pago de impuestos RFC | ... | REF. 04265F9T970050618402
+//    | Beneficiario | TESOFE INGRESOS FEDERALES REC | ..."
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LC = "04265F9T970050618402";
+
+describe("mismaLineaCaptura", () => {
+  it("empata ignorando espacios, guiones y caja", () => {
+    expect(mismaLineaCaptura(LC, "04265f9t97 0050-618402")).toBe(true);
+  });
+
+  it("NO empata líneas distintas", () => {
+    expect(mismaLineaCaptura(LC, "04265F9T970050618401")).toBe(false);
+  });
+
+  it("dos ausencias NO son un empate", () => {
+    // El error que haría explotar todo: si null === null contara, cada
+    // declaración sin línea empataría con cada movimiento sin línea.
+    expect(mismaLineaCaptura(null, null)).toBe(false);
+    expect(mismaLineaCaptura(undefined, undefined)).toBe(false);
+    expect(mismaLineaCaptura(LC, null)).toBe(false);
+    expect(mismaLineaCaptura("", "")).toBe(false);
+  });
+});
+
+describe("scoreCandidatoImpuesto — línea de captura", () => {
+  const tx = { monto: -800, fecha: new Date("2026-07-31T00:00:00Z"), lineaCaptura: LC };
+
+  it("gana contra monto exacto + fecha clavada juntos", () => {
+    // Pagó tarde y con recargos, así que ni el monto ni la fecha cuadran…
+    const laCorrecta = scoreCandidatoImpuesto(
+      { montoEsperado: 750, fechaLimitePago: new Date("2026-06-17T00:00:00Z"), lineaCaptura: LC },
+      tx,
+    );
+    // …contra otra que casualmente clava monto y fecha.
+    const laQueClava = scoreCandidatoImpuesto(
+      { montoEsperado: 800, fechaLimitePago: new Date("2026-07-31T00:00:00Z"), lineaCaptura: "OTRA00000000000000AB" },
+      tx,
+    );
+    expect(laCorrecta).toBeGreaterThan(laQueClava);
+    expect(laCorrecta).toBe(PUNTOS_LINEA_CAPTURA); // sin monto ni fecha que sumen
+    expect(laQueClava).toBe(130);
+  });
+
+  it("sin línea en el movimiento, el score es el de siempre", () => {
+    const s = scoreCandidatoImpuesto(
+      { montoEsperado: 800, fechaLimitePago: new Date("2026-07-31T00:00:00Z"), lineaCaptura: LC },
+      { monto: -800, fecha: new Date("2026-07-31T00:00:00Z") },
+    );
+    expect(s).toBe(130);
+  });
+
+  it("una línea que no empata no penaliza ni suma", () => {
+    const s = scoreCandidatoImpuesto(
+      { montoEsperado: 800, fechaLimitePago: new Date("2026-07-31T00:00:00Z"), lineaCaptura: "OTRA00000000000000AB" },
+      tx,
+    );
+    expect(s).toBe(130);
+  });
+
+  it("con línea empatada la confianza es alta aunque nada más cuadre", () => {
+    const s = scoreCandidatoImpuesto(
+      { montoEsperado: null, fechaLimitePago: null, lineaCaptura: LC },
+      tx,
+    );
+    expect(confianzaImpuesto(s)).toBe("alta");
   });
 });

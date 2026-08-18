@@ -1283,6 +1283,19 @@ model BankTransaction {
   devolucionDe   BankTransaction? @relation("DevolucionPago", fields: [devolucionDeId], references: [id], onDelete: SetNull)
   devolucionPor  BankTransaction? @relation("DevolucionPago")
 
+  // Comisión por transferencia: el banco la cobra como movimiento APARTE pero
+  // con la misma clave de rastreo del envío que la generó. Sin el vínculo, cada
+  // comisión queda como un egreso suelto que alguien descarta a mano todos los
+  // meses (200 SPEI = 200 renglones de ruido).
+  //
+  // A diferencia de la devolución, aquí NADIE se ignora ni se netea: la
+  // comisión bancaria es un gasto REAL y deducible, con su propio CFDI del
+  // banco. El vínculo sólo dice DE DÓNDE VIENE. Sin @unique: una transferencia
+  // puede generar más de un cobro (comisión + su IVA).
+  comisionDeId String?
+  comisionDe   BankTransaction?  @relation("ComisionTransferencia", fields: [comisionDeId], references: [id], onDelete: SetNull)
+  comisiones   BankTransaction[] @relation("ComisionTransferencia")
+
   // Conciliación: los flujos calientes filtran por cuenta + status
   // (auto-conciliar UNMATCHED, groupBy de status en /api/bancos).
   @@index([bankAccountId, status])
@@ -1299,6 +1312,9 @@ model BankTransaction {
   // La comisión de Bajío comparte clave de rastreo con el envío que la generó:
   // así se encuentra su transferencia. También es la llave del CEP.
   @@index([bankAccountId, claveRastreo])
+  // FK sin índice: Prisma no los crea en PostgreSQL. Sin esto, listar las
+  // comisiones de una transferencia recorre la tabla entera.
+  @@index([comisionDeId])
   // "Deshacer última importación": último lote por empresa/cuenta y borrado del lote.
   @@index([importBatchId])
   // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto

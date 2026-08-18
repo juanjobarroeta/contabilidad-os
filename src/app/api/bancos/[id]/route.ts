@@ -100,6 +100,14 @@ export async function GET(req: Request, { params }: Params) {
         // Devolución bancaria vinculada (cualquiera de los dos lados del par).
         devolucionDe: { select: { id: true, fecha: true, descripcion: true, monto: true } },
         devolucionPor: { select: { id: true, fecha: true, descripcion: true, monto: true } },
+        // Comisión por transferencia: de qué envío viene (si este movimiento ES
+        // la comisión) y qué cobros generó (si ES la transferencia). No se
+        // netean — la comisión bancaria es un gasto real y deducible; el
+        // vínculo sólo dice de dónde sale.
+        comisionDe: {
+          select: { id: true, fecha: true, monto: true, contraparteNombre: true, descripcion: true },
+        },
+        comisiones: { select: { id: true, monto: true, descripcion: true } },
         // Conciliación uno-a-varios: porciones asignadas a varias facturas
         // (la UI muestra "Conciliado con N facturas" con este detalle).
         conciliacionDetalles: {
