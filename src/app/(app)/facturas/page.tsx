@@ -16,6 +16,8 @@ import {
 import { SelectorPeriodo } from "@/components/facturas/SelectorPeriodo";
 import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
 import { ComplementosPendientes } from "@/components/facturas/ComplementosPendientes";
+import { repVencido } from "@/lib/facturas/rep-plazo";
+import { submenusFacturas, type VistaFacturas } from "@/lib/facturas/submenus";
 import { estadoRepFactura } from "@/lib/facturas/complementos-vista";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
@@ -158,7 +160,8 @@ interface Prefactura {
 }
 
 // ── Submenús de la página ─────────────────────────────────────────────────────
-type Vista = "comprobantes" | "complementos" | "prefacturas";
+// El tipo y el armado de los submenús viven en lib/facturas/submenus.
+type Vista = VistaFacturas;
 
 /** Fila del listado de complementos (GET /api/facturas/complementos). */
 interface ComplementoRow extends Invoice {
@@ -217,6 +220,13 @@ export default function FacturasPage() {
   const [hayMas, setHayMas] = useState(false);
   const [cargandoMas, setCargandoMas] = useState(false);
 
+  // REP por emitir. El submenú mostraba `conteos.pago` — TODOS los REP que
+  // existen, o sea el archivo. Quien entra a Facturas no pregunta "¿cuántos
+  // complementos he emitido en la vida?" sino "¿cuáles DEBO?", y esa cifra
+  // vivía escondida dentro de la pestaña. Se resuelve aquí para que la
+  // urgencia (y su vencimiento legal) se vea desde fuera.
+  const [repPorEmitir, setRepPorEmitir] = useState<{ sinRep: number; vencidos: number } | null>(null);
+
   // La búsqueda va al SERVIDOR (antes filtraba sólo sobre lo ya cargado, así que
   // no encontraba nada fuera de las últimas 200 filas). Debounce para no
   // disparar una consulta por tecla.
@@ -269,6 +279,29 @@ export default function FacturasPage() {
   }, [activeCompany, listaUrl, periodo]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  /** Cobros PPD sin REP + cuántos ya pasaron el plazo legal (día 5 del mes
+   *  siguiente, RMF 2.7.1.32). Alimenta la insignia del submenú. */
+  const cargarRepPorEmitir = useCallback(async () => {
+    if (!activeCompany) return;
+    try {
+      const res = await fetch(`/api/facturas/complemento-pagos?companyId=${activeCompany.id}`);
+      if (!res.ok) return;
+      const d = await res.json();
+      const pendientes: { payments?: { fecha: string }[] }[] = Array.isArray(d.pendientes) ? d.pendientes : [];
+      const hoy = new Date();
+      // "Vencido" es por COBRO, no por factura: basta un pago fuera de plazo
+      // para que esa factura urja.
+      const vencidos = pendientes.filter((x) =>
+        (x.payments ?? []).some((pg) => repVencido(new Date(pg.fecha), hoy))
+      ).length;
+      setRepPorEmitir({ sinRep: d.stats?.sinRep ?? pendientes.length, vencidos });
+    } catch {
+      // La insignia es accesoria: si falla, el submenú simplemente no la pinta.
+    }
+  }, [activeCompany]);
+
+  useEffect(() => { cargarRepPorEmitir(); }, [cargarRepPorEmitir]);
 
   /** Siguiente página (se agrega al final; el orden del servidor es fecha desc). */
   async function cargarMas() {
@@ -438,22 +471,36 @@ export default function FacturasPage() {
           REP vivían sólo como chip "Pagos" (emitidos y recibidos revueltos) y
           las prefacturas sólo como tarjeta que aparecía si había pendientes. */}
       <div className="mt-4 flex flex-wrap gap-1 rounded-control border border-cos-line bg-cos-card p-1">
-        {([
-          ["comprobantes", "Comprobantes", resumen?.conteos?.todas ?? null],
-          ["complementos", "Complementos de pago", resumen?.conteos?.pago ?? null],
-          ["prefacturas", "Prefacturas", prefacturas.length || null],
-        ] as [Vista, string, number | null][]).map(([v, t, n]) => (
+        {submenusFacturas({
+          comprobantes: resumen?.conteos?.todas ?? null,
+          prefacturas: prefacturas.length,
+          repPorEmitir,
+        }).map((m) => (
           <button
-            key={v}
-            onClick={() => setVista(v)}
+            key={m.v}
+            onClick={() => setVista(m.v)}
+            title={m.hint}
             className={
               "flex-1 min-w-[140px] rounded-[9px] px-3 py-2 text-[13.5px] font-medium transition-colors " +
-              (vista === v ? "bg-cos-brand text-white" : "text-cos-ink-soft hover:bg-cos-paper")
+              (vista === m.v ? "bg-cos-brand text-white" : "text-cos-ink-soft hover:bg-cos-paper")
             }
           >
-            {t}
-            {n != null && n > 0 && (
-              <span className={"ml-1.5 font-mono text-[11.5px] " + (vista === v ? "opacity-85" : "opacity-70")}>{n}</span>
+            {m.t}
+            {m.n != null && m.n > 0 && (
+              <span
+                className={
+                  "ml-1.5 rounded-full px-1.5 py-0.5 font-mono text-[11.5px] " +
+                  (vista === m.v
+                    ? "bg-white/20 text-white"
+                    : m.tono === "red"
+                      ? "bg-cos-red-tint text-cos-red-ink"
+                      : m.tono === "amber"
+                        ? "bg-cos-amber-tint text-cos-amber-ink"
+                        : "bg-cos-slate-tint text-cos-ink-soft")
+                }
+              >
+                {m.n}
+              </span>
             )}
           </button>
         ))}
@@ -465,7 +512,7 @@ export default function FacturasPage() {
           onOpen={(inv) => setSel(inv)}
           onIrAFactura={(uuid) => { setVista("comprobantes"); setFilter("todas"); setQ(uuid); }}
           onToast={showToast}
-          onEmitted={fetchData}
+          onEmitted={() => { fetchData(); cargarRepPorEmitir(); }}
         />
       )}
 
