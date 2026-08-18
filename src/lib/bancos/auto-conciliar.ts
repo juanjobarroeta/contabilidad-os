@@ -1,4 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import {
+  campoMontoPorTipo,
+  esTipoImpuestoConciliable,
+  mismaLineaCaptura,
+  TIPOS_IMPUESTO_CONCILIABLES,
+} from "@/lib/conciliacion-impuestos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Auto-conciliación bancaria de alta confianza (motor reutilizable)
@@ -141,18 +147,79 @@ export function isAutoApplicable(bestScore: number, secondBestScore: number | nu
  * evidencia de nada, y usarlo propagaría un error de conciliación al siguiente
  * mes convertido en "conocimiento".
  */
-async function clabesConocidasPorRfc(companyId: string, clabe: string): Promise<Set<string>> {
+export async function clabesConocidasPorRfc(companyId: string, clabe: string): Promise<Set<string>> {
   const previos = await prisma.bankTransaction.findMany({
     where: { companyId, contraparteClabe: clabe, status: "MATCHED", invoiceId: { not: null } },
-    select: { invoice: { select: { customer: { select: { rfc: true } } } } },
+    select: {
+      invoice: { select: { contraparteRfc: true, customer: { select: { rfc: true } } } },
+    },
     take: 50,
   });
   const rfcs = new Set<string>();
   for (const p of previos) {
-    const rfc = p.invoice?.customer?.rfc;
+    // Misma identidad efectiva que el scoring: Customer, o la contraparte del CFDI.
+    const rfc = p.invoice?.customer?.rfc ?? p.invoice?.contraparteRfc;
     if (rfc) rfcs.add(rfc);
   }
   return rfcs;
+}
+
+/**
+ * Concilia un egreso contra su declaración por LÍNEA DE CAPTURA. Determinista:
+ * el SAT emite la línea para UNA declaración; si el banco escribió la misma en
+ * el movimiento, ese cargo pagó exactamente esa declaración — no hay score que
+ * calcular ni umbral que cruzar.
+ *
+ * Aplica la MISMA transición que el PATCH manual (match-impuesto): movimiento
+ * → MATCHED + taxDeclarationId; declaración → PAID con el monto realmente
+ * cargado y fecha de pago del movimiento si estaba vacía. Si dos declaraciones
+ * comparten la línea (corrupción de datos: no debería existir), NO se adivina.
+ */
+async function conciliarImpuestoPorLineaCaptura(tx: {
+  id: string;
+  companyId: string;
+  monto: number;
+  fecha: Date;
+  lineaCaptura: string | null;
+}): Promise<boolean> {
+  if (!tx.lineaCaptura || tx.monto >= 0) return false;
+
+  const decls = await prisma.taxDeclaration.findMany({
+    where: {
+      companyId: tx.companyId,
+      tipo: { in: [...TIPOS_IMPUESTO_CONCILIABLES] },
+      status: { not: "PAID" },
+      lineaCaptura: { not: null },
+      // v1: una declaración ↔ un movimiento (mismo guard que el PATCH).
+      bankTransactions: { none: { status: "MATCHED" } },
+    },
+    select: { id: true, tipo: true, lineaCaptura: true, fechaPresentacion: true },
+  });
+
+  // La comparación normalizada vive en mismaLineaCaptura (espacios/guiones/caja).
+  const candidatas = decls.filter(
+    (d) => esTipoImpuestoConciliable(d.tipo) && mismaLineaCaptura(d.lineaCaptura, tx.lineaCaptura)
+  );
+  if (candidatas.length !== 1) return false;
+
+  const decl = candidatas[0];
+  if (!esTipoImpuestoConciliable(decl.tipo)) return false; // narrowing para TS
+  const montoPagado = Math.round(Math.abs(tx.monto) * 100) / 100;
+  await prisma.$transaction([
+    prisma.bankTransaction.update({
+      where: { id: tx.id },
+      data: { status: "MATCHED", invoiceId: null, taxDeclarationId: decl.id },
+    }),
+    prisma.taxDeclaration.update({
+      where: { id: decl.id },
+      data: {
+        status: "PAID",
+        [campoMontoPorTipo(decl.tipo)]: montoPagado,
+        ...(decl.fechaPresentacion == null ? { fechaPresentacion: tx.fecha } : {}),
+      },
+    }),
+  ]);
+  return true;
 }
 
 // Auto-concilia una cuenta bancaria: recorre sus transacciones UNMATCHED y
@@ -170,6 +237,17 @@ export async function autoConciliarCuenta(accountId: string): Promise<{ matched:
   let matched = 0;
 
   for (const tx of unmatched) {
+    // IMPUESTOS PRIMERO, por línea de captura: es identidad, no inferencia. Si
+    // aplica, este movimiento ya quedó conciliado y no compite con facturas.
+    try {
+      if (await conciliarImpuestoPorLineaCaptura(tx)) {
+        matched++;
+        continue;
+      }
+    } catch {
+      // best-effort: si el match de impuestos falla, se sigue con facturas
+    }
+
     const absAmount = Math.abs(tx.monto);
     const isCreditTx = tx.monto > 0;
 
@@ -192,6 +270,10 @@ export async function autoConciliarCuenta(accountId: string): Promise<{ matched:
         bankTransactions: { none: { status: "MATCHED" } },
         conciliacionDetalles: { none: {} },
       },
+      // contraparteNombre/Rfc: la contraparte del CFDI mismo (backfilleada del
+      // rawXml). Los EGRESO sincronizados del SAT casi nunca tienen `customer`
+      // — sin este respaldo, TODA la identidad se apagaba justo en el lado de
+      // proveedores, que es donde más movimientos hay.
       include: { customer: { select: { rfc: true, razonSocial: true } } },
     });
 
@@ -214,23 +296,30 @@ export async function autoConciliarCuenta(accountId: string): Promise<{ matched:
     };
 
     const scored = candidates
-      .map((inv) => ({
-        inv,
-        score: scoreCandidate(
-          {
-            total: inv.total,
-            fecha: inv.fecha,
-            customerRfc: inv.customer?.rfc ?? null,
-            customerNombre: inv.customer?.razonSocial ?? null,
-            clabesConocidas:
-              inv.customer?.rfc && clabesPorRfc.has(inv.customer.rfc) && tx.contraparteClabe
-                ? [tx.contraparteClabe]
-                : [],
-          },
-          senales,
-          absAmount,
-        ),
-      }))
+      .map((inv) => {
+        // Identidad efectiva de la factura: el Customer si existe; si no, la
+        // contraparte del propio CFDI (rawXml). Sin este respaldo la identidad
+        // se apagaba en los EGRESO del SAT, que casi nunca tienen Customer.
+        const rfcFactura = inv.customer?.rfc ?? inv.contraparteRfc ?? null;
+        const nombreFactura = inv.customer?.razonSocial ?? inv.contraparteNombre ?? null;
+        return {
+          inv,
+          score: scoreCandidate(
+            {
+              total: inv.total,
+              fecha: inv.fecha,
+              customerRfc: rfcFactura,
+              customerNombre: nombreFactura,
+              clabesConocidas:
+                rfcFactura && clabesPorRfc.has(rfcFactura) && tx.contraparteClabe
+                  ? [tx.contraparteClabe]
+                  : [],
+            },
+            senales,
+            absAmount,
+          ),
+        };
+      })
       .sort((a, b) => b.score - a.score);
 
     const best = scored[0];
