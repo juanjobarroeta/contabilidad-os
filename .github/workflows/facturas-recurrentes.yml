@@ -1,0 +1,52 @@
+name: Facturas recurrentes (daily)
+
+# Genera las PREFACTURAS de las series recurrentes que vencen hoy. Pega a
+# /api/cron/facturas-recurrentes.
+#
+# NO timbra: deja borradores para que alguien los revise y los timbre. Un CFDI
+# timbrado es un documento legal que consume timbre y sólo se deshace
+# cancelándolo ante el SAT, así que no es algo que deba pasar sin que nadie
+# mire.
+#
+# Idempotente: crear el borrador y adelantar la serie ocurren en la misma
+# transacción, así que una segunda corrida el mismo día ya no ve la serie
+# vencida. Una serie atrasada avanza UN periodo por corrida — el cron diario se
+# pone al corriente solo en vez de inundar la bandeja de golpe.
+#
+# Temprano en la mañana: quien revisa prefacturas se encuentra las del día ya
+# hechas al empezar, y no a media tarde.
+#
+# Requiere los secretos del repo CRON_SECRET y STAGING_URL (igual que los demás
+# crons). Si CRON_SECRET no está, el endpoint regresa 401.
+#
+# NOTE: GitHub only runs `schedule:` triggers from the DEFAULT branch (main).
+# Use the "Run workflow" button (workflow_dispatch) to trigger a run manually.
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # ~07:00 CT (UTC-6)
+  workflow_dispatch: {}
+
+# Serializa los disparos del mismo cron (schedule + workflow_dispatch). Es
+# cinturón-y-tirantes; el candado de la app (withCronLock) es la protección
+# real contra el solapamiento.
+concurrency:
+  group: cron:facturas-recurrentes
+  cancel-in-progress: false
+
+jobs:
+  generar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger facturas-recurrentes
+        run: |
+          set -euo pipefail
+          # Strip whitespace from the URL secret and fail loudly (a trailing
+          # newline makes curl reject the URL, and `| tee` would mask it).
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/facturas-recurrentes" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

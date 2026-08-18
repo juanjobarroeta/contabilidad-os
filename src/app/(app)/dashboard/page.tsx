@@ -10,6 +10,7 @@ import {
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Chip, type ChipStatus, Alert, Skeleton, SkeletonCard } from "@/components/ui";
 import { WhatsappNudge } from "@/components/whatsapp/WhatsappNudge";
+import { PendientesDelCierre } from "@/components/contabilidad/PendientesDelCierre";
 
 // ── Types (mirrors /api/dashboard) ───────────────────────────────────────────
 interface TrendPoint { label: string; periodo: string; ingresos: number; gastos: number }
@@ -446,6 +447,20 @@ export default function InicioPage() {
             </div>
           )}
           <HeroBand obligaciones={data.upcomingObligations} />
+
+          {/* El checklist del cierre, justo debajo del estado con el SAT: la
+              banda dice cómo vas, esto dice qué te falta hacer. Se omite
+              mientras el tablero está vacío — ahí la tarjeta de estado de datos
+              ya explica que la descarga del SAT sigue en curso, y listar
+              "sin CFDIs del periodo" como pendiente sólo repetiría el mismo
+              mensaje con otras palabras. */}
+          {data.estadoDatos?.tieneFacturas !== false && (
+            <PendientesDelCierre
+              companyId={activeCompany.id}
+              periodo={data.taxThisMonth.periodo}
+              periodoFmt={data.taxThisMonth.periodoFmt}
+            />
+          )}
 
           {/* cuánto debo + mes en números */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
