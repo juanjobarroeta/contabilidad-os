@@ -8,7 +8,7 @@ import {
   Loader2, KeyRound, SearchX, ClipboardCheck,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Card, Money, Chip, type ChipStatus, Alert, Loading } from "@/components/ui";
+import { Card, Money, Chip, type ChipStatus, Alert, Skeleton, SkeletonCard } from "@/components/ui";
 import { WhatsappNudge } from "@/components/whatsapp/WhatsappNudge";
 
 // ── Types (mirrors /api/dashboard) ───────────────────────────────────────────
@@ -318,6 +318,38 @@ function HeroBand({ obligaciones }: { obligaciones: UpcomingOb[] }) {
 
 const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint";
 
+// ── Esqueleto de carga ───────────────────────────────────────────────────────
+// Con la forma real del tablero (banda + dos tarjetas + gráfica), no un
+// spinner: el layout ya no salta cuando llegan las cifras, y se ve de
+// inmediato CUÁNTO va a aparecer.
+function InicioSkeleton() {
+  return (
+    <div className="space-y-5">
+      <div className="rounded-card bg-cos-slate-tint px-6 py-[22px]">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-12 w-12 flex-none rounded-[14px] bg-cos-line" />
+          <div className="flex-1">
+            <Skeleton className="h-5 w-64 bg-cos-line" />
+            <Skeleton className="mt-2 h-3.5 w-80 bg-cos-line" />
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+      <div className="rounded-card border border-cos-line bg-cos-card p-5">
+        <Skeleton className="h-3 w-40" />
+        <div className="mt-5 flex h-[150px] items-end gap-2.5">
+          {[55, 80, 40, 95, 65, 75].map((h, i) => (
+            <Skeleton key={i} className="flex-1 rounded-t-[5px]" style={{ height: `${h}%` }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function InicioPage() {
   const { activeCompany, loading: companyLoading } = useCompany();
@@ -397,7 +429,7 @@ export default function InicioPage() {
       )}
 
       {loading || !data ? (
-        <Loading label="Cargando datos…" className="py-16" />
+        <InicioSkeleton />
       ) : (
         <div className="space-y-5">
           {data.estadoDatos && <EstadoDatosCard estado={data.estadoDatos} />}

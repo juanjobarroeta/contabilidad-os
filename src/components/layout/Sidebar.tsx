@@ -24,6 +24,7 @@ import {
   ScanSearch,
   Menu,
   X,
+  Search,
   TrendingUp,
   Wrench,
   Inbox,
@@ -59,9 +60,9 @@ const SECTIONS: NavSection[] = [
   {
     label: "Fiscal",
     items: [
-      { href: "/impuestos", label: "Impuestos", icon: Calculator, badge: "3 tabs" },
-      { href: "/contabilidad", label: "Contabilidad", icon: BookOpen, badge: "9 tabs" },
-      { href: "/cumplimiento", label: "Cumplimiento", icon: ShieldCheck, badge: "3 tabs" },
+      { href: "/impuestos", label: "Impuestos", icon: Calculator },
+      { href: "/contabilidad", label: "Contabilidad", icon: BookOpen },
+      { href: "/cumplimiento", label: "Cumplimiento", icon: ShieldCheck },
       // Herramienta transversal (no depende de la empresa activa): valida
       // RFC/CURP/NSS y cruza la lista 69-B — el "check.id" incluido en el plan.
       { href: "/verificador", label: "Verificador", icon: ScanSearch },
@@ -132,6 +133,16 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   const [companyOpen, setCompanyOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendientesNuevos, setPendientesNuevos] = useState(0);
+  // El atajo se anuncia como ⌘K en Mac y Ctrl K en el resto. Se resuelve en un
+  // efecto (no al render) porque `navigator` no existe en el servidor y una
+  // suposición fija rompería la hidratación. Nuestra base es mayormente
+  // Windows: anunciar ⌘K a todos sería anunciar una tecla que no tienen.
+  const [teclaMod, setTeclaMod] = useState("Ctrl ");
+  useEffect(() => {
+    if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) {
+      setTeclaMod("\u2318");
+    }
+  }, []);
 
   // Cartera sólo para despachos (más de una empresa).
   const showCartera = companies.length > 1;
@@ -188,7 +199,14 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
           <BrandMark size={20} className="text-cos-brand" />
           Contabilidad<span className="text-cos-brand">OS</span>
         </span>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("cos:abrir-buscador"))}
+            aria-label="Buscar"
+            className="p-2 rounded-md hover:bg-cos-paper"
+          >
+            <Search className="h-5 w-5" />
+          </button>
           <ThemeToggle />
         </div>
       </div>
@@ -229,6 +247,20 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
             <X className="h-4 w-4" />
           </button>
         </div>
+      </div>
+
+      {/* Buscador global. Vive arriba del selector de empresa porque también
+          cambia de empresa: es el atajo, y el desplegable de abajo el camino
+          largo. Sólo dispara el evento; el paletón lo escucha desde el layout. */}
+      <div className="px-3 pt-3">
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent("cos:abrir-buscador"))}
+          className="flex w-full items-center gap-2 rounded-md border border-cos-line px-2.5 py-2 text-sm text-cos-ink-faint transition-colors hover:border-cos-brand/40 hover:bg-cos-paper hover:text-cos-ink-soft"
+        >
+          <Search className="h-4 w-4 shrink-0" />
+          <span className="flex-1 text-left">Buscar…</span>
+          <kbd className="rounded border border-cos-line px-1.5 py-0.5 font-mono text-[10px]">{teclaMod}K</kbd>
+        </button>
       </div>
 
       {/* Company switcher */}

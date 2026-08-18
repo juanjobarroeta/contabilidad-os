@@ -16,6 +16,9 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   Truck, Plus, Search, Pencil, Loader2, FileText, X, DownloadCloud, Landmark,
 } from "lucide-react";
+import {
+  TableContainer, Table, THead, TBody, TR, TH, TD,
+} from "@/components/ui";
 
 const REGIMENES_FISCALES = [
   { value: "601", label: "601 – General de Ley Personas Morales" },
@@ -248,29 +251,29 @@ export default function ProveedoresPage() {
           )}
         </div>
       ) : (
-        <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
-          <table className="w-full text-sm">
-            <thead className="bg-cos-paper text-[12px] uppercase tracking-[0.02em] text-cos-ink-faint">
-              <tr>
-                <th className="px-4 py-2.5 text-left font-medium">RFC</th>
-                <th className="px-4 py-2.5 text-left font-medium">Razón Social</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium md:table-cell">Régimen</th>
-                <th className="hidden px-4 py-2.5 text-center font-medium sm:table-cell">Facturas</th>
-                <th className="hidden px-4 py-2.5 text-center font-medium sm:table-cell">Pagos</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium lg:table-cell">Datos SPEI</th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
+        <TableContainer className="mt-5 shadow-card">
+          <Table>
+            <THead>
+              <TR>
+                <TH>RFC</TH>
+                <TH>Razón Social</TH>
+                <TH className="hidden md:table-cell">Régimen</TH>
+                <TH center className="hidden sm:table-cell">Facturas</TH>
+                <TH center className="hidden sm:table-cell">Pagos</TH>
+                <TH className="hidden lg:table-cell">Datos SPEI</TH>
+                <TH />
+              </TR>
+            </THead>
+            <TBody>
               {proveedores.map((p) => (
-                <tr
+                <TR
                   key={p.id}
                   onClick={() => openEdit(p)}
-                  className="cursor-pointer border-t border-cos-line transition-colors hover:bg-cos-paper/60"
+                  interactive
                 >
-                  <td className="px-4 py-3 font-mono text-[12px] font-medium text-cos-ink">{p.rfc}</td>
-                  <td className="px-4 py-3 font-medium text-cos-ink">{p.razonSocial}</td>
-                  <td className="hidden px-4 py-3 md:table-cell">
+                  <TD className="font-mono text-[12px] font-medium text-cos-ink">{p.rfc}</TD>
+                  <TD className="font-medium text-cos-ink">{p.razonSocial}</TD>
+                  <TD className="hidden md:table-cell">
                     {p.regimenFiscal ? (
                       <span
                         title={regimenLabel(p.regimenFiscal)}
@@ -281,17 +284,17 @@ export default function ProveedoresPage() {
                     ) : (
                       <span className="text-[12px] text-cos-ink-faint">—</span>
                     )}
-                  </td>
-                  <td className="hidden px-4 py-3 text-center sm:table-cell">
+                  </TD>
+                  <TD center className="hidden sm:table-cell">
                     <span className="inline-flex items-center gap-1 text-[12px] text-cos-ink-soft">
                       <FileText className="h-3.5 w-3.5" />
                       {p.cfdisRecibidos}
                     </span>
-                  </td>
-                  <td className="hidden px-4 py-3 text-center text-[12px] text-cos-ink-soft sm:table-cell">
+                  </TD>
+                  <TD center className="hidden text-[12px] text-cos-ink-soft sm:table-cell">
                     {p._count.bankTransactions}
-                  </td>
-                  <td className="hidden px-4 py-3 lg:table-cell">
+                  </TD>
+                  <TD className="hidden lg:table-cell">
                     {p.clabe || p.cuentaBancaria ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-cos-jade-tint px-2 py-0.5 text-[12px] font-medium text-cos-jade-ink">
                         <Landmark className="h-3 w-3" /> {p.clabe ? "CLABE" : "Cuenta"}
@@ -301,8 +304,8 @@ export default function ProveedoresPage() {
                         Sin capturar
                       </span>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
+                  </TD>
+                  <TD>
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); openEdit(p); }}
@@ -312,12 +315,12 @@ export default function ProveedoresPage() {
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </TD>
+                </TR>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TBody>
+          </Table>
+        </TableContainer>
       )}
 
       {/* ── Create / Edit Modal ── */}
