@@ -63,6 +63,7 @@ const CRONS_PERMITIDOS = [
   "sat-rawxml-backfill",
   "invoice-taxes-backfill",
   "invoice-contraparte-backfill",
+  "bancos-contraparte-backfill",
   "declaraciones-backfill",
   "onboarding-drive",
   "fiscal-audit",

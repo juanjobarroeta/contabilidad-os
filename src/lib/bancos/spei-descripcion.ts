@@ -38,6 +38,8 @@
 // PURO.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { I_ACENTO, O_ACENTO, U_ACENTO } from "./decodificar";
+
 export interface DatosSpei {
   /** Llave primaria del CEP de Banxico. */
   claveRastreo?: string;
@@ -133,9 +135,15 @@ const ETIQUETAS: ReadonlyArray<{ campo: Campo; re: string }> = [
   { campo: "clabe", re: String.raw`CTA\s*\/\s*CLABE\s*:` },
   { campo: "clabe", re: String.raw`CLABE\s*:` },
   { campo: "rfc", re: String.raw`RFC\s+(?:Beneficiario|Ordenante|Receptor|Emisor)\s*:` },
-  { campo: "banco", re: String.raw`Instituci[oó]n\s+(?:Receptora|Emisora|Beneficiaria)\s*:` },
+  { campo: "banco", re: `Instituci${O_ACENTO}n\\s+(?:Receptora|Emisora|Beneficiaria)\\s*:` },
   { campo: "bancoConCodigo", re: String.raw`BCO\s*:` },
   { campo: "claveRastreo", re: String.raw`Clave\s+de\s+Rastreo\s*:` },
+  // Bajío etiqueta la clave de rastreo como "Número de Referencia" en los
+  // renglones de comisión e IVA (el valor es el MISMO "BB4251954020513" que el
+  // envío trae bajo "Clave de Rastreo"). Va ANTES de "Referencia:" o esa
+  // etiqueta más corta se lo comería. No hay riesgo de guardar un folio: el
+  // valor pasa por pareceClaveRastreo, que exige 10-30 alfanuméricos.
+  { campo: "claveRastreo", re: `N${U_ACENTO}mero\\s+de\\s+Referencia\\s*:` },
   { campo: "concepto", re: String.raw`Concepto\s+del\s+Pago\s*:` },
   { campo: "concepto", re: String.raw`Concepto\s*:` },
   { campo: "referencia", re: String.raw`Referencia\s+Num[eé]rica\s*:` },
@@ -347,7 +355,7 @@ export function esSpeiInterbancario(descripcion: string): boolean {
   if (!/\bSPEI\b|TRANSFERENCIA\s+INTERBANCARIA|TRANSF\.?\s+INTERB/.test(d)) return false;
   // La comisión por transferencia menciona SPEI y hasta comparte la clave de
   // rastreo del envío, pero es un cobro del banco: no tiene comprobante propio.
-  if (/COMISI[OÓ]N|\bIVA\b/.test(d)) return false;
+  if (new RegExp(`COMISI${O_ACENTO.toUpperCase()}N|\\bIVA\\b`).test(d)) return false;
   return true;
 }
 
@@ -361,5 +369,7 @@ export function esSpeiInterbancario(descripcion: string): boolean {
  */
 export function esComisionDeTransferencia(descripcion: string): boolean {
   const d = (descripcion ?? "").toUpperCase();
-  return /COMISI[OÓ]N/.test(d) && /TRANSFERENCIA|SPEI|ENV[IÍ]O/.test(d);
+  const comision = new RegExp(`COMISI${O_ACENTO.toUpperCase()}N`);
+  const transferencia = new RegExp(`TRANSFERENCIA|SPEI|ENV${I_ACENTO.toUpperCase()}O`);
+  return comision.test(d) && transferencia.test(d);
 }
