@@ -233,6 +233,22 @@ describe("parseStatement — Banorte CSV", () => {
     expect(res.transactions[0].fecha.getUTCDate()).toBe(3);
   });
 
+  it("YA NO TIRA la clave de rastreo: la columna críptica viaja aparte", () => {
+    // Es ilegible para una persona, pero es la llave primaria del CEP de
+    // Banxico — con ella se pide el RFC de la contraparte.
+    expect(res.transactions[0].claveRastreoRaw).toBe("20260703400140HDH0000485641770");
+    // Y no se la robó a la descripción legible.
+    expect(res.transactions[0].descripcion).toContain("STRIPE PAYMENTS");
+  });
+
+  it("no confunde la descripción con clave de rastreo cuando no hay dos columnas", () => {
+    // Sin DESCRIPCIÓN DETALLADA ambas resuelven a la misma columna: no hay
+    // columna críptica aparte que rescatar.
+    const CSV = `FECHA,DESCRIPCION,CARGO,ABONO,SALDO\n03/07/2026,SPEI RECIBIDO STRIPE,-,"1,000.00","5,000.00"`;
+    const r = parseStatement(CSV, "generico.csv");
+    expect(r.transactions[0].claveRastreoRaw).toBeUndefined();
+  });
+
   it("descarta la referencia de relleno '0'/'-' pero conserva la real", () => {
     expect(res.transactions[0].referencia).not.toBe("0");
     expect(res.transactions[2].referencia).toBe("160726");

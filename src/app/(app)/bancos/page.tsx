@@ -22,6 +22,15 @@ interface BankTx {
   id: string; fecha: string; descripcion: string; monto: number; referencia?: string; saldo?: number;
   tipo: "CREDITO" | "DEBITO"; status: "UNMATCHED" | "MATCHED" | "IGNORED";
   notes?: string | null;
+  // Contraparte desglosada de la descripción (bancos/spei-descripcion.ts).
+  // El banco ya las escribía etiquetadas dentro de `descripcion`.
+  contraparteNombre?: string | null;
+  contraparteRfc?: string | null;
+  contraparteClabe?: string | null;
+  contraparteBanco?: string | null;
+  conceptoPago?: string | null;
+  claveRastreo?: string | null;
+  lineaCaptura?: string | null;
   invoiceId?: string | null;
   invoice?: {
     id: string;
@@ -403,11 +412,15 @@ export default function BancosPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function importarArchivo(file: File): Promise<any> {
     if (/\.(pdf|jpe?g|png)$/i.test(file.name)) return subirPdf(file);
-    const esExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
-    const fileContent = esExcel ? await fileToBase64(file) : await file.text();
+    // SIEMPRE base64, también para CSV: `file.text()` decodifica UTF-8 a fuerza
+    // y los bancos mexicanos exportan en Windows-1252, así que "Comisión" se
+    // volvía "Comisi<?>n" AQUÍ, en el navegador, sin vuelta atrás. Mandando los
+    // bytes, el servidor detecta la codificación real y el formato por FIRMA
+    // (la extensión miente: los .xls de BBVA son XML).
+    const fileContent = await fileToBase64(file);
     const res = await fetch(`/api/bancos/${selectedId}/upload`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileContent, filename: file.name, encoding: esExcel ? "base64" : "text" }),
+      body: JSON.stringify({ fileContent, filename: file.name, encoding: "base64" }),
     });
     return res.json();
   }
@@ -1020,10 +1033,36 @@ export default function BancosPage() {
                         <span className="font-mono text-[12.5px] text-cos-ink-faint">{fmtFecha(m.fecha)}</span>
                         <Money value={m.monto} sign size={17} weight={700} />
                       </div>
-                      <p className="mt-2 text-[14.5px] font-medium leading-snug text-cos-ink">{m.descripcion}</p>
+                      {/* Cuando el banco nos dijo QUIÉN, ése es el titular del
+                          movimiento — no la cadena cruda. Quien lee un estado
+                          de cuenta busca la contraparte, no la sintaxis del
+                          banco ("SPEI Enviado: | Institucion Receptora: … |
+                          Cuenta Beneficiario: … RFC Beneficiario: …").
+                          Sin contraparte extraída, la descripción sigue siendo
+                          el titular: no se pierde nada. La cadena completa
+                          queda siempre visible al expandir. */}
+                      {m.contraparteNombre ? (
+                        <>
+                          <p className="mt-2 text-[14.5px] font-semibold leading-snug text-cos-ink">
+                            {m.contraparteNombre}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] text-cos-ink-soft">
+                            {m.conceptoPago && <span className="truncate">{m.conceptoPago}</span>}
+                            {m.contraparteRfc && (
+                              <span className="font-mono text-cos-ink">{m.contraparteRfc}</span>
+                            )}
+                            {m.contraparteBanco && <span>{m.contraparteBanco}</span>}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="mt-2 text-[14.5px] font-medium leading-snug text-cos-ink">{m.descripcion}</p>
+                      )}
                       <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3">
                         <span className="text-[12px] text-cos-ink-faint">
                           {m.referencia && <>Ref <span className="font-mono">{m.referencia}</span></>}
+                          {/* La línea de captura identifica la declaración que
+                              este cargo pagó: es el dato que lo concilia. */}
+                          {m.lineaCaptura && <> · LC <span className="font-mono">{m.lineaCaptura}</span></>}
                           {m.saldo != null && <> · Saldo <span className="font-mono">${m.saldo.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></>}
                         </span>
                         {statusChip(m)}
@@ -1157,6 +1196,26 @@ export default function BancosPage() {
                           </button>
                           {expandedId === m.id && (
                             <div className="mt-3 flex flex-col gap-3">
+                              {/* El detalle fino y la cadena CRUDA del banco.
+                                  Van aquí y no en la tarjeta porque estorban al
+                                  hojear, pero nunca se esconden: el estado de
+                                  cuenta es la fuente de verdad y quien concilia
+                                  a mano necesita poder leerla tal cual. */}
+                              {(m.contraparteClabe || m.claveRastreo || m.contraparteNombre) && (
+                                <div className="rounded-control bg-cos-paper px-3 py-2.5 text-[12.5px] text-cos-ink-soft">
+                                  {m.contraparteClabe && (
+                                    <div>CLABE <span className="font-mono text-cos-ink">{m.contraparteClabe}</span></div>
+                                  )}
+                                  {m.claveRastreo && (
+                                    <div className="mt-0.5">
+                                      Clave de rastreo <span className="font-mono text-cos-ink">{m.claveRastreo}</span>
+                                    </div>
+                                  )}
+                                  <div className="mt-1.5 break-words border-t border-cos-line pt-1.5 text-[11.5px] text-cos-ink-faint">
+                                    {m.descripcion}
+                                  </div>
+                                </div>
+                              )}
                               {candLoading ? (
                                 <span className="inline-flex items-center gap-2 text-[13px] text-cos-ink-faint"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando facturas…</span>
                               ) : candidates.length > 0 ? (

@@ -128,6 +128,9 @@ const JOBS: Job[] = [
   // público en general (que no llevan Customer a propósito) salían como "—" en
   // la lista aunque el nombre venga en el comprobante. Gap-driven: converge.
   { name: "invoice-contraparte-backfill", everyMs: 6 * HOUR, firstDelayMs: 40 * MIN, minMs: MIN_LOCAL },
+  // Desglosa la contraparte de los movimientos bancarios ya importados. Local
+  // y gratis (un regex sobre texto ya guardado), así que va con el piso barato.
+  { name: "bancos-contraparte-backfill", everyMs: 6 * HOUR, firstDelayMs: 50 * MIN, minMs: MIN_LOCAL },
   // Del MISMO rawXml: CP y régimen del cliente, que los importadores dejaban en
   // "616" y sin CP. Sin esto, facturarle a un cliente importado exigía capturar
   // sus datos fiscales a mano. Gap-driven: converge y se apaga solo.

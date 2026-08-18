@@ -1208,6 +1208,31 @@ model BankTransaction {
   saldo       Float?
   tipo        BankTransactionType
 
+  // ── Contraparte, extraída de la descripción (ver bancos/spei-descripcion.ts)
+  // El banco YA escribe estos campos etiquetados dentro de `descripcion`; hasta
+  // ahora se guardaban como una sola cadena y se les corrían reglas de keywords.
+  // Desglosarlos es lo que convierte la conciliación de "adivinar por monto" a
+  // "identificar por parte y confirmar por monto".
+  /** Llave primaria del CEP de Banxico: sin ella no se puede pedir el RFC. */
+  claveRastreo      String?
+  contraparteNombre String?
+  /** El dato que cierra la conciliación. Gratis cuando el banco lo trae. */
+  contraparteRfc    String?
+  contraparteClabe  String?
+  /** Institución de la contraparte: 3 dígitos (prefijo CLABE) + nombre. */
+  contraparteBanco  String?
+  conceptoPago      String?
+  /** Pagos de impuestos: empata DIRECTO contra TaxDeclaration.lineaCaptura. */
+  lineaCaptura      String?
+  /**
+   * MARCA DE INTENTO del backfill. Sin esto el barrido filtraría por
+   * "contraparteNombre is null" y las descripciones que legítimamente no traen
+   * nada (un depósito en efectivo, una comisión) volverían a entrar en cada
+   * corrida, girando sobre las mismas filas para siempre — el mismo bucle que
+   * costó 243 re-parseos de acuses anuales. Se marca aunque no se extraiga nada.
+   */
+  contraparteAt     DateTime?
+
   // Reconciliation
   status           ReconciliationStatus @default(UNMATCHED)
   invoiceId        String?
@@ -1267,6 +1292,13 @@ model BankTransaction {
   // Conciliación de impuestos: «¿qué movimiento pagó esta declaración?»
   // (guard de segundo movimiento y detalle en la respuesta del PATCH).
   @@index([taxDeclarationId])
+  // Conciliación por contraparte: "¿qué movimientos son de este RFC?" es la
+  // consulta caliente del nuevo scoring, y el backfill busca dentro de una
+  // empresa los que todavía no tienen contraparte extraída.
+  @@index([companyId, contraparteRfc])
+  // La comisión de Bajío comparte clave de rastreo con el envío que la generó:
+  // así se encuentra su transferencia. También es la llave del CEP.
+  @@index([bankAccountId, claveRastreo])
   // "Deshacer última importación": último lote por empresa/cuenta y borrado del lote.
   @@index([importBatchId])
   // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
