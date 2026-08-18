@@ -291,6 +291,50 @@ function asignar(out: DatosSpei, campo: Campo, valor: string): void {
   }
 }
 
+// ── Puente a las columnas de BankTransaction ─────────────────────────────────
+
+export interface CamposContraparte {
+  claveRastreo: string | null;
+  contraparteNombre: string | null;
+  contraparteRfc: string | null;
+  contraparteClabe: string | null;
+  contraparteBanco: string | null;
+  conceptoPago: string | null;
+  lineaCaptura: string | null;
+}
+
+/**
+ * Traduce lo extraído a las columnas de BankTransaction.
+ *
+ * Vive aquí, no en el import, porque lo usan DOS caminos que tienen que
+ * coincidir campo por campo: la importación de un estado nuevo y el backfill
+ * de lo ya guardado. Si divergen, un movimiento importado hoy y el mismo
+ * movimiento reprocesado mañana quedarían distintos.
+ *
+ * `undefined` se vuelve `null`: en Prisma, `undefined` significa "no toques
+ * esta columna" y el backfill necesita poder BORRAR un valor que ya no aplica.
+ */
+export function camposContraparte(d: DatosSpei): CamposContraparte {
+  // El banco va como "014 SANTANDER" cuando se tienen ambos; si sólo hay uno,
+  // ese. Guardar el código pegado al nombre evita una columna más y deja el
+  // dato legible en la tarjeta del movimiento.
+  const banco = [d.bancoContraparteCodigo, d.bancoContraparteNombre].filter(Boolean).join(" ");
+  return {
+    claveRastreo: d.claveRastreo ?? null,
+    contraparteNombre: d.contraparteNombre ?? null,
+    contraparteRfc: d.contraparteRfc ?? null,
+    contraparteClabe: d.contraparteClabe ?? null,
+    contraparteBanco: banco || null,
+    conceptoPago: d.concepto ?? null,
+    lineaCaptura: d.lineaCaptura ?? null,
+  };
+}
+
+/** ¿Este movimiento tiene algo que extraer? Corta trabajo en el backfill. */
+export function tieneContraparte(c: CamposContraparte): boolean {
+  return Object.values(c).some((v) => v != null);
+}
+
 /**
  * ¿Este movimiento es un SPEI interbancario, es decir, tiene CEP?
  *

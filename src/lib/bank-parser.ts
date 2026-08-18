@@ -14,6 +14,11 @@ export interface ParsedTransaction {
    *  día en la deduplicación (dos SPEI de $10,000 el 13 de julio, a las
    *  13:07 y a las 15:07, son transacciones distintas). */
   hora?: string;
+  /** Contenido CRUDO de la columna que algunos bancos llenan con la clave de
+   *  rastreo (Banorte: DESCRIPCIÓN, junto a DESCRIPCIÓN DETALLADA). Se pasa sin
+   *  juzgar: quien decide si es una clave de rastreo es `parseSpei`, que sabe
+   *  distinguirla de un folio. Aquí sólo se deja de tirarla. */
+  claveRastreoRaw?: string;
 }
 
 /** Fila del archivo que NO se convirtió en transacción, con el motivo.
@@ -337,6 +342,13 @@ function parseCSV(content: string): ParseResult {
   // "descripcion detallada" primero: Banorte trae DESCRIPCIÓN (críptica, p.ej.
   // la clave de rastreo) Y DESCRIPCIÓN DETALLADA (la útil, con cliente/concepto).
   const descCol    = detectCol(headers, ["descripcion detallada", "descripcion", "descripci", "concepto", "movimiento", "referencia", "detalle", "memo"]);
+  // Cuando existen AMBAS columnas, la "descripcion" a secas es la críptica —
+  // detectCol devuelve la primera coincidencia, y "descripcion detallada" viene
+  // después en el encabezado de Banorte. Esa columna críptica es la CLAVE DE
+  // RASTREO: la llave del CEP de Banxico, con la que se pide el RFC de la
+  // contraparte. Se venía descartando por ilegible; lo es para una persona, no
+  // para Banxico. Si ambas resuelven a la misma columna, no hay columna aparte.
+  const claveCol   = detectCol(headers, ["descripcion"]);
   const debitCol   = detectCol(headers, ["cargo", "debito", "egreso", "retiro", "retiros", "debe"]);
   const creditCol  = detectCol(headers, ["abono", "credito", "ingreso", "deposito", "depositos", "haber"]);
   // "movimiento" como monto es un último recurso: en Banorte MOVIMIENTO es un
@@ -423,6 +435,8 @@ function parseCSV(content: string): ParseResult {
       monto,
       referencia: ref?.trim() || undefined,
       saldo: balanceCol >= 0 ? parseMXNumber(row[balanceCol] ?? "") : undefined,
+      claveRastreoRaw:
+        claveCol >= 0 && claveCol !== descCol ? row[claveCol]?.trim() || undefined : undefined,
     });
   }
 

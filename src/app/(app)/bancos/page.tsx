@@ -403,11 +403,15 @@ export default function BancosPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function importarArchivo(file: File): Promise<any> {
     if (/\.(pdf|jpe?g|png)$/i.test(file.name)) return subirPdf(file);
-    const esExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
-    const fileContent = esExcel ? await fileToBase64(file) : await file.text();
+    // SIEMPRE base64, también para CSV: `file.text()` decodifica UTF-8 a fuerza
+    // y los bancos mexicanos exportan en Windows-1252, así que "Comisión" se
+    // volvía "Comisi<?>n" AQUÍ, en el navegador, sin vuelta atrás. Mandando los
+    // bytes, el servidor detecta la codificación real y el formato por FIRMA
+    // (la extensión miente: los .xls de BBVA son XML).
+    const fileContent = await fileToBase64(file);
     const res = await fetch(`/api/bancos/${selectedId}/upload`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileContent, filename: file.name, encoding: esExcel ? "base64" : "text" }),
+      body: JSON.stringify({ fileContent, filename: file.name, encoding: "base64" }),
     });
     return res.json();
   }

@@ -29,6 +29,8 @@ import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
 import { claveDeDuplicado, planImportacionConHora } from "@/lib/bancos/dedup";
 import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuentes";
 import { primeraReglaQueEmpata, signoDeMonto, type FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
+import { decodificarEstadoDeCuenta, esExcelBinario } from "@/lib/bancos/decodificar";
+import { camposContraparte, parseSpei } from "@/lib/bancos/spei-descripcion";
 
 export type ImportResult = {
   ok: boolean;
@@ -213,6 +215,11 @@ export async function persistTransactions(opts: {
       }
     }
 
+    // La contraparte que el banco ya escribió en la descripción. No cambia el
+    // movimiento; le pone nombre, RFC y CLABE a la otra parte para que la
+    // conciliación deje de adivinar por monto.
+    const spei = parseSpei(tx.descripcion, tx.claveRastreoRaw);
+
     await prisma.bankTransaction.create({
       data: {
         companyId,
@@ -223,12 +230,15 @@ export async function persistTransactions(opts: {
         saldo: tx.saldo ?? null,
         // La hora del pegado viaja en referencia: identifica al movimiento
         // dentro del día para los pegados futuros (y se ve en conciliar).
-        referencia: tx.referencia ?? tx.hora ?? null,
+        // Si el banco trae la hora etiquetada en la descripción (Bajío), sirve
+        // igual y sin depender del formato pegado.
+        referencia: tx.referencia ?? tx.hora ?? spei.hora ?? null,
         tipo: tx.monto >= 0 ? "CREDITO" : "DEBITO",
         status,
         notes,
         source,
         importBatchId: batch.id,
+        ...camposContraparte(spei),
       },
     });
     imported++;
@@ -286,25 +296,17 @@ export function parseStatementFile(opts: {
 
   if (!fileContent) return { ok: false, error: "Archivo vacío" };
 
-  // Excel (.xlsx/.xls/.xlsm): binario, el front lo manda en base64.
+  // El front manda BYTES (base64) para todo. Se decide por FIRMA, no por la
+  // extensión: los exports .xls de BBVA ("RSM"/Banca Net Cash) son XML, y hay
+  // CSV que llegan con nombre .xls. Mandar un CSV a SheetJS lo re-emite con la
+  // idea que SheetJS tenga de la codificación — otra fuente de acentos rotos.
   let content = fileContent;
   let parseName = filename ?? "statement.csv";
-  const esExcel = encoding === "base64" || /\.(xlsx|xls|xlsm)$/i.test(parseName);
-  if (esExcel) {
-    const buf = encoding === "base64" ? Buffer.from(fileContent, "base64") : Buffer.from(fileContent, "utf8");
 
-    // OJO: los exports .xls de BBVA ("RSM"/Banca Net Cash) NO son Excel binario —
-    // son SpreadsheetML 2003 (XML). Si los pasáramos por SheetJS→CSV, las fechas
-    // ISO (2026-06-30) se reformatean a M/D/YY de 2 dígitos (6/30/26), que el
-    // parser de fechas NO reconoce → 0 movimientos. Detectamos el XML y lo pasamos
-    // CRUDO a parseStatement, que lo enruta a su parser dedicado (parseSpreadsheetML)
-    // con las fechas ISO intactas. Sólo el Excel binario REAL pasa por SheetJS.
-    const cabecera = buf.subarray(0, 4096).toString("utf8");
-    const esSpreadsheetML = /mso-application|urn:schemas-microsoft-com:office:spreadsheet|<Workbook/i.test(cabecera);
+  if (encoding === "base64") {
+    const buf = Buffer.from(fileContent, "base64");
 
-    if (esSpreadsheetML) {
-      content = buf.toString("utf8"); // parseStatement detecta SpreadsheetML por contenido
-    } else {
+    if (esExcelBinario(buf)) {
       try {
         const wb = XLSX.read(buf, { type: "buffer" });
         const ws = wb.Sheets[wb.SheetNames[0]];
@@ -314,6 +316,12 @@ export function parseStatementFile(opts: {
       } catch {
         return { ok: false, error: "Excel ilegible" };
       }
+    } else {
+      // Texto: CSV, OFX, movimientos pegados o SpreadsheetML. La decodificación
+      // detecta Windows-1252 y salva los acentos. SpreadsheetML pasa CRUDO —
+      // por SheetJS las fechas ISO (2026-06-30) se reformatean a M/D/YY, que el
+      // parser de fechas NO reconoce, y salen 0 movimientos.
+      content = decodificarEstadoDeCuenta(buf).texto;
     }
   }
 
