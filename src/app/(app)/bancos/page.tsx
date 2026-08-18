@@ -41,6 +41,10 @@ interface BankTx {
     fecha?: string | null;
     customer?: { razonSocial: string } | null;
   } | null;
+  /** Comisión por transferencia: de qué envío viene este cobro. */
+  comisionDe?: { id: string; fecha: string; monto: number; contraparteNombre?: string | null; descripcion: string } | null;
+  /** Cobros de comisión que generó esta transferencia. */
+  comisiones?: { id: string; monto: number; descripcion: string }[];
   /** Devolución bancaria: este movimiento ES la devolución de aquel pago. */
   devolucionDe?: { id: string; fecha: string; descripcion: string; monto: number } | null;
   /** Devolución bancaria: este pago FUE devuelto por aquel movimiento. */
@@ -1067,6 +1071,32 @@ export default function BancosPage() {
                         </span>
                         {statusChip(m)}
                       </div>
+
+                      {/* De dónde sale esta comisión. Sin esto es un egreso
+                          suelto que alguien mira y descarta a mano cada mes —
+                          un renglón por cada SPEI. NO se netea contra el envío:
+                          la comisión bancaria es un gasto real y deducible, con
+                          su propio CFDI del banco. */}
+                      {m.comisionDe && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12.5px] text-cos-ink-soft">
+                          <Link2 className="h-[14px] w-[14px]" />
+                          Comisión de la transferencia a{" "}
+                          <b className="truncate">
+                            {m.comisionDe.contraparteNombre ?? "otra cuenta"}
+                          </b>
+                          <Money value={m.comisionDe.monto} size={12.5} muted />
+                        </div>
+                      )}
+                      {m.comisiones != null && m.comisiones.length > 0 && (
+                        <div className="mt-2 text-[12.5px] text-cos-ink-faint">
+                          + {m.comisiones.length === 1 ? "comisión" : `${m.comisiones.length} comisiones`}{" "}
+                          <Money
+                            value={m.comisiones.reduce((s, c) => s + c.monto, 0)}
+                            size={12.5}
+                            muted
+                          />
+                        </div>
+                      )}
 
                       {matched && m.invoice && (
                         <div className="mt-3 border-t border-dashed border-cos-jade-tint pt-3 text-[13px] text-cos-jade-ink">

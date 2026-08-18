@@ -248,6 +248,30 @@ export function filtrarCandidatosImpuesto<T extends DeclCandidataImpuesto>(decls
 }
 
 /**
+ * La línea de captura pesa más que monto exacto (100) + fecha clavada (30)
+ * juntos: es identidad emitida por el SAT, no una coincidencia inferida.
+ */
+export const PUNTOS_LINEA_CAPTURA = 200;
+
+/**
+ * ¿Es la misma línea de captura?
+ *
+ * Se compara sin espacios ni guiones y en mayúsculas: el banco la escribe
+ * pegada ("REF. 04265F9T970050618402") y el acuse del SAT suele traerla en
+ * bloques. Dos declaraciones nunca comparten línea, así que un empate aquí es
+ * concluyente — y por eso la comparación tiene que ser estricta en longitud:
+ * la línea federal es de 20 posiciones y las de 0 caracteres no empatan con
+ * nada (el `if (!a || !b)` evita que dos nulos se declaren iguales).
+ */
+export function mismaLineaCaptura(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/[\s-]/g, "");
+  const x = norm(a);
+  const y = norm(b);
+  if (!x || !y) return false;
+  return x === y;
+}
+
+/**
  * Score PURO de una declaración candidata frente a un movimiento (egreso).
  * Mismas bandas que el scoring de facturas (conciliacion.ts) para que las
  * chips de confianza signifiquen lo mismo en toda la página:
@@ -255,10 +279,25 @@ export function filtrarCandidatosImpuesto<T extends DeclCandidataImpuesto>(decls
  *   fecha (vs fecha límite de pago): ≤1d +30 · ≤3d +20 · ≤7d +10 · ≤15d +5
  */
 export function scoreCandidatoImpuesto(
-  decl: { montoEsperado: number | null; fechaLimitePago: Date | null },
-  tx: { monto: number; fecha: Date }
+  decl: { montoEsperado: number | null; fechaLimitePago: Date | null; lineaCaptura?: string | null },
+  tx: { monto: number; fecha: Date; lineaCaptura?: string | null }
 ): number {
   let score = 0;
+
+  // LÍNEA DE CAPTURA: esto no es una señal más, es IDENTIDAD. La línea la emite
+  // el SAT para UNA declaración concreta; si el banco escribió la misma en el
+  // movimiento, ése cargo pagó exactamente esa declaración. No hay que
+  // inferirlo del monto ni de la fecha — el propio comprobante lo dice.
+  //
+  // Por eso vale más que todo lo demás junto (100 + 30): así un pago tardío, o
+  // uno que no cuadra al peso porque llevó recargos y actualización, gana de
+  // todos modos contra otra declaración que sí clave el monto. Ese caso —pagar
+  // fuera de plazo con recargos— es justamente donde el scoring por monto
+  // fallaba.
+  if (mismaLineaCaptura(decl.lineaCaptura, tx.lineaCaptura)) {
+    score += PUNTOS_LINEA_CAPTURA;
+  }
+
   const pagado = Math.abs(tx.monto);
   if (decl.montoEsperado != null && decl.montoEsperado > 0) {
     const diff = Math.abs(pagado - decl.montoEsperado);

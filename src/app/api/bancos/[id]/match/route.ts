@@ -175,14 +175,17 @@ export async function GET(req: Request, { params }: Params) {
         retencionesIsr: true,
         imssCuotas: true,
         fechaLimitePago: true,
+        // La línea de captura del acuse: si el movimiento trae la misma, ese
+        // cargo pagó ESTA declaración y no hay nada que inferir.
+        lineaCaptura: true,
       },
     });
     impuestos = filtrarCandidatosImpuesto(decls)
       .map((d) => {
         const montoEsperado = montoEsperadoDeclaracion(d);
         const score = scoreCandidatoImpuesto(
-          { montoEsperado, fechaLimitePago: d.fechaLimitePago },
-          { monto: tx.monto, fecha: tx.fecha }
+          { montoEsperado, fechaLimitePago: d.fechaLimitePago, lineaCaptura: d.lineaCaptura },
+          { monto: tx.monto, fecha: tx.fecha, lineaCaptura: tx.lineaCaptura }
         );
         return {
           id: d.id,
