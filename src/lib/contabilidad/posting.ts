@@ -17,6 +17,7 @@ import { resolveAccount } from "./seed-catalog";
 import { COE_CODES } from "./catalog";
 import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { classifyInvoice } from "./classify-egreso";
+import { esComprobanteDeEgreso, espejo, signoDeComprobante } from "./nota-credito";
 import {
   cargarIndiceFamilia,
   cuentaDeFamilia,
@@ -214,9 +215,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
 
   for (const inv of ingresos) {
     const ref = inv.uuid ?? inv.id;
+    // Nota de crédito, devolución o aplicación de anticipo: mismas cuentas,
+    // asiento invertido. Ver nota-credito.ts.
+    const esEgreso = esComprobanteDeEgreso(inv);
     const base = {
       fecha: inv.fecha,
-      descripcion: `Factura ingreso ${inv.serie ?? ""}${inv.folio ?? ""}`.trim(),
+      descripcion: `${esEgreso ? "Nota de egreso" : "Factura ingreso"} ${inv.serie ?? ""}${inv.folio ?? ""}`.trim(),
       referencia: ref,
       referenciaTipo: "CFDI" as const,
       fuente: "CFDI" as EntrySource,
@@ -237,19 +241,22 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       ...base,
       chartAccountId: (ctaCxc ?? accClientes).id,
       monto: inv.total,
-      tipo: "CARGO",
+      tipo: espejo("CARGO", esEgreso),
     });
     drafts.push({
       ...base,
       chartAccountId: (ctaVentaFam ?? accVentas).id,
       monto: inv.subtotal,
-      tipo: "ABONO",
+      tipo: espejo("ABONO", esEgreso),
     });
 
     // Costo de venta de la unidad: sólo cuando las TRES cuentas de la familia
     // existen (venta, costo, inventario). Aliviar un inventario que no se
     // cargó — o al revés — desbalancearía la serie 1301 contra la CE.
-    if (unidad && ctaVentaFam && unidad.costo > 0.005) {
+    // El costo lo reconoce la factura, no la nota: revertirlo aquí exigiría
+    // saber si la unidad regresó al piso, y eso lo dice el inventario, no el
+    // CFDI.
+    if (!esEgreso && unidad && ctaVentaFam && unidad.costo > 0.005) {
       const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
       const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);
       if (ctaCostoFam && ctaInvFam) {
@@ -263,7 +270,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         ...base,
         chartAccountId: accIvaTrasladado.id,
         monto: delta,
-        tipo: "ABONO",
+        tipo: espejo("ABONO", esEgreso),
       });
     } else if (delta < -0.005) {
       // Cliente nos retuvo: nace un activo (crédito al SAT)
@@ -271,7 +278,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         ...base,
         chartAccountId: accIsrPagadoTerceros.id,
         monto: -delta,
-        tipo: "CARGO",
+        tipo: espejo("CARGO", esEgreso),
       });
     }
   }
@@ -451,9 +458,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
 
   for (const inv of egresos) {
     const ref = inv.uuid ?? inv.id;
+    // Nota de crédito RECIBIDA: el proveedor deshace su factura. Espejo.
+    const esEgreso = esComprobanteDeEgreso(inv);
     const base = {
       fecha: inv.fecha,
-      descripcion: `Factura egreso ${inv.serie ?? ""}${inv.folio ?? ""}`.trim(),
+      descripcion: `${esEgreso ? "Nota de crédito recibida" : "Factura egreso"} ${inv.serie ?? ""}${inv.folio ?? ""}`.trim(),
       referencia: ref,
       referenciaTipo: "CFDI" as const,
       fuente: "CFDI" as EntrySource,
@@ -487,14 +496,14 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       ...base,
       chartAccountId: gastoAccountId,
       monto: inv.subtotal,
-      tipo: "CARGO",
+      tipo: espejo("CARGO", esEgreso),
     });
     if (delta > 0.005) {
       drafts.push({
         ...base,
         chartAccountId: accIvaAcreditable.id,
         monto: delta,
-        tipo: "CARGO",
+        tipo: espejo("CARGO", esEgreso),
       });
     } else if (delta < -0.005) {
       // Le retuvimos al proveedor (típico en honorarios/arrendamiento): pasivo a SAT
@@ -502,14 +511,14 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         ...base,
         chartAccountId: accIsrRetenidoHonorarios.id,
         monto: -delta,
-        tipo: "ABONO",
+        tipo: espejo("ABONO", esEgreso),
       });
     }
     drafts.push({
       ...base,
       chartAccountId: accProveedores.id,
       monto: inv.total,
-      tipo: "ABONO",
+      tipo: espejo("ABONO", esEgreso),
     });
   }
 
@@ -1062,7 +1071,7 @@ export async function balanzaPreview(
   // ── INGRESO (mismas reglas que postMonth) ────────────────────────────────
   const ingresos = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    select: { id: true, subtotal: true, total: true },
+    select: { id: true, subtotal: true, total: true, tipoSat: true },
   });
   // FASE 2: mismas reglas de familia que postMonth (venta a 4101-00XX y costo
   // DR 5101-00XX / CR 1301-00XX), para que la balanza preliminar no difiera
@@ -1073,14 +1082,15 @@ export async function balanzaPreview(
   const modulosIngreso = await conjuntosModulo(companyId, ingresos.map((i) => i.id));
   for (const inv of ingresos) {
     const delta = inv.total - inv.subtotal;
+    const esEgreso = esComprobanteDeEgreso(inv);
     const unidad = ventasUnidad.get(inv.id);
     const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
     const moduloCxc = moduloDeInvoice(inv.id, modulosIngreso);
-    addMov(((moduloCxc ? cuentasCxc[moduloCxc] : null) ?? accClientes).id, "CARGO", inv.total);
-    addMov((ctaVentaFam ?? accVentas).id, "ABONO", inv.subtotal);
-    if (delta > 0.005) addMov(accIvaTrasladado.id, "ABONO", delta);
-    else if (delta < -0.005) addMov(accIsrPagadoTerceros.id, "CARGO", -delta);
-    if (unidad && ctaVentaFam && unidad.costo > 0.005) {
+    addMov(((moduloCxc ? cuentasCxc[moduloCxc] : null) ?? accClientes).id, espejo("CARGO", esEgreso), inv.total);
+    addMov((ctaVentaFam ?? accVentas).id, espejo("ABONO", esEgreso), inv.subtotal);
+    if (delta > 0.005) addMov(accIvaTrasladado.id, espejo("ABONO", esEgreso), delta);
+    else if (delta < -0.005) addMov(accIsrPagadoTerceros.id, espejo("CARGO", esEgreso), -delta);
+    if (!esEgreso && unidad && ctaVentaFam && unidad.costo > 0.005) {
       const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
       const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);
       if (ctaCostoFam && ctaInvFam) {
@@ -1137,10 +1147,11 @@ export async function balanzaPreview(
         );
     const gastoId = ctaInvFam ? ctaInvFam.id : await resolveCachedSafe(classification.cuenta);
     if (!gastoId) continue;
-    addMov(gastoId, "CARGO", inv.subtotal);
-    if (delta > 0.005) addMov(accIvaAcreditable.id, "CARGO", delta);
-    else if (delta < -0.005) addMov(accIsrRetenidoHonorarios.id, "ABONO", -delta);
-    addMov(accProveedores.id, "ABONO", inv.total);
+    const esEgreso = esComprobanteDeEgreso(inv);
+    addMov(gastoId, espejo("CARGO", esEgreso), inv.subtotal);
+    if (delta > 0.005) addMov(accIvaAcreditable.id, espejo("CARGO", esEgreso), delta);
+    else if (delta < -0.005) addMov(accIsrRetenidoHonorarios.id, espejo("ABONO", esEgreso), -delta);
+    addMov(accProveedores.id, espejo("ABONO", esEgreso), inv.total);
   }
 
   // Saldos iniciales del ledger real (periodos previos ya posteados).
@@ -1393,7 +1404,7 @@ export async function estadoResultadosPreview(
   // ── INGRESO → Ventas (subtotal) ──────────────────────────────────────────
   const ingresos = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    select: { id: true, subtotal: true },
+    select: { id: true, subtotal: true, tipoSat: true },
   });
   // FASE 2: la venta de una unidad aporta a la cuenta de su FAMILIA y su costo
   // de compra aporta al COSTO de la familia (5101-00XX) — el preview refleja
@@ -1401,6 +1412,9 @@ export async function estadoResultadosPreview(
   const idxFamilia = await cargarIndiceFamilia(companyId);
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
   for (const inv of ingresos) {
+    // La nota de egreso RESTA ingreso (aplicación de anticipo, devolución,
+    // descuento): aporta con signo negativo, no como una venta más.
+    const signo = signoDeComprobante(esComprobanteDeEgreso(inv));
     const unidad = ventasUnidad.get(inv.id);
     const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
     const ctaVenta = ctaVentaFam ?? accVentas;
@@ -1409,9 +1423,9 @@ export async function estadoResultadosPreview(
       cuentaSAT: ctaVenta.cuentaSAT,
       subcuenta: ctaVenta.subcuenta,
       nombre: ctaVenta.nombre,
-      monto: inv.subtotal,
+      monto: signo * inv.subtotal,
     });
-    if (unidad && ctaVentaFam && unidad.costo > 0.005) {
+    if (signo > 0 && unidad && ctaVentaFam && unidad.costo > 0.005) {
       const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
       const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);
       if (ctaCostoFam && ctaInvFam) {
@@ -1484,7 +1498,7 @@ export async function estadoResultadosPreview(
       cuentaSAT: acc.cuentaSAT,
       subcuenta: acc.subcuenta,
       nombre: acc.nombre,
-      monto: inv.subtotal,
+      monto: signoDeComprobante(esComprobanteDeEgreso(inv)) * inv.subtotal,
     });
   }
 
