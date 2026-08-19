@@ -1,17 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { AuthzError, requireWriter } from "@/lib/authz";
+import { AuthzError, requireMembership, requireWriter } from "@/lib/authz";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import {
+  createDraftInvoice,
   discardDraft,
   stampDraftFromPending,
   type StampInput,
 } from "@/lib/facturas/stamp";
+import { pdfUrlCliente, prefacturaSchema, totalEstimadoPrefactura } from "@/lib/facturas/prefactura";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { registrarBitacora } from "@/lib/audit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Acciones sobre UNA prefactura:
+//   GET    /api/facturas/borradores/[id]   — el payload completo, para
+//                                            precargar el wizard al editar
+//   PUT    /api/facturas/borradores/[id]   — editar: draft NUEVO en Facturapi
+//                                            con el payload editado, descartar
+//                                            el viejo, actualizar la MISMA fila
 //   POST   /api/facturas/borradores/[id]   { accion: "timbrar" }
 //                                          { accion: "enviar", email? }
 //   DELETE /api/facturas/borradores/[id]   — descartar (borra el draft en
@@ -30,6 +37,108 @@ async function cargarBorrador(id: string) {
     where: { id },
     include: { customer: { select: { email: true, razonSocial: true } } },
   });
+}
+
+export async function GET(req: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    const borrador = await prisma.facturaBorrador.findUnique({
+      where: { id },
+      select: { id: true, companyId: true, customerId: true, status: true, payload: true, total: true },
+    });
+    if (!borrador) return NextResponse.json({ error: "Prefactura no encontrada" }, { status: 404 });
+    await requireMembership(borrador.companyId, undefined, req);
+    return NextResponse.json(borrador);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
+}
+
+// Editar = volver a crear con otro payload. El draft de Facturapi es
+// INMUTABLE una vez creado, así que se crea uno nuevo (sin consumir timbre),
+// se descarta el anterior y se actualiza la MISMA fila — el id de la
+// prefactura no cambia, pero el enlace del PDF sí (va firmado por draftId):
+// un enlace ya compartido deja de servir, que es exactamente lo deseable
+// cuando el contenido cambió. El invariante se sostiene: lo que el cliente
+// ve como BORRADOR es lo que se timbra.
+export async function PUT(req: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    const borrador = await cargarBorrador(id);
+    if (!borrador) return NextResponse.json({ error: "Prefactura no encontrada" }, { status: 404 });
+
+    const { user } = await requireWriter(borrador.companyId, req);
+    await assertPuedeEscribir(user.id);
+
+    if (borrador.status !== "PENDIENTE") {
+      return NextResponse.json(
+        { error: `La prefactura ya está ${borrador.status.toLowerCase()}` },
+        { status: 409 }
+      );
+    }
+
+    const parsed = prefacturaSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Datos inválidos" },
+        { status: 400 }
+      );
+    }
+    // La empresa no se edita: una prefactura no se "muda" de emisor.
+    if (parsed.data.companyId !== borrador.companyId) {
+      return NextResponse.json({ error: "La empresa de la prefactura no coincide" }, { status: 422 });
+    }
+    const input = parsed.data as StampInput;
+
+    // Primero el draft nuevo; sólo si Facturapi lo aceptó se descarta el
+    // viejo. Al revés, un fallo a media edición dejaría la prefactura sin
+    // ningún draft detrás — ni el contenido viejo ni el nuevo.
+    const draft = await createDraftInvoice(input);
+    if (!draft.ok) {
+      return NextResponse.json(
+        { error: draft.error, needsReconfigure: draft.needsReconfigure },
+        { status: draft.status }
+      );
+    }
+    await discardDraft(borrador.companyId, borrador.draftId); // best-effort
+
+    const total = +totalEstimadoPrefactura(input.items);
+    await prisma.facturaBorrador.update({
+      where: { id },
+      data: {
+        customerId: input.customerId,
+        draftId: draft.draftId,
+        payload: JSON.parse(JSON.stringify(input)),
+        total,
+        // El PDF que el cliente pudo haber visto ya no existe: si se había
+        // enviado, hay que reenviar el nuevo. Limpiar la marca lo hace visible.
+        enviadaAt: null,
+      },
+    });
+
+    registrarBitacora({
+      companyId: borrador.companyId,
+      userId: user.id,
+      actorEmail: user.email,
+      accion: "factura.prefactura.editar",
+      entidad: "FacturaBorrador",
+      entidadId: id,
+      detalle: { draftAnterior: borrador.draftId, draftId: draft.draftId, total },
+      req,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      id,
+      draftId: draft.draftId,
+      total,
+      pdfUrl: pdfUrlCliente(borrador.companyId, draft.draftId),
+    });
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 }
 
 export async function POST(req: Request, { params }: Params) {

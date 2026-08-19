@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireWriter } from "@/lib/authz";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import { createDraftInvoice, type StampInput } from "@/lib/facturas/stamp";
-import { signDraftToken, publicBaseUrl, TTL_CLIENTE_MS } from "@/lib/facturas/file-token";
+import { pdfUrlCliente, prefacturaSchema, totalEstimadoPrefactura } from "@/lib/facturas/prefactura";
 import { registrarBitacora } from "@/lib/audit";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,66 +18,9 @@ import { registrarBitacora } from "@/lib/audit";
 // y enlace de PDF vigente.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const itemSchema = z.object({
-  quantity: z.number().positive(),
-  product: z.object({
-    description: z.string(),
-    product_key: z.string(),
-    price: z.number().positive(),
-    unit_key: z.string().default("E48"),
-    tax_included: z.boolean().default(false),
-    taxes: z
-      .array(
-        z.object({
-          type: z.string(),
-          rate: z.number(),
-          factor: z.string(),
-          withholding: z.boolean().default(false),
-        })
-      )
-      .optional(),
-    // Retenciones locales (complemento implocal): el 5 al millar de obra
-    // pública, por ejemplo. La prefactura NO las aceptaba, así que guardar el
-    // borrador las tiraba en silencio y al timbrarlo salía sin retención — con
-    // un total distinto al que el cliente ya había visto en el PDF.
-    local_taxes: z
-      .array(
-        z.object({
-          type: z.string(),
-          rate: z.number(),
-          withholding: z.boolean().default(false),
-          base: z.number().optional(),
-        })
-      )
-      .optional(),
-  }),
-});
-
-const createSchema = z.object({
-  companyId: z.string().min(1),
-  customerId: z.string().min(1),
-  formaPago: z.string().min(1),
-  metodoPago: z.enum(["PUE", "PPD"]),
-  usoCfdi: z.string().min(1),
-  items: z.array(itemSchema).min(1),
-  notes: z.string().optional(),
-  global: z
-    .object({
-      periodicity: z.enum(["day", "week", "fortnight", "month", "two_months"]),
-      months: z.string(),
-      year: z.number(),
-    })
-    .optional(),
-});
-
-function pdfUrlCliente(companyId: string, draftId: string): string {
-  const token = signDraftToken(companyId, draftId, TTL_CLIENTE_MS);
-  return `${publicBaseUrl()}/api/facturas/draft/${draftId}/pdf?companyId=${companyId}&token=${token}`;
-}
-
 export async function POST(req: Request) {
   try {
-    const parsed = createSchema.safeParse(await req.json().catch(() => null));
+    const parsed = prefacturaSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.issues[0]?.message ?? "Datos inválidos" },
@@ -98,24 +40,9 @@ export async function POST(req: Request) {
     }
 
     // Total estimado con IVA por partida (el definitivo lo fija el CFDI).
-    const total = +input.items
-      .reduce((s, it) => {
-        const base = it.quantity * it.product.price;
-        const iva = (it.product.taxes ?? []).reduce(
-          (t, tax) => t + (tax.withholding ? -1 : 1) * base * tax.rate,
-          0
-        );
-        // Retenciones locales: RESTAN del total. Llevan su propia base cuando
-        // van consolidadas en una partida (el 5 al millar se calcula sobre el
-        // subtotal del comprobante, no sobre el importe de esa partida). Sin
-        // esto, el total del borrador salía más alto que el CFDI timbrado.
-        const local = (it.product.local_taxes ?? []).reduce(
-          (t, tax) => t + (tax.withholding ? -1 : 1) * (tax.base ?? base) * tax.rate,
-          0
-        );
-        return s + base + iva + local;
-      }, 0)
-      .toFixed(2);
+    // Compartido con el PUT de edición: mismo número por cualquiera de las
+    // dos puertas.
+    const total = +totalEstimadoPrefactura(input.items);
 
     const borrador = await prisma.facturaBorrador.create({
       data: {
