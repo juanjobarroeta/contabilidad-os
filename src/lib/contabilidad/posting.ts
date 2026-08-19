@@ -18,6 +18,7 @@ import { COE_CODES } from "./catalog";
 import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { classifyInvoice } from "./classify-egreso";
 import { esComprobanteDeEgreso, espejo, signoDeComprobante } from "./nota-credito";
+import { cargarContextoTaller, piernasIngresoTaller } from "./taller";
 import {
   cargarIndiceFamilia,
   cuentaDeFamilia,
@@ -212,6 +213,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // → 1217, servicio → 1214). Ver cxc-cxp-modulo.ts.
   const cuentasCxc = await cargarCuentasCxc(companyId);
   const modulosIngreso = await conjuntosModulo(companyId, ingresos.map((i) => i.id));
+  // FASE 2d: lo que no es unidad puede ser taller — mano de obra a 4301 y
+  // refacciones a 4401, partidas con el corte del DMS. Ver taller.ts.
+  const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
 
   for (const inv of ingresos) {
     const ref = inv.uuid ?? inv.id;
@@ -243,12 +247,22 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       monto: inv.total,
       tipo: espejo("CARGO", esEgreso),
     });
-    drafts.push({
-      ...base,
-      chartAccountId: (ctaVentaFam ?? accVentas).id,
-      monto: inv.subtotal,
-      tipo: espejo("ABONO", esEgreso),
-    });
+    // La unidad manda; después el taller; al final la cuenta de ingresos de
+    // siempre. Las piernas del taller suman el subtotal exacto.
+    const piernasVenta = ctaVentaFam
+      ? [{ id: ctaVentaFam.id, monto: inv.subtotal }]
+      : (piernasIngresoTaller(inv.id, inv.subtotal, taller)?.map((p) => ({
+          id: p.cuenta.id,
+          monto: p.monto,
+        })) ?? [{ id: accVentas.id, monto: inv.subtotal }]);
+    for (const pierna of piernasVenta) {
+      drafts.push({
+        ...base,
+        chartAccountId: pierna.id,
+        monto: pierna.monto,
+        tipo: espejo("ABONO", esEgreso),
+      });
+    }
 
     // Costo de venta de la unidad: sólo cuando las TRES cuentas de la familia
     // existen (venta, costo, inventario). Aliviar un inventario que no se
@@ -1080,6 +1094,7 @@ export async function balanzaPreview(
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
   const cuentasCxc = await cargarCuentasCxc(companyId);
   const modulosIngreso = await conjuntosModulo(companyId, ingresos.map((i) => i.id));
+  const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
   for (const inv of ingresos) {
     const delta = inv.total - inv.subtotal;
     const esEgreso = esComprobanteDeEgreso(inv);
@@ -1087,7 +1102,13 @@ export async function balanzaPreview(
     const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
     const moduloCxc = moduloDeInvoice(inv.id, modulosIngreso);
     addMov(((moduloCxc ? cuentasCxc[moduloCxc] : null) ?? accClientes).id, espejo("CARGO", esEgreso), inv.total);
-    addMov((ctaVentaFam ?? accVentas).id, espejo("ABONO", esEgreso), inv.subtotal);
+    const piernasVenta = ctaVentaFam
+      ? [{ id: ctaVentaFam.id, monto: inv.subtotal }]
+      : (piernasIngresoTaller(inv.id, inv.subtotal, taller)?.map((p) => ({
+          id: p.cuenta.id,
+          monto: p.monto,
+        })) ?? [{ id: accVentas.id, monto: inv.subtotal }]);
+    for (const pierna of piernasVenta) addMov(pierna.id, espejo("ABONO", esEgreso), pierna.monto);
     if (delta > 0.005) addMov(accIvaTrasladado.id, espejo("ABONO", esEgreso), delta);
     else if (delta < -0.005) addMov(accIsrPagadoTerceros.id, espejo("CARGO", esEgreso), -delta);
     if (!esEgreso && unidad && ctaVentaFam && unidad.costo > 0.005) {
@@ -1411,6 +1432,7 @@ export async function estadoResultadosPreview(
   // la utilidad bruta real de unidades, no ingreso sin costo.
   const idxFamilia = await cargarIndiceFamilia(companyId);
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
+  const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
   for (const inv of ingresos) {
     // La nota de egreso RESTA ingreso (aplicación de anticipo, devolución,
     // descuento): aporta con signo negativo, no como una venta más.
@@ -1418,13 +1440,18 @@ export async function estadoResultadosPreview(
     const unidad = ventasUnidad.get(inv.id);
     const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
     const ctaVenta = ctaVentaFam ?? accVentas;
-    contributions.push({
-      tipo: ctaVenta.tipo,
-      cuentaSAT: ctaVenta.cuentaSAT,
-      subcuenta: ctaVenta.subcuenta,
-      nombre: ctaVenta.nombre,
-      monto: signo * inv.subtotal,
-    });
+    const piernasVenta = ctaVentaFam
+      ? null
+      : piernasIngresoTaller(inv.id, inv.subtotal, taller);
+    for (const pierna of piernasVenta ?? [{ cuenta: ctaVenta, monto: inv.subtotal }]) {
+      contributions.push({
+        tipo: pierna.cuenta.tipo ?? ctaVenta.tipo,
+        cuentaSAT: pierna.cuenta.cuentaSAT,
+        subcuenta: pierna.cuenta.subcuenta ?? null,
+        nombre: pierna.cuenta.nombre,
+        monto: signo * pierna.monto,
+      });
+    }
     if (signo > 0 && unidad && ctaVentaFam && unidad.costo > 0.005) {
       const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
       const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);

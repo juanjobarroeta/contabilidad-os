@@ -137,13 +137,37 @@ cuentas; lo derivado tiene **cero** en todas ellas y lo manda al fallback 401:
 | 5301 costo mano de obra | −$8.20M | $0 |
 | 5401 costo refacciones | −$62.83M | $0 |
 
-La clasificación por módulo que ya existe (`cxc-cxp-modulo.ts`, usada para la
-CxC 1206/1217/1214) alcanza para arreglarlo: de los $2,834M del fallback 401,
-$100.31M son CFDIs con movimiento de refacciones (CE dice $95.69M — 4.8% de
-distancia) y $59.96M son CFDIs con `ServicioVenta`. La diferencia contra el
-$37.95M de 4301 es de reparto: una orden con mano de obra Y refacciones se va
-entera a un módulo, mientras el contador la parte por renglón. Fase 2d = rutear
-también ingreso y costo por módulo, no sólo la CxC.
+**Resuelto para el ingreso** (`taller.ts`). Dos decisiones, las dos leídas de
+los datos del contador:
+
+- **Qué cuenta**: la serie no basta —4401 tiene seis subcuentas activas—, así
+  que desempata el NOMBRE del catálogo del propio contador, como lo haría él:
+  «VENTA REFACCIONES TALLER» para lo que sale de una orden, «VENTA REFACCIONES»
+  para el mostrador. Sin candidata única → null y el asiento cae al fallback:
+  adivinar subcuenta es peor que no resolver.
+- **Cómo se parte**: una orden factura mano de obra Y refacciones en el mismo
+  CFDI. `ServicioVenta` ya guarda ese corte, y se usa como PROPORCIÓN escalada
+  al subtotal, así las piernas suman el subtotal exacto aunque el corte del DMS
+  venga incompleto (cuadra al centavo en 16,452 de 24,042 órdenes, 80% del
+  importe).
+
+Dry-run contra la CE (`scripts/dry-taller-margom.ts`, neto del mes):
+
+| cuenta | 2025-06 CE | 2025-06 derivado | 2026-03 CE | 2026-03 derivado |
+|---|---:|---:|---:|---:|
+| 4401-0009 refacciones taller | $4,390,160 | $4,137,568 | $3,119,193 | $4,334,806 |
+| 4401-0001 refacciones mostrador | $866,300 | $283,077 | $1,039,569 | $506,520 |
+| 4301-0001 mano de obra servicio | $1,190,887 | $1,698,308 | $1,492,027 | $2,485,695 |
+| **serie 4301 completa** | **$1,945,505** | $1,698,308 | **$2,470,068** | **$2,485,695** |
+
+Lo que falta para cerrar el resto (queda nombrado, no perdido):
+- **Garantías** (4401-0013, 4301-0003: $17.4M en la ventana) — el destino
+  depende de reconocer a la PLANTA como contraparte del CFDI.
+- **Hojalatería y pintura** (4301-0002/0005: $7.95M) — hoy cae en mano de obra
+  de servicio; el corte necesita una señal que el CFDI no trae.
+- **El costo del taller** (5301/5401, $71M declarados) — necesita costeo de
+  inventario de refacciones: `Refaccion.ultimoCosto` es el último costo, no el
+  del día de la venta.
 
 Nota operativa: **`OrdenServicio` está vacío** (0 renglones) — el taller no se
 opera en ContabilidadOS. Lo que existe son 29,382 `ServicioVenta` derivadas de
