@@ -229,6 +229,16 @@ export default function NuevaFacturaPage() {
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("desde")
   );
   const [desdeAplicado, setDesdeAplicado] = useState(false);
+
+  // Modo EDICIÓN de una prefactura (/facturas/nueva?prefactura=<id>): el
+  // wizard se precarga con el payload guardado y, al guardar, se REEMPLAZA el
+  // borrador (PUT) en vez de crear otro. Timbrar en este modo también pasa por
+  // el borrador (guardar → promover ese draft exacto), para sostener el
+  // invariante de la prefactura: lo que el cliente ve es lo que se timbra.
+  const [prefacturaId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("prefactura")
+  );
+  const [prefacturaAplicada, setPrefacturaAplicada] = useState(false);
   useEffect(() => {
     if (!desdeId || desdeAplicado || !activeCompany) return;
     let cancelado = false;
@@ -264,6 +274,76 @@ export default function NuevaFacturaPage() {
     // desdeAplicado asegura que esto corra una sola vez.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desdeId, desdeAplicado, activeCompany]);
+
+  // Precarga del payload de la prefactura en edición. Corre una sola vez y
+  // requiere la lista de clientes cargada para poder seleccionar al receptor.
+  useEffect(() => {
+    if (!prefacturaId || prefacturaAplicada || !activeCompany || clientes.length === 0) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/facturas/borradores/${prefacturaId}`);
+        if (!res.ok) return;
+        const b = await res.json();
+        if (cancelado || b.status !== "PENDIENTE" || b.companyId !== activeCompany.id) return;
+        const pl = b.payload as {
+          customerId: string;
+          formaPago: string;
+          metodoPago: "PUE" | "PPD";
+          usoCfdi: string;
+          notes?: string;
+          global?: { periodicity: string; months: string };
+          items: Array<{
+            quantity: number;
+            cuentaPredial?: string;
+            product: {
+              description: string;
+              product_key: string;
+              price: number;
+              unit_key?: string;
+              taxes?: Array<{ rate: number; factor: string }>;
+              local_taxes?: Array<{ withholding?: boolean }>;
+            };
+          }>;
+        };
+        const cliente = clientes.find((c) => c.id === pl.customerId);
+        if (cliente) setSelectedCliente(cliente);
+        setFormaPago(pl.formaPago);
+        setMetodoPago(pl.metodoPago);
+        setUsoCfdi(pl.usoCfdi);
+        setNotas(pl.notes ?? "");
+        if (pl.global) {
+          setGlobalPeriodicity(pl.global.periodicity);
+          setGlobalMonth(pl.global.months);
+        }
+        // La retención local viaja consolidada en la primera partida: su
+        // presencia ahí es lo que dice si el toggle estaba prendido.
+        setCincoAlMillar(Boolean(pl.items[0]?.product.local_taxes?.some((t) => t.withholding)));
+        setItems(
+          pl.items.map((it) => ({
+            id: Math.random().toString(36).slice(2),
+            description: it.product.description,
+            product_key: it.product.product_key,
+            unit_key: it.product.unit_key ?? "E48",
+            quantity: it.quantity,
+            price: it.product.price,
+            // Mismo mapeo que las facturas previas: rate>0 → 16; rate 0 con
+            // factor Tasa → 0; factor Exento → EXENTO.
+            iva: (it.product.taxes?.[0]?.rate ?? 0.16) > 0
+              ? "16"
+              : it.product.taxes?.[0]?.factor === "Exento"
+                ? "EXENTO"
+                : "0",
+            cuentaPredial: it.cuentaPredial ?? "",
+          }))
+        );
+      } finally {
+        if (!cancelado) setPrefacturaAplicada(true);
+      }
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefacturaId, prefacturaAplicada, activeCompany, clientes]);
 
   // ── Sugerencias ─────────────────────────────────────────────────────────────
   // Fetch concepto suggestions + recent invoices whenever the company or the
@@ -492,11 +572,16 @@ export default function NuevaFacturaPage() {
     setSavingPref(true);
     setSubmitError("");
     try {
-      const res = await fetch("/api/facturas/borradores", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload()),
-      });
+      // En edición se REEMPLAZA el borrador (misma fila, draft nuevo); si no,
+      // se crea uno. La validación y el total son la misma lib en el servidor.
+      const res = await fetch(
+        prefacturaId ? `/api/facturas/borradores/${prefacturaId}` : "/api/facturas/borradores",
+        {
+          method: prefacturaId ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildPayload()),
+        }
+      );
       const data = await res.json();
       if (!res.ok) {
         if (data.needsReconfigure) setNeedsReconfigure(true);
@@ -521,6 +606,34 @@ export default function NuevaFacturaPage() {
     const idempotencyKey = crypto.randomUUID();
     try {
       const payload = buildPayload();
+
+      if (prefacturaId) {
+        // Editando una prefactura: primero se guarda lo editado (draft nuevo)
+        // y luego se promueve EXACTAMENTE ese draft — nunca un CFDI paralelo
+        // que dejaría el borrador vivo como huérfano PENDIENTE.
+        const put = await fetch(`/api/facturas/borradores/${prefacturaId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const guardado = await put.json();
+        if (!put.ok) {
+          if (guardado.needsReconfigure) setNeedsReconfigure(true);
+          throw new Error(typeof guardado.error === "string" ? guardado.error : "Error al guardar los cambios");
+        }
+        const res = await fetch(`/api/facturas/borradores/${prefacturaId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accion: "timbrar" }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (data.needsReconfigure) setNeedsReconfigure(true);
+          throw new Error(typeof data.error === "string" ? data.error : "Error al timbrar la prefactura");
+        }
+        setSuccessId(data.invoiceId);
+        return;
+      }
 
       const res = await fetch("/api/facturas", {
         method: "POST",
@@ -1282,7 +1395,7 @@ export default function NuevaFacturaPage() {
                 title="Guarda un BORRADOR (sin timbre) para compartirlo con el cliente y timbrarlo después"
                 className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper disabled:opacity-50">
                 {savingPref ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                {savingPref ? "Guardando…" : "Guardar prefactura"}
+                {savingPref ? "Guardando…" : prefacturaId ? "Guardar cambios" : "Guardar prefactura"}
               </button>
               <button onClick={handleStamp} disabled={submitting || savingPref}
                 className="flex items-center gap-2 bg-cos-jade-ink text-white px-5 py-2 rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50">

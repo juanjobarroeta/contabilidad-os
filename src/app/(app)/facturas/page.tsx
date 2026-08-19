@@ -1444,6 +1444,11 @@ function PrefacturasView({
             </span>
             <a href={p.pdfUrl} target="_blank" rel="noopener noreferrer"
               className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">PDF</a>
+            {/* Editar reabre el wizard con el payload guardado; al guardar se
+                reemplaza el draft (el enlace compartido anterior deja de
+                servir, porque el contenido cambió). */}
+            <Link href={`/facturas/nueva?prefactura=${p.id}`}
+              className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">Editar</Link>
             <button onClick={() => { navigator.clipboard.writeText(p.pdfUrl); onToast("✓ Enlace copiado (vigente 7 días)"); }}
               className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">Copiar enlace</button>
             <button onClick={() => onAccion(p, "enviar")} disabled={busy === p.id}
