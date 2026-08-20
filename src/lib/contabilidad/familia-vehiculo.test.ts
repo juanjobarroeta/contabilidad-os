@@ -79,7 +79,7 @@ describe("agruparUnidadesAmparadas()", () => {
 
   it("una unidad por invoice: el caso dominante (1:1 en MARGOM)", () => {
     const m = agruparUnidadesAmparadas([unidad("i1", "FRISON T9 AT 4X4", 445768)]);
-    expect(m.get("i1")).toEqual({ sufijo: "0004", vin: "VIN-i1", costo: 445768 });
+    expect(m.get("i1")).toEqual({ sufijo: "0004", vin: "VIN-i1", costo: 445768, precio: 0 });
   });
 
   it("varias unidades de la MISMA familia: suma el costo", () => {

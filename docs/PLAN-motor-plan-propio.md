@@ -236,6 +236,51 @@ la mezcla de venta derivada del propio período.
 | Hojalatería y pintura (4301-0002/0005) | $7.95M/ventana | No hay señal en el CFDI |
 | CxC / CxP / IVA en flujo | ~$9,600M de saldo | **No**: necesita movimientos bancarios |
 
+## Fase 2g — el intercambio es la unidad que se vende al costo
+
+**2026-08-20.** El contador tiene una serie completa por familia para
+intercambio (4131 venta, 5131 costo, 27 subcuentas cada una) y el motor no la
+usaba nunca: todo caía en 4101/5101. $735.5M declarados en 4131 entre 2023-01 y
+2026-06 — el 35% de la venta de unidades de 2025.
+
+**Qué es, en realidad.** No es la permuta con un cliente. La balanza lo dice
+sola: mes con mes el abono de 4131 y el cargo de 5131 son el MISMO importe —
+$158,954,544 contra $158,954,535 en marzo de 2025, nueve pesos sobre ciento
+cincuenta y nueve millones. Es el intercambio entre distribuidores, que se mueve
+a costo: el otro concesionario tiene la unidad que tu cliente quiere y se la
+cambias por una tuya, sin margen para ninguno.
+
+Por eso la señal es el **margen**, no el catálogo ni la serie del folio: una
+venta de unidad cuyo precio iguala su costo es un intercambio. Tolerancia
+±0.2%; aflojarla a ±2% apenas mueve la aguja ($766.6M contra $754.3M), señal de
+que el grupo está pegado al cero y no repartido en una curva.
+
+Contraste con la CE corriendo `balanzaPreview` de esta rama:
+
+| período | 4131 CE | 4131 derivado | 4101 CE | 4101 derivado |
+|---|---:|---:|---:|---:|
+| 2025-02 | $161,955,167 | $155,113,004 | $65,269,090 | $70,611,465 |
+| 2025-06 | $66,647,366 | $64,273,315 | $92,019,460 | $96,079,732 |
+| 2026-06 | $15,132,067 | $14,823,496 | $82,020,667 | $89,695,951 |
+
+96–98% de lo declarado, y 5131 derivado sale idéntico a 4131 derivado al peso,
+que es la definición misma de una venta al costo.
+
+### Lo que se midió y NO se dedujo
+
+- **Flotilla (4141)**: la CE declara $4.1M en todo 2025. La regla natural —tres
+  o más unidades del mismo modelo, mismo cliente, mismo mes— atrapa $1,272.6M.
+  Sobra por trescientos a uno: aquí vender varias unidades iguales al mismo
+  cliente es lo normal, no una flotilla. Sin señal, no se clasifica.
+- **Seminuevos (4291/5291)**: la venta se identifica (serie SM\*, $44.7M contra
+  $44.5M declarados en 2025 — 99.6%), pero el contador la parte en AFECTOS y NO
+  AFECTOS y esa distinción no está en el CFDI: el IVA trasladado da la
+  proporción al revés ($36.1M con IVA contra $12.8M declarados como afectos).
+  **Pregunta de una línea para el contador**, y quedan dos cuentas resueltas.
+- **2025 H1 concentra el intercambio** ($692.4M de los $713.3M del año) y luego
+  cae al 3%. No es un artefacto contable: es un semestre en que el piso se
+  desbalanceó. Vale la pena preguntarlo, pero el motor ya lo sigue mes a mes.
+
 ## Fase 3 — rubros exactos, cada uno con su checksum CE
 
 En orden de tractabilidad (datos completos de nuestro lado):
