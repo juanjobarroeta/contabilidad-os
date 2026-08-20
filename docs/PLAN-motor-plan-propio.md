@@ -122,8 +122,20 @@ Verificado sin escribir (`scripts/dry-notas-credito-margom.ts`, grupo 4 del mes)
 | 2026-03 | $97.0M | $160.3M | $97.7M | +$63.32M | **+$0.66M** |
 | 2026-06 | $116.5M | $180.8M | $123.6M | +$64.31M | +$7.15M |
 
-Falta el **re-posteo histórico** para que el ledger lo refleje (lo corre el
-usuario; `scripts/repostear-margom.ts`).
+**Re-posteado el 2026-08-19**: 61 períodos (2021-08 → 2026-08), 0 saltados,
+0 errores. Verificado con `scripts/verificar-divergencia-margom.ts` sobre la
+ventana de la CE:
+
+| corte | antes | después |
+|---|---:|---:|
+| Grupo 4 (ingresos) derivado vs CE | +$1,288.5M | **+$45.2M** |
+| Grupo 5 (costos) derivado vs CE | +$1,379.6M | +$623.5M |
+| Grupo 6 (gastos) derivado vs CE | −$1,517.7M | −$619.6M |
+| Ingreso posteado de CFDIs CANCELADOS | $157M | **$0** |
+
+Los grupos 5 y 6 mejoraron sin tocarlos: entre el re-posteo anterior (2026-08-07)
+y éste se ligaron más unidades a su venta, así que más CFDIs resuelven familia —
+más costo sale de 1301 y más compra entra a inventario en vez de gasto.
 
 ## Fase 2d — taller: el motor no conoce ni servicio ni refacciones
 
@@ -159,6 +171,22 @@ Dry-run contra la CE (`scripts/dry-taller-margom.ts`, neto del mes):
 | 4401-0001 refacciones mostrador | $866,300 | $283,077 | $1,039,569 | $506,520 |
 | 4301-0001 mano de obra servicio | $1,190,887 | $1,698,308 | $1,492,027 | $2,485,695 |
 | **serie 4301 completa** | **$1,945,505** | $1,698,308 | **$2,470,068** | **$2,485,695** |
+
+Ya en el ledger (re-posteo del 2026-08-19), comparado por año — la CE de 2023 y
+casi toda la de 2024 **no usa estas series** (es la era agrupador previa a
+2024-10, ver Riesgos), así que el tramo comparable arranca en 2025:
+
+| año | 4301 CE | 4301 derivado | 4401 CE | 4401 derivado |
+|---|---:|---:|---:|---:|
+| 2023 | $0 | $20.64M | $0 | $0.95M |
+| 2024 | $2.89M | $28.28M | $9.25M | $7.06M |
+| **2025** | **$20.98M** | **$20.54M** | $52.66M | $46.20M |
+| **2026 H1** | **$14.08M** | **$14.55M** | $33.79M | $29.01M |
+
+Mano de obra cae dentro del 2–3% en el tramo comparable; refacciones al 86–88%.
+El sobrante de 2023-2024 en 4301 es la regla «orden sin corte del DMS → toda a
+mano de obra» aplicada a años cuyo DMS no traía el corte: ahí no hay contra qué
+comparar, pero conviene revisarla cuando se ataquen las garantías.
 
 Lo que falta para cerrar el resto (queda nombrado, no perdido):
 - **Garantías** (4401-0013, 4301-0003: $17.4M en la ventana) — el destino
