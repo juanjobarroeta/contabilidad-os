@@ -44,7 +44,22 @@ export async function GET(req: Request, { params }: Params) {
     const { id } = await params;
     const borrador = await prisma.facturaBorrador.findUnique({
       where: { id },
-      select: { id: true, companyId: true, customerId: true, status: true, payload: true, total: true },
+      select: {
+        id: true,
+        companyId: true,
+        customerId: true,
+        status: true,
+        payload: true,
+        total: true,
+        // El RECEPTOR completo viaja con el borrador. Antes el wizard lo
+        // buscaba en su lista de clientes ya cargada, lo que ataba el
+        // precargado a esa lista: si el cliente no estaba (lista filtrada por
+        // el buscador) el receptor quedaba vacío, y peor, la lista cambia de
+        // identidad en cada tecla y cancelaba el precargado a media carga.
+        customer: {
+          select: { id: true, rfc: true, razonSocial: true, regimenFiscal: true, facturapiId: true },
+        },
+      },
     });
     if (!borrador) return NextResponse.json({ error: "Prefactura no encontrada" }, { status: 404 });
     await requireMembership(borrador.companyId, undefined, req);

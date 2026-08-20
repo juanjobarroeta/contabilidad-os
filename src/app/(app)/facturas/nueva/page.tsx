@@ -239,6 +239,11 @@ export default function NuevaFacturaPage() {
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("prefactura")
   );
   const [prefacturaAplicada, setPrefacturaAplicada] = useState(false);
+  // Por qué NO se pudo cargar la prefactura. Fallar en silencio dejaba el
+  // wizard idéntico a "factura nueva": el usuario recapturaba y guardaba, y
+  // en vez de editar creaba un DUPLICADO (pasó: dos prefacturas idénticas de
+  // UDLAP el 18 y el 19). Con esto el modo edición nunca degrada callado.
+  const [prefacturaError, setPrefacturaError] = useState("");
   useEffect(() => {
     if (!desdeId || desdeAplicado || !activeCompany) return;
     let cancelado = false;
@@ -275,17 +280,45 @@ export default function NuevaFacturaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desdeId, desdeAplicado, activeCompany]);
 
-  // Precarga del payload de la prefactura en edición. Corre una sola vez y
-  // requiere la lista de clientes cargada para poder seleccionar al receptor.
+  // Precarga del payload de la prefactura en edición. Corre UNA sola vez, en
+  // cuanto hay empresa activa.
+  //
+  // NO depende de la lista de clientes — el receptor viene con el propio
+  // borrador. Antes sí dependía, y eso rompía el precargado de dos maneras:
+  // `setClientes` crea un ARRAY NUEVO en cada búsqueda, así que la limpieza
+  // del effect disparaba `cancelado = true` y abortaba la carga en vuelo; y
+  // si el cliente no estaba en la lista (filtrada por el buscador) el receptor
+  // quedaba vacío. Ambas fallas se veían igual: un formulario en blanco.
+  // Depende del ID de la empresa, no del OBJETO: si la dependencia fuera el
+  // objeto, un re-render que lo recree volvería a disparar la limpieza y
+  // abortaría la carga en vuelo — exactamente la falla que se acaba de quitar
+  // con `clientes`.
+  const empresaId = activeCompany?.id;
   useEffect(() => {
-    if (!prefacturaId || prefacturaAplicada || !activeCompany || clientes.length === 0) return;
+    if (!prefacturaId || prefacturaAplicada || !empresaId) return;
     let cancelado = false;
     (async () => {
       try {
         const res = await fetch(`/api/facturas/borradores/${prefacturaId}`);
-        if (!res.ok) return;
+        if (cancelado) return;
+        if (!res.ok) {
+          setPrefacturaError(
+            res.status === 404
+              ? "No encontramos esa prefactura."
+              : "No pudimos cargar la prefactura para editarla."
+          );
+          return;
+        }
         const b = await res.json();
-        if (cancelado || b.status !== "PENDIENTE" || b.companyId !== activeCompany.id) return;
+        if (cancelado) return;
+        if (b.companyId !== empresaId) {
+          setPrefacturaError("Esa prefactura es de otra empresa.");
+          return;
+        }
+        if (b.status !== "PENDIENTE") {
+          setPrefacturaError(`Esa prefactura ya está ${String(b.status).toLowerCase()}: no se puede editar.`);
+          return;
+        }
         const pl = b.payload as {
           customerId: string;
           formaPago: string;
@@ -306,8 +339,7 @@ export default function NuevaFacturaPage() {
             };
           }>;
         };
-        const cliente = clientes.find((c) => c.id === pl.customerId);
-        if (cliente) setSelectedCliente(cliente);
+        if (b.customer) setSelectedCliente(b.customer as Cliente);
         setFormaPago(pl.formaPago);
         setMetodoPago(pl.metodoPago);
         setUsoCfdi(pl.usoCfdi);
@@ -337,13 +369,17 @@ export default function NuevaFacturaPage() {
             cuentaPredial: it.cuentaPredial ?? "",
           }))
         );
+        // Se salta el paso del receptor: viene resuelto del borrador y lo que
+        // uno viene a editar casi siempre son los conceptos.
+        setStep(2);
+      } catch {
+        if (!cancelado) setPrefacturaError("No pudimos cargar la prefactura para editarla.");
       } finally {
         if (!cancelado) setPrefacturaAplicada(true);
       }
     })();
     return () => { cancelado = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefacturaId, prefacturaAplicada, activeCompany, clientes]);
+  }, [prefacturaId, prefacturaAplicada, empresaId]);
 
   // ── Sugerencias ─────────────────────────────────────────────────────────────
   // Fetch concepto suggestions + recent invoices whenever the company or the
@@ -764,8 +800,28 @@ export default function NuevaFacturaPage() {
           ← Facturas
         </button>
         <span className="text-cos-ink-soft">/</span>
-        <h1 className="text-xl font-bold">Nueva Factura CFDI 4.0</h1>
+        <h1 className="text-xl font-bold">
+          {prefacturaId ? "Editar prefactura" : "Nueva Factura CFDI 4.0"}
+        </h1>
       </div>
+
+      {/* El modo edición tiene que VERSE. Antes sólo cambiaba la etiqueta de un
+          botón al fondo del paso 2: si el precargado fallaba, la pantalla era
+          indistinguible de una factura nueva y al guardar salía un DUPLICADO
+          en vez de una edición. */}
+      {prefacturaId && !prefacturaError && (
+        <div className="mb-6 rounded-card border border-cos-brand-tint bg-cos-brand-tint/40 px-4 py-3 text-[13.5px] text-cos-brand-ink">
+          <b>Editando una prefactura.</b> Al guardar se reemplaza el borrador —
+          el enlace del PDF que hayas compartido deja de servir, porque el
+          contenido cambió.
+        </div>
+      )}
+      {prefacturaError && (
+        <div className="mb-6 rounded-card border border-cos-red-tint bg-cos-red-tint/40 px-4 py-3 text-[13.5px] text-cos-red-ink">
+          <b>{prefacturaError}</b> Para no crear un duplicado, aquí no se puede
+          guardar: vuelve a Facturas → Prefacturas e inténtalo de nuevo.
+        </div>
+      )}
 
       {/* Carta Manifiesto pendiente: avisar ANTES de capturar la factura, no
           hasta que el timbrado truene con un 422 al final del wizard. */}
@@ -1384,20 +1440,24 @@ export default function NuevaFacturaPage() {
               Continuar <ChevronRight className="h-4 w-4" />
             </button>
           ) : (
+            /* Si el precargado de la prefactura falló, el formulario está en
+               blanco y NO representa a esa prefactura: guardar crearía un
+               duplicado y timbrar emitiría un CFDI que no es el que el cliente
+               revisó. Con la carga rota no se escribe nada. */
             <div className="flex items-center gap-2">
-              <button onClick={() => setRecurrenteOpen(true)} disabled={savingPref || submitting}
+              <button onClick={() => setRecurrenteOpen(true)} disabled={savingPref || submitting || Boolean(prefacturaError)}
                 title="Repite esta factura en automático: en cada fecha se guarda una prefactura para revisar (nunca se timbra sola)"
                 className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper disabled:opacity-50">
                 <Repeat className="h-4 w-4" />
                 Recurrente
               </button>
-              <button onClick={handlePrefactura} disabled={savingPref || submitting}
+              <button onClick={handlePrefactura} disabled={savingPref || submitting || Boolean(prefacturaError)}
                 title="Guarda un BORRADOR (sin timbre) para compartirlo con el cliente y timbrarlo después"
                 className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper disabled:opacity-50">
                 {savingPref ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
                 {savingPref ? "Guardando…" : prefacturaId ? "Guardar cambios" : "Guardar prefactura"}
               </button>
-              <button onClick={handleStamp} disabled={submitting || savingPref}
+              <button onClick={handleStamp} disabled={submitting || savingPref || Boolean(prefacturaError)}
                 className="flex items-center gap-2 bg-cos-jade-ink text-white px-5 py-2 rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
                 {submitting ? "Timbrando..." : "Timbrar CFDI"}
