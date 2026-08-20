@@ -8,16 +8,14 @@ import {
   priceIdForComplemento,
   priceIdForPlan,
 } from "@/lib/billing/planes-stripe";
-import { cantidadDespacho } from "@/lib/billing/cantidad-despacho";
-import { contarEmpresasFacturables } from "@/lib/billing/sync-cantidad-despacho";
 
 // POST /api/billing/checkout — crea una sesión de Stripe Checkout (modo
 // suscripción) para el plan e intervalo solicitados y devuelve { url }. La
 // moneda y el monto los define el objeto Price en Stripe (STRIPE_PRICE_*;
-// intervalo "anual" usa las variables *_ANUAL). Para DESPACHO (Price
-// per-unit) la cantidad es max(10, empresas activas del comprador) — mismas
-// empresas a las que el webhook aplica el tier. Responde 503 en español
-// mientras Stripe (o el Price del intervalo pedido) no esté configurado.
+// intervalo "anual" usa las variables *_ANUAL). Todas las partidas cobran 1
+// unidad — el plan DESPACHO per-unit ($299/empresa) se retiró por completo.
+// Responde 503 en español mientras Stripe (o el Price del intervalo pedido)
+// no esté configurado.
 export async function POST(req: Request) {
   // Bearer-aware: el wizard de onboarding de los satélites inicia el checkout
   // con el token de /api/auth/token; la web sigue entrando por cookie
@@ -40,7 +38,7 @@ export async function POST(req: Request) {
   const plan = parsePlanFacturable((body as { plan?: unknown } | null)?.plan);
   if (!plan)
     return NextResponse.json(
-      { error: "Plan inválido. Opciones: BASICO, PROFESIONAL, DESPACHO." },
+      { error: "Plan inválido. Opciones: BASICO, PROFESIONAL." },
       { status: 400 },
     );
   const intervalo = parseIntervaloFacturable((body as { intervalo?: unknown } | null)?.intervalo);
@@ -92,13 +90,6 @@ export async function POST(req: Request) {
     const customerId = await resolveStripeCustomerId(session.user.id);
     const base = appBaseUrl();
 
-    // DESPACHO es per-unit: cantidad = max(10, empresas activas del comprador).
-    // El mismo conteo alimenta la sincronización en altas/bajas de empresas
-    // (sync-cantidad-despacho.ts). Los demás planes cobran 1 unidad.
-    const cantidad =
-      plan === "DESPACHO"
-        ? cantidadDespacho(await contarEmpresasFacturables(session.user.id))
-        : 1;
 
     // Complementos pedidos por clave (p. ej. PurificadoraOS): se cobran como
     // partidas adicionales de la MISMA suscripción, así el cliente paga todo
@@ -111,7 +102,7 @@ export async function POST(req: Request) {
       mode: "subscription",
       customer: customerId,
       line_items: [
-        { price: priceId, quantity: cantidad },
+        { price: priceId, quantity: 1 },
         ...complementos.map((price) => ({ price, quantity: 1 })),
       ],
       // Redundancia deliberada: el webhook resuelve al usuario por
