@@ -1,18 +1,44 @@
 "use client";
 
-// Stub temporal — este segmento se construye en la migración del flujo de
-// cierre (rama redesign/cierre-flow). Ver docs/BRIEF-UX-contabilidad.md.
+// Paso 5 del flujo: los entregables del mes para el buzón — los cinco XML del
+// Anexo 24 generados desde la contabilidad viva (catálogo, balanza, pólizas,
+// aux. de cuentas y aux. de folios), con su readiness. El panel consolida lo
+// que era el tab "Contabilidad Electrónica".
 
+import { useEffect, useState } from "react";
+import { useCompany } from "@/components/layout/CompanyProvider";
+import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { FlowPageHeader } from "@/components/contabilidad/FlowPageHeader";
+import {
+  ContabilidadElectronicaPanel,
+  type Period,
+} from "@/components/contabilidad/ContabilidadElectronicaPanel";
 
-export default function Page() {
+export default function EntregablesPage() {
+  const { activeCompany } = useCompany();
+  const { year, month, setPeriod } = usePeriod();
+  const [periods, setPeriods] = useState<Period[]>([]);
+
+  useEffect(() => {
+    if (!activeCompany) return;
+    (async () => {
+      const res = await fetch(`/api/contabilidad/periods?companyId=${activeCompany.id}`);
+      const d = await res.json().catch(() => null);
+      setPeriods(Array.isArray(d) ? d : []);
+    })();
+  }, [activeCompany]);
+
+  if (!activeCompany) return null;
   return (
     <div>
       <FlowPageHeader title="Entregables" />
-      <div className="rounded-card border border-cos-line bg-cos-card p-8 text-sm text-cos-ink-soft">
-        En construcción — mientras tanto, esta vista sigue disponible en la
-        página anterior de Contabilidad.
-      </div>
+      <ContabilidadElectronicaPanel
+        companyId={activeCompany.id}
+        periods={periods}
+        year={year}
+        month={month}
+        onChangePeriod={setPeriod}
+      />
     </div>
   );
 }

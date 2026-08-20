@@ -36,6 +36,12 @@ const REPORTES = [
   { href: "/contabilidad/presentado", label: "Presentado (CE)" },
 ] as const;
 
+// Tareas que viven fuera del flujo pero pertenecen a la sección.
+const TAREAS = [
+  { href: "/contabilidad/apertura", label: "Saldos iniciales" },
+  { href: "/contabilidad/polizas", label: "Pólizas y auxiliares (XML)" },
+] as const;
+
 export default function FlujoLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { activeCompany } = useCompany();
@@ -104,6 +110,16 @@ export default function FlujoLayout({ children }: { children: ReactNode }) {
                         ? "bg-cos-brand-tint text-cos-brand-ink font-medium"
                         : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
                     )}
+                  >
+                    {label}
+                  </Link>
+                ))}
+                <div className="my-1 border-t border-cos-line-soft" role="presentation" />
+                {TAREAS.map(({ href, label }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="block rounded-md px-3 py-1.5 text-[13px] text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
                   >
                     {label}
                   </Link>

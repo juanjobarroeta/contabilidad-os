@@ -17,6 +17,7 @@ import {
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { usePeriod, MESES } from "@/components/contabilidad/PeriodProvider";
 import { FlowPageHeader } from "@/components/contabilidad/FlowPageHeader";
+import { EjercicioCard } from "@/components/contabilidad/EjercicioCard";
 import { Money } from "@/components/ui/Money";
 import { cn } from "@/lib/utils";
 
@@ -147,6 +148,8 @@ export default function CierrePage() {
   const [diot, setDiot] = useState<DiotResumen | null>(null);
   const [presentada, setPresentada] = useState<boolean | null>(null);
   const [posting, setPosting] = useState(false);
+  const [pendientesLoading, setPendientesLoading] = useState(false);
+  const [cierreLoading, setCierreLoading] = useState(false);
   const [aviso, setAviso] = useState("");
   const [error, setError] = useState("");
 
@@ -198,6 +201,53 @@ export default function CierrePage() {
       setError(e instanceof Error ? e.message : "Error al postear el mes");
     } finally {
       setPosting(false);
+    }
+  }
+
+  /** Asiento de cierre del ejercicio (mes 13). */
+  async function generarCierreAnual() {
+    if (!activeCompany) return;
+    setCierreLoading(true); setError(""); setAviso("");
+    try {
+      const res = await fetch("/api/contabilidad/cierre", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, year }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al generar el cierre");
+      const r = data.resultado as number;
+      setAviso(
+        `Cierre ${year} generado (mes 13): ${r >= 0 ? "utilidad" : "pérdida"} de $${Math.abs(r).toLocaleString("es-MX", { minimumFractionDigits: 2 })}.`
+      );
+      await cargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al generar el cierre");
+    } finally {
+      setCierreLoading(false);
+    }
+  }
+
+  /** Postear de una vez todos los meses pendientes del año (post-pending). */
+  async function postearPendientes() {
+    if (!activeCompany) return;
+    setPendientesLoading(true); setError(""); setAviso("");
+    try {
+      const res = await fetch("/api/contabilidad/post-pending", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, year }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al actualizar los meses pendientes");
+      const partes: string[] = [`${data.posted} mes(es) cerrado(s)`];
+      if (data.errors?.length > 0) partes.push(`${data.errors.length} con error`);
+      setAviso(`Meses pendientes ${year}: ${partes.join(" · ")}.`);
+      await cargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al actualizar los meses pendientes");
+    } finally {
+      setPendientesLoading(false);
     }
   }
 
@@ -531,7 +581,43 @@ export default function CierrePage() {
                 <span>ene</span>
                 <span>dic</span>
               </div>
+              <button
+                onClick={postearPendientes}
+                disabled={pendientesLoading}
+                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13px] font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+              >
+                {pendientesLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Postear meses pendientes de {year}
+              </button>
             </div>
+          </section>
+
+          {/* Cierre anual: asiento de mes 13, traspaso y candado del ejercicio. */}
+          <section>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <a
+                href={`/api/contabilidad/coe/balanza?companyId=${activeCompany.id}&year=${year}&month=13`}
+                title="Descargar la balanza de cierre (mes 13)"
+                className={liga}
+              >
+                XML Balanza 13
+              </a>
+              <button
+                onClick={generarCierreAnual}
+                disabled={cierreLoading}
+                title={`Generar el asiento de cierre del ejercicio ${year} (mes 13)`}
+                className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-[13px] font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+              >
+                {cierreLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Cierre {year}
+              </button>
+            </div>
+            <EjercicioCard
+              companyId={activeCompany.id}
+              year={year}
+              periods={periods ?? []}
+              onReload={cargar}
+            />
           </section>
         </div>
       </div>
