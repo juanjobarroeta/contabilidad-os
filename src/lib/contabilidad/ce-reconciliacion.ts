@@ -297,7 +297,7 @@ export interface NudgeCE {
 }
 
 /** Deep link a la CE del periodo (pestaña con catálogo + balanza descargables). */
-export const CE_DEEP_LINK = "/contabilidad?tab=coe";
+export const CE_DEEP_LINK = "/contabilidad/entregables";
 
 /**
  * Compone (PURO) el nudge de presentación a partir del diff de conciliación.
