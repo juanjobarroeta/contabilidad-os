@@ -114,3 +114,128 @@
     color-scheme: dark;
   }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   IMPRESIÓN (brief módulo 5) — el contador externo imprime libro diario,
+   balanza y auxiliares para revisarlos con pluma. En papel:
+
+   1. Siempre tema claro, sin importar el tema en pantalla: se re-declaran
+      los tokens CLAROS (copiados literales del bloque :root de arriba)
+      también bajo [data-theme="dark"].
+   2. El shell de la app (h-screen + overflow-auto) recorta todo a una sola
+      página al imprimir; aquí se expande para que el contenido pagine.
+   3. El chrome flotante (asistente IA, prompts PWA, paleta de comandos,
+      modales) no pertenece al documento. Excepción: el overlay de la
+      representación impresa del CFDI (.rep-sheet) trae su propio
+      @media print y no se toca.
+   4. `.print-report` (el contenedor del flujo de contabilidad) recibe la
+      tipografía de reporte: tablas a 11px, encabezado repetido por página
+      y filas que no se parten entre páginas.
+
+   Este bloque queda SIN @layer a propósito: el CSS sin capa gana sobre las
+   capas de Tailwind, así los tokens de papel vencen al tema oscuro.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+@page {
+  size: letter;
+  margin: 14mm;
+}
+
+@media print {
+  /* ── 1. Papel siempre claro. Valores copiados literales del :root claro. ── */
+  :root,
+  [data-theme="dark"] {
+    --radius: 0.5rem;
+    --brand: oklch(0.55 0.16 258);
+    --brand-deep: oklch(0.45 0.14 258);
+    --brand-tint: oklch(0.965 0.018 258);
+    --brand-ink: oklch(0.4 0.12 258);
+    --jade: oklch(0.62 0.12 168);
+    --jade-tint: oklch(0.95 0.035 168);
+    --jade-ink: oklch(0.42 0.1 168);
+    --amber: oklch(0.74 0.13 70);
+    --amber-tint: oklch(0.95 0.05 78);
+    --amber-ink: oklch(0.48 0.1 55);
+    --red: oklch(0.58 0.2 25);
+    --red-tint: oklch(0.95 0.035 25);
+    --red-ink: oklch(0.5 0.18 25);
+    --ink: oklch(0.25 0.025 258);
+    --ink-soft: oklch(0.46 0.02 258);
+    --ink-faint: oklch(0.53 0.015 258);
+    --line: oklch(0.91 0.006 258);
+    --line-soft: oklch(0.955 0.004 258);
+    --paper: oklch(0.975 0.004 250);
+    --slate-tint: oklch(0.95 0.004 258);
+    --shadow-card: none;
+    --canvas: oklch(0.985 0.004 250);
+    --card: #ffffff;
+    color-scheme: light;
+  }
+
+  /* Hoja blanca, tinta oscura (los tokens ya son claros; el fondo del body
+     se fuerza a blanco puro en lugar del casi-blanco de --canvas). */
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  /* Las tarjetas pierden sombra en papel; quedan los bordes finos de --line. */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* ── 2. Los contenedores de scroll del shell se expanden para paginar. ── */
+  .h-screen {
+    height: auto !important;
+  }
+  .overflow-auto,
+  .overflow-y-auto,
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* ── 3. Chrome flotante fuera del papel. `.fixed` cubre el botón y panel
+     del asistente IA, prompts PWA, paleta de comandos, topbar móvil,
+     backdrops y modales — todo lo posicionado sobre el documento. El overlay
+     de la representación impresa del CFDI contiene .rep-sheet y se excluye:
+     su @media print propio (técnica de visibility) sigue funcionando. */
+  .fixed:not(:has(.rep-sheet)) {
+    display: none !important;
+  }
+
+  /* El banner de prueba (TrialBanner, hijo directo de <main>) no es parte
+     del reporte. Selector estructural porque su archivo no se toca aquí. */
+  main > .border-b.px-4.py-2 {
+    display: none !important;
+  }
+
+  /* ── 4. Tipografía de reporte, acotada al flujo de contabilidad. ── */
+  .print-report table {
+    font-size: 11px;
+  }
+  .print-report th,
+  .print-report td {
+    font-size: 11px;
+  }
+  .print-report thead {
+    display: table-header-group; /* encabezado repetido en cada página */
+  }
+  .print-report tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* :hover no existe en papel; esto es el cinturón por si el motor de
+     impresión congela un estado hover al momento de imprimir. */
+  .print-report tr:hover,
+  .print-report button:hover {
+    background-color: transparent !important;
+  }
+  /* Las bandas de fondo (encabezados de tabla en --paper, banners jade/ámbar
+     del checksum) son información: que sí se impriman. */
+  .print-report,
+  .print-report * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

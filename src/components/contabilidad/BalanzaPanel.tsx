@@ -46,9 +46,12 @@ export function BalanzaPanel({
 
   return (
     <div>
-      <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
+      {/* Controles de pantalla (período y descarga): fuera del papel. */}
+      <div className="print:hidden">
+        <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
+      </div>
 
-      <div className="mb-3 flex justify-end">
+      <div className="mb-3 flex justify-end print:hidden">
         <BotonExcel
           href={`/api/contabilidad/balanza?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}
           label="Balanza en Excel"
@@ -68,7 +71,7 @@ export function BalanzaPanel({
           <p className="text-xs text-cos-ink-soft mt-1">Cierra el mes desde la pestaña &ldquo;Cierres mensuales&rdquo;.</p>
         </div>
       ) : (
-        <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
+        <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden print:overflow-visible">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-cos-line bg-cos-paper">

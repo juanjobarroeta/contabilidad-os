@@ -109,7 +109,7 @@ export function LibroDiarioPanel({ companyId, year, month }: { companyId: string
   if (polizas.length === 0) {
     return (
       <div>
-        <div className="mb-3 flex justify-end">{botonNueva}</div>
+        <div className="mb-3 flex justify-end print:hidden">{botonNueva}</div>
         <Vacio texto="Sin pólizas en este periodo. Cierra el mes desde «Cierres mensuales» o captura una póliza manual." />
         {editorModal}
       </div>
@@ -126,7 +126,7 @@ export function LibroDiarioPanel({ companyId, year, month }: { companyId: string
           {polizas.length} póliza{polizas.length === 1 ? "" : "s"} · el folio coincide con el XML de Pólizas del Periodo (Anexo 24)
           · cargos {formatCurrency(totalCargos)} · abonos {formatCurrency(totalAbonos)}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 print:hidden">
           <BotonExcel
             href={`/api/contabilidad/libro-diario?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}
             label="Libro diario en Excel"
@@ -134,7 +134,7 @@ export function LibroDiarioPanel({ companyId, year, month }: { companyId: string
           {botonNueva}
         </div>
       </div>
-      <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
+      <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden print:overflow-visible">
         {polizas.map((p) => {
           const abiertaEsta = abierta === p.folio;
           return (
@@ -177,7 +177,7 @@ export function LibroDiarioPanel({ companyId, year, month }: { companyId: string
                       ))}
                     </tbody>
                   </table>
-                  <div className="mt-2 flex items-center gap-3">
+                  <div className="mt-2 flex items-center gap-3 print:hidden">
                     {p.referenciaTipo === "CFDI" && p.referencia && invoiceIdPorUuid[p.referencia] && (
                       <button
                         onClick={() => setRepInvoiceId(invoiceIdPorUuid[p.referencia!])}
@@ -549,7 +549,7 @@ export function BalanceGeneralPanel({ companyId, year, month }: { companyId: str
 
   return (
     <div>
-      <div className="mb-3 flex justify-end">
+      <div className="mb-3 flex justify-end print:hidden">
         <BotonExcel
           href={`/api/contabilidad/balance-general?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}
           label="Balance general en Excel"
@@ -592,7 +592,7 @@ function Seccion({ titulo, filas, total, icon }: {
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
+    <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden print:overflow-visible">
       <div className="flex items-center gap-2 border-b border-cos-line bg-cos-paper px-4 py-2.5 text-xs font-semibold text-cos-ink">
         {icon} {titulo}
       </div>

@@ -6,6 +6,7 @@
 
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { FlowPageHeader } from "@/components/contabilidad/FlowPageHeader";
+import { BotonImprimir, PrintHeader } from "@/components/contabilidad/PrintHeader";
 import { CePresentadoPanel } from "@/components/contabilidad/CePresentadoPanel";
 
 export default function PresentadoPage() {
@@ -13,7 +14,17 @@ export default function PresentadoPage() {
   if (!activeCompany) return null;
   return (
     <div>
-      <FlowPageHeader title="Presentado (CE)" subtitle="Balanzas presentadas al SAT, por período" />
+      {/* El período impreso exacto lo pone el panel (maneja su propia selección
+          CE, distinta del período global del flujo); aquí sólo el contexto. */}
+      <PrintHeader title="Balanza presentada (CE)" periodo="Balanza presentada al SAT" />
+      {/* El encabezado de pantalla no va al papel: PrintHeader lo sustituye. */}
+      <div className="print:hidden">
+        <FlowPageHeader
+          title="Presentado (CE)"
+          subtitle="Balanzas presentadas al SAT, por período"
+          actions={<BotonImprimir />}
+        />
+      </div>
       <CePresentadoPanel companyId={activeCompany.id} />
     </div>
   );
