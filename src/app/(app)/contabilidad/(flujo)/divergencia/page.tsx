@@ -83,6 +83,13 @@ export default function DivergenciaPage() {
   const [sel, setSel] = useState<{ cuenta: RenglonCuenta; rubro: Rubro } | null>(null);
   const [docs, setDocs] = useState<CuentaDocumentos | null>(null);
   const [docsCargando, setDocsCargando] = useState(false);
+  // «Así lo clasifico yo»: picker de cuenta propia → PostingCuentaOverride.
+  const [clasifAbierto, setClasifAbierto] = useState(false);
+  const [propias, setPropias] = useState<{ id: string; codigo: string; nombre: string; nivel: number }[] | null>(null);
+  const [busquedapropia, setBusquedaPropia] = useState("");
+  const [eleccionPropia, setEleccionPropia] = useState<string | null>(null);
+  const [guardandoOverride, setGuardandoOverride] = useState(false);
+  const [avisoOverride, setAvisoOverride] = useState<React.ReactNode>("");
 
   const cargar = useCallback(async () => {
     if (!activeCompany) return;
@@ -116,9 +123,25 @@ export default function DivergenciaPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Catálogo propio para el picker de «Así lo clasifico yo» (una sola carga).
+  useEffect(() => {
+    if (!clasifAbierto || propias !== null || !activeCompany) return;
+    fetch(`/api/contabilidad/posting-overrides?companyId=${activeCompany.id}`)
+      .then((r) => r.json())
+      .then((d) => setPropias(
+        Array.isArray(d?.cuentas)
+          ? d.cuentas.filter((c: { nivel: number }) => c.nivel >= 3)
+          : []
+      ))
+      .catch(() => setPropias([]));
+  }, [clasifAbierto, propias, activeCompany]);
+
   // Drill de la cuenta seleccionada a sus documentos.
   useEffect(() => {
     if (!sel || !activeCompany) return;
+    setClasifAbierto(false);
+    setEleccionPropia(null);
+    setBusquedaPropia("");
     let vivo = true;
     setDocsCargando(true);
     setDocs(null);
@@ -369,8 +392,6 @@ export default function DivergenciaPage() {
                         <Money value={sel.cuenta.diferencia} size={16} className="text-cos-red-ink" />
                       </div>
 
-                      {/* Adopción: v1 sólo la acción con backend real. La cola de
-                          overrides (PostingCuentaOverride) llega con el módulo 4. */}
                       <Link
                         href={`/contabilidad/ajustes?cuenta=${encodeURIComponent(sel.cuenta.numCta)}&monto=${Math.abs(sel.cuenta.diferencia).toFixed(2)}&concepto=${encodeURIComponent(`Ajuste por divergencia CE — ${sel.cuenta.numCta} ${label}`)}`}
                         className="flex items-center justify-between rounded-control border border-cos-line px-3 py-2.5 text-left hover:bg-cos-paper"
@@ -383,6 +404,107 @@ export default function DivergenciaPage() {
                         </span>
                         <ArrowRight className="h-4 w-4 shrink-0 text-cos-ink-faint" />
                       </Link>
+
+                      {/* «Así lo clasifico yo»: PostingCuentaOverride para el código
+                          que el motor postea; aplica en el siguiente posteo. */}
+                      <div className="rounded-control border border-cos-line">
+                        <button
+                          onClick={() => setClasifAbierto((v) => !v)}
+                          className="flex w-full items-center justify-between px-3 py-2.5 text-left hover:bg-cos-paper"
+                        >
+                          <span>
+                            <span className="block text-[13px] font-semibold text-cos-ink">Así lo clasifico yo</span>
+                            <span className="block text-[12px] text-cos-ink-soft">
+                              manda lo que el motor postea en{" "}
+                              <span className="font-mono">{sel.cuenta.numCta}</span> a una cuenta tuya
+                            </span>
+                          </span>
+                          <ArrowRight className={cn("h-4 w-4 shrink-0 text-cos-ink-faint transition-transform", clasifAbierto && "rotate-90")} />
+                        </button>
+                        {clasifAbierto && (
+                          <div className="border-t border-cos-line-soft bg-cos-paper px-3 py-2.5">
+                            {avisoOverride ? (
+                              <p className="text-[12px] text-cos-jade-ink">{avisoOverride}</p>
+                            ) : propias === null ? (
+                              <p className="flex items-center gap-2 text-[12px] text-cos-ink-soft">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando tu catálogo…
+                              </p>
+                            ) : (
+                              <>
+                                <input
+                                  value={busquedapropia}
+                                  onChange={(e) => { setBusquedaPropia(e.target.value); setEleccionPropia(null); }}
+                                  placeholder="busca tu cuenta por código o nombre"
+                                  className="mb-1.5 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[12px] placeholder:text-cos-ink-faint"
+                                />
+                                <ul className="max-h-40 overflow-y-auto">
+                                  {propias
+                                    .filter((c) => {
+                                      const q = busquedapropia.trim().toLowerCase();
+                                      if (!q) return false;
+                                      return c.codigo.toLowerCase().startsWith(q) || c.nombre.toLowerCase().includes(q);
+                                    })
+                                    .slice(0, 6)
+                                    .map((c) => (
+                                      <li key={c.id}>
+                                        <label className={cn("flex cursor-pointer items-baseline gap-2 rounded px-1.5 py-1", eleccionPropia === c.id ? "bg-cos-brand-tint" : "hover:bg-cos-card")}>
+                                          <input
+                                            type="radio"
+                                            name="cuenta-propia"
+                                            checked={eleccionPropia === c.id}
+                                            onChange={() => setEleccionPropia(c.id)}
+                                            className="translate-y-0.5 accent-[--brand]"
+                                          />
+                                          <span className="font-mono text-[12px]">{c.codigo}</span>
+                                          <span className="min-w-0 flex-1 truncate text-[12px] text-cos-ink">{c.nombre}</span>
+                                        </label>
+                                      </li>
+                                    ))}
+                                </ul>
+                                <button
+                                  onClick={async () => {
+                                    if (!eleccionPropia || !activeCompany || !sel) return;
+                                    setGuardandoOverride(true);
+                                    try {
+                                      const res = await fetch("/api/contabilidad/posting-overrides", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          companyId: activeCompany.id,
+                                          codigoMotor: sel.cuenta.numCta,
+                                          chartAccountId: eleccionPropia,
+                                        }),
+                                      });
+                                      const d = await res.json().catch(() => null);
+                                      if (!res.ok) throw new Error(d?.error ?? "No se pudo guardar");
+                                      setAvisoOverride(
+                                        <>
+                                          Decisión guardada: <span className="font-mono">{sel.cuenta.numCta}</span> →{" "}
+                                          <span className="font-mono">{d.cuenta.codigo}</span>. Aplica al re-postear —{" "}
+                                          <Link href="/contabilidad/cierre" className="font-medium underline">ir al Cierre</Link>.
+                                        </>
+                                      );
+                                    } catch (e) {
+                                      setAvisoOverride(
+                                        <span className="text-cos-red-ink">
+                                          {e instanceof Error ? e.message : "No se pudo guardar"}
+                                        </span>
+                                      );
+                                    } finally {
+                                      setGuardandoOverride(false);
+                                    }
+                                  }}
+                                  disabled={!eleccionPropia || guardandoOverride}
+                                  className="mt-1.5 inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-1.5 text-[12px] font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                                >
+                                  {guardandoOverride && <Loader2 className="h-3 w-3 animate-spin" />}
+                                  Guardar decisión
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </>
                   )}
 
