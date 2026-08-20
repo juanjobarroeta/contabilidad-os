@@ -88,6 +88,8 @@ export interface UnidadAmparada extends GeneralesUnidad {
   invoiceId: string;
   vin: string;
   costoCompra: number;
+  /** Precio de la venta; sirve para reconocer el intercambio (ver intercambio.ts). */
+  precioVenta?: number | null;
 }
 
 export interface UnidadResuelta {
@@ -95,6 +97,8 @@ export interface UnidadResuelta {
   vin: string;
   /** Suma de costoCompra de las unidades del CFDI (normalmente una). */
   costo: number;
+  /** Suma de precioVenta; 0 si el CFDI no es de venta o no está costeada. */
+  precio: number;
 }
 
 /**
@@ -121,6 +125,7 @@ export function agruparUnidadesAmparadas(unidades: UnidadAmparada[]): Map<string
       sufijo,
       vin: lista[0].vin,
       costo: lista.reduce((s, u) => s + (u.costoCompra || 0), 0),
+      precio: lista.reduce((s, u) => s + (u.precioVenta || 0), 0),
     });
   }
   return out;

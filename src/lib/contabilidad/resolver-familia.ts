@@ -35,6 +35,9 @@ import { agruparUnidadesAmparadas, type UnidadResuelta } from "./familia-vehicul
 export const MOTOR_VENTAS_UNIDAD = { codigo: "401.01", serie: "4101" } as const;
 export const MOTOR_COSTO_UNIDAD = { codigo: "501.01", serie: "5101" } as const;
 export const MOTOR_INVENTARIO_UNIDAD = { codigo: "115.04", serie: "1301" } as const;
+/** FASE 2g — la unidad que se va al costo vive en su propia serie. Ver intercambio.ts. */
+export const MOTOR_VENTAS_INTERCAMBIO = { codigo: "401.01", serie: "4131" } as const;
+export const MOTOR_COSTO_INTERCAMBIO = { codigo: "501.01", serie: "5131" } as const;
 export const CODIGOS_MOTOR_FAMILIA = [
   MOTOR_VENTAS_UNIDAD.codigo,
   MOTOR_COSTO_UNIDAD.codigo,
@@ -115,6 +118,7 @@ export async function unidadesAmparadas(
       modelo: true,
       version: true,
       costoCompra: true,
+      precioVenta: true,
       ventaInvoiceId: true,
       compraInvoiceId: true,
     },
@@ -127,6 +131,7 @@ export async function unidadesAmparadas(
       modelo: u.modelo,
       version: u.version,
       costoCompra: u.costoCompra,
+      precioVenta: u.precioVenta,
     })),
   );
 }

@@ -19,11 +19,14 @@ import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { classifyInvoice } from "./classify-egreso";
 import { esComprobanteDeEgreso, espejo, signoDeComprobante } from "./nota-credito";
 import { cargarContextoTaller, costoCompraRefacciones, piernasIngresoTaller } from "./taller";
+import { esVentaAlCosto } from "./intercambio";
 import {
   cargarIndiceFamilia,
   cuentaDeFamilia,
   unidadesAmparadas,
   MOTOR_VENTAS_UNIDAD,
+  MOTOR_VENTAS_INTERCAMBIO,
+  MOTOR_COSTO_INTERCAMBIO,
   MOTOR_COSTO_UNIDAD,
   MOTOR_INVENTARIO_UNIDAD,
 } from "./resolver-familia";
@@ -240,7 +243,14 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     const delta = inv.total - inv.subtotal;
 
     const unidad = ventasUnidad.get(inv.id);
-    const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
+    // FASE 2g: la unidad vendida AL COSTO es un intercambio entre
+    // distribuidores y vive en 4131/5131. Si esa serie no está en el CT, cae en
+    // la de siempre — sigue siendo una venta de unidad.
+    const alCosto = !!unidad && esVentaAlCosto(unidad.precio, unidad.costo);
+    const ctaVentaFam = unidad
+      ? ((alCosto ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_INTERCAMBIO, unidad.sufijo) : null) ??
+        cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo))
+      : null;
     const moduloCxc = moduloDeInvoice(inv.id, modulosIngreso);
     const ctaCxc = moduloCxc ? cuentasCxc[moduloCxc] : null;
 
@@ -277,7 +287,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     // saber si la unidad regresó al piso, y eso lo dice el inventario, no el
     // CFDI.
     if (!esEgreso && unidad && ctaVentaFam && unidad.costo > 0.005) {
-      const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
+      const ctaCostoFam =
+        (alCosto ? cuentaDeFamilia(idxFamilia, MOTOR_COSTO_INTERCAMBIO, unidad.sufijo) : null) ??
+        cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
       const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);
       if (ctaCostoFam && ctaInvFam) {
         const baseCosto = { ...base, descripcion: `Costo de venta VIN ${unidad.vin}` };
@@ -1126,7 +1138,11 @@ export async function balanzaPreview(
     const delta = inv.total - inv.subtotal;
     const esEgreso = esComprobanteDeEgreso(inv);
     const unidad = ventasUnidad.get(inv.id);
-    const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
+    const alCosto = !!unidad && esVentaAlCosto(unidad.precio, unidad.costo);
+    const ctaVentaFam = unidad
+      ? ((alCosto ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_INTERCAMBIO, unidad.sufijo) : null) ??
+        cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo))
+      : null;
     const moduloCxc = moduloDeInvoice(inv.id, modulosIngreso);
     addMov(((moduloCxc ? cuentasCxc[moduloCxc] : null) ?? accClientes).id, espejo("CARGO", esEgreso), inv.total);
     const piernasVenta = ctaVentaFam
@@ -1144,7 +1160,9 @@ export async function balanzaPreview(
     if (delta > 0.005) addMov(accIvaTrasladado.id, espejo("ABONO", esEgreso), delta);
     else if (delta < -0.005) addMov(accIsrPagadoTerceros.id, espejo("CARGO", esEgreso), -delta);
     if (!esEgreso && unidad && ctaVentaFam && unidad.costo > 0.005) {
-      const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
+      const ctaCostoFam =
+        (alCosto ? cuentaDeFamilia(idxFamilia, MOTOR_COSTO_INTERCAMBIO, unidad.sufijo) : null) ??
+        cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
       const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);
       if (ctaCostoFam && ctaInvFam) {
         addMov(ctaCostoFam.id, "CARGO", unidad.costo);
@@ -1477,7 +1495,11 @@ export async function estadoResultadosPreview(
     // descuento): aporta con signo negativo, no como una venta más.
     const signo = signoDeComprobante(esComprobanteDeEgreso(inv));
     const unidad = ventasUnidad.get(inv.id);
-    const ctaVentaFam = unidad ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo) : null;
+    const alCosto = !!unidad && esVentaAlCosto(unidad.precio, unidad.costo);
+    const ctaVentaFam = unidad
+      ? ((alCosto ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_INTERCAMBIO, unidad.sufijo) : null) ??
+        cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo))
+      : null;
     const ctaVenta = ctaVentaFam ?? accVentas;
     const piernasVenta = ctaVentaFam
       ? null
@@ -1492,7 +1514,9 @@ export async function estadoResultadosPreview(
       });
     }
     if (signo > 0 && unidad && ctaVentaFam && unidad.costo > 0.005) {
-      const ctaCostoFam = cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
+      const ctaCostoFam =
+        (alCosto ? cuentaDeFamilia(idxFamilia, MOTOR_COSTO_INTERCAMBIO, unidad.sufijo) : null) ??
+        cuentaDeFamilia(idxFamilia, MOTOR_COSTO_UNIDAD, unidad.sufijo);
       const ctaInvFam = cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidad.sufijo);
       if (ctaCostoFam && ctaInvFam) {
         contributions.push({
