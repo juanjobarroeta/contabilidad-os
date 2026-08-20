@@ -218,9 +218,18 @@ export const DELETE = withAuthz(
       );
     }
 
-    // Cotizaciones cascade their line items; partidas + any adjudicaciones
-    // cascade with the solicitud (onDelete: Cascade). PENDIENTE has none yet.
-    await prisma.solicitudCompra.delete({ where: { id } });
+    // A PENDIENTE requisición can already carry cotizaciones (added while
+    // awaiting authorization), whose SolicitudCotizacionPartida rows hold a
+    // RESTRICT fk to SolicitudPartida. Deleting solicitud directly lets
+    // Postgres race that cascade against the partidas' own cascade delete and
+    // the RESTRICT can fire first (PrismaClientUnknownRequestError, code
+    // 23001). Deleting cotizaciones first — same order the PUT rebuild uses —
+    // clears those line items before partidas go, so the RESTRICT never sees
+    // a live reference.
+    await prisma.$transaction(async (tx) => {
+      await tx.solicitudCompraCotizacion.deleteMany({ where: { solicitudId: id } });
+      await tx.solicitudCompra.delete({ where: { id } });
+    });
     return NextResponse.json({ deleted: id });
   }
 );
