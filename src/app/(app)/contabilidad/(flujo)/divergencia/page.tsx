@@ -20,6 +20,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { FlowPageHeader } from "@/components/contabilidad/FlowPageHeader";
 import { Money } from "@/components/ui/Money";
+import { StatTile, StatStrip } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { EstadoResultadosCe, Rubro, RenglonCuenta } from "@/lib/contabilidad/estado-resultados-ce";
 
@@ -134,6 +135,9 @@ export default function DivergenciaPage() {
   if (!activeCompany) return null;
 
   const presentado = data?.presentado ?? false;
+  const todasCuentas = (data?.rubros ?? []).flatMap((r) => r.cuentas);
+  const totalCuentas = todasCuentas.length;
+  const cuentasConDif = todasCuentas.filter((c) => Math.abs(c.diferencia) >= 0.005).length;
   const rubrosVisibles = (data?.rubros ?? [])
     .map((r) => ({
       ...r,
@@ -159,6 +163,11 @@ export default function DivergenciaPage() {
       <FlowPageHeader
         title="Divergencia"
         subtitle="Lo que el sistema derivó de tus documentos, contra lo que presentaste al SAT"
+        context={
+          data
+            ? `${data.rubros.length} rubros · ${totalCuentas} cuentas con movimiento${presentado ? ` · ${cuentasConDif} con diferencia` : " · sin balanza presentada"}`
+            : undefined
+        }
         actions={
           data && presentado ? (
             <label className="flex cursor-pointer items-center gap-2 text-[13px] text-cos-ink-soft">
@@ -194,36 +203,33 @@ export default function DivergenciaPage() {
             </div>
           )}
 
-          {/* ── Cifras de cabecera ── */}
-          <div className="mb-5 rounded-card border border-cos-line bg-cos-card px-6 py-4">
-            <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-wider text-cos-ink-faint">Derivado</p>
-                <Money value={data.resultado.derivado} size={24} />
-              </div>
-              {presentado && (
-                <>
-                  <div className="hidden self-stretch w-px bg-cos-line sm:block" aria-hidden />
-                  <div>
-                    <p className="font-mono text-[11px] uppercase tracking-wider text-cos-ink-faint">Declarado</p>
-                    <Money value={data.resultado.declarado} size={24} />
-                  </div>
-                  <div className="hidden self-stretch w-px bg-cos-line sm:block" aria-hidden />
-                  <div>
-                    <p className="font-mono text-[11px] uppercase tracking-wider text-cos-ink-faint">Diferencia</p>
-                    <Money
-                      value={data.resultado.diferencia}
-                      size={24}
-                      className={Math.abs(data.resultado.diferencia) >= 0.005 ? "text-cos-red-ink" : "text-cos-jade-ink"}
-                    />
-                    <p className="mt-0.5 text-[12px] text-cos-ink-soft">
-                      resultado del período · derivado − declarado
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          {/* ── Franja de stats (idioma del deck) ── */}
+          <StatStrip>
+            <StatTile label="Derivado" value={<Money value={data.resultado.derivado} size={20} />} />
+            {presentado && (
+              <StatTile label="Declarado" value={<Money value={data.resultado.declarado} size={20} />} />
+            )}
+            {presentado && (
+              <StatTile
+                label="Diferencia"
+                tone={Math.abs(data.resultado.diferencia) >= 0.005 ? "red" : "jade"}
+                value={
+                  <Money
+                    value={data.resultado.diferencia}
+                    size={20}
+                    className={Math.abs(data.resultado.diferencia) >= 0.005 ? "text-cos-red-ink" : "text-cos-jade-ink"}
+                  />
+                }
+                sub="derivado − declarado"
+              />
+            )}
+            <StatTile
+              label="Cuentas con diferencia"
+              tone={cuentasConDif > 0 ? "amber" : "jade"}
+              value={presentado ? cuentasConDif : "—"}
+              sub={presentado ? `de ${totalCuentas} con movimiento` : "sin balanza presentada"}
+            />
+          </StatStrip>
 
           <div className={cn("grid grid-cols-1 gap-5", sel && "xl:grid-cols-[minmax(0,1fr)_360px]")}>
             {/* ── Tabla rubro → cuenta ── */}

@@ -298,6 +298,17 @@ export default function CierrePage() {
     <div>
       <FlowPageHeader
         title="Cierre del mes"
+        context={
+          periods
+            ? periodo
+              ? `${periodo.entriesCount.toLocaleString("es-MX")} asientos · ${
+                  posteado && periodo.postedAt
+                    ? `último posteo ${new Date(periodo.postedAt).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                    : "en borrador"
+                }`
+              : "sin postear · el motor deriva las pólizas de tus CFDIs al postear"
+            : undefined
+        }
         actions={
           <>
             <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide", chipPeriodo.cls)}>
