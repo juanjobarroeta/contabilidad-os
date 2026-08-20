@@ -153,6 +153,17 @@ const JOBS: Job[] = [
   // cursor durable (BackfillProgreso) y, sin companyId, eligen solos a la
   // empresa que aún no termina — una agencia nueva queda cargada sin que nadie
   // encadene llamadas. Al terminar el barrido, cada tick es un no-op barato.
+  // ── Intake & prioritization (docs/INTAKE.md). Sin INTAKE_ENABLED=1 cada
+  // tick es un no-op de una comparación de env — cadencias agresivas gratis.
+  // Transcribir y extraer cuestan dinero por corrida → piso MIN_CARO.
+  { name: "intake-transcribe", everyMs: 15 * MIN, firstDelayMs: 6 * MIN, minMs: MIN_CARO,
+    // La transcripción recién creada se extrae enseguida, sin esperar cita.
+    encadena: ["intake-extract"] },
+  { name: "intake-extract", everyMs: 15 * MIN, firstDelayMs: 9 * MIN, minMs: MIN_CARO },
+  // El digest y el scoring se auto-gatean por ventana horaria (08/18h y lunes
+  // 06h MX respectivamente) dentro de su endpoint; aquí solo se les da tick.
+  { name: "intake-digest", everyMs: 15 * MIN, firstDelayMs: 12 * MIN, minMs: MIN_LOCAL },
+  { name: "intake-score", everyMs: HOUR, firstDelayMs: 22 * MIN, minMs: MIN_CARO },
   { name: "refacciones-backfill", everyMs: 30 * MIN, firstDelayMs: 55 * MIN, minMs: MIN_LOCAL },
   { name: "servicio-backfill", everyMs: 30 * MIN, firstDelayMs: 60 * MIN, minMs: MIN_LOCAL },
   // Costo de nómina por línea de negocio: sin él, el taller reporta ingreso
