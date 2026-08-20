@@ -56,6 +56,10 @@ const AUTENTICADORES: RegExp[] = [
   // Webhooks con firma verificada
   /\bverifyTwilioSignature/,
   /\bconstructEventAsync\b/,
+  /\bverifyZoomSignature\b/,
+  // Telegram no firma el cuerpo: autentica con secret_token propio por header
+  // (X-Telegram-Bot-Api-Secret-Token), fijado al registrar el webhook.
+  /\bTELEGRAM_WEBHOOK_SECRET\b/,
   // Secretos de máquina
   /\bCRON_SECRET\b/,
   /\bMCP_OPERADOR_KEYS\b/,

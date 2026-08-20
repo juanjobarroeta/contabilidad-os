@@ -5799,3 +5799,145 @@ model PostingCuentaOverride {
 
   @@unique([companyId, codigoMotor])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Intake & prioritization: every customer ask (WhatsApp / Zoom / manual)
+// becomes a scored, deduplicated GitHub issue behind a Telegram approval gate.
+// Fully additive — no relation back to existing models. Design: docs/INTAKE.md
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum IntakeSource {
+  WHATSAPP
+  ZOOM
+  MANUAL
+  EMAIL
+}
+
+enum IntakeAskKind {
+  BUG
+  FEATURE
+  QUESTION
+  NOISE
+}
+
+enum IntakeAskStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  MERGED
+  AUTO_APPROVED
+}
+
+// Append-only. Source of truth. Never UPDATE payload, never DELETE — cuando el
+// prompt de extracción mejore, se re-corre sobre el histórico. `processedAt`
+// y `processError` son el único estado mutable (cursor del pipeline).
+model RawIntake {
+  id           String       @id @default(cuid())
+  source       IntakeSource
+  externalId   String // provider message/meeting id
+  receivedAt   DateTime     @default(now())
+  payload      Json // verbatim provider payload
+  processedAt  DateTime?
+  processError String?
+
+  transcripts IntakeTranscript[]
+  asks        CandidateAsk[]
+
+  @@unique([source, externalId]) // idempotency guard (provider retries)
+  @@index([source, processedAt, receivedAt])
+}
+
+model IntakeContact {
+  id               String   @id @default(cuid())
+  displayName      String?
+  phoneE164        String?  @unique
+  email            String?  @unique
+  company          String?
+  stripeCustomerId String? // enables MRR lookup during scoring
+  primaryProduct   String? // default attribution hint
+  createdAt        DateTime @default(now())
+
+  asks CandidateAsk[]
+}
+
+model IntakeTranscript {
+  id           String    @id @default(cuid())
+  rawIntakeId  String
+  rawIntake    RawIntake @relation(fields: [rawIntakeId], references: [id], onDelete: Cascade)
+  meetingTopic String?
+  productHint  String? // parsed from "[PRODUCT] …" meeting-naming convention
+  startedAt    DateTime?
+  durationSec  Int?
+  participants Json? // [{name, email}]
+  provider     String // 'deepgram' | 'whisper'
+  language     String    @default("es-MX")
+  segments     Json // [{speaker, start, end, text}]
+  fullText     String    @db.Text
+  extractedAt  DateTime? // extraction-pipeline cursor
+  createdAt    DateTime  @default(now())
+
+  asks CandidateAsk[]
+
+  @@index([extractedAt, createdAt])
+}
+
+model CandidateAsk {
+  id           String            @id @default(cuid())
+  rawIntakeId  String?
+  rawIntake    RawIntake?        @relation(fields: [rawIntakeId], references: [id])
+  transcriptId String?
+  transcript   IntakeTranscript? @relation(fields: [transcriptId], references: [id])
+  contactId    String?
+  contact      IntakeContact?    @relation(fields: [contactId], references: [id])
+
+  product    String? // 'contabilidados' | 'automotriz' | …
+  kind       IntakeAskKind
+  title      String
+  body       String        @db.Text
+  quote      String?       @db.Text // verbatim source, for human review
+  quoteTsSec Int? // jump-to point in the recording
+  confidence Float? // 0.00–1.00
+
+  dedupeOfId String?
+  dedupeOf   CandidateAsk?  @relation("AskDedupe", fields: [dedupeOfId], references: [id])
+  duplicates CandidateAsk[] @relation("AskDedupe")
+
+  status     IntakeAskStatus @default(PENDING)
+  reviewedAt DateTime?
+
+  // Telegram approval card (edited in place → chat history is the audit log).
+  notifiedAt        DateTime?
+  telegramMessageId String?
+
+  githubIssueUrl String?
+  githubNodeId   String? // needed for Projects v2 GraphQL
+  createdAt      DateTime @default(now())
+
+  embedding AskEmbedding?
+
+  @@index([status, createdAt])
+  @@index([product, kind])
+}
+
+// Optional semantic-dedupe index. Requires pgvector (already installed for the
+// fiscal knowledge base). Dim must match EMBEDDING_DIM in src/lib/fiscal-kb/embed.ts.
+model AskEmbedding {
+  candidateAskId String                      @id
+  ask            CandidateAsk                @relation(fields: [candidateAskId], references: [id], onDelete: Cascade)
+  embedding      Unsupported("vector(1536)")
+}
+
+// Weekly scoring snapshot — lets the Monday digest report "what moved".
+model IntakeScoreSnapshot {
+  id          String   @id @default(cuid())
+  weekOf      DateTime // Monday 00:00 (America/Mexico_City) of the scored week
+  issueNodeId String
+  issueUrl    String?
+  title       String
+  score       Float
+  rank        Int
+  createdAt   DateTime @default(now())
+
+  @@unique([weekOf, issueNodeId])
+  @@index([weekOf, rank])
+}

@@ -27,6 +27,7 @@ import { registrarBitacora } from "@/lib/audit";
 import { tryConfirmPendingAction, getPendingAction, stagePendingDeshacerImport } from "@/lib/whatsapp/pending-action";
 import { findUltimoLoteImportado, esIntencionDeshacer } from "@/lib/bancos/undo-import";
 import { checkWhatsappRateLimit } from "@/lib/whatsapp/rate-limit";
+import { captureWhatsappInbound } from "@/lib/intake/ingest";
 import { effectiveWhatsappPlan } from "@/lib/planes";
 import { decideEscrituraUsuario } from "@/lib/subscription";
 
@@ -154,6 +155,8 @@ async function processMediaTurn(opts: {
   history: Anthropic.MessageParam[];
   userId: string;
   cartera: WhatsappCartera;
+  messageSid?: string;
+  profileName?: string | null;
 }): Promise<void> {
   const { companyId, company, conversationId, phone, media, history, userId, cartera } = opts;
 
@@ -179,6 +182,17 @@ async function processMediaTurn(opts: {
     await prisma.whatsappMessage.create({
       data: { conversationId, role: "USER", body: `🎤 ${transcript}` },
     });
+    // Tap de intake: la transcripción de la nota de voz entra al pipeline
+    // igual que un mensaje escrito (no-op sin INTAKE_ENABLED=1).
+    if (opts.messageSid) {
+      void captureWhatsappInbound({
+        messageSid: opts.messageSid,
+        phone,
+        body: transcript,
+        profileName: opts.profileName ?? null,
+        esTranscripcion: true,
+      });
+    }
     let answer: string;
     try {
       answer = await runWhatsappAgent({ companyId, company, history, userText: transcript, conversationId, userId, cartera });
@@ -469,6 +483,8 @@ export async function POST(req: Request) {
       history,
       userId: sender.userId,
       cartera,
+      messageSid,
+      profileName: params.ProfileName ?? null,
     });
     return ack();
   }
@@ -515,6 +531,16 @@ export async function POST(req: Request) {
       body,
       providerSid: messageSid || null,
     },
+  });
+
+  // Tap de intake (docs/INTAKE.md): registra el pedido crudo para el pipeline
+  // de extracción. Fire-and-forget y no-op sin INTAKE_ENABLED=1 — nunca
+  // bloquea ni rompe la respuesta a Twilio.
+  void captureWhatsappInbound({
+    messageSid,
+    phone,
+    body,
+    profileName: params.ProfileName ?? null,
   });
 
   // Fire-and-forget the agent + REST delivery; respond to Twilio immediately.
