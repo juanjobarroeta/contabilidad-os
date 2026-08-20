@@ -20,6 +20,7 @@ import { classifyInvoice } from "./classify-egreso";
 import { esComprobanteDeEgreso, espejo, signoDeComprobante } from "./nota-credito";
 import { cargarContextoTaller, costoCompraRefacciones, piernasIngresoTaller } from "./taller";
 import { esVentaAlCosto } from "./intercambio";
+import { cargarReglasSerie, reglaDeSerie } from "./serie-cuenta";
 import {
   cargarIndiceFamilia,
   cuentaDeFamilia,
@@ -222,6 +223,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // La mezcla de venta de refacciones del período reparte después el costo de
   // las compras (fase 2f): la factura del proveedor no dice a qué mostrador va.
   const mezclaRefa = { taller: 0, mostrador: 0 };
+  // FASE 2h: la serie del folio como decisión del contador — sólo llena el
+  // fallback, nunca desvía lo que la unidad o el taller ya resolvieron.
+  const reglasSerie = await cargarReglasSerie(companyId);
 
   for (const inv of ingresos) {
     const ref = inv.uuid ?? inv.id;
@@ -267,7 +271,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       : (piernasIngresoTaller(inv.id, inv.subtotal, taller)?.map((p) => ({
           id: p.cuenta.id,
           monto: p.monto,
-        })) ?? [{ id: accVentas.id, monto: inv.subtotal }]);
+        })) ?? [
+          { id: (reglaDeSerie(inv.serie, reglasSerie)?.cuenta ?? accVentas).id, monto: inv.subtotal },
+        ]);
     for (const pierna of piernasVenta) {
       drafts.push({
         ...base,
@@ -1121,7 +1127,7 @@ export async function balanzaPreview(
   // ── INGRESO (mismas reglas que postMonth) ────────────────────────────────
   const ingresos = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    select: { id: true, subtotal: true, total: true, tipoSat: true },
+    select: { id: true, subtotal: true, total: true, tipoSat: true, serie: true },
   });
   // FASE 2: mismas reglas de familia que postMonth (venta a 4101-00XX y costo
   // DR 5101-00XX / CR 1301-00XX), para que la balanza preliminar no difiera
@@ -1134,6 +1140,9 @@ export async function balanzaPreview(
   // La mezcla de venta de refacciones del período reparte después el costo de
   // las compras (fase 2f): la factura del proveedor no dice a qué mostrador va.
   const mezclaRefa = { taller: 0, mostrador: 0 };
+  // FASE 2h: la serie del folio como decisión del contador — sólo llena el
+  // fallback, nunca desvía lo que la unidad o el taller ya resolvieron.
+  const reglasSerie = await cargarReglasSerie(companyId);
   for (const inv of ingresos) {
     const delta = inv.total - inv.subtotal;
     const esEgreso = esComprobanteDeEgreso(inv);
@@ -1150,7 +1159,9 @@ export async function balanzaPreview(
       : (piernasIngresoTaller(inv.id, inv.subtotal, taller)?.map((p) => ({
           id: p.cuenta.id,
           monto: p.monto,
-        })) ?? [{ id: accVentas.id, monto: inv.subtotal }]);
+        })) ?? [
+          { id: (reglaDeSerie(inv.serie, reglasSerie)?.cuenta ?? accVentas).id, monto: inv.subtotal },
+        ]);
     for (const pierna of piernasVenta) {
       addMov(pierna.id, espejo("ABONO", esEgreso), pierna.monto);
       const signoRefa = esEgreso ? -1 : 1;
@@ -1482,7 +1493,7 @@ export async function estadoResultadosPreview(
   // ── INGRESO → Ventas (subtotal) ──────────────────────────────────────────
   const ingresos = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    select: { id: true, subtotal: true, tipoSat: true },
+    select: { id: true, subtotal: true, tipoSat: true, serie: true },
   });
   // FASE 2: la venta de una unidad aporta a la cuenta de su FAMILIA y su costo
   // de compra aporta al COSTO de la familia (5101-00XX) — el preview refleja
@@ -1490,6 +1501,9 @@ export async function estadoResultadosPreview(
   const idxFamilia = await cargarIndiceFamilia(companyId);
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
   const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
+  // FASE 2h: la serie del folio como decisión del contador — sólo llena el
+  // fallback, nunca desvía lo que la unidad o el taller ya resolvieron.
+  const reglasSerie = await cargarReglasSerie(companyId);
   for (const inv of ingresos) {
     // La nota de egreso RESTA ingreso (aplicación de anticipo, devolución,
     // descuento): aporta con signo negativo, no como una venta más.
@@ -1500,13 +1514,13 @@ export async function estadoResultadosPreview(
       ? ((alCosto ? cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_INTERCAMBIO, unidad.sufijo) : null) ??
         cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo))
       : null;
-    const ctaVenta = ctaVentaFam ?? accVentas;
+    const ctaVenta = ctaVentaFam ?? reglaDeSerie(inv.serie, reglasSerie)?.cuenta ?? accVentas;
     const piernasVenta = ctaVentaFam
       ? null
       : piernasIngresoTaller(inv.id, inv.subtotal, taller);
     for (const pierna of piernasVenta ?? [{ cuenta: ctaVenta, monto: inv.subtotal }]) {
       contributions.push({
-        tipo: pierna.cuenta.tipo ?? ctaVenta.tipo,
+        tipo: pierna.cuenta.tipo ?? ctaVenta.tipo ?? accVentas.tipo,
         cuentaSAT: pierna.cuenta.cuentaSAT,
         subcuenta: pierna.cuenta.subcuenta ?? null,
         nombre: pierna.cuenta.nombre,
