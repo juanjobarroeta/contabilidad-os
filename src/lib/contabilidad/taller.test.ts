@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  costoCompraRefacciones,
   cuentaPorNombre,
   resolverCuentasTaller,
   repartoTaller,
+  type ContextoTaller,
   type CuentaTaller,
 } from "./taller";
 
@@ -15,6 +17,10 @@ const CATALOGO: CuentaTaller[] = [
   { id: "e", cuentaSAT: "4401-0009-0000", nombre: "VENTA REFACCIONES TALLER" },
   { id: "f", cuentaSAT: "4401-0010-0000", nombre: "VENTA ACCESORIOS TALLER" },
   { id: "g", cuentaSAT: "4401-0013-0000", nombre: "VENTA REFACCIONES TALLER GARANTIAS" },
+  { id: "h", cuentaSAT: "5401-0001-0000", nombre: "COSTO REFACCIONES" },
+  { id: "i", cuentaSAT: "5401-0009-0000", nombre: "COSTO REFACCIONES TALLER" },
+  { id: "j", cuentaSAT: "5401-0013-0000", nombre: "COSTO REFACCIONES TALLER GARANTIAS" },
+  { id: "k", cuentaSAT: "5401-0015-0000", nombre: "RECUPERACION SERV INTERNOS" },
 ];
 
 describe("cuentaPorNombre()", () => {
@@ -90,5 +96,45 @@ describe("repartoTaller()", () => {
   it("falta la cuenta destino → null, cae al fallback y no se inventa nada", () => {
     const sinRefa = { ...ctas, refaccionesTaller: null };
     expect(repartoTaller(1000, { manoObra: 1, refacciones: 1 }, true, sinRefa)).toBeNull();
+  });
+});
+
+describe("costoCompraRefacciones() — fase 2f", () => {
+  const ctas = resolverCuentasTaller(CATALOGO);
+  const ctx = (compras: [string, number][]): ContextoTaller => ({
+    ctas, servicios: new Map(), refacciones: new Set(), comprasRefaccion: new Map(compras),
+  });
+
+  it("las cuentas de costo salen del catálogo por nombre, como las de venta", () => {
+    expect(ctas.costoRefaccionesTaller?.cuentaSAT).toBe("5401-0009-0000");
+    expect(ctas.costoRefaccionesMostrador?.cuentaSAT).toBe("5401-0001-0000");
+  });
+
+  it("reparte la compra con la mezcla de venta del período", () => {
+    const p = costoCompraRefacciones("c1", 10000, { taller: 800, mostrador: 200 }, ctx([["c1", 10000]]))!;
+    expect(p.map((x) => [x.cuenta.cuentaSAT, x.monto])).toEqual([
+      ["5401-0009-0000", 8000],
+      ["5401-0001-0000", 2000],
+    ]);
+  });
+
+  it("nunca carga más de lo que dice el comprobante", () => {
+    const p = costoCompraRefacciones("c2", 500, { taller: 1, mostrador: 0 }, ctx([["c2", 900]]))!;
+    expect(p.reduce((a, x) => a + x.monto, 0)).toBe(500);
+  });
+
+  it("sin ventas de refacción en el período, la compra es de taller", () => {
+    const p = costoCompraRefacciones("c3", 300, { taller: 0, mostrador: 0 }, ctx([["c3", 300]]))!;
+    expect(p).toHaveLength(1);
+    expect(p[0].cuenta.cuentaSAT).toBe("5401-0009-0000");
+  });
+
+  it("un CFDI sin entrada de almacén no es costo de refacción", () => {
+    expect(costoCompraRefacciones("otro", 1000, { taller: 1, mostrador: 1 }, ctx([["c4", 10]]))).toBeNull();
+  });
+
+  it("las piernas suman exactamente el importe repartido", () => {
+    const p = costoCompraRefacciones("c5", 1000.01, { taller: 1, mostrador: 2 }, ctx([["c5", 1000.01]]))!;
+    expect(p.reduce((a, x) => a + x.monto, 0)).toBeCloseTo(1000.01, 2);
   });
 });

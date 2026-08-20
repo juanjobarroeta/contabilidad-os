@@ -14,7 +14,7 @@ import { PrismaClient } from "@prisma/client";
 import { balanzaPreview } from "../src/lib/contabilidad/posting";
 
 const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
-const SERIES = ["401", "4301", "4401"];
+const SERIES = ["401", "4301", "4401", "1314", "5401", "601"];
 
 const money = (n: number) => (n < 0 ? "-" : " ") + "$" + Math.abs(Math.round(n)).toLocaleString("en-US");
 

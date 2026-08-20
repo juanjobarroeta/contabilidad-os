@@ -42,6 +42,9 @@ export type CuentasTaller = {
   manoObra: CuentaTaller | null;
   refaccionesTaller: CuentaTaller | null;
   refaccionesMostrador: CuentaTaller | null;
+  /** FASE 2f — el costo de la refacción, del lado de la compra. */
+  costoRefaccionesTaller: CuentaTaller | null;
+  costoRefaccionesMostrador: CuentaTaller | null;
 };
 
 export type PiernaTaller = { cuenta: CuentaTaller; monto: number };
@@ -71,6 +74,18 @@ const SIN_GARANTIA = ["GARANTIA"];
 
 export function resolverCuentasTaller(cuentas: CuentaTaller[]): CuentasTaller {
   return {
+    costoRefaccionesTaller: cuentaPorNombre(
+      cuentas,
+      "5401",
+      ["REFACCIONES", "TALLER"],
+      [...SIN_GARANTIA, "ACCESORIOS"]
+    ),
+    costoRefaccionesMostrador: cuentaPorNombre(
+      cuentas,
+      "5401",
+      ["REFACCIONES"],
+      [...SIN_GARANTIA, "TALLER", "ACCESORIOS", "RECUPERACION"]
+    ),
     manoObra: cuentaPorNombre(cuentas, "4301", ["MANO DE OBRA", "SERVICIO"], SIN_GARANTIA),
     refaccionesTaller: cuentaPorNombre(
       cuentas,
@@ -132,12 +147,16 @@ export interface ContextoTaller {
   /** Corte del DMS por CFDI (varias órdenes en una factura se suman). */
   servicios: Map<string, { manoObra: number; refacciones: number }>;
   refacciones: Set<string>;
+  /** Importe de refacción que ENTRÓ al almacén con cada CFDI de compra. */
+  comprasRefaccion: Map<string, number>;
 }
 
 const SIN_TALLER: CuentasTaller = {
   manoObra: null,
   refaccionesTaller: null,
   refaccionesMostrador: null,
+  costoRefaccionesTaller: null,
+  costoRefaccionesMostrador: null,
 };
 
 /** Todo lo que el motor necesita del taller para un lote de CFDIs. */
@@ -146,14 +165,18 @@ export async function cargarContextoTaller(
   invoiceIds: string[]
 ): Promise<ContextoTaller> {
   if (invoiceIds.length === 0) {
-    return { ctas: SIN_TALLER, servicios: new Map(), refacciones: new Set() };
+    return { ctas: SIN_TALLER, servicios: new Map(), refacciones: new Set(), comprasRefaccion: new Map() };
   }
   const [cuentas, servicios, refas] = await Promise.all([
     prisma.chartAccount.findMany({
       where: {
         companyId,
         isActive: true,
-        OR: [{ cuentaSAT: { startsWith: "4301" } }, { cuentaSAT: { startsWith: "4401" } }],
+        OR: [
+          { cuentaSAT: { startsWith: "4301" } },
+          { cuentaSAT: { startsWith: "4401" } },
+          { cuentaSAT: { startsWith: "5401" } },
+        ],
       },
       select: { id: true, cuentaSAT: true, nombre: true, subcuenta: true, tipo: true },
     }),
@@ -163,7 +186,7 @@ export async function cargarContextoTaller(
     }),
     prisma.refaccionMovimiento.findMany({
       where: { invoiceId: { in: invoiceIds } },
-      select: { invoiceId: true },
+      select: { invoiceId: true, tipo: true, cantidad: true, montoUnitario: true },
     }),
   ]);
   const porInvoice = new Map<string, { manoObra: number; refacciones: number }>();
@@ -174,11 +197,61 @@ export async function cargarContextoTaller(
     acc.refacciones += s.refacciones ?? 0;
     porInvoice.set(s.invoiceId, acc);
   }
-  return {
-    ctas: resolverCuentasTaller(cuentas),
-    servicios: porInvoice,
-    refacciones: new Set(refas.map((r) => r.invoiceId!).filter(Boolean)),
-  };
+  const refacciones = new Set<string>();
+  const comprasRefaccion = new Map<string, number>();
+  for (const r of refas) {
+    if (!r.invoiceId) continue;
+    refacciones.add(r.invoiceId);
+    if (r.tipo === "ENTRADA_COMPRA") {
+      const imp = Math.abs((r.cantidad ?? 0) * (r.montoUnitario ?? 0));
+      comprasRefaccion.set(r.invoiceId, (comprasRefaccion.get(r.invoiceId) ?? 0) + imp);
+    }
+  }
+  return { ctas: resolverCuentasTaller(cuentas), servicios: porInvoice, refacciones, comprasRefaccion };
+}
+
+/**
+ * FASE 2f — la refacción comprada es COSTO, no gasto general.
+ *
+ * Por qué el costo entra por la COMPRA y no por la venta: el movimiento de
+ * salida del DMS trae el PRECIO, no el costo —vale exactamente el subtotal del
+ * CFDI que lo ampara, ratio 1.000 en 1,236 facturas de mostrador— y el costo
+ * unitario del catálogo no es utilizable (valuar las salidas de 2025 con él da
+ * $1,138M contra $36.6M de venta). Sin costo unitario confiable no hay costeo
+ * perpetuo, así que el reconocimiento es ANALÍTICO: la compra del período es el
+ * costo del período. Es válido mientras el inventario sea estable, y en MARGOM
+ * lo es — la CE mueve $5.8M netos en 1314 sobre 42 meses, contra compras de
+ * $37.6M en un solo año. Medido 2025: compras $37.6M contra $35.1M declarados
+ * en 5401 (7% de distancia).
+ *
+ * El destino (taller o mostrador) no lo sabe la factura del proveedor, así que
+ * se reparte con la MEZCLA DE VENTA del propio período, que sí se deriva.
+ */
+export function costoCompraRefacciones(
+  invoiceId: string,
+  subtotal: number,
+  mezcla: { taller: number; mostrador: number },
+  ctx: ContextoTaller
+): PiernaTaller[] | null {
+  const entrada = ctx.comprasRefaccion.get(invoiceId);
+  if (!entrada || entrada <= 0.005) return null;
+  // Nunca más que el CFDI: si el DMS reporta de más, manda el comprobante.
+  const monto = centavos(Math.min(entrada, subtotal));
+  if (monto <= 0.005) return null;
+  const suma = mezcla.taller + mezcla.mostrador;
+  const propTaller = suma > 0.005 ? mezcla.taller / suma : 1;
+  const aTaller = centavos(monto * propTaller);
+  const aMostrador = centavos(monto - aTaller);
+  const piernas: PiernaTaller[] = [];
+  if (aTaller > 0.005) {
+    if (!ctx.ctas.costoRefaccionesTaller) return null;
+    piernas.push({ cuenta: ctx.ctas.costoRefaccionesTaller, monto: aTaller });
+  }
+  if (aMostrador > 0.005) {
+    if (!ctx.ctas.costoRefaccionesMostrador) return null;
+    piernas.push({ cuenta: ctx.ctas.costoRefaccionesMostrador, monto: aMostrador });
+  }
+  return piernas.length > 0 ? piernas : null;
 }
 
 /** Las piernas de ingreso del taller para un CFDI, o null si no es del taller. */

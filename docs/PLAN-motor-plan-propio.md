@@ -201,6 +201,41 @@ Nota operativa: **`OrdenServicio` está vacío** (0 renglones) — el taller no 
 opera en ContabilidadOS. Lo que existe son 29,382 `ServicioVenta` derivadas de
 CFDIs (2018-11 → 2026-08, todas con factura) y 151,853 `RefaccionMovimiento`.
 
+## Fase 2f — la refacción comprada es costo, no gasto
+
+**2026-08-19.** El taller ya vendía en sus cuentas (2d) pero su costo seguía
+cayendo en el mayor genérico de gastos. La CE declara $35.1M en 5401 sólo en
+2025; lo derivado tenía cero.
+
+**Por qué el costo entra por la COMPRA y no por la venta.** El movimiento de
+salida del DMS trae el PRECIO, no el costo: vale exactamente el subtotal del
+CFDI que lo ampara —ratio 1.000 en 1,236 facturas de mostrador de 2025— así que
+usarlo como costo daría margen cero. Y el costo unitario del catálogo no sirve:
+valuar las salidas de 2025 con `Refaccion.ultimoCosto` da **$1,138M** contra
+$36.6M de venta, 31× fuera; el promedio ponderado por refacción a partir de las
+entradas da **$1,056M**, igual de inservible (las cantidades de entrada y salida
+no comparten convención).
+
+Sin costo unitario confiable no hay costeo perpetuo, así que el reconocimiento
+es **analítico**: la compra del período es el costo del período. Es válido
+mientras el inventario sea estable, y aquí lo es — la CE mueve $5.8M netos en
+1314 sobre 42 meses contra compras de $37.6M en un solo año. Contraste 2025:
+compras de refacción $37.6M contra $35.1M declarados en 5401, **7% de
+distancia**. Se carga sólo la parte del CFDI que entró al almacén; el resto del
+comprobante (fletes, otros conceptos) sigue su clasificación. El destino
+—taller o mostrador— no lo sabe la factura del proveedor, así que se reparte con
+la mezcla de venta derivada del propio período.
+
+## Lo que falta, con nombre y tamaño (medido sobre 2025)
+
+| hueco | tamaño | ¿derivable sin bancos? |
+|---|---:|---|
+| Tipo de venta de unidad: 5131 intercambio, 5141 flotilla, 5291 usados — todo cae hoy en 5101 | $757.7M | **Sí**: la SERIE del CFDI lo dice (NV\*, UN\*, SM\*). Falta el mapa serie→cuenta por empresa |
+| Gasto al catálogo propio: $392.9M en el mayor 601 contra $170.5M repartidos en sus 6xxx | ~$222M | Parcial: el concepto se deriva, el DEPARTAMENTO no lo dice el CFDI (8 copias por concepto) |
+| Garantías de taller (4401-0013, 4301-0003) | $17.4M/ventana | Sí, si se reconoce a la planta como contraparte |
+| Hojalatería y pintura (4301-0002/0005) | $7.95M/ventana | No hay señal en el CFDI |
+| CxC / CxP / IVA en flujo | ~$9,600M de saldo | **No**: necesita movimientos bancarios |
+
 ## Fase 3 — rubros exactos, cada uno con su checksum CE
 
 En orden de tractabilidad (datos completos de nuestro lado):
