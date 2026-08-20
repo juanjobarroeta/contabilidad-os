@@ -82,6 +82,97 @@ Implementada (2026-08-16):
   por período — lo corre el usuario) y comparar la serie 1301/4101/5101
   derivada contra `CeBalanzaMes`.
 
+## Fase 2c — el comprobante de EGRESO es un espejo, no una venta
+
+**Hallazgo del 2026-08-18** (medido al ir a comparar taller contra CE). El
+motor seleccionaba `tipo: INGRESO, status: STAMPED` sin mirar nunca `tipoSat`:
+toda nota de crédito emitida posteaba como venta. Una nota de $19.8M quedaba
+CARGO clientes $19.8M / ABONO ventas $17.1M / ABONO IVA causado $2.7M — el
+asiento de una venta, con el signo al revés.
+
+Lo que lo vuelve grave no es el signo sino el **anticipo**: 10,024 de las
+15,660 notas emitidas en la ventana de la CE traen TipoRelacion **07,
+aplicación de anticipo** ($531.2M de $628.3M). En el procedimiento del SAT el
+anticipo se factura completo, la operación total se factura completa otra vez,
+y la nota de egreso resta el anticipo. Es la nota —no la factura— la que evita
+el doble conteo. Al posteala como ingreso, **cada anticipo quedaba contado dos
+veces**, con su IVA causado y su cargo a clientes (parte del saldo de CxC
+derivado que no baja nunca).
+
+Tamaño, ventana 2023-01…2026-06 de la CE:
+
+| concepto | asientos | importe | efecto al corregir |
+|---|---:|---:|---:|
+| Notas emitidas (E, INGRESO) a ingresos | 13,448 | $628.3M abonados | vuelco de $1,256.5M |
+| Notas recibidas (E, EGRESO) a gasto | 975 | $59.3M cargados | vuelco de $118.7M |
+| Divergencia total del grupo 4 vs CE | | **$1,288.5M** | queda ~$32M |
+
+`nota-credito.ts` centraliza la regla (`esComprobanteDeEgreso`, `espejo`,
+`signoDeComprobante`) y los tres consumidores la aplican igual: `postMonth`,
+`balanzaPreview` y `estadoResultadosPreview`. El costo de venta NO se revierte
+en la nota: saber si la unidad volvió al piso lo dice el inventario, no el CFDI.
+
+Verificado sin escribir (`scripts/dry-notas-credito-margom.ts`, grupo 4 del mes):
+
+| período | CE declarado | ledger de hoy | motor con espejo | hoy vs CE | espejo vs CE |
+|---|---:|---:|---:|---:|---:|
+| 2024-06 | $59.4M | $53.9M | $54.3M | −$5.50M | −$5.04M |
+| 2025-03 | $242.7M | $277.0M | $241.7M | +$34.28M | −$0.97M |
+| 2025-06 | $170.1M | $213.1M | $171.6M | +$43.02M | +$1.48M |
+| 2026-03 | $97.0M | $160.3M | $97.7M | +$63.32M | **+$0.66M** |
+| 2026-06 | $116.5M | $180.8M | $123.6M | +$64.31M | +$7.15M |
+
+Falta el **re-posteo histórico** para que el ledger lo refleje (lo corre el
+usuario; `scripts/repostear-margom.ts`).
+
+## Fase 2d — taller: el motor no conoce ni servicio ni refacciones
+
+Misma medición. La CE declara mano de obra y refacciones en sus propias
+cuentas; lo derivado tiene **cero** en todas ellas y lo manda al fallback 401:
+
+| cuenta | CE 2023-01…2026-06 | derivado |
+|---|---:|---:|
+| 4301 venta mano de obra (servicio, H y P, garantías) | $37.95M | $0 |
+| 4401 venta refacciones y accesorios | $95.69M | $0 |
+| 5301 costo mano de obra | −$8.20M | $0 |
+| 5401 costo refacciones | −$62.83M | $0 |
+
+**Resuelto para el ingreso** (`taller.ts`). Dos decisiones, las dos leídas de
+los datos del contador:
+
+- **Qué cuenta**: la serie no basta —4401 tiene seis subcuentas activas—, así
+  que desempata el NOMBRE del catálogo del propio contador, como lo haría él:
+  «VENTA REFACCIONES TALLER» para lo que sale de una orden, «VENTA REFACCIONES»
+  para el mostrador. Sin candidata única → null y el asiento cae al fallback:
+  adivinar subcuenta es peor que no resolver.
+- **Cómo se parte**: una orden factura mano de obra Y refacciones en el mismo
+  CFDI. `ServicioVenta` ya guarda ese corte, y se usa como PROPORCIÓN escalada
+  al subtotal, así las piernas suman el subtotal exacto aunque el corte del DMS
+  venga incompleto (cuadra al centavo en 16,452 de 24,042 órdenes, 80% del
+  importe).
+
+Dry-run contra la CE (`scripts/dry-taller-margom.ts`, neto del mes):
+
+| cuenta | 2025-06 CE | 2025-06 derivado | 2026-03 CE | 2026-03 derivado |
+|---|---:|---:|---:|---:|
+| 4401-0009 refacciones taller | $4,390,160 | $4,137,568 | $3,119,193 | $4,334,806 |
+| 4401-0001 refacciones mostrador | $866,300 | $283,077 | $1,039,569 | $506,520 |
+| 4301-0001 mano de obra servicio | $1,190,887 | $1,698,308 | $1,492,027 | $2,485,695 |
+| **serie 4301 completa** | **$1,945,505** | $1,698,308 | **$2,470,068** | **$2,485,695** |
+
+Lo que falta para cerrar el resto (queda nombrado, no perdido):
+- **Garantías** (4401-0013, 4301-0003: $17.4M en la ventana) — el destino
+  depende de reconocer a la PLANTA como contraparte del CFDI.
+- **Hojalatería y pintura** (4301-0002/0005: $7.95M) — hoy cae en mano de obra
+  de servicio; el corte necesita una señal que el CFDI no trae.
+- **El costo del taller** (5301/5401, $71M declarados) — necesita costeo de
+  inventario de refacciones: `Refaccion.ultimoCosto` es el último costo, no el
+  del día de la venta.
+
+Nota operativa: **`OrdenServicio` está vacío** (0 renglones) — el taller no se
+opera en ContabilidadOS. Lo que existe son 29,382 `ServicioVenta` derivadas de
+CFDIs (2018-11 → 2026-08, todas con factura) y 151,853 `RefaccionMovimiento`.
+
 ## Fase 3 — rubros exactos, cada uno con su checksum CE
 
 En orden de tractabilidad (datos completos de nuestro lado):
