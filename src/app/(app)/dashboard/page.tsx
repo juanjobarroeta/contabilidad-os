@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   AlertTriangle, Clock, CheckCircle2, CalendarDays,
@@ -389,6 +389,18 @@ export default function InicioPage() {
     return () => clearInterval(id);
   }, [descargando, fetchDashboard]);
 
+  // El refresco es silencioso en pantalla, así que un lector de pantalla no se
+  // entera cuando las cifras por fin llegan. Anunciamos sólo la transición
+  // descargando → listo (no cada tick del intervalo) vía la región aria-live.
+  const [aviso, setAviso] = useState("");
+  const descargandoPrev = useRef(false);
+  useEffect(() => {
+    if (descargandoPrev.current && !descargando) {
+      setAviso("Tablero actualizado: la descarga de CFDI del SAT terminó.");
+    }
+    descargandoPrev.current = descargando;
+  }, [descargando]);
+
   if (companyLoading) return <div className="p-8 text-sm text-cos-ink-faint">Cargando…</div>;
 
   if (!activeCompany) {
@@ -412,6 +424,12 @@ export default function InicioPage() {
 
   return (
     <div className="mx-auto max-w-[1000px] px-4 py-6 sm:px-8 sm:py-8">
+      {/* Región viva para lectores de pantalla: anuncia cuando el refresco
+          silencioso termina de traer los datos del SAT. */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {aviso}
+      </div>
+
       {/* greeting */}
       <div className="mb-[18px]">
         <p className="text-[15px] text-cos-ink-faint">Hola, esto es lo importante de</p>

@@ -87,6 +87,13 @@
   body {
     @apply bg-cos-canvas text-cos-ink;
   }
+  /* Anillo de foco global para navegación con teclado. Los componentes que
+     traen su propio anillo (p. ej. Button, con focus-visible:outline-none +
+     ring) lo anulan por elemento; esto es el respaldo para todo lo demás. */
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
   /* Los controles nativos no heredan fondo ni color: sin clases de fondo o
      texto explícitas el UA pinta fondo blanco — ilegible en modo oscuro
      (p. ej. los inputs de salario del importador de nómina). Base: fondo
