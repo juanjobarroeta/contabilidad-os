@@ -188,7 +188,7 @@ export function Landing() {
           {PASOS.map((p) => (
             <div key={p.n}>
               <div className={`font-mono text-sm font-bold ${ACENTO}`}>{p.n}</div>
-              <h3 className="mt-2 text-lg font-semibold text-white">{p.title}</h3>
+              <h2 className="mt-2 text-lg font-semibold text-white">{p.title}</h2>
               <p className={`mt-1.5 text-sm leading-relaxed ${SUAVE}`}>{p.desc}</p>
             </div>
           ))}
