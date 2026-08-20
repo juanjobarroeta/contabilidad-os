@@ -45,9 +45,12 @@ export function EstadoResultadosPanel({
 
   return (
     <div>
-      <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
+      {/* Controles de pantalla (período y descarga): fuera del papel. */}
+      <div className="print:hidden">
+        <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
+      </div>
 
-      <div className="mb-3 flex justify-end">
+      <div className="mb-3 flex justify-end print:hidden">
         <BotonExcel
           href={`/api/contabilidad/estado-resultados?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}
           label="Estado de resultados en Excel"

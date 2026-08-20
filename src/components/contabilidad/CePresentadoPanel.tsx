@@ -90,7 +90,7 @@ export function CePresentadoPanel({ companyId }: { companyId: string }) {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3 print:hidden">
         <select
           value={sel ? `${sel.anio}-${sel.mes}` : ""}
           onChange={(e) => {
@@ -120,6 +120,15 @@ export function CePresentadoPanel({ companyId }: { companyId: string }) {
           Leído de la balanza presentada al SAT — no del motor de posteo.
         </span>
       </div>
+
+      {/* En papel, el período y la vista viven en el select y el toggle de
+          arriba (ocultos al imprimir); esta línea los repone como hechos. */}
+      <p className="hidden print:block mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-cos-ink-soft">
+        {sel ? `${MESES[sel.mes]} ${sel.anio}` : ""}
+        {" · "}
+        {vista === "resultados" ? "Estado de resultados" : "Balance general"}
+        {" · leído de la balanza presentada al SAT"}
+      </p>
 
       {loading || !cuentas || !resumen ? (
         <div className="flex items-center gap-2 text-sm text-cos-ink-soft py-8">

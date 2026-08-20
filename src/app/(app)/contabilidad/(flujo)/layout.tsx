@@ -58,8 +58,8 @@ export default function FlujoLayout({ children }: { children: ReactNode }) {
 
   return (
     <PeriodProvider>
-      <div className="mx-auto max-w-[1100px] px-6 py-7">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="print-report mx-auto max-w-[1100px] px-6 py-7 print:max-w-none print:p-0">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 print:hidden">
           <nav aria-label="Flujo de cierre" className="flex flex-wrap items-center gap-1">
             {PASOS.map(({ href, num, label }) => {
               const activo = pathname.startsWith(href);

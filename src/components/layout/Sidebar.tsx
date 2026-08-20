@@ -187,7 +187,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   return (
     <>
       {/* Mobile top bar with hamburger (hidden on md+) */}
-      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-cos-card border-b border-cos-line flex items-center gap-3 px-4">
+      <div className="md:hidden print:hidden fixed top-0 inset-x-0 z-30 h-14 bg-cos-card border-b border-cos-line flex items-center gap-3 px-4">
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Abrir menú"
@@ -214,7 +214,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
       {/* Backdrop (mobile only, when open) */}
       {mobileOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/40"
+          className="md:hidden print:hidden fixed inset-0 z-40 bg-black/40"
           onClick={() => setMobileOpen(false)}
           aria-hidden
         />
@@ -222,7 +222,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
 
       <aside
         className={cn(
-          "bg-cos-card border-r border-cos-line flex flex-col h-full w-60 shrink-0",
+          "print:hidden bg-cos-card border-r border-cos-line flex flex-col h-full w-60 shrink-0",
           // Desktop: static in the flex row. Mobile: off-canvas drawer.
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:transition-transform",
           mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
