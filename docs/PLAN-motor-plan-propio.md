@@ -281,6 +281,41 @@ que es la definición misma de una venta al costo.
   cae al 3%. No es un artefacto contable: es un semestre en que el piso se
   desbalanceó. Vale la pena preguntarlo, pero el motor ya lo sigue mes a mes.
 
+## Fase 2h — la serie del folio como decisión del contador
+
+**2026-08-20.** Queda un ingreso que ningún documento clasifica solo: el
+**back-end** de la agencia —comisión por colocar el financiamiento, GAP y UDIS,
+garantía extendida, incentivos de la planta—. Sale por CFDIs que no amparan
+unidad ni orden de taller, y el concepto no alcanza: la misma clave de producto
+sirve para un anticipo y para una comisión. La CE lo declara en 4501 y lo
+derivado tenía **cero** ($70.1M en la ventana, $35.2M sólo en 2025).
+
+Lo que sí lo dice es la **serie del folio**, porque el DMS la usa para separar
+justo eso. Medido sobre 2025:
+
+| serie | qué es | derivado | declarado | |
+|---|---|---:|---:|---:|
+| `NCA*` | notas de cargo → 4501 | $35,583,312 | $35,249,323 | **100.9%** |
+| `SM*` | seminuevos → 4291 | $44,970,659 | $44,547,901 | **100.9%** |
+
+Pero una serie es convención de CADA empresa, no regla del SAT: «NCA» no
+significa nada fuera de este DMS. Por eso no vive en el código sino como
+DECISIÓN, en la misma tabla de overrides del contador con el prefijo `serie:`
+(`serie:NCA` → 4501-0008). Una empresa sin reglas se comporta exactamente como
+hoy. Gana el prefijo más largo, así que refinar por sucursal —`serie:NCAZ` a
+comisión de apertura mientras `serie:NCA` queda en diversos— no necesita código,
+sólo otra decisión.
+
+La regla se aplica SÓLO donde el motor ya se rindió: después de la unidad
+(familia) y del taller. Una decisión mal escrita no puede desviar una venta que
+hoy resuelve bien; a lo más, llena el fallback.
+
+Queda anotado lo que la regla NO resuelve: el reparto DENTRO de la serie. Todo
+`NCA*` cae hoy en ING DIVERSOS aunque el contador lo abra en comisión de
+apertura, UDIS y garantías extendidas; todo `SM*` en USADOS AFECTOS aunque él
+separe afectos de no afectos. El total del rubro sí cuadra, y el corte fino es
+una decisión suya —el mecanismo ya la admite.
+
 ## Fase 3 — rubros exactos, cada uno con su checksum CE
 
 En orden de tractabilidad (datos completos de nuestro lado):
