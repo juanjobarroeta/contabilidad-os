@@ -38,6 +38,7 @@ const REPORTES = [
 
 // Tareas que viven fuera del flujo pero pertenecen a la sección.
 const TAREAS = [
+  { href: "/contabilidad/catalogo", label: "Catálogo y mapeo" },
   { href: "/contabilidad/apertura", label: "Saldos iniciales" },
   { href: "/contabilidad/polizas", label: "Pólizas y auxiliares (XML)" },
 ] as const;
