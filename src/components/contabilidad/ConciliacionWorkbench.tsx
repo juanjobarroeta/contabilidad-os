@@ -1,0 +1,515 @@
+"use client";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mesa de conciliación split-view (idioma del deck People, p10): movimientos
+// del banco a la izquierda, CFDIs del mismo sentido a la derecha, un depósito
+// contra varias facturas cuadrando a cero. Todo sobre APIs existentes:
+//
+//   GET  /api/bancos/conciliacion            → el mes (movimientos sin conciliar)
+//   GET  /api/bancos/[cuenta]/match?txId=    → candidatos puntuados + impuestos
+//   PATCH /api/bancos/transactions/[txId]    → match / match-multiple /
+//                                              match-impuesto (ConciliacionDetalle)
+//   POST /api/bancos/[cuenta]/match          → motor de auto-conciliación
+//
+// Las porciones se asignan en el orden en que se palomean los CFDIs: cada uno
+// toma el mínimo entre su saldo y lo que queda del movimiento. Quedar por
+// debajo se permite (cobro parcial / comisión) — el backend lo devuelve como
+// advertencia y aquí se muestra.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Check, Landmark, Loader2, Sparkles, X } from "lucide-react";
+import { Money } from "@/components/ui/Money";
+import { StatTile, StatStrip } from "@/components/ui";
+import { cn } from "@/lib/utils";
+
+// ── Tipos espejo de las APIs ──────────────────────────────────────────────────
+interface Movimiento {
+  id: string;
+  fecha: string;
+  descripcion: string;
+  /** Firmado: + depósito, − retiro. */
+  monto: number;
+  cuentaBancariaId: string;
+}
+interface Cuenta {
+  bankAccountId: string;
+  etiqueta: string;
+}
+interface ConciliacionMes {
+  movimientosBanco: { id: string }[];
+  movimientosNoRegistrados: Movimiento[];
+  totalNoRegistrados: number;
+  cuentas: Cuenta[];
+  sinCuentaBancos: boolean;
+}
+interface Candidato {
+  id: string;
+  uuid: string | null;
+  fecha: string;
+  folio: string | null;
+  serie: string | null;
+  metodoPago: string | null;
+  total: number;
+  cliente: string;
+  rfc: string;
+  confidence: "alta" | "media" | "baja";
+  alreadyMatched: boolean;
+  matchedAmount: number;
+  remainingBalance: number;
+}
+interface CandidatoImpuesto {
+  id: string;
+  etiqueta: string;
+  montoEsperado: number | null;
+  fechaLimitePago: string | null;
+  confidence: "alta" | "media" | "baja";
+}
+
+const CONFIANZA: Record<Candidato["confidence"], { t: string; cls: string }> = {
+  alta: { t: "alta", cls: "bg-cos-jade-tint text-cos-jade-ink" },
+  media: { t: "media", cls: "bg-cos-amber-tint text-cos-amber-ink" },
+  baja: { t: "baja", cls: "bg-cos-slate-tint text-cos-ink-soft" },
+};
+
+const fFecha = (s: string) =>
+  new Date(s).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "2-digit" });
+
+export function ConciliacionWorkbench({
+  companyId,
+  year,
+  month,
+  onApplied,
+}: {
+  companyId: string;
+  year: number;
+  month: number;
+  /** Se llama tras aplicar una conciliación (para refrescar el papel de abajo). */
+  onApplied?: () => void;
+}) {
+  const [data, setData] = useState<ConciliacionMes | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [selTx, setSelTx] = useState<Movimiento | null>(null);
+  const [cand, setCand] = useState<{ candidates: Candidato[]; impuestos: CandidatoImpuesto[] } | null>(null);
+  const [candCargando, setCandCargando] = useState(false);
+  const [seleccion, setSeleccion] = useState<string[]>([]); // ids en orden de palomeo
+  const [selImpuesto, setSelImpuesto] = useState<string | null>(null);
+  const [aplicando, setAplicando] = useState(false);
+  const [autoCorriendo, setAutoCorriendo] = useState(false);
+  const [aviso, setAviso] = useState<React.ReactNode>("");
+  const [error, setError] = useState("");
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    try {
+      const res = await fetch(`/api/bancos/conciliacion?companyId=${companyId}&year=${year}&month=${month}`);
+      const d = await res.json();
+      setData(res.ok && d?.movimientosNoRegistrados ? d : null);
+    } catch {
+      setData(null);
+    } finally {
+      setCargando(false);
+    }
+  }, [companyId, year, month]);
+
+  useEffect(() => {
+    setSelTx(null); setCand(null); setSeleccion([]); setSelImpuesto(null);
+    cargar();
+  }, [cargar]);
+
+  // Candidatos del movimiento elegido.
+  useEffect(() => {
+    if (!selTx) return;
+    let vivo = true;
+    setCandCargando(true);
+    setCand(null); setSeleccion([]); setSelImpuesto(null);
+    fetch(`/api/bancos/${selTx.cuentaBancariaId}/match?txId=${selTx.id}`)
+      .then((r) => r.json())
+      .then((d) => { if (vivo && Array.isArray(d?.candidates)) setCand({ candidates: d.candidates, impuestos: d.impuestos ?? [] }); })
+      .catch(() => {})
+      .finally(() => { if (vivo) setCandCargando(false); });
+    return () => { vivo = false; };
+  }, [selTx]);
+
+  const etiquetaCuenta = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of data?.cuentas ?? []) m.set(c.bankAccountId, c.etiqueta);
+    return m;
+  }, [data]);
+
+  // Asignación en orden de palomeo: cada CFDI toma min(su saldo, lo restante).
+  const asignaciones = useMemo(() => {
+    if (!selTx || !cand) return [];
+    let restante = Math.abs(selTx.monto);
+    const out: { c: Candidato; aplicar: number }[] = [];
+    for (const id of seleccion) {
+      const c = cand.candidates.find((x) => x.id === id);
+      if (!c) continue;
+      const base = c.remainingBalance > 0 ? c.remainingBalance : c.total;
+      const aplicar = Math.min(Math.round(base * 100) / 100, Math.round(restante * 100) / 100);
+      if (aplicar <= 0) continue;
+      out.push({ c, aplicar });
+      restante = Math.round((restante - aplicar) * 100) / 100;
+    }
+    return out;
+  }, [selTx, cand, seleccion]);
+
+  const sumaAplicada = asignaciones.reduce((s, a) => s + a.aplicar, 0);
+  const diferencia = selTx ? Math.round((Math.abs(selTx.monto) - sumaAplicada) * 100) / 100 : 0;
+
+  function toggle(id: string) {
+    setSeleccion((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setSelImpuesto(null);
+  }
+
+  async function conciliar() {
+    if (!selTx || asignaciones.length === 0) return;
+    setAplicando(true); setError(""); setAviso("");
+    try {
+      const body =
+        asignaciones.length === 1
+          ? { action: "match", invoiceId: asignaciones[0].c.id }
+          : {
+              action: "match-multiple",
+              asignaciones: asignaciones.map((a) => ({ invoiceId: a.c.id, monto: a.aplicar })),
+            };
+      const res = await fetch(`/api/bancos/transactions/${selTx.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error ?? "No se pudo conciliar");
+      setAviso(
+        <>
+          Movimiento conciliado contra {asignaciones.length} CFDI
+          {asignaciones.length > 1 ? "s" : ""}.
+          {d?.advertencia && <> {d.advertencia.mensaje}</>}
+          {d?.repSugerido && (
+            <>
+              {" "}Este cobro PPD necesita complemento de pago —{" "}
+              <Link href="/facturas" className="font-medium underline">emitir REP</Link>.
+            </>
+          )}
+        </>
+      );
+      setSelTx(null);
+      await cargar();
+      onApplied?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo conciliar");
+    } finally {
+      setAplicando(false);
+    }
+  }
+
+  async function conciliarImpuesto() {
+    if (!selTx || !selImpuesto) return;
+    setAplicando(true); setError(""); setAviso("");
+    try {
+      const res = await fetch(`/api/bancos/transactions/${selTx.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "match-impuesto", taxDeclarationId: selImpuesto }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error ?? "No se pudo conciliar el impuesto");
+      setAviso("Cargo conciliado contra la declaración — quedó PAGADA.");
+      setSelTx(null);
+      await cargar();
+      onApplied?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo conciliar el impuesto");
+    } finally {
+      setAplicando(false);
+    }
+  }
+
+  async function autoConciliar() {
+    if (!data || data.cuentas.length === 0) return;
+    setAutoCorriendo(true); setError(""); setAviso("");
+    try {
+      let aplicados = 0;
+      for (const c of data.cuentas) {
+        const res = await fetch(`/api/bancos/${c.bankAccountId}/match`, { method: "POST" });
+        const d = await res.json().catch(() => null);
+        if (res.ok) aplicados += d?.autoMatched ?? 0;
+      }
+      setAviso(
+        aplicados > 0
+          ? `Auto-conciliación: ${aplicados} movimiento(s) aplicados con confianza alta.`
+          : "Auto-conciliación: sin matches de confianza alta — los restantes se concilian aquí a mano."
+      );
+      setSelTx(null);
+      await cargar();
+      onApplied?.();
+    } finally {
+      setAutoCorriendo(false);
+    }
+  }
+
+  if (cargando) {
+    return (
+      <div className="mb-6 flex items-center gap-2 rounded-card border border-cos-line bg-cos-card p-8 text-sm text-cos-ink-soft">
+        <Loader2 className="h-4 w-4 animate-spin" /> Cotejando banco contra libro…
+      </div>
+    );
+  }
+  if (!data || data.sinCuentaBancos) return null;
+
+  const total = data.movimientosBanco.length;
+  const sin = data.movimientosNoRegistrados.length;
+  const pct = total > 0 ? ((total - sin) / total) * 100 : 100;
+
+  return (
+    <div className="mb-6">
+      <StatStrip className="sm:grid-cols-3">
+        <StatTile
+          label="Conciliado"
+          tone={sin === 0 ? "jade" : "ink"}
+          value={`${pct.toFixed(1)} %`}
+          sub={`${total - sin} de ${total} movimientos del mes`}
+        />
+        <StatTile label="Sin conciliar" tone={sin === 0 ? "jade" : sin > 20 ? "red" : "amber"} value={sin} />
+        <StatTile
+          label="Por conciliar"
+          tone={sin === 0 ? "jade" : "ink"}
+          value={<Money value={Math.abs(data.totalNoRegistrados)} size={20} />}
+        />
+      </StatStrip>
+
+      {aviso && (
+        <div className="mb-4 flex items-start gap-2 rounded-card bg-cos-jade-tint px-4 py-3 text-sm text-cos-jade-ink">
+          <Check className="mt-0.5 h-4 w-4 shrink-0" /> <span className="flex-1">{aviso}</span>
+          <button onClick={() => setAviso("")} aria-label="Cerrar aviso"><X className="h-3.5 w-3.5" /></button>
+        </div>
+      )}
+      {error && (
+        <div className="mb-4 flex items-center gap-2 rounded-card bg-cos-red-tint px-4 py-3 text-sm text-cos-red-ink">
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError("")} aria-label="Cerrar error"><X className="h-3.5 w-3.5" /></button>
+        </div>
+      )}
+
+      {sin === 0 ? (
+        <div className="rounded-card border border-cos-line bg-cos-card px-5 py-4 text-sm text-cos-ink-soft">
+          Todos los movimientos del mes están conciliados — la compuerta del cierre está abierta.
+        </div>
+      ) : (
+        <div className="rounded-card border border-cos-line bg-cos-card">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cos-line px-5 py-3.5">
+            <h2 className="text-sm font-semibold text-cos-ink">Mesa de conciliación</h2>
+            <button
+              onClick={autoConciliar}
+              disabled={autoCorriendo}
+              className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-[13px] font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+            >
+              {autoCorriendo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Correr auto-conciliación
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-cos-line">
+            {/* ── Izquierda: movimientos del banco ── */}
+            <section>
+              <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
+                Movimientos del banco · {sin} sin conciliar
+              </p>
+              <ul className="max-h-[430px] overflow-y-auto">
+                {data.movimientosNoRegistrados.map((m) => {
+                  const activo = selTx?.id === m.id;
+                  return (
+                    <li key={m.id}>
+                      <button
+                        onClick={() => setSelTx(activo ? null : m)}
+                        className={cn(
+                          "flex w-full items-baseline justify-between gap-3 border-b border-cos-line-soft px-5 py-2.5 text-left",
+                          activo
+                            ? "bg-cos-brand-tint shadow-[inset_3px_0_0_var(--brand)]"
+                            : "hover:bg-cos-paper"
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13px] font-medium text-cos-ink">
+                            {m.descripcion || "(sin descripción)"}
+                          </span>
+                          <span className="font-mono text-[11px] text-cos-ink-faint">
+                            {fFecha(m.fecha)}
+                            {etiquetaCuenta.get(m.cuentaBancariaId) && ` · ${etiquetaCuenta.get(m.cuentaBancariaId)}`}
+                          </span>
+                        </span>
+                        <Money
+                          value={m.monto}
+                          className={cn("text-[13px]", m.monto < 0 && "text-cos-red-ink")}
+                        />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
+            {/* ── Derecha: CFDIs candidatos ── */}
+            <section className="border-t border-cos-line lg:border-t-0">
+              <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
+                {selTx
+                  ? `CFDI candidatos · ${seleccion.length} seleccionados`
+                  : "CFDI candidatos"}
+              </p>
+              {!selTx ? (
+                <div className="flex h-full min-h-[200px] items-center justify-center px-8 py-10 text-center text-sm text-cos-ink-soft">
+                  <span>
+                    <Landmark className="mx-auto mb-2 h-6 w-6 opacity-30" />
+                    Elige un movimiento a la izquierda para ver sus candidatos —
+                    del mismo sentido, ±30 días, puntuados por monto, fecha e identidad.
+                  </span>
+                </div>
+              ) : candCargando ? (
+                <p className="flex items-center gap-2 px-5 py-6 text-sm text-cos-ink-soft">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Buscando candidatos…
+                </p>
+              ) : !cand || (cand.candidates.length === 0 && cand.impuestos.length === 0) ? (
+                <p className="px-5 py-6 text-sm text-cos-ink-soft">
+                  Sin CFDIs candidatos en ±30 días con monto compatible. Puede ser un traspaso propio,
+                  una comisión o un documento que aún no se sincroniza.
+                </p>
+              ) : (
+                <>
+                  <ul className="max-h-[330px] overflow-y-auto">
+                    {cand.candidates.map((c) => {
+                      const idx = seleccion.indexOf(c.id);
+                      const marcado = idx >= 0;
+                      const asig = asignaciones.find((a) => a.c.id === c.id);
+                      return (
+                        <li key={c.id}>
+                          <label
+                            className={cn(
+                              "flex cursor-pointer items-baseline gap-3 border-b border-cos-line-soft px-5 py-2.5",
+                              marcado ? "bg-cos-brand-tint" : "hover:bg-cos-paper"
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={marcado}
+                              onChange={() => toggle(c.id)}
+                              className="translate-y-0.5 accent-[--brand]"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-medium text-cos-ink">
+                                {c.serie || c.folio ? `${c.serie ?? ""}-${c.folio ?? ""} · ` : ""}
+                                {c.cliente}
+                              </span>
+                              <span className="font-mono text-[11px] text-cos-ink-faint">
+                                {fFecha(c.fecha)}
+                                {c.metodoPago && ` · ${c.metodoPago}`}
+                                {c.alreadyMatched && c.remainingBalance > 0 && (
+                                  <> · saldo <Money value={c.remainingBalance} className="text-[11px]" muted /></>
+                                )}
+                              </span>
+                            </span>
+                            <span className="text-right">
+                              <Money value={c.total} className="block text-[13px]" />
+                              {marcado && asig && asig.aplicar < c.total && (
+                                <span className="block font-mono text-[11px] text-cos-brand-ink">
+                                  aplica <Money value={asig.aplicar} className="text-[11px] text-cos-brand-ink" />
+                                </span>
+                              )}
+                            </span>
+                            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", CONFIANZA[c.confidence].cls)}>
+                              {CONFIANZA[c.confidence].t}
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  {/* Impuestos: el cargo paga una declaración (SIPARE / línea de captura). */}
+                  {selTx.monto < 0 && cand.impuestos.length > 0 && (
+                    <div className="border-t border-cos-line-soft">
+                      <p className="px-5 pt-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
+                        ¿O paga una declaración?
+                      </p>
+                      <ul>
+                        {cand.impuestos.map((i) => (
+                          <li key={i.id}>
+                            <label className={cn("flex cursor-pointer items-baseline gap-3 px-5 py-2", selImpuesto === i.id ? "bg-cos-brand-tint" : "hover:bg-cos-paper")}>
+                              <input
+                                type="radio"
+                                name="impuesto"
+                                checked={selImpuesto === i.id}
+                                onChange={() => { setSelImpuesto(i.id); setSeleccion([]); }}
+                                className="translate-y-0.5 accent-[--brand]"
+                              />
+                              <span className="flex-1 text-[13px] text-cos-ink">{i.etiqueta}</span>
+                              {i.montoEsperado != null && <Money value={i.montoEsperado} className="text-[13px]" />}
+                              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", CONFIANZA[i.confidence].cls)}>
+                                {CONFIANZA[i.confidence].t}
+                              </span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* ── Suma aplicada y acción ── */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-cos-line bg-cos-paper px-5 py-3">
+                    {selImpuesto ? (
+                      <>
+                        <span className="text-[13px] text-cos-ink-soft">
+                          El cargo queda MATCHED y la declaración PAGADA, en una sola transacción.
+                        </span>
+                        <button
+                          onClick={conciliarImpuesto}
+                          disabled={aplicando}
+                          className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-4 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                        >
+                          {aplicando && <Loader2 className="h-4 w-4 animate-spin" />}
+                          Conciliar impuesto
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-[13px]">
+                          <span className="text-cos-ink-soft">Suma aplicada </span>
+                          <Money value={sumaAplicada} className="text-[13px]" />
+                          <span className="mx-2 text-cos-line">·</span>
+                          <span className="text-cos-ink-soft">Diferencia contra el {selTx.monto > 0 ? "depósito" : "retiro"} </span>
+                          <Money
+                            value={diferencia}
+                            className={cn("text-[13px]", diferencia === 0 ? "text-cos-jade-ink" : "text-cos-amber-ink")}
+                          />
+                          {diferencia === 0 && sumaAplicada > 0 && (
+                            <Check className="ml-1 inline h-3.5 w-3.5 text-cos-jade-ink" />
+                          )}
+                          {diferencia > 0 && sumaAplicada > 0 && (
+                            <span className="ml-2 text-[11px] text-cos-ink-faint">
+                              se permite parcial; queda advertencia
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={conciliar}
+                          disabled={aplicando || asignaciones.length === 0}
+                          className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-4 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                        >
+                          {aplicando && <Loader2 className="h-4 w-4 animate-spin" />}
+                          Conciliar selección
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <p className="border-t border-cos-line-soft px-5 py-2 text-[11px] text-cos-ink-faint">
+                    Al conciliar queda el rastro en bitácora: quién aplicó, a qué hora y contra qué CFDI.
+                  </p>
+                </>
+              )}
+            </section>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
