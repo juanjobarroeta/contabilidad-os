@@ -1,18 +1,19 @@
 "use client";
 
-// Stub temporal — este segmento se construye en la migración del flujo de
-// cierre (rama redesign/cierre-flow). Ver docs/BRIEF-UX-contabilidad.md.
+// Saldos interempresa dentro del flujo de cierre. La posición neta es
+// acumulada, así que no depende del período global.
 
+import { useCompany } from "@/components/layout/CompanyProvider";
 import { FlowPageHeader } from "@/components/contabilidad/FlowPageHeader";
+import { SaldosInterempresaPanel } from "@/components/contabilidad/SaldosInterempresaPanel";
 
-export default function Page() {
+export default function SaldosPage() {
+  const { activeCompany } = useCompany();
+  if (!activeCompany) return null;
   return (
     <div>
       <FlowPageHeader title="Saldos interempresa" />
-      <div className="rounded-card border border-cos-line bg-cos-card p-8 text-sm text-cos-ink-soft">
-        En construcción — mientras tanto, esta vista sigue disponible en la
-        página anterior de Contabilidad.
-      </div>
+      <SaldosInterempresaPanel companyId={activeCompany.id} />
     </div>
   );
 }

@@ -1,18 +1,21 @@
 "use client";
 
-// Stub temporal — este segmento se construye en la migración del flujo de
-// cierre (rama redesign/cierre-flow). Ver docs/BRIEF-UX-contabilidad.md.
+// Balanza de comprobación dentro del flujo de cierre: usa el período global
+// y permite el drill-down al auxiliar de cada cuenta.
 
+import { useCompany } from "@/components/layout/CompanyProvider";
+import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { FlowPageHeader } from "@/components/contabilidad/FlowPageHeader";
+import { BalanzaPanel } from "@/components/contabilidad/BalanzaPanel";
 
-export default function Page() {
+export default function BalanzaPage() {
+  const { activeCompany } = useCompany();
+  const { year, month, setPeriod } = usePeriod();
+  if (!activeCompany) return null;
   return (
     <div>
       <FlowPageHeader title="Balanza" />
-      <div className="rounded-card border border-cos-line bg-cos-card p-8 text-sm text-cos-ink-soft">
-        En construcción — mientras tanto, esta vista sigue disponible en la
-        página anterior de Contabilidad.
-      </div>
+      <BalanzaPanel companyId={activeCompany.id} year={year} month={month} onChangePeriod={setPeriod} />
     </div>
   );
 }
