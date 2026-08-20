@@ -19,3 +19,4 @@ export {
   TableEmpty,
 } from "./Table";
 export { Skeleton, SkeletonText, SkeletonCard, SkeletonRows } from "./Skeleton";
+export { StatTile, StatStrip } from "./StatTile";

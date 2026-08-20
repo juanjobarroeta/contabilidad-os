@@ -274,6 +274,11 @@ export default function AjustesPage() {
       <FlowPageHeader
         title="Nueva póliza"
         subtitle={`${label} · fuente MANUAL`}
+        context={
+          manuales
+            ? `${manuales.length} pólizas manuales en el período · ${cuentas.length} cuentas en el catálogo`
+            : undefined
+        }
         actions={
           <span className="rounded-full bg-cos-brand-tint px-3 py-1.5 text-[12px] font-medium text-cos-brand-ink">
             Fuente MANUAL — el re-posteo nunca la pisa
