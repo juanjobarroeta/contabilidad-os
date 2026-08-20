@@ -155,6 +155,11 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
             onKeyDown={onKeyDown}
             placeholder="Buscar pantallas, empresas, RFC…"
             aria-label="Buscar"
+            role="combobox"
+            aria-expanded={filas.length > 0}
+            aria-controls="cmd-listbox"
+            aria-activedescendant={filas.length > 0 ? `cmd-opt-${cursor}` : undefined}
+            aria-autocomplete="list"
             className="h-12 flex-1 bg-transparent text-[15px] text-cos-ink outline-none placeholder:text-cos-ink-faint"
           />
           <kbd className="hidden rounded border border-cos-line px-1.5 py-0.5 font-mono text-[10px] text-cos-ink-faint sm:block">
@@ -162,7 +167,13 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
           </kbd>
         </div>
 
-        <div ref={listRef} className="max-h-[52vh] overflow-y-auto py-2">
+        <div
+          ref={listRef}
+          id="cmd-listbox"
+          role="listbox"
+          aria-label="Resultados"
+          className="max-h-[52vh] overflow-y-auto py-2"
+        >
           {filas.length === 0 && (
             <p className="px-4 py-8 text-center text-sm text-cos-ink-soft">
               Nada coincide con «{q}».
@@ -174,13 +185,19 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
             const nuevoGrupo = i === 0 || grupoDe(filas[i - 1]) !== grupo;
             const activo = i === cursor;
             return (
-              <div key={f.kind === "empresa" ? `e-${f.id}` : `d-${f.d.href}`}>
+              <div key={f.kind === "empresa" ? `e-${f.id}` : `d-${f.d.href}`} role="presentation">
                 {nuevoGrupo && (
-                  <p className="px-4 pb-1 pt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.13em] text-cos-ink-faint">
+                  <p
+                    role="presentation"
+                    className="px-4 pb-1 pt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.13em] text-cos-ink-faint"
+                  >
                     {grupo}
                   </p>
                 )}
                 <button
+                  id={`cmd-opt-${i}`}
+                  role="option"
+                  aria-selected={activo}
                   data-idx={i}
                   onMouseEnter={() => setCursor(i)}
                   onClick={() => ejecutar(f)}
