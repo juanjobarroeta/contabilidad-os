@@ -18,7 +18,7 @@ import { COE_CODES } from "./catalog";
 import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { classifyInvoice } from "./classify-egreso";
 import { esComprobanteDeEgreso, espejo, signoDeComprobante } from "./nota-credito";
-import { cargarContextoTaller, piernasIngresoTaller } from "./taller";
+import { cargarContextoTaller, costoCompraRefacciones, piernasIngresoTaller } from "./taller";
 import {
   cargarIndiceFamilia,
   cuentaDeFamilia,
@@ -216,6 +216,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // FASE 2d: lo que no es unidad puede ser taller — mano de obra a 4301 y
   // refacciones a 4401, partidas con el corte del DMS. Ver taller.ts.
   const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
+  // La mezcla de venta de refacciones del período reparte después el costo de
+  // las compras (fase 2f): la factura del proveedor no dice a qué mostrador va.
+  const mezclaRefa = { taller: 0, mostrador: 0 };
 
   for (const inv of ingresos) {
     const ref = inv.uuid ?? inv.id;
@@ -262,6 +265,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         monto: pierna.monto,
         tipo: espejo("ABONO", esEgreso),
       });
+      const signoRefa = esEgreso ? -1 : 1;
+      if (pierna.id === taller.ctas.refaccionesTaller?.id) mezclaRefa.taller += signoRefa * pierna.monto;
+      if (pierna.id === taller.ctas.refaccionesMostrador?.id) mezclaRefa.mostrador += signoRefa * pierna.monto;
     }
 
     // Costo de venta de la unidad: sólo cuando las TRES cuentas de la familia
@@ -469,6 +475,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // costo se reconoce al VENDER (ver el costo de venta en el flujo de
   // ingresos), no al comprar.
   const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
+  const tallerCompras = await cargarContextoTaller(companyId, egresos.map((i) => i.id));
 
   for (const inv of egresos) {
     const ref = inv.uuid ?? inv.id;
@@ -506,12 +513,29 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
           );
     const gastoAccountId = ctaInvFam ? ctaInvFam.id : await resolveCached(classification.cuenta);
 
-    drafts.push({
-      ...base,
-      chartAccountId: gastoAccountId,
-      monto: inv.subtotal,
-      tipo: espejo("CARGO", esEgreso),
-    });
+    // FASE 2f: la parte del CFDI que entró como refacción es COSTO; el resto
+    // (fletes u otros conceptos del mismo comprobante) sigue su clasificación.
+    const costoRefa =
+      !inv.overrideCuenta && inv.naturaleza !== "INVERSION" && !ctaInvFam
+        ? costoCompraRefacciones(inv.id, inv.subtotal, mezclaRefa, tallerCompras)
+        : null;
+    const montoRefa = costoRefa?.reduce((a, p) => a + p.monto, 0) ?? 0;
+    for (const pierna of costoRefa ?? []) {
+      drafts.push({
+        ...base,
+        chartAccountId: pierna.cuenta.id,
+        monto: pierna.monto,
+        tipo: espejo("CARGO", esEgreso),
+      });
+    }
+    if (inv.subtotal - montoRefa > 0.005) {
+      drafts.push({
+        ...base,
+        chartAccountId: gastoAccountId,
+        monto: inv.subtotal - montoRefa,
+        tipo: espejo("CARGO", esEgreso),
+      });
+    }
     if (delta > 0.005) {
       drafts.push({
         ...base,
@@ -1095,6 +1119,9 @@ export async function balanzaPreview(
   const cuentasCxc = await cargarCuentasCxc(companyId);
   const modulosIngreso = await conjuntosModulo(companyId, ingresos.map((i) => i.id));
   const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
+  // La mezcla de venta de refacciones del período reparte después el costo de
+  // las compras (fase 2f): la factura del proveedor no dice a qué mostrador va.
+  const mezclaRefa = { taller: 0, mostrador: 0 };
   for (const inv of ingresos) {
     const delta = inv.total - inv.subtotal;
     const esEgreso = esComprobanteDeEgreso(inv);
@@ -1108,7 +1135,12 @@ export async function balanzaPreview(
           id: p.cuenta.id,
           monto: p.monto,
         })) ?? [{ id: accVentas.id, monto: inv.subtotal }]);
-    for (const pierna of piernasVenta) addMov(pierna.id, espejo("ABONO", esEgreso), pierna.monto);
+    for (const pierna of piernasVenta) {
+      addMov(pierna.id, espejo("ABONO", esEgreso), pierna.monto);
+      const signoRefa = esEgreso ? -1 : 1;
+      if (pierna.id === taller.ctas.refaccionesTaller?.id) mezclaRefa.taller += signoRefa * pierna.monto;
+      if (pierna.id === taller.ctas.refaccionesMostrador?.id) mezclaRefa.mostrador += signoRefa * pierna.monto;
+    }
     if (delta > 0.005) addMov(accIvaTrasladado.id, espejo("ABONO", esEgreso), delta);
     else if (delta < -0.005) addMov(accIsrPagadoTerceros.id, espejo("CARGO", esEgreso), -delta);
     if (!esEgreso && unidad && ctaVentaFam && unidad.costo > 0.005) {
@@ -1140,6 +1172,7 @@ export async function balanzaPreview(
     include: { items: { select: { claveProdServ: true, importe: true } } },
   });
   const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
+  const tallerCompras = await cargarContextoTaller(companyId, egresos.map((i) => i.id));
   const accCache = new Map<string, string | null>();
   async function resolveCachedSafe(code: string): Promise<string | null> {
     if (accCache.has(code)) return accCache.get(code) ?? null;
@@ -1169,7 +1202,13 @@ export async function balanzaPreview(
     const gastoId = ctaInvFam ? ctaInvFam.id : await resolveCachedSafe(classification.cuenta);
     if (!gastoId) continue;
     const esEgreso = esComprobanteDeEgreso(inv);
-    addMov(gastoId, espejo("CARGO", esEgreso), inv.subtotal);
+    const costoRefa =
+      !inv.overrideCuenta && inv.naturaleza !== "INVERSION" && !ctaInvFam
+        ? costoCompraRefacciones(inv.id, inv.subtotal, mezclaRefa, tallerCompras)
+        : null;
+    const montoRefa = costoRefa?.reduce((a, p) => a + p.monto, 0) ?? 0;
+    for (const pierna of costoRefa ?? []) addMov(pierna.cuenta.id, espejo("CARGO", esEgreso), pierna.monto);
+    if (inv.subtotal - montoRefa > 0.005) addMov(gastoId, espejo("CARGO", esEgreso), inv.subtotal - montoRefa);
     if (delta > 0.005) addMov(accIvaAcreditable.id, espejo("CARGO", esEgreso), delta);
     else if (delta < -0.005) addMov(accIsrRetenidoHonorarios.id, espejo("ABONO", esEgreso), -delta);
     addMov(accProveedores.id, espejo("ABONO", esEgreso), inv.total);
