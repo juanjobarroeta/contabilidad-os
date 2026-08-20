@@ -19,20 +19,24 @@ import type { CompanyPlan } from "@prisma/client";
 // Mapeo plan comprado → CompanyPlan (tier de capacidades):
 //   BASICO      → AUTOMATIZADO (sincronización SAT/Syntage; sin banco/WhatsApp)
 //   PROFESIONAL → PRO          (+ conciliación bancaria + WhatsApp)
-//   DESPACHO    → DESPACHO     (+ revisión humana / SLA, multiempresa)
-// El tier ASISTENTE no se vende por Stripe (tier interno/degradado).
+// Los tiers ASISTENTE y DESPACHO no se venden por Stripe.
 //
-// DESPACHO ya NO se ofrece en la UI (onboarding ni facturación): los precios
-// a la medida se negocian y se aplican con un código de descuento
-// (src/lib/billing/codigos-descuento.ts) sobre Básico/Profesional. Se mantiene
-// aquí — y en el webhook y la sincronización de cantidad — por compatibilidad
-// con cualquier suscripción DESPACHO existente.
+// DESPACHO ya NO es un plan facturable: el modelo per-unit ($299 MXN por
+// empresa, mínimo 10) se retiró por completo — los precios a despachos se
+// negocian y se aplican con un código de descuento
+// (src/lib/billing/codigos-descuento.ts) sobre Básico/Profesional. El TIER
+// DESPACHO (CompanyPlan) sigue existiendo como nivel de capacidades y se
+// asigna a mano por el operador, nunca por checkout. No quedaba ninguna
+// suscripción activa con ese Price al retirarlo (0 empresas con tier
+// DESPACHO en producción); si un webhook legado llegara con
+// metadata.plan="DESPACHO", parsePlanFacturable devuelve null y el evento
+// se ignora sin romper.
 //
 // Los MONTOS nunca se codifican aquí: viven en los objetos Price de Stripe
 // (moneda incluida) referenciados por las variables de entorno STRIPE_PRICE_*.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const PLANES_FACTURABLES = ["BASICO", "PROFESIONAL", "DESPACHO"] as const;
+export const PLANES_FACTURABLES = ["BASICO", "PROFESIONAL"] as const;
 export type PlanFacturable = (typeof PLANES_FACTURABLES)[number];
 
 export function parsePlanFacturable(v: unknown): PlanFacturable | null {
@@ -44,14 +48,12 @@ export function parsePlanFacturable(v: unknown): PlanFacturable | null {
 export const PLAN_FACTURABLE_LABEL: Record<PlanFacturable, string> = {
   BASICO: "Básico",
   PROFESIONAL: "Profesional",
-  DESPACHO: "Despacho",
 };
 
 /** Plan comprado → tier de capacidades (lo que lee src/lib/planes.ts). */
 export const PLAN_A_TIER: Record<PlanFacturable, CompanyPlan> = {
   BASICO: "AUTOMATIZADO",
   PROFESIONAL: "PRO",
-  DESPACHO: "DESPACHO",
 };
 
 // Intervalo de cobro. Cada intervalo tiene su propio objeto Price en Stripe:
@@ -77,12 +79,10 @@ const PRICE_ENV_VAR: Record<IntervaloFacturable, Record<PlanFacturable, string>>
   mensual: {
     BASICO: "STRIPE_PRICE_BASICO",
     PROFESIONAL: "STRIPE_PRICE_PRO",
-    DESPACHO: "STRIPE_PRICE_DESPACHO",
   },
   anual: {
     BASICO: "STRIPE_PRICE_BASICO_ANUAL",
     PROFESIONAL: "STRIPE_PRICE_PRO_ANUAL",
-    DESPACHO: "STRIPE_PRICE_DESPACHO_ANUAL",
   },
 };
 
@@ -134,17 +134,4 @@ export function priceIdForComplemento(
 ): string | null {
   const v = env[COMPLEMENTO_ENV_VAR[complemento]];
   return v && v.trim() !== "" ? v.trim() : null;
-}
-
-/**
- * Price IDs configurados del plan DESPACHO (mensual y anual). Sirve para
- * reconocer el item per-unit dentro de una suscripción de Stripe al
- * sincronizar la cantidad (ver sync-cantidad-despacho.ts).
- */
-export function despachoPriceIds(
-  env: Record<string, string | undefined> = process.env,
-): string[] {
-  return INTERVALOS_FACTURABLES.map((i) => priceIdForPlan("DESPACHO", i, env)).filter(
-    (p): p is string => p !== null,
-  );
 }

@@ -12,7 +12,6 @@ import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 import { encryptNullable } from "@/lib/crypto";
 import { parseCertExpiry } from "@/lib/fiel";
 import { validarCredencialSat } from "@/lib/sat-fiel";
-import { sincronizarCantidadDespacho } from "@/lib/billing/sync-cantidad-despacho";
 
 // GET /api/companies — sesión web O token de servicio (Authorization: Bearer),
 // para que un satélite con backend propio (JCPT) pueda enumerar sus empresas
@@ -446,10 +445,7 @@ export async function POST(req: Request) {
     });
   }
 
-  // Si el creador paga plan DESPACHO (per-unit por empresa, mínimo 10) en
-  // Stripe, sube la cantidad de su suscripción. Fire-and-forget: nunca lanza
-  // ni bloquea el alta (loguea y registra bitácora "billing.quantity-sync").
-  void sincronizarCantidadDespacho(session.user.id, "empresa.alta");
+
 
   // Auto-seed recurring fiscal obligations now (rather than lazily on first
   // Cumplimiento page load). Uses the CSF's explicit obligaciones when present

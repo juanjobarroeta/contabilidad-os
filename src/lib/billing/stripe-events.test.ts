@@ -187,11 +187,11 @@ describe("applyStripeEvent — customer.subscription.updated", () => {
     expect(users[0].subscriptionStatus).toBe("ACTIVE");
   });
 
-  it("cambio de cantidad (seats DESPACHO) sigue mapeando status y periodo", async () => {
-    // La sincronización de cantidad (sync-cantidad-despacho.ts) dispara un
-    // customer.subscription.updated cuyo items.data trae quantity y price.
-    // El webhook debe seguir mapeando el status y leer current_period_end de
-    // los items sin tropezar con los campos extra.
+  it("cambio de cantidad de una suscripción sigue mapeando status y periodo", async () => {
+    // Un customer.subscription.updated puede traer quantity y price en
+    // items.data (cualquier cambio de partidas lo dispara). El webhook debe
+    // seguir mapeando el status y leer current_period_end de los items sin
+    // tropezar con los campos extra.
     const { repo, users, planesAplicados } = fakeRepo([
       { id: "user_1", stripeCustomerId: "cus_1", stripeSubscriptionId: "sub_1", subscriptionStatus: "PAST_DUE" },
     ]);
