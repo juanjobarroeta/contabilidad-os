@@ -10,6 +10,15 @@ on:
   push:
     branches: [main]
 
+# `playwright` es devDependency SÓLO para que resuelvan los tipos de
+# scripts/recon-sat-portal.ts — un script de reconocimiento que corre una
+# persona a mano, nunca CI. Sin esta bandera su postinstall descargaría los
+# navegadores (cientos de MB, minutos) en CADA job que hace `npm ci`, para algo
+# que aquí no se ejecuta jamás. Va a nivel de workflow: los cuatro jobs
+# instalan dependencias.
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
 jobs:
   test:
     runs-on: ubuntu-latest

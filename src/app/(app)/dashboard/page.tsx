@@ -5,19 +5,26 @@ import Link from "next/link";
 import {
   AlertTriangle, Clock, CheckCircle2, CalendarDays,
   ArrowUpRight, ArrowDownLeft, ChevronRight, Sparkles, ShieldQuestion,
-  Loader2, KeyRound, SearchX, ClipboardCheck,
+  Loader2, KeyRound, SearchX,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Chip, type ChipStatus, Alert, Skeleton, SkeletonCard } from "@/components/ui";
 import { WhatsappNudge } from "@/components/whatsapp/WhatsappNudge";
 import { PendientesDelCierre } from "@/components/contabilidad/PendientesDelCierre";
+import { totalVencido } from "@/lib/obligaciones-monto";
 
 // ── Types (mirrors /api/dashboard) ───────────────────────────────────────────
-interface TrendPoint { label: string; periodo: string; ingresos: number; gastos: number }
 interface UpcomingOb {
   tipo: string; descripcion: string; periodicidad: string;
   dueDate: string; dueDateFmt: string; periodo: string;
   daysUntil: number; status: "OVERDUE" | "SOON" | "UPCOMING"; filed: boolean;
+  /** Pesos a pagar. `null` = no lo sabemos; NO es cero (obligaciones-monto.ts). */
+  monto: number | null;
+  /** `true` = lo calculamos de los CFDIs, no lo acusó el SAT. */
+  montoEstimado: boolean;
+  acuseUrl: string | null;
+  lineaCaptura: string | null;
+  fechaPresentacion: string | null;
 }
 interface EstadoDatos {
   tieneFacturas: boolean;
@@ -50,7 +57,6 @@ interface DashboardData {
     ingresosDelMes: number; gastosDelMes: number; utilidadBruta: number;
     facturasEmitidas: number; facturasRecibidas: number;
   };
-  trend: TrendPoint[];
   upcomingObligations: UpcomingOb[];
 }
 
@@ -79,34 +85,6 @@ function obChip(ob: UpcomingOb): ChipStatus {
 }
 
 // ── 6-month bars (ingresos jade / gastos red) ─────────────────────────────────
-function MiniBars({ trend }: { trend: TrendPoint[] }) {
-  const max = Math.max(...trend.flatMap((t) => [t.ingresos, t.gastos]), 1);
-  return (
-    <div className="flex items-end gap-2.5 h-[150px] pt-2.5">
-      {trend.map((t) => (
-        <div key={t.periodo} className="flex-1 flex flex-col items-center gap-2 h-full">
-          <div className="flex-1 w-full flex items-end justify-center gap-[5px]">
-            <div
-              className="w-[38%] max-w-[22px] rounded-t-[5px] bg-cos-jade min-h-[3px]"
-              style={{ height: `${(t.ingresos / max) * 100}%` }}
-              title={`Ingresos ${t.ingresos.toLocaleString("en-US")}`}
-            />
-            <div
-              className="w-[38%] max-w-[22px] rounded-t-[5px] bg-[oklch(0.78_0.13_25)] min-h-[3px]"
-              style={{ height: `${(t.gastos / max) * 100}%` }}
-              title={`Gastos ${t.gastos.toLocaleString("en-US")}`}
-            />
-          </div>
-          <span className="font-mono text-[11.5px] text-cos-ink-faint">{t.label}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Estado de datos: tarjeta "tablero vacío" tras el onboarding ───────────────
-// Explica por qué no hay cifras todavía: descarga del SAT en curso, e.firma
-// pendiente de configurar, o descarga terminada sin CFDIs encontrados.
 function fmtUltimaSync(iso?: string): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -225,94 +203,152 @@ function EstadoDatosCard({ estado }: { estado: EstadoDatos }) {
 // Aparece cuando ya hay con qué revisar (e.firma + descarga histórica lista) y
 // el contador aún no ha confirmado la apertura. Un dato inicial erróneo se
 // hereda a todos los meses, así que este aviso empuja a revisarlo UNA vez.
-function AperturaNudgeCard() {
-  return (
-    <div className="flex items-start gap-4 rounded-card bg-cos-amber-tint px-6 py-[22px]">
-      <div className="grid h-12 w-12 flex-none place-items-center rounded-[14px] bg-cos-amber text-white">
-        <ClipboardCheck className="h-[26px] w-[26px]" strokeWidth={2.2} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <h2 className="text-[21px] font-semibold tracking-[-0.02em] text-cos-amber-ink">
-          Revisa y confirma tu punto de partida fiscal
-        </h2>
-        <p className="mt-1 text-[14.5px] leading-snug text-cos-amber-ink opacity-90">
-          Tus datos del SAT ya están descargados. Antes de confiar en los cálculos, revisa el
-          saldo a favor de IVA inicial, las pérdidas por amortizar, el coeficiente de utilidad y
-          las obligaciones: un error en el arranque se arrastra a todos los meses.
+/**
+ * La banda principal: la RESPUESTA del tablero, no un aviso.
+ *
+ * Antes decía «Tienes 2 obligaciones vencidas — te decimos exactamente cuánto
+ * y cómo» y no decía cuánto, ni ligaba a ningún lado. No era descuido: las
+ * obligaciones no cargaban importe. Ahora sí (obligaciones-monto.ts), así que
+ * la banda encabeza con el número y el botón.
+ *
+ * Y cuando NO hay nada vencido no queda un hueco: sale EL ENTREGABLE del
+ * contador —qué se presentó, cuándo, por cuánto y su acuse—. Un tablero al
+ * corriente que sólo dice «no hay nada» se lee como producto sin contenido;
+ * uno que enseña el acuse se lee como producto que cumplió.
+ */
+function BandaPrincipal({
+  obligaciones,
+  periodoFmt,
+}: {
+  obligaciones: UpcomingOb[];
+  periodoFmt: string;
+}) {
+  const vencidas = obligaciones.filter((o) => !o.filed && o.status === "OVERDUE");
+  const pendientes = obligaciones.filter((o) => !o.filed && o.status !== "OVERDUE");
+
+  if (vencidas.length > 0) {
+    const { total, conMonto, sinMonto, algunoEstimado } = totalVencido(vencidas);
+    const masVencida = vencidas.reduce((a, b) => (a.daysUntil <= b.daysUntil ? a : b));
+    const dias = Math.abs(masVencida.daysUntil);
+
+    return (
+      <div className="rounded-card border border-cos-red-tint bg-cos-red-tint/40 px-6 py-[22px]">
+        <span className={LBL}>
+          Lo que debes de {vencidas.length === 1 ? masVencida.periodo : "periodos vencidos"}
+        </span>
+
+        {conMonto > 0 ? (
+          <div className="my-2.5 flex flex-wrap items-baseline gap-2.5">
+            <Money value={total} size={40} weight={700} />
+            {algunoEstimado && (
+              <span className="text-[12.5px] text-cos-ink-soft">
+                aproximado — calculado de tus CFDIs, aún sin acuse
+              </span>
+            )}
+          </div>
+        ) : (
+          // Sin importe conocido NO se inventa un cero: se dice qué falta.
+          <p className="my-2.5 text-[22px] font-semibold tracking-[-0.02em] text-cos-red-ink">
+            {vencidas.length === 1 ? "1 obligación vencida" : `${vencidas.length} obligaciones vencidas`}
+            <span className="ml-2 text-[13.5px] font-normal text-cos-ink-soft">
+              sin calcular todavía
+            </span>
+          </p>
+        )}
+
+        <p className="text-[14px] font-semibold text-cos-red-ink">
+          {dias === 0 ? "Vence hoy" : dias === 1 ? "Venció ayer" : `Venció hace ${dias} días`} · corren
+          actualización y recargos (CFF 17-A y 21)
         </p>
-        <div className="mt-3.5">
-          <Link
-            href="/empresa/apertura"
-            className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3.5 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep"
-          >
-            Revisar punto de partida <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
+
+        <div className="mt-3.5 flex flex-col gap-1.5 border-t border-cos-red-tint pt-3.5">
+          {vencidas.map((o) => (
+            <div key={`${o.tipo}-${o.periodo}`} className="flex items-baseline justify-between gap-3 text-[13.5px]">
+              <span className="text-cos-ink-soft">
+                {o.descripcion} · <span className="text-cos-ink-faint">{o.periodo}</span>
+              </span>
+              <span className="shrink-0">
+                {typeof o.monto === "number" ? (
+                  <Money value={o.monto} size={14} weight={600} />
+                ) : (
+                  <span className="text-cos-ink-faint">sin importe</span>
+                )}
+              </span>
+            </div>
+          ))}
+          {sinMonto > 0 && conMonto > 0 && (
+            <p className="text-[12.5px] text-cos-ink-faint">
+              El total no incluye {sinMonto === 1 ? "1 obligación" : `${sinMonto} obligaciones`} sin importe calculado.
+            </p>
+          )}
         </div>
+
+        <Link
+          href="/impuestos"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3.5 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep"
+        >
+          Ver cómo presentarlas <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
-    </div>
-  );
-}
-
-// ── Hero status band ──────────────────────────────────────────────────────────
-function HeroBand({ obligaciones }: { obligaciones: UpcomingOb[] }) {
-  const vencidas = obligaciones.filter((o) => !o.filed && o.status === "OVERDUE").length;
-  const pendientes = obligaciones.filter((o) => !o.filed && o.status !== "OVERDUE").length;
-
-  let tone: "red" | "blue" | "jade";
-  let Icon = CheckCircle2;
-  let title: string;
-  let body: string;
-
-  if (vencidas > 0) {
-    tone = "red"; Icon = AlertTriangle;
-    title = vencidas === 1 ? "Tienes 1 obligación vencida" : `Tienes ${vencidas} obligaciones vencidas`;
-    body = "Preséntala lo antes posible para evitar recargos. Te decimos exactamente cuánto y cómo.";
-  } else if (pendientes > 0) {
-    // "Nada urgente" sólo si de verdad no urge: con un vencimiento a ≤7 días
-    // el tono cambia (el caso típico: las mensuales de junio vencen el 17 de
-    // julio y el tablero decía "tienes tiempo").
-    const masProximo = Math.min(
-      ...obligaciones.filter((o) => !o.filed && o.status !== "OVERDUE").map((o) => o.daysUntil)
     );
-    tone = "blue"; Icon = Clock;
-    title = "Casi listo este mes";
-    body =
-      masProximo <= 7
-        ? `Te queda ${pendientes === 1 ? "1 trámite" : `${pendientes} trámites`} por presentar. El más próximo vence ${
-            masProximo === 0 ? "hoy" : masProximo === 1 ? "mañana" : `en ${masProximo} días`
-          }.`
-        : `Te queda ${pendientes === 1 ? "1 trámite" : `${pendientes} trámites`} por presentar. Nada urgente — tienes tiempo.`;
-  } else {
-    tone = "jade"; Icon = CheckCircle2;
-    title = "Vas al día";
-    body = "Todas tus obligaciones de este mes están presentadas. No tienes que hacer nada.";
   }
 
-  const band = {
-    red: "bg-cos-red-tint",
-    blue: "bg-cos-brand-tint",
-    jade: "bg-cos-jade-tint",
-  }[tone];
-  const tile = {
-    red: "bg-cos-red",
-    blue: "bg-cos-brand",
-    jade: "bg-cos-jade",
-  }[tone];
-  const ink = {
-    red: "text-cos-red-ink",
-    blue: "text-cos-brand-ink",
-    jade: "text-cos-jade-ink",
-  }[tone];
+  if (pendientes.length > 0) {
+    const masProximo = Math.min(...pendientes.map((o) => o.daysUntil));
+    const cuando =
+      masProximo === 0 ? "hoy" : masProximo === 1 ? "mañana" : `en ${masProximo} días`;
+    return (
+      <div className="flex items-center gap-4 rounded-card bg-cos-brand-tint px-6 py-[22px]">
+        <div className="grid h-12 w-12 flex-none place-items-center rounded-[14px] bg-cos-brand text-white">
+          <Clock className="h-[26px] w-[26px]" strokeWidth={2.2} />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-[21px] font-semibold tracking-[-0.02em] text-cos-brand-ink">
+            Nada vencido en {periodoFmt}
+          </h2>
+          <p className="mt-1 text-[14.5px] leading-snug text-cos-brand-ink opacity-90">
+            Te {pendientes.length === 1 ? "queda 1 trámite" : `quedan ${pendientes.length} trámites`} por
+            presentar; el más próximo vence {cuando}.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
+  // Al corriente. El acuse ES el entregable: se enseña, no se esconde.
+  const presentadas = obligaciones.filter((o) => o.filed);
   return (
-    <div className={`flex items-center gap-4 rounded-card px-6 py-[22px] ${band}`}>
-      <div className={`grid h-12 w-12 flex-none place-items-center rounded-[14px] text-white ${tile}`}>
-        <Icon className="h-[26px] w-[26px]" strokeWidth={2.2} />
+    <div className="rounded-card border border-cos-jade-tint bg-cos-jade-tint/40 px-6 py-[22px]">
+      <div className="flex items-center gap-3">
+        <CheckCircle2 className="h-6 w-6 flex-none text-cos-jade-ink" strokeWidth={2.2} />
+        <h2 className="text-[21px] font-semibold tracking-[-0.02em] text-cos-jade-ink">
+          {periodoFmt} está presentado
+        </h2>
       </div>
-      <div>
-        <h2 className={`text-[21px] font-semibold tracking-[-0.02em] ${ink}`}>{title}</h2>
-        <p className={`mt-1 text-[14.5px] leading-snug ${ink} opacity-90`}>{body}</p>
-      </div>
+      {presentadas.length > 0 && (
+        <div className="mt-3.5 flex flex-col gap-1.5 border-t border-cos-jade-tint pt-3.5">
+          {presentadas.map((o) => (
+            <div key={`${o.tipo}-${o.periodo}`} className="flex flex-wrap items-baseline justify-between gap-2 text-[13.5px]">
+              <span className="text-cos-ink-soft">
+                {o.descripcion} · <span className="text-cos-ink-faint">{o.periodo}</span>
+              </span>
+              <span className="flex shrink-0 items-baseline gap-3">
+                {typeof o.monto === "number" && <Money value={o.monto} size={14} weight={600} />}
+                {o.acuseUrl && (
+                  <a
+                    href={o.acuseUrl}
+                    className="font-semibold text-cos-brand-ink hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Acuse ↓
+                  </a>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -324,29 +360,27 @@ const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-co
 // spinner: el layout ya no salta cuando llegan las cifras, y se ve de
 // inmediato CUÁNTO va a aparecer.
 function InicioSkeleton() {
+  // Con la forma REAL del tablero nuevo (banda principal alta + checklist +
+  // una tarjeta), no un spinner: el layout ya no salta cuando llegan las
+  // cifras. Se actualizó junto con la banda — un esqueleto que dibuja la
+  // pantalla anterior es peor que ninguno, porque promete algo que no llega.
   return (
     <div className="space-y-5">
       <div className="rounded-card bg-cos-slate-tint px-6 py-[22px]">
-        <div className="flex items-center gap-4">
-          <Skeleton className="h-12 w-12 flex-none rounded-[14px] bg-cos-line" />
-          <div className="flex-1">
-            <Skeleton className="h-5 w-64 bg-cos-line" />
-            <Skeleton className="mt-2 h-3.5 w-80 bg-cos-line" />
-          </div>
+        <Skeleton className="h-3 w-40 bg-cos-line" />
+        <Skeleton className="mt-3 h-10 w-56 bg-cos-line" />
+        <Skeleton className="mt-3 h-3.5 w-72 bg-cos-line" />
+        <div className="mt-4 space-y-2 border-t border-cos-line pt-4">
+          <Skeleton className="h-3.5 w-full bg-cos-line" />
+          <Skeleton className="h-3.5 w-4/5 bg-cos-line" />
         </div>
-      </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <SkeletonCard />
-        <SkeletonCard />
       </div>
       <div className="rounded-card border border-cos-line bg-cos-card p-5">
-        <Skeleton className="h-3 w-40" />
-        <div className="mt-5 flex h-[150px] items-end gap-2.5">
-          {[55, 80, 40, 95, 65, 75].map((h, i) => (
-            <Skeleton key={i} className="flex-1 rounded-t-[5px]" style={{ height: `${h}%` }} />
-          ))}
-        </div>
+        <Skeleton className="h-3 w-48" />
+        <Skeleton className="mt-4 h-1.5 w-full" />
+        <Skeleton className="mt-4 h-3.5 w-2/3" />
       </div>
+      <SkeletonCard />
     </div>
   );
 }
@@ -419,6 +453,15 @@ export default function InicioPage() {
   const mesLabel = `${MONTHS[month - 1]} ${year}`;
 
   // "Ask AI" — forward-compatible hook the AI panel will listen for once wired.
+  // Lo VENCIDO ya lo encabeza la banda principal, con su importe y su botón.
+  // Repetirlo aquí era la tercera vez que la misma noticia aparecía en la
+  // pantalla (banda, este listado, y de refilón en el checklist del cierre),
+  // ninguna de las tres con la cifra. Este listado se queda con lo que la
+  // banda NO cubre: lo que todavía no vence.
+  const proximos = (data?.upcomingObligations ?? []).filter(
+    (o) => o.filed || o.status !== "OVERDUE"
+  );
+
   const askAi = () =>
     window.dispatchEvent(new CustomEvent("cos:ask-ai", { detail: { companyId: activeCompany.id } }));
 
@@ -451,9 +494,15 @@ export default function InicioPage() {
         <InicioSkeleton />
       ) : (
         <div className="space-y-5">
+          {/* LA RESPUESTA VA PRIMERO. Los avisos —sincronización, WhatsApp,
+              vigencia de la e.firma— son contexto y bajan; antes ocupaban la
+              mejor parte de la pantalla y empujaban el número que el usuario
+              vino a ver. */}
+          <BandaPrincipal
+            obligaciones={data.upcomingObligations}
+            periodoFmt={data.taxThisMonth.periodoFmt}
+          />
           {data.estadoDatos && <EstadoDatosCard estado={data.estadoDatos} />}
-          {data.apertura?.nudge && <AperturaNudgeCard />}
-          <WhatsappNudge />
           {data.fiel && (data.fiel.estado === "vencida" || data.fiel.estado === "por_vencer") && (
             <div className={`flex items-center gap-3 rounded-card px-5 py-3.5 text-[14px] ${data.fiel.estado === "vencida" ? "bg-cos-red-tint text-cos-red-ink" : "bg-cos-amber-tint text-cos-amber-ink"}`}>
               <AlertTriangle className="h-5 w-5 flex-none" />
@@ -464,7 +513,6 @@ export default function InicioPage() {
               </span>
             </div>
           )}
-          <HeroBand obligaciones={data.upcomingObligations} />
 
           {/* El checklist del cierre, justo debajo del estado con el SAT: la
               banda dice cómo vas, esto dice qué te falta hacer. Se omite
@@ -481,7 +529,9 @@ export default function InicioPage() {
           )}
 
           {/* cuánto debo + mes en números */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Una sola tarjeta: la rejilla de dos columnas se quedó sin su
+              pareja al salir "Tu mes en números". */}
+          <div className="grid grid-cols-1 gap-4">
             <Card className="rounded-card border-cos-line p-5 shadow-card">
               {/* El período fiscal en juego puede diferir del mes calendario:
                   del 1 al ~17 se trabaja (y se muestra) el mes anterior. */}
@@ -546,58 +596,6 @@ export default function InicioPage() {
                 )}
             </Card>
 
-            <Card className="rounded-card border-cos-line p-5 shadow-card">
-              <span className={LBL}>Tu mes en números</span>
-              <div className="mt-3.5 grid grid-cols-1 gap-3.5 min-[768px]:grid-cols-3">
-                <div className="flex flex-row items-baseline justify-between gap-2 min-[768px]:flex-col min-[768px]:items-start min-[768px]:justify-start min-[768px]:gap-1">
-                  <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-medium text-cos-ink-faint">
-                    <ArrowUpRight className="h-3.5 w-3.5" /> Te pagaron
-                  </span>
-                  <Money value={data.kpis.ingresosDelMes} size={16} />
-                  <span className="text-[12px] text-cos-ink-faint">
-                    {data.kpis.facturasEmitidas} factura{data.kpis.facturasEmitidas === 1 ? "" : "s"}
-                  </span>
-                </div>
-                <div className="flex flex-row items-baseline justify-between gap-2 min-[768px]:flex-col min-[768px]:items-start min-[768px]:justify-start min-[768px]:gap-1">
-                  <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-medium text-cos-ink-faint">
-                    <ArrowDownLeft className="h-3.5 w-3.5" /> Gastaste
-                  </span>
-                  <Money value={data.kpis.gastosDelMes} size={16} />
-                  <span className="text-[12px] text-cos-ink-faint">
-                    {data.kpis.facturasRecibidas} factura{data.kpis.facturasRecibidas === 1 ? "" : "s"}
-                  </span>
-                </div>
-                <div className="flex flex-row items-baseline justify-between gap-2 min-[768px]:flex-col min-[768px]:items-start min-[768px]:justify-start min-[768px]:gap-1">
-                  <span className="text-[12.5px] font-medium text-cos-ink-faint">Te queda</span>
-                  {data.taxThisMonth.isr == null ? (
-                    <>
-                      <Money value={data.kpis.utilidadBruta} size={16} sign />
-                      <span className="text-[12px] text-cos-ink-faint">antes de impuestos</span>
-                    </>
-                  ) : (
-                    <>
-                      <Money value={data.kpis.utilidadBruta - data.taxThisMonth.isr} size={16} sign />
-                      <span className="text-[12px] text-cos-ink-faint">después de ISR</span>
-                    </>
-                  )}
-                </div>
-              </div>
-              {/* Impuestos que genera la actividad de este mes (motor fiscal real). */}
-              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-cos-line-soft pt-3.5">
-                <span className="text-[12.5px] font-medium text-cos-ink-faint">Impuestos de este mes</span>
-                <span className="inline-flex items-baseline gap-1.5 text-[12.5px] text-cos-ink-soft">
-                  IVA <Money value={data.taxThisMonth.iva} size={14} weight={600} />
-                </span>
-                <span className="inline-flex items-baseline gap-1.5 text-[12.5px] text-cos-ink-soft">
-                  ISR{" "}
-                  {data.taxThisMonth.isr == null
-                    ? <span className="font-semibold text-cos-ink-faint">—</span>
-                    : <Money value={data.taxThisMonth.isr} size={14} weight={600} />}
-                </span>
-                <span className="ml-auto text-[12px] text-cos-ink-faint">se pagan el {data.taxThisMonth.venceFmt}</span>
-              </div>
-            </Card>
-
           </div>
 
           {/* asimilados a salarios — se reconoce solo, sólo si la empresa recibe */}
@@ -632,14 +630,14 @@ export default function InicioPage() {
                 Ver todos
               </Link>
             </div>
-            {data.upcomingObligations.length === 0 ? (
+            {proximos.length === 0 ? (
               <div className="py-6 text-center">
                 <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-cos-jade opacity-70" />
                 <p className="text-[13px] text-cos-ink-faint">Sin trámites próximos en 45 días</p>
               </div>
             ) : (
               <div className="flex flex-col">
-                {data.upcomingObligations.map((ob) => (
+                {proximos.map((ob) => (
                   <div key={ob.tipo} className="flex items-center justify-between gap-3.5 border-t border-cos-line-soft py-3.5 first:border-t-0">
                     <div className="min-w-0">
                       <p className="text-[15px] font-semibold text-cos-ink">{ob.descripcion}</p>
@@ -659,45 +657,9 @@ export default function InicioPage() {
             )}
           </Card>
 
-          {/* trend */}
-          <Card className="rounded-card border-cos-line p-5 shadow-card">
-            <div className="mb-1 flex items-start justify-between gap-3">
-              <div>
-                <span className={LBL}>Cómo te ha ido</span>
-                <p className="mt-1 text-[13px] text-cos-ink-soft">Últimos 6 meses · sin IVA</p>
-              </div>
-              <div className="flex gap-3.5 text-[12.5px] text-cos-ink-soft">
-                <span className="inline-flex items-center gap-1.5"><i className="h-[9px] w-[9px] rounded-[3px] bg-cos-jade" /> Ingresos</span>
-                <span className="inline-flex items-center gap-1.5"><i className="h-[9px] w-[9px] rounded-[3px] bg-cos-red" /> Gastos</span>
-              </div>
-            </div>
-            {data.trend.every((t) => t.ingresos === 0 && t.gastos === 0) ? (
-              <div className="flex h-[150px] items-center justify-center">
-                <div className="text-center">
-                  <p className="text-sm text-cos-ink-soft">Sin facturas en los últimos 6 meses</p>
-                  <Link href="/impuestos?tab=del-mes" className="mt-1 inline-block text-xs text-cos-brand-ink hover:underline">
-                    Importar CFDIs del SAT →
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <MiniBars trend={data.trend} />
-            )}
-            <div className="mt-3.5 grid grid-cols-1 gap-3 border-t border-cos-line-soft pt-3.5 min-[768px]:grid-cols-3">
-              <div className="flex flex-row items-baseline justify-between gap-2 min-[768px]:flex-col min-[768px]:items-start min-[768px]:gap-0.5">
-                <span className="text-[12px] text-cos-ink-faint">Ingresos 6m</span>
-                <Money value={data.trend.reduce((s, t) => s + t.ingresos, 0)} size={16} />
-              </div>
-              <div className="flex flex-row items-baseline justify-between gap-2 min-[768px]:flex-col min-[768px]:items-start min-[768px]:gap-0.5">
-                <span className="text-[12px] text-cos-ink-faint">Gastos 6m</span>
-                <Money value={data.trend.reduce((s, t) => s + t.gastos, 0)} size={16} />
-              </div>
-              <div className="flex flex-row items-baseline justify-between gap-2 min-[768px]:flex-col min-[768px]:items-start min-[768px]:gap-0.5">
-                <span className="text-[12px] text-cos-ink-faint">Te quedó</span>
-                <Money value={data.trend.reduce((s, t) => s + t.ingresos - t.gastos, 0)} size={16} sign />
-              </div>
-            </div>
-          </Card>
+          {/* Invitación a conectar WhatsApp: es crecimiento, no cierre. Baja
+              junto al asistente en vez de competir con el número del mes. */}
+          <WhatsappNudge />
 
           {/* ask AI */}
           <button
