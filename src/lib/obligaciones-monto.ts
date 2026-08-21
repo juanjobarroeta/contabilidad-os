@@ -1,0 +1,115 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// CUÁNTO se debe de una obligación, y si esa cifra es un HECHO o una CUENTA
+// NUESTRA.
+//
+// POR QUÉ EXISTE. El tablero avisaba «Tienes 2 obligaciones vencidas —
+// te decimos exactamente cuánto y cómo» y luego no decía cuánto: el tipo que
+// alimenta esa lista no cargaba importe. No era descuido, era imposible.
+//
+// El dato ya estaba a la mano y se tiraba: el tablero YA consultaba la
+// TaxDeclaration de ese período exacto para saber si estaba presentada, y se
+// quedaba nada más con el booleano.
+//
+// LA DISTINCIÓN QUE IMPORTA. Una declaración PRESENTADA trae el importe que el
+// SAT acusó: es un hecho. Una en borrador o calculada trae lo que ESTE motor
+// dedujo de los CFDIs: es una estimación, y puede moverse cuando entren
+// facturas rezagadas o se concilie el banco. Enseñar las dos con la misma
+// tipografía sería afirmar como cierto algo que no lo es — y a un contador le
+// basta cazar UNA cifra en la que no puede confiar para dejar de confiar en
+// todas. Por eso `estimado` viaja con el monto y la UI está obligada a verlo.
+//
+// SIN FILA NO HAY MONTO. Si no existe declaración para el período, se devuelve
+// null: no se inventa un cero. Cero pesos y "no lo hemos calculado" son cosas
+// distintas, y la segunda no se disfraza de la primera.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Lo mínimo que este motor necesita de una TaxDeclaration (facilita el test). */
+export interface DeclaracionParaMonto {
+  status: string;
+  ivaPagar?: number | null;
+  isrPagar?: number | null;
+  retencionesIsr?: number | null;
+  iepsPagar?: number | null;
+  imssCuotas?: number | null;
+}
+
+export interface MontoObligacion {
+  /** Pesos a pagar. `null` = no lo sabemos (sin declaración, o informativa). */
+  monto: number | null;
+  /**
+   * `true` cuando el monto sale de NUESTRO cálculo (borrador/calculada) y no
+   * del acuse del SAT. La UI debe marcarlo como aproximado.
+   */
+  estimado: boolean;
+}
+
+const SIN_MONTO: MontoObligacion = { monto: null, estimado: false };
+
+/** Una declaración cuenta como hecho consumado sólo si ya se presentó o pagó. */
+function esHecho(status: string): boolean {
+  return status === "FILED" || status === "PAID";
+}
+
+/**
+ * El importe de la obligación según su tipo.
+ *
+ * DIOT y CERO no llevan importe: son informativas. Devolver 0 para ellas
+ * pintaría "$0.00 por pagar" donde lo correcto es no pintar nada.
+ */
+export function montoDeObligacion(
+  tipo: string,
+  decl: DeclaracionParaMonto | null | undefined
+): MontoObligacion {
+  if (!decl) return SIN_MONTO;
+
+  const estimado = !esHecho(decl.status);
+  const de = (v: number | null | undefined): MontoObligacion =>
+    typeof v === "number" && Number.isFinite(v) ? { monto: v, estimado } : SIN_MONTO;
+
+  switch (tipo) {
+    case "IVA_MENSUAL":
+      return de(decl.ivaPagar);
+    case "ISR_PROVISIONAL":
+    case "DECLARACION_ANUAL":
+      return de(decl.isrPagar);
+    case "RETENCIONES_ISR":
+      return de(decl.retencionesIsr);
+    case "IEPS_MENSUAL":
+      return de(decl.iepsPagar);
+    case "IMSS":
+      return de(decl.imssCuotas);
+    // Informativas: no hay nada que pagar.
+    case "DIOT":
+    case "CERO":
+      return SIN_MONTO;
+    default:
+      return SIN_MONTO;
+  }
+}
+
+/**
+ * Suma de lo VENCIDO y no presentado — el número que encabeza el tablero.
+ *
+ * Se ignora lo que no tiene monto conocido en vez de contarlo como cero, y se
+ * reporta cuántas quedaron fuera: un total que esconde tres obligaciones sin
+ * cifra es peor que un total que dice "y otras 3 sin calcular".
+ */
+export function totalVencido(
+  obligaciones: Array<{ status: string; filed: boolean; monto: number | null; montoEstimado: boolean }>
+): { total: number; conMonto: number; sinMonto: number; algunoEstimado: boolean } {
+  const vencidas = obligaciones.filter((o) => o.status === "OVERDUE" && !o.filed);
+  let total = 0;
+  let conMonto = 0;
+  let sinMonto = 0;
+  let algunoEstimado = false;
+  for (const o of vencidas) {
+    if (typeof o.monto === "number") {
+      total += o.monto;
+      conMonto++;
+      if (o.montoEstimado) algunoEstimado = true;
+    } else {
+      sinMonto++;
+    }
+  }
+  return { total, conMonto, sinMonto, algunoEstimado };
+}

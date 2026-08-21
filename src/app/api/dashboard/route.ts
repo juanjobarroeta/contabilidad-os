@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TaxDeclarationType } from "@prisma/client";
 import { getObligacionesPorRegimen } from "@/lib/obligaciones";
+import { montoDeObligacion } from "@/lib/obligaciones-monto";
 import { detectComplementosPendientes } from "@/lib/complementos";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
@@ -320,18 +321,30 @@ export async function GET(req: Request) {
       // Anual periodos vary in format (YYYY / YYYY-MM), so match by prefix.
       const periodoFilter =
         ob.periodicidad === "ANUAL" ? { startsWith: ob.periodoKey } : ob.periodoKey;
-      const filed = tipoEnum
+      // Se consultan TODOS los estados, no sólo los presentados. Un período
+      // vencido y sin presentar suele tener su fila en borrador con el importe
+      // ya calculado — que es justo el número que el aviso "tienes N vencidas"
+      // prometía y nunca decía. El estado sigue decidiendo si CUENTA como
+      // presentada; lo que cambia es que ya no se tira el importe.
+      const decl = tipoEnum
         ? await prisma.taxDeclaration.findFirst({
-            where: {
-              companyId,
-              tipo: tipoEnum,
-              periodo: periodoFilter,
-              status: { in: ["FILED", "PAID", "CALCULATED"] },
-            },
-            orderBy: { periodo: "desc" },
+            where: { companyId, tipo: tipoEnum, periodo: periodoFilter },
+            orderBy: [{ status: "desc" }, { periodo: "desc" }],
           })
         : null;
-      return { ...ob, filed: !!filed && filed.status !== "CALCULATED" };
+      const { monto, estimado } = montoDeObligacion(ob.tipo, decl);
+      return {
+        ...ob,
+        filed: !!decl && (decl.status === "FILED" || decl.status === "PAID"),
+        monto,
+        // `true` = lo calculamos nosotros de los CFDIs, no lo acusó el SAT.
+        montoEstimado: estimado,
+        // El acuse es EL entregable del contador: si ya se presentó, se lleva
+        // a la portada en vez de hacerlo buscarlo.
+        acuseUrl: decl?.acuseUrl ?? null,
+        lineaCaptura: decl?.lineaCaptura ?? null,
+        fechaPresentacion: decl?.fechaPresentacion?.toISOString() ?? null,
+      };
     })
   );
 
