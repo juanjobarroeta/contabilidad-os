@@ -1,5 +1,35 @@
 # Captura del portal SAT — lo único que falta para reemplazar a Syntage
 
+## Recon del 2026-08-21 — el login con e.firma YA FUNCIONA (medido)
+
+`scripts/recon-sat-portal.ts` entró al portal con la e.firma de ZIONX (empresa
+propia, autorizada) y quedó autenticado: el portal mostró `ZIO190321JI6` como
+sesión activa. La arquitectura y el contrato del login quedaron mapeados:
+
+- **IdP:** `loginc.mat.sat.gob.mx` (NetIQ Access Manager). Es sólo el proveedor
+  de identidad — `/nidp/portal` NO lanza apps («no applications available»);
+  cada app federa contra este IdP y, con sesión viva, entra sin pedir nada.
+- **Entrada e.firma:** `…/nidp/jsp/main.jsp?id=FormCertiSAT&sid=0` abre en modo
+  CIEC (con captcha) y trae un botón `#buttonFiel` que la cambia a e.firma
+  **sin captcha**. Tras el clic aparece el formulario `certform` con:
+  - `#fileCertificate` (file) — el `.cer`
+  - `#filePrivateKey` (file) — el `.key`
+  - `#privateKeyPassword` (password) — la contraseña de la LLAVE (no la CIEC)
+  - `#rfc` (text, autollenado) · `#submit` (button)
+  - ocultos: `token`, `tokenuuid`, `credentialsRequired`
+- **Declaraciones y Pagos** (`ptscdecprov.clouda.sat.gob.mx`) usa OTRO realm:
+  `loginda.siat.sat.gob.mx` por WS-Federation, con **CIEC + clave dinámica**, no
+  la e.firma de loginc. Es su propio login.
+
+Lo que falta descubrir: las URLs de entrada de **CE**, **CSF** y **Opinión
+32-D** (mi `buzon.sat.gob.mx` no resuelve — era una adivinanza). Se obtienen con
+una pasada más del recon o con el HAR de un click-through (abajo). El login, que
+era la parte difícil y reutilizable, ya está resuelto y probado offline en
+`src/lib/sat-portal/auth.ts`.
+
+---
+
+
 La firma con la e.firma ya está construida y probada (`src/lib/sat-portal/auth.ts`,
 11 pruebas verdes, todas offline). Lo que no se puede inventar desde el código es
 la **forma exacta de las peticiones del portal**: qué URL sirve el reto, qué
