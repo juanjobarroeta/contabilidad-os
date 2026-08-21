@@ -6,11 +6,20 @@ import { registrarBitacora } from "@/lib/audit";
 import { coberturaPlanPropio } from "@/lib/contabilidad/resolver-plan-propio";
 import { COE_CODES } from "@/lib/contabilidad/catalog";
 import { CODIGO_AGRUPADOR_OFICIAL } from "@/lib/contabilidad/codigo-agrupador";
+import { PREFIJO_REGLA_SERIE } from "@/lib/contabilidad/serie-cuenta";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // La cola de ambigüedades del plan propio (brief UX, módulo P1-4): los códigos
 // que el motor emite contra el catálogo del contador. Hasta hoy los overrides
 // se escribían por script; esta ruta los vuelve decisiones de un clic.
+//
+// PostingCuentaOverride la comparten DOS subsistemas: los overrides de
+// agrupador que vive aquí (codigoMotor = código del motor, «601.48») y las
+// reglas de SERIE del satélite Automotriz (codigoMotor = «serie:NCA» →
+// mapean por serie de folio, no por código SAT; ver lib/contabilidad/
+// serie-cuenta.ts). El GET nunca las ve —sólo recorre COE_CODES— y la
+// escritura las RECHAZA de forma explícita: son otra cosa y se administran
+// desde su propio lado.
 //
 // GET    ?companyId=            → { cobertura, cuentas } — cobertura de cada
 //                                 código del motor (única / override / ambigua /
@@ -79,6 +88,15 @@ export const POST = withAuthz(async (req: Request) => {
     );
   }
   const { companyId, codigoMotor, chartAccountId } = parsed.data;
+  if (codigoMotor.startsWith(PREFIJO_REGLA_SERIE)) {
+    return NextResponse.json(
+      {
+        error:
+          "Ese código es una regla de SERIE, no un override de agrupador: se administra desde el módulo que la define, no desde el catálogo.",
+      },
+      { status: 400 }
+    );
+  }
   const { user } = await requireWriter(companyId, req);
 
   const cuenta = await prisma.chartAccount.findFirst({
@@ -120,6 +138,15 @@ export const DELETE = withAuthz(async (req: Request) => {
   const codigoMotor = url.searchParams.get("codigoMotor") ?? "";
   if (!companyId || !codigoMotor) {
     return NextResponse.json({ error: "companyId y codigoMotor requeridos" }, { status: 400 });
+  }
+  if (codigoMotor.startsWith(PREFIJO_REGLA_SERIE)) {
+    return NextResponse.json(
+      {
+        error:
+          "Ese código es una regla de SERIE, no un override de agrupador: se administra desde el módulo que la define, no desde el catálogo.",
+      },
+      { status: 400 }
+    );
   }
   const { user } = await requireWriter(companyId, req);
 
