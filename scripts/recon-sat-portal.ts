@@ -23,7 +23,10 @@ import * as os from "os";
 import * as path from "path";
 import * as crypto from "crypto";
 
-const RFC_OBJETIVO = "ZIO190321JI6"; // ZIONX
+// La empresa cuya FIEL usa el recon. ZIONX sirvió para PROBAR el login (funciona
+// en los dos realms), pero no tiene Contabilidad Electrónica — para mapear CE
+// hay que usar una que sí la presente, como MARGOM (16,053 renglones CE).
+const RFC_OBJETIVO = process.env.RFC || "ZIO190321JI6";
 const OUT = path.join(os.homedir(), ".claude/jobs/b2a65a05/tmp/recon");
 // El recon 1 reveló el mapa: el portal general (loginc) ofrece cinco métodos
 // como menú; el de subir .cer/.key es FormCertiSAT (el CertiSAT clásico).
@@ -65,6 +68,49 @@ async function shot(page: Page, n: number, nombre: string) {
   paso(`captura ${nombre} — campos: ${campos.slice(0, 12).join(" ") || "(ninguno)"}`);
 }
 
+// El login con e.firma en CUALQUIER realm NAM del SAT: la página abre en modo
+// CIEC y trae #buttonFiel que la cambia a subir .cer/.key sin captcha. Cada
+// realm (loginc general, login.siat de CE, loginda de declaraciones) pide su
+// propio login, pero los tres exponen este mismo flujo — medido en el recon.
+async function loginEfirma(
+  page: Page,
+  cerPath: string,
+  keyPath: string,
+  pass: string,
+  etiqueta: string,
+): Promise<boolean> {
+  const btn = page.locator("#buttonFiel");
+  if (!(await btn.count())) {
+    paso(`[${etiqueta}] no hay #buttonFiel — ¿ya autenticado o página distinta?`);
+    return false;
+  }
+  await btn.first().click().catch(() => paso(`[${etiqueta}] no se pudo clicar #buttonFiel`));
+  await page.waitForTimeout(2500);
+  const files = page.locator('input[type="file"]');
+  if ((await files.count()) < 2) {
+    paso(`[${etiqueta}] no aparecieron los inputs de archivo`);
+    return false;
+  }
+  await files.nth(0).setInputFiles(cerPath).catch(() => {});
+  await page.waitForTimeout(600);
+  await files.nth(1).setInputFiles(keyPath).catch(() => {});
+  await page.waitForTimeout(800);
+  // Pacing tipo humano por si el portal mirara el ritmo: la contraseña se
+  // teclea carácter por carácter y se hace una pausa antes de enviar. (No creo
+  // que sea la causa —el login SÍ autentica— pero descarta la variable.)
+  const pwd = page.locator('input[type="password"]:visible');
+  if (await pwd.count()) {
+    await pwd.first().click().catch(() => {});
+    await pwd.first().pressSequentially(pass, { delay: 90 }).catch(() => pwd.first().fill(pass));
+  }
+  await page.waitForTimeout(1200);
+  await page.locator("#submit, button[type=submit], input[type=submit]").first().click().catch(() => {});
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.waitForTimeout(4000);
+  paso(`[${etiqueta}] e.firma enviada · URL ahora: ${page.url().slice(0, 80)}`);
+  return true;
+}
+
 async function main() {
   fs.mkdirSync(OUT, { recursive: true });
   const prisma = new PrismaClient();
@@ -98,59 +144,56 @@ async function main() {
     page.setDefaultTimeout(45000);
 
     try {
-      paso(`abriendo ${URL_LOGIN_FIEL}`);
-      await page.goto(URL_LOGIN_FIEL, { waitUntil: "networkidle" }).catch((e) =>
-        paso(`goto login: ${e.message}`),
-      );
-      await shot(page, 1, "login-ciec");
-
-      // La página abre en modo CIEC (RFC/contraseña/captcha) y trae un botón
-      // "e.firma" (#buttonFiel) que la CAMBIA a subir .cer/.key sin captcha.
-      // Se hace clic y se deja correr el JS que revela los inputs de archivo.
-      const btnFiel = page.locator("#buttonFiel");
-      if (await btnFiel.count()) {
-        await btnFiel.first().click().catch(() => paso("no se pudo clicar #buttonFiel"));
-        await page.waitForTimeout(2500);
-        paso("clic en e.firma (#buttonFiel)");
+      // El usuario probó que ir DIRECTO a la sección con e.firma funciona;
+      // pre-loguearse en loginc dejaba una sesión cruzada que rompía la app de
+      // CE (error.seg.0001). Así que NO se pre-loguea: cada sección entra por su
+      // trámite, redirige a su realm, y ahí se hace el e.firma una sola vez.
+      // Con PORTAL=1 se prueba el login del portal general (para CSF/Opinión).
+      if (process.env.PORTAL === "1") {
+        paso(`abriendo portal general ${URL_LOGIN_FIEL}`);
+        await page.goto(URL_LOGIN_FIEL, { waitUntil: "networkidle" }).catch((e) => paso(`goto login: ${e.message}`));
+        await shot(page, 1, "login-ciec");
+        await loginEfirma(page, cerPath, keyPath, pass, "portal");
+        await shot(page, 4, "post-login");
+        paso(`URL portal: ${page.url()}`);
       } else {
-        paso("no apareció #buttonFiel — ¿cambió la página de login?");
+        paso("sin pre-login de portal — cada sección hace su propio e.firma (flujo directo)");
       }
-      await shot(page, 2, "efirma-form");
 
-      const inputs = await page.locator('input[type="file"]').count();
-      paso(`inputs de archivo tras el clic: ${inputs}`);
-      if (inputs >= 2) {
-        const files = page.locator('input[type="file"]');
-        await files.nth(0).setInputFiles(cerPath).catch(() => paso("no subió .cer al input 0"));
-        await files.nth(1).setInputFiles(keyPath).catch(() => paso("no subió .key al input 1"));
-        // En modo e.firma la contraseña es la de la LLAVE, no la CIEC.
-        const pwd = page.locator('input[type="password"]:visible');
-        if (await pwd.count()) await pwd.first().fill(pass);
-        await shot(page, 3, "efirma-lleno");
-        paso("archivos y contraseña de la llave puestos; enviando");
-        await page.locator("#submit, button[type=submit], input[type=submit]").first().click().catch(() =>
-          paso("no se encontró botón de envío"),
-        );
-        await page.waitForLoadState("networkidle").catch(() => {});
-        await page.waitForTimeout(4000);
-      } else {
-        paso("los inputs de archivo no aparecieron tras el clic — revisar 02-efirma-form.html");
-      }
-      await shot(page, 4, "post-login");
-      paso(`URL tras login: ${page.url()}`);
-
-      // Recorrido de lectura por las tres fuentes. Cada goto es sólo navegar.
+      // Recorrido de lectura. La CE consulta entra por su página de trámite,
+      // que auto-POSTea al SSO (id=mat-ptsc-totp_Aviso) y, con la sesión e.firma
+      // ya viva, aterriza en la app real. Se navega y se espera a que la cadena
+      // de redirects se asiente para grabar la app y sus llamadas de datos.
       const secciones: [string, string][] = [
-        ["declaraciones", "https://ptscdecprov.clouda.sat.gob.mx/"],
-        ["contabilidad-electronica", "https://buzon.sat.gob.mx/"],
-        ["csf-opinion", "https://loginc.mat.sat.gob.mx/nidp/portal"],
+        [
+          "contabilidad-electronica",
+          "https://wwwmat.sat.gob.mx/operacion/16203/consulta-tus-acuses-generados-en-la-aplicacion-contabilidad-electronica",
+        ],
       ];
-      let n = 5;
+      // El usuario da la secuencia real: primero el minisitio de Buzón
+      // Tributario, luego la URL de CE. El minisitio es la portada desde donde
+      // se entra; se visita para grabar su cadena antes de la consulta.
+      paso("minisitio Buzón Tributario (portada)");
+      await page
+        .goto("https://www.sat.gob.mx/minisitio/BuzonTributario/index.html", { waitUntil: "domcontentloaded", timeout: 20000 })
+        .catch((e) => paso(`  minisitio goto: ${e.message}`));
+      await page.waitForTimeout(1500);
+      await shot(page, 5, "minisitio-buzon");
+
+      let n = 6;
       for (const [nombre, url] of secciones) {
         paso(`sección ${nombre}: ${url}`);
-        await page.goto(url, { waitUntil: "domcontentloaded" }).catch((e) => paso(`  ${nombre} goto: ${e.message}`));
-        await page.waitForTimeout(3000);
+        await page.goto(url, { waitUntil: "networkidle" }).catch((e) => paso(`  ${nombre} goto: ${e.message}`));
+        await page.waitForTimeout(4000); // deja asentar la cadena SSO
+        // El realm de esta sección (login.siat) pide su PROPIO login e.firma —
+        // no hereda la sesión de loginc. Si aparece #buttonFiel, re-autenticar.
+        if (await page.locator("#buttonFiel").count()) {
+          paso(`  ${nombre} pide login propio — re-autenticando con e.firma`);
+          await loginEfirma(page, cerPath, keyPath, pass, nombre);
+          await page.waitForTimeout(3000);
+        }
         await shot(page, n++, nombre);
+        paso(`  URL final ${nombre}: ${page.url()}`);
       }
     } finally {
       await context.close(); // vuelca el HAR
