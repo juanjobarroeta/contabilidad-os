@@ -45,6 +45,11 @@ on:
         required: false
         default: "0"
         type: string
+      metadata:
+        description: "Pedir METADATA en vez de XML (el 301 del SAT habla sólo de Xml; esto pregunta si metadata tiene el mismo tope)"
+        required: false
+        default: false
+        type: boolean
       dryRun:
         description: "Sólo decir qué haría, sin gastar solicitudes"
         required: false
@@ -69,6 +74,7 @@ jobs:
           PERIODOS: ${{ inputs.periodos }}
           TRAMOS: ${{ inputs.tramos }}
           SALTAR: ${{ inputs.saltarTramos }}
+          METADATA: ${{ inputs.metadata }}
           DRY_RUN: ${{ inputs.dryRun }}
         run: |
           set -euo pipefail
@@ -78,6 +84,7 @@ jobs:
           Q="companyId=${COMPANY_ID}&periodos=$(printf '%s' "${PERIODOS}" | tr -d '[:space:]')"
           Q="${Q}&tramos=$(printf '%s' "${TRAMOS:-1}" | tr -d '[:space:]')"
           Q="${Q}&saltarTramos=$(printf '%s' "${SALTAR:-0}" | tr -d '[:space:]')"
+          if [ "${METADATA}" = "true" ]; then Q="${Q}&metadata=1"; fi
           if [ "${DRY_RUN}" = "true" ]; then Q="${Q}&dryRun=1"; fi
 
           RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/cron/sat-repesca?${Q}" \

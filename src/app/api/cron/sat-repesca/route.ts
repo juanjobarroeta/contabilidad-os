@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
-import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
+import { submitSatSync, syncCancelacionesPeriodo, verifyAndImportSatSync } from "@/lib/sat-sync";
 import { partirMes, etiquetaTramo } from "@/lib/sat-tramos";
 import { parsePeriodos } from "./parse-periodos";
 
@@ -101,6 +101,15 @@ interface ResultadoPeriodo {
   saltados?: number;
   cuotaAgotada?: boolean;
   error?: string;
+  /** Sólo con `metadata=1`: el veredicto del SAT sobre la solicitud de metadata. */
+  metadata?: {
+    ok: boolean;
+    status?: string;
+    revisadas?: number;
+    canceladas?: number;
+    cancelaria?: number;
+    error?: string;
+  };
 }
 
 async function contarIngresos(companyId: string, year: number, month: number): Promise<number> {
@@ -132,6 +141,23 @@ async function handle(req: Request) {
     return NextResponse.json({ error: "ningún periodo válido en `periodos`" }, { status: 400 });
   }
   const dryRun = params.get("dryRun") === "1";
+  // `metadata=1` pide METADATA en vez de XML, para el MISMO periodo.
+  //
+  // POR QUÉ. Medido hoy (2026-08-21) contra MARGOM 2019-06, el SAT rechazó la
+  // solicitud de XML en los dos lados con un mensaje que se explica solo:
+  //
+  //   «La solicitud de Xml no puede contener informacion mayor a 6 años de
+  //    antiguedad (código 301)»
+  //
+  // Dice «de Xml». Metadata es OTRO tipo de solicitud (RequestType
+  // "metadata"), así que no se sabe si comparte el tope — y la diferencia
+  // vale: aunque no traiga el comprobante, la metadata da folio, monto y
+  // estatus de cancelación, que es con lo que se cuadran libros viejos y se
+  // detectan canceladas contadas como vivas.
+  //
+  // NO se adivina: esto lo pregunta. Un 301 aquí cierra el tema; un aceptado
+  // abre 2017-2020 sin depender de un tercero.
+  const soloMetadata = params.get("metadata") === "1";
   // Partir el mes en tramos. Medido: el mes completo de 2025-04 devuelve 5002 en
   // los dos lados, así que la vía mensual está muerta para estos periodos y la
   // única salida por descarga masiva es pedir rangos DISTINTOS.
@@ -158,6 +184,26 @@ async function handle(req: Request) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     const periodo = `${year}-${String(month).padStart(2, "0")}`;
     const facturasAntes = await contarIngresos(companyId, year, month);
+
+    // La metadata no se parte en tramos: su cuota es la de su propio tipo de
+    // solicitud, y aquí lo que se está midiendo es si el periodo se ACEPTA.
+    // Con dryRun sí llega al SAT (es el punto) pero no escribe cancelaciones.
+    if (soloMetadata) {
+      const r = await syncCancelacionesPeriodo(companyId, year, month, dryRun);
+      resultados.push({
+        periodo,
+        facturasAntes,
+        metadata: {
+          ok: r.ok,
+          status: r.status,
+          revisadas: r.checked,
+          canceladas: r.cancelled,
+          cancelaria: r.wouldCancel?.length,
+          error: r.error,
+        },
+      });
+      continue;
+    }
 
     const todosLosTramos = partirMes(year, month, tramosPedidos);
     const tramos = todosLosTramos.slice(saltar);
