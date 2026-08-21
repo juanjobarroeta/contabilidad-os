@@ -57,7 +57,7 @@ export const GET = withAuthz(async (req: Request) => {
     : [];
   const techo = { OR: [{ year: { lt: anio } }, { year: anio, month: { lte: mes } }] };
 
-  const [declaradoRaw, derivadoRaw, cuentas] = await Promise.all([
+  const [declaradoRaw, derivadoRaw, cuentas, asientosBanco] = await Promise.all([
     // Sólo el mes de corte: saldoFin YA es el acumulado a esa fecha.
     prisma.ceBalanzaMes.findMany({
       where: { companyId, anio, mes, esPadre: false },
@@ -74,6 +74,10 @@ export const GET = withAuthz(async (req: Request) => {
       where: { companyId },
       select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true, tipo: true },
     }),
+    // Sin asientos de origen BANCO no hay cobranza ni pagos: las cuentas por
+    // cobrar y por pagar sólo pueden crecer, y el saldo derivado deja de ser
+    // una posición para volverse un acumulado. La UI tiene que poder decirlo.
+    prisma.accountingEntry.count({ where: { companyId, fuente: "BANCO" }, take: 1 }),
   ]);
 
   const porId = new Map(cuentas.map((c) => [c.id, c]));
@@ -112,6 +116,8 @@ export const GET = withAuthz(async (req: Request) => {
     ancla: apertura ? { anio: apertura.year, mes: apertura.month } : null,
     /** El corte pedido es anterior al ancla: sólo hay columna declarada. */
     antesDelAncla,
+    /** No hay asientos de banco: nada liquida las CXC ni las CXP. */
+    sinBanco: asientosBanco === 0,
     ...construirBalance(declarado, derivado, { presentado: declaradoRaw.length > 0 }),
   });
 });
