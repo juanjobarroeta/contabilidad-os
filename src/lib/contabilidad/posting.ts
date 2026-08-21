@@ -988,6 +988,15 @@ export type BalanzaRow = {
   subcuenta: string | null;
   nombre: string;
   tipo: string;
+  /**
+   * D = deudora, A = acreedora. Va aparte del `tipo` porque NO siempre
+   * coinciden: una contra-cuenta como «DESCUENTO NUEVOS» es tipo INGRESO con
+   * naturaleza D, y la depreciación acumulada es tipo ACTIVO con naturaleza A.
+   * `saldoFinal` se calcula con ESTA, así que quien convierta signos tiene que
+   * usarla — deducirla del tipo le invierte el signo a las contra-cuentas y
+   * descuadra el balance por el DOBLE de su saldo.
+   */
+  naturaleza: "D" | "A";
   nivel: number;
   cargos: number;
   abonos: number;
@@ -1052,6 +1061,7 @@ export async function balanza(companyId: string, year: number, month: number): P
       subcuenta: acc.subcuenta,
       nombre: acc.nombre,
       tipo: acc.tipo,
+      naturaleza,
       nivel: acc.nivel,
       cargos: p.cargo,
       abonos: p.abono,
@@ -1281,6 +1291,7 @@ export async function balanzaPreview(
       subcuenta: acc.subcuenta,
       nombre: acc.nombre,
       tipo: acc.tipo,
+      naturaleza,
       nivel: acc.nivel,
       cargos: p.cargo,
       abonos: p.abono,

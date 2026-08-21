@@ -124,7 +124,8 @@ describe("zip del paquete", () => {
         toXlsx([
           hojaBalanza([
             {
-              cuentaSAT: "102", subcuenta: "102.01", nombre: "Bancos", tipo: "ACTIVO", nivel: 3,
+              cuentaSAT: "102", subcuenta: "102.01", nombre: "Bancos", tipo: "ACTIVO",
+              naturaleza: "D", nivel: 3,
               cargos: 1500.5, abonos: 0, saldo: 1500.5, saldoInicial: 0, saldoFinal: 1500.5,
             },
           ]),
