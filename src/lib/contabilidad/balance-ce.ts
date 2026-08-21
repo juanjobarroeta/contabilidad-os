@@ -64,6 +64,8 @@ export interface SaldoCuenta {
   nombre?: string | null;
   /** saldoFin en convención CE: deudoras +, acreedoras −. */
   saldo: number;
+  /** Respaldo para clasificar cuentas cuyo código no empieza con dígito. */
+  tipo?: string | null;
 }
 
 const GRUPOS: { clave: ClaveGrupoBalance; titulo: string; digito: string }[] = [
@@ -72,31 +74,35 @@ const GRUPOS: { clave: ClaveGrupoBalance; titulo: string; digito: string }[] = [
   { clave: "capital", titulo: "Capital contable", digito: "3" },
 ];
 
+const POR_TIPO: Record<string, ClaveGrupoBalance | "resultado"> = {
+  ACTIVO: "activo",
+  PASIVO: "pasivo",
+  CAPITAL: "capital",
+  INGRESO: "resultado",
+  COSTO: "resultado",
+  GASTO: "resultado",
+};
+
 /**
  * El grupo de una cuenta por su primer dígito. 4–9 son cuentas de RESULTADO:
  * no forman un grupo del balance, se pliegan al resultado del ejercicio.
+ *
+ * `tipo` es el respaldo para las cuentas cuyo código NO empieza con dígito. La
+ * que obliga a tenerlo es AJUSTE-REDONDEO, que la apertura crea para absorber
+ * el redondeo de la balanza del SAT (medio centavo por hoja, $0.13 sobre las
+ * 441 de MARGOM). Sin respaldo esa cuenta se descartaba y su saldo desaparecía
+ * de la ecuación: el balance derivado quedaba descuadrado por esos $0.13 —
+ * justo el centavo que se supone que debe cuadrar.
  */
-export function grupoDeCuenta(numCta: string): ClaveGrupoBalance | "resultado" | null {
+export function grupoDeCuenta(
+  numCta: string,
+  tipo?: string | null,
+): ClaveGrupoBalance | "resultado" | null {
   const d = numCta.trim().charAt(0);
   const g = GRUPOS.find((x) => x.digito === d);
   if (g) return g.clave;
-  return d >= "4" && d <= "9" ? "resultado" : null;
-}
-
-/**
- * Pasa un saldo en signo NATURAL (el que entrega la balanza derivada, donde un
- * pasivo normal ya llega positivo) a la convención CE del lado en el signo.
- * Es la única traducción entre los dos mundos; vive aquí para poder probarla.
- *
- * Recibe la NATURALEZA (D/A), no el tipo, y eso no es un detalle: no siempre
- * coinciden. «DESCUENTO NUEVOS FRISON» es tipo INGRESO con naturaleza D —una
- * contra-cuenta que resta ventas— y la depreciación acumulada es tipo ACTIVO
- * con naturaleza A. Deducir el lado del tipo les invierte el signo, y como el
- * saldo se va del lado equivocado el balance se descuadra por el DOBLE de lo
- * que valen: en MARGOM eran $47,867,455 sobre 30 cuentas de descuento.
- */
-export function aLadoEnSigno(saldoNatural: number, naturaleza: "D" | "A"): number {
-  return naturaleza === "A" ? -saldoNatural : saldoNatural;
+  if (d >= "4" && d <= "9") return "resultado";
+  return tipo ? (POR_TIPO[tipo] ?? null) : null;
 }
 
 const c2 = (n: number) => Math.round(n * 100) / 100;
@@ -114,13 +120,19 @@ export function construirBalance(
   derivado: SaldoCuenta[],
   opts: { presentado: boolean },
 ): BalanceCe {
-  const porCuenta = new Map<string, { nombre: string; declarado: number; derivado: number }>();
+  const porCuenta = new Map<
+    string,
+    { nombre: string; tipo: string | null; declarado: number; derivado: number }
+  >();
   const acumula = (lista: SaldoCuenta[], lado: "declarado" | "derivado") => {
     for (const s of lista) {
-      if (!grupoDeCuenta(s.numCta)) continue;
-      const prev = porCuenta.get(s.numCta) ?? { nombre: s.nombre ?? "", declarado: 0, derivado: 0 };
+      if (!grupoDeCuenta(s.numCta, s.tipo)) continue;
+      const prev =
+        porCuenta.get(s.numCta) ??
+        { nombre: s.nombre ?? "", tipo: s.tipo ?? null, declarado: 0, derivado: 0 };
       prev[lado] += s.saldo;
       if (!prev.nombre && s.nombre) prev.nombre = s.nombre;
+      if (!prev.tipo && s.tipo) prev.tipo = s.tipo;
       porCuenta.set(s.numCta, prev);
     }
   };
@@ -142,7 +154,7 @@ export function construirBalance(
   let resDerivado = 0;
 
   for (const [numCta, v] of porCuenta) {
-    const clave = grupoDeCuenta(numCta)!;
+    const clave = grupoDeCuenta(numCta, v.tipo)!;
     if (clave === "resultado") {
       resDeclarado += v.declarado;
       resDerivado += v.derivado;

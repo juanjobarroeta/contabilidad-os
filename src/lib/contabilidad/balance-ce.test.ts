@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  aLadoEnSigno,
-  construirBalance,
-  grupoDeCuenta,
-  type SaldoCuenta,
-} from "./balance-ce";
+import { construirBalance, grupoDeCuenta, type SaldoCuenta } from "./balance-ce";
 
 describe("grupoDeCuenta", () => {
   it("clasifica por el primer dígito", () => {
@@ -25,20 +20,25 @@ describe("grupoDeCuenta", () => {
   });
 });
 
-describe("aLadoEnSigno", () => {
-  it("deja las deudoras como están y voltea las acreedoras", () => {
-    expect(aLadoEnSigno(100, "D")).toBe(100);
-    expect(aLadoEnSigno(100, "A")).toBe(-100);
-  });
-
-  it("respeta la naturaleza de una contra-cuenta aunque contradiga su tipo", () => {
-    // «DESCUENTO NUEVOS FRISON»: tipo INGRESO pero naturaleza D. Si el lado se
-    // dedujera del tipo saldría −100, y el balance se descuadraría por 200 —el
-    // doble— porque el saldo se iría del lado contrario. Fue exactamente el
-    // caso de MARGOM: $47,867,455 sobre 30 cuentas de descuento.
-    expect(aLadoEnSigno(100, "D")).toBe(100);
-    // Depreciación acumulada: tipo ACTIVO, naturaleza A.
-    expect(aLadoEnSigno(100, "A")).toBe(-100);
+describe("convención de signo", () => {
+  it("una contra-cuenta entra por su saldo, sin deducir el lado de su tipo", () => {
+    // «DESCUENTO NUEVOS FRISON» es tipo INGRESO pero naturaleza D: un descuento
+    // resta ventas, así que su saldo es DEUDOR y en convención CE va POSITIVO
+    // dentro del rubro 4. La ruta lo obtiene como cargos − abonos, sin mirar
+    // tipo ni naturaleza — deducir el lado del tipo le invertía el signo y
+    // descuadraba el balance por el DOBLE: $47,867,455 en MARGOM.
+    const b = construirBalance(
+      [
+        { numCta: "1101", nombre: "Bancos", saldo: 1000 },
+        { numCta: "4101", nombre: "Ventas", saldo: -1200 },
+        { numCta: "4201", nombre: "Descuento sobre ventas", saldo: 200 },
+      ],
+      [],
+      { presentado: true },
+    );
+    // Resultado = −(−1200 + 200) = 1000, y el activo lo iguala.
+    expect(b.resultado.declarado).toBe(1000);
+    expect(b.totales.descuadre.declarado).toBe(0);
   });
 });
 
