@@ -4,12 +4,12 @@ import { montoDeObligacion, totalVencido } from "./obligaciones-monto";
 describe("montoDeObligacion", () => {
   it("sin declaración no inventa un cero", () => {
     // Cero pesos y "no lo hemos calculado" son cosas distintas.
-    expect(montoDeObligacion("IVA_MENSUAL", null)).toEqual({ monto: null, estimado: false });
+    expect(montoDeObligacion("IVA_MENSUAL", null)).toEqual({ monto: null, motivo: "sin_calcular", estimado: false });
   });
 
   it("presentada = hecho: el monto NO va marcado como estimado", () => {
     expect(montoDeObligacion("IVA_MENSUAL", { status: "FILED", ivaPagar: 5376.01 }))
-      .toEqual({ monto: 5376.01, estimado: false });
+      .toEqual({ monto: 5376.01, motivo: null, estimado: false });
     expect(montoDeObligacion("IVA_MENSUAL", { status: "PAID", ivaPagar: 5376.01 }).estimado)
       .toBe(false);
   });
@@ -34,11 +34,18 @@ describe("montoDeObligacion", () => {
     expect(montoDeObligacion("IMSS", d).monto).toBe(5);
   });
 
-  it("las informativas no llevan importe", () => {
-    // Pintar "$0.00 por pagar" en una DIOT sería decir algo falso.
+  it("las informativas no llevan importe, y dicen que es POR ESO", () => {
+    // Pintar "$0.00 por pagar" en una DIOT sería falso; decir "sin calcular"
+    // sería acusarnos de un trabajo pendiente que no existe. Caso real visto
+    // en producción (BAOBAB JQM): la única vencida era una DIOT.
     const d = { status: "FILED", ivaPagar: 999 };
-    expect(montoDeObligacion("DIOT", d).monto).toBeNull();
-    expect(montoDeObligacion("CERO", d).monto).toBeNull();
+    expect(montoDeObligacion("DIOT", d)).toEqual({ monto: null, motivo: "informativa", estimado: false });
+    expect(montoDeObligacion("CERO", d).motivo).toBe("informativa");
+  });
+
+  it("sin cifra por falta de cálculo NO se confunde con informativa", () => {
+    expect(montoDeObligacion("IVA_MENSUAL", null).motivo).toBe("sin_calcular");
+    expect(montoDeObligacion("IVA_MENSUAL", { status: "DRAFT", ivaPagar: null }).motivo).toBe("sin_calcular");
   });
 
   it("un campo nulo o no finito es 'no sabemos', no cero", () => {
@@ -52,8 +59,8 @@ describe("montoDeObligacion", () => {
 });
 
 describe("totalVencido", () => {
-  const ob = (p: Partial<{ status: string; filed: boolean; monto: number | null; montoEstimado: boolean }>) => ({
-    status: "OVERDUE", filed: false, monto: 100, montoEstimado: false, ...p,
+  const ob = (p: Partial<{ status: string; filed: boolean; monto: number | null; montoEstimado: boolean; montoMotivo: "informativa" | "sin_calcular" | null }>) => ({
+    status: "OVERDUE", filed: false, monto: 100, montoEstimado: false, montoMotivo: null, ...p,
   });
 
   it("sólo suma lo vencido y NO presentado", () => {
@@ -64,6 +71,18 @@ describe("totalVencido", () => {
     ]);
     expect(r.total).toBe(100);
     expect(r.conMonto).toBe(1);
+  });
+
+  it("las informativas se cuentan aparte de lo que falta calcular", () => {
+    // Si TODO lo vencido es informativa, el tablero no debe encabezar con
+    // "lo que debes": no se debe dinero, se debe una presentación.
+    const r = totalVencido([
+      ob({ monto: null, montoMotivo: "informativa" }),
+      ob({ monto: null, montoMotivo: "sin_calcular" }),
+    ]);
+    expect(r.informativas).toBe(1);
+    expect(r.sinMonto).toBe(1);
+    expect(r.total).toBe(0);
   });
 
   it("lo que no tiene monto se reporta aparte, no se cuenta como cero", () => {
@@ -80,6 +99,6 @@ describe("totalVencido", () => {
 
   it("sin vencidas, total en cero y nada estimado", () => {
     const r = totalVencido([ob({ status: "UPCOMING" })]);
-    expect(r).toEqual({ total: 0, conMonto: 0, sinMonto: 0, algunoEstimado: false });
+    expect(r).toEqual({ total: 0, conMonto: 0, sinMonto: 0, informativas: 0, algunoEstimado: false });
   });
 });

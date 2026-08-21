@@ -332,13 +332,15 @@ export async function GET(req: Request) {
             orderBy: [{ status: "desc" }, { periodo: "desc" }],
           })
         : null;
-      const { monto, estimado } = montoDeObligacion(ob.tipo, decl);
+      const { monto, motivo, estimado } = montoDeObligacion(ob.tipo, decl);
       return {
         ...ob,
         filed: !!decl && (decl.status === "FILED" || decl.status === "PAID"),
         monto,
         // `true` = lo calculamos nosotros de los CFDIs, no lo acusó el SAT.
         montoEstimado: estimado,
+        // Por qué no hay cifra: "informativa" (no se paga) vs "sin_calcular".
+        montoMotivo: motivo,
         // El acuse es EL entregable del contador: si ya se presentó, se lleva
         // a la portada en vez de hacerlo buscarlo.
         acuseUrl: decl?.acuseUrl ?? null,
