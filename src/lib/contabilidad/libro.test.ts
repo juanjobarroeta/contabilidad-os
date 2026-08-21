@@ -73,6 +73,7 @@ describe("balanceGeneralDesdeBalanza", () => {
     subcuenta: "102.01",
     nombre: "Bancos nacionales",
     tipo: "ACTIVO",
+    naturaleza: "D",
     nivel: 3,
     cargos: 0,
     abonos: 0,

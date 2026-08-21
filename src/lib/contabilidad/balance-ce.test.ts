@@ -27,12 +27,18 @@ describe("grupoDeCuenta", () => {
 
 describe("aLadoEnSigno", () => {
   it("deja las deudoras como están y voltea las acreedoras", () => {
-    expect(aLadoEnSigno(100, "ACTIVO")).toBe(100);
-    expect(aLadoEnSigno(100, "COSTO")).toBe(100);
-    expect(aLadoEnSigno(100, "GASTO")).toBe(100);
-    expect(aLadoEnSigno(100, "PASIVO")).toBe(-100);
-    expect(aLadoEnSigno(100, "CAPITAL")).toBe(-100);
-    expect(aLadoEnSigno(100, "INGRESO")).toBe(-100);
+    expect(aLadoEnSigno(100, "D")).toBe(100);
+    expect(aLadoEnSigno(100, "A")).toBe(-100);
+  });
+
+  it("respeta la naturaleza de una contra-cuenta aunque contradiga su tipo", () => {
+    // «DESCUENTO NUEVOS FRISON»: tipo INGRESO pero naturaleza D. Si el lado se
+    // dedujera del tipo saldría −100, y el balance se descuadraría por 200 —el
+    // doble— porque el saldo se iría del lado contrario. Fue exactamente el
+    // caso de MARGOM: $47,867,455 sobre 30 cuentas de descuento.
+    expect(aLadoEnSigno(100, "D")).toBe(100);
+    // Depreciación acumulada: tipo ACTIVO, naturaleza A.
+    expect(aLadoEnSigno(100, "A")).toBe(-100);
   });
 });
 

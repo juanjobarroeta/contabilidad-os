@@ -20,7 +20,8 @@ function celdas(hoja: Parameters<typeof toXlsx>[0][number]): unknown[][] {
 }
 
 const balanzaRow = (over: Partial<BalanzaRow>): BalanzaRow => ({
-  cuentaSAT: "102", subcuenta: "102.01", nombre: "Bancos nacionales", tipo: "ACTIVO", nivel: 3,
+  cuentaSAT: "102", subcuenta: "102.01", nombre: "Bancos nacionales", tipo: "ACTIVO",
+  naturaleza: "D", nivel: 3,
   cargos: 0, abonos: 0, saldo: 0, saldoInicial: 0, saldoFinal: 0, ...over,
 });
 

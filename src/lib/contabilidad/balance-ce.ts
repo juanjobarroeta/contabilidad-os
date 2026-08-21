@@ -87,10 +87,16 @@ export function grupoDeCuenta(numCta: string): ClaveGrupoBalance | "resultado" |
  * Pasa un saldo en signo NATURAL (el que entrega la balanza derivada, donde un
  * pasivo normal ya llega positivo) a la convención CE del lado en el signo.
  * Es la única traducción entre los dos mundos; vive aquí para poder probarla.
+ *
+ * Recibe la NATURALEZA (D/A), no el tipo, y eso no es un detalle: no siempre
+ * coinciden. «DESCUENTO NUEVOS FRISON» es tipo INGRESO con naturaleza D —una
+ * contra-cuenta que resta ventas— y la depreciación acumulada es tipo ACTIVO
+ * con naturaleza A. Deducir el lado del tipo les invierte el signo, y como el
+ * saldo se va del lado equivocado el balance se descuadra por el DOBLE de lo
+ * que valen: en MARGOM eran $47,867,455 sobre 30 cuentas de descuento.
  */
-export function aLadoEnSigno(saldoNatural: number, tipo: string): number {
-  const acreedora = tipo === "PASIVO" || tipo === "CAPITAL" || tipo === "INGRESO";
-  return acreedora ? -saldoNatural : saldoNatural;
+export function aLadoEnSigno(saldoNatural: number, naturaleza: "D" | "A"): number {
+  return naturaleza === "A" ? -saldoNatural : saldoNatural;
 }
 
 const c2 = (n: number) => Math.round(n * 100) / 100;

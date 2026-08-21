@@ -76,7 +76,8 @@ export const GET = withAuthz(async (req: Request) => {
   const derivado: SaldoCuenta[] = derivadoRows.map((r) => ({
     numCta: r.subcuenta ?? r.cuentaSAT,
     nombre: r.nombre,
-    saldo: aLadoEnSigno(r.saldoFinal, r.tipo),
+    // Con la NATURALEZA de la cuenta, no con su tipo — ver aLadoEnSigno.
+    saldo: aLadoEnSigno(r.saldoFinal, r.naturaleza),
   }));
 
   const presentado = declaradoRaw.length > 0;
