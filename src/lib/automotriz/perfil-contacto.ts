@@ -133,6 +133,8 @@ export interface PerfilContacto {
       vehiculo: { id: string; vin: string; marca: string; modelo: string; anio: number } | null;
       /** El CFDI que amparó la orden — para ver/descargar XML y PDF. */
       invoice: { id: string; uuid: string | null; serie: string | null; folio: string | null; facturapiId: string | null };
+      /** Orden de taller que amparó la venta; null si el CFDI no derivó una. */
+      orden: { id: string; folio: number } | null;
     }>;
   };
   /**
@@ -307,6 +309,10 @@ export async function perfilContacto(
       id: true, fecha: true, concepto: true, total: true, manoObra: true, refacciones: true,
       vehiculo: { select: { id: true, vin: true, marca: true, modelo: true, anio: true } },
       invoice: { select: { id: true, uuid: true, serie: true, folio: true, facturapiId: true } },
+      // La orden de taller que ampara esta venta. Es la MISMA operación vista
+      // desde el otro lado, así que desde el expediente del cliente se puede
+      // abrir la orden completa en vez de volver a buscarla por folio.
+      orden: { select: { id: true, folio: true } },
     },
     orderBy: { fecha: "desc" },
   });
@@ -396,6 +402,7 @@ export async function perfilContacto(
         refacciones: s.refacciones,
         vehiculo: s.vehiculo ?? null,
         invoice: s.invoice,
+        orden: s.orden ?? null,
       })),
     },
     refacciones: {
