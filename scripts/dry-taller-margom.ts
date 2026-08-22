@@ -11,9 +11,9 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/dry-taller-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 import { balanzaPreview } from "../src/lib/contabilidad/posting";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const SERIES = ["401", "4301", "4401", "1314", "5401", "601"];
 
 const money = (n: number) => (n < 0 ? "-" : " ") + "$" + Math.abs(Math.round(n)).toLocaleString("en-US");
@@ -24,6 +24,9 @@ async function main() {
     .split(",")
     .map((p) => p.trim().split("-").map(Number) as [number, number]);
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     for (const [year, month] of periodos) {
       console.log(`\n── ${year}-${String(month).padStart(2, "0")} ────────────────────────────────`);
       const ce = await prisma.ceBalanzaMes.findMany({

@@ -21,11 +21,11 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/reparar-generales-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 import { conceptosConVeredicto } from "../src/lib/automotriz/vin";
 import { generalesParaUnidad } from "../src/lib/automotriz/auto-vehiculo";
 
 const DRY_RUN = process.env.DRY_RUN === "1";
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 
 const esNumerico = (s: string | null) => !!s && /^\d{4,}$/.test(s.trim());
 const roto = (s: string | null) => s === "POR REVISAR" || esNumerico(s);
@@ -33,6 +33,9 @@ const roto = (s: string | null) => s === "POR REVISAR" || esNumerico(s);
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     // El «modelo numérico» (~ regex) no se expresa en el where de Prisma:
     // los ids salen en SQL y el detalle con findMany.
     const candidatos = await prisma.$queryRaw<{ id: string }[]>`

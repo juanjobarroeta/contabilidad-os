@@ -10,9 +10,9 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/dry-intercambio-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 import { balanzaPreview } from "../src/lib/contabilidad/posting";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const SERIES = ["4101", "4131", "5101", "5131"];
 const d = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 
@@ -21,6 +21,9 @@ async function main() {
   const periodos = (process.env.PERIODOS ?? "2025-06")
     .split(",").map((p) => p.trim().split("-").map(Number) as [number, number]);
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     console.log("período  serie      CE declarado        derivado");
     for (const [year, month] of periodos) {
       const ce = await prisma.ceBalanzaMes.findMany({

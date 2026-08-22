@@ -11,8 +11,8 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/reglas-serie-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const APPLY = process.env.APPLY === "1";
 const ANIO = Number(process.env.ANIO ?? 2025);
 
@@ -35,6 +35,9 @@ const d = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     for (const p of PROPUESTAS) {
       const cuenta = await prisma.chartAccount.findFirst({
         where: { companyId: COMPANY, cuentaSAT: p.cuentaSAT, isActive: true },

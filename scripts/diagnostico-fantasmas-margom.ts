@@ -6,14 +6,17 @@
  * expediente (VehiculoCfdi) + el ciclo vigente.
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 import { conceptosConVeredicto } from "../src/lib/automotriz/vin";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4";
 const CUTOFF = "2026-06-30";
 
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     const fantasmas = await prisma.$queryRawUnsafe<
       { vehiculoId: string; vin: string; compra: Date; invId: string; uuid: string; fecha: Date }[]
     >(`

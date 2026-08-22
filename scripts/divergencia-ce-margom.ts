@@ -17,9 +17,9 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/divergencia-ce-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 import { FAMILIAS } from "../src/lib/contabilidad/familia-vehiculo";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const DESDE = "2024-10-01"; // numeración nueva (1301-00XX = familias)
 const UMBRAL = Number(process.env.UMBRAL ?? 500_000);
 
@@ -27,6 +27,9 @@ const UMBRAL = Number(process.env.UMBRAL ?? 500_000);
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     const caseSql = FAMILIAS.map(([, sub, re]) => `WHEN t ~ '${re}' THEN '${sub}'`).join("\n      ");
     const filas = await prisma.$queryRawUnsafe<
       { sub: string; mes: string; padron_neto: number; ce_neto: number; u_compradas: number }[]

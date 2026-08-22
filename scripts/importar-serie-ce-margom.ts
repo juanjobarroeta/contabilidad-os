@@ -10,10 +10,16 @@
  *     scripts/importar-serie-ce-margom.ts
  */
 import { importarSerieBalanzasSyntage } from "../src/lib/contabilidad/ce-serie";
+import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 
 async function main() {
+  const prisma = new PrismaClient();
+  const empresa = await resolverEmpresa(prisma);
+  await prisma.$disconnect();
+  const COMPANY = empresa.id;
+  console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
   const r = await importarSerieBalanzasSyntage(COMPANY, { force: process.env.FORCE === "1" });
   for (const p of r.periodos) {
     console.log(`  ${p.anio}-${String(p.mes).padStart(2, "0")}: ${p.accion}${p.filas ? ` (${p.filas} cuentas)` : ""}`);

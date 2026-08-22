@@ -22,8 +22,8 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/ligar-ventas-huerfanas-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const APPLY = process.env.APPLY === "1";
 const FORZAR = process.env.FORZAR === "1"; // incluye la clase REFACT
 
@@ -40,6 +40,9 @@ interface Candidato {
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     const piso = await prisma.vehiculo.findMany({
       where: { companyId: COMPANY, ventaInvoiceId: null },
       select: { id: true, vin: true, numeroMotor: true, fechaCompra: true, createdAt: true },

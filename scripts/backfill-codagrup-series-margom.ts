@@ -18,14 +18,17 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/backfill-codagrup-series-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const APPLY = process.env.APPLY === "1";
 const SERIE_RE = /^(\d{4})-\d{4}-/;
 
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     const cuentas = await prisma.chartAccount.findMany({
       where: { companyId: COMPANY, isActive: true },
       select: { id: true, cuentaSAT: true, nombre: true, codAgrup: true },

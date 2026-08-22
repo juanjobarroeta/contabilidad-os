@@ -12,9 +12,9 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/dry-notas-credito-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 import { balanzaPreview } from "../src/lib/contabilidad/posting";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 
 const fmt = (n: number) =>
   (n < 0 ? "-" : " ") + "$" + Math.abs(Math.round(n)).toLocaleString("en-US").padStart(13);
@@ -25,6 +25,9 @@ async function main() {
     .split(",")
     .map((p) => p.trim().split("-").map(Number) as [number, number]);
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     console.log("período |      CE declarado |    ledger de hoy  |   motor con espejo |  hoy vs CE |  espejo vs CE");
     for (const [year, month] of periodos) {
       const ce = await prisma.ceBalanzaMes.aggregate({
