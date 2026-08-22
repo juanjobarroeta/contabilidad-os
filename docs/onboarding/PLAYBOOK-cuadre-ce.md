@@ -5,6 +5,23 @@ resultados derivado cuadra con lo que declaró al SAT». Es la receta que en
 MARGOM llevó la divergencia del grupo 4 de **$1,288.5M a $45.2M** y el costo+gasto
 combinado a **0.09%** (era propia, 2024-10 → 2026-06).
 
+## La columna vertebral de los vehículos: el catálogo de clave vehicular
+
+Antes de nada, lo que hace que los datos de vehículo salgan LIMPIOS y no de los
+strings sucios del CFDI: el **catálogo oficial de clave vehicular** (Anexo 15
+RMF, del DOF/SAT). Es GLOBAL —ship con el producto en `src/data/anexo15/<año>.json`,
+poblado una vez por `/api/cron/claves-ingest` a `ClaveVehicularCatalogo`
+(hoy 17,240 claves, 101 empresas, 2,094 modelos)— así que NO es un paso por
+empresa: ya está.
+
+El CFDI de un auto trae la `ClaveVehicular` y el VIN en el complemento
+`ventavehiculos`. `auto-vehiculo.ts` resuelve marca/modelo/versión/año en cadena:
+**catálogo del gobierno (por ClaveVehicular) → heurística de texto → WMI del VIN**.
+Por eso el padrón tiene marca/modelo reales aunque la descripción del CFDI sea un
+desastre, y por eso `derivar-familias.ts` se para sobre datos ya limpios. Es la
+pieza que se nos había olvidado nombrar — y es la base de toda la derivación de
+inventario, familias, intercambios y seminuevos.
+
 ## Lo que ya NO hay que rehacer — el motor es genérico
 
 Estas reglas viven en `posting.ts` + sus módulos y aplican a CUALQUIER empresa
