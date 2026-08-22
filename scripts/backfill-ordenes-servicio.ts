@@ -24,10 +24,11 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/backfill-ordenes-servicio.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { resolverEmpresa } from "./lib/empresa";
 
 const APPLY = process.env.APPLY === "1";
-const LOTE = 500;
+const LOTE = 2000; // lotes grandes: la inserción es masiva, no fila por fila
 
 async function main() {
   const prisma = new PrismaClient();
@@ -99,52 +100,48 @@ async function main() {
     }))._max.folio ?? 0;
     let folio = maxFolio;
 
+    // Inserción MASIVA, no fila por fila. El id se genera aquí (el PK es un
+    // String; la orden y sus líneas se ligan sin ir a la base por cada `create`).
+    // Así cada lote son ~2 round-trips (una orden, una línea) en vez de ~1000 —
+    // lo que hacía lenta la corrida sobre el proxy. En Railway (DB local) vuela.
     let ordenes = 0, lineas = 0;
     for (let i = 0; i < pendientes.length; i += LOTE) {
       const lote = pendientes.slice(i, i + LOTE);
-      if (!APPLY) {
-        for (const v of lote) {
-          const partes = v.invoiceId ? (partesPorInvoice.get(v.invoiceId) ?? []) : [];
-          ordenes++;
-          lineas += (v.manoObra > 0.005 ? 1 : 0) + partes.length;
-        }
-        continue;
+      const filasOrden: any[] = [];
+      const filasLinea: any[] = [];
+      for (const v of lote) {
+        const veh = v.vehiculoId ? vehs.get(v.vehiculoId) : null;
+        const partes = v.invoiceId ? (partesPorInvoice.get(v.invoiceId) ?? []) : [];
+        folio += 1;
+        const ordenId = randomUUID();
+        filasOrden.push({
+          id: ordenId, companyId: COMPANY, folio, estado: "ENTREGADA",
+          clienteId: v.clienteId, vehiculoId: v.vehiculoId, vin: veh?.vin ?? null,
+          descripcionUnidad: veh ? `${veh.marca ?? ""} ${veh.modelo ?? ""} ${veh.anio ?? ""}`.trim() || null : null,
+          fallaReportada: (v.concepto ?? "Servicio de taller").slice(0, 2000),
+          recibidaAt: v.fecha, entregadaAt: v.fecha, servicioVentaId: v.id,
+        });
+        ordenes++;
+        if (v.manoObra > 0.005)
+          filasLinea.push({ ordenId, tipo: "MANO_OBRA", descripcion: (v.concepto ?? "Mano de obra").slice(0, 500), cantidad: 1, precioUnitario: v.manoObra });
+        for (const pt of partes)
+          filasLinea.push({ ordenId, tipo: "REFACCION", descripcion: pt.descripcion.slice(0, 500), cantidad: pt.cantidad, precioUnitario: pt.precio, refaccionId: pt.refaccionId });
+        // Residuo: refacciones facturadas − itemizadas del kardex, como una
+        // línea resumen, para que la orden sume lo que de verdad se cobró.
+        const itemizado = partes.reduce((a, pt) => a + pt.cantidad * pt.precio, 0);
+        const residuo = Math.round((v.refacciones - itemizado) * 100) / 100;
+        if (residuo > 0.005)
+          filasLinea.push({ ordenId, tipo: "REFACCION", descripcion: "Refacciones (sin desglose en kardex)", cantidad: 1, precioUnitario: residuo });
       }
+      lineas += filasLinea.length;
+      if (!APPLY) continue;
+      // El lote entero en UNA transacción: órdenes y sus líneas caen juntas o no
+      // caen. Si se interrumpe entre las dos, la idempotencia (por
+      // servicioVentaId) saltaría órdenes sin líneas — el tx lo evita.
       await prisma.$transaction(async (tx) => {
-        for (const v of lote) {
-          const veh = v.vehiculoId ? vehs.get(v.vehiculoId) : null;
-          const partes = v.invoiceId ? (partesPorInvoice.get(v.invoiceId) ?? []) : [];
-          folio += 1;
-          const orden = await tx.ordenServicio.create({
-            data: {
-              companyId: COMPANY,
-              folio,
-              estado: "ENTREGADA",
-              clienteId: v.clienteId,
-              vehiculoId: v.vehiculoId,
-              vin: veh?.vin ?? null,
-              descripcionUnidad: veh ? `${veh.marca ?? ""} ${veh.modelo ?? ""} ${veh.anio ?? ""}`.trim() || null : null,
-              fallaReportada: (v.concepto ?? "Servicio de taller").slice(0, 2000),
-              recibidaAt: v.fecha,
-              entregadaAt: v.fecha,
-              servicioVentaId: v.id,
-            },
-          });
-          ordenes++;
-          const filas = [];
-          if (v.manoObra > 0.005)
-            filas.push({ ordenId: orden.id, tipo: "MANO_OBRA" as const, descripcion: (v.concepto ?? "Mano de obra").slice(0, 500), cantidad: 1, precioUnitario: v.manoObra });
-          for (const pt of partes)
-            filas.push({ ordenId: orden.id, tipo: "REFACCION" as const, descripcion: pt.descripcion.slice(0, 500), cantidad: pt.cantidad, precioUnitario: pt.precio, refaccionId: pt.refaccionId });
-          // El kardex no siempre tiene TODAS las piezas de la factura; el
-          // residuo (refacciones facturadas − itemizadas) va como una línea
-          // resumen, para que la orden sume lo que de verdad se cobró.
-          const itemizado = partes.reduce((a, pt) => a + pt.cantidad * pt.precio, 0);
-          const residuo = Math.round((v.refacciones - itemizado) * 100) / 100;
-          if (residuo > 0.005)
-            filas.push({ ordenId: orden.id, tipo: "REFACCION" as const, descripcion: "Refacciones (sin desglose en kardex)", cantidad: 1, precioUnitario: residuo });
-          if (filas.length) { await tx.ordenServicioLinea.createMany({ data: filas }); lineas += filas.length; }
-        }
+        await tx.ordenServicio.createMany({ data: filasOrden });
+        for (let j = 0; j < filasLinea.length; j += 5000)
+          await tx.ordenServicioLinea.createMany({ data: filasLinea.slice(j, j + 5000) });
       }, { timeout: 120000 });
       console.log(`  ${Math.min(i + LOTE, pendientes.length).toLocaleString()}/${pendientes.length.toLocaleString()}…`);
     }
