@@ -29,7 +29,7 @@ export const GET = withAuthz(async (req: Request) => {
   // Lista LIGERA: sólo los campos que la tabla usa, y los costos como UNA suma
   // agrupada en vez de todas las filas por unidad — con miles de unidades, el
   // include de costos multiplicaba el payload y el tiempo de respuesta.
-  const [vehiculos, sumas] = await Promise.all([
+  const [vehiculos, sumas, interes] = await Promise.all([
     prisma.vehiculo.findMany({
       where: {
         companyId,
@@ -41,7 +41,7 @@ export const GET = withAuthz(async (req: Request) => {
         tipo: true, estado: true, uso: true, color: true, numeroMotor: true,
         numeroEconomico: true, ciclo: true, costoCompra: true, fechaCompra: true,
         precioVenta: true, fechaVenta: true, ventaInvoiceId: true, autoCreado: true,
-        compraInvoiceId: true,
+        compraInvoiceId: true, planPisoInicio: true, planPisoTasaAnual: true,
         cliente: { select: { id: true, razonSocial: true } },
         supplier: { select: { id: true, razonSocial: true } },
       },
@@ -52,11 +52,39 @@ export const GET = withAuthz(async (req: Request) => {
       where: { vehiculo: { companyId } },
       _sum: { monto: true },
     }),
+    // El interés de plan piso se devenga a diario como VehiculoCosto; se suma
+    // aparte porque la pantalla lo muestra en su propia columna: es el costo
+    // de tener metal parado, y mezclarlo con los demás costos lo esconde.
+    prisma.vehiculoCosto.groupBy({
+      by: ["vehiculoId"],
+      where: { vehiculo: { companyId }, tipo: "INTERES_PISO" },
+      _sum: { monto: true },
+    }),
   ]);
 
   const costosPorUnidad = new Map(sumas.map((s) => [s.vehiculoId, s._sum.monto ?? 0]));
+  const interesPorUnidad = new Map(interes.map((s) => [s.vehiculoId, s._sum.monto ?? 0]));
+
+  // Días en piso: derivado aquí, no en el cliente. Una unidad vendida deja de
+  // devengar el día de la venta; una que sigue en piso cuenta hasta hoy. Sin
+  // fecha de entrada no se inventa un cero — se devuelve null y la pantalla
+  // dice «sin documentar», que es distinto de «cero días».
+  const DIA = 86_400_000;
+  const ahora = Date.now();
+  const diasEnPiso = (v: { planPisoInicio: Date | null; fechaCompra: Date | null; fechaVenta: Date | null }) => {
+    const inicio = v.planPisoInicio ?? v.fechaCompra;
+    if (!inicio) return null;
+    const fin = v.fechaVenta ? v.fechaVenta.getTime() : ahora;
+    return Math.max(0, Math.floor((fin - inicio.getTime()) / DIA));
+  };
+
   return NextResponse.json(
-    vehiculos.map((v) => ({ ...v, costosTotal: costosPorUnidad.get(v.id) ?? 0 }))
+    vehiculos.map((v) => ({
+      ...v,
+      costosTotal: costosPorUnidad.get(v.id) ?? 0,
+      interesPiso: interesPorUnidad.get(v.id) ?? 0,
+      diasEnPiso: diasEnPiso(v),
+    }))
   );
 });
 
