@@ -13,8 +13,8 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/verificar-divergencia-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const DESDE = (process.env.DESDE ?? "2023-01").replace("-", "");
 const HASTA = (process.env.HASTA ?? "2026-06").replace("-", "");
 
@@ -23,6 +23,9 @@ const mn = (n: number) => (n < 0 ? "-" : " ") + "$" + (Math.abs(n) / 1e6).toFixe
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     const q = <T>(sql: string) => prisma.$queryRawUnsafe<T[]>(sql);
     const ventana = `BETWEEN ${DESDE} AND ${HASTA}`;
 

@@ -11,14 +11,17 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/backfill-color-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 import { colorDesdeTexto } from "../src/lib/automotriz/vin";
 
 const DRY_RUN = process.env.DRY_RUN === "1";
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     const filas = await prisma.vehiculo.findMany({
       where: {
         companyId: COMPANY,

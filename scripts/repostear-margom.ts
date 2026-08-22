@@ -14,16 +14,19 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/repostear-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 import { postMonth } from "../src/lib/contabilidad/posting";
 import { PeriodoCerradoError } from "../src/lib/contabilidad/ejercicio";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const APPLY = process.env.APPLY === "1";
 const DESDE = process.env.DESDE ?? "2024-10";
 
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     const [y0, m0] = DESDE.split("-").map(Number);
     const hoy = new Date();
     const periodos: { year: number; month: number }[] = [];

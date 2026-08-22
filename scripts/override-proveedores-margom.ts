@@ -16,8 +16,8 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/override-proveedores-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 const CODIGO_MOTOR = "201.01";
 const CUENTA_DESTINO = "2002-0001-0000"; // CXP PLANTA VEHICULOS
 const APPLY = process.env.APPLY === "1";
@@ -25,6 +25,9 @@ const APPLY = process.env.APPLY === "1";
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     const cuenta = await prisma.chartAccount.findFirst({
       where: { companyId: COMPANY, cuentaSAT: CUENTA_DESTINO, isActive: true },
     });

@@ -28,13 +28,13 @@
  *     scripts/reconstruir-ciclos-margom.ts
  */
 import { PrismaClient } from "@prisma/client";
+import { resolverEmpresa } from "./lib/empresa";
 import {
   derivarVehiculoDesdeCfdiSiAplica,
   resolverSupplierDesdeEmisor,
 } from "../src/lib/automotriz/auto-vehiculo";
 
 const APPLY = process.env.APPLY === "1";
-const COMPANY = "cmsjf1wna003kn70fb68bqhm4"; // MARGOM
 
 /** Campos que el derivador NO reconstruye y hay que acarrear del renglón viejo.
  *  Un valor igual al DEFAULT del schema (uso=VENTA, isan=0, comisionMonto=0)
@@ -131,6 +131,9 @@ interface EventoCfdi { id: string; fecha: Date; tipo: string; customerId: string
 async function main() {
   const prisma = new PrismaClient();
   try {
+    const empresa = await resolverEmpresa(prisma);
+    const COMPANY = empresa.id;
+    console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
     // 1) VINs dañados (el censo del handoff).
     const dañados = await prisma.$queryRawUnsafe<{ vin: string }[]>(`
       SELECT vin FROM "Vehiculo"
