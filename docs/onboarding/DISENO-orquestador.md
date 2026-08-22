@@ -80,6 +80,31 @@ evidencia»): código del motor, cuentas candidatas con su codAgrup y nombre, el
 dinero que cada una re-postearía, el saldo declarado en la CE de cada candidata,
 y ejemplos de los CFDIs afectados. Con eso el agente razona como se razonó aquí.
 
+## Quién supervisa: narración determinista, agente sólo cuando importa
+
+Se resolvió no poner un agente a MANEJAR todo el onboarding —eso haría cada alta
+un camino de ejecución distinto e irreproducible, inaceptable para libros—. En su
+lugar, tres voces, y sólo dos cuestan:
+
+- **Narración (gratis, determinista):** la que le da al alta el aire de un agente
+  que te acompaña —«detecté tu FIEL, bajando CFDIs… 84,110 detectados, 39 marcas,
+  1,247 clientes, poblando inventario…»— NO es un LLM: son los eventos de
+  progreso que el pipeline YA registra (`onboarding-estado` lleva
+  procesados/derivados por etapa), presentados en lenguaje humano. Reproducible,
+  cero tokens.
+- **Agente de decisión (LLM, raro):** se convoca en las compuertas de nivel 3
+  para razonar sobre el paquete de evidencia.
+- **Agente de sorpresa (LLM, raro):** cuando una etapa falla de un modo que el
+  código no anticipó, se convoca para DIAGNOSTICAR y proponer —no para arreglar
+  en silencio—, como se diagnosticó a mano el `error.seg.0001` o los 134 syncs
+  colgados.
+
+El código es dueño de la ejecución y el orden (determinismo donde se necesita
+confianza); el agente, del juicio y las sorpresas (razonamiento donde se necesita
+adaptación). Cuánto se convoca al agente se MIDE en las primeras altas: si el
+camino feliz casi nunca es feliz, se le da más rol; si las sorpresas de MARGOM ya
+quedaron en el código, con convocarlo en las compuertas basta.
+
 ## La cara: un asistente que hace todo y pregunta lo mínimo
 
 ```
