@@ -13,6 +13,8 @@ import { unidadVigentePorVin } from "@/lib/automotriz/unidad-vigente";
 // captura ni se postea nada.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
 const incluye = {
   cliente: { select: { id: true, razonSocial: true, phone: true } },
   vehiculo: { select: { id: true, vin: true, marca: true, modelo: true, anio: true } },
@@ -51,14 +53,27 @@ export const GET = withAuthz(async (req: Request) => {
       : {}),
   };
 
-  const [ordenes, conteos] = await Promise.all([
+  // El importe POR ESTADO no se puede sacar de `ordenes`: esa lista viene
+  // filtrada y truncada a 200. Y groupBy de Prisma no cruza la relación con
+  // las líneas, así que la suma va en SQL — una pasada, sin traer las líneas
+  // de todas las órdenes a memoria. La tira del taller pregunta las dos cosas
+  // juntas: cuántas órdenes esperan y cuánto dinero detienen.
+  const [ordenes, conteos, montos] = await Promise.all([
     prisma.ordenServicio.findMany({ where, include: incluye, orderBy: { recibidaAt: "desc" }, take: 200 }),
     prisma.ordenServicio.groupBy({ by: ["estado"], where: { companyId }, _count: { _all: true } }),
+    prisma.$queryRaw<{ estado: string; monto: number }[]>`
+      SELECT o.estado::text AS estado,
+             COALESCE(SUM(l.cantidad * l."precioUnitario"), 0)::float8 AS monto
+      FROM "OrdenServicio" o
+      LEFT JOIN "OrdenServicioLinea" l ON l."ordenId" = o.id
+      WHERE o."companyId" = ${companyId}
+      GROUP BY o.estado`,
   ]);
 
   return NextResponse.json({
     ordenes,
     porEstado: Object.fromEntries(conteos.map((c) => [c.estado, c._count._all])),
+    montoPorEstado: Object.fromEntries(montos.map((m) => [m.estado, r2(m.monto)])),
   });
 });
 
