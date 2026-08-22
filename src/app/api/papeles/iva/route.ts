@@ -9,6 +9,7 @@ import { repIvaAcreditableDe } from "@/lib/impuestos";
 import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import { esConceptoExcluido, UMBRAL_MONTO } from "@/lib/fiscal/audit/ingreso-no-facturado";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
+import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 
 // GET /api/papeles/iva?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -161,6 +162,14 @@ export async function GET(req: Request) {
     pagadaConciliada?: boolean;
     /** El contador excluyó este CFDI del acreditamiento de IVA. */
     excluidoAcreditamiento?: boolean;
+    /**
+     * El emisor está en la lista 69-B como DEFINITIVO: la deducción y el IVA
+     * son improcedentes (Art. 69-B CFF). NO es una decisión del contador —por
+     * eso viaja aparte de `excluidoAcreditamiento`, que sí lo es— y el motor
+     * (computeTaxPosition) ya lo descuenta. Sin esta bandera el papel de
+     * trabajo sumaba MÁS IVA acreditable que la declaración que justifica.
+     */
+    emisorEnLista69B?: boolean;
     /** PPD sin complemento de pago (REP) en el periodo → aún no acreditable. */
     sinComplementoPago?: boolean;
     /** PPD con complemento parcial → sólo se acredita el IVA del monto pagado. */
@@ -284,6 +293,14 @@ export async function GET(req: Request) {
   }
   trasladado.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
+  // Proveedores en la lista 69-B DEFINITIVO y con el hallazgo abierto. Misma
+  // fuente que usa el motor, para que ambos excluyan exactamente lo mismo: si
+  // el contador marca el hallazgo como resuelto (acreditó materialidad), el
+  // RFC sale del conjunto y sus CFDI vuelven a contar en los dos lados a la vez.
+  const rfcs69B = await efosRfcsBloqueados(companyId);
+  const bloqueado69B = (rfc: string | null) =>
+    rfc != null && rfcs69B.has(rfc.toUpperCase().trim());
+
   const acreditable: Row[] = [];
   const retenidoAProveedores: Row[] = [];
 
@@ -314,6 +331,7 @@ export async function GET(req: Request) {
         importe,
         metodoPago: inv.metodoPago,
         excluidoAcreditamiento: inv.ivaNoAcreditable,
+        emisorEnLista69B: bloqueado69B(rfcContraparte(inv)),
         sinComplementoPago: esPPD && acreditadoPPD <= 0.005,
         pagoParcial: esPPD && acreditadoPPD > 0.005 && acreditadoPPD + 0.5 < t,
       });
@@ -343,7 +361,19 @@ export async function GET(req: Request) {
   const ppdIngresoPendiente = { count: ppdIngRows.length, iva: +sum(ppdIngRows).toFixed(2) };
   // No entran al total (ni al cálculo) — igual que el motor: lo excluido por el
   // contador, ni el PPD que aún no tiene complemento de pago en el periodo.
-  const totalAcreditable = sum(acreditable.filter((r) => !r.excluidoAcreditamiento && !r.sinComplementoPago));
+  // Mismos tres motivos que el motor: lo excluido por el contador, el PPD sin
+  // complemento y el emisor en la lista 69-B. Si este total no cuadra con
+  // `computeTaxPosition`, el papel deja de justificar la declaración.
+  const totalAcreditable = sum(
+    acreditable.filter((r) => !r.excluidoAcreditamiento && !r.sinComplementoPago && !r.emisorEnLista69B)
+  );
+  const rows69B = acreditable.filter((r) => r.emisorEnLista69B);
+  const excluido69B = {
+    count: rows69B.length,
+    iva: +sum(rows69B).toFixed(2),
+    subtotal: +rows69B.reduce((a, r) => a + r.subtotal, 0).toFixed(2),
+    rfcs: [...new Set(rows69B.map((r) => r.rfc).filter(Boolean) as string[])],
+  };
   const ppdRows = acreditable.filter((r) => r.sinComplementoPago);
   const ppdSinComplemento = { count: ppdRows.length, iva: +sum(ppdRows).toFixed(2) };
   const totalRetenidoClientes = sum(retenidoPorClientes);
@@ -376,7 +406,7 @@ export async function GET(req: Request) {
   let cfdisPueSinPago = 0;
   if (reconActiva) {
     const totalById = new Map(egresos.map((e) => [e.id, e.total]));
-    const pueRows = acreditable.filter((r) => r.metodoPago === "PUE" && !r.excluidoAcreditamiento);
+    const pueRows = acreditable.filter((r) => r.metodoPago === "PUE" && !r.excluidoAcreditamiento && !r.emisorEnLista69B);
     const matched = await pagosConciliadosPorInvoice(pueRows.map((r) => r.id));
     for (const r of pueRows) {
       if (!pagadaCompleta(totalById.get(r.id) ?? 0, matched.get(r.id) ?? 0)) {
@@ -431,6 +461,7 @@ export async function GET(req: Request) {
     totales: {
       trasladado: totalTrasladado,
       acreditable: totalAcreditable,
+      excluido69B,
       proporcionAcreditamiento: actos.proporcion,
       actosGravados: actos.gravados,
       actosExentos: actos.exentos,
