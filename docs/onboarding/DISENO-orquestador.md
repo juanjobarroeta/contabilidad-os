@@ -27,7 +27,16 @@ barato. Ningún paso borra, sólo regenera.
 6. Clientes/proveedores (implícito, de la contraparte del CFDI)
 
 Servicing, parts, clientes y proveedores NO son huecos: son estas etapas y ya
-corren por alta. El catálogo de clave vehicular (global, ya poblado) es la base
+corren por alta.
+
+**Falta una salida de derivación por cablear al alta:** `OrdenServicio` (la
+orden de taller que ve la pantalla) está VACÍA aunque `ServicioVenta` esté llena
+— derivamos la venta facturada del CFDI pero nunca creamos la orden.
+`backfill-ordenes-servicio.ts` la reconstruye desde ServicioVenta +
+RefaccionMovimiento (estado ENTREGADA, líneas de mano de obra y refacciones;
+diagnóstico/técnico/kilometraje quedan null porque viven en el DMS, no en el
+CFDI). En MARGOM: 29,482 órdenes / 117,982 líneas. **Va como etapa 7 de la Mitad
+A una vez probado** — es derivación pura, idempotente, sin juicio. El catálogo de clave vehicular (global, ya poblado) es la base
 limpia de toda la derivación.
 
 ### Mitad B — Cuadre (POR CONSTRUIR, etapas 7–12)
