@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { registrarBitacora } from "@/lib/audit";
 
 export const GET = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -71,7 +72,28 @@ export const GET = withAuthz(
         })
       : [];
 
-    return NextResponse.json({ ...vehiculo, costosTotal, interesPiso, rentabilidad, otrosCiclos });
+    // Bitácora del expediente: quién tocó qué campo, qué decía antes y qué
+    // dice ahora. Se lee del AuditLog, así que sólo existe desde que se empezó
+    // a registrar — la pantalla lo dice en vez de fingir un historial completo.
+    const bitacora = await prisma.auditLog.findMany({
+      where: { companyId: vehiculo.companyId, entidad: "Vehiculo", entidadId: vehiculo.id },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+      select: { id: true, createdAt: true, accion: true, actorEmail: true, detalle: true },
+    });
+
+    // Días en piso, con la misma regla que el listado: de la entrada a la
+    // venta, o hasta hoy. Sin fecha de entrada es null, nunca cero.
+    const inicio = vehiculo.planPisoInicio ?? vehiculo.fechaCompra;
+    const diasEnPiso = inicio
+      ? Math.max(0, Math.floor(
+          ((vehiculo.fechaVenta ? vehiculo.fechaVenta.getTime() : Date.now()) - inicio.getTime()) / 86_400_000
+        ))
+      : null;
+
+    return NextResponse.json({
+      ...vehiculo, costosTotal, interesPiso, rentabilidad, otrosCiclos, bitacora, diasEnPiso,
+    });
   }
 );
 
@@ -89,6 +111,8 @@ const patchSchema = z.object({
   planPisoInicio: z.string().datetime().nullable().optional(),
   precioLista: z.number().min(0).nullable().optional(),
   notas: z.string().max(2000).nullable().optional(),
+  /** Por qué se hizo el cambio. No se guarda en la unidad: va a la bitácora. */
+  motivo: z.string().max(300).optional(),
 });
 
 export const PATCH = withAuthz(
@@ -102,11 +126,18 @@ export const PATCH = withAuthz(
 
     const vehiculo = await prisma.vehiculo.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true, autoCreado: true, compraInvoiceId: true },
+      select: {
+        id: true, companyId: true, estado: true, autoCreado: true, compraInvoiceId: true,
+        // Los valores ANTERIORES: sin ellos la bitácora sólo puede decir «alguien
+        // tocó esto», que no sirve para nada. Con ellos dice qué decía antes.
+        costoCompra: true, precioLista: true, kilometraje: true, color: true,
+        numeroEconomico: true, uso: true, planPisoTasaAnual: true, planPisoInicio: true,
+        notas: true,
+      },
     });
     if (!vehiculo) throw new AuthzError(404, "Unidad no encontrada");
 
-    await requireWriter(vehiculo.companyId, req);
+    const { user } = await requireWriter(vehiculo.companyId, req);
     await requireModule(vehiculo.companyId, "AUTOMOTRIZ", req);
 
     // Excepción del archivo SAT: una unidad auto-derivada SIN CFDI de compra
@@ -134,7 +165,7 @@ export const PATCH = withAuthz(
       );
     }
 
-    const { planPisoInicio, ...rest } = parsed.data;
+    const { planPisoInicio, motivo: _motivo, ...rest } = parsed.data;
     const updated = await prisma.vehiculo.update({
       where: { id },
       data: {
@@ -144,6 +175,38 @@ export const PATCH = withAuthz(
           : {}),
       },
     });
+    // Bitácora del expediente: una fila POR CAMPO que de verdad cambió, con lo
+    // que decía antes y lo que dice ahora. Es lo que permite responder «¿quién
+    // le puso este costo y por qué?» meses después — la pregunta que en MARGOM
+    // no se podía contestar mientras tres generaciones del derivador escribían
+    // sobre la misma factura.
+    const anterior = vehiculo as Record<string, unknown>;
+    const cambios = Object.entries(parsed.data)
+      .filter(([campo, nuevo]) => {
+        if (nuevo === undefined) return false;
+        const previo = anterior[campo];
+        const norm = (x: unknown) => (x instanceof Date ? x.toISOString() : x ?? null);
+        return norm(previo) !== norm(nuevo);
+      })
+      .map(([campo, nuevo]) => ({
+        campo,
+        antes: anterior[campo] instanceof Date
+          ? (anterior[campo] as Date).toISOString()
+          : (anterior[campo] ?? null),
+        despues: nuevo ?? null,
+      }));
+
+    if (cambios.length > 0) {
+      registrarBitacora({
+        accion: "automotriz.vehiculo.editar",
+        userId: user.id,
+        companyId: vehiculo.companyId,
+        entidad: "Vehiculo",
+        entidadId: id,
+        detalle: { cambios, motivo: parsed.data.motivo ?? null },
+      });
+    }
+
     return NextResponse.json(updated);
   }
 );
