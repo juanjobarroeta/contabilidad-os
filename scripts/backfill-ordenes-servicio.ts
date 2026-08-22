@@ -36,6 +36,14 @@ async function main() {
     const COMPANY = empresa.id;
     console.log(`Empresa: ${empresa.razonSocial ?? empresa.rfc} (${COMPANY})`);
 
+    // RESET borra las órdenes YA derivadas (las ligadas a ServicioVenta) para
+    // re-derivarlas limpias — necesario cuando cambia la lógica de líneas. No
+    // toca órdenes capturadas a mano (sin servicioVentaId).
+    if (process.env.RESET === "1" && APPLY) {
+      const del = await prisma.ordenServicio.deleteMany({ where: { companyId: COMPANY, servicioVentaId: { not: null } } });
+      console.log(`RESET: ${del.count.toLocaleString()} órdenes derivadas borradas (las líneas caen en cascada)`);
+    }
+
     // ServicioVenta sin orden todavía (idempotencia por servicioVentaId).
     const yaConOrden = new Set(
       (await prisma.ordenServicio.findMany({
@@ -128,6 +136,13 @@ async function main() {
             filas.push({ ordenId: orden.id, tipo: "MANO_OBRA" as const, descripcion: (v.concepto ?? "Mano de obra").slice(0, 500), cantidad: 1, precioUnitario: v.manoObra });
           for (const pt of partes)
             filas.push({ ordenId: orden.id, tipo: "REFACCION" as const, descripcion: pt.descripcion.slice(0, 500), cantidad: pt.cantidad, precioUnitario: pt.precio, refaccionId: pt.refaccionId });
+          // El kardex no siempre tiene TODAS las piezas de la factura; el
+          // residuo (refacciones facturadas − itemizadas) va como una línea
+          // resumen, para que la orden sume lo que de verdad se cobró.
+          const itemizado = partes.reduce((a, pt) => a + pt.cantidad * pt.precio, 0);
+          const residuo = Math.round((v.refacciones - itemizado) * 100) / 100;
+          if (residuo > 0.005)
+            filas.push({ ordenId: orden.id, tipo: "REFACCION" as const, descripcion: "Refacciones (sin desglose en kardex)", cantidad: 1, precioUnitario: residuo });
           if (filas.length) { await tx.ordenServicioLinea.createMany({ data: filas }); lineas += filas.length; }
         }
       }, { timeout: 120000 });
