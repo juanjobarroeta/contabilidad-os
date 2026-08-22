@@ -121,6 +121,28 @@ cancelados**. Emitidas cancelledas las tenemos; recibidas canceladas son el
 hueco conocido de descarga masiva (el proveedor las canceló, el WS no las
 entrega) — se marca, no se esconde.
 
+## Autocuración del sync SAT (requisito, hoy NO automatizado)
+
+El conocimiento de cómo destrabar el sync está documentado
+(`HANDOFF-inventario-cfdis.md`: tramos, cuota 5002 vitalicia, `saltarTramos`, las
+cinco trampas de medición). Lo que NO está automatizado —y por eso cada alta
+repetiría el firefighting manual— son tres guardas que el orquestador DEBE traer:
+
+1. **Reaper de colgados**: una solicitud `IN_PROGRESS` que lleva >N horas se
+   marca `FAILED` para que pueda reintentarse. Medido en MARGOM (2026-08-22):
+   ~134 solicitudes colgadas desde el 7 de agosto, ninguna se cae sola.
+2. **Reintento con tramos más cortos al fallar**: `FAILED` («Error no
+   controlado» o bloqueo por cuota) debe re-disparar el rango partido en más
+   tramos —`partirMes` ya existe en `sat-tramos.ts`—, no quedarse en FAILED
+   esperando a un humano.
+3. **Detector de huecos de cobertura**: el eje de períodos por `generate_series`
+   (trampa #5) como GUARDA del sync, no como consulta manual — que el alta
+   afirme «cobertura completa» sólo cuando de verdad lo es.
+
+Sin estas tres, la cobertura de datos igual llega (los syncs completos
+aterrizan), pero la maquinaria acumula colgados y fallidos en silencio. Para un
+alta de minutos, el sync tiene que curarse solo.
+
 ## Lo que el orquestador NO resuelve sin bancos
 
 CxC/CxP/IVA en flujo y el balance: necesitan movimientos bancarios. El estado de
