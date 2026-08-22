@@ -177,6 +177,24 @@ Sin estas tres, la cobertura de datos igual llega (los syncs completos
 aterrizan), pero la maquinaria acumula colgados y fallidos en silencio. Para un
 alta de minutos, el sync tiene que curarse solo.
 
+## ISAN: se CALCULA al vender, no se extrae (hoy en $0)
+
+`Vehiculo.isan` existe y su comentario lo dice —«calculado al vender unidades
+NUEVO»— pero nunca se calcula: 0 en las 10,342 unidades nuevas vendidas de
+MARGOM, mientras la CE declara `2402-0001 ISAN POR PAGAR ≈ $494,742`. No es un
+parser: el ISAN NO viene en el CFDI (0 rastros en compra y venta), es un impuesto
+que el distribuidor computa de una TARIFA. El primero que vende un auto nuevo lo
+causa.
+
+Es una computación fiscal (como la depreciación o el ajuste INPC), no una
+derivación. El trabajo real es la **tarifa oficial del ISAN por año** (DOF,
+actualizada por INPC), con su exención total/parcial por precio y la nuance por
+tipo de unidad —MARGOM vende mucho comercial/carga, donde el trato difiere—.
+Meterle una tarifa equivocada es peor que dejarlo en cero. Con la tarifa: se
+calcula por unidad nueva al venderla, se guarda en `Vehiculo.isan`, y se postea
+contra 2402 ISAN POR PAGAR. Meta de cuadre: el saldo de 2402 en la CE (~$494K).
+Va como etapa de cómputo fiscal del orquestador, y al alta.
+
 ## Lo que el orquestador NO resuelve sin bancos
 
 CxC/CxP/IVA en flujo y el balance: necesitan movimientos bancarios. El estado de
