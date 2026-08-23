@@ -14,6 +14,7 @@ import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
 import { absorcionPorMes, calcularResultados } from "@/lib/automotriz/resultados";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
+import { isanDelPeriodo } from "@/lib/automotriz/isan-periodo";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -37,9 +38,15 @@ export const GET = withAuthz(async (req: Request) => {
   const inicioSerie = new Date(year, month - 12, 1);
 
   const ABIERTOS_CRM = ["NUEVO", "CONTACTADO", "CITA", "DEMO", "NEGOCIACION"] as const;
+  // Mes anterior, para el comparativo del handoff. La cifra sola no dice si
+  // está bien: $85,240 de interés de piso es bueno o malo según qué fue el mes
+  // pasado, y eso es lo que decide si alguien hace algo hoy.
+  const inicioPrevio = new Date(year, month - 2, 1);
+
   const [
     enPiso, ordenesAbiertas, promesasVencidas, prospectosAbiertos, seguimientosVencidos,
     resultados, serieAbsorcion, ordenesFacturadas, refaccionesMostrador, fiscal, retenciones,
+    isan, timbrado, interesMes, interesPrevio, vendidasPrevio, resultadosPrevio, sinCfdiCompra,
   ] = await Promise.all([
     prisma.vehiculo.findMany({
       where: { companyId, estado: { in: ["DISPONIBLE", "APARTADO"] } },
@@ -96,6 +103,48 @@ export const GET = withAuthz(async (req: Request) => {
     // ya existe, no la declaración — ésa se arma con el mes cerrado.
     computeTaxPosition(companyId, year, month),
     retencionesDelPeriodo(companyId, year, month),
+
+    // ISAN causado del mes. Se calcula al vuelo y no se lee `Vehiculo.isan`:
+    // las ventas que reconstruyó el derivador desde los CFDI nunca pasaron por
+    // `vender()` y tienen ese campo en cero. Misma fuente que Impuestos, para
+    // que el panel y la declaración no digan cosas distintas.
+    isanDelPeriodo(prisma, companyId, year, month),
+
+    // Estado de timbrado del mes. El SAT sólo nos deja tres estados reales:
+    // timbrada, borrador y cancelada. «Cancelación en proceso» y «rechazada»
+    // que dibuja el handoff NO tienen dónde vivir — no se guarda cuándo se
+    // pidió la cancelación ni si el receptor la rechazó.
+    prisma.invoice.groupBy({
+      by: ["status"],
+      where: { companyId, tipo: "INGRESO", fecha: { gte: inicioMes, lt: finMes } },
+      _count: { _all: true },
+      _sum: { total: true },
+    }),
+
+    // Interés de plan piso devengado en el mes y en el anterior.
+    prisma.vehiculoCosto.aggregate({
+      where: { vehiculo: { companyId }, tipo: "INTERES_PISO", fecha: { gte: inicioMes, lt: finMes } },
+      _sum: { monto: true },
+    }),
+    prisma.vehiculoCosto.aggregate({
+      where: { vehiculo: { companyId }, tipo: "INTERES_PISO", fecha: { gte: inicioPrevio, lt: inicioMes } },
+      _sum: { monto: true },
+    }),
+    prisma.vehiculo.count({
+      where: { companyId, fechaVenta: { gte: inicioPrevio, lt: inicioMes } },
+    }),
+    calcularResultados(prisma, companyId, inicioPrevio, inicioMes),
+
+    // Unidades en piso cuyo costo no tiene CFDI que lo respalde: no entran a la
+    // utilidad y son la alerta más cara del tablero.
+    prisma.vehiculo.count({
+      where: {
+        companyId,
+        estado: { in: ["DISPONIBLE", "APARTADO"] },
+        compraInvoiceId: null,
+        costoCompra: { gt: 0 },
+      },
+    }),
   ]);
 
   const dias = (v: { fechaCompra: Date | null }) =>
@@ -199,9 +248,41 @@ export const GET = withAuthz(async (req: Request) => {
       iva: r2(Math.max(fiscal.iva.pagar, 0)),
       ivaSaldoAFavor: r2(fiscal.iva.saldoAFavor),
       isr: r2(Math.max(fiscal.isr.isrPagar ?? 0, 0)),
+      // El impuesto propio de una distribuidora, en la misma suma que el IVA y
+      // el ISR porque se entera el mismo día 17 (Art. 4 LFISAN).
+      isan: r2(Math.max(isan.total, 0)),
+      isanUnidades: isan.unidades.length,
+      isanAvisos: isan.advertencias,
       retenciones: retenciones.aEnterar,
-      total: r2(Math.max(fiscal.iva.pagar, 0) + Math.max(fiscal.isr.isrPagar ?? 0, 0) + retenciones.aEnterar),
+      total: r2(
+        Math.max(fiscal.iva.pagar, 0) +
+        Math.max(fiscal.isr.isrPagar ?? 0, 0) +
+        Math.max(isan.total, 0) +
+        retenciones.aEnterar
+      ),
     },
+
+    // Estado de timbrado del mes. Sólo los tres estados que el modelo conoce;
+    // el handoff dibuja cinco y los dos que faltan se dicen en la pantalla en
+    // vez de inventarles un conteo.
+    timbrado: {
+      emitidos: timbrado.reduce((a, t) => a + t._count._all, 0),
+      buckets: Object.fromEntries(
+        timbrado.map((t) => [t.status, { n: t._count._all, monto: r2(t._sum.total ?? 0) }])
+      ),
+      sinModelo: ["cancelacion_en_proceso", "rechazada"],
+    },
+
+    // El comparativo del handoff: la cifra sola no dice si está bien.
+    comparativo: {
+      vendidasPrevio,
+      utilidadPrevio: r2(resultadosPrevio.totales.utilidad),
+      interesMes: r2(interesMes._sum.monto ?? 0),
+      interesPrevio: r2(interesPrevio._sum.monto ?? 0),
+    },
+
+    // Señales operativas para el feed de alertas, con su costo al lado.
+    señales: { sinCfdiCompra },
     taller: {
       abiertas: ordenesAbiertas.reduce((s, o) => s + o._count._all, 0),
       porEstado: Object.fromEntries(ordenesAbiertas.map((o) => [o.estado, o._count._all])),
