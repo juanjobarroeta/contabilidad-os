@@ -104,6 +104,13 @@ export const config = {
     "/api/purificadora/:path*",
     "/api/restaurante/:path*",
     "/api/automotriz/:path*",
+    // La pantalla de Nómina del satélite Automotriz lee /api/nomina/empleado
+    // y /api/nomina/run cross-origin — ver AUTOMOTRIZ-6 y AUTOMOTRIZ-7 en
+    // Sentry: sin este renglón el preflight no lleva
+    // Access-Control-Allow-Origin y Safari tira el fetch con «Load failed»
+    // sin status, el mismo modo de falla que AUTOMOTRIZ-2 y AUTOMOTRIZ-4.
+    "/api/nomina",
+    "/api/nomina/:path*",
     // PurificadoraOS (satélite) administra clientes y concilia contra el
     // estado de cuenta desde su propio origen, así que las superficies
     // canónicas de clientes y bancos también necesitan CORS.
