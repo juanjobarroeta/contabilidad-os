@@ -55,10 +55,18 @@ El patrón es el mismo del recon del portal SAT de esta semana:
 - Primer paso IGUAL que con el SAT: **recon del formulario** — mapear qué campos
   pide, cómo responde, y qué tipo de captcha es. NO adivinar; grabar el tráfico
   real de una consulta y volverlo fixture.
-- **El CAPTCHA es la decisión de arquitectura.** A diferencia del SAT (donde la
-  e.firma lo evitaba), REPUVE no tiene ruta sin captcha. Opciones a evaluar en el
-  recon: si es reCAPTCHA/hCaptcha (servicio de resolución) o una imagen simple
-  (OCR). Medir antes de comprometerse.
+- **El CAPTCHA (recon HECHO): es reCAPTCHA v3.** Y eso es peor de lo que suena.
+  v3 es INVISIBLE —no hay reto que resolver, corre en segundo plano y ASIGNA UN
+  PUNTAJE a la petición—, por eso un humano «no ve captcha» y cree que no hay.
+  Pero califica bajo a la automatización: un navegador headless saca mal puntaje
+  y lo bloquean, aunque una persona pase sin fricción. Una consulta directa por
+  curl (sin token v3) devuelve error genérico — comprobado. Implicaciones para el
+  build, en orden de preferencia: (a) navegador REAL headed con buena reputación
+  a bajo volumen —lento pero honesto—; (b) servicio de tokens reCAPTCHA v3
+  (2captcha y similares) —costo por consulta, escala—; (c) NO se puede por HTTP
+  pelado. El volumen (417 de una vez + goteo de seminuevos) inclina hacia (b) para
+  el lote inicial y (a) para el goteo. NO es el build de fin de semana que parecía
+  cuando se creyó que no había captcha.
 - **Idempotente y con rate-limit**: 417 VINs de golpe = pedir bloqueo. Lote
   chico, pausa entre consultas, cursor durable (como los backfills de refacciones
   y servicio). `scripts/lib/empresa.ts` para parametrizar por empresa.
