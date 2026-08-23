@@ -529,6 +529,13 @@ export interface AbsorcionMes {
   utilidadFixedOps: number;
   estructura: number;
   porcentaje: number | null;
+  /**
+   * Venta de refacciones cuyo costo NO es comparable (la unidad de compra
+   * difiere de la de venta). Queda fuera del cálculo —arriba y abajo— porque
+   * su margen no se puede afirmar; se reporta para que la absorción no parezca
+   * más baja de lo que es sin explicar por qué.
+   */
+  ingresoSinCosto: number;
 }
 
 /**
@@ -559,14 +566,30 @@ export async function absorcionPorMes(
       WHERE n."companyId" = ${companyId} AND n."fecha" >= ${desde} AND n."fecha" < ${hasta}
       GROUP BY 1, 2
     `),
-    db.$queryRaw<Array<{ mes: Date; ingreso: number; costo: number }>>(Prisma.sql`
-      SELECT date_trunc('month', m."fecha") AS mes,
-             COALESCE(SUM(ABS(m."cantidad") * COALESCE(m."montoUnitario", 0)), 0)::float8 AS ingreso,
-             COALESCE(SUM(ABS(m."cantidad") * COALESCE(r."ultimoCosto", 0)), 0)::float8   AS costo
-      FROM "RefaccionMovimiento" m
-      JOIN "Refaccion" r ON r.id = m."refaccionId"
-      WHERE r."companyId" = ${companyId} AND m."tipo" = 'SALIDA_VENTA'
-        AND m."fecha" >= ${desde} AND m."fecha" < ${hasta}
+    // MISMA regla de comparabilidad que el estado de resultados. Sin ella, un
+    // lubricante comprado por TAMBO (208 L) y vendido por LITRO trae un «último
+    // costo» 208 veces mayor que el del litro que sale del kardex: en MARGOM
+    // eso convertía $3.5M de venta de refacciones en $85M de costo y hundía la
+    // absorción a −768%. El estado de resultados ya lo filtraba; esta serie no,
+    // y por eso la tarjeta y la gráfica de la misma pantalla no coincidían.
+    db.$queryRaw<Array<{ mes: Date; ingreso: number; costo: number; ingreso_sin_costo: number }>>(Prisma.sql`
+      WITH mov AS (
+        SELECT m."fecha", m."cantidad", m."montoUnitario", r."ultimoCosto",
+               (r."ultimoCosto" > 0
+                AND (r."unidadCosto" IS NULL OR r."unidadPrecio" IS NULL
+                     OR r."unidadCosto" = r."unidadPrecio")
+                AND NOT (COALESCE(r."ultimoPrecio", 0) > 0
+                         AND r."ultimoCosto" > r."ultimoPrecio" * 2)) AS comparable
+        FROM "RefaccionMovimiento" m
+        JOIN "Refaccion" r ON r.id = m."refaccionId"
+        WHERE r."companyId" = ${companyId} AND m."tipo" = 'SALIDA_VENTA'
+          AND m."fecha" >= ${desde} AND m."fecha" < ${hasta}
+      )
+      SELECT date_trunc('month', "fecha") AS mes,
+             COALESCE(SUM(ABS("cantidad") * COALESCE("montoUnitario", 0)) FILTER (WHERE comparable), 0)::float8     AS ingreso,
+             COALESCE(SUM(ABS("cantidad") * COALESCE("ultimoCosto", 0))   FILTER (WHERE comparable), 0)::float8     AS costo,
+             COALESCE(SUM(ABS("cantidad") * COALESCE("montoUnitario", 0)) FILTER (WHERE NOT comparable), 0)::float8 AS ingreso_sin_costo
+      FROM mov
       GROUP BY 1
     `),
     // Gasto de operación por mes: mismas exclusiones que gastosDeOperacion
@@ -590,12 +613,16 @@ export async function absorcionPorMes(
   const fila = (m: Date) => {
     const k = mesClave(new Date(m));
     let f = meses.get(k);
-    if (!f) meses.set(k, (f = { mes: k, utilidadFixedOps: 0, estructura: 0, porcentaje: null }));
+    if (!f) meses.set(k, (f = { mes: k, utilidadFixedOps: 0, estructura: 0, porcentaje: null, ingresoSinCosto: 0 }));
     return f;
   };
 
   for (const r of manoObra) fila(r.mes).utilidadFixedOps += r.valor;
-  for (const r of refacciones) fila(r.mes).utilidadFixedOps += r.ingreso - r.costo;
+  for (const r of refacciones) {
+    const f = fila(r.mes);
+    f.utilidadFixedOps += r.ingreso - r.costo;
+    f.ingresoSinCosto += r.ingreso_sin_costo;
+  }
   for (const r of nominaFilas) {
     // La nómina del taller es COSTO de la mano de obra; la demás es estructura.
     if (r.linea === "TALLER") fila(r.mes).utilidadFixedOps -= r.valor;
@@ -609,6 +636,7 @@ export async function absorcionPorMes(
       utilidadFixedOps: r2(f.utilidadFixedOps),
       estructura: r2(f.estructura),
       porcentaje: f.estructura > 0 ? r2((f.utilidadFixedOps / f.estructura) * 100) : null,
+      ingresoSinCosto: r2(f.ingresoSinCosto),
     }))
     .sort((a, b) => a.mes.localeCompare(b.mes));
 }
