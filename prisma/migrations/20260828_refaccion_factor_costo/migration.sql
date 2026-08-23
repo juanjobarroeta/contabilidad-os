@@ -1,0 +1,11 @@
+-- Factor de conversión entre la unidad de COMPRA y la de VENTA de una refacción.
+--
+-- Un lubricante se compra por tambo (208 L) y se vende por litro: `ultimoCosto`
+-- guarda el costo del tambo, y multiplicarlo por los litros que salen del kardex
+-- infla el costo ~200 veces. En MARGOM eso volvía $3.5M de venta de refacciones
+-- $85M de costo y hundía la absorción de servicio a −768%.
+--
+-- Null = no se sabe. En ese caso el costo NO es comparable y la pieza queda
+-- fuera del margen, que es lo correcto: mejor no afirmar un margen a afirmar
+-- uno falso.
+ALTER TABLE "Refaccion" ADD COLUMN "factorCosto" DOUBLE PRECISION;

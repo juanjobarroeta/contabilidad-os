@@ -92,9 +92,11 @@ async function main() {
     resueltas++;
     console.log(linea);
     if (APPLY) {
-      // NOTA: requiere el campo `factorCosto` en Refaccion.
-      await (prisma as never as { refaccion: { update: (a: unknown) => Promise<unknown> } })
-        .refaccion.update({ where: { id: r.id }, data: { factorCosto: hit.factor } });
+      // SQL directo y no `prisma.refaccion.update`: el cliente generado se
+      // comparte entre worktrees, y regenerarlo desde este schema borraría del
+      // cliente los campos que otra rama sí tiene. La columna existe por la
+      // migración; escribirla no necesita tipos nuevos.
+      await prisma.$executeRaw`UPDATE "Refaccion" SET "factorCosto" = ${hit.factor} WHERE id = ${r.id}`;
     }
   }
   if (sospechosas.length > 0) {

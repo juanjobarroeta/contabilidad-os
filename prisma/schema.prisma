@@ -5179,6 +5179,23 @@ model Refaccion {
    */
   unidadCosto   String?
   unidadPrecio  String?
+  /**
+   * Cuántas unidades de VENTA trae una unidad de COMPRA. Un lubricante se
+   * compra por tambo (208 L) y se vende por litro, así que `ultimoCosto` —el
+   * costo del tambo— multiplicado por los litros del kardex infla el costo
+   * ~200 veces: en MARGOM eso convertía $3.5M de venta de refacciones en $85M
+   * de costo y hundía la absorción de servicio a −768%.
+   *
+   * Se guarda el FACTOR y no el costo ya normalizado porque el factor es un
+   * hecho del producto —un tambo trae 208 litros— y no cambia; el costo cambia
+   * con cada compra. Null = no se sabe, y entonces el costo NO es comparable y
+   * la pieza queda fuera del margen en vez de afirmar una cifra falsa.
+   *
+   * Lo puebla scripts/refacciones-factor-costo.ts leyendo el tamaño del envase
+   * de la línea del CFDI de COMPRA («…5w-30*208lt (Tambo)»), que es donde está
+   * —en `descripcion` no, porque ahí casi siempre gana la descripción de venta.
+   */
+  factorCosto   Float?
   autoCreado    Boolean @default(true)
 
   company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)

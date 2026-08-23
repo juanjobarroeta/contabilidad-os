@@ -148,12 +148,17 @@ export async function calcularResultados(
       Array<{ en_orden: boolean; ingreso: number; costo: number; piezas: number; ingreso_sin_costo: number }>
     >(Prisma.sql`
       WITH mov AS (
-        SELECT m."invoiceId", m."cantidad", m."montoUnitario", r."ultimoCosto",
+        SELECT m."invoiceId", m."cantidad", m."montoUnitario",
                (r."ultimoCosto" > 0
-                AND (r."unidadCosto" IS NULL OR r."unidadPrecio" IS NULL
-                     OR r."unidadCosto" = r."unidadPrecio")
-                AND NOT (COALESCE(r."ultimoPrecio", 0) > 0
-                         AND r."ultimoCosto" > r."ultimoPrecio" * 2)) AS comparable
+                AND (r."factorCosto" IS NOT NULL
+                     OR ((r."unidadCosto" IS NULL OR r."unidadPrecio" IS NULL
+                          OR r."unidadCosto" = r."unidadPrecio")
+                         AND NOT (COALESCE(r."ultimoPrecio", 0) > 0
+                                  AND r."ultimoCosto" > r."ultimoPrecio" * 2)))) AS comparable,
+               -- Con factor, el costo se expresa en la unidad de VENTA. Sin
+               -- factor vale tal cual, que es lo correcto cuando las unidades
+               -- ya coinciden.
+               r."ultimoCosto" / COALESCE(NULLIF(r."factorCosto", 0), 1) AS costo_unit
         FROM "RefaccionMovimiento" m
         JOIN "Refaccion" r ON r.id = m."refaccionId"
         WHERE r."companyId" = ${companyId}
@@ -162,7 +167,7 @@ export async function calcularResultados(
       )
       SELECT EXISTS (SELECT 1 FROM "ServicioVenta" sv WHERE sv."invoiceId" = mov."invoiceId") AS en_orden,
              COALESCE(SUM(ABS("cantidad") * COALESCE("montoUnitario", 0)) FILTER (WHERE comparable), 0)::float8     AS ingreso,
-             COALESCE(SUM(ABS("cantidad") * COALESCE("ultimoCosto", 0)) FILTER (WHERE comparable), 0)::float8       AS costo,
+             COALESCE(SUM(ABS("cantidad") * "costo_unit")             FILTER (WHERE comparable), 0)::float8       AS costo,
              COALESCE(SUM(ABS("cantidad") * COALESCE("montoUnitario", 0)) FILTER (WHERE NOT comparable), 0)::float8 AS ingreso_sin_costo,
              COALESCE(SUM(ABS("cantidad")), 0)::float8                                                              AS piezas
       FROM mov
@@ -574,12 +579,17 @@ export async function absorcionPorMes(
     // y por eso la tarjeta y la gráfica de la misma pantalla no coincidían.
     db.$queryRaw<Array<{ mes: Date; ingreso: number; costo: number; ingreso_sin_costo: number }>>(Prisma.sql`
       WITH mov AS (
-        SELECT m."fecha", m."cantidad", m."montoUnitario", r."ultimoCosto",
+        SELECT m."fecha", m."cantidad", m."montoUnitario",
                (r."ultimoCosto" > 0
-                AND (r."unidadCosto" IS NULL OR r."unidadPrecio" IS NULL
-                     OR r."unidadCosto" = r."unidadPrecio")
-                AND NOT (COALESCE(r."ultimoPrecio", 0) > 0
-                         AND r."ultimoCosto" > r."ultimoPrecio" * 2)) AS comparable
+                AND (r."factorCosto" IS NOT NULL
+                     OR ((r."unidadCosto" IS NULL OR r."unidadPrecio" IS NULL
+                          OR r."unidadCosto" = r."unidadPrecio")
+                         AND NOT (COALESCE(r."ultimoPrecio", 0) > 0
+                                  AND r."ultimoCosto" > r."ultimoPrecio" * 2)))) AS comparable,
+               -- Con factor, el costo se expresa en la unidad de VENTA. Sin
+               -- factor vale tal cual, que es lo correcto cuando las unidades
+               -- ya coinciden.
+               r."ultimoCosto" / COALESCE(NULLIF(r."factorCosto", 0), 1) AS costo_unit
         FROM "RefaccionMovimiento" m
         JOIN "Refaccion" r ON r.id = m."refaccionId"
         WHERE r."companyId" = ${companyId} AND m."tipo" = 'SALIDA_VENTA'
@@ -587,7 +597,7 @@ export async function absorcionPorMes(
       )
       SELECT date_trunc('month', "fecha") AS mes,
              COALESCE(SUM(ABS("cantidad") * COALESCE("montoUnitario", 0)) FILTER (WHERE comparable), 0)::float8     AS ingreso,
-             COALESCE(SUM(ABS("cantidad") * COALESCE("ultimoCosto", 0))   FILTER (WHERE comparable), 0)::float8     AS costo,
+             COALESCE(SUM(ABS("cantidad") * "costo_unit")               FILTER (WHERE comparable), 0)::float8     AS costo,
              COALESCE(SUM(ABS("cantidad") * COALESCE("montoUnitario", 0)) FILTER (WHERE NOT comparable), 0)::float8 AS ingreso_sin_costo
       FROM mov
       GROUP BY 1
