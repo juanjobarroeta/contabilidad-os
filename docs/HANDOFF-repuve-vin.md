@@ -71,6 +71,34 @@ El patrón es el mismo del recon del portal SAT de esta semana:
   chico, pausa entre consultas, cursor durable (como los backfills de refacciones
   y servicio). `scripts/lib/empresa.ts` para parametrizar por empresa.
 
+## Qué devuelve la consulta y cómo LEERLA (validado con 2 VINs reales)
+
+Se probaron a mano dos unidades viejas de piso de MARGOM. La señal funciona y es
+TERNARIA, no binaria:
+
+1. **Placa + «Fecha de emplacado» + «Entidad que emplacó»** → se vendió y circula.
+   Ej: `3GA0C1223JM001632` trae placa G11AXC, emplacado en CDMX el 04/07/18 →
+   fuera del piso como VENTA no ligada.
+2. **Sólo inscripción de la PLANTA, sin placa, sin emplacado** → nunca se vendió.
+   Ej: `3GA4A132XJM002010` sólo tiene la inscripción de Giant Motors (todo auto
+   nuevo la trae de fábrica), placa vacía, «SIN INFORMACION» → fuera del piso
+   como BAJA/pérdida. OJO: la ausencia de placa no es prueba dura (el comprador
+   pudo no emplacar), pero con años transcurridos y sin actualización, es fuerte.
+3. **Reportes de robo/legal** en las pestañas FGJ · OCRA · Robo USA/CAN · Avisos
+   Ministeriales/Judiciales → bandera de pasivo (el uso de protección contra robo).
+
+Campos a capturar por consulta: marca, modelo, año, clase, tipo, versión, NIV,
+NCI, **placa**, país de origen, planta de ensamble, institución que inscribió,
+**entidad que emplacó**, **fecha de emplacado**, fecha de última actualización, y
+el estatus de las 4 pestañas de robo/legal.
+
+**Bono inesperado — corrige nuestra calidad de dato:** REPUVE trajo marca/modelo
+donde el catálogo de clave vehicular falló. `3GA4A132XJM002010` lo teníamos como
+«GML / POR REVISAR / modelo null»; REPUVE dice «JAC J4 TREND 2018». Así que la
+consulta también REPARA los `POR REVISAR` del padrón, no sólo dice si se vendió.
+Una consulta = verdad de inventario (placa) + robo (pestañas) + reparación de
+marca/modelo. Tres usos en una llamada.
+
 ## Modelo de datos (falta)
 
 `Vehiculo` NO tiene campos de REPUVE hoy (`vin` sí existe, es la llave). Agregar,
