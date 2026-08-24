@@ -115,5 +115,17 @@ export const config = {
     // facturas surface needs CORS for allowlisted satellite origins too.
     "/api/facturas",
     "/api/facturas/:path*",
+    // AutomotrizPro surfacea la nómina desde su propio origen — ver
+    // AUTOMOTRIZ-6 y AUTOMOTRIZ-7 en Sentry: `/api/nomina/empleado` y
+    // `/api/nomina/run` truenan «sin respuesta», o sea sin status, que es la
+    // firma de un fetch que el navegador tiró por falta de
+    // Access-Control-Allow-Origin — el MISMO modo de falla que AUTOMOTRIZ-2 y
+    // AUTOMOTRIZ-4 documentados arriba.
+    //
+    // Las rutas ya resuelven bearer + requireMembership como el resto de las
+    // superficies de satélite, así que lo único que faltaba era dejar correr
+    // el CORS. La nómina es además la base del costo de mano de obra que ya
+    // usa la absorción de servicio, así que el satélite tiene por qué leerla.
+    "/api/nomina/:path*",
   ],
 };
