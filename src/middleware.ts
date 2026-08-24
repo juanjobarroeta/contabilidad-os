@@ -127,5 +127,10 @@ export const config = {
     // el CORS. La nómina es además la base del costo de mano de obra que ya
     // usa la absorción de servicio, así que el satélite tiene por qué leerla.
     "/api/nomina/:path*",
+    // Papeles de trabajo (IVA, ISR, retenciones): el detalle POR CFDI que
+    // sostiene cada cifra declarada. AutomotrizPro los lee desde su pestaña
+    // de Impuestos — sin esto la pantalla sólo puede enseñar totales, y un
+    // total sin los comprobantes que lo forman no se defiende ante nadie.
+    "/api/papeles/:path*",
   ],
 };
