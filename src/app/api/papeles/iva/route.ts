@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
 import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
@@ -38,8 +37,19 @@ import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 //
 // Pasa ?format=csv para descarga directa.
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // `requireUser(req)` prueba el BEARER antes que la sesión. Con `auth()` a
+  // secas el papel de trabajo sólo se podía abrir desde el hub: AutomotrizPro
+  // manda bearer y se llevaba un 401. Y el detalle por CFDI es justo lo que el
+  // satélite necesita para que su pantalla de Impuestos deje de ser un
+  // resumen — la cifra sin los comprobantes que la sostienen no se puede
+  // defender ante nadie.
+  let usuario;
+  try {
+    usuario = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
@@ -51,7 +61,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "companyId, year, month requeridos" }, { status: 400 });
   }
 
-  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
+  const member = await getEffectiveCompanyMembership(usuario.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const from = new Date(Date.UTC(year, month - 1, 1));
