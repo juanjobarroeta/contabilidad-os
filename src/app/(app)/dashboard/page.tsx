@@ -22,6 +22,8 @@ interface UpcomingOb {
   monto: number | null;
   /** `true` = lo calculamos de los CFDIs, no lo acusó el SAT. */
   montoEstimado: boolean;
+  /** Por qué no hay cifra: "informativa" no se paga; "sin_calcular" sí falta. */
+  montoMotivo: "informativa" | "sin_calcular" | null;
   acuseUrl: string | null;
   lineaCaptura: string | null;
   fechaPresentacion: string | null;
@@ -227,14 +229,19 @@ function BandaPrincipal({
   const pendientes = obligaciones.filter((o) => !o.filed && o.status !== "OVERDUE");
 
   if (vencidas.length > 0) {
-    const { total, conMonto, sinMonto, algunoEstimado } = totalVencido(vencidas);
+    const { total, conMonto, sinMonto, informativas, algunoEstimado } = totalVencido(vencidas);
+    // Cuando lo único vencido son INFORMATIVAS (DIOT, CERO) no se debe dinero:
+    // se debe una PRESENTACIÓN. Encabezar con «Lo que debes» y un renglón
+    // «sin importe» le sugiere al contador que espere una cifra que no existe.
+    const soloInformativas = conMonto === 0 && sinMonto === 0 && informativas > 0;
     const masVencida = vencidas.reduce((a, b) => (a.daysUntil <= b.daysUntil ? a : b));
     const dias = Math.abs(masVencida.daysUntil);
 
     return (
       <div className="rounded-card border border-cos-red-tint bg-cos-red-tint/40 px-6 py-[22px]">
         <span className={LBL}>
-          Lo que debes de {vencidas.length === 1 ? masVencida.periodo : "periodos vencidos"}
+          {soloInformativas ? "Te falta presentar" : "Lo que debes"} de{" "}
+          {vencidas.length === 1 ? masVencida.periodo : "periodos vencidos"}
         </span>
 
         {conMonto > 0 ? (
@@ -247,11 +254,11 @@ function BandaPrincipal({
             )}
           </div>
         ) : (
-          // Sin importe conocido NO se inventa un cero: se dice qué falta.
+          // Sin importe NO se inventa un cero, y se dice POR QUÉ no lo hay.
           <p className="my-2.5 text-[22px] font-semibold tracking-[-0.02em] text-cos-red-ink">
-            {vencidas.length === 1 ? "1 obligación vencida" : `${vencidas.length} obligaciones vencidas`}
+            {vencidas.length === 1 ? "1 declaración vencida" : `${vencidas.length} declaraciones vencidas`}
             <span className="ml-2 text-[13.5px] font-normal text-cos-ink-soft">
-              sin calcular todavía
+              {soloInformativas ? "es informativa: no se paga, se presenta" : "sin calcular todavía"}
             </span>
           </p>
         )}
@@ -271,7 +278,9 @@ function BandaPrincipal({
                 {typeof o.monto === "number" ? (
                   <Money value={o.monto} size={14} weight={600} />
                 ) : (
-                  <span className="text-cos-ink-faint">sin importe</span>
+                  <span className="text-cos-ink-faint">
+                    {o.montoMotivo === "informativa" ? "no se paga" : "sin importe"}
+                  </span>
                 )}
               </span>
             </div>
@@ -287,7 +296,8 @@ function BandaPrincipal({
           href="/impuestos"
           className="mt-4 inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3.5 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep"
         >
-          Ver cómo presentarlas <ChevronRight className="h-3.5 w-3.5" />
+          {vencidas.length === 1 ? "Ver cómo presentarla" : "Ver cómo presentarlas"}{" "}
+          <ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
     );
@@ -458,6 +468,14 @@ export default function InicioPage() {
   // pantalla (banda, este listado, y de refilón en el checklist del cierre),
   // ninguna de las tres con la cifra. Este listado se queda con lo que la
   // banda NO cubre: lo que todavía no vence.
+  // Si hay algo VENCIDO, el mes en curso deja de ser el número protagonista:
+  // vence semanas después y competir con lo que ya genera recargos fue
+  // exactamente el defecto que este rediseño venía a corregir. Invertir el
+  // ORDEN no bastaba — mientras agosto conserve 40px, sigue siendo lo primero
+  // que el ojo encuentra.
+  const hayVencidas = (data?.upcomingObligations ?? []).some(
+    (o) => !o.filed && o.status === "OVERDUE"
+  );
   const proximos = (data?.upcomingObligations ?? []).filter(
     (o) => o.filed || o.status !== "OVERDUE"
   );
@@ -539,12 +557,12 @@ export default function InicioPage() {
                 <span className={LBL}>¿Cuánto debo? · {data.taxThisMonth.periodoFmt}</span>
                 {data.taxThisMonth.modo === "en_curso" && (
                   <span className="rounded-full bg-cos-slate-tint px-2 py-0.5 text-[11px] font-medium text-cos-ink-soft">
-                    Mes en curso · va acumulando
+                    {hayVencidas ? "Este aún no vence" : "Mes en curso · va acumulando"}
                   </span>
                 )}
               </div>
               <div className="my-2.5">
-                <Money value={data.taxThisMonth.total} size={40} weight={700} />
+                <Money value={data.taxThisMonth.total} size={hayVencidas ? 26 : 40} weight={700} />
               </div>
               <div className="flex flex-col gap-2 border-y border-cos-line-soft py-3.5">
                 <div className="flex items-center justify-between gap-3 text-[14px] text-cos-ink-soft">

@@ -1431,17 +1431,32 @@ function PrefacturasView({
         <span className="text-[12px] text-cos-ink-faint">El PDF sale con marca BORRADOR — no consume timbre hasta que la timbras.</span>
       </div>
       {prefacturas.map((p) => (
-        <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-cos-line px-[18px] py-2.5 last:border-0">
-          <div className="min-w-0">
-            <p className="truncate text-[13.5px] font-medium text-cos-ink">{p.cliente}</p>
-            <p className="font-mono text-[11.5px] text-cos-ink-faint">
-              {p.rfc} · {fmtFecha(p.createdAt)}{p.enviadaAt ? ` · enviada ${fmtFecha(p.enviadaAt)}` : ""}
-            </p>
-          </div>
-          <div className="flex flex-none items-center gap-2">
-            <span className="mr-1 font-mono text-[13.5px] font-semibold text-cos-ink">
+        // EN EL CELULAR ESTA FILA SE RECORTABA. El grupo de acciones era
+        // `flex-none` y sin `flex-wrap`: el importe más seis botones formaban
+        // una fila indivisible más ancha que el viewport, y el
+        // `overflow-hidden` de la Card (para redondear las esquinas) se comía
+        // lo que sobraba. Se perdían las tres últimas —Enviar, Timbrar, ✕— sin
+        // siquiera poder desplazarse de lado.
+        //
+        // Reporte real: «después de copiar enlace ya no deja visualizar lo
+        // demás… voy a salir a una consulta y por si me piden que timbre».
+        // Timbrar desde el teléfono es un caso de uso, no un extra.
+        <div key={p.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2.5 border-b border-cos-line px-[18px] py-2.5 last:border-0">
+          {/* El importe viaja con la identidad, no con los botones: es DATO,
+              no una acción. Además libera ~100px del renglón de acciones, que
+              es lo que decide si Timbrar cabe en un teléfono. */}
+          <div className="flex min-w-0 basis-full items-baseline justify-between gap-3 sm:basis-auto">
+            <div className="min-w-0">
+              <p className="truncate text-[13.5px] font-medium text-cos-ink">{p.cliente}</p>
+              <p className="font-mono text-[11.5px] text-cos-ink-faint">
+                {p.rfc} · {fmtFecha(p.createdAt)}{p.enviadaAt ? ` · enviada ${fmtFecha(p.enviadaAt)}` : ""}
+              </p>
+            </div>
+            <span className="flex-none font-mono text-[13.5px] font-semibold text-cos-ink sm:ml-4">
               {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(p.total)}
             </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <a href={p.pdfUrl} target="_blank" rel="noopener noreferrer"
               className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12px] font-medium text-cos-ink-soft hover:bg-cos-paper">PDF</a>
             {/* Editar reabre el wizard con el payload guardado; al guardar se

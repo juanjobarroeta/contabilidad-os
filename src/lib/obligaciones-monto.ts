@@ -34,8 +34,16 @@ export interface DeclaracionParaMonto {
 }
 
 export interface MontoObligacion {
-  /** Pesos a pagar. `null` = no lo sabemos (sin declaración, o informativa). */
+  /** Pesos a pagar. `null` = no hay cifra; ver `motivo` para saber POR QUÉ. */
   monto: number | null;
+  /**
+   * Por qué no hay monto. La distinción no es cosmética: «informativa» dice
+   * que NO HAY NADA QUE PAGAR (una DIOT se presenta, no se paga), mientras
+   * que «sin_calcular» admite que el trabajo está pendiente de nuestro lado.
+   * Enseñar «sin calcular» en una DIOT nos acusa de algo que no hicimos mal, y
+   * le sugiere al contador que espere un número que nunca va a llegar.
+   */
+  motivo: "informativa" | "sin_calcular" | null;
   /**
    * `true` cuando el monto sale de NUESTRO cálculo (borrador/calculada) y no
    * del acuse del SAT. La UI debe marcarlo como aproximado.
@@ -43,7 +51,8 @@ export interface MontoObligacion {
   estimado: boolean;
 }
 
-const SIN_MONTO: MontoObligacion = { monto: null, estimado: false };
+const INFORMATIVA: MontoObligacion = { monto: null, motivo: "informativa", estimado: false };
+const SIN_CALCULAR: MontoObligacion = { monto: null, motivo: "sin_calcular", estimado: false };
 
 /** Una declaración cuenta como hecho consumado sólo si ya se presentó o pagó. */
 function esHecho(status: string): boolean {
@@ -60,11 +69,13 @@ export function montoDeObligacion(
   tipo: string,
   decl: DeclaracionParaMonto | null | undefined
 ): MontoObligacion {
-  if (!decl) return SIN_MONTO;
+  if (!decl) return SIN_CALCULAR;
 
   const estimado = !esHecho(decl.status);
   const de = (v: number | null | undefined): MontoObligacion =>
-    typeof v === "number" && Number.isFinite(v) ? { monto: v, estimado } : SIN_MONTO;
+    typeof v === "number" && Number.isFinite(v)
+      ? { monto: v, motivo: null, estimado }
+      : SIN_CALCULAR;
 
   switch (tipo) {
     case "IVA_MENSUAL":
@@ -78,12 +89,12 @@ export function montoDeObligacion(
       return de(decl.iepsPagar);
     case "IMSS":
       return de(decl.imssCuotas);
-    // Informativas: no hay nada que pagar.
+    // Informativas: no hay nada que pagar, y eso NO es un cálculo pendiente.
     case "DIOT":
     case "CERO":
-      return SIN_MONTO;
+      return INFORMATIVA;
     default:
-      return SIN_MONTO;
+      return SIN_CALCULAR;
   }
 }
 
@@ -95,21 +106,32 @@ export function montoDeObligacion(
  * cifra es peor que un total que dice "y otras 3 sin calcular".
  */
 export function totalVencido(
-  obligaciones: Array<{ status: string; filed: boolean; monto: number | null; montoEstimado: boolean }>
-): { total: number; conMonto: number; sinMonto: number; algunoEstimado: boolean } {
+  obligaciones: Array<{
+    status: string; filed: boolean; monto: number | null;
+    montoEstimado: boolean; montoMotivo?: "informativa" | "sin_calcular" | null;
+  }>
+): {
+  total: number; conMonto: number; sinMonto: number;
+  /** De las que no traen cifra, cuántas es porque NO se paga (DIOT, CERO). */
+  informativas: number;
+  algunoEstimado: boolean;
+} {
   const vencidas = obligaciones.filter((o) => o.status === "OVERDUE" && !o.filed);
   let total = 0;
   let conMonto = 0;
   let sinMonto = 0;
+  let informativas = 0;
   let algunoEstimado = false;
   for (const o of vencidas) {
     if (typeof o.monto === "number") {
       total += o.monto;
       conMonto++;
       if (o.montoEstimado) algunoEstimado = true;
+    } else if (o.montoMotivo === "informativa") {
+      informativas++;
     } else {
       sinMonto++;
     }
   }
-  return { total, conMonto, sinMonto, algunoEstimado };
+  return { total, conMonto, sinMonto, informativas, algunoEstimado };
 }
