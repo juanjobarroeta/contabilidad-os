@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TaxDeclarationType } from "@prisma/client";
 import { getObligacionesPorRegimen } from "@/lib/obligaciones";
-import { montoDeObligacion } from "@/lib/obligaciones-monto";
+import { conCalculoEnVivo, montoDeObligacion } from "@/lib/obligaciones-monto";
 import { detectComplementosPendientes } from "@/lib/complementos";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
@@ -168,6 +168,8 @@ export async function GET(req: Request) {
   // Source of truth for "¿Cuánto debo?" (IVA flujo + ISR por régimen), not the
   // rough ivaEstimado below.
   const taxPosition = await computeTaxPosition(companyId, fiscalYear, fiscalMonth);
+  // Misma llave que usan las obligaciones (`periodoKey`), para poder cruzarlas.
+  const periodoFiscalKey = `${fiscalYear}-${String(fiscalMonth).padStart(2, "0")}`;
 
   // ── 6-month trend ─────────────────────────────────────────────────────────
   const trendData = await Promise.all(
@@ -332,7 +334,18 @@ export async function GET(req: Request) {
             orderBy: [{ status: "desc" }, { periodo: "desc" }],
           })
         : null;
-      const { monto, motivo, estimado } = montoDeObligacion(ob.tipo, decl);
+      // Si esta obligación es del período fiscal EN JUEGO, el tablero ya lo
+      // calculó desde los CFDIs (computeTaxPosition, arriba) y lo enseña en la
+      // tarjeta «¿Cuánto debo?». Sin esto la banda decía «sin importe» encima
+      // de la cifra que la propia página mostraba dos bloques más abajo —el
+      // tablero contradiciéndose a sí mismo (visto en producción, MERCEDES
+      // TRESPALACIOS: banda «4 vencidas · sin importe», tarjeta $333.79).
+      const esPeriodoCalculado = ob.periodoKey === periodoFiscalKey;
+      const { monto, motivo, estimado } = conCalculoEnVivo(
+        montoDeObligacion(ob.tipo, decl),
+        ob.tipo,
+        esPeriodoCalculado ? { iva: taxPosition.iva.pagar, isr: taxPosition.isr.isrPagar } : null,
+      );
       return {
         ...ob,
         filed: !!decl && (decl.status === "FILED" || decl.status === "PAID"),

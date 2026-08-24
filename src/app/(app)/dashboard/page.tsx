@@ -235,13 +235,19 @@ function BandaPrincipal({
     // «sin importe» le sugiere al contador que espere una cifra que no existe.
     const soloInformativas = conMonto === 0 && sinMonto === 0 && informativas > 0;
     const masVencida = vencidas.reduce((a, b) => (a.daysUntil <= b.daysUntil ? a : b));
+    const periodos = new Set(vencidas.map((o) => o.periodo));
+    const mismoPeriodo = periodos.size === 1 ? masVencida.periodo : null;
     const dias = Math.abs(masVencida.daysUntil);
 
     return (
       <div className="rounded-card border border-cos-red-tint bg-cos-red-tint/40 px-6 py-[22px]">
         <span className={LBL}>
           {soloInformativas ? "Te falta presentar" : "Lo que debes"} de{" "}
-          {vencidas.length === 1 ? masVencida.periodo : "periodos vencidos"}
+          {/* Cuando todo lo vencido es del MISMO período —el caso normal: se
+              atrasa un mes completo, no obligaciones sueltas— se nombra el mes.
+              «Lo que debes de periodos vencidos» era vago justo donde había un
+              dato preciso: los cuatro renglones decían «Jul 2026». */}
+          {mismoPeriodo ?? "periodos vencidos"}
         </span>
 
         {conMonto > 0 ? (
