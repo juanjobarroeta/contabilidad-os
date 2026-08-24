@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { montoDeObligacion, totalVencido } from "./obligaciones-monto";
+import { conCalculoEnVivo, montoDeObligacion, totalVencido } from "./obligaciones-monto";
 
 describe("montoDeObligacion", () => {
   it("sin declaración no inventa un cero", () => {
@@ -100,5 +100,47 @@ describe("totalVencido", () => {
   it("sin vencidas, total en cero y nada estimado", () => {
     const r = totalVencido([ob({ status: "UPCOMING" })]);
     expect(r).toEqual({ total: 0, conMonto: 0, sinMonto: 0, informativas: 0, algunoEstimado: false });
+  });
+});
+
+describe("conCalculoEnVivo", () => {
+  const calc = { iva: 0, isr: 333.79 };
+  const sinCalcular = { monto: null, motivo: "sin_calcular" as const, estimado: false };
+
+  it("rellena el hueco con la cifra que el tablero YA calculó", () => {
+    // El caso real (MERCEDES TRESPALACIOS): la banda decía «sin importe» y la
+    // tarjeta de abajo, del mismo julio, decía $333.79.
+    expect(conCalculoEnVivo(sinCalcular, "ISR_PROVISIONAL", calc))
+      .toEqual({ monto: 333.79, motivo: null, estimado: true });
+  });
+
+  it("un IVA de $0.00 es un HECHO, no un dato ausente", () => {
+    // «No debes IVA» y «no sabemos cuánto debes» son cosas distintas.
+    expect(conCalculoEnVivo(sinCalcular, "IVA_MENSUAL", calc))
+      .toEqual({ monto: 0, motivo: null, estimado: true });
+  });
+
+  it("la cifra viva SIEMPRE va marcada estimada", () => {
+    // Sale de los CFDIs, no de un acuse: puede moverse con facturas rezagadas.
+    expect(conCalculoEnVivo(sinCalcular, "ISR_PROVISIONAL", calc).estimado).toBe(true);
+  });
+
+  it("lo PRESENTADO gana: el cálculo no pisa el acuse del SAT", () => {
+    const presentada = { monto: 1234.5, motivo: null, estimado: false };
+    expect(conCalculoEnVivo(presentada, "ISR_PROVISIONAL", calc)).toEqual(presentada);
+  });
+
+  it("una informativa sigue sin importe aunque haya cálculo", () => {
+    const diot = { monto: null, motivo: "informativa" as const, estimado: false };
+    expect(conCalculoEnVivo(diot, "DIOT", calc)).toEqual(diot);
+  });
+
+  it("un tipo que el cálculo no cubre (IEPS) se queda como estaba", () => {
+    expect(conCalculoEnVivo(sinCalcular, "IEPS_MENSUAL", calc)).toEqual(sinCalcular);
+  });
+
+  it("sin cálculo disponible no inventa nada", () => {
+    expect(conCalculoEnVivo(sinCalcular, "ISR_PROVISIONAL", null)).toEqual(sinCalcular);
+    expect(conCalculoEnVivo(sinCalcular, "ISR_PROVISIONAL", { iva: null, isr: null })).toEqual(sinCalcular);
   });
 });

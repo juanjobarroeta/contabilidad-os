@@ -135,3 +135,45 @@ export function totalVencido(
   }
   return { total, conMonto, sinMonto, informativas, algunoEstimado };
 }
+
+/**
+ * Rellena el importe con el cálculo EN VIVO del período fiscal en juego.
+ *
+ * POR QUÉ HACE FALTA. `montoDeObligacion` lee la fila de TaxDeclaration, y para
+ * un período que todavía no se captura esa fila no existe → «sin importe». Pero
+ * el tablero YA calcula ese mismo período desde los CFDIs (`computeTaxPosition`)
+ * y lo enseña en la tarjeta «¿Cuánto debo?». El resultado era un tablero que se
+ * contradecía a sí mismo: la banda decía «4 obligaciones vencidas · sin importe»
+ * y la tarjeta de abajo, del MISMO julio, decía $333.79 (visto en producción,
+ * MERCEDES TRESPALACIOS). Enseñar «no lo sabemos» arriba de la cifra que sí
+ * sabemos es peor que no enseñar nada.
+ *
+ * TRES REGLAS, EN ESTE ORDEN:
+ *
+ *   1. Una declaración PRESENTADA gana siempre. Es el importe que el SAT acusó;
+ *      nuestro cálculo no lo pisa.
+ *   2. Una INFORMATIVA sigue sin importe. La DIOT no se paga, y el cálculo del
+ *      período no le aplica.
+ *   3. Lo demás toma la cifra viva y va marcado `estimado`: sale de los CFDIs,
+ *      no de un acuse, y puede moverse cuando entren facturas rezagadas.
+ *
+ * El CERO es un importe válido: un IVA de $0.00 es un hecho («no debes IVA»),
+ * no un dato ausente. Por eso se distingue de `null`.
+ */
+export function conCalculoEnVivo(
+  base: MontoObligacion,
+  tipo: string,
+  calculado: { iva: number | null; isr: number | null } | null
+): MontoObligacion {
+  // 1 · lo presentado manda; 2 · las informativas no llevan importe.
+  if (base.monto !== null || base.motivo === "informativa") return base;
+  if (!calculado) return base;
+
+  const vivo =
+    tipo === "IVA_MENSUAL" ? calculado.iva
+    : tipo === "ISR_PROVISIONAL" ? calculado.isr
+    : null;
+
+  if (typeof vivo !== "number" || !Number.isFinite(vivo)) return base;
+  return { monto: vivo, motivo: null, estimado: true };
+}
