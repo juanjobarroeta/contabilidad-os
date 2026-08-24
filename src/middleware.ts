@@ -104,6 +104,13 @@ export const config = {
     "/api/purificadora/:path*",
     "/api/restaurante/:path*",
     "/api/automotriz/:path*",
+    // Nómina: el satélite Automotriz la lee desde su pestaña Nómina (roster y
+    // corridas) — ver AUTOMOTRIZ-6/AUTOMOTRIZ-7 en Sentry: mismo modo de falla
+    // que AUTOMOTRIZ-2/AUTOMOTRIZ-4, sin este renglón el preflight no lleva
+    // Access-Control-Allow-Origin y el fetch truena con «Load failed» sin
+    // status. Las rutas ya resuelven bearer (requireUser/withAuthz +
+    // requireMembership) como el resto de superficies de satélite.
+    "/api/nomina/:path*",
     // PurificadoraOS (satélite) administra clientes y concilia contra el
     // estado de cuenta desde su propio origen, así que las superficies
     // canónicas de clientes y bancos también necesitan CORS.
