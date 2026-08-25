@@ -2,37 +2,38 @@
 
 // Paso 2 del flujo: la conciliación bancaria es COMPUERTA del cierre — el
 // motor no postea un mes con movimientos sin conciliar (regla existente).
-// Arriba, la mesa split-view para RESOLVER los pendientes (deck People, p10);
-// abajo, el papel de conciliación de siempre. Al aplicar un match, el papel
-// se remonta (key) para releer el mes.
+//
+// LA MESA YA NO VIVE AQUÍ: se mudó a /bancos, que es a donde mandan todos los
+// CTAs del producto («Ir a Bancos», «Clasificar en Bancos», el tablero). Tener
+// la misma mesa montada en dos rutas era la confusión original — el trabajo se
+// hace en UN lugar y este paso queda como lo que es: el estado de la compuerta
+// (el papel de conciliación del mes) con la puerta a la mesa.
 
-import { useState } from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { FlowPageHeader } from "@/components/contabilidad/FlowPageHeader";
-import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWorkbench";
 import { ConciliacionBancariaPanel } from "@/components/contabilidad/ConciliacionBancariaPanel";
 
 export default function ConciliacionPage() {
   const { activeCompany } = useCompany();
   const { year, month } = usePeriod();
-  const [version, setVersion] = useState(0);
   if (!activeCompany) return null;
   return (
     <div>
-      <FlowPageHeader title="Conciliación bancaria" />
-      <ConciliacionWorkbench
-        companyId={activeCompany.id}
-        year={year}
-        month={month}
-        onApplied={() => setVersion((v) => v + 1)}
+      <FlowPageHeader
+        title="Conciliación bancaria"
+        actions={
+          <Link
+            href="/bancos"
+            className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep"
+          >
+            Abrir la mesa en Bancos <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        }
       />
-      <ConciliacionBancariaPanel
-        key={version}
-        companyId={activeCompany.id}
-        year={year}
-        month={month}
-      />
+      <ConciliacionBancariaPanel companyId={activeCompany.id} year={year} month={month} />
     </div>
   );
 }

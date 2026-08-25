@@ -94,7 +94,8 @@ describe("evaluarChecks — banco (fuente-agnóstico)", () => {
     const banco = find(r, "banco");
     expect(banco?.estado).toBe("error");
     expect(banco?.detalle).toMatch(/balance no cierra/);
-    expect(banco?.cta?.href).toBe("/bancos");
+    // Importar el estado de cuenta vive en el tab Cuentas de /bancos.
+    expect(banco?.cta?.href).toBe("/bancos?tab=cuentas");
   });
 
   it("régimen sin balance sin banco → warn (no bloquea)", () => {
@@ -120,7 +121,8 @@ describe("evaluarChecks — sin clasificar", () => {
     const c = find(r, "sin_clasificar");
     expect(c?.estado).toBe("warn");
     expect(c?.titulo).toMatch(/4 movimiento/);
-    expect(c?.cta?.href).toBe("/bancos");
+    // El triage (conciliar/categorizar) vive en el tab Movimientos.
+    expect(c?.cta?.href).toBe("/bancos?tab=movimientos");
   });
 
   it("sin banco → el check no aplica", () => {
