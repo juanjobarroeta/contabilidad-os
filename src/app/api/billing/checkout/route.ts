@@ -132,6 +132,21 @@ export async function POST(req: Request) {
       intervalo,
       addons: String((body as { addons?: unknown } | null)?.addons ?? ""),
     });
+    // Un Price que no existe en el MODO de las llaves en uso (llaves live con
+    // precios de sandbox, o al revés) es el error de configuración más fácil de
+    // cometer al pasar a producción, y con el mensaje genérico es indistinguible
+    // de "Stripe está caído". Se nombra para que quien configura sepa qué mover.
+    const err = e as { code?: string; param?: string; message?: string };
+    if (err?.code === "resource_missing" && /price/i.test(err.param ?? err.message ?? "")) {
+      return NextResponse.json(
+        {
+          error:
+            "Configuración de Stripe inconsistente: el precio no existe para las llaves en uso. " +
+            "Revisa que STRIPE_SECRET_KEY y las STRIPE_PRICE_* sean del mismo modo (ambas live o ambas de prueba).",
+        },
+        { status: 500 },
+      );
+    }
     return NextResponse.json(
       { error: "No se pudo iniciar el pago. Intenta de nuevo más tarde." },
       { status: 500 },
