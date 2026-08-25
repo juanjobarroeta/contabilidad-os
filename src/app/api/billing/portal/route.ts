@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/observability";
 import { NextResponse } from "next/server";
 import { AuthzError, requireUser } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ url: portal.url });
   } catch (e) {
-    console.error("[billing/portal] error creando sesión del portal:", e);
+    reportError(e, { ruta: "billing/portal", userId: session.user.id });
     return NextResponse.json(
       { error: "No se pudo abrir el portal de facturación. Intenta de nuevo más tarde." },
       { status: 500 },

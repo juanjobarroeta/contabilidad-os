@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/observability";
 import { NextResponse } from "next/server";
 import { AuthzError, requireUser } from "@/lib/authz";
 import { appBaseUrl, getStripe, resolveStripeCustomerId } from "@/lib/billing/stripe";
@@ -122,7 +123,15 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url: checkout.url });
   } catch (e) {
-    console.error("[billing/checkout] error creando sesión de Stripe:", e);
+    // Reportar a Sentry, no sólo a consola: un fallo aquí es un cobro que no
+    // ocurrió, y los logs de Railway son efímeros y por deployment.
+    reportError(e, {
+      ruta: "billing/checkout",
+      userId: session.user.id,
+      plan,
+      intervalo,
+      addons: String((body as { addons?: unknown } | null)?.addons ?? ""),
+    });
     return NextResponse.json(
       { error: "No se pudo iniciar el pago. Intenta de nuevo más tarde." },
       { status: 500 },
