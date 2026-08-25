@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { registrarBitacora } from "@/lib/audit";
 
@@ -12,8 +11,13 @@ import { registrarBitacora } from "@/lib/audit";
 // Los datos bancarios (CLABE/Banco) se toman del empleado cuando están capturados.
 
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { searchParams } = new URL(req.url);
   const runId = searchParams.get("runId");
@@ -38,7 +42,7 @@ export async function GET(req: Request) {
 
   if (!run) return NextResponse.json({ error: "Corrida no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, run.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, run.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
   // El archivo de dispersión expone CLABE, banco, RFC y neto de todos los
   // empleados: sólo roles con permiso de escritura pueden exportarlo.
@@ -49,7 +53,7 @@ export async function GET(req: Request) {
   // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED). Aunque es
   // un GET, el archivo SPEI es el ENTREGABLE monetizable de la nómina: se trata
   // como export de valor, no como lectura pasiva.
-  const gate = await gateEscritura(session.user.id);
+  const gate = await gateEscritura(user.id);
   if (gate) return gate;
 
   if (!["CALCULATED", "STAMPED", "PAID"].includes(run.status)) {
@@ -85,8 +89,8 @@ export async function GET(req: Request) {
   // expone CLABE/RFC/neto de toda la plantilla). Fire-and-forget.
   registrarBitacora({
     companyId: run.companyId,
-    userId: session.user.id,
-    actorEmail: session.user.email ?? null,
+    userId: user.id,
+    actorEmail: user.email ?? null,
     accion: "nomina.dispersion-export",
     entidad: "PayrollRun",
     entidadId: run.id,

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { recalcularPayrollRun } from "@/lib/nomina/payroll-run";
 
 type Params = { params: Promise<{ id: string }> };
@@ -11,14 +10,19 @@ type Params = { params: Promise<{ id: string }> };
 // incidencias vigentes del periodo. Sólo corridas DRAFT/CALCULATED de la app;
 // las timbradas no cambian (los CFDIs ya se emitieron).
 export async function POST(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id } = await params;
   const run = await prisma.payrollRun.findUnique({ where: { id }, select: { companyId: true } });
   if (!run) return NextResponse.json({ error: "Corrida no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, run.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, run.companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }

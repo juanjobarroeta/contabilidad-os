@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, withAuthz } from "@/lib/authz";
+import { SALARIO_MINIMO_GENERAL } from "@/lib/nomina/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/nomina/empleado?companyId=…[&incluirBajas=1]
@@ -31,6 +32,11 @@ export const GET = withAuthz(async (req: Request) => {
   return NextResponse.json({
     total: empleados.length,
     activos: empleados.filter((e) => e.isActive).length,
+    // El mínimo vigente viaja con el roster para que el cliente compare el
+    // salario REGISTRADO contra el piso legal sin cablearse la cifra: es el
+    // dato que separa «en el mínimo» de «por debajo» (el IMSS rechaza el alta
+    // sub-mínima) y cambia cada año por decreto.
+    salarioMinimoGeneral: SALARIO_MINIMO_GENERAL,
     empleados: empleados.map((e) => ({
       ...e,
       nombreCompleto: `${e.nombre} ${e.apellidoPaterno} ${e.apellidoMaterno ?? ""}`.trim(),

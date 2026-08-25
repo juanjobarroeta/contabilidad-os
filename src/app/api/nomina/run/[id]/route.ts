@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { rangoDelPeriodo } from "@/lib/nomina/incidencias";
@@ -69,9 +68,14 @@ export async function GET(req: Request, { params }: Params) {
 
 // DELETE /api/nomina/run/[id]
 // Only DRAFT or CALCULATED runs can be deleted (not stamped — CFDIs already exist)
-export async function DELETE(_req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function DELETE(req: Request, { params }: Params) {
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { id } = await params;
   const run = await prisma.payrollRun.findUnique({
@@ -81,7 +85,7 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   if (!run) return NextResponse.json({ error: "Corrida no encontrada" }, { status: 404 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, run.companyId);
+  const member = await getEffectiveCompanyMembership(user.id, run.companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
