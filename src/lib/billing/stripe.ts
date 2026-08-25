@@ -54,7 +54,20 @@ export async function resolveStripeCustomerId(userId: string): Promise<string> {
     select: { id: true, email: true, name: true, stripeCustomerId: true },
   });
   if (!user) throw new Error("Usuario no encontrado");
-  if (user.stripeCustomerId) return user.stripeCustomerId;
+
+  // El id guardado pertenece a UNA cuenta y UN modo de Stripe. Al pasar de
+  // llaves de prueba a live (o al cambiar de cuenta) el id viejo deja de
+  // existir, y usarlo revienta el checkout con "No such customer" — un cobro
+  // que nunca ocurre. Se verifica y, si ya no existe, se crea uno nuevo en el
+  // modo actual y se reemplaza; así la migración a live se cura sola.
+  if (user.stripeCustomerId) {
+    try {
+      const existente = await stripe.customers.retrieve(user.stripeCustomerId);
+      if (!existente.deleted) return user.stripeCustomerId;
+    } catch (e) {
+      if ((e as { code?: string })?.code !== "resource_missing") throw e;
+    }
+  }
 
   const customer = await stripe.customers.create({
     email: user.email,

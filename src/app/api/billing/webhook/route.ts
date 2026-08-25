@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/observability";
 import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/billing/stripe";
 import { applyStripeEvent, type StripeEventLike } from "@/lib/billing/stripe-events";
@@ -36,7 +37,11 @@ export async function POST(req: Request) {
       signature,
       secret,
     )) as unknown as StripeEventLike;
-  } catch {
+  } catch (e) {
+    // Antes se devolvía 400 en SILENCIO: ni log ni Sentry. Un secreto que no
+    // corresponde (p. ej. el de live contra llaves de test) rebota TODOS los
+    // eventos y nadie se entera — el cobro pasa y la cuenta nunca se activa.
+    reportError(e, { ruta: "billing/webhook", motivo: "firma-invalida" }, { level: "warning" });
     return NextResponse.json({ error: "Firma de Stripe inválida." }, { status: 400 });
   }
 
@@ -46,7 +51,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   } catch (e) {
     // Error real (DB caída, etc.): 500 para que Stripe reintente.
-    console.error(`[billing/webhook] error aplicando ${event.type}:`, e);
+    reportError(e, { ruta: "billing/webhook", evento: event.type });
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
