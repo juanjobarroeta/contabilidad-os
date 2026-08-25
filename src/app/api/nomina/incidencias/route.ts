@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
 import { recalcularPayrollRun } from "@/lib/nomina/payroll-run";
 import { rangoDelPeriodo } from "@/lib/nomina/incidencias";
@@ -104,8 +103,13 @@ function metadatosIncidencia(inc: Incidencia, payrollRunId?: string | null) {
 }
 
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
@@ -114,7 +118,7 @@ export async function GET(req: Request) {
 
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
+  const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
   const where: Record<string, unknown> = { companyId };
@@ -143,15 +147,20 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   const body = await req.json();
   const { companyId, action } = body;
 
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
 
-  const member = await getEffectiveCompanyMembership(session.user.id, companyId);
+  const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
@@ -248,8 +257,8 @@ export async function POST(req: Request) {
 
     registrarBitacora({
       companyId,
-      userId: session.user.id,
-      actorEmail: session.user.email ?? null,
+      userId: user.id,
+      actorEmail: user.email ?? null,
       accion: "nomina.incidencia.agregar",
       entidad: "Incidencia",
       entidadId: incidencia.id,
@@ -337,8 +346,8 @@ export async function POST(req: Request) {
     if (created > 0) {
       registrarBitacora({
         companyId,
-        userId: session.user.id,
-        actorEmail: session.user.email ?? null,
+        userId: user.id,
+        actorEmail: user.email ?? null,
         accion: "nomina.incidencia.agregar",
         entidad: "Incidencia",
         detalle: { bulk: true, creadas: created, errores: errors.length },
@@ -380,8 +389,8 @@ export async function POST(req: Request) {
 
     registrarBitacora({
       companyId,
-      userId: session.user.id,
-      actorEmail: session.user.email ?? null,
+      userId: user.id,
+      actorEmail: user.email ?? null,
       accion: "nomina.incidencia.eliminar",
       entidad: "Incidencia",
       entidadId: incidencia.id,
