@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, withAuthz } from "@/lib/authz";
 import { SALARIO_MINIMO_GENERAL } from "@/lib/nomina/constants";
+import { Prisma } from "@prisma/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/nomina/empleado?companyId=…[&incluirBajas=1]
@@ -29,6 +30,22 @@ export const GET = withAuthz(async (req: Request) => {
     },
   });
 
+  // Última fecha de pago por empleado. El flag isActive del padrón está
+  // desincronizado de la realidad (en MARGOM: 281 personas con recibo en los
+  // últimos 45 días y 245 de ellas marcadas inactivas), así que el cliente
+  // necesita el dato duro —cuándo cobró por última vez— para derivar quién
+  // está EN NÓMINA, en lugar de creerle a la marca.
+  const ultimos = await prisma.$queryRaw<Array<{ employeeId: string; ultimo: Date }>>(
+    Prisma.sql`
+      SELECT i."employeeId", max(r."fechaPago") AS ultimo
+      FROM "PayrollItem" i
+      JOIN "PayrollRun" r ON r.id = i."payrollRunId"
+      WHERE r."companyId" = ${companyId}
+      GROUP BY 1
+    `
+  );
+  const ultimoBy = new Map(ultimos.map((u) => [u.employeeId, u.ultimo]));
+
   return NextResponse.json({
     total: empleados.length,
     activos: empleados.filter((e) => e.isActive).length,
@@ -40,6 +57,7 @@ export const GET = withAuthz(async (req: Request) => {
     empleados: empleados.map((e) => ({
       ...e,
       nombreCompleto: `${e.nombre} ${e.apellidoPaterno} ${e.apellidoMaterno ?? ""}`.trim(),
+      ultimoPago: ultimoBy.get(e.id) ?? null,
     })),
   });
 });

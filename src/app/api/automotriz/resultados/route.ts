@@ -109,7 +109,7 @@ async function nominaPorEmpleado(companyId: string, desde: Date, hasta: Date) {
   const filas = await prisma.$queryRaw<
     Array<{
       rfc: string | null; empleado: string | null; puesto: string | null; sucursal: string | null;
-      linea: string; percepciones: number; cuotas: number; recibos: number;
+      linea: string; percepciones: number; cuotas: number; recibos: number; sbc: number | null;
     }>
   >`
     SELECT n."rfcEmpleado" AS rfc,
@@ -117,6 +117,7 @@ async function nominaPorEmpleado(companyId: string, desde: Date, hasta: Date) {
            (array_agg(n."puesto"   ORDER BY n."fecha" DESC))[1]    AS puesto,
            (array_agg(n."sucursal" ORDER BY n."fecha" DESC))[1]    AS sucursal,
            (array_agg(n."linea"::text ORDER BY n."fecha" DESC))[1] AS linea,
+           (array_agg(n."sbcDiario" ORDER BY n."fecha" DESC))[1]    AS sbc,
            COALESCE(SUM(n."percepciones"), 0)::float8      AS percepciones,
            COALESCE(SUM(n."cuotasPatronales"), 0)::float8  AS cuotas,
            COUNT(*)::int                                    AS recibos
@@ -132,6 +133,10 @@ async function nominaPorEmpleado(companyId: string, desde: Date, hasta: Date) {
     puesto: e.puesto,
     sucursal: e.sucursal,
     linea: e.linea,
+    // SBC del recibo más reciente del periodo: el salario REGISTRADO con
+    // autoridad de CFDI. Los campos de salario del Employee son captura vieja
+    // (hay $59 y $79 diarios imposibles como SBC); el recibo es el dato.
+    sbcDiario: e.sbc,
     percepciones: Math.round(e.percepciones * 100) / 100,
     cuotasPatronales: Math.round(e.cuotas * 100) / 100,
     monto: Math.round((e.percepciones + e.cuotas) * 100) / 100,
