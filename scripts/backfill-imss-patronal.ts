@@ -98,9 +98,18 @@ async function main() {
       let sdi = e?.salarioDiarioIntegrado ?? e?.salarioDiario ?? 0;
       if (!sdi || sdi <= 0) { sdi = (it.totalPercepciones || it.sueldoBase || 0) / dias; if (sdi <= 0) sinSdi++; }
       const uma = umaDiariaDelEjercicio(anio) ?? undefined;
+      // Art. 36 (salario mínimo: el patrón absorbe la cuota obrera) NO se decide
+      // con el salarioDiario guardado: en este padrón es un DEFAULT al mínimo
+      // (dato, no realidad) y en el ejercicio donde coincide con el mínimo
+      // vigente (2026) cebaba la absorción para TODOS — obrero calculado en $0
+      // y patronal inflado, cuando el CFDI sí retuvo. El CFDI es la autoridad
+      // de lo que pasó: si retuvo (imssObrero > 0) no hay absorción; sólo si no
+      // retuvo se permite el traslado del Art. 36.
+      const sinRetencionCfdi = (it.imssObrero || 0) < 0.005;
       const r = calcularImss({
         salarioBaseCotizacion: sdi, diasPagados: dias, riesgoPuesto: e?.riesgoPuesto ?? "1",
-        ejercicio: anio, umaDiaria: uma, salarioDiario: e?.salarioDiario,
+        ejercicio: anio, umaDiaria: uma,
+        salarioDiario: sinRetencionCfdi ? e?.salarioDiario : undefined,
       });
       updates.push({ id: it.id, val: r.patronal.total });
       a.obrero += r.obrero.total; a.patronal += r.patronal.total;
