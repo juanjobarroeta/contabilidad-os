@@ -177,22 +177,38 @@ Sin estas tres, la cobertura de datos igual llega (los syncs completos
 aterrizan), pero la maquinaria acumula colgados y fallidos en silencio. Para un
 alta de minutos, el sync tiene que curarse solo.
 
-## ISAN: se CALCULA al vender, no se extrae (hoy en $0)
+## ISAN: se CALCULA al vender, no se extrae (Vehiculo.isan en $0)
 
 `Vehiculo.isan` existe y su comentario lo dice —«calculado al vender unidades
-NUEVO»— pero nunca se calcula: 0 en las 10,342 unidades nuevas vendidas de
-MARGOM, mientras la CE declara `2402-0001 ISAN POR PAGAR ≈ $494,742`. No es un
+NUEVO»— pero nunca se calcula: 0 en las unidades nuevas del padrón. No es un
 parser: el ISAN NO viene en el CFDI (0 rastros en compra y venta), es un impuesto
-que el distribuidor computa de una TARIFA. El primero que vende un auto nuevo lo
-causa.
+que el distribuidor computa de una TARIFA.
 
-Es una computación fiscal (como la depreciación o el ajuste INPC), no una
-derivación. El trabajo real es la **tarifa oficial del ISAN por año** (DOF,
-actualizada por INPC), con su exención total/parcial por precio y la nuance por
-tipo de unidad —MARGOM vende mucho comercial/carga, donde el trato difiere—.
-Meterle una tarifa equivocada es peor que dejarlo en cero. Con la tarifa: se
-calcula por unidad nueva al venderla, se guarda en `Vehiculo.isan`, y se postea
-contra 2402 ISAN POR PAGAR. Meta de cuadre: el saldo de 2402 en la CE (~$494K).
+**Pero SÍ se declara** — y aquí dos trampas de balanza mordieron a dos agentes,
+vale documentarlas: el ISAN causado es el FLUJO (abonos) de 2402, no su SALDO, y
+2402 tiene mayor + subcuentas (sumar ambos duplica). El causado real, sólo hojas:
+
+  2402 causado (abonos)   2024 $7.87M · 2025 $37.64M · 2026 $11.68M
+
+(el saldo se queda chico porque se entera cada mes — pasivo que rota). La primera
+versión de este doc citó $494K: era el SALDO de un corte, no el causado. Y un
+conteo padre+hija daba $23.35M en 2026: el doble del real.
+
+Es una computación fiscal (como depreciación/INPC), no derivación. Un `calcularIsan()`
+al vuelo sobre `precioVenta` da **$18.6M en 2026 — ~59% ARRIBA de los $11.68M
+declarados**. Que SOBRE, no que falte, dice cuál es el trabajo de modelo, en orden:
+
+1. **Exención por tipo de unidad** (baja el calc, DOMINANTE): el ISAN exenta
+   comerciales de carga sobre cierto límite, y MARGOM vende justo eso (JAC carga,
+   tractos K7). Aplicar tarifa plena a unidades exentas es lo que infla el calc.
+2. **Base sin descuento** (sube el calc, secundario): Art. 2 — la base es el
+   precio de enajenación sin disminuir descuentos; si `precioVenta` ya viene neto,
+   la base legal es mayor. Esto requiere guardar precio de lista aparte del
+   negociado — cambio de MODELO, no de cálculo.
+
+Con las dos, $18.6M debe converger a ~$11.68M. Hasta entonces, NO escribir
+`Vehiculo.isan` (calcular al vuelo). Meta de cuadre: el FLUJO de abonos de 2402
+(sólo hojas), no el saldo.
 Va como etapa de cómputo fiscal del orquestador, y al alta.
 
 ## Lo que el orquestador NO resuelve sin bancos
