@@ -159,7 +159,7 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
         detalle:
           "Sin banco el balance no cierra (Activo, Cuentas por cobrar y por pagar). " +
           "Conecta tu banco o sube tu estado de cuenta para este mes.",
-        cta: { label: "Ir a Bancos", href: "/bancos" },
+        cta: { label: "Ir a Bancos", href: "/bancos?tab=cuentas" },
       });
     } else {
       checks.push({
@@ -178,7 +178,7 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
       detalle:
         "Tu régimen no exige balance, así que la CE puede generarse sin banco. " +
         "Aun así, registrar tus movimientos mejora la precisión de la contabilidad.",
-      cta: { label: "Ir a Bancos", href: "/bancos" },
+      cta: { label: "Ir a Bancos", href: "/bancos?tab=cuentas" },
     });
   } else {
     checks.push({
@@ -199,7 +199,7 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
         detalle:
           `Quedan ${input.bankUnmatchedCount} movimiento(s) bancario(s) sin conciliar ni ` +
           "categorizar. Mientras no se resuelvan, no entran a la contabilidad y el mes no cierra.",
-        cta: { label: "Clasificar en Bancos", href: "/bancos" },
+        cta: { label: "Clasificar en Bancos", href: "/bancos?tab=movimientos" },
       });
     } else {
       checks.push({
