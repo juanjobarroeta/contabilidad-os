@@ -208,26 +208,45 @@ export const DELETE = withAuthz(
       select: { id: true, companyId: true, estado: true },
     });
     if (!existing) throw new AuthzError(404, "Solicitud no encontrada");
-    await requireWriter(existing.companyId, req);
+    const { membership } = await requireWriter(existing.companyId, req);
     await requireModule(existing.companyId, "CONSTRUCCION");
 
-    if (existing.estado !== "BORRADOR" && existing.estado !== "PENDIENTE") {
+    // Reglas de borrado por estado:
+    //   BORRADOR/PENDIENTE — cualquier writer (como siempre).
+    //   APROBADA           — sólo OWNER/ADMIN: arrastra sus adjudicaciones
+    //                        (y aplicaciones de pago) y saca la fila de la
+    //                        cola de cuentas por pagar.
+    //   PAGADA             — nunca por API: es evidencia de dinero gastado
+    //                        (auditoría); una limpieza deliberada va por el
+    //                        script de mantenimiento.
+    const esAdmin = membership.role === "OWNER" || membership.role === "ADMIN";
+    if (existing.estado === "PAGADA") {
       return NextResponse.json(
-        { error: "Solo se pueden eliminar requisiciones no autorizadas (borrador o pendiente)." },
+        { error: "Una requisición pagada no se puede eliminar (respaldo de auditoría)." },
+        { status: 409 }
+      );
+    }
+    if (!esAdmin && existing.estado !== "BORRADOR" && existing.estado !== "PENDIENTE") {
+      return NextResponse.json(
+        { error: "Solo un administrador puede eliminar requisiciones ya autorizadas." },
         { status: 409 }
       );
     }
 
-    // A PENDIENTE requisición can already carry cotizaciones (added while
-    // awaiting authorization), whose SolicitudCotizacionPartida rows hold a
-    // RESTRICT fk to SolicitudPartida. Deleting solicitud directly lets
-    // Postgres race that cascade against the partidas' own cascade delete and
-    // the RESTRICT can fire first (PrismaClientUnknownRequestError, code
-    // 23001). Deleting cotizaciones first — same order the PUT rebuild uses —
-    // clears those line items before partidas go, so the RESTRICT never sees
-    // a live reference.
+    // Orden hijo→padre para no despertar los RESTRICT del árbol (cotización↔
+    // partida y adjudicación↔cotización); mismo orden que el PUT rebuild y el
+    // script de limpieza. Las aplicaciones de pago caen en cascada desde la
+    // adjudicación; los vínculos de CFDI se sueltan (la factura se conserva y
+    // vuelve a "por vincular").
     await prisma.$transaction(async (tx) => {
+      await tx.solicitudAdjudicacion.deleteMany({ where: { solicitudId: id } });
+      await tx.solicitudCotizacionPartida.deleteMany({
+        where: { cotizacion: { solicitudId: id } },
+      });
       await tx.solicitudCompraCotizacion.deleteMany({ where: { solicitudId: id } });
+      await tx.construccionCfdiVinculo.deleteMany({
+        where: { companyId: existing.companyId, targetTipo: "SOLICITUD", targetId: id },
+      });
       await tx.solicitudCompra.delete({ where: { id } });
     });
     return NextResponse.json({ deleted: id });
