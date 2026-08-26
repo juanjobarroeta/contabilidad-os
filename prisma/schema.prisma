@@ -410,6 +410,17 @@ model CompanyMember {
   /// /api/auth/token para que bartiz filtre navegación y rutas.
   construccionRol ConstruccionRol?
 
+  /// Sólo para el satélite AUTOMOTRIZ: páginas del ERP que este miembro puede
+  /// VER, como llaves de ruta del satélite ("panel", "ventas", "inventario",
+  /// "nomina"…). Vacío = sin restricción (default compatible, igual que
+  /// allowedModules). Son strings opacos para el hub — el satélite es dueño de
+  /// su lista de páginas y agregar una no pide migración. Es VISIBILIDAD de
+  /// UI (navegación y guard de rutas del satélite); la protección de
+  /// escritura sigue siendo por rol (VIEWER no escribe) + requireModule. El
+  /// encajonamiento server-side por página puede añadirse después al estilo
+  /// construccion/rol.ts.
+  automotrizPaginas String[] @default([])
+
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
