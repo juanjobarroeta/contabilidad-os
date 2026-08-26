@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { camposContraparte, parseSpei, tieneContraparte } from "@/lib/bancos/spei-descripcion";
+import { nombresPorRfc } from "@/lib/bancos/contraparte-nombre";
 import { vincularComisionesDeCuenta } from "@/lib/bancos/comisiones-repo";
 import { repararMojibake, tieneMojibake } from "@/lib/bancos/decodificar";
 
@@ -78,6 +79,7 @@ async function handle(req: Request) {
   let procesadas = 0;
   let conContraparte = 0;
   let conRfc = 0;
+  let conNombreResuelto = 0;
   let conClaveRastreo = 0;
   let conLineaCaptura = 0;
   let reparadas = 0;
@@ -94,15 +96,19 @@ async function handle(req: Request) {
     };
     const lote = await prisma.bankTransaction.findMany({
       where,
-      select: { id: true, descripcion: true },
+      select: { id: true, companyId: true, descripcion: true },
       orderBy: { id: "asc" },
       take: Math.min(PAGE, limit - procesadas),
     });
     if (lote.length === 0) break;
     cursorId = lote[lote.length - 1].id;
 
-    for (const tx of lote) {
-      procesadas++;
+    // Pasada 1: parsear todo el lote. Pasada 2 (abajo): resolver por RFC los
+    // nombres que el banco no escribió — BBVA en los traspasos manda SOLO el
+    // RFC, y la razón social de ese RFC ya vive en el catálogo de clientes y
+    // en los CFDIs de la MISMA empresa (el barrido puede ser global, por eso
+    // se agrupa por companyId). Match exacto o nada.
+    const parseados = lote.map((tx) => {
       // El backfill no tiene la columna críptica del CSV original (Banorte),
       // sólo la descripción guardada. Los bancos que etiquetan la clave de
       // rastreo dentro del texto (Bajío) sí la rinden aquí; los que la mandan
@@ -112,9 +118,34 @@ async function handle(req: Request) {
       // editar lo que escribió el banco: el byte original decía "ó" y esto lo
       // devuelve a "ó". Sólo palabras con una sola lectura posible.
       const reparada = repararMojibake(tx.descripcion);
+      return { tx, reparada, campos: camposContraparte(parseSpei(reparada)) };
+    });
+
+    const rfcsPorEmpresa = new Map<string, Set<string>>();
+    for (const p of parseados) {
+      if (p.campos.contraparteRfc && !p.campos.contraparteNombre) {
+        let s = rfcsPorEmpresa.get(p.tx.companyId);
+        if (!s) rfcsPorEmpresa.set(p.tx.companyId, (s = new Set()));
+        s.add(p.campos.contraparteRfc);
+      }
+    }
+    const nombresEmpresa = new Map<string, Map<string, string>>();
+    for (const [cid, rfcs] of rfcsPorEmpresa) {
+      // best-effort: sin resolución el barrido sigue rindiendo lo extraído
+      nombresEmpresa.set(cid, await nombresPorRfc(cid, [...rfcs]).catch(() => new Map()));
+    }
+
+    for (const { tx, reparada, campos } of parseados) {
+      procesadas++;
       if (reparada !== tx.descripcion) reparadas++;
 
-      const campos = camposContraparte(parseSpei(reparada));
+      if (campos.contraparteRfc && !campos.contraparteNombre) {
+        const nombre = nombresEmpresa.get(tx.companyId)?.get(campos.contraparteRfc);
+        if (nombre) {
+          campos.contraparteNombre = nombre;
+          conNombreResuelto++;
+        }
+      }
       const sello = new Date();
 
       await prisma.bankTransaction
@@ -173,6 +204,9 @@ async function handle(req: Request) {
     // Los que ya traen RFC son los que NO habrá que consultarle a Banxico:
     // este número es directamente el ahorro del CEP.
     conRfc,
+    // Nombres que el banco no escribió y se resolvieron por RFC desde el
+    // catálogo de clientes / los CFDIs de la propia empresa.
+    conNombreResuelto,
     // Los que traen clave de rastreo pero no RFC son los candidatos a CEP.
     conClaveRastreo,
     conLineaCaptura,

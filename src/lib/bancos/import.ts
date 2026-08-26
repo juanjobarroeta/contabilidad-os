@@ -31,6 +31,7 @@ import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuen
 import { primeraReglaQueEmpata, signoDeMonto, type FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 import { decodificarEstadoDeCuenta, esExcelBinario } from "@/lib/bancos/decodificar";
 import { camposContraparte, parseSpei } from "@/lib/bancos/spei-descripcion";
+import { nombresPorRfc } from "@/lib/bancos/contraparte-nombre";
 import { vincularComisionesDeCuenta } from "@/lib/bancos/comisiones-repo";
 
 export type ImportResult = {
@@ -175,6 +176,25 @@ export async function persistTransactions(opts: {
   // Conteo de aciertos por regla, para sellar hitCount al final del lote.
   const hitsPorRegla = new Map<string, number>();
 
+  // La contraparte que el banco ya escribió en la descripción, parseada UNA
+  // vez por fila. Y cuando el banco mandó sólo el RFC (BBVA en los traspasos),
+  // el nombre se resuelve por RFC desde el catálogo de clientes y los CFDIs de
+  // la empresa — una consulta por lote, match exacto o nada.
+  const speiPorFila = transactions.map((tx, i) =>
+    plan[i] ? parseSpei(tx.descripcion, tx.claveRastreoRaw) : null
+  );
+  const rfcsSinNombre = [
+    ...new Set(
+      speiPorFila
+        .filter((s) => s?.contraparteRfc && !s.contraparteNombre)
+        .map((s) => s!.contraparteRfc!)
+    ),
+  ];
+  const nombresResueltos =
+    rfcsSinNombre.length > 0
+      ? await nombresPorRfc(companyId, rfcsSinNombre).catch(() => new Map<string, string>())
+      : new Map<string, string>();
+
   for (let i = 0; i < transactions.length; i++) {
     const tx = transactions[i];
 
@@ -216,10 +236,14 @@ export async function persistTransactions(opts: {
       }
     }
 
-    // La contraparte que el banco ya escribió en la descripción. No cambia el
-    // movimiento; le pone nombre, RFC y CLABE a la otra parte para que la
-    // conciliación deje de adivinar por monto.
-    const spei = parseSpei(tx.descripcion, tx.claveRastreoRaw);
+    // La contraparte parseada arriba. No cambia el movimiento; le pone nombre,
+    // RFC y CLABE a la otra parte para que la conciliación deje de adivinar
+    // por monto.
+    const spei = speiPorFila[i]!;
+    const campos = camposContraparte(spei);
+    if (campos.contraparteRfc && !campos.contraparteNombre) {
+      campos.contraparteNombre = nombresResueltos.get(campos.contraparteRfc) ?? null;
+    }
 
     await prisma.bankTransaction.create({
       data: {
@@ -239,7 +263,7 @@ export async function persistTransactions(opts: {
         notes,
         source,
         importBatchId: batch.id,
-        ...camposContraparte(spei),
+        ...campos,
       },
     });
     imported++;

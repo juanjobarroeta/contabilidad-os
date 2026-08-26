@@ -153,6 +153,20 @@ export function ConciliacionWorkbench({
     return () => { vivo = false; };
   }, [companyId]);
 
+  // La derecha nunca abre muerta: al llegar el mes (o cambiar de cuenta) se
+  // elige el primer movimiento pendiente, para que los candidatos se enseñen
+  // solos — la mesa abría con la caja vacía y parecía rota. Deseleccionar con
+  // clic sigue funcionando: esto sólo corre cuando cambian datos o filtro, no
+  // cuando el usuario suelta la selección. Tras conciliar, cargar() trae datos
+  // nuevos y esto avanza solo al siguiente pendiente.
+  useEffect(() => {
+    if (!data) return;
+    const lista = cuentaSel
+      ? data.movimientosNoRegistrados.filter((m) => m.cuentaBancariaId === cuentaSel)
+      : data.movimientosNoRegistrados;
+    setSelTx((prev) => (prev && lista.some((m) => m.id === prev.id) ? prev : lista[0] ?? null));
+  }, [data, cuentaSel]);
+
   // Candidatos del movimiento elegido.
   useEffect(() => {
     if (!selTx) return;
@@ -301,7 +315,12 @@ export function ConciliacionWorkbench({
   const total = deLaCuenta(data.movimientosBanco).length;
   const sin = pendientes.length;
   const sinGlobal = data.movimientosNoRegistrados.length;
-  const porConciliar = pendientes.reduce((s, m) => s + m.monto, 0);
+  // Σ|monto|, NO el neto firmado: +$17k de abonos y −$17k de cargos netean a
+  // casi cero, y el tile diría «$92 por conciliar» con 12 movimientos por
+  // casar. El neto es del motor (la ecuación del cuadre lo necesita firmado);
+  // este tile mide cuánto trabajo hay sobre la mesa.
+  const abonos = pendientes.reduce((s, m) => s + (m.monto > 0 ? m.monto : 0), 0);
+  const cargos = pendientes.reduce((s, m) => s + (m.monto < 0 ? -m.monto : 0), 0);
   const pct = total > 0 ? ((total - sin) / total) * 100 : 100;
 
   return (
@@ -317,7 +336,15 @@ export function ConciliacionWorkbench({
         <StatTile
           label="Por conciliar"
           tone={sin === 0 ? "jade" : "ink"}
-          value={<Money value={Math.abs(porConciliar)} size={20} />}
+          value={<Money value={abonos + cargos} size={20} />}
+          sub={
+            abonos > 0 && cargos > 0 ? (
+              <>
+                abonos <Money value={abonos} className="text-[12px]" muted /> · cargos{" "}
+                <Money value={cargos} className="text-[12px]" muted />
+              </>
+            ) : undefined
+          }
         />
       </StatStrip>
 
@@ -462,8 +489,9 @@ export function ConciliacionWorkbench({
                 </p>
               ) : !cand || (cand.candidates.length === 0 && cand.impuestos.length === 0) ? (
                 <p className="px-5 py-6 text-sm text-cos-ink-soft">
-                  Sin CFDIs candidatos en ±30 días con monto compatible. Puede ser un traspaso propio,
-                  una comisión o un documento que aún no se sincroniza.
+                  Sin CFDIs de este sentido en ±30 días que quepan en este movimiento. Puede ser un
+                  traspaso propio, una comisión, un documento que aún no se sincroniza — o un{" "}
+                  {selTx.monto > 0 ? "ingreso" : "gasto"} que no se facturó.
                 </p>
               ) : (
                 <>
