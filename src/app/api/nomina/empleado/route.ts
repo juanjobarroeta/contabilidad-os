@@ -41,6 +41,12 @@ export const GET = withAuthz(async (req: Request) => {
       FROM "PayrollItem" i
       JOIN "PayrollRun" r ON r.id = i."payrollRunId"
       WHERE r."companyId" = ${companyId}
+        -- Hay corridas TIMBRADAS con fecha de pago futura (el pre-timbrado de
+        -- la quincena en curso y finiquitos fechados al 31-dic). Son CFDIs
+        -- reales, pero un pago futuro no es evidencia de que alguien cobra
+        -- HOY: sin este recorte, el cliente mostraría «último pago 31/12» y
+        -- derivaría «en nómina» de un hecho que aún no ocurre.
+        AND r."fechaPago" <= now()
       GROUP BY 1
     `
   );
