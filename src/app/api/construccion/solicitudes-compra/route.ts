@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { buildPartidasAndOffers } from "@/lib/construccion/requisicion-offers";
+import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 const partidaSchema = z.object({
   insumoId: z.string().optional(),
@@ -120,7 +121,7 @@ export const POST = withAuthz(async (req: Request) => {
   }
   const data = parsed.data;
 
-  await requireWriter(data.companyId, req);
+  const { user } = await requireWriter(data.companyId, req);
   await requireModule(data.companyId, "CONSTRUCCION");
 
   // Optional cross-checks: project + supplier belong to the same company
@@ -155,6 +156,7 @@ export const POST = withAuthz(async (req: Request) => {
           fechaEntrega: data.fechaEntrega ? new Date(data.fechaEntrega) : null,
           formaPago: data.formaPago ?? null,
           estado: data.estado ?? "PENDIENTE",
+          creadaPorId: user.id,
           total: 0,
         },
       });
@@ -171,6 +173,22 @@ export const POST = withAuthz(async (req: Request) => {
         include: { partidas: true, cotizaciones: { include: { partidas: true } } },
       });
     });
+    // Enviada directo a autorización → avisar a quienes autorizan (admins y
+    // contabilidad), sin el propio autor. Fire-and-forget: un push caído no
+    // debe tirar la creación.
+    if (solicitud && solicitud.estado === "PENDIENTE") {
+      void notificarConstruccion({
+        companyId: data.companyId,
+        destinos: ["ADMIN", "CONTABILIDAD"],
+        excludeUserId: user.id,
+        payload: {
+          title: `Nueva requisición ${solicitud.folio}`,
+          body: `${moneyPush(solicitud.total)} — por autorizar`,
+          url: "/compras-por-autorizar",
+          tag: `solicitud-${solicitud.id}`,
+        },
+      });
+    }
     return NextResponse.json(solicitud, { status: 201 });
   } catch (e: unknown) {
     if (

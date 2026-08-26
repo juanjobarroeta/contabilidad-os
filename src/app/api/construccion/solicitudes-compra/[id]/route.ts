@@ -21,6 +21,7 @@ import {
   withAuthz,
 } from "@/lib/authz";
 import { buildPartidasAndOffers } from "@/lib/construccion/requisicion-offers";
+import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 const putSchema = z.object({
   folio: z.string().min(1).optional(),
@@ -123,7 +124,7 @@ export const PUT = withAuthz(
       select: { id: true, companyId: true, estado: true },
     });
     if (!existing) throw new AuthzError(404, "Solicitud no encontrada");
-    await requireWriter(existing.companyId, req);
+    const { user } = await requireWriter(existing.companyId, req);
     await requireModule(existing.companyId, "CONSTRUCCION");
 
     // Un-authorized requisiciones (BORRADOR draft + PENDIENTE awaiting
@@ -184,6 +185,21 @@ export const PUT = withAuthz(
           include: { partidas: true, cotizaciones: { include: { partidas: true } } },
         });
       });
+      // Borrador que se acaba de ENVIAR a autorización → avisar a los que
+      // autorizan (el create con estado PENDIENTE ya avisa por su lado).
+      if (existing.estado === "BORRADOR" && updated?.estado === "PENDIENTE") {
+        void notificarConstruccion({
+          companyId: existing.companyId,
+          destinos: ["ADMIN", "CONTABILIDAD"],
+          excludeUserId: user.id,
+          payload: {
+            title: `Nueva requisición ${updated.folio}`,
+            body: `${moneyPush(updated.total)} — por autorizar`,
+            url: "/compras-por-autorizar",
+            tag: `solicitud-${updated.id}`,
+          },
+        });
+      }
       return NextResponse.json(updated);
     } catch (e: unknown) {
       if (typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "P2002") {

@@ -18,6 +18,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 import { aplicarPago } from "@/lib/construccion/pagos-proveedor";
 
 const createSchema = z.object({
@@ -49,7 +50,7 @@ export const POST = withAuthz(async (req: Request) => {
   }
   const data = parsed.data;
 
-  await requireWriter(data.companyId, req);
+  const { user } = await requireWriter(data.companyId, req);
   await requireModule(data.companyId, "CONSTRUCCION");
 
   if (data.supplierId) {
@@ -90,6 +91,20 @@ export const POST = withAuthz(async (req: Request) => {
       const aplicado = await aplicarPago(tx, pago, data.aplicaciones, fecha);
       return { pago, aplicado, anticipo: Math.max(0, data.monto - aplicado) };
     });
+
+    // Pago registrado (normalmente por tesorería) → avisar a los admins.
+    void notificarConstruccion({
+      companyId: data.companyId,
+      destinos: ["ADMIN"],
+      excludeUserId: user.id,
+      payload: {
+        title: "Pago registrado",
+        body: `${data.supplierNombre} · ${moneyPush(data.monto)}`,
+        url: "/cuentas-por-pagar",
+        tag: `pago-${result.pago.id}`,
+      },
+    });
+
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error al registrar el pago";

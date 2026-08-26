@@ -83,6 +83,14 @@ describe("enforceConstruccionRol", () => {
     expect(allowed("CONTABILIDAD", "GET", "/api/construccion/usuarios")).toBe(false);
   });
 
+  it("push: todos los roles pueden suscribirse a sus notificaciones", () => {
+    for (const rol of ["TESORERIA", "RESIDENTE", "CONTABILIDAD"] as const) {
+      expect(allowed(rol, "GET", "/api/construccion/push")).toBe(true);
+      expect(allowed(rol, "POST", "/api/construccion/push")).toBe(true);
+      expect(allowed(rol, "DELETE", "/api/construccion/push")).toBe(true);
+    }
+  });
+
   it("fuera de /api/construccion no restringe (p. ej. cambiar contraseña)", () => {
     expect(allowed("RESIDENTE", "POST", "/api/auth/change-password")).toBe(true);
     expect(allowed("TESORERIA", "POST", "/api/auth/change-password")).toBe(true);

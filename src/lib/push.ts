@@ -37,7 +37,7 @@ export interface PushPayload {
 
 // Categorías de notificación que el usuario puede activar/desactivar. "sistema"
 // (p.ej. el push de prueba) no se filtra. Modelo opt-out: ausente/true = on.
-export type NotifCategoria = "cfdis" | "declaraciones" | "revision" | "sistema";
+export type NotifCategoria = "cfdis" | "declaraciones" | "revision" | "construccion" | "sistema";
 
 /** ¿El usuario tiene activada esta categoría? Default: sí (opt-out). */
 async function categoriaHabilitada(userId: string, categoria?: NotifCategoria): Promise<boolean> {

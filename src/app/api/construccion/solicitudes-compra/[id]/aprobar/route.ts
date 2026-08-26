@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireModule, requireWriter, withAuthz, AuthzError } from "@/lib/authz";
 import { generateAdjudicaciones } from "@/lib/construccion/adjudicaciones";
+import { notificarConstruccion } from "@/lib/construccion/push";
 
 // POST /api/construccion/solicitudes-compra/:id/aprobar
 export const POST = withAuthz(
@@ -10,7 +11,7 @@ export const POST = withAuthz(
 
     const solicitud = await prisma.solicitudCompra.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true },
+      select: { id: true, companyId: true, estado: true, folio: true, creadaPorId: true },
     });
     if (!solicitud) {
       throw new AuthzError(404, "Solicitud no encontrada");
@@ -40,6 +41,20 @@ export const POST = withAuthz(
       });
       await generateAdjudicaciones(tx, id);
       return u;
+    });
+
+    // Avisar a quien la creó (si no fue él mismo quien aprobó).
+    void notificarConstruccion({
+      companyId: solicitud.companyId,
+      destinos: [],
+      userIds: [solicitud.creadaPorId],
+      excludeUserId: user.id,
+      payload: {
+        title: `Requisición ${solicitud.folio} autorizada`,
+        body: "Ya está adjudicada y en camino a pago.",
+        url: "/requisiciones",
+        tag: `solicitud-${solicitud.id}`,
+      },
     });
 
     return NextResponse.json(updated);

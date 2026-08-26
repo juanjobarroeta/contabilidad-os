@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 export const POST = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -16,10 +17,17 @@ export const POST = withAuthz(
 
     const adj = await prisma.solicitudAdjudicacion.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true },
+      select: {
+        id: true,
+        companyId: true,
+        estado: true,
+        supplierNombre: true,
+        total: true,
+        solicitud: { select: { folio: true } },
+      },
     });
     if (!adj) throw new AuthzError(404, "Adjudicación no encontrada");
-    await requireWriter(adj.companyId, req);
+    const { user } = await requireWriter(adj.companyId, req);
     await requireModule(adj.companyId, "CONSTRUCCION");
 
     if (adj.estado !== "POR_PAGAR") {
@@ -33,6 +41,20 @@ export const POST = withAuthz(
       where: { id },
       data: { enviadaTesoreriaAt: new Date() },
     });
+
+    // A la cola de tesorería → avisar a quien paga.
+    void notificarConstruccion({
+      companyId: adj.companyId,
+      destinos: ["TESORERIA"],
+      excludeUserId: user.id,
+      payload: {
+        title: "Pago por ejecutar",
+        body: `${adj.supplierNombre} · ${moneyPush(adj.total)} (${adj.solicitud.folio})`,
+        url: "/pagos-tesoreria",
+        tag: `adjudicacion-${adj.id}`,
+      },
+    });
+
     return NextResponse.json(updated);
   }
 );

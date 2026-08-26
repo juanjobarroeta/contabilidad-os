@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 export const POST = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -16,10 +17,10 @@ export const POST = withAuthz(
 
     const gasto = await prisma.gasto.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true },
+      select: { id: true, companyId: true, estado: true, beneficiarioNombre: true, importe: true },
     });
     if (!gasto) throw new AuthzError(404, "Gasto no encontrado");
-    await requireWriter(gasto.companyId, req);
+    const { user } = await requireWriter(gasto.companyId, req);
     await requireModule(gasto.companyId, "CONSTRUCCION");
 
     if (gasto.estado !== "APROBADO") {
@@ -33,6 +34,20 @@ export const POST = withAuthz(
       where: { id },
       data: { enviadaTesoreriaAt: new Date() },
     });
+
+    // A la cola de tesorería → avisar a quien paga.
+    void notificarConstruccion({
+      companyId: gasto.companyId,
+      destinos: ["TESORERIA"],
+      excludeUserId: user.id,
+      payload: {
+        title: "Gasto por pagar",
+        body: `${gasto.beneficiarioNombre} · ${moneyPush(gasto.importe)}`,
+        url: "/pagos-tesoreria",
+        tag: `gasto-${gasto.id}`,
+      },
+    });
+
     return NextResponse.json(updated);
   }
 );

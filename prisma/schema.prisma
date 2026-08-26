@@ -2887,6 +2887,10 @@ model SolicitudCompra {
   fechaEntrega DateTime?
   formaPago    SolicitudFormaPago?
 
+  // Quién la creó (User id, sin FK — igual que aprobadaPorId). Destino de los
+  // push "tu requisición fue autorizada/pagada"; null en filas históricas.
+  creadaPorId String?
+
   // Approval tracking
   aprobadaPorId String?
   aprobadaAt    DateTime?
@@ -3396,6 +3400,10 @@ model Gasto {
   pagadoAt           DateTime?
   // Cuándo admin lo mandó a tesorería para pago (workflow de cuentas por pagar).
   enviadaTesoreriaAt DateTime?
+
+  // Quién lo capturó (User id, sin FK — igual que aprobadoPor). Destino de
+  // los push "tu gasto fue aprobado/pagado"; null en filas históricas.
+  creadaPorId String?
 
   // Katia's approval audit
   aprobadoPor String? // User id
