@@ -78,15 +78,33 @@ export async function GET(req: Request, { params }: Params) {
         gte: new Date(tx.fecha.getTime() - WINDOW_DAYS * 86400000),
         lte: new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000),
       },
-      total: { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
-      // Exclude PUE invoices already matched to another bank tx — either via
-      // the legacy 1:1 link or via assigned portions (ConciliacionDetalle).
-      // Keep PPD invoices visible — they can have multiple partial payments.
-      OR: [
-        { metodoPago: "PPD" },
+      AND: [
         {
-          bankTransactions: { none: { status: "MATCHED" } },
-          conciliacionDetalles: { none: {} },
+          // El total del CFDI ya no tiene que ser el del movimiento. Con el
+          // filtro viejo (total a ±5%) los dos flujos que la mesa promete eran
+          // inalcanzables: un depósito agrupado (Stripe/PayPal pagan en lote y
+          // netos de comisión) se cuadra con VARIOS CFDIs menores que él, y un
+          // abono parcial paga un PPD MAYOR que él. Entra todo lo que cabe en
+          // el movimiento, más los PPD más grandes; el ranking por score y la
+          // tolerancia del scoring deciden el orden — el auto-match conserva
+          // su propio query estricto, aquí sólo se SUGIERE a un humano.
+          OR: [
+            { total: { lte: absAmount * (1 + TOLERANCE) } },
+            { metodoPago: "PPD", total: { gt: absAmount } },
+          ],
+        },
+        {
+          // Exclude PUE invoices already matched to another bank tx — either
+          // via the legacy 1:1 link or via assigned portions
+          // (ConciliacionDetalle). Keep PPD invoices visible — they can have
+          // multiple partial payments.
+          OR: [
+            { metodoPago: "PPD" },
+            {
+              bankTransactions: { none: { status: "MATCHED" } },
+              conciliacionDetalles: { none: {} },
+            },
+          ],
         },
       ],
     },
@@ -98,8 +116,10 @@ export async function GET(req: Request, { params }: Params) {
       },
       conciliacionDetalles: { select: { montoAsignado: true } },
     },
+    // Acotado por si el filtro ancho trae mucho; el corte fino (top 15) se
+    // hace DESPUÉS de puntuar — cortar aquí por fecha tiraría a los mejores.
     orderBy: { fecha: "desc" },
-    take: 10,
+    take: 300,
   });
 
   // Memoria de CLABEs: sólo se consulta si el movimiento trae CLABE extraída.
@@ -161,7 +181,12 @@ export async function GET(req: Request, { params }: Params) {
       matchedAmount: Math.round(matchedAmount * 100) / 100,
       remainingBalance: Math.round((inv.total - matchedAmount) * 100) / 100,
     };
-  }).sort((a, b) => b.score - a.score);
+  })
+    // Un PPD ya cobrado por completo no es candidato de nada: sin saldo no hay
+    // porción que asignar (los PUE en ese estado ya los excluyó el query).
+    .filter((c) => !c.alreadyMatched || c.remainingBalance > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 15);
 
   // ── Pagos de impuestos pendientes ──────────────────────────────────────────
   // Sólo para egresos: declaraciones no pagadas (SIPARE / línea de captura) de
