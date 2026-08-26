@@ -245,6 +245,7 @@ model Company {
   bankAccounts        BankAccount[]
   bankTransactions    BankTransaction[]
   employees           Employee[]
+  employeeDocumentos EmployeeDocumento[]
   payrollRuns         PayrollRun[]
   taxDeclarations     TaxDeclaration[]
   obligations         CompanyObligation[]
@@ -1615,6 +1616,7 @@ model Employee {
   pensionAlimenticiaValor Float?
 
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  documentos        EmployeeDocumento[]
   payrollItems      PayrollItem[]
   imssMovimientos   ImssMovimiento[]
   incidencias       Incidencia[]
@@ -1782,6 +1784,32 @@ model PayrollItem {
 
   payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
   employee   Employee   @relation(fields: [employeeId], references: [id])
+}
+
+// Expediente documental del empleado: contrato firmado, identificación, CSF,
+// alta del IMSS. Lo que Conciliación o una inspección de la STPS piden en
+// papel. POR AHORA los bytes viven en la BD (bytea) — un contrato PDF pesa
+// 1-5 MB y el patrón es el mismo que los acuses de declaración; el TODO de
+// migrar a object storage (R2) es el mismo de ahí (docs/HANDOFF.md).
+model EmployeeDocumento {
+  id         String   @id @default(cuid())
+  companyId  String
+  employeeId String
+  createdAt  DateTime @default(now())
+
+  /// CONTRATO | IDENTIFICACION | CSF | ALTA_IMSS | OTRO — texto libre acotado
+  /// por la UI, no enum: los despachos piden papeles distintos por cliente.
+  tipo    String
+  nombre  String // nombre del archivo original
+  mime    String
+  bytes   Int // tamaño real, para listar sin leer el blob
+  archivo Bytes
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([companyId, createdAt])
 }
 
 // Cadencia con la que la empresa paga (y timbra) su nómina ordinaria.

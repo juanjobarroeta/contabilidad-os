@@ -60,7 +60,8 @@ export async function GET(req: Request, { params }: Params) {
     if (!empleado) return NextResponse.json({ error: "Empleado no encontrado" }, { status: 404 });
 
     // Cualquier rol con membresía (VIEWER incluido) puede LEER el expediente.
-    await requireMembership(empleado.companyId);
+    // Con `req`: sin él, requireUser no ve el bearer y el satélite recibe 401.
+    await requireMembership(empleado.companyId, undefined, req);
 
     // Ejercicios con recibos (fechas de pago de las corridas del empleado).
     const runsConRecibos = await prisma.payrollRun.findMany({
