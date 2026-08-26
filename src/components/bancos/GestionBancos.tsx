@@ -1066,28 +1066,51 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                           el titular: no se pierde nada. La cadena completa
                           queda siempre visible al expandir. */}
                       {m.contraparteNombre ? (
-                        <>
-                          <p className="mt-2 text-[14.5px] font-semibold leading-snug text-cos-ink">
-                            {m.contraparteNombre}
-                          </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] text-cos-ink-soft">
-                            {m.conceptoPago && <span className="truncate">{m.conceptoPago}</span>}
-                            {m.contraparteRfc && (
-                              <span className="font-mono text-cos-ink">{m.contraparteRfc}</span>
-                            )}
-                            {m.contraparteBanco && <span>{m.contraparteBanco}</span>}
-                          </div>
-                        </>
+                        <p className="mt-2 text-[14.5px] font-semibold leading-snug text-cos-ink">
+                          {m.contraparteNombre}
+                        </p>
                       ) : (
                         <p className="mt-2 text-[14.5px] font-medium leading-snug text-cos-ink">{m.descripcion}</p>
                       )}
+                      {/* La identidad extraída se enseña TENIÉNDOLA, con o sin
+                          nombre: BBVA en los traspasos escribe sólo el RFC, y
+                          esconderlo por no tener nombre era tirar el dato que
+                          identifica a la contraparte. */}
+                      {(m.conceptoPago || m.contraparteRfc || m.contraparteBanco) && (
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] text-cos-ink-soft">
+                          {m.conceptoPago && <span className="truncate">{m.conceptoPago}</span>}
+                          {m.contraparteRfc && (
+                            <span className="font-mono text-cos-ink">{m.contraparteRfc}</span>
+                          )}
+                          {m.contraparteBanco && <span>{m.contraparteBanco}</span>}
+                        </div>
+                      )}
                       <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3">
                         <span className="text-[12px] text-cos-ink-faint">
-                          {m.referencia && <>Ref <span className="font-mono">{m.referencia}</span></>}
-                          {/* La línea de captura identifica la declaración que
-                              este cargo pagó: es el dato que lo concilia. */}
-                          {m.lineaCaptura && <> · LC <span className="font-mono">{m.lineaCaptura}</span></>}
-                          {m.saldo != null && <> · Saldo <span className="font-mono">${m.saldo.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></>}
+                          {[
+                            // Algunos bancos pegan en `referencia` la MISMA cola
+                            // que ya vive en la descripción («1525229544 RFC: …
+                            // AUT: …»): repetirla es eco, no información. La
+                            // cadena completa sigue visible al expandir.
+                            m.referencia && !m.descripcion.includes(m.referencia) && (
+                              <>Ref <span className="font-mono">{m.referencia}</span></>
+                            ),
+                            // La línea de captura identifica la declaración que
+                            // este cargo pagó: es el dato que lo concilia.
+                            m.lineaCaptura && (
+                              <>LC <span className="font-mono">{m.lineaCaptura}</span></>
+                            ),
+                            m.saldo != null && (
+                              <>Saldo <span className="font-mono">${m.saldo.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></>
+                            ),
+                          ]
+                            .filter(Boolean)
+                            .map((parte, i) => (
+                              <span key={i}>
+                                {i > 0 && " · "}
+                                {parte}
+                              </span>
+                            ))}
                         </span>
                         {statusChip(m)}
                       </div>
