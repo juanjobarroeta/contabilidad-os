@@ -102,7 +102,13 @@ export async function conciliacionDelMes(
     }),
     prisma.bankTransaction.findMany({
       where: { companyId, fecha: { gte: inicio, lt: fin } },
-      select: { id: true, fecha: true, descripcion: true, monto: true, status: true, bankAccountId: true },
+      // La contraparte extraída (spei-descripcion + su barrido) viaja al papel
+      // y a la mesa: sin estas columnas, la mesa enseñaba la sintaxis cruda del
+      // banco («SPEI RECIBIDO, BCO:0014 …») teniendo el QUIÉN ya guardado.
+      select: {
+        id: true, fecha: true, descripcion: true, monto: true, status: true, bankAccountId: true,
+        contraparteNombre: true, contraparteRfc: true, conceptoPago: true, claveRastreo: true,
+      },
       orderBy: { fecha: "asc" },
     }),
     prisma.conciliacionBancaria.findMany({ where: { companyId, year, month } }),
@@ -180,6 +186,10 @@ export async function conciliacionDelMes(
     monto: t.monto,
     cuentaBancariaId: t.bankAccountId,
     registrado: conAsiento.has(t.id),
+    contraparteNombre: t.contraparteNombre,
+    contraparteRfc: t.contraparteRfc,
+    conceptoPago: t.conceptoPago,
+    claveRastreo: t.claveRastreo,
   }));
 
   // Saldo del estado por cuenta: el capturado gana; si no hay, se propone el

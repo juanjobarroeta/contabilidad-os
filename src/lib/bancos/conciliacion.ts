@@ -45,6 +45,13 @@ export interface MovimientoParaConciliar {
   cuentaBancariaId: string;
   /** ¿Llegó al libro? Los UNMATCHED no se postean (ver postMonth). */
   registrado: boolean;
+  // Contraparte extraída de la descripción (spei-descripcion.ts). Opcional:
+  // el motor no la usa para conciliar — la ARRASTRA para que la mesa enseñe
+  // quién pagó en vez de la sintaxis del banco.
+  contraparteNombre?: string | null;
+  contraparteRfc?: string | null;
+  conceptoPago?: string | null;
+  claveRastreo?: string | null;
 }
 
 /** Asiento del mes en la cuenta contable de Bancos. */

@@ -243,3 +243,38 @@ describe("resumenConciliacion", () => {
     expect(resumenConciliacion(conciliarBancos(conPartidas))).toContain("1 partida");
   });
 });
+
+describe("contraparte extraída", () => {
+  it("SOBREVIVE el paso por el motor: la mesa la necesita para decir quién", () => {
+    // El motor no usa la contraparte para conciliar — la arrastra. Este test
+    // fija ese contrato: si alguien "limpia" el objeto al filtrar/ordenar, la
+    // mesa vuelve a enseñar la sintaxis cruda del banco sin que nada truene.
+    const r = conciliarBancos({
+      saldos: [],
+      movimientos: [
+        mov({
+          id: "t9", registrado: false,
+          contraparteNombre: "CONSTRUCTORA DEL VALLE",
+          contraparteRfc: "CVA010101AAA",
+          conceptoPago: "Estimación 3",
+          claveRastreo: "2026080412345678",
+        }),
+      ],
+      asientos: [],
+      saldoInicialLibros: 0,
+    });
+    const m = r.movimientosNoRegistrados[0];
+    expect(m.contraparteNombre).toBe("CONSTRUCTORA DEL VALLE");
+    expect(m.contraparteRfc).toBe("CVA010101AAA");
+    expect(m.conceptoPago).toBe("Estimación 3");
+    expect(m.claveRastreo).toBe("2026080412345678");
+  });
+
+  it("sin contraparte no pasa nada: el campo simplemente no viene", () => {
+    const r = conciliarBancos({
+      saldos: [], movimientos: [mov({ id: "t9", registrado: false })],
+      asientos: [], saldoInicialLibros: 0,
+    });
+    expect(r.movimientosNoRegistrados[0].contraparteNombre).toBeUndefined();
+  });
+});
