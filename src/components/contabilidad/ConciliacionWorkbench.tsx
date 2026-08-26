@@ -32,13 +32,29 @@ interface Movimiento {
   /** Firmado: + depósito, − retiro. */
   monto: number;
   cuentaBancariaId: string;
+  // Contraparte extraída de la descripción (spei-descripcion.ts + su barrido).
+  // La misma regla que el tab Movimientos: cuando el banco nos dijo QUIÉN, ése
+  // es el titular del renglón — no la sintaxis del banco.
+  contraparteNombre?: string | null;
+  contraparteRfc?: string | null;
+  conceptoPago?: string | null;
 }
 interface Cuenta {
   bankAccountId: string;
   etiqueta: string;
 }
+/** GET /api/bancos — sólo lo que el encabezado de contexto usa. */
+interface CuentaDetalle {
+  id: string;
+  banco: string;
+  numeroCuenta: string;
+  lastTransaction: { fecha: string; saldo: number | null } | null;
+  stats: { total: number };
+}
 interface ConciliacionMes {
-  movimientosBanco: { id: string }[];
+  /** TODOS los movimientos del mes (el feed ya manda el objeto completo); la
+   *  cuenta permite calcular el % conciliado POR CUENTA sin otra consulta. */
+  movimientosBanco: { id: string; cuentaBancariaId: string }[];
   movimientosNoRegistrados: Movimiento[];
   totalNoRegistrados: number;
   cuentas: Cuenta[];
@@ -99,6 +115,12 @@ export function ConciliacionWorkbench({
   const [autoCorriendo, setAutoCorriendo] = useState(false);
   const [aviso, setAviso] = useState<React.ReactNode>("");
   const [error, setError] = useState("");
+  // Filtro por cuenta (client-side: el feed ya trae la cuenta de cada
+  // movimiento). null = todas. Se resetea al cambiar de período/empresa.
+  const [cuentaSel, setCuentaSel] = useState<string | null>(null);
+  // Contexto de la cuenta elegida (banco ··4 · saldo del estado de cuenta),
+  // del GET /api/bancos existente. Si la consulta falla, la línea no aparece.
+  const [detalleCuentas, setDetalleCuentas] = useState<Map<string, CuentaDetalle>>(new Map());
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -115,8 +137,21 @@ export function ConciliacionWorkbench({
 
   useEffect(() => {
     setSelTx(null); setCand(null); setSeleccion([]); setSelImpuesto(null);
+    setCuentaSel(null);
     cargar();
   }, [cargar]);
+
+  // Una vez por empresa: el detalle no depende del período.
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/bancos?companyId=${companyId}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((xs: CuentaDetalle[]) => {
+        if (vivo && Array.isArray(xs)) setDetalleCuentas(new Map(xs.map((c) => [c.id, c])));
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [companyId]);
 
   // Candidatos del movimiento elegido.
   useEffect(() => {
@@ -258,8 +293,15 @@ export function ConciliacionWorkbench({
   }
   if (!data || data.sinCuentaBancos) return null;
 
-  const total = data.movimientosBanco.length;
-  const sin = data.movimientosNoRegistrados.length;
+  // Con una cuenta elegida, los tres stats y la lista son DE ESA CUENTA — el
+  // % global junto a una lista filtrada diría dos cosas distintas a la vez.
+  const deLaCuenta = <T extends { cuentaBancariaId: string }>(xs: T[]) =>
+    cuentaSel ? xs.filter((x) => x.cuentaBancariaId === cuentaSel) : xs;
+  const pendientes = deLaCuenta(data.movimientosNoRegistrados);
+  const total = deLaCuenta(data.movimientosBanco).length;
+  const sin = pendientes.length;
+  const sinGlobal = data.movimientosNoRegistrados.length;
+  const porConciliar = pendientes.reduce((s, m) => s + m.monto, 0);
   const pct = total > 0 ? ((total - sin) / total) * 100 : 100;
 
   return (
@@ -275,7 +317,7 @@ export function ConciliacionWorkbench({
         <StatTile
           label="Por conciliar"
           tone={sin === 0 ? "jade" : "ink"}
-          value={<Money value={Math.abs(data.totalNoRegistrados)} size={20} />}
+          value={<Money value={Math.abs(porConciliar)} size={20} />}
         />
       </StatStrip>
 
@@ -292,9 +334,52 @@ export function ConciliacionWorkbench({
         </div>
       )}
 
+      {data.cuentas.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {[{ bankAccountId: null as string | null, etiqueta: "Todas las cuentas" }, ...data.cuentas].map((c) => (
+            <button
+              key={c.bankAccountId ?? "__todas__"}
+              onClick={() => { setCuentaSel(c.bankAccountId); setSelTx(null); }}
+              className={cn(
+                "inline-flex items-center rounded-full border px-3.5 py-1.5 text-[13px] font-medium",
+                cuentaSel === c.bankAccountId
+                  ? "border-cos-brand bg-cos-brand text-white"
+                  : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink"
+              )}
+            >
+              {c.etiqueta}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Contexto de la cuenta elegida. El saldo es el del último renglón del
+          estado de cuenta (con su fecha) — y sólo cuando el banco lo trae:
+          sin saldo no se muestra un cero que nadie midió. El conteo es
+          histórico de la cuenta, no del mes (los tiles de arriba ya son del
+          mes), por eso dice «en total». */}
+      {cuentaSel && detalleCuentas.has(cuentaSel) && (() => {
+        const d = detalleCuentas.get(cuentaSel)!;
+        return (
+          <p className="-mt-2 mb-4 font-mono text-[11px] text-cos-ink-faint">
+            {d.banco} ··{d.numeroCuenta.slice(-4)} · {d.stats.total.toLocaleString("es-MX")} movimientos en total
+            {d.lastTransaction?.saldo != null && (
+              <>
+                {" "}· saldo <Money value={d.lastTransaction.saldo} className="text-[11px]" muted /> al{" "}
+                {fFecha(d.lastTransaction.fecha)}
+              </>
+            )}
+          </p>
+        );
+      })()}
+
       {sin === 0 ? (
         <div className="rounded-card border border-cos-line bg-cos-card px-5 py-4 text-sm text-cos-ink-soft">
-          Todos los movimientos del mes están conciliados — la compuerta del cierre está abierta.
+          {/* «Compuerta abierta» sólo cuando el MES entero está limpio: con una
+              cuenta filtrada en cero pero otras pendientes, decirlo mentiría. */}
+          {sinGlobal === 0
+            ? "Todos los movimientos del mes están conciliados — la compuerta del cierre está abierta."
+            : `Esta cuenta está al corriente; quedan ${sinGlobal} movimiento(s) en otras cuentas.`}
         </div>
       ) : (
         <div className="rounded-card border border-cos-line bg-cos-card">
@@ -314,10 +399,10 @@ export function ConciliacionWorkbench({
             {/* ── Izquierda: movimientos del banco ── */}
             <section>
               <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
-                Movimientos del banco · {sin} sin conciliar
+                Movimientos del banco · {sin} sin conciliar{cuentaSel ? " en esta cuenta" : ""}
               </p>
               <ul className="max-h-[430px] overflow-y-auto">
-                {data.movimientosNoRegistrados.map((m) => {
+                {pendientes.map((m) => {
                   const activo = selTx?.id === m.id;
                   return (
                     <li key={m.id}>
@@ -331,11 +416,17 @@ export function ConciliacionWorkbench({
                         )}
                       >
                         <span className="min-w-0">
+                          {/* La contraparte extraída manda; la cadena cruda del
+                              banco sólo cuando no hay nada mejor (misma regla,
+                              con el mismo porqué, que el tab Movimientos). */}
                           <span className="block truncate text-[13px] font-medium text-cos-ink">
-                            {m.descripcion || "(sin descripción)"}
+                            {m.contraparteNombre || m.descripcion || "(sin descripción)"}
                           </span>
-                          <span className="font-mono text-[11px] text-cos-ink-faint">
+                          <span className="block truncate font-mono text-[11px] text-cos-ink-faint">
                             {fFecha(m.fecha)}
+                            {m.contraparteRfc && <> · <span className="text-cos-ink-soft">{m.contraparteRfc}</span></>}
+                            {m.conceptoPago && ` · ${m.conceptoPago}`}
+                            {!m.contraparteNombre && " · sin identificar"}
                             {etiquetaCuenta.get(m.cuentaBancariaId) && ` · ${etiquetaCuenta.get(m.cuentaBancariaId)}`}
                           </span>
                         </span>
@@ -416,8 +507,19 @@ export function ConciliacionWorkbench({
                                 </span>
                               )}
                             </span>
-                            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", CONFIANZA[c.confidence].cls)}>
-                              {CONFIANZA[c.confidence].t}
+                            <span className="flex flex-col items-end gap-0.5">
+                              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", CONFIANZA[c.confidence].cls)}>
+                                {CONFIANZA[c.confidence].t}
+                              </span>
+                              {/* El porqué de la confianza: el RFC que el banco
+                                  escribió en el SPEI es el del receptor de este
+                                  CFDI. Es la señal más fuerte del scoring
+                                  (PUNTOS_RFC_EXACTO) — merece verse. */}
+                              {selTx?.contraparteRfc && c.rfc === selTx.contraparteRfc && (
+                                <span className="rounded-full bg-cos-jade-tint px-2 py-0.5 text-[10px] font-semibold text-cos-jade-ink">
+                                  RFC coincide
+                                </span>
+                              )}
                             </span>
                           </label>
                         </li>
