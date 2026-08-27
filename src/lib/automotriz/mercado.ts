@@ -21,7 +21,7 @@ export type ResultadoMercado = {
   resultados: { titulo: string; url: string; precio?: number }[];
 };
 
-type Item = { title: string; url: string; description: string };
+type Item = { title: string; url: string; description: string; miniatura?: string };
 
 const PRECIO_RE = /\$\s?([\d]{2,3}(?:[,.][\d]{3})*(?:\.[\d]{2})?|[\d]{2,6}(?:\.[\d]{2})?)/;
 
@@ -54,9 +54,23 @@ async function buscar(q: string): Promise<Item[]> {
     err.cuotaAgotada = res.status === 429;
     throw err;
   }
-  return ((data?.web?.results ?? []) as { title?: string; url?: string; description?: string }[])
+  return (
+    (data?.web?.results ?? []) as {
+      title?: string;
+      url?: string;
+      description?: string;
+      thumbnail?: { src?: string };
+    }[]
+  )
     .filter((r) => r.url)
-    .map((r) => ({ title: r.title ?? "", url: r.url!, description: r.description ?? "" }));
+    .map((r) => ({
+      title: r.title ?? "",
+      url: r.url!,
+      description: r.description ?? "",
+      // La miniatura del listado viene gratis en el resultado (CDN de Brave);
+      // se guarda la URL y el front la pinta con fallback silencioso.
+      ...(r.thumbnail?.src ? { miniatura: r.thumbnail.src } : {}),
+    }));
 }
 
 /**
@@ -86,6 +100,7 @@ export async function consultarMercado(
       titulo: it.title.slice(0, 160),
       url: it.url,
       ...(precio != null ? { precio } : {}),
+      ...(it.miniatura ? { miniatura: it.miniatura } : {}),
     };
   });
 
@@ -140,7 +155,12 @@ export async function consultarMercadoVehiculo(
       const p = Number(m[1].replace(/,/g, ""));
       if (p >= 60_000 && p <= 3_000_000) { precio = precio ?? p; precios.push(p); }
     }
-    return { titulo: it.title.slice(0, 160), url: it.url, ...(precio != null ? { precio } : {}) };
+    return {
+      titulo: it.title.slice(0, 160),
+      url: it.url,
+      ...(precio != null ? { precio } : {}),
+      ...(it.miniatura ? { miniatura: it.miniatura } : {}),
+    };
   });
 
   precios.sort((a, b) => a - b);
