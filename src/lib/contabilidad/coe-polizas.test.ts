@@ -62,6 +62,33 @@ const RUN = hasXmllint();
     expect(r.ok, r.err).toBe(true);
   });
 
+
+  it("valida una póliza bancaria con nodo Transferencia (evidencia Anexo 24)", () => {
+    const xml = renderPolizasXml({
+      rfc: "AAA010101AAA",
+      year: 2026,
+      month: 5,
+      tipoSolicitud: "AF",
+      numOrden: "ABC1234567/12",
+      polizas: agruparPolizas([
+        {
+          numCta: "102.01", desCta: "Bancos", concepto: "Cobro cliente", tipo: "CARGO", monto: 1160,
+          fecha: "2026-05-12", referencia: "btx-1", referenciaTipo: "BANK_TX", fuente: "BANCO",
+          transferencia: {
+            ctaOri: "014180655043289761", bancoOriNal: "014",
+            ctaDest: "012180001234567895", bancoDestNal: "012",
+            fecha: "2026-05-12", benef: "MI EMPRESA SA", rfc: "AND010101AB1", monto: 1160,
+          },
+        },
+        { numCta: "105.01", desCta: "Clientes", concepto: "Cobro cliente", tipo: "ABONO", monto: 1160, fecha: "2026-05-12", referencia: "btx-1", referenciaTipo: "BANK_TX", fuente: "BANCO" },
+      ]),
+    });
+    expect(xml).toContain("<PLZ:Transferencia");
+    expect(xml).toContain('BancoOriNal="014"');
+    const r = validate(xml);
+    expect(r.ok, r.err).toBe(true);
+  });
+
   it("valida auditoría (NumOrden) sin CompNal", () => {
     const xml = renderPolizasXml({
       rfc: "AAA010101AAA",

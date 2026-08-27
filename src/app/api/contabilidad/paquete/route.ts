@@ -5,6 +5,7 @@ import { evaluarReadinessCE } from "@/lib/contabilidad/ce-readiness";
 import { generateAuxiliarCtasXml, generateAuxiliarFoliosXml } from "@/lib/contabilidad/coe-auxiliares";
 import { generatePolizasXml } from "@/lib/contabilidad/coe-polizas";
 import { generateBalanzaXml, generateCatalogoXml } from "@/lib/contabilidad/coe-xml";
+import { validarCatalogoXml, validarPolizasXml } from "@/lib/contabilidad/coe-validador";
 import { auxiliarCuenta, balanceGeneralDesdeBalanza, libroDiario, type EntryForLibro } from "@/lib/contabilidad/libro";
 import {
   CARPETA,
@@ -110,6 +111,8 @@ export async function GET(req: Request) {
 
     await intentar("Catálogo de cuentas (XML)", async () => {
       const xml = await generateCatalogoXml({ companyId, year, month });
+      const val = validarCatalogoXml(xml);
+      if (!val.ok) throw new Error(val.errores.join(" · "));
       agregar(
         `${CARPETA.xml}/${nombreArchivoSat(company.rfc, year, month, "CT")}`,
         xml,
@@ -133,9 +136,12 @@ export async function GET(req: Request) {
       const opts = { companyId, year, month, tipoSolicitud, ...ident };
 
       await intentar("Pólizas del periodo (XML)", async () => {
+        const pol = await generatePolizasXml(opts);
+        const valPol = validarPolizasXml(pol);
+        if (!valPol.ok) throw new Error(valPol.errores.join(" · "));
         agregar(
           `${CARPETA.xml}/${nombreArchivoSat(company.rfc, year, month, "PL")}`,
-          await generatePolizasXml(opts),
+          pol,
           `Pólizas del periodo — requerimiento ${tipoSolicitud} ${folio}.`
         );
       });

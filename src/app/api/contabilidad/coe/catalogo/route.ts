@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthzError, requireMembership } from "@/lib/authz";
 import { generateCatalogoXml } from "@/lib/contabilidad/coe-xml";
 import { prisma } from "@/lib/prisma";
+import { validarCatalogoXml } from "@/lib/contabilidad/coe-validador";
 
 // GET /api/contabilidad/coe/catalogo?companyId=xxx&year=2026&month=3
 // Returns the SAT COE Catálogo de Cuentas XML for the period.
@@ -26,6 +27,15 @@ export async function GET(req: Request) {
     if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
     const xml = await generateCatalogoXml({ companyId, year, month });
+    // Fail-closed: un CodAgrup fuera de la enum del SAT rebota el archivo —
+    // mejor 422 con el detalle aquí que un rechazo del SAT después.
+    const val = validarCatalogoXml(xml);
+    if (!val.ok) {
+      return NextResponse.json(
+        { error: "El catálogo no pasaría la validación del SAT", detalles: val.errores },
+        { status: 422 },
+      );
+    }
     const filename = `${company.rfc}${year}${String(month).padStart(2, "0")}CT.XML`;
 
     return new NextResponse(xml, {

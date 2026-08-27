@@ -9,6 +9,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "../prisma";
+import { assertMesPosteado } from "./coe-xml";
+import { rfcDesdeXml } from "./coe-polizas";
 import { balanza } from "./posting";
 import { clavePoliza, numerarPolizas, type TipoSolicitud, type CompNalInput } from "./coe-polizas";
 
@@ -119,6 +121,7 @@ interface AuxOptions {
 }
 
 export async function generateAuxiliarCtasXml(opts: AuxOptions): Promise<string> {
+  await assertMesPosteado(opts.companyId, opts.year, opts.month);
   const company = await prisma.company.findUnique({ where: { id: opts.companyId }, select: { rfc: true } });
   if (!company) throw new Error("Empresa no encontrada");
 
@@ -178,6 +181,7 @@ export async function generateAuxiliarCtasXml(opts: AuxOptions): Promise<string>
 }
 
 export async function generateAuxiliarFoliosXml(opts: AuxOptions): Promise<string> {
+  await assertMesPosteado(opts.companyId, opts.year, opts.month);
   const company = await prisma.company.findUnique({ where: { id: opts.companyId }, select: { rfc: true } });
   if (!company) throw new Error("Empresa no encontrada");
 
@@ -197,12 +201,19 @@ export async function generateAuxiliarFoliosXml(opts: AuxOptions): Promise<strin
   const invoices = uuids.length
     ? await prisma.invoice.findMany({
         where: { companyId: opts.companyId, uuid: { in: uuids } },
-        select: { uuid: true, total: true, customer: { select: { rfc: true } } },
+        select: { uuid: true, total: true, tipo: true, rawXml: true, customer: { select: { rfc: true } } },
       })
     : [];
+  // Mismo fallback de RFC que las pólizas: sin él, un CFDI recibido sin
+  // proveedor ligado desaparecía del auxiliar de folios EN SILENCIO.
   const compNalPorUuid = new Map<string, CompNalInput>();
   for (const inv of invoices) {
-    if (inv.uuid && inv.customer?.rfc) compNalPorUuid.set(inv.uuid, { uuid: inv.uuid, rfc: inv.customer.rfc, montoTotal: Number(inv.total) });
+    if (!inv.uuid) continue;
+    const esRecibido = inv.tipo === "EGRESO" || inv.tipo === "PAGO";
+    const rfc = esRecibido
+      ? rfcDesdeXml(inv.rawXml, "Emisor") ?? inv.customer?.rfc ?? null
+      : inv.customer?.rfc ?? rfcDesdeXml(inv.rawXml, "Receptor");
+    if (rfc) compNalPorUuid.set(inv.uuid, { uuid: inv.uuid, rfc, montoTotal: Number(inv.total) });
   }
 
   // Una entrada DetAuxFol por póliza, con sus comprobantes únicos.
