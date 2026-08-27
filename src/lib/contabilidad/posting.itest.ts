@@ -29,7 +29,7 @@ async function limpiar() {
   await prisma.company.deleteMany({ where: { id: CIA } });
 }
 
-describe.skipIf(skip)("postMonth contra Postgres real — banco multi-cuenta", () => {
+describe.skipIf(skip)("postMonth contra Postgres real", () => {
   beforeAll(async () => {
     await limpiar();
     await prisma.company.create({
@@ -51,6 +51,15 @@ describe.skipIf(skip)("postMonth contra Postgres real — banco multi-cuenta", (
     await prisma.taxDeclaration.create({
       data: { id: "pb-td", companyId: CIA, tipo: "IVA_MENSUAL", periodo: "2026-07" },
     });
+  });
+
+  afterAll(async () => {
+    await limpiar();
+    await prisma.$disconnect();
+  });
+
+  describe("banco multi-cuenta (agosto 2026)", () => {
+  beforeAll(async () => {
     // Movimientos de agosto 2026 (sin CFDIs del periodo: aislamos el banco).
     await prisma.bankTransaction.createMany({
       data: [
@@ -87,11 +96,6 @@ describe.skipIf(skip)("postMonth contra Postgres real — banco multi-cuenta", (
         },
       ],
     });
-  });
-
-  afterAll(async () => {
-    await limpiar();
-    await prisma.$disconnect();
   });
 
   it("un IGNORED sin categoría bloquea el cierre con mensaje accionable", async () => {
@@ -157,4 +161,108 @@ describe.skipIf(skip)("postMonth contra Postgres real — banco multi-cuenta", (
     });
     expect(traspaso).toBe(2);
   });
+  });
+
+  // ─── Ola C: IVA al flujo contra Postgres real ─────────────────────────────
+  describe("reclasificación de IVA al flujo (sept 2026)", () => {
+  const MES = 9;
+
+  beforeAll(async () => {
+    // Facturas de septiembre + su liquidación bancaria.
+    await prisma.invoice.createMany({
+      data: [
+        // Ingreso IVA 16%, cobrada COMPLETA
+        {
+          id: "pc-ing1", companyId: CIA, fecha: new Date("2026-09-03T12:00:00Z"),
+          tipo: "INGRESO", status: "STAMPED", uuid: "pc-uuid-ing1",
+          formaPago: "03", metodoPago: "PUE", usoCfdi: "G03",
+          subtotal: 1000, total: 1160, updatedAt: new Date(),
+        },
+        // Ingreso IVA 16%, cobrada a la MITAD vía detalle
+        {
+          id: "pc-ing2", companyId: CIA, fecha: new Date("2026-09-05T12:00:00Z"),
+          tipo: "INGRESO", status: "STAMPED", uuid: "pc-uuid-ing2",
+          formaPago: "03", metodoPago: "PPD", usoCfdi: "G03",
+          subtotal: 2000, total: 2320, updatedAt: new Date(),
+        },
+        // Egreso IVA 16%, pagado completo
+        {
+          id: "pc-egr1", companyId: CIA, fecha: new Date("2026-09-07T12:00:00Z"),
+          tipo: "EGRESO", status: "STAMPED", uuid: "pc-uuid-egr1",
+          formaPago: "03", metodoPago: "PUE", usoCfdi: "G03",
+          subtotal: 500, total: 580, updatedAt: new Date(),
+        },
+        // LEGADA: emitida en julio (fuera del mes posteado) — su devengo nunca
+        // pasó por 209, así que su cobro NO debe reclasificar.
+        {
+          id: "pc-leg", companyId: CIA, fecha: new Date("2026-07-10T12:00:00Z"),
+          tipo: "INGRESO", status: "STAMPED", uuid: "pc-uuid-leg",
+          formaPago: "03", metodoPago: "PPD", usoCfdi: "G03",
+          subtotal: 3000, total: 3480, updatedAt: new Date(),
+        },
+      ],
+    });
+    await prisma.bankTransaction.createMany({
+      data: [
+        { id: "pc-cob1", companyId: CIA, bankAccountId: "pb-x", fecha: new Date("2026-09-10T12:00:00Z"), descripcion: "Cobro ing1", tipo: "CREDITO", monto: 1160, status: "MATCHED", invoiceId: "pc-ing1" },
+        { id: "pc-cob2", companyId: CIA, bankAccountId: "pb-x", fecha: new Date("2026-09-12T12:00:00Z"), descripcion: "Abono parcial ing2", tipo: "CREDITO", monto: 1160, status: "MATCHED" },
+        { id: "pc-pago", companyId: CIA, bankAccountId: "pb-y", fecha: new Date("2026-09-15T12:00:00Z"), descripcion: "Pago egr1", tipo: "DEBITO", monto: -580, status: "MATCHED", invoiceId: "pc-egr1" },
+        { id: "pc-cobleg", companyId: CIA, bankAccountId: "pb-x", fecha: new Date("2026-09-20T12:00:00Z"), descripcion: "Cobro legada", tipo: "CREDITO", monto: 3480, status: "MATCHED", invoiceId: "pc-leg" },
+      ],
+    });
+    await prisma.conciliacionDetalle.create({
+      data: { bankTransactionId: "pc-cob2", invoiceId: "pc-ing2", montoAsignado: 1160 },
+    });
+  });
+
+  it("devengo a pendientes, reclasificación proporcional y legada intacta", async () => {
+    await postMonth({ companyId: CIA, year: 2026, month: MES });
+
+    const cuentas = await prisma.chartAccount.findMany({
+      where: { companyId: CIA, subcuenta: { in: ["208.01", "209.01", "118.01", "119.01"] } },
+      select: { id: true, subcuenta: true },
+    });
+    const idPor = new Map(cuentas.map((c) => [c.subcuenta, c.id]));
+    const saldo = async (sub: string, natur: "D" | "A") => {
+      const rows = await prisma.accountingEntry.findMany({
+        where: { companyId: CIA, year: 2026, month: MES, chartAccountId: idPor.get(sub)! },
+        select: { tipo: true, monto: true },
+      });
+      const d = rows.filter((r) => r.tipo === "CARGO").reduce((s, r) => s + Number(r.monto), 0);
+      const a = rows.filter((r) => r.tipo === "ABONO").reduce((s, r) => s + Number(r.monto), 0);
+      return natur === "A" ? a - d : d - a;
+    };
+
+    // 209 (pendiente, acreedora): devengó 160+320 y reclasificó 160+160 → queda 160
+    expect(await saldo("209.01", "A")).toBeCloseTo(160, 2);
+    // 208 (cobrado): completa 160 + mitad de ing2 160 = 320. La LEGADA no suma.
+    expect(await saldo("208.01", "A")).toBeCloseTo(320, 2);
+    // 119 (acreditable pendiente, deudora): devengó 80, pagó 80 → 0
+    expect(await saldo("119.01", "D")).toBeCloseTo(0, 2);
+    // 118 (acreditable pagado): 80
+    expect(await saldo("118.01", "D")).toBeCloseTo(80, 2);
+
+    // La legada liquidó Clientes pero NO tocó 208/209.
+    const legada = await prisma.accountingEntry.findMany({
+      where: { companyId: CIA, referencia: "pc-cobleg" },
+      select: { chartAccountId: true },
+    });
+    expect(legada.length).toBe(2); // sólo DR banco / AB clientes
+    for (const e of legada) {
+      expect([idPor.get("208.01"), idPor.get("209.01")]).not.toContain(e.chartAccountId);
+    }
+  });
+
+  it("re-posteo idempotente: mismos saldos de IVA", async () => {
+    await postMonth({ companyId: CIA, year: 2026, month: MES });
+    const c209 = await prisma.accountingEntry.count({
+      where: {
+        companyId: CIA, year: 2026, month: MES,
+        chartAccount: { subcuenta: "209.01" },
+      },
+    });
+    // devengo ing1 + ing2 (2 abonos) + reclas ing1 + ing2 (2 cargos) = 4
+    expect(c209).toBe(4);
+  });
+});
 });

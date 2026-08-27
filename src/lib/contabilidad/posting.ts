@@ -242,6 +242,30 @@ export function planearTraspasos(
   return plan;
 }
 
+
+/**
+ * Reclasificación de IVA al flujo (pura). Al COBRAR una factura de ingreso,
+ * el IVA pendiente pasa a cobrado (DR 209 / AB 208) en proporción al pago;
+ * al PAGAR un egreso, el acreditable pendiente pasa a pagado (DR 118 /
+ * AB 119). La proporción usa el MISMO delta (total − subtotal) que el
+ * devengo abonó/cargó a 209/119 — así la cuenta pendiente queda exactamente
+ * en cero cuando la factura se liquida por completo, retenciones incluidas.
+ * Devuelve null si la factura no lleva IVA neto o la dirección no cuadra.
+ */
+export function reclasificacionIvaFlujo(
+  aplicado: number,
+  invoice: { tipo: string; total: number; subtotal: number },
+  esCobro: boolean,
+): { lado: "TRASLADADO" | "ACREDITABLE"; monto: number } | null {
+  const delta = invoice.total - invoice.subtotal;
+  if (delta <= 0.005 || invoice.total <= 0.005 || aplicado <= 0.005) return null;
+  const monto = Math.round(aplicado * (delta / invoice.total) * 100) / 100;
+  if (monto <= 0.005) return null;
+  if (esCobro && invoice.tipo === "INGRESO") return { lado: "TRASLADADO", monto };
+  if (!esCobro && invoice.tipo === "EGRESO") return { lado: "ACREDITABLE", monto };
+  return null;
+}
+
 export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult> {
   const { companyId, year, month } = opts;
   const { start, end } = monthRange(year, month);
@@ -268,6 +292,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accProveedores,
     accIvaTrasladado,
     accIvaAcreditable,
+    accIvaTrasladadoPend,
+    accIvaAcreditablePend,
     accVentas,
     accComisionesBanc,
     accImpuestos,
@@ -288,6 +314,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.PROVEEDORES),
     resolveAccount(companyId, COE_CODES.IVA_TRASLADADO),
     resolveAccount(companyId, COE_CODES.IVA_ACREDITABLE),
+    resolveAccount(companyId, COE_CODES.IVA_TRASLADADO_PEND),
+    resolveAccount(companyId, COE_CODES.IVA_ACREDITABLE_PEND),
     resolveAccount(companyId, COE_CODES.VENTAS_GENERAL),
     resolveAccount(companyId, COE_CODES.COMISIONES_BANCARIAS),
     resolveAccount(companyId, COE_CODES.IMPUESTOS_DERECHOS),
@@ -417,9 +445,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       }
     }
     if (delta > 0.005) {
+      // Art. 1-B LIVA: al devengar, el IVA es PENDIENTE de cobro (209); pasa
+      // a cobrado (208) cuando el banco concilia el cobro — ver la
+      // reclasificación en el loop bancario.
       drafts.push({
         ...base,
-        chartAccountId: accIvaTrasladado.id,
+        chartAccountId: accIvaTrasladadoPend.id,
         monto: delta,
         tipo: espejo("ABONO", esEgreso),
       });
@@ -670,9 +701,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       });
     }
     if (delta > 0.005) {
+      // Acreditable PENDIENTE de pago (119) al devengar; pasa a pagado (118)
+      // cuando el banco concilia el pago.
       drafts.push({
         ...base,
-        chartAccountId: accIvaAcreditable.id,
+        chartAccountId: accIvaAcreditablePend.id,
         monto: delta,
         tipo: espejo("CARGO", esEgreso),
       });
@@ -770,7 +803,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       // póliza de liquidación es la misma que la del match 1:1.
       // ...y el invoiceId de cada porción: la liquidación resuelve mirando LA
       // FACTURA (nómina → acreedores; módulo → su CxC), no sólo el sentido.
-      conciliacionDetalles: { select: { invoiceId: true } },
+      conciliacionDetalles: { select: { invoiceId: true, montoAsignado: true } },
     },
   })).map((t) => ({ ...t, monto: Number(t.monto) }));
 
@@ -827,6 +860,43 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     ),
   ];
   const kindsLiquidacion = await kindPorInvoice(companyId, idsConciliados);
+
+  // Reclasificación de IVA al flujo: financieros de las facturas conciliadas
+  // y — regla de transición — qué facturas tienen su devengo en las cuentas
+  // PENDIENTES (209/119). Una factura vieja (devengo directo a 208/118, motor
+  // pre-Ola C) NO se reclasifica: hacerlo dejaría 209/119 con saldo fantasma.
+  // La transición converge re-posteando meses en orden; mientras tanto ambas
+  // generaciones conviven sin descuadrar.
+  const invoicesConciliadas = idsConciliados.length
+    ? (await prisma.invoice.findMany({
+        where: { id: { in: idsConciliados } },
+        select: { id: true, uuid: true, tipo: true, total: true, subtotal: true },
+      })).map((i) => ({ ...i, total: Number(i.total), subtotal: Number(i.subtotal) }))
+    : [];
+  const invoicePorId = new Map(invoicesConciliadas.map((i) => [i.id, i]));
+  const refsConciliadas = invoicesConciliadas.map((i) => i.uuid ?? i.id);
+  const devengoNuevo = new Set(
+    refsConciliadas.length
+      ? (
+          await prisma.accountingEntry.findMany({
+            where: {
+              companyId,
+              referenciaTipo: "CFDI",
+              referencia: { in: refsConciliadas },
+              chartAccountId: { in: [accIvaTrasladadoPend.id, accIvaAcreditablePend.id] },
+            },
+            select: { referencia: true },
+          })
+        ).map((e) => e.referencia!)
+      : [],
+  );
+  // …más las facturas cuyo devengo se está posteando EN ESTA corrida (sus
+  // asientos a 209/119 viven todavía en drafts, no en la base): sin esta
+  // unión, el primer posteo del mes no reclasificaría y el re-posteo sí —
+  // mismo mes, dos resultados.
+  for (const inv of [...ingresos, ...egresos]) {
+    if (inv.total - inv.subtotal > 0.005) devengoNuevo.add(inv.uuid ?? inv.id);
+  }
 
   // Strict mode: refuse to close the month if any bank tx is still UNMATCHED.
   // Every movement must be either matched to a CFDI or categorized (taxes,
@@ -913,6 +983,29 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         const ctaPago = kind === "NOMINA" ? accAcreedoresDiv : accProveedores;
         drafts.push({ ...base, chartAccountId: ctaPago.id, monto: absAmount, tipo: "CARGO" });
         drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
+      }
+
+      // IVA al flujo (Art. 1-B): la porción de IVA del pago/cobro pasa de
+      // pendiente a cobrado/pagado. El aplicado por factura es exacto: el
+      // montoAsignado del detalle en 1-a-varios, o el movimiento entero en 1:1.
+      const aplicadoPorFactura: [string, number][] = tx.invoiceId
+        ? [[tx.invoiceId, absAmount]]
+        : tx.conciliacionDetalles
+            .filter((d): d is typeof d & { invoiceId: string } => !!d.invoiceId)
+            .map((d) => [d.invoiceId, Math.abs(Number(d.montoAsignado))]);
+      for (const [invoiceId, aplicado] of aplicadoPorFactura) {
+        const inv = invoicePorId.get(invoiceId);
+        if (!inv || !devengoNuevo.has(inv.uuid ?? inv.id)) continue;
+        const re = reclasificacionIvaFlujo(aplicado, inv, isCredit);
+        if (!re) continue;
+        const baseRe = { ...base, descripcion: `IVA al flujo · ${base.descripcion}`.slice(0, 200) };
+        if (re.lado === "TRASLADADO") {
+          drafts.push({ ...baseRe, chartAccountId: accIvaTrasladadoPend.id, monto: re.monto, tipo: "CARGO" });
+          drafts.push({ ...baseRe, chartAccountId: accIvaTrasladado.id,     monto: re.monto, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...baseRe, chartAccountId: accIvaAcreditable.id,     monto: re.monto, tipo: "CARGO" });
+          drafts.push({ ...baseRe, chartAccountId: accIvaAcreditablePend.id, monto: re.monto, tipo: "ABONO" });
+        }
       }
       continue;
     }
@@ -1291,6 +1384,8 @@ export async function balanzaPreview(
   // Cuentas fijas. Si el catálogo no está sembrado, devolvemos balanza base.
   let accClientes: Awaited<ReturnType<typeof resolveAccount>>;
   let accProveedores: Awaited<ReturnType<typeof resolveAccount>>;
+  // Ola C: el preview es sólo devengo, así que estas dos resuelven a las
+  // cuentas PENDIENTES (209/119) — espejo exacto de lo que postea postMonth.
   let accIvaTrasladado: Awaited<ReturnType<typeof resolveAccount>>;
   let accIvaAcreditable: Awaited<ReturnType<typeof resolveAccount>>;
   let accVentas: Awaited<ReturnType<typeof resolveAccount>>;
@@ -1312,8 +1407,8 @@ export async function balanzaPreview(
     ] = await Promise.all([
       resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
       resolveAccount(companyId, COE_CODES.PROVEEDORES),
-      resolveAccount(companyId, COE_CODES.IVA_TRASLADADO),
-      resolveAccount(companyId, COE_CODES.IVA_ACREDITABLE),
+      resolveAccount(companyId, COE_CODES.IVA_TRASLADADO_PEND),
+      resolveAccount(companyId, COE_CODES.IVA_ACREDITABLE_PEND),
       resolveAccount(companyId, COE_CODES.VENTAS_GENERAL),
       resolveAccount(companyId, COE_CODES.SUELDOS_SALARIOS),
       resolveAccount(companyId, COE_CODES.ISR_PAGADO_TERCEROS),
