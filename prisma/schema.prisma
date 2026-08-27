@@ -356,6 +356,7 @@ model Company {
   refacciones         Refaccion[]
   serviciosVenta      ServicioVenta[]
   ordenesServicio     OrdenServicio[]
+  citasServicio    CitaServicio[]
   prospectos          Prospecto[]
   backfillProgreso    BackfillProgreso[]
   nominaCostos        NominaCosto[]
@@ -714,6 +715,7 @@ model Customer {
   pedidosVehiculo   PedidoVehiculo[]
   serviciosVenta    ServicioVenta[]
   ordenesServicio   OrdenServicio[]
+  citasServicio    CitaServicio[]
   prospectos        Prospecto[]
 
   @@unique([companyId, rfc])
@@ -5104,6 +5106,7 @@ model Vehiculo {
   expediente      VehiculoCfdi[]
   servicios       ServicioVenta[]
   ordenesServicio OrdenServicio[]
+  citasServicio    CitaServicio[]
   prospectos      Prospecto[]
 
   // Ciclo de vida de ESTE VIN en la agencia: 1 = la primera vez que se compró
@@ -5379,6 +5382,17 @@ model OrdenServicio {
    */
   servicioVentaId String? @unique
 
+  // ── Recepción física (citas+recepción R1) ──────────────────────────────────
+  torre           String? // torre/tarjeta que identifica la unidad en el patio
+  gasolinaOctavos Int? // nivel de gasolina en octavos: 0..8 (lleno = 8)
+  /// { items: [{clave, etiqueta, ok}], pertenencias?, comentarios? } — el
+  /// inventario/checkup capturado al recibir la unidad.
+  inventarioRecepcion Json?
+  garantiaDias        Int? // garantía ofrecida en el contrato de adhesión
+  /// Se fija SOLO server-side al subir el CONTRATO_FIRMADO (misma transacción).
+  /// Ningún PATCH lo acepta: una firma sin el contrato que la ampara no vale.
+  firmadoAt DateTime?
+
   company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   cliente       Customer?            @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   vehiculo      Vehiculo?            @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
@@ -5386,6 +5400,8 @@ model OrdenServicio {
   tecnico       Employee?            @relation("OrdenServicioTecnico", fields: [tecnicoId], references: [id], onDelete: SetNull)
   servicioVenta ServicioVenta?       @relation(fields: [servicioVentaId], references: [id], onDelete: SetNull)
   lineas        OrdenServicioLinea[]
+  cita          CitaServicio?
+  documentos    OrdenDocumento[]
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
@@ -5412,6 +5428,95 @@ model OrdenServicioLinea {
   refaccion Refaccion?    @relation(fields: [refaccionId], references: [id], onDelete: SetNull)
 
   @@index([ordenId])
+}
+
+/// Cita de servicio: el cliente la agenda desde su portal (PORTAL) o el taller
+/// por teléfono/mostrador (STAFF). R1 sin modelo de capacidad: fecha única y
+/// el taller confirma — la compuerta humana ES el control de capacidad.
+enum CitaServicioEstado {
+  PENDIENTE // solicitada desde el portal, sin confirmar por el taller
+  CONFIRMADA
+  CANCELADA
+  RECIBIDA // ya se convirtió en orden de servicio (ordenId puesto)
+  NO_SHOW
+}
+
+enum CitaServicioCanal {
+  PORTAL // la agendó el cliente en su portal
+  STAFF // la agendó el taller (teléfono / mostrador)
+}
+
+model CitaServicio {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  estado CitaServicioEstado @default(PENDIENTE)
+  canal  CitaServicioCanal  @default(PORTAL)
+
+  // Quién viene: customerId cuando hay expediente (portal o staff); walk-in
+  // telefónico sin expediente va con nombre/teléfono libres.
+  customerId    String?
+  clienteNombre String?
+  telefono      String?
+
+  // Qué unidad: del padrón (vehiculoId) o capturada libre — mismos campos que
+  // la orden, para que recibir sea copiar.
+  vehiculoId        String?
+  vin               String?
+  descripcionUnidad String?
+  placas            String?
+
+  fecha  DateTime // slot pedido (fecha+hora)
+  motivo String   @db.Text
+  notas  String?  @db.Text
+
+  confirmadaAt          DateTime?
+  canceladaAt           DateTime?
+  canceladaPor          String? // 'CLIENTE' | 'STAFF'
+  recordatorioEnviadoAt DateTime? // R2 (recordatorios WhatsApp) — lista, sin uso
+
+  /// La orden que la cumplió (POST [id]/recibir). La cita apunta a la orden,
+  /// igual que la orden apunta a la venta que la cerró — un solo FK.
+  ordenId String? @unique
+
+  company  Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  vehiculo Vehiculo?      @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  orden    OrdenServicio? @relation(fields: [ordenId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, fecha])
+  @@index([companyId, estado])
+  @@index([customerId])
+}
+
+enum OrdenDocumentoTipo {
+  FOTO_RECEPCION // checkup: estado físico de la unidad al recibirla
+  CONTRATO_FIRMADO // contrato de adhesión PROFECO con la firma estampada — inmutable
+  OTRO
+}
+
+/// Expediente binario de la orden (bytea). `bytes` va desnormalizado para que
+/// las listas jamás lean el blob; la subida viaja como base64-en-JSON (el
+/// apiFetch del satélite sólo habla JSON) y se decodifica una vez en la
+/// frontera. companyId desnormalizado para acotar tenant sin join.
+model OrdenDocumento {
+  id        String   @id @default(cuid())
+  companyId String
+  ordenId   String
+  createdAt DateTime @default(now())
+
+  tipo   OrdenDocumentoTipo
+  nombre String // nombre del archivo
+  mime   String
+  bytes  Int // tamaño real, para listar sin leer el blob
+  datos  Bytes
+
+  orden OrdenServicio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@index([ordenId])
+  @@index([companyId])
 }
 
 // Expediente CFDI del VIN: TODA factura que menciona la unidad, con su papel.

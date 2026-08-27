@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { unidadVigentePorVin } from "@/lib/automotriz/unidad-vigente";
+import { camposRecepcion, datosRecepcion } from "@/lib/automotriz/recepcion";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET/POST /api/automotriz/ordenes — órdenes de servicio del taller (fase 5b):
@@ -22,6 +23,7 @@ const incluye = {
   tecnico: { select: { id: true, nombre: true, apellidoPaterno: true } },
   servicioVenta: { select: { id: true, invoiceId: true, total: true, fecha: true } },
   lineas: true,
+  _count: { select: { documentos: true } },
 } as const;
 
 export const GET = withAuthz(async (req: Request) => {
@@ -98,6 +100,7 @@ const createSchema = z.object({
   prometidaAt: z.string().datetime().nullable().optional(),
   notas: z.string().max(4000).nullable().optional(),
   lineas: z.array(lineaSchema).max(50).optional(),
+  ...camposRecepcion,
 });
 
 export const POST = withAuthz(async (req: Request) => {
@@ -154,6 +157,7 @@ export const POST = withAuthz(async (req: Request) => {
           tecnicoId: d.tecnicoId ?? null,
           prometidaAt: d.prometidaAt ? new Date(d.prometidaAt) : null,
           notas: d.notas ?? null,
+          ...datosRecepcion(d),
           lineas: d.lineas?.length
             ? {
                 create: d.lineas.map((l) => ({
