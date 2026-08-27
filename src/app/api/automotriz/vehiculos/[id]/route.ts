@@ -18,6 +18,7 @@ export const GET = withAuthz(
     const vehiculo = await prisma.vehiculo.findUnique({
       where: { id },
       include: {
+        mercado: true,
         cliente: { select: { id: true, razonSocial: true, rfc: true } },
         supplier: { select: { id: true, razonSocial: true, rfc: true } },
         vendedor: { select: { id: true, nombre: true, apellidoPaterno: true } },
