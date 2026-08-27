@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthzError, requireMembership } from "@/lib/authz";
 import { generateBalanzaXml } from "@/lib/contabilidad/coe-xml";
 import { prisma } from "@/lib/prisma";
+import { validarBalanzaXml } from "@/lib/contabilidad/coe-validador";
 
 // GET /api/contabilidad/coe/balanza?companyId=xxx&year=2026&month=3&tipo=N
 // Returns the SAT COE Balanza de Comprobación XML for the period.
@@ -29,6 +30,13 @@ export async function GET(req: Request) {
     if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
     const { xml, tipoEnvio } = await generateBalanzaXml({ companyId, year, month, tipoEnvio: tipoOverride });
+    const val = validarBalanzaXml(xml);
+    if (!val.ok) {
+      return NextResponse.json(
+        { error: "La balanza no pasaría la validación del SAT", detalles: val.errores },
+        { status: 422 },
+      );
+    }
     const filename = `${company.rfc}${year}${String(month).padStart(2, "0")}B${tipoEnvio}.XML`;
 
     return new NextResponse(xml, {

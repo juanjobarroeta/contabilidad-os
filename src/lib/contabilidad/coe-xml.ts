@@ -81,7 +81,11 @@ export async function generateCatalogoXml(opts: CoeCatXmlOptions): Promise<strin
     cuentas: accounts.map((a) => {
       const code = a.subcuenta ?? a.cuentaSAT;
       return {
-        codAgrup: code,
+        // codAgrup: el código agrupador REAL del Anexo 24 (enum cerrada del
+        // XSD). En planes propios importados viene de ChartAccount.codAgrup;
+        // el catálogo semilla usa códigos SAT como cuenta, así que ahí el
+        // fallback coincide. Emitir el código interno aquí = rechazo del SAT.
+        codAgrup: a.codAgrup ?? code,
         numCta: code,
         desc: a.nombre,
         nivel: a.nivel,
@@ -159,7 +163,27 @@ export interface BalanzaXmlResult {
   fechaModBal: string | null;
 }
 
+
+/**
+ * Compuerta dura del Anexo 24: los entregables que reportan MOVIMIENTOS
+ * (balanza, pólizas, auxiliares) sólo se generan de un mes POSTED/CLOSED.
+ * Sin esto, un mes sin postear producía una balanza estructuralmente válida
+ * y materialmente vacía — y nada impedía subirla al SAT.
+ */
+export async function assertMesPosteado(companyId: string, year: number, month: number): Promise<void> {
+  const period = await prisma.accountingPeriod.findFirst({
+    where: { companyId, year, month },
+    select: { status: true },
+  });
+  if (!period || period.status === "DRAFT") {
+    throw new Error(
+      `El mes ${year}-${String(month).padStart(2, "0")} no está posteado — postea el mes (Cierres mensuales) antes de generar entregables del SAT.`,
+    );
+  }
+}
+
 export async function generateBalanzaXml(opts: CoeBalXmlOptions): Promise<BalanzaXmlResult> {
+  await assertMesPosteado(opts.companyId, opts.year, opts.month);
   const company = await prisma.company.findUnique({ where: { id: opts.companyId }, select: { rfc: true } });
   if (!company) throw new Error("Empresa no encontrada");
 

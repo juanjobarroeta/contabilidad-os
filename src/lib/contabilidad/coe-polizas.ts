@@ -8,6 +8,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "../prisma";
+import { assertMesPosteado } from "./coe-xml";
+import { transferenciaParaTx, type TransferenciaInput } from "./coe-bancos";
 
 const VERSION = "1.3";
 const esc = (s: string | null | undefined): string =>
@@ -29,6 +31,8 @@ export interface TransaccionInput {
   debe: number;
   haber: number;
   compNal?: CompNalInput;
+  /** Evidencia bancaria (Anexo 24): requerida cuando la póliza mueve banco. */
+  transferencia?: TransferenciaInput;
 }
 export interface PolizaInput {
   numUnIdenPol: string;
@@ -65,9 +69,20 @@ export function renderPolizasXml(args: {
     for (const t of p.transacciones) {
       const desCta = t.desCta ? ` DesCta="${esc(t.desCta)}"` : "";
       const open = `    <PLZ:Transaccion NumCta="${esc(t.numCta)}"${desCta} Concepto="${esc(t.concepto)}" Debe="${money(t.debe)}" Haber="${money(t.haber)}"`;
-      if (t.compNal) {
+      if (t.compNal || t.transferencia) {
         lines.push(`${open}>`);
-        lines.push(`      <PLZ:CompNal UUID_CFDI="${esc(t.compNal.uuid)}" RFC="${esc(t.compNal.rfc)}" MontoTotal="${money(t.compNal.montoTotal)}" />`);
+        if (t.compNal) {
+          lines.push(`      <PLZ:CompNal UUID_CFDI="${esc(t.compNal.uuid)}" RFC="${esc(t.compNal.rfc)}" MontoTotal="${money(t.compNal.montoTotal)}" />`);
+        }
+        if (t.transferencia) {
+          const tr = t.transferencia;
+          const ctaOri = tr.ctaOri ? ` CtaOri="${esc(tr.ctaOri)}"` : "";
+          lines.push(
+            `      <PLZ:Transferencia${ctaOri} BancoOriNal="${esc(tr.bancoOriNal)}" CtaDest="${esc(tr.ctaDest)}" ` +
+              `BancoDestNal="${esc(tr.bancoDestNal)}" Fecha="${esc(tr.fecha)}" Benef="${esc(tr.benef)}" ` +
+              `RFC="${esc(tr.rfc)}" Monto="${money(tr.monto)}" />`,
+          );
+        }
         lines.push(`    </PLZ:Transaccion>`);
       } else {
         lines.push(`${open} />`);
@@ -90,6 +105,7 @@ export interface EntryForPoliza {
   referenciaTipo: string | null;
   fuente: string;
   compNal?: CompNalInput;
+  transferencia?: TransferenciaInput;
 }
 
 /**
@@ -152,6 +168,7 @@ export function agruparPolizas(entries: EntryForPoliza[]): PolizaInput[] {
         debe: e.tipo === "CARGO" ? e.monto : 0,
         haber: e.tipo === "ABONO" ? e.monto : 0,
         compNal: e.compNal,
+        transferencia: e.transferencia,
       })),
     };
   });
@@ -166,8 +183,33 @@ export interface PolizasXmlOptions {
   numTramite?: string | null;
 }
 
+
+/** RFC de Emisor/Receptor leído del propio rawXml del CFDI (fallback cuando
+ *  la relación customer no está ligada — típico en recibidos de la descarga). */
+export function rfcDesdeXml(xml: string | null, nodo: "Emisor" | "Receptor"): string | null {
+  if (!xml) return null;
+  const m = new RegExp(`<(?:[a-zA-Z0-9]+:)?${nodo}\\b[^>]*\\bRfc="([^"]+)"`).exec(xml);
+  return m?.[1] ?? null;
+}
+
+export interface PolizasXmlResultado {
+  xml: string;
+  /** Pólizas bancarias del periodo y cuántas salieron SIN nodo Transferencia
+   *  (banco de algún lado no resoluble con datos reales) — visible, no mudo. */
+  bancarias: number;
+  sinEvidencia: number;
+}
+
 export async function generatePolizasXml(opts: PolizasXmlOptions): Promise<string> {
-  const company = await prisma.company.findUnique({ where: { id: opts.companyId }, select: { rfc: true } });
+  return (await generatePolizasXmlDetallado(opts)).xml;
+}
+
+export async function generatePolizasXmlDetallado(opts: PolizasXmlOptions): Promise<PolizasXmlResultado> {
+  await assertMesPosteado(opts.companyId, opts.year, opts.month);
+  const company = await prisma.company.findUnique({
+    where: { id: opts.companyId },
+    select: { rfc: true, razonSocial: true },
+  });
   if (!company) throw new Error("Empresa no encontrada");
 
   const entries = await prisma.accountingEntry.findMany({
@@ -192,11 +234,7 @@ export async function generatePolizasXml(opts: PolizasXmlOptions): Promise<strin
         select: { uuid: true, total: true, tipo: true, rawXml: true, customer: { select: { rfc: true } } },
       })
     : [];
-  const rfcDesdeXml = (xml: string | null, nodo: "Emisor" | "Receptor"): string | null => {
-    if (!xml) return null;
-    const m = new RegExp(`<(?:[a-zA-Z0-9]+:)?${nodo}\\b[^>]*\\bRfc="([^"]+)"`).exec(xml);
-    return m?.[1] ?? null;
-  };
+
   const compNalPorUuid = new Map<string, CompNalInput>();
   for (const inv of invoices) {
     if (!inv.uuid) continue;
@@ -209,6 +247,44 @@ export async function generatePolizasXml(opts: PolizasXmlOptions): Promise<strin
     }
   }
 
+  // Evidencia bancaria: las pólizas BANK_TX llevan nodo Transferencia con
+  // banco/cuenta de ambos lados, derivado de CLABE (jamás inventado). El RFC
+  // del tercero: el de la factura conciliada si existe, si no el extraído de
+  // la descripción SPEI, si no el genérico del SAT.
+  const bankTxIds = [
+    ...new Set(entries.filter((e) => e.referenciaTipo === "BANK_TX" && e.referencia).map((e) => e.referencia!)),
+  ];
+  const bankTxs = bankTxIds.length
+    ? await prisma.bankTransaction.findMany({
+        where: { id: { in: bankTxIds } },
+        select: {
+          id: true, monto: true, fecha: true,
+          contraparteNombre: true, contraparteRfc: true, contraparteClabe: true, contraparteBanco: true,
+          bankAccount: { select: { banco: true, nombre: true, numeroCuenta: true, clabe: true } },
+          invoice: { select: { customer: { select: { rfc: true } } } },
+        },
+      })
+    : [];
+  const transferenciaPorTx = new Map<string, TransferenciaInput>();
+  for (const tx of bankTxs) {
+    const nodo = transferenciaParaTx(
+      {
+        monto: Number(tx.monto),
+        fecha: tx.fecha,
+        contraparteNombre: tx.contraparteNombre,
+        contraparteRfc: tx.contraparteRfc,
+        contraparteClabe: tx.contraparteClabe,
+        contraparteBanco: tx.contraparteBanco,
+        cuenta: tx.bankAccount,
+      },
+      { rfcTercero: tx.invoice?.customer?.rfc ?? null, razonSocialPropia: company.razonSocial },
+    );
+    if (nodo) transferenciaPorTx.set(tx.id, nodo);
+  }
+
+  // El nodo va UNA vez por póliza, en la pierna de Bancos (102.*).
+  const evidenciaAdjunta = new Set<string>();
+
   const forPoliza: EntryForPoliza[] = entries.map((e) => ({
     numCta: e.chartAccount.subcuenta ?? e.chartAccount.cuentaSAT,
     desCta: e.chartAccount.nombre,
@@ -220,9 +296,18 @@ export async function generatePolizasXml(opts: PolizasXmlOptions): Promise<strin
     referenciaTipo: e.referenciaTipo,
     fuente: e.fuente,
     compNal: e.referenciaTipo === "CFDI" && e.referencia ? compNalPorUuid.get(e.referencia) : undefined,
+    transferencia: (() => {
+      if (e.referenciaTipo !== "BANK_TX" || !e.referencia) return undefined;
+      const numCta = e.chartAccount.subcuenta ?? e.chartAccount.cuentaSAT;
+      if (!numCta.startsWith("102")) return undefined;
+      if (evidenciaAdjunta.has(e.referencia)) return undefined;
+      const nodo = transferenciaPorTx.get(e.referencia);
+      if (nodo) evidenciaAdjunta.add(e.referencia);
+      return nodo;
+    })(),
   }));
 
-  return renderPolizasXml({
+  const xml = renderPolizasXml({
     rfc: company.rfc,
     year: opts.year,
     month: opts.month,
@@ -231,4 +316,9 @@ export async function generatePolizasXml(opts: PolizasXmlOptions): Promise<strin
     numTramite: opts.numTramite,
     polizas: agruparPolizas(forPoliza),
   });
+  return {
+    xml,
+    bancarias: bankTxIds.length,
+    sinEvidencia: bankTxIds.length - evidenciaAdjunta.size,
+  };
 }
