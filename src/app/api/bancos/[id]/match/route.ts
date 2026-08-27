@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { autoConciliarCuenta, clabesConocidasPorRfc, scoreCandidate } from "@/lib/bancos/auto-conciliar";
+import { signoDeMonto, sugerirCategoriaConcepto, type CompanyRule } from "@/lib/bancos/categorizar-concepto";
+import { sugerirCategoriaConceptoLLM } from "@/lib/bancos/categorizar-llm";
+import {
+  familiaATag,
+  inferirPorIdentidad,
+  type SugerenciaMovimiento,
+} from "@/lib/bancos/inferir-movimiento";
 import {
   TIPOS_IMPUESTO_CONCILIABLES,
   confianzaImpuesto,
@@ -251,5 +258,96 @@ export async function GET(req: Request, { params }: Params) {
       .sort((a, b) => b.score - a.score);
   }
 
-  return NextResponse.json({ transaction: tx, candidates: scored, impuestos });
+  // ── ¿Y si NO es una factura? ───────────────────────────────────────────────
+  // La mesa también clasifica (préstamos, aportaciones, traspasos, nómina…) y
+  // aquí se le sugiere la categoría con lo que YA sabemos, en orden de certeza:
+  //   1. identidad (determinista): RFC propio / CLABE de otra cuenta propia /
+  //      movimiento espejo (±3 días — cubre fin de semana; más ancho falsearía
+  //      con montos que se repiten) / RFC de un empleado;
+  //   2. reglas de la empresa + patrones de siempre (motor puro);
+  //   3. LLM acotado — SÓLO cuando 1 y 2 no dieron nada Y tampoco hay
+  //      candidatos: es cuando el usuario está más perdido y el costo (medido
+  //      en CostEvent) se justifica.
+  const ESPEJO_DIAS = 3;
+  const [empresa, cuentasPropias, empleados, espejo, reglasUsuario] = await Promise.all([
+    prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } }),
+    prisma.bankAccount.findMany({
+      where: { companyId },
+      select: { clabe: true, banco: true, nombre: true },
+    }),
+    prisma.employee.findMany({
+      where: { companyId },
+      select: { rfc: true, nombre: true, apellidoPaterno: true },
+    }),
+    tx.monto === 0
+      ? Promise.resolve(null)
+      : prisma.bankTransaction.findFirst({
+          where: {
+            companyId,
+            bankAccountId: { not: bankAccountId },
+            monto: { gte: -tx.monto - 0.005, lte: -tx.monto + 0.005 },
+            fecha: {
+              gte: new Date(tx.fecha.getTime() - ESPEJO_DIAS * 86400000),
+              lte: new Date(tx.fecha.getTime() + ESPEJO_DIAS * 86400000),
+            },
+          },
+          select: { fecha: true, bankAccount: { select: { banco: true, nombre: true } } },
+        }),
+    prisma.categorizationRule.findMany({
+      where: { companyId, activo: true, origen: "USER" },
+      select: { pattern: true, matchType: true, familia: true, signo: true },
+    }),
+  ]);
+
+  const signo = signoDeMonto(tx.monto);
+  let sugerencia: SugerenciaMovimiento | null = inferirPorIdentidad(
+    { monto: tx.monto, contraparteRfc: tx.contraparteRfc, contraparteClabe: tx.contraparteClabe },
+    {
+      rfcEmpresa: empresa?.rfc ?? null,
+      clabesPropias: new Map(
+        cuentasPropias
+          .filter((c) => c.clabe)
+          .map((c) => [c.clabe as string, `${c.banco} · ${c.nombre}`])
+      ),
+      empleadosPorRfc: new Map(
+        empleados.map((e) => [e.rfc.toUpperCase(), `${e.nombre} ${e.apellidoPaterno}`.trim()])
+      ),
+      espejo: espejo
+        ? {
+            etiquetaCuenta: `${espejo.bankAccount.banco} · ${espejo.bankAccount.nombre}`,
+            fecha: espejo.fecha.toISOString().slice(0, 10),
+          }
+        : null,
+    }
+  );
+  if (!sugerencia) {
+    // El motor puro ya integra las reglas de la empresa con precedencia sobre
+    // los patrones hardcodeados (sugerirCategoriaConcepto acepta companyRules).
+    const porReglas = sugerirCategoriaConcepto(tx.descripcion, signo, reglasUsuario as CompanyRule[]);
+    const tag = porReglas && familiaATag(porReglas.familia);
+    if (porReglas && tag) {
+      sugerencia = {
+        tag,
+        etiqueta: porReglas.etiqueta,
+        porQue: "el concepto empata con las reglas de tu empresa",
+        confianza: porReglas.confianza,
+        fuente: "reglas",
+      };
+    }
+  }
+  if (!sugerencia && scored.length === 0 && impuestos.length === 0) {
+    const porLLM = await sugerirCategoriaConceptoLLM(tx.descripcion, signo, { companyId });
+    const tag = porLLM && familiaATag(porLLM.familia);
+    if (porLLM && tag) {
+      sugerencia = {
+        tag,
+        etiqueta: porLLM.etiqueta,
+        porQue: "lo sugiere el asistente por el texto del concepto",
+        confianza: "media",
+        fuente: "llm",
+      };
+    }
+  }
+
+  return NextResponse.json({ transaction: tx, candidates: scored, impuestos, sugerencia });
 }
