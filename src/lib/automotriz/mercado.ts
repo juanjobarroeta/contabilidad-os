@@ -1,13 +1,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// El mercado de una refacción, vía Google Programmable Search (CSE) — el
-// buscador está RESTRINGIDO a MercadoLibre MX (y los sitios que se agreguen
-// en programmablesearchengine.google.com), así que los resultados son
-// listados reales del mercado mexicano, no la web abierta.
+// El mercado de una refacción, vía Brave Search API.
 //
-// Cuota: 100 búsquedas/día gratis. Cada parte gasta 1 búsqueda (2 si el
-// número no arroja nada y se reintenta con la descripción). El cron nocturno
-// respeta un presupuesto por corrida y el botón de la ficha consume del
-// mismo día — por eso el resultado se CACHEA en RefaccionMercado.
+// Historia: esto nació sobre Google Programmable Search, pero Google CERRÓ el
+// Custom Search JSON API a clientes nuevos (403 permanente; sunset ene-2027),
+// así que el proveedor es Brave — API oficial, country=mx, plan gratis de
+// 2,000 búsquedas/mes y 1 req/segundo.
+//
+// Estrategia de búsqueda (máx 2 consultas por parte, con pausa de 1.1s por el
+// rate limit): 1) el número ACOTADO a mercadolibre.com.mx — ahí viven los
+// precios mexicanos; 2) si no hay nada, el número abierto — las tiendas del
+// mundo identifican la parte aunque no den precio MX. El resultado se CACHEA
+// en RefaccionMercado; el cron nocturno y el botón de la ficha comparten la
+// misma cuota mensual.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type ResultadoMercado = {
@@ -17,86 +21,69 @@ export type ResultadoMercado = {
   resultados: { titulo: string; url: string; precio?: number }[];
 };
 
-type CseItem = {
-  title?: string;
-  link?: string;
-  snippet?: string;
-  pagemap?: { offer?: { price?: string; pricecurrency?: string }[] };
-};
+type Item = { title: string; url: string; description: string };
 
 const PRECIO_RE = /\$\s?([\d]{2,3}(?:[,.][\d]{3})*(?:\.[\d]{2})?|[\d]{2,6}(?:\.[\d]{2})?)/;
 
-function precioDe(item: CseItem): number | undefined {
-  const ofertas = item.pagemap?.offer ?? [];
-  for (const o of ofertas) {
-    const p = Number(String(o.price ?? "").replace(/,/g, ""));
-    if (Number.isFinite(p) && p > 0 && (o.pricecurrency == null || o.pricecurrency === "MXN")) return p;
-  }
-  const m = `${item.title ?? ""} ${item.snippet ?? ""}`.match(PRECIO_RE);
-  if (m) {
-    const p = Number(m[1].replace(/,/g, ""));
-    if (Number.isFinite(p) && p >= 10 && p < 1_000_000) return p;
-  }
-  return undefined;
+function precioDe(item: Item): number | undefined {
+  const m = `${item.title} ${item.description}`.match(PRECIO_RE);
+  if (!m) return undefined;
+  const p = Number(m[1].replace(/,/g, ""));
+  return Number.isFinite(p) && p >= 10 && p < 1_000_000 ? p : undefined;
 }
 
-async function buscar(q: string): Promise<CseItem[]> {
-  const key = process.env.GOOGLE_CSE_KEY;
-  const cx = process.env.GOOGLE_CSE_CX;
-  if (!key || !cx) throw new Error("GOOGLE_CSE_KEY/GOOGLE_CSE_CX sin configurar");
-  const url = new URL("https://www.googleapis.com/customsearch/v1");
-  url.searchParams.set("key", key);
-  url.searchParams.set("cx", cx);
+const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function buscar(q: string): Promise<Item[]> {
+  const key = process.env.BRAVE_SEARCH_KEY;
+  if (!key) throw new Error("BRAVE_SEARCH_KEY sin configurar");
+  const url = new URL("https://api.search.brave.com/res/v1/web/search");
   url.searchParams.set("q", q);
-  url.searchParams.set("num", "5");
-  url.searchParams.set("gl", "mx");
-  url.searchParams.set("hl", "es");
-  const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
+  url.searchParams.set("country", "mx");
+  url.searchParams.set("search_lang", "es");
+  url.searchParams.set("count", "5");
+  const res = await fetch(url, {
+    headers: { "X-Subscription-Token": key, Accept: "application/json" },
+    signal: AbortSignal.timeout(12_000),
+  });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const msg = data?.error?.message ?? `HTTP ${res.status}`;
-    // 429/cuota: el llamador decide si abortar la corrida completa.
-    const err = new Error(msg) as Error & { cuotaAgotada?: boolean };
-    err.cuotaAgotada = res.status === 429 || /quota|limit/i.test(msg);
+    const msg = data?.error?.detail ?? data?.message ?? `HTTP ${res.status}`;
+    const err = new Error(String(msg).slice(0, 160)) as Error & { cuotaAgotada?: boolean };
+    // 429 = rate limit o cuota mensual: el llamador decide si abortar la corrida.
+    err.cuotaAgotada = res.status === 429;
     throw err;
   }
-  return (data?.items ?? []) as CseItem[];
-}
-
-/** Limpia la descripción del CFDI para usarla como consulta de respaldo. */
-function consultaDeDescripcion(descripcion: string | null): string | null {
-  if (!descripcion) return null;
-  const sinModelo = descripcion.replace(/MODELOS?\s*:.*$/i, "").trim();
-  const palabras = sinModelo.split(/\s+/).slice(0, 5).join(" ");
-  return palabras.length >= 6 ? `${palabras} JAC` : null;
+  return ((data?.web?.results ?? []) as { title?: string; url?: string; description?: string }[])
+    .filter((r) => r.url)
+    .map((r) => ({ title: r.title ?? "", url: r.url!, description: r.description ?? "" }));
 }
 
 /**
- * 1 búsqueda por el número de parte; si no hay resultados y hay descripción,
- * 1 más por la descripción. Devuelve el resumen listo para RefaccionMercado.
+ * 1 búsqueda acotada a ML MX; si no arroja nada, 1 más abierta. Devuelve el
+ * resumen listo para RefaccionMercado (el precio manda: el primer resultado
+ * con precio detectado es el principal).
  */
 export async function consultarMercado(
   numeroParte: string,
-  descripcion: string | null
+  _descripcion: string | null
 ): Promise<ResultadoMercado & { busquedas: number }> {
-  let items = await buscar(`"${numeroParte}"`);
+  let items = await buscar(`"${numeroParte}" site:mercadolibre.com.mx`);
   let busquedas = 1;
   if (items.length === 0) {
-    const alterna = consultaDeDescripcion(descripcion);
-    if (alterna) {
-      items = await buscar(alterna);
-      busquedas = 2;
-    }
+    await pausa(1_100); // rate limit del plan gratis: 1 req/segundo
+    items = await buscar(`"${numeroParte}"`);
+    busquedas = 2;
   }
 
   const resultados = items.slice(0, 5).map((it) => {
     const precio = precioDe(it);
     return {
-      titulo: (it.title ?? "").slice(0, 160),
-      url: it.link ?? "",
+      titulo: it.title.slice(0, 160),
+      url: it.url,
       ...(precio != null ? { precio } : {}),
     };
-  }).filter((r) => r.url);
+  });
 
   const principal = resultados.find((r) => r.precio != null) ?? resultados[0] ?? null;
   return {

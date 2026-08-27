@@ -5,8 +5,8 @@ import { consultarMercado } from "@/lib/automotriz/mercado";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/automotriz/refacciones/[id]/mercado — el botón «Consultar mercado»
-// de la ficha: busca la parte en el buscador restringido (ML MX) y guarda el
-// resumen. CACHEADO 24h (la cuota gratis es de 100/día y la comparte el cron);
+// de la ficha: busca la parte en el mercado (Brave, ML MX primero) y guarda
+// el resumen. CACHEADO 24h (la cuota mensual la comparte con el cron);
 // ?forzar=1 lo salta.
 // ─────────────────────────────────────────────────────────────────────────────
 
