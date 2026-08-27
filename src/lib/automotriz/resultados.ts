@@ -270,7 +270,7 @@ async function anclaDeLibros(
   if (asientos.length === 0) return undefined;
 
   const costoDeVentas = r2(
-    asientos.reduce((s, a) => s + (a.tipo === "CARGO" ? a.monto : -a.monto), 0),
+    asientos.reduce((s, a) => s + (a.tipo === "CARGO" ? Number(a.monto) : -Number(a.monto)), 0),
   );
   // Un costo de ventas negativo o en cero no es un ancla: es una señal de que
   // la apertura de esta empresa no trae la familia 5 como se espera. Mejor

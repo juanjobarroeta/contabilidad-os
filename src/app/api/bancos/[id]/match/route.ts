@@ -238,7 +238,15 @@ export async function GET(req: Request, { params }: Params) {
         lineaCaptura: true,
       },
     });
-    impuestos = filtrarCandidatosImpuesto(decls)
+    impuestos = filtrarCandidatosImpuesto(
+      decls.map((d) => ({
+        ...d,
+        ivaPagar: d.ivaPagar === null ? null : Number(d.ivaPagar),
+        isrPagar: d.isrPagar === null ? null : Number(d.isrPagar),
+        retencionesIsr: d.retencionesIsr === null ? null : Number(d.retencionesIsr),
+        imssCuotas: d.imssCuotas === null ? null : Number(d.imssCuotas),
+      }))
+    )
       .map((d) => {
         const montoEsperado = montoEsperadoDeclaracion(d);
         const score = scoreCandidatoImpuesto(

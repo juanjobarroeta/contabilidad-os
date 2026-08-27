@@ -135,7 +135,7 @@ export async function GET(req: Request) {
     else if (algunaGuardada) estado = vencido ? "vencida" : "calculada";
     else estado = vencido ? "vencida" : "pendiente";
 
-    const aPagar = Math.round(((iva?.ivaPagar ?? 0) + (isr?.isrPagar ?? 0)) * 100) / 100;
+    const aPagar = Math.round((Number(iva?.ivaPagar ?? 0) + Number(isr?.isrPagar ?? 0)) * 100) / 100;
     const hz = hallazgosBy.get(c.id) ?? { total: 0, peor: null };
 
     // Diligencia (sólo lectura): qué mantiene al día el contador AI.

@@ -64,8 +64,8 @@ export const GET = withAuthz(async (req: Request) => {
     }),
   ]);
 
-  const abonos = agregado.find((a) => a.tipo === "ABONO")?._sum.monto ?? 0;
-  const cargos = agregado.find((a) => a.tipo === "CARGO")?._sum.monto ?? 0;
+  const abonos = Number(agregado.find((a) => a.tipo === "ABONO")?._sum.monto ?? 0);
+  const cargos = Number(agregado.find((a) => a.tipo === "CARGO")?._sum.monto ?? 0);
 
   const uuids = [
     ...new Set(

@@ -161,7 +161,7 @@ export async function conciliacionDelMes(
   ]);
 
   const saldoInicialLibros = previos.reduce(
-    (s, g) => s + (g.tipo === "CARGO" ? 1 : -1) * (g._sum.monto ?? 0),
+    (s, g) => s + (g.tipo === "CARGO" ? 1 : -1) * Number(g._sum.monto ?? 0),
     0
   );
 
@@ -169,7 +169,7 @@ export async function conciliacionDelMes(
     id: e.id,
     fecha: e.fecha.toISOString().slice(0, 10),
     concepto: e.descripcion,
-    delta: (e.tipo === "CARGO" ? 1 : -1) * e.monto,
+    delta: (e.tipo === "CARGO" ? 1 : -1) * Number(e.monto),
     fuente: e.fuente,
     // Sólo los asientos que vienen de un movimiento bancario traen su id.
     bankTxId: e.referenciaTipo === "BANK_TX" ? e.referencia : null,

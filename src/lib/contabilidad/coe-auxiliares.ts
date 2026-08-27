@@ -134,7 +134,7 @@ export async function generateAuxiliarCtasXml(opts: AuxOptions): Promise<string>
     }),
   ]);
 
-  const conFecha = entries.map((e) => ({ ...e, fechaStr: e.fecha.toISOString().slice(0, 10) }));
+  const conFecha = entries.map((e) => ({ ...e, monto: Number(e.monto), fechaStr: e.fecha.toISOString().slice(0, 10) }));
   const num = numerarPolizas(
     conFecha.map((e) => ({ referencia: e.referencia, referenciaTipo: e.referenciaTipo, fuente: e.fuente, fecha: e.fechaStr, concepto: e.descripcion })),
   );

@@ -34,7 +34,7 @@ async function main() {
       for (const serie of SERIES) {
         const ingreso = serie.startsWith("4");
         const c = ce.filter((r) => r.numCta.startsWith(serie))
-          .reduce((a, r) => a + (ingreso ? r.haber - r.debe : r.debe - r.haber), 0);
+          .reduce((a, r) => a + (ingreso ? Number(r.haber) - Number(r.debe) : Number(r.debe) - Number(r.haber)), 0);
         const der = prev.filter((r) => r.nivel > 1 && r.cuentaSAT.startsWith(serie))
           .reduce((a, r) => a + (ingreso ? r.abonos - r.cargos : r.cargos - r.abonos), 0);
         if (Math.abs(c) < 0.5 && Math.abs(der) < 0.5) continue;

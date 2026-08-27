@@ -65,7 +65,7 @@ export async function cargarAjusteInflacion(
   for (const g of previos) {
     const nat = natPorCuenta.get(g.chartAccountId);
     if (!nat) continue;
-    const delta = natural(nat, g.tipo, g._sum.monto ?? 0);
+    const delta = natural(nat, g.tipo, Number(g._sum.monto ?? 0));
     saldoPrevio.set(g.chartAccountId, (saldoPrevio.get(g.chartAccountId) ?? 0) + delta);
   }
 
@@ -74,7 +74,7 @@ export async function cargarAjusteInflacion(
     const nat = natPorCuenta.get(g.chartAccountId);
     if (!nat || g.month < 1 || g.month > MESES_EJERCICIO) continue;
     const fila = movPorMes.get(g.chartAccountId) ?? Array<number>(MESES_EJERCICIO).fill(0);
-    fila[g.month - 1] += natural(nat, g.tipo, g._sum.monto ?? 0);
+    fila[g.month - 1] += natural(nat, g.tipo, Number(g._sum.monto ?? 0));
     movPorMes.set(g.chartAccountId, fila);
   }
 

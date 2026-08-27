@@ -328,12 +328,20 @@ export async function GET(req: Request) {
       // ya calculado — que es justo el número que el aviso "tienes N vencidas"
       // prometía y nunca decía. El estado sigue decidiendo si CUENTA como
       // presentada; lo que cambia es que ya no se tira el importe.
-      const decl = tipoEnum
+      const declRow = tipoEnum
         ? await prisma.taxDeclaration.findFirst({
             where: { companyId, tipo: tipoEnum, periodo: periodoFilter },
             orderBy: [{ status: "desc" }, { periodo: "desc" }],
           })
         : null;
+      const decl = declRow === null ? null : {
+        ...declRow,
+        ivaPagar: declRow.ivaPagar === null ? null : Number(declRow.ivaPagar),
+        isrPagar: declRow.isrPagar === null ? null : Number(declRow.isrPagar),
+        retencionesIsr: declRow.retencionesIsr === null ? null : Number(declRow.retencionesIsr),
+        iepsPagar: declRow.iepsPagar === null ? null : Number(declRow.iepsPagar),
+        imssCuotas: declRow.imssCuotas === null ? null : Number(declRow.imssCuotas),
+      };
       // Si esta obligación es del período fiscal EN JUEGO, el tablero ya lo
       // calculó desde los CFDIs (computeTaxPosition, arriba) y lo enseña en la
       // tarjeta «¿Cuánto debo?». Sin esto la banda decía «sin importe» encima

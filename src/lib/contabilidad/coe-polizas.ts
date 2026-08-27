@@ -214,7 +214,7 @@ export async function generatePolizasXml(opts: PolizasXmlOptions): Promise<strin
     desCta: e.chartAccount.nombre,
     concepto: e.descripcion,
     tipo: e.tipo as "CARGO" | "ABONO",
-    monto: e.monto,
+    monto: Number(e.monto),
     fecha: e.fecha.toISOString().slice(0, 10),
     referencia: e.referencia,
     referenciaTipo: e.referenciaTipo,

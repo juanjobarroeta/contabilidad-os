@@ -142,7 +142,7 @@ export async function verificarContraSat(
   // Neto firmado: a pagar positivo, saldo a favor negativo (compara ambas direcciones).
   const appIvaNeto = (pos.iva.pagar ?? 0) - (pos.iva.saldoAFavor ?? 0);
   const satIvaNeto =
-    ivaDecl == null ? null : (ivaDecl.ivaPagar ?? 0) - (ivaDecl.ivaSaldoFavor ?? 0);
+    ivaDecl == null ? null : Number(ivaDecl.ivaPagar ?? 0) - Number(ivaDecl.ivaSaldoFavor ?? 0);
   {
     const c = clasificarLinea(appIvaNeto, satIvaNeto);
     lineas.push({
@@ -163,7 +163,7 @@ export async function verificarContraSat(
 
   // ── 3. ISR provisional: app vs presentado ───────────────────────────────────
   const appIsr = pos.isr.isrPagar ?? 0;
-  const satIsr = isrDecl == null ? null : isrDecl.isrPagar ?? 0;
+  const satIsr = isrDecl == null ? null : Number(isrDecl.isrPagar ?? 0);
   {
     const c = clasificarLinea(appIsr, satIsr);
     lineas.push({
