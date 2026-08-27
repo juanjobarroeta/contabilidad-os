@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 // POST /api/push/subscribe — store (or refresh) a Web Push subscription for the
 // logged-in user. Body: the browser PushSubscription JSON { endpoint, keys }.
@@ -12,10 +13,18 @@ export async function POST(req: Request) {
   const endpoint: string | undefined = body?.endpoint;
   const p256dh: string | undefined = body?.keys?.p256dh;
   const auth_: string | undefined = body?.keys?.auth;
-  const companyId: string | null = body?.companyId ?? null;
 
   if (!endpoint || !p256dh || !auth_) {
     return NextResponse.json({ error: "Suscripción inválida" }, { status: 400 });
+  }
+
+  // companyId viene del cliente (empresa activa al suscribirse); nadie lo lee
+  // hoy para enviar, pero no guardamos un scoping que el usuario no tiene.
+  // Sin membresía (o empresa basura) → null, sin tumbar la suscripción.
+  let companyId: string | null = body?.companyId ?? null;
+  if (companyId) {
+    const membership = await getEffectiveCompanyMembership(session.user.id, companyId);
+    if (!membership) companyId = null;
   }
 
   await prisma.pushSubscription.upsert({

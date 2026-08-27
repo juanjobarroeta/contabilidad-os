@@ -85,11 +85,6 @@ export const RUTAS_CON_AUTH_PROPIA: EntradaAllowlist[] = [
     razon: "Invitación amarrada al email de la sesión; sin acceso a datos de otra empresa.",
   },
   {
-    ruta: "api/push/subscribe/route.ts",
-    razon:
-      "Suscripción push del propio usuario (upsert por userId de sesión). OJO: el companyId del body se guarda SIN validar membresía — hoy es metadato inerte (todos los senders seleccionan por userId), pero cualquier sender futuro que filtre por subscription.companyId confiaría en dato manipulable. Follow-up P0-2: validar membresía o dejar de guardarlo.",
-  },
-  {
     ruta: "api/verificador/route.ts",
     razon:
       "Usa su propio companyIdsVisibles(userId). HALLAZGO documentado en el PR: duplica empresasAccesiblesIds SIN respetar el scoping por DespachoMemberCompany (un miembro de despacho restringido a la empresa X ve terceros conocidos de la empresa Y). Propuesta: sustituir por empresasAccesiblesIds — toca lógica de tenant-scoping (lista no-go), requiere aprobación del owner.",
