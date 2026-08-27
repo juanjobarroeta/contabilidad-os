@@ -255,9 +255,9 @@ export async function autoConciliarCuenta(
   const impuestosLc = vacio;
 
   const companyId = account.companyId;
-  const unmatched = await prisma.bankTransaction.findMany({
+  const unmatched = (await prisma.bankTransaction.findMany({
     where: { bankAccountId: accountId, status: "UNMATCHED" },
-  });
+  })).map((t) => ({ ...t, monto: Number(t.monto) }));
 
   let matched = 0;
 
@@ -268,7 +268,7 @@ export async function autoConciliarCuenta(
   // IGNORED: siguen fuera de la bandeja, pero ahora con la evidencia de QUÉ
   // declaración pagaron. Sólo la nota exacta del categorizador — un movimiento
   // que el USUARIO ignoró a mano no se toca.
-  const impuestosIgnorados = await prisma.bankTransaction.findMany({
+  const impuestosIgnorados = (await prisma.bankTransaction.findMany({
     where: {
       bankAccountId: accountId,
       status: "IGNORED",
@@ -276,7 +276,7 @@ export async function autoConciliarCuenta(
       lineaCaptura: { not: null },
       taxDeclarationId: null,
     },
-  });
+  })).map((t) => ({ ...t, monto: Number(t.monto) }));
   for (const tx of impuestosIgnorados) {
     try {
       const r = await conciliarImpuestoPorLineaCaptura(tx);

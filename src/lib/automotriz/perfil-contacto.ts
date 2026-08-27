@@ -244,7 +244,7 @@ export async function perfilContacto(
   }
 
   const facturas: FacturaPerfil[] = facturasDb.map((f) => {
-    const conciliado = r2(f.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0));
+    const conciliado = r2(f.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0));
     const amparadoRep = f.uuid ? r2(amparadoPorUuid.get(normalizarUuid(f.uuid)) ?? 0) : 0;
     // Evidencia de cobro/pago — misma semántica que el motor de IVA en flujo:
     // PUE queda pagada en su emisión (pago en una sola exhibición); PPD por la

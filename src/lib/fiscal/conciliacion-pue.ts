@@ -43,10 +43,10 @@ export async function pagosConciliadosPorInvoice(
     }),
   ]);
   for (const g of grouped) {
-    if (g.invoiceId) out.set(g.invoiceId, Math.abs(g._sum.monto ?? 0));
+    if (g.invoiceId) out.set(g.invoiceId, Math.abs(Number(g._sum.monto ?? 0)));
   }
   for (const d of detalles) {
-    out.set(d.invoiceId, (out.get(d.invoiceId) ?? 0) + Math.abs(d._sum.montoAsignado ?? 0));
+    out.set(d.invoiceId, (out.get(d.invoiceId) ?? 0) + Math.abs(Number(d._sum.montoAsignado ?? 0)));
   }
   return out;
 }

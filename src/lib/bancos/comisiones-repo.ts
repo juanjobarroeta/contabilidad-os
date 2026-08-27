@@ -51,7 +51,7 @@ export async function vincularComisionesDeCuenta(
   const entrada: MovimientoComision[] = movs.map((m) => ({
     id: m.id,
     fecha: m.fecha,
-    monto: m.monto,
+    monto: Number(m.monto),
     descripcion: m.descripcion,
     claveRastreo: m.claveRastreo,
     referencia: m.referencia,

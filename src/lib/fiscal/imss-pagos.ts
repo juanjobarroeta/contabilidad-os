@@ -268,7 +268,11 @@ async function movimientoSugeridoPara(
     select: { id: true, fecha: true, descripcion: true, monto: true, status: true },
     take: 100,
   });
-  const mejor = elegirMovimientoSugerido(objetivo, fechaLimite, movimientos);
+  const mejor = elegirMovimientoSugerido(
+    objetivo,
+    fechaLimite,
+    movimientos.map((m) => ({ ...m, monto: Number(m.monto) }))
+  );
   if (!mejor) return null;
   return {
     id: mejor.id,

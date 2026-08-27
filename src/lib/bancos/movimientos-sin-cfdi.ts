@@ -312,7 +312,7 @@ export async function detectarMovimientosSinCfdi(
   const cruce = detectarSinCfdi({
     periodo,
     toleranciaPesos: opts.toleranciaPesos,
-    movimientos,
+    movimientos: movimientos.map((m) => ({ ...m, monto: Number(m.monto) })),
     cfdis: cfdis.map((c) => ({
       id: c.id,
       tipo: c.tipo,

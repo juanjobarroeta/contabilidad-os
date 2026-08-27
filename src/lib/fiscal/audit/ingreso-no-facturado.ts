@@ -109,7 +109,7 @@ export async function cargarIngresoNoFacturado(
 
   const depositos = rows
     .filter((r) => !esConceptoExcluido(r.descripcion))
-    .map((r) => ({ id: r.id, monto: r.monto, fecha: r.fecha, descripcion: r.descripcion }));
+    .map((r) => ({ id: r.id, monto: Number(r.monto), fecha: r.fecha, descripcion: r.descripcion }));
 
   return { depositos, periodo };
 }

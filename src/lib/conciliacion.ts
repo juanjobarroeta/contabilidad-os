@@ -32,13 +32,14 @@ export async function scoreCandidates(txId: string, companyId: string): Promise<
   });
   if (!tx) return { tx: null, candidates: [] };
 
-  const absAmount = Math.abs(tx.monto);
+  const monto = Number(tx.monto);
+  const absAmount = Math.abs(monto);
   // Incoming deposit → income CFDIs: INGRESO you issued, OR a NOMINA you
   // RECEIVED (asimilados/sueldos paid to you — a real income deposit).
   // Outgoing debit → expense CFDIs: EGRESO, OR a NOMINA you issued as employer.
   const incomingTypes = ["INGRESO", "NOMINA"] as const;
   const outgoingTypes = ["EGRESO", "NOMINA"] as const;
-  const tipoIn = tx.monto > 0 ? [...incomingTypes] : [...outgoingTypes];
+  const tipoIn = monto > 0 ? [...incomingTypes] : [...outgoingTypes];
 
   const invoices = await prisma.invoice.findMany({
     where: {
@@ -99,7 +100,7 @@ export async function scoreCandidates(txId: string, companyId: string): Promise<
       id: tx.id,
       fecha: tx.fecha.toISOString().slice(0, 10),
       descripcion: tx.descripcion,
-      monto: tx.monto,
+      monto,
     },
     candidates,
   };
@@ -136,7 +137,7 @@ export async function listUnmatched(companyId: string, limit = 10): Promise<{
       id: tx.id,
       fecha: tx.fecha.toISOString().slice(0, 10),
       descripcion: tx.descripcion,
-      monto: tx.monto,
+      monto: Number(tx.monto),
       banco: tx.bankAccount?.banco ?? "—",
       topCandidate: candidates[0] ?? null,
     });
@@ -365,8 +366,15 @@ export async function reconcileTransaction(
   if (!tx) return { ok: false, error: "Movimiento no encontrado." };
   if (!inv) return { ok: false, error: "Factura no encontrada." };
 
-  const pagosPrevios = mergePagosConciliados(inv.bankTransactions, inv.conciliacionDetalles);
-  const guard = checkInvoiceMatchGuard(inv, pagosPrevios, tx);
+  const pagosPrevios = mergePagosConciliados(
+    inv.bankTransactions.map((t) => ({ ...t, monto: Number(t.monto) })),
+    inv.conciliacionDetalles.map((d) => ({
+      ...d,
+      montoAsignado: Number(d.montoAsignado),
+      bankTransaction: { ...d.bankTransaction, monto: Number(d.bankTransaction.monto) },
+    })),
+  );
+  const guard = checkInvoiceMatchGuard(inv, pagosPrevios, { ...tx, monto: Number(tx.monto) });
   if (!guard.ok) return { ok: false, error: guard.error };
 
   await prisma.bankTransaction.update({

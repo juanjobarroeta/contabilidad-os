@@ -1297,8 +1297,8 @@ model BankTransaction {
   fecha       DateTime
   descripcion String
   referencia  String?
-  monto       Float // positive = credit, negative = debit
-  saldo       Float?
+  monto       Decimal @db.Decimal(18, 6) // positive = credit, negative = debit
+  saldo       Decimal? @db.Decimal(18, 6)
   tipo        BankTransactionType
 
   // ── Contraparte, extraída de la descripción (ver bancos/spei-descripcion.ts)
@@ -1435,8 +1435,8 @@ model ImportBatch {
   // para un cuadre de sanidad y luego los tiraba; persistirlos es lo que
   // permite proponer el saldo de la conciliación bancaria sin capturarlo a
   // mano. Null cuando el estado no los trae o el origen no los expone.
-  saldoInicial Float?
-  saldoFinal   Float?
+  saldoInicial Decimal? @db.Decimal(18, 6)
+  saldoFinal   Decimal? @db.Decimal(18, 6)
 
   // El DOCUMENTO original del estado de cuenta (PDF/imagen subido por visión).
   // Evidencia de underwriting y de conciliación: "lo leímos y lo tiramos" es
@@ -1474,9 +1474,9 @@ model ConciliacionBancaria {
   month         Int // 1-12
 
   /// Saldo final que declara el estado de cuenta del periodo.
-  saldoFinalEstado   Float?
+  saldoFinalEstado   Decimal? @db.Decimal(18, 6)
   /// Saldo inicial declarado — sirve para explicar el arrastre del mes previo.
-  saldoInicialEstado Float?
+  saldoInicialEstado Decimal? @db.Decimal(18, 6)
   /// true cuando el saldo lo capturó una persona (no vino del import).
   saldoManual        Boolean @default(false)
 
@@ -1549,7 +1549,7 @@ model ConciliacionDetalle {
   id                String   @id @default(cuid())
   bankTransactionId String
   invoiceId         String
-  montoAsignado     Float // porción (valor absoluto) del movimiento asignada a esta factura
+  montoAsignado     Decimal @db.Decimal(18, 6) // porción (valor absoluto) del movimiento asignada a esta factura
   createdAt         DateTime @default(now())
 
   bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)

@@ -453,7 +453,7 @@ export async function GET(req: Request) {
         })
       ).filter((r) => !esConceptoExcluido(r.descripcion))
     : [];
-  const depositosSinFacturaTotal = depositosDelPeriodo.reduce((s, d) => s + d.monto, 0);
+  const depositosSinFacturaTotal = depositosDelPeriodo.reduce((s, d) => s + Number(d.monto), 0);
   const depositosSinFactura = {
     count: depositosDelPeriodo.length,
     total: +depositosSinFacturaTotal.toFixed(2),

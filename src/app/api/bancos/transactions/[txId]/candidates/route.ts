@@ -43,11 +43,12 @@ export async function GET(_req: Request, { params }: Params) {
   }
 
   const { txId } = await params;
-  const tx = await prisma.bankTransaction.findUnique({
+  const txRow = await prisma.bankTransaction.findUnique({
     where: { id: txId },
     select: { id: true, companyId: true, monto: true, fecha: true, tipo: true },
   });
-  if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
+  if (!txRow) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
+  const tx = { ...txRow, monto: Number(txRow.monto) };
 
   const member = await getEffectiveCompanyMembership(userId, tx.companyId);
   if (!member) return NextResponse.json({ error: "Sin permisos" }, { status: 403 });

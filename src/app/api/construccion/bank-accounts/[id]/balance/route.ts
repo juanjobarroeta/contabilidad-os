@@ -31,7 +31,7 @@ export const GET = withAuthz(
       _sum: { monto: true },
       _count: true,
     });
-    const balance = Math.round((agg._sum.monto ?? 0) * 100) / 100;
+    const balance = Math.round(Number(agg._sum.monto ?? 0) * 100) / 100;
     return NextResponse.json({ balance, transactionCount: agg._count });
   }
 );

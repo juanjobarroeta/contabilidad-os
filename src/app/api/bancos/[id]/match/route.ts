@@ -59,8 +59,9 @@ export async function GET(req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(user.id, account.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const tx = await prisma.bankTransaction.findUnique({ where: { id: txId } });
-  if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
+  const txRow = await prisma.bankTransaction.findUnique({ where: { id: txId } });
+  if (!txRow) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
+  const tx = { ...txRow, monto: Number(txRow.monto) };
 
   const companyId   = account.companyId;
   const absAmount   = Math.abs(tx.monto);
@@ -163,8 +164,8 @@ export async function GET(req: Request, { params }: Params) {
     // Neto firmado: un reembolso (cargo) resta de lo cobrado. Las porciones
     // asignadas (conciliación múltiple) suman por su monto asignado.
     const matchedAmount =
-      Math.abs(inv.bankTransactions.reduce((s, t) => s + t.monto, 0)) +
-      inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+      Math.abs(inv.bankTransactions.reduce((s, t) => s + Number(t.monto), 0)) +
+      inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
     return {
       id:          inv.id,
       uuid:        inv.uuid,

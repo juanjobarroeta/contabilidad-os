@@ -41,7 +41,7 @@ async function oldBankPPD(companyId: string, tipo: "INGRESO" | "EGRESO", from: D
   });
   let iva = 0;
   for (const inv of invs) {
-    const paid = inv.bankTransactions.reduce((s, t) => s + Math.abs(t.monto), 0);
+    const paid = inv.bankTransactions.reduce((s, t) => s + Math.abs(Number(t.monto)), 0);
     const frac = inv.total > 0 ? Math.min(1, paid / inv.total) : 0;
     iva += ivaTrasladado(inv) * frac;
   }

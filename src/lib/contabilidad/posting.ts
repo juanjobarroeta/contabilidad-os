@@ -644,7 +644,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   }
 
   // ─── 3. Bank transactions ──────────────────────────────────────────────
-  const bankTxs = await prisma.bankTransaction.findMany({
+  const bankTxs = (await prisma.bankTransaction.findMany({
     where: {
       companyId,
       fecha: { gte: start, lt: end },
@@ -657,7 +657,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       // FACTURA (nómina → acreedores; módulo → su CxC), no sólo el sentido.
       conciliacionDetalles: { select: { invoiceId: true } },
     },
-  });
+  })).map((t) => ({ ...t, monto: Number(t.monto) }));
 
   // FASE 2b: a qué liquida cada match — nómina a acreedores, módulo a su CxC.
   const idsConciliados = [

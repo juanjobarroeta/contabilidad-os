@@ -139,7 +139,7 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   const { txId } = await params;
-  const tx = await prisma.bankTransaction.findUnique({
+  const txRow = await prisma.bankTransaction.findUnique({
     where: { id: txId },
     include: {
       gastoPagado: { select: { id: true } },
@@ -155,7 +155,8 @@ export async function PATCH(req: Request, { params }: Params) {
       devolucionPor: { select: { id: true } },
     },
   });
-  if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
+  if (!txRow) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
+  const tx = { ...txRow, monto: Number(txRow.monto) };
 
   const member = await getEffectiveCompanyMembership(user.id, tx.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
@@ -266,7 +267,14 @@ export async function PATCH(req: Request, { params }: Params) {
       if (!inv) return NextResponse.json({ error: "Factura inválida" }, { status: 400 });
       const guard = checkInvoiceMatchGuard(
         inv,
-        mergePagosConciliados(inv.bankTransactions, inv.conciliacionDetalles),
+        mergePagosConciliados(
+          inv.bankTransactions.map((t) => ({ ...t, monto: Number(t.monto) })),
+          inv.conciliacionDetalles.map((d) => ({
+            ...d,
+            montoAsignado: Number(d.montoAsignado),
+            bankTransaction: { ...d.bankTransaction, monto: Number(d.bankTransaction.monto) },
+          })),
+        ),
         { id: txId, monto: tx.monto }
       );
       if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: 409 });
@@ -371,7 +379,14 @@ export async function PATCH(req: Request, { params }: Params) {
         }
         const guardMulti = checkInvoiceMatchGuard(
           factura,
-          mergePagosConciliados(factura.bankTransactions, factura.conciliacionDetalles),
+          mergePagosConciliados(
+            factura.bankTransactions.map((t) => ({ ...t, monto: Number(t.monto) })),
+            factura.conciliacionDetalles.map((d) => ({
+              ...d,
+              montoAsignado: Number(d.montoAsignado),
+              bankTransaction: { ...d.bankTransaction, monto: Number(d.bankTransaction.monto) },
+            })),
+          ),
           { id: txId, monto: tx.monto, montoAsignado: p.monto }
         );
         if (!guardMulti.ok) return NextResponse.json({ error: guardMulti.error }, { status: 409 });
@@ -625,7 +640,7 @@ export async function PATCH(req: Request, { params }: Params) {
 
       const motivo = validarParDevolucion(
         { id: tx.id, bankAccountId: tx.bankAccountId, fecha: tx.fecha, monto: tx.monto, descripcion: tx.descripcion, referencia: tx.referencia },
-        { id: origen.id, bankAccountId: origen.bankAccountId, fecha: origen.fecha, monto: origen.monto, descripcion: origen.descripcion, referencia: origen.referencia },
+        { id: origen.id, bankAccountId: origen.bankAccountId, fecha: origen.fecha, monto: Number(origen.monto), descripcion: origen.descripcion, referencia: origen.referencia },
       );
       if (motivo) return NextResponse.json({ error: motivo }, { status: 422 });
 

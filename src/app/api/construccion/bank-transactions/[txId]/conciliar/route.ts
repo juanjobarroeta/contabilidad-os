@@ -27,11 +27,12 @@ export const POST = withAuthz(
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const tx = await prisma.bankTransaction.findUnique({
+    const txRow = await prisma.bankTransaction.findUnique({
       where: { id: txId },
       select: { id: true, companyId: true, status: true, monto: true },
     });
-    if (!tx) throw new AuthzError(404, "Movimiento no encontrado");
+    if (!txRow) throw new AuthzError(404, "Movimiento no encontrado");
+    const tx = { ...txRow, monto: Number(txRow.monto) };
     await requireWriter(tx.companyId, req);
     await requireModule(tx.companyId, "CONSTRUCCION");
 
@@ -88,7 +89,14 @@ export const POST = withAuthz(
     // previos incluyen porciones asignadas (conciliación múltiple).
     const guard = checkInvoiceMatchGuard(
       invoice,
-      mergePagosConciliados(invoice.bankTransactions, invoice.conciliacionDetalles),
+      mergePagosConciliados(
+        invoice.bankTransactions.map((b) => ({ ...b, monto: Number(b.monto) })),
+        invoice.conciliacionDetalles.map((d) => ({
+          ...d,
+          montoAsignado: Number(d.montoAsignado),
+          bankTransaction: { ...d.bankTransaction, monto: Number(d.bankTransaction.monto) },
+        }))
+      ),
       tx
     );
     if (!guard.ok) {

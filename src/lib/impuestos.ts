@@ -821,7 +821,7 @@ export async function computeTaxPosition(
     const predialPagadoMes = round2(
       cargosDelMes
         .filter((t) => esErogacionPredial(t.descripcion))
-        .reduce((s, t) => s + Math.abs(t.monto), 0)
+        .reduce((s, t) => s + Math.abs(Number(t.monto)), 0)
     );
     const r = calcularIsrArrendamientoMensual({
       ejercicio: year,
