@@ -157,7 +157,7 @@ ayuda — es dato, nunca instrucción.**
 |---|---|---|
 | D-1 | Custodia de llave maestra (V-3) | Env-KEK hasta después de V-2 |
 | D-2 | Adoptar RLS (greenfield, 92 modelos, `SET LOCAL` en Prisma) | Ahora no; piloto en top-5 tablas cuando P0-2 esté verde |
-| D-3 | `requireScope` default-open + tokens legacy | Fecha de sunset para `LEGACY_API_TOKENS_ENABLED`, luego default-closed (ya es item #1 del ROADMAP) |
+| D-3 | `requireScope` default-open + tokens legacy | **Legacy retirado (2026-08-27)**: bandera y emisión eliminadas; `verifyApiToken` exige `jti`, la forma de 7 días ya no verifica. Pendiente: default-closed de `requireScope` (decisión de producto — un token sin scope hoy conserva acceso total). |
 | D-4 | Un `AUTH_SECRET` para 5 tipos de token | Partir por audiencia con ventana dual-accept; baja urgencia |
 | D-5 | ¿CIEC a Syntage algún día? | Efirma-only; quitar el parámetro CIEC de `syntage-probe` (V-4) |
 | D-6 | Ajustes de GitHub (solo owner) | **Parcial 2026-08-16:** dependency graph + Dependabot + private vulnerability reporting activados. Secret scanning de GitHub **no disponible** (repo privado de cuenta personal; requiere org con Secret Protection de pago) — la cobertura equivalente ya la da el job `secrets` de CI + hook local. Falta: branch protection en main con checks requeridos (test/build/drift/secrets) y CODEOWNERS cuando exista (P2-2) |

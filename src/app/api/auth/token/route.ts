@@ -10,12 +10,10 @@
  *     email: string,
  *     password: string,
  *     cliente?: string,   // etiqueta del satélite (fallback: User-Agent)
- *     scope?: string,     // scopes separados por espacio, p. ej. "clientes facturas"
- *     legacy?: boolean    // token de 7 días SIN refresh — sólo si
- *                         // LEGACY_API_TOKENS_ENABLED="true" (deprecado)
+ *     scope?: string      // scopes separados por espacio, p. ej. "clientes facturas"
  *   }
  *
- * Response (200), flujo normal:
+ * Response (200):
  *   {
  *     token: string,            // access JWT de 1 hora (con jti y scope opcional)
  *     refreshToken: string,     // secreto opaco de 30 días, ROTATORIO
@@ -24,14 +22,14 @@
  *     user:  { id, email, name },
  *     companies: Array<{ id, rfc, razonSocial, role, modulos: ModuloApp[] }>
  *   }
- * Con { legacy: true } y la bandera activa: la forma HISTÓRICA
- *   { token (7 días), user, companies } — sin refreshToken.
+ *
+ * Los tokens legados de 7 días quedaron RETIRADOS (agosto 2026): ni se
+ * emiten ni verifican — verifyApiToken exige jti.
  *
  * Renovación: POST /api/auth/token/refresh. Revocación: /api/me/tokens.
- * Guía de migración para satélites: docs/API-TOKENS.md.
+ * Guía para satélites: docs/API-TOKENS.md.
  *
- * Errors: 400 invalid body, 401 bad credentials, 403 trial expired / legacy
- * deshabilitado.
+ * Errors: 400 invalid body, 401 bad credentials, 403 trial expired.
  */
 
 import { NextResponse } from "next/server";
@@ -40,9 +38,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
   ACCESS_TOKEN_EXPIRY_SECONDS,
-  legacyApiTokensEnabled,
   signApiToken,
-  signLegacyApiToken,
 } from "@/lib/api-token";
 import {
   emitirRefreshToken,
@@ -62,7 +58,6 @@ const loginSchema = z.object({
     .max(200)
     .regex(/^[a-z0-9_-]+(\s+[a-z0-9_-]+)*$/i, "scope inválido")
     .optional(),
-  legacy: z.boolean().optional(),
 });
 
 const WINDOW_MS = 15 * 60 * 1000;
@@ -103,20 +98,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { email, password, cliente, scope, legacy } = parsed.data;
-
-  // La emisión legada (7 días, sin refresh ni revocación) está deprecada y
-  // sólo se permite con la bandera explícita — los tokens legados YA emitidos
-  // siguen verificando hasta expirar, esto sólo bloquea emitir nuevos.
-  if (legacy && !legacyApiTokensEnabled()) {
-    return NextResponse.json(
-      {
-        error:
-          "La emisión de tokens legados de 7 días está deshabilitada. Usa el flujo con refreshToken (ver docs/API-TOKENS.md).",
-      },
-      { status: 403 }
-    );
-  }
+  const { email, password, cliente, scope } = parsed.data;
 
   // Límite por correo (normalizado): se aplica exista o no la cuenta, para
   // no filtrar información por diferencia de comportamiento.
@@ -174,48 +156,25 @@ export async function POST(req: Request) {
     "satelite-desconocido";
   const ip = getClientIp(req);
 
-  let token: string;
-  let refresh: Awaited<ReturnType<typeof emitirRefreshToken>> | null = null;
-
-  if (legacy) {
-    // Flujo DEPRECADO: JWT de 7 días sin refresh ni revocación.
-    console.warn(
-      `[api-token] DEPRECADO: token legado de 7 días emitido para ${user.email} (cliente: ${etiqueta}). Migrar al flujo con refreshToken — ver docs/API-TOKENS.md.`
-    );
-    token = await signLegacyApiToken({
-      sub: user.id,
-      email: user.email,
-      name: user.name,
-    });
-    registrarBitacora({
-      userId: user.id,
-      actorEmail: user.email,
-      accion: "token.emitir",
-      entidad: "ApiRefreshToken",
-      detalle: { etiqueta, legacy: true, vigencia: "7d" },
-      ip,
-    });
-  } else {
-    token = await signApiToken(
-      { sub: user.id, email: user.email, name: user.name },
-      { scope }
-    );
-    refresh = await emitirRefreshToken({
-      userId: user.id,
-      etiqueta,
-      scope,
-      ip,
-    });
-    registrarBitacora({
-      userId: user.id,
-      actorEmail: user.email,
-      accion: "token.emitir",
-      entidad: "ApiRefreshToken",
-      entidadId: refresh.id,
-      detalle: { etiqueta, scope: scope ?? null, legacy: false },
-      ip,
-    });
-  }
+  const token = await signApiToken(
+    { sub: user.id, email: user.email, name: user.name },
+    { scope }
+  );
+  const refresh = await emitirRefreshToken({
+    userId: user.id,
+    etiqueta,
+    scope,
+    ip,
+  });
+  registrarBitacora({
+    userId: user.id,
+    actorEmail: user.email,
+    accion: "token.emitir",
+    entidad: "ApiRefreshToken",
+    entidadId: refresh.id,
+    detalle: { etiqueta, scope: scope ?? null },
+    ip,
+  });
 
   // Include the companies + modules the user belongs to so the client can
   // immediately decide which empresa to activate without a second roundtrip.
