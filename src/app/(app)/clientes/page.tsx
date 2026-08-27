@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   Users, Plus, Search, Pencil, Trash2, Loader2,
-  FileText, X, RefreshCw,
+  FileText, X, RefreshCw, ReceiptText,
 } from "lucide-react";
 import {
   TableContainer, Table, THead, TBody, TR, TH, TD, Alert, RetryButton,
@@ -293,6 +294,14 @@ export default function ClientesPage() {
                   </TD>
                   <TD>
                     <div className="flex items-center justify-end gap-1">
+                      <Link
+                        href={`/clientes/${c.id}/estado-cuenta`}
+                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        className="rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-jade-tint hover:text-cos-jade-ink"
+                        title="Estado de cuenta"
+                      >
+                        <ReceiptText className="h-3.5 w-3.5" />
+                      </Link>
                       {!c.facturapiId && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleSync(c.id); }}
