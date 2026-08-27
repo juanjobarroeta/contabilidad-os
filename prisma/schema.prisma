@@ -5251,9 +5251,33 @@ model Refaccion {
   company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   movimientos RefaccionMovimiento[]
   lineasOrden OrdenServicioLinea[]
+  mercado     RefaccionMercado?
 
   @@unique([companyId, numeroParte])
   @@index([companyId, descripcion])
+}
+
+/// Lo que el MERCADO dice de una refacción: la búsqueda programada de Google
+/// (CSE restringida a MercadoLibre MX y tiendas agregadas) guardada por parte.
+/// La llena el botón «Consultar mercado» de la ficha o el cron nocturno
+/// (prioriza las de mayor demanda 12m, dentro de la cuota gratuita diaria).
+model RefaccionMercado {
+  id           String   @id @default(cuid())
+  companyId    String
+  refaccionId  String   @unique
+  consultadoAt DateTime
+
+  /// Mejor título encontrado (el resultado más relevante).
+  titulo String?
+  /// Precio detectado en MXN (pagemap del resultado o $ en el snippet).
+  precioMercado Float?
+  urlPrincipal  String?
+  /// Resultados resumidos: [{titulo, url, precio?}] (máx 5) — para la ficha.
+  resultados Json?
+
+  refaccion Refaccion @relation(fields: [refaccionId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, consultadoAt])
 }
 
 model RefaccionMovimiento {
