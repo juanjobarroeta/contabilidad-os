@@ -4,6 +4,13 @@
 > hard constraints (security, economics) that gate what we're allowed to build,
 > and the concrete execution ladder. Update as phases land.
 
+> **Ago 2026 — decisión de ICP:** el despacho es el cliente; los verticales
+> (padel, restaurante, purificadora, automotriz) pasan a mantenimiento. La
+> cola *comercial* vive en [`docs/GTM-ROADMAP.md`](./docs/GTM-ROADMAP.md)
+> («Seis meses a vendible»); este documento sigue siendo la cola técnica.
+> Regla permanente: nada se construye para un solo cliente salvo que esté
+> pagado y generalice al ICP de despachos.
+
 ---
 
 ## Estado y cola de ejecución — actualizado 2026-07-04
