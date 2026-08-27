@@ -39,8 +39,30 @@ export type DeduccionItem = {
   importe: number;
 };
 
+/**
+ * Empleado tal como llega en RUNTIME desde el cliente Prisma compartido
+ * (src/lib/prisma.ts convierte todo Prisma.Decimal a number): los montos son
+ * `number` aunque los tipos generados digan `Decimal`. Los llamadores que
+ * traigan filas tipadas con `Decimal` deben convertir en su frontera
+ * (`Number(...)`, preservando null).
+ */
+export type EmployeeCalcRow = Omit<
+  Employee,
+  | "salarioDiario"
+  | "salarioDiarioIntegrado"
+  | "descuentoInfonavit"
+  | "descuentoFonacot"
+  | "pensionAlimenticiaValor"
+> & {
+  salarioDiario: number;
+  salarioDiarioIntegrado: number | null;
+  descuentoInfonavit: number | null;
+  descuentoFonacot: number | null;
+  pensionAlimenticiaValor: number | null;
+};
+
 export type NominaCalcInput = {
-  employee: Employee & { tipoDescuentoInfonavit?: string | null };
+  employee: EmployeeCalcRow & { tipoDescuentoInfonavit?: string | null };
   diasPagados: number;
   tipo: PayrollRunType;
   sueldoBruto?: number;

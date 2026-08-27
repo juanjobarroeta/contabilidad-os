@@ -142,14 +142,19 @@ export async function POST(req: Request) {
   }
 
   // Fetch our employees for comparison
-  const employees = await prisma.employee.findMany({
+  const employees = (await prisma.employee.findMany({
     where: { companyId, isActive: true },
     select: {
       id: true, nombre: true, apellidoPaterno: true, nss: true,
       salarioDiario: true, salarioDiarioIntegrado: true, riesgoPuesto: true,
       descuentoInfonavit: true, tipoDescuentoInfonavit: true, creditoInfonavit: true,
     },
-  });
+  })).map((r) => ({
+    ...r,
+    salarioDiario: Number(r.salarioDiario),
+    salarioDiarioIntegrado: r.salarioDiarioIntegrado === null ? null : Number(r.salarioDiarioIntegrado),
+    descuentoInfonavit: r.descuentoInfonavit === null ? null : Number(r.descuentoInfonavit),
+  }));
 
   const ourByNss = new Map(employees.map((e) => [e.nss, e]));
 

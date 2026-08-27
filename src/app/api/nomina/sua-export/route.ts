@@ -58,7 +58,7 @@ export async function GET(req: Request) {
   const periodoStart = `${year}-${String(mes1).padStart(2, "0")}`;
   const periodoEnd = `${year}-${String(mes2).padStart(2, "0")}`;
 
-  const payrollItems = await prisma.payrollItem.findMany({
+  const payrollItems = (await prisma.payrollItem.findMany({
     where: {
       employee: { companyId },
       payrollRun: {
@@ -74,7 +74,12 @@ export async function GET(req: Request) {
       imssObrero: true,
       imssPatronal: true,
     },
-  });
+  })).map((r) => ({
+    ...r,
+    totalPercepciones: Number(r.totalPercepciones),
+    imssObrero: Number(r.imssObrero),
+    imssPatronal: Number(r.imssPatronal),
+  }));
 
   // Aggregate per employee
   const itemsByEmployee = new Map<string, { totalPerc: number; imssObrero: number; imssPatronal: number }>();

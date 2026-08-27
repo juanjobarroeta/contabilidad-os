@@ -76,7 +76,7 @@ export async function GET(req: Request, { params }: Params) {
     // Recibos del ejercicio seleccionado — acotado por empleado-año.
     const desde = new Date(Date.UTC(anio, 0, 1));
     const hasta = new Date(Date.UTC(anio + 1, 0, 1));
-    const items = await prisma.payrollItem.findMany({
+    const items = (await prisma.payrollItem.findMany({
       where: {
         employeeId: id,
         payrollRun: { fechaPago: { gte: desde, lt: hasta } },
@@ -87,7 +87,18 @@ export async function GET(req: Request, { params }: Params) {
         },
       },
       orderBy: [{ payrollRun: { fechaPago: "desc" } }, { id: "asc" }],
-    });
+    })).map((r) => ({
+      ...r,
+      sueldoBase: Number(r.sueldoBase), horasExtra: Number(r.horasExtra),
+      bonosPagoFijo: Number(r.bonosPagoFijo), bonosPagoVar: Number(r.bonosPagoVar),
+      vales: Number(r.vales), otrasPercepciones: Number(r.otrasPercepciones),
+      aguinaldo: Number(r.aguinaldo), primaVacacional: Number(r.primaVacacional),
+      vacaciones: Number(r.vacaciones), ptu: Number(r.ptu),
+      isrRetenido: Number(r.isrRetenido), imssObrero: Number(r.imssObrero),
+      imssPatronal: Number(r.imssPatronal), infonavit: Number(r.infonavit),
+      otrasDeducc: Number(r.otrasDeducc), totalPercepciones: Number(r.totalPercepciones),
+      totalDeducciones: Number(r.totalDeducciones), netoAPagar: Number(r.netoAPagar),
+    }));
 
     const paraAcumular: ReciboAcumulable[] = items.map((i) => ({
       fechaPago: i.payrollRun.fechaPago,

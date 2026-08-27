@@ -53,7 +53,20 @@ export async function previewRecibo(companyId: string, payrollItemId: string): P
   });
   if (!company) return { ok: false, status: 404, error: "Empresa no encontrada" };
 
-  const employee = item.employee;
+  // Frontera Prisma→cálculo: en runtime los Decimal ya llegan como number
+  // (src/lib/prisma.ts); aquí sólo se alinean los TIPOS con esa realidad.
+  const employee = {
+    ...item.employee,
+    salarioDiario: Number(item.employee.salarioDiario),
+    salarioDiarioIntegrado:
+      item.employee.salarioDiarioIntegrado == null ? null : Number(item.employee.salarioDiarioIntegrado),
+    descuentoInfonavit:
+      item.employee.descuentoInfonavit == null ? null : Number(item.employee.descuentoInfonavit),
+    descuentoFonacot:
+      item.employee.descuentoFonacot == null ? null : Number(item.employee.descuentoFonacot),
+    pensionAlimenticiaValor:
+      item.employee.pensionAlimenticiaValor == null ? null : Number(item.employee.pensionAlimenticiaValor),
+  };
   const [periodoInicio, periodoFin] = run.periodo.split("/").map((s) => new Date(s));
   const diasPagadosRun = diasPagadosDeRun(run);
 
@@ -83,24 +96,25 @@ export async function previewRecibo(companyId: string, payrollItemId: string): P
       ? {
           diasAguinaldo: Number(extra.diasAguinaldo) || undefined,
           fechaCorte: extra.fechaCorte ? new Date(String(extra.fechaCorte)) : undefined,
-          aguinaldoMontoOverride: item.aguinaldo,
+          aguinaldoMontoOverride: Number(item.aguinaldo),
         }
       : {}),
     ...(run.tipo === "PTU"
       ? {
-          ptuMonto: item.ptu,
-          ptuExento: Math.round(Math.min(item.ptu, PTU_EXENTO_UMA * umaPago) * 100) / 100,
+          ptuMonto: Number(item.ptu),
+          ptuExento: Math.round(Math.min(Number(item.ptu), PTU_EXENTO_UMA * umaPago) * 100) / 100,
         }
       : {}),
   });
 
   // Igual que en el timbrado: si el cálculo ya no coincide con el item revisado,
   // la vista previa lo dice en vez de mostrar un recibo que no se va a emitir.
-  if (Math.abs(calc.netoAPagar - item.netoAPagar) > 0.05) {
+  const itemNeto = Number(item.netoAPagar);
+  if (Math.abs(calc.netoAPagar - itemNeto) > 0.05) {
     return {
       ok: false,
       status: 409,
-      error: `Los importes cambiaron desde el último cálculo (neto ${calc.netoAPagar.toFixed(2)} vs ${item.netoAPagar.toFixed(2)}). Recalcula la corrida y vuelve a abrir la vista previa.`,
+      error: `Los importes cambiaron desde el último cálculo (neto ${calc.netoAPagar.toFixed(2)} vs ${itemNeto.toFixed(2)}). Recalcula la corrida y vuelve a abrir la vista previa.`,
     };
   }
 

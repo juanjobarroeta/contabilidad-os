@@ -587,8 +587,8 @@ export async function ajusteAnualEmpresa(
     acc.recibos.push({
       fechaPago: item.payrollRun.fechaPago.toISOString().slice(0, 10),
       gravado: entrada ? entrada.totalGravado : null,
-      totalPercepciones: item.totalPercepciones,
-      isrRetenido: item.isrRetenido,
+      totalPercepciones: Number(item.totalPercepciones),
+      isrRetenido: Number(item.isrRetenido),
       esSeparacion:
         item.payrollRun.tipo === "FINIQUITO" || entrada?.esFiniquito === true || gravadoSeparacion,
     });

@@ -120,7 +120,7 @@ export async function cargarNominaParaIsn(
     .map((i) => ({
       employeeId: i.employeeId,
       claveEntFed: i.employee.claveEntFed,
-      totalPercepciones: i.totalPercepciones,
+      totalPercepciones: Number(i.totalPercepciones),
     }));
 
   if (items.length > 0) {
@@ -131,7 +131,7 @@ export async function cargarNominaParaIsn(
     where: { companyId, isActive: true },
     select: { id: true, salarioDiario: true, claveEntFed: true, isActive: true },
   });
-  return { empleados: empleados.map(empleadoNominaDesde), fuente: "estimado" };
+  return { empleados: empleados.map((e) => empleadoNominaDesde({ ...e, salarioDiario: Number(e.salarioDiario) })), fuente: "estimado" };
 }
 
 export interface AuditResult {

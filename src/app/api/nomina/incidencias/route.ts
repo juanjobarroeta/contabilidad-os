@@ -125,7 +125,7 @@ export async function GET(req: Request) {
   if (periodo) where.periodo = periodo;
   if (employeeId) where.employeeId = employeeId;
 
-  const incidencias = await prisma.incidencia.findMany({
+  const incidencias = (await prisma.incidencia.findMany({
     where,
     include: {
       employee: {
@@ -133,7 +133,7 @@ export async function GET(req: Request) {
       },
     },
     orderBy: { fecha: "desc" },
-  });
+  })).map((r) => ({ ...r, dias: Number(r.dias) }));
 
   // Summary by type
   const summary: Record<string, { count: number; dias: number }> = {};

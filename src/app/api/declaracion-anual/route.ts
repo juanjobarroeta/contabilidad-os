@@ -156,9 +156,9 @@ export async function GET(req: Request) {
   // Deducción de inversiones del ejercicio: del registro de activo fijo, salvo
   // que el contador la sobreescriba por query param.
   const depreciacionRegistro = registroDepreciacion.totalDepreciacionEjercicio;
-  const sueldos = nominaAgg._sum.totalPercepciones ?? 0;
-  const imssPatronal = nominaAgg._sum.imssPatronal ?? 0;
-  const ptuPagado = nominaAgg._sum.ptu ?? 0;
+  const sueldos = Number(nominaAgg._sum.totalPercepciones ?? 0);
+  const imssPatronal = Number(nominaAgg._sum.imssPatronal ?? 0);
+  const ptuPagado = Number(nominaAgg._sum.ptu ?? 0);
   // Dedupe per periodo: prefer the dedicated ISR_PROVISIONAL row, fall back to a
   // legacy folded IVA_MENSUAL row, so imported and live-saved ISR are each counted once.
   const isrProvTotal = sumIsrPagar(isrProvisionalesAgg);

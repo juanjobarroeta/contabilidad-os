@@ -64,8 +64,18 @@ export const RESUMEN_VACIO: IncidenciasResumen = {
 
 /** Subconjunto de campos de Incidencia que necesita el resumen (permite pasar
  *  filas de Prisma o literales en pruebas). */
-export type IncidenciaParaResumen = Pick<
+export type IncidenciaConvertida = Omit<
   Incidencia,
+  "dias" | "horas" | "horasTriples" | "monto"
+> & {
+  dias: number;
+  horas: number | null;
+  horasTriples: number | null;
+  monto: number | null;
+};
+
+export type IncidenciaParaResumen = Pick<
+  IncidenciaConvertida,
   "tipo" | "dias" | "horas" | "horasTriples" | "monto"
 >;
 
@@ -135,17 +145,25 @@ export async function incidenciasDelPeriodo(
   employeeIds: string[],
   inicio: Date,
   fin: Date
-): Promise<Map<string, Incidencia[]>> {
+): Promise<Map<string, IncidenciaConvertida[]>> {
   if (employeeIds.length === 0) return new Map();
-  const rows = await prisma.incidencia.findMany({
-    where: {
-      companyId,
-      employeeId: { in: employeeIds },
-      fecha: { gte: inicio, lte: fin },
-    },
-    orderBy: { fecha: "asc" },
-  });
-  const porEmpleado = new Map<string, Incidencia[]>();
+  const rows = (
+    await prisma.incidencia.findMany({
+      where: {
+        companyId,
+        employeeId: { in: employeeIds },
+        fecha: { gte: inicio, lte: fin },
+      },
+      orderBy: { fecha: "asc" },
+    })
+  ).map((r) => ({
+    ...r,
+    dias: Number(r.dias),
+    horas: r.horas === null ? null : Number(r.horas),
+    horasTriples: r.horasTriples === null ? null : Number(r.horasTriples),
+    monto: r.monto === null ? null : Number(r.monto),
+  }));
+  const porEmpleado = new Map<string, IncidenciaConvertida[]>();
   for (const row of rows) {
     const list = porEmpleado.get(row.employeeId);
     if (list) list.push(row);

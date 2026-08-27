@@ -484,12 +484,12 @@ export async function checklistDeclaracion(
   const imssBimestralDecl = declOf("IMSS_BIMESTRAL");
   const imss: ChecklistInputs["imss"] = {
     aplica: empleadosActivos > 0 || corridas > 0,
-    estimadoMensual: r2((imssSumsMes._sum.imssObrero ?? 0) + (imssSumsMes._sum.imssPatronal ?? 0)),
+    estimadoMensual: r2(Number(imssSumsMes._sum.imssObrero ?? 0) + Number(imssSumsMes._sum.imssPatronal ?? 0)),
     pagadaMensual: imssMensualDecl?.status === "PAID",
     bimestre: bimImss.cierraBimestre
       ? {
           etiqueta: bimImss.etiqueta,
-          estimado: r2(imssSumsBimestre?._sum.infonavit ?? 0),
+          estimado: r2(Number(imssSumsBimestre?._sum.infonavit ?? 0)),
           pagada: imssBimestralDecl?.status === "PAID",
         }
       : null,

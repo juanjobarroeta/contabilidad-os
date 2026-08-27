@@ -191,7 +191,22 @@ export async function calcularResultados(
 
   return armar({
     unidades: unidades as UnidadVendida[],
-    servicios, refaccionesRaw, nomina, nominaPorSucursal, gastos, otros,
+    servicios, refaccionesRaw,
+    nomina: nomina.map((g) => ({
+      ...g,
+      _sum: {
+        percepciones: g._sum.percepciones != null ? Number(g._sum.percepciones) : null,
+        cuotasPatronales: g._sum.cuotasPatronales != null ? Number(g._sum.cuotasPatronales) : null,
+      },
+    })),
+    nominaPorSucursal: nominaPorSucursal.map((s) => ({
+      ...s,
+      _sum: {
+        percepciones: s._sum.percepciones != null ? Number(s._sum.percepciones) : null,
+        cuotasPatronales: s._sum.cuotasPatronales != null ? Number(s._sum.cuotasPatronales) : null,
+      },
+    })),
+    gastos, otros,
     anclaCE: await anclaDeLibros(db, companyId, desde, hasta),
   });
 }

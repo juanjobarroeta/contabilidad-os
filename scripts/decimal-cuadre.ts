@@ -60,9 +60,9 @@ async function tomarFoto(): Promise<Snapshot> {
   for (const f of nomina) {
     const g = `payrollRun:${f.companyId}`;
     poner(g, "count", f._count);
-    poner(g, "totalPercepciones", f._sum.totalPercepciones);
-    poner(g, "totalDeducciones", f._sum.totalDeducciones);
-    poner(g, "totalNeto", f._sum.totalNeto);
+    poner(g, "totalPercepciones", Number(f._sum.totalPercepciones));
+    poner(g, "totalDeducciones", Number(f._sum.totalDeducciones));
+    poner(g, "totalNeto", Number(f._sum.totalNeto));
   }
 
   const items = await prisma.payrollItem.aggregate({
@@ -70,9 +70,9 @@ async function tomarFoto(): Promise<Snapshot> {
     _sum: { sueldoBase: true, isrRetenido: true, imssObrero: true },
   });
   poner("payrollItem:global", "count", items._count);
-  poner("payrollItem:global", "sueldoBase", items._sum.sueldoBase);
-  poner("payrollItem:global", "isrRetenido", items._sum.isrRetenido);
-  poner("payrollItem:global", "imssObrero", items._sum.imssObrero);
+  poner("payrollItem:global", "sueldoBase", Number(items._sum.sueldoBase));
+  poner("payrollItem:global", "isrRetenido", Number(items._sum.isrRetenido));
+  poner("payrollItem:global", "imssObrero", Number(items._sum.imssObrero));
 
   const decl = await prisma.taxDeclaration.groupBy({
     by: ["companyId"],

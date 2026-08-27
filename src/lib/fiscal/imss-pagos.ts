@@ -334,8 +334,8 @@ export async function estadoPagosImss(
     ]);
 
   const mensualPeriodo = periodoImssMensual(year, month, {
-    imssObrero: sumsMes._sum.imssObrero ?? 0,
-    imssPatronal: sumsMes._sum.imssPatronal ?? 0,
+    imssObrero: Number(sumsMes._sum.imssObrero ?? 0),
+    imssPatronal: Number(sumsMes._sum.imssPatronal ?? 0),
   });
   const diasMensual = diasPara(mensualPeriodo.fechaLimite, hoy);
 
@@ -361,7 +361,7 @@ export async function estadoPagosImss(
 
   let bimestral: EstadoImssBimestral | null = null;
   if (bim.cierraBimestre) {
-    const estimadoBim = estimadoImssBimestral([{ infonavit: sumsBimestre?._sum.infonavit ?? 0 }]);
+    const estimadoBim = estimadoImssBimestral([{ infonavit: Number(sumsBimestre?._sum.infonavit ?? 0) }]);
     const diasBim = diasPara(bim.fechaLimite, hoy);
     const pagadaBim = declBimestral != null && PAGADA.includes(declBimestral.status);
     const objetivoBim = declBimestral?.imssCuotas ?? estimadoBim.total;

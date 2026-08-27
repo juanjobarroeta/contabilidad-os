@@ -35,7 +35,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "../prisma";
-import { calcularNomina } from "./calc-nomina";
+import { calcularNomina, type EmployeeCalcRow } from "./calc-nomina";
 import { repartirPtu, type RepartoPtuEmpleado } from "./ptu";
 import { createPayrollRun, type PayrollRunResult } from "./payroll-run";
 import {
@@ -52,6 +52,19 @@ const DIA_MS = 24 * 60 * 60 * 1000;
 
 /** Fecha (UTC, sólo día) → timestamp UTC a medianoche. */
 const diaUtc = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+
+function employeeCalcRow(e: Employee): EmployeeCalcRow {
+  return {
+    ...e,
+    salarioDiario: Number(e.salarioDiario),
+    salarioDiarioIntegrado:
+      e.salarioDiarioIntegrado === null ? null : Number(e.salarioDiarioIntegrado),
+    descuentoInfonavit: e.descuentoInfonavit === null ? null : Number(e.descuentoInfonavit),
+    descuentoFonacot: e.descuentoFonacot === null ? null : Number(e.descuentoFonacot),
+    pensionAlimenticiaValor:
+      e.pensionAlimenticiaValor === null ? null : Number(e.pensionAlimenticiaValor),
+  };
+}
 
 /**
  * Días trabajados DENTRO de un ejercicio (inclusive), de la fecha de alta a
@@ -117,15 +130,17 @@ export async function previewAguinaldo(params: {
   const fechaCorte = new Date(Date.UTC(ejercicio, 11, 31));
   const umaDiaria = umaDiariaDelEjercicio(fechaPago.getUTCFullYear()) ?? UMA_DIARIO;
 
-  const employees = await prisma.employee.findMany({
-    where: { companyId, isActive: true },
-    orderBy: [{ apellidoPaterno: "asc" }, { nombre: "asc" }],
-  });
+  const employees = (
+    await prisma.employee.findMany({
+      where: { companyId, isActive: true },
+      orderBy: [{ apellidoPaterno: "asc" }, { nombre: "asc" }],
+    })
+  ).map(employeeCalcRow);
 
   let tarifasVerificadas = true;
   const rows: AguinaldoPreviewRow[] = employees.map((emp) => {
     const calc = calcularNomina({
-      employee: emp as Employee & { tipoDescuentoInfonavit?: string | null },
+      employee: emp,
       diasPagados: 0,
       tipo: "AGUINALDO",
       ejercicio: fechaPago.getUTCFullYear(),
@@ -273,7 +288,7 @@ export function fechaPagoPtuDefault(ejercicio: number): Date {
 }
 
 type DatosPtuEmpleado = {
-  employee: Employee;
+  employee: EmployeeCalcRow;
   diasTrabajados: number;
   salarioDevengado: number;
   fuenteSalario: "RECIBOS" | "ESTIMADO";
@@ -297,19 +312,21 @@ async function datosPtuEmpleados(
   anioPago: number,
   employeeIds?: string[]
 ): Promise<DatosPtuEmpleado[]> {
-  const employees = await prisma.employee.findMany({
-    where: {
-      companyId,
-      isActive: true,
-      ...(employeeIds ? { id: { in: employeeIds } } : {}),
-    },
-    orderBy: [{ apellidoPaterno: "asc" }, { nombre: "asc" }],
-  });
+  const employees = (
+    await prisma.employee.findMany({
+      where: {
+        companyId,
+        isActive: true,
+        ...(employeeIds ? { id: { in: employeeIds } } : {}),
+      },
+      orderBy: [{ apellidoPaterno: "asc" }, { nombre: "asc" }],
+    })
+  ).map(employeeCalcRow);
   if (employees.length === 0) return [];
 
   const anioMin = Math.min(ejercicio, anioPago - 3);
   const anioMax = Math.max(ejercicio, anioPago - 1);
-  const items = await prisma.payrollItem.findMany({
+  const itemsRaw = await prisma.payrollItem.findMany({
     where: {
       employeeId: { in: employees.map((e) => e.id) },
       payrollRun: {
@@ -327,6 +344,7 @@ async function datosPtuEmpleados(
       payrollRun: { select: { fechaPago: true } },
     },
   });
+  const items = itemsRaw.map((r) => ({ ...r, sueldoBase: Number(r.sueldoBase), ptu: Number(r.ptu) }));
 
   const sueldoPorEmpleado = new Map<string, { suma: number; recibos: number }>();
   const ptuPorEmpleadoAnio = new Map<string, Map<number, number>>();
@@ -410,7 +428,7 @@ export async function previewPtu(params: {
   const rows: PtuPreviewRow[] = reparto.asignaciones.map((a) => {
     const d = datosPorId.get(a.employeeId)!;
     const calc = calcularNomina({
-      employee: d.employee as Employee & { tipoDescuentoInfonavit?: string | null },
+      employee: d.employee,
       diasPagados: 0,
       tipo: "PTU",
       ejercicio: anioPago,
