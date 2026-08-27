@@ -30,6 +30,7 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   const refaccion = await prisma.refaccion.findUnique({
     where: { id },
     include: {
+      mercado: true,
       movimientos: {
         orderBy: { fecha: "desc" },
         take: 200,
