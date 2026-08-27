@@ -247,8 +247,8 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
       estado: "warn",
       titulo: "Mes preliminar",
       detalle:
-        "El mes aún no se ha cerrado: los XML se generan con un cálculo directo de tus CFDIs y " +
-        "serán definitivos en cuanto cierres el periodo desde “Cierres mensuales”.",
+        "El mes aún no se ha posteado: la descarga de los XML del SAT (balanza, pólizas y " +
+        "auxiliares) está bloqueada hasta cerrar el periodo desde “Cierres mensuales”.",
       cta: { label: "Cerrar mes", href: "/contabilidad/cierre" },
     });
   }

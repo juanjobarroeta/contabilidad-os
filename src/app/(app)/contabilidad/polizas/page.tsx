@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useDescargaXml, ErroresDeValidacion, DiagnosticoEvidencia } from "@/components/contabilidad/descarga-xml";
+import { Loader2 } from "lucide-react";
 import { ChevronLeft, FileDown } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card } from "@/components/ui";
@@ -42,6 +44,7 @@ export default function PolizasPage() {
     ...(usaOrden(tipo) ? { numOrden: folio } : { numTramite: folio }),
   });
   const qs = params.toString();
+  const { descargar, descargando, error: errorDescarga, diagnostico } = useDescargaXml();
   const descargas = [
     { label: "Pólizas del periodo", href: `/api/contabilidad/coe/polizas?${qs}` },
     { label: "Auxiliar de cuentas", href: `/api/contabilidad/coe/aux-cuentas?${qs}` },
@@ -100,20 +103,25 @@ export default function PolizasPage() {
           </span>
         </label>
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-5">
+          <ErroresDeValidacion error={errorDescarga} />
+          <DiagnosticoEvidencia diagnostico={diagnostico} />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
           {descargas.map((d) => (
-            <a
+            <button
               key={d.label}
-              href={folioValido ? d.href : undefined}
-              aria-disabled={!folioValido}
+              type="button"
+              onClick={() => descargar(d.href)}
+              disabled={!folioValido || descargando !== null}
               className={`inline-flex items-center gap-1.5 rounded-control px-3 py-2 text-[13.5px] font-semibold ${
                 folioValido
-                  ? "bg-cos-jade text-white hover:opacity-90"
-                  : "pointer-events-none bg-cos-slate-tint text-cos-ink-faint"
+                  ? "bg-cos-jade text-white hover:opacity-90 disabled:opacity-60"
+                  : "cursor-not-allowed bg-cos-slate-tint text-cos-ink-faint"
               }`}
             >
-              <FileDown className="h-4 w-4" /> {d.label}
-            </a>
+              {descargando === d.href ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />} {d.label}
+            </button>
           ))}
         </div>
         {!folioValido && <p className="mt-2 text-[12px] text-cos-ink-faint">Captura un folio válido para habilitar las descargas.</p>}

@@ -148,7 +148,7 @@ describe("evaluarChecks — posteo", () => {
   it("DRAFT → warn preliminar", () => {
     const r = evaluarChecks({ ...base(), posted: false });
     expect(find(r, "posteo")?.estado).toBe("warn");
-    expect(find(r, "posteo")?.detalle).toMatch(/preliminar|cerrado/i);
+    expect(find(r, "posteo")?.detalle).toMatch(/bloqueada|preliminar|cerrado/i);
   });
 
   it("posteado → ok", () => {
