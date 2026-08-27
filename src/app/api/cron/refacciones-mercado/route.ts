@@ -5,7 +5,7 @@ import { consultarMercado } from "@/lib/automotriz/mercado";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/cron/refacciones-mercado[?limite=40] — enriquecimiento nocturno:
-// busca en el mercado (CSE) las partes de MAYOR DEMANDA (salidas 12m) que no
+// busca en el mercado (Brave, country=mx) las partes de MAYOR DEMANDA que no
 // tienen consulta o la tienen vieja (>30 días), para cada empresa con el
 // módulo AUTOMOTRIZ. Presupuesto por corrida (default 40 búsquedas) para
 // convivir con el botón de la ficha dentro de la cuota gratis de 100/día;
@@ -69,6 +69,7 @@ async function handle(req: Request) {
 
       for (const parte of candidatas) {
         if (busquedas >= limite) break;
+        await new Promise((r) => setTimeout(r, 1_200)); // 1 req/s del plan gratis
         try {
           const resumen = await consultarMercado(parte.numeroParte, parte.descripcion);
           busquedas += resumen.busquedas;
