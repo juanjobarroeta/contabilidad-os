@@ -22,6 +22,7 @@ import Link from "next/link";
 import { Check, Landmark, Loader2, Sparkles, X } from "lucide-react";
 import { Money } from "@/components/ui/Money";
 import { StatTile, StatStrip } from "@/components/ui";
+import { CATEGORIAS_MESA, type SugerenciaMovimiento } from "@/lib/bancos/inferir-movimiento";
 import { cn } from "@/lib/utils";
 
 // ── Tipos espejo de las APIs ──────────────────────────────────────────────────
@@ -107,7 +108,12 @@ export function ConciliacionWorkbench({
   const [data, setData] = useState<ConciliacionMes | null>(null);
   const [cargando, setCargando] = useState(true);
   const [selTx, setSelTx] = useState<Movimiento | null>(null);
-  const [cand, setCand] = useState<{ candidates: Candidato[]; impuestos: CandidatoImpuesto[] } | null>(null);
+  const [cand, setCand] = useState<{
+    candidates: Candidato[];
+    impuestos: CandidatoImpuesto[];
+    /** «¿No es una factura?» — la categoría inferida (identidad/reglas/LLM). */
+    sugerencia: SugerenciaMovimiento | null;
+  } | null>(null);
   const [candCargando, setCandCargando] = useState(false);
   const [seleccion, setSeleccion] = useState<string[]>([]); // ids en orden de palomeo
   const [selImpuesto, setSelImpuesto] = useState<string | null>(null);
@@ -175,7 +181,7 @@ export function ConciliacionWorkbench({
     setCand(null); setSeleccion([]); setSelImpuesto(null);
     fetch(`/api/bancos/${selTx.cuentaBancariaId}/match?txId=${selTx.id}`)
       .then((r) => r.json())
-      .then((d) => { if (vivo && Array.isArray(d?.candidates)) setCand({ candidates: d.candidates, impuestos: d.impuestos ?? [] }); })
+      .then((d) => { if (vivo && Array.isArray(d?.candidates)) setCand({ candidates: d.candidates, impuestos: d.impuestos ?? [], sugerencia: d.sugerencia ?? null }); })
       .catch(() => {})
       .finally(() => { if (vivo) setCandCargando(false); });
     return () => { vivo = false; };
@@ -270,6 +276,35 @@ export function ConciliacionWorkbench({
       onApplied?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo conciliar el impuesto");
+    } finally {
+      setAplicando(false);
+    }
+  }
+
+  // Clasificar sin factura (o ignorar): el MISMO PATCH ignore+tag del tab
+  // Movimientos — el cierre (postMonth) postea cada tag con su asiento, así
+  // que aquí no se escribe ledger, sólo se etiqueta.
+  async function clasificar(tag: string | null, label: string) {
+    if (!selTx) return;
+    setAplicando(true); setError(""); setAviso("");
+    try {
+      const res = await fetch(`/api/bancos/transactions/${selTx.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ignore", notes: tag }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error ?? "No se pudo clasificar");
+      setAviso(
+        tag
+          ? `Clasificado: ${label}. El cierre del mes genera su póliza.`
+          : "Movimiento ignorado — no genera póliza."
+      );
+      setSelTx(null);
+      await cargar();
+      onApplied?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo clasificar");
     } finally {
       setAplicando(false);
     }
@@ -487,14 +522,16 @@ export function ConciliacionWorkbench({
                 <p className="flex items-center gap-2 px-5 py-6 text-sm text-cos-ink-soft">
                   <Loader2 className="h-4 w-4 animate-spin" /> Buscando candidatos…
                 </p>
-              ) : !cand || (cand.candidates.length === 0 && cand.impuestos.length === 0) ? (
-                <p className="px-5 py-6 text-sm text-cos-ink-soft">
-                  Sin CFDIs de este sentido en ±30 días que quepan en este movimiento. Puede ser un
-                  traspaso propio, una comisión, un documento que aún no se sincroniza — o un{" "}
-                  {selTx.monto > 0 ? "ingreso" : "gasto"} que no se facturó.
-                </p>
               ) : (
                 <>
+                  {!cand || (cand.candidates.length === 0 && cand.impuestos.length === 0) ? (
+                    <p className="px-5 py-6 text-sm text-cos-ink-soft">
+                      Sin CFDIs de este sentido en ±30 días que quepan en este movimiento. Puede ser un
+                      traspaso propio, una comisión, un documento que aún no se sincroniza — o un{" "}
+                      {selTx.monto > 0 ? "ingreso" : "gasto"} que no se facturó.
+                    </p>
+                  ) : (
+                    <>
                   <ul className="max-h-[330px] overflow-y-auto">
                     {cand.candidates.map((c) => {
                       const idx = seleccion.indexOf(c.id);
@@ -634,6 +671,49 @@ export function ConciliacionWorkbench({
                   <p className="border-t border-cos-line-soft px-5 py-2 text-[11px] text-cos-ink-faint">
                     Al conciliar queda el rastro en bitácora: quién aplicó, a qué hora y contra qué CFDI.
                   </p>
+                    </>
+                  )}
+
+                  {/* ── ¿No es una factura? La mesa también clasifica lo demás
+                      —préstamos, aportaciones, traspasos, nómina— con el MISMO
+                      PATCH del tab Movimientos; el cierre postea cada tag con
+                      su asiento. Antes esto obligaba a cambiar de tab. */}
+                  <div className="border-t border-cos-line px-5 py-3.5">
+                    <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
+                      ¿No es una factura?
+                    </p>
+                    {cand?.sugerencia && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-card bg-cos-brand-tint px-3.5 py-2.5">
+                        {/* La EVIDENCIA junto al veredicto: el usuario decide
+                            con ella, no con fe en el sistema. */}
+                        <span className="min-w-[200px] flex-1 text-[13px] text-cos-ink">
+                          Parece <b>{cand.sugerencia.etiqueta}</b> — {cand.sugerencia.porQue}.
+                        </span>
+                        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", CONFIANZA[cand.sugerencia.confianza].cls)}>
+                          {cand.sugerencia.confianza}
+                        </span>
+                        <button
+                          onClick={() => clasificar(cand.sugerencia!.tag, cand.sugerencia!.etiqueta)}
+                          disabled={aplicando}
+                          className="rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                        >
+                          Aplicar
+                        </button>
+                      </div>
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {CATEGORIAS_MESA.map((c) => (
+                        <button
+                          key={c.tag ?? "__ignorar__"}
+                          onClick={() => clasificar(c.tag, c.label)}
+                          disabled={aplicando}
+                          className="rounded-full border border-cos-line bg-cos-card px-3 py-1.5 text-[12.5px] font-medium text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink disabled:opacity-50"
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
             </section>
