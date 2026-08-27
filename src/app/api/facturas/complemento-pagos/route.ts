@@ -130,7 +130,7 @@ export async function GET(req: Request) {
   for (const inv of ppdInvoices) {
     const payments = matchedPayments.filter(p => p.invoiceId === inv.id);
     const reps = repByParent.get(inv.id) ?? [];
-    const totalPaid = payments.reduce((s, p) => s + p.monto, 0);
+    const totalPaid = payments.reduce((s, p) => s + Number(p.monto), 0);
     const totalReped = reps.reduce((s, r) => s + r.total, 0);
     const pendingAmount = Math.round((totalPaid - totalReped) * 100) / 100;
 

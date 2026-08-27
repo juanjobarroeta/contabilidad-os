@@ -66,7 +66,7 @@ export const GET = withAuthz(async (req: Request) => {
       rfc: f.customer?.rfc ?? "—",
       facturas: 0, facturado: 0, pagado: 0, saldo: 0, repPendiente: 0, masAntigua: null,
     };
-    const conciliado = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+    const conciliado = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
     const rep = f.uuid ? (amparado.get(normalizarUuid(f.uuid)) ?? 0) : 0;
     // Evidencia de cobro/pago (misma regla que perfil-contacto): PUE queda
     // pagada en su emisión; PPD por la mejor evidencia (REP o banco). Así la

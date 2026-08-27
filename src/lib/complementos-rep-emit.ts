@@ -275,7 +275,7 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
       select: { monto: true, fecha: true },
     });
     if (!bankTx) return { ok: false, status: 404, error: "Movimiento bancario no encontrado." };
-    paymentAmount = paymentAmount ?? Math.abs(bankTx.monto);
+    paymentAmount = paymentAmount ?? Math.abs(Number(bankTx.monto));
     paymentDate = input.fechaPago ? paymentDate : bankTx.fecha;
   }
   // "De un toque": sin monto ni movimiento, se asume el SALDO PENDIENTE completo

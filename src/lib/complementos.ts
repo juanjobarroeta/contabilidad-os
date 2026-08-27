@@ -130,12 +130,12 @@ export async function detectComplementosPendientes(
   for (const p of matchedPayments) {
     if (!p.invoiceId) continue;
     const arr = pagosPorFactura.get(p.invoiceId) ?? [];
-    arr.push({ fecha: p.fecha, monto: p.monto });
+    arr.push({ fecha: p.fecha, monto: Number(p.monto) });
     pagosPorFactura.set(p.invoiceId, arr);
   }
   for (const d of detalleAsignaciones) {
     const arr = pagosPorFactura.get(d.invoiceId) ?? [];
-    arr.push({ fecha: d.bankTransaction.fecha, monto: d.montoAsignado });
+    arr.push({ fecha: d.bankTransaction.fecha, monto: Number(d.montoAsignado) });
     pagosPorFactura.set(d.invoiceId, arr);
   }
 
@@ -251,8 +251,8 @@ export async function detectComplementosRecibidosPendientes(
     // Neto firmado: un reembolso (cargo) resta de lo pagado. Las porciones
     // asignadas (conciliación múltiple) suman por su monto asignado.
     const totalPagado =
-      Math.abs(g.bankTransactions.reduce((s, t) => s + t.monto, 0)) +
-      g.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+      Math.abs(g.bankTransactions.reduce((s, t) => s + Number(t.monto), 0)) +
+      g.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
     const fechasPago = [
       ...g.bankTransactions.map((t) => t.fecha),
       ...g.conciliacionDetalles.map((d) => d.bankTransaction.fecha),

@@ -53,7 +53,7 @@ async function resolveTarget(
     where: { id: targetId, companyId },
     select: { referencia: true, monto: true },
   });
-  return bt ? `Mov. ${bt.referencia ?? Math.abs(bt.monto).toFixed(2)}` : null;
+  return bt ? `Mov. ${bt.referencia ?? Math.abs(Number(bt.monto)).toFixed(2)}` : null;
 }
 
 export const POST = withAuthz(

@@ -156,10 +156,11 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
     for (const m of movimientos) {
       const periodo = `${m.fecha.getUTCFullYear()}-${String(m.fecha.getUTCMonth() + 1).padStart(2, "0")}`;
       const acc = porMesMap.get(periodo) ?? { abonos: 0, cargos: 0 };
-      if (m.monto > 0) acc.abonos += m.monto;
-      else acc.cargos += -m.monto;
+      const monto = Number(m.monto);
+      if (monto > 0) acc.abonos += monto;
+      else acc.cargos += -monto;
       porMesMap.set(periodo, acc);
-      if (m.saldo != null) saldoMap.set(periodo, m.saldo);
+      if (m.saldo != null) saldoMap.set(periodo, Number(m.saldo));
     }
     const porMes = [...porMesMap.entries()]
       .map(([periodo, v]) => ({ periodo, abonos: v.abonos, cargos: v.cargos }))
@@ -168,7 +169,10 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
     // todas las cuentas del periodo. El saldo corrido del último movimiento
     // sólo cubre los meses sin estado: es opcional en el PDF y, con varias
     // cuentas, reportaba el saldo de una sola — de ahí salían los negativos.
-    const saldosFinMes = saldosFinDeMes(lotesSaldo, saldoMap).map(({ periodo, saldo }) => ({
+    const saldosFinMes = saldosFinDeMes(
+      lotesSaldo.map((l) => ({ ...l, saldoFinal: Number(l.saldoFinal) })),
+      saldoMap
+    ).map(({ periodo, saldo }) => ({
       periodo,
       saldo,
     }));

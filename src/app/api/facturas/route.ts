@@ -170,8 +170,8 @@ export async function GET(req: Request) {
     // y su devolución dan el total exacto en vez de sobre-conciliar. Las
     // porciones asignadas (conciliación múltiple) suman por su monto asignado.
     const matchedAmount =
-      Math.abs(inv.bankTransactions.reduce((s, tx) => s + tx.monto, 0)) +
-      inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+      Math.abs(inv.bankTransactions.reduce((s, tx) => s + Number(tx.monto), 0)) +
+      inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
     const fullyMatched = matchedAmount >= inv.total - 0.01;
     // Totales del REP desde el complemento (monto pagado, IVA trasladado y la
     // fecha de pago — que es la que causa el IVA, no la fecha del comprobante).

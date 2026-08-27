@@ -183,7 +183,7 @@ export async function conciliacionDelMes(
     id: t.id,
     fecha: t.fecha.toISOString().slice(0, 10),
     descripcion: t.descripcion,
-    monto: t.monto,
+    monto: Number(t.monto),
     cuentaBancariaId: t.bankAccountId,
     registrado: conAsiento.has(t.id),
     contraparteNombre: t.contraparteNombre,
@@ -194,13 +194,21 @@ export async function conciliacionDelMes(
 
   // Saldo del estado por cuenta: el capturado gana; si no hay, se propone el
   // del ImportBatch del periodo (lo que dijo el PDF que se subió).
-  const porCuenta = new Map(conciliaciones.map((c) => [c.bankAccountId, c]));
+  const porCuenta = new Map(conciliaciones.map((c) => [c.bankAccountId, {
+    ...c,
+    saldoInicialEstado: c.saldoInicialEstado === null ? null : Number(c.saldoInicialEstado),
+    saldoFinalEstado: c.saldoFinalEstado === null ? null : Number(c.saldoFinalEstado),
+  }]));
   const periodo = `${year}-${String(month).padStart(2, "0")}`;
-  const lotes = await prisma.importBatch.findMany({
+  const lotes = (await prisma.importBatch.findMany({
     where: { companyId, periodo, undoneAt: null, saldoFinal: { not: null } },
     select: { bankAccountId: true, saldoInicial: true, saldoFinal: true },
     orderBy: { createdAt: "desc" },
-  });
+  })).map((l) => ({
+    ...l,
+    saldoInicial: l.saldoInicial === null ? null : Number(l.saldoInicial),
+    saldoFinal: l.saldoFinal === null ? null : Number(l.saldoFinal),
+  }));
   const propuestos = new Map<string, { saldoInicial: number | null; saldoFinal: number | null }>();
   for (const l of lotes) if (!propuestos.has(l.bankAccountId)) propuestos.set(l.bankAccountId, l);
 

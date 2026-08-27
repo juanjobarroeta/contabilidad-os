@@ -49,7 +49,7 @@ async function tomarFoto(): Promise<Snapshot> {
   });
   for (const f of bancos) {
     poner(`bankTx:${f.companyId}`, "count", f._count);
-    poner(`bankTx:${f.companyId}`, "monto", f._sum.monto);
+    poner(`bankTx:${f.companyId}`, "monto", Number(f._sum.monto));
   }
 
   const nomina = await prisma.payrollRun.groupBy({

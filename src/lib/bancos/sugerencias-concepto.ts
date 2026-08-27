@@ -62,7 +62,7 @@ export async function sugerenciasPeriodo(
 ): Promise<MovimientoConSugerencia[]> {
   const { start, end } = monthRange(year, month);
 
-  const txs = await prisma.bankTransaction.findMany({
+  const txs = (await prisma.bankTransaction.findMany({
     where: {
       companyId,
       status: "UNMATCHED", // sin conciliar
@@ -71,7 +71,7 @@ export async function sugerenciasPeriodo(
     },
     orderBy: { fecha: "asc" },
     select: { id: true, fecha: true, descripcion: true, monto: true, bankAccountId: true },
-  });
+  })).map((t) => ({ ...t, monto: Number(t.monto) }));
 
   const out: MovimientoConSugerencia[] = [];
   for (const tx of txs) {
@@ -179,8 +179,9 @@ export async function aprobarSugerencia(
   const fecha = tx.fecha;
   const year = fecha.getUTCFullYear();
   const month = fecha.getUTCMonth() + 1;
-  const absAmount = Math.abs(tx.monto);
-  const isCredit = tx.monto > 0;
+  const monto = Number(tx.monto);
+  const absAmount = Math.abs(monto);
+  const isCredit = monto > 0;
 
   if (absAmount <= 0) {
     return { ok: false, error: "El movimiento no tiene importe", status: 422 };

@@ -259,10 +259,10 @@ async function proponerConciliacion(input: ToolInput, companyId: string, context
   });
   if (!inv) return JSON.stringify({ error: "Factura no encontrada para esta empresa." });
 
-  const montoMatch = Math.abs(tx.monto).toFixed(2) === inv.total.toFixed(2);
+  const montoMatch = Math.abs(Number(tx.monto)).toFixed(2) === inv.total.toFixed(2);
   const summary =
     `Conciliar el movimiento del ${tx.fecha.toISOString().slice(0, 10)} ` +
-    `(${tx.descripcion}, ${MXN(tx.monto)}) con la factura de ` +
+    `(${tx.descripcion}, ${MXN(Number(tx.monto))}) con la factura de ` +
     `${inv.customer?.razonSocial ?? "—"} (${MXN(inv.total)}). ` +
     (montoMatch ? "Los montos coinciden." : "Atención: los montos NO coinciden exactamente.");
 
@@ -299,7 +299,7 @@ async function proponerCategorizacion(input: ToolInput, companyId: string, conte
 
   const summary =
     `Categorizar el movimiento del ${tx.fecha.toISOString().slice(0, 10)} ` +
-    `(${tx.descripcion}, ${MXN(tx.monto)}) como "${FAMILIA_LABEL[familia]}" y registrar su asiento ` +
+    `(${tx.descripcion}, ${MXN(Number(tx.monto))}) como "${FAMILIA_LABEL[familia]}" y registrar su asiento ` +
     `en el libro mayor.`;
 
   const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
@@ -1021,7 +1021,7 @@ async function queryBankTransactions(input: ToolInput, companyId: string) {
       count,
       totalNeto: agg._sum.monto ?? 0,
       totalIngresos: ingresos._sum.monto ?? 0,
-      totalEgresos: Math.abs(egresos._sum.monto ?? 0),
+      totalEgresos: Math.abs(Number(egresos._sum.monto ?? 0)),
     });
   }
 
@@ -1050,9 +1050,9 @@ async function queryBankTransactions(input: ToolInput, companyId: string) {
       fecha: tx.fecha.toISOString().substring(0, 10),
       descripcion: tx.descripcion,
       referencia: tx.referencia,
-      monto: tx.monto,
-      montoAbsoluto: Math.abs(tx.monto),
-      flujo: tx.monto >= 0 ? "INGRESO" : "EGRESO",
+      monto: Number(tx.monto),
+      montoAbsoluto: Math.abs(Number(tx.monto)),
+      flujo: Number(tx.monto) >= 0 ? "INGRESO" : "EGRESO",
       tipo: tx.tipo,
       status: tx.status,
       banco: tx.bankAccount.banco,
@@ -1282,7 +1282,7 @@ async function suggestReconciliationMatch(input: ToolInput, companyId: string) {
 
   if (!tx) return JSON.stringify({ error: "Transacción no encontrada" });
 
-  const absAmount = Math.abs(tx.monto);
+  const absAmount = Math.abs(Number(tx.monto));
   const tolerance = absAmount * 0.02; // 2% tolerance
 
   // Find invoices with similar amounts around the same date
@@ -1378,14 +1378,14 @@ async function analyzeAnomalies(input: ToolInput, companyId: string) {
     }));
 
   // Detect unusually high transactions (> 3 std deviations)
-  const amounts = transactions.map((t) => Math.abs(t.monto));
+  const amounts = transactions.map((t) => Math.abs(Number(t.monto)));
   const mean = amounts.length ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
   const std = amounts.length
     ? Math.sqrt(amounts.reduce((a, b) => a + (b - mean) ** 2, 0) / amounts.length)
     : 0;
   const threshold = mean + 3 * std;
   const unusualTransactions = transactions
-    .filter((t) => Math.abs(t.monto) > threshold && threshold > 0)
+    .filter((t) => Math.abs(Number(t.monto)) > threshold && threshold > 0)
     .map((t) => ({
       id: t.id,
       fecha: t.fecha.toISOString().substring(0, 10),

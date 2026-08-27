@@ -107,8 +107,8 @@ export const GET = withAuthz(async (req: Request) => {
     const supplier = recibida && cp?.rfc ? supplierByRfc.get(cp.rfc) ?? null : null;
 
     const matchedAmount =
-      Math.abs(inv.bankTransactions.reduce((s, t) => s + t.monto, 0)) +
-      inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+      Math.abs(inv.bankTransactions.reduce((s, t) => s + Number(t.monto), 0)) +
+      inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
     const paid = inv.total > 0 && matchedAmount >= inv.total - 0.01;
 
     const vinculo = vinculoByInvoice.get(inv.id);

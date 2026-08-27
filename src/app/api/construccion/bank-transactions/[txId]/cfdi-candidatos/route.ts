@@ -40,8 +40,9 @@ export const GET = withAuthz(
     await requireMembership(tx.companyId, undefined, req);
     await requireModule(tx.companyId, "CONSTRUCCION");
 
-    const absAmount = Math.abs(tx.monto);
-    const invoiceType = tx.monto > 0 ? "INGRESO" : "EGRESO";
+    const monto = Number(tx.monto);
+    const absAmount = Math.abs(monto);
+    const invoiceType = monto > 0 ? "INGRESO" : "EGRESO";
     const windowStart = new Date(tx.fecha.getTime() - WINDOW_DAYS * 86400000);
     const windowEnd = new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000);
 
@@ -85,8 +86,8 @@ export const GET = withAuthz(
     const candidates = invoices
       .map((inv) => {
         const matchedAmount =
-          inv.bankTransactions.reduce((s, b) => s + Math.abs(b.monto), 0) +
-          inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+          inv.bankTransactions.reduce((s, b) => s + Math.abs(Number(b.monto)), 0) +
+          inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
         return {
           id: inv.id,
           uuid: inv.uuid,

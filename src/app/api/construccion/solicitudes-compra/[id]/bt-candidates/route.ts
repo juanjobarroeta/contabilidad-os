@@ -86,7 +86,7 @@ export const GET = withAuthz(
           score += 20;
         }
         // Closer in amount = higher score
-        const delta = Math.abs(Math.abs(c.monto) - sol.total);
+        const delta = Math.abs(Math.abs(Number(c.monto)) - sol.total);
         score -= Math.round(delta);
         return { ...c, score };
       })

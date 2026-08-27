@@ -64,10 +64,13 @@ cuadre → staging → prod. **Orden por riesgo creciente y valor de canario:**
 1. Rama desde `main`; editar `prisma/schema.prisma` (sólo los campos de la
    ola).
 2. Migración SQL **a mano** en `prisma/migrations/<fecha>_decimal_ola_N/`:
-   un `ALTER TABLE` por tabla con todas sus columnas:
-   `ALTER TABLE "X" ALTER COLUMN "c" TYPE numeric(18,6) USING round("c"::numeric, 6);`
-   (el cast float8→numeric de Postgres usa la representación decimal más
-   corta — 123.45 queda 123.45 —; el `round` es cinturón y tirantes).
+   un `ALTER TABLE` por tabla con todas sus columnas, casteando **vía texto**:
+   `ALTER TABLE "X" ALTER COLUMN "c" TYPE numeric(18,6) USING round(("c"::text)::numeric, 6);`
+   Lección del ensayo de la Ola 1: el cast directo `float8::numeric` trunca a
+   15 dígitos significativos (1234567890.123456 → 1234567890.12346), mientras
+   que `float8::text` imprime la representación más corta que round-tripea —
+   exactamente lo que la app siempre vio. NaN/Infinity revientan el parse de
+   numeric: dinero no-finito debe frenar la migración, no colarse.
 3. `prisma generate` → `tsc` → envolver lecturas rojas en `Number()`.
 4. Suite completa + integración (`npm run test:db`).
 5. **Staging:** `decimal-cuadre.ts --out antes.json` → deploy (el

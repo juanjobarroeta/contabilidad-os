@@ -164,7 +164,7 @@ export const GET = withAuthz(async (req: Request) => {
     meses[e.createdAt.getMonth()].ingresosEstimaciones += e.subtotal;
   }
   for (const b of banktxs) {
-    meses[b.fecha.getMonth()].flowBancario += b.monto;
+    meses[b.fecha.getMonth()].flowBancario += Number(b.monto);
   }
 
   // Reduce maps → sorted top-N arrays

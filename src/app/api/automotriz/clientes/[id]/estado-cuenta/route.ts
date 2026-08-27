@@ -99,7 +99,7 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
       fecha: f.fecha, tipo: "FACTURA", referencia: ref(f), invoiceId: f.id,
       concepto: `Factura ${ref(f) ?? ""}`.trim(), cargo: f.total, abono: 0,
     });
-    const conciliado = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+    const conciliado = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
     const rep = f.uuid ? (repPorFactura.get(normalizarUuid(f.uuid)) ?? 0) : 0;
     if (f.metodoPago === "PPD") {
       // Banco por encima de lo amparado con REP (el REP ya tiene su renglón).

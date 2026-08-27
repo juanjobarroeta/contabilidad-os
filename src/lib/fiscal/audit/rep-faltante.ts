@@ -87,7 +87,7 @@ export async function cargarCobrosSinRep(companyId: string, hoy: Date): Promise<
 
   const resultado: CobroSinRep[] = [];
   for (const f of facturas) {
-    const cobradoBanco = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(d.montoAsignado), 0);
+    const cobradoBanco = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
     const amparadoRep = f.uuid ? (amparadoPorUuid.get(normalizarUuid(f.uuid)) ?? 0) : 0;
     const sinRep = cobradoBanco - amparadoRep;
     if (sinRep <= TOLERANCIA_MONTO) continue;

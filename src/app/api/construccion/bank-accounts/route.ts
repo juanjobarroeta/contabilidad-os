@@ -59,10 +59,10 @@ export const GET = withAuthz(async (req: Request) => {
     _sum: { monto: true },
   });
   const balanceMap = new Map(
-    allBalances.map((r) => [r.bankAccountId, { total: r._sum.monto ?? 0, count: r._count }])
+    allBalances.map((r) => [r.bankAccountId, { total: Number(r._sum.monto ?? 0), count: r._count }])
   );
   const recentMap = new Map(
-    recent.map((r) => [r.bankAccountId, r._sum.monto ?? 0])
+    recent.map((r) => [r.bankAccountId, Number(r._sum.monto ?? 0)])
   );
 
   const enriched = accounts.map((a) => ({

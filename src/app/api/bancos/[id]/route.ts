@@ -213,21 +213,21 @@ export async function GET(req: Request, { params }: Params) {
   );
   for (const dev of candidatasDevolucion) {
     const desde = new Date(dev.fecha.getTime() - DEVOLUCION_VENTANA_DIAS * 86400000);
-    const posibles = await prisma.bankTransaction.findMany({
+    const posibles = (await prisma.bankTransaction.findMany({
       where: {
         bankAccountId,
         id: { not: dev.id },
         fecha: { gte: desde, lte: dev.fecha },
         // Monto opuesto exacto (el validador re-verifica con tolerancia).
-        monto: -dev.monto,
+        monto: -Number(dev.monto),
         devolucionDeId: null,
         devolucionPor: { is: null },
       },
       select: { id: true, bankAccountId: true, fecha: true, monto: true, descripcion: true, referencia: true },
       take: 20,
-    });
+    })).map((p) => ({ ...p, monto: Number(p.monto) }));
     const origen = elegirOrigenDevolucion(
-      { id: dev.id, bankAccountId: dev.bankAccountId, fecha: dev.fecha, monto: dev.monto, descripcion: dev.descripcion, referencia: dev.referencia },
+      { id: dev.id, bankAccountId: dev.bankAccountId, fecha: dev.fecha, monto: Number(dev.monto), descripcion: dev.descripcion, referencia: dev.referencia },
       posibles,
     );
     if (origen) {

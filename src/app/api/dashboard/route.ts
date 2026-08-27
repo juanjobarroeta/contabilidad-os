@@ -388,7 +388,7 @@ export async function GET(req: Request) {
     numeroCuenta: acct.numeroCuenta,
     totalTx:      acct._count.transactions,
     unmatchedCount: acct.transactions.length,
-    unmatchedTotal: acct.transactions.reduce((s, t) => s + Math.abs(t.monto), 0),
+    unmatchedTotal: acct.transactions.reduce((s, t) => s + Math.abs(Number(t.monto)), 0),
   }));
 
   const totalUnmatched = bankSummary.reduce((s, a) => s + a.unmatchedCount, 0);
