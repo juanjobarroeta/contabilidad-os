@@ -46,15 +46,17 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   const inicio = new Date(year, 0, 1);
   const fin = new Date(year + 1, 0, 1);
 
-  const facturas = await prisma.invoice.findMany({
-    where: { companyId: cliente.companyId, customerId: id, tipo: "INGRESO", status: { not: "CANCELLED" } },
-    select: {
-      id: true, uuid: true, serie: true, folio: true, fecha: true, total: true,
-      metodoPago: true, tipoSat: true,
-      conciliacionDetalles: { select: { montoAsignado: true } },
-    },
-    orderBy: { fecha: "asc" },
-  });
+  const facturas = (
+    await prisma.invoice.findMany({
+      where: { companyId: cliente.companyId, customerId: id, tipo: "INGRESO", status: { not: "CANCELLED" } },
+      select: {
+        id: true, uuid: true, serie: true, folio: true, fecha: true, total: true,
+        metodoPago: true, tipoSat: true,
+        conciliacionDetalles: { select: { montoAsignado: true } },
+      },
+      orderBy: { fecha: "asc" },
+    })
+  ).map((f) => ({ ...f, total: Number(f.total) }));
 
   const uuids = facturas.filter((f) => f.tipoSat !== "E").map((f) => f.uuid).filter(Boolean) as string[];
   const reps = uuids.length
@@ -74,7 +76,7 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   const repPorFactura = new Map<string, number>();
   for (const r of reps) {
     const k = normalizarUuid(r.parentUuid);
-    repPorFactura.set(k, (repPorFactura.get(k) ?? 0) + (r.impPagado ?? 0));
+    repPorFactura.set(k, (repPorFactura.get(k) ?? 0) + Number(r.impPagado ?? 0));
     const padre = refPorUuid.get(k);
     movimientos.push({
       fecha: r.fechaPago ?? padre?.fecha ?? new Date(),
@@ -83,7 +85,7 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
       invoiceId: r.pagoInvoiceId,
       concepto: `Pago (REP${r.numParcialidad ? ` parcialidad ${r.numParcialidad}` : ""}) de ${padre?.ref ?? "factura"}`,
       cargo: 0,
-      abono: r.impPagado ?? 0,
+      abono: Number(r.impPagado ?? 0),
     });
   }
 

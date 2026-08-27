@@ -98,7 +98,7 @@ async function handle(req: Request) {
         tipo: inv.tipo,
         fecha: inv.fecha,
         rawXml: inv.rawXml,
-        subtotal: inv.subtotal,
+        subtotal: Number(inv.subtotal),
       });
       if (creo) derivados++;
     }

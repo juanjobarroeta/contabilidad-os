@@ -318,13 +318,14 @@ export function registrarToolsOperador(server: McpServerLike): void {
       const porMes = new Map<string, { n: number; total: number; sinSustituta: number; montoSinSustituta: number }>();
       for (const c of canceladas) {
         const mes = c.fecha.toISOString().slice(0, 7);
+        const total = Number(c.total);
         const m = porMes.get(mes) ?? { n: 0, total: 0, sinSustituta: 0, montoSinSustituta: 0 };
         m.n++;
-        m.total += c.total;
+        m.total += total;
         const tieneSustituta = c.uuid != null && sustituidas.has(c.uuid.toUpperCase());
         if (!tieneSustituta && c.tipo !== "PAGO") {
           m.sinSustituta++;
-          m.montoSinSustituta += c.total;
+          m.montoSinSustituta += total;
         }
         porMes.set(mes, m);
       }

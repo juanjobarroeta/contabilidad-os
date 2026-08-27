@@ -71,8 +71,8 @@ export async function getAsimiladosResumen(
     emisor: r.customer?.razonSocial ?? "—",
     rfc: r.customer?.rfc ?? "—",
     regimenLabel: etiquetaRegimenNomina(r.regimenNomina),
-    ingreso: r.subtotal,
-    isrRetenido: r.isrRetenidoNomina ?? 0,
+    ingreso: Number(r.subtotal),
+    isrRetenido: Number(r.isrRetenidoNomina ?? 0),
     esDelMes: new Date(r.fecha) >= from,
   }));
   const delMes = recibos.filter((r) => r.esDelMes);

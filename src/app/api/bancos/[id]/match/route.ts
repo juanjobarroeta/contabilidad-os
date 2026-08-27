@@ -142,9 +142,10 @@ export async function GET(req: Request, { params }: Params) {
     // sincronizados del SAT casi nunca tienen Customer.
     const rfcFactura = inv.customer?.rfc ?? inv.contraparteRfc ?? null;
     const nombreFactura = inv.customer?.razonSocial ?? inv.contraparteNombre ?? null;
+    const total = Number(inv.total);
     let score = scoreCandidate(
       {
-        total: inv.total,
+        total,
         fecha: inv.fecha,
         customerRfc: rfcFactura,
         customerNombre: nombreFactura,
@@ -158,7 +159,7 @@ export async function GET(req: Request, { params }: Params) {
     );
     // Banda ancha PROPIA de las sugerencias (no existe en el auto-match): un
     // monto a 1–5% todavía se ofrece al humano, sólo que con poco puntaje.
-    const diff = Math.abs(Math.abs(inv.total) - absAmount);
+    const diff = Math.abs(Math.abs(total) - absAmount);
     if (diff / absAmount >= 0.01 && diff / absAmount < TOLERANCE) score += 20;
     const alreadyMatched = inv.bankTransactions.length > 0 || inv.conciliacionDetalles.length > 0;
     // Neto firmado: un reembolso (cargo) resta de lo cobrado. Las porciones
@@ -173,14 +174,14 @@ export async function GET(req: Request, { params }: Params) {
       folio:       inv.folio,
       serie:       inv.serie,
       metodoPago:  inv.metodoPago,
-      total:       inv.total,
+      total,
       cliente:     inv.customer?.razonSocial ?? inv.contraparteNombre ?? "—",
       rfc:         inv.customer?.rfc ?? inv.contraparteRfc ?? "—",
       score,
       confidence:  score >= 100 ? "alta" : score >= 50 ? "media" : "baja",
       alreadyMatched,
       matchedAmount: Math.round(matchedAmount * 100) / 100,
-      remainingBalance: Math.round((inv.total - matchedAmount) * 100) / 100,
+      remainingBalance: Math.round((total - matchedAmount) * 100) / 100,
     };
   })
     // Un PPD ya cobrado por completo no es candidato de nada: sin saldo no hay

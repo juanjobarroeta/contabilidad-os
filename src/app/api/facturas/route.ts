@@ -172,12 +172,12 @@ export async function GET(req: Request) {
     const matchedAmount =
       Math.abs(inv.bankTransactions.reduce((s, tx) => s + Number(tx.monto), 0)) +
       inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
-    const fullyMatched = matchedAmount >= inv.total - 0.01;
+    const fullyMatched = matchedAmount >= Number(inv.total) - 0.01;
     // Totales del REP desde el complemento (monto pagado, IVA trasladado y la
     // fecha de pago — que es la que causa el IVA, no la fecha del comprobante).
     const esPago = inv.tipo === "PAGO";
-    const pagoMonto = esPago ? inv.doctosRelacionados.reduce((s, d) => s + (d.impPagado ?? 0), 0) : null;
-    const pagoIva = esPago ? inv.doctosRelacionados.reduce((s, d) => s + (d.ivaTrasladado ?? 0), 0) : null;
+    const pagoMonto = esPago ? inv.doctosRelacionados.reduce((s, d) => s + Number(d.impPagado ?? 0), 0) : null;
+    const pagoIva = esPago ? inv.doctosRelacionados.reduce((s, d) => s + Number(d.ivaTrasladado ?? 0), 0) : null;
     const pagoFecha = esPago
       ? inv.doctosRelacionados.map((d) => d.fechaPago).filter(Boolean).sort()[0] ?? null
       : null;

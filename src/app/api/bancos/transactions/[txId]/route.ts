@@ -266,7 +266,7 @@ export async function PATCH(req: Request, { params }: Params) {
       });
       if (!inv) return NextResponse.json({ error: "Factura inválida" }, { status: 400 });
       const guard = checkInvoiceMatchGuard(
-        inv,
+        { ...inv, total: Number(inv.total) },
         mergePagosConciliados(
           inv.bankTransactions.map((t) => ({ ...t, monto: Number(t.monto) })),
           inv.conciliacionDetalles.map((d) => ({
@@ -378,7 +378,7 @@ export async function PATCH(req: Request, { params }: Params) {
           );
         }
         const guardMulti = checkInvoiceMatchGuard(
-          factura,
+          { ...factura, total: Number(factura.total) },
           mergePagosConciliados(
             factura.bankTransactions.map((t) => ({ ...t, monto: Number(t.monto) })),
             factura.conciliacionDetalles.map((d) => ({

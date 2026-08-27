@@ -35,7 +35,7 @@ export const GET = withAuthz(
 
     const pools = await loadMatchPools(inv.companyId);
     const candidates = rankCandidates(
-      { total: inv.total, fecha: inv.fecha, recibida, emisorNombre: recibida ? inv.customer?.razonSocial ?? null : null, supplierId: supplier?.id ?? null },
+      { total: Number(inv.total), fecha: inv.fecha, recibida, emisorNombre: recibida ? inv.customer?.razonSocial ?? null : null, supplierId: supplier?.id ?? null },
       pools
     );
     return NextResponse.json(candidates);

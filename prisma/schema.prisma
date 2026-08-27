@@ -811,11 +811,11 @@ model Invoice {
   cfdiRelacionadoUuid String?
   tipoRelacion        String?
   moneda              String  @default("MXN")
-  tipoCambio          Float   @default(1.0)
-  subtotal            Float
-  descuento           Float   @default(0)
-  totalImpuestos      Float   @default(0)
-  total               Float
+  tipoCambio          Decimal @db.Decimal(18, 6)   @default(1.0)
+  subtotal            Decimal @db.Decimal(18, 6)
+  descuento           Decimal @db.Decimal(18, 6)   @default(0)
+  totalImpuestos      Decimal @db.Decimal(18, 6)   @default(0)
+  total               Decimal @db.Decimal(18, 6)
   notas               String?
 
   // Contador override: if set, the posting engine uses this SAT account
@@ -855,7 +855,7 @@ model Invoice {
   // CFDI no es nómina o se importó antes de parsear el complemento.
   regimenNomina     String?
   tipoNomina        String? // "O" ordinaria | "E" extraordinaria
-  isrRetenidoNomina Float?
+  isrRetenidoNomina Decimal? @db.Decimal(18, 6)
 
   // SAT stamping data (from PAC/Facturapi)
   status         InvoiceStatus @default(DRAFT)
@@ -1021,10 +1021,10 @@ model PagoDoctoRelacionado {
   id               String @id @default(cuid())
   pagoInvoiceId    String // the tipo=PAGO Invoice that carries this node
   parentUuid       String // UUID of the invoice being paid (IdDocumento)
-  impPagado        Float?
+  impPagado        Decimal? @db.Decimal(18, 6)
   numParcialidad   Int?
-  impSaldoAnterior Float?
-  impSaldoInsoluto Float?
+  impSaldoAnterior Decimal? @db.Decimal(18, 6)
+  impSaldoInsoluto Decimal? @db.Decimal(18, 6)
 
   // FechaPago of the parent <pago:Pago> node — the legal date of the payment,
   // which the SAT uses to attribute IVA to a period (not the REP's emission
@@ -1036,8 +1036,8 @@ model PagoDoctoRelacionado {
   // breakdown (legacy 1.0, or 2.0 ObjetoImpDR "03"), these are null and
   // ivaDerivado is set so the tax engine prorates the parent invoice's IVA
   // instead of reading a firm value.
-  baseTraslado  Float?
-  ivaTrasladado Float?
+  baseTraslado  Decimal? @db.Decimal(18, 6)
+  ivaTrasladado Decimal? @db.Decimal(18, 6)
   ivaDerivado   Boolean @default(false)
 
   pagoInvoice Invoice @relation(fields: [pagoInvoiceId], references: [id], onDelete: Cascade)
@@ -1054,7 +1054,7 @@ model IvaPeriodNotice {
   id             String    @id @default(cuid())
   companyId      String
   periodo        String // "YYYY-MM"
-  ivaTrasladado  Float // value at last baseline/notification
+  ivaTrasladado  Decimal @db.Decimal(18, 6) // value at last baseline/notification
   lastNotifiedAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -1067,14 +1067,14 @@ model IvaPeriodNotice {
 model InvoiceItem {
   id            String  @id @default(cuid())
   invoiceId     String
-  cantidad      Float
+  cantidad      Decimal @db.Decimal(18, 6)
   claveUnidad   String // SAT catalog key e.g. "E48"
   unidad        String?
   claveProdServ String // SAT product/service catalog key
   descripcion   String
-  valorUnitario Float
-  importe       Float
-  descuento     Float   @default(0)
+  valorUnitario Decimal @db.Decimal(18, 6)
+  importe       Decimal @db.Decimal(18, 6)
+  descuento     Decimal @db.Decimal(18, 6)   @default(0)
 
   // Cuenta predial del inmueble arrendado (CFDI 4.0: nodo hijo CuentaPredial
   // del concepto, atributo Numero). Guarda UNA cuenta: es la que captura el
@@ -1096,12 +1096,12 @@ model InvoiceTax {
   invoiceId String
   tipo      TaxType // IVA, ISR, IEPS
   factor    TaxFactor // TASA, CUOTA, EXENTO
-  tasa      Float
+  tasa      Decimal @db.Decimal(18, 6)
   // Base del impuesto (atributo Base del nodo Traslado a nivel comprobante).
   // Para filas EXENTO es el valor de los actos exentos — el insumo de la
   // proporción de acreditamiento (Art. 5 LIVA). Null en filas legacy/retención.
-  base      Float?
-  importe   Float
+  base      Decimal? @db.Decimal(18, 6)
+  importe   Decimal @db.Decimal(18, 6)
   retencion Boolean   @default(false)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -1139,7 +1139,7 @@ model FacturaBorrador {
   /// StampInput serializado — el mismo cuerpo con el que se creó el draft;
   /// al timbrar se promueve ESE draft y se persiste el Invoice con esto.
   payload    Json
-  total      Float
+  total      Decimal @db.Decimal(18, 6)
   status     String    @default("PENDIENTE") // PENDIENTE | TIMBRADA | DESCARTADA
   /// Invoice creado al timbrar (para el enlace "ver factura").
   invoiceId  String?
@@ -1176,7 +1176,7 @@ model FacturaRecurrente {
   /// de construir un CFDI que pueda divergir de la primera.
   payload Json
   /// Total estimado con IVA; se guarda para listar sin recalcular partidas.
-  total   Float
+  total   Decimal @db.Decimal(18, 6)
 
   /// SEMANAL | MENSUAL | BIMESTRAL | TRIMESTRAL | SEMESTRAL | ANUAL.
   /// La lógica de calendario vive en lib/facturas/recurrentes.ts.
@@ -2231,7 +2231,7 @@ model CfdiFaltante {
   fecha         DateTime
   /// TipoDeComprobante crudo del SAT (I/E/N/P/T), tal cual lo reporta el censo.
   tipoSat       String?
-  total         Float?
+  total         Decimal? @db.Decimal(18, 6)
   /// VIGENTE | CANCELADO, según el censo. Un cancelado pierde el XML pero no
   /// el renglón, así que este suele ser el motivo de que esté aquí.
   estatus       String?

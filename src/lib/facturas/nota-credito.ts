@@ -62,8 +62,8 @@ export async function emitirNotaCredito(input: NotaCreditoInput): Promise<NotaCr
     where: { companyId: input.companyId, tipoSat: "E", status: "STAMPED", cfdiRelacionadoUuid: parent.uuid },
     _sum: { subtotal: true },
   });
-  const acreditado = previas._sum.subtotal ?? 0;
-  if (montoBase > round2(parent.subtotal - acreditado) + 0.01) {
+  const acreditado = Number(previas._sum.subtotal ?? 0);
+  if (montoBase > round2(Number(parent.subtotal) - acreditado) + 0.01) {
     return {
       ok: false,
       status: 422,
@@ -128,5 +128,5 @@ export async function emitirNotaCredito(input: NotaCreditoInput): Promise<NotaCr
     select: { id: true, uuid: true, total: true },
   });
 
-  return { ok: true, invoiceId: rep.id, uuid: rep.uuid ?? "", total: rep.total };
+  return { ok: true, invoiceId: rep.id, uuid: rep.uuid ?? "", total: Number(rep.total) };
 }

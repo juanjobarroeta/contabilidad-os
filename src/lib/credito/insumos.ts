@@ -86,10 +86,12 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
   const hace12m = new Date();
   hace12m.setUTCFullYear(hace12m.getUTCFullYear() - 1);
   const [vigentesRows, cancelados, porCliente] = await Promise.all([
-    prisma.invoice.findMany({
-      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: hace12m } },
-      select: { fecha: true, total: true },
-    }),
+    prisma.invoice
+      .findMany({
+        where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: hace12m } },
+        select: { fecha: true, total: true },
+      })
+      .then((rows) => rows.map((v) => ({ ...v, total: Number(v.total) }))),
     prisma.invoice.count({
       where: { companyId, tipo: "INGRESO", status: "CANCELLED", fecha: { gte: hace12m } },
     }),
@@ -117,7 +119,7 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
           emitidosCancelados: cancelados,
           topClientePct:
             totalFacturado > 0 && porCliente.length > 0
-              ? (Math.max(...porCliente.map((c) => c._sum.total ?? 0)) / totalFacturado) * 100
+              ? (Math.max(...porCliente.map((c) => Number(c._sum.total ?? 0))) / totalFacturado) * 100
               : null,
           clientesActivos: porCliente.length,
         }
@@ -125,10 +127,12 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
 
   // Capacidad de pago: gastos facturados, nómina timbrada y flujos bancarios.
   const [egresosRows, nomina, movimientos, lotesSaldo] = await Promise.all([
-    prisma.invoice.findMany({
-      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: hace12m } },
-      select: { fecha: true, total: true },
-    }),
+    prisma.invoice
+      .findMany({
+        where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: hace12m } },
+        select: { fecha: true, total: true },
+      })
+      .then((rows) => rows.map((g) => ({ ...g, total: Number(g.total) }))),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "NOMINA", status: "STAMPED", fecha: { gte: hace12m } },
       _sum: { total: true },
@@ -207,7 +211,7 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
         uuid: { not: null },
       },
       select: { uuid: true, tipo: true, fecha: true, total: true },
-    }),
+    }).then((rows) => rows.map((f) => ({ ...f, total: Number(f.total) }))),
     prisma.pagoDoctoRelacionado.findMany({
       where: { pagoInvoice: { companyId } },
       select: { parentUuid: true, impPagado: true, fechaPago: true },
@@ -220,7 +224,7 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
     for (const d of doctos) {
       const k = d.parentUuid.trim().toUpperCase();
       const arr = pagosPorUuid.get(k) ?? [];
-      arr.push({ monto: d.impPagado ?? 0, fecha: d.fechaPago });
+      arr.push({ monto: Number(d.impPagado ?? 0), fecha: d.fechaPago });
       pagosPorUuid.set(k, arr);
     }
     const lado = (tipo: "INGRESO" | "EGRESO") => {
@@ -283,7 +287,7 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
   return {
     gastosFacturados12m: egresosRows.reduce((s, g) => s + g.total, 0),
     gastosPorMes: [...gastosMap.entries()].map(([periodo, total]) => ({ periodo, total })),
-    nomina12m: nomina._sum.total ?? 0,
+    nomina12m: Number(nomina._sum.total ?? 0),
     bancos,
     flujosPPD,
     declaraciones,

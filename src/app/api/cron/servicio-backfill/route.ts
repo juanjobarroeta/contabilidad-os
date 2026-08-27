@@ -150,7 +150,7 @@ async function handle(req: Request) {
         invoiceId: inv.id,
         tipo: inv.tipo,
         fecha: inv.fecha,
-        total: inv.total,
+        total: Number(inv.total),
         rawXml: inv.rawXml,
         clienteId: inv.customerId,
       });

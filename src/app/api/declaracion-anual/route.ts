@@ -116,8 +116,8 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  const ingresosAsimilados = asimiladosAgg._sum.subtotal ?? 0;
-  const isrRetenidoAsimilados = asimiladosAgg._sum.isrRetenidoNomina ?? 0;
+  const ingresosAsimilados = Number(asimiladosAgg._sum.subtotal ?? 0);
+  const isrRetenidoAsimilados = Number(asimiladosAgg._sum.isrRetenidoNomina ?? 0);
 
   // Pérdidas disponibles, actualizadas a junio del ejercicio (Art. 57). Alimentan
   // el cálculo como default; el contador puede sobreescribir con ?perdidasAnteriores=.
@@ -133,7 +133,7 @@ export async function GET(req: Request) {
     ejercicio
   );
 
-  const ingresosCfdis = ingresosAgg._sum.subtotal ?? 0;
+  const ingresosCfdis = Number(ingresosAgg._sum.subtotal ?? 0);
   // Compras/deducciones inmediatas = todo EGRESO salvo INVERSION (se deduce vía
   // depreciación) y SIN_EFECTOS (no deducible). Los CFDIs sin clasificar (legacy
   // null) se tratan como gasto, igual que antes — corre el backfill de naturaleza
@@ -142,7 +142,7 @@ export async function GET(req: Request) {
   const sumaPorNaturaleza = (excluir: string[]) =>
     egresosPorNaturaleza
       .filter((g) => !excluir.includes(g.naturaleza ?? ""))
-      .reduce((s, g) => s + (g._sum.subtotal ?? 0), 0);
+      .reduce((s, g) => s + Number(g._sum.subtotal ?? 0), 0);
   const egresosCfdis = sumaPorNaturaleza(["INVERSION", "SIN_EFECTOS"]);
   const inversionesExcluidas = egresosPorNaturaleza.find((g) => g.naturaleza === "INVERSION")?._sum.subtotal ?? 0;
   const sinEfectosExcluidos = egresosPorNaturaleza.find((g) => g.naturaleza === "SIN_EFECTOS")?._sum.subtotal ?? 0;

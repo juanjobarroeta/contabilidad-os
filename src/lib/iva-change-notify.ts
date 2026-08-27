@@ -122,7 +122,7 @@ export async function notifyIvaChanges(
       continue;
     }
 
-    const delta = current - existing.ivaTrasladado;
+    const delta = current - Number(existing.ivaTrasladado);
     if (delta <= TOL) continue; // unchanged or decreased — nothing to announce
 
     // Only advance the baseline once we've actually reached someone; otherwise
@@ -131,7 +131,7 @@ export async function notifyIvaChanges(
 
     const periodo = periodoLabel(p.periodo);
     const ivaActual = formatCurrency(current);
-    const ivaPrevio = formatCurrency(existing.ivaTrasladado);
+    const ivaPrevio = formatCurrency(Number(existing.ivaTrasladado));
 
     const body =
       `💡 Llegó un complemento de pago que afecta tu IVA de ${periodo}. ` +

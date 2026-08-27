@@ -259,11 +259,12 @@ async function proponerConciliacion(input: ToolInput, companyId: string, context
   });
   if (!inv) return JSON.stringify({ error: "Factura no encontrada para esta empresa." });
 
-  const montoMatch = Math.abs(Number(tx.monto)).toFixed(2) === inv.total.toFixed(2);
+  const invTotal = Number(inv.total);
+  const montoMatch = Math.abs(Number(tx.monto)).toFixed(2) === invTotal.toFixed(2);
   const summary =
     `Conciliar el movimiento del ${tx.fecha.toISOString().slice(0, 10)} ` +
     `(${tx.descripcion}, ${MXN(Number(tx.monto))}) con la factura de ` +
-    `${inv.customer?.razonSocial ?? "—"} (${MXN(inv.total)}). ` +
+    `${inv.customer?.razonSocial ?? "—"} (${MXN(invTotal)}). ` +
     (montoMatch ? "Los montos coinciden." : "Atención: los montos NO coinciden exactamente.");
 
   const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
@@ -438,10 +439,11 @@ async function previewConciliacion(
   if (!inv) return JSON.stringify({ error: "Factura no encontrada para esta empresa." });
 
   const MXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
-  const montoMatch = Math.abs(tx.monto).toFixed(2) === inv.total.toFixed(2);
+  const invTotal = Number(inv.total);
+  const montoMatch = Math.abs(tx.monto).toFixed(2) === invTotal.toFixed(2);
   const preview =
     `Movimiento: ${tx.fecha} · ${tx.descripcion} · ${MXN(tx.monto)}\n` +
-    `Factura: ${inv.customer?.razonSocial ?? "—"} · ${MXN(inv.total)} · ${inv.fecha.toISOString().slice(0, 10)}\n` +
+    `Factura: ${inv.customer?.razonSocial ?? "—"} · ${MXN(invTotal)} · ${inv.fecha.toISOString().slice(0, 10)}\n` +
     `${montoMatch ? "Los montos coinciden ✅" : "⚠️ Los montos NO coinciden exactamente — revisa."}`;
 
   const { code } = await stagePendingConciliar(conversationId, companyId, { txId, invoiceId }, preview);
@@ -742,8 +744,14 @@ async function getInvoiceDetail(input: ToolInput, companyId: string): Promise<st
       },
       include: { pagoInvoice: { select: { uuid: true, fecha: true, status: true } } },
       orderBy: { fechaPago: "asc" },
-    });
-    const s = saldoInsolutoPpd(invoice.total, doctos);
+    }).then((rows) =>
+      rows.map((d) => ({
+        ...d,
+        impPagado: d.impPagado === null ? null : Number(d.impPagado),
+        impSaldoInsoluto: d.impSaldoInsoluto === null ? null : Number(d.impSaldoInsoluto),
+      })),
+    );
+    const s = saldoInsolutoPpd(Number(invoice.total), doctos);
     ppd = {
       saldoInsoluto: s.saldo,
       cobrado: s.pagado,
@@ -884,7 +892,7 @@ async function queryCancelaciones(input: ToolInput, companyId: string): Promise<
       fecha: c.fecha.toISOString().slice(0, 10),
       canceladaAt: c.canceladaAt?.toISOString().slice(0, 10) ?? null,
       motivo: c.cancelMotivo,
-      total: c.total,
+      total: Number(c.total),
       contraparte: nombreContraparte(c),
       conSustituta: sust != null,
       sustitutaUuid: sust?.uuid ?? null,
@@ -949,7 +957,13 @@ async function queryPpdCartera(input: ToolInput, companyId: string): Promise<str
       parentUuid: true, numParcialidad: true, impPagado: true,
       impSaldoInsoluto: true, fechaPago: true,
     },
-  });
+  }).then((rows) =>
+    rows.map((d) => ({
+      ...d,
+      impPagado: d.impPagado === null ? null : Number(d.impPagado),
+      impSaldoInsoluto: d.impSaldoInsoluto === null ? null : Number(d.impSaldoInsoluto),
+    })),
+  );
   const porParent = new Map<string, typeof doctos>();
   for (const d of doctos) {
     const k = d.parentUuid.toUpperCase();
@@ -959,14 +973,14 @@ async function queryPpdCartera(input: ToolInput, companyId: string): Promise<str
   const hoy = Date.now();
   const filas = parents
     .map((p) => {
-      const s = saldoInsolutoPpd(p.total, porParent.get((p.uuid as string).toUpperCase()) ?? []);
+      const s = saldoInsolutoPpd(Number(p.total), porParent.get((p.uuid as string).toUpperCase()) ?? []);
       return {
         uuid: p.uuid,
         folio: [p.serie, p.folio].filter(Boolean).join("") || null,
         fecha: p.fecha.toISOString().slice(0, 10),
         cliente: nombreContraparte(p),
         clienteRfc: rfcContraparte(p),
-        total: p.total,
+        total: Number(p.total),
         cobrado: s.pagado,
         saldo: s.saldo,
         parcialidades: s.parcialidades,
@@ -1135,10 +1149,10 @@ async function queryDashboardKpis(companyId: string) {
       }),
     ]);
 
-  const ingresosDelMes = ingresos._sum.subtotal ?? 0;
-  const gastosDelMes = gastos._sum.subtotal ?? 0;
-  const ivaTrasl = ivaTrasladado._sum.importe ?? 0;
-  const ivaAcred = ivaAcreditable._sum.importe ?? 0;
+  const ingresosDelMes = Number(ingresos._sum.subtotal ?? 0);
+  const gastosDelMes = Number(gastos._sum.subtotal ?? 0);
+  const ivaTrasl = Number(ivaTrasladado._sum.importe ?? 0);
+  const ivaAcred = Number(ivaAcreditable._sum.importe ?? 0);
 
   return JSON.stringify({
     periodo: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
@@ -1360,7 +1374,7 @@ async function analyzeAnomalies(input: ToolInput, companyId: string) {
   // Detect duplicate amounts in invoices
   const amountMap = new Map<number, typeof invoices>();
   for (const inv of invoices) {
-    const key = inv.total;
+    const key = Number(inv.total);
     if (!amountMap.has(key)) amountMap.set(key, []);
     amountMap.get(key)!.push(inv);
   }

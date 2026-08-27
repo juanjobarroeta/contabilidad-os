@@ -98,7 +98,7 @@ export async function GET(req: Request) {
   const linksPorParent = new Map<string, { impPagado: number | null; fechaPago: Date | null }[]>();
   for (const l of anticipoLinks) {
     const k = normalizarUuid(l.parentUuid);
-    linksPorParent.set(k, [...(linksPorParent.get(k) ?? []), l]);
+    linksPorParent.set(k, [...(linksPorParent.get(k) ?? []), { ...l, impPagado: l.impPagado === null ? null : Number(l.impPagado) }]);
   }
 
   // Group ingresos by month to build the monthly acumulado table
@@ -113,14 +113,16 @@ export async function GET(req: Request) {
     if (m < 1 || m > month) continue;
     monthlyTotals[m - 1].invoices += 1;
 
-    let restante = inv.subtotal;
+    const subtotal = Number(inv.subtotal);
+    const total = Number(inv.total);
+    let restante = subtotal;
     const links = inv.uuid ? (linksPorParent.get(normalizarUuid(inv.uuid)) ?? []) : [];
     for (const l of links) {
-      if (!l.fechaPago || l.impPagado == null || inv.total <= 0) continue;
+      if (!l.fechaPago || l.impPagado == null || total <= 0) continue;
       const mPago = l.fechaPago.getUTCMonth() + 1;
       if (mPago >= m || mPago < 1 || mPago > month) continue; // sólo cobros ANTERIORES a la emisión
       // Equivalente en subtotal del pago (el REP trae importes con IVA).
-      const porcion = Math.min(restante, l.impPagado * (inv.subtotal / inv.total));
+      const porcion = Math.min(restante, l.impPagado * (subtotal / total));
       if (porcion <= 0) continue;
       monthlyTotals[mPago - 1].ingresos += porcion;
       restante -= porcion;
@@ -134,8 +136,8 @@ export async function GET(req: Request) {
   // El coeficiente crudo (ingresos−egresos)/ingresos se muestra como referencia,
   // pero NO es el que se aplica ni el que se sugiere: ambos vienen del motor
   // (computeTaxPosition) para no divergir de la pantalla de Impuestos.
-  const prevIngresosTotal = prevYearIngresos._sum.subtotal ?? 0;
-  const prevGastosTotal = prevYearGastos._sum.subtotal ?? 0;
+  const prevIngresosTotal = Number(prevYearIngresos._sum.subtotal ?? 0);
+  const prevGastosTotal = Number(prevYearGastos._sum.subtotal ?? 0);
   const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
   const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 

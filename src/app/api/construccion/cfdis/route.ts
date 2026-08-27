@@ -106,10 +106,11 @@ export const GET = withAuthz(async (req: Request) => {
     const cp = inv.customer;
     const supplier = recibida && cp?.rfc ? supplierByRfc.get(cp.rfc) ?? null : null;
 
+    const total = Number(inv.total);
     const matchedAmount =
       Math.abs(inv.bankTransactions.reduce((s, t) => s + Number(t.monto), 0)) +
       inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
-    const paid = inv.total > 0 && matchedAmount >= inv.total - 0.01;
+    const paid = total > 0 && matchedAmount >= total - 0.01;
 
     const vinculo = vinculoByInvoice.get(inv.id);
     let matchEstado = "SIN_VINCULAR";
@@ -130,7 +131,7 @@ export const GET = withAuthz(async (req: Request) => {
       matchEstado = "PAGADA";
     } else {
       suggestion = bestSuggestion(
-        { total: inv.total, fecha: inv.fecha, recibida, emisorNombre: recibida ? cp?.razonSocial ?? null : null, supplierId: supplier?.id ?? null },
+        { total, fecha: inv.fecha, recibida, emisorNombre: recibida ? cp?.razonSocial ?? null : null, supplierId: supplier?.id ?? null },
         pools
       );
       if (suggestion) matchEstado = "SUGERIDA";

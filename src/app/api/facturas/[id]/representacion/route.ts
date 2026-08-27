@@ -63,10 +63,10 @@ export async function GET(req: Request, { params }: Params) {
       metodoPago: invoice.metodoPago,
       condicionesDePago: null,
       moneda: invoice.moneda,
-      tipoCambio: invoice.tipoCambio,
-      subtotal: invoice.subtotal,
-      descuento: invoice.descuento,
-      total: invoice.total,
+      tipoCambio: Number(invoice.tipoCambio),
+      subtotal: Number(invoice.subtotal),
+      descuento: Number(invoice.descuento),
+      total: Number(invoice.total),
       totalImpuestosTrasladados: null,
       totalImpuestosRetenidos: null,
       noCertificadoEmisor: null,
@@ -85,13 +85,13 @@ export async function GET(req: Request, { params }: Params) {
       conceptos: invoice.items.map((it) => ({
         claveProdServ: it.claveProdServ,
         noIdentificacion: null,
-        cantidad: it.cantidad,
+        cantidad: Number(it.cantidad),
         claveUnidad: it.claveUnidad,
         unidad: it.unidad,
         descripcion: it.descripcion,
-        valorUnitario: it.valorUnitario,
-        importe: it.importe,
-        descuento: it.descuento,
+        valorUnitario: Number(it.valorUnitario),
+        importe: Number(it.importe),
+        descuento: Number(it.descuento),
         objetoImp: null,
         // Sin XML (borradores/CFDIs sin rawXml) la cuenta predial viene de la
         // partida guardada, que sólo lleva una.
@@ -99,10 +99,10 @@ export async function GET(req: Request, { params }: Params) {
       })),
       traslados: invoice.taxes
         .filter((t) => !t.retencion)
-        .map((t) => ({ impuesto: t.tipo, tipoFactor: t.factor, tasaOCuota: t.tasa, base: t.base, importe: t.importe, retencion: false })),
+        .map((t) => ({ impuesto: t.tipo, tipoFactor: t.factor, tasaOCuota: Number(t.tasa), base: t.base === null ? null : Number(t.base), importe: Number(t.importe), retencion: false })),
       retenciones: invoice.taxes
         .filter((t) => t.retencion)
-        .map((t) => ({ impuesto: t.tipo, tipoFactor: t.factor, tasaOCuota: t.tasa, base: t.base, importe: t.importe, retencion: true })),
+        .map((t) => ({ impuesto: t.tipo, tipoFactor: t.factor, tasaOCuota: Number(t.tasa), base: t.base === null ? null : Number(t.base), importe: Number(t.importe), retencion: true })),
       tfd: invoice.uuid
         ? { uuid: invoice.uuid, fechaTimbrado: null, rfcProvCertif: null, selloCFD: invoice.selloCFD, noCertificadoSAT: null, selloSAT: invoice.selloSAT, version: null }
         : null,

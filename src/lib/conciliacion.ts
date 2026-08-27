@@ -69,7 +69,8 @@ export async function scoreCandidates(txId: string, companyId: string): Promise<
   const candidates: MatchCandidate[] = invoices
     .map((inv) => {
       let score = 0;
-      const diff = Math.abs(Math.abs(inv.total) - absAmount);
+      const total = Number(inv.total);
+      const diff = Math.abs(Math.abs(total) - absAmount);
       if (diff < 0.01) score += 100;
       else if (diff / absAmount < 0.005) score += 70;
       else if (diff / absAmount < 0.01) score += 40;
@@ -84,7 +85,7 @@ export async function scoreCandidates(txId: string, companyId: string): Promise<
         invoiceId: inv.id,
         uuid: inv.uuid,
         fecha: inv.fecha.toISOString().slice(0, 10),
-        total: inv.total,
+        total,
         tipo: inv.tipo,
         cliente: inv.customer?.razonSocial ?? "—",
         rfc: inv.customer?.rfc ?? "—",
@@ -374,7 +375,7 @@ export async function reconcileTransaction(
       bankTransaction: { ...d.bankTransaction, monto: Number(d.bankTransaction.monto) },
     })),
   );
-  const guard = checkInvoiceMatchGuard(inv, pagosPrevios, { ...tx, monto: Number(tx.monto) });
+  const guard = checkInvoiceMatchGuard({ ...inv, total: Number(inv.total) }, pagosPrevios, { ...tx, monto: Number(tx.monto) });
   if (!guard.ok) return { ok: false, error: guard.error };
 
   await prisma.bankTransaction.update({

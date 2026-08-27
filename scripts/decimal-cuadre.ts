@@ -37,9 +37,9 @@ async function tomarFoto(): Promise<Snapshot> {
   for (const f of invoices) {
     const g = `invoice:${f.companyId}:${f.tipo}`;
     poner(g, "count", f._count);
-    poner(g, "total", f._sum.total);
-    poner(g, "subtotal", f._sum.subtotal);
-    poner(g, "totalImpuestos", f._sum.totalImpuestos);
+    poner(g, "total", Number(f._sum.total));
+    poner(g, "subtotal", Number(f._sum.subtotal));
+    poner(g, "totalImpuestos", Number(f._sum.totalImpuestos));
   }
 
   const bancos = await prisma.bankTransaction.groupBy({

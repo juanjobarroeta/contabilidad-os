@@ -194,8 +194,8 @@ export async function GET(req: Request) {
   );
 
   // ── IVA estimation ────────────────────────────────────────────────────────
-  const ivaTrasladado  = ivaTaxesEmitidas._sum.importe  ?? 0;
-  const ivaAcreditable = ivaTaxesRecibidas._sum.importe ?? 0;
+  const ivaTrasladado  = Number(ivaTaxesEmitidas._sum.importe  ?? 0);
+  const ivaAcreditable = Number(ivaTaxesRecibidas._sum.importe ?? 0);
   const ivaEstimado    = ivaTrasladado - ivaAcreditable;
 
   // ── Upcoming obligations (next 45 days) ────────────────────────────────────
@@ -405,8 +405,8 @@ export async function GET(req: Request) {
   }));
 
   // ── Current month KPIs ────────────────────────────────────────────────────
-  const ingresosDelMes = ingresosThisMonth._sum.subtotal ?? 0;
-  const gastosDelMes   = gastosThisMonth._sum.subtotal   ?? 0;
+  const ingresosDelMes = Number(ingresosThisMonth._sum.subtotal ?? 0);
+  const gastosDelMes   = Number(gastosThisMonth._sum.subtotal   ?? 0);
   const utilidadBruta  = ingresosDelMes - gastosDelMes;
 
   // ISR provisional now lives on its own ISR_PROVISIONAL row; the IVA_MENSUAL row

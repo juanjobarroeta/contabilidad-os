@@ -64,13 +64,13 @@ async function handle(req: Request) {
       const id = await crearActivoDesdeCfdiSiAplica(prisma, {
         companyId: inv.companyId,
         invoiceId: inv.id,
-        subtotal: inv.subtotal,
+        subtotal: Number(inv.subtotal),
         fecha: inv.fecha,
         descripcion: inv.items[0]?.descripcion,
         clasifInput: {
           tipo: inv.tipo,
           usoCfdi: inv.usoCfdi ?? null,
-          items: inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
+          items: inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe) })),
         },
       });
       if (id) creados++;

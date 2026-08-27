@@ -118,7 +118,7 @@ export const GET = withAuthz(async (req: Request) => {
     if (!emisor) continue;
     const row = rowFor(emisor.rfc, emisor.razonSocial);
     row.cfdiFacturas = c._count;
-    row.cfdiTotal = round2(c._sum.total ?? 0);
+    row.cfdiTotal = round2(Number(c._sum.total ?? 0));
     const f = c._max.fecha;
     if (f && (!row.ultimaFactura || f > row.ultimaFactura)) row.ultimaFactura = f;
   }

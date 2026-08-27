@@ -71,12 +71,12 @@ export async function POST(req: Request) {
     const clasif = clasificarCfdi({
       tipo: inv.tipo,
       usoCfdi: inv.usoCfdi ?? null,
-      items: inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
+      items: inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe) })),
     });
     defaults = {
       descripcion: inv.items[0]?.descripcion ?? `CFDI ${inv.serie ?? ""}${inv.folio ?? ""}`.trim(),
       tipo: tipoActivoDesdeSubtipo(clasif.subtipoInversion),
-      moi: inv.subtotal,
+      moi: Number(inv.subtotal),
       fechaAdquisicion: inv.fecha,
       esAutomovil: clasif.posibleTopeAutomovil === true,
     };

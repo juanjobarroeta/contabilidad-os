@@ -82,11 +82,11 @@ export async function GET(req: Request) {
     // borradores no tienen filas de impuesto confiables) y solo cuando el
     // comprobante es inequívoco; en cualquier otro caso queda null.
     const ivaTratamiento =
-      inv.status === "STAMPED" ? derivarTratamientoIva(inv.taxes) : null;
+      inv.status === "STAMPED" ? derivarTratamientoIva(inv.taxes.map((t) => ({ ...t, tasa: Number(t.tasa) }))) : null;
     return inv.items.map((it) => ({
       claveProdServ: it.claveProdServ,
       descripcion: it.descripcion,
-      valorUnitario: it.valorUnitario,
+      valorUnitario: Number(it.valorUnitario),
       claveUnidad: it.claveUnidad,
       cuentaPredial: it.cuentaPredial,
       fecha: inv.fecha,
@@ -104,11 +104,11 @@ export async function GET(req: Request) {
       .map((inv) => ({
         id: inv.id,
         fecha: inv.fecha,
-        total: inv.total,
+        total: Number(inv.total),
         customerId: inv.customerId,
         cliente: inv.customer?.razonSocial ?? "Sin cliente",
-        items: inv.items,
-        ivaTratamiento: derivarTratamientoIva(inv.taxes),
+        items: inv.items.map((it) => ({ ...it, cantidad: Number(it.cantidad), valorUnitario: Number(it.valorUnitario) })),
+        ivaTratamiento: derivarTratamientoIva(inv.taxes.map((t) => ({ ...t, tasa: Number(t.tasa) }))),
       })),
     6
   );
@@ -156,7 +156,7 @@ export async function GET(req: Request) {
         // Tratamiento de IVA de la factura origen para el prellenado. Antes el
         // formulario asumía siempre "16"; ahora respeta tasa 0 / exento de la
         // factura copiada. Ante ambigüedad (mixto/sin filas) conserva "16".
-        ivaTratamiento: derivarTratamientoIva(inv.taxes) ?? "16",
+        ivaTratamiento: derivarTratamientoIva(inv.taxes.map((t) => ({ ...t, tasa: Number(t.tasa) }))) ?? "16",
       }))
     : [];
 

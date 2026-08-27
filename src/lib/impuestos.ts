@@ -139,7 +139,7 @@ async function flujoEfectivoAcum(
           customer: { select: { rfc: true } },
           taxes: { where: { tipo: "ISR", retencion: true }, select: { importe: true } },
         },
-      })
+      }).then((rows) => rows.map((p) => ({ ...p, subtotal: Number(p.subtotal), total: Number(p.total), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
     : [];
   const byUuid = new Map(parents.map((p) => [normalizarUuid(p.uuid!), p]));
   const EXCLUIDAS_DEDUCCION = new Set(["INVERSION", "SIN_EFECTOS"]);
@@ -152,8 +152,8 @@ async function flujoEfectivoAcum(
   for (const l of repLinks) {
     const p = byUuid.get(normalizarUuid(l.parentUuid));
     if (!p || p.total <= 0 || l.impPagado == null) continue;
-    const fraccionPagada = l.impPagado / p.total;
-    const base = l.impPagado * (p.subtotal / p.total); // subtotal-equivalent collected/paid
+    const fraccionPagada = Number(l.impPagado) / p.total;
+    const base = Number(l.impPagado) * (p.subtotal / p.total); // subtotal-equivalent collected/paid
     const signoNota = signoTipoSat(p.tipoSat);
     if (p.tipo === "INGRESO") {
       ppdIngreso += signoNota * base;
@@ -171,9 +171,9 @@ async function flujoEfectivoAcum(
   return {
     // El agregado positivo INCLUYE las notas "E" (+), así que el neto es
     // total − 2·E (una vez para quitarlas, otra para restarlas).
-    ingresosCobrados: (puIngreso._sum.subtotal ?? 0) - 2 * (puIngresoE._sum.subtotal ?? 0) + ppdIngreso,
-    deduccionesPagadas: (puEgreso._sum.subtotal ?? 0) - 2 * (puEgresoE._sum.subtotal ?? 0) + ppdEgreso,
-    isrRetenidoCobrado: (puIngresoIsrRet._sum.importe ?? 0) + ppdIsrRetenido,
+    ingresosCobrados: Number(puIngreso._sum.subtotal ?? 0) - 2 * Number(puIngresoE._sum.subtotal ?? 0) + ppdIngreso,
+    deduccionesPagadas: Number(puEgreso._sum.subtotal ?? 0) - 2 * Number(puEgresoE._sum.subtotal ?? 0) + ppdEgreso,
+    isrRetenidoCobrado: Number(puIngresoIsrRet._sum.importe ?? 0) + ppdIsrRetenido,
   };
 }
 
@@ -552,11 +552,11 @@ export async function computeTaxPosition(
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
       include: invoiceInclude,
-    }),
+    }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) }))),
     prisma.invoice.findMany({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to }, ...efosWhere },
       include: invoiceInclude,
-    }),
+    }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) }))),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
       _sum: { subtotal: true },
@@ -614,7 +614,7 @@ export async function computeTaxPosition(
         pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
       },
       select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
-    }),
+    }).then((rows) => rows.map((l) => ({ ...l, impPagado: l.impPagado === null ? null : Number(l.impPagado), ivaTrasladado: l.ivaTrasladado === null ? null : Number(l.ivaTrasladado) }))),
     // Coeficiente autoritativo: declaraciones anuales guardadas de los últimos
     // 5 ejercicios (Art. 14, fracc. I LISR — si el último ejercicio no arroja
     // coeficiente, se usa el del último ejercicio CON utilidad, hasta 5 años
@@ -661,7 +661,7 @@ export async function computeTaxPosition(
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, metodoPago: "PPD", status: "STAMPED" },
         select: { uuid: true, tipo: true, tipoSat: true, total: true, totalImpuestos: true, taxes: true, ivaNoAcreditable: true, ivaNoCausado: true, customer: { select: { rfc: true } } },
-      })
+      }).then((rows) => rows.map((p) => ({ ...p, total: Number(p.total), totalImpuestos: Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
     : [];
   const repParentByUuid = new Map(repParents.map((p) => [normalizarUuid(p.uuid!), p]));
   const esEfosBloqueado = (rfc?: string | null) =>
@@ -719,7 +719,7 @@ export async function computeTaxPosition(
   const ingresosDelMes = round2(facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0));
   const gastosDelMes = round2(facturasEgresos.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0));
   const ingresosAcumulados =
-    (ingresosAcumuladosAgg._sum.subtotal ?? 0) - 2 * (acumuladosE._sum.subtotal ?? 0);
+    Number(ingresosAcumuladosAgg._sum.subtotal ?? 0) - 2 * Number(acumuladosE._sum.subtotal ?? 0);
   const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
 
   const resicoKind = detectResicoKind(company?.regimenFiscal ?? null, company?.rfc ?? null);
@@ -915,9 +915,9 @@ export async function computeTaxPosition(
     // sobre ingresos nominales acumulados). Sólo personas morales llegan aquí —
     // cualquier persona física se resuelve arriba con tarifa/tasa (sin coeficiente).
     const prevIngresosTotal =
-      (prevYearIngresos._sum.subtotal ?? 0) - 2 * (prevYearIngresosE._sum.subtotal ?? 0);
+      Number(prevYearIngresos._sum.subtotal ?? 0) - 2 * Number(prevYearIngresosE._sum.subtotal ?? 0);
     const prevGastosTotal =
-      (prevYearEgresos._sum.subtotal ?? 0) - 2 * (prevYearEgresosE._sum.subtotal ?? 0);
+      Number(prevYearEgresos._sum.subtotal ?? 0) - 2 * Number(prevYearEgresosE._sum.subtotal ?? 0);
     const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
     const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 
@@ -1092,8 +1092,8 @@ export async function computeTaxPosition(
     efos = {
       rfcsBloqueados: rfcs,
       cfdisExcluidos: aggExcl._count.id,
-      subtotalExcluido: round2(aggExcl._sum.subtotal ?? 0),
-      ivaAcreditableExcluido: round2(ivaExcl._sum.importe ?? 0),
+      subtotalExcluido: round2(Number(aggExcl._sum.subtotal ?? 0)),
+      ivaAcreditableExcluido: round2(Number(ivaExcl._sum.importe ?? 0)),
     };
   }
 
