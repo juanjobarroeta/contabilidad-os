@@ -14,7 +14,7 @@ import {
   Building2,
   Sparkles,
 } from "lucide-react";
-import { Card, Badge, EmptyState, type BadgeTone } from "@/components/ui";
+import { Card, Badge, EmptyState, Alert, Loading, RetryButton, type BadgeTone } from "@/components/ui";
 
 interface Notificacion {
   id: string;
@@ -71,8 +71,9 @@ export default function PendientesPage() {
       const data = await res.json();
       setItems(data.items ?? []);
     } catch {
+      // items queda en null (= desconocido): así el error y el EmptyState de
+      // "No tienes pendientes" son excluyentes en vez de contradecirse.
       setError("No se pudieron cargar tus pendientes.");
-      setItems([]);
     }
   }, []);
 
@@ -118,16 +119,15 @@ export default function PendientesPage() {
       </div>
 
       {error && (
-        <div className="mt-4 flex items-center gap-2 rounded-control bg-cos-red-tint px-4 py-3 text-sm text-cos-red-ink">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
+        <Alert tone="danger" className="mt-4" action={<RetryButton onClick={load} />}>
           {error}
-        </div>
+        </Alert>
       )}
 
       {items === null ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-cos-ink-faint">
-          <Loader2 className="h-5 w-5 animate-spin" /> Cargando pendientes…
-        </div>
+        // Sin datos y con error, el hueco lo ocupa el Alert de arriba —
+        // el spinner o el "No tienes pendientes" aquí serían mentira.
+        !error && <Loading label="Cargando pendientes…" className="py-16" />
       ) : ordenados.length === 0 ? (
         <Card className="mt-5 rounded-card border-cos-line shadow-card">
           <EmptyState

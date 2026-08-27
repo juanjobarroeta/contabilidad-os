@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Money } from "@/components/ui";
+import { Alert, EmptyState, Money, RetryButton } from "@/components/ui";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatDate } from "@/lib/utils";
 import {
@@ -25,8 +25,14 @@ import { NewEmployeeModal, EditEmployeeModal, BajaModal, EmitNominaModal } from 
 export default function EmpleadosTab() {
   const { activeCompany } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Arranca en true: antes de la primera carga la pantalla NO debe verse como
+  // «Sin empleados» (no-cargado ≠ vacío).
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Error de carga del roster — distinto del banner de acciones (`error`):
+  // se renderiza EN LUGAR del vacío, para no invitar a re-importar el equipo
+  // por un fallo de red.
+  const [loadError, setLoadError] = useState(false);
   const [q, setQ] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [emitFor, setEmitFor] = useState<Employee | null>(null);
@@ -37,12 +43,14 @@ export default function EmpleadosTab() {
   const loadEmployees = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true);
+    setLoadError(false);
     try {
       // includeInactive: el roster del hub también muestra bajas (expediente).
       const res = await fetch(`/api/empleados?companyId=${activeCompany.id}&includeInactive=1&withUltimoRecibo=1`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setEmployees(Array.isArray(data) ? data : []);
-    } catch { setError("Error al cargar empleados"); }
+    } catch { setLoadError(true); }
     finally { setLoading(false); }
   }, [activeCompany]);
 
@@ -72,8 +80,10 @@ export default function EmpleadosTab() {
         <div>
           <h1 className="text-2xl font-bold">Empleados</h1>
           <p className="text-sm text-cos-ink-soft mt-0.5">
-            {activeCompany.razonSocial} · {activos} activo{activos === 1 ? "" : "s"}
-            {bajas > 0 ? ` · ${bajas} baja${bajas === 1 ? "" : "s"}` : ""}
+            {activeCompany.razonSocial}
+            {/* Conteos sólo con datos reales — no «0 activos» mientras carga o falló. */}
+            {!loading && !loadError && ` · ${activos} activo${activos === 1 ? "" : "s"}`}
+            {!loading && !loadError && bajas > 0 ? ` · ${bajas} baja${bajas === 1 ? "" : "s"}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -109,19 +119,29 @@ export default function EmpleadosTab() {
         <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-12 justify-center">
           <Loader2 className="h-5 w-5 animate-spin" /> Cargando empleados...
         </div>
+      ) : loadError ? (
+        /* Error ANTES que el vacío: un fallo de red jamás debe verse como
+           «Sin empleados» con invitación a re-importar el roster. */
+        <Alert tone="danger" action={<RetryButton onClick={loadEmployees} />}>
+          No se pudieron cargar los empleados. Revisa tu conexión e inténtalo de nuevo.
+        </Alert>
       ) : employees.length === 0 ? (
-        <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
-          <Users2 className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
-          <p className="font-medium text-sm">Sin empleados</p>
-          <p className="text-xs text-cos-ink-soft mt-1">Reconstruye tu equipo desde los recibos de nómina que ya timbraste, o agrégalo manualmente.</p>
-          <div className="mt-4 flex items-center justify-center gap-2">
-            <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
-              <Wand2 className="h-4 w-4" /> Importar desde recibos de nómina
-            </button>
-            <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper">
-              <Plus className="h-4 w-4" /> Nuevo empleado
-            </button>
-          </div>
+        <div className="bg-cos-card border border-dashed border-cos-line rounded-xl">
+          <EmptyState
+            icon={Users2}
+            title="Sin empleados"
+            description="Reconstruye tu equipo desde los recibos de nómina que ya timbraste, o agrégalo manualmente."
+            action={
+              <div className="flex items-center justify-center gap-2">
+                <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep">
+                  <Wand2 className="h-4 w-4" /> Importar desde recibos de nómina
+                </button>
+                <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper">
+                  <Plus className="h-4 w-4" /> Nuevo empleado
+                </button>
+              </div>
+            }
+          />
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-10 text-center text-sm text-cos-ink-soft">

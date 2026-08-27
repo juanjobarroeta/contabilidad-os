@@ -39,6 +39,19 @@ export function Money({
   ...rest
 }: MoneyProps) {
   const n = Number(value);
+  // Un fetch fallido jamás debe renderizar "$NaN" como si fuera una cifra:
+  // sin número real, un guion mudo.
+  if (!Number.isFinite(n)) {
+    return (
+      <span
+        className={cn("font-mono tabular-nums text-cos-ink-faint", className)}
+        style={{ fontSize: size, fontWeight: weight, ...style }}
+        {...rest}
+      >
+        —
+      </span>
+    );
+  }
   const color = muted
     ? "text-cos-ink-soft"
     : sign && n > 0

@@ -16,7 +16,7 @@ import {
   Download, Stamp, ShieldAlert,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Loading, Money } from "@/components/ui";
+import { Alert, Loading, Money, RetryButton } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 // Una corrida CALCULATED pendiente de timbrar (id concreto + totales), tal como
@@ -118,6 +118,10 @@ export default function NominaCockpitPage() {
   const router = useRouter();
   const [data, setData] = useState<CockpitData | null>(null);
   const [loading, setLoading] = useState(true);
+  // Error de carga del cockpit. NUNCA se renderizan ceros si el fetch falló:
+  // un tablero de 0 empresas / $0.00 por un error de red invita a cerrar el
+  // mes sobre datos falsos.
+  const [loadError, setLoadError] = useState(false);
 
   // Estado del comando "Calcular quincena" en lote.
   const [panelAbierto, setPanelAbierto] = useState(false);
@@ -126,15 +130,27 @@ export default function NominaCockpitPage() {
   // Estado del comando "Timbrar" en lote (IRREVERSIBLE — emite CFDIs reales).
   const [timbrarAbierto, setTimbrarAbierto] = useState(false);
 
-  const fetchCockpit = useCallback(() => {
-    return fetch("/api/nomina/cockpit")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: CockpitData | null) => setData(d));
+  const fetchCockpit = useCallback(async () => {
+    setLoadError(false);
+    try {
+      const r = await fetch("/api/nomina/cockpit");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData((await r.json()) as CockpitData);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    fetchCockpit().finally(() => setLoading(false));
+    fetchCockpit();
   }, [fetchCockpit]);
+
+  const retry = () => {
+    setLoading(true);
+    fetchCockpit();
+  };
 
   // Cambia la empresa activa del contexto y entra a su workspace de nómina.
   function operar(c: CockpitCompany, destino: "/nomina" | "/nomina?tab=corridas") {
@@ -144,6 +160,22 @@ export default function NominaCockpitPage() {
   }
 
   if (loading) return <Loading />;
+
+  // Fetch fallido → pantalla de error con reintento, NUNCA el tablero en ceros.
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-[1100px] px-6 py-7">
+        <Link href="/nomina" className="inline-flex items-center gap-1 text-[13px] text-cos-ink-faint hover:text-cos-brand-ink">
+          <ChevronLeft className="h-4 w-4" /> Nómina
+        </Link>
+        <h1 className="mt-1 text-[24px] font-bold tracking-[-0.02em] text-cos-ink">Tablero de nómina</h1>
+        <Alert tone="danger" className="mt-4" action={<RetryButton onClick={retry} />}>
+          No se pudo cargar el tablero de nómina. Revisa tu conexión e inténtalo de nuevo — no se muestran totales para no operar sobre datos incompletos.
+        </Alert>
+      </div>
+    );
+  }
+
   // Triage: las que necesitan acción primero (sin corrida → sin timbrar/setup →
   // al corriente → sin empleados), para procesar la quincena de arriba a abajo.
   const urgencia = (c: CockpitCompany): number => {

@@ -22,6 +22,7 @@ import Link from "next/link";
 import { Check, Landmark, Loader2, Sparkles, X } from "lucide-react";
 import { Money } from "@/components/ui/Money";
 import { StatTile, StatStrip } from "@/components/ui";
+import { Alert, RetryButton } from "@/components/ui/feedback";
 import { CATEGORIAS_MESA, type SugerenciaMovimiento } from "@/lib/bancos/inferir-movimiento";
 import { cn } from "@/lib/utils";
 
@@ -128,14 +129,22 @@ export function ConciliacionWorkbench({
   // del GET /api/bancos existente. Si la consulta falla, la línea no aparece.
   const [detalleCuentas, setDetalleCuentas] = useState<Map<string, CuentaDetalle>>(new Map());
 
+  // Fallo del fetch, SEPARADO de data=null: antes un error dejaba data=null y
+  // la mesa entera desaparecía sin decir nada (idéntico al caso "sin cuenta
+  // bancaria", que sí es genuino y se oculta a propósito).
+  const [errorCarga, setErrorCarga] = useState("");
+
   const cargar = useCallback(async () => {
     setCargando(true);
+    setErrorCarga("");
     try {
       const res = await fetch(`/api/bancos/conciliacion?companyId=${companyId}&year=${year}&month=${month}`);
       const d = await res.json();
-      setData(res.ok && d?.movimientosNoRegistrados ? d : null);
+      if (!res.ok || !d?.movimientosNoRegistrados) throw new Error();
+      setData(d);
     } catch {
       setData(null);
+      setErrorCarga("No se pudo cargar la conciliación bancaria. Revisa tu conexión e inténtalo de nuevo.");
     } finally {
       setCargando(false);
     }
@@ -337,6 +346,16 @@ export function ConciliacionWorkbench({
     return (
       <div className="mb-6 flex items-center gap-2 rounded-card border border-cos-line bg-cos-card p-8 text-sm text-cos-ink-soft">
         <Loader2 className="h-4 w-4 animate-spin" /> Cotejando banco contra libro…
+      </div>
+    );
+  }
+  // ERROR ≠ "sin cuenta": el fallo de red se dice y ofrece reintentar; el
+  // return null de abajo queda sólo para el caso genuino (sin cuenta de
+  // bancos, la mesa no aplica).
+  if (errorCarga) {
+    return (
+      <div className="mb-6">
+        <Alert tone="danger" action={<RetryButton onClick={cargar} />}>{errorCarga}</Alert>
       </div>
     );
   }

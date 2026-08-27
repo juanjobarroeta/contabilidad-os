@@ -281,9 +281,27 @@ function CoberturaFiscalCard() {
     inpcUltimo: { periodo: string; valor: number } | null;
     tipoCambioFix: { fecha: string; valor: number } | null;
   } | null>(null);
-  useEffect(() => {
-    fetch("/api/fiscal/cobertura").then((r) => (r.ok ? r.json() : null)).then(setData).catch(() => {});
+  const [coberturaError, setCoberturaError] = useState(false);
+  const loadCobertura = useCallback(() => {
+    setCoberturaError(false);
+    fetch("/api/fiscal/cobertura")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setData)
+      .catch(() => setCoberturaError(true));
   }, []);
+  useEffect(() => { loadCobertura(); }, [loadCobertura]);
+  // Antes el fallo hacía desaparecer la tarjeta en silencio — parecía que no
+  // había nada que verificar. Una línea discreta con reintento basta.
+  if (coberturaError) {
+    return (
+      <p className="text-[12.5px] text-cos-ink-faint">
+        No se pudo consultar la cobertura de datos fiscales (tarifas, INPC, UMA…).{" "}
+        <button type="button" onClick={loadCobertura} className="underline hover:text-cos-ink">
+          Reintentar
+        </button>
+      </p>
+    );
+  }
   if (!data) return null;
   // Sólo mostramos lo accionable: faltante o sin cotejar. Si todo al día, una línea.
   const alertas = data.datasets.filter((d) => d.estado === "faltante" || d.estado === "sin_cotejar");

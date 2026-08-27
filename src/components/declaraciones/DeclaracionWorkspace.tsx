@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Card, Money, Loading } from "@/components/ui";
+import { Card, Money, Loading, Alert, RetryButton } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
   CheckCircle2, AlertTriangle, CalendarDays, Printer, ChevronRight as ChevronR, FileWarning,
@@ -91,10 +91,19 @@ export function DeclaracionWorkspace() {
 
   // Auditor findings (company-wide) — drive the Revisión tab + its count badge.
   const [flags, setFlags] = useState<HallazgoDTO[] | null>(null);
+  const [flagsError, setFlagsError] = useState(false);
   const loadFlags = useCallback(async () => {
     if (!activeCompany) return;
-    const res = await fetch(`/api/hallazgos?companyId=${activeCompany.id}&estado=ABIERTO`);
-    if (res.ok) { const d = await res.json(); setFlags(d.hallazgos ?? []); }
+    setFlagsError(false);
+    try {
+      const res = await fetch(`/api/hallazgos?companyId=${activeCompany.id}&estado=ABIERTO`);
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      setFlags(d.hallazgos ?? []);
+    } catch {
+      // Sin esto, flags se queda en null y la pestaña Revisión gira para siempre.
+      setFlagsError(true);
+    }
   }, [activeCompany]);
   useEffect(() => { loadFlags(); }, [loadFlags]);
 
@@ -130,6 +139,9 @@ export function DeclaracionWorkspace() {
       setDiotAcuse(d.diot?.acuseUrl ?? "");
       setAcuseParsed(null); setAcuseError("");
     } catch {
+      // Limpia data para que el error sea excluyente: nunca cifras de otro mes
+      // bajo el encabezado del mes nuevo en la pantalla donde se presenta.
+      setData(null);
       setError("No se pudo cargar la declaración del mes");
     } finally { setLoading(false); }
   }, [activeCompany, month, year]);
@@ -253,7 +265,13 @@ export function DeclaracionWorkspace() {
         ))}
       </div>
 
-      {loading || !data ? (
+      {error && !data ? (
+        // Falla de carga: rama excluyente con salida. Antes el gate `!data`
+        // dejaba el spinner girando para siempre sobre la pantalla de presentar.
+        <Alert tone="danger" className="mt-5" action={<RetryButton onClick={load} />}>
+          {error}
+        </Alert>
+      ) : loading || !data ? (
         <Loading label="Cargando…" className="py-16" />
       ) : (
         <div id="tabpanel-declaracion" role="tabpanel" aria-labelledby={`tab-${tab}`} className="mt-5">
@@ -264,6 +282,7 @@ export function DeclaracionWorkspace() {
               companyId={activeCompany.id}
               fechaIso={`${year}-${String(month).padStart(2, "0")}-15`}
               flags={flags}
+              flagsError={flagsError}
               onRefresh={loadFlags}
             />
           )}
@@ -278,7 +297,10 @@ export function DeclaracionWorkspace() {
           )}
         </div>
       )}
-      {error && <p className="mt-4 flex items-center gap-1.5 text-[13px] text-cos-red-ink"><AlertTriangle className="h-4 w-4" /> {error}</p>}
+      {/* Errores de guardado (data intacta): aviso inline; el reintento es el propio botón de guardar. */}
+      {error && data && !loading && (
+        <p className="mt-4 flex items-center gap-1.5 text-[13px] text-cos-red-ink"><AlertTriangle className="h-4 w-4" /> {error}</p>
+      )}
     </div>
   );
 }
@@ -466,7 +488,7 @@ function PapelesTab({ companyId, month, year, onChanged }: { companyId: string; 
   );
 }
 
-function RevisionTab({ companyId, fechaIso, flags, onRefresh }: { companyId: string; fechaIso: string; flags: HallazgoDTO[] | null; onRefresh: () => void }) {
+function RevisionTab({ companyId, fechaIso, flags, flagsError, onRefresh }: { companyId: string; fechaIso: string; flags: HallazgoDTO[] | null; flagsError: boolean; onRefresh: () => void }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
@@ -498,6 +520,13 @@ function RevisionTab({ companyId, fechaIso, flags, onRefresh }: { companyId: str
     </button>
   );
 
+  if (flagsError) {
+    return (
+      <Alert tone="danger" action={<RetryButton onClick={onRefresh} />}>
+        No se pudo cargar la revisión del auditor.
+      </Alert>
+    );
+  }
   if (flags === null) return <Loading label="Cargando revisión…" className="py-12" />;
 
   if (flags.length === 0) {

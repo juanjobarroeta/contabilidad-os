@@ -7,9 +7,10 @@
 // balanza → auxiliar → póliza → CFDI (representación impresa).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Scale, ScrollText, CheckCircle2, AlertTriangle, X, Plus, Pencil, Trash2 } from "lucide-react";
 import { Money } from "@/components/ui";
+import { Alert, Loading, RetryButton } from "@/components/ui/feedback";
 import { formatCurrency } from "@/lib/utils";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import { BotonExcel } from "@/components/contabilidad/BotonExcel";
@@ -34,14 +35,6 @@ interface PolizaVista {
   transacciones: Array<{ entryId: string; numCta: string; desCta: string; concepto: string; cargo: number; abono: number }>;
 }
 
-function Cargando() {
-  return (
-    <div className="flex items-center gap-2 text-sm text-cos-ink-soft py-8 justify-center">
-      <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
-    </div>
-  );
-}
-
 function Vacio({ texto }: { texto: string }) {
   return (
     <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
@@ -54,25 +47,36 @@ function Vacio({ texto }: { texto: string }) {
 // ── Libro diario ─────────────────────────────────────────────────────────────
 
 export function LibroDiarioPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
-  const [polizas, setPolizas] = useState<PolizaVista[]>([]);
+  // Tri-estado: null = aún no carga, [] = periodo genuinamente sin pólizas.
+  const [polizas, setPolizas] = useState<PolizaVista[] | null>(null);
   const [invoiceIdPorUuid, setInvoiceIdPorUuid] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [abierta, setAbierta] = useState<string | null>(null);
   const [repInvoiceId, setRepInvoiceId] = useState<string | null>(null);
   // Editor de pólizas manuales: null = cerrado; sin referencia = nueva.
   const [editor, setEditor] = useState<{ poliza: PolizaVista | null } | null>(null);
   const [reload, setReload] = useState(0);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
       const res = await fetch(`/api/contabilidad/libro-diario?companyId=${companyId}&year=${year}&month=${month}`);
-      const d = await res.json();
-      setPolizas(d.polizas ?? []);
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !Array.isArray(d?.polizas)) {
+        throw new Error(d?.error ?? "No se pudo cargar el libro diario");
+      }
+      setPolizas(d.polizas);
       setInvoiceIdPorUuid(d.invoiceIdPorUuid ?? {});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar el libro diario");
+    } finally {
       setLoading(false);
-    })();
-  }, [companyId, year, month, reload]);
+    }
+  }, [companyId, year, month]);
+
+  useEffect(() => { cargar(); }, [cargar, reload]);
 
   async function borrarManual(p: PolizaVista) {
     if (!p.referencia) return;
@@ -105,7 +109,10 @@ export function LibroDiarioPanel({ companyId, year, month }: { companyId: string
     />
   );
 
-  if (loading) return <Cargando />;
+  if (error) {
+    return <Alert tone="danger" action={<RetryButton onClick={cargar} />}>{error}</Alert>;
+  }
+  if (loading || polizas === null) return <Loading />;
   if (polizas.length === 0) {
     return (
       <div>
@@ -432,16 +439,25 @@ export function AuxiliarCuentaModal({
 }: { companyId: string; year: number; month: number; cuenta: string; onClose: () => void }) {
   const [data, setData] = useState<AuxiliarData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [repInvoiceId, setRepInvoiceId] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
       const res = await fetch(`/api/contabilidad/auxiliar?companyId=${companyId}&year=${year}&month=${month}&cuenta=${encodeURIComponent(cuenta)}`);
-      setData(res.ok ? await res.json() : null);
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d) throw new Error(d?.error ?? "No se pudo cargar el auxiliar");
+      setData(d);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar el auxiliar");
+    } finally {
       setLoading(false);
-    })();
+    }
   }, [companyId, year, month, cuenta]);
+
+  useEffect(() => { cargar(); }, [cargar]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-10" onClick={onClose}>
@@ -456,10 +472,12 @@ export function AuxiliarCuentaModal({
           <button onClick={onClose} className="rounded p-1 text-cos-ink-faint hover:bg-cos-paper"><X className="h-4 w-4" /></button>
         </div>
         <div className="p-5">
-          {loading ? (
-            <Cargando />
-          ) : !data ? (
-            <p className="text-sm text-cos-red-ink">No se pudo cargar el auxiliar.</p>
+          {error || (!loading && !data) ? (
+            <Alert tone="danger" action={<RetryButton onClick={cargar} />}>
+              {error || "No se pudo cargar el auxiliar"}
+            </Alert>
+          ) : loading || !data ? (
+            <Loading />
           ) : (
             <>
               <table className="w-full text-xs">
@@ -528,20 +546,33 @@ interface BalanceGeneralData {
 }
 
 export function BalanceGeneralPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
+  // Tri-estado: null = aún no carga; el vacío genuino es un payload sin cuentas.
   const [data, setData] = useState<BalanceGeneralData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
       const res = await fetch(`/api/contabilidad/balance-general?companyId=${companyId}&year=${year}&month=${month}`);
-      setData(res.ok ? await res.json() : null);
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d) throw new Error(d?.error ?? "No se pudo cargar el balance general");
+      setData(d);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar el balance general");
+    } finally {
       setLoading(false);
-    })();
+    }
   }, [companyId, year, month]);
 
-  if (loading) return <Cargando />;
-  if (!data || (data.activo.length === 0 && data.pasivo.length === 0 && data.capital.length === 0)) {
+  useEffect(() => { cargar(); }, [cargar]);
+
+  if (error) {
+    return <Alert tone="danger" action={<RetryButton onClick={cargar} />}>{error}</Alert>;
+  }
+  if (loading || !data) return <Loading />;
+  if (data.activo.length === 0 && data.pasivo.length === 0 && data.capital.length === 0) {
     return <Vacio texto="Sin saldos acumulados a este periodo. Cierra meses desde «Cierres mensuales»." />;
   }
 

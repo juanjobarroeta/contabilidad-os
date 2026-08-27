@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck, FileText, Copy } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Button } from "@/components/ui";
+import { Alert, RetryButton } from "@/components/ui/feedback";
 import { esAsimilado, etiquetaRegimenNomina } from "@/lib/nomina/regimen";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import {
@@ -206,6 +207,9 @@ export default function FacturasPage() {
   const [prefacturas, setPrefacturas] = useState<Prefactura[]>([]);
   const [prefBusy, setPrefBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Fallo de carga de la lista/resumen. Sin esto, un fetch caído se veía como
+  // "No hay facturas" y los KPIs como $0.00 — datos falsos, no un error.
+  const [errorCarga, setErrorCarga] = useState("");
   const [filter, setFilter] = useState<FilterKey>("todas");
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<Invoice | null>(null);
@@ -280,18 +284,27 @@ export default function FacturasPage() {
   const fetchData = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true);
+    setErrorCarga("");
     try {
       const [list, res, prefs] = await Promise.all([
         fetch(listaUrl(0)).then((r) => r.json()),
         fetch(`/api/facturas/resumen?companyId=${activeCompany.id}&periodo=${encodeURIComponent(periodo)}`).then((r) => r.json()),
         fetch(`/api/facturas/borradores?companyId=${activeCompany.id}`).then((r) => r.json()).catch(() => []),
       ]);
-      const filas: Invoice[] = Array.isArray(list) ? list : [];
-      setInvoices(filas);
-      setHayMas(filas.length === TAKE);
-      setResumen(res);
+      // Una respuesta de error ({ error: … }) no es una lista vacía: sin array
+      // real esto es un fallo de carga, no "no hay facturas".
+      if (!Array.isArray(list)) throw new Error();
+      setInvoices(list as Invoice[]);
+      setHayMas(list.length === TAKE);
+      // El resumen también puede venir como objeto de error; sin cifras reales
+      // se guarda null y las tarjetas pintan "—", nunca $0.00.
+      setResumen(res && typeof res.totalFacturado === "number" ? res : null);
       setPeriodos(Array.isArray(res?.periodos) ? res.periodos : []);
       setPrefacturas(Array.isArray(prefs) ? prefs : []);
+    } catch {
+      setErrorCarga("No se pudieron cargar las facturas. Revisa tu conexión e inténtalo de nuevo.");
+      setInvoices([]);
+      setResumen(null);
     } finally {
       setLoading(false);
     }
@@ -558,12 +571,14 @@ export default function FacturasPage() {
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <span className={LBL}>Total facturado</span>
-          <div className="my-1"><Money value={resumen?.totalFacturado ?? 0} size={24} /></div>
+          {/* Sin resumen (aún cargando o fetch caído) va NaN → Money pinta "—".
+              Un `?? 0` aquí presentaba $0.00 como cifra real. */}
+          <div className="my-1"><Money value={resumen?.totalFacturado ?? NaN} size={24} /></div>
           <span className="text-[12.5px] text-cos-ink-faint">emitido {subPeriodo}</span>
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <span className={LBL}>IVA cobrado</span>
-          <div className="my-1"><Money value={resumen?.ivaCobrado ?? 0} size={24} /></div>
+          <div className="my-1"><Money value={resumen?.ivaCobrado ?? NaN} size={24} /></div>
           <span className="text-[12.5px] text-cos-ink-faint">trasladado a clientes</span>
         </Card>
       </div>
@@ -617,6 +632,12 @@ export default function FacturasPage() {
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-cos-ink-faint">
             <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
+          </div>
+        ) : errorCarga ? (
+          /* Rama de ERROR, excluyente del vacío: un fetch caído jamás debe
+             leerse como "no hay facturas". */
+          <div className="px-[18px] py-6">
+            <Alert tone="danger" action={<RetryButton onClick={fetchData} />}>{errorCarga}</Alert>
           </div>
         ) : rows.length === 0 ? (
           <div className="px-10 py-10 text-center text-cos-ink-faint">

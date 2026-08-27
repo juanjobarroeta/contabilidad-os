@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Money } from "@/components/ui";
+import { Money, Alert, RetryButton } from "@/components/ui";
 import { Download, Loader2, FileText, AlertTriangle, CheckCircle2, Sparkles, Check } from "lucide-react";
 
 const CARD = "rounded-card border border-cos-line bg-cos-card shadow-card print:border-2";
@@ -56,12 +56,19 @@ interface IvaData {
 export function IvaPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
   const [data, setData] = useState<IvaData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const res = await fetch(`/api/papeles/iva?companyId=${companyId}&year=${year}&month=${month}`);
-      if (res.ok) setData(await res.json());
+      if (!res.ok) throw new Error();
+      setData(await res.json());
+    } catch {
+      // Antes una falla caía en <Empty/>: un papel de IVA fallido se leía como
+      // "no hubo IVA este mes". Error explícito, nunca falso vacío.
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -112,6 +119,7 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
   }
 
   if (loading) return <Loading />;
+  if (loadError) return <LoadError onRetry={load} />;
   if (!data) return <Empty />;
 
   return (
@@ -517,12 +525,25 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
   const [savingPerdida, setSavingPerdida] = useState(false);
   const [perdidaError, setPerdidaError] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState(false);
+
   useEffect(() => {
-    setLoading(true);
-    fetch(`/api/papeles/isr?companyId=${companyId}&year=${year}&month=${month}`)
-      .then((r) => r.json())
-      .then(setData)
-      .finally(() => setLoading(false));
+    (async () => {
+      setLoading(true);
+      setLoadError(false);
+      try {
+        const res = await fetch(`/api/papeles/isr?companyId=${companyId}&year=${year}&month=${month}`);
+        // Sin el .ok, un JSON de error entraba a setData y reventaba en
+        // data.regimen.label (página de error global); sin .catch, la red caída
+        // dejaba el estado a la deriva. Error explícito con reintento.
+        if (!res.ok) throw new Error();
+        setData(await res.json());
+      } catch {
+        setLoadError(true);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [companyId, year, month, reloadKey]);
 
   // Persiste el coeficiente como ajuste manual de la empresa (mismo endpoint que
@@ -573,6 +594,7 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
   }, [companyId, year]);
 
   if (loading) return <Loading />;
+  if (loadError) return <LoadError onRetry={() => setReloadKey((k) => k + 1)} />;
   if (!data) return <Empty />;
 
   return (
@@ -1083,16 +1105,28 @@ interface RetData {
 export function RetencionesPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
   const [data, setData] = useState<RetData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    fetch(`/api/papeles/retenciones?companyId=${companyId}&year=${year}&month=${month}`)
-      .then((r) => r.json())
-      .then(setData)
-      .finally(() => setLoading(false));
+    setLoadError(false);
+    try {
+      const res = await fetch(`/api/papeles/retenciones?companyId=${companyId}&year=${year}&month=${month}`);
+      // Misma trampa que el ISR: un JSON de error en setData reventaba en
+      // data.retencionesRecibidas.length. Error explícito con reintento.
+      if (!res.ok) throw new Error();
+      setData(await res.json());
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [companyId, year, month]);
 
+  useEffect(() => { load(); }, [load]);
+
   if (loading) return <Loading />;
+  if (loadError) return <LoadError onRetry={load} />;
   if (!data) return <Empty />;
 
   return (
@@ -1194,6 +1228,14 @@ function Empty() {
     <div className="rounded-card border border-dashed border-cos-line bg-cos-card p-12 text-center text-[14px] text-cos-ink-faint">
       Sin datos para este periodo.
     </div>
+  );
+}
+/** Falla de carga de un papel de trabajo — nunca disfrazarla de "sin datos". */
+function LoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Alert tone="danger" action={<RetryButton onClick={onRetry} />}>
+      No se pudo cargar el papel de trabajo.
+    </Alert>
   );
 }
 function Dash() {

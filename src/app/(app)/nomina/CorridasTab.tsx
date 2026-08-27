@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from "react";
-import { Money } from "@/components/ui";
+import { Alert, Money, RetryButton } from "@/components/ui";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
@@ -48,10 +48,15 @@ export default function CorridasTab() {
   const { activeCompany } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [error, setError] = useState("");
+  // Error de carga del roster (alimenta la captura de incidencias).
+  const [empError, setEmpError] = useState(false);
 
-  // Corridas state
+  // Corridas state. runsLoading arranca en true: antes de la primera carga la
+  // pantalla NO debe verse como «Sin corridas» (no-cargado ≠ vacío).
   const [runs, setRuns] = useState<PayrollRun[]>([]);
-  const [runsLoading, setRunsLoading] = useState(false);
+  const [runsLoading, setRunsLoading] = useState(true);
+  // Fetch de corridas fallido — se muestra error con reintento, no el vacío.
+  const [runsError, setRunsError] = useState(false);
   const [showNewRun, setShowNewRun] = useState(false);
   // Corridas especiales de un toque: menú + modal de aguinaldo / PTU.
   const [especialMenuOpen, setEspecialMenuOpen] = useState(false);
@@ -63,6 +68,8 @@ export default function CorridasTab() {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [runItems, setRunItems] = useState<PayrollItemDetail[]>([]);
   const [runItemsLoading, setRunItemsLoading] = useState(false);
+  // Drill-in fallido: sin esto, una corrida con error de red se vería VACÍA.
+  const [runItemsError, setRunItemsError] = useState(false);
   // Incidencias del periodo de la corrida expandida + item con el modal abierto.
   const [runIncidencias, setRunIncidencias] = useState<RunIncidencia[]>([]);
   const [incForItem, setIncForItem] = useState<PayrollItemDetail | null>(null);
@@ -81,39 +88,46 @@ export default function CorridasTab() {
 
   // Incidencias state (sección «Incidencias del periodo»)
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
-  const [incLoading, setIncLoading] = useState(false);
+  const [incLoading, setIncLoading] = useState(true);
+  const [incError, setIncError] = useState(false);
   const [showNewInc, setShowNewInc] = useState(false);
   const now = new Date();
   const [incPeriodo, setIncPeriodo] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
 
   const loadEmployees = useCallback(async () => {
     if (!activeCompany) return;
+    setEmpError(false);
     try {
       const res = await fetch(`/api/empleados?companyId=${activeCompany.id}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setEmployees(Array.isArray(data) ? data : []);
-    } catch { /* silent */ }
+    } catch { setEmpError(true); }
   }, [activeCompany]);
 
   const loadRuns = useCallback(async () => {
     if (!activeCompany) return;
     setRunsLoading(true);
+    setRunsError(false);
     try {
       const res = await fetch(`/api/nomina/run?companyId=${activeCompany.id}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setRuns(Array.isArray(data) ? data : []);
-    } catch { /* silent */ }
+    } catch { setRunsError(true); }
     finally { setRunsLoading(false); }
   }, [activeCompany]);
 
   const loadIncidencias = useCallback(async () => {
     if (!activeCompany) return;
     setIncLoading(true);
+    setIncError(false);
     try {
       const res = await fetch(`/api/nomina/incidencias?companyId=${activeCompany.id}&periodo=${incPeriodo}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setIncidencias(data.incidencias ?? []);
-    } catch { /* silent */ }
+    } catch { setIncError(true); }
     finally { setIncLoading(false); }
   }, [activeCompany, incPeriodo]);
 
@@ -152,12 +166,19 @@ export default function CorridasTab() {
 
   const loadRunDetail = useCallback(async (runId: string) => {
     setRunItemsLoading(true);
+    setRunItemsError(false);
     try {
       const res = await fetch(`/api/nomina/run/${runId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setRunItems(data.items ?? []);
       setRunIncidencias(data.incidencias ?? []);
-    } catch { setRunItems([]); setRunIncidencias([]); }
+    } catch {
+      // Error ≠ corrida vacía: se limpia lo viejo y se muestra error + reintentar.
+      setRunItems([]);
+      setRunIncidencias([]);
+      setRunItemsError(true);
+    }
     finally { setRunItemsLoading(false); }
   }, []);
 
@@ -328,10 +349,20 @@ export default function CorridasTab() {
         </div>
       )}
 
+      {empError && (
+        <Alert tone="danger" className="mb-4" action={<RetryButton onClick={loadEmployees} />}>
+          No se pudo cargar la lista de empleados — la captura de incidencias la necesita.
+        </Alert>
+      )}
+
     {runsLoading ? (
       <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-12 justify-center">
         <Loader2 className="h-5 w-5 animate-spin" /> Cargando corridas...
       </div>
+    ) : runsError ? (
+      <Alert tone="danger" action={<RetryButton onClick={loadRuns} />}>
+        No se pudieron cargar las corridas. Revisa tu conexión e inténtalo de nuevo.
+      </Alert>
     ) : runs.length === 0 ? (
       <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
         <Calendar className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
@@ -428,6 +459,12 @@ export default function CorridasTab() {
                   {runItemsLoading ? (
                     <div className="flex items-center gap-2 text-cos-ink-soft text-xs py-6 justify-center">
                       <Loader2 className="h-4 w-4 animate-spin" /> Cargando desglose…
+                    </div>
+                  ) : runItemsError ? (
+                    <div className="p-4">
+                      <Alert tone="danger" action={<RetryButton onClick={() => loadRunDetail(run.id)} />}>
+                        No se pudo cargar el desglose de la corrida.
+                      </Alert>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
@@ -604,6 +641,10 @@ export default function CorridasTab() {
         <div className="flex items-center gap-2 text-cos-ink-soft text-sm py-12 justify-center">
           <Loader2 className="h-5 w-5 animate-spin" /> Cargando...
         </div>
+      ) : incError ? (
+        <Alert tone="danger" action={<RetryButton onClick={loadIncidencias} />}>
+          No se pudieron cargar las incidencias del periodo.
+        </Alert>
       ) : incidencias.length === 0 ? (
         <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <ClipboardList className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />

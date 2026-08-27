@@ -44,17 +44,43 @@ const ALERT_TONES: Record<AlertTone, string> = {
   warning: "bg-cos-amber-tint border-cos-amber-ink/20 text-cos-amber-ink",
 };
 
-/** Consistent inline alert/banner (was styled slightly differently per page). */
+/** Consistent inline alert/banner (was styled slightly differently per page).
+ *  `action` (típicamente un botón de reintentar) se alinea a la derecha —
+ *  un error de fetch SIEMPRE debe ofrecer salida, no sólo informar. */
 export function Alert({
   tone = "info",
   className,
+  action,
   children,
 }: {
   tone?: AlertTone;
   className?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("rounded-lg border px-4 py-3 text-sm", ALERT_TONES[tone], className)}>{children}</div>
+    <div className={cn("rounded-lg border px-4 py-3 text-sm", ALERT_TONES[tone], className)}>
+      {action ? (
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">{children}</div>
+          <div className="shrink-0">{action}</div>
+        </div>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
+
+/** Botón de reintentar para usar como `action` de un Alert de error. */
+export function RetryButton({ onClick, label = "Reintentar" }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-md border border-current/30 px-3 py-1 text-xs font-semibold hover:bg-white/40"
+    >
+      {label}
+    </button>
   );
 }

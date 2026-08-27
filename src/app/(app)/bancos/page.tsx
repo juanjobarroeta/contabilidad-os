@@ -21,6 +21,7 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { Loading } from "@/components/ui/feedback";
 import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWorkbench";
 import { GestionBancos, type VistaBancos } from "@/components/bancos/GestionBancos";
 import { MESES } from "@/components/contabilidad/PeriodProvider";
@@ -44,7 +45,7 @@ function tabInicial(): Tab {
 }
 
 export default function BancosPage() {
-  const { activeCompany } = useCompany();
+  const { activeCompany, loading: companyLoading } = useCompany();
   const [tab, setTab] = useState<Tab>(tabInicial);
   // Período de la mesa (la lista de Movimientos trae su propio corte por mes).
   const now = new Date();
@@ -66,6 +67,10 @@ export default function BancosPage() {
   }
 
   if (!activeCompany) {
+    // Mientras el CompanyProvider carga aún no se sabe qué empresa está
+    // activa: pintar "Selecciona una empresa." aquí era un destello falso en
+    // cada entrada a la página.
+    if (companyLoading) return <Loading className="p-8" />;
     return <div className="p-8 text-sm text-cos-ink-faint">Selecciona una empresa.</div>;
   }
 

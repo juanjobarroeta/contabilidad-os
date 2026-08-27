@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { CumplimientoTabs } from "@/components/layout/CumplimientoTabs";
-import { Card, Badge, type BadgeTone } from "@/components/ui";
+import { Card, Badge, Alert, RetryButton, type BadgeTone } from "@/components/ui";
 import { ctaParaHallazgo } from "@/lib/hallazgos-cta";
 
 interface Hallazgo {
@@ -91,8 +91,9 @@ export default function HallazgosPage() {
       setBrief(data.brief ?? null);
       setResumen(data.resumen ?? { ABIERTO: 0, POSPUESTO: 0, RESUELTO: 0, IGNORADO: 0 });
     } catch {
+      // hallazgos queda en null (= desconocido): "Sin hallazgos abiertos — el
+      // auditor no detectó riesgos" jamás debe afirmarse desde un fetch fallido.
       setError("No se pudieron cargar los hallazgos.");
-      setHallazgos([]);
     }
   }, [activeCompany, tab]);
 
@@ -183,10 +184,9 @@ export default function HallazgosPage() {
       </div>
 
       {error && (
-        <div className="mt-4 flex items-center gap-2 rounded-control bg-cos-red-tint px-4 py-3 text-sm text-cos-red-ink">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
+        <Alert tone="danger" className="mt-4" action={<RetryButton onClick={load} />}>
           {error}
-        </div>
+        </Alert>
       )}
 
       {/* Lectura del auditor: la síntesis priorizada de TODO lo abierto —
@@ -242,9 +242,13 @@ export default function HallazgosPage() {
       )}
 
       {hallazgos === null ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-cos-ink-faint">
-          <Loader2 className="h-5 w-5 animate-spin" /> Cargando hallazgos…
-        </div>
+        // Con error de carga el hueco lo ocupa el Alert de arriba: ni spinner
+        // eterno ni un falso "Sin hallazgos abiertos".
+        !error && (
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-cos-ink-faint">
+            <Loader2 className="h-5 w-5 animate-spin" /> Cargando hallazgos…
+          </div>
+        )
       ) : hallazgos.length === 0 ? (
         <Card className="mt-5 rounded-card border-cos-line p-10 text-center shadow-card">
           <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-cos-jade-ink opacity-50" />

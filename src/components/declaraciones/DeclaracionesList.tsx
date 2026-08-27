@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { FileText, CheckCircle2, Loader2, Download } from "lucide-react";
+import { Alert, RetryButton } from "@/components/ui";
 import { FaltantesUploader, type EmpresaCobertura } from "@/components/declaraciones/FaltantesUploader";
 
 type Cobertura = { total: number; empresasConFaltantes: number; empresas: EmpresaCobertura[] };
@@ -24,15 +25,27 @@ export function DeclaracionesList() {
   const [filtroTipo, setFiltroTipo] = useState<string>("TODAS");
   const [busqueda, setBusqueda] = useState("");
 
+  const [error, setError] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
+    setError(false);
     try {
-      const [cob, acu] = await Promise.all([
-        fetch("/api/declaraciones/cobertura").then((r) => r.json()),
-        fetch("/api/declaraciones/acuses").then((r) => (r.ok ? r.json() : { acuses: [] })),
+      // La cobertura es el dato primario: sin .ok/.catch, una falla de red se
+      // veía como "Todo al día" — un falso vacío en la pantalla de captura.
+      const [cobRes, acuRes] = await Promise.all([
+        fetch("/api/declaraciones/cobertura"),
+        fetch("/api/declaraciones/acuses").catch(() => null),
       ]);
+      if (!cobRes.ok) throw new Error();
+      const cob: Cobertura = await cobRes.json();
+      // Los acuses son secundarios: si fallan, la lista simplemente no se muestra.
+      const acu = acuRes?.ok ? await acuRes.json() : { acuses: [] };
       setData(cob);
       setAcuses(acu.acuses ?? []);
+    } catch {
+      setData(null);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -76,6 +89,10 @@ export function DeclaracionesList() {
         <div className="mt-10 flex items-center gap-2 text-cos-ink-faint">
           <Loader2 className="h-4 w-4 animate-spin" /> Revisando qué falta…
         </div>
+      ) : error ? (
+        <Alert tone="danger" className="mt-10" action={<RetryButton onClick={load} />}>
+          No se pudo cargar la lista de declaraciones por capturar.
+        </Alert>
       ) : !data || data.total === 0 ? (
         <div className="mt-10 flex flex-col items-center gap-2 rounded-card border border-cos-line bg-cos-card py-12 text-center">
           <CheckCircle2 className="h-8 w-8 text-cos-green-ink" />

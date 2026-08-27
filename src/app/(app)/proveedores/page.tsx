@@ -17,7 +17,7 @@ import {
   Truck, Plus, Search, Pencil, Loader2, FileText, X, DownloadCloud, Landmark,
 } from "lucide-react";
 import {
-  TableContainer, Table, THead, TBody, TR, TH, TD,
+  TableContainer, Table, THead, TBody, TR, TH, TD, Alert, RetryButton,
 } from "@/components/ui";
 
 const REGIMENES_FISCALES = [
@@ -59,6 +59,7 @@ export default function ProveedoresPage() {
   const { activeCompany } = useCompany();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Proveedor | null>(null);
@@ -71,12 +72,18 @@ export default function ProveedoresPage() {
   const fetchProveedores = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true);
+    setFetchError("");
     try {
       const res = await fetch(
         `/api/proveedores?companyId=${activeCompany.id}&search=${encodeURIComponent(search)}`
       );
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setProveedores(Array.isArray(data) ? data : []);
+    } catch {
+      // Error ≠ vacío: el estado "Sin proveedores aún" invita a re-importar de
+      // CFDIs, y eso no debe nacer de un fetch fallido.
+      setFetchError("No se pudieron cargar los proveedores.");
     } finally {
       setLoading(false);
     }
@@ -183,7 +190,9 @@ export default function ProveedoresPage() {
         <div>
           <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Proveedores</h1>
           <p className="mt-1.5 text-[15px] text-cos-ink-soft">
-            {activeCompany.razonSocial} · {proveedores.length} proveedor{proveedores.length !== 1 ? "es" : ""}
+            {activeCompany.razonSocial}
+            {/* Con error no hay conteo que afirmar: "0 proveedores" sería falso. */}
+            {!loading && !fetchError && ` · ${proveedores.length} proveedor${proveedores.length !== 1 ? "es" : ""}`}
           </p>
         </div>
         <div className="flex gap-2.5">
@@ -230,6 +239,10 @@ export default function ProveedoresPage() {
           <Loader2 className="h-5 w-5 animate-spin" />
           Cargando proveedores…
         </div>
+      ) : fetchError ? (
+        <Alert tone="danger" className="mt-5" action={<RetryButton onClick={fetchProveedores} />}>
+          {fetchError}
+        </Alert>
       ) : proveedores.length === 0 ? (
         <div className="mt-5 flex flex-col items-center justify-center rounded-card border border-dashed border-cos-line bg-cos-card py-16 text-center">
           <Truck className="mb-3 h-12 w-12 text-cos-ink-faint opacity-40" />

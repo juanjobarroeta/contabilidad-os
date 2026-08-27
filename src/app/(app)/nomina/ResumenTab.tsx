@@ -15,7 +15,7 @@ import {
   CalendarDays, BadgeCheck, Clock4, Receipt, FileText, Ban, Loader2, X,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Card, Money, Loading } from "@/components/ui";
+import { Alert, Card, Money, Loading, RetryButton } from "@/components/ui";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import ValidacionCalculo from "./ValidacionCalculo";
 import ImssPagosCard from "./ImssPagosCard";
@@ -94,6 +94,9 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [hub, setHub] = useState<HubData | null>(null);
   const [loading, setLoading] = useState(true);
+  // Error de carga. Si CUALQUIERA de los tres fetches falla, el resumen entero
+  // sería mentira (hero de $0.00, equipo vacío) — mejor error + reintentar.
+  const [loadError, setLoadError] = useState(false);
 
   // Cancelación de un timbre de nómina: modal con motivo SAT. Tras cancelar,
   // el empleado queda listo para retimbrar (la corrida vuelve a CALCULATED).
@@ -109,21 +112,21 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
   const load = useCallback(async () => {
     if (!activeCompany) return;
     setLoading(true);
+    setLoadError(false);
     try {
       const [empRes, runRes, hubRes] = await Promise.all([
         fetch(`/api/empleados?companyId=${activeCompany.id}&withUltimoRecibo=1`),
         fetch(`/api/nomina/run?companyId=${activeCompany.id}`),
         fetch(`/api/nomina/hub?companyId=${activeCompany.id}`),
       ]);
-      if (empRes.ok) {
-        const data = await empRes.json();
-        setEmployees(Array.isArray(data) ? data : data.employees ?? []);
-      }
-      if (runRes.ok) {
-        const data = await runRes.json();
-        setRuns(Array.isArray(data) ? data : data.runs ?? []);
-      }
-      if (hubRes.ok) setHub(await hubRes.json());
+      if (!empRes.ok || !runRes.ok || !hubRes.ok) throw new Error("hub fetch failed");
+      const empData = await empRes.json();
+      setEmployees(Array.isArray(empData) ? empData : empData.employees ?? []);
+      const runData = await runRes.json();
+      setRuns(Array.isArray(runData) ? runData : runData.runs ?? []);
+      setHub(await hubRes.json());
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -204,6 +207,11 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
 
       {loading ? (
         <Loading />
+      ) : loadError ? (
+        /* Fetch fallido → error con reintento, NUNCA el hero en $0.00. */
+        <Alert tone="danger" className="mt-4" action={<RetryButton onClick={load} />}>
+          No se pudo cargar el resumen de nómina. Revisa tu conexión e inténtalo de nuevo.
+        </Alert>
       ) : (
         <div className="mt-4 space-y-5">
           {/* banner — nómina del mes */}
