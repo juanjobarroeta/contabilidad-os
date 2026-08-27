@@ -125,3 +125,38 @@ describe("IGNORED_TAGS_VALIDOS", () => {
     ]);
   });
 });
+
+// ─── Ola C: reclasificación de IVA al flujo ─────────────────────────────────
+import { reclasificacionIvaFlujo } from "./posting";
+
+describe("reclasificacionIvaFlujo — Art. 1-B, proporcional al pago", () => {
+  const ingreso = { tipo: "INGRESO", total: 1160, subtotal: 1000 };
+  const egreso = { tipo: "EGRESO", total: 2320, subtotal: 2000 };
+
+  it("cobro completo de un ingreso: reclasifica el delta exacto", () => {
+    expect(reclasificacionIvaFlujo(1160, ingreso, true)).toEqual({ lado: "TRASLADADO", monto: 160 });
+  });
+
+  it("cobro parcial: proporcional — media factura, medio IVA", () => {
+    expect(reclasificacionIvaFlujo(580, ingreso, true)).toEqual({ lado: "TRASLADADO", monto: 80 });
+  });
+
+  it("pago de un egreso: acreditable pendiente → pagado", () => {
+    expect(reclasificacionIvaFlujo(2320, egreso, false)).toEqual({ lado: "ACREDITABLE", monto: 320 });
+  });
+
+  it("con retenciones (delta neto), la pendiente queda en cero al liquidar", () => {
+    // Honorarios: subtotal 1000, IVA 160, ret ISR 100 y ret IVA 106.67 →
+    // total 953.33; delta = −46.67 < 0 → el devengo no tocó 209 → null.
+    expect(reclasificacionIvaFlujo(953.33, { tipo: "INGRESO", total: 953.33, subtotal: 1000 }, true)).toBeNull();
+    // Arrendamiento con delta positivo chico: reclasifica ese delta, no el IVA bruto.
+    const arr = { tipo: "INGRESO", total: 1053.33, subtotal: 1000 };
+    expect(reclasificacionIvaFlujo(1053.33, arr, true)).toEqual({ lado: "TRASLADADO", monto: 53.33 });
+  });
+
+  it("dirección equivocada o sin IVA → null", () => {
+    expect(reclasificacionIvaFlujo(1160, ingreso, false)).toBeNull(); // "pago" de un ingreso
+    expect(reclasificacionIvaFlujo(500, { tipo: "EGRESO", total: 500, subtotal: 500 }, false)).toBeNull();
+    expect(reclasificacionIvaFlujo(0, ingreso, true)).toBeNull();
+  });
+});

@@ -45,12 +45,19 @@ cuenta bancaria nada cambia (cero churn); los saldos históricos migran a
 subcuentas mes a mes al RE-postear — no automáticamente; los matches de
 construcción (Gasto/Raya/Reembolso) siguen fuera de este motor (satélite).
 
-**Ola C — reclasificación de IVA (el premio contable):** hoy el IVA se
-postea a 208/118 al TIMBRAR — el libro afirma que todo está cobrado/pagado.
-Correcto: devengo a 209/119 (pendiente) y reclasificación proporcional a
-208/118 al conciliar el cobro/pago. Las cuentas ya existen en el catálogo
-(constantes muertas en `catalog.ts`). Con esto la balanza ata contra la
-DIOT (que ya es de flujo).
+**Ola C — reclasificación de IVA: CERRADA (2026-08-28).** El devengo postea
+a las cuentas PENDIENTES (AB 209.01 trasladado / DR 119.01 acreditable,
+Art. 1-B LIVA) y al conciliar el cobro/pago el motor reclasifica
+proporcionalmente a 208.01/118.01 (`reclasificacionIvaFlujo`, pura: usa el
+MISMO delta total−subtotal del devengo, así la pendiente queda exactamente
+en cero al liquidar — retenciones incluidas; el aplicado exacto sale del
+montoAsignado en 1-a-varios). **Regla de transición:** sólo reclasifican
+facturas cuyo devengo pasó por 209/119 (las legadas con devengo directo a
+208/118 conservan su tratamiento hasta re-postear su mes) — las dos
+generaciones conviven sin descuadrar. balanzaPreview espeja el devengo
+nuevo. Con esto el saldo de 208 en la balanza ES el IVA cobrado del
+periodo: ata contra la DIOT (flujo). Itests: devengo/reclas/parcial/legada
+en Postgres real, re-posteo idempotente.
 
 **Ola D — UX del cierre:** /contabilidad como «Cierre del mes» guiado — un
 solo flujo con pasos gateados (CFDIs ✓ → banco conciliado → postear →
