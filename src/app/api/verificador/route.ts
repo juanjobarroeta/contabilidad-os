@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { AuthzError, requireUser } from "@/lib/authz";
+import { AuthzError, empresasAccesiblesIds, requireUser } from "@/lib/authz";
 import { validarCurp, validarNss, validarRfc } from "@/lib/fiscal/verificador/estructura";
 import { consultar69b } from "@/lib/fiscal/verificador/lista69b";
 import { registrarBitacora } from "@/lib/audit";
@@ -17,26 +17,6 @@ import { registrarBitacora } from "@/lib/audit";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const dynamic = "force-dynamic";
-
-/** Empresas visibles para el usuario: membresías directas + las del despacho
- *  (cualquier rol) + todas si es operador de plataforma. */
-async function companyIdsVisibles(userId: string): Promise<string[] | "TODAS"> {
-  const u = await prisma.user.findUnique({ where: { id: userId }, select: { esOperador: true } });
-  if (u?.esOperador) return "TODAS";
-  const [directas, despachos] = await Promise.all([
-    prisma.companyMember.findMany({ where: { userId }, select: { companyId: true } }),
-    prisma.despachoMember.findMany({ where: { userId }, select: { despachoId: true } }),
-  ]);
-  const ids = new Set(directas.map((m) => m.companyId));
-  if (despachos.length > 0) {
-    const delDespacho = await prisma.company.findMany({
-      where: { despachoId: { in: despachos.map((d) => d.despachoId) } },
-      select: { id: true },
-    });
-    for (const c of delDespacho) ids.add(c.id);
-  }
-  return Array.from(ids);
-}
 
 type Conocido = {
   origen: "EMPRESA" | "CLIENTE" | "EMPLEADO";
@@ -86,9 +66,9 @@ function empleadoAConocido(e: EmpleadoRow): Conocido {
   };
 }
 
-async function conocidosDeRfc(rfc: string, visibles: string[] | "TODAS"): Promise<Conocido[]> {
-  const scope = visibles === "TODAS" ? {} : { companyId: { in: visibles } };
-  const scopeEmpresa = visibles === "TODAS" ? {} : { id: { in: visibles } };
+async function conocidosDeRfc(rfc: string, visibles: string[]): Promise<Conocido[]> {
+  const scope = { companyId: { in: visibles } };
+  const scopeEmpresa = { id: { in: visibles } };
   const [empresas, clientes, empleados] = await Promise.all([
     prisma.company.findMany({
       where: { rfc, ...scopeEmpresa },
@@ -137,9 +117,9 @@ async function conocidosDeRfc(rfc: string, visibles: string[] | "TODAS"): Promis
 async function conocidosDeEmpleado(
   campo: "curp" | "nss",
   valor: string,
-  visibles: string[] | "TODAS"
+  visibles: string[]
 ): Promise<Conocido[]> {
-  const scope = visibles === "TODAS" ? {} : { companyId: { in: visibles } };
+  const scope = { companyId: { in: visibles } };
   const empleados = await prisma.employee.findMany({
     where: { [campo]: valor, ...scope },
     select: EMPLEADO_SELECT,
@@ -177,7 +157,7 @@ export async function GET(req: Request) {
     const estructura = validarCurp(curp);
     bitacora("CURP", estructura.valor);
     const conocidos = estructura.formatoValido
-      ? await conocidosDeEmpleado("curp", estructura.valor, await companyIdsVisibles(user.id))
+      ? await conocidosDeEmpleado("curp", estructura.valor, await empresasAccesiblesIds(user.id))
       : [];
     return NextResponse.json({ tipo: "CURP", estructura, conocidos });
   }
@@ -185,7 +165,7 @@ export async function GET(req: Request) {
     const estructura = validarNss(nss);
     bitacora("NSS", estructura.valor);
     const conocidos = estructura.formatoValido
-      ? await conocidosDeEmpleado("nss", estructura.valor, await companyIdsVisibles(user.id))
+      ? await conocidosDeEmpleado("nss", estructura.valor, await empresasAccesiblesIds(user.id))
       : [];
     return NextResponse.json({ tipo: "NSS", estructura, conocidos });
   }
@@ -201,7 +181,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ tipo: "RFC", estructura, lista69b: null, conocidos: [] });
   }
 
-  const visibles = await companyIdsVisibles(user.id);
+  // Scoping canónico (P0-2): respeta DespachoMemberCompany; el operador
+  // recibe la lista explícita de todas las empresas activas.
+  const visibles = await empresasAccesiblesIds(user.id);
   const [lista69b, conocidos] = await Promise.all([
     consultar69b(estructura.valor).catch((e) => ({
       error: e instanceof Error ? e.message : "No se pudo consultar la lista 69-B",
