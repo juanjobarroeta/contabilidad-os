@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { MESES } from "@/components/contabilidad/PeriodProvider";
 import { PeriodPicker } from "@/components/contabilidad/PeriodPicker";
+import Link from "next/link";
+import { useDescargaXml, ErroresDeValidacion } from "@/components/contabilidad/descarga-xml";
 
 // ── Readiness CE (tipos espejo de /api/contabilidad/ce-readiness) ──────────────
 export type ReadinessCheckEstado = "ok" | "warn" | "error";
@@ -74,6 +76,13 @@ export function ContabilidadElectronicaPanel({
     return () => { cancelled = true; };
   }, [qs]);
 
+  const { descargar, descargando, error: errorDescarga } = useDescargaXml();
+  // Compuerta espejo del servidor: un mes sin postear responde 422 en
+  // balanza/pólizas/auxiliares — mejor deshabilitar con la razón aquí que
+  // dejar que el click choque contra el candado.
+  const mesSinPostear = readiness != null &&
+    readiness.checks.find((c) => c.clave === "posteo")?.estado !== "ok";
+
   const entregables: {
     key: string;
     label: string;
@@ -127,13 +136,22 @@ export function ContabilidadElectronicaPanel({
             LEEME que dice qué trae y qué falta.
           </p>
         </div>
-        <a
-          href={`/api/contabilidad/paquete?${qs}`}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-medium text-white hover:bg-cos-brand-deep"
+        <button
+          type="button"
+          onClick={() => descargar(`/api/contabilidad/paquete?${qs}`)}
+          disabled={descargando !== null}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-medium text-white hover:bg-cos-brand-deep disabled:opacity-60"
         >
-          <Download className="h-3.5 w-3.5" /> Descargar paquete
-        </a>
+          {descargando?.includes("/paquete") ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}{" "}
+          Descargar paquete
+        </button>
       </div>
+
+      <ErroresDeValidacion error={errorDescarga} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {entregables.map(({ key, label, desc, Icon, href, note }) => (
@@ -153,12 +171,26 @@ export function ContabilidadElectronicaPanel({
                 Abrir pólizas y auxiliares <ExternalLink className="h-3.5 w-3.5" />
               </a>
             ) : (
-              <a
-                href={href}
-                className="inline-flex items-center justify-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-medium text-white hover:bg-cos-brand-deep"
+              <button
+                type="button"
+                onClick={() => href && descargar(href)}
+                disabled={descargando !== null || (key === "balanza" && mesSinPostear)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-medium text-white hover:bg-cos-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Download className="h-3.5 w-3.5" /> Descargar XML
-              </a>
+                {descargando === href ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}{" "}
+                Descargar XML
+              </button>
+            )}
+            {key === "balanza" && mesSinPostear && (
+              <p className="mt-2 text-[11px] text-cos-amber-ink">
+                El mes no está posteado — postéalo en{" "}
+                <Link href="/contabilidad/cierre" className="underline">Cierres mensuales</Link>{" "}
+                para generar la balanza definitiva.
+              </p>
             )}
             {note && <p className="mt-2 text-[11px] text-cos-ink-faint">{note}</p>}
           </div>

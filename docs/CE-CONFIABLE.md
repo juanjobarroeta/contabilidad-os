@@ -59,10 +59,17 @@ nuevo. Con esto el saldo de 208 en la balanza ES el IVA cobrado del
 periodo: ata contra la DIOT (flujo). Itests: devengo/reclas/parcial/legada
 en Postgres real, re-posteo idempotente.
 
-**Ola D — UX del cierre:** /contabilidad como «Cierre del mes» guiado — un
-solo flujo con pasos gateados (CFDIs ✓ → banco conciliado → postear →
-cuadre → entregables), el semáforo de readiness DESHABILITANDO descargas en
-vez de decorarlas, y el diagnóstico de evidencia bancaria visible.
+**Ola D — UX del cierre: CERRADA (2026-08-28).** El flujo guiado con pasos
+y estado ya existía (PasosDelFlujo + pasos-cierre, del brief UX previo); lo
+que faltaba era la última milla de los entregables: las descargas eran
+`<a href>` pelones — un 422 del validador (Ola A) se descargaba como un
+.XML roto. Ahora (`descarga-xml.tsx`): fetch con el error pintado como
+lista accionable, nombre de archivo del Content-Disposition, botón de
+balanza DESHABILITADO con razón y CTA cuando el mes no está posteado
+(espejo del candado del servidor), y el diagnóstico de evidencia bancaria
+(X-Polizas-Sin-Evidencia) visible tras generar pólizas — con instrucción de
+capturar la CLABE de la contraparte. El copy del readiness dejó de
+prometer XML de meses sin postear.
 
 **Notas de alcance:** cheques no se emiten (no capturamos cheques; SPEI
 cubre la operación real). c_Banco incluye «999» genérico — no lo usamos:
