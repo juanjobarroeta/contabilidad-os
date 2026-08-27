@@ -1,0 +1,29 @@
+name: Refacciones - mercado (enriquecimiento nocturno)
+
+# Busca en el mercado (Google CSE restringido a MercadoLibre MX) las partes de
+# MAYOR demanda que no tienen consulta fresca, y guarda título/precio/ligas en
+# RefaccionMercado. Presupuesto de 40 búsquedas por corrida para convivir con
+# el botón «Consultar mercado» de la ficha dentro de la cuota gratis (100/día);
+# si Google agota la cuota, el endpoint corta solo y mañana sigue.
+#
+# NOTE: GitHub solo corre schedule: desde la rama default (main). Usa el botón
+# "Run workflow" (workflow_dispatch) para una corrida manual.
+
+on:
+  schedule:
+    - cron: "10 9 * * *" # ~03:00 CT (UTC-6), diario, cuota de Google recién renovada
+  workflow_dispatch: {}
+
+jobs:
+  mercado:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enriquecer refacciones con el mercado
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS -X POST "${URL}/api/cron/refacciones-mercado?limite=40" -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
