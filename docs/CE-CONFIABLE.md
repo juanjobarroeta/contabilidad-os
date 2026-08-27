@@ -33,15 +33,17 @@ quedan tres olas de fondo.
 
 ## Pendiente — olas de fondo
 
-**Ola B — posteo (los tres agujeros del banco):**
-1. Pagos de impuestos conciliados contra `TaxDeclaration` no se postean
-   (`posting.ts` TODO(impuestos)) → Bancos sobrevaluado. Postearlos como
-   DR Impuestos y derechos / AB Bancos (igual que IGNORED+TAX_PAYMENT).
-2. Una sola cuenta 102.01 para todos los bancos → subcuenta por
-   `BankAccount` (mata la doble contabilización de traspasos internos y da
-   CtaOri/CtaDest reales).
-3. `IGNORED` sin tag desaparece → debe bloquear el cierre igual que
-   UNMATCHED (misma disciplina).
+**Ola B — posteo: CERRADA (2026-08-28).** Enteramientos conciliados contra
+`TaxDeclaration` postean (espejo de TAX_PAYMENT; devolución invertida). Con
+2+ cuentas bancarias, cada una postea en su subcuenta contable propia
+(102.01.NN, creada y ligada vía `BankAccount.chartAccountId`; CodAgrup
+heredado del padre) y los traspasos internos generan UNA póliza cruzada — el
+depósito espejo se detecta y no duplica (`planearTraspasos`, pura y
+testeada). `IGNORED` sin categoría BLOQUEA el cierre igual que UNMATCHED.
+Primer itest de `postMonth` contra Postgres real. Notas: con una sola
+cuenta bancaria nada cambia (cero churn); los saldos históricos migran a
+subcuentas mes a mes al RE-postear — no automáticamente; los matches de
+construcción (Gasto/Raya/Reembolso) siguen fuera de este motor (satélite).
 
 **Ola C — reclasificación de IVA (el premio contable):** hoy el IVA se
 postea a 208/118 al TIMBRAR — el libro afirma que todo está cobrado/pagado.

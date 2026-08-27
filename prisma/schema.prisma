@@ -1273,8 +1273,13 @@ model BankAccount {
   // Belvo / open banking
   belvoAccountId String?
   belvoLinkId    String?
+  // Subcuenta contable de ESTA cuenta bancaria (102.01.NN). La crea el motor
+  // de posteo cuando la empresa tiene 2+ cuentas — así cada banco tiene su
+  // saldo propio y los traspasos internos dejan de lavarse en una sola cuenta.
+  chartAccountId String?
 
   company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chartAccount   ChartAccount?          @relation(fields: [chartAccountId], references: [id])
   transactions   BankTransaction[]
   conciliaciones ConciliacionBancaria[]
   gastos         Gasto[]
@@ -2112,6 +2117,7 @@ model ChartAccount {
   company          Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   entries          AccountingEntry[]
   postingOverrides PostingCuentaOverride[]
+  bankAccounts BankAccount[]
 
   @@unique([companyId, cuentaSAT, subcuenta])
   @@index([companyId, codAgrup])
