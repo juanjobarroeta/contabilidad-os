@@ -162,7 +162,7 @@ export async function cargarProveedoresDiot(
         pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
       },
       select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
-    }),
+    }).then((rows) => rows.map((l) => ({ ...l, impPagado: l.impPagado === null ? null : Number(l.impPagado), ivaTrasladado: l.ivaTrasladado === null ? null : Number(l.ivaTrasladado) }))),
   ]);
 
   // 3) Facturas madre PPD (EGRESO) de esos pagos — mismos filtros que el motor.
@@ -191,10 +191,10 @@ export async function cargarProveedoresDiot(
 
   const egresos: EgresoDelMes[] = egresosDelMes.map((inv) => ({
     metodoPago: inv.metodoPago,
-    subtotal: inv.subtotal,
-    total: inv.total,
-    totalImpuestos: inv.totalImpuestos,
-    taxes: inv.taxes,
+    subtotal: Number(inv.subtotal),
+    total: Number(inv.total),
+    totalImpuestos: Number(inv.totalImpuestos),
+    taxes: inv.taxes.map((t) => ({ ...t, tasa: Number(t.tasa), base: t.base === null ? null : Number(t.base), importe: Number(t.importe) })),
     ivaNoAcreditable: inv.ivaNoAcreditable || esEfos(inv.customer?.rfc),
     rfc: inv.customer?.rfc ?? null,
     razonSocial: inv.customer?.razonSocial ?? null,
@@ -205,10 +205,10 @@ export async function cargarProveedoresDiot(
     .map((p) => ({
       uuid: p.uuid!,
       metodoPago: p.metodoPago,
-      subtotal: p.subtotal,
-      total: p.total,
-      totalImpuestos: p.totalImpuestos,
-      taxes: p.taxes,
+      subtotal: Number(p.subtotal),
+      total: Number(p.total),
+      totalImpuestos: Number(p.totalImpuestos),
+      taxes: p.taxes.map((t) => ({ ...t, tasa: Number(t.tasa), base: t.base === null ? null : Number(t.base), importe: Number(t.importe) })),
       ivaNoAcreditable: p.ivaNoAcreditable || esEfos(p.customer?.rfc),
       rfc: p.customer?.rfc ?? null,
       razonSocial: p.customer?.razonSocial ?? null,

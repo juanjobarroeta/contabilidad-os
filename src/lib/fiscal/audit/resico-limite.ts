@@ -73,7 +73,7 @@ export async function cargarResicoLimite(
     _sum: { total: true },
   });
 
-  return { companyId, kind, ejercicio, acumulado: agg._sum.total ?? 0 };
+  return { companyId, kind, ejercicio, acumulado: Number(agg._sum.total ?? 0) };
 }
 
 /**

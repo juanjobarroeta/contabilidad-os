@@ -44,8 +44,8 @@ export async function notifyNewInvoices(
 
   let emitidas = 0, recibidas = 0, montoEmit = 0, montoReci = 0;
   for (const g of grouped) {
-    if (g.tipo === "INGRESO") { emitidas = g._count._all; montoEmit = g._sum.total ?? 0; }
-    else if (g.tipo === "EGRESO") { recibidas = g._count._all; montoReci = g._sum.total ?? 0; }
+    if (g.tipo === "INGRESO") { emitidas = g._count._all; montoEmit = Number(g._sum.total ?? 0); }
+    else if (g.tipo === "EGRESO") { recibidas = g._count._all; montoReci = Number(g._sum.total ?? 0); }
   }
   if (emitidas === 0 && recibidas === 0) return { notified: 0 };
 

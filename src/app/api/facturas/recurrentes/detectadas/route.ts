@@ -91,11 +91,11 @@ export async function GET(req: Request) {
       facturas.map((inv) => ({
         id: inv.id,
         fecha: inv.fecha,
-        total: inv.total,
+        total: Number(inv.total),
         customerId: inv.customerId,
         cliente: inv.customer?.razonSocial ?? "Sin cliente",
-        items: inv.items,
-        ivaTratamiento: derivarTratamientoIva(inv.taxes),
+        items: inv.items.map((it) => ({ ...it, cantidad: Number(it.cantidad), valorUnitario: Number(it.valorUnitario) })),
+        ivaTratamiento: derivarTratamientoIva(inv.taxes.map((t) => ({ ...t, tasa: Number(t.tasa) }))),
       })),
       FORMAS_A_EVALUAR
     );

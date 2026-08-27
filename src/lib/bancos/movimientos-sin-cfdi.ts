@@ -318,7 +318,7 @@ export async function detectarMovimientosSinCfdi(
       tipo: c.tipo,
       metodoPago: c.metodoPago,
       fecha: c.fecha,
-      total: c.total,
+      total: Number(c.total),
       uuid: c.uuid,
       tieneMovimientoConciliado: c.bankTransactions.length > 0 || c.conciliacionDetalles.length > 0,
     })),

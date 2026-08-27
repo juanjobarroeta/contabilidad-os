@@ -174,25 +174,27 @@ export async function perfilContacto(
   if (!contacto || contacto.companyId !== companyId) return null;
 
   const tipo = direccion === "CLIENTE" ? "INGRESO" : "EGRESO";
-  const todasDb = await db.invoice.findMany({
-    where: { companyId, customerId, tipo, status: { not: "CANCELLED" } },
-    select: {
-      id: true,
-      uuid: true,
-      serie: true,
-      folio: true,
-      fecha: true,
-      total: true,
-      metodoPago: true,
-      tipoSat: true,
-      facturapiId: true,
-      // Prefiltro barato para detectar anticipos (clave 84111506); el rawXml
-      // no se trae completo — sólo se pregunta si contiene la clave.
-      rawXml: true,
-      conciliacionDetalles: { select: { montoAsignado: true } },
-    },
-    orderBy: { fecha: "desc" },
-  });
+  const todasDb = (
+    await db.invoice.findMany({
+      where: { companyId, customerId, tipo, status: { not: "CANCELLED" } },
+      select: {
+        id: true,
+        uuid: true,
+        serie: true,
+        folio: true,
+        fecha: true,
+        total: true,
+        metodoPago: true,
+        tipoSat: true,
+        facturapiId: true,
+        // Prefiltro barato para detectar anticipos (clave 84111506); el rawXml
+        // no se trae completo — sólo se pregunta si contiene la clave.
+        rawXml: true,
+        conciliacionDetalles: { select: { montoAsignado: true } },
+      },
+      orderBy: { fecha: "desc" },
+    })
+  ).map((f) => ({ ...f, total: Number(f.total) }));
   // Las notas de crédito viajan como INGRESO/EGRESO con tipoSat "E": contarlas
   // junto a las facturas inflaba «facturado» y su saldo. Van aparte y restan.
   // Anticipo: CFDI cuyo ÚNICO concepto es la clave 84111506 del SAT. Se marca
@@ -240,7 +242,7 @@ export async function perfilContacto(
   const amparadoPorUuid = new Map<string, number>();
   for (const l of links) {
     const k = normalizarUuid(l.parentUuid);
-    amparadoPorUuid.set(k, (amparadoPorUuid.get(k) ?? 0) + (l.impPagado ?? 0));
+    amparadoPorUuid.set(k, (amparadoPorUuid.get(k) ?? 0) + Number(l.impPagado ?? 0));
   }
 
   const facturas: FacturaPerfil[] = facturasDb.map((f) => {

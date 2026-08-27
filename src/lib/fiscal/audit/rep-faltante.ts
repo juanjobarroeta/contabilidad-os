@@ -68,7 +68,7 @@ export async function cargarCobrosSinRep(companyId: string, hoy: Date): Promise<
         select: { montoAsignado: true },
       },
     },
-  });
+  }).then((rows) => rows.map((f) => ({ ...f, total: Number(f.total), totalImpuestos: Number(f.totalImpuestos), taxes: f.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })));
   if (facturas.length === 0) return [];
 
   // Empate por UUID normalizado (REP en MAYÚSCULAS vs PAC en minúsculas).
@@ -82,7 +82,7 @@ export async function cargarCobrosSinRep(companyId: string, hoy: Date): Promise<
   const amparadoPorUuid = new Map<string, number>();
   for (const l of links) {
     const k = normalizarUuid(l.parentUuid);
-    amparadoPorUuid.set(k, (amparadoPorUuid.get(k) ?? 0) + (l.impPagado ?? 0));
+    amparadoPorUuid.set(k, (amparadoPorUuid.get(k) ?? 0) + Number(l.impPagado ?? 0));
   }
 
   const resultado: CobroSinRep[] = [];

@@ -105,20 +105,22 @@ export async function gastosDeOperacion(
   desde: Date,
   hasta: Date
 ): Promise<GastosResultado> {
-  const facturas = await db.invoice.findMany({
-    where: {
-      companyId,
-      tipo: "EGRESO",
-      status: { not: "CANCELLED" },
-      fecha: { gte: desde, lt: hasta },
-      // Ya contados arriba: compra de unidad, costos atribuidos a una unidad y
-      // entradas de refacciones.
-      vehiculosComprados: { none: {} },
-      vehiculoCostos: { none: {} },
-      refaccionMovimientos: { none: {} },
-    },
-    select: { id: true, subtotal: true, tipoSat: true, rawXml: true },
-  });
+  const facturas = (
+    await db.invoice.findMany({
+      where: {
+        companyId,
+        tipo: "EGRESO",
+        status: { not: "CANCELLED" },
+        fecha: { gte: desde, lt: hasta },
+        // Ya contados arriba: compra de unidad, costos atribuidos a una unidad y
+        // entradas de refacciones.
+        vehiculosComprados: { none: {} },
+        vehiculoCostos: { none: {} },
+        refaccionMovimientos: { none: {} },
+      },
+      select: { id: true, subtotal: true, tipoSat: true, rawXml: true },
+    })
+  ).map((f) => ({ ...f, subtotal: Number(f.subtotal) }));
 
   const porCuenta = new Map<string, GastoLinea>();
   const claves = new Map<string, Map<string, { monto: number; facturas: number; ejemplo: string | null }>>();

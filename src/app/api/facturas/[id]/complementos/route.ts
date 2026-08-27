@@ -167,7 +167,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const complementos = [...porRep.values()].map((g) => ({
     rep: filaConPago(g.fila),
-    montoPagado: g.links.reduce((s, l) => s + (l.impPagado ?? 0), 0),
+    montoPagado: g.links.reduce((s, l) => s + Number(l.impPagado ?? 0), 0),
     parcialidades: g.links.map((l) => l.numParcialidad).filter((n): n is number => n != null),
     fechaPago:
       g.links
@@ -180,11 +180,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const saldo =
     invoice.metodoPago === "PPD"
       ? saldoInsolutoPpd(
-          invoice.total,
+          Number(invoice.total),
           links.map((l) => ({
             numParcialidad: l.numParcialidad,
-            impPagado: l.impPagado,
-            impSaldoInsoluto: l.impSaldoInsoluto,
+            impPagado: l.impPagado === null ? null : Number(l.impPagado),
+            impSaldoInsoluto: l.impSaldoInsoluto === null ? null : Number(l.impSaldoInsoluto),
             fechaPago: l.fechaPago,
           }))
         )

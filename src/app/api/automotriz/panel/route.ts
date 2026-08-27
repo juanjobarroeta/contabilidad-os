@@ -268,7 +268,7 @@ export const GET = withAuthz(async (req: Request) => {
     timbrado: {
       emitidos: timbrado.reduce((a, t) => a + t._count._all, 0),
       buckets: Object.fromEntries(
-        timbrado.map((t) => [t.status, { n: t._count._all, monto: r2(t._sum.total ?? 0) }])
+        timbrado.map((t) => [t.status, { n: t._count._all, monto: r2(Number(t._sum.total ?? 0)) }])
       ),
       sinModelo: ["cancelacion_en_proceso", "rechazada"],
     },

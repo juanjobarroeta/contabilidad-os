@@ -123,7 +123,7 @@ export const GET = withAuthz(
       },
       select: { invoice: { select: { total: true } } },
     });
-    const facturado = vinculos.reduce((s, v) => s + (v.invoice?.total ?? 0), 0);
+    const facturado = vinculos.reduce((s, v) => s + Number(v.invoice?.total ?? 0), 0);
 
     return NextResponse.json({
       proyectoId: id,

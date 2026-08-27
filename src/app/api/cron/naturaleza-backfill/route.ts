@@ -76,7 +76,7 @@ async function handle(req: Request) {
         // No sabemos si el usoCfdi guardado fue default; G01/I0x/S01 son
         // explícitos de todos modos, y un G03 con clave de activo se marca.
         usoEsDefault: false,
-        items: inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
+        items: inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe) })),
       });
       if (clasif.fuente === "no_aplica") continue;
       await prisma.invoice.update({

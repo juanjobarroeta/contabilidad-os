@@ -131,7 +131,7 @@ export async function GET(req: Request) {
     const payments = matchedPayments.filter(p => p.invoiceId === inv.id);
     const reps = repByParent.get(inv.id) ?? [];
     const totalPaid = payments.reduce((s, p) => s + Number(p.monto), 0);
-    const totalReped = reps.reduce((s, r) => s + r.total, 0);
+    const totalReped = reps.reduce((s, r) => s + Number(r.total), 0);
     const pendingAmount = Math.round((totalPaid - totalReped) * 100) / 100;
 
     if (payments.length > 0) {
@@ -159,11 +159,11 @@ export async function GET(req: Request) {
   const sinCobroDetectado = ppdInvoices
     .map((inv) => {
       const reps = repByParent.get(inv.id) ?? [];
-      const totalReped = reps.reduce((s, r) => s + r.total, 0);
+      const totalReped = reps.reduce((s, r) => s + Number(r.total), 0);
       return {
         invoice: inv,
         totalReped,
-        saldoInsoluto: Math.round((inv.total - totalReped) * 100) / 100,
+        saldoInsoluto: Math.round((Number(inv.total) - totalReped) * 100) / 100,
       };
     })
     .filter((x) => !conPagoIds.has(x.invoice.id) && x.saldoInsoluto > 0.01)

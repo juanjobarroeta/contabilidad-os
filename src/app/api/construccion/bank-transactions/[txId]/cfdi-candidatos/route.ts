@@ -85,6 +85,7 @@ export const GET = withAuthz(
 
     const candidates = invoices
       .map((inv) => {
+        const total = Number(inv.total);
         const matchedAmount =
           inv.bankTransactions.reduce((s, b) => s + Math.abs(Number(b.monto)), 0) +
           inv.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
@@ -94,16 +95,16 @@ export const GET = withAuthz(
           serie: inv.serie,
           folio: inv.folio,
           fecha: inv.fecha,
-          total: inv.total,
+          total,
           metodoPago: inv.metodoPago,
           formaPago: inv.formaPago,
           rfc: inv.customer?.rfc ?? null,
           nombre: inv.customer?.razonSocial ?? null,
           alreadyMatched: inv.bankTransactions.length > 0 || inv.conciliacionDetalles.length > 0,
           matchedAmount,
-          remainingBalance: Math.max(0, inv.total - matchedAmount),
+          remainingBalance: Math.max(0, total - matchedAmount),
           score: scoreCandidate(
-            { total: inv.total, fecha: inv.fecha, customerRfc: inv.customer?.rfc ?? null },
+            { total, fecha: inv.fecha, customerRfc: inv.customer?.rfc ?? null },
             { fecha: tx.fecha, descripcion: tx.descripcion },
             absAmount
           ),

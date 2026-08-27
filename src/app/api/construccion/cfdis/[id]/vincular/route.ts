@@ -90,7 +90,7 @@ export const POST = withAuthz(
       update: data,
     });
 
-    const invoiceTotal = inv.total;
+    const invoiceTotal = Number(inv.total);
     const costDelta =
       targetTotal != null ? Math.round((invoiceTotal - targetTotal) * 100) / 100 : null;
 

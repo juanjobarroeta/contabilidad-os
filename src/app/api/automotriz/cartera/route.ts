@@ -27,18 +27,20 @@ export const GET = withAuthz(async (req: Request) => {
   await requireModule(companyId, "AUTOMOTRIZ", req);
 
   const tipo = lado === "COBRAR" ? "INGRESO" : "EGRESO";
-  const facturas = await prisma.invoice.findMany({
-    where: { companyId, tipo, status: { not: "CANCELLED" }, customerId: { not: null } },
-    select: {
-      customerId: true,
-      uuid: true,
-      total: true,
-      metodoPago: true,
-      fecha: true,
-      customer: { select: { razonSocial: true, rfc: true } },
-      conciliacionDetalles: { select: { montoAsignado: true } },
-    },
-  });
+  const facturas = (
+    await prisma.invoice.findMany({
+      where: { companyId, tipo, status: { not: "CANCELLED" }, customerId: { not: null } },
+      select: {
+        customerId: true,
+        uuid: true,
+        total: true,
+        metodoPago: true,
+        fecha: true,
+        customer: { select: { razonSocial: true, rfc: true } },
+        conciliacionDetalles: { select: { montoAsignado: true } },
+      },
+    })
+  ).map((f) => ({ ...f, total: Number(f.total) }));
 
   const uuids = facturas.map((f) => f.uuid).filter(Boolean) as string[];
   const links = uuids.length
@@ -50,7 +52,7 @@ export const GET = withAuthz(async (req: Request) => {
   const amparado = new Map<string, number>();
   for (const l of links) {
     const k = normalizarUuid(l.parentUuid);
-    amparado.set(k, (amparado.get(k) ?? 0) + (l.impPagado ?? 0));
+    amparado.set(k, (amparado.get(k) ?? 0) + Number(l.impPagado ?? 0));
   }
 
   type Fila = {

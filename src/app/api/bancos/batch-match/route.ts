@@ -27,6 +27,7 @@ export async function POST(req: Request) {
       select: { id: true, companyId: true, total: true },
     });
     if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+    const invoiceTotal = Number(invoice.total);
 
     // Auth: writer on the invoice's company
     await requireWriter(invoice.companyId);
@@ -62,9 +63,9 @@ export async function POST(req: Request) {
       ok: true,
       matched: result.count,
       sumMatched,
-      invoiceTotal: invoice.total,
+      invoiceTotal,
       // Informational: tells the UI whether the linked txs fully cover the invoice
-      coverage: invoice.total > 0 ? sumMatched / invoice.total : 0,
+      coverage: invoiceTotal > 0 ? sumMatched / invoiceTotal : 0,
     });
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });

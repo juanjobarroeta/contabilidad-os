@@ -219,7 +219,7 @@ type Contexto =
   | { ok: false; status: number; error: string };
 
 async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
-  const parentInv = await prisma.invoice.findFirst({
+  const parentRow = await prisma.invoice.findFirst({
     where: { id: input.invoiceId, companyId: input.companyId, tipo: "INGRESO", metodoPago: "PPD" },
     select: {
       id: true, uuid: true, serie: true, folio: true, total: true, subtotal: true, moneda: true,
@@ -228,8 +228,9 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
       taxes: { select: { tipo: true, factor: true, tasa: true, base: true, importe: true, retencion: true } },
     },
   });
-  if (!parentInv) return { ok: false, status: 404, error: "Factura PPD no encontrada." };
-  if (!parentInv.uuid) return { ok: false, status: 400, error: "La factura no está timbrada (sin folio fiscal)." };
+  if (!parentRow) return { ok: false, status: 404, error: "Factura PPD no encontrada." };
+  if (!parentRow.uuid) return { ok: false, status: 400, error: "La factura no está timbrada (sin folio fiscal)." };
+  const parentInv = { ...parentRow, total: Number(parentRow.total), subtotal: Number(parentRow.subtotal) };
 
   // Alcance por ahora: solo MXN. Una PPD en USD exige TipoCambioP y el tipo de
   // cambio no se persiste en la importación — se difiere para no emitir un REP
@@ -262,7 +263,7 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
     _sum: { total: true },
     _count: { _all: true },
   });
-  const priorImpPagado = prev._sum.total ?? 0;
+  const priorImpPagado = Number(prev._sum.total ?? 0);
   const priorCount = prev._count._all;
   const saldoPendiente = round2(parentInv.total - priorImpPagado);
 
@@ -289,9 +290,9 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
   let parentTaxes: RepParentTax[] = parentInv.taxes.map((t) => ({
     tipo: t.tipo as RepParentTax["tipo"],
     factor: t.factor as RepParentTax["factor"],
-    tasa: t.tasa,
-    base: t.base,
-    importe: t.importe,
+    tasa: Number(t.tasa),
+    base: t.base === null ? null : Number(t.base),
+    importe: Number(t.importe),
     retencion: t.retencion,
   }));
   // Facturas timbradas en la app ANTES de que persistiéramos InvoiceTax: sin

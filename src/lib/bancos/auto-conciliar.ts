@@ -366,7 +366,7 @@ export async function autoConciliarCuenta(
           inv,
           score: scoreCandidate(
             {
-              total: inv.total,
+              total: Number(inv.total),
               fecha: inv.fecha,
               customerRfc: rfcFactura,
               customerNombre: nombreFactura,

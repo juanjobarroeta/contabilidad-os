@@ -46,10 +46,10 @@ export const GET = withAuthz(async (req: Request) => {
     const fila = porContacto.get(g.customerId) ?? { fI: 0, mI: 0, fE: 0, mE: 0 };
     if (g.tipo === "INGRESO") {
       fila.fI += g._count._all;
-      fila.mI += g._sum.total ?? 0;
+      fila.mI += Number(g._sum.total ?? 0);
     } else {
       fila.fE += g._count._all;
-      fila.mE += g._sum.total ?? 0;
+      fila.mE += Number(g._sum.total ?? 0);
     }
     porContacto.set(g.customerId, fila);
   }

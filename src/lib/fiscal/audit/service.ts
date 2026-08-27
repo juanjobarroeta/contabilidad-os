@@ -74,17 +74,17 @@ export async function loadCompanyCfdis(companyId: string): Promise<CfdiNormaliza
     const direccion: Direccion = inv.tipo === "INGRESO" ? "EMITIDA" : "RECIBIDA";
     const ivaTrasladado = inv.taxes
       .filter((t) => t.tipo === "IVA" && !t.retencion)
-      .reduce((s, t) => s + t.importe, 0);
+      .reduce((s, t) => s + Number(t.importe), 0);
     return {
       id: inv.id,
       direccion,
       fecha: inv.fecha.toISOString().slice(0, 10),
       formaPago: inv.formaPago,
-      total: inv.total,
+      total: Number(inv.total),
       items: inv.items.map((i) => ({ claveProdServ: i.claveProdServ, descripcion: i.descripcion })),
       ivaTrasladado: ivaTrasladado > 0 ? ivaTrasladado : undefined,
       moneda: inv.moneda,
-      tipoCambio: inv.tipoCambio,
+      tipoCambio: Number(inv.tipoCambio),
     };
   });
 }
@@ -166,7 +166,7 @@ export async function cargarPueSinPago(
   const egresos = await prisma.invoice.findMany({
     where: { companyId, tipo: "EGRESO", status: "STAMPED", metodoPago: "PUE", ivaNoAcreditable: false, fecha: { gte: from, lt: to } },
     select: { id: true, total: true, taxes: { select: { tipo: true, importe: true, retencion: true } } },
-  });
+  }).then((rows) => rows.map((e) => ({ ...e, total: Number(e.total), taxes: e.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })));
   if (egresos.length === 0) return { items: [], ejercicio };
 
   const matched = await pagosConciliadosPorInvoice(egresos.map((e) => e.id));

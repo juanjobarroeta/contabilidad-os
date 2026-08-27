@@ -141,7 +141,7 @@ export async function detectComplementosPendientes(
 
   const repTotalByParent = new Map<string, number>();
   for (const rep of existingReps) {
-    repTotalByParent.set(rep.notas ?? "", (repTotalByParent.get(rep.notas ?? "") ?? 0) + rep.total);
+    repTotalByParent.set(rep.notas ?? "", (repTotalByParent.get(rep.notas ?? "") ?? 0) + Number(rep.total));
   }
 
   const pendientes: ComplementoPendiente[] = [];
@@ -165,7 +165,7 @@ export async function detectComplementosPendientes(
       folio: inv.folio,
       cliente: inv.customer?.razonSocial ?? null,
       fechaFactura: inv.fecha.toISOString().slice(0, 10),
-      totalFactura: inv.total,
+      totalFactura: Number(inv.total),
       totalPagado,
       totalComplementado,
       montoPendiente,
@@ -265,7 +265,7 @@ export async function detectComplementosRecibidosPendientes(
       uuid: g.uuid,
       proveedor: g.customer?.razonSocial ?? null,
       fechaFactura: g.fecha.toISOString().slice(0, 10),
-      total: g.total,
+      total: Number(g.total),
       totalPagado: Math.round(totalPagado * 100) / 100,
       ultimoPago: ultimoPago.toISOString().slice(0, 10),
       fechaLimite: fechaLimite.toISOString().slice(0, 10),

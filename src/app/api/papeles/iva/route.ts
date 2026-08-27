@@ -71,7 +71,7 @@ export async function GET(req: Request) {
   // Previous month's declaration for saldo a favor carryover
   const prevPeriodo = month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, "0")}`;
 
-  const [ingresos, egresos, prevDecl, curDecl, company, repCobros] = await Promise.all([
+  const [ingresosDb, egresosDb, prevDecl, curDecl, company, repCobros] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
       include: { customer: { select: { razonSocial: true, rfc: true } }, taxes: true },
@@ -108,6 +108,15 @@ export async function GET(req: Request) {
       select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true, fechaPago: true },
     }),
   ]);
+  const numInvoice = (inv: (typeof ingresosDb)[number]) => ({
+    ...inv,
+    subtotal: Number(inv.subtotal),
+    total: Number(inv.total),
+    totalImpuestos: inv.totalImpuestos === null ? null : Number(inv.totalImpuestos),
+    taxes: inv.taxes.map((t) => ({ ...t, tasa: Number(t.tasa), base: t.base === null ? null : Number(t.base), importe: Number(t.importe) })),
+  });
+  const ingresos = ingresosDb.map(numInvoice);
+  const egresos = egresosDb.map(numInvoice);
   // REP links liquidados en el periodo, agrupados por CFDI pagado (parentUuid).
   type RepLink = { impPagado: number | null; ivaTrasladado: number | null; ivaDerivado: boolean; fechaPago: Date | null };
   // Llaves NORMALIZADAS: el REP escribe IdDocumento en MAYÚSCULAS y las
@@ -116,7 +125,10 @@ export async function GET(req: Request) {
   const repLinksPorParent = new Map<string, RepLink[]>();
   for (const r of repCobros) {
     const k = normalizarUuid(r.parentUuid);
-    repLinksPorParent.set(k, [...(repLinksPorParent.get(k) ?? []), r]);
+    repLinksPorParent.set(k, [
+      ...(repLinksPorParent.get(k) ?? []),
+      { ...r, impPagado: r.impPagado === null ? null : Number(r.impPagado), ivaTrasladado: r.ivaTrasladado === null ? null : Number(r.ivaTrasladado) },
+    ]);
   }
   // Padres INGRESO (de cualquier mes) de los REP cobrados este periodo: su IVA
   // se causa al COBRARSE (flujo), no en la fecha del CFDI — igual que el motor.
@@ -127,7 +139,7 @@ export async function GET(req: Request) {
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, tipo: "INGRESO", metodoPago: "PPD", status: "STAMPED" },
         select: { id: true, uuid: true, serie: true, folio: true, total: true, totalImpuestos: true, taxes: true, ivaNoCausado: true, customer: { select: { razonSocial: true, rfc: true } } },
-      })
+      }).then((parents) => parents.map((p) => ({ ...p, total: Number(p.total), totalImpuestos: p.totalImpuestos === null ? null : Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
     : [];
   const repIngresoByUuid = new Map(repIngresoParents.map((p) => [normalizarUuid(p.uuid!), p]));
 

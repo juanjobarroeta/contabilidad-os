@@ -202,7 +202,7 @@ export async function generateAuxiliarFoliosXml(opts: AuxOptions): Promise<strin
     : [];
   const compNalPorUuid = new Map<string, CompNalInput>();
   for (const inv of invoices) {
-    if (inv.uuid && inv.customer?.rfc) compNalPorUuid.set(inv.uuid, { uuid: inv.uuid, rfc: inv.customer.rfc, montoTotal: inv.total });
+    if (inv.uuid && inv.customer?.rfc) compNalPorUuid.set(inv.uuid, { uuid: inv.uuid, rfc: inv.customer.rfc, montoTotal: Number(inv.total) });
   }
 
   // Una entrada DetAuxFol por póliza, con sus comprobantes únicos.

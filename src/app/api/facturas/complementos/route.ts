@@ -142,7 +142,12 @@ export async function GET(req: Request) {
     .map((id) => porId.get(id))
     .filter((f): f is NonNullable<typeof f> => !!f)
     .map((f) => {
-      const { doctosRelacionados, ...rest } = f;
+      const { doctosRelacionados: doctosRaw, ...rest } = f;
+      const doctosRelacionados = doctosRaw.map((d) => ({
+        ...d,
+        impPagado: d.impPagado === null ? null : Number(d.impPagado),
+        ivaTrasladado: d.ivaTrasladado === null ? null : Number(d.ivaTrasladado),
+      }));
       const r = resumenRep(doctosRelacionados);
       return {
         ...rest,

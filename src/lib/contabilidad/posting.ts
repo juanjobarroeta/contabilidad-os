@@ -196,7 +196,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // Debit: Clientes (full total)
   // Credit: Ventas (subtotal)
   // Credit: IVA trasladado (tax portion)
-  const ingresos = await prisma.invoice.findMany({
+  const ingresosRows = await prisma.invoice.findMany({
     where: {
       companyId,
       tipo: "INGRESO",
@@ -204,6 +204,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       fecha: { gte: start, lt: end },
     },
   });
+  const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
 
   // FASE 2 (plan propio por FAMILIA): si el CFDI ampara una unidad NUEVA de
   // venta, la venta cae en la subcuenta de su familia (4101-00XX) y el costo
@@ -340,7 +341,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // because the bank movement settles separately. The bank tx that pays the
   // empleado is matched (or categorized as PAYROLL_NO_CFDI) and contributes
   // its own pair of entries that close out the provision.
-  const nominaCfdis = await prisma.invoice.findMany({
+  const nominaCfdisRows = await prisma.invoice.findMany({
     where: {
       companyId,
       tipo: "NOMINA",
@@ -348,6 +349,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       fecha: { gte: start, lt: end },
     },
   });
+  const nominaCfdis = nominaCfdisRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
 
   for (const inv of nominaCfdis) {
     const ref = inv.uuid ?? inv.id;
@@ -453,7 +455,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     return acc.id;
   }
 
-  const egresos = await prisma.invoice.findMany({
+  const egresosRows = await prisma.invoice.findMany({
     where: {
       companyId,
       tipo: "EGRESO",
@@ -466,6 +468,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       },
     },
   });
+  const egresos = egresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
 
   // CFDIs clasificados INVERSION: el cargo va al ACTIVO FIJO (15x), no a
   // gasto — de otro modo la compra se duplicaría contra la depreciación.
@@ -527,7 +530,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       : inv.naturaleza === "INVERSION"
         ? { cuenta: activosPorInvoice.get(inv.id) ?? "160.01", label: "activo fijo" }
         : classifyInvoice(
-            inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
+            inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe) }))
           );
     const gastoAccountId = ctaInvFam ? ctaInvFam.id : await resolveCached(classification.cuenta);
 
@@ -1135,10 +1138,11 @@ export async function balanzaPreview(
   }
 
   // ── INGRESO (mismas reglas que postMonth) ────────────────────────────────
-  const ingresos = await prisma.invoice.findMany({
+  const ingresosRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
     select: { id: true, subtotal: true, total: true, tipoSat: true, serie: true },
   });
+  const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
   // FASE 2: mismas reglas de familia que postMonth (venta a 4101-00XX y costo
   // DR 5101-00XX / CR 1301-00XX), para que la balanza preliminar no difiera
   // del cierre.
@@ -1193,10 +1197,11 @@ export async function balanzaPreview(
   }
 
   // ── NOMINA ────────────────────────────────────────────────────────────────
-  const nominas = await prisma.invoice.findMany({
+  const nominasRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "NOMINA", status: "STAMPED", fecha: { gte: start, lt: end } },
     select: { subtotal: true, total: true },
   });
+  const nominas = nominasRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
   for (const inv of nominas) {
     const delta = inv.total - inv.subtotal;
     addMov(accSueldos.id, "CARGO", inv.subtotal);
@@ -1206,10 +1211,11 @@ export async function balanzaPreview(
   }
 
   // ── EGRESO ────────────────────────────────────────────────────────────────
-  const egresos = await prisma.invoice.findMany({
+  const egresosRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
     include: { items: { select: { claveProdServ: true, importe: true } } },
   });
+  const egresos = egresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
   const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
   const tallerCompras = await cargarContextoTaller(companyId, egresos.map((i) => i.id));
   const accCache = new Map<string, string | null>();
@@ -1236,7 +1242,7 @@ export async function balanzaPreview(
     const classification = inv.overrideCuenta
       ? { cuenta: inv.overrideCuenta }
       : classifyInvoice(
-          inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
+          inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe) }))
         );
     const gastoId = ctaInvFam ? ctaInvFam.id : await resolveCachedSafe(classification.cuenta);
     if (!gastoId) continue;
@@ -1502,10 +1508,11 @@ export async function estadoResultadosPreview(
   }
 
   // ── INGRESO → Ventas (subtotal) ──────────────────────────────────────────
-  const ingresos = await prisma.invoice.findMany({
+  const ingresosRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
     select: { id: true, subtotal: true, tipoSat: true, serie: true },
   });
+  const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal) }));
   // FASE 2: la venta de una unidad aporta a la cuenta de su FAMILIA y su costo
   // de compra aporta al COSTO de la familia (5101-00XX) — el preview refleja
   // la utilidad bruta real de unidades, no ingreso sin costo.
@@ -1556,10 +1563,11 @@ export async function estadoResultadosPreview(
   }
 
   // ── NOMINA → Sueldos y salarios (subtotal = percepciones brutas) ─────────
-  const nominas = await prisma.invoice.findMany({
+  const nominasRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "NOMINA", status: "STAMPED", fecha: { gte: start, lt: end } },
     select: { subtotal: true },
   });
+  const nominas = nominasRows.map((i) => ({ ...i, subtotal: Number(i.subtotal) }));
   for (const inv of nominas) {
     contributions.push({
       tipo: accSueldos.tipo,
@@ -1571,10 +1579,11 @@ export async function estadoResultadosPreview(
   }
 
   // ── EGRESO → cuenta de gasto clasificada (subtotal) ──────────────────────
-  const egresos = await prisma.invoice.findMany({
+  const egresosRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
     include: { items: { select: { claveProdServ: true, importe: true } } },
   });
+  const egresos = egresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal) }));
 
   // Cache de cuentas resueltas; omite (best-effort) egresos cuya clasificación
   // apunte a una cuenta inexistente, sin abortar todo el preview.
@@ -1604,7 +1613,7 @@ export async function estadoResultadosPreview(
     const classification = inv.overrideCuenta
       ? { cuenta: inv.overrideCuenta }
       : classifyInvoice(
-          inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe }))
+          inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe) }))
         );
     const acc = await resolveCachedSafe(classification.cuenta);
     if (!acc) continue;

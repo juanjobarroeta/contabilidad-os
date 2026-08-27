@@ -179,7 +179,7 @@ export async function retencionesDelPeriodo(
         taxes: { some: { retencion: true } },
       },
       select: { tipoSat: true, taxes: { where: { retencion: true }, select: { tipo: true, importe: true } } },
-    }),
+    }).then((rows) => rows.map((f) => ({ ...f, taxes: f.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) }))),
     // Lo retenido POR los clientes en los CFDIs que la empresa emitió.
     prisma.invoice.findMany({
       where: {
@@ -187,14 +187,14 @@ export async function retencionesDelPeriodo(
         taxes: { some: { retencion: true } },
       },
       select: { tipoSat: true, taxes: { where: { retencion: true }, select: { tipo: true, importe: true } } },
-    }),
+    }).then((rows) => rows.map((f) => ({ ...f, taxes: f.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) }))),
   ]);
 
   return armarRetenciones({
     year,
     month,
-    sueldos: { isrRetenido: sueldos._sum.isrRetenidoNomina ?? 0, recibos: sueldos._count._all },
-    asimilados: { isrRetenido: asimilados._sum.isrRetenidoNomina ?? 0, recibos: asimilados._count._all },
+    sueldos: { isrRetenido: Number(sueldos._sum.isrRetenidoNomina ?? 0), recibos: sueldos._count._all },
+    asimilados: { isrRetenido: Number(asimilados._sum.isrRetenidoNomina ?? 0), recibos: asimilados._count._all },
     retencionesAProveedores: retProveedores,
     retencionesDeClientes: retClientes,
   });

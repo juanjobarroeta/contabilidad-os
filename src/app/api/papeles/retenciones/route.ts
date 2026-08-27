@@ -78,9 +78,11 @@ export async function GET(req: Request) {
     // If InvoiceTax rows exist use those (preferred — exact values per type)
     const taxRows = inv.taxes.filter((t) => t.retencion);
     const rows: Row[] = [];
+    const subtotal = Number(inv.subtotal);
     if (taxRows.length > 0) {
       for (const t of taxRows) {
-        if (t.importe < 0.005) continue;
+        const importe = Number(t.importe);
+        if (importe < 0.005) continue;
         rows.push({
           id: inv.id,
           fecha: inv.fecha.toISOString().slice(0, 10),
@@ -89,17 +91,17 @@ export async function GET(req: Request) {
           folio: inv.folio,
           contraparte: nombreContraparte(inv),
           rfc: rfcContraparte(inv),
-          subtotal: inv.subtotal,
+          subtotal,
           tipoRetencion: (t.tipo as "IVA" | "ISR" | "IEPS") ?? "ISR",
-          tasa: inv.subtotal > 0 ? +(t.importe / inv.subtotal).toFixed(4) : null,
-          importe: t.importe,
+          tasa: subtotal > 0 ? +(importe / subtotal).toFixed(4) : null,
+          importe,
         });
       }
     } else {
       // Fallback: if totalImpuestos is negative, it represents net retenciones.
       // We can't know the split between IVA/ISR without InvoiceTax rows so we
       // label it as ISR (the most common retención) and warn in the footer.
-      const ti = inv.totalImpuestos ?? 0;
+      const ti = Number(inv.totalImpuestos ?? 0);
       if (ti < -0.005) {
         rows.push({
           id: inv.id,
@@ -109,9 +111,9 @@ export async function GET(req: Request) {
           folio: inv.folio,
           contraparte: nombreContraparte(inv),
           rfc: rfcContraparte(inv),
-          subtotal: inv.subtotal,
+          subtotal,
           tipoRetencion: "ISR",
-          tasa: inv.subtotal > 0 ? +(-ti / inv.subtotal).toFixed(4) : null,
+          tasa: subtotal > 0 ? +(-ti / subtotal).toFixed(4) : null,
           importe: -ti,
         });
       }

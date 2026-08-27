@@ -145,15 +145,17 @@ export async function cuadreDeCfdis(
   hasta: Date,
   opts: { peores?: number } = {},
 ): Promise<CuadreResultado> {
-  const facturas = await db.invoice.findMany({
-    where: {
-      companyId,
-      tipo: "EGRESO",
-      status: { not: "CANCELLED" },
-      fecha: { gte: desde, lt: hasta },
-    },
-    select: { id: true, subtotal: true, tipoSat: true },
-  });
+  const facturas = (
+    await db.invoice.findMany({
+      where: {
+        companyId,
+        tipo: "EGRESO",
+        status: { not: "CANCELLED" },
+        fecha: { gte: desde, lt: hasta },
+      },
+      select: { id: true, subtotal: true, tipoSat: true },
+    })
+  ).map((f) => ({ ...f, subtotal: Number(f.subtotal) }));
 
   const atribuciones = await atribucionesPorFactura(db, companyId, desde, hasta);
 
@@ -324,18 +326,24 @@ export async function cuadreDeIngresos(
   desde: Date,
   hasta: Date,
 ): Promise<CuadreIngreso> {
-  const facturas = await db.invoice.findMany({
-    where: { companyId, tipo: "INGRESO", status: { not: "CANCELLED" }, fecha: { gte: desde, lt: hasta } },
-    select: {
-      id: true,
-      subtotal: true,
-      tipoSat: true,
-      tipoRelacion: true,
-      items: { select: { claveProdServ: true, importe: true, descripcion: true } },
-      vehiculosVendidos: { select: { id: true }, take: 1 },
-      servicioVenta: { select: { id: true } },
-    },
-  });
+  const facturas = (
+    await db.invoice.findMany({
+      where: { companyId, tipo: "INGRESO", status: { not: "CANCELLED" }, fecha: { gte: desde, lt: hasta } },
+      select: {
+        id: true,
+        subtotal: true,
+        tipoSat: true,
+        tipoRelacion: true,
+        items: { select: { claveProdServ: true, importe: true, descripcion: true } },
+        vehiculosVendidos: { select: { id: true }, take: 1 },
+        servicioVenta: { select: { id: true } },
+      },
+    })
+  ).map((f) => ({
+    ...f,
+    subtotal: Number(f.subtotal),
+    items: f.items.map((i) => ({ ...i, importe: Number(i.importe) })),
+  }));
 
   const b = () => ({ facturas: 0, monto: 0 });
   const res: CuadreIngreso = {
@@ -412,7 +420,7 @@ export async function cuadreDeIngresos(
       db.invoice.count({ where }),
       db.invoice.aggregate({ where, _sum: { subtotal: true } }),
     ]);
-    if (n > 0) enXml.push({ tipoRelacion: t, facturas: n, monto: r2(agg._sum.subtotal ?? 0) });
+    if (n > 0) enXml.push({ tipoRelacion: t, facturas: n, monto: r2(Number(agg._sum.subtotal ?? 0)) });
   }
   res.relacionesEnXml = enXml.sort((a, b2) => b2.monto - a.monto);
 

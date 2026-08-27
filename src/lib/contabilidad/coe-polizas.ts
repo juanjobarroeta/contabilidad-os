@@ -205,7 +205,7 @@ export async function generatePolizasXml(opts: PolizasXmlOptions): Promise<strin
       ? rfcDesdeXml(inv.rawXml, "Emisor") ?? inv.customer?.rfc ?? null
       : inv.customer?.rfc ?? rfcDesdeXml(inv.rawXml, "Receptor");
     if (rfc) {
-      compNalPorUuid.set(inv.uuid, { uuid: inv.uuid, rfc, montoTotal: inv.total });
+      compNalPorUuid.set(inv.uuid, { uuid: inv.uuid, rfc, montoTotal: Number(inv.total) });
     }
   }
 

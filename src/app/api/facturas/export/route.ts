@@ -113,8 +113,9 @@ export async function GET(req: Request) {
     // Split totalImpuestos into positive (trasladado) and negative (retenido)
     // portions. Our schema stores the net; anything positive is IVA cobrado,
     // anything negative is retenciones on the contador's side.
-    const ivaTrasladado = inv.totalImpuestos > 0 ? inv.totalImpuestos : 0;
-    const retenidoNeto = inv.totalImpuestos < 0 ? -inv.totalImpuestos : 0;
+    const totalImpuestos = Number(inv.totalImpuestos);
+    const ivaTrasladado = totalImpuestos > 0 ? totalImpuestos : 0;
+    const retenidoNeto = totalImpuestos < 0 ? -totalImpuestos : 0;
 
     const conceptos = inv.items
       .slice(0, 3)

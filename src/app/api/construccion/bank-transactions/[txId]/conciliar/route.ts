@@ -88,7 +88,7 @@ export const POST = withAuthz(
     // parcialidades no puede exceder el total (tolerancia 1%). Los pagos
     // previos incluyen porciones asignadas (conciliación múltiple).
     const guard = checkInvoiceMatchGuard(
-      invoice,
+      { ...invoice, total: Number(invoice.total) },
       mergePagosConciliados(
         invoice.bankTransactions.map((b) => ({ ...b, monto: Number(b.monto) })),
         invoice.conciliacionDetalles.map((d) => ({
