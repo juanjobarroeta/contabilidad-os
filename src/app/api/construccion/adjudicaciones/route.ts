@@ -54,7 +54,7 @@ export const GET = withAuthz(async (req: Request) => {
   });
 
   const out = rows.map((a) => {
-    const aplicado = a.aplicaciones.reduce((s, x) => s + x.monto, 0);
+    const aplicado = a.aplicaciones.reduce((s, x) => s + Number(x.monto), 0);
     // Tolerancia legacy: PAGADA/CONCILIADA sin aplicaciones (flujo anterior)
     // cuenta como saldada.
     const legacyPaid = (a.estado === "PAGADA" || a.estado === "CONCILIADA") && aplicado <= 0.01;
@@ -71,7 +71,7 @@ export const GET = withAuthz(async (req: Request) => {
       diasEntrega: a.diasEntrega,
       total: a.total,
       aplicado,
-      saldo: legacyPaid ? 0 : Math.max(0, a.total - aplicado),
+      saldo: legacyPaid ? 0 : Math.max(0, Number(a.total) - aplicado),
       estado: a.estado,
       createdAt: a.createdAt,
       enviadaTesoreriaAt: a.enviadaTesoreriaAt,

@@ -57,14 +57,14 @@ export const POST = withAuthz(
     const updated = await prisma.$transaction(async (tx) => {
       for (const item of compra.items) {
         const prevStock = item.insumo.stock;
-        const prevCosto = item.insumo.costoPromedio;
-        const newStock = prevStock + item.cantidad;
+        const prevCosto = Number(item.insumo.costoPromedio);
+        const newStock = prevStock + Number(item.cantidad);
         // Promedio ponderado; con stock previo <= 0 el promedio se reinicia
         // al costo entrante (evita promedios sin sentido tras faltantes).
         const newCosto =
           prevStock > 0 && newStock > 0
-            ? (prevStock * prevCosto + item.cantidad * item.costoUnitario) / newStock
-            : item.costoUnitario;
+            ? (prevStock * prevCosto + Number(item.cantidad) * Number(item.costoUnitario)) / newStock
+            : Number(item.costoUnitario);
 
         await tx.restInsumo.update({
           where: { id: item.insumoId },
@@ -72,13 +72,13 @@ export const POST = withAuthz(
         });
       }
 
-      if (compra.subtotal > 0) {
+      if (Number(compra.subtotal) > 0) {
         await postCompraRestauranteRecibida(tx, {
           companyId: compra.companyId,
           compraId: compra.id,
           folio: compra.folio,
-          subtotal: compra.subtotal,
-          iva: compra.iva,
+          subtotal: Number(compra.subtotal),
+          iva: Number(compra.iva),
           fecha,
           proveedorNombre: compra.supplier?.razonSocial,
         });

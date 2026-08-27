@@ -127,14 +127,14 @@ export const GET = withAuthz(
       });
 
       for (const p of partidas) {
-        const partidaQty = p.cantidad ?? 0;
+        const partidaQty = Number(p.cantidad ?? 0);
         const lines = p.concepto?.apuActual?.insumos ?? [];
         for (const line of lines) {
           if (!line.insumoId) continue;
           const agg =
             planeadoByInsumoId.get(line.insumoId) ??
             ({ planeadoCantidad: 0, partidaRefs: [] } as PlaneadoAgg);
-          agg.planeadoCantidad += partidaQty * (line.cantidad ?? 0);
+          agg.planeadoCantidad += partidaQty * Number(line.cantidad ?? 0);
           if (!agg.partidaRefs.find((r) => r.partidaId === p.id)) {
             agg.partidaRefs.push({
               partidaId: p.id,
@@ -156,7 +156,7 @@ export const GET = withAuthz(
         });
         for (const row of explosionRows) {
           planeadoByInsumoId.set(row.insumoId, {
-            planeadoCantidad: row.cantidad,
+            planeadoCantidad: Number(row.cantidad),
             partidaRefs: [],
           });
         }
@@ -178,8 +178,8 @@ export const GET = withAuthz(
     for (const row of realAgg) {
       if (!row.insumoId) continue;
       realByInsumoId.set(row.insumoId, {
-        cantidad: row._sum.cantidad ?? 0,
-        importe: row._sum.importe ?? 0,
+        cantidad: Number(row._sum.cantidad ?? 0),
+        importe: Number(row._sum.importe ?? 0),
         count: row._count,
       });
     }
@@ -209,7 +209,7 @@ export const GET = withAuthz(
         const planeado = planeadoByInsumoId.get(iid);
         const real = realByInsumoId.get(iid);
         const planeadoCantidad = round2(planeado?.planeadoCantidad ?? 0);
-        const puCatalogo = meta.costoActual ?? 0;
+        const puCatalogo = Number(meta.costoActual ?? 0);
         const planeadoImporte = round2(planeadoCantidad * puCatalogo);
         const realCantidad = round2(real?.cantidad ?? 0);
         const realImporte = round2(real?.importe ?? 0);
@@ -252,7 +252,7 @@ export const GET = withAuthz(
       .filter((r) => r.categoriaIndirecto)
       .map((r) => ({
         categoria: r.categoriaIndirecto!,
-        totalImporte: round2(r._sum.importe ?? 0),
+        totalImporte: round2(Number(r._sum.importe ?? 0)),
         count: r._count,
       }))
       .sort((a, b) => b.totalImporte - a.totalImporte);

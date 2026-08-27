@@ -104,7 +104,7 @@ export const PUT = withAuthz(
             data: {
               cotizacionGanadoraId: cotizacionId,
               precioUnitario: quotedLine.precioUnitario,
-              importe: round2(sp.cantidad * quotedLine.precioUnitario),
+              importe: round2(Number(sp.cantidad) * Number(quotedLine.precioUnitario)),
             },
           });
         } else {
@@ -135,7 +135,7 @@ export const PUT = withAuthz(
       await tx.solicitudCompra.update({
         where: { id },
         data: {
-          total: round2(agg._sum.importe ?? 0),
+          total: round2(Number(agg._sum.importe ?? 0)),
           supplierId: headerSupplierId,
         },
       });

@@ -203,7 +203,7 @@ export const PATCH = withAuthz(
             const anterior = p.viviendasAvanceAnterior ?? 0;
             const acumulado = Math.min(anterior + newPeriodo, obj);
             const cappedPeriodo = acumulado - anterior;
-            const importeC = p.importeContrato ?? 0;
+            const importeC = Number(p.importeContrato ?? 0);
             const pctAcum = obj > 0 ? acumulado / obj : 0;
             const pctPer = obj > 0 ? cappedPeriodo / obj : 0;
             const importePer = round2(importeC * pctPer);
@@ -236,9 +236,9 @@ export const PATCH = withAuthz(
               },
               _sum: { cantidadEjecutada: true },
             });
-            const priorExecuted = priorAgg._sum.cantidadEjecutada ?? 0;
+            const priorExecuted = Number(priorAgg._sum.cantidadEjecutada ?? 0);
             const cantidadAcumulada = round2(priorExecuted + p.cantidadEjecutada);
-            const importe = round2(p.cantidadEjecutada * pp.precioUnitario);
+            const importe = round2(p.cantidadEjecutada * Number(pp.precioUnitario));
             await tx.estimacionPartida.create({
               data: {
                 estimacionId: id,
@@ -253,14 +253,20 @@ export const PATCH = withAuthz(
       }
 
       // ── Recompute estimación-level totals ──────────────────────────────
-      const allPartidas = await tx.estimacionPartida.findMany({
-        where: { estimacionId: id },
-        select: {
-          importe: true,
-          pctAcumulado: true,
-          importeContrato: true,
-        },
-      });
+      const allPartidas = (
+        await tx.estimacionPartida.findMany({
+          where: { estimacionId: id },
+          select: {
+            importe: true,
+            pctAcumulado: true,
+            importeContrato: true,
+          },
+        })
+      ).map((p) => ({
+        ...p,
+        importe: Number(p.importe),
+        importeContrato: p.importeContrato === null ? null : Number(p.importeContrato),
+      }));
       const subtotal = round2(
         allPartidas.reduce((a, p) => a + (p.importe ?? 0), 0)
       );

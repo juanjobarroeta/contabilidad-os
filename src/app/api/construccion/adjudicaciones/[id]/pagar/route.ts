@@ -61,7 +61,7 @@ export const POST = withAuthz(
     await requireModule(adj.companyId, "CONSTRUCCION");
 
     const aplicadoPrevio = await aplicadoDeAdjudicacion(prisma, adj.id);
-    const saldo = saldoDe(adj, aplicadoPrevio);
+    const saldo = saldoDe({ ...adj, total: Number(adj.total) }, aplicadoPrevio);
     if (saldo <= 0.01) {
       return NextResponse.json(
         { error: "Esta adjudicación ya está saldada" },
@@ -84,7 +84,7 @@ export const POST = withAuthz(
           comprobanteName: comprobante?.name ?? null,
         },
       });
-      await aplicarPago(tx, pago, [{ adjudicacionId: adj.id, monto }], fecha);
+      await aplicarPago(tx, { ...pago, monto: Number(pago.monto) }, [{ adjudicacionId: adj.id, monto }], fecha);
 
       // Espejo en la adjudicación para el panel de detalle (referencia y
       // comprobante del último pago registrado).

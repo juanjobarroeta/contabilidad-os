@@ -90,13 +90,13 @@ export async function loadMatchPools(companyId: string): Promise<MatchPools> {
 
   return {
     solicitudes: solicitudes.map((s) => ({
-      id: s.id, folio: s.folio, total: s.total, fecha: s.createdAt, supplierId: s.supplierId, codigo: s.proyecto?.codigo ?? null,
+      id: s.id, folio: s.folio, total: Number(s.total), fecha: s.createdAt, supplierId: s.supplierId, codigo: s.proyecto?.codigo ?? null,
     })),
     gastos: gastos.map((g) => ({
-      id: g.id, beneficiario: g.beneficiarioNombre, descripcion: g.descripcion, importe: g.importe, fecha: g.createdAt, codigo: g.proyecto?.codigo ?? null,
+      id: g.id, beneficiario: g.beneficiarioNombre, descripcion: g.descripcion, importe: Number(g.importe), fecha: g.createdAt, codigo: g.proyecto?.codigo ?? null,
     })),
     estimaciones: estimaciones.map((e) => ({
-      id: e.id, numero: e.numero, total: e.total, fecha: e.fechaCorte ?? e.periodoFin, codigo: e.proyecto?.codigo ?? null,
+      id: e.id, numero: e.numero, total: Number(e.total), fecha: e.fechaCorte ?? e.periodoFin, codigo: e.proyecto?.codigo ?? null,
     })),
   };
 }

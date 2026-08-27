@@ -39,12 +39,12 @@ export const POST = withAuthz(
 
     try {
       const result = await prisma.$transaction(async (tx) => {
-        const aplicado = await aplicarPago(tx, pago, parsed.data.aplicaciones, new Date());
+        const aplicado = await aplicarPago(tx, { ...pago, monto: Number(pago.monto) }, parsed.data.aplicaciones, new Date());
         const agg = await tx.pagoAplicacion.aggregate({
           where: { pagoId: pago.id },
           _sum: { monto: true },
         });
-        return { aplicado, disponible: Math.max(0, pago.monto - (agg._sum.monto ?? 0)) };
+        return { aplicado, disponible: Math.max(0, Number(pago.monto) - Number(agg._sum.monto ?? 0)) };
       });
       return NextResponse.json(result);
     } catch (e) {

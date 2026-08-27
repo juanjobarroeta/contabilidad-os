@@ -69,7 +69,7 @@ async function recomputeTotal(tx: typeof prisma, presupuestoId: string) {
     where: { presupuestoId, esRollup: false },
     _sum: { importe: true },
   });
-  const montoTotal = round2(agg._sum.importe ?? 0);
+  const montoTotal = round2(Number(agg._sum.importe ?? 0));
   return tx.presupuesto.update({
     where: { id: presupuestoId },
     data: { montoTotal },
@@ -101,8 +101,8 @@ export const PATCH = withAuthz(
       );
     }
 
-    const nextCantidad = parsed.data.cantidad ?? partida.cantidad ?? 0;
-    const nextImporte = round2(nextCantidad * partida.precioUnitario);
+    const nextCantidad = parsed.data.cantidad ?? Number(partida.cantidad ?? 0);
+    const nextImporte = round2(nextCantidad * Number(partida.precioUnitario));
 
     const result = await prisma.$transaction(async (tx) => {
       const updated = await tx.presupuestoPartida.update({

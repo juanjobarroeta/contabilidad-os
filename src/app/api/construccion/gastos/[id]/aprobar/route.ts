@@ -95,7 +95,7 @@ export const POST = withAuthz(
       excludeUserId: user?.id ?? null,
       payload: {
         title: "Gasto aprobado",
-        body: `${gasto.beneficiarioNombre} · ${moneyPush(gasto.importe)} — en camino a pago`,
+        body: `${gasto.beneficiarioNombre} · ${moneyPush(Number(gasto.importe))} — en camino a pago`,
         url: "/gastos",
         tag: `gasto-${gasto.id}`,
       },

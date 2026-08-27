@@ -76,7 +76,7 @@ export const POST = withAuthz(
     const [label, targetTotal] = await Promise.all([
       resolveTarget(tipo, targetId, inv.companyId),
       tipo === "SOLICITUD"
-        ? prisma.solicitudCompra.findFirst({ where: { id: targetId, companyId: inv.companyId }, select: { total: true } }).then((s) => s?.total ?? null)
+        ? prisma.solicitudCompra.findFirst({ where: { id: targetId, companyId: inv.companyId }, select: { total: true } }).then((s) => (s ? Number(s.total) : null))
         : Promise.resolve(null),
     ]);
     if (!label) {

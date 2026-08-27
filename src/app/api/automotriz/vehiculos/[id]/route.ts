@@ -40,10 +40,10 @@ export const GET = withAuthz(
     await requireMembership(vehiculo.companyId, undefined, req);
     await requireModule(vehiculo.companyId, "AUTOMOTRIZ", req);
 
-    const costosTotal = vehiculo.costos.reduce((s, c) => s + c.monto, 0);
+    const costosTotal = vehiculo.costos.reduce((s, c) => s + Number(c.monto), 0);
     const interesPiso = vehiculo.costos
       .filter((c) => c.tipo === "INTERES_PISO")
-      .reduce((s, c) => s + c.monto, 0);
+      .reduce((s, c) => s + Number(c.monto), 0);
 
     const rentabilidad =
       vehiculo.precioVenta != null
@@ -54,10 +54,10 @@ export const GET = withAuthz(
             interesPiso,
             comision: vehiculo.comisionMonto,
             utilidad:
-              vehiculo.precioVenta -
-              vehiculo.costoCompra -
+              Number(vehiculo.precioVenta) -
+              Number(vehiculo.costoCompra) -
               costosTotal -
-              vehiculo.comisionMonto,
+              Number(vehiculo.comisionMonto),
           }
         : null;
 

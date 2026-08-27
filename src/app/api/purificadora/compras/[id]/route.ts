@@ -72,7 +72,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           descripcion:
             `Pago compra ${compra.folio}` +
             (compra.supplier ? ` — ${compra.supplier.razonSocial}` : ""),
-          monto: compra.total,
+          monto: Number(compra.total),
           formaPago,
           fecha,
         });

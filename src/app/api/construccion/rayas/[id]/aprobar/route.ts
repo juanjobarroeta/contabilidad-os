@@ -30,7 +30,7 @@ export const POST = withAuthz(
         { status: 422 }
       );
     }
-    if (raya.totalDestajo <= 0) {
+    if (Number(raya.totalDestajo) <= 0) {
       return NextResponse.json(
         { error: "La raya no tiene trabajos con importe" },
         { status: 422 }

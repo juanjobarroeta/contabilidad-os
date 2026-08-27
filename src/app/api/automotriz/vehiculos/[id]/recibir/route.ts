@@ -53,7 +53,7 @@ export const POST = withAuthz(
       );
     }
 
-    const costo = parsed.data.costoCompra ?? vehiculo.costoCompra;
+    const costo = Number(parsed.data.costoCompra ?? vehiculo.costoCompra);
     if (!(costo > 0)) {
       return NextResponse.json(
         { error: "La unidad necesita costo de compra > 0 para postear el inventario" },

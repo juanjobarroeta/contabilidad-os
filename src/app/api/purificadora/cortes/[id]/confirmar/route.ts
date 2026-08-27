@@ -53,8 +53,10 @@ export const POST = withAuthz(async (req: Request, ctx: Params) => {
     prisma.purifConfig.findUnique({ where: { companyId } }),
     prisma.purifClienteConfig.findMany({ where: { companyId } }),
   ]);
-  const precioLista = config?.precioGarrafon ?? 15;
-  const precioPorCliente = new Map(clienteConfigs.map((c) => [c.customerId, c.precioGarrafon]));
+  const precioLista = Number(config?.precioGarrafon ?? 15);
+  const precioPorCliente = new Map(
+    clienteConfigs.map((c) => [c.customerId, Number(c.precioGarrafon)])
+  );
 
   // ── Armar las ventas a crear (fuera de la tx; sólo lectura) ────────────────
   type VentaPlan = {
@@ -75,12 +77,13 @@ export const POST = withAuthz(async (req: Request, ctx: Params) => {
 
   // 1. Rutas (casas): venta EFECTIVO y/o TRANSFERENCIA por ruta.
   for (const linea of corte.rutas) {
-    const totalRuta = linea.efectivo + linea.transferencia;
+    const totalRuta = Number(linea.efectivo) + Number(linea.transferencia);
     if (!(totalRuta > 0)) continue;
     const partes: Array<{ formaPago: "EFECTIVO" | "TRANSFERENCIA"; importe: number }> = [];
-    if (linea.efectivo > 0) partes.push({ formaPago: "EFECTIVO", importe: linea.efectivo });
-    if (linea.transferencia > 0)
-      partes.push({ formaPago: "TRANSFERENCIA", importe: linea.transferencia });
+    if (Number(linea.efectivo) > 0)
+      partes.push({ formaPago: "EFECTIVO", importe: Number(linea.efectivo) });
+    if (Number(linea.transferencia) > 0)
+      partes.push({ formaPago: "TRANSFERENCIA", importe: Number(linea.transferencia) });
 
     let garrafonesRestantes = linea.garrafones;
     partes.forEach((parte, idx) => {
@@ -196,7 +199,7 @@ export const POST = withAuthz(async (req: Request, ctx: Params) => {
             companyId,
             gastoId: gasto.id,
             descripcion: `Gasto purificadora — ${g.descripcion}`,
-            monto: g.monto,
+            monto: Number(g.monto),
             formaPago: g.formaPago,
             fecha,
           });

@@ -27,8 +27,17 @@ const recetaInclude = {
 export const GET = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
     const { id } = await ctx.params;
-    const item = await prisma.restMenuItem.findUnique({ where: { id }, include: recetaInclude });
-    if (!item) throw new AuthzError(404, "Platillo no encontrado");
+    const raw = await prisma.restMenuItem.findUnique({ where: { id }, include: recetaInclude });
+    if (!raw) throw new AuthzError(404, "Platillo no encontrado");
+    const item = {
+      ...raw,
+      precio: Number(raw.precio),
+      receta: raw.receta.map((r) => ({
+        ...r,
+        cantidad: Number(r.cantidad),
+        insumo: { ...r.insumo, costoPromedio: Number(r.insumo.costoPromedio) },
+      })),
+    };
 
     await requireMembership(item.companyId, undefined, req);
     await requireModule(item.companyId, "RESTAURANTE", req);
@@ -37,7 +46,7 @@ export const GET = withAuthz(
       where: { companyId: item.companyId },
       select: { ivaRate: true },
     });
-    return NextResponse.json({ ...item, ...computeCosting(item, config?.ivaRate ?? 0.16) });
+    return NextResponse.json({ ...item, ...computeCosting(item, Number(config?.ivaRate ?? 0.16)) });
   }
 );
 
@@ -132,13 +141,21 @@ export const PATCH = withAuthz(
           ...(categoriaId !== undefined ? { categoriaId } : {}),
         },
         include: recetaInclude,
-      });
+      }).then((it) => ({
+        ...it,
+        precio: Number(it.precio),
+        receta: it.receta.map((r) => ({
+          ...r,
+          cantidad: Number(r.cantidad),
+          insumo: { ...r.insumo, costoPromedio: Number(r.insumo.costoPromedio) },
+        })),
+      }));
     });
 
     const config = await prisma.restauranteConfig.findUnique({
       where: { companyId: item.companyId },
       select: { ivaRate: true },
     });
-    return NextResponse.json({ ...updated, ...computeCosting(updated, config?.ivaRate ?? 0.16) });
+    return NextResponse.json({ ...updated, ...computeCosting(updated, Number(config?.ivaRate ?? 0.16)) });
   }
 );

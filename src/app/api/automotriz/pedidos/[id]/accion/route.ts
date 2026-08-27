@@ -64,7 +64,7 @@ export const POST = withAuthz(async (req: Request, ctx: { params: Promise<{ id: 
         data: {
           estado: "APARTADO",
           apartadoAt: new Date(),
-          ...(parsed.data.anticipo ? { anticipoRecibido: pedido.anticipoRecibido + parsed.data.anticipo } : {}),
+          ...(parsed.data.anticipo ? { anticipoRecibido: Number(pedido.anticipoRecibido) + parsed.data.anticipo } : {}),
         },
       });
     });
@@ -81,7 +81,7 @@ export const POST = withAuthz(async (req: Request, ctx: { params: Promise<{ id: 
     const toma = parsed.data.toma;
     let tomaVin: string | null = null;
     if (toma) {
-      if (!pedido.tomaACuentaMonto || pedido.tomaACuentaMonto <= 0) {
+      if (!pedido.tomaACuentaMonto || Number(pedido.tomaACuentaMonto) <= 0) {
         return NextResponse.json({ error: "El pedido no tiene toma a cuenta registrada" }, { status: 422 });
       }
       tomaVin = toma.vin.trim().toUpperCase();
@@ -95,7 +95,7 @@ export const POST = withAuthz(async (req: Request, ctx: { params: Promise<{ id: 
       const fechaVenta = parsed.data.fecha ? new Date(parsed.data.fecha) : new Date();
       const venta = await ejecutarVentaUnidad({
         vehiculoId: pedido.vehiculoId,
-        precioVenta: pedido.precio,
+        precioVenta: Number(pedido.precio),
         fecha: fechaVenta,
         clienteId: pedido.clienteId,
         vendedorId: pedido.vendedorId,

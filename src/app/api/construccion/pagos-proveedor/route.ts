@@ -88,7 +88,7 @@ export const POST = withAuthz(async (req: Request) => {
           comprobanteName: data.comprobante?.name ?? null,
         },
       });
-      const aplicado = await aplicarPago(tx, pago, data.aplicaciones, fecha);
+      const aplicado = await aplicarPago(tx, { ...pago, monto: Number(pago.monto) }, data.aplicaciones, fecha);
       return { pago, aplicado, anticipo: Math.max(0, data.monto - aplicado) };
     });
 
@@ -154,7 +154,7 @@ export const GET = withAuthz(async (req: Request) => {
   });
 
   const out = pagos.map((p) => {
-    const aplicado = p.aplicaciones.reduce((s, a) => s + a.monto, 0);
+    const aplicado = p.aplicaciones.reduce((s, a) => s + Number(a.monto), 0);
     return {
       id: p.id,
       supplierId: p.supplierId,
@@ -166,7 +166,7 @@ export const GET = withAuthz(async (req: Request) => {
       notas: p.notas,
       comprobanteName: p.comprobanteName,
       aplicado,
-      disponible: Math.max(0, p.monto - aplicado),
+      disponible: Math.max(0, Number(p.monto) - aplicado),
       aplicaciones: p.aplicaciones,
       createdAt: p.createdAt,
     };

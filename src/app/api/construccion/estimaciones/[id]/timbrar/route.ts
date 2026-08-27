@@ -40,7 +40,7 @@ export const POST = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
     const { id } = await ctx.params;
 
-    const estimacion = await prisma.estimacion.findUnique({
+    const estimacionRow = await prisma.estimacion.findUnique({
       where: { id },
       include: {
         proyecto: {
@@ -58,7 +58,25 @@ export const POST = withAuthz(
       },
     });
 
-    if (!estimacion) throw new AuthzError(404, "Estimación no encontrada");
+    if (!estimacionRow) throw new AuthzError(404, "Estimación no encontrada");
+    const estimacion = {
+      ...estimacionRow,
+      subtotal: Number(estimacionRow.subtotal),
+      iva: Number(estimacionRow.iva),
+      total: Number(estimacionRow.total),
+      proyecto: {
+        ...estimacionRow.proyecto,
+        montoContratado:
+          estimacionRow.proyecto.montoContratado === null
+            ? null
+            : Number(estimacionRow.proyecto.montoContratado),
+        anticipoMonto:
+          estimacionRow.proyecto.anticipoMonto === null
+            ? null
+            : Number(estimacionRow.proyecto.anticipoMonto),
+        anticipoAmortizado: Number(estimacionRow.proyecto.anticipoAmortizado),
+      },
+    };
     if (estimacion.estado !== "BORRADOR") {
       return NextResponse.json(
         { error: `Solo se pueden timbrar estimaciones en BORRADOR (estado: ${estimacion.estado})` },

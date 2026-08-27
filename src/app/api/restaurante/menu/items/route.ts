@@ -52,11 +52,21 @@ export const GET = withAuthz(async (req: Request) => {
       },
       include: recetaInclude,
       orderBy: [{ categoria: { orden: "asc" } }, { nombre: "asc" }],
-    }),
+    }).then((rows) =>
+      rows.map((item) => ({
+        ...item,
+        precio: Number(item.precio),
+        receta: item.receta.map((r) => ({
+          ...r,
+          cantidad: Number(r.cantidad),
+          insumo: { ...r.insumo, costoPromedio: Number(r.insumo.costoPromedio) },
+        })),
+      }))
+    ),
     prisma.restauranteConfig.findUnique({ where: { companyId }, select: { ivaRate: true } }),
   ]);
 
-  const ivaRate = config?.ivaRate ?? 0.16;
+  const ivaRate = Number(config?.ivaRate ?? 0.16);
   return NextResponse.json(
     items.map((item) => ({ ...item, ...computeCosting(item, ivaRate) }))
   );
@@ -136,12 +146,20 @@ export const POST = withAuthz(async (req: Request) => {
         },
       },
       include: recetaInclude,
-    }),
+    }).then((it) => ({
+      ...it,
+      precio: Number(it.precio),
+      receta: it.receta.map((r) => ({
+        ...r,
+        cantidad: Number(r.cantidad),
+        insumo: { ...r.insumo, costoPromedio: Number(r.insumo.costoPromedio) },
+      })),
+    })),
     prisma.restauranteConfig.findUnique({ where: { companyId }, select: { ivaRate: true } }),
   ]);
 
   return NextResponse.json(
-    { ...item, ...computeCosting(item, config?.ivaRate ?? 0.16) },
+    { ...item, ...computeCosting(item, Number(config?.ivaRate ?? 0.16)) },
     { status: 201 }
   );
 });

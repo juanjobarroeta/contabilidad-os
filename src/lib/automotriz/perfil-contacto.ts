@@ -291,14 +291,14 @@ export async function perfilContacto(
   // unidades sin costo conocido (compra anterior al archivo de 5 años del SAT)
   // NO entran al agregado: inventarían una utilidad igual a la venta entera.
   const unidades = unidadesDb.map((v) => {
-    const costos = v.costos.reduce((s, c) => s + c.monto, 0);
-    const sinCosto = v.costoCompra <= 0;
+    const costos = v.costos.reduce((s, c) => s + Number(c.monto), 0);
+    const sinCosto = Number(v.costoCompra) <= 0;
     const utilidad =
       v.precioVenta == null || sinCosto
         ? null
-        : r2(v.precioVenta - v.costoCompra - costos - v.comisionMonto);
+        : r2(Number(v.precioVenta) - Number(v.costoCompra) - costos - Number(v.comisionMonto));
     const { costos: _costos, comisionMonto: _com, ...resto } = v;
-    return { ...resto, utilidad };
+    return { ...resto, costoCompra: Number(v.costoCompra), precioVenta: v.precioVenta === null ? null : Number(v.precioVenta), utilidad };
   });
   const conUtilidad = unidades.filter((u) => u.utilidad != null);
   const ventaConUtilidad = r2(conUtilidad.reduce((s, u) => s + (u.precioVenta ?? 0), 0));
@@ -348,8 +348,8 @@ export async function perfilContacto(
       piezas: 0,
       importe: 0,
     };
-    const piezas = Math.abs(m.cantidad);
-    const importe = piezas * (m.montoUnitario ?? 0);
+    const piezas = Math.abs(Number(m.cantidad));
+    const importe = piezas * Number(m.montoUnitario ?? 0);
     acc.piezas += piezas;
     acc.importe = r2(acc.importe + importe);
     porParte.set(clave, acc);
@@ -391,17 +391,17 @@ export async function perfilContacto(
     },
     servicio: {
       ordenes: serviciosDb.length,
-      total: r2(serviciosDb.reduce((s, x) => s + x.total, 0)),
-      manoObra: r2(serviciosDb.reduce((s, x) => s + x.manoObra, 0)),
-      refacciones: r2(serviciosDb.reduce((s, x) => s + x.refacciones, 0)),
+      total: r2(serviciosDb.reduce((s, x) => s + Number(x.total), 0)),
+      manoObra: r2(serviciosDb.reduce((s, x) => s + Number(x.manoObra), 0)),
+      refacciones: r2(serviciosDb.reduce((s, x) => s + Number(x.refacciones), 0)),
       ultimaVisita: serviciosDb[0]?.fecha ?? null,
       ultimas: serviciosDb.slice(0, 25).map((s) => ({
         id: s.id,
         fecha: s.fecha,
         concepto: s.concepto,
-        total: s.total,
-        manoObra: s.manoObra,
-        refacciones: s.refacciones,
+        total: Number(s.total),
+        manoObra: Number(s.manoObra),
+        refacciones: Number(s.refacciones),
         vehiculo: s.vehiculo ?? null,
         invoice: s.invoice,
         orden: s.orden ?? null,

@@ -43,8 +43,8 @@ async function main() {
     for (const o of ordenes) {
       const sv = svs.get(o.servicioVentaId!);
       if (!sv) { sinSV++; continue; }
-      const lineas = o.lineas.reduce((a, l) => a + l.cantidad * l.precioUnitario, 0);
-      const esperado = sv.manoObra + sv.refacciones; // subtotal del servicio
+      const lineas = o.lineas.reduce((a, l) => a + Number(l.cantidad) * Number(l.precioUnitario), 0);
+      const esperado = Number(sv.manoObra) + Number(sv.refacciones); // subtotal del servicio
       if (Math.abs(lineas - esperado) <= TOL) cuadran++;
       else if (fallos.length < 6)
         fallos.push(`  folio ${o.folio}: líneas $${Math.round(lineas).toLocaleString()} vs SV $${Math.round(esperado).toLocaleString()} (Δ ${Math.round(lineas - esperado)})`);

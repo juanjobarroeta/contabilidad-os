@@ -87,8 +87,8 @@ async function main() {
         arr.push({
           refaccionId: m.refaccion.id,
           descripcion: m.refaccion.descripcion ?? "Refacción",
-          cantidad: Math.abs(m.cantidad ?? 1),
-          precio: Math.abs(m.montoUnitario ?? 0),
+          cantidad: Math.abs(Number(m.cantidad ?? 1)),
+          precio: Math.abs(Number(m.montoUnitario ?? 0)),
         });
         partesPorInvoice.set(m.invoiceId, arr);
       }
@@ -122,14 +122,14 @@ async function main() {
           recibidaAt: v.fecha, entregadaAt: v.fecha, servicioVentaId: v.id,
         });
         ordenes++;
-        if (v.manoObra > 0.005)
+        if (Number(v.manoObra) > 0.005)
           filasLinea.push({ ordenId, tipo: "MANO_OBRA", descripcion: (v.concepto ?? "Mano de obra").slice(0, 500), cantidad: 1, precioUnitario: v.manoObra });
         for (const pt of partes)
           filasLinea.push({ ordenId, tipo: "REFACCION", descripcion: pt.descripcion.slice(0, 500), cantidad: pt.cantidad, precioUnitario: pt.precio, refaccionId: pt.refaccionId });
         // Residuo: refacciones facturadas − itemizadas del kardex, como una
         // línea resumen, para que la orden sume lo que de verdad se cobró.
         const itemizado = partes.reduce((a, pt) => a + pt.cantidad * pt.precio, 0);
-        const residuo = Math.round((v.refacciones - itemizado) * 100) / 100;
+        const residuo = Math.round((Number(v.refacciones) - itemizado) * 100) / 100;
         if (residuo > 0.005)
           filasLinea.push({ ordenId, tipo: "REFACCION", descripcion: "Refacciones (sin desglose en kardex)", cantidad: 1, precioUnitario: residuo });
       }

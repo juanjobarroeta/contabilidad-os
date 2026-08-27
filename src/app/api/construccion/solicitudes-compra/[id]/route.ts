@@ -194,7 +194,7 @@ export const PUT = withAuthz(
           excludeUserId: user.id,
           payload: {
             title: `Nueva requisición ${updated.folio}`,
-            body: `${moneyPush(updated.total)} — por autorizar`,
+            body: `${moneyPush(Number(updated.total))} — por autorizar`,
             url: "/compras-por-autorizar",
             tag: `solicitud-${updated.id}`,
           },

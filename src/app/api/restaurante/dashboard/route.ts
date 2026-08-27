@@ -55,23 +55,23 @@ export const GET = withAuthz(async (req: Request) => {
     prisma.restCompra.count({ where: { companyId, estado: "RECIBIDA" } }),
   ]);
 
-  const ventasTotal = round2(cobradas.reduce((s, o) => s + o.total, 0));
-  const ventasSubtotal = round2(cobradas.reduce((s, o) => s + o.subtotal, 0));
-  const propinas = round2(cobradas.reduce((s, o) => s + o.propina, 0));
-  const costo = round2(cobradas.reduce((s, o) => s + o.costoTotal, 0));
+  const ventasTotal = round2(cobradas.reduce((s, o) => s + Number(o.total), 0));
+  const ventasSubtotal = round2(cobradas.reduce((s, o) => s + Number(o.subtotal), 0));
+  const propinas = round2(cobradas.reduce((s, o) => s + Number(o.propina), 0));
+  const costo = round2(cobradas.reduce((s, o) => s + Number(o.costoTotal), 0));
 
   const porFormaPago: Record<string, number> = {};
   for (const o of cobradas) {
     const key = o.formaPago ?? "OTRO";
-    porFormaPago[key] = round2((porFormaPago[key] ?? 0) + o.total + o.propina);
+    porFormaPago[key] = round2((porFormaPago[key] ?? 0) + Number(o.total) + Number(o.propina));
   }
 
   const topMap = new Map<string, { nombre: string; cantidad: number; venta: number }>();
   for (const o of cobradas) {
     for (const i of o.items) {
       const cur = topMap.get(i.menuItem.id) ?? { nombre: i.menuItem.nombre, cantidad: 0, venta: 0 };
-      cur.cantidad += i.cantidad;
-      cur.venta = round2(cur.venta + i.cantidad * i.precioUnitario);
+      cur.cantidad += Number(i.cantidad);
+      cur.venta = round2(cur.venta + Number(i.cantidad) * Number(i.precioUnitario));
       topMap.set(i.menuItem.id, cur);
     }
   }

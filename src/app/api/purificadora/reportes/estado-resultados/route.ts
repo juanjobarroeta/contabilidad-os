@@ -59,15 +59,21 @@ export const GET = withAuthz(async (req: Request) => {
   // Gastos + compras fusionados por categoría.
   const porCategoria = new Map<string, number>();
   for (const g of gastosCat) {
-    porCategoria.set(g.categoria, round2((porCategoria.get(g.categoria) ?? 0) + (g._sum.monto ?? 0)));
+    porCategoria.set(
+      g.categoria,
+      round2((porCategoria.get(g.categoria) ?? 0) + Number(g._sum.monto ?? 0))
+    );
   }
   for (const c of comprasCat) {
-    porCategoria.set(c.categoria, round2((porCategoria.get(c.categoria) ?? 0) + (c._sum.total ?? 0)));
+    porCategoria.set(
+      c.categoria,
+      round2((porCategoria.get(c.categoria) ?? 0) + Number(c._sum.total ?? 0))
+    );
   }
 
   const porEstado = new Map(ventas.map((v) => [v.estado, v]));
-  const cobrado = round2(porEstado.get("COBRADA")?._sum.total ?? 0);
-  const porCobrar = round2(porEstado.get("PENDIENTE")?._sum.total ?? 0);
+  const cobrado = round2(Number(porEstado.get("COBRADA")?._sum.total ?? 0));
+  const porCobrar = round2(Number(porEstado.get("PENDIENTE")?._sum.total ?? 0));
   const ingresos = round2(cobrado + porCobrar);
   const garrafones =
     (porEstado.get("COBRADA")?._sum.garrafones ?? 0) +
@@ -97,7 +103,7 @@ export const GET = withAuthz(async (req: Request) => {
     },
     cortesias: {
       garrafones: cortesias._sum.cortesiasGarrafones ?? 0,
-      importe: round2(cortesias._sum.cortesiasImporte ?? 0),
+      importe: round2(Number(cortesias._sum.cortesiasImporte ?? 0)),
     },
     costoAgua,
     utilidadBruta,

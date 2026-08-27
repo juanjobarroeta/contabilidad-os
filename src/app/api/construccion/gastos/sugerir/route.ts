@@ -92,7 +92,7 @@ export const GET = withAuthz(async (req: Request) => {
   });
   const gastadoByInsumoId = new Map<string, number>();
   for (const g of insumoGastos) {
-    if (g.insumoId) gastadoByInsumoId.set(g.insumoId, g._sum.importe ?? 0);
+    if (g.insumoId) gastadoByInsumoId.set(g.insumoId, Number(g._sum.importe ?? 0));
   }
 
   const insumoScored = insumosRaw
@@ -152,7 +152,7 @@ export const GET = withAuthz(async (req: Request) => {
     const gastadoByPartidaId = new Map<string, number>();
     for (const g of partidaGastos) {
       if (g.presupuestoPartidaId)
-        gastadoByPartidaId.set(g.presupuestoPartidaId, g._sum.importe ?? 0);
+        gastadoByPartidaId.set(g.presupuestoPartidaId, Number(g._sum.importe ?? 0));
     }
 
     partidaScored = partidasRaw
@@ -166,11 +166,11 @@ export const GET = withAuthz(async (req: Request) => {
         return {
           id: p.id,
           codigo: p.codigo,
-          cantidad: p.cantidad,
-          importe: p.importe,
+          cantidad: p.cantidad === null ? null : Number(p.cantidad),
+          importe: Number(p.importe),
           concepto,
           gastado,
-          queda: Math.max(0, p.importe - gastado),
+          queda: Math.max(0, Number(p.importe) - gastado),
           _score: score,
         };
       })

@@ -136,7 +136,7 @@ async function handle(req: Request) {
           resourceId,
           start: r.inicio,
           end: r.fin,
-          price: r.precio,
+          price: Number(r.precio),
         });
         if (extId) {
           await prisma.reservation.update({

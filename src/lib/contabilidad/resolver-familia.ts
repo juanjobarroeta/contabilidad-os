@@ -130,8 +130,8 @@ export async function unidadesAmparadas(
       marca: u.marca,
       modelo: u.modelo,
       version: u.version,
-      costoCompra: u.costoCompra,
-      precioVenta: u.precioVenta,
+      costoCompra: Number(u.costoCompra),
+      precioVenta: u.precioVenta === null ? null : Number(u.precioVenta),
     })),
   );
 }

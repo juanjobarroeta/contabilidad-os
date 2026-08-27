@@ -68,7 +68,7 @@ async function main() {
   for (const r of problematicas) {
     const hit = porParte.get(r.numeroParte);
     if (!hit) continue;
-    const antes = r.ultimoCosto;
+    const antes = Number(r.ultimoCosto);
     const despues = Math.round((antes / hit.factor) * 100) / 100;
 
     // El factor tiene que producir un margen que EXISTA en el negocio. Éste es
@@ -76,7 +76,7 @@ async function main() {
     // leído cambia un costo absurdo —que se nota— por uno razonable que no.
     // Una refacción se vende entre 15% y 70% de margen; fuera de ahí, la
     // lectura se sospecha y se manda a revisión en vez de escribirse.
-    const precio = r.ultimoPrecio ?? 0;
+    const precio = Number(r.ultimoPrecio ?? 0);
     const margen = precio > 0 ? (precio - despues) / precio : null;
     const creible = margen != null && margen >= 0.05 && margen <= 0.80;
 

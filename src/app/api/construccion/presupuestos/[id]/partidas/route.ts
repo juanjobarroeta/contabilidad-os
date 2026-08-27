@@ -169,7 +169,7 @@ export const POST = withAuthz(
       return NextResponse.json({ error: "Concepto inválido" }, { status: 400 });
     }
 
-    const precioUnitario = concepto.apuActual?.precioUnitario ?? 0;
+    const precioUnitario = Number(concepto.apuActual?.precioUnitario ?? 0);
     const importe = round2(data.cantidad! * precioUnitario);
 
     // If orden not supplied, append within same parent
@@ -224,7 +224,7 @@ export const POST = withAuthz(
         where: { presupuestoId: id, esRollup: false },
         _sum: { importe: true },
       });
-      const montoTotal = round2(agg._sum.importe ?? 0);
+      const montoTotal = round2(Number(agg._sum.importe ?? 0));
 
       const updatedPresupuesto = await tx.presupuesto.update({
         where: { id },

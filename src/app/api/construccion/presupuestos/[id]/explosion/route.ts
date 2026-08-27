@@ -104,8 +104,8 @@ export const GET = withAuthz(
         // if/when we add recursive explosion. For now, only raw insumos.
         if (!line.insumo) continue;
 
-        const totalQty = round2(partida.cantidad * line.cantidad);
-        const totalCost = round2(totalQty * line.costoUnitario);
+        const totalQty = round2(Number(partida.cantidad) * Number(line.cantidad));
+        const totalCost = round2(totalQty * Number(line.costoUnitario));
 
         if (!byInsumoId.has(line.insumo.id)) {
           byInsumoId.set(line.insumo.id, {
@@ -114,7 +114,7 @@ export const GET = withAuthz(
             descripcion: line.insumo.descripcion,
             tipo: line.insumo.tipo,
             unidad: line.insumo.unidad,
-            costoUnitario: line.costoUnitario,
+            costoUnitario: Number(line.costoUnitario),
             cantidadTotal: 0,
             importeTotal: 0,
             usedInConceptos: new Set(),
@@ -154,9 +154,9 @@ export const GET = withAuthz(
           descripcion: row.insumo.descripcion,
           tipo: row.insumo.tipo,
           unidad: row.insumo.unidad,
-          costoUnitario: row.costoUnitario,
-          cantidadTotal: round2(row.cantidad),
-          importeTotal: round2(row.importe),
+          costoUnitario: Number(row.costoUnitario),
+          cantidadTotal: round2(Number(row.cantidad)),
+          importeTotal: round2(Number(row.importe)),
           usedInConceptos: new Set(),
         });
       }
@@ -204,8 +204,8 @@ export const GET = withAuthz(
       for (const g of grouped) {
         if (!g.insumoId) continue;
         compradoByInsumo.set(g.insumoId, {
-          cantidad: g._sum.cantidad ?? 0,
-          importe: g._sum.importe ?? 0,
+          cantidad: Number(g._sum.cantidad ?? 0),
+          importe: Number(g._sum.importe ?? 0),
         });
       }
     }

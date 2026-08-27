@@ -62,7 +62,7 @@ async function recomputeApuTotals(tx: Tx, apuId: string) {
   });
   if (!apu) throw new Error("apu not found during recompute");
 
-  const costoDirecto = apu.insumos.reduce((acc, l) => acc + l.importe, 0);
+  const costoDirecto = apu.insumos.reduce((acc, l) => acc + Number(l.importe), 0);
   // Cascading overhead formula matching Mexican construction standard:
   //   subtotal1 = CD + (CD × indirectos)
   //   subtotal2 = subtotal1 + (subtotal1 × financieros)

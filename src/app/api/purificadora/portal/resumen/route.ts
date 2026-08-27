@@ -67,7 +67,7 @@ export const GET = withAuthz(async (req: Request) => {
     const bucket = porMes.get(v.fecha.toISOString().slice(0, 7));
     if (bucket) {
       bucket.garrafones += v.garrafones;
-      bucket.total = round2(bucket.total + v.total);
+      bucket.total = round2(bucket.total + Number(v.total));
     }
   }
 
@@ -77,11 +77,11 @@ export const GET = withAuthz(async (req: Request) => {
     precioGarrafon: clienteConfig?.precioGarrafon ?? config?.precioGarrafon ?? null,
     mesActual: {
       garrafones: mesActual._sum.garrafones ?? 0,
-      total: round2(mesActual._sum.total ?? 0),
+      total: round2(Number(mesActual._sum.total ?? 0)),
       entregas: mesActual._count,
     },
     saldoPendiente: {
-      total: round2(pendiente._sum.total ?? 0),
+      total: round2(Number(pendiente._sum.total ?? 0)),
       entregas: pendiente._count,
     },
     meses,

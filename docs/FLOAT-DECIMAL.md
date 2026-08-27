@@ -1,7 +1,8 @@
 # Float → Decimal en dinero — plan por olas
 
-**Estado:** Olas 0–4 en producción (convertidor, bancos, facturas, nómina,
-mayor/declaraciones); Ola 5 pendiente (verticales).
+**Estado:** ✅ COMPLETO — las 6 olas (0–5) en producción. Todo el dinero del
+schema vive en `numeric(18,6)`; los únicos `Float` restantes son no-dinero a
+propósito (porcentajes, rendimiento, stock, scores — 20 columnas).
 **Por qué:** hay 232 campos `Float` en el schema; ~190 son dinero. `float8`
 no representa decimales exactos (0.1 + 0.2 ≠ 0.3): los importes derivan
 centavos al acumularse y los `SUM()` de Postgres arrastran ruido binario. Un
@@ -96,3 +97,11 @@ cuadre → staging → prod. **Orden por riesgo creciente y valor de canario:**
 - **`limiteCredito` (ya Decimal):** desde la Ola 0 sale como `number` en las
   APIs (antes: string serializado). Único consumidor conocido: el route de
   terms de construcción, que escribe con `z.coerce.number()` — compatible.
+- **Scripts con `new PrismaClient()` crudo** (~27 en `scripts/`, sobre todo
+  seeds/backfills ya ejecutados y los `validate-*-postings.mjs`): NO pasan
+  por el convertidor — a runtime reciben `Prisma.Decimal`, y `d1 + d2` en JS
+  concatena strings en silencio. Los `.ts` que hacían aritmética los cachó
+  `tsc` (arreglados); los `.mjs` no tienen red de tipos. **Antes de volver a
+  correr uno de esos scripts, migrarlo al cliente compartido
+  (`import { prisma } from "../src/lib/prisma"`) o envolver sus lecturas de
+  dinero en `Number()`.**

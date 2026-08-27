@@ -192,11 +192,11 @@ model Company {
   logoUrl String?
 
   // ISR — Coeficiente de utilidad (Art. 14 LISR) set once per fiscal year
-  coeficienteUtilidad Float? // Stored after user confirms/overrides auto-calculation
+  coeficienteUtilidad Decimal? @db.Decimal(18, 6) // Stored after user confirms/overrides auto-calculation
   coeficienteAnio     Int? // Which fiscal year this coeficiente applies to
 
   // ISR — Pérdidas fiscales de ejercicios anteriores pendientes de aplicar (Art. 14)
-  perdidaFiscalPendiente Float? // Monto ACTUALIZADO del remanente pendiente de amortizar
+  perdidaFiscalPendiente Decimal? @db.Decimal(18, 6) // Monto ACTUALIZADO del remanente pendiente de amortizar
   perdidaFiscalAnio      Int? // Ejercicio al que corresponde el remanente (última anual)
 
   // Apertura fiscal — momento en que el contador revisó y CONFIRMÓ el punto de
@@ -2342,7 +2342,7 @@ model Proyecto {
   fechaInicio     DateTime?
   fechaFinPlan    DateTime?
   fechaFinReal    DateTime?
-  montoContratado Float?
+  montoContratado Decimal? @db.Decimal(18, 6)
   anticipoPorc    Float? // typical 30
   retencionPorc   Float? // typical 5
 
@@ -2373,9 +2373,9 @@ model Proyecto {
   weekCount         Int?
 
   // Anticipo tracking — filled when the customer pays the anticipo
-  anticipoMonto      Float? // actual $ received (montoContratado × anticipoPorc / 100)
+  anticipoMonto      Decimal? @db.Decimal(18, 6) // actual $ received (montoContratado × anticipoPorc / 100)
   anticipoFecha      DateTime? // date received
-  anticipoAmortizado Float     @default(0) // running total amortized across estimaciones
+  anticipoAmortizado Decimal @db.Decimal(18, 6)     @default(0) // running total amortized across estimaciones
   anticipoBankTxId   String? // link to the BankTransaction that recorded the deposit
   anticipoInvoiceId  String? // link to the CFDI de anticipo (Invoice)
 
@@ -2447,12 +2447,12 @@ model APU {
   version    Int      @default(1)
 
   // Roll-up totals (computed from APUInsumo at write time, validated server-side)
-  costoDirecto    Float // sum of all insumos
+  costoDirecto    Decimal @db.Decimal(18, 6) // sum of all insumos
   indirectosPorc  Float @default(0)
   financierosPorc Float @default(0)
   utilidadPorc    Float @default(0)
   cargosAdicPorc  Float @default(0)
-  precioUnitario  Float // final PU after all overhead
+  precioUnitario  Decimal @db.Decimal(18, 6) // final PU after all overhead
   rendimiento     Float @default(1) // qty produced per cuadrilla-day
 
   concepto           Concepto    @relation("ConceptoApus", fields: [conceptoId], references: [id], onDelete: Cascade)
@@ -2480,9 +2480,9 @@ model APUInsumo {
   apuId         String
   insumoId      String? // raw insumo reference (mutually exclusive with conceptoRefId)
   conceptoRefId String? // sub-APU reference (mutually exclusive with insumoId)
-  cantidad      Float
-  costoUnitario Float // snapshot at time of APU build
-  importe       Float // = cantidad * costoUnitario
+  cantidad      Decimal @db.Decimal(18, 6)
+  costoUnitario Decimal @db.Decimal(18, 6) // snapshot at time of APU build
+  importe       Decimal @db.Decimal(18, 6) // = cantidad * costoUnitario
   orden         Int     @default(0)
 
   apu         APU       @relation(fields: [apuId], references: [id], onDelete: Cascade)
@@ -2501,12 +2501,12 @@ model Insumo {
   descripcion String
   tipo        InsumoTipo
   unidad      String
-  costoActual Float
+  costoActual Decimal @db.Decimal(18, 6)
   monedaCosto String     @default("MXN")
 
   // For MANO_OBRA: link to IMSS factor calc inputs
-  salarioBase   Float? // daily base (SBC)
-  factorSalario Float? // SDR factor including IMSS/INFONAVIT/prestaciones
+  salarioBase   Decimal? @db.Decimal(18, 6) // daily base (SBC)
+  factorSalario Decimal? @db.Decimal(18, 6) // SDR factor including IMSS/INFONAVIT/prestaciones
 
   // For MATERIAL: SAT product key (carries over to CFDI)
   claveProdServ String?
@@ -2541,7 +2541,7 @@ model Presupuesto {
 
   version    Int               @default(1)
   estado     PresupuestoEstado @default(BORRADOR)
-  montoTotal Float             @default(0)
+  montoTotal Decimal @db.Decimal(18, 6)             @default(0)
 
   // Contrato vs Ejecutado distinction.
   // CONTRATO = frozen, customer-signed. Revenue basis. Default for all existing rows.
@@ -2582,9 +2582,9 @@ model PresupuestoInsumo {
   id            String @id @default(cuid())
   presupuestoId String
   insumoId      String
-  cantidad      Float // project-total quantity from the explosion sheet
-  costoUnitario Float // unit price snapshot at import time
-  importe       Float // cantidad × costoUnitario
+  cantidad      Decimal @db.Decimal(18, 6) // project-total quantity from the explosion sheet
+  costoUnitario Decimal @db.Decimal(18, 6) // unit price snapshot at import time
+  importe       Decimal @db.Decimal(18, 6) // cantidad × costoUnitario
 
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
   insumo      Insumo      @relation(fields: [insumoId], references: [id])
@@ -2601,9 +2601,9 @@ model PresupuestoPartida {
   // for BRANCH partidas (capítulo rollup rows). See esRollup.
   conceptoId     String?
   apuVersion     Int     @default(1) // snapshot of which APU version was used (leaves only)
-  cantidad       Float? // leaves only
-  precioUnitario Float   @default(0) // leaves only; branches compute from children
-  importe        Float   @default(0) // leaves: cantidad × PU; branches: sum of children
+  cantidad       Decimal? @db.Decimal(18, 6) // leaves only
+  precioUnitario Decimal @db.Decimal(18, 6)   @default(0) // leaves only; branches compute from children
+  importe        Decimal @db.Decimal(18, 6)   @default(0) // leaves: cantidad × PU; branches: sum of children
   orden          Int     @default(0) // global display order within the presupuesto
 
   // Legacy flat grouping (kept nullable for backwards read-compat during
@@ -2660,15 +2660,15 @@ model Estimacion {
   fechaCorte    DateTime? // Decolsa workflow: "CORTE AL" — cuando se cierra el período
   estado        EstimacionEstado @default(BORRADOR)
 
-  subtotal             Float
-  retencionGarantia    Float @default(0)
-  amortizacionAnticipo Float @default(0)
-  iva                  Float
-  total                Float
+  subtotal             Decimal @db.Decimal(18, 6)
+  retencionGarantia    Decimal @db.Decimal(18, 6) @default(0)
+  amortizacionAnticipo Decimal @db.Decimal(18, 6) @default(0)
+  iva                  Decimal @db.Decimal(18, 6)
+  total                Decimal @db.Decimal(18, 6)
 
   // Cumulative figures cached at the time this estimación is approved. Lets
   // us render the dashboard without recomputing every time.
-  importeAcumulado Float @default(0)
+  importeAcumulado Decimal @db.Decimal(18, 6) @default(0)
   pctPeriodo       Float @default(0)
   pctAcumulado     Float @default(0)
 
@@ -2724,8 +2724,8 @@ model EstimacionPartida {
 
   // ── LEAF MODE (Bartiz)
   presupuestoPartidaId String?
-  cantidadEjecutada    Float? // this period
-  cantidadAcumulada    Float? // running total
+  cantidadEjecutada    Decimal? @db.Decimal(18, 6) // this period
+  cantidadAcumulada    Decimal? @db.Decimal(18, 6) // running total
 
   // ── TEMPLATE MODE (Decolsa)
   templatePartidaId        String?
@@ -2736,10 +2736,10 @@ model EstimacionPartida {
   pctPeriodo               Float? // computed
   pctAcumulado             Float? // computed
   descripcionSnapshot      String?
-  importeContrato          Float? // capítulo total at template-set time
+  importeContrato          Decimal? @db.Decimal(18, 6) // capítulo total at template-set time
 
   // ── Both modes share these
-  importe          Float // periodo importe (qty × PU OR pct × contrato)
+  importe          Decimal @db.Decimal(18, 6) // periodo importe (qty × PU OR pct × contrato)
   unidadProyectoId String? // optional: which depto / nivel consumed this
 
   estimacion         Estimacion                 @relation(fields: [estimacionId], references: [id], onDelete: Cascade)
@@ -2880,7 +2880,7 @@ model SolicitudCompra {
 
   folio  String
   estado SolicitudEstado @default(PENDIENTE)
-  total  Float
+  total  Decimal @db.Decimal(18, 6)
   notas  String?
 
   // Header metadata — matches the partner's "SOLICITUD DE COTIZACIÓN"
@@ -2933,9 +2933,9 @@ model SolicitudPartida {
   insumoId       String?
   descripcion    String
   unidad         String? // TON, PALLET, m3, kg, pza — keeps requisición rows aligned with the Excel template
-  cantidad       Float
-  precioUnitario Float
-  importe        Float
+  cantidad       Decimal @db.Decimal(18, 6)
+  precioUnitario Decimal @db.Decimal(18, 6)
+  importe        Decimal @db.Decimal(18, 6)
 
   // Link purchase to a specific ejecutado partida for cost tracking
   presupuestoPartidaId String?
@@ -2969,7 +2969,7 @@ model SolicitudCompraCotizacion {
   supplierNombre  String // "RYSCO", "BARAMAT" — free-text when supplier row doesn't exist yet
   fechaCotizacion DateTime  @default(now())
   vigenciaHasta   DateTime?
-  total           Float     @default(0)
+  total           Decimal @db.Decimal(18, 6)     @default(0)
   moneda          String    @default("MXN")
   notas           String?
   isSelected      Boolean   @default(false)
@@ -3014,7 +3014,7 @@ model SolicitudAdjudicacion {
   tieneCredito       Boolean   @default(false)
   diasCredito        Int? // días de crédito de la oferta ganadora → vencimiento
   diasEntrega        Int?
-  total              Float // Σ importe de las líneas adjudicadas a este proveedor
+  total              Decimal @db.Decimal(18, 6) // Σ importe de las líneas adjudicadas a este proveedor
   // POR_PAGAR → PARCIAL (pagos aplicados < total) → PAGADA (saldada) →
   // CONCILIADA (empatada con un movimiento bancario importado = pago real).
   // El pago vive en PagoProveedor (cuenta corriente del proveedor) y se
@@ -3060,7 +3060,7 @@ model PagoProveedor {
   supplierId      String? // null cuando el proveedor es texto libre
   supplierNombre  String // clave de agrupación cuando no hay Supplier row
   fecha           DateTime @default(now())
-  monto           Float // total del pago; lo no aplicado = anticipo/saldo a favor
+  monto           Decimal @db.Decimal(18, 6) // total del pago; lo no aplicado = anticipo/saldo a favor
   referencia      String? // folio SPEI / transferencia
   comprobanteData String?  @db.Text
   comprobanteMime String?
@@ -3084,7 +3084,7 @@ model PagoAplicacion {
   id             String   @id @default(cuid())
   pagoId         String
   adjudicacionId String
-  monto          Float
+  monto          Decimal @db.Decimal(18, 6)
   createdAt      DateTime @default(now())
 
   pago         PagoProveedor         @relation(fields: [pagoId], references: [id], onDelete: Cascade)
@@ -3099,8 +3099,8 @@ model SolicitudCotizacionPartida {
   id                 String  @id @default(cuid())
   cotizacionId       String
   solicitudPartidaId String
-  precioUnitario     Float
-  importe            Float
+  precioUnitario     Decimal @db.Decimal(18, 6)
+  importe            Decimal @db.Decimal(18, 6)
   tiempoEntrega      String?
   notas              String?
 
@@ -3118,7 +3118,7 @@ model PresupuestoVersion {
   version       Int
   createdAt     DateTime @default(now())
   descripcion   String? // "Engineer found stone walls", "Added waterproofing"
-  snapshotTotal Float // montoTotal at time of snapshot
+  snapshotTotal Decimal @db.Decimal(18, 6) // montoTotal at time of snapshot
 
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
 
@@ -3164,7 +3164,7 @@ model Pago {
   createdAt  DateTime @default(now())
 
   tipo              PagoTipo
-  monto             Float
+  monto             Decimal @db.Decimal(18, 6)
   fecha             DateTime
   referencia        String?
   bankAccountId     String?
@@ -3248,7 +3248,7 @@ model RayaSemanal {
   semanaInicio DateTime // Monday 00:00 local
   semanaFin    DateTime // Sunday 23:59 local
   estado       RayaEstado @default(BORRADOR)
-  totalDestajo Float      @default(0) // sum of RayaTrabajo.importeDestajo
+  totalDestajo Decimal @db.Decimal(18, 6)      @default(0) // sum of RayaTrabajo.importeDestajo
   notas        String?
 
   // Filled when marked PAGADA. Unique so we can't double-book a raya.
@@ -3280,9 +3280,9 @@ model RayaTrabajo {
   presupuestoPartidaId String? // optional link to a leaf partida (drives avance)
   unidadProyectoId     String? // optional "en el Depto 101"
   descripcion          String
-  cantidad             Float?
+  cantidad             Decimal? @db.Decimal(18, 6)
   unidad               String?
-  importeDestajo       Float
+  importeDestajo       Decimal @db.Decimal(18, 6)
 
   raya               RayaSemanal         @relation(fields: [rayaId], references: [id], onDelete: Cascade)
   presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
@@ -3298,8 +3298,8 @@ model RayaDetalleMiembro {
   id             String @id @default(cuid())
   rayaId         String
   miembroId      String
-  diasTrabajados Float  @default(6)
-  importe        Float
+  diasTrabajados Decimal @db.Decimal(18, 6)  @default(6)
+  importe        Decimal @db.Decimal(18, 6)
 
   raya    RayaSemanal      @relation(fields: [rayaId], references: [id], onDelete: Cascade)
   miembro CuadrillaMiembro @relation(fields: [miembroId], references: [id])
@@ -3340,12 +3340,12 @@ model Gasto {
   // What + to whom + how much
   beneficiarioNombre String // "Lesly Flores", "Jose Luis Lopez Pozos"
   descripcion        String // free-text what was bought: "varilla y arena"
-  importe            Float
+  importe            Decimal @db.Decimal(18, 6)
 
   // Physical quantity + unit — optional for indirect gastos but required
   // for a meaningful insumo variance view (planned vs real PU). If set,
   // importe / cantidad should match the real PU Rosy paid.
-  cantidad Float?
+  cantidad Decimal? @db.Decimal(18, 6)
   unidad   String?
 
   // Optional budget linkage — Katia picks from auto-suggest
@@ -3478,12 +3478,12 @@ model ReembolsoSemanal {
   estado       ReembolsoEstado @default(SUBMITTED)
 
   // Running totals (denormalized for fast list views; recomputed on gasto add/remove)
-  totalGastos      Float @default(0)
+  totalGastos      Decimal @db.Decimal(18, 6) @default(0)
   // Adelanto previo de caja chica que este reembolso justifica.
   // Ejemplo: Rosy recibió $5,000 el lunes para caja chica; gastó $7,500
   // en la semana; reembolso total a pagar = $7,500 - $5,000 = $2,500.
-  anticipoAplicado Float @default(0)
-  totalReembolso   Float @default(0) // totalGastos - anticipoAplicado
+  anticipoAplicado Decimal @db.Decimal(18, 6) @default(0)
+  totalReembolso   Decimal @db.Decimal(18, 6) @default(0) // totalGastos - anticipoAplicado
 
   // Pago
   bankTransactionId String?   @unique
@@ -3909,7 +3909,7 @@ model PadelClubConfig {
 
   // Default IVA rate applied to court rentals / academy fees (0.16 = 16%).
   // 0 when the activity is exempt or the club bills IVA-incluido elsewhere.
-  ivaRate Float @default(0.16)
+  ivaRate Decimal @db.Decimal(18, 6) @default(0.16)
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
@@ -3993,7 +3993,7 @@ model Reservation {
 
   // Pricing + collection. precio is the total charged for the slot; subtotal/iva
   // are filled when the slot is charged (see postCourtRentalRevenue).
-  precio    Float                 @default(0)
+  precio    Decimal @db.Decimal(18, 6)                 @default(0)
   pagado    Boolean               @default(false)
   formaPago ReservationFormaPago?
   cobradoAt DateTime?
@@ -4065,7 +4065,7 @@ model RestauranteConfig {
 
   // IVA aplicado a la venta de alimentos y bebidas (0.16). Los precios del
   // menú son IVA-incluido (costumbre mexicana); al cobrar se desglosan.
-  ivaRate Float @default(0.16)
+  ivaRate Decimal @db.Decimal(18, 6) @default(0.16)
 
   // Número de mesas del piso; alimenta el selector del POS (0 = texto libre).
   numMesas Int @default(0)
@@ -4095,7 +4095,7 @@ model RestInsumo {
   categoria String? // "Carnes", "Abarrotes", "Lácteos", …
   unidad    RestUnidad @default(PZA)
 
-  costoPromedio Float @default(0) // por unidad, sin IVA
+  costoPromedio Decimal @db.Decimal(18, 6) @default(0) // por unidad, sin IVA
   stock         Float @default(0)
   stockMinimo   Float @default(0)
 
@@ -4138,8 +4138,8 @@ model RestCompra {
   estado     RestCompraEstado @default(ORDENADA)
   fecha      DateTime         @default(now())
 
-  subtotal Float @default(0) // Σ items.importe, sin IVA
-  iva      Float @default(0) // capturado explícito (insumos tasa 0% abundan)
+  subtotal Decimal @db.Decimal(18, 6) @default(0) // Σ items.importe, sin IVA
+  iva      Decimal @db.Decimal(18, 6) @default(0) // capturado explícito (insumos tasa 0% abundan)
 
   notas String?
 
@@ -4165,9 +4165,9 @@ model RestCompraItem {
   compraId String
   insumoId String
 
-  cantidad      Float
-  costoUnitario Float // sin IVA, por unidad del insumo
-  importe       Float // cantidad * costoUnitario
+  cantidad      Decimal @db.Decimal(18, 6)
+  costoUnitario Decimal @db.Decimal(18, 6) // sin IVA, por unidad del insumo
+  importe       Decimal @db.Decimal(18, 6) // cantidad * costoUnitario
 
   compra RestCompra @relation(fields: [compraId], references: [id], onDelete: Cascade)
   insumo RestInsumo @relation(fields: [insumoId], references: [id])
@@ -4211,7 +4211,7 @@ model RestMenuItem {
   nombre      String
   descripcion String?
 
-  precio Float // precio al público, IVA incluido
+  precio Decimal @db.Decimal(18, 6) // precio al público, IVA incluido
 
   // Claves SAT para facturar (CFDI 4.0): 90101500 = establecimientos para
   // comer y beber; E48 = unidad de servicio.
@@ -4238,7 +4238,7 @@ model RestReceta {
   id         String @id @default(cuid())
   menuItemId String
   insumoId   String
-  cantidad   Float // en la unidad del insumo
+  cantidad   Decimal @db.Decimal(18, 6) // en la unidad del insumo
 
   menuItem RestMenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   insumo   RestInsumo   @relation(fields: [insumoId], references: [id], onDelete: Cascade)
@@ -4295,11 +4295,11 @@ model RestOrden {
 
   estado RestOrdenEstado @default(ABIERTA)
 
-  subtotal   Float @default(0)
-  iva        Float @default(0)
-  total      Float @default(0) // subtotal + iva (sin propina)
-  propina    Float @default(0)
-  costoTotal Float @default(0) // costo teórico (recetas) congelado al cobrar
+  subtotal   Decimal @db.Decimal(18, 6) @default(0)
+  iva        Decimal @db.Decimal(18, 6) @default(0)
+  total      Decimal @db.Decimal(18, 6) @default(0) // subtotal + iva (sin propina)
+  propina    Decimal @db.Decimal(18, 6) @default(0)
+  costoTotal Decimal @db.Decimal(18, 6) @default(0) // costo teórico (recetas) congelado al cobrar
 
   formaPago         RestOrdenFormaPago?
   cobradaAt         DateTime?
@@ -4334,15 +4334,15 @@ model RestOrdenItem {
   menuItemId String
   createdAt  DateTime @default(now())
 
-  cantidad       Float
-  precioUnitario Float // IVA incluido, congelado al agregar
+  cantidad       Decimal @db.Decimal(18, 6)
+  precioUnitario Decimal @db.Decimal(18, 6) // IVA incluido, congelado al agregar
   notas          String? // "sin cebolla", "término medio"
 
   estacion     RestEstacion   @default(COCINA)
   estadoCocina RestItemEstado @default(PENDIENTE)
   listoAt      DateTime?
 
-  costoUnitario Float @default(0) // costo teórico congelado al cobrar
+  costoUnitario Decimal @db.Decimal(18, 6) @default(0) // costo teórico congelado al cobrar
 
   orden    RestOrden    @relation(fields: [ordenId], references: [id], onDelete: Cascade)
   menuItem RestMenuItem @relation(fields: [menuItemId], references: [id])
@@ -4369,11 +4369,11 @@ model PurifConfig {
   nombreComercial String?
   // Precio de lista de la recarga de garrafón — el producto ancla del negocio.
   // Se puede sobreescribir por cliente en PurifClienteConfig.
-  precioGarrafon  Float   @default(15)
+  precioGarrafon  Decimal @db.Decimal(18, 6)   @default(15)
   // IVA default de las ventas. El agua no gaseosa ni compuesta en envases
   // mayores a 10 L tributa al 0% (Art. 2-A LIVA), por eso el default es 0.
   // Configurable por producto para presentaciones gravadas (botella chica, hielo).
-  ivaTasaDefault  Float   @default(0)
+  ivaTasaDefault  Decimal @db.Decimal(18, 6)   @default(0)
 
   // Datos CFDI para "facturar consumo del mes" desde el satélite.
   claveProdServ      String @default("50202306") // SAT c_ClaveProdServ: agua potable/purificada
@@ -4391,7 +4391,7 @@ model PurifClienteConfig {
   companyId  String
   customerId String
 
-  precioGarrafon Float
+  precioGarrafon Decimal @db.Decimal(18, 6)
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -4456,7 +4456,7 @@ model PurifCorte {
   estado PurifCorteEstado @default(BORRADOR)
 
   cortesiasGarrafones Int     @default(0)
-  cortesiasImporte    Float   @default(0) // valor de lo regalado (no es ingreso)
+  cortesiasImporte    Decimal @db.Decimal(18, 6)   @default(0) // valor de lo regalado (no es ingreso)
   notas               String?
 
   confirmadoAt DateTime?
@@ -4478,8 +4478,8 @@ model PurifCorteRuta {
   corteId String
   rutaId  String
 
-  efectivo      Float @default(0)
-  transferencia Float @default(0)
+  efectivo      Decimal @db.Decimal(18, 6) @default(0)
+  transferencia Decimal @db.Decimal(18, 6) @default(0)
   garrafones    Int   @default(0)
 
   corte PurifCorte @relation(fields: [corteId], references: [id], onDelete: Cascade)
@@ -4523,7 +4523,7 @@ model PurifTicket {
   formaPago PurifFormaPago
   estado    PurifTicketEstado @default(REGISTRADO)
 
-  total      Float
+  total      Decimal @db.Decimal(18, 6)
   garrafones Int     @default(0)
   notas      String?
 
@@ -4543,9 +4543,9 @@ model PurifTicketItem {
 
   productoId     String?
   descripcion    String
-  cantidad       Float
-  precioUnitario Float
-  importe        Float
+  cantidad       Decimal @db.Decimal(18, 6)
+  precioUnitario Decimal @db.Decimal(18, 6)
+  importe        Decimal @db.Decimal(18, 6)
   garrafones     Int     @default(0)
 
   ticket   PurifTicket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
@@ -4560,7 +4560,7 @@ model PurifCorteGasto {
 
   categoria   PurifGastoCategoria
   descripcion String
-  monto       Float
+  monto       Decimal @db.Decimal(18, 6)
   formaPago   PurifFormaPago      @default(EFECTIVO)
 
   corte PurifCorte @relation(fields: [corteId], references: [id], onDelete: Cascade)
@@ -4575,12 +4575,12 @@ model PurifProducto {
   updatedAt DateTime @updatedAt
 
   nombre       String
-  precio       Float
+  precio       Decimal @db.Decimal(18, 6)
   // Cuántos garrafones físicos representa una unidad vendida (recarga = 1,
   // paquete de 5 = 5, botella PET = 0). Alimenta el contador de garrafones
   // vendidos por cliente sin depender del nombre del producto.
   garrafones   Int     @default(1)
-  ivaTasa      Float   @default(0)
+  ivaTasa      Decimal @db.Decimal(18, 6)   @default(0)
   activo       Boolean @default(true)
   // Aparece en el menú del POS de ventanilla. Permite productos activos para
   // ventas normales pero fuera del mostrador (p. ej. paquetes por volumen).
@@ -4619,9 +4619,9 @@ model PurifVenta {
   formaPago  PurifFormaPago
   estado     PurifVentaEstado @default(COBRADA)
 
-  subtotal   Float
-  iva        Float @default(0)
-  total      Float
+  subtotal   Decimal @db.Decimal(18, 6)
+  iva        Decimal @db.Decimal(18, 6) @default(0)
+  total      Decimal @db.Decimal(18, 6)
   // Garrafones físicos que salieron en esta venta (suma de items × factor).
   garrafones Int   @default(0)
 
@@ -4661,9 +4661,9 @@ model PurifVentaItem {
 
   productoId     String?
   descripcion    String
-  cantidad       Float
-  precioUnitario Float
-  importe        Float
+  cantidad       Decimal @db.Decimal(18, 6)
+  precioUnitario Decimal @db.Decimal(18, 6)
+  importe        Decimal @db.Decimal(18, 6)
   // Garrafones físicos de esta partida (cantidad × factor del producto),
   // congelado al vender para que editar el producto no reescriba la historia.
   garrafones     Int     @default(0)
@@ -4735,7 +4735,7 @@ model PurifCompra {
   formaPago  PurifFormaPago
   estado     PurifCompraEstado   @default(PAGADA)
 
-  total Float
+  total Decimal @db.Decimal(18, 6)
   notas String?
 
   // CFDI recibido que la ampara y movimiento bancario que la pagó (opcionales).
@@ -4803,7 +4803,7 @@ model PurifEntrega {
   garrafones Int
   // CASAS: lo cobrado en el momento. EMPRESA: garrafones × precio pactado
   // (calculado en el servidor). CORTESIA: valor de referencia (no es ingreso).
-  importe    Float           @default(0)
+  importe    Decimal @db.Decimal(18, 6)           @default(0)
   formaPago  PurifFormaPago? // CASAS: EFECTIVO/TRANSFERENCIA/TARJETA; EMPRESA: CREDITO; CORTESIA: null
 
   estado PurifEntregaEstado @default(REGISTRADO)
@@ -4850,9 +4850,9 @@ model PurifCompraItem {
 
   insumoId       String?
   descripcion    String
-  cantidad       Float
-  precioUnitario Float
-  importe        Float
+  cantidad       Decimal @db.Decimal(18, 6)
+  precioUnitario Decimal @db.Decimal(18, 6)
+  importe        Decimal @db.Decimal(18, 6)
 
   compra PurifCompra  @relation(fields: [compraId], references: [id], onDelete: Cascade)
   insumo PurifInsumo? @relation(fields: [insumoId], references: [id], onDelete: SetNull)
@@ -4869,7 +4869,7 @@ model PurifGasto {
   fecha             DateTime
   categoria         PurifGastoCategoria
   descripcion       String
-  monto             Float
+  monto             Decimal @db.Decimal(18, 6)
   // CREDITO = queda a deber al proveedor (se abona a 2104 Acreedores diversos).
   formaPago         PurifFormaPago      @default(EFECTIVO)
   supplierId        String?
@@ -5059,7 +5059,7 @@ model Vehiculo {
   // Compra — CFDI del proveedor/planta cuando existe (seminuevos comprados a
   // persona física pueden no traer factura: queda el costo capturado y el
   // contrato fuera del sistema).
-  costoCompra     Float     @default(0) // sin IVA
+  costoCompra     Decimal @db.Decimal(18, 6)     @default(0) // sin IVA
   fechaCompra     DateTime?
   compraInvoiceId String?
   supplierId      String?
@@ -5067,18 +5067,18 @@ model Vehiculo {
   // Plan piso (floor plan): tasa anual de la línea que financia esta unidad.
   // El cron de devengo diario usa estos campos para generar
   // VehiculoCosto(tipo=INTERES_PISO) + póliza de gasto financiero.
-  planPisoTasaAnual Float?
+  planPisoTasaAnual Decimal? @db.Decimal(18, 6)
   planPisoInicio    DateTime?
 
   // Venta
-  precioLista    Float?
-  precioVenta    Float? // sin IVA, al momento de vender
-  isan           Float     @default(0) // calculado al vender unidades NUEVO
+  precioLista    Decimal? @db.Decimal(18, 6)
+  precioVenta    Decimal? @db.Decimal(18, 6) // sin IVA, al momento de vender
+  isan           Decimal @db.Decimal(18, 6)     @default(0) // calculado al vender unidades NUEVO
   fechaVenta     DateTime?
   ventaInvoiceId String?
   clienteId      String?
   vendedorId     String? // Employee que cierra la venta (comisiones)
-  comisionMonto  Float     @default(0)
+  comisionMonto  Decimal @db.Decimal(18, 6)     @default(0)
 
   // Derivación automática desde CFDIs (onboarding con la e.firma). autoCreado
   // marca las unidades creadas por el sync a partir del complemento de venta de
@@ -5151,7 +5151,7 @@ model VehiculoCosto {
 
   tipo       VehiculoCostoTipo
   concepto   String
-  monto      Float // sin IVA
+  monto      Decimal @db.Decimal(18, 6) // sin IVA
   fecha      DateTime
   invoiceId  String? // CFDI del gasto cuando existe
   /**
@@ -5215,11 +5215,11 @@ model Refaccion {
   /**
    * Último costo unitario de compra visto (sin IVA).
    */
-  ultimoCosto   Float   @default(0)
+  ultimoCosto   Decimal @db.Decimal(18, 6)   @default(0)
   /**
    * Último precio unitario de venta visto (sin IVA).
    */
-  ultimoPrecio  Float?
+  ultimoPrecio  Decimal? @db.Decimal(18, 6)
   /**
    * ClaveUnidad del SAT en que vienen expresados el costo y el precio. Los
    * lubricantes se COMPRAN por tambo (208 L) y se VENDEN por litro: si las
@@ -5245,7 +5245,7 @@ model Refaccion {
    * de la línea del CFDI de COMPRA («…5w-30*208lt (Tambo)»), que es donde está
    * —en `descripcion` no, porque ahí casi siempre gana la descripción de venta.
    */
-  factorCosto   Float?
+  factorCosto   Decimal? @db.Decimal(18, 6)
   autoCreado    Boolean @default(true)
 
   company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -5267,11 +5267,11 @@ model RefaccionMovimiento {
   /**
    * Positiva en entradas, negativa en salidas/ajustes a la baja.
    */
-  cantidad      Float
+  cantidad      Decimal @db.Decimal(18, 6)
   /**
    * Costo unitario (entradas) o precio unitario (salidas), sin IVA.
    */
-  montoUnitario Float?
+  montoUnitario Decimal? @db.Decimal(18, 6)
   fecha         DateTime
   createdAt     DateTime         @default(now())
 
@@ -5298,15 +5298,15 @@ model ServicioVenta {
   clienteId   String?
   vehiculoId  String?
   fecha       DateTime
-  total       Float // total del CFDI (con IVA)
+  total       Decimal @db.Decimal(18, 6) // total del CFDI (con IVA)
   /**
    * Suma de conceptos de servicio (mano de obra, lavado, mantenimiento), sin IVA.
    */
-  manoObra    Float    @default(0)
+  manoObra    Decimal @db.Decimal(18, 6)    @default(0)
   /**
    * Suma de conceptos con número de parte (refacciones facturadas), sin IVA.
    */
-  refacciones Float    @default(0)
+  refacciones Decimal @db.Decimal(18, 6)    @default(0)
   /**
    * Primer concepto de servicio — la descripción legible de la orden.
    */
@@ -5417,11 +5417,11 @@ model OrdenServicioLinea {
 
   tipo           OrdenServicioLineaTipo
   descripcion    String
-  cantidad       Float                  @default(1)
+  cantidad       Decimal @db.Decimal(18, 6)                  @default(1)
   /**
    * Precio unitario presupuestado, sin IVA.
    */
-  precioUnitario Float                  @default(0)
+  precioUnitario Decimal @db.Decimal(18, 6)                  @default(0)
   refaccionId    String?
 
   orden     OrdenServicio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
@@ -5573,12 +5573,12 @@ model PedidoVehiculo {
   estado PedidoVehiculoEstado @default(COTIZACION)
 
   // Negociación (montos sin IVA, como precioVenta).
-  precio           Float
-  enganche         Float   @default(0)
-  anticipoRecibido Float   @default(0)
+  precio           Decimal @db.Decimal(18, 6)
+  enganche         Decimal @db.Decimal(18, 6)   @default(0)
+  anticipoRecibido Decimal @db.Decimal(18, 6)   @default(0)
   // Toma a cuenta de seminuevo (descripción libre + valor acordado).
   tomaACuentaDesc  String?
-  tomaACuentaMonto Float?
+  tomaACuentaMonto Decimal? @db.Decimal(18, 6)
   financiamiento   String? // texto libre: financiera, plazo, condiciones
   notas            String? @db.Text
 
@@ -5779,12 +5779,12 @@ model AutomotrizConfig {
 
   // Plan piso: tasa anual default para unidades sin tasa propia (0.145 = 14.5%).
   // El cron interes-piso acumula el costo financiero mensual por unidad en piso.
-  planPisoTasaAnual Float?
+  planPisoTasaAnual Decimal? @db.Decimal(18, 6)
 
   // Comisión del vendedor al vender, cuando la venta no trae monto explícito:
   // % de la utilidad estimada (precio − costo capitalizado) y/o monto fijo.
   comisionPorcentajeUtilidad Float?
-  comisionFija               Float?
+  comisionFija               Decimal? @db.Decimal(18, 6)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -5829,7 +5829,7 @@ model CreditoEvaluacion {
 
   score          Int // 0-100
   banda          String // "A" | "B" | "C" | "D"
-  limiteSugerido Float
+  limiteSugerido Decimal @db.Decimal(18, 6)
   /**
    * True cuando faltaron insumos (p. ej. CFDIs sin descargar): score parcial.
    */

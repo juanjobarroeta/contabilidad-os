@@ -63,7 +63,7 @@ export const GET = withAuthz(async (req: Request) => {
         : rowFor("__casas__", "Casas / rutas");
       row.porDia[dia] = (row.porDia[dia] ?? 0) + v.garrafones;
       row.totalGarrafones += v.garrafones;
-      row.totalImporte = round2(row.totalImporte + v.total);
+      row.totalImporte = round2(row.totalImporte + Number(v.total));
     }
   } else {
     const items = await prisma.purifVentaItem.findMany({
@@ -90,7 +90,7 @@ export const GET = withAuthz(async (req: Request) => {
         : rowFor("__sin__", "Sin sucursal");
       row.porDia[dia] = (row.porDia[dia] ?? 0) + it.garrafones;
       row.totalGarrafones += it.garrafones;
-      row.totalImporte = round2(row.totalImporte + it.importe);
+      row.totalImporte = round2(row.totalImporte + Number(it.importe));
     }
   }
 

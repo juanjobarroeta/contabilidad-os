@@ -64,7 +64,7 @@ export const GET = withAuthz(async (req: Request) => {
   const emisorById = new Map(emisores.map((e) => [e.id, e]));
   const comprasBySupplier = new Map(comprasAgg.map((c) => [c.supplierId, c]));
   const pendienteBySupplier = new Map(
-    pendientesAgg.map((p) => [p.supplierId, round2(p._sum.total ?? 0)])
+    pendientesAgg.map((p) => [p.supplierId, round2(Number(p._sum.total ?? 0))])
   );
 
   type Row = {
@@ -107,7 +107,7 @@ export const GET = withAuthz(async (req: Request) => {
     const compras = comprasBySupplier.get(s.id);
     if (compras) {
       row.compras = compras._count;
-      row.comprasTotal = round2(compras._sum.total ?? 0);
+      row.comprasTotal = round2(Number(compras._sum.total ?? 0));
       row.ultimaFactura = compras._max.fecha ?? row.ultimaFactura;
     }
     row.saldoPorPagar = pendienteBySupplier.get(s.id) ?? 0;

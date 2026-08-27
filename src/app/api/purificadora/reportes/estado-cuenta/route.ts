@@ -69,14 +69,14 @@ export const GET = withAuthz(async (req: Request) => {
         porSucursal.set(key, row);
       }
       row.garrafones += it.garrafones;
-      row.total = round2(row.total + it.importe);
+      row.total = round2(row.total + Number(it.importe));
     }
   }
 
   const totalGarrafones = ventas.reduce((s, v) => s + v.garrafones, 0);
-  const total = round2(ventas.reduce((s, v) => s + v.total, 0));
+  const total = round2(ventas.reduce((s, v) => s + Number(v.total), 0));
   const pendiente = round2(
-    ventas.filter((v) => v.estado === "PENDIENTE").reduce((s, v) => s + v.total, 0)
+    ventas.filter((v) => v.estado === "PENDIENTE").reduce((s, v) => s + Number(v.total), 0)
   );
   const yaFacturado = ventas.some((v) => v.invoiceId);
 

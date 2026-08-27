@@ -183,7 +183,7 @@ export const POST = withAuthz(async (req: Request) => {
         excludeUserId: user.id,
         payload: {
           title: `Nueva requisición ${solicitud.folio}`,
-          body: `${moneyPush(solicitud.total)} — por autorizar`,
+          body: `${moneyPush(Number(solicitud.total))} — por autorizar`,
           url: "/compras-por-autorizar",
           tag: `solicitud-${solicitud.id}`,
         },

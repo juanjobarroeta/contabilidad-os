@@ -50,7 +50,7 @@ export const POST = withAuthz(
       );
     }
 
-    const total = Math.round((compra.subtotal + compra.iva) * 100) / 100;
+    const total = Math.round((Number(compra.subtotal) + Number(compra.iva)) * 100) / 100;
     if (!(total > 0)) {
       return NextResponse.json({ error: "El total de la compra debe ser mayor a 0" }, { status: 422 });
     }

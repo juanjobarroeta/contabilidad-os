@@ -55,7 +55,7 @@ export const POST = withAuthz(async (req: Request) => {
   if (refacciones.length !== ids.length) {
     return NextResponse.json({ error: "Alguna refacción no existe o no es de esta empresa" }, { status: 400 });
   }
-  const existencias = new Map(sumas.map((s) => [s.refaccionId, s._sum.cantidad ?? 0]));
+  const existencias = new Map(sumas.map((s) => [s.refaccionId, Number(s._sum.cantidad ?? 0)]));
 
   const fecha = new Date();
   const ajustes: Array<{ refaccionId: string; numeroParte: string; existencia: number; contada: number; ajuste: number }> = [];

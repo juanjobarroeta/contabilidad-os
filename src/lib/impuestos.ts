@@ -975,7 +975,7 @@ export async function computeTaxPosition(
     let coeficiente: number | null;
     let coeficienteFuente: "manual" | "declaracion_anual" | "provisional_previo" | "calculado" | "ninguno";
     if (company?.coeficienteUtilidad != null && (company.coeficienteAnio === year || company.coeficienteAnio == null)) {
-      coeficiente = company.coeficienteUtilidad;
+      coeficiente = Number(company.coeficienteUtilidad);
       coeficienteFuente = "manual";
     } else if (coeficienteAnual !== null) {
       coeficiente = coeficienteAnual;
@@ -1003,7 +1003,7 @@ export async function computeTaxPosition(
     const annualDeclPrev = annualDecls.find((r) => r.periodo.startsWith(String(prevYear))) ?? null;
     const usaPerdidaManual = company?.perdidaFiscalPendiente != null;
     const perdidaFiscalPendiente = usaPerdidaManual
-      ? company!.perdidaFiscalPendiente
+      ? Number(company!.perdidaFiscalPendiente)
       : (annualDeclPrev?.isrPerdidaPendiente ?? null);
     const perdidaFiscalAnio = usaPerdidaManual
       ? (company?.perdidaFiscalAnio ?? null)

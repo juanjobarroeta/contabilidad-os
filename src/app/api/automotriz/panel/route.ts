@@ -151,7 +151,7 @@ export const GET = withAuthz(async (req: Request) => {
     v.fechaCompra ? Math.floor((hoy.getTime() - v.fechaCompra.getTime()) / DIA_MS) : null;
 
   const valorPiso = r2(
-    enPiso.reduce((s, v) => s + v.costoCompra + v.costos.reduce((c, x) => c + x.monto, 0), 0)
+    enPiso.reduce((s, v) => s + Number(v.costoCompra) + v.costos.reduce((c, x) => c + Number(x.monto), 0), 0)
   );
   // Las demos/cortesías no suenan en el aging: están en piso a propósito.
   const enVenta = enPiso.filter((v) => v.uso === "VENTA");
@@ -230,9 +230,9 @@ export const GET = withAuthz(async (req: Request) => {
     // Back end del mes: lo que el taller y el mostrador realmente facturaron.
     servicio: {
       ordenesFacturadas: ordenesFacturadas._count._all,
-      monto: r2(ordenesFacturadas._sum.total ?? 0),
-      manoObra: r2(ordenesFacturadas._sum.manoObra ?? 0),
-      refacciones: r2(ordenesFacturadas._sum.refacciones ?? 0),
+      monto: r2(Number(ordenesFacturadas._sum.total ?? 0)),
+      manoObra: r2(Number(ordenesFacturadas._sum.manoObra ?? 0)),
+      refacciones: r2(Number(ordenesFacturadas._sum.refacciones ?? 0)),
     },
     refacciones: {
       facturas: mostrador.facturas,
@@ -277,8 +277,8 @@ export const GET = withAuthz(async (req: Request) => {
     comparativo: {
       vendidasPrevio,
       utilidadPrevio: r2(resultadosPrevio.totales.utilidad),
-      interesMes: r2(interesMes._sum.monto ?? 0),
-      interesPrevio: r2(interesPrevio._sum.monto ?? 0),
+      interesMes: r2(Number(interesMes._sum.monto ?? 0)),
+      interesPrevio: r2(Number(interesPrevio._sum.monto ?? 0)),
     },
 
     // Señales operativas para el feed de alertas, con su costo al lado.

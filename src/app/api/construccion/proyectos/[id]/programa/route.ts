@@ -74,7 +74,7 @@ export const GET = withAuthz(
     const descByCap = new Map<string, string>();
     for (const tp of template.partidas) {
       const cap = tp.capituloCode;
-      const imp = tp.presupuestoPartida.importe ?? 0;
+      const imp = Number(tp.presupuestoPartida.importe ?? 0);
       importeByCap.set(cap, (importeByCap.get(cap) ?? 0) + imp);
       if (!descByCap.has(cap)) descByCap.set(cap, tp.descripcion);
     }
@@ -98,7 +98,7 @@ export const GET = withAuthz(
       for (const r of [...preferred, ...rest]) {
         const norm = (r.codigo ?? "").replace(/\.0+$/, "");
         if (!/^\d+$/.test(norm)) continue; // solo ramas nivel 1
-        if (!capImporteCanonico.has(norm)) capImporteCanonico.set(norm, r.importe ?? 0);
+        if (!capImporteCanonico.has(norm)) capImporteCanonico.set(norm, Number(r.importe ?? 0));
       }
     }
 

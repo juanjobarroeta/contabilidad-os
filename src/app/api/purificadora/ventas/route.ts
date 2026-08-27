@@ -123,8 +123,8 @@ export const POST = withAuthz(async (req: Request) => {
 
   const partidas = items.map((i) => {
     const producto = i.productoId ? productoById.get(i.productoId)! : null;
-    const precioUnitario = i.precioUnitario ?? producto?.precio ?? 0;
-    const ivaTasa = i.ivaTasa ?? producto?.ivaTasa ?? 0;
+    const precioUnitario = i.precioUnitario ?? Number(producto?.precio ?? 0);
+    const ivaTasa = i.ivaTasa ?? Number(producto?.ivaTasa ?? 0);
     const importe = round2(i.cantidad * precioUnitario);
     const garrafones =
       i.garrafones ?? (producto ? Math.round(i.cantidad * producto.garrafones) : 0);

@@ -226,7 +226,7 @@ export const POST = withAuthz(async (req: Request) => {
     excludeUserId: user.id,
     payload: {
       title: "Nuevo gasto por aprobar",
-      body: `${created.beneficiarioNombre} · ${moneyPush(created.importe)}`,
+      body: `${created.beneficiarioNombre} · ${moneyPush(Number(created.importe))}`,
       url: "/gastos",
       tag: `gasto-${created.id}`,
     },

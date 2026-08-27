@@ -111,10 +111,10 @@ export const GET = withAuthz(
 
     // Add a "wonCotizaciones" count and totalSpent across cotizaciones
     const wonCount = supplier.cotizaciones.filter((c) => c.isSelected).length;
-    const totalQuoted = supplier.cotizaciones.reduce((a, c) => a + c.total, 0);
+    const totalQuoted = supplier.cotizaciones.reduce((a, c) => a + Number(c.total), 0);
     const totalSpent = supplier.solicitudesCompra
       .filter((s) => s.estado === "PAGADA")
-      .reduce((a, s) => a + s.total, 0);
+      .reduce((a, s) => a + Number(s.total), 0);
 
     return NextResponse.json({
       ...supplier,

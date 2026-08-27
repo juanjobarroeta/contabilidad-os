@@ -38,7 +38,7 @@ export const GET = withAuthz(async (req: Request) => {
   ]);
 
   const compraById = new Map(compras.map((c) => [c.customerId, c]));
-  const pendienteById = new Map(pendientes.map((p) => [p.customerId, p._sum.total ?? 0]));
+  const pendienteById = new Map(pendientes.map((p) => [p.customerId, Number(p._sum.total ?? 0)]));
 
   const resumen = clientes.map((c) => {
     const compra = compraById.get(c.id);
@@ -46,7 +46,7 @@ export const GET = withAuthz(async (req: Request) => {
       ...c,
       ventas: compra?._count ?? 0,
       garrafones: compra?._sum.garrafones ?? 0,
-      totalComprado: round2(compra?._sum.total ?? 0),
+      totalComprado: round2(Number(compra?._sum.total ?? 0)),
       saldoPendiente: round2(pendienteById.get(c.id) ?? 0),
       ultimaCompra: compra?._max.fecha ?? null,
     };

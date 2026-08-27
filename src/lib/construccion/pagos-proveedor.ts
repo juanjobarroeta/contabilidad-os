@@ -22,7 +22,7 @@ export async function aplicadoDeAdjudicacion(
     where: { adjudicacionId },
     _sum: { monto: true },
   });
-  return agg._sum.monto ?? 0;
+  return Number(agg._sum.monto ?? 0);
 }
 
 /**
@@ -64,7 +64,7 @@ export async function recomputeAdjudicacionEstado(
     return;
   }
 
-  const saldada = aplicado >= adj.total - EPS;
+  const saldada = aplicado >= Number(adj.total) - EPS;
   await tx.solicitudAdjudicacion.update({
     where: { id: adjudicacionId },
     data: {
@@ -92,7 +92,7 @@ export async function aplicarPago(
     where: { pagoId: pago.id },
     _sum: { monto: true },
   });
-  let disponible = pago.monto - (yaAplicado._sum.monto ?? 0);
+  let disponible = pago.monto - Number(yaAplicado._sum.monto ?? 0);
 
   let totalAplicado = 0;
   const solicitudesTocadas = new Set<string>();
@@ -110,7 +110,7 @@ export async function aplicarPago(
       throw new Error("La adjudicación pertenece a otro proveedor");
     }
     const aplicado = await aplicadoDeAdjudicacion(tx, adj.id);
-    const saldo = saldoDe(adj, aplicado);
+    const saldo = saldoDe({ ...adj, total: Number(adj.total) }, aplicado);
     if (a.monto > saldo + EPS) {
       throw new Error(`La aplicación excede el saldo de la adjudicación (saldo ${saldo.toFixed(2)})`);
     }

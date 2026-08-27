@@ -67,8 +67,8 @@ export async function ejecutarVentaUnidad(args: EjecutarVentaArgs) {
   // de plan piso ya se fue a gasto (5205) — no sale del inventario, pero sí
   // resta en la utilidad por VIN.
   const costoCapitalizado =
-    vehiculo.costoCompra +
-    vehiculo.costos.filter((c) => c.tipo !== "INTERES_PISO").reduce((s, c) => s + c.monto, 0);
+    Number(vehiculo.costoCompra) +
+    vehiculo.costos.filter((c) => c.tipo !== "INTERES_PISO").reduce((s, c) => s + Number(c.monto), 0);
 
   // Comisión: el monto explícito gana; si no viene, la regla de la empresa
   // (fija + % de la utilidad estimada). Sin regla → 0.
@@ -82,7 +82,7 @@ export async function ejecutarVentaUnidad(args: EjecutarVentaArgs) {
       const utilidadEstimada = Math.max(0, args.precioVenta - costoCapitalizado);
       comisionMonto =
         Math.round(
-          ((config.comisionFija ?? 0) + (config.comisionPorcentajeUtilidad ?? 0) * utilidadEstimada) * 100
+          (Number(config.comisionFija ?? 0) + (config.comisionPorcentajeUtilidad ?? 0) * utilidadEstimada) * 100
         ) / 100;
     }
   }

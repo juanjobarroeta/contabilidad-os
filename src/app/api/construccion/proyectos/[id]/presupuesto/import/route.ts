@@ -328,10 +328,12 @@ export const POST = withAuthz(
         for (const b of allBranches) {
           const branchId = branchIdByCodigo.get(b.codigo)!;
           // Sum direct children: leaves (importe) + child branches (already computed)
-          const children = await tx.presupuestoPartida.findMany({
-            where: { parentPartidaId: branchId },
-            select: { id: true, importe: true, esRollup: true },
-          });
+          const children = (
+            await tx.presupuestoPartida.findMany({
+              where: { parentPartidaId: branchId },
+              select: { id: true, importe: true, esRollup: true },
+            })
+          ).map((c) => ({ ...c, importe: Number(c.importe) }));
           let total = 0;
           for (const c of children) {
             if (c.esRollup) {

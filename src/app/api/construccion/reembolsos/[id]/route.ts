@@ -106,7 +106,7 @@ export const PATCH = withAuthz(
         select: { totalGastos: true },
       });
       data.totalReembolso =
-        Math.round(((existing?.totalGastos ?? 0) - parsed.data.anticipoAplicado) * 100) / 100;
+        Math.round((Number(existing?.totalGastos ?? 0) - parsed.data.anticipoAplicado) * 100) / 100;
     }
 
     const updated = await prisma.reembolsoSemanal.update({

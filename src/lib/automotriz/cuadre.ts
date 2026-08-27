@@ -105,7 +105,7 @@ async function atribucionesPorFactura(
     select: { id: true, compraInvoiceId: true, costoCompra: true, descripcionCfdi: true },
   });
   for (const v of compras) {
-    if (v.compraInvoiceId) suma(v.compraInvoiceId, v.costoCompra, v.id, v.descripcionCfdi);
+    if (v.compraInvoiceId) suma(v.compraInvoiceId, Number(v.costoCompra), v.id, v.descripcionCfdi);
   }
 
   // 2. Costos que cuelgan de una factura (accesorios, traslado, conversión, NC).
@@ -115,7 +115,7 @@ async function atribucionesPorFactura(
     orderBy: { monto: "desc" },
   });
   for (const c of costos) {
-    if (c.invoiceId) suma(c.invoiceId, c.monto, c.vehiculoId, c.concepto);
+    if (c.invoiceId) suma(c.invoiceId, Number(c.monto), c.vehiculoId, c.concepto);
   }
 
   // 3. Entradas de refacciones (cantidad positiva = entrada al kardex).
@@ -129,7 +129,7 @@ async function atribucionesPorFactura(
     select: { invoiceId: true, cantidad: true, montoUnitario: true },
   });
   for (const m of movs) {
-    if (m.invoiceId) suma(m.invoiceId, m.cantidad * (m.montoUnitario ?? 0), null, null);
+    if (m.invoiceId) suma(m.invoiceId, Number(m.cantidad) * Number(m.montoUnitario ?? 0), null, null);
   }
 
   return acc;

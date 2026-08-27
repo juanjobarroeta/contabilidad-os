@@ -41,7 +41,7 @@ export const POST = withAuthz(
         { status: 422 }
       );
     }
-    if (estimacion.total <= 0) {
+    if (Number(estimacion.total) <= 0) {
       return NextResponse.json(
         { error: "La estimación tiene total $0. Captura avance antes de aprobar." },
         { status: 422 }
