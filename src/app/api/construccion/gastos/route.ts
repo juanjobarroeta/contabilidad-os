@@ -27,6 +27,7 @@ import {
   requireWriter,
   withAuthz,
 } from "@/lib/authz";
+import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 const createSchema = z.object({
   // Opcional desde el rediseño: sin proyecto = gasto general de la empresa
@@ -129,7 +130,7 @@ export const POST = withAuthz(async (req: Request) => {
     }
     companyId = parsed.data.companyId;
   }
-  await requireWriter(companyId, req);
+  const { user } = await requireWriter(companyId, req);
   await requireModule(companyId, "CONSTRUCCION");
 
   // Proveedor (opcional) debe ser de la misma empresa.
@@ -202,6 +203,7 @@ export const POST = withAuthz(async (req: Request) => {
       caja,
       indirecto: parsed.data.indirecto ?? false,
       categoriaIndirecto: parsed.data.categoriaIndirecto ?? null,
+      creadaPorId: user.id,
     },
     include: {
       supplier: { select: { id: true, rfc: true, razonSocial: true } },
@@ -214,6 +216,19 @@ export const POST = withAuthz(async (req: Request) => {
         },
       },
       insumo: { select: { id: true, codigo: true, descripcion: true } },
+    },
+  });
+
+  // Nuevo gasto por aprobar → avisar a quienes deciden (sin el propio autor).
+  void notificarConstruccion({
+    companyId,
+    destinos: ["ADMIN", "CONTABILIDAD"],
+    excludeUserId: user.id,
+    payload: {
+      title: "Nuevo gasto por aprobar",
+      body: `${created.beneficiarioNombre} · ${moneyPush(created.importe)}`,
+      url: "/gastos",
+      tag: `gasto-${created.id}`,
     },
   });
 

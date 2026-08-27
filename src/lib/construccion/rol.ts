@@ -31,6 +31,8 @@ const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * requisiciones (decisiones), gastos, destajo ni reportes.
  */
 const TESORERIA_RULES: Rule[] = [
+  // Notificaciones push: cualquiera activa/desactiva las suyas
+  { methods: "all", pattern: "push" },
   // Contexto de sólo lectura que usa la pantalla de pagos
   { methods: "read", pattern: "proyectos" },
   { methods: "read", pattern: "proyectos/*" },
@@ -65,6 +67,8 @@ const TESORERIA_RULES: Rule[] = [
  * decisiones de compra (cotizar, aprobar, adjudicar, pagar) quedan fuera.
  */
 const RESIDENTE_RULES: Rule[] = [
+  // Notificaciones push: cualquiera activa/desactiva las suyas
+  { methods: "all", pattern: "push" },
   // Lectura: obra, presupuesto y precios unitarios
   { methods: "read", pattern: "proyectos" },
   { methods: "read", pattern: "proyectos/*" },
@@ -109,6 +113,8 @@ const RESIDENTE_RULES: Rule[] = [
  * destajo/caja chica/reportes/usuarios.
  */
 const CONTABILIDAD_RULES: Rule[] = [
+  // Notificaciones push: cualquiera activa/desactiva las suyas
+  { methods: "all", pattern: "push" },
   // Contexto de obra y presupuesto (lectura)
   { methods: "read", pattern: "proyectos" },
   { methods: "read", pattern: "proyectos/*" },

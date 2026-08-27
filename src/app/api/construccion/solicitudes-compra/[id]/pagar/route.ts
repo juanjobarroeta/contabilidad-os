@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireModule, requireWriter, withAuthz, AuthzError } from "@/lib/authz";
+import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 // bankAccountId is accepted for backward-compat with the old caller but ignored:
 // registrar el pago ya no toca la cuenta bancaria.
@@ -34,13 +35,13 @@ export const POST = withAuthz(
 
     const solicitud = await prisma.solicitudCompra.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true },
+      select: { id: true, companyId: true, estado: true, folio: true, total: true, creadaPorId: true },
     });
     if (!solicitud) {
       throw new AuthzError(404, "Solicitud no encontrada");
     }
 
-    await requireWriter(solicitud.companyId, req);
+    const { user } = await requireWriter(solicitud.companyId, req);
     await requireModule(solicitud.companyId, "CONSTRUCCION");
 
     if (solicitud.estado !== "APROBADA") {
@@ -55,6 +56,21 @@ export const POST = withAuthz(
     const updated = await prisma.solicitudCompra.update({
       where: { id: solicitud.id },
       data: { estado: "PAGADA", pagadaAt: fecha },
+    });
+
+    // Pagada → avisar a admins y a quien la creó (sin el actor: normalmente
+    // tesorería, que ya sabe que pagó).
+    void notificarConstruccion({
+      companyId: solicitud.companyId,
+      destinos: ["ADMIN"],
+      userIds: [solicitud.creadaPorId],
+      excludeUserId: user.id,
+      payload: {
+        title: `Requisición ${solicitud.folio} pagada`,
+        body: moneyPush(solicitud.total),
+        url: "/requisiciones",
+        tag: `solicitud-${solicitud.id}`,
+      },
     });
 
     return NextResponse.json({ solicitud: updated });

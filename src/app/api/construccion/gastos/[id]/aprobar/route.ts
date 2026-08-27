@@ -16,6 +16,7 @@ import {
   requireWriter,
   withAuthz,
 } from "@/lib/authz";
+import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 export const POST = withAuthz(
   async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -33,6 +34,9 @@ export const POST = withAuthz(
         categoriaIndirecto: true,
         proyectoId: true,
         supplierId: true,
+        beneficiarioNombre: true,
+        importe: true,
+        creadaPorId: true,
       },
     });
     if (!gasto) throw new AuthzError(404, "Gasto no encontrado");
@@ -80,6 +84,20 @@ export const POST = withAuthz(
         estado: "APROBADO",
         aprobadoPor: user?.id ?? null,
         aprobadoAt: new Date(),
+      },
+    });
+
+    // Avisar a quien lo capturó (si no fue él mismo quien aprobó).
+    void notificarConstruccion({
+      companyId: gasto.companyId,
+      destinos: [],
+      userIds: [gasto.creadaPorId],
+      excludeUserId: user?.id ?? null,
+      payload: {
+        title: "Gasto aprobado",
+        body: `${gasto.beneficiarioNombre} · ${moneyPush(gasto.importe)} — en camino a pago`,
+        url: "/gastos",
+        tag: `gasto-${gasto.id}`,
       },
     });
 

@@ -32,6 +32,7 @@ import {
   requireWriter,
   withAuthz,
 } from "@/lib/authz";
+import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 const bodySchema = z.object({
   // Two paths for recording the payment:
@@ -189,6 +190,20 @@ export const POST = withAuthz(
       });
 
       return updated;
+    });
+
+    // Pagado → avisar a admins y a quien lo capturó (sin el actor).
+    void notificarConstruccion({
+      companyId: gasto.companyId,
+      destinos: ["ADMIN"],
+      userIds: [gasto.creadaPorId],
+      excludeUserId: userId,
+      payload: {
+        title: "Gasto pagado",
+        body: `${gasto.beneficiarioNombre} · ${moneyPush(gasto.importe)}`,
+        url: "/gastos",
+        tag: `gasto-${gasto.id}`,
+      },
     });
 
     return NextResponse.json(result);
