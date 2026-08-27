@@ -1,7 +1,7 @@
-# Planta purificadora — Cada litro y cada garrafón, contados
+# EHABSA — Cada litro y cada garrafón, contados
 
-Propuesta de sistema integral para la planta purificadora (mismo dueño que el
-proyecto Haltus Hope). Compra pipas de agua cruda, purifica con una máquina
+Propuesta de sistema integral para **EHABSA** (mismo dueño que el proyecto
+Haltus Hope). Compra pipas de agua cruda, purifica con una máquina
 PORTAQUA BPS3, llena garrafones de 20 L y 19 L, y entrega por camión a
 dependencias de gobierno, recogiendo los vacíos.
 
@@ -81,7 +81,8 @@ Los números cuadran entre pantallas a propósito: esa continuidad es el product
 ## Sobre estas pantallas
 
 Se generan con HTML y se capturan con un navegador sin interfaz: corregir un
-dato, un precio o la marca es volver a correr el generador. La marca de la
-planta del cliente sustituye a la genérica cuando esté definida.
+dato, un precio o la marca es volver a correr el generador. La marca EHABSA ya
+está sembrada; sus colores y logo reales sustituirán a la paleta genérica de
+agua cuando estén definidos.
 
 Los datos son ficticios; las dependencias son nombres genéricos.

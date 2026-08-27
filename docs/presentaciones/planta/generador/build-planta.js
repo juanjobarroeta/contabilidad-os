@@ -14,11 +14,11 @@ const sh = (o={}) => ({ type:"outer", color:"05202E", blur:12, offset:3, angle:9
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE";
 pres.author = "Contabilidad OS";
-pres.title = "Planta purificadora — Sistema integral";
+pres.title = "EHABSA — Sistema integral";
 
 const dark = (s) => s.addShape(pres.ShapeType.rect,{x:0,y:0,w:W,h:H,fill:{color:C.deep},line:{width:0}});
 const foot = (s,n,light) => {
-  s.addText("Planta purificadora",{x:M,y:H-0.46,w:4,h:0.26,fontFace:BODY,fontSize:9.5,color:light?"7FA6B8":C.muted,margin:0});
+  s.addText("EHABSA",{x:M,y:H-0.46,w:4,h:0.26,fontFace:BODY,fontSize:9.5,color:light?"7FA6B8":C.muted,margin:0});
   s.addText(String(n),{x:W-M-1,y:H-0.46,w:1,h:0.26,fontFace:BODY,fontSize:9.5,color:light?"7FA6B8":C.muted,align:"right",margin:0});
 };
 function shotSlide(n, kicker, title, solves, img) {
@@ -59,7 +59,7 @@ const head = (s,title,kicker,sub) => {
 let s = pres.addSlide(); dark(s);
 s.addShape(pres.ShapeType.ellipse,{x:9.9,y:-1.8,w:6.2,h:6.2,fill:{color:C.mid,transparency:68},line:{width:0}});
 s.addShape(pres.ShapeType.ellipse,{x:11.4,y:3.9,w:3.6,h:3.6,fill:{color:C.aqua,transparency:76},line:{width:0}});
-s.addText("PROPUESTA DE SISTEMA INTEGRAL · PLANTA PURIFICADORA",{x:M,y:1.95,w:10,h:0.3,fontFace:BODY,fontSize:12,bold:true,color:C.aquaBright,charSpacing:2.4,margin:0});
+s.addText("EHABSA · PROPUESTA DE SISTEMA INTEGRAL",{x:M,y:1.95,w:10,h:0.3,fontFace:BODY,fontSize:12,bold:true,color:C.aquaBright,charSpacing:2.4,margin:0});
 s.addText("Cada litro y cada garrafón, contados",{x:M,y:2.42,w:10.6,h:1.7,fontFace:HEAD,fontSize:47,bold:true,color:C.white,margin:0});
 s.addText("Producción  ·  Envases  ·  Remisiones  ·  Gobierno  ·  Normatividad  ·  Contabilidad",
   {x:M,y:4.5,w:11,h:0.34,fontFace:BODY,fontSize:13.5,color:C.aquaBright,margin:0});
@@ -227,7 +227,7 @@ s.addText("Tres pasos para arrancar",{x:M,y:1.06,w:10.6,h:0.64,fontFace:HEAD,fon
 });
 s.addText("La misma plataforma que lleva la contabilidad, los bancos y la nómina — la planta se suma, no empieza de cero.",
   {x:M,y:5.3,w:11.5,h:0.6,fontFace:HEAD,fontSize:15.5,italic:true,color:C.aquaBright,margin:0});
-s.addText("Planta purificadora  ·  Propuesta de sistema integral  ·  Agosto 2026",{x:M,y:6.62,w:CW,h:0.32,fontFace:BODY,fontSize:11.5,color:"7FA6B8",margin:0});
+s.addText("EHABSA  ·  Propuesta de sistema integral  ·  Agosto 2026",{x:M,y:6.62,w:CW,h:0.32,fontFace:BODY,fontSize:11.5,color:"7FA6B8",margin:0});
 s.addNotes("Cerrar pidiendo la visita de media jornada — compromiso chico que destraba todo.");
 
 pres.writeFile({ fileName: process.argv[2] }).then(()=>console.log("OK ->", process.argv[2]));

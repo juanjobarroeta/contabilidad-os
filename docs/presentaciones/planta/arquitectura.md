@@ -1,8 +1,8 @@
-# Arquitectura — vertical de planta purificadora
+# Arquitectura — EHABSA (vertical de planta purificadora)
 
 > Extiende el módulo `PURIFICADORA` del hub. Satélite **nuevo y separado** del
-> existente (`purificadora`): repo propio, marca propia, deploy propio. La app
-> actual no se toca.
+> existente (`purificadora`): repo propio (`ehabsa`, minúsculas como el resto
+> de los satélites), marca propia, deploy propio. La app actual no se toca.
 
 ## La operación que se modela
 

@@ -1,4 +1,4 @@
-/* Sistema visual — marca Haltus Hope (morado + coral) sobre neutros de la plataforma. */
+/* Sistema visual — EHABSA (azules profundos + aqua) sobre neutros de la plataforma. */
 :root{
   --purple:#0C3D55; --purple-deep:#082E41; --purple-mid:#2E6E8E; --purple-tint:#E7F3F8;
   --coral:#0E93B8; --coral-tint:#E0F4FA; --coral-ink:#0A6A85;
@@ -16,7 +16,8 @@ body{white-space:normal;font-family:"Liberation Sans","DejaVu Sans",sans-serif;b
 /* Rail de iconos */
 .rail{width:74px;background:var(--purple);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:3px;flex:none}
 .logo{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.14);display:grid;place-items:center;
-  color:#fff;font-size:17px;font-weight:700;letter-spacing:-.5px;margin-bottom:14px}
+  color:#fff;font-size:17px;font-weight:700;letter-spacing:-.5px;margin-bottom:4px}
+.brand{font-size:9px;font-weight:800;letter-spacing:1.6px;color:#fff;opacity:.85;margin-bottom:10px}
 .ri{width:46px;height:42px;border-radius:11px;display:grid;place-items:center;color:#8FB9CC;position:relative}
 svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .ri svg{width:20px;height:20px}

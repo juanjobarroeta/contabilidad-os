@@ -36,7 +36,7 @@ const NAV = [["home","Inicio"],["drop","Producción"],["pkg","Envases"],["truck"
              ["users","Clientes"],["cart","Compras"],["shield","Normativ."],["card","Bancos"],
              ["clip","Nómina"],["chart","Reportes"],["slid","Config."]];
 
-const rail = (active) => `<div class="rail"><div class="logo">${ic("drop")}</div>` +
+const rail = (active) => `<div class="rail"><div class="logo">${ic("drop")}</div><div class="brand">EHABSA</div>` +
   NAV.map(([k, l]) => `<div class="ri ${k === active ? "on" : ""}">${ic(k)}<span class="lbl">${l}</span></div>`).join("") + `</div>`;
 
 const top = (title, crumb, right = "") => `<div class="top"><h1>${title}</h1>${crumb ? `<span class="crumb">${crumb}</span>` : ""}
@@ -403,7 +403,7 @@ const mobilePage = (name, kicker, title, lead, inner) => {
   fs.writeFileSync(path.join(OUT, name + ".html"), html);
 };
 
-mobilePage("remision", "LA REMISIÓN, DESDE EL CAMIÓN",
+mobilePage("remision", "EHABSA · LA REMISIÓN, DESDE EL CAMIÓN",
   "El talón sellado deja de vivir en una carpeta",
   "El chofer entrega llenos, recoge vacíos y registra quién recibió — en el mismo viaje y desde su teléfono. El saldo de garrafones de la dependencia se actualiza solo.",
   `<div style="padding:18px 20px 14px;background:var(--purple);color:#fff">

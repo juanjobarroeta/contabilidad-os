@@ -26,16 +26,17 @@ node build-planta.js ../planta-agua.pptx   # arma el deck de 15 láminas
 python3 qa.py ../planta-agua.pptx      # QA: desbordes, márgenes, encimados
 ```
 
-## Qué tocar cuando haya marca real
+## Qué tocar cuando haya identidad completa
 
-Hoy todo usa el placeholder **«Planta purificadora»** y una paleta propia de
-agua. Con el nombre y los colores del cliente:
+La marca **EHABSA** ya está sembrada (rail de las pantallas, kicker de la
+pantalla móvil, portada, pies de lámina y cierre del deck). Lo que sigue siendo
+genérico es la identidad visual — hoy corre una paleta propia de agua:
 
 | Qué | Dónde |
 |---|---|
 | Paleta de las pantallas | `planta/base.css`, variables `--…` al inicio (azules `#0C3D55`/`#2E6E8E`, acento aqua `#0E93B8`) |
-| Logo del rail (hoy: icono de gota) | `planta/gen.js`, helper `rail` |
-| Nombre en portada, pies de lámina y cierre | `build-planta.js`, buscar `"Planta purificadora"` |
+| Logo del rail (hoy: gota + wordmark EHABSA) | `planta/gen.js`, helper `rail` |
+| Nombre (si cambia la razón comercial) | buscar `"EHABSA"` en `planta/gen.js` y `build-planta.js` |
 | Precio de la lámina de inversión | `build-planta.js`, buscar `"$12,000"` |
 | Colores del deck | `build-planta.js`, objeto `C` al inicio |
 
