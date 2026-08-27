@@ -3,11 +3,11 @@
 Guía para las aplicaciones satélite (padel/theclubpadel, bartiz, FlotaGob,
 ZionX) que consumen la API de contabilidad-os con `Authorization: Bearer`.
 
-Desde julio de 2026 el flujo recomendado emite un **access token de 1 hora**
-más un **refresh token opaco de 30 días con rotación**. El token legado de
-7 días queda deprecado: los ya emitidos siguen funcionando hasta expirar,
-pero emitir nuevos requiere la bandera `LEGACY_API_TOKENS_ENABLED="true"` en
-el servidor y `{ "legacy": true }` en el body.
+Desde julio de 2026 el flujo emite un **access token de 1 hora** más un
+**refresh token opaco de 30 días con rotación**. El token legado de 7 días
+quedó **RETIRADO en agosto de 2026**: no se emite (la bandera y el body
+`{ legacy: true }` desaparecieron) y tampoco verifica — el servidor exige
+`jti`, presente sólo en los access tokens del flujo con refresh.
 
 Los tokens de socios del club de pádel (`/api/padel/auth/token`, audiencia
 `theclubpadel:member`) NO cambian.
@@ -91,12 +91,9 @@ de emergencia global sigue siendo rotar `AUTH_SECRET`.
    proactivamente cada ~50 minutos, llama a `/api/auth/token/refresh` y
    sustituye AMBOS valores.
 4. Maneja el 401 del refresh volviendo al login con credenciales.
-5. Mientras migras, puedes pedir el token de 7 días con `{ "legacy": true }`
-   — sólo funciona si el servidor tiene `LEGACY_API_TOKENS_ENABLED="true"`,
-   y quedará deshabilitado una vez migrados todos los satélites.
 
 ## 5. Bitácora
 
 Eventos registrados en la bitácora de seguridad (AuditLog): `token.emitir`
-(login, incluye etiqueta/scope/legacy), `token.revocar` (revocación desde
+(login, incluye etiqueta/scope), `token.revocar` (revocación desde
 UI/API) y `token.refresh-reuso` (detección de reutilización/robo).

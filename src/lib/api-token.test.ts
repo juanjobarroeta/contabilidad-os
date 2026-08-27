@@ -3,12 +3,12 @@ import { decodeJwt } from "jose";
 
 process.env.AUTH_SECRET = "secreto-de-prueba-para-tokens-api";
 
+import { SignJWT } from "jose";
+
 import {
   signApiToken,
-  signLegacyApiToken,
   signClubMemberToken,
   verifyApiToken,
-  legacyApiTokensEnabled,
   ACCESS_TOKEN_EXPIRY_SECONDS,
 } from "./api-token";
 
@@ -53,17 +53,20 @@ describe("access token nuevo (1 hora, jti, scope opcional)", () => {
   });
 });
 
-describe("compatibilidad con tokens legados de 7 días", () => {
-  it("un token legado (sin jti/scope) sigue verificando — satélites vivos no se rompen", async () => {
-    const token = await signLegacyApiToken(usuario);
-    const payload = await verifyApiToken(token);
-    expect(payload.sub).toBe("u1");
-    expect(payload.jti).toBeUndefined();
-    expect(payload.scope).toBeUndefined();
+describe("tokens legados de 7 días — retirados", () => {
+  it("verifyApiToken RECHAZA un token con forma legada (sin jti) aunque la firma sea válida", async () => {
+    // Forma legada firmada con el mismo secreto/issuer/audience — antes del
+    // retiro habría verificado; hoy debe morir en el requisito de jti.
+    const legado = await new SignJWT({ email: usuario.email, name: usuario.name })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject(usuario.sub)
+      .setIssuedAt()
+      .setIssuer("contabilidad-os")
+      .setAudience("contabilidad-os:api")
+      .setExpirationTime("7d")
+      .sign(new TextEncoder().encode(process.env.AUTH_SECRET!));
 
-    const claims = decodeJwt(token);
-    const vida = (claims.exp ?? 0) - (claims.iat ?? 0);
-    expect(vida).toBe(7 * 24 * 60 * 60); // 7 días exactos, como siempre
+    await expect(verifyApiToken(legado)).rejects.toThrow(/jti/);
   });
 
   it("verifyApiToken RECHAZA tokens de socios del club (audiencia distinta)", async () => {
@@ -74,33 +77,5 @@ describe("compatibilidad con tokens legados de 7 días", () => {
       companyId: "c1",
     });
     await expect(verifyApiToken(member)).rejects.toThrow();
-  });
-});
-
-describe("legacyApiTokensEnabled (bandera de emisión legada)", () => {
-  const original = process.env.LEGACY_API_TOKENS_ENABLED;
-
-  afterEach(() => {
-    if (original === undefined) delete process.env.LEGACY_API_TOKENS_ENABLED;
-    else process.env.LEGACY_API_TOKENS_ENABLED = original;
-  });
-
-  it("apagada por omisión (env ausente)", () => {
-    delete process.env.LEGACY_API_TOKENS_ENABLED;
-    expect(legacyApiTokensEnabled()).toBe(false);
-  });
-
-  it('sólo "true" exacto la enciende', () => {
-    process.env.LEGACY_API_TOKENS_ENABLED = "true";
-    expect(legacyApiTokensEnabled()).toBe(true);
-
-    process.env.LEGACY_API_TOKENS_ENABLED = "false";
-    expect(legacyApiTokensEnabled()).toBe(false);
-
-    process.env.LEGACY_API_TOKENS_ENABLED = "TRUE";
-    expect(legacyApiTokensEnabled()).toBe(false);
-
-    process.env.LEGACY_API_TOKENS_ENABLED = "1";
-    expect(legacyApiTokensEnabled()).toBe(false);
   });
 });

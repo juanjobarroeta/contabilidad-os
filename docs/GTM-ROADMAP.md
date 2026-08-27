@@ -55,8 +55,8 @@ frío.**
 - [ ] **Dinero: Float → Decimal** *(L)* — 234 campos Float en el schema de un
   producto contable. Primero las escrituras nuevas, luego backfill con script
   de validación, cuadre contra totales conocidos.
-- [ ] **Cerrar la migración de tokens y la cola Bóveda** *(M)* — apagar
-  `LEGACY_API_TOKENS_ENABLED` en definitivo; resolver los dos hallazgos
+- [x] parcial **Cerrar la migración de tokens y la cola Bóveda** *(M)* — legacy
+  retirado (2026-08-27: emisión y verificación eliminadas); resolver los dos hallazgos
   abiertos (scoping de despacho en `verificador`, `companyId` en
   `push/subscribe`); seguir el orden del plan.
 - [ ] **Pasada de confiabilidad en las ~20 pantallas de dinero** *(M)* —
