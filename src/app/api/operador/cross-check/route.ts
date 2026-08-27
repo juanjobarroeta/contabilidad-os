@@ -113,13 +113,13 @@ export async function GET(req: Request) {
       isrProvisional: {
         capturados: [...isrHave].sort(),
         faltantes: expectedMonths.filter((p) => !isrHave.has(p)),
-        sumaIsrPagar: round2(priorDecls.filter((d) => d.tipo === "ISR_PROVISIONAL").reduce((s, d) => s + (d.isrPagar ?? 0), 0)),
+        sumaIsrPagar: round2(priorDecls.filter((d) => d.tipo === "ISR_PROVISIONAL").reduce((s, d) => s + Number(d.isrPagar ?? 0), 0)),
       },
       ivaMensual: {
         capturados: [...ivaHave].sort(),
         faltantes: expectedMonths.filter((p) => !ivaHave.has(p)),
         ultimoSaldoFavor: round2(
-          priorDecls.filter((d) => d.tipo === "IVA_MENSUAL").at(-1)?.ivaSaldoFavor ?? 0
+          Number(priorDecls.filter((d) => d.tipo === "IVA_MENSUAL").at(-1)?.ivaSaldoFavor ?? 0)
         ),
       },
     },

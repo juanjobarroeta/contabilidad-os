@@ -118,8 +118,8 @@ export async function generarTraspasoResultado(
   let cargos = 0;
   let abonos = 0;
   for (const g of groups) {
-    if (g.tipo === "CARGO") cargos += g._sum.monto ?? 0;
-    else abonos += g._sum.monto ?? 0;
+    if (g.tipo === "CARGO") cargos += Number(g._sum.monto ?? 0);
+    else abonos += Number(g._sum.monto ?? 0);
   }
   // 305.01 es de capital (acreedora): saldo natural = abonos − cargos.
   const asiento = construirTraspaso(abonos - cargos, resultadoAcc.id, acumuladosAcc.id);

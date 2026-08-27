@@ -600,9 +600,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
           id: a.id,
           descripcion: a.descripcion,
           tipo: a.tipo,
-          moi: a.moi,
+          moi: Number(a.moi),
           fechaInicioUso: a.fechaInicioUso ?? a.fechaAdquisicion,
-          tasaAnual: a.tasaAnual,
+          tasaAnual: Number(a.tasaAnual),
           fechaBaja: a.fechaBaja,
         })),
         year,
@@ -907,8 +907,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     let entriesCount = 0;
     for (const g of grouped) {
       entriesCount += g._count._all;
-      if (g.tipo === "CARGO") periodCargos += g._sum.monto ?? 0;
-      else if (g.tipo === "ABONO") periodAbonos += g._sum.monto ?? 0;
+      if (g.tipo === "CARGO") periodCargos += Number(g._sum.monto ?? 0);
+      else if (g.tipo === "ABONO") periodAbonos += Number(g._sum.monto ?? 0);
     }
 
     // Update period status + summary
@@ -971,8 +971,8 @@ export async function unpostMonth(companyId: string, year: number, month: number
     let entriesCount = 0;
     for (const g of grouped) {
       entriesCount += g._count._all;
-      if (g.tipo === "CARGO") totalCargos += g._sum.monto ?? 0;
-      else if (g.tipo === "ABONO") totalAbonos += g._sum.monto ?? 0;
+      if (g.tipo === "CARGO") totalCargos += Number(g._sum.monto ?? 0);
+      else if (g.tipo === "ABONO") totalAbonos += Number(g._sum.monto ?? 0);
     }
 
     await tx.accountingPeriod.update({
@@ -1039,8 +1039,8 @@ export async function balanza(companyId: string, year: number, month: number): P
     const m = new Map<string, { cargo: number; abono: number }>();
     for (const g of groups) {
       const e = m.get(g.chartAccountId) ?? { cargo: 0, abono: 0 };
-      if (g.tipo === "CARGO") e.cargo += g._sum.monto ?? 0;
-      else if (g.tipo === "ABONO") e.abono += g._sum.monto ?? 0;
+      if (g.tipo === "CARGO") e.cargo += Number(g._sum.monto ?? 0);
+      else if (g.tipo === "ABONO") e.abono += Number(g._sum.monto ?? 0);
       m.set(g.chartAccountId, e);
     }
     return m;
@@ -1276,8 +1276,8 @@ export async function balanzaPreview(
   const previo = new Map<string, { cargo: number; abono: number }>();
   for (const g of priorG) {
     const e = previo.get(g.chartAccountId) ?? { cargo: 0, abono: 0 };
-    if (g.tipo === "CARGO") e.cargo += g._sum.monto ?? 0;
-    else if (g.tipo === "ABONO") e.abono += g._sum.monto ?? 0;
+    if (g.tipo === "CARGO") e.cargo += Number(g._sum.monto ?? 0);
+    else if (g.tipo === "ABONO") e.abono += Number(g._sum.monto ?? 0);
     previo.set(g.chartAccountId, e);
   }
 

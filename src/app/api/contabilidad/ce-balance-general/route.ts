@@ -88,7 +88,7 @@ export const GET = withAuthz(async (req: Request) => {
     numCta: r.numCta,
     nombre: nombreDe.get(r.numCta) ?? null,
     // Ya viene con el lado en el signo — es la convención de la balanza CE.
-    saldo: r.saldoFin,
+    saldo: Number(r.saldoFin),
     tipo: porCodigo.get(r.numCta)?.tipo ?? null,
   }));
 
@@ -99,7 +99,7 @@ export const GET = withAuthz(async (req: Request) => {
     if (!cta) continue;
     const codigo = cta.subcuenta ?? cta.cuentaSAT;
     const prev = acum.get(codigo) ?? { nombre: cta.nombre, tipo: cta.tipo, saldo: 0 };
-    prev.saldo += (g.tipo === "CARGO" ? 1 : -1) * (g._sum.monto ?? 0);
+    prev.saldo += (g.tipo === "CARGO" ? 1 : -1) * Number(g._sum.monto ?? 0);
     acum.set(codigo, prev);
   }
   const derivado: SaldoCuenta[] = [...acum].map(([numCta, v]) => ({

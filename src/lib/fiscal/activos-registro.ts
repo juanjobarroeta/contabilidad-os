@@ -47,7 +47,7 @@ export async function calcularDepreciacionRegistro(
     where: { companyId },
     orderBy: { fechaAdquisicion: "desc" },
     include: { invoice: { select: { uuid: true, serie: true, folio: true } } },
-  });
+  }).then((rows) => rows.map((a) => ({ ...a, moi: Number(a.moi), tasaAnual: Number(a.tasaAnual) })));
 
   let totalDepreciacionEjercicio = 0;
   const rows = activos.map((a): ActivoConDepreciacion => {
@@ -97,7 +97,7 @@ export async function calcularDepreciacionRegistroPeriodo(
   ejercicio: number,
   hastaMes: number
 ): Promise<number> {
-  const activos = await prisma.activoFijo.findMany({ where: { companyId } });
+  const activos = await prisma.activoFijo.findMany({ where: { companyId } }).then((rows) => rows.map((a) => ({ ...a, moi: Number(a.moi), tasaAnual: Number(a.tasaAnual) })));
   let total = 0;
   for (const a of activos) {
     const adqYear = a.fechaAdquisicion.getFullYear();

@@ -34,7 +34,7 @@ async function main() {
         where: { companyId: COMPANY, anio: year, mes: month, esPadre: false, numCta: { startsWith: "4" } },
         _sum: { haber: true, debe: true },
       });
-      const neto = (ce._sum.haber ?? 0) - (ce._sum.debe ?? 0);
+      const neto = Number(ce._sum.haber ?? 0) - Number(ce._sum.debe ?? 0);
 
       const hoy = await prisma.accountingEntry.findMany({
         where: { companyId: COMPANY, year, month },
@@ -42,7 +42,7 @@ async function main() {
       });
       const netoHoy = hoy
         .filter((e) => e.chartAccount.cuentaSAT.startsWith("4"))
-        .reduce((a, e) => a + (e.tipo === "ABONO" ? e.monto : -e.monto), 0);
+        .reduce((a, e) => a + (e.tipo === "ABONO" ? Number(e.monto) : -Number(e.monto)), 0);
 
       const prev = await balanzaPreview(COMPANY, year, month);
       const netoPrev = prev

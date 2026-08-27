@@ -191,7 +191,7 @@ async function handle(req: Request) {
   };
 
   // ── 2. Lo que se DECLARÓ ───────────────────────────────────────────────────
-  const decls = await prisma.taxDeclaration.findMany({
+  const decls = (await prisma.taxDeclaration.findMany({
     where: { companyId, periodo: { startsWith: String(anio) } },
     select: {
       tipo: true,
@@ -203,7 +203,13 @@ async function handle(req: Request) {
       isrPerdidaPendiente: true,
     },
     orderBy: { periodo: "asc" },
-  });
+  })).map((d) => ({
+    ...d,
+    isrIngresos: d.isrIngresos === null ? null : Number(d.isrIngresos),
+    isrDeducciones: d.isrDeducciones === null ? null : Number(d.isrDeducciones),
+    isrBaseGravable: d.isrBaseGravable === null ? null : Number(d.isrBaseGravable),
+    isrPerdidaPendiente: d.isrPerdidaPendiente === null ? null : Number(d.isrPerdidaPendiente),
+  }));
   const anual = decls.find((d) => d.periodo === String(anio));
   const mensualesIsr = decls.filter((d) => d.tipo === "ISR_PROVISIONAL" && d.isrIngresos != null);
   const declarado = {

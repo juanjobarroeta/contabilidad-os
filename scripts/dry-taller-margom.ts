@@ -40,7 +40,7 @@ async function main() {
       for (const r of ce) {
         if (!SERIES.some((s) => r.numCta.startsWith(s))) continue;
         cuentas.add(r.numCta);
-        ceNeto.set(r.numCta, (ceNeto.get(r.numCta) ?? 0) + r.haber - r.debe);
+        ceNeto.set(r.numCta, (ceNeto.get(r.numCta) ?? 0) + Number(r.haber) - Number(r.debe));
       }
       const derNeto = new Map<string, number>();
       for (const r of prev) {

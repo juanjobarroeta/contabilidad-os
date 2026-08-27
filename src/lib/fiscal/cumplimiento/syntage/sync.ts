@@ -153,7 +153,7 @@ async function persistDeclaracionesAnuales(
         fechaPresentacion: true,
         acuseParseadoAt: true,
       },
-    });
+    }).then((d) => d === null ? null : { ...d, isrIngresos: d.isrIngresos === null ? null : Number(d.isrIngresos), isrBaseGravable: d.isrBaseGravable === null ? null : Number(d.isrBaseGravable), isrCoeficienteUtilidad: d.isrCoeficienteUtilidad === null ? null : Number(d.isrCoeficienteUtilidad), isrPerdidaPendiente: d.isrPerdidaPendiente === null ? null : Number(d.isrPerdidaPendiente) });
 
     // ¿La fila guardada quedó SUPERADA por una presentación más reciente
     // (complementaria)? Se detecta por fecha: la fila conserva la fecha del

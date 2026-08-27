@@ -79,8 +79,8 @@ export async function GET(req: Request) {
       });
       // ACTIVO: saldo deudor = sum(CARGO) - sum(ABONO)
       for (const e of entries) {
-        if (e.tipo === "CARGO") prestamosOtorgados += e.monto;
-        else prestamosOtorgados -= e.monto;
+        if (e.tipo === "CARGO") prestamosOtorgados += Number(e.monto);
+        else prestamosOtorgados -= Number(e.monto);
       }
     }
 
@@ -91,8 +91,8 @@ export async function GET(req: Request) {
       });
       // PASIVO: saldo acreedor = sum(ABONO) - sum(CARGO)
       for (const e of entries) {
-        if (e.tipo === "ABONO") prestamosPorPagar += e.monto;
-        else prestamosPorPagar -= e.monto;
+        if (e.tipo === "ABONO") prestamosPorPagar += Number(e.monto);
+        else prestamosPorPagar -= Number(e.monto);
       }
     }
 

@@ -32,8 +32,8 @@ export async function GET(req: Request) {
     for (const e of apertura) {
       const codigo = e.chartAccount.subcuenta ?? e.chartAccount.cuentaSAT;
       const s = saldoPorCodigo.get(codigo) ?? { cargo: 0, abono: 0 };
-      if (e.tipo === "CARGO") s.cargo += e.monto;
-      else s.abono += e.monto;
+      if (e.tipo === "CARGO") s.cargo += Number(e.monto);
+      else s.abono += Number(e.monto);
       saldoPorCodigo.set(codigo, s);
       if (!fecha) fecha = e.fecha.toISOString().slice(0, 10);
     }

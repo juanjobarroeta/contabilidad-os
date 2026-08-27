@@ -33,7 +33,7 @@ export const GET = withAuthz(async (req: Request) => {
     fecha: e.fecha.toISOString().slice(0, 10),
     concepto: e.descripcion,
     tipo: e.tipo,
-    monto: e.monto,
+    monto: Number(e.monto),
     referencia: e.referencia,
     referenciaTipo: e.referenciaTipo,
     fuente: e.fuente,

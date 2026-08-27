@@ -579,7 +579,7 @@ export async function computeTaxPosition(
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
       select: { tipo: true, periodo: true, isrPagar: true },
-    }),
+    }).then((rows) => rows.map((d) => ({ ...d, isrPagar: d.isrPagar === null ? null : Number(d.isrPagar) }))),
     prisma.taxDeclaration.findFirst({
       where: {
         companyId,
@@ -629,11 +629,11 @@ export async function computeTaxPosition(
       },
       orderBy: { periodo: "desc" },
       select: { periodo: true, isrIngresos: true, isrDeducciones: true, isrBaseGravable: true, isrCoeficienteUtilidad: true, isrPerdidaPendiente: true },
-    }),
+    }).then((rows) => rows.map((d) => ({ ...d, isrIngresos: d.isrIngresos === null ? null : Number(d.isrIngresos), isrDeducciones: d.isrDeducciones === null ? null : Number(d.isrDeducciones), isrBaseGravable: d.isrBaseGravable === null ? null : Number(d.isrBaseGravable), isrCoeficienteUtilidad: d.isrCoeficienteUtilidad === null ? null : Number(d.isrCoeficienteUtilidad), isrPerdidaPendiente: d.isrPerdidaPendiente === null ? null : Number(d.isrPerdidaPendiente) }))),
     // Pérdidas fiscales pendientes (Art. 57) — sólo las consume el provisional PF
     // de actividad empresarial (Art. 106); el ledger lo cierra la anual, aquí es
     // sólo lectura.
-    prisma.perdidaFiscal.findMany({ where: { companyId } }),
+    prisma.perdidaFiscal.findMany({ where: { companyId } }).then((rows) => rows.map((p) => ({ ...p, montoOriginal: Number(p.montoOriginal), saldoActualizado: Number(p.saldoActualizado) }))),
   ]);
 
   // Notas de crédito ("E") en los agregados anuales: el agregado positivo las
@@ -710,7 +710,7 @@ export async function computeTaxPosition(
   const actos = calcularActosDelPeriodo(facturasEmitidas);
   const ivaAcreditable = round2(ivaAcreditableBruto * actos.proporcion);
 
-  const saldoFavorAnterior = prevDeclaracion?.ivaSaldoFavor ?? 0;
+  const saldoFavorAnterior = Number(prevDeclaracion?.ivaSaldoFavor ?? 0);
   const ivaNeto = ivaTrasladadoTotal - ivaAcreditable - ivaRetenidoPorClientes - saldoFavorAnterior;
   const ivaPagar = Math.max(0, round2(ivaNeto));
   const ivaSaldoAFavor = ivaNeto < 0 ? round2(-ivaNeto) : 0;
@@ -782,7 +782,7 @@ export async function computeTaxPosition(
     // periodo anterior (isrSaldoFavor de la declaración guardada). No cruza
     // ejercicios — el excedente de diciembre se recupera en la declaración
     // anual (Art. 113-F), no contra enero.
-    const saldoFavorIsrAnterior = month === 1 ? 0 : round2(prevIsrDeclaracion?.isrSaldoFavor ?? 0);
+    const saldoFavorIsrAnterior = month === 1 ? 0 : round2(Number(prevIsrDeclaracion?.isrSaldoFavor ?? 0));
     const acreditableIsr = isrRetenidoMes + saldoFavorIsrAnterior;
     isr = {
       metodo: "RESICO_PF",
@@ -954,7 +954,7 @@ export async function computeTaxPosition(
         _sum: { ptu: true },
       }),
     ]);
-    const coeficienteDeclarado = coefProvRow?.isrCoeficienteUtilidad ?? null;
+    const coeficienteDeclarado = coefProvRow?.isrCoeficienteUtilidad != null ? Number(coefProvRow.isrCoeficienteUtilidad) : null;
     const ptuPagadaEjercicio = round2(Number(ptuNominaAgg._sum.ptu ?? 0));
 
     // Mejor valor AUTO-detectado, independiente de un override manual: anual

@@ -94,7 +94,7 @@ export async function GET(req: Request) {
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
       select: { isrPagar: true, tipo: true, periodo: true },
-    }),
+    }).then((rows) => rows.map((d) => ({ ...d, isrPagar: d.isrPagar === null ? null : Number(d.isrPagar) }))),
     // Check for existing saved annual declaration
     prisma.taxDeclaration.findFirst({
       where: { companyId, tipo: "DECLARACION_ANUAL", periodo: String(ejercicio) },
@@ -102,7 +102,7 @@ export async function GET(req: Request) {
     // Depreciación del registro de activo fijo (deducción de inversiones).
     calcularDepreciacionRegistro(companyId, ejercicio),
     // Pérdidas fiscales pendientes de amortizar (Art. 57).
-    prisma.perdidaFiscal.findMany({ where: { companyId } }),
+    prisma.perdidaFiscal.findMany({ where: { companyId } }).then((rows) => rows.map((p) => ({ ...p, montoOriginal: Number(p.montoOriginal), saldoActualizado: Number(p.saldoActualizado) }))),
     // Asimilados a salarios recibidos (Art. 94): ingreso acumulable + ISR retenido
     // acreditable. Reconciliación anual de lo que se mostró mes a mes.
     prisma.invoice.aggregate({
@@ -318,8 +318,8 @@ export async function POST(req: Request) {
       const ap = aplicarPerdidas(
         aplicables.map((p) => ({
           ejercicioOrigen: p.ejercicioOrigen,
-          montoOriginal: p.montoOriginal,
-          saldoActualizado: p.saldoActualizado,
+          montoOriginal: Number(p.montoOriginal),
+          saldoActualizado: Number(p.saldoActualizado),
           mesUltimaActualizacion: p.mesUltimaActualizacion,
           agotada: p.agotada,
           ultimoEjercicioAplicado: p.ultimoEjercicioAplicado,

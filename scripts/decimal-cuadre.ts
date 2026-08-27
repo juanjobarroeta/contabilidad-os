@@ -82,8 +82,8 @@ async function tomarFoto(): Promise<Snapshot> {
   for (const f of decl) {
     const g = `taxDeclaration:${f.companyId}`;
     poner(g, "count", f._count);
-    poner(g, "ivaPagar", f._sum.ivaPagar);
-    poner(g, "isrPagar", f._sum.isrPagar);
+    poner(g, "ivaPagar", Number(f._sum.ivaPagar));
+    poner(g, "isrPagar", Number(f._sum.isrPagar));
   }
 
   const asientos = await prisma.accountingEntry.aggregate({
@@ -91,15 +91,15 @@ async function tomarFoto(): Promise<Snapshot> {
     _sum: { monto: true },
   });
   poner("accountingEntry:global", "count", asientos._count);
-  poner("accountingEntry:global", "monto", asientos._sum.monto);
+  poner("accountingEntry:global", "monto", Number(asientos._sum.monto));
 
   const balanza = await prisma.ceBalanzaMes.aggregate({
     _count: true,
     _sum: { debe: true, haber: true },
   });
   poner("ceBalanzaMes:global", "count", balanza._count);
-  poner("ceBalanzaMes:global", "debe", balanza._sum.debe);
-  poner("ceBalanzaMes:global", "haber", balanza._sum.haber);
+  poner("ceBalanzaMes:global", "debe", Number(balanza._sum.debe));
+  poner("ceBalanzaMes:global", "haber", Number(balanza._sum.haber));
 
   return foto;
 }

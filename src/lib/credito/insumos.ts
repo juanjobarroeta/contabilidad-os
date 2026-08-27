@@ -38,18 +38,28 @@ export async function cargarInsumosCredito(companyId: string): Promise<InsumosCr
     select: { rfc: true, regimenFiscal: true, regimenes: { select: { code: true } } },
   });
   const [decls, faltantes, opinion, efosAbiertos] = await Promise.all([
-    prisma.taxDeclaration.findMany({
-      where: { companyId, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL"] } },
-      select: {
-        tipo: true,
-        periodo: true,
-        isrIngresos: true,
-        isrPagar: true,
-        ivaPagar: true,
-        iepsPagar: true,
-        fechaPresentacion: true,
-      },
-    }),
+    prisma.taxDeclaration
+      .findMany({
+        where: { companyId, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL"] } },
+        select: {
+          tipo: true,
+          periodo: true,
+          isrIngresos: true,
+          isrPagar: true,
+          ivaPagar: true,
+          iepsPagar: true,
+          fechaPresentacion: true,
+        },
+      })
+      .then((rows) =>
+        rows.map((d) => ({
+          ...d,
+          isrIngresos: d.isrIngresos === null ? null : Number(d.isrIngresos),
+          isrPagar: d.isrPagar === null ? null : Number(d.isrPagar),
+          ivaPagar: d.ivaPagar === null ? null : Number(d.ivaPagar),
+          iepsPagar: d.iepsPagar === null ? null : Number(d.iepsPagar),
+        }))
+      ),
     declaracionesFaltantesEmpresa(companyId),
     prisma.complianceSnapshot.findFirst({
       where: { companyId, tipo: "SAT_OPINION" },

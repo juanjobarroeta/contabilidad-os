@@ -414,7 +414,7 @@ export async function PATCH(req: Request, { params }: Params) {
       if (!taxDeclarationId || typeof taxDeclarationId !== "string") {
         return NextResponse.json({ error: "taxDeclarationId requerido para conciliar un pago de impuestos" }, { status: 400 });
       }
-      const decl = await prisma.taxDeclaration.findFirst({
+      const declRow = await prisma.taxDeclaration.findFirst({
         where: { id: taxDeclarationId, companyId: tx.companyId },
         select: {
           id: true,
@@ -429,7 +429,14 @@ export async function PATCH(req: Request, { params }: Params) {
           bankTransactions: { where: { status: "MATCHED" }, select: { id: true } },
         },
       });
-      if (!decl) return NextResponse.json({ error: "Declaración inválida" }, { status: 400 });
+      if (!declRow) return NextResponse.json({ error: "Declaración inválida" }, { status: 400 });
+      const decl = {
+        ...declRow,
+        ivaPagar: declRow.ivaPagar === null ? null : Number(declRow.ivaPagar),
+        isrPagar: declRow.isrPagar === null ? null : Number(declRow.isrPagar),
+        retencionesIsr: declRow.retencionesIsr === null ? null : Number(declRow.retencionesIsr),
+        imssCuotas: declRow.imssCuotas === null ? null : Number(declRow.imssCuotas),
+      };
       const guardImpuesto = checkImpuestoMatchGuard(decl, decl.bankTransactions, {
         id: txId,
         monto: tx.monto,

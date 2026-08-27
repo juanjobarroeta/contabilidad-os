@@ -413,8 +413,8 @@ export async function GET(req: Request) {
   // declaración del mes previo (ivaSaldoFavor). El contador puede ajustarlo a mano
   // y ese override se guarda en ivaSaldoFavorAnterior de la declaración del periodo
   // (misma fuente que la pantalla de detalle). Cuando existe el override, manda.
-  const saldoFavorAnteriorAuto = prevDecl?.ivaSaldoFavor ?? 0;
-  const saldoFavorAnteriorOverride = curDecl?.ivaSaldoFavorAnterior ?? null;
+  const saldoFavorAnteriorAuto = Number(prevDecl?.ivaSaldoFavor ?? 0);
+  const saldoFavorAnteriorOverride = curDecl?.ivaSaldoFavorAnterior != null ? Number(curDecl.ivaSaldoFavorAnterior) : null;
   const saldoFavorAnterior = saldoFavorAnteriorOverride ?? saldoFavorAnteriorAuto;
   const cargoFinal = ivaCargo - saldoFavorAnterior;
   const ivaPagar = cargoFinal > 0 ? cargoFinal : 0;

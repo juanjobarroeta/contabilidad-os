@@ -99,8 +99,8 @@ export async function generarCierre(
   const mov = new Map<string, { cargo: number; abono: number }>();
   for (const g of groups) {
     const m = mov.get(g.chartAccountId) ?? { cargo: 0, abono: 0 };
-    if (g.tipo === "CARGO") m.cargo += g._sum.monto ?? 0;
-    else m.abono += g._sum.monto ?? 0;
+    if (g.tipo === "CARGO") m.cargo += Number(g._sum.monto ?? 0);
+    else m.abono += Number(g._sum.monto ?? 0);
     mov.set(g.chartAccountId, m);
   }
 

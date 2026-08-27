@@ -436,7 +436,7 @@ export async function estadoApertura(companyId: string, hoy: Date = new Date()):
           isrCoeficienteUtilidad: true,
           isrPerdidaPendiente: true,
         },
-      }),
+      }).then((rows) => rows.map((d) => ({ ...d, isrIngresos: d.isrIngresos === null ? null : Number(d.isrIngresos), isrDeducciones: d.isrDeducciones === null ? null : Number(d.isrDeducciones), isrBaseGravable: d.isrBaseGravable === null ? null : Number(d.isrBaseGravable), isrCoeficienteUtilidad: d.isrCoeficienteUtilidad === null ? null : Number(d.isrCoeficienteUtilidad), isrPerdidaPendiente: d.isrPerdidaPendiente === null ? null : Number(d.isrPerdidaPendiente) }))),
       prisma.taxDeclaration.findFirst({
         where: { companyId, tipo: "ISR_PROVISIONAL", isrCoeficienteUtilidad: { not: null } },
         orderBy: { periodo: "desc" },
@@ -445,7 +445,7 @@ export async function estadoApertura(companyId: string, hoy: Date = new Date()):
       prisma.perdidaFiscal.findMany({
         where: { companyId },
         select: { ejercicioOrigen: true, montoOriginal: true, saldoActualizado: true, origen: true, agotada: true },
-      }),
+      }).then((rows) => rows.map((p) => ({ ...p, montoOriginal: Number(p.montoOriginal), saldoActualizado: Number(p.saldoActualizado) }))),
       // Pagos provisionales guardados del ejercicio en curso, previos al mes actual.
       prisma.taxDeclaration.findMany({
         where: {
@@ -481,7 +481,7 @@ export async function estadoApertura(companyId: string, hoy: Date = new Date()):
     primerPeriodo,
     declaracionAnterior: declAnterior
       ? {
-          ivaSaldoFavor: declAnterior.ivaSaldoFavor,
+          ivaSaldoFavor: declAnterior.ivaSaldoFavor === null ? null : Number(declAnterior.ivaSaldoFavor),
           status: declAnterior.status,
           isHistorical: declAnterior.isHistorical,
           tieneAcuse: tieneAcuseDe(declAnterior),
@@ -493,7 +493,7 @@ export async function estadoApertura(companyId: string, hoy: Date = new Date()):
       deAnual: anual ? { valor: anual.coeficiente, ejercicio: anual.ejercicio } : null,
       deProvisional:
         coefProvRow?.isrCoeficienteUtilidad != null
-          ? { valor: coefProvRow.isrCoeficienteUtilidad, periodo: coefProvRow.periodo }
+          ? { valor: Number(coefProvRow.isrCoeficienteUtilidad), periodo: coefProvRow.periodo }
           : null,
     },
     perdidaManual: { valor: company.perdidaFiscalPendiente, anio: company.perdidaFiscalAnio },
@@ -511,7 +511,7 @@ export async function estadoApertura(companyId: string, hoy: Date = new Date()):
       })),
     pagosProvisionales: pagosProv.map((p) => ({
       periodo: p.periodo,
-      isrPagar: p.isrPagar,
+      isrPagar: p.isrPagar === null ? null : Number(p.isrPagar),
       isHistorical: p.isHistorical,
       tieneAcuse: tieneAcuseDe(p),
     })),
@@ -568,7 +568,7 @@ export async function guardarSaldoFavorInicial(
         ...(GUARDADA_STATUSES.includes(existente.status) ? {} : { status: "FILED", isHistorical: true }),
       },
     });
-    return { periodo, anterior: existente.ivaSaldoFavor, creada: false };
+    return { periodo, anterior: existente.ivaSaldoFavor === null ? null : Number(existente.ivaSaldoFavor), creada: false };
   }
 
   if (valor == null) return { periodo, anterior: null, creada: false }; // nada que borrar

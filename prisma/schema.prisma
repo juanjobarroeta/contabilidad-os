@@ -985,13 +985,13 @@ model ActivoFijo {
 
   descripcion      String
   tipo             String // construccion|mobiliario|transporte|computo|herramental|comunicaciones|maquinaria|otro
-  moi              Float // Monto Original de la Inversión (sin IVA)
+  moi              Decimal @db.Decimal(18, 6) // Monto Original de la Inversión (sin IVA)
   fechaAdquisicion DateTime
   /**
    * Mes en que inicia su utilización, si difiere de la adquisición (Art. 31).
    */
   fechaInicioUso   DateTime?
-  tasaAnual        Float // por ciento máximo Art. 34 aplicado (puede sobreescribirse)
+  tasaAnual        Decimal @db.Decimal(18, 6) // por ciento máximo Art. 34 aplicado (puede sobreescribirse)
 
   // Automóviles: tope MOI deducible (Art. 36-II). Pickups de carga: esAutomovil=false.
   esAutomovil        Boolean @default(false)
@@ -1866,15 +1866,15 @@ model TaxDeclaration {
   status  DeclarationStatus  @default(DRAFT)
 
   // IVA
-  ivaTrasladadoCobrado  Float?
-  ivaAcreditableGastado Float?
-  ivaSaldoFavor         Float?
-  ivaPagar              Float?
-  ivaSaldoFavorAnterior Float? // Carryover from previous months
+  ivaTrasladadoCobrado  Decimal? @db.Decimal(18, 6)
+  ivaAcreditableGastado Decimal? @db.Decimal(18, 6)
+  ivaSaldoFavor         Decimal? @db.Decimal(18, 6)
+  ivaPagar              Decimal? @db.Decimal(18, 6)
+  ivaSaldoFavorAnterior Decimal? @db.Decimal(18, 6) // Carryover from previous months
 
   // IEPS (definitivo mensual — capturado del acuse; el motor llega después)
-  iepsPagar      Float?
-  iepsSaldoFavor Float?
+  iepsPagar      Decimal? @db.Decimal(18, 6)
+  iepsSaldoFavor Decimal? @db.Decimal(18, 6)
 
   // Último parse COMPLETADO del acuse anual con Claude (aunque no extrajera
   // nada). Sin esta marca, el centinela isrIngresos==null re-parseaba el mismo
@@ -1883,34 +1883,34 @@ model TaxDeclaration {
   acuseParseadoAt DateTime?
 
   // ISR
-  isrIngresos            Float?
-  isrDeducciones         Float?
-  isrBaseGravable        Float?
-  isrTasa                Float?
-  isrPagar               Float?
-  isrCoeficienteUtilidad Float? // Coeficiente asignado por el SAT del ejercicio anterior
+  isrIngresos            Decimal? @db.Decimal(18, 6)
+  isrDeducciones         Decimal? @db.Decimal(18, 6)
+  isrBaseGravable        Decimal? @db.Decimal(18, 6)
+  isrTasa                Decimal? @db.Decimal(18, 6)
+  isrPagar               Decimal? @db.Decimal(18, 6)
+  isrCoeficienteUtilidad Decimal? @db.Decimal(18, 6) // Coeficiente asignado por el SAT del ejercicio anterior
   // DECLARACION_ANUAL: remanente de pérdidas fiscales de ejercicios anteriores
   // pendiente de aplicar a ejercicios FUTUROS (actualizado), extraído del acuse.
   // Lo amortiza el pago provisional de PM (Art. 14) como respaldo del valor
   // manual de la empresa — ver computeTaxPosition.
-  isrPerdidaPendiente    Float?
+  isrPerdidaPendiente    Decimal? @db.Decimal(18, 6)
   // Saldo a favor de ISR generado en el periodo (RESICO PF: retención 1.25% de
   // PM, Art. 113-J, que excedió el ISR definitivo del mes). Se arrastra al
   // periodo siguiente dentro del mismo ejercicio — el excedente de diciembre se
   // recupera en la anual (Art. 113-F), no contra enero.
-  isrSaldoFavor          Float?
+  isrSaldoFavor          Decimal? @db.Decimal(18, 6)
 
   // Retenciones (enteramiento de ISR retenido a terceros — p.ej. nómina). Es un
   // impuesto del trabajador que el patrón sólo retiene y entera (Art. 96 LISR);
   // NO se acredita contra el ISR provisional propio de la empresa, por eso vive
   // en su propio renglón con tipo RETENCIONES_ISR.
-  retencionesIsr Float? // ISR retenido a enterar en el periodo
+  retencionesIsr Decimal? @db.Decimal(18, 6) // ISR retenido a enterar en el periodo
 
   // Cuotas IMSS (SIPARE) — monto pagado/por pagar del periodo. En filas
   // IMSS_MENSUAL: cuotas obrero-patronales del mes; en IMSS_BIMESTRAL: RCV +
   // Infonavit del bimestre. Se precarga con el estimado desde la nómina
   // timbrada y el usuario lo ajusta a la cifra exacta del SUA al registrar.
-  imssCuotas Float?
+  imssCuotas Decimal? @db.Decimal(18, 6)
 
   // DIOT
   diotXmlUrl String?
@@ -1958,9 +1958,9 @@ model PerdidaFiscal {
   id                      String   @id @default(cuid())
   companyId               String
   ejercicioOrigen         Int // año en que se generó la pérdida
-  montoOriginal           Float // pérdida nominal del ejercicio
+  montoOriginal           Decimal @db.Decimal(18, 6) // pérdida nominal del ejercicio
   // Saldo pendiente de amortizar, actualizado hasta `mesUltimaActualizacion`.
-  saldoActualizado        Float
+  saldoActualizado        Decimal @db.Decimal(18, 6)
   mesUltimaActualizacion  String // "YYYY-MM"
   agotada                 Boolean  @default(false)
   // Último ejercicio en que se aplicó (idempotencia del guardado de la anual).
@@ -2130,7 +2130,7 @@ model AccountingEntry {
   descripcion    String
   referencia     String? // e.g. UUID del CFDI, ESTIMACION id, etc.
   referenciaTipo String? // "CFDI" | "ESTIMACION" | "SOLICITUD_COMPRA" | "BANK_TX" | etc.
-  monto          Float
+  monto          Decimal @db.Decimal(18, 6)
   tipo           EntryType // CARGO, ABONO
   fuente         EntrySource // CFDI, NOMINA, BANCO, MANUAL, CONSTRUCCION, FLOTA
 
@@ -2155,8 +2155,8 @@ model AccountingPeriod {
   postedById   String?
   // Summary counts so the UI can show period health at a glance
   entriesCount Int                    @default(0)
-  totalCargos  Float                  @default(0)
-  totalAbonos  Float                  @default(0)
+  totalCargos  Decimal @db.Decimal(18, 6)                  @default(0)
+  totalAbonos  Decimal @db.Decimal(18, 6)                  @default(0)
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
 
@@ -5828,10 +5828,10 @@ model CeBalanzaMes {
   anio      Int
   mes       Int
   numCta    String
-  saldoIni  Float
-  debe      Float
-  haber     Float
-  saldoFin  Float
+  saldoIni  Decimal @db.Decimal(18, 6)
+  debe      Decimal @db.Decimal(18, 6)
+  haber     Decimal @db.Decimal(18, 6)
+  saldoFin  Decimal @db.Decimal(18, 6)
   /// true = cuenta de mayor cuyo saldo YA es la suma de sus hijas (padresDeBalanza):
   /// sumar padres e hijas duplica — los reportes filtran por esto.
   esPadre   Boolean  @default(false)

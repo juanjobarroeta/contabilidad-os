@@ -61,12 +61,12 @@ export const GET = withAuthz(async (req: Request) => {
   const declarado: MovimientoCuenta[] = declaradoRaw.map((r) => ({
     numCta: r.numCta,
     nombre: nombreDe.get(r.numCta) ?? null,
-    monto: r.haber - r.debe,
+    monto: Number(r.haber) - Number(r.debe),
   }));
   const derivado: MovimientoCuenta[] = derivadoRaw.map((e) => ({
     numCta: e.chartAccount.cuentaSAT,
     nombre: e.chartAccount.nombre,
-    monto: e.tipo === "ABONO" ? e.monto : -e.monto,
+    monto: e.tipo === "ABONO" ? Number(e.monto) : -Number(e.monto),
   }));
 
   // «Presentado» es del MES pedido: en acumulado basta que ese mes exista para

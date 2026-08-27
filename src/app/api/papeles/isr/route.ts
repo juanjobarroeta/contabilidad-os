@@ -74,7 +74,7 @@ export async function GET(req: Request) {
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
       select: { tipo: true, periodo: true, isrPagar: true },
-    }),
+    }).then((rows) => rows.map((d) => ({ ...d, isrPagar: d.isrPagar === null ? null : Number(d.isrPagar) }))),
   ]);
 
   // ANTICIPOS (Art. 17-I LISR): el ingreso nominal de una PM se acumula en lo

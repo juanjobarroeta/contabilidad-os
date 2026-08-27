@@ -324,12 +324,12 @@ export async function estadoPagosImss(
       prisma.taxDeclaration.findFirst({
         where: { companyId, tipo: "IMSS_MENSUAL", periodo },
         select: DECL_SELECT,
-      }),
+      }).then((d) => d === null ? null : { ...d, imssCuotas: d.imssCuotas === null ? null : Number(d.imssCuotas) }),
       bim.cierraBimestre
         ? prisma.taxDeclaration.findFirst({
             where: { companyId, tipo: "IMSS_BIMESTRAL", periodo: bim.periodo },
             select: DECL_SELECT,
-          })
+          }).then((d) => d === null ? null : { ...d, imssCuotas: d.imssCuotas === null ? null : Number(d.imssCuotas) })
         : Promise.resolve(null),
     ]);
 
