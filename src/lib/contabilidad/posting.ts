@@ -119,17 +119,129 @@ function monthRange(year: number, month: number): { start: Date; end: Date } {
  *   - Invoice (INGRESO, EGRESO) stamped in the period
  *   - BankTransaction in the period, grouped by status/notes:
  *       MATCHED (to invoice) → settles the invoice's client/supplier account
- *       MATCHED (to TaxDeclaration, taxDeclarationId) → NOT posted (v1): no es
- *           liquidación de Clientes/Proveedores; el enteramiento pertenece al
- *           módulo de impuestos (ver comentario y TODO en el loop)
+ *       MATCHED (to TaxDeclaration) → enteramiento: DR Impuestos y derechos /
+ *           AB Bancos (espejo de IGNORED+TAX_PAYMENT; devolución = invertido).
+ *           Reclasificación fina contra pasivo provisionado: pendiente (Ola C).
  *       IGNORED + TAX_PAYMENT       → debits impuestos por pagar
  *       IGNORED + PAYROLL_NO_CFDI   → debits sueldos y salarios
  *       IGNORED + NON_DEDUCTIBLE    → debits gastos no deducibles
  *       IGNORED + PENDING_MONTHLY_CFDI → debits "comisiones bancarias por conciliar"
  *                                      (will be reconciled when monthly CFDI matches)
- *       IGNORED + INTERNAL_TRANSFER → neutral (bank → bank, posted as both)
- *       UNMATCHED                   → warning, NOT posted (blocks clean close)
+ *       IGNORED + INTERNAL_TRANSFER → con 2+ cuentas: póliza CRUZADA entre las
+ *           subcuentas de banco (el retiro postea; la entrada espejo se marca
+ *           cubierta). Contraparte irresoluble o cuenta única: lavado visible.
+ *       IGNORED sin categoría       → BLOQUEA el cierre (misma disciplina que
+ *           UNMATCHED: el saldo de Bancos debe atar contra el estado de cuenta)
+ *       UNMATCHED                   → BLOQUEA el cierre
+ *
+ *   Subcuentas de banco: con 2+ BankAccount, cada cuenta postea en su propia
+ *   subcuenta contable (102.01.NN bajo la cuenta Bancos de la empresa, creada
+ *   y ligada vía BankAccount.chartAccountId). Con una sola cuenta, todo sigue
+ *   en la cuenta base — cero churn para las empresas existentes.
  */
+
+/** Tags válidos de IGNORED — cualquier otro valor bloquea el cierre. */
+export const IGNORED_TAGS_VALIDOS = new Set([
+  "PENDING_MONTHLY_CFDI",
+  "TAX_PAYMENT",
+  "PAYROLL_NO_CFDI",
+  "NON_DEDUCTIBLE",
+  "INTERNAL_TRANSFER",
+  "LOAN_RECEIVED",
+  "LOAN_GIVEN",
+  "CAPITAL_CONTRIBUTION",
+]);
+
+/** Spec (pura) de la subcuenta contable de una cuenta bancaria. */
+export function subcuentaBancoSpec(
+  base: {
+    cuentaSAT: string;
+    subcuenta: string | null;
+    nombre: string;
+    tipo: string;
+    nivel: number;
+    codAgrup: string | null;
+  },
+  banco: { banco: string; numeroCuenta: string },
+  consecutivo: number,
+) {
+  const baseCode = base.subcuenta ?? base.cuentaSAT;
+  return {
+    cuentaSAT: base.cuentaSAT,
+    subcuenta: `${baseCode}.${String(consecutivo).padStart(2, "0")}`,
+    nombre: `${base.nombre} — ${banco.banco} ${banco.numeroCuenta.slice(-4)}`,
+    tipo: base.tipo,
+    nivel: base.nivel + 1,
+    // CodAgrup del Anexo 24: hereda el del padre (o su código, que en el
+    // catálogo semilla ES el agrupador) — el código hijo NO está en la enum.
+    codAgrup: base.codAgrup ?? baseCode,
+  };
+}
+
+export type PlanTraspaso =
+  | { modo: "cruzado"; contraparteBankAccountId: string }
+  | { modo: "cubierto" }
+  | { modo: "lavado" };
+
+/**
+ * Plan (puro) de posteo de traspasos internos del periodo.
+ *
+ * Un traspaso real produce DOS movimientos (retiro en X, depósito en Y). El
+ * retiro genera la póliza cruzada AB 102.X / DR 102.Y; su depósito espejo
+ * (misma magnitud, cuentas invertidas) se marca "cubierto" para no duplicar.
+ * Un depósito sin retiro espejo (la otra cuenta no está sincronizada ese mes)
+ * postea su propia póliza cruzada. Contraparte no resoluble por CLABE →
+ * "lavado" en la propia cuenta, con warning — visible, nunca silencioso.
+ */
+export function planearTraspasos(
+  txs: {
+    id: string;
+    monto: number;
+    bankAccountId: string;
+    contraparteClabe: string | null;
+    status: string;
+    notes: string | null;
+  }[],
+  bankAccountPorClabe: Map<string, string>,
+): Map<string, PlanTraspaso> {
+  const plan = new Map<string, PlanTraspaso>();
+  const traspasos = txs.filter((t) => t.status === "IGNORED" && t.notes === "INTERNAL_TRANSFER");
+  const propio = (clabe: string | null) =>
+    clabe ? bankAccountPorClabe.get(clabe.replace(/\s+/g, "")) ?? null : null;
+
+  // Primero los retiros: registran la firma del traspaso que cubren.
+  const cubiertos = new Map<string, number>(); // "origen>destino:monto" → count
+  for (const t of traspasos) {
+    if (t.monto >= 0) continue;
+    const destino = propio(t.contraparteClabe);
+    if (!destino || destino === t.bankAccountId) {
+      plan.set(t.id, { modo: "lavado" });
+      continue;
+    }
+    plan.set(t.id, { modo: "cruzado", contraparteBankAccountId: destino });
+    const k = `${t.bankAccountId}>${destino}:${Math.abs(t.monto).toFixed(2)}`;
+    cubiertos.set(k, (cubiertos.get(k) ?? 0) + 1);
+  }
+  // Luego los depósitos: si su retiro espejo ya postea, quedan cubiertos.
+  for (const t of traspasos) {
+    if (t.monto < 0) continue;
+    const origen = propio(t.contraparteClabe);
+    if (!origen || origen === t.bankAccountId) {
+      plan.set(t.id, { modo: "lavado" });
+      continue;
+    }
+    const k = `${origen}>${t.bankAccountId}:${Math.abs(t.monto).toFixed(2)}`;
+    const n = cubiertos.get(k) ?? 0;
+    if (n > 0) {
+      cubiertos.set(k, n - 1);
+      plan.set(t.id, { modo: "cubierto" });
+    } else {
+      plan.set(t.id, { modo: "cruzado", contraparteBankAccountId: origen });
+    }
+  }
+  return plan;
+}
+
 export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult> {
   const { companyId, year, month } = opts;
   const { start, end } = monthRange(year, month);
@@ -662,6 +774,49 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     },
   })).map((t) => ({ ...t, monto: Number(t.monto) }));
 
+  // Subcuentas de banco: con 2+ cuentas, cada una postea en su subcuenta
+  // contable propia (creada y ligada bajo demanda); con una, la cuenta base.
+  const bankAccounts = await prisma.bankAccount.findMany({
+    where: { companyId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, banco: true, numeroCuenta: true, clabe: true, chartAccountId: true },
+  });
+  const multiBanco = bankAccounts.length >= 2;
+  const ctaPorBankAccount = new Map<string, { id: string }>();
+  if (multiBanco) {
+    for (const ba of bankAccounts) {
+      let cta = ba.chartAccountId
+        ? await prisma.chartAccount.findFirst({ where: { id: ba.chartAccountId, isActive: true } })
+        : null;
+      if (!cta) {
+        const baseCode = accBancos.subcuenta ?? accBancos.cuentaSAT;
+        const hermanos = await prisma.chartAccount.count({
+          where: { companyId, isActive: true, subcuenta: { startsWith: `${baseCode}.` } },
+        });
+        const spec = subcuentaBancoSpec(accBancos, ba, hermanos + 1);
+        cta = await prisma.chartAccount.create({
+          data: {
+            companyId,
+            cuentaSAT: spec.cuentaSAT,
+            subcuenta: spec.subcuenta,
+            nombre: spec.nombre,
+            tipo: spec.tipo as typeof accBancos.tipo,
+            nivel: spec.nivel,
+            naturaleza: accBancos.naturaleza,
+            codAgrup: spec.codAgrup,
+          },
+        });
+        await prisma.bankAccount.update({ where: { id: ba.id }, data: { chartAccountId: cta.id } });
+      }
+      ctaPorBankAccount.set(ba.id, cta);
+    }
+  }
+  const ctaBanco = (tx: { bankAccountId: string }) => ctaPorBankAccount.get(tx.bankAccountId) ?? accBancos;
+  const bankAccountPorClabe = new Map(
+    bankAccounts.flatMap((ba) => (ba.clabe ? [[ba.clabe.replace(/\s+/g, ""), ba.id] as const] : [])),
+  );
+  const planTraspasos = planearTraspasos(bankTxs, bankAccountPorClabe);
+
   // FASE 2b: a qué liquida cada match — nómina a acreedores, módulo a su CxC.
   const idsConciliados = [
     ...new Set(
@@ -678,17 +833,28 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // payroll, no deducible, etc.) before the books can close. This guarantees
   // the Bancos account in the balanza reflects the true balance.
   const unmatched = bankTxs.filter((t) => t.status === "UNMATCHED");
-  if (unmatched.length > 0) {
-    const sample = unmatched
+  // Misma disciplina para IGNORED sin categoría: antes sólo era un warning y
+  // el movimiento DESAPARECÍA del libro — el saldo de Bancos dejaba de atar
+  // contra el estado de cuenta sin que nada lo delatara.
+  const sinCategoria = bankTxs.filter(
+    (t) => t.status === "IGNORED" && !IGNORED_TAGS_VALIDOS.has(t.notes ?? "")
+  );
+  const bloqueantes = [...unmatched, ...sinCategoria];
+  if (bloqueantes.length > 0) {
+    const sample = bloqueantes
       .slice(0, 3)
       .map(
         (t) =>
-          `· ${t.fecha.toISOString().slice(0, 10)} ${t.descripcion.slice(0, 40)} $${Math.abs(t.monto).toFixed(2)}`
+          `· ${t.fecha.toISOString().slice(0, 10)} ${t.descripcion.slice(0, 40)} $${Math.abs(t.monto).toFixed(2)}${t.status === "IGNORED" ? " (ignorado sin categoría)" : ""}`
       )
       .join("\n");
-    const more = unmatched.length > 3 ? `\n…y ${unmatched.length - 3} más` : "";
+    const more = bloqueantes.length > 3 ? `\n…y ${bloqueantes.length - 3} más` : "";
+    const partes = [
+      unmatched.length > 0 ? `${unmatched.length} sin conciliar` : null,
+      sinCategoria.length > 0 ? `${sinCategoria.length} ignorado(s) sin categoría` : null,
+    ].filter(Boolean).join(" y ");
     throw new Error(
-      `No se puede cerrar el mes: ${unmatched.length} movimiento(s) sin conciliar.\nResuélvelos en Bancos antes de cerrar.\n\n${sample}${more}`
+      `No se puede cerrar el mes: ${partes}.\nResuélvelos en Bancos antes de cerrar.\n\n${sample}${more}`
     );
   }
 
@@ -711,19 +877,21 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       continue; // not posted
     }
 
-    // Pago de impuestos conciliado (movimiento MATCHED ↔ TaxDeclaration vía
-    // taxDeclarationId): NO es una liquidación de Clientes/Proveedores — el
-    // CFDI nunca pasó por esas cuentas — así que se EXCLUYE de la póliza de
-    // liquidación de abajo. Decisión v1 documentada: el enteramiento (cargo a
-    // impuestos por pagar / abono a bancos) pertenece al módulo de impuestos,
-    // que hoy no provisiona ese pasivo; postear aquí sólo la mitad del asiento
-    // rompería la partida doble. Mismo trato que los matches de construcción
-    // (Gasto/Raya/Reembolso), que tampoco se postean desde este motor.
-    // TODO(impuestos): cuando el módulo de impuestos provisione el pasivo
-    // (impuestos por pagar) al cierre, postear aquí la liquidación
-    // DR Impuestos por pagar / CR Bancos, espejo del tag IGNORED+TAX_PAYMENT.
+    // Enteramiento de impuestos conciliado (MATCHED ↔ TaxDeclaration): postea
+    // el espejo exacto del tag IGNORED+TAX_PAYMENT — DR Impuestos y derechos /
+    // AB Bancos (devolución del SAT: invertido). Antes NO se posteaba y el
+    // saldo de Bancos quedaba sobrevaluado por cada pago de impuestos.
+    // Reclasificación fina contra pasivo provisionado: Ola C (cuando el módulo
+    // de impuestos provisione impuestos por pagar al cierre).
     if (tx.status === "MATCHED" && tx.taxDeclarationId) {
-      continue; // not posted (v1)
+      if (isCredit) {
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "CARGO" });
+        drafts.push({ ...base, chartAccountId: accImpuestos.id, monto: absAmount, tipo: "ABONO" });
+      } else {
+        drafts.push({ ...base, chartAccountId: accImpuestos.id, monto: absAmount, tipo: "CARGO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
+      }
+      continue;
     }
 
     if (tx.status === "MATCHED" && (tx.invoiceId || tx.conciliacionDetalles.length > 0)) {
@@ -738,13 +906,13 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       if (isCredit) {
         // Cobro: abona LA MISMA CxC que el CFDI cargó (módulo o stub).
         const ctaCobro = kind && kind !== "NOMINA" ? (cuentasCxc[kind] ?? accClientes) : accClientes;
-        drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "CARGO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "CARGO" });
         drafts.push({ ...base, chartAccountId: ctaCobro.id, monto: absAmount, tipo: "ABONO" });
       } else {
         // Pago: nómina liquida ACREEDORES (donde provisionó); lo demás, proveedores.
         const ctaPago = kind === "NOMINA" ? accAcreedoresDiv : accProveedores;
         drafts.push({ ...base, chartAccountId: ctaPago.id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "ABONO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
       }
       continue;
     }
@@ -758,13 +926,13 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         // because the tx is already in MATCHED status at that point — we'd need
         // a re-post, which the user can trigger manually).
         drafts.push({ ...base, chartAccountId: accComisionesBanc.id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "ABONO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
         continue;
       }
 
       if (tag === "TAX_PAYMENT") {
         drafts.push({ ...base, chartAccountId: accImpuestos.id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "ABONO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
         continue;
       }
 
@@ -772,22 +940,40 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         // Same treatment as expense — you should emit CFDI nómina eventually,
         // but for now this keeps the books balanced.
         drafts.push({ ...base, chartAccountId: accSueldos.id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "ABONO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
         continue;
       }
 
       if (tag === "NON_DEDUCTIBLE") {
         drafts.push({ ...base, chartAccountId: accNoDeducibles.id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "ABONO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
         continue;
       }
 
       if (tag === "INTERNAL_TRANSFER") {
-        // Neutral: we debit and credit bank. For v1 we only use one bank account
-        // so this is a wash. When multi-account arrives we'll resolve the target
-        // bank account from tx.notes JSON.
-        drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: accBancos.id, monto: absAmount, tipo: "ABONO" });
+        const plan = planTraspasos.get(tx.id) ?? { modo: "lavado" as const };
+        if (plan.modo === "cubierto") continue; // la póliza la generó el retiro espejo
+        const propia = ctaBanco(tx);
+        if (plan.modo === "cruzado" && multiBanco) {
+          const contraparte = ctaPorBankAccount.get(plan.contraparteBankAccountId) ?? accBancos;
+          if (isCredit) {
+            drafts.push({ ...base, chartAccountId: propia.id,      monto: absAmount, tipo: "CARGO" });
+            drafts.push({ ...base, chartAccountId: contraparte.id, monto: absAmount, tipo: "ABONO" });
+          } else {
+            drafts.push({ ...base, chartAccountId: contraparte.id, monto: absAmount, tipo: "CARGO" });
+            drafts.push({ ...base, chartAccountId: propia.id,      monto: absAmount, tipo: "ABONO" });
+          }
+        } else {
+          // Contraparte no resoluble (o cuenta única): lavado en la propia
+          // cuenta — neutral en saldo, y con warning para que no sea mudo.
+          if (multiBanco) {
+            warnings.push(
+              `Traspaso sin contraparte identificable (${tx.fecha.toISOString().slice(0, 10)} $${absAmount.toFixed(2)}): lavado en la misma cuenta. Captura la CLABE de la otra cuenta para la póliza cruzada.`
+            );
+          }
+          drafts.push({ ...base, chartAccountId: propia.id, monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: propia.id, monto: absAmount, tipo: "ABONO" });
+        }
         continue;
       }
 
@@ -796,11 +982,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         //   inflow → DR Bancos / CR Préstamos por pagar  (deuda nace)
         //   outflow → DR Préstamos por pagar / CR Bancos  (estamos pagando deuda)
         if (isCredit) {
-          drafts.push({ ...base, chartAccountId: accBancos.id,           monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,           monto: absAmount, tipo: "CARGO" });
           drafts.push({ ...base, chartAccountId: accPrestamosPorPagar.id, monto: absAmount, tipo: "ABONO" });
         } else {
           drafts.push({ ...base, chartAccountId: accPrestamosPorPagar.id, monto: absAmount, tipo: "CARGO" });
-          drafts.push({ ...base, chartAccountId: accBancos.id,           monto: absAmount, tipo: "ABONO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,           monto: absAmount, tipo: "ABONO" });
         }
         continue;
       }
@@ -810,11 +996,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         //   outflow → DR Préstamos otorgados / CR Bancos  (nace el activo)
         //   inflow → DR Bancos / CR Préstamos otorgados  (nos están pagando)
         if (isCredit) {
-          drafts.push({ ...base, chartAccountId: accBancos.id,            monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,            monto: absAmount, tipo: "CARGO" });
           drafts.push({ ...base, chartAccountId: accPrestamosOtorgados.id, monto: absAmount, tipo: "ABONO" });
         } else {
           drafts.push({ ...base, chartAccountId: accPrestamosOtorgados.id, monto: absAmount, tipo: "CARGO" });
-          drafts.push({ ...base, chartAccountId: accBancos.id,            monto: absAmount, tipo: "ABONO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,            monto: absAmount, tipo: "ABONO" });
         }
         continue;
       }
@@ -824,18 +1010,19 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         //   inflow → DR Bancos / CR Capital social
         //   outflow → DR Capital social / CR Bancos (retiro de capital, raro)
         if (isCredit) {
-          drafts.push({ ...base, chartAccountId: accBancos.id,        monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,        monto: absAmount, tipo: "CARGO" });
           drafts.push({ ...base, chartAccountId: accCapitalSocial.id, monto: absAmount, tipo: "ABONO" });
         } else {
           drafts.push({ ...base, chartAccountId: accCapitalSocial.id, monto: absAmount, tipo: "CARGO" });
-          drafts.push({ ...base, chartAccountId: accBancos.id,        monto: absAmount, tipo: "ABONO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,        monto: absAmount, tipo: "ABONO" });
         }
         continue;
       }
 
-      // Plain ignored (no tag) — skip, not posted
+      // Inalcanzable: los IGNORED sin categoría bloquean el cierre arriba.
+      // Defensivo por si aparece un tag nuevo sin rama.
       warnings.push(
-        `Movimiento ignorado sin categoría: ${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 40)}`
+        `Movimiento ignorado con categoría desconocida ("${tag}"): ${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 40)} — NO posteado.`
       );
       continue;
     }
