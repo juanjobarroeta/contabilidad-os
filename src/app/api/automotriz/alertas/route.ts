@@ -80,10 +80,10 @@ export const GET = withAuthz(async (req: Request) => {
     const dias = Math.floor((now.getTime() - v.fechaCompra!.getTime()) / MS_DIA);
     // Costo financiero estimado de tener la unidad parada (si hay tasa piso).
     const interesEstimado =
-      v.planPisoTasaAnual != null ? Math.round(((v.costoCompra * v.planPisoTasaAnual * dias) / 365) * 100) / 100 : null;
+      v.planPisoTasaAnual != null ? Math.round(((Number(v.costoCompra) * Number(v.planPisoTasaAnual) * dias) / 365) * 100) / 100 : null;
     return {
       id: v.id, vin: v.vin, unidad: `${v.marca} ${v.modelo} ${v.anio}`, dias,
-      costoCompra: v.costoCompra, interesEstimado,
+      costoCompra: Number(v.costoCompra), interesEstimado,
       improbable: v.autoCreado && v.pedidos.length === 0 && dias >= DIAS_IMPROBABLE,
     };
   });

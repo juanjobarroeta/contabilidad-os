@@ -84,7 +84,7 @@ export const POST = withAuthz(
           fecha: new Date(parsed.data.fecha),
           descripcion: desc,
           referencia: parsed.data.referencia ?? null,
-          monto: -Math.abs(raya.totalDestajo),
+          monto: -Math.abs(Number(raya.totalDestajo)),
           tipo: "DEBITO",
           status: "MATCHED",
           // Manual fallback when no existing CSV-imported tx is picked.

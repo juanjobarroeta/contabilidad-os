@@ -49,23 +49,34 @@ export const GET = withAuthz(
       presups.find((p) => p.estado === "APROBADO" || p.estado === "EN_EJECUCION") ??
       presups[0];
 
-    const solicitudes = await prisma.solicitudCompra.findMany({
-      where: { proyectoId: id, estado: { in: ["PENDIENTE", "APROBADA", "PAGADA"] } },
-      select: {
-        id: true,
-        estado: true,
-        total: true,
-        cotizaciones: { select: { total: true } },
-        adjudicaciones: {
-          select: {
-            id: true,
-            total: true,
-            estado: true,
-            aplicaciones: { select: { monto: true } },
+    const solicitudes = (
+      await prisma.solicitudCompra.findMany({
+        where: { proyectoId: id, estado: { in: ["PENDIENTE", "APROBADA", "PAGADA"] } },
+        select: {
+          id: true,
+          estado: true,
+          total: true,
+          cotizaciones: { select: { total: true } },
+          adjudicaciones: {
+            select: {
+              id: true,
+              total: true,
+              estado: true,
+              aplicaciones: { select: { monto: true } },
+            },
           },
         },
-      },
-    });
+      })
+    ).map((s) => ({
+      ...s,
+      total: Number(s.total),
+      cotizaciones: s.cotizaciones.map((c) => ({ ...c, total: Number(c.total) })),
+      adjudicaciones: s.adjudicaciones.map((a) => ({
+        ...a,
+        total: Number(a.total),
+        aplicaciones: a.aplicaciones.map((ap) => ({ ...ap, monto: Number(ap.monto) })),
+      })),
+    }));
 
     let solicitado = 0;
     let comprometido = 0;
@@ -96,8 +107,8 @@ export const GET = withAuthz(
       where: { proyectoId: id, estado: { in: ["APROBADO", "PAGADO"] } },
       _sum: { importe: true },
     });
-    const gastosAprobados = gastos.find((g) => g.estado === "APROBADO")?._sum.importe ?? 0;
-    const gastosPagados = gastos.find((g) => g.estado === "PAGADO")?._sum.importe ?? 0;
+    const gastosAprobados = Number(gastos.find((g) => g.estado === "APROBADO")?._sum.importe ?? 0);
+    const gastosPagados = Number(gastos.find((g) => g.estado === "PAGADO")?._sum.importe ?? 0);
     comprometido += gastosAprobados + gastosPagados;
     solicitado += gastosAprobados + gastosPagados;
     pagadoReal += gastosPagados;

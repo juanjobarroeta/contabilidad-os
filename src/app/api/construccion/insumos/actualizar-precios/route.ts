@@ -63,14 +63,14 @@ export const POST = withAuthz(async (req: Request) => {
       });
       if (!insumo) continue;
 
-      if (insumo.costoActual !== nuevoCosto) {
+      if (Number(insumo.costoActual) !== nuevoCosto) {
         await tx.insumo.update({
           where: { companyId_codigo: { companyId, codigo } },
           data: { costoActual: nuevoCosto },
         });
         updatedInsumos.push({
           codigo,
-          antes: insumo.costoActual,
+          antes: Number(insumo.costoActual),
           despues: nuevoCosto,
         });
 
@@ -86,7 +86,7 @@ export const POST = withAuthz(async (req: Request) => {
             where: { id: line.id },
             data: {
               costoUnitario: nuevoCosto,
-              importe: round2(line.cantidad * nuevoCosto),
+              importe: round2(Number(line.cantidad) * nuevoCosto),
             },
           });
         }
@@ -110,9 +110,9 @@ export const POST = withAuthz(async (req: Request) => {
       });
       if (!apu) continue;
 
-      const puAntes = apu.precioUnitario;
+      const puAntes = Number(apu.precioUnitario);
       const costoDirecto = round2(
-        apu.insumos.reduce((a, l) => a + l.importe, 0)
+        apu.insumos.reduce((a, l) => a + Number(l.importe), 0)
       );
       const rendimiento = apu.rendimiento > 0 ? apu.rendimiento : 1;
       const subtotal1 = costoDirecto * (1 + apu.indirectosPorc);

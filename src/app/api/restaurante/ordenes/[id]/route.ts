@@ -160,7 +160,7 @@ export const PATCH = withAuthz(
         return {
           menuItemId: i.menuItemId,
           cantidad: i.cantidad,
-          precioUnitario: m.precio,
+          precioUnitario: Number(m.precio),
           estacion: m.estacion,
           notas: i.notas ?? null,
         };

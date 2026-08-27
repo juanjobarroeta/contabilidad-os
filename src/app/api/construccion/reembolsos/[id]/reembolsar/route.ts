@@ -116,7 +116,7 @@ export const POST = withAuthz(
     }
 
     const user = await requireUser(req).catch(() => null);
-    const totalReembolso = reembolso.totalReembolso;
+    const totalReembolso = Number(reembolso.totalReembolso);
 
     if (totalReembolso <= 0) {
       return NextResponse.json(

@@ -55,13 +55,13 @@ async function recomputeTotals(reembolsoId: string) {
     where: { reembolsoId, estado: { not: "RECHAZADO" } },
     _sum: { importe: true },
   });
-  const totalGastos = Math.round((agg._sum.importe ?? 0) * 100) / 100;
+  const totalGastos = Math.round(Number(agg._sum.importe ?? 0) * 100) / 100;
   const current = await prisma.reembolsoSemanal.findUnique({
     where: { id: reembolsoId },
     select: { anticipoAplicado: true },
   });
   const totalReembolso =
-    Math.round((totalGastos - (current?.anticipoAplicado ?? 0)) * 100) / 100;
+    Math.round((totalGastos - Number(current?.anticipoAplicado ?? 0)) * 100) / 100;
   await prisma.reembolsoSemanal.update({
     where: { id: reembolsoId },
     data: { totalGastos, totalReembolso },

@@ -79,7 +79,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           descripcion:
             `Cobro venta ${venta.folio}` +
             (venta.customer ? ` — ${venta.customer.razonSocial}` : ""),
-          monto: venta.total,
+          monto: Number(venta.total),
           formaPago,
           fecha,
         });
@@ -120,7 +120,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
       const cobro =
         venta.formaPago === "CREDITO" && venta.estado === "COBRADA" && venta.cobroFormaPago
           ? {
-              monto: venta.total,
+              monto: Number(venta.total),
               formaPago: venta.cobroFormaPago as "EFECTIVO" | "TRANSFERENCIA" | "TARJETA",
             }
           : null;
@@ -132,8 +132,8 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           descripcion:
             `Cancelación venta ${venta.folio}` +
             (venta.customer ? ` — ${venta.customer.razonSocial}` : ""),
-          subtotal: venta.subtotal,
-          iva: venta.iva,
+          subtotal: Number(venta.subtotal),
+          iva: Number(venta.iva),
           formaPago: venta.formaPago,
           cobro,
           fecha: new Date(),

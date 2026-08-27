@@ -31,6 +31,6 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
 
   return NextResponse.json({
     ...refaccion,
-    existencia: Math.round((existencia._sum.cantidad ?? 0) * 100) / 100,
+    existencia: Math.round(Number(existencia._sum.cantidad ?? 0) * 100) / 100,
   });
 });

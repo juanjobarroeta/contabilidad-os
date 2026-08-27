@@ -67,7 +67,7 @@ export const POST = withAuthz(
       excludeUserId: user.id,
       payload: {
         title: `Requisición ${solicitud.folio} pagada`,
-        body: moneyPush(solicitud.total),
+        body: moneyPush(Number(solicitud.total)),
         url: "/requisiciones",
         tag: `solicitud-${solicitud.id}`,
       },

@@ -58,7 +58,7 @@ export async function generateAdjudicaciones(
     if (!p.cotizacionGanadoraId) continue;
     totalByCot.set(
       p.cotizacionGanadoraId,
-      round2((totalByCot.get(p.cotizacionGanadoraId) ?? 0) + p.importe)
+      round2((totalByCot.get(p.cotizacionGanadoraId) ?? 0) + Number(p.importe))
     );
   }
 

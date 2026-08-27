@@ -68,9 +68,9 @@ export const GET = withAuthz(async (req: Request) => {
     const row = v.customerId
       ? rowFor(v.customerId, v.customer!.razonSocial)
       : rowFor("__casas__", "Casas / rutas");
-    row.ingresos[m] = round2(row.ingresos[m] + v.total);
+    row.ingresos[m] = round2(row.ingresos[m] + Number(v.total));
     row.garrafones[m] += v.garrafones;
-    row.totalIngresos = round2(row.totalIngresos + v.total);
+    row.totalIngresos = round2(row.totalIngresos + Number(v.total));
     row.totalGarrafones += v.garrafones;
   }
 
@@ -78,8 +78,8 @@ export const GET = withAuthz(async (req: Request) => {
   let totalGastos = 0;
   for (const g of gastos) {
     const m = g.fecha.getUTCMonth();
-    gastosPorMes[m] = round2(gastosPorMes[m] + g.monto);
-    totalGastos = round2(totalGastos + g.monto);
+    gastosPorMes[m] = round2(gastosPorMes[m] + Number(g.monto));
+    totalGastos = round2(totalGastos + Number(g.monto));
   }
 
   const list = [...rows.values()].sort((a, b) => b.totalIngresos - a.totalIngresos);

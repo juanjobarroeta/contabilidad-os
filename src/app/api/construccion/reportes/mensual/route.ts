@@ -82,7 +82,7 @@ export const GET = withAuthz(async (req: Request) => {
         pagadoAt: true,
         insumo: { select: { codigo: true, descripcion: true } },
       },
-    }),
+    }).then((rows) => rows.map((g) => ({ ...g, importe: Number(g.importe) }))),
     prisma.rayaSemanal.findMany({
       where: {
         companyId,
@@ -91,7 +91,8 @@ export const GET = withAuthz(async (req: Request) => {
         pagadaAt: { gte: yearStart, lt: yearEnd },
       },
       select: { totalDestajo: true, pagadaAt: true },
-    }).catch(() => [] as { totalDestajo: number; pagadaAt: Date | null }[]),
+    }).then((rows) => rows.map((r) => ({ ...r, totalDestajo: Number(r.totalDestajo) })))
+      .catch(() => [] as { totalDestajo: number; pagadaAt: Date | null }[]),
     prisma.solicitudCompra.findMany({
       where: {
         companyId,
@@ -100,7 +101,7 @@ export const GET = withAuthz(async (req: Request) => {
         pagadaAt: { gte: yearStart, lt: yearEnd },
       },
       select: { total: true, pagadaAt: true },
-    }),
+    }).then((rows) => rows.map((s) => ({ ...s, total: Number(s.total) }))),
     prisma.estimacion.findMany({
       where: {
         companyId,
@@ -109,7 +110,7 @@ export const GET = withAuthz(async (req: Request) => {
         createdAt: { gte: yearStart, lt: yearEnd },
       },
       select: { subtotal: true, total: true, createdAt: true },
-    }),
+    }).then((rows) => rows.map((e) => ({ ...e, subtotal: Number(e.subtotal), total: Number(e.total) }))),
     prisma.bankTransaction.findMany({
       where: { companyId, fecha: { gte: yearStart, lt: yearEnd } },
       select: { monto: true, fecha: true, tipo: true },

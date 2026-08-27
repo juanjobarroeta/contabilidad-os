@@ -83,8 +83,8 @@ export const GET = withAuthz(async (req: Request) => {
         };
         casasPorRuta.set(key, row);
       }
-      if (e.formaPago === "EFECTIVO") row.efectivo = round2(row.efectivo + e.importe);
-      else row.transferencia = round2(row.transferencia + e.importe); // transferencia y tarjeta caen al banco
+      if (e.formaPago === "EFECTIVO") row.efectivo = round2(row.efectivo + Number(e.importe));
+      else row.transferencia = round2(row.transferencia + Number(e.importe)); // transferencia y tarjeta caen al banco
       row.garrafones += e.garrafones;
     } else if (e.tipo === "EMPRESA" && e.customerId) {
       const key = `${e.customerId}:${e.sucursalId ?? ""}`;
@@ -101,10 +101,10 @@ export const GET = withAuthz(async (req: Request) => {
         empresas.set(key, row);
       }
       row.garrafones += e.garrafones;
-      row.importe = round2(row.importe + e.importe);
+      row.importe = round2(row.importe + Number(e.importe));
     } else if (e.tipo === "CORTESIA") {
       cortesias.garrafones += e.garrafones;
-      cortesias.importe = round2(cortesias.importe + e.importe);
+      cortesias.importe = round2(cortesias.importe + Number(e.importe));
     }
   }
 
@@ -200,13 +200,13 @@ export const POST = withAuthz(async (req: Request) => {
       }),
       prisma.purifConfig.findUnique({ where: { companyId } }),
     ]);
-    const precio = clienteConfig?.precioGarrafon ?? config?.precioGarrafon ?? 15;
+    const precio = Number(clienteConfig?.precioGarrafon ?? config?.precioGarrafon ?? 15);
     importe = round2(garrafones * precio);
     formaPago = "CREDITO";
   } else {
     // CORTESIA: valor de referencia al precio de lista (no es ingreso).
     const config = await prisma.purifConfig.findUnique({ where: { companyId } });
-    importe = round2(garrafones * (config?.precioGarrafon ?? 15));
+    importe = round2(garrafones * Number(config?.precioGarrafon ?? 15));
     formaPago = null;
   }
 

@@ -107,7 +107,7 @@ export const POST = withAuthz(
     }
 
     // Compute importe per line + total cotización
-    const cantById = new Map(sol.partidas.map((p) => [p.id, p.cantidad]));
+    const cantById = new Map(sol.partidas.map((p) => [p.id, Number(p.cantidad)]));
     const linesWithImporte = data.lineas.map((l) => {
       const qty = cantById.get(l.solicitudPartidaId) ?? 0;
       const importe = round2(qty * l.precioUnitario);

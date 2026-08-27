@@ -42,16 +42,16 @@ export const GET = withAuthz(async (req: Request) => {
   const resumen = {
     tickets: pendientes.length,
     efectivo: round2(
-      pendientes.filter((t) => t.formaPago === "EFECTIVO").reduce((s, t) => s + t.total, 0)
+      pendientes.filter((t) => t.formaPago === "EFECTIVO").reduce((s, t) => s + Number(t.total), 0)
     ),
     // Tarjeta y transferencia caen al banco: en el corte viajan juntas.
     banco: round2(
       pendientes
         .filter((t) => t.formaPago === "TRANSFERENCIA" || t.formaPago === "TARJETA")
-        .reduce((s, t) => s + t.total, 0)
+        .reduce((s, t) => s + Number(t.total), 0)
     ),
     garrafones: pendientes.reduce((s, t) => s + t.garrafones, 0),
-    total: round2(pendientes.reduce((s, t) => s + t.total, 0)),
+    total: round2(pendientes.reduce((s, t) => s + Number(t.total), 0)),
   };
 
   return NextResponse.json({ tickets, resumen });
@@ -107,7 +107,7 @@ export const POST = withAuthz(async (req: Request) => {
       descripcion: p.nombre,
       cantidad: i.cantidad,
       precioUnitario: p.precio,
-      importe: round2(i.cantidad * p.precio),
+      importe: round2(i.cantidad * Number(p.precio)),
       garrafones: Math.round(i.cantidad * p.garrafones),
     };
   });

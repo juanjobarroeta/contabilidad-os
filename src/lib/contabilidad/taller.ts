@@ -193,8 +193,8 @@ export async function cargarContextoTaller(
   for (const s of servicios) {
     if (!s.invoiceId) continue;
     const acc = porInvoice.get(s.invoiceId) ?? { manoObra: 0, refacciones: 0 };
-    acc.manoObra += s.manoObra ?? 0;
-    acc.refacciones += s.refacciones ?? 0;
+    acc.manoObra += Number(s.manoObra ?? 0);
+    acc.refacciones += Number(s.refacciones ?? 0);
     porInvoice.set(s.invoiceId, acc);
   }
   const refacciones = new Set<string>();
@@ -203,7 +203,7 @@ export async function cargarContextoTaller(
     if (!r.invoiceId) continue;
     refacciones.add(r.invoiceId);
     if (r.tipo === "ENTRADA_COMPRA") {
-      const imp = Math.abs((r.cantidad ?? 0) * (r.montoUnitario ?? 0));
+      const imp = Math.abs(Number(r.cantidad ?? 0) * Number(r.montoUnitario ?? 0));
       comprasRefaccion.set(r.invoiceId, (comprasRefaccion.get(r.invoiceId) ?? 0) + imp);
     }
   }

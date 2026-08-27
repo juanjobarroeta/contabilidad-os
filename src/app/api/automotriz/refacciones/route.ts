@@ -64,12 +64,12 @@ export const GET = withAuthz(async (req: Request) => {
     pageSize: PAGE_SIZE,
     refacciones: refacciones.map((r) => {
       const s = porRefaccion.get(r.id);
-      const existencia = r2(s?._sum.cantidad ?? 0);
+      const existencia = r2(Number(s?._sum.cantidad ?? 0));
       return {
         ...r,
         existencia,
         movimientos: s?._count._all ?? 0,
-        valorInventario: existencia > 0 ? r2(existencia * r.ultimoCosto) : 0,
+        valorInventario: existencia > 0 ? r2(existencia * Number(r.ultimoCosto)) : 0,
       };
     }),
   });

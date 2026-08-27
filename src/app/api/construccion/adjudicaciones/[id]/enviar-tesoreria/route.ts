@@ -49,7 +49,7 @@ export const POST = withAuthz(
       excludeUserId: user.id,
       payload: {
         title: "Pago por ejecutar",
-        body: `${adj.supplierNombre} · ${moneyPush(adj.total)} (${adj.solicitud.folio})`,
+        body: `${adj.supplierNombre} · ${moneyPush(Number(adj.total))} (${adj.solicitud.folio})`,
         url: "/pagos-tesoreria",
         tag: `adjudicacion-${adj.id}`,
       },

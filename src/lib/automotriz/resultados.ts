@@ -190,8 +190,20 @@ export async function calcularResultados(
   ]);
 
   return armar({
-    unidades: unidades as UnidadVendida[],
-    servicios, refaccionesRaw,
+    unidades: unidades.map((u) => ({
+      ...u,
+      precioVenta: u.precioVenta === null ? null : Number(u.precioVenta),
+      costoCompra: Number(u.costoCompra),
+      comisionMonto: Number(u.comisionMonto),
+      isan: Number(u.isan),
+      costos: u.costos.map((c) => ({ ...c, monto: Number(c.monto) })),
+    })) as UnidadVendida[],
+    servicios: servicios.map((s) => ({
+      ...s,
+      manoObra: Number(s.manoObra),
+      refacciones: Number(s.refacciones),
+    })),
+    refaccionesRaw,
     nomina: nomina.map((g) => ({
       ...g,
       _sum: {

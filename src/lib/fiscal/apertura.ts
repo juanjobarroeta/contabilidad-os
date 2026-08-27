@@ -488,7 +488,7 @@ export async function estadoApertura(companyId: string, hoy: Date = new Date()):
         }
       : null,
     coeficiente: {
-      manual: company.coeficienteUtilidad,
+      manual: company.coeficienteUtilidad === null ? null : Number(company.coeficienteUtilidad),
       manualAnio: company.coeficienteAnio,
       deAnual: anual ? { valor: anual.coeficiente, ejercicio: anual.ejercicio } : null,
       deProvisional:
@@ -496,7 +496,7 @@ export async function estadoApertura(companyId: string, hoy: Date = new Date()):
           ? { valor: Number(coefProvRow.isrCoeficienteUtilidad), periodo: coefProvRow.periodo }
           : null,
     },
-    perdidaManual: { valor: company.perdidaFiscalPendiente, anio: company.perdidaFiscalAnio },
+    perdidaManual: { valor: company.perdidaFiscalPendiente === null ? null : Number(company.perdidaFiscalPendiente), anio: company.perdidaFiscalAnio },
     perdidaDeAnual:
       anualPrev?.isrPerdidaPendiente != null
         ? { valor: anualPrev.isrPerdidaPendiente, ejercicio: prevYear }

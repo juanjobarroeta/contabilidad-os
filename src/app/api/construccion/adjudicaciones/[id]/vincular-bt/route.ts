@@ -48,7 +48,7 @@ export const POST = withAuthz(
       return NextResponse.json({ error: "Ese movimiento ya está conciliado" }, { status: 409 });
     }
     // Loose amount guard (±15%) so an obviously-wrong link is rejected.
-    if (adj.total > 0 && Math.abs(Math.abs(Number(bt.monto)) - adj.total) > adj.total * 0.15) {
+    if (Number(adj.total) > 0 && Math.abs(Math.abs(Number(bt.monto)) - Number(adj.total)) > Number(adj.total) * 0.15) {
       return NextResponse.json(
         { error: "El monto del movimiento no coincide con la adjudicación (±15%)" },
         { status: 422 }

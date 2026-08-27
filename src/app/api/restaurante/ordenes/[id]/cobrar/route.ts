@@ -102,7 +102,7 @@ export const POST = withAuthz(
       );
     }
 
-    const total = round2(vivos.reduce((sum, i) => sum + i.cantidad * i.precioUnitario, 0));
+    const total = round2(vivos.reduce((sum, i) => sum + Number(i.cantidad) * Number(i.precioUnitario), 0));
     if (formaPago !== "CORTESIA" && !(total > 0)) {
       return NextResponse.json(
         { error: "El total de la orden debe ser mayor a 0 para cobrar" },
@@ -132,7 +132,7 @@ export const POST = withAuthz(
       where: { companyId: orden.companyId },
       select: { ivaRate: true },
     });
-    const ivaRate = config?.ivaRate ?? 0.16;
+    const ivaRate = Number(config?.ivaRate ?? 0.16);
     const { subtotal, iva } = splitIvaIncluidoRest(total, ivaRate);
 
     // Theoretical cost per item at current average costs + inventory relief map.
@@ -142,16 +142,16 @@ export const POST = withAuthz(
     for (const item of vivos) {
       const costoUnitario = round2(
         item.menuItem.receta.reduce(
-          (sum, r) => sum + r.cantidad * r.insumo.costoPromedio,
+          (sum, r) => sum + Number(r.cantidad) * Number(r.insumo.costoPromedio),
           0
         )
       );
       costoPorItem.set(item.id, costoUnitario);
-      costoTotal += item.cantidad * costoUnitario;
+      costoTotal += Number(item.cantidad) * costoUnitario;
       for (const r of item.menuItem.receta) {
         descargas.set(
           r.insumoId,
-          (descargas.get(r.insumoId) ?? 0) + item.cantidad * r.cantidad
+          (descargas.get(r.insumoId) ?? 0) + Number(item.cantidad) * Number(r.cantidad)
         );
       }
     }

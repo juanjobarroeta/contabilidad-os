@@ -70,7 +70,7 @@ export const POST = withAuthz(
           where: { id: cotPart.solicitudPartidaId },
           data: {
             precioUnitario: cotPart.precioUnitario,
-            importe: round2(sp.cantidad * cotPart.precioUnitario),
+            importe: round2(Number(sp.cantidad) * Number(cotPart.precioUnitario)),
             cotizacionGanadoraId: cotId,
           },
         });
@@ -94,7 +94,7 @@ export const POST = withAuthz(
       await tx.solicitudCompra.update({
         where: { id },
         data: {
-          total: round2(agg._sum.importe ?? 0),
+          total: round2(Number(agg._sum.importe ?? 0)),
           ...(cot.supplierId && { supplierId: cot.supplierId }),
         },
       });

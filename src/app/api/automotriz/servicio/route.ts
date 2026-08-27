@@ -65,9 +65,9 @@ export const GET = withAuthz(async (req: Request) => {
     const m = new Date(s.fecha).getMonth() + 1;
     const a = porMes.get(m) ?? { facturas: 0, total: 0, manoObra: 0, refacciones: 0 };
     a.facturas++;
-    a.total = r2(a.total + s.total);
-    a.manoObra = r2(a.manoObra + s.manoObra);
-    a.refacciones = r2(a.refacciones + s.refacciones);
+    a.total = r2(a.total + Number(s.total));
+    a.manoObra = r2(a.manoObra + Number(s.manoObra));
+    a.refacciones = r2(a.refacciones + Number(s.refacciones));
     porMes.set(m, a);
   }
 
@@ -75,7 +75,7 @@ export const GET = withAuthz(async (req: Request) => {
   seisMeses.setMonth(seisMeses.getMonth() - 6);
   const noRegresanIds = noRegresanRaw
     .filter((c) => c._count._all >= 2 && c._max.fecha && c._max.fecha < seisMeses)
-    .sort((a, b) => (b._sum.total ?? 0) - (a._sum.total ?? 0))
+    .sort((a, b) => Number(b._sum.total ?? 0) - Number(a._sum.total ?? 0))
     .slice(0, 15);
 
   const clienteIds = [
@@ -89,14 +89,14 @@ export const GET = withAuthz(async (req: Request) => {
     : [];
   const nombre = new Map(clientes.map((c) => [c.id, c.razonSocial]));
 
-  const totalAnio = r2(delAnio.reduce((s, x) => s + x.total, 0));
+  const totalAnio = r2(delAnio.reduce((s, x) => s + Number(x.total), 0));
   return NextResponse.json({
     year,
     resumen: {
       facturas: delAnio.length,
       total: totalAnio,
-      manoObra: r2(delAnio.reduce((s, x) => s + x.manoObra, 0)),
-      refacciones: r2(delAnio.reduce((s, x) => s + x.refacciones, 0)),
+      manoObra: r2(delAnio.reduce((s, x) => s + Number(x.manoObra), 0)),
+      refacciones: r2(delAnio.reduce((s, x) => s + Number(x.refacciones), 0)),
       ticketPromedio: delAnio.length ? r2(totalAnio / delAnio.length) : null,
     },
     porMes: [...porMes.entries()].sort((a, b) => a[0] - b[0]).map(([mes, a]) => ({ mes, ...a })),
@@ -104,14 +104,14 @@ export const GET = withAuthz(async (req: Request) => {
       clienteId: c.clienteId,
       razonSocial: nombre.get(c.clienteId!) ?? "—",
       servicios: c._count._all,
-      total: r2(c._sum.total ?? 0),
+      total: r2(Number(c._sum.total ?? 0)),
     })),
     noRegresan: noRegresanIds.map((c) => ({
       clienteId: c.clienteId,
       razonSocial: nombre.get(c.clienteId!) ?? "—",
       servicios: c._count._all,
       ultimaVisita: c._max.fecha,
-      totalHistorico: r2(c._sum.total ?? 0),
+      totalHistorico: r2(Number(c._sum.total ?? 0)),
     })),
     ultimas,
   });

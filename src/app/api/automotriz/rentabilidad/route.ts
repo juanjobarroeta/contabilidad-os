@@ -49,17 +49,17 @@ export const GET = withAuthz(async (req: Request) => {
   });
 
   const unidades = vendidas.map((v) => {
-    const costosTotal = v.costos.reduce((s, c) => s + c.monto, 0); // NC restan solas
-    const interesPiso = v.costos.filter((c) => c.tipo === "INTERES_PISO").reduce((s, c) => s + c.monto, 0);
-    const notasCredito = v.costos.filter((c) => c.monto < 0).reduce((s, c) => s + c.monto, 0);
+    const costosTotal = v.costos.reduce((s, c) => s + Number(c.monto), 0); // NC restan solas
+    const interesPiso = v.costos.filter((c) => c.tipo === "INTERES_PISO").reduce((s, c) => s + Number(c.monto), 0);
+    const notasCredito = v.costos.filter((c) => Number(c.monto) < 0).reduce((s, c) => s + Number(c.monto), 0);
     // NC emitidas AL cliente (descuento post-venta): monto positivo que ya
     // resta en costosTotal, pero se reporta como menos-ingreso, no como costo.
-    const ncClientes = v.costos.filter((c) => c.tipo === "NC_CLIENTE").reduce((s, c) => s + c.monto, 0);
+    const ncClientes = v.costos.filter((c) => c.tipo === "NC_CLIENTE").reduce((s, c) => s + Number(c.monto), 0);
     // Costo incompleto: la compra quedó fuera del archivo de 5 años del SAT y
     // nadie ha capturado el costo real — su "utilidad" sería la venta entera.
     // Se reporta aparte y NO entra a utilidad/margen agregados.
-    const costoIncompleto = v.costoCompra <= 0;
-    const utilidad = (v.precioVenta ?? 0) - v.costoCompra - costosTotal - v.comisionMonto;
+    const costoIncompleto = Number(v.costoCompra) <= 0;
+    const utilidad = Number(v.precioVenta ?? 0) - Number(v.costoCompra) - costosTotal - Number(v.comisionMonto);
     return {
       id: v.id,
       vin: v.vin,
@@ -69,7 +69,7 @@ export const GET = withAuthz(async (req: Request) => {
       fechaVenta: v.fechaVenta,
       cliente: v.cliente?.razonSocial ?? (v.ventaInvoiceId ? "Público en general" : null),
       vendedor: v.vendedor ? `${v.vendedor.nombre} ${v.vendedor.apellidoPaterno}` : null,
-      precioVenta: v.precioVenta ?? 0,
+      precioVenta: Number(v.precioVenta ?? 0),
       costoCompra: v.costoCompra,
       costosAdicionales: r2(costosTotal - notasCredito - interesPiso - ncClientes),
       notasCredito: r2(-notasCredito), // positivo = monto acreditado a favor (proveedor)
@@ -78,7 +78,7 @@ export const GET = withAuthz(async (req: Request) => {
       comision: v.comisionMonto,
       costoIncompleto,
       utilidad: costoIncompleto ? null : r2(utilidad),
-      margen: !costoIncompleto && v.precioVenta ? r2((utilidad / v.precioVenta) * 100) : null,
+      margen: !costoIncompleto && v.precioVenta ? r2((utilidad / Number(v.precioVenta)) * 100) : null,
     };
   });
   const completas = unidades.filter((u) => !u.costoIncompleto);

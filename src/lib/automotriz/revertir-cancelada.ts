@@ -95,16 +95,16 @@ export async function revertirDerivadosDeCancelada(
     invoiceId,
     compras: {
       unidades: comprasAntes.length,
-      costoLiberado: r2(comprasAntes.reduce((s, v) => s + v.costoCompra, 0)),
+      costoLiberado: r2(comprasAntes.reduce((s, v) => s + Number(v.costoCompra), 0)),
       retiradas: aRetirar.length,
     },
     ventas: {
       unidades: ventasAntes.length,
-      ingresoLiberado: r2(ventasAntes.reduce((s, v) => s + (v.precioVenta ?? 0), 0)),
+      ingresoLiberado: r2(ventasAntes.reduce((s, v) => s + Number(v.precioVenta ?? 0), 0)),
     },
     costos: {
       borrados: costosDerivados.length,
-      monto: r2(costosDerivados.reduce((s, c) => s + c.monto, 0)),
+      monto: r2(costosDerivados.reduce((s, c) => s + Number(c.monto), 0)),
       conservadosManuales: costosManuales,
     },
     refacciones: { movimientos: 0 },

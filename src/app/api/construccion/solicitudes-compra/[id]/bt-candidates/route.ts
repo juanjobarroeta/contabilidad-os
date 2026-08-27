@@ -45,8 +45,8 @@ export const GET = withAuthz(
     await requireMembership(sol.companyId, undefined, req);
     await requireModule(sol.companyId, "CONSTRUCCION");
 
-    const minAmt = sol.total * (1 - DELTA_PCT);
-    const maxAmt = sol.total * (1 + DELTA_PCT);
+    const minAmt = Number(sol.total) * (1 - DELTA_PCT);
+    const maxAmt = Number(sol.total) * (1 + DELTA_PCT);
     const dateLow = new Date(sol.createdAt);
     dateLow.setDate(dateLow.getDate() - DATE_WINDOW_DAYS);
     const dateHigh = new Date(sol.createdAt);
@@ -86,7 +86,7 @@ export const GET = withAuthz(
           score += 20;
         }
         // Closer in amount = higher score
-        const delta = Math.abs(Math.abs(Number(c.monto)) - sol.total);
+        const delta = Math.abs(Math.abs(Number(c.monto)) - Number(sol.total));
         score -= Math.round(delta);
         return { ...c, score };
       })

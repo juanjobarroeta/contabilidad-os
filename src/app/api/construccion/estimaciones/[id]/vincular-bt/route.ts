@@ -36,8 +36,8 @@ export const GET = withAuthz(
     await requireMembership(est.companyId, undefined, req);
     await requireModule(est.companyId, "CONSTRUCCION");
 
-    const minAmt = est.total * (1 - DELTA_PCT);
-    const maxAmt = est.total * (1 + DELTA_PCT);
+    const minAmt = Number(est.total) * (1 - DELTA_PCT);
+    const maxAmt = Number(est.total) * (1 + DELTA_PCT);
     const refDate = est.fechaCorte ?? new Date();
     const dateLow = new Date(refDate);
     dateLow.setDate(dateLow.getDate() - DATE_WINDOW_DAYS);

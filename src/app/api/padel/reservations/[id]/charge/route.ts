@@ -65,7 +65,7 @@ export const POST = withAuthz(
       );
     }
 
-    const total = parsed.data.precio ?? reservation.precio;
+    const total = parsed.data.precio ?? Number(reservation.precio);
 
     // CORTESIA: gift the slot, no money, no ledger.
     if (formaPago === "CORTESIA") {
@@ -106,7 +106,7 @@ export const POST = withAuthz(
       where: { companyId: reservation.companyId },
       select: { ivaRate: true },
     });
-    const ivaRate = config?.ivaRate ?? 0.16;
+    const ivaRate = Number(config?.ivaRate ?? 0.16);
     const { subtotal, iva } = splitIvaIncluded(total, ivaRate);
     const descripcion = slotLabel(reservation.court.nombre, reservation.inicio);
 

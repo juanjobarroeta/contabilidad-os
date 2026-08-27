@@ -85,7 +85,7 @@ export const GET = withAuthz(async (req: Request) => {
       .slice(0, 10);
     const bucket = porDia.get(key);
     if (bucket) {
-      bucket.ingresos = round2(bucket.ingresos + v.total);
+      bucket.ingresos = round2(bucket.ingresos + Number(v.total));
       bucket.garrafones += v.garrafones;
     }
   }
@@ -100,14 +100,16 @@ export const GET = withAuthz(async (req: Request) => {
     : [];
   const nombreById = new Map(clientes.map((c) => [c.id, c.razonSocial]));
 
-  const ingresosMes = round2(ventasMes._sum.total ?? 0);
+  const ingresosMes = round2(Number(ventasMes._sum.total ?? 0));
   // Gastos del mes = gastos rápidos + compras a proveedor (no canceladas).
-  const gastosMesTotal = round2((gastosMes._sum.monto ?? 0) + (comprasMes._sum.total ?? 0));
+  const gastosMesTotal = round2(
+    Number(gastosMes._sum.monto ?? 0) + Number(comprasMes._sum.total ?? 0)
+  );
 
   return NextResponse.json({
     hoy: {
       ventas: ventasHoy._count,
-      ingresos: round2(ventasHoy._sum.total ?? 0),
+      ingresos: round2(Number(ventasHoy._sum.total ?? 0)),
       garrafones: ventasHoy._sum.garrafones ?? 0,
     },
     mes: {
@@ -120,19 +122,19 @@ export const GET = withAuthz(async (req: Request) => {
     },
     porCobrar: {
       ventas: porCobrar._count,
-      total: round2(porCobrar._sum.total ?? 0),
+      total: round2(Number(porCobrar._sum.total ?? 0)),
     },
     serie14dias: [...porDia.entries()].map(([fecha, v]) => ({ fecha, ...v })),
     topClientes: topClientesRaw.map((t) => ({
       customerId: t.customerId,
       nombre: nombreById.get(t.customerId!) ?? "—",
       garrafones: t._sum.garrafones ?? 0,
-      total: round2(t._sum.total ?? 0),
+      total: round2(Number(t._sum.total ?? 0)),
       ventas: t._count,
     })),
     gastosPorCategoria: gastosCat.map((g) => ({
       categoria: g.categoria,
-      total: round2(g._sum.monto ?? 0),
+      total: round2(Number(g._sum.monto ?? 0)),
     })),
   });
 });

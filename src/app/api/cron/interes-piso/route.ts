@@ -80,7 +80,7 @@ async function handle(req: Request) {
     if (page.length === 0) break;
 
     for (const v of page) {
-      const tasa = v.planPisoTasaAnual ?? tasaDefault.get(v.companyId);
+      const tasa = Number(v.planPisoTasaAnual ?? tasaDefault.get(v.companyId));
       if (!tasa || tasa <= 0) continue;
       unidades++;
 
@@ -100,7 +100,7 @@ async function handle(req: Request) {
         const dias = Math.max(0, Math.round((hasta.getTime() - desde.getTime()) / MS_DIA));
         const concepto = `Interés plan piso ${claveMes(mes)}`;
         if (dias > 0 && !yaCargados.has(concepto)) {
-          const monto = r2((v.costoCompra * tasa * dias) / 365);
+          const monto = r2((Number(v.costoCompra) * tasa * dias) / 365);
           if (monto >= 0.01) {
             nuevos.push({ concepto, monto, fecha: new Date(mesFin.getTime() - MS_DIA) });
           }

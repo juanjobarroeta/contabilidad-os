@@ -105,7 +105,7 @@ export async function isanDelPeriodo(
   let exentasTotal = 0, exentasParcial = 0, gravadasCompleto = 0;
 
   for (const v of nuevas) {
-    const precio = v.precioVenta ?? 0;
+    const precio = Number(v.precioVenta ?? 0);
     const r = calcularIsan(precio, year, tarifa);
     if (r.exencion === "TOTAL") exentasTotal++;
     else if (r.exencion === "PARCIAL") exentasParcial++;
@@ -121,11 +121,11 @@ export async function isanDelPeriodo(
       reduccionLujo: r2(r.reduccionLujo),
       exencion: r.exencion,
       isan: r2(r.isan),
-      isanRegistrado: r2(v.isan),
+      isanRegistrado: r2(Number(v.isan)),
     });
   }
 
-  const sinPrecio = nuevas.filter((v) => !(v.precioVenta && v.precioVenta > 0)).length;
+  const sinPrecio = nuevas.filter((v) => !(v.precioVenta && Number(v.precioVenta) > 0)).length;
   if (sinPrecio > 0) {
     advertencias.push(
       `${sinPrecio} unidad(es) nueva(s) del mes no tienen precio de venta capturado: causan ISAN y aquí cuentan como $0. Capturar el precio de enajenación para que el impuesto salga completo.`
