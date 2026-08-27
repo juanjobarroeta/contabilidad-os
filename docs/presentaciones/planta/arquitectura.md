@@ -25,8 +25,8 @@ mensual, pago a 30–45 días.
 3. **Saldos siempre derivados, nunca columnas editables** — el saldo de envases
    es Σ movimientos, igual que el kardex de refacciones del automotriz.
 4. **El contador de la máquina se captura a mano al cierre del turno.** La
-   integración con el PLC (Modbus) NO se promete: es fase futura y depende del
-   fabricante.
+   lectura automática NO se promete en la venta: es fase 2, sujeta a visita
+   técnica (ver sección al final).
 5. **Asientos contables sólo vía `src/lib/accounting/postings.ts`**, con
    `fuente = PURIFICADORA` y `referenciaTipo` nuevos por evento.
 6. **IVA tasa 0%** (agua en envases > 10 L, Art. 2-A LIVA) ya modelado en
@@ -109,6 +109,55 @@ se imprime completo para una visita de la autoridad.
 cambian). La app del chofer captura remisiones **sin señal** y sincroniza al
 volver — cola local en el dispositivo, idempotente por folio.
 
+## Fase 2 — lectura automática de la PORTAQUA (tras visita técnica)
+
+**¿Se puede conectar el sistema a la máquina? Casi seguro que sí — pero se
+confirma en la visita, no se promete en la venta.** Portaqua (Grupo Junghanns)
+anuncia control automatizado en sus plantas pero no publica protocolo ni
+conectividad del BPS3; la HMI con contadores implica un PLC detrás, y la
+mayoría de las HMI comerciales (Weintek, Delta, Kinco, Siemens) hablan Modbus
+por RS-485 o Ethernet.
+
+Tres rutas, de mejor a peor:
+
+1. **Modbus al PLC/HMI** — un gateway en la planta (Raspberry Pi o gateway
+   industrial, ~$1,500–4,000 MXN) sondea los registros del contador y los manda
+   al hub. Requiere que el tablero exponga puerto y mapa de registros
+   (pedírselo a Portaqua). ~1 semana de integración TRAS confirmar protocolo.
+2. **Retrofit de sensores** — fotocelda/proximidad en las dos boquillas
+   contando garrafones (~$1,000–3,000 MXN). Plan B si el tablero está cerrado;
+   no toca la máquina del fabricante (garantía intacta).
+3. **Captura manual al cierre** — lo ya diseñado; queda siempre como respaldo
+   y como flujo de arranque. La conciliación (contador vs remisiones vs
+   inventario) funciona igual con cualquiera de las tres fuentes.
+
+**Checklist de la visita técnica** (la visita ya es el paso 1 del deck):
+fotografiar el interior del tablero — marca/modelo del PLC y de la HMI, puertos
+RS-485/Ethernet/USB en la parte trasera de la HMI —, pedir a Portaqua el manual
+del tablero o el mapa de registros, y preguntar si conectarse afecta la
+garantía.
+
+**Diseño hub (boceto, mismos patrones del módulo):**
+
+```
+PurifLecturaMaquina — timestamp, contador20L, contador19L,
+                      origen (MANUAL | MODBUS | SENSOR), deviceId?
+POST /api/purificadora/lecturas — requireWriter + requireModule;
+                      el gateway autentica como usuario de servicio (WRITER
+                      dedicado, flujo de token de la guía de satélites) y
+                      bufferea sin señal, mandando en lote
+```
+
+Invariante: `PurifLoteProduccion` sigue siendo el documento que una persona
+confirma al cierre del turno; las lecturas solo **prefillean** el lote y
+alimentan la conciliación (delta de lecturas vs lote capturado → alerta).
+
+**La línea para responder al cliente:** «Sí — su máquina ya cuenta los
+llenados; leerlos en automático depende de qué expone su tablero, y eso lo
+confirmamos en la visita técnica. Desde el día uno el contador se captura al
+cierre del turno y el sistema lo concilia contra remisiones e inventario; la
+lectura automática entra como fase 2.»
+
 ## Pantallas (18 mapeadas; 8 construidas como mockups)
 
 Ver `README.md` de esta carpeta. Construidas: tablero, producción, envases,
@@ -130,5 +179,5 @@ cobra (remisión → estado de cuenta → CFDI), al final lo que reporta.
 - Invariantes en tests: saldo de envases = Σ movimientos; una remisión no puede
   facturarse dos veces (`estado` + unique por folio); litros embotellados ≤
   litros de entrada del lote.
-- Los mockups se regeneran con `scratchpad/deck/planta/` (HTML + Chromium) y el
-  deck con `build-planta.js`; QA geométrico con `qa.py`.
+- Los mockups y el deck se regeneran con `generador/` de esta misma carpeta
+  (HTML + Chromium + pptxgenjs; ver su README); QA geométrico con `qa.py`.
