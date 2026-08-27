@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
+import { camposRecepcion, datosRecepcion } from "@/lib/automotriz/recepcion";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET/PATCH /api/automotriz/ordenes/[id] — detalle y edición de la orden.
@@ -25,6 +26,8 @@ const incluye = {
     },
   },
   lineas: { include: { refaccion: { select: { id: true, numeroParte: true, ultimoCosto: true } } } },
+  documentos: { select: { id: true, tipo: true, nombre: true, mime: true, bytes: true, createdAt: true } },
+  cita: { select: { id: true, fecha: true, canal: true, motivo: true } },
 } as const;
 
 export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -54,6 +57,7 @@ const patchSchema = z.object({
   prometidaAt: z.string().datetime().nullable().optional(),
   /** Reemplaza TODAS las líneas del presupuesto. */
   lineas: z.array(lineaSchema).max(50).optional(),
+  ...camposRecepcion,
 });
 
 export const PATCH = withAuthz(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -117,6 +121,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: { params: Promise<{ id:
         ...(d.prometidaAt !== undefined
           ? { prometidaAt: d.prometidaAt ? new Date(d.prometidaAt) : null }
           : {}),
+        ...datosRecepcion(d),
       },
       include: incluye,
     });
