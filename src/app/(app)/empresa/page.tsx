@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { Money } from "@/components/ui";
+import { Alert, Loading, Money, RetryButton } from "@/components/ui";
 import Link from "next/link";
 import {
   Building2, Plus, Loader2, Pencil, CheckCircle2,
@@ -112,8 +112,12 @@ export default function EmpresaPage() {
     }
   }
 
-  // Active company detail (from DB, includes sensitive fields not in provider)
+  // Active company detail (from DB, includes sensitive fields not in provider).
+  // null = desconocido (cargando o error), NUNCA "sin configurar": esta página
+  // decide si se muestran los formularios de CSD/e.firma/Facturapi.
   const [companyDetail, setCompanyDetail] = useState<CompanyDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(true);
+  const [detailError, setDetailError] = useState("");
 
   // Facturapi setup
   const [fpLoading, setFpLoading] = useState(false);
@@ -164,6 +168,7 @@ export default function EmpresaPage() {
   const [importSuccess, setImportSuccess] = useState("");
   const [importError, setImportError] = useState("");
   const [historicalDecs, setHistoricalDecs] = useState<{ id: string; tipo: string; periodo: string; status: string; isrPagar: number | null; ivaPagar: number | null; ivaSaldoFavor: number | null; isrCoeficienteUtilidad: number | null }[]>([]);
+  const [historicalError, setHistoricalError] = useState(false);
 
   // Import Contabilidad Electrónica (Anexo 24)
   const [ceCatalogoFile, setCeCatalogoFile] = useState<File | null>(null);
@@ -179,11 +184,22 @@ export default function EmpresaPage() {
 
   const fetchCompanyDetail = useCallback(async () => {
     if (!activeCompany) return;
-    const res = await fetch(`/api/companies/${activeCompany.id}`);
-    if (res.ok) {
+    setDetailLoading(true);
+    setDetailError("");
+    try {
+      const res = await fetch(`/api/companies/${activeCompany.id}`);
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setCompanyDetail(data);
       setRpValue(data.registroPatronal ?? "");
+    } catch {
+      // Sin respuesta no hay hechos: si el fetch falla, el estado del CSD y la
+      // e.firma es DESCONOCIDO. Afirmar "sin configurar" invitaría a resubir
+      // certificados que ya existen, en la página que habilita la facturación.
+      setCompanyDetail(null);
+      setDetailError("No se pudo cargar la configuración fiscal de la empresa.");
+    } finally {
+      setDetailLoading(false);
     }
     // Also fetch live Facturapi status (best-effort, don't block)
     try {
@@ -407,13 +423,16 @@ export default function EmpresaPage() {
   // Load historical declarations
   const loadHistorical = useCallback(async () => {
     if (!activeCompany) return;
+    setHistoricalError(false);
     try {
       const res = await fetch(`/api/impuestos/historical?companyId=${activeCompany.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setHistoricalDecs(data.declarations ?? []);
-      }
-    } catch { /* silent */ }
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setHistoricalDecs(data.declarations ?? []);
+    } catch {
+      // No bloquea la importación; sólo avisa que la lista puede estar incompleta.
+      setHistoricalError(true);
+    }
   }, [activeCompany]);
 
   useEffect(() => { loadHistorical(); }, [loadHistorical]);
@@ -726,8 +745,21 @@ export default function EmpresaPage() {
         ))}
       </div>
 
+      {/* Configuración fiscal: mientras no sepamos qué hay (cargando o fetch
+          fallido), NO se pintan las secciones de CSD/e.firma/Facturapi — un
+          "Sin configurar" nacido de un error invita a resubir certificados
+          que ya existen. Error y vacío son excluyentes. */}
+      {activeCompany && detailLoading && !companyDetail && (
+        <Loading label="Cargando configuración fiscal…" />
+      )}
+      {activeCompany && !detailLoading && detailError && (
+        <Alert tone="danger" className="mb-5" action={<RetryButton onClick={fetchCompanyDetail} />}>
+          {detailError} El estado del CSD, la e.firma y Facturapi no se puede mostrar por ahora.
+        </Alert>
+      )}
+
       {/* ── Nómina — Registro Patronal IMSS ── */}
-      {activeCompany && (
+      {activeCompany && companyDetail && (
         <div className="bg-cos-card border border-cos-line rounded-xl shadow-sm p-5 mb-5">
           <div className="flex items-start gap-3 mb-3">
             <div className="h-9 w-9 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
@@ -806,7 +838,7 @@ export default function EmpresaPage() {
       )}
 
       {/* ── Facturapi Setup + FIEL ── */}
-      {activeCompany && (
+      {activeCompany && companyDetail && (
         <>
         <div className="bg-cos-card border border-cos-line rounded-xl shadow-sm overflow-hidden">
           {/* Header */}
@@ -1328,6 +1360,14 @@ export default function EmpresaPage() {
               </button>
             )}
             {/* Historical declarations already imported */}
+            {historicalError && (
+              <p className="text-xs text-cos-ink-soft">
+                No se pudieron cargar las declaraciones ya importadas — la lista puede verse incompleta.{" "}
+                <button type="button" onClick={loadHistorical} className="underline hover:text-cos-ink">
+                  Reintentar
+                </button>
+              </p>
+            )}
             {historicalDecs.length > 0 && (
               <div className="border-t border-cos-line pt-3 mt-1">
                 <p className="text-xs font-medium text-cos-ink-soft mb-2">📄 Declaraciones importadas</p>

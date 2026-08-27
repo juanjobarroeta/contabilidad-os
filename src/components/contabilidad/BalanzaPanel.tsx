@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Money } from "@/components/ui";
+import { Alert, Loading, RetryButton } from "@/components/ui/feedback";
 import { formatCurrency } from "@/lib/utils";
-import { Loader2, BookOpen } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { AuxiliarCuentaModal } from "@/components/contabilidad/LibroPanels";
 import { BotonExcel } from "@/components/contabilidad/BotonExcel";
 import { PeriodPicker } from "@/components/contabilidad/PeriodPicker";
@@ -23,26 +24,37 @@ export interface BalanzaRow {
 export function BalanzaPanel({
   companyId, year, month, onChangePeriod,
 }: { companyId: string; year: number; month: number; onChangePeriod: (y: number, m: number) => void }) {
-  const [rows, setRows] = useState<BalanzaRow[]>([]);
+  // Tri-estado: null = aún no carga, [] = periodo genuinamente vacío.
+  const [rows, setRows] = useState<BalanzaRow[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [preliminar, setPreliminar] = useState(false);
   // Drill-down: clic en una cuenta → auxiliar con saldo corrido.
   const [auxCuenta, setAuxCuenta] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
       const res = await fetch(
         `/api/contabilidad/balanza?companyId=${companyId}&year=${year}&month=${month}`
       );
-      const data = await res.json();
-      setRows(data.rows ?? []);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !Array.isArray(data?.rows)) {
+        throw new Error(data?.error ?? "No se pudo cargar la balanza");
+      }
+      setRows(data.rows);
       setPreliminar(Boolean(data.preliminar));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar la balanza");
+    } finally {
       setLoading(false);
-    })();
+    }
   }, [companyId, year, month]);
 
-  const nonZero = rows.filter(r => Math.abs(r.cargos) > 0.01 || Math.abs(r.abonos) > 0.01);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const nonZero = (rows ?? []).filter(r => Math.abs(r.cargos) > 0.01 || Math.abs(r.abonos) > 0.01);
 
   return (
     <div>
@@ -58,12 +70,12 @@ export function BalanzaPanel({
         />
       </div>
 
-      {!loading && preliminar && nonZero.length > 0 && <PreliminarBanner />}
+      {!loading && !error && preliminar && nonZero.length > 0 && <PreliminarBanner />}
 
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-cos-ink-soft py-8 justify-center">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
-        </div>
+      {error ? (
+        <Alert tone="danger" action={<RetryButton onClick={cargar} />}>{error}</Alert>
+      ) : loading || rows === null ? (
+        <Loading />
       ) : nonZero.length === 0 ? (
         <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <BookOpen className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />

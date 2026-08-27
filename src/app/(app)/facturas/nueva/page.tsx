@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Money } from "@/components/ui";
+import { Alert, RetryButton } from "@/components/ui/feedback";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import Link from "next/link";
@@ -185,6 +186,11 @@ export default function NuevaFacturaPage() {
 
   // Step 1
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clientesLoading, setClientesLoading] = useState(false);
+  // Fallo al cargar clientes. Antes un error del API llegaba como objeto a
+  // `clientes.map` y reventaba la página; y mientras cargaba se leía el falso
+  // "No hay clientes. Agrega uno primero".
+  const [clientesError, setClientesError] = useState(false);
   const [clienteSearch, setClienteSearch] = useState("");
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [formaPago, setFormaPago] = useState("03");
@@ -213,11 +219,23 @@ export default function NuevaFacturaPage() {
 
   const fetchClientes = useCallback(async () => {
     if (!activeCompany) return;
-    const res = await fetch(
-      `/api/clientes?companyId=${activeCompany.id}&search=${encodeURIComponent(clienteSearch)}`
-    );
-    const data = await res.json();
-    setClientes(data);
+    setClientesLoading(true);
+    setClientesError(false);
+    try {
+      const res = await fetch(
+        `/api/clientes?companyId=${activeCompany.id}&search=${encodeURIComponent(clienteSearch)}`
+      );
+      const data = await res.json();
+      // Una respuesta de error ({ error: … }) no es una lista: sin array real
+      // esto es un fallo de carga, no "no hay clientes".
+      if (!res.ok || !Array.isArray(data)) throw new Error();
+      setClientes(data);
+    } catch {
+      setClientesError(true);
+      setClientes([]);
+    } finally {
+      setClientesLoading(false);
+    }
   }, [activeCompany, clienteSearch]);
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
@@ -931,7 +949,15 @@ export default function NuevaFacturaPage() {
                 </div>
               )}
 
-              {!selectedCliente && clientes.length > 0 && (
+              {/* Rama de ERROR, excluyente del vacío: sin clientes cargados no
+                  se afirma que no existen — se ofrece reintentar. */}
+              {!selectedCliente && clientesError && (
+                <Alert tone="danger" action={<RetryButton onClick={fetchClientes} />}>
+                  No se pudieron cargar los clientes.
+                </Alert>
+              )}
+
+              {!selectedCliente && !clientesError && clientes.length > 0 && (
                 <div className="border border-cos-line rounded-md overflow-hidden max-h-48 overflow-y-auto">
                   {clientes.map((c) => (
                     <button
@@ -949,10 +975,16 @@ export default function NuevaFacturaPage() {
                 </div>
               )}
 
-              {!selectedCliente && clientes.length === 0 && (
-                <p className="text-sm text-cos-ink-soft">
-                  No hay clientes. <a href="/clientes" className="text-cos-brand-ink underline">Agrega uno primero</a>.
-                </p>
+              {!selectedCliente && !clientesError && clientes.length === 0 && (
+                clientesLoading ? (
+                  <p className="flex items-center gap-2 text-sm text-cos-ink-soft">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando clientes…
+                  </p>
+                ) : (
+                  <p className="text-sm text-cos-ink-soft">
+                    No hay clientes. <a href="/clientes" className="text-cos-brand-ink underline">Agrega uno primero</a>.
+                  </p>
+                )
               )}
 
               {/* Usar factura anterior — prefill conceptos from a past invoice */}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, ShieldCheck, AlertTriangle, Check, Landmark } from "lucide-react";
 import { Money } from "@/components/ui";
+import { Alert, RetryButton } from "@/components/ui/feedback";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Papel de trabajo de la conciliación bancaria.
@@ -138,7 +139,11 @@ export function ConciliacionBancariaPanel({
     );
   }
   if (!data) {
-    return <p className="py-8 text-center text-sm text-cos-red-ink">{error || "Sin datos"}</p>;
+    return (
+      <Alert tone="danger" action={<RetryButton onClick={cargar} />}>
+        {error || "No se pudo cargar la conciliación"}
+      </Alert>
+    );
   }
   if (data.sinCuentaBancos) {
     return <p className="py-8 text-center text-sm text-cos-ink-soft">{data.resumen}</p>;
@@ -151,7 +156,7 @@ export function ConciliacionBancariaPanel({
   return (
     <div className="space-y-4">
       {error && (
-        <div className="rounded-card bg-cos-red-tint px-4 py-3 text-sm text-cos-red-ink">{error}</div>
+        <Alert tone="danger" action={<RetryButton onClick={cargar} />}>{error}</Alert>
       )}
 
       <div className={`flex items-start gap-2 rounded-card px-4 py-3 text-sm ${estado.tono}`}>

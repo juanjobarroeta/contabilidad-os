@@ -16,7 +16,7 @@ import { useParams } from "next/navigation";
 import {
   ArrowLeft, BadgeCheck, Loader2, Receipt, TrendingUp, UserRound, FileText,
 } from "lucide-react";
-import { Card, Money, Loading } from "@/components/ui";
+import { Alert, Card, Money, Loading, RetryButton } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { AcumuladosEmpleado } from "@/lib/nomina/acumulados";
 import { TIPO_RUN_LABEL, STATUS_RUN_LABEL, PERIODICIDAD_LABEL } from "../../workspace-shared";
@@ -126,7 +126,10 @@ export default function ExpedienteEmpleadoPage() {
         <Link href="/nomina?tab=empleados" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-cos-ink-soft hover:text-cos-brand-ink">
           <ArrowLeft className="h-4 w-4" /> Volver a Empleados
         </Link>
-        <div className="mt-4 rounded-card border border-cos-red-ink/20 bg-cos-red-tint px-5 py-4 text-[13.5px] text-cos-red-ink">{error}</div>
+        {/* Reintentar además del escape «Volver a Empleados». */}
+        <Alert tone="danger" className="mt-4" action={<RetryButton onClick={() => load(anio, 1, false)} />}>
+          {error}
+        </Alert>
       </div>
     );
   }

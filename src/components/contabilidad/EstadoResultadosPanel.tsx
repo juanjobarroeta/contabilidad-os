@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Money } from "@/components/ui";
-import { Loader2, FileText } from "lucide-react";
+import { Alert, Loading, RetryButton } from "@/components/ui/feedback";
+import { FileText } from "lucide-react";
 import { BotonExcel } from "@/components/contabilidad/BotonExcel";
 import { PeriodPicker } from "@/components/contabilidad/PeriodPicker";
 import { PreliminarBanner } from "@/components/contabilidad/PreliminarBanner";
@@ -28,20 +29,33 @@ export interface EstadoResultados {
 export function EstadoResultadosPanel({
   companyId, year, month, onChangePeriod,
 }: { companyId: string; year: number; month: number; onChangePeriod: (y: number, m: number) => void }) {
+  // Tri-estado: null = aún no carga; el payload vacío es el vacío genuino.
   const [data, setData] = useState<EstadoResultados | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
       const res = await fetch(
         `/api/contabilidad/estado-resultados?companyId=${companyId}&year=${year}&month=${month}`
       );
-      const d = await res.json();
+      const d = await res.json().catch(() => null);
+      // Un objeto de error del API no tiene la forma del estado de resultados:
+      // no lo guardamos como si fuera dato.
+      if (!res.ok || !Array.isArray(d?.ingresos) || !Array.isArray(d?.gastos) || !Array.isArray(d?.costos)) {
+        throw new Error(d?.error ?? "No se pudo cargar el estado de resultados");
+      }
       setData(d);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar el estado de resultados");
+    } finally {
       setLoading(false);
-    })();
+    }
   }, [companyId, year, month]);
+
+  useEffect(() => { cargar(); }, [cargar]);
 
   return (
     <div>
@@ -57,13 +71,13 @@ export function EstadoResultadosPanel({
         />
       </div>
 
-      {!loading && data?.preliminar && (data.ingresos.length > 0 || data.gastos.length > 0 || data.costos.length > 0) && <PreliminarBanner />}
+      {!loading && !error && data?.preliminar && (data.ingresos.length > 0 || data.gastos.length > 0 || data.costos.length > 0) && <PreliminarBanner />}
 
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-cos-ink-soft py-8 justify-center">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
-        </div>
-      ) : !data || (data.ingresos.length === 0 && data.gastos.length === 0 && data.costos.length === 0) ? (
+      {error ? (
+        <Alert tone="danger" action={<RetryButton onClick={cargar} />}>{error}</Alert>
+      ) : loading || !data ? (
+        <Loading />
+      ) : data.ingresos.length === 0 && data.gastos.length === 0 && data.costos.length === 0 ? (
         <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <FileText className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
           <p className="text-sm text-cos-ink-soft">Sin movimientos para este periodo.</p>

@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Chip } from "@/components/ui";
+import { Alert, RetryButton } from "@/components/ui/feedback";
 import { etiquetaImpuesto } from "@/lib/conciliacion-impuestos";
 
 // ── Types (mirror /api/bancos) ────────────────────────────────────────────────
@@ -260,6 +261,12 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   }[]>([]);
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
 
+  // Fallos de carga. Sin esto, un fetch caído se leía como "Sin cuentas
+  // bancarias" / "No hay movimientos" — afirmar que los datos no existen es
+  // peor que admitir que no se pudieron traer.
+  const [errorCuentas, setErrorCuentas] = useState("");
+  const [errorTxs, setErrorTxs] = useState("");
+
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2800); };
   // Contraseña de PDFs protegidos, recordada durante la sesión de carga (los 12
   // estados de un año suelen compartirla). Nunca se persiste.
@@ -267,20 +274,31 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
 
   const loadAccounts = useCallback(async () => {
     if (!activeCompany) return;
-    const res = await fetch(`/api/bancos?companyId=${activeCompany.id}`);
-    const data = await res.json();
-    const list: BankAccount[] = Array.isArray(data) ? data : [];
-    setAccounts(list);
-    setSelectedId((prev) => prev && list.some((a) => a.id === prev) ? prev : list[0]?.id ?? null);
+    setErrorCuentas("");
+    try {
+      const res = await fetch(`/api/bancos?companyId=${activeCompany.id}`);
+      const data = await res.json();
+      // Una respuesta de error no es una lista vacía: sin array real esto es
+      // un fallo de carga, no "sin cuentas".
+      if (!res.ok || !Array.isArray(data)) throw new Error();
+      const list: BankAccount[] = data;
+      setAccounts(list);
+      setSelectedId((prev) => prev && list.some((a) => a.id === prev) ? prev : list[0]?.id ?? null);
+    } catch {
+      setErrorCuentas("No se pudieron cargar las cuentas bancarias. Revisa tu conexión e inténtalo de nuevo.");
+    }
   }, [activeCompany]);
 
   const loadTxs = useCallback(async () => {
     if (!selectedId) { setTxs([]); return; }
     setLoading(true); setExpandedId(null);
+    setErrorTxs("");
     try {
       const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}`);
       const data = await res.json();
-      setTxs(data.transactions ?? []);
+      // Un error del API no es "no hay movimientos": sin array real, es fallo.
+      if (!res.ok || !Array.isArray(data?.transactions)) throw new Error();
+      setTxs(data.transactions);
       setCounts(data.statusCounts ?? {});
       setMeses(Array.isArray(data.meses) ? data.meses : []);
       // La lista traía sólo la primera página y NUNCA ofrecía la siguiente: con
@@ -288,6 +306,9 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       // no existían para quien mira. El API ya devolvía `pagination`.
       setPagina(1);
       setPaginas(data.pagination?.pages ?? 1);
+    } catch {
+      setErrorTxs("No se pudieron cargar los movimientos. Revisa tu conexión e inténtalo de nuevo.");
+      setTxs([]);
     } finally { setLoading(false); }
   }, [selectedId, filter, mes]);
 
@@ -796,7 +817,13 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
 
   return (
     <div>
-      {accounts.length === 0 ? (
+      {errorCuentas && accounts.length === 0 ? (
+        /* Rama de ERROR, excluyente del vacío: si el fetch cayó no se afirma
+           "Sin cuentas bancarias" — las cuentas pueden existir. */
+        <div className="mt-5">
+          <Alert tone="danger" action={<RetryButton onClick={loadAccounts} />}>{errorCuentas}</Alert>
+        </div>
+      ) : accounts.length === 0 ? (
         <Card className="mt-5 rounded-card border-cos-line p-10 text-center shadow-card">
           <Landmark className="mx-auto mb-3 h-10 w-10 text-cos-ink-faint opacity-40" />
           <p className="text-sm font-medium text-cos-ink">Sin cuentas bancarias</p>
@@ -1025,6 +1052,10 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
           <div className="mt-3 flex flex-col gap-3">
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-cos-ink-faint"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</div>
+            ) : errorTxs ? (
+              /* Rama de ERROR, excluyente del vacío: un fetch caído jamás debe
+                 leerse como "no hay movimientos". */
+              <Alert tone="danger" action={<RetryButton onClick={loadTxs} />}>{errorTxs}</Alert>
             ) : txs.length === 0 ? (
               <Card className="rounded-card border-cos-line p-10 text-center text-cos-ink-faint shadow-card">No hay movimientos con ese filtro.</Card>
             ) : txs.map((m, i) => {
