@@ -1,7 +1,7 @@
 # Float → Decimal en dinero — plan por olas
 
-**Estado:** Olas 0–2 en producción (convertidor, bancos, facturas);
-olas 3–5 pendientes (nómina → mayor/declaraciones → verticales).
+**Estado:** Olas 0–3 en producción (convertidor, bancos, facturas, nómina);
+olas 4–5 pendientes (mayor/declaraciones → verticales).
 **Por qué:** hay 232 campos `Float` en el schema; ~190 son dinero. `float8`
 no representa decimales exactos (0.1 + 0.2 ≠ 0.3): los importes derivan
 centavos al acumularse y los `SUM()` de Postgres arrastran ruido binario. Un

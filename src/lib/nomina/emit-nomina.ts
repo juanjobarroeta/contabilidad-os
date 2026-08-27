@@ -110,7 +110,7 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
   }
 
   // ── Cálculo de percepciones, deducciones, neto ────────────────────────
-  const sdi = employee.salarioDiarioIntegrado ?? employee.salarioDiario;
+  const sdi = Number(employee.salarioDiarioIntegrado ?? employee.salarioDiario);
 
   let totalPercepciones: number;
   let totalDeducciones: number;
@@ -153,7 +153,7 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     }));
     console.log(`[nomina] ${employee.nombre}: desglose precalculado percepciones=${totalPercepciones} deducciones=${totalDeducciones} neto=${netoAPagar}`);
   } else {
-    const sueldoBruto = input.sueldoBruto ?? +(employee.salarioDiario * input.diasPagados).toFixed(2);
+    const sueldoBruto = input.sueldoBruto ?? +(Number(employee.salarioDiario) * input.diasPagados).toFixed(2);
 
     const isrCalc = calcularIsrRetenido({
       baseGravable: sueldoBruto,
@@ -169,13 +169,13 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       ejercicio: input.fechaPago.getFullYear(),
       // Art. 36 LSS: al trabajador de salario mínimo no se le retiene IMSS
       // (la cuota obrera la absorbe el patrón).
-      salarioDiario: employee.salarioDiario,
+      salarioDiario: Number(employee.salarioDiario),
     });
     const imssObrero = imssCalc.obrero.total;
     const imssPatronal = imssCalc.patronal.total;
     const infonavitDeduccion = calcularInfonavit({
       tipoDescuento: (employee as Employee & { tipoDescuentoInfonavit?: string | null }).tipoDescuentoInfonavit ?? null,
-      descuentoInfonavit: employee.descuentoInfonavit ?? null,
+      descuentoInfonavit: employee.descuentoInfonavit === null ? null : Number(employee.descuentoInfonavit),
       salarioBaseCotizacion: sdi,
       diasPagados: input.diasPagados,
     });
@@ -183,9 +183,9 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     // FONACOT y pensión alimenticia — MISMO módulo que calc-nomina, para que
     // este fallback (timbrado sin desglose) nunca difiera del recibo calculado.
     const recurrentes = calcularDescuentosRecurrentes({
-      descuentoFonacot: employee.descuentoFonacot ?? null,
+      descuentoFonacot: employee.descuentoFonacot === null ? null : Number(employee.descuentoFonacot),
       pensionAlimenticiaTipo: employee.pensionAlimenticiaTipo ?? null,
-      pensionAlimenticiaValor: employee.pensionAlimenticiaValor ?? null,
+      pensionAlimenticiaValor: employee.pensionAlimenticiaValor === null ? null : Number(employee.pensionAlimenticiaValor),
       periodicidadPago: employee.periodicidadPago,
       diasPagados: input.diasPagados,
       totalPercepciones: sueldoBruto,

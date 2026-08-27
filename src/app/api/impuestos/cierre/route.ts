@@ -51,7 +51,7 @@ async function nominaRetencionesMes(companyId: string, from: Date, to: Date): Pr
     },
     _sum: { isrRetenido: true },
   });
-  return agg._sum.isrRetenido ?? 0;
+  return Number(agg._sum.isrRetenido ?? 0);
 }
 
 export async function GET(req: Request) {

@@ -56,8 +56,8 @@ export async function POST(req: Request) {
 
   // 3. Calculate finiquito/liquidación
   const finiquito = calcularFiniquito({
-    salarioDiario: employee.salarioDiario,
-    salarioDiarioIntegrado: employee.salarioDiarioIntegrado ?? employee.salarioDiario,
+    salarioDiario: Number(employee.salarioDiario),
+    salarioDiarioIntegrado: Number(employee.salarioDiarioIntegrado ?? employee.salarioDiario),
     fechaIngreso: employee.fechaIngreso,
     fechaBaja: fechaBajaDate,
     motivo: motivo as "VOLUNTARIA" | "JUSTIFICADA" | "INJUSTIFICADA",

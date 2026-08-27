@@ -59,7 +59,7 @@ export async function GET(req: Request) {
     const now = new Date();
     const desde = new Date(now.getFullYear(), now.getMonth(), 1);
     const hasta = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const delMes = await prisma.payrollItem.findMany({
+    const delMes = (await prisma.payrollItem.findMany({
       where: { payrollRun: { companyId, fechaPago: { gte: desde, lt: hasta } } },
       select: {
         sueldoBase: true, horasExtra: true, bonosPagoFijo: true, bonosPagoVar: true,
@@ -69,7 +69,18 @@ export async function GET(req: Request) {
         otrasDeducc: true, totalPercepciones: true, totalDeducciones: true,
         netoAPagar: true, cfdiUuid: true,
       },
-    });
+    })).map((r) => ({
+      ...r,
+      sueldoBase: Number(r.sueldoBase), horasExtra: Number(r.horasExtra),
+      bonosPagoFijo: Number(r.bonosPagoFijo), bonosPagoVar: Number(r.bonosPagoVar),
+      vales: Number(r.vales), otrasPercepciones: Number(r.otrasPercepciones),
+      aguinaldo: Number(r.aguinaldo), primaVacacional: Number(r.primaVacacional),
+      vacaciones: Number(r.vacaciones), ptu: Number(r.ptu),
+      isrRetenido: Number(r.isrRetenido), imssObrero: Number(r.imssObrero),
+      imssPatronal: Number(r.imssPatronal), infonavit: Number(r.infonavit),
+      otrasDeducc: Number(r.otrasDeducc), totalPercepciones: Number(r.totalPercepciones),
+      totalDeducciones: Number(r.totalDeducciones), netoAPagar: Number(r.netoAPagar),
+    }));
     const sum = (f: (i: (typeof delMes)[number]) => number) =>
       Math.round(delMes.reduce((s, i) => s + f(i), 0) * 100) / 100;
     const mes = {

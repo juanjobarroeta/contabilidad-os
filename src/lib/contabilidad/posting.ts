@@ -416,7 +416,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       select: { imssPatronal: true, payrollRun: { select: { periodo: true } } },
     });
 
-    const totalImssPatronal = payrollItems.reduce((s, i) => s + i.imssPatronal, 0);
+    const totalImssPatronal = payrollItems.reduce((s, i) => s + Number(i.imssPatronal), 0);
     if (totalImssPatronal > 0.01) {
       const base = {
         fecha: new Date(year, month - 1, Math.min(15, end.getDate())),

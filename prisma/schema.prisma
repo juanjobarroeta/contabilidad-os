@@ -1589,8 +1589,8 @@ model Employee {
   tipoContrato           String // e.g. "01" = Indefinido
   tipoJornada            String // e.g. "01" = Diurna
   tipoRegimen            String  @default("02") // "02" = Sueldos, "05" = Asimilados
-  salarioDiario          Float // SBC for IMSS
-  salarioDiarioIntegrado Float? // SDI
+  salarioDiario          Decimal @db.Decimal(18, 6) // SBC for IMSS
+  salarioDiarioIntegrado Decimal? @db.Decimal(18, 6) // SDI
   periodicidadPago       String // "04" = Quincenal, "05" = Mensual
   numEmpleado            String? // Internal employee number; defaults to short id
   departamento           String?
@@ -1611,20 +1611,20 @@ model Employee {
   // INFONAVIT
   creditoInfonavit       String?
   tipoDescuentoInfonavit String? // "PCT_SBC" | "VSM" | "PESOS"
-  descuentoInfonavit     Float?
+  descuentoInfonavit     Decimal? @db.Decimal(18, 6)
 
   /// FONACOT (crédito de nómina): número de crédito y retención MENSUAL en
   /// pesos según la cédula de Fonacot. El motor la prorratea por periodicidad
   /// de pago (CFDI c_TipoDeduccion 011 — Pago de abonos INFONACOT).
   creditoFonacot   String?
-  descuentoFonacot Float?
+  descuentoFonacot Decimal? @db.Decimal(18, 6)
 
   /// Pensión alimenticia por resolución judicial (CFDI c_TipoDeduccion 007).
   /// Tipo: "PCT_TOTAL" (% de percepciones totales), "PCT_NETO" (% del neto
   /// tras ISR/IMSS/INFONAVIT) o "PESOS" (monto MENSUAL fijo, prorrateado por
   /// periodicidad). El valor es el porcentaje (0.30 = 30%) o el monto mensual.
   pensionAlimenticiaTipo  String?
-  pensionAlimenticiaValor Float?
+  pensionAlimenticiaValor Decimal? @db.Decimal(18, 6)
 
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   documentos        EmployeeDocumento[]
@@ -1652,15 +1652,15 @@ model Incidencia {
   tipo         IncidenciaTipo
   fecha        DateTime // Date of the incident
   fechaFin     DateTime? // End date for multi-day (incapacidad, vacaciones)
-  dias         Float          @default(1) // Number of days affected
-  horas        Float? // For overtime: DOUBLE hours (dentro/fuera del límite LFT las separa el cálculo)
+  dias         Decimal @db.Decimal(18, 6)          @default(1) // Number of days affected
+  horas        Decimal? @db.Decimal(18, 6) // For overtime: DOUBLE hours (dentro/fuera del límite LFT las separa el cálculo)
   // Horas extra TRIPLES (las que exceden el límite de la jornada extraordinaria,
   // LFT Art. 68: se pagan al 200% adicional y son 100% gravadas). Columna
   // ADITIVA — prod usa `prisma db push`.
-  horasTriples Float?
+  horasTriples Decimal? @db.Decimal(18, 6)
   // Monto en pesos para incidencias económicas (BONO, COMISION, DESCUENTO).
   // Columna ADITIVA — prod usa `prisma db push`.
-  monto        Float?
+  monto        Decimal? @db.Decimal(18, 6)
 
   // Incapacidad-specific
   folioImss String? // IMSS disability folio number
@@ -1701,8 +1701,8 @@ model ImssMovimiento {
 
   tipo            ImssMovimientoTipo // ALTA, BAJA, MODIFICACION_SALARIO, REINGRESO
   fechaMovimiento DateTime // When the movement should be effective
-  sbcAnterior     Float? // Previous SBC (for modifications)
-  sbcNuevo        Float? // New SBC
+  sbcAnterior     Decimal? @db.Decimal(18, 6) // Previous SBC (for modifications)
+  sbcNuevo        Decimal? @db.Decimal(18, 6) // New SBC
   motivo          String? // Reason text
 
   // Filing status
@@ -1741,9 +1741,9 @@ model PayrollRun {
   tipo      PayrollRunType // ORDINARIA, EXTRAORDINARIA, FINIQUITO, AGUINALDO
   status    PayrollStatus  @default(DRAFT)
 
-  totalPercepciones Float @default(0)
-  totalDeducciones  Float @default(0)
-  totalNeto         Float @default(0)
+  totalPercepciones Decimal @db.Decimal(18, 6) @default(0)
+  totalDeducciones  Decimal @db.Decimal(18, 6) @default(0)
+  totalNeto         Decimal @db.Decimal(18, 6) @default(0)
 
   // Type-specific data (e.g. { utilidadFiscalGravable } for PTU,
   // { diasAguinaldo, fechaCorte } for AGUINALDO)
@@ -1765,29 +1765,29 @@ model PayrollItem {
   employeeId   String
 
   // Percepciones
-  sueldoBase        Float
-  horasExtra        Float @default(0)
-  bonosPagoFijo     Float @default(0)
-  bonosPagoVar      Float @default(0)
-  vales             Float @default(0)
-  otrasPercepciones Float @default(0)
+  sueldoBase        Decimal @db.Decimal(18, 6)
+  horasExtra        Decimal @db.Decimal(18, 6) @default(0)
+  bonosPagoFijo     Decimal @db.Decimal(18, 6) @default(0)
+  bonosPagoVar      Decimal @db.Decimal(18, 6) @default(0)
+  vales             Decimal @db.Decimal(18, 6) @default(0)
+  otrasPercepciones Decimal @db.Decimal(18, 6) @default(0)
 
   // Deducciones
-  isrRetenido  Float @default(0)
-  imssObrero   Float @default(0)
-  imssPatronal Float @default(0) // Informational (employer cost, not deducted from employee)
-  infonavit    Float @default(0)
-  otrasDeducc  Float @default(0)
+  isrRetenido  Decimal @db.Decimal(18, 6) @default(0)
+  imssObrero   Decimal @db.Decimal(18, 6) @default(0)
+  imssPatronal Decimal @db.Decimal(18, 6) @default(0) // Informational (employer cost, not deducted from employee)
+  infonavit    Decimal @db.Decimal(18, 6) @default(0)
+  otrasDeducc  Decimal @db.Decimal(18, 6) @default(0)
 
   // Extraordinary percepciones (aguinaldo, vacaciones, PTU)
-  aguinaldo       Float @default(0)
-  primaVacacional Float @default(0)
-  vacaciones      Float @default(0)
-  ptu             Float @default(0)
+  aguinaldo       Decimal @db.Decimal(18, 6) @default(0)
+  primaVacacional Decimal @db.Decimal(18, 6) @default(0)
+  vacaciones      Decimal @db.Decimal(18, 6) @default(0)
+  ptu             Decimal @db.Decimal(18, 6) @default(0)
 
-  totalPercepciones Float
-  totalDeducciones  Float
-  netoAPagar        Float
+  totalPercepciones Decimal @db.Decimal(18, 6)
+  totalDeducciones  Decimal @db.Decimal(18, 6)
+  netoAPagar        Decimal @db.Decimal(18, 6)
 
   // CFDI nómina
   cfdiUuid    String?
@@ -5607,7 +5607,7 @@ model NominaCosto {
   /**
    * Percepciones del recibo (gravado + exento): el costo bruto del periodo.
    */
-  percepciones     Float
+  percepciones     Decimal @db.Decimal(18, 6)
   /**
    * Cuotas PATRONALES estimadas del periodo (IMSS + RCV + 5% INFONAVIT),
    * calculadas con el SBC y los días del propio recibo. El CFDI de nómina NO
@@ -5615,11 +5615,11 @@ model NominaCosto {
    * base (SalarioBaseCotApor), así que el costo real del patrón es
    * reconstruible en vez de quedar fuera del estado de resultados.
    */
-  cuotasPatronales Float        @default(0)
+  cuotasPatronales Decimal @db.Decimal(18, 6)        @default(0)
   /**
    * Insumos de la estimación, para auditarla sin volver a abrir el XML.
    */
-  sbcDiario        Float?
+  sbcDiario        Decimal? @db.Decimal(18, 6)
   diasPagados      Int?
   riesgoPuesto     String?
   /**

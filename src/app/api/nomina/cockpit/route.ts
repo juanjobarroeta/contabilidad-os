@@ -117,7 +117,7 @@ export async function GET() {
       periodo: run.periodo,
       tipo: run.tipo,
       empleados: run._count.items,
-      totalNeto: run.totalNeto,
+      totalNeto: Number(run.totalNeto),
     });
     sinTimbrarBy.set(run.companyId, arr);
   }
@@ -137,10 +137,10 @@ export async function GET() {
         razonSocial: c.razonSocial,
         regimenFiscal: c.regimenFiscal,
         empleadosActivos: eq?._count.id ?? 0,
-        masaSalarialDiaria: r2(eq?._sum.salarioDiario ?? 0),
+        masaSalarialDiaria: r2(Number(eq?._sum.salarioDiario ?? 0)),
         bajoMinimo: bajoBy.get(c.id)?._count.id ?? 0,
         corridasDelMes: mesBy.get(c.id)?._count.id ?? 0,
-        netoDelMes: r2(mesBy.get(c.id)?._sum.totalNeto ?? 0),
+        netoDelMes: r2(Number(mesBy.get(c.id)?._sum.totalNeto ?? 0)),
         corridasSinTimbrar: runsSinTimbrar.length,
         // Lista explícita de corridas CALCULATED a timbrar (ids concretos +
         // totales) para construir la selección del timbrado en lote.

@@ -955,7 +955,7 @@ export async function computeTaxPosition(
       }),
     ]);
     const coeficienteDeclarado = coefProvRow?.isrCoeficienteUtilidad ?? null;
-    const ptuPagadaEjercicio = round2(ptuNominaAgg._sum.ptu ?? 0);
+    const ptuPagadaEjercicio = round2(Number(ptuNominaAgg._sum.ptu ?? 0));
 
     // Mejor valor AUTO-detectado, independiente de un override manual: anual
     // (ley) → el aplicado en provisionales → calculado de CFDIs. Se sugiere en la

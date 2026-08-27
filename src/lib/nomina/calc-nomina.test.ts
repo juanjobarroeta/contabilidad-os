@@ -15,11 +15,10 @@
 // obrero (SBC 600, riesgo 1): 15 días → 228.63; 13 → 198.15; 12 → 182.91.
 
 import { describe, it, expect } from "vitest";
-import type { Employee } from "@prisma/client";
-import { calcularNomina } from "./calc-nomina";
+import { calcularNomina, type EmployeeCalcRow } from "./calc-nomina";
 import { resumirIncidencias, resumenTieneEfecto, RESUMEN_VACIO } from "./incidencias";
 
-function empleado(salarioDiario: number): Employee & { tipoDescuentoInfonavit?: string | null } {
+function empleado(salarioDiario: number): EmployeeCalcRow & { tipoDescuentoInfonavit?: string | null } {
   return {
     salarioDiario,
     salarioDiarioIntegrado: null, // SDI = salario diario (goldens simples)
@@ -28,7 +27,7 @@ function empleado(salarioDiario: number): Employee & { tipoDescuentoInfonavit?: 
     fechaIngreso: new Date("2020-01-15"),
     tipoDescuentoInfonavit: null,
     descuentoInfonavit: null,
-  } as unknown as Employee & { tipoDescuentoInfonavit?: string | null };
+  } as unknown as EmployeeCalcRow & { tipoDescuentoInfonavit?: string | null };
 }
 
 const BASE = {
@@ -53,7 +52,7 @@ describe("calcularNomina + incidencias — corrida ordinaria quincenal 2026", ()
       descuentoFonacot: 1200, // cédula mensual → 600 por quincena
       pensionAlimenticiaTipo: "PCT_NETO",
       pensionAlimenticiaValor: 0.3,
-    } as unknown as Employee & { tipoDescuentoInfonavit?: string | null };
+    } as unknown as EmployeeCalcRow & { tipoDescuentoInfonavit?: string | null };
     const base = calcularNomina({ employee: empleado(600), ...BASE });
     const r = calcularNomina({ employee: emp, ...BASE });
     // No tocan ISR ni IMSS (deducción neta post-impuestos).

@@ -95,8 +95,8 @@ async function main() {
       if (esExtra) { updates.push({ id: it.id, val: 0 }); a.n++; porAnio.set(anio, a); continue; }
 
       const dias = DIAS[e?.periodicidadPago ?? "04"] ?? 15;
-      let sdi = e?.salarioDiarioIntegrado ?? e?.salarioDiario ?? 0;
-      if (!sdi || sdi <= 0) { sdi = (it.totalPercepciones || it.sueldoBase || 0) / dias; if (sdi <= 0) sinSdi++; }
+      let sdi = Number(e?.salarioDiarioIntegrado ?? e?.salarioDiario ?? 0);
+      if (!sdi || sdi <= 0) { sdi = Number(it.totalPercepciones || it.sueldoBase || 0) / dias; if (sdi <= 0) sinSdi++; }
       const uma = umaDiariaDelEjercicio(anio) ?? undefined;
       // Art. 36 (salario mínimo: el patrón absorbe la cuota obrera) NO se decide
       // con el salarioDiario guardado: en este padrón es un DEFAULT al mínimo
@@ -105,16 +105,16 @@ async function main() {
       // y patronal inflado, cuando el CFDI sí retuvo. El CFDI es la autoridad
       // de lo que pasó: si retuvo (imssObrero > 0) no hay absorción; sólo si no
       // retuvo se permite el traslado del Art. 36.
-      const sinRetencionCfdi = (it.imssObrero || 0) < 0.005;
+      const sinRetencionCfdi = Number(it.imssObrero || 0) < 0.005;
       const r = calcularImss({
         salarioBaseCotizacion: sdi, diasPagados: dias, riesgoPuesto: e?.riesgoPuesto ?? "1",
         ejercicio: anio, umaDiaria: uma,
-        salarioDiario: sinRetencionCfdi ? e?.salarioDiario : undefined,
+        salarioDiario: sinRetencionCfdi && e?.salarioDiario != null ? Number(e.salarioDiario) : undefined,
       });
       updates.push({ id: it.id, val: r.patronal.total });
       a.obrero += r.obrero.total; a.patronal += r.patronal.total;
       a.patronalSinRetiro += r.patronal.total - r.patronal.retiro; a.retiro += r.patronal.retiro;
-      a.storedObr += it.imssObrero || 0; a.n++;
+      a.storedObr += Number(it.imssObrero || 0); a.n++;
       porAnio.set(anio, a);
     }
 
