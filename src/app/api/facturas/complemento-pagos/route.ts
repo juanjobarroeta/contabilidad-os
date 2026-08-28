@@ -26,6 +26,9 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
+  // Filtro opcional: el hub del cliente pide sólo SUS pendientes de REP.
+  const customerId = searchParams.get("customerId");
+
   // Find PPD invoices (ingreso) that are stamped
   const ppdInvoices = await prisma.invoice.findMany({
     where: {
@@ -33,6 +36,7 @@ export async function GET(req: Request) {
       tipo: "INGRESO",
       metodoPago: "PPD",
       status: "STAMPED",
+      ...(customerId ? { customerId } : {}),
     },
     select: {
       id: true,

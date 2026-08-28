@@ -17,6 +17,28 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/Table";
 import { Alert, Loading, RetryButton } from "@/components/ui/feedback";
 import type { EstadoDeCuenta } from "@/lib/clientes/estado-cuenta";
 
+// Hub del cliente (decisión del owner, pág. 8): el estado de cuenta ES la
+// página del cliente — ficha, REPs y facturas viven aquí, sin rutas nuevas.
+interface FichaCliente {
+  rfc: string;
+  razonSocial: string;
+  email: string | null;
+  phone: string | null;
+  codigoPostal: string | null;
+  facturapiId: string | null;
+  situacion69b: string | null;
+  facturas: number;
+}
+interface RepEmitido { id: string; uuid: string | null; folio: string | null; fecha: string; total: number }
+interface RepPendiente {
+  invoiceId: string;
+  serie: string | null;
+  folio: string | null;
+  totalPagado: number;
+  pagosSinRep: number;
+}
+type EstadoHub = EstadoDeCuenta & { empresaId: string; cliente: FichaCliente; repsEmitidos: RepEmitido[] };
+
 const RANGOS = [
   { meses: 3, label: "3 meses" },
   { meses: 6, label: "6 meses" },
@@ -32,7 +54,10 @@ const TIPO_LABEL: Record<string, string> = {
 export default function EstadoCuentaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [meses, setMeses] = useState<number>(3);
-  const [data, setData] = useState<EstadoDeCuenta | null>(null);
+  const [data, setData] = useState<EstadoHub | null>(null);
+  const [pendientesRep, setPendientesRep] = useState<RepPendiente[] | null>(null);
+  const [emitiendoRep, setEmitiendoRep] = useState<string | null>(null);
+  const [avisoRep, setAvisoRep] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +74,31 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
       const res = await fetch(`/api/clientes/${id}/estado-cuenta?${qs}`);
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? `HTTP ${res.status}`);
-      setData(j as EstadoDeCuenta);
+      const hub = j as EstadoHub;
+      setData(hub);
+      // Pendientes de REP de ESTE cliente (detector global filtrado).
+      fetch(`/api/facturas/complemento-pagos?companyId=${hub.empresaId}&customerId=${id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d) return setPendientesRep([]);
+          type Det = {
+            invoice: { id: string; serie: string | null; folio: string | null };
+            pendingAmount: number;
+            needsRep: boolean;
+          };
+          setPendientesRep(
+            ((d.pendientes ?? []) as Det[])
+              .filter((pe) => pe.needsRep)
+              .map((pe) => ({
+                invoiceId: pe.invoice.id,
+                serie: pe.invoice.serie,
+                folio: pe.invoice.folio,
+                totalPagado: pe.pendingAmount,
+                pagosSinRep: 1,
+              })),
+          );
+        })
+        .catch(() => setPendientesRep([]));
     } catch (e) {
       setData(null);
       setError(e instanceof Error ? e.message : "No se pudo cargar el estado de cuenta.");
@@ -61,6 +110,28 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
   useEffect(() => {
     void cargar();
   }, [cargar]);
+
+  async function emitirRep(invoiceId: string) {
+    if (!data) return;
+    if (!confirm("¿Timbrar el complemento de pago? Se emite un CFDI real ante el SAT.")) return;
+    setEmitiendoRep(invoiceId);
+    setAvisoRep(null);
+    try {
+      const res = await fetch("/api/facturas/complemento-pagos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: data.empresaId, invoiceId }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error ?? `HTTP ${res.status}`);
+      setAvisoRep(`Complemento timbrado (parcialidad ${j?.numParcialidad ?? ""}).`);
+      await cargar();
+    } catch (e) {
+      setAvisoRep(e instanceof Error ? e.message : "No se pudo timbrar el complemento.");
+    } finally {
+      setEmitiendoRep(null);
+    }
+  }
 
   return (
     <div className="print-report mx-auto max-w-[880px] px-6 py-7 print:max-w-none print:p-0">
@@ -123,6 +194,28 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
               <p className="text-[12.5px] text-cos-ink-soft">
                 Del {data.desde} al {data.hasta} · corte {data.generado}
               </p>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-cos-ink-soft">
+              {data.cliente.email && <span>{data.cliente.email}</span>}
+              {data.cliente.phone && <span>{data.cliente.phone}</span>}
+              {data.cliente.codigoPostal && <span>CP {data.cliente.codigoPostal}</span>}
+              <span className="print:hidden">
+                <Link href={`/facturas?q=${encodeURIComponent(data.cliente.rfc)}`} className="text-cos-brand-ink hover:underline">
+                  {data.cliente.facturas} factura{data.cliente.facturas === 1 ? "" : "s"} →
+                </Link>
+              </span>
+              {data.cliente.situacion69b && (
+                <span className={`print:hidden rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                  data.cliente.situacion69b === "DEFINITIVO" ? "bg-cos-red-tint text-cos-red-ink" : "bg-cos-amber-tint text-cos-amber-ink"
+                }`}>
+                  69-B {data.cliente.situacion69b.toLowerCase()}
+                </span>
+              )}
+              {!data.cliente.facturapiId && !data.cliente.codigoPostal && (
+                <span className="print:hidden rounded-full bg-cos-amber-tint px-2 py-0.5 text-[10.5px] font-medium text-cos-amber-ink" title="Captura su CP para poder timbrarle">
+                  Falta CP
+                </span>
+              )}
             </div>
           </header>
 
@@ -236,6 +329,65 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
                 Notas de crédito del periodo: <Money value={data.notasCreditoPeriodo} size={12} /> —
                 abonan al saldo general.
               </p>
+            )}
+          </section>
+
+          <section className="mt-6 print:hidden">
+            <h2 className="mb-2 text-[15px] font-semibold text-cos-ink">Complementos de pago</h2>
+            {avisoRep && (
+              <p className="mb-2 text-[12.5px] text-cos-brand-ink">{avisoRep}</p>
+            )}
+            {pendientesRep && pendientesRep.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {pendientesRep.map((pr) => (
+                  <div key={pr.invoiceId} className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-cos-amber-ink/25 bg-cos-amber-tint px-3 py-2.5">
+                    <p className="text-[13px] text-cos-amber-ink">
+                      <b>{[pr.serie, pr.folio].filter(Boolean).join("-") || "PPD"}</b>: cobrado{" "}
+                      <Money value={pr.totalPagado} size={13} /> sin complemento — vence el día 5 del mes siguiente al cobro.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => emitirRep(pr.invoiceId)}
+                      disabled={emitiendoRep !== null}
+                      className="rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                    >
+                      {emitiendoRep === pr.invoiceId ? "Timbrando…" : "Emitir REP"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {data.repsEmitidos.length > 0 ? (
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Fecha</TH>
+                    <TH>Folio</TH>
+                    <TH>Folio fiscal</TH>
+                    <TH numeric>Monto</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {data.repsEmitidos.map((rep) => (
+                    <TR key={rep.id}>
+                      <TD className="whitespace-nowrap text-[12.5px]">{String(rep.fecha).slice(0, 10)}</TD>
+                      <TD className="text-[12.5px]">{rep.folio ?? "—"}</TD>
+                      <TD className="max-w-[260px] truncate font-mono text-[11.5px] text-cos-ink-soft">
+                        {rep.uuid ? (
+                          <Link href={`/facturas?q=${rep.uuid}`} className="hover:text-cos-brand-ink hover:underline">
+                            {rep.uuid}
+                          </Link>
+                        ) : "—"}
+                      </TD>
+                      <TD numeric><Money value={rep.total} size={12} /></TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            ) : (
+              (!pendientesRep || pendientesRep.length === 0) && (
+                <p className="text-[13px] text-cos-ink-soft">Sin complementos: este cliente no tiene cobros PPD que los requieran.</p>
+              )
             )}
           </section>
 
