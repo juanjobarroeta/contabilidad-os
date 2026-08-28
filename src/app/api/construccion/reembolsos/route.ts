@@ -21,7 +21,12 @@ import {
 
 const createSchema = z.object({
   proyectoId: z.string().min(1),
-  bankAccountId: z.string().min(1),
+  // Opcional desde el rediseño de caja chica: sin cuenta, el período se ancla
+  // a la cuenta CAJA de la empresa (se crea "Caja chica" de efectivo si no
+  // existe). La cuenta bancaria real del reembolso se decide al CERRAR el
+  // período (picker de movimientos), no al abrirlo — preguntar por BBVA al
+  // crear un período de efectivo sólo confundía.
+  bankAccountId: z.string().min(1).optional(),
   semanaInicio: z.string(),
   semanaFin: z.string(),
   anticipoAplicado: z.number().nonnegative().optional(),
@@ -78,12 +83,34 @@ export const POST = withAuthz(async (req: Request) => {
   await requireWriter(proyecto.companyId, req);
   await requireModule(proyecto.companyId, "CONSTRUCCION");
 
-  const account = await prisma.bankAccount.findUnique({
-    where: { id: parsed.data.bankAccountId },
-    select: { id: true, companyId: true },
-  });
-  if (!account || account.companyId !== proyecto.companyId) {
-    return NextResponse.json({ error: "BankAccount inválido" }, { status: 400 });
+  let bankAccountId = parsed.data.bankAccountId ?? null;
+  if (bankAccountId) {
+    const account = await prisma.bankAccount.findUnique({
+      where: { id: bankAccountId },
+      select: { id: true, companyId: true },
+    });
+    if (!account || account.companyId !== proyecto.companyId) {
+      return NextResponse.json({ error: "BankAccount inválido" }, { status: 400 });
+    }
+  } else {
+    // Caja chica: anclar a la cuenta CAJA de la empresa; crearla si no existe.
+    // No es una cuenta bancaria real — es el fondo de efectivo del responsable.
+    const caja =
+      (await prisma.bankAccount.findFirst({
+        where: { companyId: proyecto.companyId, tipo: "CAJA" },
+        select: { id: true },
+      })) ??
+      (await prisma.bankAccount.create({
+        data: {
+          companyId: proyecto.companyId,
+          banco: "EFECTIVO",
+          nombre: "Caja chica",
+          numeroCuenta: "EFECTIVO",
+          tipo: "CAJA",
+        },
+        select: { id: true },
+      }));
+    bankAccountId = caja.id;
   }
 
   try {
@@ -91,7 +118,7 @@ export const POST = withAuthz(async (req: Request) => {
       data: {
         companyId: proyecto.companyId,
         proyectoId: parsed.data.proyectoId,
-        bankAccountId: parsed.data.bankAccountId,
+        bankAccountId,
         semanaInicio: new Date(parsed.data.semanaInicio),
         semanaFin: new Date(parsed.data.semanaFin),
         anticipoAplicado: parsed.data.anticipoAplicado ?? 0,
