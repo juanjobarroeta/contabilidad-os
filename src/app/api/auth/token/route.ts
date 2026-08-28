@@ -193,6 +193,7 @@ export async function POST(req: Request) {
         allowedModules: true,
         purifPuesto: true,
         construccionRol: true,
+        construccionPaginas: true,
         automotrizPaginas: true,
         company: {
           select: {
@@ -243,6 +244,8 @@ export async function POST(req: Request) {
     purifPuesto: string | null;
     /** Rol del satélite de construcción (bartiz), o null = sin restricción. */
     construccionRol: string | null;
+    /** Páginas visibles del satélite de construcción; [] = según su rol. */
+    construccionPaginas: string[];
     /** Páginas visibles del satélite automotriz; [] = todas (sin restricción). */
     automotrizPaginas: string[];
   };
@@ -263,6 +266,7 @@ export async function POST(req: Request) {
       modulos,
       purifPuesto: m.purifPuesto ?? null,
       construccionRol: m.construccionRol ?? null,
+      construccionPaginas: m.construccionPaginas ?? [],
       automotrizPaginas: m.automotrizPaginas ?? [],
     });
   }
@@ -286,6 +290,7 @@ export async function POST(req: Request) {
         modulos,
         purifPuesto: null, // acceso vía despacho: sin restricción de puesto
         construccionRol: null, // acceso vía despacho: sin rol restringido
+        construccionPaginas: [], // acceso vía despacho: ve todas las páginas
         automotrizPaginas: [], // acceso vía despacho: ve todas las páginas
       });
     }

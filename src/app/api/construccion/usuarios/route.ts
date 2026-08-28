@@ -44,6 +44,7 @@ export const GET = withAuthz(async (req: Request) => {
       id: true,
       role: true,
       construccionRol: true,
+      construccionPaginas: true,
       allowedModules: true,
       createdAt: true,
       user: { select: { id: true, name: true, email: true } },
@@ -65,6 +66,7 @@ export const GET = withAuthz(async (req: Request) => {
       email: m.user.email,
       role: m.role,
       construccionRol: m.construccionRol,
+      paginas: m.construccionPaginas,
       createdAt: m.createdAt,
     }));
 
@@ -81,6 +83,8 @@ const createSchema = z.object({
   // Requerida sólo si el usuario no existe aún.
   password: z.string().min(8, "Mínimo 8 caracteres").max(200).optional(),
   construccionRol: ROL,
+  // Páginas visibles (llaves opacas del satélite). [] u omitido = según rol.
+  paginas: z.array(z.string().trim().min(1).max(40)).max(64).default([]),
 });
 
 export const POST = withAuthz(async (req: Request) => {
@@ -97,7 +101,7 @@ export const POST = withAuthz(async (req: Request) => {
       { status: 400 }
     );
   }
-  const { companyId, name, email, password, construccionRol } = parsed.data;
+  const { companyId, name, email, password, construccionRol, paginas } = parsed.data;
 
   await requireMembership(companyId, ["OWNER", "ADMIN"], req);
   await requireModule(companyId, "CONSTRUCCION");
@@ -146,6 +150,7 @@ export const POST = withAuthz(async (req: Request) => {
       companyId,
       role: MEMBER_ROLE[construccionRol],
       construccionRol,
+      construccionPaginas: paginas,
       // Encajonado al satélite de construcción: no ve contabilidad/nómina.
       allowedModules: ["CONSTRUCCION"],
     },
@@ -153,6 +158,7 @@ export const POST = withAuthz(async (req: Request) => {
       id: true,
       role: true,
       construccionRol: true,
+      construccionPaginas: true,
       user: { select: { id: true, name: true, email: true } },
     },
   });
@@ -165,6 +171,7 @@ export const POST = withAuthz(async (req: Request) => {
       email: member.user.email,
       role: member.role,
       construccionRol: member.construccionRol,
+      paginas: member.construccionPaginas,
       created,
     },
     { status: 201 }
