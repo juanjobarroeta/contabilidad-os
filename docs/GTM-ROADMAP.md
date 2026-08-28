@@ -84,9 +84,10 @@ del despacho es cómo el despacho justifica su iguala.
   mensual con el logo del despacho: el artefacto que le entregan a su
   cliente. Cuando tu producto produce su entregable, el churn se vuelve
   estructuralmente difícil.
-- [ ] **Empresa demo con datos sembrados** *(M)* — una empresa ficticia
-  realista (CFDIs, movimientos, nómina, una declaración a medio vuelo) en un
-  clic. Vender no puede depender de enseñar el RFC de un cliente real.
+- [x] **Empresa demo con datos sembrados** *(M)* — hecha (2026-08-28):
+  `scripts/seed-empresa-demo.ts`, tres meses de vida posteados con el motor
+  real, determinista, idempotente. Vender ya no depende de enseñar el RFC de
+  un cliente real.
 - [ ] **Onboarding como teatro** *(M)* — medir FIEL → historial de 5 años →
   apertura, punta a punta; objetivo < 30 min con progreso visible. Este
   momento cierra ventas: instrumentarlo, pulirlo, ensayarlo.
