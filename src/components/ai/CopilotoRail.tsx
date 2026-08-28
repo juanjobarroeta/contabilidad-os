@@ -1,77 +1,98 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EL COPILOTO COMO RAIL, NO COMO CHAT ESCONDIDO.
+// COPILOTO v2 — cartas-VERBO, no enunciados (feedback del owner con 97
+// hallazgos reales: «me estresa y no hay camino»).
 //
-// Decisión del rediseño Piloto (docs/REDISENO-PILOTO.md): lo que el copiloto
-// SABE — los hallazgos del auditor fiscal, con severidad, sugerencia y
-// fundamento — merece estar a la vista como CAJAS, no enterrado tras un botón
-// flotante de chat. El rail vive en xl+ (colapsable a una tira con badge);
-// «Preguntar al copiloto» abre el chat existente vía el evento cos:ask-ai —
-// cero cirugía sobre ChatPanel. En pantallas menores el FAB de siempre sigue
-// siendo la puerta.
+//   · Los hallazgos se AGRUPAN por causa raíz operativa (el destino que los
+//     resuelve): 4 obligaciones vencidas = UNA carta con contador. Máximo 4
+//     grupos; error > warn; los `info` colapsan a una línea.
+//   · El botón principal de cada carta ES la sugerencia: deep link al lugar
+//     donde se arregla (ctaParaHallazgo). La prosa pasa a segundo plano.
+//   · Posponer 7 días inline (PATCH existente, en lote) — la pila ENCOGE.
+//   · Con cartera de 2+ empresas: resumen agregado arriba, enlazando a la
+//     vista de Cartera.
 //
-// Tri-estado del fetch como en toda la casa: error con retry, vacío de
-// verdad («sin hallazgos abiertos») sólo tras un 200.
+// Tri-estado del fetch como en toda la casa.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  ChevronRight, ChevronLeft, MessageCircle, ShieldAlert, Sparkles, TriangleAlert, Info,
+  ArrowRight, Briefcase, ChevronRight, ChevronLeft, Clock, MessageCircle, ShieldAlert,
+  Sparkles, TriangleAlert,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { agruparParaRail, type HallazgoRail, type RailAgrupado } from "@/lib/hallazgos/agrupar";
 import { cn } from "@/lib/utils";
 
-interface HallazgoCard {
-  id: string;
-  categoria: string;
-  severidad: string; // info | warn | error
-  mensaje: string;
-  sugerencia: string;
+interface Cartera {
+  empresas: number;
+  total: number;
+  criticos: number;
 }
 
-const SEV: Record<string, { Icon: typeof Info; chip: string }> = {
-  error: { Icon: ShieldAlert, chip: "bg-cos-red-tint text-cos-red-ink" },
-  warn: { Icon: TriangleAlert, chip: "bg-cos-amber-tint text-cos-amber-ink" },
-  info: { Icon: Info, chip: "bg-cos-brand-tint text-cos-brand-ink" },
-};
-
 export function CopilotoRail() {
-  const { activeCompany } = useCompany();
+  const { activeCompany, companies } = useCompany();
   const [colapsado, setColapsado] = useState(false);
-  const [hallazgos, setHallazgos] = useState<HallazgoCard[] | null>(null);
+  const [rail, setRail] = useState<RailAgrupado | null>(null);
+  const [cartera, setCartera] = useState<Cartera | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [posponiendo, setPosponiendo] = useState<string | null>(null);
 
   const companyId = activeCompany?.id;
+  const multi = companies.length > 1;
+
   const cargar = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/hallazgos?companyId=${companyId}&estado=ABIERTO`);
+      const [res, resCartera] = await Promise.all([
+        fetch(`/api/hallazgos?companyId=${companyId}&estado=ABIERTO`),
+        multi ? fetch("/api/hallazgos/cartera") : Promise.resolve(null),
+      ]);
       const j = await res.json().catch(() => null);
-      if (!res.ok || !Array.isArray(j?.hallazgos ?? j)) throw new Error(j?.error ?? `HTTP ${res.status}`);
-      setHallazgos((j.hallazgos ?? j) as HallazgoCard[]);
+      if (!res.ok || !Array.isArray(j?.hallazgos)) throw new Error(j?.error ?? `HTTP ${res.status}`);
+      setRail(agruparParaRail(j.hallazgos as HallazgoRail[]));
+      if (resCartera?.ok) setCartera((await resCartera.json()) as Cartera);
     } catch {
-      setHallazgos(null);
+      setRail(null);
       setError("No se pudieron cargar los hallazgos.");
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, multi]);
 
   useEffect(() => {
     void cargar();
   }, [cargar]);
 
+  async function posponer(grupoHref: string, ids: string[]) {
+    setPosponiendo(grupoHref);
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/hallazgos/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ posponer: "7d" }),
+          }),
+        ),
+      );
+      await cargar(); // la pila encoge de verdad
+    } finally {
+      setPosponiendo(null);
+    }
+  }
+
   if (!companyId) return null;
 
-  const abiertos = hallazgos?.length ?? 0;
-  const graves = hallazgos?.filter((h) => h.severidad === "error").length ?? 0;
+  const abiertos = rail ? rail.grupos.reduce((t, g) => t + g.count, 0) + rail.restantes : 0;
+  const graves = rail?.grupos.filter((g) => g.severidad === "error").length ?? 0;
 
   if (colapsado) {
     return (
@@ -125,47 +146,102 @@ export function CopilotoRail() {
         )}
         {loading && !error && (
           <>
-            <Skeleton className="h-20 rounded-card" />
-            <Skeleton className="h-20 rounded-card" />
-            <Skeleton className="h-20 rounded-card" />
+            <Skeleton className="h-24 rounded-card" />
+            <Skeleton className="h-24 rounded-card" />
           </>
         )}
-        {!loading && !error && hallazgos && hallazgos.length === 0 && (
+
+        {!loading && !error && cartera && cartera.total > 0 && (
+          <Link
+            href="/despacho"
+            className="block rounded-card border border-cos-brand/25 bg-cos-brand-tint px-3 py-2.5 transition-colors hover:border-cos-brand/50"
+          >
+            <p className="flex items-center gap-1.5 text-[12px] font-semibold text-cos-brand-ink">
+              <Briefcase className="h-3.5 w-3.5" /> Tu cartera
+            </p>
+            <p className="mt-0.5 text-[12.5px] text-cos-ink-soft">
+              {cartera.total} hallazgo{cartera.total === 1 ? "" : "s"} en {cartera.empresas} empresa
+              {cartera.empresas === 1 ? "" : "s"}
+              {cartera.criticos > 0 && (
+                <span className="font-semibold text-cos-red-ink"> · {cartera.criticos} críticos</span>
+              )}{" "}
+              — ver por empresa →
+            </p>
+          </Link>
+        )}
+
+        {!loading && !error && rail && rail.grupos.length === 0 && (
           <div className="rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-3 text-[12.5px] text-cos-jade-ink">
-            Sin hallazgos abiertos — el auditor no detectó riesgos pendientes en{" "}
-            {activeCompany?.razonSocial}.
+            {activeCompany?.razonSocial}: sin pendientes urgentes del auditor.
+            {rail.informativos > 0 && ` ${rail.informativos} aviso(s) informativos en Hallazgos.`}
           </div>
         )}
+
         {!loading &&
           !error &&
-          hallazgos?.slice(0, 8).map((h) => {
-            const sev = SEV[h.severidad] ?? SEV.info;
-            return (
-              <Link
-                key={h.id}
-                href="/hallazgos"
-                className="block rounded-card border border-cos-line bg-cos-paper px-3 py-2.5 transition-colors hover:border-cos-brand/40"
-              >
-                <div className="mb-1 flex items-center gap-1.5">
-                  <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide", sev.chip)}>
-                    <sev.Icon className="h-3 w-3" /> {h.categoria}
+          rail?.grupos.map((g) => (
+            <div
+              key={g.href + g.categoria}
+              className="rounded-card border border-cos-line bg-cos-paper px-3 py-2.5"
+            >
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                    g.severidad === "error"
+                      ? "bg-cos-red-tint text-cos-red-ink"
+                      : "bg-cos-amber-tint text-cos-amber-ink",
+                  )}
+                >
+                  {g.severidad === "error" ? (
+                    <ShieldAlert className="h-3 w-3" />
+                  ) : (
+                    <TriangleAlert className="h-3 w-3" />
+                  )}
+                  {g.categoria}
+                </span>
+                {g.count > 1 && (
+                  <span className="rounded-full bg-cos-slate-tint px-1.5 text-[10.5px] font-bold tabular-nums text-cos-ink-soft">
+                    {g.count}
                   </span>
-                </div>
-                <p className="text-[12.5px] font-medium leading-snug text-cos-ink">{h.mensaje}</p>
-                {h.sugerencia && (
-                  <p className="mt-1 line-clamp-2 text-[11.5px] leading-snug text-cos-ink-soft">
-                    {h.sugerencia}
-                  </p>
                 )}
-              </Link>
-            );
-          })}
-        {!loading && !error && abiertos > 8 && (
+              </div>
+              <p className="text-[13px] font-semibold leading-snug text-cos-ink">{g.titulo}</p>
+              {g.muestra && (
+                <p className="mt-0.5 line-clamp-1 text-[11.5px] text-cos-ink-faint">p. ej. {g.muestra}</p>
+              )}
+              <div className="mt-2 flex items-center gap-1.5">
+                <Link
+                  href={g.href}
+                  className="inline-flex flex-1 items-center justify-center gap-1 rounded-control bg-cos-brand px-2.5 py-1.5 text-[12px] font-semibold text-white hover:bg-cos-brand-deep"
+                >
+                  {g.verbo} <ArrowRight className="h-3 w-3" />
+                </Link>
+                <button
+                  type="button"
+                  title="Posponer 7 días"
+                  disabled={posponiendo !== null}
+                  onClick={() => posponer(g.href, g.ids)}
+                  className="rounded-control border border-cos-line p-1.5 text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink disabled:opacity-50"
+                >
+                  <Clock className={cn("h-3.5 w-3.5", posponiendo === g.href && "animate-pulse")} />
+                </button>
+              </div>
+            </div>
+          ))}
+
+        {!loading && !error && rail && (rail.restantes > 0 || rail.informativos > 0) && (
           <Link
             href="/hallazgos"
             className="block rounded-card px-3 py-2 text-center text-[12px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint"
           >
-            Ver los {abiertos} hallazgos →
+            {[
+              rail.restantes > 0 ? `${rail.restantes} más` : null,
+              rail.informativos > 0 ? `${rail.informativos} informativos` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}{" "}
+            → Ver todos
           </Link>
         )}
       </div>
