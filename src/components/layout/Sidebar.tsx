@@ -26,7 +26,6 @@ import {
   Search,
   TrendingUp,
   Wrench,
-  Inbox,
   Banknote,
   LayoutGrid,
   type LucideIcon,
@@ -127,7 +126,6 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   const { companies, activeCompany, setActiveCompany } = useCompany();
   const [companyOpen, setCompanyOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [pendientesNuevos, setPendientesNuevos] = useState(0);
   // El atajo se anuncia como ⌘K en Mac y Ctrl K en el resto. Se resuelve en un
   // efecto (no al render) porque `navigator` no existe en el servidor y una
   // suposición fija rompería la hidratación. Nuestra base es mayormente
@@ -147,27 +145,12 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
     setMobileOpen(false);
   }, [pathname]);
 
-  // Conteo de pendientes NUEVO para el badge del menú. Se refresca al navegar
-  // (p.ej. al volver de /pendientes tras atender alguno).
-  useEffect(() => {
-    let activo = true;
-    fetch("/api/notificaciones?estado=NUEVO")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (activo && d) setPendientesNuevos(d.noLeidos ?? 0);
-      })
-      .catch(() => {});
-    return () => {
-      activo = false;
-    };
-  }, [pathname]);
 
   // Highlight only the most specific matching item, so a nested route (e.g.
   // /impuestos/papeles) doesn't also light up a shorter-prefix sibling.
   const allHrefs = [
     ...SECTIONS.flatMap((s) => s.items.map((i) => i.href)),
     CARTERA.href,
-    "/pendientes",
     "/rentabilidad",
     "/operador",
     ...BOTTOM_NAV_ITEMS.map((i) => i.href),
@@ -337,15 +320,11 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
             <LayoutDashboard className="h-4 w-4 shrink-0" />
             Inicio
           </Link>
-          <Link href="/pendientes" className={navLinkClass("/pendientes" === activeNavHref)}>
-            <Inbox className="h-4 w-4 shrink-0" />
-            <span className="flex-1">Pendientes</span>
-            {pendientesNuevos > 0 && (
-              <span className="rounded-full bg-cos-brand px-2 py-0.5 font-mono text-[10px] font-semibold text-white">
-                {pendientesNuevos}
-              </span>
-            )}
-          </Link>
+          {/* «Pendientes» se retiró del menú (decisión del owner, revisión
+              página por página): el trabajo pendiente vive en Inicio (pasos,
+              cola) y en el rail del Copiloto. El historial de avisos del
+              sistema quedó en /avisos, enlazado desde Configuración →
+              Notificaciones. */}
           {showCartera && (
             <Link href={CARTERA.href} className={navLinkClass(CARTERA.href === activeNavHref)}>
               <CARTERA.icon className="h-4 w-4 shrink-0" />

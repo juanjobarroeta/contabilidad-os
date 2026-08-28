@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Bell, BellOff, Loader2, Check, AlertCircle } from "lucide-react";
 
@@ -104,7 +105,8 @@ export default function NotificacionesPage() {
     <div className="p-6 max-w-2xl">
       <h1 className="text-2xl font-bold">Notificaciones</h1>
       <p className="mt-1 text-sm text-cos-ink-soft">
-        Activa las notificaciones push y elige qué quieres recibir.
+        Activa las notificaciones push y elige qué quieres recibir. El historial de lo enviado vive
+        en <Link href="/avisos" className="font-medium text-cos-brand-ink hover:underline">Avisos</Link>.
       </p>
 
       {/* Estado del dispositivo */}
