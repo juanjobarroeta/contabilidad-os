@@ -34,12 +34,14 @@ const DEMO_RFC = "CAL150612DM4"; // ficticio; el «DM» de la homoclave es el gu
 const DEMO_RAZON = "COMERCIALIZADORA ALTIPLANO SA DE CV";
 
 const CLIENTES = [
-  ["ACEROS DEL BAJIO SA DE CV", "ABJ080312HA1"],
-  ["DISTRIBUIDORA MAREA SA DE CV", "DMA110925KT3"],
-  ["GRUPO TEXTIL ORIENTE SA DE CV", "GTO050718QW2"],
-  ["SERVICIOS LOGISTICOS PUMA SA DE CV", "SLP130204ZR8"],
-  ["INMOBILIARIA CANTERA SA DE CV", "ICA090830PL5"],
-  ["OPERADORA GASTRONOMICA NORTE SA DE CV", "OGN160419MB7"],
+  // Con CP fiscal: el sync a Facturapi (test) y el timbrado en la demo no
+  // deben toparse con «falta CP».
+  ["ACEROS DEL BAJIO SA DE CV", "ABJ080312HA1", "72810"],
+  ["DISTRIBUIDORA MAREA SA DE CV", "DMA110925KT3", "06600"],
+  ["GRUPO TEXTIL ORIENTE SA DE CV", "GTO050718QW2", "64000"],
+  ["SERVICIOS LOGISTICOS PUMA SA DE CV", "SLP130204ZR8", "44100"],
+  ["INMOBILIARIA CANTERA SA DE CV", "ICA090830PL5", "76000"],
+  ["OPERADORA GASTRONOMICA NORTE SA DE CV", "OGN160419MB7", "20000"],
 ] as const;
 
 const PROVEEDORES = [
@@ -194,8 +196,8 @@ async function main() {
   await seedChartOfAccounts(cid);
 
   const clientes = await Promise.all(
-    CLIENTES.map(([razonSocial, rfc]) =>
-      prisma.customer.create({ data: { companyId: cid, razonSocial, rfc, regimenFiscal: "601" } }),
+    CLIENTES.map(([razonSocial, rfc, codigoPostal]) =>
+      prisma.customer.create({ data: { companyId: cid, razonSocial, rfc, regimenFiscal: "601", codigoPostal } }),
     ),
   );
   await Promise.all(
