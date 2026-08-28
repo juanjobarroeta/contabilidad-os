@@ -21,10 +21,59 @@ export interface GrupoDuplicado {
 const fmt = (n: number) =>
   "$" + n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Fila mínima para el agrupador — pura, sin Prisma. */
+export interface CfdiParaDuplicados {
+  id: string;
+  tipo: "INGRESO" | "EGRESO";
+  total: number;
+  fecha: string; // YYYY-MM-DD
+  rfc: string | null;
+  nombre: string | null;
+}
+
+/** RFC genérico de público en general (venta mostrador). */
+const RFC_PUBLICO_GENERAL = "XAXX010101000";
+
 /**
  * Agrupa CFDIs I/E vivos por (dirección, contraparte, importe, día). Grupos con
- * 2+ comprobantes son posibles duplicados. Sólo total > 0 (ignora REP/$0).
+ * 2+ comprobantes son posibles duplicados.
+ *
+ * La señal exige contraparte IDENTIFICADA:
+ *  - Sin RFC no hay grupo — meter todos los "desconocidos" a una misma cubeta
+ *    fabricaba duplicados falsos entre proveedores distintos con el mismo
+ *    importe el mismo día (esto era el 99% de los 13,916 hallazgos en prod).
+ *  - XAXX010101000 (público en general) tampoco agrupa: decenas de tickets
+ *    idénticos el mismo día son la operación normal de un mostrador, y la
+ *    sugerencia («confirma con el cliente») es imposible ahí.
  */
+export function agruparPosiblesDuplicados(cfdis: CfdiParaDuplicados[]): GrupoDuplicado[] {
+  const grupos = new Map<string, { ids: string[]; tipo: "INGRESO" | "EGRESO"; contraparte: string; total: number; fecha: string }>();
+  for (const inv of cfdis) {
+    if (!inv.rfc || inv.rfc === RFC_PUBLICO_GENERAL) continue;
+    const total = +inv.total.toFixed(2);
+    const key = `${inv.tipo}|${inv.rfc}|${total.toFixed(2)}|${inv.fecha}`;
+    const g = grupos.get(key);
+    if (g) {
+      g.ids.push(inv.id);
+    } else {
+      grupos.set(key, {
+        ids: [inv.id],
+        tipo: inv.tipo,
+        contraparte: inv.nombre ?? inv.rfc,
+        total,
+        fecha: inv.fecha,
+      });
+    }
+  }
+
+  return [...grupos.values()]
+    .filter((g) => g.ids.length >= 2)
+    .map((g) => ({ ids: g.ids, direccion: g.tipo, contraparte: g.contraparte, total: g.total, fecha: g.fecha }));
+}
+
+/** Sólo total > 0 (ignora REP/$0). La contraparte sale de `customer` o, en su
+ *  defecto, de los datos del comprobante (contraparteRfc — típico en EGRESOS,
+ *  que no tienen Customer ligado). */
 export async function cargarPosiblesDuplicados(companyId: string): Promise<GrupoDuplicado[]> {
   const invoices = await prisma.invoice.findMany({
     where: {
@@ -38,33 +87,22 @@ export async function cargarPosiblesDuplicados(companyId: string): Promise<Grupo
       tipo: true,
       total: true,
       fecha: true,
+      contraparteRfc: true,
+      contraparteNombre: true,
       customer: { select: { razonSocial: true, rfc: true } },
     },
   });
 
-  const grupos = new Map<string, { ids: string[]; tipo: "INGRESO" | "EGRESO"; contraparte: string; total: number; fecha: string }>();
-  for (const inv of invoices) {
-    const rfc = inv.customer?.rfc ?? "SIN_RFC";
-    const fecha = inv.fecha.toISOString().slice(0, 10);
-    const total = +inv.total.toFixed(2);
-    const key = `${inv.tipo}|${rfc}|${total.toFixed(2)}|${fecha}`;
-    const g = grupos.get(key);
-    if (g) {
-      g.ids.push(inv.id);
-    } else {
-      grupos.set(key, {
-        ids: [inv.id],
-        tipo: inv.tipo as "INGRESO" | "EGRESO",
-        contraparte: inv.customer?.razonSocial ?? rfc,
-        total,
-        fecha,
-      });
-    }
-  }
-
-  return [...grupos.values()]
-    .filter((g) => g.ids.length >= 2)
-    .map((g) => ({ ids: g.ids, direccion: g.tipo, contraparte: g.contraparte, total: g.total, fecha: g.fecha }));
+  return agruparPosiblesDuplicados(
+    invoices.map((inv) => ({
+      id: inv.id,
+      tipo: inv.tipo as "INGRESO" | "EGRESO",
+      total: Number(inv.total),
+      fecha: inv.fecha.toISOString().slice(0, 10),
+      rfc: inv.customer?.rfc ?? inv.contraparteRfc,
+      nombre: inv.customer?.razonSocial ?? inv.contraparteNombre,
+    })),
+  );
 }
 
 /**
