@@ -67,17 +67,51 @@ export async function cargarPosiblesDuplicados(companyId: string): Promise<Grupo
     .map((g) => ({ ids: g.ids, direccion: g.tipo, contraparte: g.contraparte, total: g.total, fecha: g.fecha }));
 }
 
-/** Un hallazgo por cada grupo de posibles duplicados. */
+/**
+ * UN caso por empresa: N grupos de posibles duplicados son UNA revisión, no N
+ * renglones (un hallazgo = algo que se atiende, no una instancia). El dedupeRef
+ * estable hace que el conteo cambie entre corridas sin abrir/cerrar el caso,
+ * preservando el posponer/resolver del usuario — mismo patrón que rep-faltante
+ * y los checks de banco.
+ */
 export function auditarDuplicados(grupos: GrupoDuplicado[]): Hallazgo[] {
-  return grupos.map((g) => ({
+  if (grupos.length === 0) return [];
+  const g0 = grupos[0];
+  if (grupos.length === 1) {
+    return [{
+      checkClave: "cfdi.posible_duplicado",
+      severidad: "warn",
+      mensaje: `${g0.ids.length} CFDIs de ${g0.direccion === "INGRESO" ? "ingreso" : "egreso"} casi idénticos a ${g0.contraparte} por ${fmt(g0.total)} el ${g0.fecha} — posible duplicado.`,
+      referencias: [...g0.ids].sort(),
+      dedupeRef: "cfdi.posible_duplicado",
+      fundamento: { ley: "CFF", articulo: "29-A" },
+      sugerencia: SUGERENCIA[g0.direccion],
+    }];
+  }
+  const cfdis = grupos.reduce((s, g) => s + g.ids.length, 0);
+  const monto = grupos.reduce((s, g) => s + g.total, 0);
+  const ing = grupos.filter((g) => g.direccion === "INGRESO").length;
+  const egr = grupos.length - ing;
+  const partes = [ing > 0 ? `${ing} de ingreso` : null, egr > 0 ? `${egr} de egreso` : null]
+    .filter(Boolean)
+    .join(" y ");
+  return [{
     checkClave: "cfdi.posible_duplicado",
     severidad: "warn",
-    mensaje: `${g.ids.length} CFDIs de ${g.direccion === "INGRESO" ? "ingreso" : "egreso"} casi idénticos a ${g.contraparte} por ${fmt(g.total)} el ${g.fecha} — posible duplicado.`,
-    referencias: g.ids,
+    mensaje:
+      `${cfdis} CFDIs casi idénticos en ${grupos.length} grupos (${partes}) por ${fmt(monto)} — posibles duplicados. ` +
+      `P. ej. ${g0.contraparte} por ${fmt(g0.total)} el ${g0.fecha}.`,
+    referencias: grupos.flatMap((g) => g.ids).sort(),
+    dedupeRef: "cfdi.posible_duplicado",
     fundamento: { ley: "CFF", articulo: "29-A" },
     sugerencia:
-      g.direccion === "INGRESO"
-        ? "Confirma con el cliente si son dos operaciones (y dos cobros) reales o un timbrado doble. Si es duplicado, cancela el de más (motivo 01/02) y, si ya se declaró, corrige el periodo; si son reales, déjalos."
-        : "Verifica con el proveedor si son dos comprobantes legítimos o uno duplicado. Acreditar/deducir dos veces el mismo gasto es improcedente: si es duplicado, exclúyelo.",
-  }));
+      "Revisa cada grupo: si son operaciones reales idénticas, déjalas; si es timbrado doble, cancela el sobrante (motivo 01/02) y corrige el periodo si ya se declaró. En egresos, deducir dos veces el mismo gasto es improcedente.",
+  }];
 }
+
+const SUGERENCIA: Record<"INGRESO" | "EGRESO", string> = {
+  INGRESO:
+    "Confirma con el cliente si son dos operaciones (y dos cobros) reales o un timbrado doble. Si es duplicado, cancela el de más (motivo 01/02) y, si ya se declaró, corrige el periodo; si son reales, déjalos.",
+  EGRESO:
+    "Verifica con el proveedor si son dos comprobantes legítimos o uno duplicado. Acreditar/deducir dos veces el mismo gasto es improcedente: si es duplicado, exclúyelo.",
+};
