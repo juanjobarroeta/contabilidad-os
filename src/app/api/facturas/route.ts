@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { recordTimbrado } from "@/lib/costos/record";
-import { getFacturapiClient } from "@/lib/facturapi";
+import { ensureFacturapiCustomer, getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { z } from "zod";
 import { getEffectiveCompanyMembership, requireScope, requireUser, AuthzError } from "@/lib/authz";
@@ -243,11 +243,14 @@ export async function POST(req: Request) {
       { status: 422 }
     );
   }
-  if (!customer?.facturapiId) {
-    return NextResponse.json(
-      { error: "El cliente no está sincronizado con Facturapi" },
-      { status: 422 }
-    );
+  if (!customer) {
+    return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+  }
+  // Sync perezoso: si el cliente aún no existe en Facturapi, se registra AQUÍ
+  // (antes esto era un 422 sin salida — ver ensureFacturapiCustomer).
+  const sync = await ensureFacturapiCustomer(company.facturapiApiKey, customer);
+  if (!sync.ok) {
+    return NextResponse.json({ error: sync.error }, { status: 422 });
   }
 
   const facturapi = getFacturapiClient(company.facturapiApiKey);
@@ -330,7 +333,7 @@ export async function POST(req: Request) {
   let facturapiInvoice: any;
   try {
     facturapiInvoice = await facturapi.invoices.create({
-      customer: customer.facturapiId,
+      customer: sync.facturapiId,
       payment_form: formaPago,
       payment_method: metodoPago,
       use: usoCfdi,

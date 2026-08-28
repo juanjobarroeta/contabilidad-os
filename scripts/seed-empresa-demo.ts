@@ -79,8 +79,45 @@ function fecha(y: number, m: number, d: number) {
   return new Date(Date.UTC(y, m - 1, d, 17, 0, 0));
 }
 
-function rawXmlStub(emisorRfc: string, receptorRfc: string) {
-  return `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4"><cfdi:Emisor Rfc="${emisorRfc}"/><cfdi:Receptor Rfc="${receptorRfc}"/></cfdi:Comprobante>`;
+/**
+ * CFDI 4.0 completo (no un esqueleto): la representación impresa y el drawer
+ * parsean el rawXml — con un stub de puros RFCs todo salía «—» (nombre, fecha,
+ * método de pago, conceptos… reporte del owner en el clic-through de prod).
+ * Incluye TFD para que el folio fiscal (UUID) se vea como en un CFDI real.
+ */
+function rawXmlStub(a: {
+  emisor: { rfc: string; nombre: string };
+  receptor: { rfc: string; nombre: string };
+  uuid: string;
+  fecha: Date;
+  serie?: string;
+  folio?: string;
+  formaPago: string;
+  metodoPago: string;
+  usoCfdi: string;
+  subtotal: number;
+  iva: number;
+  total: number;
+  concepto: { claveProdServ: string; claveUnidad: string; descripcion: string };
+}) {
+  const f = a.fecha.toISOString().slice(0, 19);
+  const m2 = (n: number) => n.toFixed(2);
+  return (
+    `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0"` +
+    (a.serie ? ` Serie="${a.serie}"` : "") +
+    (a.folio ? ` Folio="${a.folio}"` : "") +
+    ` Fecha="${f}" FormaPago="${a.formaPago}" MetodoPago="${a.metodoPago}" Moneda="MXN"` +
+    ` SubTotal="${m2(a.subtotal)}" Total="${m2(a.total)}" TipoDeComprobante="I"` +
+    ` Exportacion="01" LugarExpedicion="72810">` +
+    `<cfdi:Emisor Rfc="${a.emisor.rfc}" Nombre="${a.emisor.nombre}" RegimenFiscal="601"/>` +
+    `<cfdi:Receptor Rfc="${a.receptor.rfc}" Nombre="${a.receptor.nombre}" DomicilioFiscalReceptor="72810" RegimenFiscalReceptor="601" UsoCFDI="${a.usoCfdi}"/>` +
+    `<cfdi:Conceptos><cfdi:Concepto ClaveProdServ="${a.concepto.claveProdServ}" Cantidad="1" ClaveUnidad="${a.concepto.claveUnidad}" Descripcion="${a.concepto.descripcion}" ValorUnitario="${m2(a.subtotal)}" Importe="${m2(a.subtotal)}" ObjetoImp="02">` +
+    `<cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Base="${m2(a.subtotal)}" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="${m2(a.iva)}"/></cfdi:Traslados></cfdi:Impuestos>` +
+    `</cfdi:Concepto></cfdi:Conceptos>` +
+    `<cfdi:Impuestos TotalImpuestosTrasladados="${m2(a.iva)}"><cfdi:Traslados><cfdi:Traslado Base="${m2(a.subtotal)}" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="${m2(a.iva)}"/></cfdi:Traslados></cfdi:Impuestos>` +
+    `<cfdi:Complemento><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="${a.uuid.toUpperCase()}" FechaTimbrado="${f}" RfcProvCertif="SAT970701NN3"/></cfdi:Complemento>` +
+    `</cfdi:Comprobante>`
+  );
 }
 
 async function borrarDemo(companyId: string) {
@@ -207,15 +244,24 @@ async function main() {
       const total = r2(subtotal + iva);
       const ppd = i % 3 === 0;
       const dia = 2 + i * 3;
+      const uuidIng = uuidDemo(`${uuidBase}-ing-${i}`);
+      const folioIng = String(folio++);
       const inv = await prisma.invoice.create({
         data: {
           companyId: cid, customerId: cliente.id,
           tipo: "INGRESO", status: "STAMPED", tipoSat: "I",
-          uuid: uuidDemo(`${uuidBase}-ing-${i}`), serie: "A", folio: String(folio++),
+          uuid: uuidIng, serie: "A", folio: folioIng,
           fecha: fecha(per.y, per.m, dia),
           formaPago: ppd ? "99" : "03", metodoPago: ppd ? "PPD" : "PUE", usoCfdi: "G03",
           subtotal, total, totalImpuestos: iva,
-          rawXml: rawXmlStub(DEMO_RFC, cliente.rfc),
+          rawXml: rawXmlStub({
+            emisor: { rfc: DEMO_RFC, nombre: DEMO_RAZON },
+            receptor: { rfc: cliente.rfc, nombre: cliente.razonSocial },
+            uuid: uuidIng, fecha: fecha(per.y, per.m, dia), serie: "A", folio: folioIng,
+            formaPago: ppd ? "99" : "03", metodoPago: ppd ? "PPD" : "PUE", usoCfdi: "G03",
+            subtotal, iva, total,
+            concepto: { claveProdServ: "43211500", claveUnidad: "H87", descripcion: "Mercancía general" },
+          }),
           items: {
             create: {
               cantidad: 1, claveProdServ: "43211500", claveUnidad: "H87",
@@ -251,15 +297,32 @@ async function main() {
       const iva = r2(subtotal * 0.16);
       const total = r2(subtotal + iva);
       const dia = 3 + i * 3;
+      const uuidEgr = uuidDemo(`${uuidBase}-egr-${i}`);
       const inv = await prisma.invoice.create({
         data: {
           companyId: cid,
           tipo: "EGRESO", status: "STAMPED", tipoSat: "I",
-          uuid: uuidDemo(`${uuidBase}-egr-${i}`),
+          uuid: uuidEgr,
           fecha: fecha(per.y, per.m, dia),
           formaPago: "03", metodoPago: "PUE", usoCfdi: "G03",
           subtotal, total, totalImpuestos: iva,
-          rawXml: rawXmlStub(provRfc, DEMO_RFC),
+          // La contraparte en columnas: la lista de facturas y la mesa leen de
+          // aquí (sin esto los gastos salían con «—» de proveedor).
+          contraparteRfc: provRfc, contraparteNombre: provRazon,
+          rawXml: rawXmlStub({
+            emisor: { rfc: provRfc, nombre: provRazon },
+            receptor: { rfc: DEMO_RFC, nombre: DEMO_RAZON },
+            uuid: uuidEgr, fecha: fecha(per.y, per.m, dia),
+            formaPago: "03", metodoPago: "PUE", usoCfdi: "G03",
+            subtotal, iva, total,
+            concepto: { claveProdServ: "80141600", claveUnidad: "E48", descripcion: conceptos[i] },
+          }),
+          items: {
+            create: {
+              cantidad: 1, claveProdServ: "80141600", claveUnidad: "E48",
+              descripcion: conceptos[i], valorUnitario: subtotal, importe: subtotal,
+            },
+          },
           taxes: { create: { tipo: "IVA", factor: "TASA", tasa: 0.16, base: subtotal, importe: iva } },
         },
       });
