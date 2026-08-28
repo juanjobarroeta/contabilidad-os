@@ -3,6 +3,7 @@ import { Readable } from "stream";
 import { prisma } from "./prisma";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { emisorNombreDesdeXml, sinRegimenSocietario } from "./fiscal/nombre-fiscal";
+import { cpReceptorDesdeXml } from "./facturas/cp-receptor";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Master client — uses the user-level (sk_user_/sk_live_) key from Facturapi.
@@ -256,7 +257,27 @@ export async function ensureFacturapiCustomer(
   },
 ): Promise<{ ok: true; facturapiId: string } | { ok: false; error: string }> {
   if (customer.facturapiId) return { ok: true, facturapiId: customer.facturapiId };
-  if (!customer.codigoPostal) {
+  let codigoPostal = customer.codigoPostal;
+  if (!codigoPostal) {
+    // El CP del padrón vive en nuestros propios CFDIs (DomicilioFiscalReceptor
+    // es obligatorio en 4.0): antes de pedirle al usuario que lo capture, se
+    // extrae del comprobante emitido más reciente y se persiste.
+    const previas = await prisma.invoice.findMany({
+      where: { customerId: customer.id, tipo: "INGRESO", status: "STAMPED", rawXml: { not: null } },
+      orderBy: { fecha: "desc" },
+      take: 5,
+      select: { rawXml: true },
+    });
+    for (const inv of previas) {
+      const cp = cpReceptorDesdeXml(inv.rawXml);
+      if (cp) {
+        codigoPostal = cp;
+        await prisma.customer.update({ where: { id: customer.id }, data: { codigoPostal: cp } });
+        break;
+      }
+    }
+  }
+  if (!codigoPostal) {
     return {
       ok: false,
       error: `Falta el código postal fiscal de ${customer.razonSocial}. Captúralo en Directorio → editar cliente: el SAT valida RFC + nombre + CP al timbrar.`,
@@ -271,7 +292,7 @@ export async function ensureFacturapiCustomer(
       tax_system: customer.regimenFiscal,
       email: customer.email || undefined,
       phone: customer.phone || undefined,
-      address: { zip: customer.codigoPostal, street: customer.domicilio || undefined },
+      address: { zip: codigoPostal, street: customer.domicilio || undefined },
     });
     await prisma.customer.update({
       where: { id: customer.id },

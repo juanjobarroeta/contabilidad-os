@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getFacturapiClient } from "@/lib/facturapi";
+import { ensureFacturapiCustomer, getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
 import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
@@ -92,6 +92,21 @@ export async function PATCH(
 
   try {
     const updated = await prisma.customer.update({ where: { id }, data });
+    // Auto-sync: si el cliente aún no existe en Facturapi y ya tiene CP, se
+    // registra en segundo plano (fire-and-forget) — ahorra el paso manual y el
+    // badge de Directorio pasa a «Sincronizado» solo. El timbrado no depende
+    // de esto: ensureFacturapiCustomer vuelve a intentar al timbrar.
+    if (!existing.facturapiId && updated.codigoPostal) {
+      void (async () => {
+        const company = await prisma.company.findUnique({
+          where: { id: customer.companyId },
+          select: { facturapiApiKey: true },
+        });
+        if (company?.facturapiApiKey) {
+          await ensureFacturapiCustomer(company.facturapiApiKey, updated).catch(() => {});
+        }
+      })().catch(() => {});
+    }
     return NextResponse.json(updated);
   } catch {
     // Most likely the unique (companyId, rfc) constraint — another customer
