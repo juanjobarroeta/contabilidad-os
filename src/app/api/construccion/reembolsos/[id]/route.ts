@@ -27,13 +27,23 @@ const patchSchema = z.object({
 async function loadReembolso(id: string, req: Request, write = false) {
   const r = await prisma.reembolsoSemanal.findUnique({
     where: { id },
-    select: { id: true, companyId: true, estado: true },
+    select: { id: true, companyId: true, estado: true, creadaPorId: true },
   });
   if (!r) throw new AuthzError(404, "Reembolso no encontrado");
-  if (write) await requireWriter(r.companyId, req);
-  else await requireMembership(r.companyId, undefined, req);
+  if (write) {
+    const { user, membership } = await requireWriter(r.companyId, req);
+    // Cada caja tiene dueño: sólo él (y OWNER/ADMIN) la editan. Filas
+    // históricas sin dueño quedan sólo-admin, como siempre fueron.
+    const esAdmin = membership.role === "OWNER" || membership.role === "ADMIN";
+    if (!esAdmin && r.creadaPorId !== user.id) {
+      throw new AuthzError(403, "Esta caja chica es de otro usuario; sólo su responsable o un admin pueden editarla");
+    }
+    await requireModule(r.companyId, "CONSTRUCCION");
+    return { ...r, esAdmin };
+  }
+  await requireMembership(r.companyId, undefined, req);
   await requireModule(r.companyId, "CONSTRUCCION");
-  return r;
+  return { ...r, esAdmin: false };
 }
 
 export const GET = withAuthz(
@@ -70,7 +80,60 @@ export const GET = withAuthz(
         },
       },
     });
-    return NextResponse.json(r);
+    // Nombre del dueño (creadaPorId sin FK) para el encabezado del detalle.
+    let creadaPorNombre: string | null = null;
+    if (r?.creadaPorId) {
+      const u = await prisma.user.findUnique({
+        where: { id: r.creadaPorId },
+        select: { name: true, email: true },
+      });
+      creadaPorNombre = u?.name || u?.email || null;
+    }
+
+    // CFDI vinculado por gasto (conciliación de caja chica → deducible):
+    // un lookup por lote sobre construccion_cfdi_vinculo targetTipo GASTO.
+    const gastoIds = (r?.gastos ?? []).map((g) => g.id);
+    const vinculos = gastoIds.length
+      ? await prisma.construccionCfdiVinculo.findMany({
+          where: {
+            companyId: r!.companyId,
+            estado: "VINCULADA",
+            targetTipo: "GASTO",
+            targetId: { in: gastoIds },
+          },
+          select: {
+            targetId: true,
+            invoice: {
+              select: {
+                id: true,
+                uuid: true,
+                total: true,
+                customer: { select: { razonSocial: true } },
+                contraparteNombre: true,
+              },
+            },
+          },
+        })
+      : [];
+    const cfdiPorGasto = new Map(
+      vinculos.map((v) => [
+        v.targetId,
+        {
+          invoiceId: v.invoice.id,
+          uuid: v.invoice.uuid,
+          total: Number(v.invoice.total),
+          emisor: v.invoice.customer?.razonSocial ?? v.invoice.contraparteNombre ?? null,
+        },
+      ])
+    );
+    return NextResponse.json({
+      ...r,
+      creadaPorNombre,
+      gastos: (r?.gastos ?? []).map((g) => ({
+        ...g,
+        cfdiVinculado: cfdiPorGasto.get(g.id) ?? null,
+      })),
+    });
   }
 );
 
@@ -88,6 +151,15 @@ export const PATCH = withAuthz(
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
+
+    // Las decisiones de revisión (REVISADO/RECHAZADO) son de admin: el dueño
+    // restringido edita su caja pero no se auto-revisa.
+    if (parsed.data.estado && !r.esAdmin) {
+      return NextResponse.json(
+        { error: "Sólo un admin puede cambiar el estado de revisión" },
+        { status: 403 }
+      );
     }
 
     const data: Record<string, unknown> = {};

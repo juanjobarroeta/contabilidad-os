@@ -36,6 +36,9 @@ const createSchema = z.object({
   beneficiarioNombre: z.string().min(1).max(200),
   descripcion: z.string().min(1).max(500),
   importe: z.number().positive(),
+  // Proveedor etiquetado (opcional): habilita sugerir CFDIs por RFC para
+  // conciliar el gasto y volverlo deducible.
+  supplierId: z.string().min(1).nullable().optional(),
   cantidad: z.number().positive().nullable().optional(),
   unidad: z.string().max(20).nullable().optional(),
   bankAccountId: z.string().min(1).nullable().optional(), // defaults to reembolso's
@@ -79,11 +82,18 @@ export const POST = withAuthz(
         proyectoId: true,
         bankAccountId: true,
         estado: true,
+        creadaPorId: true,
       },
     });
     if (!reembolso) throw new AuthzError(404, "Reembolso no encontrado");
-    await requireWriter(reembolso.companyId, req);
+    const { user, membership } = await requireWriter(reembolso.companyId, req);
     await requireModule(reembolso.companyId, "CONSTRUCCION");
+    // Cada caja tiene dueño: sólo él (y OWNER/ADMIN) le suben gastos. Filas
+    // históricas sin dueño quedan sólo-admin.
+    const esAdmin = membership.role === "OWNER" || membership.role === "ADMIN";
+    if (!esAdmin && reembolso.creadaPorId !== user.id) {
+      throw new AuthzError(403, "Esta caja chica es de otro usuario; sólo su responsable o un admin le agregan gastos");
+    }
     if (reembolso.estado === "REEMBOLSADO") {
       return NextResponse.json(
         { error: "Reembolso ya pagado; no se pueden agregar gastos" },
@@ -142,12 +152,25 @@ export const POST = withAuthz(
 
     const bankAccountId = data.bankAccountId ?? reembolso.bankAccountId;
 
+    // Proveedor etiquetado (opcional): debe ser de la misma empresa.
+    if (data.supplierId) {
+      const sup = await prisma.supplier.findUnique({
+        where: { id: data.supplierId },
+        select: { companyId: true },
+      });
+      if (!sup || sup.companyId !== reembolso.companyId) {
+        return NextResponse.json({ error: "supplierId inválido" }, { status: 400 });
+      }
+    }
+
     const created = await prisma.gasto.create({
       data: {
         companyId: reembolso.companyId,
         proyectoId: reembolso.proyectoId,
         bankAccountId,
         reembolsoId: id,
+        creadaPorId: user.id,
+        supplierId: data.supplierId ?? null,
         beneficiarioNombre: data.beneficiarioNombre,
         descripcion: data.descripcion,
         importe: data.importe,
