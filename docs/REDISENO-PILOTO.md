@@ -56,6 +56,37 @@ demo cada vez. Nada se finge en la UI: datos ficticios, maquinaria real.
 Idempotente con --reset; jamás toca otra empresa. Guion del demo: ambos
 lentes del Inicio muestran exactamente las historias de los mockups.
 
+## Copiloto v2 — feedback del owner (2026-08-28, PRIORITARIO)
+
+Con datos reales el rail **estresa en vez de ayudar**: 97 hallazgos, cada
+carta es una AFIRMACIÓN sin camino («tu declaración venció») — sin deep
+link al lugar donde se resuelve, sin acción inline, y cuatro cartas casi
+idénticas para la misma causa raíz. Lo que debe cambiar:
+
+1. **Cartas = verbos, no enunciados.** Cada checkClave mapea a SU destino:
+   `obligacion.*` → /impuestos (la empresa activada), `cfdi.rep_faltante` →
+   complementos, `efos.*` → el proveedor en el Directorio, `contabilidad.
+   descuadre` → /contabilidad/divergencia, `iva.*` → papeles. El botón ES
+   la sugerencia; la prosa legal pasa a segundo plano (tooltip/expandir).
+2. **Agrupar por causa raíz y rankear.** Las 4 cartas «OBLIGACION de julio
+   vencida» son UNA: «4 declaraciones de julio vencidas — Presentar →».
+   El rail muestra máx. 4-5 grupos (error > warn; info colapsado en una
+   línea), no un muro. Considerar agregar TAMBIÉN en la generación del
+   auditor (un hallazgo por empresa-tema, no por declaración).
+3. **Resolubilidad inline.** Posponer / marcar resuelto desde la carta (el
+   PATCH ya existe) — el estrés viene de la permanencia inaccionable: la
+   pila debe ENCOGER conforme trabajas.
+4. **Tono de siguiente-paso, no de alarma.** «Presenta julio y esto
+   desaparece» > «cada día genera recargos». Los `info` (ISN estimado) no
+   compiten con los `error`.
+5. En cartera, el rail debería agregarse POR EMPRESA (como la cola), no
+   mostrar sólo los hallazgos de la empresa activa.
+
+Arreglado ya (mismo commit): la tarjeta VENCIDO de la cola mostraba
+**$0.00 en rojo** cuando las 12 vencidas no tenían importe — el mismo
+defecto que matamos en la banda del tablero. Ahora el héroe es el CONTEO
+cuando no hay importe calculado.
+
 ## Explícitamente pospuesto
 
 El Command Center completo de A (cola de trabajo como pantalla, vistas
