@@ -69,6 +69,7 @@ interface Cliente {
   razonSocial: string;
   regimenFiscal: string;
   facturapiId?: string;
+  codigoPostal?: string | null;
 }
 
 interface LineItem {
@@ -967,8 +968,8 @@ export default function NuevaFacturaPage() {
                     >
                       <span className="font-medium">{c.razonSocial}</span>
                       <span className="text-cos-ink-soft font-mono text-xs ml-2">{c.rfc}</span>
-                      {!c.facturapiId && (
-                        <span className="ml-2 text-xs text-cos-amber-ink">⚠ sin Facturapi</span>
+                      {!c.codigoPostal && (
+                        <span className="ml-2 text-xs text-cos-amber-ink">⚠ falta CP</span>
                       )}
                     </button>
                   ))}
@@ -1422,13 +1423,16 @@ export default function NuevaFacturaPage() {
                 </div>
               </div>
 
-              {/* Warning if no facturapi */}
-              {selectedCliente && !selectedCliente.facturapiId && (
+              {/* El único bloqueo real de timbrado del cliente es el CP: el
+                  registro en Facturapi ocurre solo al timbrar (sync perezoso).
+                  El aviso viejo de «sin Facturapi» mandaba a re-editar sin
+                  necesidad. */}
+              {selectedCliente && !selectedCliente.codigoPostal && (
                 <div className="flex items-start gap-3 bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg p-4 text-sm text-cos-amber-ink">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                   <div>
-                    <p className="font-medium">Cliente sin Facturapi</p>
-                    <p className="text-xs mt-0.5">Este cliente no está sincronizado con Facturapi. Edítalo desde Clientes para sincronizarlo antes de timbrar.</p>
+                    <p className="font-medium">Falta el código postal fiscal</p>
+                    <p className="text-xs mt-0.5">El SAT valida RFC + nombre + CP al timbrar. Captúralo en Directorio → editar cliente y vuelve aquí.</p>
                   </div>
                 </div>
               )}
