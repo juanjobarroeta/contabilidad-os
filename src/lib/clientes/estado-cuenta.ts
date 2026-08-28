@@ -292,3 +292,55 @@ export async function estadoDeCuentaCliente(
     generado: dia(hoy),
   };
 }
+
+/**
+ * Saldo por cobrar POR CLIENTE, batcheado para el Directorio (3 queries para
+ * toda la cartera de clientes — jamás un estado de cuenta por fila). MISMAS
+ * reglas que el estado de cuenta de arriba: cargos = INGRESO timbrado (las
+ * notas de crédito, tipoSat E, restan); abonos = cobros con evidencia
+ * bancaria — match 1:1 manda y los detalles sólo aplican si el movimiento no
+ * tiene invoiceId (regla de precedencia del motor). Los REP no son cobro.
+ */
+export async function saldosPorCliente(companyId: string): Promise<Map<string, number>> {
+  const facturas = await prisma.invoice.findMany({
+    where: { companyId, tipo: "INGRESO", status: "STAMPED", customerId: { not: null } },
+    select: { id: true, customerId: true, total: true, tipoSat: true },
+  });
+  const ids = facturas.map((f) => f.id);
+  const [directos, detalles] = await Promise.all([
+    ids.length
+      ? prisma.bankTransaction.findMany({
+          where: { companyId, status: "MATCHED", invoiceId: { in: ids }, monto: { gt: 0 } },
+          select: { invoiceId: true, monto: true },
+        })
+      : [],
+    ids.length
+      ? prisma.conciliacionDetalle.findMany({
+          where: {
+            invoiceId: { in: ids },
+            bankTransaction: { companyId, status: "MATCHED", monto: { gt: 0 }, invoiceId: null },
+          },
+          select: { invoiceId: true, montoAsignado: true },
+        })
+      : [],
+  ]);
+
+  const clienteDe = new Map<string, string>();
+  const saldos = new Map<string, number>();
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  for (const f of facturas) {
+    const cid = f.customerId as string;
+    clienteDe.set(f.id, cid);
+    const cargo = esComprobanteDeEgreso({ tipoSat: f.tipoSat }) ? -Number(f.total) : Number(f.total);
+    saldos.set(cid, r2((saldos.get(cid) ?? 0) + cargo));
+  }
+  for (const d of directos) {
+    const cid = clienteDe.get(d.invoiceId as string);
+    if (cid) saldos.set(cid, r2((saldos.get(cid) ?? 0) - Math.abs(Number(d.monto))));
+  }
+  for (const d of detalles) {
+    const cid = clienteDe.get(d.invoiceId);
+    if (cid) saldos.set(cid, r2((saldos.get(cid) ?? 0) - Math.abs(Number(d.montoAsignado))));
+  }
+  return saldos;
+}

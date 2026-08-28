@@ -43,3 +43,17 @@ export async function consultar69b(rfc: string): Promise<Consulta69b> {
     rfcsEnLista: lista.size,
   };
 }
+
+/** Situaciones 69-B para un lote de RFCs (una sola carga de la lista, cacheada
+ *  12 h). Sólo devuelve entradas para RFCs QUE APARECEN en la lista — el
+ *  Directorio pinta el badge únicamente cuando hay algo que señalar. */
+export async function situaciones69b(rfcs: string[]): Promise<Map<string, string>> {
+  if (rfcs.length === 0) return new Map();
+  const { lista } = await obtenerLista();
+  const out = new Map<string, string>();
+  for (const rfc of rfcs) {
+    const sit = lista.get(rfc.trim().toUpperCase());
+    if (sit === "PRESUNTO" || sit === "DEFINITIVO") out.set(rfc, sit);
+  }
+  return out;
+}

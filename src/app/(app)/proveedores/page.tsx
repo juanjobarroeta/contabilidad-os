@@ -50,6 +50,8 @@ interface Proveedor {
   titularCuenta: string | null;
   cfdisRecibidos: number;
   _count: { bankTransactions: number };
+  /** "PRESUNTO" | "DEFINITIVO" sólo cuando el RFC aparece en la 69-B. */
+  situacion69b?: string | null;
 }
 
 const EMPTY_FORM = {
@@ -288,7 +290,21 @@ export default function ProveedoresPage() {
                   interactive
                 >
                   <TD className="font-mono text-[12px] font-medium text-cos-ink">{p.rfc}</TD>
-                  <TD className="font-medium text-cos-ink">{p.razonSocial}</TD>
+                  <TD className="font-medium text-cos-ink">
+                    {p.razonSocial}
+                    {p.situacion69b && (
+                      <span
+                        title={`Este RFC aparece en la lista 69-B del SAT (${p.situacion69b.toLowerCase()}): deducciones e IVA acreditable en riesgo`}
+                        className={`ml-2 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                          p.situacion69b === "DEFINITIVO"
+                            ? "bg-cos-red-tint text-cos-red-ink"
+                            : "bg-cos-amber-tint text-cos-amber-ink"
+                        }`}
+                      >
+                        69-B {p.situacion69b === "DEFINITIVO" ? "definitivo" : "presunto"}
+                      </span>
+                    )}
+                  </TD>
                   <TD className="hidden md:table-cell">
                     {p.regimenFiscal ? (
                       <span
