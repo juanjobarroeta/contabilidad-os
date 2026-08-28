@@ -4,13 +4,12 @@ import { cn } from "@/lib/utils";
 /** en-US grouping with a $ prefix and fixed decimals — matches the design spec
  *  ("money strings must never truncate"; always tabular so columns align). */
 function fmtMoney(n: number, decimals = 2) {
-  return (
-    "$" +
-    Number(n).toLocaleString("en-US", {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    })
-  );
+  // Negativos como -$1,234.56 (convención contable), no $-1,234.56.
+  const abs = Math.abs(Number(n)).toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  return (Number(n) < 0 ? "-$" : "$") + abs;
 }
 
 export interface MoneyProps extends React.HTMLAttributes<HTMLSpanElement> {

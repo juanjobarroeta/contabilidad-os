@@ -220,7 +220,11 @@ export default function FacturasPage() {
   const [checkingCancel, setCheckingCancel] = useState(false);
   // Periodo elegido en el selector ("todo" | "YYYY" | "YYYY-MM") + los meses
   // que tienen comprobantes (los da /api/facturas/resumen).
-  const [periodo, setPeriodo] = useState<string>(PERIODO_TODO);
+  // Default «Este mes» (decisión del owner): el despacho trabaja mes a mes;
+  // el historial completo queda a un click en el selector. Corte UTC, como
+  // postMonth.
+  const periodoActual = new Date().toISOString().slice(0, 7);
+  const [periodo, setPeriodo] = useState<string>(periodoActual);
   const [periodos, setPeriodos] = useState<ConteoPeriodo[]>([]);
   const [hayMas, setHayMas] = useState(false);
   const [cargandoMas, setCargandoMas] = useState(false);
@@ -260,7 +264,7 @@ export default function FacturasPage() {
   }, [q]);
 
   // Al cambiar de empresa el periodo elegido ya no aplica.
-  useEffect(() => { setPeriodo(PERIODO_TODO); }, [activeCompany?.id]);
+  useEffect(() => { setPeriodo(periodoActual); }, [activeCompany?.id, periodoActual]);
 
   /** Query de la lista para una página, con la ventana del periodo y la búsqueda. */
   const listaUrl = useCallback(
@@ -577,9 +581,9 @@ export default function FacturasPage() {
           <span className="text-[12.5px] text-cos-ink-faint">emitido {subPeriodo}</span>
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
-          <span className={LBL}>IVA cobrado</span>
+          <span className={LBL}>IVA trasladado</span>
           <div className="my-1"><Money value={resumen?.ivaCobrado ?? NaN} size={24} /></div>
-          <span className="text-[12.5px] text-cos-ink-faint">trasladado a clientes</span>
+          <span className="text-[12.5px] text-cos-ink-faint">a clientes, {subPeriodo}</span>
         </Card>
       </div>
 
