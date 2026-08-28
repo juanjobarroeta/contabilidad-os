@@ -6,18 +6,18 @@ import {
   type GrupoDuplicado,
 } from "./duplicados";
 
-describe("agruparPosiblesDuplicados — la señal exige contraparte identificada", () => {
+describe("agruparPosiblesDuplicados — la señal tiene la FORMA de un duplicado accidental", () => {
   const base = (over: Partial<CfdiParaDuplicados>): CfdiParaDuplicados => ({
     id: Math.random().toString(36).slice(2),
     tipo: "EGRESO",
-    total: 1160,
+    total: 11600,
     fecha: "2026-07-15",
     rfc: "PCE070211AA9",
     nombre: "PAPELERA CENTRAL",
     ...over,
   });
 
-  it("misma contraparte, mismo importe y día → grupo", () => {
+  it("par aislado, material, misma contraparte/importe/día → grupo", () => {
     const g = agruparPosiblesDuplicados([base({ id: "a" }), base({ id: "b" })]);
     expect(g).toHaveLength(1);
     expect(g[0].ids).toEqual(["a", "b"]);
@@ -42,9 +42,45 @@ describe("agruparPosiblesDuplicados — la señal exige contraparte identificada
     const g = agruparPosiblesDuplicados([
       base({ id: "a" }),
       base({ id: "b", fecha: "2026-07-16" }),
-      base({ id: "c", total: 1161 }),
+      base({ id: "c", total: 11601 }),
     ]);
     expect(g).toHaveLength(0);
+  });
+
+  it("precio recurrente no agrupa: el mismo importe en 3+ días es cuota/lista, no accidente (combustible de flotilla)", () => {
+    const cargas = ["2026-07-01", "2026-07-02", "2026-07-03"].flatMap((fecha, d) => [
+      base({ id: `f${d}a`, fecha, total: 2500, rfc: "CRI121108BB2", nombre: "COMBUSTIBLES RIVERA" }),
+      base({ id: `f${d}b`, fecha, total: 2500, rfc: "CRI121108BB2", nombre: "COMBUSTIBLES RIVERA" }),
+    ]);
+    expect(agruparPosiblesDuplicados(cargas)).toHaveLength(0);
+  });
+
+  it("en 2 días o menos sí agrupa (el par aislado sobrevive)", () => {
+    const g = agruparPosiblesDuplicados([
+      base({ id: "a" }),
+      base({ id: "b" }),
+      base({ id: "c", fecha: "2026-07-20" }),
+    ]);
+    expect(g).toHaveLength(1);
+    expect(g[0].ids).toEqual(["a", "b"]);
+  });
+
+  it("4+ idénticos el mismo día es patrón operativo, no duplicado", () => {
+    const g = agruparPosiblesDuplicados(
+      Array.from({ length: 4 }, (_, i) => base({ id: `x${i}` })),
+    );
+    expect(g).toHaveLength(0);
+  });
+
+  it("por debajo de $2,000 no amerita el caso", () => {
+    const g = agruparPosiblesDuplicados([base({ id: "a", total: 1160 }), base({ id: "b", total: 1160 })]);
+    expect(g).toHaveLength(0);
+  });
+
+  it("un triple timbrado material sí se levanta", () => {
+    const g = agruparPosiblesDuplicados([base({ id: "a" }), base({ id: "b" }), base({ id: "c" })]);
+    expect(g).toHaveLength(1);
+    expect(g[0].ids).toHaveLength(3);
   });
 });
 
