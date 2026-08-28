@@ -9,7 +9,7 @@ import {
   FileText, X, RefreshCw, ReceiptText,
 } from "lucide-react";
 import {
-  TableContainer, Table, THead, TBody, TR, TH, TD, Alert, RetryButton,
+  TableContainer, Table, THead, TBody, TR, TH, TD, Alert, RetryButton, Money,
 } from "@/components/ui";
 
 const REGIMENES_FISCALES = [
@@ -38,6 +38,10 @@ interface Cliente {
   domicilio?: string;
   codigoPostal?: string;
   facturapiId?: string;
+  /** Saldo por cobrar (mismas reglas que su estado de cuenta). */
+  saldo?: number;
+  /** "PRESUNTO" | "DEFINITIVO" sólo cuando el RFC aparece en la 69-B. */
+  situacion69b?: string | null;
   _count: { invoices: number };
 }
 
@@ -253,6 +257,7 @@ export default function ClientesPage() {
                 <TH className="hidden md:table-cell">Régimen</TH>
                 <TH className="hidden lg:table-cell">Correo</TH>
                 <TH center className="hidden sm:table-cell">Facturas</TH>
+                <TH numeric className="hidden sm:table-cell">Saldo</TH>
                 <TH className="hidden sm:table-cell">Facturapi</TH>
                 <TH />
               </TR>
@@ -265,7 +270,28 @@ export default function ClientesPage() {
                   interactive
                 >
                   <TD className="font-mono text-[12px] font-medium text-cos-ink">{c.rfc}</TD>
-                  <TD className="font-medium text-cos-ink">{c.razonSocial}</TD>
+                  <TD className="font-medium text-cos-ink">
+                    <Link
+                      href={`/clientes/${c.id}/estado-cuenta`}
+                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                      className="hover:text-cos-brand-ink hover:underline"
+                      title="Ver estado de cuenta"
+                    >
+                      {c.razonSocial}
+                    </Link>
+                    {c.situacion69b && (
+                      <span
+                        title={`Este RFC aparece en la lista 69-B del SAT (${c.situacion69b.toLowerCase()})`}
+                        className={`ml-2 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                          c.situacion69b === "DEFINITIVO"
+                            ? "bg-cos-red-tint text-cos-red-ink"
+                            : "bg-cos-amber-tint text-cos-amber-ink"
+                        }`}
+                      >
+                        69-B {c.situacion69b === "DEFINITIVO" ? "definitivo" : "presunto"}
+                      </span>
+                    )}
+                  </TD>
                   <TD className="hidden md:table-cell">
                     <span
                       title={regimenLabel(c.regimenFiscal)}
@@ -283,14 +309,27 @@ export default function ClientesPage() {
                       {c._count.invoices}
                     </span>
                   </TD>
+                  <TD numeric className="hidden sm:table-cell">
+                    <Money value={c.saldo ?? 0} size={12} muted={!c.saldo} />
+                  </TD>
                   <TD className="hidden sm:table-cell">
                     {c.facturapiId ? (
                       <span className="rounded-full bg-cos-jade-tint px-2 py-0.5 text-[12px] font-medium text-cos-jade-ink">
                         Sincronizado
                       </span>
+                    ) : c.codigoPostal ? (
+                      <span
+                        title="Se registra solo la primera vez que le factures"
+                        className="rounded-full bg-cos-slate-tint px-2 py-0.5 text-[12px] text-cos-ink-soft"
+                      >
+                        Al timbrar
+                      </span>
                     ) : (
-                      <span className="rounded-full bg-cos-slate-tint px-2 py-0.5 text-[12px] text-cos-ink-soft">
-                        Pendiente
+                      <span
+                        title="Captura su CP al editar — o se toma de su CFDI más reciente al timbrar"
+                        className="rounded-full bg-cos-amber-tint px-2 py-0.5 text-[12px] font-medium text-cos-amber-ink"
+                      >
+                        Falta CP
                       </span>
                     )}
                   </TD>

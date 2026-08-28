@@ -208,7 +208,7 @@ export async function DELETE(
   const invoiceCount = await prisma.invoice.count({ where: { customerId: id } });
   if (invoiceCount > 0) {
     return NextResponse.json(
-      { error: `No se puede eliminar: tiene ${invoiceCount} factura(s) asociada(s)` },
+      { error: `No se puede eliminar: tiene ${invoiceCount} ${invoiceCount === 1 ? "factura asociada" : "facturas asociadas"}` },
       { status: 409 }
     );
   }

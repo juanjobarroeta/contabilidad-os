@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
+import { saldosPorCliente } from "@/lib/clientes/estado-cuenta";
+import { situaciones69b } from "@/lib/fiscal/verificador/lista69b";
 import { getEffectiveCompanyMembership, requireScope, requireUser, AuthzError } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 
@@ -45,7 +47,19 @@ export async function GET(req: Request) {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(clientes);
+  // Directorio informado: saldo por cobrar (mismas reglas que el estado de
+  // cuenta) y bandera 69-B sólo cuando hay algo que señalar. Batcheado.
+  const [saldos, sit69b] = await Promise.all([
+    saldosPorCliente(companyId),
+    situaciones69b(clientes.map((c) => c.rfc)),
+  ]);
+  return NextResponse.json(
+    clientes.map((c) => ({
+      ...c,
+      saldo: saldos.get(c.id) ?? 0,
+      situacion69b: sit69b.get(c.rfc) ?? null,
+    })),
+  );
 }
 
 // POST /api/clientes

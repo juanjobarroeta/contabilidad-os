@@ -14,6 +14,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { situaciones69b } from "@/lib/fiscal/verificador/lista69b";
 import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 
@@ -69,10 +70,14 @@ export async function GET(req: Request) {
   });
   const cfdisPorRfc = new Map(emisores.map((e) => [e.rfc.toUpperCase().trim(), e._count.invoices]));
 
+  // Bandera 69-B: deducir de un EFOS es la exposición fiscal real del
+  // directorio de proveedores. Sólo se marca cuando el RFC aparece en la lista.
+  const sit69b = await situaciones69b(proveedores.map((p) => p.rfc));
   return NextResponse.json(
     proveedores.map((p) => ({
       ...p,
       cfdisRecibidos: cfdisPorRfc.get(p.rfc.toUpperCase().trim()) ?? 0,
+      situacion69b: sit69b.get(p.rfc) ?? null,
     })),
   );
 }
