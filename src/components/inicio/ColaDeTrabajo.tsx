@@ -102,13 +102,22 @@ export function ColaDeTrabajo() {
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-cos-ink-faint">
               Vencido
             </p>
+            {/* El héroe honesto: sin importe calculado, el número es el CONTEO —
+                nunca un $0.00 en rojo fingiendo ser deuda (mismo principio que
+                mató a la banda del tablero). */}
             <p className={cn("mt-1", r.rfcsVencidos > 0 ? "text-cos-red-ink" : "text-cos-ink")}>
-              <Money value={r.vencidoMonto} size={22} weight={700} className={r.rfcsVencidos > 0 ? "text-cos-red-ink" : undefined} />
+              {r.vencidoMonto > 0 ? (
+                <Money value={r.vencidoMonto} size={22} weight={700} className={r.rfcsVencidos > 0 ? "text-cos-red-ink" : undefined} />
+              ) : (
+                <span className="text-[22px] font-bold tabular-nums">{r.rfcsVencidos}</span>
+              )}
             </p>
             <p className="mt-0.5 text-[12px] text-cos-ink-soft">
               {r.rfcsVencidos === 0
                 ? "sin declaraciones vencidas"
-                : `${r.rfcsVencidos} RFC con recargos corriendo${r.vencidoSinImporte > 0 ? ` · ${r.vencidoSinImporte} sin importe` : ""}`}
+                : r.vencidoMonto > 0
+                  ? `${r.rfcsVencidos} RFC con recargos corriendo${r.vencidoSinImporte > 0 ? ` · ${r.vencidoSinImporte} sin importe` : ""}`
+                  : `RFC con recargos corriendo — importes por calcular`}
             </p>
           </div>
           <div className="rounded-card border border-cos-line bg-cos-card px-4 py-3">
