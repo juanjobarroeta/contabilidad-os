@@ -16,7 +16,7 @@
 // deep-links viejos `?tab=`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { ReactNode } from "react";
+import { ReactNode, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PeriodProvider, PeriodSelector } from "@/components/contabilidad/PeriodProvider";
@@ -44,6 +44,10 @@ const TAREAS = [
 export default function FlujoLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { activeCompany } = useCompany();
+  // Hooks ANTES del return temprano (React #310 — mismo patrón que tiró
+  // /contabilidad/polizas al error boundary).
+  const menuReportes = useRef<HTMLDetailsElement>(null);
+  const cerrarMenu = () => menuReportes.current?.removeAttribute("open");
 
   if (!activeCompany) {
     return (
@@ -67,7 +71,11 @@ export default function FlujoLayout({ children }: { children: ReactNode }) {
         </div>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 print:hidden">
           <nav aria-label="Reportes y tareas" className="flex flex-wrap items-center gap-1">
-            <details className="relative" open={enReporte ? true : undefined}>
+            {/* `enReporte` sólo PINTA el summary; forzar `open` desplegaba el
+                panel sobre el contenido en cada página de reporte (revisión de
+                pantallas). El menú se cierra al elegir: el layout persiste
+                entre navegaciones client-side y <details> retiene su estado. */}
+            <details ref={menuReportes} className="relative">
               <summary
                 className={cn(
                   "inline-flex cursor-pointer list-none items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium [&::-webkit-details-marker]:hidden",
@@ -83,6 +91,7 @@ export default function FlujoLayout({ children }: { children: ReactNode }) {
                   <Link
                     key={href}
                     href={href}
+                    onClick={cerrarMenu}
                     className={cn(
                       "block rounded-md px-3 py-1.5 text-[13px]",
                       pathname.startsWith(href)
@@ -98,6 +107,7 @@ export default function FlujoLayout({ children }: { children: ReactNode }) {
                   <Link
                     key={href}
                     href={href}
+                    onClick={cerrarMenu}
                     className="block rounded-md px-3 py-1.5 text-[13px] text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
                   >
                     {label}
