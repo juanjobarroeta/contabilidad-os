@@ -200,7 +200,9 @@ export function PilotoDelCierre() {
     {
       num: 3,
       titulo: "Nómina",
-      sub: "La quincena, al corriente",
+      // El subtítulo no puede presumir «al corriente» con recibos sin timbrar
+      // en amarillo dos renglones abajo (lo cachó la revisión de pantallas).
+      sub: sinTimbrar > 0 ? "Hay recibos por timbrar" : "La quincena, al corriente",
       estado: nominaEstado,
       cuerpo: nomina ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
