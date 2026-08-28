@@ -10,9 +10,14 @@ import { enforceConstruccionRol } from "./rol";
 const req = (method: string, path: string) =>
   new Request(`https://x.test${path}`, { method });
 
-const allowed = (rol: "TESORERIA" | "RESIDENTE" | "CONTABILIDAD", method: string, path: string) => {
+const allowed = (
+  rol: "TESORERIA" | "RESIDENTE" | "CONTABILIDAD",
+  method: string,
+  path: string,
+  paginas: string[] = []
+) => {
   try {
-    enforceConstruccionRol(rol, req(method, path));
+    enforceConstruccionRol(rol, req(method, path), paginas);
     return true;
   } catch {
     return false;
@@ -89,6 +94,33 @@ describe("enforceConstruccionRol", () => {
       expect(allowed(rol, "POST", "/api/construccion/push")).toBe(true);
       expect(allowed(rol, "DELETE", "/api/construccion/push")).toBe(true);
     }
+  });
+
+  it("grants de la matriz: una página extra amplía con su bundle", () => {
+    // Residente con Compras marcada: puede autorizar/cotizar (el bundle)
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/solicitudes-compra/abc/aprobar", ["compras"])).toBe(true);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/solicitudes-compra/abc/cotizaciones", ["compras"])).toBe(true);
+    // Sin la marca, sigue bloqueado
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/solicitudes-compra/abc/aprobar")).toBe(false);
+    // Tesorería con Facturas marcada: lee CFDIs y vincula
+    expect(allowed("TESORERIA", "GET", "/api/construccion/cfdis", ["facturas"])).toBe(true);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/cfdis/abc/vincular", ["facturas"])).toBe(true);
+    // Contabilidad con Bancos marcada: concilia
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/bank-transactions/abc/conciliar", ["bancos"])).toBe(true);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/bank-transactions/abc/conciliar")).toBe(false);
+  });
+
+  it("grants: una página DENTRO del alcance del rol no amplía facultades", () => {
+    // Caja chica es natural del residente: abre y edita SUS cajas (el candado
+    // de dueño vive en la ruta), pero cerrarlas (reembolsar) sigue fuera
+    // aunque la marque en la matriz — el bundle no aplica dentro del alcance.
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/reembolsos")).toBe(true);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/reembolsos/abc/gastos")).toBe(true);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/reembolsos/abc/reembolsar", ["caja"])).toBe(false);
+    // Y gastos (también natural): las decisiones siguen fuera
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/gastos/abc/aprobar", ["gastos", "caja"])).toBe(false);
+    // usuarios nunca es grantable por bundle
+    expect(allowed("RESIDENTE", "GET", "/api/construccion/usuarios", ["usuarios"])).toBe(false);
   });
 
   it("fuera de /api/construccion no restringe (p. ej. cambiar contraseña)", () => {

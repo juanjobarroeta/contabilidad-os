@@ -66,7 +66,23 @@ export const GET = withAuthz(async (req: Request) => {
     orderBy: { semanaInicio: "desc" },
     take: 200,
   });
-  return NextResponse.json(rows);
+
+  // Nombre del dueño de cada caja (creadaPorId no tiene FK): un lookup por
+  // lote y se adjunta como creadaPorNombre.
+  const ownerIds = [...new Set(rows.map((r) => r.creadaPorId).filter(Boolean))] as string[];
+  const owners = ownerIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: ownerIds } },
+        select: { id: true, name: true, email: true },
+      })
+    : [];
+  const nombrePor = new Map(owners.map((u) => [u.id, u.name || u.email]));
+  return NextResponse.json(
+    rows.map((r) => ({
+      ...r,
+      creadaPorNombre: r.creadaPorId ? nombrePor.get(r.creadaPorId) ?? null : null,
+    }))
+  );
 });
 
 export const POST = withAuthz(async (req: Request) => {
@@ -80,7 +96,7 @@ export const POST = withAuthz(async (req: Request) => {
     select: { companyId: true },
   });
   if (!proyecto) throw new AuthzError(404, "Proyecto no encontrado");
-  await requireWriter(proyecto.companyId, req);
+  const { user } = await requireWriter(proyecto.companyId, req);
   await requireModule(proyecto.companyId, "CONSTRUCCION");
 
   let bankAccountId = parsed.data.bankAccountId ?? null;
@@ -123,6 +139,9 @@ export const POST = withAuthz(async (req: Request) => {
         semanaFin: new Date(parsed.data.semanaFin),
         anticipoAplicado: parsed.data.anticipoAplicado ?? 0,
         notas: parsed.data.notas ?? null,
+        // Dueño de la caja: quien la abre. Sólo él (y los admins) la editan
+        // y le suben gastos — permite varias cajas por proyecto y usuario.
+        creadaPorId: user.id,
       },
     });
     return NextResponse.json(created, { status: 201 });

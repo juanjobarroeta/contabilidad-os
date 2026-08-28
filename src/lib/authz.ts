@@ -291,7 +291,11 @@ export async function requireMembership(
   // Sólo aplica a miembros directos; el acceso vía despacho no se restringe.
   if (req && direct?.construccionRol) {
     const { enforceConstruccionRol } = await import("./construccion/rol");
-    enforceConstruccionRol(direct.construccionRol, req);
+    enforceConstruccionRol(
+      direct.construccionRol,
+      req,
+      direct.construccionPaginas ?? []
+    );
   }
 
   // Return the direct row if it exists (some callers read its id for audit);

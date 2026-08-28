@@ -3505,6 +3505,12 @@ model ReembolsoSemanal {
   reembolsadoAt     DateTime?
   reembolsadoPor    String?
 
+  // Dueño de la caja (User id, sin FK — patrón aprobadaPorId): quien la
+  // abrió es el único (además de los admins) que puede editarla y subirle
+  // gastos. Permite varias cajas por proyecto y por usuario. null = filas
+  // históricas: sólo admins escriben.
+  creadaPorId String?
+
   notas String?
 
   company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)

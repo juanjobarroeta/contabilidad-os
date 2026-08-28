@@ -42,6 +42,11 @@ const createSchema = z.object({
   beneficiarioNombre: z.string().min(1).max(200),
   descripcion: z.string().min(1).max(500),
   importe: z.number().positive(),
+  // Cantidad física + unidad (opcional) — llega del autocompletado de
+  // catálogo: con insumo elegido, unidad se rellena sola y el PU real
+  // (importe/cantidad) se puede comparar contra el de catálogo.
+  cantidad: z.number().positive().nullable().optional(),
+  unidad: z.string().max(20).nullable().optional(),
   presupuestoPartidaId: z.string().min(1).nullable().optional(),
   insumoId: z.string().min(1).nullable().optional(),
   comprobanteUrl: z.string().max(1000).nullable().optional(),
@@ -193,6 +198,8 @@ export const POST = withAuthz(async (req: Request) => {
       beneficiarioNombre: parsed.data.beneficiarioNombre,
       descripcion: parsed.data.descripcion,
       importe: parsed.data.importe,
+      cantidad: parsed.data.cantidad ?? null,
+      unidad: parsed.data.unidad ?? null,
       presupuestoPartidaId: parsed.data.presupuestoPartidaId ?? null,
       insumoId: parsed.data.insumoId ?? null,
       comprobanteUrl: parsed.data.comprobanteUrl ?? null,
