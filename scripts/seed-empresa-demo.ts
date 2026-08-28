@@ -24,6 +24,7 @@
  * recrea desde cero. Jamás toca ninguna otra empresa.
  */
 
+import { createHash } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { seedChartOfAccounts } from "../src/lib/contabilidad/seed-catalog";
 import { postMonth } from "../src/lib/contabilidad/posting";
@@ -64,6 +65,13 @@ const entre = (a: number, b: number) => Math.round((a + rnd() * (b - a)) * 100) 
 const de = <T,>(arr: readonly T[]) => arr[Math.floor(rnd() * arr.length)];
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
+
+// UUID determinista con forma RFC-4122 (el XSD del Anexo 24 exige el patrón
+// hex 8-4-4-4-12; un tag legible como "demo-…" invalida Pólizas y Auxiliares).
+const uuidDemo = (tag: string): string => {
+  const h = createHash("md5").update(tag).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+};
 const CLABE_X = "012180004455667788"; // BBVA operativa
 const CLABE_Y = "014180009988776655"; // Santander nómina
 
@@ -199,7 +207,7 @@ async function main() {
         data: {
           companyId: cid, customerId: cliente.id,
           tipo: "INGRESO", status: "STAMPED", tipoSat: "I",
-          uuid: `${uuidBase}-ing-${i}`, serie: "A", folio: String(folio++),
+          uuid: uuidDemo(`${uuidBase}-ing-${i}`), serie: "A", folio: String(folio++),
           fecha: fecha(per.y, per.m, dia),
           formaPago: ppd ? "99" : "03", metodoPago: ppd ? "PPD" : "PUE", usoCfdi: "G03",
           subtotal, total, totalImpuestos: iva,
@@ -243,7 +251,7 @@ async function main() {
         data: {
           companyId: cid,
           tipo: "EGRESO", status: "STAMPED", tipoSat: "I",
-          uuid: `${uuidBase}-egr-${i}`,
+          uuid: uuidDemo(`${uuidBase}-egr-${i}`),
           fecha: fecha(per.y, per.m, dia),
           formaPago: "03", metodoPago: "PUE", usoCfdi: "G03",
           subtotal, total, totalImpuestos: iva,
