@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import {
   Building2, Users2, BadgeCheck, Clock4, AlertTriangle, FileWarning,
   ChevronRight as ChevronR, CalendarDays, Database, ScanSearch, ShieldAlert,
-  Check, CircleAlert, Landmark, BookCheck, Sparkles,
+  Check, CircleAlert, Landmark, BookCheck,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Loading, Money } from "@/components/ui";
@@ -113,12 +113,6 @@ function DiligenciaChips({ r }: { r: Row }) {
         label={r.libroMesPosteado ? "Libro posteado" : "Libro preliminar"}
         title="Estado de la póliza contable del periodo a declarar"
       />
-      <DiligChip
-        ok={r.hallazgosAbiertos === 0}
-        icon={ShieldAlert}
-        label={r.hallazgosAbiertos === 0 ? "Sin hallazgos" : `${r.hallazgosAbiertos} hallazgo${r.hallazgosAbiertos === 1 ? "" : "s"}`}
-        title="Hallazgos abiertos del auditor"
-      />
     </div>
   );
 }
@@ -174,15 +168,23 @@ export default function DespachoCockpitPage() {
       {/* Briefing "Hoy" — el resumen de la revisión nocturna del auditor. */}
       <div className="rounded-card border border-cos-line bg-cos-card p-5 shadow-card">
         <p className="text-[12.5px] font-medium text-cos-ink-faint">
-          {saludo} · <span className="capitalize">{fechaLarga}</span>
+          {saludo} · {fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1)}
         </p>
         <h1 className="mt-1 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-cos-ink">
           {!data ? (
             "Despacho"
           ) : atencion > 0 ? (
-            <>Revisé tus <span className="font-mono">{total}</span> empresas anoche — <span className="text-cos-amber-ink">{atencion} {atencion === 1 ? "necesita" : "necesitan"} tu atención</span> hoy.</>
+            total === 1 ? (
+              <>Tu empresa <span className="text-cos-amber-ink">necesita tu atención</span> hoy.</>
+            ) : (
+              <><span className="font-mono">{atencion}</span> de tus <span className="font-mono">{total}</span> empresas <span className="text-cos-amber-ink">{atencion === 1 ? "necesita" : "necesitan"} tu atención</span> hoy.</>
+            )
           ) : total > 0 ? (
-            <>Revisé tus <span className="font-mono">{total}</span> empresas anoche — <span className="text-cos-jade-ink">toda tu cartera al día</span>.</>
+            total === 1 ? (
+              <>Tu empresa está <span className="text-cos-jade-ink">al día</span>.</>
+            ) : (
+              <>Tus <span className="font-mono">{total}</span> empresas están <span className="text-cos-jade-ink">al día</span>.</>
+            )
           ) : (
             "Despacho"
           )}
@@ -192,7 +194,7 @@ export default function DespachoCockpitPage() {
             {conErrores > 0 && <span className="rounded-full bg-cos-red-tint px-2.5 py-1 font-medium text-cos-red-ink">{conErrores} con algo crítico</span>}
             {conVencidas > 0 && <span className="rounded-full bg-cos-red-tint px-2.5 py-1 font-medium text-cos-red-ink">{conVencidas} con obligaciones vencidas</span>}
             {conHallazgos > 0 && <span className="rounded-full bg-cos-amber-tint px-2.5 py-1 font-medium text-cos-amber-ink">{conHallazgos} con hallazgos por revisar</span>}
-            <span className="rounded-full bg-cos-jade-tint px-2.5 py-1 font-medium text-cos-jade-ink">{alDia} al día</span>
+            {alDia > 0 && <span className="rounded-full bg-cos-jade-tint px-2.5 py-1 font-medium text-cos-jade-ink">{alDia} al día</span>}
             <span className="ml-auto text-cos-ink-soft">
               Periodo <b>{data.periodo}</b> · vence {formatDate(data.vencimiento)} · a pagar{" "}
               <b className="font-mono"><Money value={data.resumen.totalAPagar} /></b>
@@ -236,7 +238,7 @@ export default function DespachoCockpitPage() {
         <Link href="/cumplimiento" className="mt-4 flex items-center gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink hover:opacity-90">
           <Database className="h-4 w-4 flex-none" />
           <span className="flex-1">
-            Datos fiscales: {data.cobertura.faltantes > 0 && <b>{data.cobertura.faltantes} faltante(s)</b>}
+            Datos fiscales: {data.cobertura.faltantes > 0 && <b>{data.cobertura.faltantes} {data.cobertura.faltantes === 1 ? "faltante" : "faltantes"}</b>}
             {data.cobertura.faltantes > 0 && data.cobertura.sinCotejar > 0 && " · "}
             {data.cobertura.sinCotejar > 0 && <b>{data.cobertura.sinCotejar} sin cotejar</b>} — afecta todos los RFC.
           </span>
@@ -249,19 +251,13 @@ export default function DespachoCockpitPage() {
         <Link href="/impuestos?tab=historial" className="mt-3 flex items-center gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink hover:opacity-90">
           <FileWarning className="h-4 w-4 flex-none" />
           <span className="flex-1">
-            Faltan <b>{declFaltan.total} acuse(s)</b> en <b>{declFaltan.empresas} empresa(s)</b> — súbelos para calcular saldos a favor, coeficiente y pagos provisionales.
+            {declFaltan.total === 1 ? "Falta" : "Faltan"} <b>{declFaltan.total} {declFaltan.total === 1 ? "acuse" : "acuses"}</b> en <b>{declFaltan.empresas} {declFaltan.empresas === 1 ? "empresa" : "empresas"}</b> — súbelos para calcular saldos a favor, coeficiente y pagos provisionales.
           </span>
           <ChevronR className="h-4 w-4 flex-none" />
         </Link>
       )}
 
-      {/* Diligencia: refuerza que el mantenimiento corre solo, por empresa. */}
-      <div className="mt-5 flex items-center gap-2 text-[12.5px] text-cos-ink-soft">
-        <Sparkles className="h-3.5 w-3.5 flex-none text-cos-brand-ink" />
-        <span>Tu contador AI mantiene esto al día: CFDIs sincronizados, banco conciliado y libros posteados — revisa la diligencia de cada empresa abajo.</span>
-      </div>
-
-      <div className="mt-2 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
+      <div className="mt-5 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
         {/* Scroll horizontal en móvil: 5 columnas no caben en ~360px y el
             overflow-hidden del contenedor recortaba la columna Nómina. */}
         <div className="overflow-x-auto">
