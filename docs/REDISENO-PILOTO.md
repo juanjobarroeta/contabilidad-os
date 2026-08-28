@@ -43,11 +43,18 @@ distingue importe calculado / por calcular / informativa. El ranking de la
 cola es puro y testeado (armarCola). PendientesDelCierre queda sin consumo
 (el Piloto lo reemplaza) — borrar en limpieza futura.
 
-## Fase 3 — Empresa demo
+## Fase 3 — Empresa demo: HECHA (2026-08-28)
 
-Seed de una empresa ficticia realista (CFDIs, banco a medio conciliar,
-quincena en vuelo, declaración armada) para que B luzca vivo en un demo sin
-exponer el RFC de un cliente real. (Detalle en el plan GTM.)
+`scripts/seed-empresa-demo.ts --user <email> [--reset]`: crea/regenera
+COMERCIALIZADORA ALTIPLANO SA DE CV (RFC ficticio fijo `CAL150612DM4`) con
+tres meses de vida — 68 CFDIs, 87 movimientos (15 sin clasificar para la
+mesa), quincena CALCULADA sin timbrar, declaración del mes anterior
+CALCULADA, 4 hallazgos en el rail — y POSTEA los meses cerrados con el
+motor real (371 asientos, subcuentas por banco, traspaso cruzado,
+enteramiento, IVA al flujo). Determinista (LCG con semilla fija): el mismo
+demo cada vez. Nada se finge en la UI: datos ficticios, maquinaria real.
+Idempotente con --reset; jamás toca otra empresa. Guion del demo: ambos
+lentes del Inicio muestran exactamente las historias de los mockups.
 
 ## Explícitamente pospuesto
 
