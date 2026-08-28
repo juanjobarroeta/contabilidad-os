@@ -1,5 +1,52 @@
 import { describe, it, expect } from "vitest";
-import { auditarDuplicados, type GrupoDuplicado } from "./duplicados";
+import {
+  agruparPosiblesDuplicados,
+  auditarDuplicados,
+  type CfdiParaDuplicados,
+  type GrupoDuplicado,
+} from "./duplicados";
+
+describe("agruparPosiblesDuplicados — la señal exige contraparte identificada", () => {
+  const base = (over: Partial<CfdiParaDuplicados>): CfdiParaDuplicados => ({
+    id: Math.random().toString(36).slice(2),
+    tipo: "EGRESO",
+    total: 1160,
+    fecha: "2026-07-15",
+    rfc: "PCE070211AA9",
+    nombre: "PAPELERA CENTRAL",
+    ...over,
+  });
+
+  it("misma contraparte, mismo importe y día → grupo", () => {
+    const g = agruparPosiblesDuplicados([base({ id: "a" }), base({ id: "b" })]);
+    expect(g).toHaveLength(1);
+    expect(g[0].ids).toEqual(["a", "b"]);
+  });
+
+  it("sin RFC no agrupa: proveedores distintos con el mismo importe NO son duplicados", () => {
+    const g = agruparPosiblesDuplicados([
+      base({ id: "a", rfc: null, nombre: null }),
+      base({ id: "b", rfc: null, nombre: null }),
+    ]);
+    expect(g).toHaveLength(0);
+  });
+
+  it("público en general (XAXX010101000) no agrupa: tickets idénticos son la operación normal", () => {
+    const tickets = Array.from({ length: 30 }, (_, i) =>
+      base({ id: `t${i}`, tipo: "INGRESO", rfc: "XAXX010101000", total: 35 }),
+    );
+    expect(agruparPosiblesDuplicados(tickets)).toHaveLength(0);
+  });
+
+  it("distinta fecha o importe no agrupa", () => {
+    const g = agruparPosiblesDuplicados([
+      base({ id: "a" }),
+      base({ id: "b", fecha: "2026-07-16" }),
+      base({ id: "c", total: 1161 }),
+    ]);
+    expect(g).toHaveLength(0);
+  });
+});
 
 describe("auditarDuplicados", () => {
   it("un grupo: mensaje específico, referenciando todos los CFDIs", () => {
