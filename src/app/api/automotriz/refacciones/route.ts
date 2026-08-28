@@ -40,7 +40,10 @@ const TAB_WHERE: Record<Tab, string> = {
 const TAB_ORDER: Record<Tab, string> = {
   ALMACEN: "descripcion ASC",
   PROCESO: "comprometida * COALESCE(costo, 0) DESC, comprometida DESC",
-  PEDIR: "demanda12m DESC",
+  // Legítimas primero (tienen historia de compra), las de venta más reciente
+  // arriba (demanda VIVA); las sin-compra-jamás al final — su «por pedir» es
+  // en realidad «identifícame» (alias/kit/pre-archivo), no una llamada a planta.
+  PEDIR: "(CASE WHEN compras > 0 THEN 0 ELSE 1 END), ult_venta DESC NULLS LAST, demanda12m DESC",
   MUERTAS: "COALESCE(valor, 0) DESC",
   TODAS: "descripcion ASC",
 };
@@ -85,6 +88,8 @@ export const GET = withAuthz(async (req: Request) => {
         COALESCE(SUM(CASE WHEN m.tipo = 'ENTRADA_COMPRA' AND s.factor IS NOT NULL
                           THEN m.cantidad * s.factor ELSE m.cantidad END), 0)::float8 AS existencia,
         COUNT(*)::int AS movs,
+        COUNT(*) FILTER (WHERE m.tipo = 'ENTRADA_COMPRA')::int AS compras,
+        MAX(m.fecha) FILTER (WHERE m.tipo = 'SALIDA_VENTA') AS ult_venta,
         MAX(m.fecha) AS ultimo_mov,
         COALESCE(SUM(CASE WHEN m.tipo = 'SALIDA_VENTA' AND m.fecha >= NOW() - interval '12 months'
                           THEN -m.cantidad ELSE 0 END), 0)::float8 AS demanda12m
@@ -107,6 +112,8 @@ export const GET = withAuthz(async (req: Request) => {
         (s.factor IS NOT NULL OR s.costo_ok) AS costo_ok,
         COALESCE(mov.existencia, 0) AS existencia,
         COALESCE(mov.movs, 0) AS movs,
+        COALESCE(mov.compras, 0) AS compras,
+        mov.ult_venta,
         mov.ultimo_mov,
         COALESCE(mov.demanda12m, 0) AS demanda12m,
         COALESCE(comp.comprometida, 0) AS comprometida,
@@ -120,6 +127,23 @@ export const GET = withAuthz(async (req: Request) => {
       LEFT JOIN mov ON mov.rid = s.id
       LEFT JOIN comp ON comp.rid = s.id
     )`;
+
+  // El ancla contable del KPI: lo que el contador DECLARA en el almacén
+  // (cuenta 13xx con nombre ALM…), para que el valor kardex —que sobreestima
+  // donde la venta no se desglosó— nunca se lea solo.
+  const almacenDeclarado = (async () => {
+    const cta = await prisma.chartAccount.findFirst({
+      where: { companyId, cuentaSAT: { startsWith: "13" }, nombre: { contains: "ALM", mode: "insensitive" } },
+      select: { cuentaSAT: true },
+    });
+    if (!cta) return null;
+    const fila = await prisma.ceBalanzaMes.findFirst({
+      where: { companyId, numCta: cta.cuentaSAT, esPadre: false },
+      orderBy: [{ anio: "desc" }, { mes: "desc" }],
+      select: { saldoFin: true, anio: true, mes: true },
+    });
+    return fila ? { saldo: r2(Number(fila.saldoFin)), anio: fila.anio, mes: fila.mes } : null;
+  })();
 
   const [filas, conteos] = await Promise.all([
     prisma.$queryRawUnsafe<any[]>(
@@ -159,6 +183,7 @@ export const GET = withAuthz(async (req: Request) => {
     },
     valores: {
       almacen: r2(c.valor_almacen) ?? 0,
+      almacenDeclarado: await almacenDeclarado,
       proceso: r2(c.valor_proceso) ?? 0,
       muertas: r2(c.valor_muertas) ?? 0,
     },
@@ -172,6 +197,8 @@ export const GET = withAuthz(async (req: Request) => {
       comprometida: r2(f.comprometida) ?? 0,
       disponible: r2(f.disponible) ?? 0,
       demanda12m: r2(f.demanda12m) ?? 0,
+      compras: f.compras,
+      ultVenta: f.ult_venta,
       ultimoMov: f.ultimo_mov,
       movimientos: f.movs,
       valorInventario: r2(f.valor),
