@@ -25,9 +25,19 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 
 // La condición de costo COMPARABLE, en SQL (fijada por absorcion-comparable.test).
 const COSTO_COMPARABLE = `
-  r."ultimoCosto" > 0
-  AND (r."unidadCosto" IS NULL OR r."unidadPrecio" IS NULL OR r."unidadCosto" = r."unidadPrecio")
-  AND NOT (COALESCE(r."ultimoPrecio", 0) > 0 AND r."ultimoCosto" > COALESCE(r."ultimoPrecio", 0) * 2)`;
+  r."ultimoCosto" > 0 AND (
+    COALESCE(r."factorCosto", 0) > 0
+    OR (
+      (r."unidadCosto" IS NULL OR r."unidadPrecio" IS NULL OR r."unidadCosto" = r."unidadPrecio")
+      AND NOT (COALESCE(r."ultimoPrecio", 0) > 0 AND r."ultimoCosto" > COALESCE(r."ultimoPrecio", 0) * 2)
+    )
+  )`;
+
+// Costo por UNIDAD DE VENTA: con factor guardado, el costo del envase se
+// divide (tambo ÷ 208 = litro) — misma doctrina que unidad-refaccion.ts.
+const COSTO_VENTA = `
+  CASE WHEN COALESCE(r."factorCosto", 0) > 0 THEN r."ultimoCosto" / r."factorCosto"
+       ELSE r."ultimoCosto" END`;
 
 export const GET = withAuthz(async (req: Request) => {
   const { searchParams } = new URL(req.url);
@@ -49,7 +59,7 @@ export const GET = withAuthz(async (req: Request) => {
        c."razonSocial" AS cliente,
        COALESCE(o."descripcionUnidad", NULLIF(TRIM(CONCAT(v.marca, ' ', v.modelo, ' ', v.anio)), '')) AS unidad,
        COUNT(l.id)::int AS lineas,
-       COALESCE(SUM(CASE WHEN ${COSTO_COMPARABLE} THEN l.cantidad * r."ultimoCosto" ELSE 0 END), 0)::float8 AS costo,
+       COALESCE(SUM(CASE WHEN ${COSTO_COMPARABLE} THEN l.cantidad * (${COSTO_VENTA}) ELSE 0 END), 0)::float8 AS costo,
        COALESCE(SUM(l.cantidad * l."precioUnitario"), 0)::float8 AS venta,
        COUNT(l.id) FILTER (WHERE r.id IS NULL OR NOT (${COSTO_COMPARABLE}))::int AS sin_costo
      FROM "OrdenServicio" o

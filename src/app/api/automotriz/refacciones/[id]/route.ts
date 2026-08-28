@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule, withAuthz } from "@/lib/authz";
+import { costoEnUnidadDeVenta } from "@/lib/automotriz/unidad-refaccion";
 
 /**
  * GET /api/automotriz/refacciones/[id] — la FICHA de la parte: kardex con su
@@ -45,7 +46,13 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   await requireModule(refaccion.companyId, "AUTOMOTRIZ", req);
 
   const [existencia, demandaMensual, enOrdenes] = await Promise.all([
-    prisma.refaccionMovimiento.aggregate({ where: { refaccionId: id }, _sum: { cantidad: true } }),
+    prisma.$queryRawUnsafe<{ existencia: number }[]>(
+      `SELECT COALESCE(SUM(CASE WHEN tipo = 'ENTRADA_COMPRA' AND $2::float8 IS NOT NULL
+                                THEN cantidad * $2::float8 ELSE cantidad END), 0)::float8 AS existencia
+       FROM "RefaccionMovimiento" WHERE "refaccionId" = $1`,
+      id,
+      Number(refaccion.factorCosto) > 0 ? Number(refaccion.factorCosto) : null
+    ),
     prisma.$queryRawUnsafe<{ mes: Date; salidas: number }[]>(
       `SELECT date_trunc('month', fecha) AS mes, COALESCE(SUM(-cantidad), 0)::float8 AS salidas
        FROM "RefaccionMovimiento"
@@ -64,14 +71,18 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
     ),
   ]);
 
-  const costo = Number(refaccion.ultimoCosto);
   const precio = refaccion.ultimoPrecio == null ? null : Number(refaccion.ultimoPrecio);
-  const costoComparable =
-    costo > 0 &&
-    (refaccion.unidadCosto == null || refaccion.unidadPrecio == null || refaccion.unidadCosto === refaccion.unidadPrecio) &&
-    !((precio ?? 0) > 0 && costo > (precio ?? 0) * 2);
+  // El costo EN UNIDAD DE VENTA (el helper del factor: tambo ÷ 208 = litro).
+  const costoVenta = costoEnUnidadDeVenta({
+    ultimoCosto: Number(refaccion.ultimoCosto),
+    ultimoPrecio: precio,
+    unidadCosto: refaccion.unidadCosto,
+    unidadPrecio: refaccion.unidadPrecio,
+    factorCosto: refaccion.factorCosto == null ? null : Number(refaccion.factorCosto),
+  });
+  const costoComparable = costoVenta != null;
 
-  const exist = r2(Number(existencia._sum.cantidad ?? 0)) ?? 0;
+  const exist = r2(Number(existencia[0]?.existencia ?? 0)) ?? 0;
   const comprometida = r2(enOrdenes.reduce((a, o) => a + o.cantidad, 0)) ?? 0;
 
   return NextResponse.json({
@@ -81,7 +92,9 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
     disponible: r2(exist - comprometida),
     costoComparable,
     margenPct:
-      costoComparable && (precio ?? 0) > 0 ? Math.round(((precio! - costo) / precio!) * 1000) / 10 : null,
+      costoVenta != null && (precio ?? 0) > 0
+        ? Math.round(((precio! - costoVenta) / precio!) * 1000) / 10
+        : null,
     demandaMensual: demandaMensual.map((d) => ({ mes: d.mes, salidas: r2(d.salidas) ?? 0 })),
     enOrdenes: enOrdenes.map((o) => ({ ...o, cantidad: r2(o.cantidad) ?? 0 })),
     aplicaciones: parsearAplicaciones(refaccion.descripcion),

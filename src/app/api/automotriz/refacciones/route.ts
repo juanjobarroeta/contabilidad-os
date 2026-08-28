@@ -69,6 +69,7 @@ export const GET = withAuthz(async (req: Request) => {
     WITH sel AS (
       SELECT r.id, r."numeroParte", r.descripcion,
         r."ultimoCosto"::float8 AS costo_raw, r."ultimoPrecio"::float8 AS precio,
+        NULLIF(r."factorCosto", 0)::float8 AS factor,
         (r."ultimoCosto" > 0
           AND (r."unidadCosto" IS NULL OR r."unidadPrecio" IS NULL OR r."unidadCosto" = r."unidadPrecio")
           AND NOT (COALESCE(r."ultimoPrecio", 0) > 0 AND r."ultimoCosto" > COALESCE(r."ultimoPrecio", 0) * 2)
@@ -77,14 +78,18 @@ export const GET = withAuthz(async (req: Request) => {
       WHERE r."companyId" = $1 ${filtroQ}
     ),
     mov AS (
+      -- La existencia se normaliza a la UNIDAD DE VENTA: una ENTRADA con
+      -- factor (tambo de 208 L) vale cantidad × factor; salidas y ajustes ya
+      -- viven en la unidad de venta (misma doctrina que unidad-refaccion.ts).
       SELECT m."refaccionId" AS rid,
-        COALESCE(SUM(m.cantidad), 0)::float8 AS existencia,
+        COALESCE(SUM(CASE WHEN m.tipo = 'ENTRADA_COMPRA' AND s.factor IS NOT NULL
+                          THEN m.cantidad * s.factor ELSE m.cantidad END), 0)::float8 AS existencia,
         COUNT(*)::int AS movs,
         MAX(m.fecha) AS ultimo_mov,
         COALESCE(SUM(CASE WHEN m.tipo = 'SALIDA_VENTA' AND m.fecha >= NOW() - interval '12 months'
                           THEN -m.cantidad ELSE 0 END), 0)::float8 AS demanda12m
       FROM "RefaccionMovimiento" m
-      WHERE m."refaccionId" IN (SELECT id FROM sel)
+      JOIN sel s ON s.id = m."refaccionId"
       GROUP BY 1
     ),
     comp AS (
@@ -97,16 +102,20 @@ export const GET = withAuthz(async (req: Request) => {
     ),
     base AS (
       SELECT s.id, s."numeroParte", s.descripcion, s.precio,
-        CASE WHEN s.costo_ok THEN s.costo_raw END AS costo,
-        s.costo_ok,
+        CASE WHEN s.factor IS NOT NULL THEN s.costo_raw / s.factor
+             WHEN s.costo_ok THEN s.costo_raw END AS costo,
+        (s.factor IS NOT NULL OR s.costo_ok) AS costo_ok,
         COALESCE(mov.existencia, 0) AS existencia,
         COALESCE(mov.movs, 0) AS movs,
         mov.ultimo_mov,
         COALESCE(mov.demanda12m, 0) AS demanda12m,
         COALESCE(comp.comprometida, 0) AS comprometida,
         COALESCE(mov.existencia, 0) - COALESCE(comp.comprometida, 0) AS disponible,
-        CASE WHEN s.costo_ok AND COALESCE(mov.existencia, 0) > 0
-             THEN COALESCE(mov.existencia, 0) * s.costo_raw END AS valor
+        CASE WHEN COALESCE(mov.existencia, 0) > 0 THEN
+          COALESCE(mov.existencia, 0) *
+          CASE WHEN s.factor IS NOT NULL THEN s.costo_raw / s.factor
+               WHEN s.costo_ok THEN s.costo_raw END
+        END AS valor
       FROM sel s
       LEFT JOIN mov ON mov.rid = s.id
       LEFT JOIN comp ON comp.rid = s.id
@@ -167,7 +176,7 @@ export const GET = withAuthz(async (req: Request) => {
       movimientos: f.movs,
       valorInventario: r2(f.valor),
       margenPct:
-        f.costo_ok && (f.precio ?? 0) > 0
+        f.costo != null && (f.precio ?? 0) > 0
           ? Math.round(((f.precio - f.costo) / f.precio) * 1000) / 10
           : null,
     })),
