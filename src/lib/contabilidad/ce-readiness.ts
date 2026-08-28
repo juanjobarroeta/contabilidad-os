@@ -135,7 +135,7 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
         estado: "warn",
         titulo: "Sincronización de CFDIs desactualizada",
         detalle:
-          `Hay ${input.cfdiCount} CFDI(s) en el periodo, pero la última sincronización fue hace ` +
+          `Hay ${input.cfdiCount} ${input.cfdiCount === 1 ? "CFDI" : "CFDIs"} en el periodo, pero la última sincronización fue hace ` +
           `${diasSync} días. Vuelve a sincronizar para no omitir facturas recientes.`,
         cta: { label: "Sincronizar CFDIs", href: "/facturas" },
       });
@@ -144,7 +144,7 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
         clave: "cfdis",
         estado: "ok",
         titulo: "CFDIs del periodo sincronizados",
-        detalle: `Hay ${input.cfdiCount} CFDI(s) sincronizados para este mes.`,
+        detalle: `Hay ${input.cfdiCount} ${input.cfdiCount === 1 ? "CFDI sincronizado" : "CFDIs sincronizados"} para este mes.`,
       });
     }
   }
@@ -166,7 +166,7 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
         clave: "banco",
         estado: "ok",
         titulo: "Datos bancarios del periodo presentes",
-        detalle: `Hay ${input.bankTxCount} movimiento(s) bancario(s) registrados en este mes.`,
+        detalle: `Hay ${input.bankTxCount} ${input.bankTxCount === 1 ? "movimiento bancario registrado" : "movimientos bancarios registrados"} en este mes.`,
       });
     }
   } else if (input.bankTxCount === 0) {
@@ -185,7 +185,7 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
       clave: "banco",
       estado: "ok",
       titulo: "Datos bancarios del periodo presentes",
-      detalle: `Hay ${input.bankTxCount} movimiento(s) bancario(s) registrados en este mes.`,
+      detalle: `Hay ${input.bankTxCount} ${input.bankTxCount === 1 ? "movimiento bancario registrado" : "movimientos bancarios registrados"} en este mes.`,
     });
   }
 
@@ -195,9 +195,9 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
       checks.push({
         clave: "sin_clasificar",
         estado: "warn",
-        titulo: `${input.bankUnmatchedCount} movimiento(s) sin clasificar`,
+        titulo: `${input.bankUnmatchedCount} ${input.bankUnmatchedCount === 1 ? "movimiento sin clasificar" : "movimientos sin clasificar"}`,
         detalle:
-          `Quedan ${input.bankUnmatchedCount} movimiento(s) bancario(s) sin conciliar ni ` +
+          `${input.bankUnmatchedCount === 1 ? "Queda un movimiento bancario" : `Quedan ${input.bankUnmatchedCount} movimientos bancarios`} sin conciliar ni ` +
           "categorizar. Mientras no se resuelvan, no entran a la contabilidad y el mes no cierra.",
         cta: { label: "Clasificar en Bancos", href: "/bancos?tab=movimientos" },
       });
@@ -248,7 +248,7 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
       titulo: "Mes preliminar",
       detalle:
         "El mes aún no se ha posteado: la descarga de los XML del SAT (balanza, pólizas y " +
-        "auxiliares) está bloqueada hasta cerrar el periodo desde “Cierres mensuales”.",
+        "auxiliares) está bloqueada hasta postear y cerrar el periodo en “Cierre del mes”.",
       cta: { label: "Cerrar mes", href: "/contabilidad/cierre" },
     });
   }

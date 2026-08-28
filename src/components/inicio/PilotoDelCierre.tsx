@@ -133,7 +133,7 @@ export function PilotoDelCierre() {
       </Alert>
     );
   }
-  if (loading || !dash) return <Loading label="Armando el piloto del mes…" />;
+  if (loading || !dash) return <Loading label="Cargando el mes…" />;
 
   // ── Paso 1 · SAT ──
   const ed = dash.estadoDatos;
