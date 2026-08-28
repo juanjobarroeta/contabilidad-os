@@ -56,7 +56,19 @@ demo cada vez. Nada se finge en la UI: datos ficticios, maquinaria real.
 Idempotente con --reset; jamás toca otra empresa. Guion del demo: ambos
 lentes del Inicio muestran exactamente las historias de los mockups.
 
-## Copiloto v2 — feedback del owner (2026-08-28, PRIORITARIO)
+## Copiloto v2 — HECHO (2026-08-28, mismo día del feedback)
+
+Enviado: agrupación por causa raíz operativa (el destino que resuelve,
+vía ctaParaHallazgo — 4 obligaciones vencidas = UNA carta con contador;
+resico se funde con impuestos porque se arreglan en el mismo lugar), máx 4
+grupos error>warn, `info` colapsado a una línea, **el botón ES la
+sugerencia** (deep link por checkClave), posponer 7 días inline EN LOTE
+(la pila encoge de verdad), y con 2+ empresas un resumen de cartera arriba
+(total + críticos → /despacho, /api/hallazgos/cartera batcheado en 2
+queries). Pendiente de la lista original: agregación en la GENERACIÓN del
+auditor (un hallazgo por empresa-tema) — sigue siendo «considerar».
+
+### El feedback original (para memoria del porqué)
 
 Con datos reales el rail **estresa en vez de ayudar**: 97 hallazgos, cada
 carta es una AFIRMACIÓN sin camino («tu declaración venció») — sin deep
