@@ -850,8 +850,8 @@ export default function NuevaFacturaPage() {
         </div>
       )}
 
-      {/* Step indicator */}
-      <div className="flex items-center gap-2 mb-8">
+      {/* Step indicator — scrollea en móvil (390px cortaba «Resumen»). */}
+      <div className="flex items-center gap-2 mb-8 overflow-x-auto whitespace-nowrap [-webkit-overflow-scrolling:touch]">
         {STEPS.map((s, i) => (
           <div key={s.id} className="flex items-center gap-2">
             <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${

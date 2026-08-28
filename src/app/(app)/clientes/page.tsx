@@ -357,7 +357,9 @@ export default function ClientesPage() {
                       )}
                       <button
                         onClick={(e) => { e.stopPropagation(); openEdit(c); }}
-                        className="rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-paper hover:text-cos-ink"
+                        // En móvil el tap a la fila YA abre editar; el ícono
+                        // sólo empujaba Eliminar fuera del viewport (390px).
+                        className="hidden rounded-control p-1.5 text-cos-ink-faint transition-colors hover:bg-cos-paper hover:text-cos-ink sm:inline-flex"
                         title="Editar"
                       >
                         <Pencil className="h-3.5 w-3.5" />
