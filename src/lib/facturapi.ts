@@ -231,3 +231,57 @@ export async function provisionFacturapiOrg(companyId: string): Promise<Provisio
     };
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sync perezoso de clientes: garantiza que el cliente exista en Facturapi EN
+// EL MOMENTO de timbrar. El sync al crear sólo ocurría si la llave ya estaba
+// configurada y el cliente traía CP: cualquier cliente capturado antes de
+// conectar Facturapi, importado del SAT o sin CP quedaba en «no está
+// sincronizado con Facturapi» — un callejón sin salida sin arreglo en la UI
+// (reporte del owner). Aquí se sincroniza cuando de verdad se necesita y se
+// persiste el id; el error, cuando lo hay, dice QUÉ falta.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function ensureFacturapiCustomer(
+  facturapiApiKey: string,
+  customer: {
+    id: string;
+    facturapiId: string | null;
+    razonSocial: string;
+    rfc: string;
+    regimenFiscal: string;
+    email: string | null;
+    phone: string | null;
+    domicilio: string | null;
+    codigoPostal: string | null;
+  },
+): Promise<{ ok: true; facturapiId: string } | { ok: false; error: string }> {
+  if (customer.facturapiId) return { ok: true, facturapiId: customer.facturapiId };
+  if (!customer.codigoPostal) {
+    return {
+      ok: false,
+      error: `Falta el código postal fiscal de ${customer.razonSocial}. Captúralo en Directorio → editar cliente: el SAT valida RFC + nombre + CP al timbrar.`,
+    };
+  }
+  try {
+    const fp = getFacturapiClient(facturapiApiKey);
+    const fpCustomer = await fp.customers.create({
+      // CFDI 4.0: el nombre se valida contra el padrón SIN régimen societario.
+      legal_name: sinRegimenSocietario(customer.razonSocial),
+      tax_id: customer.rfc.toUpperCase(),
+      tax_system: customer.regimenFiscal,
+      email: customer.email || undefined,
+      phone: customer.phone || undefined,
+      address: { zip: customer.codigoPostal, street: customer.domicilio || undefined },
+    });
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: { facturapiId: fpCustomer.id },
+    });
+    return { ok: true, facturapiId: fpCustomer.id };
+  } catch (e) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const err = e as any;
+    const detalle = err?.response?.data?.message ?? err?.message ?? "error desconocido";
+    return { ok: false, error: `No se pudo registrar el cliente en Facturapi: ${detalle}` };
+  }
+}

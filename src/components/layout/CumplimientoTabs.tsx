@@ -10,6 +10,9 @@ const TABS = [
   { href: "/cumplimiento", label: "Estatus" },
   { href: "/opiniones", label: "Opiniones SAT" },
   { href: "/hallazgos", label: "Hallazgos" },
+  // El Verificador llegaba desde aquí pero perdía las pestañas: callejón sin
+  // salida (reporte del owner). Es parte del hub — consulta cualquier RFC.
+  { href: "/verificador", label: "Verificador" },
 ];
 
 export function CumplimientoTabs() {

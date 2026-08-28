@@ -14,6 +14,7 @@ import {
   Building2, Users, UserRound, Search,
 } from "lucide-react";
 import { Card } from "@/components/ui";
+import { CumplimientoTabs } from "@/components/layout/CumplimientoTabs";
 
 type Tipo = "RFC" | "CURP" | "NSS";
 
@@ -90,6 +91,7 @@ export default function VerificadorPage() {
 
   return (
     <div className="mx-auto max-w-[760px] px-4 py-6 sm:px-8 sm:py-8">
+      <CumplimientoTabs />
       <div className="flex items-center gap-3">
         <ScanSearch className="h-7 w-7 text-cos-brand-ink" />
         <div>
