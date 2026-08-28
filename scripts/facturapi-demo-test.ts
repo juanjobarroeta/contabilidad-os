@@ -63,11 +63,31 @@ async function main() {
   });
   console.log("· Llave TEST guardada (cifrada) en la empresa demo.");
 
+  // Cliente timbrable en sandbox (RFC de prueba oficial del SAT) — los RFC
+  // ficticios de la historia no pasan la validación del padrón ni en test.
+  await prisma.customer.upsert({
+    where: { companyId_rfc: { companyId: company.id, rfc: "EKU9003173C9" } },
+    create: {
+      companyId: company.id,
+      razonSocial: "ESCUELA KEMPER URGATE SA DE CV",
+      rfc: "EKU9003173C9",
+      regimenFiscal: "601",
+      codigoPostal: "26015",
+    },
+    update: { codigoPostal: "26015" },
+  });
+
   const clientes = await prisma.customer.findMany({ where: { companyId: company.id } });
   for (const c of clientes) {
     const r = await ensureFacturapiCustomer(encrypted, c);
-    console.log(`  · ${c.razonSocial}: ${r.ok ? "sincronizado" : r.error}`);
+    const nota = r.ok
+      ? "sincronizado"
+      : c.rfc === "EKU9003173C9"
+        ? r.error
+        : `RFC ficticio — no timbra (esperado): ${r.error.slice(0, 60)}…`;
+    console.log(`  · ${c.razonSocial}: ${nota}`);
   }
+  console.log("  → Para timbrar en la demo usa ESCUELA KEMPER URGATE (EKU9003173C9).");
   console.log("✔ ALTIPLANO en modo test — Timbrar/prefacturas/REP funcionan en sandbox.");
 }
 
