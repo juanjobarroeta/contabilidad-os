@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { CompanyProvider } from "@/components/layout/CompanyProvider";
 import { ChatPanel } from "@/components/ai/ChatPanel";
+import { CopilotoRail } from "@/components/ai/CopilotoRail";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AbrirChatDesdeNotif } from "@/components/ai/AbrirChatDesdeNotif";
 import { TrialBanner } from "@/components/layout/TrialBanner";
@@ -111,6 +112,7 @@ export default async function AppLayout({
           <TrialBanner state={subscription} enforcement={enforcementHabilitado()} />
           <div className="flex-1 overflow-auto">{children}</div>
         </main>
+        <CopilotoRail />
         <CommandPalette esOperador={esOperador} />
         <ChatPanel />
         <AbrirChatDesdeNotif />

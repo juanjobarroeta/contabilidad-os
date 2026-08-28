@@ -21,7 +21,6 @@ import {
   Plus,
   Settings,
   ShieldCheck,
-  ScanSearch,
   Menu,
   X,
   Search,
@@ -29,10 +28,7 @@ import {
   Wrench,
   Inbox,
   Banknote,
-  UserRound,
-  ClipboardCheck,
   LayoutGrid,
-  Truck,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -52,8 +48,9 @@ const SECTIONS: NavSection[] = [
     label: "Operación",
     items: [
       { href: "/facturas", label: "Facturas", icon: FileText },
-      { href: "/clientes", label: "Clientes", icon: Users },
-      { href: "/proveedores", label: "Proveedores", icon: Truck },
+      // Directorio = clientes y proveedores (se enlazan entre sí en sus
+      // headers). Una entrada donde había dos — rediseño Piloto, Fase 1.
+      { href: "/clientes", label: "Directorio", icon: Users },
       { href: "/bancos", label: "Bancos", icon: Landmark },
     ],
   },
@@ -63,9 +60,8 @@ const SECTIONS: NavSection[] = [
       { href: "/impuestos", label: "Impuestos", icon: Calculator },
       { href: "/contabilidad", label: "Contabilidad", icon: BookOpen },
       { href: "/cumplimiento", label: "Cumplimiento", icon: ShieldCheck },
-      // Herramienta transversal (no depende de la empresa activa): valida
-      // RFC/CURP/NSS y cruza la lista 69-B — el "check.id" incluido en el plan.
-      { href: "/verificador", label: "Verificador", icon: ScanSearch },
+      // El Verificador (RFC/CURP/NSS + 69-B) dejó la sidebar: es herramienta
+      // puntual — vive como acción en el header del Directorio; la ruta sigue.
     ],
   },
 ];
@@ -77,11 +73,10 @@ const SECTIONS: NavSection[] = [
 // /nomina/empleado/* y /nomina/ajuste-anual encienden a su padre).
 type NominaItem = { href: string; label: string; icon: LucideIcon; tab: string | null };
 
+// Rediseño Piloto, Fase 1: UNA entrada — las pestañas viven dentro del hub
+// (siempre existieron ahí; cuatro renglones de sidebar eran ruido).
 const NOMINA_ITEMS: NominaItem[] = [
-  { href: "/nomina", label: "Resumen", icon: Users2, tab: "resumen" },
-  { href: "/nomina?tab=corridas", label: "Corridas", icon: Banknote, tab: "corridas" },
-  { href: "/nomina?tab=empleados", label: "Empleados", icon: UserRound, tab: "empleados" },
-  { href: "/nomina?tab=cumplimiento", label: "IMSS y cumplimiento", icon: ClipboardCheck, tab: "cumplimiento" },
+  { href: "/nomina", label: "Nómina", icon: Users2, tab: null },
 ];
 
 /**
@@ -396,7 +391,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
                     </Link>
                   )}
                   {NOMINA_ITEMS.map(({ href, label, icon: Icon, tab }) => (
-                    <Link key={href} href={href} className={navLinkClass(nominaActiva === tab)}>
+                    <Link key={href} href={href} className={navLinkClass(tab === null ? nominaActiva !== null : nominaActiva === tab)}>
                       <Icon className="h-4 w-4 shrink-0" />
                       <span className="flex-1">{label}</span>
                     </Link>

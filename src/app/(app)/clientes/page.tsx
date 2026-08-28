@@ -187,6 +187,11 @@ export default function ClientesPage() {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
+          <nav className="mb-2 inline-flex rounded-control border border-cos-line p-0.5 text-[12.5px] font-medium">
+            <Link href="/clientes" className="rounded-[8px] bg-cos-slate-tint px-2.5 py-1 text-cos-ink">Clientes</Link>
+            <Link href="/proveedores" className="rounded-[8px] px-2.5 py-1 text-cos-ink-soft hover:text-cos-ink">Proveedores</Link>
+            <Link href="/verificador" className="rounded-[8px] px-2.5 py-1 text-cos-ink-soft hover:text-cos-ink" title="Verificar RFC/CURP/NSS y lista 69-B">Verificar RFC</Link>
+          </nav>
           <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Clientes</h1>
           <p className="mt-1.5 text-[15px] text-cos-ink-soft">
             {activeCompany.razonSocial}
