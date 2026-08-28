@@ -173,7 +173,8 @@ export function CopilotoRail() {
         {!loading && !error && rail && rail.grupos.length === 0 && (
           <div className="rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-3 text-[12.5px] text-cos-jade-ink">
             {activeCompany?.razonSocial}: sin pendientes urgentes del auditor.
-            {rail.informativos > 0 && ` ${rail.informativos} aviso(s) informativos en Hallazgos.`}
+            {rail.informativos > 0 &&
+              ` ${rail.informativos} ${rail.informativos === 1 ? "aviso informativo" : "avisos informativos"} en Hallazgos.`}
           </div>
         )}
 
