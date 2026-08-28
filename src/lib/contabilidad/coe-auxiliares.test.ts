@@ -47,6 +47,26 @@ d("Auxiliar de Cuentas → AuxiliarCtas_1_3.xsd", () => {
     const r = validate(xml, "AuxiliarCtas_1_3.xsd");
     expect(r.ok, r.err).toBe(true);
   });
+
+  it("una cuenta con saldo pero SIN movimientos se omite (el XSD exige ≥1 DetalleAux)", () => {
+    const xml = renderAuxiliarCtasXml({
+      rfc: "AAA010101AAA",
+      year: 2026,
+      month: 7,
+      tipoSolicitud: "AF",
+      numOrden: "ABC1234567/26",
+      cuentas: [
+        {
+          numCta: "102.01", desCta: "Bancos", saldoIni: 1000, saldoFin: 1200,
+          movimientos: [{ fecha: "2026-07-10", numUnIdenPol: "1", concepto: "Cobro", debe: 200, haber: 0 }],
+        },
+        { numCta: "601.58", desCta: "Otros impuestos y derechos", saldoIni: 62465, saldoFin: 62465, movimientos: [] },
+      ],
+    });
+    expect(xml).not.toContain("601.58");
+    const r = validate(xml, "AuxiliarCtas_1_3.xsd");
+    expect(r.ok, r.err).toBe(true);
+  });
 });
 
 d("Auxiliar de Folios → AuxiliarFolios_1_3.xsd", () => {

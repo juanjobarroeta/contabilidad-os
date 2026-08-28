@@ -59,6 +59,9 @@ export function renderAuxiliarCtasXml(args: {
       `Version="${VERSION}" RFC="${esc(args.rfc)}" Mes="${mm(args.month)}" Anio="${args.year}" TipoSolicitud="${args.tipoSolicitud}"${identAttr(args.tipoSolicitud, args.numOrden, args.numTramite)}>`,
   ];
   for (const c of args.cuentas) {
+    // El XSD exige ≥1 DetalleAux por Cuenta: una cuenta con saldo pero sin
+    // movimientos en el periodo no va (no hay auxiliar que reportar).
+    if (c.movimientos.length === 0) continue;
     lines.push(
       `  <AuxiliarCtas:Cuenta NumCta="${esc(c.numCta)}" DesCta="${esc(c.desCta)}" SaldoIni="${money(c.saldoIni)}" SaldoFin="${money(c.saldoFin)}">`,
     );
@@ -157,12 +160,10 @@ export async function generateAuxiliarCtasXml(opts: AuxOptions): Promise<string>
     movPorCuenta.set(numCta, arr);
   }
 
-  // Sólo cuentas con movimiento o saldo (las cuentas vacías no van).
+  // Sólo cuentas CON movimientos del periodo: el XSD exige ≥1 DetalleAux por
+  // Cuenta, así que una cuenta con puro saldo (sin movimiento) invalida el XML.
   const cuentas: AuxCtaInput[] = rows
-    .filter((r) => {
-      const numCta = r.subcuenta ?? r.cuentaSAT;
-      return (movPorCuenta.get(numCta)?.length ?? 0) > 0 || Math.abs(r.saldoInicial) >= 0.01 || Math.abs(r.saldoFinal) >= 0.01;
-    })
+    .filter((r) => (movPorCuenta.get(r.subcuenta ?? r.cuentaSAT)?.length ?? 0) > 0)
     .map((r) => {
       const numCta = r.subcuenta ?? r.cuentaSAT;
       return {
