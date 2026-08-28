@@ -200,6 +200,20 @@ async function main() {
       prisma.customer.create({ data: { companyId: cid, razonSocial, rfc, regimenFiscal: "601", codigoPostal } }),
     ),
   );
+  // Cliente TIMBRABLE en sandbox: Facturapi valida el RFC receptor contra el
+  // padrón real aun en modo test, así que los RFC ficticios no timbran. El SAT
+  // publica este RFC DE PRUEBA (existe en el padrón para esto). Va FUERA de
+  // CLIENTES a propósito: no entra a `de(clientes)` y la historia determinista
+  // (conteos, pago junto de ACEROS) no se mueve.
+  await prisma.customer.create({
+    data: {
+      companyId: cid,
+      razonSocial: "ESCUELA KEMPER URGATE SA DE CV",
+      rfc: "EKU9003173C9",
+      regimenFiscal: "601",
+      codigoPostal: "26015",
+    },
+  });
   await Promise.all(
     PROVEEDORES.map(([razonSocial, rfc]) =>
       prisma.supplier.create({ data: { companyId: cid, razonSocial, rfc } }),
