@@ -34,24 +34,46 @@ export interface CfdiParaDuplicados {
 /** RFC genérico de público en general (venta mostrador). */
 const RFC_PUBLICO_GENERAL = "XAXX010101000";
 
+// ── Perillas de precisión ────────────────────────────────────────────────────
+// Un duplicado ACCIDENTAL real (doble timbrado por timeout del PAC, doble
+// facturación del proveedor) tiene forma de PAR aislado; las operaciones
+// recurrentes idénticas (combustible de flotilla, cuota estándar de servicio)
+// tienen forma de patrón. Los datos de prod lo confirmaron: sin estos filtros,
+// una automotriz acumulaba 7,335 "grupos" que eran su operación diaria.
+/** Máximo de CFDIs idénticos en un día para sospechar duplicado (4+ = patrón). */
+const MAX_TAMANO_GRUPO = 3;
+/** Si (contraparte, importe) se repite en 3+ días distintos, es un precio de
+ *  lista/cuota recurrente, no un accidente. */
+const MAX_DIAS_RECURRENCIA = 2;
+/** Importe mínimo del comprobante para levantar el caso (eco del umbral de
+ *  deducción en efectivo, LISR 27-III). Un par de tickets chicos no amerita
+ *  la llamada al proveedor. */
+const MIN_TOTAL_MXN = 2000;
+
 /**
- * Agrupa CFDIs I/E vivos por (dirección, contraparte, importe, día). Grupos con
- * 2+ comprobantes son posibles duplicados.
- *
- * La señal exige contraparte IDENTIFICADA:
- *  - Sin RFC no hay grupo — meter todos los "desconocidos" a una misma cubeta
- *    fabricaba duplicados falsos entre proveedores distintos con el mismo
- *    importe el mismo día (esto era el 99% de los 13,916 hallazgos en prod).
- *  - XAXX010101000 (público en general) tampoco agrupa: decenas de tickets
- *    idénticos el mismo día son la operación normal de un mostrador, y la
- *    sugerencia («confirma con el cliente») es imposible ahí.
+ * Agrupa CFDIs I/E vivos por (dirección, contraparte, importe, día). La señal
+ * exige la forma de un duplicado accidental:
+ *  - Contraparte IDENTIFICADA: sin RFC no hay grupo (una cubeta "desconocidos"
+ *    fabricaba duplicados falsos entre proveedores distintos — el 99% de los
+ *    13,916 hallazgos en prod), y XAXX010101000 (público en general) tampoco:
+ *    tickets idénticos el mismo día son operación normal de mostrador.
+ *  - PAR aislado, no patrón: 2–3 comprobantes el mismo día, con un importe que
+ *    NO se repite en 3+ días del historial, y por monto material (≥ $2,000).
+ * Costo del filtro: una doble facturación sistemática (misma cuota cada día)
+ * no se levanta aquí — ese es un problema de conciliación, no de timbrado.
  */
 export function agruparPosiblesDuplicados(cfdis: CfdiParaDuplicados[]): GrupoDuplicado[] {
   const grupos = new Map<string, { ids: string[]; tipo: "INGRESO" | "EGRESO"; contraparte: string; total: number; fecha: string }>();
+  const diasPorPrecio = new Map<string, Set<string>>();
   for (const inv of cfdis) {
     if (!inv.rfc || inv.rfc === RFC_PUBLICO_GENERAL) continue;
     const total = +inv.total.toFixed(2);
-    const key = `${inv.tipo}|${inv.rfc}|${total.toFixed(2)}|${inv.fecha}`;
+    const clavePrecio = `${inv.tipo}|${inv.rfc}|${total.toFixed(2)}`;
+    const dias = diasPorPrecio.get(clavePrecio) ?? new Set<string>();
+    dias.add(inv.fecha);
+    diasPorPrecio.set(clavePrecio, dias);
+
+    const key = `${clavePrecio}|${inv.fecha}`;
     const g = grupos.get(key);
     if (g) {
       g.ids.push(inv.id);
@@ -66,9 +88,14 @@ export function agruparPosiblesDuplicados(cfdis: CfdiParaDuplicados[]): GrupoDup
     }
   }
 
-  return [...grupos.values()]
-    .filter((g) => g.ids.length >= 2)
-    .map((g) => ({ ids: g.ids, direccion: g.tipo, contraparte: g.contraparte, total: g.total, fecha: g.fecha }));
+  return [...grupos.entries()]
+    .filter(([key, g]) => {
+      if (g.ids.length < 2 || g.ids.length > MAX_TAMANO_GRUPO) return false;
+      if (g.total < MIN_TOTAL_MXN) return false;
+      const clavePrecio = key.slice(0, key.lastIndexOf("|"));
+      return (diasPorPrecio.get(clavePrecio)?.size ?? 0) <= MAX_DIAS_RECURRENCIA;
+    })
+    .map(([, g]) => ({ ids: g.ids, direccion: g.tipo, contraparte: g.contraparte, total: g.total, fecha: g.fecha }));
 }
 
 /** Sólo total > 0 (ignora REP/$0). La contraparte sale de `customer` o, en su
