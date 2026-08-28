@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getPacProvider, type CfdiInput, type StampedCfdi } from "@/lib/pac";
 import { recordTimbrado } from "@/lib/costos/record";
 import { invoiceTaxRowsFromItems } from "./taxes-persist";
+import { ensureFacturapiCustomer } from "@/lib/facturapi";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Stamp (timbrar) a CFDI via Facturapi. Extracted from POST /api/facturas so it
@@ -47,11 +48,15 @@ export type StampResult =
   | { ok: true; invoiceId: string; uuid: string; total: number; folio?: string | null }
   | { ok: false; status: number; error: string; needsReconfigure?: boolean };
 
-/** Readiness: can this company stamp, and is the customer synced? */
+/** Readiness: can this company stamp, and is the customer synced? Si el
+ *  cliente aún no existe en Facturapi, se sincroniza AQUÍ (perezoso) en vez
+ *  de responder un 422 sin salida — mismo patrón que el timbrado de facturas
+ *  (ensureFacturapiCustomer). Ojo para el llamador: si su copia del cliente
+ *  se cargó ANTES, el facturapiId pudo nacer en esta llamada — re-léelo. */
 export async function checkStampReadiness(companyId: string, customerId: string): Promise<StampResult | null> {
   const [company, customer] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { facturapiApiKey: true } }),
-    prisma.customer.findUnique({ where: { id: customerId }, select: { facturapiId: true, companyId: true } }),
+    prisma.customer.findUnique({ where: { id: customerId } }),
   ]);
   if (!company?.facturapiApiKey) {
     return { ok: false, status: 422, error: "La empresa no está lista para timbrar: configura Facturapi (CSD + Carta Manifiesto) en la app.", needsReconfigure: true };
@@ -59,8 +64,9 @@ export async function checkStampReadiness(companyId: string, customerId: string)
   if (!customer || customer.companyId !== companyId) {
     return { ok: false, status: 404, error: "Cliente no encontrado." };
   }
-  if (!customer.facturapiId) {
-    return { ok: false, status: 422, error: "El cliente no está sincronizado con Facturapi. Créalo/edítalo en la app primero." };
+  const sync = await ensureFacturapiCustomer(company.facturapiApiKey, customer);
+  if (!sync.ok) {
+    return { ok: false, status: 422, error: sync.error };
   }
   return null; // ready
 }

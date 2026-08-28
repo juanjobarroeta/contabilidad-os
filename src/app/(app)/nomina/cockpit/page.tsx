@@ -170,7 +170,7 @@ export default function NominaCockpitPage() {
         </Link>
         <h1 className="mt-1 text-[24px] font-bold tracking-[-0.02em] text-cos-ink">Tablero de nómina</h1>
         <Alert tone="danger" className="mt-4" action={<RetryButton onClick={retry} />}>
-          No se pudo cargar el tablero de nómina. Revisa tu conexión e inténtalo de nuevo — no se muestran totales para no operar sobre datos incompletos.
+          No se pudo cargar el tablero de nómina. Vuelve a intentarlo; si persiste, avísanos — no se muestran totales para no operar sobre datos incompletos.
         </Alert>
       </div>
     );

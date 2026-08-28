@@ -294,7 +294,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       setAccounts(list);
       setSelectedId((prev) => prev && list.some((a) => a.id === prev) ? prev : list[0]?.id ?? null);
     } catch {
-      setErrorCuentas("No se pudieron cargar las cuentas bancarias. Revisa tu conexión e inténtalo de nuevo.");
+      setErrorCuentas("No se pudieron cargar las cuentas bancarias. Vuelve a intentarlo; si persiste, avísanos.");
     }
   }, [activeCompany]);
 
@@ -316,7 +316,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       setPagina(1);
       setPaginas(data.pagination?.pages ?? 1);
     } catch {
-      setErrorTxs("No se pudieron cargar los movimientos. Revisa tu conexión e inténtalo de nuevo.");
+      setErrorTxs("No se pudieron cargar los movimientos. Vuelve a intentarlo; si persiste, avísanos.");
       setTxs([]);
     } finally { setLoading(false); }
   }, [selectedId, filter, mes]);

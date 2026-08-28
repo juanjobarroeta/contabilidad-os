@@ -67,7 +67,7 @@ export function useDescargaXml() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      setError({ mensaje: "No se pudo descargar. Revisa tu conexión e intenta de nuevo.", detalles: [] });
+      setError({ mensaje: "No se pudo descargar. Vuelve a intentarlo; si persiste, avísanos.", detalles: [] });
     } finally {
       setDescargando(null);
     }

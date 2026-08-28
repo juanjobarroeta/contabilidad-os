@@ -144,7 +144,7 @@ export function ConciliacionWorkbench({
       setData(d);
     } catch {
       setData(null);
-      setErrorCarga("No se pudo cargar la conciliación bancaria. Revisa tu conexión e inténtalo de nuevo.");
+      setErrorCarga("No se pudo cargar la conciliación bancaria. Vuelve a intentarlo; si persiste, avísanos.");
     } finally {
       setCargando(false);
     }

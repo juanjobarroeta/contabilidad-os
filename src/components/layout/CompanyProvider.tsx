@@ -98,7 +98,7 @@ export function CompanyProvider({
     return (
       <div className="mx-auto mt-24 max-w-md px-4">
         <Alert tone="danger" action={<RetryButton onClick={reload} />}>
-          {error} Revisa tu conexión e intenta de nuevo.
+          {error} Vuelve a intentarlo; si persiste, avísanos.
         </Alert>
       </div>
     );

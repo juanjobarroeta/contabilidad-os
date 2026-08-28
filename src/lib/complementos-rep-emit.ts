@@ -255,6 +255,16 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
   if (readiness && !readiness.ok) {
     return { ok: false, status: readiness.status, error: readiness.error };
   }
+  // El readiness pudo SINCRONIZAR al cliente en Facturapi en esta misma
+  // llamada (sync perezoso): nuestra copia de parentInv se cargó antes, así
+  // que el facturapiId se re-lee fresco para armar el payload.
+  const customerFresco = await prisma.customer.findUnique({
+    where: { id: parentInv.customerId },
+    select: { facturapiId: true },
+  });
+  if (customerFresco?.facturapiId && parentInv.customer) {
+    parentInv.customer.facturapiId = customerFresco.facturapiId;
+  }
 
   // Parcialidades previas: sumamos los REP ya emitidos para este padre (misma
   // convención que el detector: Invoice tipo PAGO con notas = id del padre).

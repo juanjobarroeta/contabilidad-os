@@ -123,7 +123,7 @@ export default function EmpleadosTab() {
         /* Error ANTES que el vacío: un fallo de red jamás debe verse como
            «Sin empleados» con invitación a re-importar el roster. */
         <Alert tone="danger" action={<RetryButton onClick={loadEmployees} />}>
-          No se pudieron cargar los empleados. Revisa tu conexión e inténtalo de nuevo.
+          No se pudieron cargar los empleados. Vuelve a intentarlo; si persiste, avísanos.
         </Alert>
       ) : employees.length === 0 ? (
         <div className="bg-cos-card border border-dashed border-cos-line rounded-xl">

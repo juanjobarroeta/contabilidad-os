@@ -302,7 +302,7 @@ export default function FacturasPage() {
       setPeriodos(Array.isArray(res?.periodos) ? res.periodos : []);
       setPrefacturas(Array.isArray(prefs) ? prefs : []);
     } catch {
-      setErrorCarga("No se pudieron cargar las facturas. Revisa tu conexión e inténtalo de nuevo.");
+      setErrorCarga("No se pudieron cargar las facturas. Vuelve a intentarlo; si persiste, avísanos.");
       setInvoices([]);
       setResumen(null);
     } finally {

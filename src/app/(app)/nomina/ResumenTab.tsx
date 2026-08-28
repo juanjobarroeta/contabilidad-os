@@ -210,7 +210,7 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
       ) : loadError ? (
         /* Fetch fallido → error con reintento, NUNCA el hero en $0.00. */
         <Alert tone="danger" className="mt-4" action={<RetryButton onClick={load} />}>
-          No se pudo cargar el resumen de nómina. Revisa tu conexión e inténtalo de nuevo.
+          No se pudo cargar el resumen de nómina. Vuelve a intentarlo; si persiste, avísanos.
         </Alert>
       ) : (
         <div className="mt-4 space-y-5">

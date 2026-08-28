@@ -361,7 +361,7 @@ export default function CorridasTab() {
       </div>
     ) : runsError ? (
       <Alert tone="danger" action={<RetryButton onClick={loadRuns} />}>
-        No se pudieron cargar las corridas. Revisa tu conexión e inténtalo de nuevo.
+        No se pudieron cargar las corridas. Vuelve a intentarlo; si persiste, avísanos.
       </Alert>
     ) : runs.length === 0 ? (
       <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
