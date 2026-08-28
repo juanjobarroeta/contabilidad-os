@@ -384,6 +384,42 @@ async function main() {
     })),
   });
 
+  // Un PAGO JUNTO listo para la mesa: UN SPEI que suma EXACTO (al centavo)
+  // dos facturas abiertas del mismo cliente — el cliente "paga su estado de
+  // cuenta". La mesa lo detecta (sugerirPagoJunto) y ofrece conciliarlo en un
+  // click: momento de demo. Autoadaptable: toma el primer cliente con 2+
+  // facturas de ingreso sin cobrar, sin montos cableados.
+  const abiertas = await prisma.invoice.findMany({
+    where: {
+      companyId: cid, tipo: "INGRESO", status: "STAMPED",
+      bankTransactions: { none: { status: "MATCHED" } },
+      conciliacionDetalles: { none: {} },
+    },
+    select: { total: true, customerId: true, customer: { select: { razonSocial: true } } },
+    orderBy: { fecha: "desc" },
+  });
+  const porCliente = new Map<string, typeof abiertas>();
+  for (const f of abiertas) {
+    if (!f.customerId) continue;
+    const g = porCliente.get(f.customerId) ?? [];
+    g.push(f);
+    porCliente.set(f.customerId, g);
+  }
+  const parAbierto = [...porCliente.values()].find((g) => g.length >= 2);
+  if (parAbierto) {
+    const [f1, f2] = parAbierto;
+    await prisma.bankTransaction.create({
+      data: {
+        companyId: cid, bankAccountId: bancoX.id,
+        fecha: fecha(y, m, Math.min(hoy.getUTCDate(), 12)),
+        descripcion: `SPEI RECIBIDO ${f1.customer!.razonSocial.slice(0, 26)} PAGO FACTURAS`,
+        tipo: "CREDITO",
+        monto: r2(Number(f1.total) + Number(f2.total)),
+        status: "UNMATCHED",
+      },
+    });
+  }
+
   // Hallazgos del auditor para el rail del Copiloto.
   await prisma.fiscalHallazgo.createMany({
     data: [
