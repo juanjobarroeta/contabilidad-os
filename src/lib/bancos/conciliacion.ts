@@ -45,6 +45,11 @@ export interface MovimientoParaConciliar {
   cuentaBancariaId: string;
   /** ¿Llegó al libro? Los UNMATCHED no se postean (ver postMonth). */
   registrado: boolean;
+  /** ¿Está conciliado/clasificado (status ≠ UNMATCHED)? Distinto de
+   *  `registrado`: un mes sin postear no tiene asientos aunque sus
+   *  movimientos ya estén conciliados — confundirlos hacía que la mesa
+   *  gritara «27 sin conciliar» con 11 ya conciliados (revisión pág. 9). */
+  conciliado: boolean;
   // Contraparte extraída de la descripción (spei-descripcion.ts). Opcional:
   // el motor no la usa para conciliar — la ARRASTRA para que la mesa enseñe
   // quién pagó en vez de la sintaxis del banco.

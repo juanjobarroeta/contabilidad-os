@@ -34,6 +34,8 @@ interface Movimiento {
   /** Firmado: + depósito, − retiro. */
   monto: number;
   cuentaBancariaId: string;
+  /** status ≠ UNMATCHED (conciliado o clasificado). */
+  conciliado?: boolean;
   // Contraparte extraída de la descripción (spei-descripcion.ts + su barrido).
   // La misma regla que el tab Movimientos: cuando el banco nos dijo QUIÉN, ése
   // es el titular del renglón — no la sintaxis del banco.
@@ -375,6 +377,10 @@ export function ConciliacionWorkbench({
     cuentaSel ? xs.filter((x) => x.cuentaBancariaId === cuentaSel) : xs;
   const pendientes = deLaCuenta(data.movimientosNoRegistrados);
   const total = deLaCuenta(data.movimientosBanco).length;
+  // «Sin conciliar» = status UNMATCHED (el MISMO número que el paso 2 del
+  // Inicio); los conciliados de un mes sin postear sólo esperan el posteo.
+  const sinConciliar = pendientes.filter((m) => !m.conciliado).length;
+  const esperanPosteo = pendientes.length - sinConciliar;
   const sin = pendientes.length;
   const sinGlobal = data.movimientosNoRegistrados.length;
   // Σ|monto|, NO el neto firmado: +$17k de abonos y −$17k de cargos netean a
@@ -383,18 +389,23 @@ export function ConciliacionWorkbench({
   // este tile mide cuánto trabajo hay sobre la mesa.
   const abonos = pendientes.reduce((s, m) => s + (m.monto > 0 ? m.monto : 0), 0);
   const cargos = pendientes.reduce((s, m) => s + (m.monto < 0 ? -m.monto : 0), 0);
-  const pct = total > 0 ? ((total - sin) / total) * 100 : 100;
+  const pct = total > 0 ? ((total - sinConciliar) / total) * 100 : 100;
 
   return (
     <div className="mb-6">
       <StatStrip className="sm:grid-cols-3">
         <StatTile
           label="Conciliado"
-          tone={sin === 0 ? "jade" : "ink"}
+          tone={sinConciliar === 0 ? "jade" : "ink"}
           value={`${pct.toFixed(1)} %`}
-          sub={`${total - sin} de ${total} movimientos del mes`}
+          sub={`${total - sinConciliar} de ${total} movimientos del mes`}
         />
-        <StatTile label="Sin conciliar" tone={sin === 0 ? "jade" : sin > 20 ? "red" : "amber"} value={sin} />
+        <StatTile
+          label="Sin conciliar"
+          tone={sinConciliar === 0 ? "jade" : sinConciliar > 20 ? "red" : "amber"}
+          value={sinConciliar}
+          sub={esperanPosteo > 0 ? `+ ${esperanPosteo} conciliado${esperanPosteo === 1 ? "" : "s"} por postear` : undefined}
+        />
         <StatTile
           label="Por conciliar"
           tone={sin === 0 ? "jade" : "ink"}
@@ -488,7 +499,7 @@ export function ConciliacionWorkbench({
             {/* ── Izquierda: movimientos del banco ── */}
             <section>
               <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
-                Movimientos del banco · {sin} sin conciliar{cuentaSel ? " en esta cuenta" : ""}
+                Movimientos del banco · {sinConciliar} sin conciliar{esperanPosteo > 0 ? ` · ${esperanPosteo} por postear` : ""}{cuentaSel ? " en esta cuenta" : ""}
               </p>
               <ul className="max-h-[430px] overflow-y-auto">
                 {pendientes.map((m) => {
