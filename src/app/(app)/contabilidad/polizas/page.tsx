@@ -30,6 +30,11 @@ export default function PolizasPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [tipo, setTipo] = useState<Tipo>("DE");
   const [folio, setFolio] = useState("");
+  // Antes del return temprano: los hooks deben correr en TODOS los renders.
+  // Con el hook después del guard, el primer render (empresa aún cargando)
+  // corría menos hooks que el segundo → React #310 y la página caía al
+  // error boundary (lo cachó el ensayo de pantallas de la demo).
+  const { descargar, descargando, error: errorDescarga, diagnostico } = useDescargaXml();
 
   if (!activeCompany) {
     return <div className="p-8 text-sm text-cos-ink-faint">Selecciona una empresa.</div>;
@@ -44,7 +49,6 @@ export default function PolizasPage() {
     ...(usaOrden(tipo) ? { numOrden: folio } : { numTramite: folio }),
   });
   const qs = params.toString();
-  const { descargar, descargando, error: errorDescarga, diagnostico } = useDescargaXml();
   const descargas = [
     { label: "Pólizas del periodo", href: `/api/contabilidad/coe/polizas?${qs}` },
     { label: "Auxiliar de cuentas", href: `/api/contabilidad/coe/aux-cuentas?${qs}` },

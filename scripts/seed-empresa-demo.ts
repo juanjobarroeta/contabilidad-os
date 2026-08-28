@@ -145,6 +145,10 @@ async function main() {
       codigoPostal: "72810",
       registroPatronal: "D5312874109",
       members: { create: { userId: user.id, role: "OWNER" } },
+      // Como el alta real: sin el módulo CONTABILIDAD habilitado, el layout
+      // manda la cuenta al muro de acceso restringido (caso real: la demo
+      // era la única empresa del usuario y toda la app quedaba bloqueada).
+      modules: { create: [{ modulo: "CONTABILIDAD" }] },
     },
   });
   const cid = company.id;
