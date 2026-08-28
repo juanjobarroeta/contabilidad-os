@@ -12,6 +12,7 @@ const mov = (over: Partial<MovimientoParaConciliar> = {}): MovimientoParaConcili
   fecha: "2026-07-05",
   descripcion: "Pago cliente",
   monto: 1000,
+  conciliado: false,
   cuentaBancariaId: "b1",
   registrado: true,
   ...over,

@@ -186,6 +186,7 @@ export async function conciliacionDelMes(
     monto: Number(t.monto),
     cuentaBancariaId: t.bankAccountId,
     registrado: conAsiento.has(t.id),
+    conciliado: t.status !== "UNMATCHED",
     contraparteNombre: t.contraparteNombre,
     contraparteRfc: t.contraparteRfc,
     conceptoPago: t.conceptoPago,
