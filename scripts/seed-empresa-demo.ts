@@ -181,6 +181,8 @@ async function main() {
       regimenFiscal: "601",
       codigoPostal: "72810",
       registroPatronal: "D5312874109",
+      // El paso SAT del Inicio muestra «Última sincronización hace X».
+      lastAutoSyncAt: new Date(),
       members: { create: { userId: user.id, role: "OWNER" } },
       // Como el alta real: sin el módulo CONTABILIDAD habilitado, el layout
       // manda la cuenta al muro de acceso restringido (caso real: la demo

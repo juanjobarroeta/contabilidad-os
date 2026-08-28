@@ -77,6 +77,18 @@ function check(r: ReadinessResult | null, clave: string) {
   return r?.checks.find((c) => c.clave === clave) ?? null;
 }
 
+/** «hace 5 min / hace 3 h / hace 2 días» — el dato que hace verificable el
+ *  paso SAT (decisión del owner: estados con hechos, no eslóganes). */
+function hace(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return "hace un momento";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 48) return `hace ${h} h`;
+  return `hace ${Math.floor(h / 24)} días`;
+}
+
 export function PilotoDelCierre() {
   const { activeCompany } = useCompany();
   const [dash, setDash] = useState<DashboardData | null>(null);
@@ -165,10 +177,19 @@ export function PilotoDelCierre() {
     cuerpo: ReactNode;
     cta: { label: string; href: string };
   }[] = [
+    // Subtítulos = ESTADOS con hechos, no eslóganes (decisión del owner en la
+    // revisión página por página): el usuario quiere leer qué pasa, no que le
+    // vendan el producto que ya compró.
     {
       num: 1,
       titulo: "SAT",
-      sub: "Todo lo que el SAT sabe, ya está aquí",
+      sub: ed.sincronizando
+        ? "Sincronizando con el SAT…"
+        : ed.ultimaSincronizacion
+          ? `Última sincronización ${hace(ed.ultimaSincronizacion)}`
+          : ed.tieneFacturas
+            ? "CFDIs cargados"
+            : "Sin facturas sincronizadas todavía",
       estado: satEstado,
       cuerpo: (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -183,26 +204,27 @@ export function PilotoDelCierre() {
     {
       num: 2,
       titulo: "Bancos",
-      sub: "La conciliación casi se hace sola",
+      sub:
+        dash.totalUnmatched > 0
+          ? `${dash.totalUnmatched} movimiento${dash.totalUnmatched === 1 ? "" : "s"} por clasificar`
+          : "Banco conciliado y clasificado",
       estado: bancoEstado,
       cuerpo:
         dash.totalUnmatched > 0 ? (
           <p className="text-[13.5px] text-cos-ink-soft">
-            <strong className="text-cos-ink">{dash.totalUnmatched}</strong> movimiento
-            {dash.totalUnmatched === 1 ? "" : "s"} por clasificar —{" "}
-            {sinClasificar?.detalle ?? banco?.detalle ?? "la mesa los agrupa por parecido."}
+            {sinClasificar?.detalle ?? banco?.detalle ?? "La mesa los agrupa por parecido."}
           </p>
         ) : (
-          <p className="text-[13.5px] text-cos-jade-ink">Banco al día — todo conciliado o clasificado.</p>
+          <p className="text-[13.5px] text-cos-jade-ink">Todo conciliado o clasificado.</p>
         ),
       cta: { label: dash.totalUnmatched > 0 ? `Revisar en la mesa` : "Abrir bancos", href: "/bancos" },
     },
     {
       num: 3,
       titulo: "Nómina",
-      // El subtítulo no puede presumir «al corriente» con recibos sin timbrar
-      // en amarillo dos renglones abajo (lo cachó la revisión de pantallas).
-      sub: sinTimbrar > 0 ? "Hay recibos por timbrar" : "La quincena, al corriente",
+      sub: sinTimbrar > 0
+        ? `${sinTimbrar} recibo${sinTimbrar === 1 ? "" : "s"} por timbrar`
+        : "Nómina timbrada al corriente",
       estado: nominaEstado,
       cuerpo: nomina ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -222,20 +244,32 @@ export function PilotoDelCierre() {
     {
       num: 4,
       titulo: "Declara",
-      sub: vencidas.length > 0 ? "Hay obligaciones vencidas" : `${tax.periodoFmt}, explicado peso por peso`,
+      sub:
+        vencidas.length > 0
+          ? `${vencidas.length} obligación${vencidas.length === 1 ? "" : "es"} vencida${vencidas.length === 1 ? "" : "s"}`
+          : `Declaración de ${tax.periodoFmt}`,
       estado: declaraEstado,
       cuerpo:
         vencidas.length > 0 ? (
           <div>
             {conMonto.length > 0 ? (
-              <p className="text-[15px] text-cos-ink">
-                <Money value={totalVencido} size={26} weight={700} className="text-cos-red-ink" />{" "}
+              <div>
+                <p className="flex flex-wrap items-baseline gap-2 text-[15px] text-cos-ink">
+                  <Money value={totalVencido} size={26} weight={700} className="text-cos-red-ink" />
+                  {/* El titular no puede subestimar la deuda: lo que falta por
+                      calcular se declara junto al importe (decisión del owner). */}
+                  {sinMonto.length > 0 && (
+                    <span className="text-[15px] font-semibold text-cos-red-ink">
+                      + {sinMonto.length} por calcular
+                    </span>
+                  )}
+                </p>
                 {algunoEstimado && (
-                  <span className="text-[12px] text-cos-ink-soft">
+                  <p className="text-[12px] text-cos-ink-soft">
                     aproximado — calculado de tus CFDIs, aún sin acuse
-                  </span>
+                  </p>
                 )}
-              </p>
+              </div>
             ) : (
               <p className="text-[14px] font-medium text-cos-red-ink">
                 {sinMonto.length + informativas.length} obligación
@@ -287,7 +321,11 @@ export function PilotoDelCierre() {
     {
       num: 5,
       titulo: "Cierre",
-      sub: "El libro, listo para el SAT",
+      sub: cierreBloqueado
+        ? "En espera del banco"
+        : posteo?.estado === "ok"
+          ? "Mes posteado — Anexo 24 disponible"
+          : "Mes preliminar, sin postear",
       estado: cierreEstado,
       cuerpo: (
         <p className="text-[13.5px] text-cos-ink-soft">
@@ -302,8 +340,30 @@ export function PilotoDelCierre() {
     },
   ];
 
+  // El momento dorado del contador: nada vencido, banco limpio, nómina
+  // timbrada y mes posteado. Merece celebrarse, no cinco tarjetas mudas.
+  const todoAlDia =
+    satEstado === "listo" &&
+    bancoEstado === "listo" &&
+    nominaEstado === "listo" &&
+    vencidas.length === 0 &&
+    cierreEstado === "listo";
+
   return (
     <ol className="space-y-3">
+      {todoAlDia && (
+        <li className="flex items-center gap-3 rounded-card border border-cos-jade-ink/25 bg-cos-jade-tint px-5 py-4">
+          <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-cos-jade text-white">
+            <Check className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-[16px] font-semibold text-cos-jade-ink">Todo al día</p>
+            <p className="text-[13px] text-cos-ink-soft">
+              Sin vencidos, banco conciliado, nómina timbrada y mes posteado — entregables listos.
+            </p>
+          </div>
+        </li>
+      )}
       {pasos.map((p) => {
         const pinta = PINTA[p.estado];
         return (
