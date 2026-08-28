@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { autoConciliarCuenta, clabesConocidasPorRfc, scoreCandidate } from "@/lib/bancos/auto-conciliar";
+import { sugerirPagoJunto } from "@/lib/bancos/pago-junto";
 import { signoDeMonto, sugerirCategoriaConcepto, type CompanyRule } from "@/lib/bancos/categorizar-concepto";
 import { sugerirCategoriaConceptoLLM } from "@/lib/bancos/categorizar-llm";
 import {
@@ -142,7 +143,7 @@ export async function GET(req: Request, { params }: Params) {
     contraparteClabe: tx.contraparteClabe,
   };
 
-  const scored = candidates.map(inv => {
+  const puntuados = candidates.map(inv => {
     // MISMA fórmula que la auto-conciliación (antes era una copia que divergió:
     // esta ruta no conocía las señales de identidad). Identidad efectiva: el
     // Customer si existe; si no, la contraparte del propio CFDI — los EGRESO
@@ -193,9 +194,37 @@ export async function GET(req: Request, { params }: Params) {
   })
     // Un PPD ya cobrado por completo no es candidato de nada: sin saldo no hay
     // porción que asignar (los PUE en ese estado ya los excluyó el query).
-    .filter((c) => !c.alreadyMatched || c.remainingBalance > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 15);
+    .filter((c) => !c.alreadyMatched || c.remainingBalance > 0);
+
+  const scored = [...puntuados].sort((a, b) => b.score - a.score).slice(0, 15);
+
+  // ── Pago junto ─────────────────────────────────────────────────────────────
+  // ¿Un subconjunto de facturas abiertas de UNA contraparte suma EXACTO el
+  // movimiento? Se busca sobre el pool completo (no el top-15 del score: las
+  // facturas chicas de un pago junto puntúan bajo individualmente a propósito).
+  // La UI lo aplica con el PATCH `match-multiple` que ya existe.
+  const sugerido = sugerirPagoJunto(
+    Math.abs(Number(tx.monto)),
+    puntuados
+      .filter((c) => c.rfc !== "—" && c.remainingBalance > 0)
+      .map((c) => ({ id: c.id, rfc: c.rfc, saldo: c.remainingBalance })),
+  );
+  const pagoJunto = sugerido
+    ? {
+        rfc: sugerido.rfc,
+        cliente: puntuados.find((c) => c.rfc === sugerido.rfc)?.cliente ?? sugerido.rfc,
+        suma: Math.round(sugerido.asignaciones.reduce((s, a) => s + a.monto, 0) * 100) / 100,
+        facturas: sugerido.asignaciones.map((a) => {
+          const c = puntuados.find((p) => p.id === a.invoiceId);
+          return {
+            invoiceId: a.invoiceId,
+            monto: a.monto,
+            folio: c ? [c.serie, c.folio].filter(Boolean).join("-") || "—" : "—",
+            fecha: c?.fecha ?? null,
+          };
+        }),
+      }
+    : null;
 
   // ── Pagos de impuestos pendientes ──────────────────────────────────────────
   // Sólo para egresos: declaraciones no pagadas (SIPARE / línea de captura) de
@@ -358,5 +387,5 @@ export async function GET(req: Request, { params }: Params) {
     }
   }
 
-  return NextResponse.json({ transaction: tx, candidates: scored, impuestos, sugerencia });
+  return NextResponse.json({ transaction: tx, candidates: scored, impuestos, sugerencia, pagoJunto });
 }

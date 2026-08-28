@@ -86,6 +86,14 @@ interface Candidate {
   id: string; uuid?: string; fecha: string; total: number; cliente: string; rfc: string;
   score: number; confidence: "alta" | "media" | "baja"; folio?: string;
 }
+// Pago junto: varias facturas de la misma contraparte que suman exacto el
+// movimiento (sugerido por el motor; se aplica con match-multiple).
+interface PagoJuntoSugerido {
+  rfc: string;
+  cliente: string;
+  suma: number;
+  facturas: Array<{ invoiceId: string; monto: number; folio: string; fecha: string | null }>;
+}
 // Candidato de pago de impuestos (declaración pendiente, sólo egresos).
 interface ImpuestoCandidate {
   id: string; tipo: string; periodo: string; etiqueta: string;
@@ -212,6 +220,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   const [busy, setBusy] = useState<"" | "auto" | "upload">("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [pagoJunto, setPagoJunto] = useState<PagoJuntoSugerido | null>(null);
   const [impuestoCands, setImpuestoCands] = useState<ImpuestoCandidate[]>([]);
   const [candLoading, setCandLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
@@ -518,7 +527,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
 
   async function expand(tx: BankTx) {
     if (expandedId === tx.id) { setExpandedId(null); setMultiSel([]); return; }
-    setExpandedId(tx.id); setCandidates([]); setImpuestoCands([]); setCandLoading(true); setMultiSel([]);
+    setExpandedId(tx.id); setCandidates([]); setImpuestoCands([]); setPagoJunto(null); setCandLoading(true); setMultiSel([]);
     // Reset de la búsqueda manual; arranca con el tipo probable según el signo.
     setManualOpen(false); setManualQuery(""); setManualResults([]);
     setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
@@ -527,6 +536,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       const data = await res.json();
       setCandidates(data.candidates ?? []);
       setImpuestoCands(data.impuestos ?? []);
+      setPagoJunto(data.pagoJunto ?? null);
     } finally { setCandLoading(false); }
   }
 
@@ -586,6 +596,30 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
         showToast(data?.error ?? "No se pudo conciliar el pago de impuestos");
       }
     } finally { setActing(null); }
+  }
+
+  // Aplica el pago junto sugerido en un gesto: mismas asignaciones, mismo
+  // PATCH match-multiple que la selección manual.
+  async function aplicarPagoJunto(txId: string) {
+    if (!pagoJunto) return;
+    setMultiBusy(true);
+    try {
+      const res = await fetch(`/api/bancos/transactions/${txId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "match-multiple",
+          asignaciones: pagoJunto.facturas.map((fac) => ({ invoiceId: fac.invoiceId, monto: fac.monto })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast(`Pago junto aplicado: ${pagoJunto.facturas.length} facturas de ${pagoJunto.cliente}`);
+        setExpandedId(null); setMultiSel([]); setPagoJunto(null);
+        await Promise.all([loadTxs(), loadAccounts()]);
+      } else {
+        showToast(data?.error ?? "No se pudo aplicar el pago junto");
+      }
+    } finally { setMultiBusy(false); }
   }
 
   // ── Conciliación múltiple: un movimiento ↔ varias facturas ─────────────────
@@ -1318,6 +1352,23 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                                   <div className="mt-1.5 break-words border-t border-cos-line pt-1.5 text-[11.5px] text-cos-ink-faint">
                                     {m.descripcion}
                                   </div>
+                                </div>
+                              )}
+                              {/* Pago junto: N facturas de la MISMA contraparte suman
+                                  exacto el movimiento — la combinación es única, por
+                                  eso se ofrece en un gesto. */}
+                              {!candLoading && pagoJunto && (
+                                <div className="rounded-control border border-cos-brand/30 bg-cos-brand-tint px-3 py-2.5">
+                                  <p className="text-[13px] font-semibold text-cos-brand-ink">
+                                    Pago junto: {pagoJunto.facturas.length} facturas de {pagoJunto.cliente} suman exacto <Money value={pagoJunto.suma} size={13} />
+                                  </p>
+                                  <p className="mt-0.5 text-[12px] text-cos-ink-soft">
+                                    {pagoJunto.facturas.map((fac) => `${fac.folio} (${fac.monto.toLocaleString("es-MX", { style: "currency", currency: "MXN" })})`).join(" + ")}
+                                  </p>
+                                  <button onClick={() => aplicarPagoJunto(m.id)} disabled={multiBusy}
+                                    className="mt-2 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+                                    {multiBusy ? "Aplicando…" : "Conciliar las " + pagoJunto.facturas.length + " facturas"}
+                                  </button>
                                 </div>
                               )}
                               {candLoading ? (
