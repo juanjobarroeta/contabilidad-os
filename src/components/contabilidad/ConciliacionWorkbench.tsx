@@ -114,6 +114,14 @@ export function ConciliacionWorkbench({
     impuestos: CandidatoImpuesto[];
     /** «¿No es una factura?» — la categoría inferida (identidad/reglas/LLM). */
     sugerencia: SugerenciaMovimiento | null;
+    /** Subconjunto de facturas de UNA contraparte que suma EXACTO el
+     *  movimiento (sugerirPagoJunto). Un clic las palomea todas. */
+    pagoJunto: {
+      rfc: string;
+      cliente: string;
+      suma: number;
+      facturas: Array<{ invoiceId: string; monto: number; folio: string }>;
+    } | null;
   } | null>(null);
   const [candCargando, setCandCargando] = useState(false);
   const [seleccion, setSeleccion] = useState<string[]>([]); // ids en orden de palomeo
@@ -190,7 +198,7 @@ export function ConciliacionWorkbench({
     setCand(null); setSeleccion([]); setSelImpuesto(null);
     fetch(`/api/bancos/${selTx.cuentaBancariaId}/match?txId=${selTx.id}`)
       .then((r) => r.json())
-      .then((d) => { if (vivo && Array.isArray(d?.candidates)) setCand({ candidates: d.candidates, impuestos: d.impuestos ?? [], sugerencia: d.sugerencia ?? null }); })
+      .then((d) => { if (vivo && Array.isArray(d?.candidates)) setCand({ candidates: d.candidates, impuestos: d.impuestos ?? [], sugerencia: d.sugerencia ?? null, pagoJunto: d.pagoJunto ?? null }); })
       .catch(() => {})
       .finally(() => { if (vivo) setCandCargando(false); });
     return () => { vivo = false; };
@@ -551,6 +559,21 @@ export function ConciliacionWorkbench({
                     </p>
                   ) : (
                     <>
+                  {cand.pagoJunto && (
+                    <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-card border border-cos-brand/30 bg-cos-brand-tint px-3 py-2.5">
+                      <p className="text-[12.5px] text-cos-brand-ink">
+                        <b>Pago junto:</b> {cand.pagoJunto.facturas.length} facturas de {cand.pagoJunto.cliente} suman
+                        exacto <Money value={cand.pagoJunto.suma} size={12} /> ({cand.pagoJunto.facturas.map((f) => f.folio).join(" + ")}).
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { setSeleccion(cand.pagoJunto!.facturas.map((f) => f.invoiceId)); setSelImpuesto(null); }}
+                        className="rounded-control bg-cos-brand px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-cos-brand-deep"
+                      >
+                        Palomearlas
+                      </button>
+                    </div>
+                  )}
                   <ul className="max-h-[330px] overflow-y-auto">
                     {cand.candidates.map((c) => {
                       const idx = seleccion.indexOf(c.id);
