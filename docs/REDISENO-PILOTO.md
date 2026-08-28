@@ -28,14 +28,20 @@ capa visual migró en otra sesión. Lo que queda es estructura, no piel.
   chat existente (evento cos:ask-ai). El FAB del chat se oculta en xl (el
   rail es su nueva puerta). v2: chat embebido en el rail con pestañas.
 
-## Fase 2 — B como Inicio
+## Fase 2 — B como Inicio: HECHA (2026-08-28)
 
-/dashboard se convierte en el **Piloto del Cierre**: el mes del despacho
-como narrativa de 5 pasos — SAT (ya está aquí) → Bancos (casi se hace sola,
-con reglas) → Nómina (empresa por empresa) → Declara (peso por peso,
-Art. 1-B) → Cierre. Cada paso se alimenta de APIs que ya existen
-(ce-readiness, pasos-cierre, cockpit, mesa, checklist). El tablero actual
-aporta sus datos, no su forma.
+El Inicio tiene DOS LENTES con toggle persistente (default: cartera si
+operas 2+ empresas): **Empresa** = el Piloto del Cierre (los 5 pasos con
+estado, la cifra que importa y una acción; compone /api/dashboard +
+ce-readiness + nomina/hub client-side — cero backend nuevo) y **Cartera** =
+la Cola de Trabajo (Propuesta A: una fila por cosa-que-hacer en los N RFC,
+una acción por fila, click activa la empresa y navega; /api/inicio/cola
+batcheado al estilo despacho/cockpit — jamás computeTaxPosition ni balanza
+en abanico; sin clasificar = UNMATCHED + IGNORED sin tag, el criterio que
+bloquea el cierre). La banda del «$0.00 vencido» MURIÓ: el paso Declara
+distingue importe calculado / por calcular / informativa. El ranking de la
+cola es puro y testeado (armarCola). PendientesDelCierre queda sin consumo
+(el Piloto lo reemplaza) — borrar en limpieza futura.
 
 ## Fase 3 — Empresa demo
 
