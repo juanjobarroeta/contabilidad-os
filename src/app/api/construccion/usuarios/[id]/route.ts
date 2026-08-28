@@ -29,8 +29,11 @@ const patchSchema = z
     construccionRol: ROL.optional(),
     newPassword: z.string().min(8, "Mínimo 8 caracteres").max(200).optional(),
     name: z.string().trim().min(1).max(120).optional(),
+    // Páginas visibles (llaves opacas del satélite). Presente = reemplaza la
+    // lista completa; [] = sin restricción extra (ve lo que su rol permite).
+    paginas: z.array(z.string().trim().min(1).max(40)).max(64).optional(),
   })
-  .refine((d) => d.construccionRol || d.newPassword || d.name, {
+  .refine((d) => d.construccionRol || d.newPassword || d.name || d.paginas !== undefined, {
     message: "Nada que actualizar",
   });
 
@@ -98,12 +101,17 @@ export const PATCH = withAuthz(
     if (res.error || !res.target) return res.error ?? NextResponse.json({ error: "Miembro no encontrado" }, { status: 404 });
     const target = res.target;
 
-    const { construccionRol, newPassword, name } = parsed.data;
+    const { construccionRol, newPassword, name, paginas } = parsed.data;
 
-    if (construccionRol) {
+    if (construccionRol || paginas !== undefined) {
       await prisma.companyMember.update({
         where: { id: target.id },
-        data: { construccionRol, role: MEMBER_ROLE[construccionRol] },
+        data: {
+          ...(construccionRol
+            ? { construccionRol, role: MEMBER_ROLE[construccionRol] }
+            : {}),
+          ...(paginas !== undefined ? { construccionPaginas: paginas } : {}),
+        },
       });
     }
     if (name) {

@@ -411,6 +411,15 @@ model CompanyMember {
   /// /api/auth/token para que bartiz filtre navegación y rutas.
   construccionRol ConstruccionRol?
 
+  /// Sólo para el satélite de CONSTRUCCIÓN (bartiz): páginas que este miembro
+  /// puede VER, como llaves de ruta del satélite ("obras", "requisiciones",
+  /// "gastos"…). Vacío = sin restricción extra (ve lo que su rol permite).
+  /// Mismo contrato que automotrizPaginas: strings opacos para el hub, sólo
+  /// VISIBILIDAD de UI — las facultades (escritura/decisiones) siguen siendo
+  /// del rol (construccion/rol.ts); la matriz sólo puede RECORTAR lo visible,
+  /// nunca ampliar lo que el rol no permite.
+  construccionPaginas String[] @default([])
+
   /// Sólo para el satélite AUTOMOTRIZ: páginas del ERP que este miembro puede
   /// VER, como llaves de ruta del satélite ("panel", "ventas", "inventario",
   /// "nomina"…). Vacío = sin restricción (default compatible, igual que
