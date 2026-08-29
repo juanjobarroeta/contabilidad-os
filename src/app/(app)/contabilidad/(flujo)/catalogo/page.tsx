@@ -79,6 +79,14 @@ export default function CatalogoPage() {
   );
   const overrides = useMemo(() => (cobertura ?? []).filter((c) => c.estado === "override"), [cobertura]);
   const unicas = useMemo(() => (cobertura ?? []).filter((c) => c.estado === "unica"), [cobertura]);
+  // ¿La empresa declara agrupadores en cuentas propias? Sin ninguno, el motor
+  // postea directo al catálogo SAT y la cola de mapeo no aplica. Las subcuentas
+  // de banco (102.01.NN) no cuentan: las crea el propio motor con su codAgrup
+  // — no son una decisión del contador.
+  const planPropio = useMemo(
+    () => cuentas.some((c) => c.codAgrup && !c.codigo.startsWith("102.01.")),
+    [cuentas]
+  );
 
   const candidatasDe = useCallback(
     (codigo: string) => cuentas.filter((c) => c.codAgrup === codigo),
@@ -165,7 +173,9 @@ export default function CatalogoPage() {
         subtitle="A qué cuenta tuya va cada cosa que el motor postea"
         context={
           cobertura
-            ? `${cobertura.length} códigos del motor · ${pendientes.length} por decidir · ${cuentas.length} cuentas propias`
+            ? planPropio
+              ? `${cobertura.length} códigos del motor · ${pendientes.length} por decidir · ${cuentas.length} cuentas propias`
+              : `${cobertura.length} códigos del motor · catálogo SAT, nada que mapear · ${cuentas.length} cuentas propias`
             : undefined
         }
       />
@@ -193,6 +203,20 @@ export default function CatalogoPage() {
         </div>
       ) : (
         <>
+          {/* Sin plan propio no hay nada que mapear: el motor postea directo a
+              las cuentas del catálogo SAT. Pintar «0 cubiertos · 39 sin
+              candidata» en rojo aquí acusaba un problema inexistente. */}
+          {!planPropio ? (
+            <div className="mb-5 flex items-start gap-2 rounded-card bg-cos-jade-tint px-4 py-3.5 text-sm text-cos-jade-ink">
+              <Check className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Tu catálogo es el del SAT (código agrupador): cada código del motor postea
+                directo a su cuenta y no hay nada que mapear. Esta cola de decisiones se usa
+                cuando importas un catálogo propio y declaras el agrupador de cada cuenta.
+              </span>
+            </div>
+          ) : (
+          <>
           <StatStrip>
             <StatTile
               label="Cubiertos"
@@ -367,6 +391,8 @@ export default function CatalogoPage() {
               ))}
             </ul>
           </details>
+          </>
+          )}
 
           {/* ── Catálogo navegable ── */}
           <section className="rounded-card border border-cos-line bg-cos-card">
@@ -419,7 +445,9 @@ export default function CatalogoPage() {
                       <td className="px-3 py-0 text-[12px] text-cos-ink-faint">{c.tipo ?? ""}</td>
                       <td className="px-3 py-0 font-mono text-[12px]">
                         {c.codAgrup ?? (
-                          c.nivel >= 3 ? (
+                          // En catálogo SAT nada declara agrupador: pintar 100+
+                          // chips ámbar de «sin agrupador» sería puro ruido.
+                          planPropio && c.nivel >= 3 ? (
                             <span className="rounded-full bg-cos-amber-tint px-2 py-0.5 font-sans text-[11px] font-semibold text-cos-amber-ink">
                               sin agrupador
                             </span>
