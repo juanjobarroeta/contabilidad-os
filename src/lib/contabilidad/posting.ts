@@ -647,7 +647,13 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     const esEgreso = esComprobanteDeEgreso(inv);
     const base = {
       fecha: inv.fecha,
-      descripcion: `${esEgreso ? "Nota de crédito recibida" : "Factura egreso"} ${inv.serie ?? ""}${inv.folio ?? ""}`.trim(),
+      // Con el QUIÉN: un CFDI recibido rara vez trae serie/folio propios y el
+      // libro diario mostraba renglones de puro «Factura egreso» sin decir de
+      // quién era el gasto.
+      descripcion: [
+        `${esEgreso ? "Nota de crédito recibida" : "Factura egreso"} ${inv.serie ?? ""}${inv.folio ?? ""}`.trim(),
+        inv.contraparteNombre,
+      ].filter(Boolean).join(" · "),
       referencia: ref,
       referenciaTipo: "CFDI" as const,
       fuente: "CFDI" as EntrySource,
