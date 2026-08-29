@@ -219,7 +219,7 @@ export async function GET(req: Request) {
       agregar(
         `${CARPETA.declaraciones}/DIOT_${year}${String(month).padStart(2, "0")}.txt`,
         archivoDiot2025(proveedores),
-        `DIOT ${proveedores.length} proveedor(es), base de flujo (Art. 1-B LIVA).`
+        `DIOT ${proveedores.length} ${proveedores.length === 1 ? "proveedor" : "proveedores"}, base de flujo (Art. 1-B LIVA).`
       );
     });
 

@@ -171,7 +171,10 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
     detalle:
       i.advertenciasCadena.length === 0
         ? "La cadena de arrastre está íntegra: los meses anteriores con actividad tienen declaración guardada."
-        : i.advertenciasCadena[0],
+        // Sólo la primera oración: el texto completo ya vive en la alerta del
+        // Resumen — repetirlo palabra por palabra en la misma pantalla era
+        // ruido (revisión pág. 11).
+        : `${i.advertenciasCadena[0].split(". ")[0]}.`,
     accionUrl: "/impuestos?tab=historial",
   });
 

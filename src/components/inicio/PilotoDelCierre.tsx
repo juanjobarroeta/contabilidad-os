@@ -316,7 +316,15 @@ export function PilotoDelCierre() {
             />
           </div>
         ),
-      cta: { label: vencidas.length > 0 ? "Presentar ahora" : "Preparar presentación", href: "/impuestos" },
+      cta: {
+        label: vencidas.length > 0 ? "Presentar ahora" : "Preparar presentación",
+        // Con vencidas, aterrizar en el PERIODO VENCIDO (el mes cerrado
+        // anterior — obligacion-proxima sólo evalúa ése), no en el mes en
+        // curso: «Presentar ahora» debe llevar a lo que venció (pág. 11).
+        href: vencidas.length > 0
+          ? `/impuestos?month=${((m0) => (m0 === 0 ? 12 : m0))(new Date().getMonth())}&year=${new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()}`
+          : "/impuestos",
+      },
     },
     {
       num: 5,
