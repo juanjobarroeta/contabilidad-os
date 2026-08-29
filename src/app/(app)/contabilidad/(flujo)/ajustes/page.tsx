@@ -359,7 +359,7 @@ export default function AjustesPage() {
                         onKeyDown={(e) => teclas(e, i, "cuenta")}
                         onPaste={(e) => pegar(e, i)}
                         placeholder="código o nombre"
-                        className={cn(celda, "w-24 shrink-0 font-mono")}
+                        className={cn(celda, "w-32 shrink-0 font-mono")}
                       />
                       <span className="truncate pr-2 text-[13px] text-cos-ink-soft">{nombreDe(l.cuenta)}</span>
                     </div>

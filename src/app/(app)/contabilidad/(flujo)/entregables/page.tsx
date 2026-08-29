@@ -16,7 +16,7 @@ import {
 
 export default function EntregablesPage() {
   const { activeCompany } = useCompany();
-  const { year, month, setPeriod } = usePeriod();
+  const { year, month } = usePeriod();
   const [periods, setPeriods] = useState<Period[]>([]);
 
   useEffect(() => {
@@ -37,7 +37,6 @@ export default function EntregablesPage() {
         periods={periods}
         year={year}
         month={month}
-        onChangePeriod={setPeriod}
       />
     </div>
   );
