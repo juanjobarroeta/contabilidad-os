@@ -173,7 +173,10 @@ export function ConciliacionBancariaPanel({
           </p>
         </div>
         <div className="space-y-2 p-4 text-[14px]">
-          <Renglon label="Saldo según estado(s) de cuenta" valor={data.saldoEstadoCuenta} />
+          <Renglon
+            label={data.cuentas.length === 1 ? "Saldo según estado de cuenta" : "Saldo según estados de cuenta"}
+            valor={data.saldoEstadoCuenta}
+          />
           <Renglon
             label={`− Movimientos del banco no registrados (${data.movimientosNoRegistrados.length})`}
             valor={data.totalNoRegistrados === 0 ? 0 : -data.totalNoRegistrados}
@@ -224,7 +227,7 @@ export function ConciliacionBancariaPanel({
                   <div className="min-w-0">
                     <p className="truncate text-[13.5px] font-medium text-cos-ink">{c.etiqueta}</p>
                     <p className="text-[12px] text-cos-ink-soft">
-                      {c.movimientos} movimiento(s)
+                      {c.movimientos} {c.movimientos === 1 ? "movimiento" : "movimientos"}
                       {c.sinRegistrar > 0 ? ` · ${c.sinRegistrar} sin registrar` : ""}
                       {c.saldoPropuesto ? " · saldo tomado del estado importado" : ""}
                       {c.saldoManual ? " · saldo capturado a mano" : ""}

@@ -181,6 +181,14 @@ export async function conciliacionDelMes(
   // Un movimiento está REGISTRADO si generó asiento en Bancos. Se comprueba
   // contra el ledger y no contra su status, porque un mes sin postear no tiene
   // asientos aunque los movimientos estén conciliados con su CFDI.
+  //
+  // Los IGNORED cuentan como registrados aunque no tengan asiento propio: o son
+  // la pierna receptora de un traspaso entre cuentas propias (su contra-asiento
+  // ya la puso en libros — dejarla como partida inflaba la diferencia por el
+  // monto del traspaso) o son ruido que el contador descartó a propósito. Si un
+  // descarte deja al banco y al libro sin cuadrar, la diferencia lo delata como
+  // «sin explicar» — más honesto que listarlo como partida y dar por conciliado
+  // un hueco real.
   const conAsiento = new Set(asientos.map((a) => a.bankTxId).filter(Boolean) as string[]);
   const movimientos: MovimientoParaConciliar[] = txs.map((t) => ({
     id: t.id,
@@ -188,7 +196,7 @@ export async function conciliacionDelMes(
     descripcion: t.descripcion,
     monto: Number(t.monto),
     cuentaBancariaId: t.bankAccountId,
-    registrado: conAsiento.has(t.id),
+    registrado: conAsiento.has(t.id) || t.status === "IGNORED",
     conciliado: t.status !== "UNMATCHED",
     contraparteNombre: t.contraparteNombre,
     contraparteRfc: t.contraparteRfc,

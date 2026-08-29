@@ -219,7 +219,8 @@ export function resumenConciliacion(r: ConciliacionResultado): string {
   // pendiente. Decirlo primero evita que 27 movimientos normales se lean como
   // 27 excepciones que hay que investigar.
   if (!r.mesPosteado && r.movimientosNoRegistrados.length > 0) {
-    return `El mes todavía no se ha cerrado, así que sus ${r.movimientosNoRegistrados.length} movimiento(s) aún no llegan al libro. Ciérralo en «Cierres mensuales» y vuelve: lo que siga apareciendo aquí sí serán partidas en conciliación.`;
+    const n = r.movimientosNoRegistrados.length;
+    return `El mes todavía no se ha cerrado, así que ${n === 1 ? "su movimiento aún no llega" : `sus ${n} movimientos aún no llegan`} al libro. Ciérralo en «Cierre del mes» y vuelve: lo que siga apareciendo aquí sí serán partidas en conciliación.`;
   }
   if (r.saldoEstadoCuenta == null) {
     const cuentas = r.cuentasSinSaldo.length > 0 ? `: ${r.cuentasSinSaldo.join(", ")}` : "";
@@ -229,7 +230,9 @@ export function resumenConciliacion(r: ConciliacionResultado): string {
     const partidas = r.movimientosNoRegistrados.length + r.asientosSinMovimiento.length;
     return partidas === 0
       ? "Conciliado: el libro y el banco coinciden, sin partidas pendientes."
-      : `Conciliado: el libro y el banco coinciden una vez consideradas ${partidas} partida(s) en conciliación.`;
+      : partidas === 1
+        ? "Conciliado: el libro y el banco coinciden una vez considerada 1 partida en conciliación."
+        : `Conciliado: el libro y el banco coinciden una vez consideradas ${partidas} partidas en conciliación.`;
   }
   const monto = Math.abs(r.diferencia ?? 0).toLocaleString("es-MX", {
     style: "currency",

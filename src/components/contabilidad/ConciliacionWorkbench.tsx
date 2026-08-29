@@ -341,7 +341,7 @@ export function ConciliacionWorkbench({
       }
       setAviso(
         aplicados > 0
-          ? `Auto-conciliación: ${aplicados} movimiento(s) aplicados con confianza alta.`
+          ? `Auto-conciliación: ${aplicados} ${aplicados === 1 ? "movimiento aplicado" : "movimientos aplicados"} con confianza alta.`
           : "Auto-conciliación: sin matches de confianza alta — los restantes se concilian aquí a mano."
       );
       setSelTx(null);
@@ -479,7 +479,7 @@ export function ConciliacionWorkbench({
               cuenta filtrada en cero pero otras pendientes, decirlo mentiría. */}
           {sinGlobal === 0
             ? "Todos los movimientos del mes están conciliados — la compuerta del cierre está abierta."
-            : `Esta cuenta está al corriente; quedan ${sinGlobal} movimiento(s) en otras cuentas.`}
+            : `Esta cuenta está al corriente; ${sinGlobal === 1 ? "queda 1 movimiento" : `quedan ${sinGlobal} movimientos`} en otras cuentas.`}
         </div>
       ) : (
         <div className="rounded-card border border-cos-line bg-cos-card">
