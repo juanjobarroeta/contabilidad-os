@@ -38,11 +38,25 @@ export async function GET(req: Request, { params }: Params) {
     fechaMes = { gte: new Date(Date.UTC(y, m - 1, 1)), lt: new Date(Date.UTC(y, m, 1)) };
   }
 
-  const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
-  if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
-
-  const member = await getEffectiveCompanyMembership(user.id, account.companyId);
-  if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+  // «todas»: la vista de TODAS las cuentas de la empresa (?companyId=). El
+  // mesa ya la ofrecía; sin ella la pestaña Movimientos aterrizaba en una
+  // sola cuenta y sus conteos (11) no ataban con los del mesa (16) —
+  // decisión del owner, revisión pág. 10.
+  let companyIdScope: string | null = null;
+  if (bankAccountId === "todas") {
+    const companyId = searchParams.get("companyId");
+    if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
+    const member = await getEffectiveCompanyMembership(user.id, companyId);
+    if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+    companyIdScope = companyId;
+  }
+  let account: Awaited<ReturnType<typeof prisma.bankAccount.findUnique>> = null;
+  if (!companyIdScope) {
+    account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
+    if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
+    const member = await getEffectiveCompanyMembership(user.id, account.companyId);
+    if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+  }
 
   // Tag-based subcategories of IGNORED that we surface as their own tabs.
   // Anything else with status=IGNORED falls into the plain "Ignorados" tab.
@@ -58,9 +72,12 @@ export async function GET(req: Request, { params }: Params) {
   };
   const knownTags = Object.values(TAG_TABS);
 
-  const scope: Prisma.BankTransactionWhereInput = fechaMes
-    ? { bankAccountId, fecha: fechaMes }
+  const alcanceCuenta: Prisma.BankTransactionWhereInput = companyIdScope
+    ? { bankAccount: { companyId: companyIdScope } }
     : { bankAccountId };
+  const scope: Prisma.BankTransactionWhereInput = fechaMes
+    ? { ...alcanceCuenta, fecha: fechaMes }
+    : { ...alcanceCuenta };
   let where: Prisma.BankTransactionWhereInput = { ...scope };
   if (status && status in TAG_TABS) {
     where = { ...scope, status: "IGNORED", notes: TAG_TABS[status] };
