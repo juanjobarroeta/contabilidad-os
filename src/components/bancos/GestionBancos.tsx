@@ -40,7 +40,8 @@ interface BankAccount {
   lastTransaction: { fecha: string; saldo?: number } | null;
 }
 interface BankTx {
-  id: string; fecha: string; descripcion: string; monto: number; referencia?: string; saldo?: number;
+  id: string;
+  bankAccountId: string; fecha: string; descripcion: string; monto: number; referencia?: string; saldo?: number;
   tipo: "CREDITO" | "DEBITO"; status: "UNMATCHED" | "MATCHED" | "IGNORED";
   notes?: string | null;
   // Contraparte desglosada de la descripción (bancos/spei-descripcion.ts).
@@ -292,7 +293,15 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       if (!res.ok || !Array.isArray(data)) throw new Error();
       const list: BankAccount[] = data;
       setAccounts(list);
-      setSelectedId((prev) => prev && list.some((a) => a.id === prev) ? prev : list[0]?.id ?? null);
+      setSelectedId((prev) =>
+        prev === "todas"
+          ? prev
+          : prev && list.some((a) => a.id === prev)
+            ? prev
+            : list.length > 1
+              ? "todas"
+              : list[0]?.id ?? null,
+      );
     } catch {
       setErrorCuentas("No se pudieron cargar las cuentas bancarias. Revisa tu conexión e inténtalo de nuevo.");
     }
@@ -303,7 +312,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     setLoading(true); setExpandedId(null);
     setErrorTxs("");
     try {
-      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}`);
+      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}${selectedId === "todas" && activeCompany ? `&companyId=${activeCompany.id}` : ""}`);
       const data = await res.json();
       // Un error del API no es "no hay movimientos": sin array real, es fallo.
       if (!res.ok || !Array.isArray(data?.transactions)) throw new Error();
@@ -327,7 +336,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     setCargandoMas(true);
     try {
       const sig = pagina + 1;
-      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=${sig}&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}`);
+      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=${sig}&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}${selectedId === "todas" && activeCompany ? `&companyId=${activeCompany.id}` : ""}`);
       const data = await res.json();
       setTxs((prev) => [...prev, ...(data.transactions ?? [])]);
       setPagina(sig);
@@ -532,7 +541,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     setManualOpen(false); setManualQuery(""); setManualResults([]);
     setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
     try {
-      const res = await fetch(`/api/bancos/${selectedId}/match?txId=${tx.id}`);
+      const res = await fetch(`/api/bancos/${tx.bankAccountId}/match?txId=${tx.id}`);
       const data = await res.json();
       setCandidates(data.candidates ?? []);
       setImpuestoCands(data.impuestos ?? []);
@@ -867,6 +876,14 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
         <>
           {/* account selector */}
           <div className="mt-4 flex flex-wrap gap-2">
+            {accounts.length > 1 && (
+              <button
+                onClick={() => { setSelectedId("todas"); setImportReport(null); }}
+                className={"inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium " + ("todas" === selectedId ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}
+              >
+                Todas las cuentas
+              </button>
+            )}
             {accounts.map((a) => (
               <button key={a.id} onClick={() => { setSelectedId(a.id); setImportReport(null); }}
                 className={"inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13.5px] font-medium " + (a.id === selectedId ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
@@ -879,6 +896,11 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
           </div>
 
           {/* account card */}
+          {vista === "cuentas" && !account && selectedId === "todas" && (
+            <Card className="mt-4 rounded-card border-cos-line p-5 text-[13.5px] text-cos-ink-soft shadow-card">
+              Elige una cuenta arriba para ver su saldo, cargar su estado de cuenta o conciliarla automáticamente.
+            </Card>
+          )}
           {vista === "cuentas" && account && (
             <Card className="mt-4 rounded-card border-cos-line p-5 shadow-card">
               <div className="flex items-center gap-3.5">
@@ -901,7 +923,12 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                 <span className={LBL}>Saldo en banco</span>
                 {account.lastTransaction?.saldo != null
                   ? <Money value={account.lastTransaction.saldo} size={30} weight={700} />
-                  : <span className="font-mono text-[20px] text-cos-ink-faint">—</span>}
+                  : (
+                    <>
+                      <span className="font-mono text-[20px] text-cos-ink-faint">—</span>
+                      <span className="text-[12px] text-cos-ink-faint">Se toma del estado de cuenta que cargues.</span>
+                    </>
+                  )}
               </div>
               <div className="flex flex-wrap gap-2.5">
                 <label className={"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-control border border-cos-line bg-cos-card px-4 py-2.5 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper " + (busy ? "pointer-events-none opacity-50" : "")}>

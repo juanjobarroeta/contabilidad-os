@@ -85,6 +85,35 @@ export async function DELETE(
     return NextResponse.json({ error: "La factura ya está cancelada" }, { status: 409 });
   }
 
+  // Cadena de cancelación (decisión del owner, revisión pág. 5): cancelar una
+  // factura con complementos de pago TIMBRADOS deja REPs vivos apuntando a un
+  // CFDI cancelado — el SAT espera cancelar primero la cadena. Se bloquea con
+  // la lista para que el usuario cancele los REP y regrese.
+  if (invoice.uuid) {
+    const repsVivos = await prisma.pagoDoctoRelacionado.findMany({
+      where: {
+        parentUuid: invoice.uuid,
+        pagoInvoice: { companyId: invoice.companyId, tipo: "PAGO", status: "STAMPED" },
+      },
+      select: { pagoInvoice: { select: { serie: true, folio: true, uuid: true } } },
+    });
+    if (repsVivos.length > 0) {
+      const folios = [...new Set(repsVivos.map((r) => {
+        const p = r.pagoInvoice;
+        return [p.serie, p.folio].filter(Boolean).join("-") || (p.uuid ?? "").slice(0, 8);
+      }))];
+      return NextResponse.json(
+        {
+          error:
+            `Esta factura tiene ${folios.length} complemento${folios.length === 1 ? "" : "s"} de pago timbrado${folios.length === 1 ? "" : "s"} (${folios.join(", ")}). ` +
+            "Cancela primero los complementos y después la factura — el SAT exige la cadena.",
+          codigo: "REPS_VIVOS",
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   // Stamped CFDI → must cancel at SAT via the PAC, with the motivo.
   if (invoice.facturapiId && invoice.company.facturapiApiKey) {
     const out = await getPacProvider().cancelCfdi(
