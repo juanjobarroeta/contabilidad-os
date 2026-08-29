@@ -99,7 +99,7 @@ export default function TerminosPage() {
         <li>
           Concluido el periodo de prueba, el uso de la Plataforma requiere la
           contratación de un plan de pago conforme a los precios y condiciones
-          vigentes: plan Básico $499 MXN/mes por empresa; plan Profesional $1,299 MXN/mes por empresa; plan Despacho $299 MXN/mes por empresa administrada (mínimo diez empresas; cincuenta o más, $199 MXN por empresa). Precios más IVA cuando aplique; el Proveedor puede modificarlos con aviso previo de treinta días naturales.
+          vigentes: plan Básico $499 MXN/mes por empresa; plan Profesional $1,299 MXN/mes por empresa; plan Despachos: multiempresa con precio por volumen conforme a la propuesta o contrato correspondiente. Precios más IVA cuando aplique; el Proveedor puede modificarlos con aviso previo de treinta días naturales.
         </li>
         <li>
           Facturación y renovaciones: cobro mensual por adelantado con
