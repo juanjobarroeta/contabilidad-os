@@ -58,7 +58,7 @@ interface BankTx {
     uuid?: string | null;
     folio?: string | null;
     serie?: string | null;
-    total: number;
+    total: number; contraparteNombre?: string | null;
     fecha?: string | null;
     customer?: { razonSocial: string } | null;
   } | null;
@@ -77,7 +77,7 @@ interface BankTx {
   // Conciliación uno-a-varios: porciones asignadas a varias facturas.
   conciliacionDetalles?: {
     id: string; montoAsignado: number;
-    invoice: { id: string; uuid?: string | null; folio?: string | null; serie?: string | null; total: number; customer?: { razonSocial: string } | null };
+    invoice: { id: string; uuid?: string | null; folio?: string | null; serie?: string | null; total: number; contraparteNombre?: string | null; customer?: { razonSocial: string } | null };
   }[];
 }
 // Línea de la charola de selección múltiple: factura elegida + monto asignado editable.
@@ -1210,7 +1210,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                         <div className="mt-3 border-t border-dashed border-cos-jade-tint pt-3 text-[13px] text-cos-jade-ink">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <Link2 className="h-[15px] w-[15px]" /> Conciliado con{" "}
-                            <b>{m.invoice.customer?.razonSocial ?? "factura"}</b>
+                            <b>{m.invoice.customer?.razonSocial ?? m.invoice.contraparteNombre ?? m.contraparteNombre ?? "factura"}</b>
                           </div>
                           {/* La factura concreta, no solo la contraparte: folio,
                               fecha y total — y enlace al CFDI por UUID. */}

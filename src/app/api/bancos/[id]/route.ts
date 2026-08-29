@@ -306,6 +306,20 @@ export async function DELETE(_req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
+  // El historial bancario es EVIDENCIA contable: los movimientos alimentan
+  // conciliaciones, estados de cuenta de clientes/proveedores y pólizas
+  // posteadas. El cascade de Prisma los borraría en silencio (revisión pág.
+  // 10) — una cuenta con movimientos no se elimina.
+  const movimientos = await prisma.bankTransaction.count({ where: { bankAccountId } });
+  if (movimientos > 0) {
+    return NextResponse.json(
+      {
+        error: `No se puede eliminar: la cuenta tiene ${movimientos} ${movimientos === 1 ? "movimiento" : "movimientos"}. Su historial es evidencia de la conciliación y del libro.`,
+      },
+      { status: 409 },
+    );
+  }
+
   await prisma.bankAccount.delete({ where: { id: bankAccountId } });
   return NextResponse.json({ ok: true });
 }
