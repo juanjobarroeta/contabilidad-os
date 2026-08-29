@@ -157,6 +157,8 @@ export async function GET(req: Request, { params }: Params) {
         fecha: inv.fecha,
         customerRfc: rfcFactura,
         customerNombre: nombreFactura,
+        serie: inv.serie,
+        folio: inv.folio,
         clabesConocidas:
           rfcFactura && clabesPorRfc.has(rfcFactura) && tx.contraparteClabe
             ? [tx.contraparteClabe]
