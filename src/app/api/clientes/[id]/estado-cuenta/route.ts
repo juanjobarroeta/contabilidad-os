@@ -27,7 +27,7 @@ export async function GET(
       select: {
         companyId: true, rfc: true, razonSocial: true, email: true, phone: true,
         codigoPostal: true, facturapiId: true,
-        _count: { select: { invoices: { where: { tipo: "INGRESO", status: "STAMPED" } } } },
+        _count: { select: { invoices: { where: { status: "STAMPED", OR: [{ tipo: "INGRESO" }, { tipo: "EGRESO" }] } } } },
       },
     });
     if (!customer) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -46,13 +46,14 @@ export async function GET(
       return NextResponse.json({ error: "Rango de fechas inválido" }, { status: 400 });
     }
 
-    const estado = await estadoDeCuentaCliente(customer.companyId, id, { desde, hasta, hoy });
+    const direccion = url.searchParams.get("direccion") === "proveedor" ? ("proveedor" as const) : ("cliente" as const);
+    const estado = await estadoDeCuentaCliente(customer.companyId, id, { desde, hasta, hoy, direccion });
 
     // Ficha del cliente (hub): 69-B, Facturapi y REPs emitidos hacia él —
     // todo lo del cliente en una sola página (decisión del owner, pág. 8).
     const uuidsCliente = (
       await prisma.invoice.findMany({
-        where: { companyId: customer.companyId, customerId: id, tipo: "INGRESO", status: "STAMPED", uuid: { not: null } },
+        where: { companyId: customer.companyId, customerId: id, tipo: direccion === "proveedor" ? "EGRESO" : "INGRESO", status: "STAMPED", uuid: { not: null } },
         select: { uuid: true },
       })
     ).map((f) => f.uuid as string);

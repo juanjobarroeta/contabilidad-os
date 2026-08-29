@@ -62,6 +62,7 @@ export async function GET(req: Request) {
       invoices: { some: { companyId, tipo: "EGRESO", status: { not: "CANCELLED" } } },
     },
     select: {
+      id: true,
       rfc: true,
       _count: {
         select: { invoices: { where: { tipo: "EGRESO", status: { not: "CANCELLED" } } } },
@@ -69,6 +70,9 @@ export async function GET(req: Request) {
     },
   });
   const cfdisPorRfc = new Map(emisores.map((e) => [e.rfc.toUpperCase().trim(), e._count.invoices]));
+  // El emisor de los EGRESO vive como Customer: su id abre el estado de
+  // cuenta del proveedor (?direccion=proveedor).
+  const emisorPorRfc = new Map(emisores.map((e) => [e.rfc.toUpperCase().trim(), e.id]));
 
   // Bandera 69-B: deducir de un EFOS es la exposición fiscal real del
   // directorio de proveedores. Sólo se marca cuando el RFC aparece en la lista.
@@ -78,6 +82,7 @@ export async function GET(req: Request) {
       ...p,
       cfdisRecibidos: cfdisPorRfc.get(p.rfc.toUpperCase().trim()) ?? 0,
       situacion69b: sit69b.get(p.rfc) ?? null,
+      emisorCustomerId: emisorPorRfc.get(p.rfc.toUpperCase().trim()) ?? null,
     })),
   );
 }
