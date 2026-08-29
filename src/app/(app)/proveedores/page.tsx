@@ -190,11 +190,12 @@ export default function ProveedoresPage() {
   }
 
   return (
+    <div>
+    <DirectorioNav />
     <div className="mx-auto max-w-[1000px] px-6 py-7">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <DirectorioNav />
           <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Proveedores</h1>
           <p className="mt-1.5 text-[15px] text-cos-ink-soft">
             {activeCompany.razonSocial}
@@ -503,6 +504,7 @@ export default function ProveedoresPage() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

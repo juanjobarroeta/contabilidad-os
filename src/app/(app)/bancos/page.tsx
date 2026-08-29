@@ -24,6 +24,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Loading } from "@/components/ui/feedback";
 import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWorkbench";
 import { GestionBancos, type VistaBancos } from "@/components/bancos/GestionBancos";
+import { TopTabsBar } from "@/components/layout/TopTabsBar";
 import { MESES } from "@/components/contabilidad/PeriodProvider";
 import { cn } from "@/lib/utils";
 
@@ -75,7 +76,13 @@ export default function BancosPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1060px] px-4 py-6 sm:px-8 sm:py-8">
+    <div>
+      <TopTabsBar
+        ariaLabel="Secciones de Bancos"
+        innerClassName="max-w-[1060px]"
+        tabs={TABS.map(({ id, label }) => ({ key: id, label, active: tab === id, onSelect: () => irA(id) }))}
+      />
+      <div className="mx-auto max-w-[1060px] px-4 py-6 sm:px-8 sm:py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.03em] text-cos-ink">Bancos</h1>
@@ -102,20 +109,6 @@ export default function BancosPage() {
         )}
       </div>
 
-      <nav aria-label="Secciones de Bancos" className="mt-4 flex flex-wrap gap-1 border-b border-cos-line">
-        {TABS.map(({ id, label }) => (
-          <button key={id} onClick={() => irA(id)} aria-current={tab === id ? "page" : undefined}
-            className={cn(
-              "-mb-px border-b-2 px-3.5 py-2 text-[13.5px] font-medium transition-colors",
-              tab === id
-                ? "border-cos-brand text-cos-brand-ink"
-                : "border-transparent text-cos-ink-soft hover:border-cos-line hover:text-cos-ink"
-            )}>
-            {label}
-          </button>
-        ))}
-      </nav>
-
       <div className="mt-5">
         {tab === "conciliacion" ? (
           <ConciliacionWorkbench
@@ -127,6 +120,7 @@ export default function BancosPage() {
         ) : (
           <GestionBancos key={`${tab}-${version}`} vista={tab} />
         )}
+      </div>
       </div>
     </div>
   );

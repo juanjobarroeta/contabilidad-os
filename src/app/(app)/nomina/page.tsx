@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { TopTabsBar } from "@/components/layout/TopTabsBar";
 import ResumenTab from "./ResumenTab";
 import CorridasTab from "./CorridasTab";
 import EmpleadosTab from "./EmpleadosTab";
@@ -59,33 +60,12 @@ export default function NominaHubPage() {
 
   return (
     <div>
-      <div className="border-b border-cos-line px-4 sm:px-8">
-        <div className="mx-auto flex max-w-[1000px] items-center gap-1">
-          {/* min-w-0 permite que el tablist se encoja y haga scroll horizontal en
-              móvil en vez de empujar el enlace al cockpit fuera de la pantalla. */}
-          <div
-            role="tablist"
-            aria-label="Secciones de nómina"
-            className="flex min-w-0 flex-1 snap-x gap-1 overflow-x-auto"
-          >
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                role="tab"
-                aria-selected={tab === t.id}
-                onClick={() => selectTab(t.id)}
-                className={`-mb-px shrink-0 snap-start whitespace-nowrap border-b-2 px-3.5 py-3 text-[14px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cos-brand-tint ${
-                  tab === t.id
-                    ? "border-cos-brand text-cos-brand-ink"
-                    : "border-transparent text-cos-ink-soft hover:text-cos-ink"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          {/* multi-RFC: el cockpit de despacho sigue siendo página propia */}
-          {companies.length > 1 && (
+      <TopTabsBar
+        ariaLabel="Secciones de nómina"
+        tabs={TABS.map((t) => ({ key: t.id, label: t.label, active: tab === t.id, onSelect: () => selectTab(t.id) }))}
+        trailing={
+          /* multi-RFC: el cockpit de despacho sigue siendo página propia */
+          companies.length > 1 ? (
             <Link
               href="/nomina/cockpit"
               className="inline-flex flex-none items-center gap-1.5 py-3 text-[13px] font-medium text-cos-ink-soft hover:text-cos-brand-ink"
@@ -94,9 +74,9 @@ export default function NominaHubPage() {
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Tablero multi-RFC</span>
             </Link>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {tab === "resumen" && <ResumenTab onTab={selectTab} />}
       {tab === "corridas" && <CorridasTab />}

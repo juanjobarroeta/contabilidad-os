@@ -90,8 +90,9 @@ export default function VerificadorPage() {
   const enLista = l69?.situacion === "DEFINITIVO" || l69?.situacion === "PRESUNTO";
 
   return (
+    <div>
+    <DirectorioNav />
     <div className="mx-auto max-w-[760px] px-4 py-6 sm:px-8 sm:py-8">
-      <DirectorioNav />
       <div className="flex items-center gap-3">
         <ScanSearch className="h-7 w-7 text-cos-brand-ink" />
         <div>
@@ -242,6 +243,7 @@ export default function VerificadorPage() {
         errores de captura al instante; no consulta el padrón en vivo. La lista 69-B se descarga del SAT y se refresca
         cada 12 horas. Cada consulta queda registrada en la bitácora.
       </p>
+    </div>
     </div>
   );
 }
