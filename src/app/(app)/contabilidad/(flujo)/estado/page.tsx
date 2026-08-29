@@ -10,7 +10,7 @@ import { EstadoResultadosPanel } from "@/components/contabilidad/EstadoResultado
 
 export default function EstadoPage() {
   const { activeCompany } = useCompany();
-  const { year, month, setPeriod } = usePeriod();
+  const { year, month } = usePeriod();
   if (!activeCompany) return null;
   return (
     <div>
@@ -19,7 +19,7 @@ export default function EstadoPage() {
       <div className="print:hidden">
         <FlowPageHeader title="Estado de resultados" actions={<BotonImprimir />} />
       </div>
-      <EstadoResultadosPanel companyId={activeCompany.id} year={year} month={month} onChangePeriod={setPeriod} />
+      <EstadoResultadosPanel companyId={activeCompany.id} year={year} month={month} />
     </div>
   );
 }

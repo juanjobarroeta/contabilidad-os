@@ -11,7 +11,7 @@ import { BalanzaPanel } from "@/components/contabilidad/BalanzaPanel";
 
 export default function BalanzaPage() {
   const { activeCompany } = useCompany();
-  const { year, month, setPeriod } = usePeriod();
+  const { year, month } = usePeriod();
   if (!activeCompany) return null;
   return (
     <div>
@@ -20,7 +20,7 @@ export default function BalanzaPage() {
       <div className="print:hidden">
         <FlowPageHeader title="Balanza" actions={<BotonImprimir />} />
       </div>
-      <BalanzaPanel companyId={activeCompany.id} year={year} month={month} onChangePeriod={setPeriod} />
+      <BalanzaPanel companyId={activeCompany.id} year={year} month={month} />
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { Money } from "@/components/ui";
 import { Alert, Loading, RetryButton } from "@/components/ui/feedback";
 import { FileText } from "lucide-react";
 import { BotonExcel } from "@/components/contabilidad/BotonExcel";
-import { PeriodPicker } from "@/components/contabilidad/PeriodPicker";
 import { PreliminarBanner } from "@/components/contabilidad/PreliminarBanner";
 
 export interface EstadoResultadosRow {
@@ -27,8 +26,8 @@ export interface EstadoResultados {
 }
 
 export function EstadoResultadosPanel({
-  companyId, year, month, onChangePeriod,
-}: { companyId: string; year: number; month: number; onChangePeriod: (y: number, m: number) => void }) {
+  companyId, year, month,
+}: { companyId: string; year: number; month: number }) {
   // Tri-estado: null = aún no carga; el payload vacío es el vacío genuino.
   const [data, setData] = useState<EstadoResultados | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,11 +58,7 @@ export function EstadoResultadosPanel({
 
   return (
     <div>
-      {/* Controles de pantalla (período y descarga): fuera del papel. */}
-      <div className="print:hidden">
-        <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
-      </div>
-
+      {/* El período se elige en la navegación del flujo (‹ mes ›). */}
       <div className="mb-3 flex justify-end print:hidden">
         <BotonExcel
           href={`/api/contabilidad/estado-resultados?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}

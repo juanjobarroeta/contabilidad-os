@@ -299,7 +299,7 @@ export function ConciliacionBancariaPanel({
       <LadoDetalle
         titulo="Auxiliar de Bancos (libros)"
         ayuda="Cada asiento con su folio de póliza — el mismo que ves en el libro diario y el que lleva el XML de pólizas del SAT."
-        vacio="El mes no tiene asientos en la cuenta de Bancos. Si ya importaste los movimientos, cierra el mes en «Cierres mensuales» para generarlos."
+        vacio="El mes no tiene asientos en la cuenta de Bancos. Si ya importaste los movimientos, postea el mes en «Cierre del mes» para generarlos."
         filas={data.auxiliar.map((a) => ({
           id: a.id,
           fecha: a.fecha,

@@ -7,7 +7,6 @@ import { formatCurrency } from "@/lib/utils";
 import { BookOpen } from "lucide-react";
 import { AuxiliarCuentaModal } from "@/components/contabilidad/LibroPanels";
 import { BotonExcel } from "@/components/contabilidad/BotonExcel";
-import { PeriodPicker } from "@/components/contabilidad/PeriodPicker";
 import { PreliminarBanner } from "@/components/contabilidad/PreliminarBanner";
 
 export interface BalanzaRow {
@@ -19,11 +18,13 @@ export interface BalanzaRow {
   cargos: number;
   abonos: number;
   saldo: number;
+  saldoInicial: number;
+  saldoFinal: number;
 }
 
 export function BalanzaPanel({
-  companyId, year, month, onChangePeriod,
-}: { companyId: string; year: number; month: number; onChangePeriod: (y: number, m: number) => void }) {
+  companyId, year, month,
+}: { companyId: string; year: number; month: number }) {
   // Tri-estado: null = aún no carga, [] = periodo genuinamente vacío.
   const [rows, setRows] = useState<BalanzaRow[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,15 +55,22 @@ export function BalanzaPanel({
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  const nonZero = (rows ?? []).filter(r => Math.abs(r.cargos) > 0.01 || Math.abs(r.abonos) > 0.01);
+  // Con saldo que reportar: movimiento del mes O saldo acumulado — una cuenta
+  // de Bancos sin movimientos este mes sigue teniendo saldo en la balanza,
+  // igual que en el XML del Anexo 24.
+  const nonZero = (rows ?? []).filter(
+    (r) =>
+      Math.abs(r.cargos) > 0.01 ||
+      Math.abs(r.abonos) > 0.01 ||
+      Math.abs(r.saldoInicial) > 0.01 ||
+      Math.abs(r.saldoFinal) > 0.01
+  );
+  const totCargos = nonZero.reduce((s, r) => s + r.cargos, 0);
+  const totAbonos = nonZero.reduce((s, r) => s + r.abonos, 0);
 
   return (
     <div>
-      {/* Controles de pantalla (período y descarga): fuera del papel. */}
-      <div className="print:hidden">
-        <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
-      </div>
-
+      {/* El período se elige en la navegación del flujo (‹ mes ›). */}
       <div className="mb-3 flex justify-end print:hidden">
         <BotonExcel
           href={`/api/contabilidad/balanza?companyId=${companyId}&year=${year}&month=${month}&format=xlsx`}
@@ -80,7 +88,7 @@ export function BalanzaPanel({
         <div className="bg-cos-card border border-dashed border-cos-line rounded-xl p-12 text-center">
           <BookOpen className="h-10 w-10 text-cos-ink-soft mx-auto mb-3 opacity-30" />
           <p className="text-sm text-cos-ink-soft">Sin movimientos para este periodo.</p>
-          <p className="text-xs text-cos-ink-soft mt-1">Cierra el mes desde la pestaña &ldquo;Cierres mensuales&rdquo;.</p>
+          <p className="text-xs text-cos-ink-soft mt-1">Postea el mes en «Cierre del mes».</p>
         </div>
       ) : (
         <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden print:overflow-visible">
@@ -89,9 +97,10 @@ export function BalanzaPanel({
               <tr className="border-b border-cos-line bg-cos-paper">
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Cuenta</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Nombre</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Saldo inicial</th>
                 <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Cargos</th>
                 <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Abonos</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Saldo</th>
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Saldo final</th>
               </tr>
             </thead>
             <tbody>
@@ -104,12 +113,25 @@ export function BalanzaPanel({
                 >
                   <td className="px-4 py-2 text-xs font-mono">{r.subcuenta ?? r.cuentaSAT}</td>
                   <td className="px-4 py-2">{r.nombre}</td>
+                  <td className="px-4 py-2 text-right font-mono text-xs">
+                    {Math.abs(r.saldoInicial) > 0.005 ? formatCurrency(r.saldoInicial) : "—"}
+                  </td>
                   <td className="px-4 py-2 text-right font-mono text-xs">{r.cargos > 0 ? formatCurrency(r.cargos) : "—"}</td>
                   <td className="px-4 py-2 text-right font-mono text-xs">{r.abonos > 0 ? formatCurrency(r.abonos) : "—"}</td>
-                  <td className="px-4 py-2 text-right font-mono text-xs font-semibold"><Money value={r.saldo} /></td>
+                  <td className="px-4 py-2 text-right font-mono text-xs font-semibold"><Money value={r.saldoFinal} /></td>
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="border-t border-cos-line bg-cos-paper">
+                <td className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-cos-ink-soft" colSpan={3}>
+                  Totales del período
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono text-xs font-semibold">{formatCurrency(totCargos)}</td>
+                <td className="px-4 py-2.5 text-right font-mono text-xs font-semibold">{formatCurrency(totAbonos)}</td>
+                <td className="px-4 py-2.5" />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
