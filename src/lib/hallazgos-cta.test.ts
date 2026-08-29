@@ -26,3 +26,18 @@ describe("ctaParaHallazgo", () => {
     expect(ctaParaHallazgo("desconocido.total")).toBeNull();
   });
 });
+
+describe("destinos afinados del copiloto", () => {
+  it("REP faltante lleva al centro de complementos, donde se emite", () => {
+    expect(ctaParaHallazgo("cfdi.rep_faltante")).toEqual({
+      label: "Emitir complemento",
+      href: "/facturas?tab=complementos",
+    });
+  });
+
+  it("69-B lleva al directorio de proveedores (ahí está la situación por RFC)", () => {
+    expect(ctaParaHallazgo("efos.presunto")?.href).toBe("/proveedores");
+    expect(ctaParaHallazgo("efos.definitivo")?.href).toBe("/proveedores");
+    expect(ctaParaHallazgo("efos.alguna_clave_futura")?.href).toBe("/proveedores");
+  });
+});
