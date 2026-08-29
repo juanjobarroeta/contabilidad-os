@@ -82,8 +82,9 @@ export function CePresentadoPanel({ companyId }: { companyId: string }) {
   if (periodos.length === 0 && !loading) {
     return (
       <p className="text-sm text-cos-ink-soft">
-        Sin balanzas presentadas importadas. Corre la importación de la serie CE
-        (Syntage → CeBalanzaMes) para leer aquí lo declarado.
+        Aún no hay balanzas presentadas al SAT en el expediente de esta empresa.
+        Llegan solas con la sincronización SAT (serie de Contabilidad Electrónica);
+        cuando existan, aquí se compara lo declarado contra lo derivado.
       </p>
     );
   }
