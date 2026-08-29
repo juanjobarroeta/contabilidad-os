@@ -227,6 +227,25 @@ export function CopilotoRail() {
                 </Link>
                 <button
                   type="button"
+                  title="Preguntar al copiloto sobre esto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // El chat abre con el hallazgo pre-cargado en el input
+                    // (mismo mecanismo que Avisos): el usuario edita o envía.
+                    window.dispatchEvent(
+                      new CustomEvent("cos:ask-ai", {
+                        detail: {
+                          seed: `Explícame este hallazgo y cómo lo resuelvo: ${g.titulo}${g.muestra ? ` (p. ej. ${g.muestra})` : ""}`,
+                        },
+                      }),
+                    );
+                  }}
+                  className="rounded-control border border-cos-line p-1.5 text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
                   title="Posponer 7 días"
                   disabled={posponiendo !== null}
                   onClick={(e) => { e.stopPropagation(); posponer(g.href, g.ids); }}

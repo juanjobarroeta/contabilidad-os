@@ -368,12 +368,13 @@ export default function FacturasPage() {
   }
 
   // Deep-link ?q= — p. ej. el expediente del empleado enlaza el CFDI del
-  // recibo por UUID (/facturas?q=<uuid>). Se lee directo de la URL para no
-  // forzar un limite de Suspense (useSearchParams).
+  // recibo por UUID, y el Copiloto llega con la contraparte del posible
+  // duplicado. Sigue al parámetro (no lectura única): un router.push desde el
+  // rail no remonta la página.
+  const qParam = searchParams.get("q");
   useEffect(() => {
-    const initial = new URLSearchParams(window.location.search).get("q");
-    if (initial) setQ(initial);
-  }, []);
+    if (qParam) setQ(qParam);
+  }, [qParam]);
 
   function showToast(m: string) {
     setToast(m);
