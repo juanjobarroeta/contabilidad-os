@@ -103,6 +103,15 @@ brazo**, alimentada por un lead magnet y SEO comparativo — el playbook exacto
 que Tesio corre contra nosotros, corrido mejor porque el producto es más
 profundo.
 
+- [x] **Doctrina de precios (2026-08-29, con el pricing real de Syntage en
+  docs/proveedores/):** lista **$1,200 MXN/RFC/mes**; escalera por volumen
+  10+ → $999 · 25+ → $899 · 50+ → $799. **Piso duro: $800** mientras
+  Syntage esté en el stack (costo por servir ≈ $450–600/RFC; Syntage manda
+  por ENTIDAD: Tier 1 $7,500/25). El deal ancla a $600×20 se honra como
+  precio fundador con plazo de 12 meses y renovación a lista. Sustituir
+  Syntage = +$300/RFC de margen (~75%): la partida de margen del roadmap.
+  Los términos legales ya no publican cifras de despacho ($299/$199
+  retiradas — subcotizaban toda negociación futura).
 - [ ] **Programa piloto: 10 despachos** *(L)* — onboarding de la mano, office
   hours semanales, precio anual (10 meses) con mínimo de 10 empresas. El
   universo: ~15,000 despachos chicos. La ventaja injusta: el fundador
