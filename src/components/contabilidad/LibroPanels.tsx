@@ -117,7 +117,7 @@ export function LibroDiarioPanel({ companyId, year, month }: { companyId: string
     return (
       <div>
         <div className="mb-3 flex justify-end print:hidden">{botonNueva}</div>
-        <Vacio texto="Sin pólizas en este periodo. Cierra el mes desde «Cierres mensuales» o captura una póliza manual." />
+        <Vacio texto="Sin pólizas en este periodo. Postea el mes en «Cierre del mes» o captura una póliza manual." />
         {editorModal}
       </div>
     );
@@ -573,7 +573,7 @@ export function BalanceGeneralPanel({ companyId, year, month }: { companyId: str
   }
   if (loading || !data) return <Loading />;
   if (data.activo.length === 0 && data.pasivo.length === 0 && data.capital.length === 0) {
-    return <Vacio texto="Sin saldos acumulados a este periodo. Cierra meses desde «Cierres mensuales»." />;
+    return <Vacio texto="Sin saldos acumulados a este periodo. Postea meses en «Cierre del mes»." />;
   }
 
   const cuadra = Math.abs(data.descuadre) < 0.01;
