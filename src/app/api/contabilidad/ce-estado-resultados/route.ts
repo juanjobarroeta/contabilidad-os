@@ -48,23 +48,27 @@ export const GET = withAuthz(async (req: Request) => {
         month: { gte: desdeMes, lte: mes },
         fuente: { notIn: ["APERTURA", "CIERRE"] },
       },
-      select: { monto: true, tipo: true, chartAccount: { select: { cuentaSAT: true, nombre: true } } },
+      select: { monto: true, tipo: true, chartAccount: { select: { cuentaSAT: true, subcuenta: true, nombre: true } } },
     }),
     prisma.chartAccount.findMany({
       where: { companyId },
-      select: { cuentaSAT: true, nombre: true },
+      select: { cuentaSAT: true, subcuenta: true, nombre: true },
     }),
   ]);
 
-  const nombreDe = new Map(nombres.map((n) => [n.cuentaSAT, n.nombre]));
+  const nombreDe = new Map(nombres.map((n) => [n.subcuenta ?? n.cuentaSAT, n.nombre]));
 
   const declarado: MovimientoCuenta[] = declaradoRaw.map((r) => ({
     numCta: r.numCta,
     nombre: nombreDe.get(r.numCta) ?? null,
     monto: Number(r.haber) - Number(r.debe),
   }));
+  // La SUBCUENTA es la llave, no la cuenta de mayor: la balanza presentada
+  // trae renglones por código agrupador (601.46, 601.48…) y agrupar lo
+  // derivado en «601» impedía cotejar renglón a renglón — además el mayor se
+  // quedaba con el nombre de la primera subcuenta que apareciera.
   const derivado: MovimientoCuenta[] = derivadoRaw.map((e) => ({
-    numCta: e.chartAccount.cuentaSAT,
+    numCta: e.chartAccount.subcuenta ?? e.chartAccount.cuentaSAT,
     nombre: e.chartAccount.nombre,
     monto: e.tipo === "ABONO" ? Number(e.monto) : -Number(e.monto),
   }));

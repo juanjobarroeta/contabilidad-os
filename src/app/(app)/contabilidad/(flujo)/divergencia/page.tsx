@@ -306,7 +306,9 @@ export default function DivergenciaPage() {
               </table>
               {rubrosVisibles.length === 0 && (
                 <p className="px-5 py-8 text-center text-sm text-cos-ink-soft">
-                  Sin diferencias en el período — residuo $0.00. Quita el filtro para ver todas las cuentas.
+                  {totalCuentas === 0
+                    ? "El mes no tiene asientos posteados: no hay nada derivado que comparar. Postéalo en «Cierre del mes»."
+                    : "Sin diferencias en el período — residuo $0.00. Quita el filtro para ver todas las cuentas."}
                 </p>
               )}
             </div>

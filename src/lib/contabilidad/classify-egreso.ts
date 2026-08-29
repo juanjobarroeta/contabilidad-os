@@ -110,6 +110,10 @@ const MAPPING: EgresoCategory[] = [
   { prefix: "78111", cuenta: "601.49", label: "Viajes (boletos aéreos)" },
 
   // ── Servicios públicos ───────────────────────────────────────────────
+  // 831018 = servicios de energía eléctrica: es la clave que usa CFE en sus
+  // CFDI reales. Sin el prefijo largo caía en 83101 y cada recibo de luz se
+  // contabilizaba como AGUA.
+  { prefix: "831018", cuenta: "601.52", label: "Energía eléctrica" },
   { prefix: "83101", cuenta: "601.51", label: "Agua" },
   { prefix: "83111", cuenta: "601.52", label: "Energía eléctrica" },
   { prefix: "83121", cuenta: COE_CODES.COMBUSTIBLES, label: "Gas" },

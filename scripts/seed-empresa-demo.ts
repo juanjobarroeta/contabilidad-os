@@ -312,10 +312,18 @@ async function main() {
       }
     }
     // EGRESOS: 8 gastos variados (renta con retenciones no — simple 16%).
-    const conceptos = [
-      "Renta de oficina", "Combustible flotilla", "Servicios de telecomunicaciones",
-      "Honorarios contables", "Energía eléctrica", "Papelería y consumibles",
-      "Mantenimiento de equipo", "Publicidad digital",
+    // Cada uno con SU claveProdServ real: el clasificador de egresos reparte
+    // por clave, y con una sola clave los ocho caían en «Propaganda y
+    // publicidad» — el estado de resultados derivado salía de un solo renglón.
+    const conceptos: [string, string][] = [
+      ["Renta de oficina", "80131502"],
+      ["Combustible flotilla", "15101514"],
+      ["Servicios de telecomunicaciones", "81161700"],
+      ["Honorarios contables", "80101500"],
+      ["Energía eléctrica", "83101800"], // la clave que usa CFE
+      ["Papelería y consumibles", "44121600"],
+      ["Mantenimiento de equipo", "72101511"],
+      ["Publicidad digital", "82101500"],
     ];
     for (let i = 0; i < 8; i++) {
       const [provRazon, provRfc] = PROVEEDORES[i % PROVEEDORES.length];
@@ -324,6 +332,7 @@ async function main() {
       const total = r2(subtotal + iva);
       const dia = 3 + i * 3;
       const uuidEgr = uuidDemo(`${uuidBase}-egr-${i}`);
+      const [conceptoEgr, claveEgr] = conceptos[i];
       const inv = await prisma.invoice.create({
         data: {
           companyId: cid,
@@ -341,12 +350,12 @@ async function main() {
             uuid: uuidEgr, fecha: fecha(per.y, per.m, dia),
             formaPago: "03", metodoPago: "PUE", usoCfdi: "G03",
             subtotal, iva, total,
-            concepto: { claveProdServ: "80141600", claveUnidad: "E48", descripcion: conceptos[i] },
+            concepto: { claveProdServ: claveEgr, claveUnidad: "E48", descripcion: conceptoEgr },
           }),
           items: {
             create: {
-              cantidad: 1, claveProdServ: "80141600", claveUnidad: "E48",
-              descripcion: conceptos[i], valorUnitario: subtotal, importe: subtotal,
+              cantidad: 1, claveProdServ: claveEgr, claveUnidad: "E48",
+              descripcion: conceptoEgr, valorUnitario: subtotal, importe: subtotal,
             },
           },
           taxes: { create: { tipo: "IVA", factor: "TASA", tasa: 0.16, base: subtotal, importe: iva } },
@@ -357,7 +366,7 @@ async function main() {
           data: {
             companyId: cid, bankAccountId: bancoX.id,
             fecha: fecha(per.y, per.m, Math.min(dia + 2, 28)),
-            descripcion: `SPEI ENVIADO ${provRazon.slice(0, 18)} ${conceptos[i]}`,
+            descripcion: `SPEI ENVIADO ${provRazon.slice(0, 18)} ${conceptoEgr}`,
             tipo: "DEBITO", monto: -total, status: "MATCHED", invoiceId: inv.id,
             contraparteNombre: provRazon, contraparteRfc: provRfc,
             contraparteClabe: `0141800${String(10000000000 + Math.floor(rnd() * 8_999_999_999))}`,
