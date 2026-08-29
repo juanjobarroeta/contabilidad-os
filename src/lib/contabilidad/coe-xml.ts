@@ -99,7 +99,8 @@ export async function generateCatalogoXml(opts: CoeCatXmlOptions): Promise<strin
 //
 // SaldoIni/SaldoFin son acumulados (arrastre incluido) y se emiten como MAGNITUD
 // no negativa — la naturaleza (CodAgrup) implica el signo. TipoEnvio: N normal,
-// C complementaria (en C, FechaModBal es obligatoria — pendiente, hoy N-only).
+// C complementaria con FechaModBal obligatoria — la decisión N/C vive en
+// coe-envio.ts (hash del contenido por periodo vs el envío previo).
 
 export interface BalanzaCuentaInput {
   numCta: string;
