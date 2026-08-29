@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
-import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, Shield, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X, ListChecks, RefreshCw, CreditCard, ExternalLink } from "lucide-react";
+import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X, ListChecks, RefreshCw, CreditCard, ExternalLink, Lock, PenLine } from "lucide-react";
 import { mapCsfObligacion, TIPO_DESC } from "@/lib/obligaciones";
 import { rutaRetornoSegura } from "@/lib/ruta-retorno";
 
@@ -90,18 +90,32 @@ const REGIMENES_FISCALES = [
   { value: "626", label: "626 – Régimen Simplificado de Confianza (RESICO)" },
 ];
 
+// Cinco pasos percibidos (seis con documentos): Contacto vive dentro de Datos
+// (eran cuatro campos opcionales con pantalla propia) y CSD + e.firma son UNA
+// pantalla de credenciales — la misma interacción dos veces no merece dos
+// estaciones. Revisión sólo existe en el camino con documentos: en el manual
+// no hay nada que revisar y la pantalla hablaba de documentos nunca subidos.
 const STEPS = [
-  { id: 0, label: "Asistente IA",      icon: Sparkles },
-  { id: 1, label: "Datos fiscales",    icon: Building2 },
-  { id: 2, label: "Revisión",          icon: ListChecks },
-  { id: 3, label: "Sincronización",    icon: RefreshCw },
-  { id: 4, label: "Plan",              icon: CreditCard },
-  { id: 5, label: "Contacto",          icon: Building2 },
-  { id: 6, label: "CSD",               icon: FileKey2 },
-  { id: 7, label: "e.firma / FIEL",    icon: Shield },
+  { id: 0, label: "Asistente IA",   icon: Sparkles },
+  { id: 1, label: "Datos",          icon: Building2 },
+  { id: 2, label: "Revisión",       icon: ListChecks },
+  { id: 3, label: "Sincronización", icon: RefreshCw },
+  { id: 4, label: "Plan",           icon: CreditCard },
+  { id: 5, label: "Credenciales",   icon: FileKey2 },
 ];
 
-const LAST_STEP = 7;
+const LAST_STEP = 5;
+
+// El subtítulo acompaña al paso — el encabezado fijo «Ingresa los datos
+// fiscales del SAT» mentía en Plan y Credenciales.
+const SUBTITULOS: Record<number, string> = {
+  0: "Sube tus documentos del SAT y el asistente llena todo por ti",
+  1: "Los datos de tu Constancia de Situación Fiscal",
+  2: "Confirma lo que detectamos en tus documentos",
+  3: "Cuánto historial de CFDIs traemos del SAT",
+  4: "Elige cómo empezar — sin tarjeta todavía",
+  5: "Sellos del SAT para timbrar y declarar (puedes omitirlo)",
+};
 
 // 2-tier plan cards. Precios de lista MXN/mes (decisión 2026-07); el cobro
 // real usa los objetos Price de Stripe (STRIPE_PRICE_*) — mantener ambos en
@@ -392,17 +406,31 @@ function OnboardingPageInner() {
     return true;
   }
 
+  // Revisión (paso 2) sólo existe cuando el asistente extrajo documentos.
+  const conRevision = aiExtracted;
+
   function nextStep() {
     setError("");
     if (step === 1 && !validateStep1()) return;
-    if (step === 6 && !manifiestoAck) {
-      setError("Confirma la Carta Manifiesto de Facturapi para continuar (o usa Omitir).");
-      return;
-    }
+    if (step === 1) { setStep(conRevision ? 2 : 3); return; }
     setStep((s) => s + 1);
   }
 
-  async function handleSubmit() {
+  function prevStep() {
+    setError("");
+    if (step === 3) { setStep(conRevision ? 2 : 1); return; }
+    setStep((s) => s - 1);
+  }
+
+  async function handleSubmit(omitirCredenciales = false) {
+    // La Carta Manifiesto sólo aplica si de verdad se sube un CSD: exigirla
+    // con las manos vacías era una trampa (checkbox obligatorio u «Omitir»
+    // escondido). «Omitir» crea la empresa sin credenciales, elija lo que
+    // haya elegido el usuario en los campos.
+    if (!omitirCredenciales && (csd.cerFile || csd.keyFile) && !manifiestoAck) {
+      setError("Confirma la Carta Manifiesto de Facturapi para continuar (u Omitir para configurarlo después).");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -412,10 +440,12 @@ function OnboardingPageInner() {
       let fielCer: string | undefined;
       let fielKey: string | undefined;
 
-      if (csd.cerFile) csdCer = await fileToBase64(csd.cerFile);
-      if (csd.keyFile) csdKey = await fileToBase64(csd.keyFile);
-      if (fiel.cerFile) fielCer = await fileToBase64(fiel.cerFile);
-      if (fiel.keyFile) fielKey = await fileToBase64(fiel.keyFile);
+      if (!omitirCredenciales) {
+        if (csd.cerFile) csdCer = await fileToBase64(csd.cerFile);
+        if (csd.keyFile) csdKey = await fileToBase64(csd.keyFile);
+        if (fiel.cerFile) fielCer = await fileToBase64(fiel.cerFile);
+        if (fiel.keyFile) fielKey = await fileToBase64(fiel.keyFile);
+      }
 
       // Earliest régimen start date from the CSF — used server-side as the
       // lower bound for the historical SAT backfill (we never ask SAT for
@@ -461,10 +491,10 @@ function OnboardingPageInner() {
           ...contacto,
           csdCer,
           csdKey,
-          csdPassword: csd.password || undefined,
+          csdPassword: omitirCredenciales ? undefined : csd.password || undefined,
           fielCer,
           fielKey,
-          fielPassword: fiel.password || undefined,
+          fielPassword: omitirCredenciales ? undefined : fiel.password || undefined,
           fechaInicioRegimen,
           regimenes,
           csfObligaciones,
@@ -540,13 +570,9 @@ function OnboardingPageInner() {
               <ArrowLeft className="h-3.5 w-3.5" /> Volver a Empresas
             </Link>
           ) : (
-            <div className="mb-3 flex items-center justify-between">
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-1.5 text-xs text-cos-ink-soft hover:text-cos-ink"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" /> Salir
-              </Link>
+            /* Primera vez no hay a dónde «Salir» (el dashboard rebota aquí
+               mismo sin empresa): una sola salida honesta — cerrar sesión. */
+            <div className="mb-3 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => signOut({ callbackUrl: "/login" })}
@@ -577,40 +603,53 @@ function OnboardingPageInner() {
             {fromEmpresas ? "Agregar nueva empresa" : "Configura tu empresa"}
           </h1>
           <p className="text-sm text-cos-ink-soft">
-            {fromEmpresas
+            {fromEmpresas && step === 0
               ? "Se agregará a tu despacho automáticamente"
-              : "Ingresa los datos fiscales del SAT"}
+              : SUBTITULOS[step]}
           </p>
 
-          {/* Step indicators — icon dots + connectors, with a single active-step caption */}
-          <div className="flex items-center mt-5">
-            {STEPS.map((s, i) => {
+          {/* Estaciones con nombre: ocho íconos anónimos sólo comunicaban
+              «hay mucho». Sin documentos, Revisión ni aparece. */}
+          <div className="mt-5 flex items-start">
+            {STEPS.filter((s) => s.id !== 2 || conRevision).map((s, i, visibles) => {
               const Icon = s.icon;
               const done = step > s.id;
               const active = step === s.id;
               return (
-                <div key={s.id} className="flex items-center flex-1 last:flex-none">
-                  <div
-                    className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                      done
-                        ? "bg-cos-jade-tint0 text-white"
-                        : active
-                        ? "bg-cos-brand text-white ring-4 ring-cos-brand/15"
-                        : "bg-cos-slate-tint text-cos-ink-soft"
-                    }`}
-                  >
-                    {done ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                <div key={s.id} className="flex flex-1 items-start last:flex-none">
+                  <div className="flex w-14 flex-col items-center gap-1">
+                    <div
+                      className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                        done
+                          ? "bg-cos-jade text-white"
+                          : active
+                          ? "bg-cos-brand text-white ring-4 ring-cos-brand/15"
+                          : "bg-cos-slate-tint text-cos-ink-soft"
+                      }`}
+                    >
+                      {done ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                    </div>
+                    <span
+                      className={`hidden sm:block text-center text-[9.5px] font-medium leading-tight ${
+                        active ? "text-cos-brand-ink" : done ? "text-cos-jade-ink" : "text-cos-ink-faint"
+                      }`}
+                    >
+                      {s.label}
+                    </span>
                   </div>
-                  {i < STEPS.length - 1 && (
-                    <div className={`h-px flex-1 mx-1.5 ${done ? "bg-cos-jade-ink" : "bg-cos-slate-tint"}`} />
+                  {i < visibles.length - 1 && (
+                    <div className={`mt-4 h-px flex-1 -mx-2.5 ${done ? "bg-cos-jade" : "bg-cos-slate-tint"}`} />
                   )}
                 </div>
               );
             })}
           </div>
-          <p className="text-xs text-center mt-3">
-            <span className="text-cos-ink-soft">Paso {step + 1} de {STEPS.length} · </span>
-            <span className="font-medium text-cos-brand-ink">{STEPS[step]?.label}</span>
+          <p className="mt-2 text-center text-xs sm:hidden">
+            <span className="text-cos-ink-soft">
+              Paso {STEPS.filter((s) => s.id !== 2 || conRevision).findIndex((s) => s.id === step) + 1} de{" "}
+              {STEPS.filter((s) => s.id !== 2 || conRevision).length} ·{" "}
+            </span>
+            <span className="font-medium text-cos-brand-ink">{STEPS.find((s) => s.id === step)?.label}</span>
           </p>
         </div>
 
@@ -619,25 +658,25 @@ function OnboardingPageInner() {
           {/* ── STEP 0: Asistente IA (multi-documento) ── */}
           {step === 0 && (
             <>
-              <div className="bg-gradient-to-br from-cos-brand via-cos-brand to-cos-brand border border-cos-brand-ink/15 rounded-lg p-5">
+              <div className="rounded-card border border-cos-brand/25 bg-cos-brand-tint p-5">
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="h-10 w-10 rounded-lg bg-cos-brand text-white flex items-center justify-center shrink-0">
+                  <div className="h-10 w-10 rounded-control bg-cos-brand text-white flex items-center justify-center shrink-0">
                     <Sparkles className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-cos-brand-ink">Onboarding asistido con IA</h3>
-                    <p className="text-xs text-cos-brand-ink mt-0.5">
-                      Sube todos los documentos relevantes en un solo paso. El asistente clasifica y extrae los datos automáticamente.
+                    <h3 className="font-semibold text-cos-ink">Onboarding asistido con IA</h3>
+                    <p className="text-xs text-cos-ink-soft mt-0.5">
+                      Sube todos los documentos en un solo paso. El asistente los clasifica, extrae los datos y te ahorra la captura de los siguientes pasos.
                     </p>
-                    <ul className="text-[11px] text-cos-brand-ink mt-2 space-y-0.5 list-disc list-inside">
-                      <li><strong>CSF</strong> (obligatorio) — datos fiscales base</li>
-                      <li><strong>Tarjeta IMSS</strong> — registro patronal para nómina</li>
-                      <li><strong>Acuse Anual</strong> — coeficiente de utilidad</li>
-                      <li><strong>Acuses Mensuales</strong> — histórico si onboardeas a mitad de año</li>
+                    <ul className="mt-2 space-y-1 text-[11.5px] text-cos-ink-soft">
+                      <li className="flex items-start gap-1.5"><CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-cos-brand-ink" /><span><strong className="text-cos-ink">CSF</strong> (obligatoria) — datos fiscales y regímenes</span></li>
+                      <li className="flex items-start gap-1.5"><CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-cos-brand-ink" /><span><strong className="text-cos-ink">Tarjeta IMSS</strong> — registro patronal para nómina</span></li>
+                      <li className="flex items-start gap-1.5"><CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-cos-brand-ink" /><span><strong className="text-cos-ink">Acuse anual</strong> — coeficiente de utilidad</span></li>
+                      <li className="flex items-start gap-1.5"><CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-cos-brand-ink" /><span><strong className="text-cos-ink">Acuses mensuales</strong> — histórico si llegas a mitad de año</span></li>
                     </ul>
                   </div>
                 </div>
-                <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-cos-brand-ink/15 rounded-md text-sm bg-cos-card cursor-pointer hover:bg-cos-brand-tint/50 transition-colors">
+                <label className="flex items-center gap-3 w-full px-4 py-3 border-2 border-dashed border-cos-brand/30 rounded-control text-sm bg-cos-card cursor-pointer hover:bg-cos-brand-tint/60 transition-colors">
                   {aiParsing ? (
                     <Loader2 className="h-4 w-4 text-cos-brand-ink shrink-0 animate-spin" />
                   ) : (
@@ -658,8 +697,8 @@ function OnboardingPageInner() {
                     }}
                   />
                 </label>
-                <p className="text-[10px] text-cos-brand-ink mt-2">
-                  🔒 Los PDFs se procesan con Claude (Anthropic) y no se almacenan.
+                <p className="mt-2 flex items-center gap-1 text-[10.5px] text-cos-ink-faint">
+                  <Lock className="h-3 w-3 shrink-0" /> Los PDFs se procesan con Claude (Anthropic) y no se almacenan.
                 </p>
               </div>
 
@@ -791,7 +830,7 @@ function OnboardingPageInner() {
                             : "bg-cos-card text-cos-brand-ink border-cos-brand-ink/15 hover:bg-cos-brand-tint disabled:opacity-40"
                         }`}
                       >
-                        {isPrimary ? "Principal ✓" : "Hacer principal"}
+                        {isPrimary ? "Principal" : "Hacer principal"}
                       </button>
                     </div>
                   );
@@ -853,15 +892,61 @@ function OnboardingPageInner() {
                   />
                 </div>
               </div>
+
+              {/* Contacto vive aquí: eran cuatro campos opcionales con
+                  pantalla propia — un paso entero de ceremonia. */}
+              <div className="border-t border-cos-line-soft pt-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-cos-ink-faint">
+                  Contacto <span className="font-normal normal-case tracking-normal">(opcional — puedes llenarlo después)</span>
+                </p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Correo electrónico</label>
+                      <input
+                        type="email" name="email" value={contacto.email} onChange={handleContactoChange}
+                        placeholder="contabilidad@empresa.com"
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Teléfono</label>
+                      <input
+                        type="tel" name="telefono" value={contacto.telefono} onChange={handleContactoChange}
+                        placeholder="55 1234 5678"
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Nombre Comercial</label>
+                      <input
+                        type="text" name="nombreComercial" value={contacto.nombreComercial} onChange={handleContactoChange}
+                        placeholder="Como aparece en tus facturas"
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Actividad Económica</label>
+                      <input
+                        type="text" name="actividadEconomica" value={contacto.actividadEconomica} onChange={handleContactoChange}
+                        placeholder="ej. Comercio al por mayor"
+                        className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </>
           )}
 
           {/* ── STEP 2: Revisión (obligaciones + declaraciones) ── */}
           {step === 2 && (
             <>
-              <div className="bg-cos-slate-tint border border-cos-line rounded-md px-4 py-3 text-sm text-cos-ink-soft">
-                Revisa lo que detectamos en tus documentos. Confirmamos los regímenes, las obligaciones de tu CSF y los datos de tus declaraciones.
-              </div>
+              <p className="text-sm text-cos-ink-soft">
+                Esto es lo que el asistente detectó en tus documentos: regímenes, obligaciones de tu CSF y datos de tus declaraciones.
+              </p>
 
               {/* Régimenes incluidos */}
               <div>
@@ -948,9 +1033,10 @@ function OnboardingPageInner() {
           {/* ── STEP 3: Sincronización SAT ── */}
           {step === 3 && (
             <>
-              <div className="bg-cos-slate-tint border border-cos-line rounded-md px-4 py-3 text-sm text-cos-ink-soft">
-                ¿Qué tan atrás traemos tus CFDIs del SAT? Esto define la sincronización inicial; siempre se respeta tu fecha de inicio de operaciones.
-              </div>
+              <p className="text-sm text-cos-ink-soft">
+                ¿Qué tan atrás traemos tus CFDIs del SAT? Define la sincronización inicial;
+                siempre se respeta tu fecha de inicio de operaciones.
+              </p>
               <div className="space-y-2">
                 {BACKFILL_OPTIONS.map((o) => (
                   <label
@@ -997,9 +1083,9 @@ function OnboardingPageInner() {
           )}
           {step === 4 && !invitacion?.invitado && (
             <>
-              <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-md px-4 py-3 text-sm text-cos-jade-ink flex items-center gap-2">
-                <Sparkles className="h-4 w-4 shrink-0" />
-                Elige tu plan. Empiezas con una <strong>prueba gratis</strong> — no se cobra nada todavía.
+              <div className="bg-cos-jade-tint border border-cos-jade-ink/20 rounded-md px-4 py-3 text-sm text-cos-jade-ink flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>Empiezas con una <strong>prueba gratis</strong> — no se cobra nada todavía.</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {PLANS.map((p) => {
@@ -1043,54 +1129,24 @@ function OnboardingPageInner() {
             </>
           )}
 
-          {/* ── STEP 5: Contacto ── */}
+          {/* ── STEP 5: Credenciales del SAT (CSD + e.firma en una pantalla) ── */}
           {step === 5 && (
             <>
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Nombre Comercial <span className="text-cos-ink-soft font-normal text-xs">(opcional)</span></label>
-                <input
-                  type="text" name="nombreComercial" value={contacto.nombreComercial} onChange={handleContactoChange}
-                  placeholder="Nombre que aparece en facturas y documentos"
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
-                />
+              <div className="bg-cos-brand-tint border border-cos-brand/25 rounded-card px-4 py-3 text-sm">
+                <p className="font-semibold text-cos-ink mb-1">Los dos sellos del SAT</p>
+                <p className="text-cos-ink-soft text-[13px]">
+                  El <strong className="text-cos-ink">CSD</strong> timbra tus CFDIs; la{" "}
+                  <strong className="text-cos-ink">e.firma (FIEL)</strong> presenta tus declaraciones.
+                  Cada uno es un archivo <code>.cer</code>, un <code>.key</code> y su contraseña.
+                </p>
+                <p className="mt-1 text-xs text-cos-ink-faint">
+                  Puedes omitir este paso y configurarlos después desde Mi Empresa.
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Correo electrónico</label>
-                  <input
-                    type="email" name="email" value={contacto.email} onChange={handleContactoChange}
-                    placeholder="contabilidad@empresa.com"
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Teléfono</label>
-                  <input
-                    type="tel" name="telefono" value={contacto.telefono} onChange={handleContactoChange}
-                    placeholder="55 1234 5678"
-                    className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Actividad Económica <span className="text-cos-ink-soft font-normal text-xs">(opcional)</span></label>
-                <input
-                  type="text" name="actividadEconomica" value={contacto.actividadEconomica} onChange={handleContactoChange}
-                  placeholder="ej. Servicios de consultoría empresarial"
-                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
-                />
-              </div>
-            </>
-          )}
 
-          {/* ── STEP 6: CSD ── */}
-          {step === 6 && (
-            <>
-              <div className="bg-cos-brand-tint border border-cos-brand-ink/15 rounded-lg px-4 py-3 text-sm text-cos-brand-ink">
-                <p className="font-semibold mb-1">¿Qué es el CSD?</p>
-                <p>El Certificado de Sello Digital (CSD) es requerido para <strong>timbrar CFDIs</strong>. Lo emite el SAT y consta de un archivo <code>.cer</code>, un <code>.key</code> y una contraseña.</p>
-                <p className="mt-1 text-cos-brand-ink text-xs">Puedes omitir este paso y configurarlo después desde Mi Empresa.</p>
-              </div>
+              <p className="pt-1 text-xs font-semibold uppercase tracking-wide text-cos-ink-faint">
+                Certificado de Sello Digital — para timbrar
+              </p>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Certificado CSD <code className="text-xs bg-cos-slate-tint px-1 rounded">.cer</code></label>
                 <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-sm cursor-pointer hover:bg-cos-slate-tint transition-colors">
@@ -1130,9 +1186,11 @@ function OnboardingPageInner() {
                 </div>
               </div>
 
-              {/* Carta Manifiesto de Facturapi — forced acknowledgement */}
-              <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-4 py-3 text-sm text-cos-amber-ink">
-                <p className="font-semibold mb-1">✍️ Carta Manifiesto (obligatoria para timbrar)</p>
+              {/* Carta Manifiesto de Facturapi — sólo obliga si se sube CSD */}
+              <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-card px-4 py-3 text-sm text-cos-amber-ink">
+                <p className="mb-1 flex items-center gap-1.5 font-semibold">
+                  <PenLine className="h-4 w-4 shrink-0" /> Carta Manifiesto (obligatoria para timbrar)
+                </p>
                 <p className="text-xs">
                   Facturapi requiere que firmes la Carta Manifiesto con tu <strong>e.firma</strong> directamente en su portal seguro — no se pueden enviar las llaves desde nuestra app. Hazlo ahora para dejarlo listo.
                 </p>
@@ -1156,17 +1214,10 @@ function OnboardingPageInner() {
                   <span className="text-xs">Confirmo que firmé (o firmaré) la Carta Manifiesto en Facturapi.</span>
                 </label>
               </div>
-            </>
-          )}
 
-          {/* ── STEP 7: e.firma / FIEL ── */}
-          {step === 7 && (
-            <>
-              <div className="bg-cos-amber-tint border border-cos-amber-ink/20 rounded-lg px-4 py-3 text-sm text-cos-amber-ink">
-                <p className="font-semibold mb-1">¿Qué es la e.firma / FIEL?</p>
-                <p>La Firma Electrónica Avanzada es requerida para <strong>presentar declaraciones fiscales</strong> ante el SAT (IVA, ISR, DIOT). También consta de un <code>.cer</code>, un <code>.key</code> y contraseña.</p>
-                <p className="mt-1 text-cos-amber-ink text-xs">Puedes omitir este paso y configurarlo después desde Mi Empresa.</p>
-              </div>
+              <p className="pt-2 text-xs font-semibold uppercase tracking-wide text-cos-ink-faint">
+                e.firma (FIEL) — para declarar
+              </p>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Certificado e.firma <code className="text-xs bg-cos-slate-tint px-1 rounded">.cer</code></label>
                 <label className="flex items-center gap-3 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-sm cursor-pointer hover:bg-cos-slate-tint transition-colors">
@@ -1220,7 +1271,7 @@ function OnboardingPageInner() {
             {step > 0 && step !== 1 && (
               <button
                 type="button"
-                onClick={() => { setError(""); setStep((s) => s - 1); }}
+                onClick={prevStep}
                 className="px-4 py-2.5 rounded-md text-sm font-medium border border-cos-line hover:bg-cos-paper transition-colors"
               >
                 Atrás
@@ -1238,7 +1289,7 @@ function OnboardingPageInner() {
             ) : (
               <button
                 type="button"
-                onClick={handleSubmit}
+                onClick={() => handleSubmit()}
                 disabled={loading}
                 className="flex-1 flex items-center justify-center gap-2 bg-cos-brand text-white px-4 py-2.5 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50 transition-colors"
               >
@@ -1247,11 +1298,11 @@ function OnboardingPageInner() {
               </button>
             )}
 
-            {/* Skip CSD/FIEL steps (the optional credential steps) */}
-            {(step === 6 || step === 7) && (
+            {/* Omitir credenciales: crea la empresa sin CSD/e.firma. */}
+            {step === LAST_STEP && (
               <button
                 type="button"
-                onClick={() => step === LAST_STEP ? handleSubmit() : setStep((s) => s + 1)}
+                onClick={() => handleSubmit(true)}
                 disabled={loading}
                 className="px-4 py-2.5 rounded-md text-sm text-cos-ink-soft border border-cos-line hover:bg-cos-paper transition-colors"
               >
