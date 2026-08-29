@@ -65,6 +65,15 @@ export default function HistorialDeclaracionesPage() {
       </Link>
     ) : null;
 
+  // Presentada o borrador: sin el chip, una FILED y una DRAFT se leían igual
+  // («a pagar $X») en una página que se llama «Declaraciones presentadas».
+  const EstadoDecl = ({ s }: { s: string }) =>
+    s === "FILED" || s === "PAID" ? (
+      <span className="mr-1.5 rounded-full bg-cos-jade-tint px-1.5 py-0.5 text-[11px] font-semibold text-cos-jade-ink">Presentada</span>
+    ) : (
+      <span className="mr-1.5 rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[11px] font-semibold text-cos-amber-ink">Borrador</span>
+    );
+
   return (
     <div className="mx-auto max-w-[900px] px-4 py-6 sm:px-8 sm:py-8">
       <Link href="/impuestos?tab=historial" className="inline-flex items-center gap-1 text-[13px] text-cos-ink-soft hover:text-cos-ink">
@@ -102,6 +111,7 @@ export default function HistorialDeclaracionesPage() {
                   <span className={cell.iva ? "text-cos-ink" : "text-cos-ink-faint"}>
                     {cell.iva ? (
                       <>
+                        <EstadoDecl s={cell.iva.status} />
                         {cell.iva.ivaSaldoFavor && cell.iva.ivaSaldoFavor > 0
                           ? <span className="text-cos-jade-ink">{fmt(cell.iva.ivaSaldoFavor)} a favor</span>
                           : <>a pagar {fmt(cell.iva.ivaPagar)}</>}{" "}
@@ -110,7 +120,7 @@ export default function HistorialDeclaracionesPage() {
                     ) : "—"}
                   </span>
                   <span className={cell.isr ? "text-cos-ink" : "text-cos-ink-faint"}>
-                    {cell.isr ? <>a pagar {fmt(cell.isr.isrPagar)} <Acuse d={cell.isr} /></> : "—"}
+                    {cell.isr ? <><EstadoDecl s={cell.isr.status} />a pagar {fmt(cell.isr.isrPagar)} <Acuse d={cell.isr} /></> : "—"}
                   </span>
                 </div>
               );
