@@ -28,8 +28,23 @@ export function llmCostMicroUsd(model: string, inputTokens: number, outputTokens
   return Math.round(inputTokens * p.in + outputTokens * p.out);
 }
 
-/** Precio Syntage por extracción (USD). VERIFY: ponlo en tu precio de contrato. */
-export const SYNTAGE_EXTRACTION_USD = 0.5;
+/**
+ * Precio Syntage por extracción (USD), derivado de su lista 2025
+ * (docs/proveedores/syntage-pricing-2025.pdf):
+ *
+ *   Tier 1: $7,500 MXN/mes → 25 entidades y 400 extracciones incluidas
+ *           (extra: $450/entidad, $28/extracción)
+ *   Tier 2: $15,000 → 75 ent / 1,200 extr ($300 / $18)
+ *   Tier 3: $21,250 → 125 ent / 2,000 extr ($255 / $16)
+ *   Tier 4: $27,500 → 200 ent / 3,200 extr ($206 / $12)
+ *
+ * El costo REAL manda por ENTIDAD, no por extracción: en Tier 1 el piso es
+ * $300 MXN/RFC/mes ($7,500/25) aunque la cadencia sólo dispare ~8 pulls. Para
+ * que /rentabilidad refleje eso con eventos por extracción: $300/8 ≈ $37.5
+ * MXN/extracción ≈ $1.9 USD (ref. $20/USD). Si cambia el tier o la cadencia,
+ * recalcula aquí. (Antes: $0.50 placeholder — subestimaba ~4×.)
+ */
+export const SYNTAGE_EXTRACTION_USD = 1.9;
 
 export function syntageExtractionMicroUsd(): number {
   return Math.round(SYNTAGE_EXTRACTION_USD * MICRO_USD);
