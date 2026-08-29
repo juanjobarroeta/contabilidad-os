@@ -54,10 +54,14 @@ const PROVEEDORES = [
 ] as const;
 
 const EMPLEADOS = [
-  ["María Fernanda", "López", 620.5], ["José Luis", "Hernández", 480.0],
-  ["Ana Karen", "Martínez", 535.75], ["Carlos", "Ramírez", 710.2],
-  ["Lucía", "Torres", 458.6], ["Miguel Ángel", "Flores", 595.0],
-  ["Paola", "Sánchez", 505.4], ["Ricardo", "Domínguez", 662.3],
+  ["María Fernanda", "López", 620.5, "Contadora"],
+  ["José Luis", "Hernández", 480.0, "Almacenista"],
+  ["Ana Karen", "Martínez", 535.75, "Ventas"],
+  ["Carlos", "Ramírez", 710.2, "Gerente de operaciones"],
+  ["Lucía", "Torres", 458.6, "Atención a clientes"],
+  ["Miguel Ángel", "Flores", 595.0, "Chofer repartidor"],
+  ["Paola", "Sánchez", 505.4, "Administración"],
+  ["Ricardo", "Domínguez", 662.3, "Ventas"],
 ] as const;
 
 // LCG determinista: mismo demo cada vez, sin Math.random.
@@ -229,12 +233,13 @@ async function main() {
   );
 
   const empleados = await Promise.all(
-    EMPLEADOS.map(([nombre, apellidoPaterno, salarioDiario], i) =>
+    EMPLEADOS.map(([nombre, apellidoPaterno, salarioDiario, puesto], i) =>
       prisma.employee.create({
         data: {
           companyId: cid,
           nombre,
           apellidoPaterno,
+          puesto,
           rfc: `DEM${String(850101 + i * 10101).slice(0, 6)}AA${i}`,
           curp: `DEMO850101H${String(i).padStart(2, "0")}XXX0${i}`,
           nss: `1234567890${i}`,
@@ -409,7 +414,7 @@ async function main() {
         if (hoy.getUTCDate() < 13) continue;
       }
       let totalNeto = 0;
-      const items = empleados.map((e) => {
+      const items = empleados.map((e, idx) => {
         const sueldo = r2(Number(e.salarioDiario) * 15);
         const isr = r2(sueldo * 0.11);
         const imss = r2(sueldo * 0.027);
@@ -418,6 +423,10 @@ async function main() {
         return {
           employeeId: e.id, sueldoBase: sueldo, isrRetenido: isr, imssObrero: imss,
           totalPercepciones: sueldo, totalDeducciones: r2(isr + imss), netoAPagar: neto,
+          // Una corrida STAMPED sin UUID en sus recibos es una contradicción:
+          // el contador «0/16 timbrados» y «Últimos recibos timbrados» leen el
+          // cfdiUuid del recibo, no el status de la corrida.
+          cfdiUuid: esActualSinTimbrar ? null : uuidDemo(`${uuidBase}-nom-${q}-${idx}`),
         };
       });
       await prisma.payrollRun.create({
