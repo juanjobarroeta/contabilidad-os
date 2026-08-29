@@ -107,12 +107,17 @@ export async function GET(req: Request) {
         let estado: "FILED" | "PENDING" | "OVERDUE" | "UPCOMING" | "NOT_APPLICABLE";
         if (declStatus === "FILED" || declStatus === "PAID") {
           estado = "FILED";
-        } else if (declStatus === "CALCULATED") {
-          estado = "PENDING";
-        } else if (vencimiento < companyCreatedAt) {
-          // Period ended before the company was onboarded — don't show as overdue
+        } else if (vencimiento < companyCreatedAt && !declStatus) {
+          // Period ended before the company was onboarded — don't show as
+          // overdue. Pero SÓLO sin declaración guardada: si ya existe una
+          // (borrador/calculada), el periodo claramente sí le aplica.
           estado = "NOT_APPLICABLE";
         } else if (vencimiento < now) {
+          // Calculada ≠ presentada: tener el borrador no detiene el plazo del
+          // SAT. Antes «CALCULATED» forzaba PENDING aunque estuviera vencida y
+          // esta pantalla decía «Vencidas 0» mientras la cartera decía
+          // «Vencida» de la misma empresa. declaracionStatus viaja aparte para
+          // que la celda pueda decir «calculada» además de vencida.
           estado = "OVERDUE";
         } else if (vencimiento.getTime() - now.getTime() < 30 * 24 * 60 * 60 * 1000) {
           estado = "UPCOMING";
