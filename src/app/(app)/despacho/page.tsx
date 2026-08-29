@@ -39,6 +39,7 @@ interface Row {
   // Diligencia (mantenimiento del contador AI, sólo lectura)
   cfdisAlDia: boolean;
   bancoSinConciliar: number;
+  tieneBanco: boolean;
   libroMesPosteado: boolean;
 }
 
@@ -76,18 +77,20 @@ const ESTADO: Record<Row["estadoDeclaracion"], { label: string; cls: string; ico
 // Diligencia: mini-checklist de mantenimiento por empresa (sólo lectura).
 // Refleja lo que el contador AI mantiene al día — derivado de estado existente,
 // sin acciones destructivas ni recálculos. Verde = en orden, ámbar = por revisar.
-function DiligChip({ ok, icon: Icon, label, title }: {
-  ok: boolean; icon: typeof Check; label: string; title?: string;
+function DiligChip({ ok, neutral, icon: Icon, label, title }: {
+  ok: boolean; neutral?: boolean; icon: typeof Check; label: string; title?: string;
 }) {
   return (
     <span
       title={title ?? label}
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-        ok ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-amber-tint text-cos-amber-ink"
+        neutral
+          ? "bg-cos-slate-tint text-cos-ink-faint"
+          : ok ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-amber-tint text-cos-amber-ink"
       }`}
     >
       <Icon className="h-3 w-3" /> {label}
-      {ok ? <Check className="h-3 w-3" /> : <CircleAlert className="h-3 w-3" />}
+      {neutral ? null : ok ? <Check className="h-3 w-3" /> : <CircleAlert className="h-3 w-3" />}
     </span>
   );
 }
@@ -103,8 +106,14 @@ function DiligenciaChips({ r }: { r: Row }) {
       />
       <DiligChip
         ok={r.bancoSinConciliar === 0}
+        // Sin cuentas bancarias, «Banco conciliado ✓» sería un verde falso.
+        neutral={!r.tieneBanco}
         icon={Landmark}
-        label={r.bancoSinConciliar === 0 ? "Banco conciliado" : `Banco: ${r.bancoSinConciliar} sin conciliar`}
+        label={
+          !r.tieneBanco
+            ? "Sin banco conectado"
+            : r.bancoSinConciliar === 0 ? "Banco conciliado" : `Banco: ${r.bancoSinConciliar} sin conciliar`
+        }
         title="Movimientos bancarios pendientes de conciliar"
       />
       <DiligChip

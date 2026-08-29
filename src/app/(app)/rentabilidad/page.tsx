@@ -143,7 +143,10 @@ export default function RentabilidadPage() {
     );
   }
 
-  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+  // «Agosto 2026» como en el resto de la app — la clase `capitalize` sobre
+  // «agosto de 2026» pintaba «Agosto De 2026».
+  const mesLargo = new Date(year, month - 1, 1).toLocaleDateString("es-MX", { month: "long" });
+  const monthLabel = `${mesLargo.charAt(0).toUpperCase()}${mesLargo.slice(1)} ${year}`;
   const bajoAgua = (precio: number | null, costo: number) => precio != null && precio > 0 && costo > precio;
   const empresasBajoAgua = data?.empresas.filter((e) => bajoAgua(e.precioMensualCentavos, e.costoCentavos)) ?? [];
   const despBajoAgua = data?.despachos.filter((d) => bajoAgua(d.precioMensualCentavos, d.costoCentavos)) ?? [];
@@ -166,7 +169,7 @@ export default function RentabilidadPage() {
             aria-label="Mes anterior" className="grid h-8 w-8 place-items-center rounded-control border border-cos-line hover:bg-cos-paper">
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="min-w-[150px] text-center text-[15px] font-semibold capitalize text-cos-ink">{monthLabel}</span>
+          <span className="min-w-[150px] text-center text-[15px] font-semibold text-cos-ink">{monthLabel}</span>
           <button onClick={() => { const d = new Date(year, month, 1); setYear(d.getFullYear()); setMonth(d.getMonth() + 1); }}
             aria-label="Mes siguiente" className="grid h-8 w-8 place-items-center rounded-control border border-cos-line hover:bg-cos-paper">
             <ChevronRight className="h-4 w-4" />

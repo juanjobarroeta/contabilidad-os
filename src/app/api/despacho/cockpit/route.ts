@@ -25,8 +25,11 @@ export async function GET(req: Request) {
   const year = periodoDate.getFullYear();
   const month = periodoDate.getMonth() + 1;
   const periodo = `${year}-${String(month).padStart(2, "0")}`;
-  // Vence el día 17 del mes siguiente al periodo (= este mes).
-  const vencimiento = new Date(now.getFullYear(), now.getMonth(), 17, 23, 59, 59);
+  // Vence el día 17 del mes siguiente al periodo (= este mes). Fecha CALENDARIO
+  // en UTC: construirla en hora local del servidor rodaba al 18 cuando el
+  // servidor no corre en UTC (formatDate pinta en UTC) y la cartera decía
+  // «vence 18 ago» junto a un pie que decía «vence el 17».
+  const vencimiento = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 17));
 
   const companies = await prisma.company.findMany({
     where: { id: { in: ids }, isActive: true },
@@ -41,7 +44,7 @@ export async function GET(req: Request) {
   //  • bancoSinConciliar → # de BankTransaction UNMATCHED (no IGNORED) por empresa
   //  • libroMesPosteado  → ¿el AccountingPeriod del periodo a declarar está POSTED?
   const CFDI_FRESH_MS = 36 * 3600 * 1000; // ~36h
-  const [bancoPend, periodos] = await Promise.all([
+  const [bancoPend, periodos, cuentasBanco] = await Promise.all([
     prisma.bankTransaction.groupBy({
       by: ["companyId"],
       where: { companyId: { in: companyIds }, status: "UNMATCHED" },
@@ -51,9 +54,17 @@ export async function GET(req: Request) {
       where: { companyId: { in: companyIds }, year, month },
       select: { companyId: true, status: true },
     }),
+    // Sin cuentas bancarias no hay nada que conciliar: 0 UNMATCHED ahí no es
+    // «Banco conciliado ✓», es «sin banco conectado».
+    prisma.bankAccount.groupBy({
+      by: ["companyId"],
+      where: { companyId: { in: companyIds } },
+      _count: { id: true },
+    }),
   ]);
   const bancoPendBy = new Map(bancoPend.map((r) => [r.companyId, r._count.id]));
   const periodoBy = new Map(periodos.map((p) => [p.companyId, p.status]));
+  const conBancoBy = new Set(cuentasBanco.filter((r) => r._count.id > 0).map((r) => r.companyId));
 
   // Lecturas baratas (sin recomputar impuestos): declaraciones del periodo,
   // nómina sin timbrar y empleados activos — todo agregado.
@@ -120,7 +131,11 @@ export async function GET(req: Request) {
   const obligBy = await resumenObligacionesPorEmpresa(companyIds, now.getFullYear(), now);
 
   const FILED = ["FILED", "PAID"];
-  const vencido = now > vencimiento;
+  // Vencida a partir de la MEDIANOCHE del 18 en Ciudad de México (UTC−6 fijo
+  // desde 2022): comparar contra las 23:59 UTC del 17 marcaba «vencida» seis
+  // horas antes de que terminara el día 17 para el contribuyente.
+  const vencido =
+    now.getTime() >= Date.UTC(now.getFullYear(), now.getMonth(), 18, 6, 0, 0);
 
   const rows = companies.map((c) => {
     const ds = declsBy.get(c.id) ?? [];
@@ -162,6 +177,7 @@ export async function GET(req: Request) {
       // Diligencia (mantenimiento del contador AI, sólo lectura)
       cfdisAlDia,
       bancoSinConciliar,
+      tieneBanco: conBancoBy.has(c.id),
       libroMesPosteado,
     };
   });
