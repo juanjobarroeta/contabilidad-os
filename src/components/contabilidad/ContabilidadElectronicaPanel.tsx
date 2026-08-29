@@ -6,7 +6,6 @@ import {
   ExternalLink, FileCheck2, FileText, Landmark, Loader2, ShieldCheck,
 } from "lucide-react";
 import { MESES } from "@/components/contabilidad/PeriodProvider";
-import { PeriodPicker } from "@/components/contabilidad/PeriodPicker";
 import Link from "next/link";
 import { useDescargaXml, ErroresDeValidacion } from "@/components/contabilidad/descarga-xml";
 
@@ -45,13 +44,12 @@ export interface Period {
 // balanza de comprobación y pólizas. No hay ensamblado manual ni carga de XML:
 // el contador abre el periodo y los XML están listos para descargar.
 export function ContabilidadElectronicaPanel({
-  companyId, periods, year, month, onChangePeriod,
+  companyId, periods, year, month,
 }: {
   companyId: string;
   periods: Period[];
   year: number;
   month: number;
-  onChangePeriod: (y: number, m: number) => void;
 }) {
   const qs = `companyId=${companyId}&year=${year}&month=${month}`;
 
@@ -117,8 +115,8 @@ export function ContabilidadElectronicaPanel({
 
   return (
     <div>
-      <PeriodPicker year={year} month={month} onChange={onChangePeriod} />
-
+      {/* El período se elige en la navegación del flujo (‹ mes ›): un picker
+          local aquí era un SEGUNDO control para lo mismo en la misma pantalla. */}
       {/* ¿Lista tu Contabilidad Electrónica? — readiness del periodo */}
       <ReadinessCard
         loading={readinessLoading}
