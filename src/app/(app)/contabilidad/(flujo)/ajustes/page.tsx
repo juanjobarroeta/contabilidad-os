@@ -75,11 +75,15 @@ export default function AjustesPage() {
     (async () => {
       const res = await fetch(`/api/contabilidad/apertura?companyId=${activeCompany.id}`);
       const d = await res.json().catch(() => null);
+      // El API de apertura YA devuelve `codigo` resuelto (subcuenta ?? cuentaSAT).
+      // Mapear campos que ese payload no trae dejaba codigo=undefined en TODAS
+      // las cuentas y la primera tecla del autocompletar tronaba la página
+      // entera (undefined.toLowerCase) — el autocompletar nunca funcionó.
       const cs: CuentaOpcion[] = (d?.cuentas ?? [])
-        .filter((c: { nivel: number }) => c.nivel >= 3)
-        .map((c: { cuentaSAT: string; subcuenta: string | null; nombre: string }) => ({
-          codigo: c.subcuenta ?? c.cuentaSAT,
-          nombre: c.nombre,
+        .filter((c: { nivel: number; codigo?: string }) => c.nivel >= 3 && c.codigo)
+        .map((c: { codigo: string; nombre: string | null }) => ({
+          codigo: c.codigo,
+          nombre: c.nombre ?? "",
         }));
       setCuentas(cs);
     })();
@@ -521,7 +525,9 @@ export default function AjustesPage() {
                 <tr key={p.folio} className="h-[38px] border-b border-cos-line-soft hover:bg-cos-paper">
                   <td className="px-3 py-0 font-mono text-[12px] text-cos-ink-soft">{p.folio}</td>
                   <td className="px-3 py-0 font-mono text-[12px] tabular-nums">
-                    {new Date(p.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    {/* En UTC: la fecha de una póliza es fecha CALENDARIO — en
+                        horario local (UTC−6) el 31/07 se pintaba como 30/07. */}
+                    {new Date(p.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
                   </td>
                   <td className="max-w-[280px] truncate px-3 py-0">{p.concepto}</td>
                   <td className="px-3 py-0 text-right"><Money value={p.totalCargos} className="text-[13px]" /></td>
