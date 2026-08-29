@@ -84,7 +84,7 @@ export const POST = withAuthz(
 
     const est = await prisma.estimacion.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true, bankTransactionId: true },
+      select: { id: true, companyId: true, estado: true, bankTransactionId: true, invoiceId: true },
     });
     if (!est) throw new AuthzError(404, "Estimación no encontrada");
     await requireWriter(est.companyId, req);
@@ -107,7 +107,7 @@ export const POST = withAuthz(
 
     const bt = await prisma.bankTransaction.findUnique({
       where: { id: parsed.data.bankTransactionId },
-      select: { id: true, companyId: true, status: true },
+      select: { id: true, companyId: true, status: true, invoiceId: true },
     });
     if (!bt || bt.companyId !== est.companyId) {
       return NextResponse.json(
@@ -115,11 +115,27 @@ export const POST = withAuthz(
         { status: 400 }
       );
     }
+
+    // Un movimiento YA conciliado sólo se puede ADOPTAR cuando su
+    // conciliación es contra el CFDI de ESTA estimación (match directo o
+    // porción asignada): es el cobro real ya identificado en bancos y la
+    // estimación sólo lo refleja. Conciliado contra otra cosa → 409.
+    let yaConciliado = false;
     if (bt.status === "MATCHED") {
-      return NextResponse.json(
-        { error: "Ese movimiento ya está conciliado." },
-        { status: 409 }
-      );
+      const esDeEstaFactura =
+        !!est.invoiceId &&
+        (bt.invoiceId === est.invoiceId ||
+          (await prisma.conciliacionDetalle.findFirst({
+            where: { bankTransactionId: bt.id, invoiceId: est.invoiceId },
+            select: { id: true },
+          })) !== null);
+      if (!esDeEstaFactura) {
+        return NextResponse.json(
+          { error: "Ese movimiento ya está conciliado (con otra factura)." },
+          { status: 409 }
+        );
+      }
+      yaConciliado = true;
     }
 
     await prisma.$transaction([
@@ -127,10 +143,15 @@ export const POST = withAuthz(
         where: { id },
         data: { bankTransactionId: bt.id, estado: "PAGADA" },
       }),
-      prisma.bankTransaction.update({
-        where: { id: bt.id },
-        data: { status: "MATCHED" },
-      }),
+      // Al adoptar un movimiento ya conciliado no se toca su status.
+      ...(yaConciliado
+        ? []
+        : [
+            prisma.bankTransaction.update({
+              where: { id: bt.id },
+              data: { status: "MATCHED" },
+            }),
+          ]),
     ]);
 
     const updated = await prisma.estimacion.findUnique({ where: { id } });
