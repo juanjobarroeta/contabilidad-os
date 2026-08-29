@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { TopTabsBar } from "@/components/layout/TopTabsBar";
 
-// Píldoras del hub de Directorio. Vivían copiadas en Clientes y Proveedores, y
-// el Verificador no las tenía: entrar desde «Verificar RFC» era un callejón
-// sin salida (reporte del owner con captura). Un solo componente, tres
-// pantallas, siempre se puede volver.
-const PILDORAS = [
+// La tira del hub de Directorio. Nació como píldoras copiadas en Clientes y
+// Proveedores (el Verificador ni las tenía y era un callejón sin salida);
+// ahora es la tira superior estándar (TopTabsBar), la misma de Nómina y
+// Bancos. Va ARRIBA del contenedor con padding de cada página.
+const SECCIONES = [
   { href: "/clientes", label: "Clientes" },
   { href: "/proveedores", label: "Proveedores" },
   { href: "/verificador", label: "Verificar RFC", title: "Verificar RFC/CURP/NSS y lista 69-B" },
@@ -16,21 +16,15 @@ const PILDORAS = [
 export function DirectorioNav() {
   const pathname = usePathname();
   return (
-    <nav className="mb-2 inline-flex rounded-control border border-cos-line p-0.5 text-[12.5px] font-medium">
-      {PILDORAS.map((p) => (
-        <Link
-          key={p.href}
-          href={p.href}
-          title={p.title}
-          className={
-            pathname.startsWith(p.href)
-              ? "rounded-[8px] bg-cos-slate-tint px-2.5 py-1 text-cos-ink"
-              : "rounded-[8px] px-2.5 py-1 text-cos-ink-soft hover:text-cos-ink"
-          }
-        >
-          {p.label}
-        </Link>
-      ))}
-    </nav>
+    <TopTabsBar
+      ariaLabel="Secciones del Directorio"
+      tabs={SECCIONES.map((s) => ({
+        key: s.href,
+        label: s.label,
+        href: s.href,
+        title: s.title,
+        active: pathname.startsWith(s.href),
+      }))}
+    />
   );
 }
