@@ -39,7 +39,24 @@ CFDI). En MARGOM: 29,482 órdenes / 117,982 líneas. **Va como etapa 7 de la Mit
 A una vez probado** — es derivación pura, idempotente, sin juicio. El catálogo de clave vehicular (global, ya poblado) es la base
 limpia de toda la derivación.
 
-### Mitad B — Cuadre (POR CONSTRUIR, etapas 7–12)
+**Nómina también es derivación — con dos completadores que el import no hace**
+(aprendido al surfacearla en MARGOM, agosto 2026). `historia-import` ya
+construye roster, corridas y recibos desde los CFDIs tipo N, pero:
+
+- **El costo patronal de IMSS no viaja en ningún recibo** (el CFDI sólo trae la
+  cuota obrera): `backfill-imss-patronal.ts` lo CALCULA (`calcularImss`, UMA
+  del ejercicio, Art. 36 decidido por el CFDI — si retuvo, no hay absorción) y
+  lo puebla en `PayrollItem.imssPatronal`. Determinista, idempotente →
+  **nivel 1**, etapa de derivación al alta.
+- **El import clasifica ACTIVO/BAJA sólo al crear** y nunca revisita
+  (`continue` sobre existentes): el flag se congela — MARGOM decía 36 activos
+  con 281 cobrando, y `run/prefill` FILTRA por él.
+  `sincronizar-empleados-activos.ts` lo re-deriva de la evidencia (recibo en
+  ventana de 45 días desde el último pago real `<= hoy` — hay CFDIs
+  pre-timbrados a futuro, hasta 31-dic). **Nivel 2** (aplicado y mostrado) y
+  mantenimiento re-corrible.
+
+### Mitad B — Cuadre (POR CONSTRUIR, etapas 7–13)
 
 Lo que llevó a MARGOM de $1.6B de divergencia a 0.09% y NO está en el pipeline:
 
@@ -49,6 +66,15 @@ Lo que llevó a MARGOM de $1.6B de divergencia a 0.09% y NO está en el pipeline
 10. Reglas de serie (back-end: 4501, seminuevos: 4291)
 11. Importar la CE presentada (`CeBalanzaMes`) — la verdad
 12. Re-postear + verificar divergencia
+13. Cuadre de nómina/IMSS: obrero del XML = autoridad (el calc corre ~15%
+    arriba, drift motor-vs-proveedor — es diagnóstico, no dato); patronal
+    calculado vs el **lado IMSS combinado** (6X-0014 CUOTAS + 6X-0012 SAR — el
+    contador reparte el CEAV entre ambas; MARGOM 2025: 1.14×). **Trampa: 2407
+    «RETENCION IMSS» es clearing de la liquidación SUA**, nunca cuadrar contra
+    ella. La etapa además EMITE riesgos de negocio en vez de «corregirlos»:
+    SBC al mínimo integrado (~94% del padrón), cero claves de percepción
+    variable, brecha registrado-vs-pagado — material de nivel 3 / evidencia
+    para el contador, porque el origen (los CFDIs timbrados) dice eso.
 
 ## Los tres niveles de automatización
 
@@ -219,8 +245,10 @@ límite de datos, no del diseño.
 
 ## Orden de construcción (cuando se apruebe)
 
-1. Parametrizar los `*-margom.ts` por `--company` (hoy tienen el id fijo).
-2. El orquestador `onboard-dealer --company <id>` que encadena las etapas 7–12
+1. ~~Parametrizar los `*-margom.ts`~~ **HECHO** — `scripts/lib/empresa.ts`
+   (`resolverEmpresa`: `COMPANY_ID` o `RFC` por env, error si falta); los
+   scripts de cuadre y los de Fase E (taller, nómina) ya lo usan.
+2. El orquestador `onboard-dealer --company <id>` que encadena las etapas 7–13
    con las compuertas de verificación, extendiendo `onboarding-estado`.
 3. El paquete de evidencia + la convocatoria al agente para el nivel 3.
 4. El cross-check de CFDIs con cancelados.
