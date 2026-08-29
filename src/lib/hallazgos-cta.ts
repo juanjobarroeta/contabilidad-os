@@ -32,7 +32,15 @@ const MAP: Record<string, HallazgoCta> = {
 };
 
 /** Acción de arreglo para un hallazgo, o null si no hay una ruta clara. */
-export function ctaParaHallazgo(checkClave: string): HallazgoCta | null {
+export function ctaParaHallazgo(checkClave: string, hallazgo?: { mensaje?: string }): HallazgoCta | null {
+  // Posible duplicado: la contraparte viaja en el mensaje con plantilla fija
+  // (duplicados.ts: «… casi idénticos a CONTRAPARTE por $…»). Con ella la
+  // carta aterriza en Facturas YA filtrada a esa contraparte — el par
+  // duplicado queda a la vista en lugar de la lista completa.
+  if (checkClave === "cfdi.posible_duplicado" && hallazgo?.mensaje) {
+    const m = hallazgo.mensaje.match(/casi idénticos (?:a|de) (.+?) por \$/);
+    if (m) return { label: "Revisar facturas", href: `/facturas?q=${encodeURIComponent(m[1])}` };
+  }
   if (MAP[checkClave]) return MAP[checkClave];
   // Respaldos por prefijo para claves futuras del mismo dominio.
   if (checkClave.startsWith("banco.")) return { label: "Subir estado de cuenta", href: "/bancos" };

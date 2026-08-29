@@ -543,7 +543,7 @@ async function main() {
         fundamentoLey: "RMF", fundamentoArticulo: "2.7.1.32", dedupeKey: `demo-${cid}-rep`,
       },
       {
-        companyId: cid, checkClave: "cfdi.duplicado", severidad: "warn",
+        companyId: cid, checkClave: "cfdi.posible_duplicado", severidad: "warn",
         mensaje: "2 CFDIs de egreso casi idénticos de PAPELERA CENTRAL por $4,872.00 el mismo día — posible duplicado.",
         sugerencia: "Verifica con el proveedor si son dos comprobantes legítimos o uno duplicado.",
         fundamentoLey: "LISR", fundamentoArticulo: "27", dedupeKey: `demo-${cid}-dup`,

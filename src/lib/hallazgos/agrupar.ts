@@ -71,7 +71,7 @@ export function agruparParaRail(
 
   const porDestino = new Map<string, { cta: { label: string; href: string }; miembros: HallazgoRail[] }>();
   for (const h of accionables) {
-    const cta = ctaParaHallazgo(h.checkClave) ?? { label: "Ver hallazgos", href: "/hallazgos" };
+    const cta = ctaParaHallazgo(h.checkClave, h) ?? { label: "Ver hallazgos", href: "/hallazgos" };
     const g = porDestino.get(cta.href) ?? { cta, miembros: [] };
     g.miembros.push(h);
     porDestino.set(cta.href, g);

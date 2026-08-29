@@ -41,3 +41,25 @@ describe("destinos afinados del copiloto", () => {
     expect(ctaParaHallazgo("efos.alguna_clave_futura")?.href).toBe("/proveedores");
   });
 });
+
+describe("posible duplicado con contraparte en el mensaje", () => {
+  // La plantilla vive en duplicados.ts:149 — si cambia allá, cambia aquí.
+  it("aterriza en Facturas filtrado a la contraparte", () => {
+    const cta = ctaParaHallazgo("cfdi.posible_duplicado", {
+      mensaje: "2 CFDIs de egreso casi idénticos a PAPELERA CENTRAL SA DE CV por $4,872.00 el 2026-08-04 — posible duplicado.",
+    });
+    expect(cta?.href).toBe(`/facturas?q=${encodeURIComponent("PAPELERA CENTRAL SA DE CV")}`);
+  });
+
+  it("acepta la variante «de» del seed de la demo", () => {
+    const cta = ctaParaHallazgo("cfdi.posible_duplicado", {
+      mensaje: "2 CFDIs de egreso casi idénticos de PAPELERA CENTRAL por $4,872.00 el mismo día — posible duplicado.",
+    });
+    expect(cta?.href).toBe(`/facturas?q=${encodeURIComponent("PAPELERA CENTRAL")}`);
+  });
+
+  it("sin mensaje reconocible cae a la lista de facturas", () => {
+    expect(ctaParaHallazgo("cfdi.posible_duplicado")?.href).toBe("/facturas");
+    expect(ctaParaHallazgo("cfdi.posible_duplicado", { mensaje: "otra cosa" })?.href).toBe("/facturas");
+  });
+});
