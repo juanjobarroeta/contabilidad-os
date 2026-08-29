@@ -52,6 +52,8 @@ interface Proveedor {
   _count: { bankTransactions: number };
   /** "PRESUNTO" | "DEFINITIVO" sólo cuando el RFC aparece en la 69-B. */
   situacion69b?: string | null;
+  /** Customer-emisor de sus EGRESO (abre su estado de cuenta), si existe. */
+  emisorCustomerId?: string | null;
 }
 
 const EMPTY_FORM = {
@@ -291,7 +293,18 @@ export default function ProveedoresPage() {
                 >
                   <TD className="font-mono text-[12px] font-medium text-cos-ink">{p.rfc}</TD>
                   <TD className="font-medium text-cos-ink">
-                    {p.razonSocial}
+                    {p.emisorCustomerId ? (
+                      <Link
+                        href={`/clientes/${p.emisorCustomerId}/estado-cuenta?direccion=proveedor`}
+                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        className="hover:text-cos-brand-ink hover:underline"
+                        title="Ver estado de cuenta del proveedor"
+                      >
+                        {p.razonSocial}
+                      </Link>
+                    ) : (
+                      p.razonSocial
+                    )}
                     {p.situacion69b && (
                       <span
                         title={`Este RFC aparece en la lista 69-B del SAT (${p.situacion69b.toLowerCase()}): deducciones e IVA acreditable en riesgo`}

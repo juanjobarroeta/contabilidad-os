@@ -53,6 +53,10 @@ const TIPO_LABEL: Record<string, string> = {
 
 export default function EstadoCuentaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  // ?direccion=proveedor → cuentas por pagar (cargos = EGRESO recibidos,
+  // abonos = pagos del banco). Se lee de la URL para no exigir Suspense.
+  const esProveedor =
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("direccion") === "proveedor";
   const [meses, setMeses] = useState<number>(3);
   const [data, setData] = useState<EstadoHub | null>(null);
   const [pendientesRep, setPendientesRep] = useState<RepPendiente[] | null>(null);
@@ -70,6 +74,7 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
       const qs = new URLSearchParams({
         desde: desde.toISOString().slice(0, 10),
         hasta: hasta.toISOString().slice(0, 10),
+        ...(esProveedor ? { direccion: "proveedor" } : {}),
       });
       const res = await fetch(`/api/clientes/${id}/estado-cuenta?${qs}`);
       const j = await res.json().catch(() => null);
@@ -105,7 +110,7 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
     } finally {
       setLoading(false);
     }
-  }, [id, meses]);
+  }, [id, meses, esProveedor]);
 
   useEffect(() => {
     void cargar();
@@ -137,10 +142,10 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
     <div className="print-report mx-auto max-w-[880px] px-6 py-7 print:max-w-none print:p-0">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
         <Link
-          href="/clientes"
+          href={esProveedor ? "/proveedores" : "/clientes"}
           className="inline-flex items-center gap-1 text-[13px] text-cos-ink-soft hover:text-cos-ink"
         >
-          <ChevronLeft className="h-4 w-4" /> Clientes
+          <ChevronLeft className="h-4 w-4" /> {esProveedor ? "Proveedores" : "Clientes"}
         </Link>
         <div className="flex items-center gap-2">
           <div className="flex rounded-control border border-cos-line p-0.5">
@@ -184,7 +189,7 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
               {data.empresa.razonSocial} · {data.empresa.rfc}
             </p>
             <h1 className="mt-1 text-[24px] font-semibold tracking-[-0.02em] text-cos-ink">
-              Estado de cuenta
+              Estado de cuenta{esProveedor ? " del proveedor" : ""}
             </h1>
             <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-[15px] font-medium text-cos-ink">
@@ -276,7 +281,9 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
 
           <section>
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-[15px] font-semibold text-cos-ink">Facturas abiertas al corte</h2>
+              <h2 className="text-[15px] font-semibold text-cos-ink">
+                {esProveedor ? "Facturas por pagar al corte" : "Facturas abiertas al corte"}
+              </h2>
               <p className="text-[12px] text-cos-ink-soft">
                 Antigüedad: 0–30 <Money value={data.aging["0-30"]} size={12} /> · 31–60{" "}
                 <Money value={data.aging["31-60"]} size={12} /> · 61–90{" "}
@@ -332,6 +339,7 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
             )}
           </section>
 
+          {!esProveedor && (
           <section className="mt-6 print:hidden">
             <h2 className="mb-2 text-[15px] font-semibold text-cos-ink">Complementos de pago</h2>
             {avisoRep && (
@@ -390,6 +398,7 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
               )
             )}
           </section>
+          )}
 
           <footer className="mt-8 border-t border-cos-line pt-3 text-[11px] text-cos-ink-faint">
             Cobros con evidencia bancaria conciliada. Documento informativo — no sustituye a los CFDI.

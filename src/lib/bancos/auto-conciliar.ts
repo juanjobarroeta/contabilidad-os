@@ -38,9 +38,48 @@ export const AUTO_MATCH_AMBIGUITY_GAP = 20;
 
 /** Señales de identidad, de más fuerte a más débil. */
 export const PUNTOS_RFC_EXACTO = 120;
+/** El folio de la factura escrito en el concepto («REF FACT 7781», «PAGO
+ *  A-1033»): quien paga nombró al documento — casi determinista. Entre el RFC
+ *  y el monto exacto a propósito. */
+export const PUNTOS_FOLIO = 90;
 export const PUNTOS_CLABE_CONOCIDA = 80;
 export const PUNTOS_RFC_EN_TEXTO = 25;
 export const PUNTOS_NOMBRE = 40;
+
+/**
+ * Tokens tipo folio en el concepto de un movimiento. Conservador para no
+ * casar con referencias bancarias o fechas: sólo (a) el número que SIGUE a una
+ * palabra clave de factura (FACT/FACTURA/FOLIO/FOL/REF/PAGO/F) o (b) un token
+ * serie-folio explícito (letras+separador+dígitos, p. ej. «A-1033»). Devuelve
+ * los candidatos normalizados SIN serie y CON serie (a1033) en minúsculas.
+ */
+export function foliosEnConcepto(descripcion: string): Set<string> {
+  const out = new Set<string>();
+  const d = (descripcion ?? "").toUpperCase();
+  for (const m of d.matchAll(/\b(?:FACT(?:URA)?|FOLIO|FOL|REF|PAGO|F)[.:\s#-]*([A-Z]{0,3}[-\s]?\d{2,8})\b/g)) {
+    const token = m[1].replace(/[-\s]/g, "");
+    out.add(token.toLowerCase());
+    const soloDigitos = token.replace(/^[A-Z]+/, "");
+    if (soloDigitos) out.add(soloDigitos.toLowerCase());
+  }
+  for (const m of d.matchAll(/\b([A-Z]{1,3})[-]?(\d{3,8})\b/g)) {
+    out.add((m[1] + m[2]).toLowerCase());
+  }
+  return out;
+}
+
+/** ¿El folio (o serie+folio) de la factura aparece nombrado en el concepto? */
+export function folioNombrado(
+  inv: { serie?: string | null; folio?: string | null },
+  folios: Set<string>,
+): boolean {
+  if (!inv.folio || folios.size === 0) return false;
+  const folio = String(inv.folio).trim().toLowerCase();
+  if (!folio) return false;
+  if (folios.has(folio)) return true;
+  const serie = (inv.serie ?? "").trim().toLowerCase();
+  return serie !== "" && folios.has(serie + folio);
+}
 
 /** Normaliza para comparar nombres: sin acentos, sin puntuación, sin sufijos. */
 export function normalizarNombre(s: string): string {
@@ -86,6 +125,8 @@ export function scoreCandidate(
     fecha: Date;
     customerRfc: string | null;
     customerNombre?: string | null;
+    serie?: string | null;
+    folio?: string | null;
     /** CLABEs ya vistas para este cliente/proveedor en movimientos conciliados. */
     clabesConocidas?: readonly string[];
   },
@@ -117,6 +158,11 @@ export function scoreCandidate(
   } else if (rfc && tx.descripcion.toUpperCase().includes(rfc)) {
     // Respaldo histórico: el RFC suelto en la descripción, sin etiqueta.
     score += PUNTOS_RFC_EN_TEXTO;
+  }
+
+  // FOLIO nombrado en el concepto: quien paga citó al documento.
+  if (folioNombrado(inv, foliosEnConcepto(tx.descripcion))) {
+    score += PUNTOS_FOLIO;
   }
 
   // La CLABE identifica la cuenta, no a la persona; sube fuerte pero por debajo
@@ -370,6 +416,8 @@ export async function autoConciliarCuenta(
               fecha: inv.fecha,
               customerRfc: rfcFactura,
               customerNombre: nombreFactura,
+              serie: inv.serie,
+              folio: inv.folio,
               clabesConocidas:
                 rfcFactura && clabesPorRfc.has(rfcFactura) && tx.contraparteClabe
                   ? [tx.contraparteClabe]

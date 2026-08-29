@@ -7,6 +7,7 @@ import {
   PUNTOS_CLABE_CONOCIDA,
   PUNTOS_RFC_EXACTO,
   mismoNombre,
+  foliosEnConcepto, folioNombrado, PUNTOS_FOLIO,
 } from "./auto-conciliar";
 
 const tx = { fecha: new Date("2026-06-10T00:00:00Z"), descripcion: "SPEI RECIBIDO" };
@@ -154,5 +155,39 @@ describe("scoreCandidate — el nombre solo no alcanza", () => {
     );
     expect(s).toBe(70); // 30 fecha + 40 nombre
     expect(isAutoApplicable(s, null)).toBe(false);
+  });
+});
+
+describe("foliosEnConcepto / folioNombrado — el folio citado en el concepto", () => {
+  it("extrae el folio tras una palabra clave", () => {
+    const f = foliosEnConcepto("SPEI ENVIADO REF FACT 7781");
+    expect(folioNombrado({ folio: "7781" }, f)).toBe(true);
+  });
+
+  it("extrae serie-folio explícito (A-1033 y A1033)", () => {
+    expect(folioNombrado({ serie: "A", folio: "1033" }, foliosEnConcepto("PAGO A-1033 GRACIAS"))).toBe(true);
+    expect(folioNombrado({ serie: "A", folio: "1033" }, foliosEnConcepto("PAGO A1033"))).toBe(true);
+  });
+
+  it("no casa números sueltos sin palabra clave ni serie", () => {
+    // "88213" es referencia bancaria, no folio: sin FACT/REF/… no se toma.
+    expect(folioNombrado({ folio: "88213" }, foliosEnConcepto("SPEI RECIBIDO BANORTE 88213"))).toBe(false);
+  });
+
+  it("no casa un folio distinto", () => {
+    expect(folioNombrado({ folio: "1034" }, foliosEnConcepto("REF FACT 7781"))).toBe(false);
+  });
+
+  it("suma PUNTOS_FOLIO en el score", () => {
+    const base = {
+      total: 1000,
+      fecha: new Date("2026-07-10"),
+      customerRfc: null,
+      customerNombre: null,
+    };
+    const tx = { fecha: new Date("2026-07-20"), descripcion: "TRANSFERENCIA REF FACT 555" };
+    const sinFolio = scoreCandidate(base, tx, 999999);
+    const conFolio = scoreCandidate({ ...base, folio: "555" }, tx, 999999);
+    expect(conFolio - sinFolio).toBe(PUNTOS_FOLIO);
   });
 });

@@ -191,13 +191,22 @@ export interface EstadoDeCuenta extends EstadoDeCuentaData {
   generado: string;
 }
 
-/** Carga la historia del cliente y arma el estado de cuenta al corte. */
+/**
+ * Carga la historia de la contraparte y arma el estado de cuenta al corte.
+ * `direccion` (owner, revisión pág. 9): "cliente" = cobranza (facturas
+ * INGRESO, cobros = abonos del banco); "proveedor" = cuentas por pagar (los
+ * EGRESO recibidos como cargos, los PAGOS del banco como abonos). El emisor de
+ * los EGRESO vive como fila de Customer (así lo importa el sync), por eso la
+ * misma llave sirve para ambos.
+ */
 export async function estadoDeCuentaCliente(
   companyId: string,
   customerId: string,
-  opts: { desde: Date; hasta: Date; hoy?: Date },
+  opts: { desde: Date; hasta: Date; hoy?: Date; direccion?: "cliente" | "proveedor" },
 ): Promise<EstadoDeCuenta> {
   const hoy = opts.hoy ?? new Date();
+  const esProveedor = opts.direccion === "proveedor";
+  const tipoDoc = esProveedor ? "EGRESO" : "INGRESO";
   const [company, customer] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { razonSocial: true, rfc: true } }),
     prisma.customer.findFirst({
@@ -209,7 +218,7 @@ export async function estadoDeCuentaCliente(
   if (!customer) throw new Error("Cliente no encontrado");
 
   const facturasRows = await prisma.invoice.findMany({
-    where: { companyId, customerId, tipo: "INGRESO", status: "STAMPED" },
+    where: { companyId, customerId, tipo: tipoDoc, status: "STAMPED" },
     select: { id: true, uuid: true, fecha: true, serie: true, folio: true, total: true, tipoSat: true },
     orderBy: { fecha: "asc" },
   });
@@ -228,7 +237,7 @@ export async function estadoDeCuentaCliente(
   const [directos, detalles, reps] = await Promise.all([
     ids.length
       ? prisma.bankTransaction.findMany({
-          where: { companyId, status: "MATCHED", invoiceId: { in: ids }, monto: { gt: 0 } },
+          where: { companyId, status: "MATCHED", invoiceId: { in: ids }, monto: esProveedor ? { lt: 0 } : { gt: 0 } },
           select: { fecha: true, descripcion: true, invoiceId: true, monto: true },
         })
       : [],
@@ -239,7 +248,7 @@ export async function estadoDeCuentaCliente(
           // sin este filtro, un cobro contaría doble.
           where: {
             invoiceId: { in: ids },
-            bankTransaction: { companyId, status: "MATCHED", monto: { gt: 0 }, invoiceId: null },
+            bankTransaction: { companyId, status: "MATCHED", monto: esProveedor ? { lt: 0 } : { gt: 0 }, invoiceId: null },
           },
           select: {
             invoiceId: true,
@@ -258,15 +267,15 @@ export async function estadoDeCuentaCliente(
   const cobros: CobroInput[] = [
     ...directos.map((d) => ({
       fecha: d.fecha,
-      descripcion: d.descripcion || "Cobro",
+      descripcion: d.descripcion || (esProveedor ? "Pago" : "Cobro"),
       invoiceId: d.invoiceId!,
-      monto: Number(d.monto),
+      monto: Math.abs(Number(d.monto)),
     })),
     ...detalles.flatMap((d) =>
       d.invoiceId
         ? [{
             fecha: d.bankTransaction.fecha,
-            descripcion: d.bankTransaction.descripcion || "Cobro",
+            descripcion: d.bankTransaction.descripcion || (esProveedor ? "Pago" : "Cobro"),
             invoiceId: d.invoiceId,
             monto: Math.abs(Number(d.montoAsignado)),
           }]
