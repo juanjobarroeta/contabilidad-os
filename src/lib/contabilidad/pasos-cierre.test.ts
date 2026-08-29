@@ -90,3 +90,22 @@ describe("estadoDeLosPasos", () => {
     expect(p.cierre.detalle).toBe("Falta capital inicial");
   });
 });
+
+describe("entregables sin checks propios", () => {
+  it("mes posteado: los XML existen — no «sin datos»", () => {
+    const p = porClave(estadoDeLosPasos(res(chk("posteo", "ok"))));
+    expect(p.entregables.estado).toBe("listo");
+    expect(p.entregables.detalle).toBe("XML del periodo listos");
+  });
+
+  it("mes preliminar: espera al posteo, con el porqué", () => {
+    const p = porClave(estadoDeLosPasos(res(chk("posteo", "warn"))));
+    expect(p.entregables.estado).toBe("espera");
+    expect(p.entregables.detalle).toBe("Se generan al postear el mes");
+  });
+
+  it("un bloqueo anterior sigue mandando sobre entregables", () => {
+    const p = porClave(estadoDeLosPasos(res(chk("banco", "error"), chk("posteo", "ok"))));
+    expect(p.entregables.estado).toBe("espera");
+  });
+});

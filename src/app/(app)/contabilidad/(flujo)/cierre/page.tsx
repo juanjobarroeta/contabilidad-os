@@ -46,14 +46,14 @@ interface Readiness {
   checks: ReadinessCheck[];
 }
 interface Conciliacion {
-  movimientosNoRegistrados: { monto: number }[];
-  totalNoRegistrados: number;
+  movimientosBanco: { monto: number; conciliado: boolean }[];
   conciliado: boolean;
   sinCuentaBancos: boolean;
   resumen: string;
 }
 interface RepStats {
   stats: { total: number; conPago: number; sinRep: number };
+  pendientes: { needsRep: boolean; payments: { fecha: string }[] }[];
 }
 interface DiotResumen {
   rows: unknown[];
@@ -272,10 +272,18 @@ export default function CierrePage() {
     : readiness.status === "lista" ? "listo"
     : readiness.status === "con_huecos" ? "pendiente" : "bloquea";
 
-  const sinConciliar = concil?.movimientosNoRegistrados.length ?? 0;
+  // SIN CONCILIAR = status UNMATCHED, no «sin asiento»: un mes en borrador no
+  // tiene asientos aunque todo esté conciliado, y contarlo así gritaba «27 sin
+  // conciliar» con 16 reales (misma confusión que la mesa, revisión pág. 9).
+  const movsSinConciliar = concil?.movimientosBanco.filter((m) => !m.conciliado) ?? [];
+  const sinConciliar = movsSinConciliar.length;
+  const totalSinConciliar = movsSinConciliar.reduce((s, m) => s + Math.abs(m.monto), 0);
+  // En un mes ya posteado los sin conciliar no «bloquean» nada que ya pasó:
+  // quedaron fuera del posteo y piden conciliar + re-postear.
   const e2: EstadoPaso = !concil
     ? "cargando"
-    : concil.sinCuentaBancos || sinConciliar === 0 ? "listo" : "bloquea";
+    : concil.sinCuentaBancos || sinConciliar === 0 ? "listo"
+    : posteado ? "pendiente" : "bloquea";
 
   const e3: EstadoPaso = !periods ? "cargando" : posteado ? "listo" : "pendiente";
   const e4: EstadoPaso =
@@ -283,7 +291,19 @@ export default function CierrePage() {
   const e5: EstadoPaso = "pendiente";
   const e6: EstadoPaso = posteado ? "listo" : "bloqueado";
 
-  const repsPendientes = rep?.stats.sinRep ?? null;
+  // REPs del PERIODO en pantalla: el endpoint devuelve el pendiente global,
+  // pero la tarjeta se llama «obligaciones del período» — aquí cuentan las PPD
+  // con cobros de ESTE mes; el resto se anota aparte para que el total ate con
+  // la pestaña de facturas.
+  const enPeriodo = (iso: string) => {
+    const d = new Date(iso);
+    return d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month;
+  };
+  const repsDelPeriodo = rep
+    ? rep.pendientes.filter((p) => p.needsRep && p.payments.some((pg) => enPeriodo(pg.fecha))).length
+    : null;
+  const repsOtrosMeses =
+    rep && repsDelPeriodo !== null ? rep.stats.sinRep - repsDelPeriodo : 0;
   const chipPeriodo = !periodo
     ? { t: "SIN INICIAR", cls: "bg-cos-slate-tint text-cos-ink-faint" }
     : periodo.status === "DRAFT"
@@ -393,12 +413,14 @@ export default function CierrePage() {
                       {sinConciliar}
                     </span>
                     <span>
-                      movimientos sin conciliar por{" "}
-                      <Money value={Math.abs(concil.totalNoRegistrados)} className="mx-1" />
+                      {sinConciliar === 1 ? "movimiento sin conciliar por" : "movimientos sin conciliar por"}{" "}
+                      <Money value={totalSinConciliar} className="mx-1" />
                     </span>
                   </p>
                   <p className="mt-1 text-[13px]">
-                    El motor no postea movimientos bancarios sin conciliar.
+                    {posteado
+                      ? "Quedaron fuera del último posteo: concílialos y vuelve a postear el mes."
+                      : "El motor no postea movimientos bancarios sin conciliar."}
                   </p>
                   <Link href="/contabilidad/conciliacion" className={cn(liga, "mt-2")}>
                     Ir a conciliación <ArrowRight className="h-3.5 w-3.5" />
@@ -421,9 +443,15 @@ export default function CierrePage() {
                   <span>
                     REPs pendientes:{" "}
                     <span className="font-mono font-semibold tabular-nums">
-                      {repsPendientes ?? "…"}
+                      {repsDelPeriodo ?? "…"}
                     </span>{" "}
-                    {repsPendientes != null && repsPendientes > 0 && "PPD cobradas sin complemento"}
+                    {repsDelPeriodo != null && repsDelPeriodo > 0 &&
+                      (repsDelPeriodo === 1 ? "PPD cobrada este mes sin complemento" : "PPD cobradas este mes sin complemento")}
+                    {repsOtrosMeses > 0 && (
+                      <span className="text-cos-ink-faint">
+                        {" "}· {repsOtrosMeses} más de otros meses
+                      </span>
+                    )}
                   </span>
                   <Link href="/facturas" className={liga}>Emitir</Link>
                 </li>
@@ -431,7 +459,7 @@ export default function CierrePage() {
                   <span>
                     DIOT:{" "}
                     <span className="font-mono font-semibold tabular-nums">{diot ? diot.rows.length : "…"}</span>{" "}
-                    proveedores del período
+                    {diot && diot.rows.length === 1 ? "proveedor" : "proveedores"} del período
                   </span>
                   <a
                     href={`/api/impuestos/diot?companyId=${activeCompany.id}&year=${year}&month=${month}&format=txt`}
