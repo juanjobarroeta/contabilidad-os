@@ -85,14 +85,16 @@ export async function conciliacionDelMes(
 ): Promise<ConciliacionMes> {
   const { inicio, fin } = rangoMes(year, month);
 
-  const [cuentaBancos, cuentasBancarias, txs, conciliaciones] = await Promise.all([
-    prisma.chartAccount.findFirst({
+  const [cuentasBancos, cuentasBancarias, txs, conciliaciones] = await Promise.all([
+    // TODA la familia de Bancos: el motor postea en subcuentas por banco
+    // (102.01.NN) — leer sólo la cuenta padre deja el libro en cero y marca
+    // todos los movimientos como sin registrar.
+    prisma.chartAccount.findMany({
       where: {
         companyId,
         isActive: true,
-        OR: [{ subcuenta: COE_CODES.BANCOS }, { cuentaSAT: COE_CODES.BANCOS, subcuenta: null }],
+        OR: [{ subcuenta: { startsWith: COE_CODES.BANCOS } }, { cuentaSAT: COE_CODES.BANCOS, subcuenta: null }],
       },
-      orderBy: { createdAt: "desc" },
       select: { id: true },
     }),
     prisma.bankAccount.findMany({
@@ -114,7 +116,8 @@ export async function conciliacionDelMes(
     prisma.conciliacionBancaria.findMany({ where: { companyId, year, month } }),
   ]);
 
-  if (!cuentaBancos) {
+  const idsBancos = cuentasBancos.map((c) => c.id);
+  if (idsBancos.length === 0) {
     const vacio = conciliarBancos({ saldos: [], movimientos: [], asientos: [], saldoInicialLibros: 0 });
     return {
       ...vacio,
@@ -134,7 +137,7 @@ export async function conciliacionDelMes(
   // Bancos daría folios que no coinciden con el libro diario ni con el XML).
   const [asientosMes, previos, periodoContable, todosDelMes] = await Promise.all([
     prisma.accountingEntry.findMany({
-      where: { companyId, chartAccountId: cuentaBancos.id, year, month },
+      where: { companyId, chartAccountId: { in: idsBancos }, year, month },
       select: {
         id: true, fecha: true, descripcion: true, monto: true, tipo: true,
         fuente: true, referencia: true, referenciaTipo: true,
@@ -143,7 +146,7 @@ export async function conciliacionDelMes(
     }),
     prisma.accountingEntry.groupBy({
       by: ["tipo"],
-      where: { companyId, chartAccountId: cuentaBancos.id, fecha: { lt: inicio } },
+      where: { companyId, chartAccountId: { in: idsBancos }, fecha: { lt: inicio } },
       _sum: { monto: true },
     }),
     prisma.accountingPeriod.findUnique({
