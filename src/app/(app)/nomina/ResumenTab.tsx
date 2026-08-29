@@ -187,7 +187,12 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
     const f = new Date(r.fechaPago);
     return f.getFullYear() === now.getFullYear() && f.getMonth() === now.getMonth();
   });
-  const netoDelMes = runsDelMes.reduce((s, r) => s + (r.totalNeto ?? 0), 0);
+  // PAGADA = sólo corridas timbradas/pagadas. Sumar la quincena CALCULATED
+  // (con fecha de pago futura) inflaba el hero al doble y contradecía al
+  // «0/16 timbrados» de la misma pantalla.
+  const runsPagadas = runsDelMes.filter((r) => r.status === "STAMPED" || r.status === "PAID");
+  const netoDelMes = runsPagadas.reduce((s, r) => s + (r.totalNeto ?? 0), 0);
+  const runsPendientes = runsDelMes.length - runsPagadas.length;
   const ordinariaDelMes = runsDelMes.find((r) => r.tipo === "ORDINARIA");
 
   return (
@@ -222,7 +227,7 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
               <span className="inline-flex items-center gap-1.5 text-[13.5px] text-white/85">
                 <CalendarDays className="h-[15px] w-[15px]" />
                 {runsDelMes.length > 0
-                  ? `${runsDelMes.length} corrida${runsDelMes.length > 1 ? "s" : ""} este mes`
+                  ? `${runsDelMes.length} ${runsDelMes.length === 1 ? "corrida" : "corridas"} este mes${runsPendientes > 0 ? ` · ${runsPendientes} por timbrar` : ""}`
                   : ordinariaDelMes
                   ? "Ordinaria registrada"
                   : "Aún no corres la nómina de este mes"}
@@ -360,7 +365,9 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
                   <FriendlyRow label="IMSS obrero" value={-hub.mes.imssObrero} negative />
                   {hub.mes.infonavit > 0 && <FriendlyRow label="INFONAVIT" value={-hub.mes.infonavit} negative />}
                   {hub.mes.otrasDeducciones > 0 && <FriendlyRow label="Otras deducciones (FONACOT, pensión, descuentos)" value={-hub.mes.otrasDeducciones} negative />}
-                  <FriendlyRow label="Neto pagado" value={hub.mes.neto} total />
+                  {/* «del mes», no «pagado»: el desglose suma también la
+                      quincena calculada sin timbrar. */}
+                  <FriendlyRow label="Neto del mes" value={hub.mes.neto} total />
                   <p className="mt-2 text-[12px] text-cos-ink-faint">
                     Carga patronal del mes (IMSS patronal): <b className="font-mono text-cos-ink-soft">{formatCurrency(hub.mes.imssPatronal)}</b>
                   </p>
