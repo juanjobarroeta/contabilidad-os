@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight, Briefcase, ChevronRight, ChevronLeft, Clock, MessageCircle, ShieldAlert,
   Sparkles, TriangleAlert,
@@ -35,6 +36,7 @@ interface Cartera {
 }
 
 export function CopilotoRail() {
+  const router = useRouter();
   const { activeCompany, companies } = useCompany();
   const [colapsado, setColapsado] = useState(false);
   const [rail, setRail] = useState<RailAgrupado | null>(null);
@@ -181,9 +183,14 @@ export function CopilotoRail() {
         {!loading &&
           !error &&
           rail?.grupos.map((g) => (
+            // La carta ENTERA navega al destino del verbo (no sólo el botón):
+            // con 300px de rail, el botón solo era un blanco chico. El botón
+            // sigue siendo <Link> por semántica/teclado; Posponer corta la
+            // propagación.
             <div
               key={g.href + g.categoria}
-              className="rounded-card border border-cos-line bg-cos-paper px-3 py-2.5"
+              onClick={() => router.push(g.href)}
+              className="cursor-pointer rounded-card border border-cos-line bg-cos-paper px-3 py-2.5 transition-colors hover:border-cos-brand/40"
             >
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span
@@ -222,7 +229,7 @@ export function CopilotoRail() {
                   type="button"
                   title="Posponer 7 días"
                   disabled={posponiendo !== null}
-                  onClick={() => posponer(g.href, g.ids)}
+                  onClick={(e) => { e.stopPropagation(); posponer(g.href, g.ids); }}
                   className="rounded-control border border-cos-line p-1.5 text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink disabled:opacity-50"
                 >
                   <Clock className={cn("h-3.5 w-3.5", posponiendo === g.href && "animate-pulse")} />

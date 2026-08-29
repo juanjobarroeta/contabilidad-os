@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Search, Plus, Download, X, Info, Loader2, AlertTriangle, ShieldCheck, FileText, Copy } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Button } from "@/components/ui";
@@ -215,7 +216,17 @@ export default function FacturasPage() {
   const [sel, setSel] = useState<Invoice | null>(null);
   // Submenú activo: comprobantes (la lista de siempre) · complementos de pago
   // (emitidos/recibidos, con enlace a la factura que pagan) · prefacturas.
+  // `?tab=` sigue al parámetro (useSearchParams, mismo patrón que Nómina): con
+  // la lectura única de window.location, un router.push desde el Copiloto
+  // («Emitir complemento») cambiaba la URL pero caía en comprobantes.
   const [vista, setVista] = useState<Vista>("comprobantes");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  useEffect(() => {
+    if (tabParam === "complementos" || tabParam === "prefacturas" || tabParam === "recurrentes") {
+      setVista(tabParam);
+    }
+  }, [tabParam]);
   const [toast, setToast] = useState("");
   const [checkingCancel, setCheckingCancel] = useState(false);
   // Periodo elegido en el selector ("todo" | "YYYY" | "YYYY-MM") + los meses

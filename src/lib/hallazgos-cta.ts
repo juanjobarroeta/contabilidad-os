@@ -12,6 +12,12 @@ const MAP: Record<string, HallazgoCta> = {
   "banco.movimientos_desactualizados": { label: "Subir estado de cuenta", href: "/bancos" },
   "iva.pue.sin_pago": { label: "Revisar conciliación", href: "/bancos" },
   "cfdi.rep.fecha_pago_anterior_factura": { label: "Revisar conciliación", href: "/bancos" },
+  // El REP se EMITE en el centro de complementos, no en la mesa de conciliación.
+  "cfdi.rep_faltante": { label: "Emitir complemento", href: "/facturas?tab=complementos" },
+  // 69-B: el directorio de proveedores enseña la situación (presunto/definitivo)
+  // por RFC — ahí se revisa al proveedor, no en la lista genérica de hallazgos.
+  "efos.presunto": { label: "Revisar proveedor", href: "/proveedores" },
+  "efos.definitivo": { label: "Revisar proveedor", href: "/proveedores" },
   "declaraciones.faltantes": { label: "Ir a Declaraciones", href: "/impuestos?tab=historial" },
   "obligacion.vencimiento.proximo": { label: "Ir a la declaración del mes", href: "/impuestos?tab=del-mes" },
   "resico.ingresos_limite": { label: "Ver impuestos", href: "/impuestos?tab=del-mes" },
@@ -30,6 +36,7 @@ export function ctaParaHallazgo(checkClave: string): HallazgoCta | null {
   if (MAP[checkClave]) return MAP[checkClave];
   // Respaldos por prefijo para claves futuras del mismo dominio.
   if (checkClave.startsWith("banco.")) return { label: "Subir estado de cuenta", href: "/bancos" };
+  if (checkClave.startsWith("efos.")) return { label: "Revisar proveedor", href: "/proveedores" };
   if (checkClave.startsWith("cfdi.rep")) return { label: "Revisar conciliación", href: "/bancos" };
   if (checkClave.startsWith("csd.") || checkClave.startsWith("fiel.")) return { label: "Actualizar credenciales", href: "/empresa" };
   if (checkClave.startsWith("cumplimiento.")) return { label: "Ver cumplimiento", href: "/cumplimiento" };
