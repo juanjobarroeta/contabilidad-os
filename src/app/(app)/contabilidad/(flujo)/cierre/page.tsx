@@ -195,7 +195,9 @@ export default function CierrePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al postear el mes");
       const warn = data.warnings?.length ?? 0;
-      setAviso(`${data.entriesCreated} asientos creados${warn > 0 ? ` · ${warn} advertencia(s)` : ""}.`);
+      setAviso(
+        `${data.entriesCreated} ${data.entriesCreated === 1 ? "asiento creado" : "asientos creados"}${warn > 0 ? ` · ${warn} ${warn === 1 ? "advertencia" : "advertencias"}` : ""}.`
+      );
       await cargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al postear el mes");
@@ -240,7 +242,9 @@ export default function CierrePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al actualizar los meses pendientes");
-      const partes: string[] = [`${data.posted} mes(es) cerrado(s)`];
+      const partes: string[] = [
+        `${data.posted} ${data.posted === 1 ? "mes cerrado" : "meses cerrados"}`,
+      ];
       if (data.errors?.length > 0) partes.push(`${data.errors.length} con error`);
       setAviso(`Meses pendientes ${year}: ${partes.join(" · ")}.`);
       await cargar();
@@ -639,7 +643,7 @@ export default function CierrePage() {
                 title="Descargar la balanza de cierre (mes 13)"
                 className={liga}
               >
-                XML Balanza 13
+                Balanza de cierre (mes 13)
               </a>
               <button
                 onClick={generarCierreAnual}

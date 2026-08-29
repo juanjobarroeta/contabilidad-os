@@ -62,7 +62,10 @@ function EjercicioCard({
       } else if (tipo === "cerrar") {
         setMsg({ texto: `Ejercicio ${year} cerrado. Sus asientos quedan protegidos.`, error: false });
       } else {
-        setMsg({ texto: `Ejercicio ${year} reabierto (${data.reabiertos} periodo(s)).`, error: false });
+        setMsg({
+          texto: `Ejercicio ${year} reabierto (${data.reabiertos} ${data.reabiertos === 1 ? "periodo" : "periodos"}).`,
+          error: false,
+        });
       }
       await onReload();
     } catch (e) {

@@ -155,7 +155,13 @@ async function main() {
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (!user) throw new Error(`Usuario ${email} no existe.`);
 
-  const existente = await prisma.company.findFirst({ where: { rfc: DEMO_RFC }, select: { id: true } });
+  // La liga con Facturapi (org de sandbox + llave cifrada) sobrevive al reset:
+  // sin esto cada reseed dejaba la demo sin poder timbrar hasta re-correr
+  // facturapi-demo-test.ts, que además creaba una org huérfana nueva.
+  const existente = await prisma.company.findFirst({
+    where: { rfc: DEMO_RFC },
+    select: { id: true, facturapiOrgId: true, facturapiApiKey: true },
+  });
   if (existente) {
     if (!args.includes("--reset")) {
       throw new Error(`La empresa demo ya existe (${DEMO_RFC}). Corre con --reset para regenerarla.`);
@@ -183,6 +189,8 @@ async function main() {
       regimenFiscal: "601",
       codigoPostal: "72810",
       registroPatronal: "D5312874109",
+      facturapiOrgId: existente?.facturapiOrgId ?? null,
+      facturapiApiKey: existente?.facturapiApiKey ?? null,
       // El paso SAT del Inicio muestra «Última sincronización hace X».
       lastAutoSyncAt: new Date(),
       members: { create: { userId: user.id, role: "OWNER" } },
@@ -537,6 +545,35 @@ async function main() {
   await postMonth({ companyId: cid, year: M2.y, month: M2.m });
   await postMonth({ companyId: cid, year: M1.y, month: M1.m });
 
+  // Saldos del estado de cuenta — lo que el contador captura del PDF del banco.
+  // Derivados de los propios movimientos (las cuentas nacen en M3 con saldo
+  // cero), así el papel de trabajo de los meses posteados cuadra a cero y la
+  // demo enseña una conciliación FIRMABLE, no «falta capturar el saldo».
+  console.log("· Capturando saldos de estado de cuenta…");
+  const movsParaSaldos = await prisma.bankTransaction.findMany({
+    where: { companyId: cid },
+    select: { bankAccountId: true, fecha: true, monto: true },
+  });
+  for (const cuenta of [bancoX, bancoY]) {
+    let saldo = 0;
+    for (const per of [M3, M2, M1, { y, m }]) {
+      const delMes = movsParaSaldos.filter(
+        (mv) =>
+          mv.bankAccountId === cuenta.id &&
+          mv.fecha.getUTCFullYear() === per.y &&
+          mv.fecha.getUTCMonth() + 1 === per.m
+      );
+      const inicial = saldo;
+      saldo = r2(delMes.reduce((s, mv) => s + Number(mv.monto), saldo));
+      await prisma.conciliacionBancaria.create({
+        data: {
+          companyId: cid, bankAccountId: cuenta.id, year: per.y, month: per.m,
+          saldoInicialEstado: inicial, saldoFinalEstado: saldo, saldoManual: true,
+        },
+      });
+    }
+  }
+
   const resumen = await Promise.all([
     prisma.invoice.count({ where: { companyId: cid } }),
     prisma.bankTransaction.count({ where: { companyId: cid } }),
@@ -549,7 +586,7 @@ async function main() {
 ✔ Empresa demo lista: ${DEMO_RAZON} (${DEMO_RFC})
   · ${resumen[0]} CFDIs · ${resumen[1]} movimientos bancarios (${resumen[2]} sin clasificar para la mesa)
   · ${resumen[3]} asientos posteados con el motor real · ${resumen[5]} subcuentas de banco
-  · ${resumen[4]} corrida(s) sin timbrar (la cola dirá «Timbrar»)
+  · ${resumen[4]} ${resumen[4] === 1 ? "corrida" : "corridas"} sin timbrar (la cola dirá «Timbrar»)
   · Declaración de ${perStr(M1)} CALCULADA — la cola dirá «Presentar»
   · 4 hallazgos del auditor en el rail del Copiloto
   Entra como ${email} y selecciona la empresa.`);
