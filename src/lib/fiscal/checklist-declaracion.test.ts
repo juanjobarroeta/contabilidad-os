@@ -110,11 +110,13 @@ describe("decidirChecklist — sincronización SAT", () => {
 });
 
 describe("decidirChecklist — cadena de declaraciones", () => {
-  it("advertencias del motor → atención con el aviso textual", () => {
-    const aviso = "El mes anterior (abril de 2026) tiene CFDI timbrados pero no cuenta con una declaración guardada…";
+  it("advertencias del motor → atención con SÓLO la primera oración (el texto completo vive en la alerta del Resumen)", () => {
+    const aviso =
+      "El mes anterior (abril de 2026) tiene CFDI timbrados pero no cuenta con una declaración guardada. " +
+      "El saldo a favor se está tomando como cero, capture antes de confiar en estas cifras.";
     const cad = item(decidirChecklist(baseInputs({ advertenciasCadena: [aviso] })), "cadena-declaraciones");
     expect(cad.estado).toBe("atencion");
-    expect(cad.detalle).toBe(aviso);
+    expect(cad.detalle).toBe("El mes anterior (abril de 2026) tiene CFDI timbrados pero no cuenta con una declaración guardada.");
     expect(cad.accionUrl).toBe("/impuestos?tab=historial");
   });
 });

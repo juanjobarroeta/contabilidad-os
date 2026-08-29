@@ -330,7 +330,7 @@ function FaltantesBanner({ faltantes, empresa, onUploaded }: {
         <div className="flex items-start gap-2.5 px-4 py-3 text-[13px] text-cos-amber-ink">
           <FileWarning className="mt-0.5 h-4 w-4 flex-none" />
           <span className="flex-1">
-            Faltan <b>{criticos.length} acuse(s)</b> de esta empresa — sin ellos no podemos arrastrar bien
+            {criticos.length === 1 ? "Falta" : "Faltan"} <b>{criticos.length} {criticos.length === 1 ? "acuse" : "acuses"}</b> de esta empresa — sin ellos no podemos arrastrar bien
             el saldo a favor, el coeficiente de utilidad ni los pagos provisionales. Los números de abajo pueden
             estar incompletos. <span className="text-cos-amber-ink/80">{muestra}{criticos.length > 4 ? "…" : ""}</span>
           </span>
@@ -425,7 +425,7 @@ function Resumen({ data, year, companyId, month }: { data: CierreData; year: num
             <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">DIOT</span>
             <EstadoBadge estado={data.diot.estado} />
           </div>
-          <p className="mt-2 text-[14px] text-cos-ink">{data.diot.proveedores} proveedor(es) con IVA · vence {fmtFecha(data.diot.vencimiento)}</p>
+          <p className="mt-2 text-[14px] text-cos-ink">{data.diot.proveedores} {data.diot.proveedores === 1 ? "proveedor" : "proveedores"} con IVA · vence {fmtFecha(data.diot.vencimiento)}</p>
         </Card>
       )}
 
@@ -616,7 +616,7 @@ function Presentar({
             <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">DIOT</span>
             <EstadoBadge estado={data.diot.estado} />
           </div>
-          <p className="mt-2 text-[14px] text-cos-ink">{data.diot.proveedores} proveedor(es) con IVA · vence {fmtFecha(data.diot.vencimiento)}</p>
+          <p className="mt-2 text-[14px] text-cos-ink">{data.diot.proveedores} {data.diot.proveedores === 1 ? "proveedor" : "proveedores"} con IVA · vence {fmtFecha(data.diot.vencimiento)}</p>
           <a href={`/api/impuestos/diot?companyId=${companyId}&month=${month}&year=${year}&format=txt`}
             className="mt-2 inline-flex items-center gap-1.5 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-paper">
             <Download className="h-3.5 w-3.5" /> Descargar archivo DIOT (.txt)

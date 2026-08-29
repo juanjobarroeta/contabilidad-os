@@ -182,7 +182,7 @@ export default function OperadorPage() {
           </p>
           <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[13px] hover:bg-cos-paper">
             {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-            {uploading ? "Leyendo…" : "Subir acuse(s)"}
+            {uploading ? "Leyendo…" : "Subir acuses"}
             <input type="file" accept="application/pdf,.pdf" multiple className="hidden" disabled={uploading || !companyId}
               onChange={(e) => { uploadAcuses(e.target.files); e.target.value = ""; }} />
           </label>
@@ -232,7 +232,7 @@ export default function OperadorPage() {
             Backfill · {backfill.company?.razonSocial}
           </p>
           <p className="mt-2 text-[14px] text-cos-ink">
-            {backfill.backfill?.mesesCreados} fila(s) creada(s) · {backfill.backfill?.acusesParseados} acuse(s) leído(s)
+            {backfill.backfill?.mesesCreados} filas creadas · {backfill.backfill?.acusesParseados} acuses leídos
             {backfill.backfill?.topeAlcanzado ? " · queda más (vuelve a correr)" : ""}
           </p>
           {backfill.nota && <p className="mt-1 text-[13px] text-cos-ink-soft">{backfill.nota}</p>}
