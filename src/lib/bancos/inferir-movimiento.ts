@@ -70,6 +70,8 @@ export function familiaATag(familia: FamiliaConcepto): TagSinFactura | null {
     case "PAYROLL_NO_CFDI":
     case "INTERNAL_TRANSFER":
     case "NON_DEDUCTIBLE":
+    case "LOAN_RECEIVED":
+    case "LOAN_GIVEN":
       return familia;
     case "RENT":
     case "FINANCIAL_INCOME":

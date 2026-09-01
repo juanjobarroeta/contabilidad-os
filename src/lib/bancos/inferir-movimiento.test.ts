@@ -74,6 +74,8 @@ describe("familiaATag", () => {
   it("los tags directos pasan tal cual", () => {
     expect(familiaATag("TAX_PAYMENT")).toBe("TAX_PAYMENT");
     expect(familiaATag("INTERNAL_TRANSFER")).toBe("INTERNAL_TRANSFER");
+    expect(familiaATag("LOAN_RECEIVED")).toBe("LOAN_RECEIVED");
+    expect(familiaATag("LOAN_GIVEN")).toBe("LOAN_GIVEN");
   });
 });
 

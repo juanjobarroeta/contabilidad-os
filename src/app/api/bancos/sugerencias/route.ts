@@ -13,6 +13,8 @@ const FAMILIAS_VALIDAS: FamiliaConcepto[] = [
   "FINANCIAL_INCOME",
   "RENT",
   "NON_DEDUCTIBLE",
+  "LOAN_RECEIVED",
+  "LOAN_GIVEN",
 ];
 
 /**
