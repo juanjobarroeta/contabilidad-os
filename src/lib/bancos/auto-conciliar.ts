@@ -81,47 +81,12 @@ export function folioNombrado(
   return serie !== "" && folios.has(serie + folio);
 }
 
-/** Normaliza para comparar nombres: sin acentos, sin puntuación, sin sufijos. */
-export function normalizarNombre(s: string): string {
-  return s
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\b(S\.?A\.?|S\.?\s*DE\s*R\.?L\.?|DE\s*C\.?V\.?|S\.?C\.?|A\.?C\.?|SAPI)\b/g, " ")
-    .replace(/[^A-Z0-9 ]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
- * ¿El nombre de la contraparte y el de la factura son la misma persona?
- *
- * Se exige que uno contenga al otro DESPUÉS de normalizar, y que el más corto
- * tenga al menos 6 caracteres. Sin ese piso, "SA" o "GRUPO" empatarían con
- * media cartera — y un match de nombre mal dado concilia la factura equivocada,
- * que es más caro que no conciliar.
- */
-export function mismoNombre(a: string | null | undefined, b: string | null | undefined): boolean {
-  const x = normalizarNombre(a ?? "");
-  const y = normalizarNombre(b ?? "");
-  if (x.length < 6 || y.length < 6) return false;
-  return x.includes(y) || y.includes(x);
-}
-
-/**
- * El token que IDENTIFICA a una contraparte bancaria, para buscar sus facturas
- * con un `contains` en SQL: el más largo del nombre normalizado (sin sufijos
- * societarios), con piso de 4 letras. "ZIONX SA DE CV" → "ZIONX";
- * "MARIA AMPARO ALONSO SOBERON" → "SOBERON". Devuelve null cuando no hay
- * token con el que un contains no traiga medio padrón.
- */
-export function tokenIdentificante(nombre: string | null | undefined): string | null {
-  const tokens = normalizarNombre(nombre ?? "")
-    .split(" ")
-    .filter((t) => t.length >= 4 && !/^\d+$/.test(t));
-  if (tokens.length === 0) return null;
-  return tokens.reduce((mejor, t) => (t.length > mejor.length ? t : mejor), tokens[0]);
-}
+// normalizarNombre / mismoNombre / tokenIdentificante viven en nombres.ts
+// (módulo puro, sin prisma) porque también los usa código que llega al bundle
+// del navegador. Se re-exportan aquí para no romper a los importadores; el
+// import además los liga localmente (scoreCandidate usa mismoNombre).
+import { mismoNombre } from "./nombres";
+export { normalizarNombre, mismoNombre, tokenIdentificante } from "./nombres";
 
 export interface SenalesTx {
   fecha: Date;
