@@ -41,12 +41,27 @@ describe("sugerirCategoriaConcepto — familias de concepto", () => {
     }
   });
 
-  it("SPEI/TRASPASO/TRANSFERENCIA → traspasos (confianza media)", () => {
-    for (const c of ["TRASPASO ENTRE CUENTAS", "SPEI ENVIADO", "TRANSFERENCIA"]) {
+  it("sólo frases de cuenta propia → traspasos (confianza media)", () => {
+    for (const c of ["TRASPASO ENTRE CUENTAS", "TRANSFERENCIA PROPIA REF 99", "PAGO CUENTA PROPIA"]) {
       const s = sugerirCategoriaConcepto(c, "DEBITO");
       expect(s?.familia, c).toBe("INTERNAL_TRANSFER");
       expect(s?.cuentaSugerida).toBe(COE_CODES.BANCOS);
       expect(s?.confianza).toBe("media");
+    }
+  });
+
+  it("SPEI/TRANSFERENCIA a secas NO huelen a traspaso", () => {
+    // Todo pago interbancario en México imprime "SPEI" en el concepto — un
+    // pago real de un tercero no debe recibir "Parece Traspaso" (bug visto en
+    // BanBajío: "ABONO PRESTAMO ... (SPEI; Banca por Internet)").
+    for (const c of [
+      "ABONO PRESTAMO Recibo # 26 (SPEI; Banca por Internet)",
+      "SPEI ENVIADO",
+      "TRANSFERENCIA",
+      "PAGO FACTURA por 193333.34 SPEI 014 SANTANDER",
+    ]) {
+      const s = sugerirCategoriaConcepto(c, "DEBITO");
+      expect(s?.familia, c).not.toBe("INTERNAL_TRANSFER");
     }
   });
 

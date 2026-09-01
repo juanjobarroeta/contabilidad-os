@@ -7,6 +7,7 @@ import {
   PUNTOS_CLABE_CONOCIDA,
   PUNTOS_RFC_EXACTO,
   mismoNombre,
+  tokenIdentificante,
   foliosEnConcepto, folioNombrado, PUNTOS_FOLIO,
 } from "./auto-conciliar";
 
@@ -189,5 +190,21 @@ describe("foliosEnConcepto / folioNombrado — el folio citado en el concepto", 
     const sinFolio = scoreCandidate(base, tx, 999999);
     const conFolio = scoreCandidate({ ...base, folio: "555" }, tx, 999999);
     expect(conFolio - sinFolio).toBe(PUNTOS_FOLIO);
+  });
+});
+
+describe("tokenIdentificante", () => {
+  it("morales: el token largo, sin sufijos societarios", () => {
+    expect(tokenIdentificante("ZIONX SA DE CV")).toBe("ZIONX");
+    expect(tokenIdentificante("BULDING INNOVATIVE IDEAS")).toBe("INNOVATIVE");
+  });
+  it("físicas: el apellido más largo", () => {
+    expect(tokenIdentificante("MARIA AMPARO ALONSO SOBERON")).toBe("SOBERON");
+  });
+  it("sin token útil → null (un contains con basura traería medio padrón)", () => {
+    expect(tokenIdentificante(null)).toBeNull();
+    expect(tokenIdentificante("")).toBeNull();
+    expect(tokenIdentificante("S.A. DE C.V.")).toBeNull();
+    expect(tokenIdentificante("IPP BG SC")).toBeNull();
   });
 });

@@ -183,16 +183,18 @@ const REGLAS: Regla[] = [
     confianza: "alta",
   },
   // ── Traspasos / transferencias entre cuentas propias ───────────────────────
-  // Confianza media: un SPEI/TRANSFERENCIA puede ser un pago real con CFDI; sólo
-  // lo sugerimos cuando no empató con ningún CFDI y el concepto huele a traspaso.
+  // SÓLO frases que afirman "cuenta propia". "SPEI" y "TRANSFERENCIA" a secas
+  // NO cuentan: en México todo pago interbancario imprime "SPEI" en el concepto
+  // (BanBajío: "(SPEI; Banca por Internet)"), así que con ellas de patrón la
+  // mesa le decía "Parece Traspaso" a pagos reales de terceros con nombre y
+  // RFC. Los traspasos de verdad los detecta la identidad (CLABE propia /
+  // movimiento espejo) en inferir-movimiento, que corre ANTES que estas reglas.
   {
     patrones: [
       "TRASPASO",
       "TRANSFERENCIA ENTRE CUENTAS",
       "TRANSFERENCIA PROPIA",
       "CUENTA PROPIA",
-      "SPEI",
-      "TRANSFERENCIA",
     ],
     familia: "INTERNAL_TRANSFER",
     cuenta: COE_CODES.BANCOS,
