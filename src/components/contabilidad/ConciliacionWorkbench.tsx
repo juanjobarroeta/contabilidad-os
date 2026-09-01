@@ -195,19 +195,31 @@ export function ConciliacionWorkbench({
     setSelTx((prev) => (prev && lista.some((m) => m.id === prev.id) ? prev : primero));
   }, [data, cuentaSel]);
 
+  // Búsqueda del humano sobre los candidatos (con debounce): cuando el
+  // contador YA sabe qué factura es, tecleársela gana a cualquier score. El
+  // servidor ensancha el pool (±365 días, sin tope de monto) y filtra.
+  const [busqueda, setBusqueda] = useState("");
+  const [busquedaLista, setBusquedaLista] = useState("");
+  useEffect(() => { setBusqueda(""); setBusquedaLista(""); }, [selTx?.id]);
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaLista(busqueda.trim()), 300);
+    return () => clearTimeout(t);
+  }, [busqueda]);
+
   // Candidatos del movimiento elegido.
   useEffect(() => {
     if (!selTx) return;
     let vivo = true;
     setCandCargando(true);
     setCand(null); setSeleccion([]); setSelImpuesto(null);
-    fetch(`/api/bancos/${selTx.cuentaBancariaId}/match?txId=${selTx.id}`)
+    const qParam = busquedaLista ? `&q=${encodeURIComponent(busquedaLista)}` : "";
+    fetch(`/api/bancos/${selTx.cuentaBancariaId}/match?txId=${selTx.id}${qParam}`)
       .then((r) => r.json())
       .then((d) => { if (vivo && Array.isArray(d?.candidates)) setCand({ candidates: d.candidates, impuestos: d.impuestos ?? [], sugerencia: d.sugerencia ?? null, pagoJunto: d.pagoJunto ?? null }); })
       .catch(() => {})
       .finally(() => { if (vivo) setCandCargando(false); });
     return () => { vivo = false; };
-  }, [selTx]);
+  }, [selTx, busquedaLista]);
 
   const etiquetaCuenta = useMemo(() => {
     const m = new Map<string, string>();
@@ -565,6 +577,16 @@ export function ConciliacionWorkbench({
                   ? `CFDI candidatos · ${seleccion.length} seleccionados`
                   : "CFDI candidatos"}
               </p>
+              {selTx && (
+                <div className="border-b border-cos-line-soft px-5 py-2">
+                  <input
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="Buscar por folio, cliente, RFC o UUID…"
+                    className="w-full rounded-control border border-cos-line bg-cos-paper px-2.5 py-1.5 text-[12.5px] text-cos-ink placeholder:text-cos-ink-faint focus:border-cos-brand focus:outline-none"
+                  />
+                </div>
+              )}
               {!selTx ? (
                 <div className="flex h-full min-h-[200px] items-center justify-center px-8 py-10 text-center text-sm text-cos-ink-soft">
                   <span>
@@ -591,9 +613,11 @@ export function ConciliacionWorkbench({
                   )}
                   {!cand || (cand.candidates.length === 0 && cand.impuestos.length === 0) ? (
                     <p className="px-5 py-6 text-sm text-cos-ink-soft">
-                      Sin CFDIs de este sentido que empaten por identidad, monto o fecha. Puede ser un
-                      traspaso propio, una comisión, un documento que aún no se sincroniza — o un{" "}
-                      {selTx.monto > 0 ? "ingreso" : "gasto"} que no se facturó.
+                      {busquedaLista
+                        ? `Nada empata con «${busquedaLista}» en ±365 días (mismo sentido, sin CFDIs ya cobrados).`
+                        : <>Sin CFDIs de este sentido que empaten por identidad, monto o fecha. Puede ser un
+                          traspaso propio, una comisión, un documento que aún no se sincroniza — o un{" "}
+                          {selTx.monto > 0 ? "ingreso" : "gasto"} que no se facturó.</>}
                     </p>
                   ) : (
                     <>
