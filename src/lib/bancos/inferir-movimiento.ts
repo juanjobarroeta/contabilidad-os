@@ -25,6 +25,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { FamiliaConcepto } from "./categorizar-concepto";
+import { mismoNombre } from "./auto-conciliar";
 
 /** Tags de `BankTransaction.notes` que postMonth postea con asiento propio. */
 export type TagSinFactura =
@@ -116,7 +117,12 @@ const ETIQUETA: Record<TagSinFactura, string> = Object.fromEntries(
  * dato duro la sostiene; si no, null — las capas de reglas/LLM siguen después.
  */
 export function inferirPorIdentidad(
-  mov: { monto: number; contraparteRfc?: string | null; contraparteClabe?: string | null },
+  mov: {
+    monto: number;
+    contraparteRfc?: string | null;
+    contraparteClabe?: string | null;
+    contraparteNombre?: string | null;
+  },
   ctx: ContextoIdentidad
 ): SugerenciaMovimiento | null {
   const rfc = mov.contraparteRfc?.trim().toUpperCase() || null;
@@ -162,6 +168,26 @@ export function inferirPorIdentidad(
       confianza: "media",
       fuente: "identidad",
     };
+  }
+
+  // El banco a veces sólo da el NOMBRE (sin RFC — visto en BanBajío: pago a
+  // una empleada sin RFC extraíble). El nombre completo también identifica,
+  // con las mismas dos cautelas del RFC: sólo egresos, y sólo si empata con
+  // UNA persona del padrón (dos homónimos = silencio; mejor callar que
+  // adivinar).
+  if (!rfc && mov.contraparteNombre && mov.monto < 0) {
+    const empatan = [...ctx.empleadosPorRfc.values()].filter((n) =>
+      mismoNombre(mov.contraparteNombre, n)
+    );
+    if (empatan.length === 1) {
+      return {
+        tag: "PAYROLL_NO_CFDI",
+        etiqueta: ETIQUETA.PAYROLL_NO_CFDI,
+        porQue: `el nombre coincide con tu empleado(a) ${empatan[0]}`,
+        confianza: "media",
+        fuente: "identidad",
+      };
+    }
   }
 
   return null;

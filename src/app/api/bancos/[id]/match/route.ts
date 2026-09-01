@@ -65,7 +65,11 @@ export async function GET(req: Request, { params }: Params) {
   }
 
   const { id: bankAccountId } = await params;
-  const txId = new URL(req.url).searchParams.get("txId");
+  const url = new URL(req.url);
+  const txId = url.searchParams.get("txId");
+  // Búsqueda del humano sobre los candidatos: cuando el contador YA sabe qué
+  // factura es, tecleársela gana a cualquier score.
+  const q = url.searchParams.get("q")?.trim() || null;
   if (!txId) return NextResponse.json({ error: "txId requerido" }, { status: 400 });
 
   const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
@@ -195,6 +199,57 @@ export async function GET(req: Request, { params }: Params) {
     for (const inv of porIdentidad) if (!yaEnPool.has(inv.id)) candidates.push(inv);
   }
 
+  // ── Búsqueda explícita ─────────────────────────────────────────────────────
+  // Con `q`, el pool se ENSANCHA con lo que el texto encuentre (folio, serie,
+  // UUID, nombre o RFC) en ±365 días y sin tope de monto — y la respuesta se
+  // FILTRA a lo que empate, para que la lista sea el resultado de la búsqueda.
+  if (q && q.length >= 2) {
+    const Q_WINDOW_DAYS = 365;
+    const porBusqueda = await prisma.invoice.findMany({
+      where: {
+        companyId,
+        tipo: invoiceType,
+        status: "STAMPED",
+        fecha: {
+          gte: new Date(tx.fecha.getTime() - Q_WINDOW_DAYS * 86400000),
+          lte: new Date(tx.fecha.getTime() + Q_WINDOW_DAYS * 86400000),
+        },
+        OR: [
+          { folio: { contains: q, mode: "insensitive" } },
+          { serie: { contains: q, mode: "insensitive" } },
+          { uuid: { contains: q, mode: "insensitive" } },
+          { contraparteNombre: { contains: q, mode: "insensitive" } },
+          { contraparteRfc: { contains: q, mode: "insensitive" } },
+          { customer: { razonSocial: { contains: q, mode: "insensitive" } } },
+          { customer: { rfc: { contains: q, mode: "insensitive" } } },
+        ],
+        AND: [
+          {
+            OR: [
+              { metodoPago: "PPD" },
+              {
+                bankTransactions: { none: { status: "MATCHED" } },
+                conciliacionDetalles: { none: {} },
+              },
+            ],
+          },
+        ],
+      },
+      include: {
+        customer: { select: { rfc: true, razonSocial: true } },
+        bankTransactions: {
+          where: { status: "MATCHED" },
+          select: { id: true, fecha: true, monto: true },
+        },
+        conciliacionDetalles: { select: { montoAsignado: true } },
+      },
+      orderBy: { fecha: "desc" },
+      take: 50,
+    });
+    const enPool = new Set(candidates.map((c) => c.id));
+    for (const inv of porBusqueda) if (!enPool.has(inv.id)) candidates.push(inv);
+  }
+
   // Memoria de CLABEs: sólo se consulta si el movimiento trae CLABE extraída.
   const clabesPorRfc = tx.contraparteClabe
     ? await clabesConocidasPorRfc(companyId, tx.contraparteClabe)
@@ -262,7 +317,15 @@ export async function GET(req: Request, { params }: Params) {
     // porción que asignar (los PUE en ese estado ya los excluyó el query).
     .filter((c) => !c.alreadyMatched || c.remainingBalance > 0);
 
-  const scored = [...puntuados].sort((a, b) => b.score - a.score).slice(0, 15);
+  const qNorm = q && q.length >= 2 ? q.toLowerCase() : null;
+  const visibles = qNorm
+    ? puntuados.filter((c) =>
+        [c.cliente, c.rfc, c.folio ?? "", c.serie ?? "", c.uuid ?? ""].some((v) =>
+          (v ?? "").toLowerCase().includes(qNorm)
+        )
+      )
+    : puntuados;
+  const scored = [...visibles].sort((a, b) => b.score - a.score).slice(0, 15);
 
   // ── Pago junto ─────────────────────────────────────────────────────────────
   // ¿Un subconjunto de facturas abiertas de UNA contraparte suma EXACTO el
@@ -381,7 +444,7 @@ export async function GET(req: Request, { params }: Params) {
     }),
     prisma.employee.findMany({
       where: { companyId },
-      select: { rfc: true, nombre: true, apellidoPaterno: true },
+      select: { rfc: true, nombre: true, apellidoPaterno: true, apellidoMaterno: true },
     }),
     tx.monto === 0
       ? Promise.resolve(null)
@@ -405,7 +468,12 @@ export async function GET(req: Request, { params }: Params) {
 
   const signo = signoDeMonto(tx.monto);
   let sugerencia: SugerenciaMovimiento | null = inferirPorIdentidad(
-    { monto: tx.monto, contraparteRfc: tx.contraparteRfc, contraparteClabe: tx.contraparteClabe },
+    {
+      monto: tx.monto,
+      contraparteRfc: tx.contraparteRfc,
+      contraparteClabe: tx.contraparteClabe,
+      contraparteNombre: tx.contraparteNombre,
+    },
     {
       rfcEmpresa: empresa?.rfc ?? null,
       clabesPropias: new Map(
@@ -414,7 +482,12 @@ export async function GET(req: Request, { params }: Params) {
           .map((c) => [c.clabe as string, `${c.banco} · ${c.nombre}`])
       ),
       empleadosPorRfc: new Map(
-        empleados.map((e) => [e.rfc.toUpperCase(), `${e.nombre} ${e.apellidoPaterno}`.trim()])
+        // Nombre COMPLETO (con materno): el banco imprime los dos apellidos y
+        // la inferencia por nombre exige contención del nombre completo.
+        empleados.map((e) => [
+          e.rfc.toUpperCase(),
+          [e.nombre, e.apellidoPaterno, e.apellidoMaterno].filter(Boolean).join(" ").trim(),
+        ])
       ),
       espejo: espejo
         ? {

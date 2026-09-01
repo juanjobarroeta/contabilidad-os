@@ -57,6 +57,38 @@ describe("inferirPorIdentidad", () => {
     expect(inferirPorIdentidad({ monto: 485, contraparteRfc: "VESC940829TE5" }, ctx)).toBeNull();
   });
 
+  it("nombre completo de empleada (sin RFC) → nómina; homónimos o depósitos → silencio", () => {
+    const ctx = (): ContextoIdentidad => ({
+      ...ctxVacio(),
+      empleadosPorRfc: new Map([["COBK900101AAA", "KATIA FABIOLA CORDERO BERNARDINO"]]),
+    });
+    // Caso real BanBajío: pago a la empleada, el banco dio el nombre pero no el RFC.
+    const s1 = inferirPorIdentidad(
+      { monto: -4725.6, contraparteNombre: "KATIA FABIOLA CORDERO BERNARDINO" },
+      ctx(),
+    );
+    expect(s1?.tag).toBe("PAYROLL_NO_CFDI");
+    expect(s1?.fuente).toBe("identidad");
+    expect(s1?.porQue).toContain("KATIA");
+
+    // Un DEPÓSITO de la empleada no es nómina (misma cautela que el RFC).
+    expect(
+      inferirPorIdentidad({ monto: 4725.6, contraparteNombre: "KATIA FABIOLA CORDERO BERNARDINO" }, ctx()),
+    ).toBeNull();
+
+    // Dos homónimos → silencio.
+    const dos = ctx();
+    dos.empleadosPorRfc.set("COBK900101BBB", "KATIA FABIOLA CORDERO");
+    expect(
+      inferirPorIdentidad({ monto: -4725.6, contraparteNombre: "KATIA FABIOLA CORDERO BERNARDINO" }, dos),
+    ).toBeNull();
+
+    // Un nombre ajeno al padrón → silencio.
+    expect(
+      inferirPorIdentidad({ monto: -4725.6, contraparteNombre: "JAIME PEREZ HUITZIL" }, ctx()),
+    ).toBeNull();
+  });
+
   it("sin datos duros → null, nunca adivina", () => {
     expect(inferirPorIdentidad({ monto: -900, contraparteRfc: "XAXX010101000" }, ctxVacio())).toBeNull();
     expect(inferirPorIdentidad({ monto: -900 }, ctxVacio())).toBeNull();
