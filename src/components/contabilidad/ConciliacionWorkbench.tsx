@@ -581,8 +581,12 @@ export function ConciliacionWorkbench({
                 <>
                   {selTx.conciliado && (
                     <div className="mx-4 mt-3 rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-2 text-[12.5px] text-cos-jade-ink">
-                      Este movimiento ya está conciliado — entra en libros al contabilizar el mes, en
-                      Cierre.
+                      Este movimiento ya está conciliado — no hay nada que volver a cruzar. Entra en
+                      libros al{" "}
+                      <Link href="/contabilidad/cierre" className="font-medium underline">
+                        contabilizar el mes
+                      </Link>
+                      , un solo clic para todo el período.
                     </div>
                   )}
                   {!cand || (cand.candidates.length === 0 && cand.impuestos.length === 0) ? (
