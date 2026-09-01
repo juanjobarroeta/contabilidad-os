@@ -403,6 +403,14 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       total: netoAPagar,
       totalImpuestos: -totalDeducciones, // negative because retenciones reduce the total
       status: "STAMPED",
+      // Contraparte del recibo = el/la empleado(a). Sin esto la lista de
+      // facturas muestra "—" y ni la mesa ni la búsqueda encuentran el recibo
+      // por nombre o RFC (visto con un recibo real: sólo `notas` lo sabía).
+      contraparteNombre: [employee.nombre, employee.apellidoPaterno, employee.apellidoMaterno]
+        .filter(Boolean)
+        .join(" ")
+        .trim(),
+      contraparteRfc: employee.rfc,
       uuid: facturapiResp.uuid?.toUpperCase() ?? null, // folio fiscal canónico en MAYÚSCULAS
       facturapiId: facturapiResp.id ?? null,
       notas: `Nómina ${employee.nombre} ${employee.apellidoPaterno} · ${input.periodoInicio.toISOString().slice(0, 10)} a ${input.periodoFin.toISOString().slice(0, 10)}`,
