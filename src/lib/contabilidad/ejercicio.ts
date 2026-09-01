@@ -20,7 +20,7 @@ export class PeriodoCerradoError extends Error {
     super(
       `El ejercicio ${year} está cerrado, así que ${
         month === 13 ? "el asiento de cierre" : `el mes ${month}`
-      } ya no admite movimientos. Si necesitas corregirlo, reabre el ejercicio en Contabilidad › Cierres mensuales.`
+      } ya no admite movimientos. Si necesitas corregirlo, reabre el ejercicio en Contabilidad › Cierre del mes.`
     );
     this.name = "PeriodoCerradoError";
   }

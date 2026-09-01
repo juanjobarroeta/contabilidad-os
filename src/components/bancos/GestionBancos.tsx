@@ -28,6 +28,7 @@ import {
   Banknote, Ban, ArrowLeftRight, SlidersHorizontal, Pencil, Trash2,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import { Card, Money, Chip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { etiquetaImpuesto } from "@/lib/conciliacion-impuestos";
@@ -218,6 +219,9 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   const [cargandoMas, setCargandoMas] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [loading, setLoading] = useState(false);
+  // «Ver factura» abre la representación impresa AQUÍ (modal) — antes mandaba
+  // a /facturas?q=<uuid>, una búsqueda que te saca del flujo (pedido del owner).
+  const [verFacturaId, setVerFacturaId] = useState<string | null>(null);
   const [busy, setBusy] = useState<"" | "auto" | "upload">("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -1253,14 +1257,13 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                               </span>
                             )}
                             <Money value={m.invoice.total} size={12.5} muted />
-                            {m.invoice.uuid && (
-                              <Link
-                                href={`/facturas?q=${m.invoice.uuid}`}
-                                className="font-semibold text-cos-brand-ink hover:underline"
-                              >
-                                Ver factura
-                              </Link>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => setVerFacturaId(m.invoice!.id)}
+                              className="font-semibold text-cos-brand-ink hover:underline"
+                            >
+                              Ver factura
+                            </button>
                           </div>
                         </div>
                       )}
@@ -1733,6 +1736,10 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
             </button>
           </div>
         </div>
+      )}
+
+      {verFacturaId && (
+        <RepresentacionImpresa invoiceId={verFacturaId} onClose={() => setVerFacturaId(null)} />
       )}
     </div>
   );
