@@ -40,6 +40,8 @@ const FAMILIA_A_CUENTA: Record<FamiliaConcepto, { cuenta: string; etiqueta: stri
   FINANCIAL_INCOME: { cuenta: COE_CODES.OTROS_INGRESOS, etiqueta: "Productos financieros (intereses ganados)" },
   RENT: { cuenta: COE_CODES.RENTAS, etiqueta: "Rentas" },
   NON_DEDUCTIBLE: { cuenta: COE_CODES.GASTOS_NO_DEDUCIBLES, etiqueta: "Gasto no deducible" },
+  LOAN_RECEIVED: { cuenta: COE_CODES.PRESTAMOS_RECIBIDOS, etiqueta: "Préstamo recibido" },
+  LOAN_GIVEN: { cuenta: COE_CODES.PRESTAMOS_OTORGADOS, etiqueta: "Préstamo otorgado" },
 };
 
 const FAMILIAS_VALIDAS = Object.keys(FAMILIA_A_CUENTA) as FamiliaConcepto[];
@@ -55,6 +57,8 @@ Familias válidas:
 - FINANCIAL_INCOME: intereses o rendimientos ganados (solo cuando entra dinero).
 - RENT: pago de renta o arrendamiento.
 - NON_DEDUCTIBLE: gasto claramente no deducible.
+- LOAN_RECEIVED: préstamo recibido o su devolución (el concepto habla de un préstamo y NO es cobro de uno que dimos).
+- LOAN_GIVEN: préstamo que otorgamos o su cobro.
 
 Reglas:
 - Si tienes cualquier duda razonable, responde NINGUNA.

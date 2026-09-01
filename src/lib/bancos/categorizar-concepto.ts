@@ -36,7 +36,9 @@ export type FamiliaConcepto =
   | "INTERNAL_TRANSFER" // traspaso entre cuentas propias → COE_CODES.BANCOS (lavado)
   | "FINANCIAL_INCOME" // intereses / rendimientos ganados → COE_CODES.OTROS_INGRESOS
   | "RENT" // renta / arrendamiento pagado → COE_CODES.RENTAS
-  | "NON_DEDUCTIBLE"; // gasto no deducible → COE_CODES.GASTOS_NO_DEDUCIBLES
+  | "NON_DEDUCTIBLE" // gasto no deducible → COE_CODES.GASTOS_NO_DEDUCIBLES
+  | "LOAN_RECEIVED" // préstamo que NOS dieron / su devolución → COE_CODES.PRESTAMOS_RECIBIDOS
+  | "LOAN_GIVEN"; // préstamo que DIMOS / su cobro → COE_CODES.PRESTAMOS_OTORGADOS
 
 export interface SugerenciaCategoria {
   /** Familia interna (coincide con la etiqueta de notes que lee postMonth). */
@@ -63,6 +65,8 @@ export const FAMILIA_META: Record<FamiliaConcepto, { cuenta: string; etiqueta: s
   FINANCIAL_INCOME: { cuenta: COE_CODES.OTROS_INGRESOS, etiqueta: "Productos financieros (intereses ganados)" },
   RENT: { cuenta: COE_CODES.RENTAS, etiqueta: "Rentas" },
   NON_DEDUCTIBLE: { cuenta: COE_CODES.GASTOS_NO_DEDUCIBLES, etiqueta: "Gasto no deducible" },
+  LOAN_RECEIVED: { cuenta: COE_CODES.PRESTAMOS_RECIBIDOS, etiqueta: "Préstamo recibido" },
+  LOAN_GIVEN: { cuenta: COE_CODES.PRESTAMOS_OTORGADOS, etiqueta: "Préstamo otorgado" },
 };
 
 /**
@@ -199,6 +203,27 @@ const REGLAS: Regla[] = [
     familia: "INTERNAL_TRANSFER",
     cuenta: COE_CODES.BANCOS,
     etiqueta: "Traspaso entre cuentas propias",
+    confianza: "media",
+  },
+  // ── Préstamos ───────────────────────────────────────────────────────────────
+  // "PRESTAMO" en el concepto (BanBajío: "ABONO PRESTAMO Recibo # N") casi
+  // nunca trae CFDI — es la familia por signo, con confianza media porque el
+  // signo no desambigua del todo: un crédito puede ser recibir un préstamo O
+  // cobrar uno otorgado (y viceversa). El humano confirma con el chip.
+  {
+    patrones: ["PRESTAMO"],
+    soloSigno: "CREDITO",
+    familia: "LOAN_RECEIVED",
+    cuenta: COE_CODES.PRESTAMOS_RECIBIDOS,
+    etiqueta: "Préstamo recibido",
+    confianza: "media",
+  },
+  {
+    patrones: ["PRESTAMO"],
+    soloSigno: "DEBITO",
+    familia: "LOAN_GIVEN",
+    cuenta: COE_CODES.PRESTAMOS_OTORGADOS,
+    etiqueta: "Préstamo otorgado",
     confianza: "media",
   },
 ];

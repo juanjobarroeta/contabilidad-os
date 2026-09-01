@@ -41,6 +41,22 @@ describe("sugerirCategoriaConcepto — familias de concepto", () => {
     }
   });
 
+  it("PRESTAMO → familia por signo (crédito recibido, débito otorgado)", () => {
+    // Caso real BanBajío: "ABONO PRESTAMO Recibo # 26" (+$10,000).
+    const credito = sugerirCategoriaConcepto("ABONO PRESTAMO Recibo # 26", "CREDITO");
+    expect(credito?.familia).toBe("LOAN_RECEIVED");
+    expect(credito?.cuentaSugerida).toBe(COE_CODES.PRESTAMOS_RECIBIDOS);
+    expect(credito?.confianza).toBe("media");
+
+    const debito = sugerirCategoriaConcepto("PRESTAMO", "DEBITO");
+    expect(debito?.familia).toBe("LOAN_GIVEN");
+    expect(debito?.cuentaSugerida).toBe(COE_CODES.PRESTAMOS_OTORGADOS);
+
+    // El signo manda: un crédito jamás sugiere "otorgado" ni viceversa.
+    expect(sugerirCategoriaConcepto("PRESTAMO", "CREDITO")?.familia).toBe("LOAN_RECEIVED");
+    expect(sugerirCategoriaConcepto("PRESTAMO", "DEBITO")?.familia).not.toBe("LOAN_RECEIVED");
+  });
+
   it("sólo frases de cuenta propia → traspasos (confianza media)", () => {
     for (const c of ["TRASPASO ENTRE CUENTAS", "TRANSFERENCIA PROPIA REF 99", "PAGO CUENTA PROPIA"]) {
       const s = sugerirCategoriaConcepto(c, "DEBITO");

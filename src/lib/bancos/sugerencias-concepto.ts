@@ -146,6 +146,12 @@ async function construirAsiento(
         { chartAccountId: accBancos.id, tipo: "CARGO" as EntryType },
         { chartAccountId: accBancos.id, tipo: "ABONO" as EntryType },
       ];
+    case "LOAN_RECEIVED":
+      // Entra → nace la deuda; sale → la estamos pagando. contraCargoAbono ya
+      // voltea por signo, igual que postMonth.
+      return contraCargoAbono(COE_CODES.PRESTAMOS_RECIBIDOS);
+    case "LOAN_GIVEN":
+      return contraCargoAbono(COE_CODES.PRESTAMOS_OTORGADOS);
   }
 }
 

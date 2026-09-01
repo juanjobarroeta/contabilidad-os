@@ -228,6 +228,8 @@ const FAMILIA_LABEL: Record<FamiliaConcepto, string> = {
   FINANCIAL_INCOME: "Intereses / rendimientos",
   RENT: "Renta / arrendamiento",
   NON_DEDUCTIBLE: "Gasto no deducible",
+  LOAN_RECEIVED: "Préstamo recibido",
+  LOAN_GIVEN: "Préstamo otorgado",
 };
 
 async function proponerConciliacion(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
