@@ -85,14 +85,21 @@ export async function GET(req: Request, { params }: Params) {
   const companyId   = account.companyId;
   const absAmount   = Math.abs(tx.monto);
   const isCreditTx  = tx.monto > 0;
-  const invoiceType = isCreditTx ? "INGRESO" : "EGRESO";
+  // Los recibos de nómina TAMBIÉN son candidatos de un egreso: su `total` ES
+  // el neto pagado al empleado, el PATCH ya los acepta (tiposValidos) y
+  // postMonth liquida Acreedores diversos cuando el match es NOMINA. Para un
+  // recibo timbrado, CONCILIAR es lo correcto — cierra la provisión que el
+  // recibo creó; el tag «Nómina sin CFDI» cargaría Sueldos otra vez.
+  const tiposCandidatos: ("INGRESO" | "EGRESO" | "NOMINA")[] = isCreditTx
+    ? ["INGRESO"]
+    : ["EGRESO", "NOMINA"];
   const WINDOW_DAYS = 30;
   const TOLERANCE   = 0.05; // 5% for suggestions (wider than auto-match)
 
   const candidates = await prisma.invoice.findMany({
     where: {
       companyId,
-      tipo:   invoiceType,
+      tipo:   { in: tiposCandidatos },
       status: "STAMPED",
       fecha:  {
         gte: new Date(tx.fecha.getTime() - WINDOW_DAYS * 86400000),
@@ -164,7 +171,7 @@ export async function GET(req: Request, { params }: Params) {
     const porIdentidad = await prisma.invoice.findMany({
       where: {
         companyId,
-        tipo: invoiceType,
+        tipo: { in: tiposCandidatos },
         status: "STAMPED",
         fecha: {
           gte: new Date(tx.fecha.getTime() - IDENTITY_WINDOW_DAYS * 86400000),
@@ -208,7 +215,7 @@ export async function GET(req: Request, { params }: Params) {
     const porBusqueda = await prisma.invoice.findMany({
       where: {
         companyId,
-        tipo: invoiceType,
+        tipo: { in: tiposCandidatos },
         status: "STAMPED",
         fecha: {
           gte: new Date(tx.fecha.getTime() - Q_WINDOW_DAYS * 86400000),
