@@ -189,7 +189,10 @@ export function ConciliacionWorkbench({
     const lista = cuentaSel
       ? data.movimientosNoRegistrados.filter((m) => m.cuentaBancariaId === cuentaSel)
       : data.movimientosNoRegistrados;
-    setSelTx((prev) => (prev && lista.some((m) => m.id === prev.id) ? prev : lista[0] ?? null));
+    // El auto-seleccionado es el primer SIN conciliar: un «por postear» no
+    // pide trabajo y abriría la mesa sobre algo que no hay que tocar.
+    const primero = lista.find((m) => !m.conciliado) ?? lista[0] ?? null;
+    setSelTx((prev) => (prev && lista.some((m) => m.id === prev.id) ? prev : primero));
   }, [data, cuentaSel]);
 
   // Candidatos del movimiento elegido.
@@ -375,7 +378,12 @@ export function ConciliacionWorkbench({
   // % global junto a una lista filtrada diría dos cosas distintas a la vez.
   const deLaCuenta = <T extends { cuentaBancariaId: string }>(xs: T[]) =>
     cuentaSel ? xs.filter((x) => x.cuentaBancariaId === cuentaSel) : xs;
-  const pendientes = deLaCuenta(data.movimientosNoRegistrados);
+  // Los sin conciliar (trabajo real) arriba; los «por postear» al final. El
+  // sort es estable, así que dentro de cada grupo se conserva el orden por
+  // fecha con el que llegan del API.
+  const pendientes = [...deLaCuenta(data.movimientosNoRegistrados)].sort(
+    (a, b) => Number(a.conciliado ?? false) - Number(b.conciliado ?? false),
+  );
   const total = deLaCuenta(data.movimientosBanco).length;
   // «Sin conciliar» = status UNMATCHED (el MISMO número que el paso 2 del
   // Inicio); los conciliados de un mes sin postear sólo esperan el posteo.
@@ -523,6 +531,15 @@ export function ConciliacionWorkbench({
                             {m.contraparteNombre || m.descripcion || "(sin descripción)"}
                           </span>
                           <span className="block truncate font-mono text-[11px] text-cos-ink-faint">
+                            {/* Sin el chip, un movimiento ya conciliado (que en
+                                Movimientos luce ✓) aparece aquí idéntico a uno
+                                pendiente y parece trabajo por hacer — cuando
+                                sólo espera el posteo del mes. */}
+                            {m.conciliado && (
+                              <span className="mr-1.5 rounded-full bg-cos-jade-tint px-1.5 py-px font-sans text-[10px] font-semibold text-cos-jade-ink">
+                                Conciliado · por postear
+                              </span>
+                            )}
                             {fFecha(m.fecha)}
                             {m.contraparteRfc && <> · <span className="text-cos-ink-soft">{m.contraparteRfc}</span></>}
                             {m.conceptoPago && ` · ${m.conceptoPago}`}
@@ -553,7 +570,7 @@ export function ConciliacionWorkbench({
                   <span>
                     <Landmark className="mx-auto mb-2 h-6 w-6 opacity-30" />
                     Elige un movimiento a la izquierda para ver sus candidatos —
-                    del mismo sentido, ±30 días, puntuados por monto, fecha e identidad.
+                    del mismo sentido, puntuados por identidad (RFC y nombre), monto y fecha.
                   </span>
                 </div>
               ) : candCargando ? (
@@ -562,9 +579,15 @@ export function ConciliacionWorkbench({
                 </p>
               ) : (
                 <>
+                  {selTx.conciliado && (
+                    <div className="mx-4 mt-3 rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-2 text-[12.5px] text-cos-jade-ink">
+                      Este movimiento ya está conciliado — entra en libros al postear el mes, en
+                      Cierre.
+                    </div>
+                  )}
                   {!cand || (cand.candidates.length === 0 && cand.impuestos.length === 0) ? (
                     <p className="px-5 py-6 text-sm text-cos-ink-soft">
-                      Sin CFDIs de este sentido en ±30 días que quepan en este movimiento. Puede ser un
+                      Sin CFDIs de este sentido que empaten por identidad, monto o fecha. Puede ser un
                       traspaso propio, una comisión, un documento que aún no se sincroniza — o un{" "}
                       {selTx.monto > 0 ? "ingreso" : "gasto"} que no se facturó.
                     </p>
