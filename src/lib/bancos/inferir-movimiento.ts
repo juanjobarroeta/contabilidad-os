@@ -25,7 +25,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { FamiliaConcepto } from "./categorizar-concepto";
-import { mismoNombre } from "./auto-conciliar";
+// SÓLO desde el módulo puro: auto-conciliar importa prisma y este archivo
+// llega al bundle del navegador (la mesa importa CATEGORIAS_MESA).
+import { mismoNombre } from "./nombres";
 
 /** Tags de `BankTransaction.notes` que postMonth postea con asiento propio. */
 export type TagSinFactura =
