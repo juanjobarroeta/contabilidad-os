@@ -635,33 +635,53 @@ export default function CierrePage() {
             </div>
           </section>
 
-          {/* Cierre anual: asiento de mes 13, traspaso y candado del ejercicio. */}
-          <section>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <a
-                href={`/api/contabilidad/coe/balanza?companyId=${activeCompany.id}&year=${year}&month=13`}
-                title="Descargar la balanza de cierre (mes 13)"
-                className={liga}
-              >
-                Balanza de cierre (mes 13)
-              </a>
+          {/* Cierre anual: asiento de mes 13, traspaso y candado del ejercicio.
+              Todo DENTRO de una tarjeta: el enlace y el botón sueltos «flotaban»
+              sin contexto, y el enlace a la balanza 13 se servía aunque el mes
+              13 no existiera — el navegador enseñaba el JSON de error crudo. */}
+          <section className="rounded-card border border-cos-line bg-cos-card">
+            <div className="flex items-center justify-between gap-2 border-b border-cos-line px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-cos-ink">Cierre del ejercicio {year}</p>
+                <p className="text-[12px] text-cos-ink-soft">
+                  El «mes 13» del SAT: el asiento que cierra resultados del año.
+                </p>
+              </div>
               <button
                 onClick={generarCierreAnual}
                 disabled={cierreLoading}
                 title={`Generar el asiento de cierre del ejercicio ${year} (mes 13)`}
-                className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-[13px] font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-[13px] font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
               >
                 {cierreLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 Cierre {year}
               </button>
             </div>
-            <EjercicioCard
-              companyId={activeCompany.id}
-              year={year}
-              periods={periods ?? []}
-              onReload={cargar}
-            />
+            <div className="px-4 py-3">
+              {periods?.some((p) => p.year === year && p.month === 13) ? (
+                <a
+                  href={`/api/contabilidad/coe/balanza?companyId=${activeCompany.id}&year=${year}&month=13`}
+                  title="Descargar la balanza XML del mes 13 (Anexo 24)"
+                  className={liga}
+                >
+                  Descargar balanza de cierre (mes 13)
+                </a>
+              ) : (
+                <p className="text-[12.5px] text-cos-ink-faint">
+                  La balanza del mes 13 se podrá descargar cuando generes el asiento de cierre.
+                </p>
+              )}
+            </div>
           </section>
+
+          {/* Estado del ejercicio (traspaso de resultado y candado) — trae su
+              propia tarjeta, va como hermana para no anidar bordes. */}
+          <EjercicioCard
+            companyId={activeCompany.id}
+            year={year}
+            periods={periods ?? []}
+            onReload={cargar}
+          />
         </div>
       </div>
     </div>

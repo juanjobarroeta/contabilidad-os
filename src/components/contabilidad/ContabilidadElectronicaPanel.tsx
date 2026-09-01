@@ -186,7 +186,7 @@ export function ContabilidadElectronicaPanel({
             {key === "balanza" && mesSinPostear && (
               <p className="mt-2 text-[11px] text-cos-amber-ink">
                 El mes no está posteado — postéalo en{" "}
-                <Link href="/contabilidad/cierre" className="underline">Cierres mensuales</Link>{" "}
+                <Link href="/contabilidad/cierre" className="underline">Cierre del mes</Link>{" "}
                 para generar la balanza definitiva.
               </p>
             )}
