@@ -1121,7 +1121,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       // Inalcanzable: los IGNORED sin categoría bloquean el cierre arriba.
       // Defensivo por si aparece un tag nuevo sin rama.
       warnings.push(
-        `Movimiento ignorado con categoría desconocida ("${tag}"): ${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 40)} — NO posteado.`
+        `Movimiento ignorado con categoría desconocida ("${tag}"): ${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 40)} — NO contabilizado.`
       );
       continue;
     }

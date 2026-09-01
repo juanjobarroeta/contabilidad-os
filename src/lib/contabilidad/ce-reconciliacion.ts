@@ -535,7 +535,7 @@ async function persistirHallazgoReconciliacion(
       mensaje: mensajeHallazgo(diff),
       referencias,
       sugerencia:
-        "Revise los asientos del periodo y vuelva a postear el mes para alinear el libro con la Contabilidad Electrónica presentada al SAT.",
+        "Revise los asientos del periodo y vuelva a contabilizar el mes para alinear el libro con la Contabilidad Electrónica presentada al SAT.",
       fundamentoLey: "CFF",
       fundamentoArticulo: "28",
       fundamentoFraccion: "III",

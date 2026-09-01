@@ -193,14 +193,14 @@ export default function CierrePage() {
         body: JSON.stringify({ companyId: activeCompany.id, year, month }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error al postear el mes");
+      if (!res.ok) throw new Error(data.error ?? "Error al contabilizar el mes");
       const warn = data.warnings?.length ?? 0;
       setAviso(
         `${data.entriesCreated} ${data.entriesCreated === 1 ? "asiento creado" : "asientos creados"}${warn > 0 ? ` · ${warn} ${warn === 1 ? "advertencia" : "advertencias"}` : ""}.`
       );
       await cargar();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al postear el mes");
+      setError(e instanceof Error ? e.message : "Error al contabilizar el mes");
     } finally {
       setPosting(false);
     }
@@ -327,10 +327,10 @@ export default function CierrePage() {
             ? periodo
               ? `${periodo.entriesCount.toLocaleString("es-MX")} asientos · ${
                   posteado && periodo.postedAt
-                    ? `último posteo ${new Date(periodo.postedAt).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                    ? `última contabilización ${new Date(periodo.postedAt).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
                     : "en borrador"
                 }`
-              : "sin postear · el motor deriva las pólizas de tus CFDIs al postear"
+              : "sin contabilizar · el motor deriva las pólizas de tus CFDIs al contabilizar"
             : undefined
         }
         actions={
@@ -350,7 +350,7 @@ export default function CierrePage() {
               className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
             >
               {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {posteado ? "Re-postear el mes" : "Postear el mes"}
+              {posteado ? "Volver a contabilizar el mes" : "Contabilizar el mes"}
             </button>
           </>
         }
@@ -423,8 +423,8 @@ export default function CierrePage() {
                   </p>
                   <p className="mt-1 text-[13px]">
                     {posteado
-                      ? "Quedaron fuera del último posteo: concílialos y vuelve a postear el mes."
-                      : "El motor no postea movimientos bancarios sin conciliar."}
+                      ? "Quedaron fuera de la última contabilización: concílialos y vuelve a contabilizar el mes."
+                      : "El motor no contabiliza movimientos bancarios sin conciliar."}
                   </p>
                   <Link href="/contabilidad/conciliacion" className={cn(liga, "mt-2")}>
                     Ir a conciliación <ArrowRight className="h-3.5 w-3.5" />
@@ -485,13 +485,13 @@ export default function CierrePage() {
             {periodo ? (
               <p>
                 <span className="font-mono font-semibold tabular-nums">{periodo.entriesCount.toLocaleString("es-MX")}</span>{" "}
-                asientos {posteado ? "posteados" : "en borrador"}
+                asientos {posteado ? "contabilizados" : "en borrador"}
                 {periodo.postedAt &&
-                  ` · último posteo ${new Date(periodo.postedAt).toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`}
+                  ` · última contabilización ${new Date(periodo.postedAt).toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`}
                 .
               </p>
             ) : (
-              <p>El período aún no se ha posteado.</p>
+              <p>El período aún no se ha contabilizado.</p>
             )}
             <div className="mt-2 flex items-start gap-2 rounded-md bg-cos-slate-tint px-3 py-2 text-[13px]">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cos-ink-soft" />
@@ -531,7 +531,7 @@ export default function CierrePage() {
 
           {/* 5 · Ajustes */}
           <Paso num={5} titulo="Ajustes" estado={e5}>
-            <p>Pólizas manuales para el residuo — fuente MANUAL, el re-posteo nunca las pisa.</p>
+            <p>Pólizas manuales para el residuo — fuente MANUAL, volver a contabilizar nunca las pisa.</p>
             <Link href="/contabilidad/ajustes" className={cn(liga, "mt-1")}>
               Capturar póliza <ArrowRight className="h-3.5 w-3.5" />
             </Link>
@@ -542,7 +542,7 @@ export default function CierrePage() {
             <p>
               {posteado
                 ? "Los 5 XML del Anexo 24 del período están listos para descargar."
-                : "Los 5 XML del Anexo 24 se habilitan al postear el mes."}
+                : "Los 5 XML del Anexo 24 se habilitan al contabilizar el mes."}
             </p>
             <p className="mt-1.5 flex flex-wrap gap-1.5">
               {["catálogo", "balanza", "pólizas", "aux. cuentas", "aux. folios"].map((x) => (

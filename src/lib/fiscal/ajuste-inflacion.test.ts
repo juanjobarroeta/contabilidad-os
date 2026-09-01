@@ -204,7 +204,7 @@ describe("calcularAjusteInflacion (Art. 44)", () => {
       cuentas: [plana("102", "102.01", 100_000)],
       mesesSinPostear: [11, 12],
     });
-    expect(r.advertencias.join(" ")).toMatch(/sin postear/i);
+    expect(r.advertencias.join(" ")).toMatch(/sin contabilizar/i);
   });
 
   it("advierte de las cuentas incluidas que dependen de hechos fuera del catálogo", () => {

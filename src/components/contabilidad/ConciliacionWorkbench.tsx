@@ -189,7 +189,7 @@ export function ConciliacionWorkbench({
     const lista = cuentaSel
       ? data.movimientosNoRegistrados.filter((m) => m.cuentaBancariaId === cuentaSel)
       : data.movimientosNoRegistrados;
-    // El auto-seleccionado es el primer SIN conciliar: un «por postear» no
+    // El auto-seleccionado es el primer SIN conciliar: un «por contabilizar» no
     // pide trabajo y abriría la mesa sobre algo que no hay que tocar.
     const primero = lista.find((m) => !m.conciliado) ?? lista[0] ?? null;
     setSelTx((prev) => (prev && lista.some((m) => m.id === prev.id) ? prev : primero));
@@ -378,7 +378,7 @@ export function ConciliacionWorkbench({
   // % global junto a una lista filtrada diría dos cosas distintas a la vez.
   const deLaCuenta = <T extends { cuentaBancariaId: string }>(xs: T[]) =>
     cuentaSel ? xs.filter((x) => x.cuentaBancariaId === cuentaSel) : xs;
-  // Los sin conciliar (trabajo real) arriba; los «por postear» al final. El
+  // Los sin conciliar (trabajo real) arriba; los «por contabilizar» al final. El
   // sort es estable, así que dentro de cada grupo se conserva el orden por
   // fecha con el que llegan del API.
   const pendientes = [...deLaCuenta(data.movimientosNoRegistrados)].sort(
@@ -412,7 +412,7 @@ export function ConciliacionWorkbench({
           label="Sin conciliar"
           tone={sinConciliar === 0 ? "jade" : sinConciliar > 20 ? "red" : "amber"}
           value={sinConciliar}
-          sub={esperanPosteo > 0 ? `+ ${esperanPosteo} conciliado${esperanPosteo === 1 ? "" : "s"} por postear` : undefined}
+          sub={esperanPosteo > 0 ? `+ ${esperanPosteo} conciliado${esperanPosteo === 1 ? "" : "s"} por contabilizar` : undefined}
         />
         <StatTile
           label="Por conciliar"
@@ -507,7 +507,7 @@ export function ConciliacionWorkbench({
             {/* ── Izquierda: movimientos del banco ── */}
             <section>
               <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
-                Movimientos del banco · {sinConciliar} sin conciliar{esperanPosteo > 0 ? ` · ${esperanPosteo} por postear` : ""}{cuentaSel ? " en esta cuenta" : ""}
+                Movimientos del banco · {sinConciliar} sin conciliar{esperanPosteo > 0 ? ` · ${esperanPosteo} por contabilizar` : ""}{cuentaSel ? " en esta cuenta" : ""}
               </p>
               <ul className="max-h-[430px] overflow-y-auto">
                 {pendientes.map((m) => {
@@ -537,7 +537,7 @@ export function ConciliacionWorkbench({
                                 sólo espera el posteo del mes. */}
                             {m.conciliado && (
                               <span className="mr-1.5 rounded-full bg-cos-jade-tint px-1.5 py-px font-sans text-[10px] font-semibold text-cos-jade-ink">
-                                Conciliado · por postear
+                                Conciliado · por contabilizar
                               </span>
                             )}
                             {fFecha(m.fecha)}
@@ -581,7 +581,7 @@ export function ConciliacionWorkbench({
                 <>
                   {selTx.conciliado && (
                     <div className="mx-4 mt-3 rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-2 text-[12.5px] text-cos-jade-ink">
-                      Este movimiento ya está conciliado — entra en libros al postear el mes, en
+                      Este movimiento ya está conciliado — entra en libros al contabilizar el mes, en
                       Cierre.
                     </div>
                   )}

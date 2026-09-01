@@ -56,7 +56,7 @@ export const POST = withAuthz(
     const costo = Number(parsed.data.costoCompra ?? vehiculo.costoCompra);
     if (!(costo > 0)) {
       return NextResponse.json(
-        { error: "La unidad necesita costo de compra > 0 para postear el inventario" },
+        { error: "La unidad necesita costo de compra > 0 para contabilizar el inventario" },
         { status: 422 }
       );
     }

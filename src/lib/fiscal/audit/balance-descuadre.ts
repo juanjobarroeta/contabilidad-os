@@ -115,7 +115,7 @@ export function auditarBalanceDescuadre(data: BalanceDescuadre): Hallazgo[] {
         dedupeRef: "contabilidad.sin_lado_efectivo",
         fundamento: { ley: "CFF", articulo: "28" },
         sugerencia:
-          "Sube los estados de cuenta en Bancos y concilia los movimientos: al conciliar se postea el lado del efectivo y los saldos de clientes y proveedores empiezan a bajar. De este balance salen el balance general, el ajuste anual por inflación y la contabilidad electrónica.",
+          "Sube los estados de cuenta en Bancos y concilia los movimientos: al conciliar se contabiliza el lado del efectivo y los saldos de clientes y proveedores empiezan a bajar. De este balance salen el balance general, el ajuste anual por inflación y la contabilidad electrónica.",
       },
     ];
   }
@@ -133,7 +133,7 @@ export function auditarBalanceDescuadre(data: BalanceDescuadre): Hallazgo[] {
         dedupeRef: "contabilidad.balance_descuadrado",
         fundamento: { ley: "CFF", articulo: "28" },
         sugerencia:
-          "Revisa los meses posteados en Contabilidad → Cierres: un periodo con asientos incompletos descuadra todo lo que viene después. Mientras no cuadre, el ajuste anual por inflación no se puede determinar.",
+          "Revisa los meses contabilizados en «Cierre del mes»: un periodo con asientos incompletos descuadra todo lo que viene después. Mientras no cuadre, el ajuste anual por inflación no se puede determinar.",
       },
     ];
   }

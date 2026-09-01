@@ -178,7 +178,7 @@ export async function assertMesPosteado(companyId: string, year: number, month: 
   });
   if (!period || period.status === "DRAFT") {
     throw new Error(
-      `El mes ${year}-${String(month).padStart(2, "0")} no está posteado — postea el mes en «Cierre del mes» antes de generar entregables del SAT.`,
+      `El mes ${year}-${String(month).padStart(2, "0")} no está contabilizado — contabiliza el mes en «Cierre del mes» antes de generar entregables del SAT.`,
     );
   }
 }

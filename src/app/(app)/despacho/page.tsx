@@ -119,7 +119,7 @@ function DiligenciaChips({ r }: { r: Row }) {
       <DiligChip
         ok={r.libroMesPosteado}
         icon={BookCheck}
-        label={r.libroMesPosteado ? "Libro posteado" : "Libro preliminar"}
+        label={r.libroMesPosteado ? "Libro contabilizado" : "Libro preliminar"}
         title="Estado de la póliza contable del periodo a declarar"
       />
     </div>

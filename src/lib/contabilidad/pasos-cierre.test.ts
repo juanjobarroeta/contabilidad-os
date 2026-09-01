@@ -101,7 +101,7 @@ describe("entregables sin checks propios", () => {
   it("mes preliminar: espera al posteo, con el porqué", () => {
     const p = porClave(estadoDeLosPasos(res(chk("posteo", "warn"))));
     expect(p.entregables.estado).toBe("espera");
-    expect(p.entregables.detalle).toBe("Se generan al postear el mes");
+    expect(p.entregables.detalle).toBe("Se generan al contabilizar el mes");
   });
 
   it("un bloqueo anterior sigue mandando sobre entregables", () => {
