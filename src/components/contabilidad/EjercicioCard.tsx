@@ -30,7 +30,7 @@ function EjercicioCard({
 
   async function accion(tipo: "cerrar" | "reabrir" | "traspaso") {
     if (tipo === "cerrar" && !confirm(
-      `¿Cerrar el ejercicio ${year}? A partir de ese momento ningún proceso podrá modificar sus asientos: ni el re-posteo automático, ni la conciliación bancaria, ni las pólizas manuales. Siempre puedes reabrirlo (queda registrado en la bitácora).`
+      `¿Cerrar el ejercicio ${year}? A partir de ese momento ningún proceso podrá modificar sus asientos: ni la contabilización automática, ni la conciliación bancaria, ni las pólizas manuales. Siempre puedes reabrirlo (queda registrado en la bitácora).`
     )) return;
     if (tipo === "reabrir" && !confirm(
       `¿Reabrir el ejercicio ${year}? Los periodos vuelven a admitir cambios. La acción queda registrada en la bitácora.`
@@ -92,7 +92,7 @@ function EjercicioCard({
           </p>
           <p className="mt-1 max-w-[68ch] text-xs text-cos-ink-soft">
             {ev.yaCerrado
-              ? "Ningún proceso puede modificar los asientos de este año: ni el re-posteo automático, ni la conciliación, ni las pólizas manuales. Reábrelo si necesitas corregir algo."
+              ? "Ningún proceso puede modificar los asientos de este año: ni la contabilización automática, ni la conciliación, ni las pólizas manuales. Reábrelo si necesitas corregir algo."
               : ev.motivo ?? "El ejercicio está listo para cerrarse. Traspasa el resultado a acumulados y ciérralo para proteger sus asientos."}
           </p>
         </div>

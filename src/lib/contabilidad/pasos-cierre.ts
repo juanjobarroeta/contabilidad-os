@@ -95,7 +95,7 @@ export function estadoDeLosPasos(result: ReadinessResult | null): EstadoPaso[] {
       if (!posteo) return { clave, estado: "sin_datos" as const, detalle: null };
       return posteo.estado === "ok"
         ? { clave, estado: "listo" as const, detalle: "XML del periodo listos" }
-        : { clave, estado: "espera" as const, detalle: "Se generan al postear el mes" };
+        : { clave, estado: "espera" as const, detalle: "Se generan al contabilizar el mes" };
     }
     if (!check) {
       return { clave, estado: "sin_datos" as const, detalle: null };

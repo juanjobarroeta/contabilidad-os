@@ -247,8 +247,8 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
       estado: "warn",
       titulo: "Mes preliminar",
       detalle:
-        "El mes aún no se ha posteado: la descarga de los XML del SAT (balanza, pólizas y " +
-        "auxiliares) está bloqueada hasta postear y cerrar el periodo en “Cierre del mes”.",
+        "El mes aún no se ha contabilizado: la descarga de los XML del SAT (balanza, pólizas y " +
+        "auxiliares) está bloqueada hasta contabilizar y cerrar el periodo en “Cierre del mes”.",
       cta: { label: "Cerrar mes", href: "/contabilidad/cierre" },
     });
   }

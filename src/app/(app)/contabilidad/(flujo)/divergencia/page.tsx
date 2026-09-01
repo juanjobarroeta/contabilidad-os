@@ -307,7 +307,7 @@ export default function DivergenciaPage() {
               {rubrosVisibles.length === 0 && (
                 <p className="px-5 py-8 text-center text-sm text-cos-ink-soft">
                   {totalCuentas === 0
-                    ? "El mes no tiene asientos posteados: no hay nada derivado que comparar. Postéalo en «Cierre del mes»."
+                    ? "El mes no tiene asientos contabilizados: no hay nada derivado que comparar. Contabilízalo en «Cierre del mes»."
                     : "Sin diferencias en el período — residuo $0.00. Quita el filtro para ver todas las cuentas."}
                 </p>
               )}
@@ -417,7 +417,7 @@ export default function DivergenciaPage() {
                           <span>
                             <span className="block text-[13px] font-semibold text-cos-ink">Así lo clasifico yo</span>
                             <span className="block text-[12px] text-cos-ink-soft">
-                              manda lo que el motor postea en{" "}
+                              manda lo que el motor contabiliza en{" "}
                               <span className="font-mono">{sel.cuenta.numCta}</span> a una cuenta tuya
                             </span>
                           </span>
@@ -482,7 +482,7 @@ export default function DivergenciaPage() {
                                       setAvisoOverride(
                                         <>
                                           Decisión guardada: <span className="font-mono">{sel.cuenta.numCta}</span> →{" "}
-                                          <span className="font-mono">{d.cuenta.codigo}</span>. Aplica al re-postear —{" "}
+                                          <span className="font-mono">{d.cuenta.codigo}</span>. Aplica al volver a contabilizar —{" "}
                                           <Link href="/contabilidad/cierre" className="font-medium underline">ir al Cierre</Link>.
                                         </>
                                       );

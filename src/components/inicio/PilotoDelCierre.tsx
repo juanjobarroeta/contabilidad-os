@@ -332,16 +332,16 @@ export function PilotoDelCierre() {
       sub: cierreBloqueado
         ? "En espera del banco"
         : posteo?.estado === "ok"
-          ? "Mes posteado — Anexo 24 disponible"
-          : "Mes preliminar, sin postear",
+          ? "Mes contabilizado — Anexo 24 disponible"
+          : "Mes preliminar, sin contabilizar",
       estado: cierreEstado,
       cuerpo: (
         <p className="text-[13.5px] text-cos-ink-soft">
           {cierreBloqueado
             ? "El cierre espera a que el banco quede clasificado."
             : (posteo?.estado === "ok"
-                ? "Mes posteado — entregables del Anexo 24 disponibles."
-                : posteo?.detalle ?? "El mes aún no se ha posteado.")}
+                ? "Mes contabilizado — entregables del Anexo 24 disponibles."
+                : posteo?.detalle ?? "El mes aún no se ha contabilizado.")}
         </p>
       ),
       cta: { label: "Ir al cierre", href: "/contabilidad/cierre" },

@@ -165,7 +165,7 @@ export function registrarToolsOperador(server: McpServerLike): void {
     {
       title: "Estado contable del ejercicio",
       description:
-        "Cierres mensuales de un ejercicio (qué meses están posteados y cuáles no) y, para personas morales, el ajuste anual por inflación calculado del ledger (Arts. 44-46 LISR) con sus promedios y factor. Responde '¿por qué esta empresa no tiene tal cifra?' sin abrir la app.",
+        "Cierres mensuales de un ejercicio (qué meses están contabilizados y cuáles no) y, para personas morales, el ajuste anual por inflación calculado del ledger (Arts. 44-46 LISR) con sus promedios y factor. Responde '¿por qué esta empresa no tiene tal cifra?' sin abrir la app.",
       inputSchema: fromJsonSchema<{ empresa: string; ejercicio?: number }>({
         type: "object",
         properties: {

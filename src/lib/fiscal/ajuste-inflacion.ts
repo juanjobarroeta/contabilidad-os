@@ -285,7 +285,7 @@ export function calcularAjusteInflacion(entrada: EntradaAjuste): ResultadoAjuste
   }
   if (entrada.mesesSinPostear?.length) {
     advertencias.push(
-      `Meses sin postear (${entrada.mesesSinPostear.join(", ")}): el saldo promedio anual del Art. 44 frac. I necesita los 12 cierres mensuales, así que la cifra saldría incompleta.`
+      `Meses sin contabilizar (${entrada.mesesSinPostear.join(", ")}): el saldo promedio anual del Art. 44 frac. I necesita los 12 cierres mensuales, así que la cifra saldría incompleta.`
     );
   }
   const porRevisar = cuentas.filter((c) => c.revisar && c.clase !== "EXCLUIDA" && c.promedio !== 0);

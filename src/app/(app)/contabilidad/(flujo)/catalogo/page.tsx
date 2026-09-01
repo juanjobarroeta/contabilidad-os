@@ -128,8 +128,8 @@ export default function CatalogoPage() {
       setAviso(
         <>
           Decisión guardada: <span className="font-mono">{codigoMotor}</span> →{" "}
-          <span className="font-mono">{d.cuenta.codigo}</span> {d.cuenta.nombre}. Aplica en el
-          siguiente posteo —{" "}
+          <span className="font-mono">{d.cuenta.codigo}</span> {d.cuenta.nombre}. Aplica en la
+          siguiente contabilización —{" "}
           <Link href="/contabilidad/cierre" className="font-medium underline">ir al Cierre</Link>.
         </>
       );
@@ -153,7 +153,7 @@ export default function CatalogoPage() {
       );
       const d = await res.json().catch(() => null);
       if (!res.ok) throw new Error(d?.error ?? "No se pudo quitar el override");
-      setAviso(`Override de ${codigoMotor} eliminado. Aplica en el siguiente posteo.`);
+      setAviso(`Override de ${codigoMotor} eliminado. Aplica en la siguiente contabilización.`);
       await cargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo quitar el override");
@@ -170,7 +170,7 @@ export default function CatalogoPage() {
     <div>
       <FlowPageHeader
         title="Catálogo y mapeo"
-        subtitle="A qué cuenta tuya va cada cosa que el motor postea"
+        subtitle="A qué cuenta tuya va cada cosa que el motor contabiliza"
         context={
           cobertura
             ? planPropio
