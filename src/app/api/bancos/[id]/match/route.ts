@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
-import { autoConciliarCuenta, clabesConocidasPorRfc, scoreCandidate } from "@/lib/bancos/auto-conciliar";
+import {
+  autoConciliarCuenta,
+  clabesConocidasPorRfc,
+  scoreCandidate,
+  tokenIdentificante,
+} from "@/lib/bancos/auto-conciliar";
 import { sugerirPagoJunto } from "@/lib/bancos/pago-junto";
 import { signoDeMonto, sugerirCategoriaConcepto, type CompanyRule } from "@/lib/bancos/categorizar-concepto";
 import { sugerirCategoriaConceptoLLM } from "@/lib/bancos/categorizar-llm";
 import {
+  esTraspasoContradictorio,
   familiaATag,
   inferirPorIdentidad,
   type SugerenciaMovimiento,
@@ -130,6 +137,63 @@ export async function GET(req: Request, { params }: Params) {
     orderBy: { fecha: "desc" },
     take: 300,
   });
+
+  // ── Red de identidad ───────────────────────────────────────────────────────
+  // Si el banco nombró a la contraparte (RFC o nombre extraídos del concepto),
+  // sus facturas abiertas SON candidatas aunque el monto no se parezca —
+  // anticipos, pagos parciales, depósitos netos de comisión — y con ventana más
+  // ancha. El score ya premia el RFC por encima del monto exacto; lo que
+  // faltaba era dejarlas ENTRAR al pool: el query de arriba las tiraba por
+  // monto (un PUE mayor al movimiento) o por fecha (±30 días).
+  const IDENTITY_WINDOW_DAYS = 90;
+  const tokenNombre = tokenIdentificante(tx.contraparteNombre);
+  const identidadOR: Prisma.InvoiceWhereInput[] = [];
+  if (tx.contraparteRfc) {
+    identidadOR.push({ contraparteRfc: { equals: tx.contraparteRfc, mode: "insensitive" } });
+    identidadOR.push({ customer: { rfc: { equals: tx.contraparteRfc, mode: "insensitive" } } });
+  }
+  if (tokenNombre) {
+    identidadOR.push({ contraparteNombre: { contains: tokenNombre, mode: "insensitive" } });
+    identidadOR.push({ customer: { razonSocial: { contains: tokenNombre, mode: "insensitive" } } });
+  }
+  if (identidadOR.length > 0) {
+    const porIdentidad = await prisma.invoice.findMany({
+      where: {
+        companyId,
+        tipo: invoiceType,
+        status: "STAMPED",
+        fecha: {
+          gte: new Date(tx.fecha.getTime() - IDENTITY_WINDOW_DAYS * 86400000),
+          lte: new Date(tx.fecha.getTime() + IDENTITY_WINDOW_DAYS * 86400000),
+        },
+        OR: identidadOR,
+        // Misma exclusión que arriba: un PUE ya cobrado no es candidato.
+        AND: [
+          {
+            OR: [
+              { metodoPago: "PPD" },
+              {
+                bankTransactions: { none: { status: "MATCHED" } },
+                conciliacionDetalles: { none: {} },
+              },
+            ],
+          },
+        ],
+      },
+      include: {
+        customer: { select: { rfc: true, razonSocial: true } },
+        bankTransactions: {
+          where: { status: "MATCHED" },
+          select: { id: true, fecha: true, monto: true },
+        },
+        conciliacionDetalles: { select: { montoAsignado: true } },
+      },
+      orderBy: { fecha: "desc" },
+      take: 100,
+    });
+    const yaEnPool = new Set(candidates.map((c) => c.id));
+    for (const inv of porIdentidad) if (!yaEnPool.has(inv.id)) candidates.push(inv);
+  }
 
   // Memoria de CLABEs: sólo se consulta si el movimiento trae CLABE extraída.
   const clabesPorRfc = tx.contraparteClabe
@@ -360,32 +424,39 @@ export async function GET(req: Request, { params }: Params) {
         : null,
     }
   );
+  // Una sugerencia por TEXTO de "traspaso entre cuentas propias" se calla
+  // cuando el movimiento nombra a un tercero por RFC: la evidencia ya la
+  // desmintió (los traspasos reales entran por identidad, arriba).
+  const vetada = (s: SugerenciaMovimiento): boolean =>
+    esTraspasoContradictorio(s, tx.contraparteRfc, empresa?.rfc);
   if (!sugerencia) {
     // El motor puro ya integra las reglas de la empresa con precedencia sobre
     // los patrones hardcodeados (sugerirCategoriaConcepto acepta companyRules).
     const porReglas = sugerirCategoriaConcepto(tx.descripcion, signo, reglasUsuario as CompanyRule[]);
     const tag = porReglas && familiaATag(porReglas.familia);
     if (porReglas && tag) {
-      sugerencia = {
+      const s: SugerenciaMovimiento = {
         tag,
         etiqueta: porReglas.etiqueta,
         porQue: "el concepto empata con las reglas de tu empresa",
         confianza: porReglas.confianza,
         fuente: "reglas",
       };
+      if (!vetada(s)) sugerencia = s;
     }
   }
   if (!sugerencia && scored.length === 0 && impuestos.length === 0) {
     const porLLM = await sugerirCategoriaConceptoLLM(tx.descripcion, signo, { companyId });
     const tag = porLLM && familiaATag(porLLM.familia);
     if (porLLM && tag) {
-      sugerencia = {
+      const s: SugerenciaMovimiento = {
         tag,
         etiqueta: porLLM.etiqueta,
         porQue: "lo sugiere el asistente por el texto del concepto",
         confianza: "media",
         fuente: "llm",
       };
+      if (!vetada(s)) sugerencia = s;
     }
   }
 

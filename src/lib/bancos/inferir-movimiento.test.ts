@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { familiaATag, inferirPorIdentidad, type ContextoIdentidad } from "./inferir-movimiento";
+import {
+  esTraspasoContradictorio,
+  familiaATag,
+  inferirPorIdentidad,
+  type ContextoIdentidad,
+} from "./inferir-movimiento";
 
 const ctxVacio = (): ContextoIdentidad => ({
   rfcEmpresa: "AMA170817NK1",
@@ -69,5 +74,31 @@ describe("familiaATag", () => {
   it("los tags directos pasan tal cual", () => {
     expect(familiaATag("TAX_PAYMENT")).toBe("TAX_PAYMENT");
     expect(familiaATag("INTERNAL_TRANSFER")).toBe("INTERNAL_TRANSFER");
+  });
+});
+
+describe("esTraspasoContradictorio", () => {
+  const traspasoTexto = { tag: "INTERNAL_TRANSFER", fuente: "reglas" } as const;
+
+  it("RFC de un tercero desmiente el traspaso sugerido por texto", () => {
+    expect(esTraspasoContradictorio(traspasoTexto, "ZI0190321JI6", "AMA170817NK1")).toBe(true);
+    expect(esTraspasoContradictorio({ ...traspasoTexto, fuente: "llm" }, "ZI0190321JI6", "AMA170817NK1")).toBe(true);
+  });
+
+  it("RFC propio o ausente no desmiente nada", () => {
+    expect(esTraspasoContradictorio(traspasoTexto, "AMA170817NK1", "AMA170817NK1")).toBe(false);
+    expect(esTraspasoContradictorio(traspasoTexto, "  ama170817nk1 ", "AMA170817NK1")).toBe(false);
+    expect(esTraspasoContradictorio(traspasoTexto, null, "AMA170817NK1")).toBe(false);
+    expect(esTraspasoContradictorio(traspasoTexto, "   ", "AMA170817NK1")).toBe(false);
+  });
+
+  it("la identidad (CLABE propia / espejo) no se veta: trae evidencia propia", () => {
+    expect(
+      esTraspasoContradictorio({ tag: "INTERNAL_TRANSFER", fuente: "identidad" }, "ZI0190321JI6", "AMA170817NK1"),
+    ).toBe(false);
+  });
+
+  it("otras familias nunca se vetan", () => {
+    expect(esTraspasoContradictorio({ tag: "TAX_PAYMENT", fuente: "reglas" }, "ZI0190321JI6", "AMA170817NK1")).toBe(false);
   });
 });

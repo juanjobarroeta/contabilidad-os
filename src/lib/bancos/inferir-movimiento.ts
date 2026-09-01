@@ -164,3 +164,24 @@ export function inferirPorIdentidad(
 
   return null;
 }
+
+/**
+ * ¿"Traspaso entre cuentas propias" contradice la identidad del movimiento?
+ *
+ * Si el banco extrajo el RFC de la contraparte y NO es el de la empresa, el
+ * dinero viene de (o va a) un tercero con nombre y apellido — sugerirle
+ * "cuentas propias" a eso es afirmar algo que la evidencia ya desmintió. Sólo
+ * aplica a sugerencias por texto (reglas/LLM): las de fuente "identidad" ya
+ * traen evidencia propia (CLABE de la casa o movimiento espejo) y un RFC de
+ * tercero en el concepto no las invalida (p. ej. un espejo real).
+ */
+export function esTraspasoContradictorio(
+  sugerencia: Pick<SugerenciaMovimiento, "tag" | "fuente">,
+  contraparteRfc: string | null | undefined,
+  rfcEmpresa: string | null | undefined,
+): boolean {
+  if (sugerencia.tag !== "INTERNAL_TRANSFER" || sugerencia.fuente === "identidad") return false;
+  const rfc = contraparteRfc?.trim().toUpperCase();
+  if (!rfc) return false;
+  return rfc !== (rfcEmpresa ?? "").trim().toUpperCase();
+}

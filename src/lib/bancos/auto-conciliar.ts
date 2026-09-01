@@ -108,6 +108,21 @@ export function mismoNombre(a: string | null | undefined, b: string | null | und
   return x.includes(y) || y.includes(x);
 }
 
+/**
+ * El token que IDENTIFICA a una contraparte bancaria, para buscar sus facturas
+ * con un `contains` en SQL: el más largo del nombre normalizado (sin sufijos
+ * societarios), con piso de 4 letras. "ZIONX SA DE CV" → "ZIONX";
+ * "MARIA AMPARO ALONSO SOBERON" → "SOBERON". Devuelve null cuando no hay
+ * token con el que un contains no traiga medio padrón.
+ */
+export function tokenIdentificante(nombre: string | null | undefined): string | null {
+  const tokens = normalizarNombre(nombre ?? "")
+    .split(" ")
+    .filter((t) => t.length >= 4 && !/^\d+$/.test(t));
+  if (tokens.length === 0) return null;
+  return tokens.reduce((mejor, t) => (t.length > mejor.length ? t : mejor), tokens[0]);
+}
+
 export interface SenalesTx {
   fecha: Date;
   descripcion: string;
