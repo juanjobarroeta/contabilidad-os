@@ -45,10 +45,29 @@ export type ImportResult = {
   descartadas: RowDescartada[];
   format?: string;
   detectedBank?: string | null;
+  /** Periodo que cubre el archivo ("2026-08", o "2026-08-26 – 2026-09-01"). */
+  periodo?: string | null;
   warnings?: string[];
   message: string;
   error?: string;
 };
+
+/**
+ * Periodo que cubren los movimientos de un archivo: el mes (AAAA-MM) cuando
+ * todos caen en uno, o el rango de fechas cuando lo cruzan. Va al ImportBatch
+ * para que "deshacer una importación" muestre QUÉ archivo era — antes el
+ * lote de CSV/pegado se guardaba sin banco ni periodo y un estado de Banorte
+ * subido a la cuenta de Scotiabank era imposible de distinguir.
+ */
+export function periodoDe(transactions: { fecha: Date }[]): string | null {
+  if (transactions.length === 0) return null;
+  const dias = transactions
+    .map((t) => t.fecha.toISOString().slice(0, 10))
+    .sort();
+  const min = dias[0];
+  const max = dias[dias.length - 1];
+  return min.slice(0, 7) === max.slice(0, 7) ? min.slice(0, 7) : `${min} – ${max}`;
+}
 
 /**
  * Persist already-parsed transactions: dedup + auto-categorize + insert.
@@ -409,11 +428,16 @@ export async function importBankStatement(opts: {
     };
   }
 
+  // Banco detectado y periodo van al lote: es lo que vuelve reconocible una
+  // importación en "deshacer" (los caminos de PDF y WhatsApp ya lo hacían).
+  const periodo = periodoDe(parseResult.transactions);
   const { imported, skipped } = await persistTransactions({
     bankAccountId,
     companyId,
     transactions: parseResult.transactions,
     source: "UPLOAD",
+    banco: parseResult.detectedBank ?? null,
+    periodo,
   });
 
   const descartadas = parseResult.descartadas;
@@ -425,6 +449,7 @@ export async function importBankStatement(opts: {
     descartadas,
     format: parseResult.format,
     detectedBank: parseResult.detectedBank,
+    periodo,
     warnings: parseResult.warnings,
     message:
       `${imported} movimiento(s) importados` +

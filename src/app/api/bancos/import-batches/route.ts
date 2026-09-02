@@ -1,10 +1,11 @@
 /**
  * Lotes de importación de estados de cuenta — para "deshacer una importación".
  *
- * GET /api/bancos/import-batches?companyId=xxx
+ * GET /api/bancos/import-batches?companyId=xxx[&bankAccountId=yyy]
  *   Sesión web O token de servicio (Bearer, satélites como JCPT). Lista los
- *   últimos lotes NO deshechos de la empresa (todas sus cuentas), cada uno con
- *   cuántos movimientos siguen borrables y cuántos ya se conciliaron.
+ *   últimos lotes NO deshechos de la empresa (todas sus cuentas, o sólo la
+ *   pedida), cada uno con el banco/periodo del archivo, una descripción de
+ *   muestra, y cuántos movimientos siguen borrables vs. ya conciliados.
  */
 
 import { NextResponse } from "next/server";
@@ -27,5 +28,6 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member) return NextResponse.json([], { status: 403 });
 
-  return NextResponse.json(await listarLotesImportados(companyId));
+  const bankAccountId = searchParams.get("bankAccountId");
+  return NextResponse.json(await listarLotesImportados(companyId, { bankAccountId }));
 }
