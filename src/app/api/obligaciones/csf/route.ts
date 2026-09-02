@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   // Verify RFC matches company
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { rfc: true, regimenFiscal: true },
+    select: { rfc: true, regimenFiscal: true, codigoPostal: true },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
@@ -121,13 +121,26 @@ export async function POST(req: Request) {
     results.created++;
   }
 
-  // Update company regimenFiscal if CSF found a regime and current is different
+  // La CSF es el registro del SAT: refresca los datos fiscales de la empresa.
+  // regimenFiscal guarda UN código — los consumidores (impuestos, balance,
+  // facturación) lo tratan como escalar; con varios regímenes en la constancia
+  // se toma el principal (el primero). Las obligaciones de TODOS los regímenes
+  // ya se upsertaron arriba. Antes se escribía "605,612" ahí, y eso rompía a
+  // todo consumidor escalar del campo.
+  const cambios: string[] = [];
   if (csf.regimenFiscal && csf.regimenFiscal !== company.regimenFiscal) {
-    const allCodes = csf.regimenes.map(r => r.codigo).join(",");
     await prisma.company.update({
       where: { id: companyId },
-      data: { regimenFiscal: allCodes },
+      data: { regimenFiscal: csf.regimenFiscal },
     });
+    cambios.push(`régimen ${company.regimenFiscal} → ${csf.regimenFiscal}`);
+  }
+  if (csf.codigoPostal && /^\d{5}$/.test(csf.codigoPostal) && csf.codigoPostal !== company.codigoPostal) {
+    await prisma.company.update({
+      where: { id: companyId },
+      data: { codigoPostal: csf.codigoPostal },
+    });
+    cambios.push(`CP ${company.codigoPostal || "—"} → ${csf.codigoPostal}`);
   }
 
   return NextResponse.json({
@@ -138,7 +151,14 @@ export async function POST(req: Request) {
     obligacionesActualizadas: results.obligaciones,
     created: results.created,
     updated: results.updated,
-    message: `CSF procesada: ${results.obligaciones.length} obligacion(es) actualizadas desde ${csf.regimenes.length} régimen(es).`,
+    cambios,
+    message: [
+      results.obligaciones.length === 1
+        ? "1 obligación actualizada"
+        : `${results.obligaciones.length} obligaciones actualizadas`,
+      csf.regimenes.length === 1 ? "1 régimen en la constancia" : `${csf.regimenes.length} regímenes en la constancia`,
+      ...cambios,
+    ].join(" · "),
   });
 }
 
