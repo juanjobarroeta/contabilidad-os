@@ -1,5 +1,7 @@
 "use client";
 
+import { descargarUrl } from "@/lib/descargar";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pestaña Resumen del hub de Nómina — la vista amigable que antes era /nomina.
 // Responde lo que el dueño/contador quiere saber de un vistazo: ¿cuánta gente,
@@ -396,16 +398,16 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
                       <span className="flex flex-none items-center gap-2.5">
                         <span className="font-mono font-semibold text-cos-jade-ink">{formatCurrency(r.neto)}</span>
                         {r.invoiceId && r.pdfDisponible && (
-                          <a href={`/api/facturas/${r.invoiceId}/download?format=pdf`}
+                          <button type="button" onClick={() => void descargarUrl(`/api/facturas/${r.invoiceId}/download?format=pdf`, "recibo.pdf")}
                             className="inline-flex items-center gap-0.5 text-[11px] font-medium text-cos-brand-ink underline hover:opacity-80"
                             title="Descargar recibo en PDF">
                             <FileText className="h-3 w-3" /> PDF
-                          </a>
+                          </button>
                         )}
                         {r.invoiceId && r.xmlDisponible && (
-                          <a href={`/api/facturas/${r.invoiceId}/download?format=xml`}
+                          <button type="button" onClick={() => void descargarUrl(`/api/facturas/${r.invoiceId}/download?format=xml`, "recibo.xml")}
                             className="text-[11px] font-medium text-cos-brand-ink underline hover:opacity-80"
-                            title="Descargar XML del CFDI">XML</a>
+                            title="Descargar XML del CFDI">XML</button>
                         )}
                         {/* Representación impresa — imprime/guarda PDF también para importados */}
                         {r.invoiceId && (

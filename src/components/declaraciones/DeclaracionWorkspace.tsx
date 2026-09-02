@@ -1,5 +1,7 @@
 "use client";
 
+import { descargarUrl } from "@/lib/descargar";
+
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading, Alert, RetryButton } from "@/components/ui";
@@ -617,10 +619,10 @@ function Presentar({
             <EstadoBadge estado={data.diot.estado} />
           </div>
           <p className="mt-2 text-[14px] text-cos-ink">{data.diot.proveedores} {data.diot.proveedores === 1 ? "proveedor" : "proveedores"} con IVA · vence {fmtFecha(data.diot.vencimiento)}</p>
-          <a href={`/api/impuestos/diot?companyId=${companyId}&month=${month}&year=${year}&format=txt`}
+          <button type="button" onClick={() => void descargarUrl(`/api/impuestos/diot?companyId=${companyId}&month=${month}&year=${year}&format=txt`, `diot-${year}-${month}.txt`)}
             className="mt-2 inline-flex items-center gap-1.5 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-paper">
             <Download className="h-3.5 w-3.5" /> Descargar archivo DIOT (.txt)
-          </a>
+          </button>
           {data.diot.estado === "FILED" ? (
             <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint p-3">
               <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-jade-ink">
@@ -661,7 +663,7 @@ function FederalPresentar({
             <p className="flex items-center gap-1.5 font-medium text-cos-jade-ink"><CheckCircle2 className="h-4 w-4" /> Presentada {f.fechaPresentacion ? `el ${fmtFecha(f.fechaPresentacion)}` : ""}</p>
             <div className="mt-1 flex items-center gap-3">
               {f.acusePdfDisponible && f.declaracionId && (
-                <a href={`/api/declaraciones/acuse/${f.declaracionId}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12.5px] text-cos-jade-ink underline"><Download className="h-3.5 w-3.5" /> Descargar acuse</a>
+                <button type="button" onClick={() => void descargarUrl(`/api/declaraciones/acuse/${f.declaracionId}`, "acuse.pdf")} className="inline-flex items-center gap-1 text-[12.5px] text-cos-jade-ink underline"><Download className="h-3.5 w-3.5" /> Descargar acuse</button>
               )}
               {f.acuseUrl && <a href={f.acuseUrl} target="_blank" rel="noreferrer" className="text-[12.5px] text-cos-jade-ink underline">Ver acuse</a>}
             </div>
@@ -680,7 +682,7 @@ function FederalPresentar({
           <p className="text-[13px] font-medium">¿Ya la presentaste? Sube el acuse (PDF)</p>
           <div className="flex items-center gap-2">
             {f.acusePdfDisponible && f.declaracionId && (
-              <a href={`/api/declaraciones/acuse/${f.declaracionId}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-paper"><Download className="h-3.5 w-3.5" /> Descargar PDF</a>
+              <button type="button" onClick={() => void descargarUrl(`/api/declaraciones/acuse/${f.declaracionId}`, "acuse.pdf")} className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-paper"><Download className="h-3.5 w-3.5" /> Descargar PDF</button>
             )}
             <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-paper">
               {acuseUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
