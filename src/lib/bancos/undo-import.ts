@@ -28,6 +28,12 @@ export interface LoteImportado {
   count: number;
   bankAccountId: string;
   cuentaEtiqueta: string;
+  /** Banco de la CUENTA destino, aparte de la etiqueta, para compararlo con
+   *  `banco` (el del archivo) sin parsear texto. */
+  cuentaBanco: string;
+  /** Descripción del movimiento más reciente del lote: con `banco` en null en
+   *  lotes viejos, es lo que deja reconocer un archivo ajeno de un vistazo. */
+  ejemplo: string | null;
   /** Movimientos del lote que aún se pueden borrar (no conciliados). */
   borrables: number;
   /** Movimientos ya conciliados que se conservarían. */
@@ -88,6 +94,8 @@ export async function findUltimoLoteImportado(companyId: string): Promise<LoteIm
     count: batch.count,
     bankAccountId: batch.bankAccountId,
     cuentaEtiqueta,
+    cuentaBanco: batch.bankAccount.banco,
+    ejemplo: null,
     borrables,
     conciliados: total - borrables,
     tienePdf: batch.archivoNombre != null,
@@ -100,9 +108,13 @@ export async function findUltimoLoteImportado(companyId: string): Promise<LoteIm
  * movimientos siguen borrables vs. ya conciliados — para la UI de "deshacer una
  * importación" (hub y satélites como JCPT). Orden: más reciente primero.
  */
-export async function listarLotesImportados(companyId: string, take = 10): Promise<LoteImportado[]> {
+export async function listarLotesImportados(
+  companyId: string,
+  opts: { bankAccountId?: string | null; take?: number } = {},
+): Promise<LoteImportado[]> {
+  const { bankAccountId, take = 30 } = opts;
   const batches = await prisma.importBatch.findMany({
-    where: { companyId, undoneAt: null },
+    where: { companyId, undoneAt: null, ...(bankAccountId ? { bankAccountId } : {}) },
     orderBy: { createdAt: "desc" },
     take,
     select: {
@@ -114,9 +126,14 @@ export async function listarLotesImportados(companyId: string, take = 10): Promi
 
   return Promise.all(
     batches.map(async (batch) => {
-      const [borrables, total] = await Promise.all([
+      const [borrables, total, reciente] = await Promise.all([
         prisma.bankTransaction.count({ where: whereBorrables(batch.id, companyId) }),
         prisma.bankTransaction.count({ where: { importBatchId: batch.id, companyId } }),
+        prisma.bankTransaction.findFirst({
+          where: { importBatchId: batch.id, companyId },
+          orderBy: { fecha: "desc" },
+          select: { descripcion: true },
+        }),
       ]);
       const t = ult4(batch.bankAccount.numeroCuenta) ?? ult4(batch.bankAccount.clabe);
       return {
@@ -128,6 +145,8 @@ export async function listarLotesImportados(companyId: string, take = 10): Promi
         bankAccountId: batch.bankAccountId,
         cuentaEtiqueta:
           `${batch.bankAccount.banco} ${batch.bankAccount.nombre}` + (t ? ` (terminación ${t})` : ""),
+        cuentaBanco: batch.bankAccount.banco,
+        ejemplo: reciente?.descripcion ?? null,
         borrables,
         conciliados: total - borrables,
         tienePdf: batch.archivoNombre != null,
@@ -184,6 +203,8 @@ async function materializarClusterSinLote(companyId: string): Promise<LoteImport
     bankAccountId: ultimo.bankAccountId,
     cuentaEtiqueta:
       `${ultimo.bankAccount.banco} ${ultimo.bankAccount.nombre}` + (t ? ` (terminación ${t})` : ""),
+    cuentaBanco: ultimo.bankAccount.banco,
+    ejemplo: null,
     borrables,
     conciliados: total - borrables,
     tienePdf: false,
@@ -206,6 +227,9 @@ function whereBorrables(batchId: string, companyId: string): Prisma.BankTransact
 export interface ResultadoDeshacer {
   borrados: number;
   conservados: number;
+  /** Ids de los movimientos borrados: los satélites (JCPT) los usan para
+   *  limpiar sus propias ligas a esos movimientos. */
+  borradosIds: string[];
 }
 
 /**
@@ -223,11 +247,17 @@ export async function deshacerLoteImportado(
       where: { id: batchId, companyId, undoneAt: null },
       select: { id: true },
     });
-    if (!batch) return { borrados: 0, conservados: 0 };
+    if (!batch) return { borrados: 0, conservados: 0, borradosIds: [] };
 
     const conservados = await tx.bankTransaction.count({
       where: { importBatchId: batchId, companyId, NOT: whereBorrables(batchId, companyId) },
     });
+    const borradosIds = (
+      await tx.bankTransaction.findMany({
+        where: whereBorrables(batchId, companyId),
+        select: { id: true },
+      })
+    ).map((t) => t.id);
     const { count: borrados } = await tx.bankTransaction.deleteMany({
       where: whereBorrables(batchId, companyId),
     });
@@ -245,6 +275,6 @@ export async function deshacerLoteImportado(
       detalle: { borrados, conservados },
     });
 
-    return { borrados, conservados };
+    return { borrados, conservados, borradosIds };
   });
 }
