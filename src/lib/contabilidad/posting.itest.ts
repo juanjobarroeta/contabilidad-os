@@ -99,8 +99,9 @@ describe.skipIf(skip)("postMonth contra Postgres real", () => {
   });
 
   it("un IGNORED sin categoría bloquea el cierre con mensaje accionable", async () => {
+    // Plural real: "1 ignorado sin categoría" / "2 ignorados sin categoría".
     await expect(postMonth({ companyId: CIA, year: 2026, month: 8 })).rejects.toThrow(
-      /ignorado\(s\) sin categoría/
+      /ignorados? sin categoría/
     );
   });
 
