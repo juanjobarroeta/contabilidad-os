@@ -9,7 +9,7 @@ describe("inpc()", () => {
   });
 
   it("returns null for unloaded or out-of-range months", () => {
-    expect(inpc(2026, 6)).toBeNull(); // junio 2026 aún no publicado
+    expect(inpc(2026, 8)).toBeNull(); // agosto 2026 aún no publicado (~10-sep)
     expect(inpc(2025, 13)).toBeNull();
     expect(inpc(2025, 0)).toBeNull();
     expect(inpc(1999, 1)).toBeNull();
@@ -18,7 +18,7 @@ describe("inpc()", () => {
 
 describe("coberturaInpc()", () => {
   it("reports the latest loaded month", () => {
-    expect(coberturaInpc()).toEqual({ year: 2026, month: 5 });
+    expect(coberturaInpc()).toEqual({ year: 2026, month: 7 });
   });
 });
 
@@ -49,7 +49,7 @@ describe("factorActualizacionDepreciacion() — Art. 31 LISR", () => {
 
   it("falls back to nominal (factor 1, completo false) when an INPC is missing", () => {
     const r = factorActualizacionDepreciacion({
-      fechaAdquisicion: new Date(2026, 5, 1), // jun-2026 no está cargado
+      fechaAdquisicion: new Date(2026, 7, 1), // ago-2026 no está cargado (~10-sep)
       ejercicio: 2026,
       startMonthIndex: 0,
       mesesUso: 4,
