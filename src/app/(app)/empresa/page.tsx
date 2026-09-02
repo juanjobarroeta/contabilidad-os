@@ -78,6 +78,17 @@ function fileToBase64(file: File): Promise<string> {
 
 export default function EmpresaPage() {
   const { companies, activeCompany, setActiveCompany } = useCompany();
+  // Con 19 empresas, la lista empujaba la configuración fiscal fuera de la
+  // pantalla — dos pestañas: la configuración de la ACTIVA (lo que se viene a
+  // hacer aquí) y la lista de empresas. `hidden` en vez de desmontar: conserva
+  // el estado de los formularios al cambiar de pestaña.
+  const [tab, setTab] = useState<"config" | "empresas">("config");
+
+  // Re-subir la CSF: refresca obligaciones y datos fiscales (régimen/CP) de la
+  // activa vía el endpoint existente (extracción de texto, sin IA).
+  const [csfSubiendo, setCsfSubiendo] = useState(false);
+  const [csfResultado, setCsfResultado] = useState("");
+  const [csfError, setCsfError] = useState("");
   const router = useRouter();
 
   // Add company form
@@ -620,6 +631,34 @@ export default function EmpresaPage() {
           ? { clase: "bg-cos-jade-tint text-cos-jade-ink", texto: fielVigenciaFmt ? `Vigente hasta ${fielVigenciaFmt}` : "✓ Configurada" }
           : { clase: "bg-cos-amber-tint text-cos-amber-ink", texto: "Sin configurar" };
 
+  async function subirCsf(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !activeCompany) return;
+    setCsfSubiendo(true); setCsfResultado(""); setCsfError("");
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+        reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/obligaciones/csf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, csfBase64: base64 }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error ?? "No se pudo procesar la constancia");
+      setCsfResultado(d.message ?? "Constancia procesada.");
+      fetchCompanyDetail();
+    } catch (err) {
+      setCsfError(err instanceof Error ? err.message : "Error al procesar la CSF");
+    } finally {
+      setCsfSubiendo(false);
+      e.target.value = "";
+    }
+  }
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
       {/* Header */}
@@ -637,6 +676,24 @@ export default function EmpresaPage() {
         </a>
       </div>
 
+      <div className="mb-5 flex gap-1 border-b border-cos-line">
+        <button
+          type="button"
+          onClick={() => setTab("config")}
+          className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${tab === "config" ? "border-cos-brand text-cos-ink" : "border-transparent text-cos-ink-soft hover:text-cos-ink"}`}
+        >
+          Configuración fiscal
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("empresas")}
+          className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${tab === "empresas" ? "border-cos-brand text-cos-ink" : "border-transparent text-cos-ink-soft hover:text-cos-ink"}`}
+        >
+          Empresas · {companies.length}
+        </button>
+      </div>
+
+      <div hidden={tab !== "empresas"}>
       {/* Add Company Form */}
       {showAddForm && (
         <div className="bg-cos-card border border-cos-line rounded-xl p-6 mb-6 shadow-sm">
@@ -744,6 +801,54 @@ export default function EmpresaPage() {
           </div>
         ))}
       </div>
+
+      </div>
+
+      <div hidden={tab !== "config"}>
+      {activeCompany ? (
+        <div className="mb-5 flex items-center justify-between rounded-xl border border-cos-brand/25 bg-cos-brand-tint px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold">{activeCompany.razonSocial}</p>
+            <p className="text-xs font-mono text-cos-ink-soft">{activeCompany.rfc} · Régimen {activeCompany.regimenFiscal}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTab("empresas")}
+            className="text-xs font-medium text-cos-brand-ink hover:underline"
+          >
+            Cambiar de empresa →
+          </button>
+        </div>
+      ) : (
+        <Alert tone="warning" className="mb-5">
+          Elige una empresa en la pestaña «Empresas» para ver su configuración.
+        </Alert>
+      )}
+
+      {/* ── Constancia de Situación Fiscal ── */}
+      {activeCompany && (
+        <div className="bg-cos-card border border-cos-line rounded-xl shadow-sm p-5 mb-5">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="h-9 w-9 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
+              <FileText className="h-4 w-4 text-cos-brand-ink" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-sm">Constancia de Situación Fiscal</h2>
+              <p className="text-xs text-cos-ink-soft">
+                Sube la CSF más reciente para refrescar obligaciones, régimen y código postal — el SAT es la
+                fuente; aquí sólo se refleja.
+              </p>
+            </div>
+          </div>
+          <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-cos-line px-4 py-3 text-sm text-cos-ink-soft hover:bg-cos-paper ${csfSubiendo ? "pointer-events-none opacity-60" : ""}`}>
+            {csfSubiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {csfSubiendo ? "Procesando constancia…" : "Seleccionar CSF (PDF)"}
+            <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={subirCsf} disabled={csfSubiendo} />
+          </label>
+          {csfResultado && <p className="mt-2 text-xs text-cos-jade-ink">{csfResultado}</p>}
+          {csfError && <p className="mt-2 text-xs text-cos-red-ink">{csfError}</p>}
+        </div>
+      )}
 
       {/* Configuración fiscal: mientras no sepamos qué hay (cargando o fetch
           fallido), NO se pintan las secciones de CSD/e.firma/Facturapi — un
@@ -1500,6 +1605,7 @@ export default function EmpresaPage() {
 
         </>
       )}
+      </div>
     </div>
   );
 }
