@@ -20,6 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "../prisma";
+import { CODIGO_AGRUPADOR_OFICIAL } from "./codigo-agrupador";
 import { balanza, balanzaPreview } from "./posting";
 
 // Tolerancia de cuadre (cargos vs abonos). Coincide con el balance check de
@@ -75,6 +76,11 @@ export type ReadinessInputs = {
   // Las personas físicas con régimen simplificado (RESICO/PFAE puro) no llevan
   // balance, así que la falta de banco es nota suave, no error.
   requiereBalance: boolean;
+
+  // Cuentas ACTIVAS cuyo CodAgrup emitido no existe en el catálogo oficial del
+  // SAT (Anexo 24). Pasa en planes propios importados sin mapear: el XML del
+  // catálogo saldría con el código interno como CodAgrup y el SAT lo rechaza.
+  cuentasSinAgrupador: number;
 
   // Aportación de capital inicial detectada (asiento/clasificación CAPITAL).
   // undefined = no se pudo determinar de forma trivial → se omite el check.
@@ -233,6 +239,23 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
     });
   }
 
+  // 4.5 Códigos agrupadores: sólo aparece cuando hay cuentas sin mapear —
+  // en un catálogo semilla es ruido, en un plan propio importado es EL bloqueo.
+  if (input.cuentasSinAgrupador > 0) {
+    checks.push({
+      clave: "agrupadores",
+      estado: "error",
+      titulo:
+        input.cuentasSinAgrupador === 1
+          ? "1 cuenta sin código agrupador del SAT"
+          : `${input.cuentasSinAgrupador} cuentas sin código agrupador del SAT`,
+      detalle:
+        "Su CodAgrup saldría con el código interno de la cuenta y el SAT rechazaría el XML del " +
+        "catálogo. Asigna el código agrupador real de cada una.",
+      cta: { label: "Mapear cuentas", href: "/contabilidad/catalogo" },
+    });
+  }
+
   // 5. Mes posteado (definitivo) o preliminar.
   if (input.posted) {
     checks.push({
@@ -300,7 +323,7 @@ export async function evaluarReadinessCE(
   const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
   const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
 
-  const [company, period, cfdiCount, bankTxCount, bankUnmatchedCount] = await Promise.all([
+  const [company, period, cfdiCount, bankTxCount, bankUnmatchedCount, cuentasActivas] = await Promise.all([
     prisma.company.findUnique({
       where: { id: companyId },
       select: { regimenFiscal: true, lastAutoSyncAt: true, createdAt: true },
@@ -322,6 +345,10 @@ export async function evaluarReadinessCE(
     }),
     prisma.bankTransaction.count({
       where: { companyId, fecha: { gte: start, lt: end }, status: "UNMATCHED" },
+    }),
+    prisma.chartAccount.findMany({
+      where: { companyId, isActive: true },
+      select: { codAgrup: true, subcuenta: true, cuentaSAT: true },
     }),
   ]);
 
@@ -348,6 +375,13 @@ export async function evaluarReadinessCE(
   // afirmamos su ausencia (undefined) para no inventar el check.
   const esEmpresaNueva = company.createdAt.getUTCFullYear() === year;
 
+  // El MISMO CodAgrup que emitiría el XML del catálogo (coe-xml: codAgrup ??
+  // código de la cuenta), cotejado contra la lista oficial del Anexo 24.
+  const cuentasSinAgrupador = cuentasActivas.filter((a) => {
+    const emitido = a.codAgrup ?? a.subcuenta ?? a.cuentaSAT;
+    return !emitido || !(emitido in CODIGO_AGRUPADOR_OFICIAL);
+  }).length;
+
   return evaluarChecks({
     cfdiCount,
     lastSyncAt: company.lastAutoSyncAt,
@@ -359,6 +393,7 @@ export async function evaluarReadinessCE(
     posted,
     requiereBalance,
     esEmpresaNueva,
+    cuentasSinAgrupador,
     // tieneCapitalInicial se deja sin resolver: detectarlo con certeza requeriría
     // inspeccionar asientos APERTURA/clasificación CAPITAL, lo que no es trivial
     // ni barato aquí. Al ser undefined, el check de capital inicial se omite.

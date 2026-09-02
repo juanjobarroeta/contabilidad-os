@@ -112,15 +112,19 @@ describe("subcuentaBancoSpec", () => {
 });
 
 describe("IGNORED_TAGS_VALIDOS", () => {
-  it("los ocho tags del contrato, y nada más", () => {
+  it("los diez tags del contrato, y nada más", () => {
+    // RENT y FINANCIAL_INCOME entraron cuando el flujo de Movimientos ya podía
+    // etiquetarlas pero el cierre las rechazaba como "sin categoría".
     expect([...IGNORED_TAGS_VALIDOS].sort()).toEqual([
       "CAPITAL_CONTRIBUTION",
+      "FINANCIAL_INCOME",
       "INTERNAL_TRANSFER",
       "LOAN_GIVEN",
       "LOAN_RECEIVED",
       "NON_DEDUCTIBLE",
       "PAYROLL_NO_CFDI",
       "PENDING_MONTHLY_CFDI",
+      "RENT",
       "TAX_PAYMENT",
     ]);
   });
