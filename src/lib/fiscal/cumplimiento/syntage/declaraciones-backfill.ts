@@ -16,7 +16,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { SyntageClient } from "./client";
-import { parseSatDocument, type AcuseMensual } from "@/lib/fiscal/acuse/parse";
+import { parseSatDocument, SatParsePagadoError, type AcuseMensual } from "@/lib/fiscal/acuse/parse";
 
 export interface BackfillResult {
   companyId: string;
@@ -147,6 +147,32 @@ export async function backfillDeclaracionesMensuales(
     const ref = fileRefDe(tr);
     if (!ref) continue;
 
+    // Un parseo PAGADO que no dejó fila se repetía cada corrida (6h) para
+    // siempre — visto en prod: 42 parseos/48h y 0 filas para una empresa
+    // (~$50/mes en releer los mismos PDFs). El tax-return de Syntage viene del
+    // registro del SAT: la declaración SÍ se presentó aunque el PDF no se deje
+    // leer. El marcador es la propia fila FILED con importes en null, el PDF
+    // adjunto y acuseParseadoAt — la misma disciplina que el caso Canales en
+    // las anuales. Sólo los fallos de red (no pagados) se dejan reintentar.
+    const crearMarcadores = async (pdfBytes: Uint8Array<ArrayBuffer> | null) => {
+      const pares: [boolean, "IVA_MENSUAL" | "ISR_PROVISIONAL" | "IEPS_MENSUAL"][] = [
+        [needIva, "IVA_MENSUAL"],
+        [needIsr, "ISR_PROVISIONAL"],
+        [needIeps, "IEPS_MENSUAL"],
+      ];
+      for (const [need, tipo] of pares) {
+        if (!need) continue;
+        await prisma.taxDeclaration.create({
+          data: {
+            companyId, tipo, periodo, status: "FILED", isHistorical: true,
+            acuseParseadoAt: new Date(),
+            ...(pdfBytes ? { acusePdf: pdfBytes, acusePdfNombre: `acuse-${periodo}.pdf` } : {}),
+          },
+        });
+        have.add(`${tipo}:${periodo}`);
+      }
+    };
+
     let acuse: AcuseMensual | null = null;
     let pdf: Uint8Array<ArrayBuffer> | null = null;
     try {
@@ -155,10 +181,19 @@ export async function backfillDeclaracionesMensuales(
       const parsed = await parseSatDocument(Buffer.from(pdf).toString("base64"), { companyId, subtipo: "declaraciones.backfill" });
       acusesParseados++;
       if (parsed.type === "ACUSE_MENSUAL") acuse = parsed.acuseMensual;
-    } catch {
-      continue; // un acuse ilegible no detiene el resto
+    } catch (e) {
+      if (e instanceof SatParsePagadoError) {
+        acusesParseados++;
+        await crearMarcadores(pdf);
+      }
+      continue; // red/API sin costo: se reintenta; un acuse ilegible no detiene el resto
     }
-    if (!acuse) continue;
+    if (!acuse) {
+      // Pagado y completado, pero el PDF no es un acuse mensual (transcript,
+      // anexo…): marcar para no volver a pagarlo.
+      await crearMarcadores(pdf);
+      continue;
+    }
 
     const fecha = acuse.fechaPresentacion ? new Date(acuse.fechaPresentacion) : null;
     const acusePdfNombre = `acuse-${periodo}.pdf`;
@@ -166,6 +201,13 @@ export async function backfillDeclaracionesMensuales(
       acuse.ivaAPagar != null || acuse.ivaCausado != null || acuse.ivaAFavor != null || acuse.ivaAcreditable != null;
     const tieneDatosIsr = acuse.isrAPagar != null || acuse.isrIngresos != null;
     const tieneDatosIeps = acuse.iepsAPagar != null || acuse.iepsAFavor != null;
+
+    // Acuse legible pero sin UN SOLO importe: mismo destino que el ilegible —
+    // marcar las filas necesitadas para no re-pagar el parseo cada corrida.
+    if (!tieneDatosIva && !tieneDatosIsr && !tieneDatosIeps) {
+      await crearMarcadores(pdf);
+      continue;
+    }
 
     if (needIva && tieneDatosIva) {
       await prisma.taxDeclaration.create({
