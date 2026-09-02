@@ -504,11 +504,23 @@ export async function GET(req: Request, { params }: Params) {
         : null,
     }
   );
+  // Con un recibo de nómina timbrado del MISMO monto entre los candidatos, la
+  // acción correcta es CONCILIARLO — liquida la provisión (Acreedores) que el
+  // recibo creó al contabilizarse. El tag «Nómina sin CFDI» cargaría Sueldos
+  // por segunda vez. La sugerencia se calla; el recibo, con monto exacto y
+  // nombre, habla desde arriba de la lista.
+  const reciboExacto = candidates.some(
+    (inv) => inv.tipo === "NOMINA" && Math.abs(Number(inv.total) - absAmount) < 0.01
+  );
+  if (sugerencia?.tag === "PAYROLL_NO_CFDI" && reciboExacto) sugerencia = null;
+
   // Una sugerencia por TEXTO de "traspaso entre cuentas propias" se calla
   // cuando el movimiento nombra a un tercero por RFC: la evidencia ya la
-  // desmintió (los traspasos reales entran por identidad, arriba).
+  // desmintió (los traspasos reales entran por identidad, arriba). Y la de
+  // nómina, cuando existe el recibo exacto (mismo porqué de arriba).
   const vetada = (s: SugerenciaMovimiento): boolean =>
-    esTraspasoContradictorio(s, tx.contraparteRfc, empresa?.rfc);
+    esTraspasoContradictorio(s, tx.contraparteRfc, empresa?.rfc) ||
+    (s.tag === "PAYROLL_NO_CFDI" && reciboExacto);
   if (!sugerencia) {
     // El motor puro ya integra las reglas de la empresa con precedencia sobre
     // los patrones hardcodeados (sugerirCategoriaConcepto acepta companyRules).
