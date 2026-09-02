@@ -1,5 +1,7 @@
 "use client";
 
+import { descargarBlob } from "@/lib/descargar";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Descarga de entregables del Anexo 24 con el error COMO GUÍA, no como archivo
 // roto. Desde la ola «CE confiable», el servidor valida fail-closed (422 con
@@ -58,14 +60,7 @@ export function useDescargaXml() {
       const cd = res.headers.get("Content-Disposition") ?? "";
       const filename = /filename="([^"]+)"/.exec(cd)?.[1] ?? "entregable.xml";
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await descargarBlob(blob, filename); // PWA-consciente: hoja de compartir en standalone
     } catch {
       setError({ mensaje: "No se pudo descargar. Revisa tu conexión e intenta de nuevo.", detalles: [] });
     } finally {

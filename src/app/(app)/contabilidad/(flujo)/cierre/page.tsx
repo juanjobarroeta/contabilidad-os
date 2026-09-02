@@ -1,5 +1,7 @@
 "use client";
 
+import { descargarUrl } from "@/lib/descargar";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // El Cierre del Mes (brief UX, módulo P0-1): el cierre como checklist vivo.
 // Un stepper de 6 pasos sobre el período global; cada paso trae EL NÚMERO que
@@ -465,12 +467,13 @@ export default function CierrePage() {
                     <span className="font-mono font-semibold tabular-nums">{diot ? diot.rows.length : "…"}</span>{" "}
                     {diot && diot.rows.length === 1 ? "proveedor" : "proveedores"} del período
                   </span>
-                  <a
-                    href={`/api/impuestos/diot?companyId=${activeCompany.id}&year=${year}&month=${month}&format=txt`}
+                  <button
+                    type="button"
+                    onClick={() => void descargarUrl(`/api/impuestos/diot?companyId=${activeCompany.id}&year=${year}&month=${month}&format=txt`, `diot-${year}-${month}.txt`)}
                     className={liga}
                   >
                     Generar .txt
-                  </a>
+                  </button>
                 </li>
                 <li className="flex items-center justify-between gap-2">
                   <span>Depreciación del período</span>
@@ -659,13 +662,14 @@ export default function CierrePage() {
             </div>
             <div className="px-4 py-3">
               {periods?.some((p) => p.year === year && p.month === 13) ? (
-                <a
-                  href={`/api/contabilidad/coe/balanza?companyId=${activeCompany.id}&year=${year}&month=13`}
+                <button
+                  type="button"
+                  onClick={() => void descargarUrl(`/api/contabilidad/coe/balanza?companyId=${activeCompany.id}&year=${year}&month=13`, `balanza-${year}-13.xml`)}
                   title="Descargar la balanza XML del mes 13 (Anexo 24)"
                   className={liga}
                 >
                   Descargar balanza de cierre (mes 13)
-                </a>
+                </button>
               ) : (
                 <p className="text-[12.5px] text-cos-ink-faint">
                   La balanza del mes 13 se podrá descargar cuando generes el asiento de cierre.

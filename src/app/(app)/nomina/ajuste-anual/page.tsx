@@ -1,5 +1,7 @@
 "use client";
 
+import { descargarBlob } from "@/lib/descargar";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Ajuste anual de ISR de sueldos (Art. 97 LISR) — reporte por trabajador.
 //
@@ -179,12 +181,7 @@ function AjusteAnualContenido() {
     // BOM para que Excel abra el CSV en UTF-8 con acentos correctos.
     const csv = "\uFEFF" + [encabezados.map(csvEscape).join(","), ...filas].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ajuste-anual-isr-${ejercicio}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    void descargarBlob(blob, `ajuste-anual-isr-${ejercicio}.csv`);
   }
 
   if (companyLoading) return <Loading />;

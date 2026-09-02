@@ -1,5 +1,7 @@
 "use client";
 
+import { descargarBlob } from "@/lib/descargar";
+
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -126,16 +128,12 @@ function DownloadBtn({ id, format, onUnavailable }: { id: string; format: "xml" 
         return;
       }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       // Nombre del servidor (UUID completo, via Content-Disposition) — el
-      // hardcode "factura.xml" de antes pisaba el folio fiscal.
+      // hardcode "factura.xml" de antes pisaba el folio fiscal. La entrega
+      // pasa por descargarBlob: en la PWA instalada el <a download> no opera.
       const cd = res.headers.get("content-disposition") ?? "";
       const m = /filename="?([^";]+)"?/i.exec(cd);
-      a.download = m?.[1] ?? `factura.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await descargarBlob(blob, m?.[1] ?? `factura.${format}`);
     } catch {
       alert("Error al descargar el archivo");
     } finally {

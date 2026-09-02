@@ -1,5 +1,7 @@
 "use client";
 
+import { descargarUrl } from "@/lib/descargar";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Expediente del empleado — /nomina/empleado/[id]
 //
@@ -302,14 +304,14 @@ export default function ExpedienteEmpleadoPage() {
                       <FileText className="h-3.5 w-3.5" /> CFDI …{r.cfdiUuid.slice(-8)}
                     </Link>
                     {r.invoiceId && r.pdfDisponible && (
-                      <a href={`/api/facturas/${r.invoiceId}/download?format=pdf`}
+                      <button type="button" onClick={() => void descargarUrl(`/api/facturas/${r.invoiceId}/download?format=pdf`, "recibo.pdf")}
                         className="text-[11px] font-medium text-cos-brand underline hover:opacity-80"
-                        title="Descargar el recibo timbrado en PDF">PDF</a>
+                        title="Descargar el recibo timbrado en PDF">PDF</button>
                     )}
                     {r.invoiceId && r.xmlDisponible && (
-                      <a href={`/api/facturas/${r.invoiceId}/download?format=xml`}
+                      <button type="button" onClick={() => void descargarUrl(`/api/facturas/${r.invoiceId}/download?format=xml`, "recibo.xml")}
                         className="text-[11px] font-medium text-cos-brand underline hover:opacity-80"
-                        title="Descargar el XML del CFDI de nómina">XML</a>
+                        title="Descargar el XML del CFDI de nómina">XML</button>
                     )}
                   </>
                 ) : (

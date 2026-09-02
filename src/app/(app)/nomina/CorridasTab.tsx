@@ -1,5 +1,7 @@
 "use client";
 
+import { descargarUrl } from "@/lib/descargar";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pestaña Corridas del hub de Nómina — el workspace power-user que antes vivía
 // en /nomina/detalle: lista de corridas (con las importadas del SAT en sólo
@@ -548,14 +550,14 @@ export default function CorridasTab() {
                                   <span className="inline-flex items-center gap-1.5" title={item.cfdiUuid}>
                                     <span className="text-cos-jade-ink">✓</span>
                                     {item.invoiceId && item.pdfDisponible && (
-                                      <a href={`/api/facturas/${item.invoiceId}/download?format=pdf`}
+                                      <button type="button" onClick={() => void descargarUrl(`/api/facturas/${item.invoiceId}/download?format=pdf`, "recibo.pdf")}
                                         className="text-[10px] font-medium text-cos-brand underline hover:opacity-80"
-                                        title="Descargar el recibo timbrado en PDF">PDF</a>
+                                        title="Descargar el recibo timbrado en PDF">PDF</button>
                                     )}
                                     {item.invoiceId && item.xmlDisponible && (
-                                      <a href={`/api/facturas/${item.invoiceId}/download?format=xml`}
+                                      <button type="button" onClick={() => void descargarUrl(`/api/facturas/${item.invoiceId}/download?format=xml`, "recibo.xml")}
                                         className="text-[10px] font-medium text-cos-brand underline hover:opacity-80"
-                                        title="Descargar el XML del CFDI de nómina">XML</a>
+                                        title="Descargar el XML del CFDI de nómina">XML</button>
                                     )}
                                     {/* Representación impresa: imprime/guarda PDF incluso para
                                         recibos importados del SAT (se arma desde el XML). */}
