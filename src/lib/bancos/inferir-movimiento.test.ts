@@ -99,9 +99,11 @@ describe("familiaATag", () => {
   it("COMISION mapea al tag que postMonth postea provisionalmente", () => {
     expect(familiaATag("COMISION")).toBe("PENDING_MONTHLY_CFDI");
   });
-  it("RENT y FINANCIAL_INCOME no se ofrecen: postMonth no regenera su asiento", () => {
-    expect(familiaATag("RENT")).toBeNull();
-    expect(familiaATag("FINANCIAL_INCOME")).toBeNull();
+  it("RENT y FINANCIAL_INCOME se ofrecen: postMonth ya regenera su asiento", () => {
+    // Antes devolvían null y el flujo de Movimientos podía etiquetarlas de
+    // todos modos → el cierre se bloqueaba como "ignorado sin categoría".
+    expect(familiaATag("RENT")).toBe("RENT");
+    expect(familiaATag("FINANCIAL_INCOME")).toBe("FINANCIAL_INCOME");
   });
   it("los tags directos pasan tal cual", () => {
     expect(familiaATag("TAX_PAYMENT")).toBe("TAX_PAYMENT");

@@ -19,6 +19,7 @@ const NOW = new Date("2026-06-29T00:00:00Z");
 function base(): ReadinessInputs {
   return {
     cfdiCount: 12,
+    cuentasSinAgrupador: 0,
     lastSyncAt: new Date("2026-06-28T00:00:00Z"),
     now: NOW,
     bankTxCount: 30,
@@ -188,5 +189,25 @@ describe("evaluarChecks — capital inicial (opcional)", () => {
       tieneCapitalInicial: false,
     });
     expect(find(r, "capital_inicial")).toBeUndefined();
+  });
+});
+
+describe("check de códigos agrupadores (planes propios sin mapear)", () => {
+  it("con cuentas sin agrupador válido: error con conteo y CTA al catálogo", () => {
+    const r = evaluarChecks({ ...base(), cuentasSinAgrupador: 39 });
+    const c = find(r, "agrupadores");
+    expect(c?.estado).toBe("error");
+    expect(c?.titulo).toContain("39 cuentas");
+    expect(c?.cta?.href).toBe("/contabilidad/catalogo");
+    expect(r.status).toBe("incompleta");
+  });
+
+  it("singular sin «(s)»", () => {
+    const c = find(evaluarChecks({ ...base(), cuentasSinAgrupador: 1 }), "agrupadores");
+    expect(c?.titulo).toBe("1 cuenta sin código agrupador del SAT");
+  });
+
+  it("catálogo completo: el check ni aparece (en semilla sería ruido)", () => {
+    expect(find(evaluarChecks(base()), "agrupadores")).toBeUndefined();
   });
 });

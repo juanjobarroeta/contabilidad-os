@@ -127,6 +127,8 @@ function monthRange(year: number, month: number): { start: Date; end: Date } {
  *       IGNORED + NON_DEDUCTIBLE    → debits gastos no deducibles
  *       IGNORED + PENDING_MONTHLY_CFDI → debits "comisiones bancarias por conciliar"
  *                                      (will be reconciled when monthly CFDI matches)
+ *       IGNORED + RENT              → debits rentas
+ *       IGNORED + FINANCIAL_INCOME  → credits otros ingresos (entrada a Bancos)
  *       IGNORED + INTERNAL_TRANSFER → con 2+ cuentas: póliza CRUZADA entre las
  *           subcuentas de banco (el retiro postea; la entrada espejo se marca
  *           cubierta). Contraparte irresoluble o cuenta única: lavado visible.
@@ -150,6 +152,13 @@ export const IGNORED_TAGS_VALIDOS = new Set([
   "LOAN_RECEIVED",
   "LOAN_GIVEN",
   "CAPITAL_CONTRIBUTION",
+  // Las dos que el flujo de Movimientos (aprobarSugerencia) siempre pudo
+  // etiquetar pero este set no conocía: al contabilizar, el mes se bloqueaba
+  // como "ignorado sin categoría" y el asiento que la sugerencia había creado
+  // se borraba en la regeneración sin reponerse. Intereses ganados aparecen en
+  // CUALQUIER estado de cuenta — era cuestión de tiempo en datos reales.
+  "RENT",
+  "FINANCIAL_INCOME",
 ]);
 
 /** Spec (pura) de la subcuenta contable de una cuenta bancaria. */
@@ -308,6 +317,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accImssPatronalGasto,
     accImssPorPagar,
     accAcreedoresDiv,
+    accRentas,
+    accOtrosIngresos,
   ] = await Promise.all([
     resolveAccount(companyId, COE_CODES.BANCOS),
     resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
@@ -330,6 +341,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.CUOTAS_IMSS_PATRONAL),
     resolveAccount(companyId, COE_CODES.IMSS_POR_PAGAR),
     resolveAccount(companyId, COE_CODES.ACREEDORES_DIVERSOS),
+    resolveAccount(companyId, COE_CODES.RENTAS),
+    resolveAccount(companyId, COE_CODES.OTROS_INGRESOS),
   ]);
 
   // ─── 1. CFDIs emitted (INGRESO) ────────────────────────────────────────
@@ -927,7 +940,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     const more = bloqueantes.length > 3 ? `\n…y ${bloqueantes.length - 3} más` : "";
     const partes = [
       unmatched.length > 0 ? `${unmatched.length} sin conciliar` : null,
-      sinCategoria.length > 0 ? `${sinCategoria.length} ignorado(s) sin categoría` : null,
+      sinCategoria.length > 0
+        ? sinCategoria.length === 1
+          ? "1 ignorado sin categoría"
+          : `${sinCategoria.length} ignorados sin categoría`
+        : null,
     ].filter(Boolean).join(" y ");
     throw new Error(
       `No se puede cerrar el mes: ${partes}.\nResuélvelos en Bancos antes de cerrar.\n\n${sample}${more}`
@@ -1114,6 +1131,32 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         } else {
           drafts.push({ ...base, chartAccountId: accCapitalSocial.id, monto: absAmount, tipo: "CARGO" });
           drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,        monto: absAmount, tipo: "ABONO" });
+        }
+        continue;
+      }
+
+      if (tag === "RENT") {
+        // Renta pagada sin CFDI. Espeja construirAsiento (sugerencias-concepto):
+        //   outflow → DR Rentas / CR Bancos; inflow (reembolso, raro) invertido.
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accRentas.id,    monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accRentas.id,    monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
+        }
+        continue;
+      }
+
+      if (tag === "FINANCIAL_INCOME") {
+        // Intereses/rendimientos ganados:
+        //   inflow → DR Bancos / CR Otros ingresos; outflow (ajuste) invertido.
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,      monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accOtrosIngresos.id, monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accOtrosIngresos.id, monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,      monto: absAmount, tipo: "ABONO" });
         }
         continue;
       }

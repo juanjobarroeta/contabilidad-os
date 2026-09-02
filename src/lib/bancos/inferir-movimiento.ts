@@ -38,7 +38,9 @@ export type TagSinFactura =
   | "LOAN_GIVEN"
   | "CAPITAL_CONTRIBUTION"
   | "NON_DEDUCTIBLE"
-  | "INTERNAL_TRANSFER";
+  | "INTERNAL_TRANSFER"
+  | "RENT"
+  | "FINANCIAL_INCOME";
 
 /**
  * Las categorías que la mesa ofrece de un toque — las MISMAS del tab
@@ -52,6 +54,8 @@ export const CATEGORIAS_MESA: { tag: TagSinFactura | null; label: string }[] = [
   { tag: "LOAN_RECEIVED", label: "Préstamo recibido" },
   { tag: "LOAN_GIVEN", label: "Préstamo otorgado" },
   { tag: "CAPITAL_CONTRIBUTION", label: "Aportación de capital" },
+  { tag: "RENT", label: "Renta sin CFDI" },
+  { tag: "FINANCIAL_INCOME", label: "Intereses ganados" },
   { tag: "NON_DEDUCTIBLE", label: "No deducible" },
   { tag: "INTERNAL_TRANSFER", label: "Transferencia entre cuentas" },
   { tag: null, label: "Ignorar" },
@@ -78,7 +82,9 @@ export function familiaATag(familia: FamiliaConcepto): TagSinFactura | null {
       return familia;
     case "RENT":
     case "FINANCIAL_INCOME":
-      return null;
+      // Desde que IGNORED_TAGS_VALIDOS las conoce, postMonth regenera su
+      // asiento igual que las demás — la mesa ya puede ofrecerlas.
+      return familia;
   }
 }
 
