@@ -5,8 +5,8 @@
 // inflacionarios. Versionado/git-tracked como las tarifas; `verificado: false`
 // hasta cotejar contra la fuente oficial (INEGI / DOF).
 //
-// COBERTURA ACTUAL: ene–dic 2016–2025 (años completos) + ene–may 2026 (junio aún
-// no lo publica INEGI). Cubre los meses que pide la actualización de pérdidas
+// COBERTURA ACTUAL: ene–dic 2016–2025 (años completos) + ene–jul 2026 (agosto
+// se publica ~10-sep). Cubre los meses que pide la actualización de pérdidas
 // (Art. 57: jul, dic del origen; jun de aplicación) y de la depreciación. Para
 // meses no cargados `inpc()` devuelve null y el factor cae a 1.0 (nominal).
 // Valores cotejados contra Banxico SIE serie SP1 (redondeo a 3 decimales).
@@ -29,7 +29,7 @@ const INPC: Record<number, Fila> = {
   2023: [127.336, 128.046, 128.389, 128.363, 128.084, 128.214, 128.832, 129.545, 130.120, 130.609, 131.445, 132.373],
   2024: [133.555, 133.681, 134.065, 134.336, 134.087, 134.594, 136.003, 136.013, 136.080, 136.828, 137.424, 137.949],
   2025: [138.343, 138.726, 139.161, 139.620, 140.012, 140.405, 140.780, 140.867, 141.197, 141.708, 142.645, 143.042],
-  2026: [143.588, 144.307, 145.544, 145.831, 145.527, null, null, null, null, null, null, null],
+  2026: [143.588, 144.307, 145.544, 145.831, 145.527, 145.131, 145.169, null, null, null, null, null],
 };
 
 /** INPC de un (año, mes 1-12). Null si no está cargado. */

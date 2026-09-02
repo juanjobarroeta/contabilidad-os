@@ -19,7 +19,7 @@ describe("factorInpc()", () => {
   });
 
   it("falls back to nominal (1, completo false) when an INPC is missing", () => {
-    expect(factorInpc({ year: 2023, month: 12 }, { year: 2026, month: 6 })).toEqual({
+    expect(factorInpc({ year: 2023, month: 12 }, { year: 2026, month: 8 })).toEqual({
       factor: 1,
       completo: false,
     });
@@ -108,8 +108,10 @@ describe("aplicarPerdidas() — FIFO contra la utilidad", () => {
 
   it("marca actualización incompleta cuando falta el INPC (cae a nominal)", () => {
     // dic-2023 → jun-2026 (no cargado) ⇒ factor 1, completo false
+    // Aplicación en 2027: su junio (mes de aplicación, Art. 57) aún no puede
+    // estar cargado — antes se usaba 2026 y el test caducó al cargar jun-2026.
     const recs = [recAt(2023, 40_000, "2023-12")];
-    const r = aplicarPerdidas(recs, 100_000, 2026);
+    const r = aplicarPerdidas(recs, 100_000, 2027);
     expect(r.algunaIncompleta).toBe(true);
     expect(r.totalDisponible).toBe(40_000); // ×1 nominal
     expect(r.totalAplicado).toBe(40_000);

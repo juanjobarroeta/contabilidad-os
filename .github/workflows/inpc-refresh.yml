@@ -14,6 +14,10 @@ on:
     - cron: "0 16 12 * *" # day 12 monthly, ~10:00 CT, after INEGI's day-10 publish
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   freshness:
     runs-on: ubuntu-latest
@@ -26,3 +30,17 @@ jobs:
       - run: npm ci
       - name: Check INPC series is current
         run: npm run fiscal:actualizacion-check -- --strict
+      # Un rojo mensual por correo se pierde (pasó: jun, jul y ago de 2026
+      # fallaron sin que nadie lo viera; el atraso lo delató la tarjeta de
+      # frescura en la app). Un issue abierto no se pierde.
+      - name: Abrir issue si la serie está atrasada
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "INPC atrasado in:title" --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "INPC atrasado — falta el mes publicado" \
+              --body "El check mensual de frescura (--strict) falló: falta cargar el INPC del mes en src/lib/fiscal/inpc.ts. INEGI lo publica ~día 10 (DOF); Banxico SIE serie SP1 lo tiene el mismo día. Corre: npm run fiscal:actualizacion-check"
+          fi
