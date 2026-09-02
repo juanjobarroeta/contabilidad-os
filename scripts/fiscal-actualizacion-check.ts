@@ -21,12 +21,16 @@ console.log("INPC por periodo");
 check("inpc '2024-01' (serie base) = 133.555", inpcPeriodo("2024-01") === 133.555, `got ${inpcPeriodo("2024-01")}`);
 check("inpc '2025-12' (suplemento) = 143.042", inpcPeriodo("2025-12") === 143.042, `got ${inpcPeriodo("2025-12")}`);
 check("periodo mal formado → null", inpcPeriodo("2025/12") === null);
-check("mes no cargado → null", inpcPeriodo("2023-12") === null);
+// Un periodo FUERA de la cobertura (la serie empieza en 2016): usar un mes que
+// algún día se cargue (pasó con 2023-12) convierte este check en un rojo falso
+// que enmascara al de frescura — el workflow estuvo rojo por ESTO mientras el
+// atraso real crecía sin que nadie lo viera.
+check("mes no cargado → null", inpcPeriodo("2015-01") === null);
 
 console.log("factor de actualización (Art. 17-A CFF)");
 check("dic2024→dic2025 = 1.0369", factorActualizacion("2024-12", "2025-12") === 1.0369, `got ${factorActualizacion("2024-12", "2025-12")}`);
 check("actualizar 100,000 dic24→dic25 = 103,690", actualizar(100000, "2024-12", "2025-12") === 103690, `got ${actualizar(100000, "2024-12", "2025-12")}`);
-check("factor con periodo faltante → null", factorActualizacion("2024-12", "2023-12") === null);
+check("factor con periodo faltante → null", factorActualizacion("2024-12", "2015-01") === null);
 
 console.log("frescura INPC");
 const atraso = mesesAtrasadoInpc();
