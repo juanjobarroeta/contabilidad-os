@@ -8,6 +8,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { inferirBancoPorDescripciones } from "./banco-por-descripcion";
 import { registrarBitacora } from "@/lib/audit";
 
 // Intención de "deshacer la última importación": un verbo de reversión + una
@@ -34,6 +35,10 @@ export interface LoteImportado {
   /** Descripción del movimiento más reciente del lote: con `banco` en null en
    *  lotes viejos, es lo que deja reconocer un archivo ajeno de un vistazo. */
   ejemplo: string | null;
+  /** Cuando `banco` es null (lotes previos a 2026-09), el banco que se
+   *  reconoce por la firma de sus descripciones — null si no es claro.
+   *  Es una inferencia: la UI lo muestra como «parece de…», no como dato. */
+  bancoInferido: string | null;
   /** Movimientos del lote que aún se pueden borrar (no conciliados). */
   borrables: number;
   /** Movimientos ya conciliados que se conservarían. */
@@ -96,6 +101,7 @@ export async function findUltimoLoteImportado(companyId: string): Promise<LoteIm
     cuentaEtiqueta,
     cuentaBanco: batch.bankAccount.banco,
     ejemplo: null,
+    bancoInferido: null,
     borrables,
     conciliados: total - borrables,
     tienePdf: batch.archivoNombre != null,
@@ -126,12 +132,15 @@ export async function listarLotesImportados(
 
   return Promise.all(
     batches.map(async (batch) => {
-      const [borrables, total, reciente] = await Promise.all([
+      const [borrables, total, muestra] = await Promise.all([
         prisma.bankTransaction.count({ where: whereBorrables(batch.id, companyId) }),
         prisma.bankTransaction.count({ where: { importBatchId: batch.id, companyId } }),
-        prisma.bankTransaction.findFirst({
+        // Los más recientes: el primero es la descripción de muestra y el
+        // conjunto alimenta la inferencia del banco en lotes sin `banco`.
+        prisma.bankTransaction.findMany({
           where: { importBatchId: batch.id, companyId },
           orderBy: { fecha: "desc" },
+          take: 25,
           select: { descripcion: true },
         }),
       ]);
@@ -146,7 +155,10 @@ export async function listarLotesImportados(
         cuentaEtiqueta:
           `${batch.bankAccount.banco} ${batch.bankAccount.nombre}` + (t ? ` (terminación ${t})` : ""),
         cuentaBanco: batch.bankAccount.banco,
-        ejemplo: reciente?.descripcion ?? null,
+        ejemplo: muestra[0]?.descripcion ?? null,
+        bancoInferido: batch.banco
+          ? null
+          : inferirBancoPorDescripciones(muestra.map((m) => m.descripcion)),
         borrables,
         conciliados: total - borrables,
         tienePdf: batch.archivoNombre != null,
@@ -205,6 +217,7 @@ async function materializarClusterSinLote(companyId: string): Promise<LoteImport
       `${ultimo.bankAccount.banco} ${ultimo.bankAccount.nombre}` + (t ? ` (terminación ${t})` : ""),
     cuentaBanco: ultimo.bankAccount.banco,
     ejemplo: null,
+    bancoInferido: null,
     borrables,
     conciliados: total - borrables,
     tienePdf: false,
