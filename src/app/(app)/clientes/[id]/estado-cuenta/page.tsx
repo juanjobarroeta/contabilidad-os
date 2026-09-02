@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
+import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import { ChevronLeft, Printer } from "lucide-react";
 import { Money } from "@/components/ui/Money";
 import { StatTile, StatStrip } from "@/components/ui/StatTile";
@@ -61,6 +62,9 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
   const [data, setData] = useState<EstadoHub | null>(null);
   const [pendientesRep, setPendientesRep] = useState<RepPendiente[] | null>(null);
   const [emitiendoRep, setEmitiendoRep] = useState<string | null>(null);
+  // Ver el CFDI aquí mismo: el link a /facturas?q= sacaba del estado de
+  // cuenta (y con el filtro del mes en curso, la búsqueda fallaba).
+  const [verFacturaId, setVerFacturaId] = useState<string | null>(null);
   const [avisoRep, setAvisoRep] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -382,9 +386,13 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
                       <TD className="text-[12.5px]">{rep.folio ?? "—"}</TD>
                       <TD className="max-w-[260px] truncate font-mono text-[11.5px] text-cos-ink-soft">
                         {rep.uuid ? (
-                          <Link href={`/facturas?q=${rep.uuid}`} className="hover:text-cos-brand-ink hover:underline">
+                          <button
+                            type="button"
+                            onClick={() => setVerFacturaId(rep.id)}
+                            className="hover:text-cos-brand-ink hover:underline"
+                          >
                             {rep.uuid}
-                          </Link>
+                          </button>
                         ) : "—"}
                       </TD>
                       <TD numeric><Money value={rep.total} size={12} /></TD>
@@ -404,6 +412,9 @@ export default function EstadoCuentaPage({ params }: { params: Promise<{ id: str
             Cobros con evidencia bancaria conciliada. Documento informativo — no sustituye a los CFDI.
           </footer>
         </>
+      )}
+      {verFacturaId && (
+        <RepresentacionImpresa invoiceId={verFacturaId} onClose={() => setVerFacturaId(null)} />
       )}
     </div>
   );

@@ -373,7 +373,13 @@ export default function FacturasPage() {
   // rail no remonta la página.
   const qParam = searchParams.get("q");
   useEffect(() => {
-    if (qParam) setQ(qParam);
+    if (qParam) {
+      setQ(qParam);
+      // Un deep-link con búsqueda (UUID/folio desde estado de cuenta, mesa,
+      // nómina…) casi nunca es del mes en curso: con la ventana del periodo
+      // actual la búsqueda "fallaba" en silencio. Se abre todo el historial.
+      setPeriodo(PERIODO_TODO);
+    }
   }, [qParam]);
 
   function showToast(m: string) {
