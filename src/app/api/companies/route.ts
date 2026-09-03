@@ -12,6 +12,7 @@ import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 import { encryptNullable } from "@/lib/crypto";
 import { parseCertExpiry } from "@/lib/fiel";
 import { validarCredencialSat } from "@/lib/sat-fiel";
+import { registrarAceptaciones } from "@/lib/legal/aceptaciones";
 
 // GET /api/companies — sesión web O token de servicio (Authorization: Bearer),
 // para que un satélite con backend propio (JCPT) pueda enumerar sus empresas
@@ -120,10 +121,10 @@ export async function POST(req: Request) {
   // Bearer-aware: los satélites (Automotriz, …) crean la empresa desde su
   // wizard de onboarding con el token de /api/auth/token; la web sigue
   // entrando por la cookie de NextAuth (requireUser intenta ambos).
-  let session: { user: { id: string } };
+  let session: { user: { id: string; email: string | null } };
   try {
     const user = await requireUser(req);
-    session = { user: { id: user.id } };
+    session = { user: { id: user.id, email: user.email } };
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
     throw e;
@@ -149,6 +150,7 @@ export async function POST(req: Request) {
     plan,
     csfObligaciones,
     manifiestoAck,
+    aceptaMandatoEfirma,
     onboardingPackage,
     grupoId,
     modulos,
@@ -164,6 +166,9 @@ export async function POST(req: Request) {
     plan?: string;
     csfObligaciones?: string[];
     manifiestoAck?: boolean;
+    // Autorización expresa de uso de la e.firma (/legal/mandato-efirma).
+    // Obligatoria cuando se carga la e.firma; queda registrada en LegalAcceptance.
+    aceptaMandatoEfirma?: boolean;
     onboardingPackage?: {
       imss?: {
         registroPatronal?: string | null;
@@ -341,6 +346,12 @@ export async function POST(req: Request) {
       rfcEsperado: rfcNorm, esperado: "FIEL",
     });
     if (!v.ok) return NextResponse.json({ error: `e.firma: ${v.error}` }, { status: 422 });
+    if (aceptaMandatoEfirma !== true) {
+      return NextResponse.json(
+        { error: "Para guardar la e.firma debes aceptar la Autorización de uso de la e.firma.", codigo: "MANDATO_EFIRMA_REQUERIDO" },
+        { status: 400 },
+      );
+    }
   }
   if (csdCer && csdKey && csdPassword) {
     const v = validarCredencialSat({
@@ -349,6 +360,7 @@ export async function POST(req: Request) {
     });
     if (!v.ok) return NextResponse.json({ error: `CSD: ${v.error}` }, { status: 422 });
   }
+  const guardaEfirma = Boolean(fielCer && fielKey && fielPassword);
 
   // Encrypt credential material before persisting. In production
   // encryptSecret/encryptNullable throw if CREDENTIALS_ENCRYPTION_KEY is
@@ -392,8 +404,30 @@ export async function POST(req: Request) {
     throw e;
   }
 
+  // La empresa y, si trae e.firma, la evidencia de autorización de uso van en
+  // la MISMA transacción: no queda e.firma guardada sin su autorización.
   async function crearCompany() {
-    return prisma.company.create({
+    return prisma.$transaction(async (tx) => {
+      const creada = await crearCompanyEn(tx);
+      if (guardaEfirma) {
+        await registrarAceptaciones(
+          {
+            userId: creadorId,
+            email: session.user.email,
+            companyId: creada.id,
+            documentos: ["MANDATO_EFIRMA"],
+            contexto: "onboarding",
+            req,
+          },
+          tx,
+        );
+      }
+      return creada;
+    });
+  }
+
+  async function crearCompanyEn(tx: Prisma.TransactionClient) {
+    return tx.company.create({
     data: {
       rfc: rfcNorm,
       razonSocial,

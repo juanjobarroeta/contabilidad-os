@@ -8,25 +8,34 @@ export const metadata: Metadata = {
 };
 
 /**
- * Aviso de privacidad integral conforme a los artículos 15 a 17 de la LFPDPPP.
- * Datos del responsable llenados el 2026-07-03 (persona física; actualizar
- * cuando la operación migre a una sociedad).
+ * Aviso de privacidad integral conforme a la LFPDPPP. Datos del responsable
+ * llenados el 2026-07-03 (persona física; actualizar cuando la operación
+ * migre a una sociedad).
+ *
+ * Versión vigente: src/lib/legal/documentos.ts (AVISO_PRIVACIDAD.version). Al
+ * cambiar el texto de forma sustancial, actualizar la fecha aquí y allá.
+ *
+ * BORRADOR PARA REVISIÓN LEGAL (2026-09-03): se quitaron las referencias a
+ * artículos numerados (la LFPDPPP de 2010 fue sustituida por una nueva ley en
+ * 2025 y la numeración cambió), se corrigió la declaración sobre datos
+ * sensibles en nómina y se añadieron la notificación de vulneraciones y la
+ * evidencia de aceptación. Un abogado debe validar las referencias legales y
+ * la autoridad competente vigente.
  */
 export default function AvisoDePrivacidadPage() {
   return (
     <>
       <h1>Aviso de Privacidad</h1>
       <p className="text-cos-ink-faint">
-        Última actualización: 3 de julio de 2026
+        Última actualización: 3 de septiembre de 2026
       </p>
 
       <p>
         El presente aviso de privacidad se emite en cumplimiento de la Ley
         Federal de Protección de Datos Personales en Posesión de los
-        Particulares (en adelante, la «LFPDPPP»), su Reglamento y los
-        Lineamientos del Aviso de Privacidad, y aplica al tratamiento de datos
-        personales realizado a través de la plataforma ContabilidadOS (en
-        adelante, la «Plataforma»).
+        Particulares vigente (en adelante, la «LFPDPPP») y demás disposiciones
+        aplicables, y aplica al tratamiento de datos personales realizado a
+        través de la plataforma ContabilidadOS (en adelante, la «Plataforma»).
       </p>
 
       <h2>1. Identidad y domicilio del responsable</h2>
@@ -84,8 +93,19 @@ export default function AvisoDePrivacidadPage() {
         </li>
       </ul>
       <p>
-        El Responsable no recaba deliberadamente datos personales sensibles en
-        los términos del artículo 3, fracción VI de la LFPDPPP.
+        El Responsable no recaba datos personales sensibles de sus usuarios.
+        La información de nómina que el cliente incorpora puede incluir datos
+        sensibles de sus empleados (por ejemplo, incapacidades médicas o
+        afiliación sindical); el Responsable los trata únicamente como
+        encargado, por cuenta del cliente, quien es responsable de contar con
+        el consentimiento y el aviso de privacidad que la ley exige frente a
+        sus empleados.
+      </p>
+      <p>
+        Al aceptar este aviso y los Términos y Condiciones, el Responsable
+        registra además la fecha y hora, la versión aceptada, la dirección IP
+        y el navegador desde el que se otorgó la aceptación, como evidencia
+        del consentimiento.
       </p>
 
       <h2>3. Finalidades del tratamiento</h2>
@@ -170,7 +190,7 @@ export default function AvisoDePrivacidadPage() {
         procesen fuera de los Estados Unidos Mexicanos. En todos los casos, el
         Responsable exige a sus encargados condiciones de tratamiento
         equivalentes a las de este aviso. Fuera de los supuestos anteriores y
-        de los previstos en el artículo 37 de la LFPDPPP (por ejemplo,
+        de los que la LFPDPPP permite sin consentimiento (por ejemplo,
         requerimientos de autoridad competente), sus datos no serán
         transferidos a terceros sin su consentimiento.{" "}
         <strong>El Responsable no vende datos personales.</strong>
@@ -229,7 +249,18 @@ export default function AvisoDePrivacidadPage() {
       <p>
         Los datos personales se conservarán durante el tiempo necesario para
         cumplir con las finalidades descritas y con las obligaciones legales
-        aplicables, incluidos los plazos de conservación en materia fiscal.
+        aplicables, incluidos los plazos de conservación en materia fiscal. La
+        bitácora de seguridad y el registro de aceptación de los documentos
+        legales se conservan después de la baja de la cuenta, por el tiempo
+        necesario para la defensa de reclamaciones.
+      </p>
+      <p>
+        <strong>Vulneraciones de seguridad.</strong> Si ocurre una
+        vulneración de seguridad que afecte de forma significativa sus
+        derechos patrimoniales o morales, el Responsable se lo informará sin
+        dilación indebida al correo registrado en su cuenta, indicando la
+        naturaleza del incidente, los datos comprometidos, las medidas
+        adoptadas y las recomendaciones para protegerse.
       </p>
 
       <h2>8. Cookies y almacenamiento local</h2>
@@ -253,7 +284,8 @@ export default function AvisoDePrivacidadPage() {
 
       <p className="pt-4">
         Consulte también nuestros{" "}
-        <Link href="/legal/terminos">Términos y Condiciones</Link>.
+        <Link href="/legal/terminos">Términos y Condiciones</Link> y la{" "}
+        <Link href="/legal/mandato-efirma">Autorización de uso de la e.firma</Link>.
       </p>
     </>
   );

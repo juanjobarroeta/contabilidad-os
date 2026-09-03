@@ -19,6 +19,9 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Aceptación expresa (clickwrap): el botón queda deshabilitado hasta marcarla
+  // y el servidor la exige también (no se confía sólo en la UI).
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
 
   // Invitación: del enlace (?invite=) o tecleada como código. Se previsualiza
   // para mostrar el banner de condiciones antes de registrarse.
@@ -61,7 +64,7 @@ export default function SignupPage() {
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password, ...(inviteToken.trim() ? { inviteToken: inviteToken.trim() } : {}) }),
+      body: JSON.stringify({ name, email, password, aceptaTerminos, ...(inviteToken.trim() ? { inviteToken: inviteToken.trim() } : {}) }),
     });
 
     if (!res.ok) {
@@ -179,18 +182,27 @@ export default function SignupPage() {
               </p>
             )}
 
-            <button type="submit" disabled={loading}
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-cos-line px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={aceptaTerminos}
+                onChange={(e) => setAceptaTerminos(e.target.checked)}
+                required
+                className="mt-0.5 h-4 w-4 shrink-0 accent-cos-brand"
+              />
+              <span className="text-[12.5px] leading-relaxed text-cos-ink-soft">
+                He leído y acepto los{" "}
+                <Link href="/legal/terminos" target="_blank" rel="noopener noreferrer" className="font-medium text-cos-brand-ink hover:underline">Términos y Condiciones</Link>{" "}
+                y el{" "}
+                <Link href="/legal/aviso-de-privacidad" target="_blank" rel="noopener noreferrer" className="font-medium text-cos-brand-ink hover:underline">Aviso de Privacidad</Link>.
+              </span>
+            </label>
+
+            <button type="submit" disabled={loading || !aceptaTerminos}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-cos-brand py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-cos-brand-deep disabled:opacity-50">
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {loading ? "Creando cuenta…" : "Empezar prueba gratis"}
             </button>
-
-            <p className="text-center text-[12px] leading-relaxed text-cos-ink-faint">
-              Al crear tu cuenta aceptas los{" "}
-              <Link href="/legal/terminos" className="font-medium text-cos-brand-ink hover:underline">Términos y Condiciones</Link>{" "}
-              y el{" "}
-              <Link href="/legal/aviso-de-privacidad" className="font-medium text-cos-brand-ink hover:underline">Aviso de Privacidad</Link>.
-            </p>
           </form>
 
           {/* señales de confianza */}

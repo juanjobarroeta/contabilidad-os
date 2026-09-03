@@ -13,6 +13,8 @@ import { CuentaSuspendida } from "@/components/layout/CuentaSuspendida";
 import { isOperador } from "@/lib/authz";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { PushOptIn } from "@/components/pwa/PushOptIn";
+import { AceptacionLegalGate } from "@/components/legal/AceptacionLegalGate";
+import { pendientesDeUsuario } from "@/lib/legal/aceptaciones";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -103,8 +105,13 @@ export default async function AppLayout({
     return <CuentaSuspendida />;
   }
 
+  // Documentos legales de cuenta (Términos, Aviso) sin aceptar en su versión
+  // vigente: se monta el gate encima de la app hasta que el usuario acepte.
+  const legalPendientes = await pendientesDeUsuario(session.user.id!);
+
   return (
     <CompanyProvider userId={session.user.id!}>
+      <AceptacionLegalGate pendientes={legalPendientes} />
       <div className="flex h-screen bg-cos-paper">
         <Sidebar user={session.user} esOperador={esOperador} />
         {/* pt-14 on mobile clears the fixed top bar; none on md+ */}

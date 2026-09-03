@@ -33,6 +33,12 @@ export default function LegalLayout({
             >
               Términos y Condiciones
             </Link>
+            <Link
+              href="/legal/mandato-efirma"
+              className="text-cos-ink-soft hover:text-cos-brand-ink hover:underline"
+            >
+              Uso de la e.firma
+            </Link>
           </nav>
         </div>
       </header>
@@ -60,6 +66,9 @@ export default function LegalLayout({
           </Link>
           <Link href="/legal/terminos" className="hover:text-cos-brand-ink hover:underline">
             Términos y Condiciones
+          </Link>
+          <Link href="/legal/mandato-efirma" className="hover:text-cos-brand-ink hover:underline">
+            Uso de la e.firma
           </Link>
         </div>
       </footer>
