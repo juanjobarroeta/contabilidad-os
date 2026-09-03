@@ -26,6 +26,19 @@ function authorized(req: Request): boolean {
   return req.headers.get("x-cron-secret") === secret;
 }
 
+/**
+ * Señal para el ritmo adaptativo del scheduler (lib/cron/ritmo.ts). El cuerpo
+ * original (`acusesParseados`, `topeAlcanzado`) no usa ninguna de las llaves que
+ * el scheduler reconoce, así que una corrida que se cortaba por el tope de 10
+ * acuses dormía 6 h como si no quedara nada — con ~20 empresas y un tope
+ * compartido, una empresa recién extraída en Syntage podía tardar días en
+ * recibir sus acuses (caso FRC ABOGADOS, sep-2026). `completado=false` hace que
+ * vuelva al piso del job (15 min, MIN_CARO) hasta drenar el pendiente.
+ */
+function señalRitmo(acusesParseados: number, topeAlcanzado: boolean) {
+  return { completado: !topeAlcanzado, procesadas: acusesParseados };
+}
+
 async function handle(req: Request) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const sp = new URL(req.url).searchParams;
@@ -35,9 +48,29 @@ async function handle(req: Request) {
   const maxAcuses = Number.isFinite(maxParam) && maxParam > 0 ? maxParam : undefined;
   try {
     if (only) {
-      return NextResponse.json({ ok: true, ...(await backfillDeclaracionesMensuales(only, undefined, { maxAcuses })) });
+      const r = await backfillDeclaracionesMensuales(only, undefined, { maxAcuses });
+      console.log(
+        `[declaraciones-backfill] ${r.rfc ?? only}: acuses=${r.acusesParseados} meses=${r.mesesCreados}` +
+          `${r.topeAlcanzado ? " tope" : ""}${r.error ? ` error=${r.error}` : ""}`,
+      );
+      return NextResponse.json({ ok: true, ...r, ...señalRitmo(r.acusesParseados, r.topeAlcanzado === true) });
     }
-    return NextResponse.json({ ok: true, ...(await backfillAllDeclaracionesMensuales({ maxAcuses })) });
+    const r = await backfillAllDeclaracionesMensuales({ maxAcuses });
+    // Resumen en el log de Railway: antes una corrida exitosa no dejaba rastro
+    // (el scheduler sólo loguea errores HTTP), así que no había forma de saber si
+    // el job llegó a una empresa o se quedó sin presupuesto antes.
+    const conMovimiento = r.resultados.filter((x) => x.acusesParseados > 0 || x.mesesCreados > 0 || x.error);
+    console.log(
+      `[declaraciones-backfill] empresas=${r.empresas} acuses=${r.acusesParseados} meses=${r.mesesCreados}` +
+        ` errores=${r.errores}${r.topeAlcanzado ? " tope" : ""}` +
+        (conMovimiento.length
+          ? " · " +
+            conMovimiento
+              .map((x) => `${x.rfc ?? x.companyId}:${x.acusesParseados}/${x.mesesCreados}${x.error ? `!${x.error}` : ""}`)
+              .join(" ")
+          : ""),
+    );
+    return NextResponse.json({ ok: true, ...r, ...señalRitmo(r.acusesParseados, r.topeAlcanzado) });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },
