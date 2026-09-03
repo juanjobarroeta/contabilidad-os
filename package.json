@@ -33,6 +33,7 @@
     "fiscal:cumplimiento-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-cumplimiento-check.ts",
     "fiscal:efos-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-efos-check.ts",
     "fiscal:syntage-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/syntage-check.ts",
+    "copiloto:eval": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/copiloto-eval.ts",
     "automotriz:ingest-claves": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/automotriz-ingest-claves.ts",
     "prepare": "lefthook install || true",
     "test:db": "vitest run -c vitest.integration.config.ts"

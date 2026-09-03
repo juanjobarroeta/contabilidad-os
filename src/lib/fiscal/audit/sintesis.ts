@@ -131,7 +131,10 @@ export async function generarSintesisAuditoria(companyId: string): Promise<{
   // Narrativa (best-effort): si Claude falla, los grupos deterministas quedan.
   let resumen: string | null = null;
   try {
-    const model = "claude-sonnet-4-5";
+    // Configurable por despliegue (AI_AUDIT_MODEL); Sonnet 4.5 sigue siendo el
+    // default: la síntesis es un resumen de 220 palabras sobre datos ya
+    // agrupados, no necesita el modelo del chat.
+    const model = process.env.AI_AUDIT_MODEL ?? "claude-sonnet-4-5";
     const response = await anthropic().messages.create({
       model,
       max_tokens: 700,

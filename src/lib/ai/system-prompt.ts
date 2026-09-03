@@ -5,7 +5,28 @@ interface CompanyContext {
   codigoPostal: string;
 }
 
-export function buildSystemPrompt(company: CompanyContext): string {
+/** Contexto de navegación del cliente: qué página tiene abierta el usuario. */
+export interface ContextoNavegacion {
+  /** Ruta de la app (pathname + query), p.ej. "/bancos?tab=historico". */
+  ruta?: string;
+}
+
+/**
+ * Bloque «Dónde está el usuario». El chat vive en todas las páginas, pero el
+ * modelo no sabía en cuál: «¿por qué sale esto?» desde /bancos y desde
+ * /declaraciones son preguntas distintas. La ruta se manda desde el cliente y
+ * aquí se traduce a lo que el usuario está mirando.
+ */
+function navegacionBlock(ctx?: ContextoNavegacion): string {
+  const ruta = ctx?.ruta?.trim();
+  if (!ruta) return "";
+  return `
+
+## Dónde está el usuario ahora
+Tiene abierta la página \`${ruta}\` de la app. Úsala para resolver referencias como "esto", "aquí", "este mes" o "lo que ves": /dashboard es la portada de obligaciones, /bancos es conciliación bancaria (tabs: conciliacion, movimientos, cuentas, historico), /facturas son los CFDIs, /declaraciones son impuestos, /nomina es nómina, /contabilidad/* es el cierre contable y sus reportes, /cumplimiento es opinión de cumplimiento y CSF. Si la ruta no te dice nada, ignórala.`;
+}
+
+export function buildSystemPrompt(company: CompanyContext, contexto?: ContextoNavegacion): string {
   const now = new Date();
   const hoyIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(now);
   const hoyLargo = new Intl.DateTimeFormat("es-MX", {
@@ -25,7 +46,7 @@ Hoy es ${hoyLargo} (${hoyIso}), zona horaria de México. Usa SIEMPRE esta fecha 
 - **Razón social:** ${company.razonSocial}
 - **RFC:** ${company.rfc}
 - **Régimen fiscal:** ${company.regimenFiscal}
-- **Código postal:** ${company.codigoPostal}
+- **Código postal:** ${company.codigoPostal}${navegacionBlock(contexto)}
 
 ## Tu rol
 Eres un contador virtual experto en fiscalidad mexicana. Ayudas con:

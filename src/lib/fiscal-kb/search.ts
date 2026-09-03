@@ -62,6 +62,11 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
   const fecha = opts.fechaVigencia ?? new Date();
   const limit = Math.min(opts.limit ?? DEFAULT_LIMIT, 20);
   const minSim = opts.minSimilarity ?? DEFAULT_MIN_SIMILARITY;
+  // Se piden MÁS filas de las que se entregan: el piso de similitud se aplica
+  // en JS y antes se aplicaba sobre las `limit` primeras — una consulta cuyos
+  // 6 vecinos más cercanos fueran débiles devolvía CERO aunque hubiera
+  // artículos buenos en la posición 7. Cortar a `limit` después del piso.
+  const candidatos = Math.min(limit * 4, 40);
 
   const vec = toVectorLiteral(await embedQuery(query));
 
@@ -94,10 +99,11 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
       AND (c."vigenciaHasta" IS NULL OR c."vigenciaHasta" >= ${fecha})
       ${fuenteFilter}
     ORDER BY c."embedding" <=> ${vec}::vector
-    LIMIT ${limit}`;
+    LIMIT ${candidatos}`;
 
   const resultados = rows
     .filter((r) => r.similitud >= minSim)
+    .slice(0, limit)
     .map((r) => ({
       cita: buildCita(r.source, r.clave, r.articulo, r.titulo),
       texto: r.texto,

@@ -19,6 +19,12 @@ describe("llmCostMicroUsd", () => {
     // 1M input tokens of Sonnet ($3/Mtok) = $3 = 3,000,000 µUSD
     expect(llmCostMicroUsd("claude-sonnet-4-5", 1_000_000, 0)).toBe(3_000_000);
   });
+  it("prices the chat model (claude-fable-5) at its own rate, not the default", () => {
+    // $10/Mtok in, $50/Mtok out — si cayera al default (Sonnet) sería 3_000_000.
+    expect(llmCostMicroUsd("claude-fable-5", 1_000_000, 0)).toBe(10_000_000);
+    expect(llmCostMicroUsd("claude-fable-5", 0, 1_000_000)).toBe(50_000_000);
+    expect(llmCostMicroUsd("claude-opus-4-8", 1_000_000, 0)).toBe(5_000_000);
+  });
   it("is zero for zero tokens", () => {
     expect(llmCostMicroUsd("claude-sonnet-4-5", 0, 0)).toBe(0);
   });

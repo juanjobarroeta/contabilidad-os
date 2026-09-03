@@ -1,0 +1,98 @@
+name: Eval del copiloto (manual)
+
+# Corre el eval del copiloto fiscal contra el despliegue (donde vive la KB) por
+# páginas, agrega el resumen y guarda los resultados como artefacto. Es la
+# brújula del plan «que razone como los mejores contadores»: cada fase se
+# aprueba sólo si mueve estos números.
+#
+# Cuesta tokens (agente + juez, subtipo ai.eval en CostEvent). Con `juez=false`
+# y `agente=false` sólo mide recuperación de la KB — gratis (embeddings).
+
+on:
+  workflow_dispatch:
+    inputs:
+      agente:
+        description: "Correr el agente real (cuesta tokens)"
+        required: false
+        default: true
+        type: boolean
+      juez:
+        description: "Correr el juez LLM (cuesta tokens; requiere agente)"
+        required: false
+        default: true
+        type: boolean
+      pagina:
+        description: "Preguntas por request (≤ 20; cada request tiene 300 s)"
+        required: false
+        default: "6"
+        type: string
+      ids:
+        description: "Subconjunto de ids separados por coma (vacío = todas)"
+        required: false
+        default: ""
+        type: string
+      baseUrl:
+        description: "URL del despliegue"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Correr por páginas
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          AGENTE: ${{ inputs.agente }}
+          JUEZ: ${{ inputs.juez }}
+          PAGINA: ${{ inputs.pagina }}
+          IDS: ${{ inputs.ids }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+          IDS_JSON="$(printf '%s' "${IDS}" | tr -d '[:space:]' | jq -R 'if . == "" then [] else split(",") end')"
+          OFFSET=0; FIN=false; : > resultados.jsonl
+          while [ "$FIN" != "true" ]; do
+            BODY="$(jq -cn --argjson o "$OFFSET" --argjson l "${PAGINA:-6}" --argjson a "$AGENTE" --argjson j "$JUEZ" --argjson ids "$IDS_JSON" \
+              '{offset:$o, limit:$l, agente:$a, juez:$j, ids:$ids}')"
+            RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/admin/copiloto-eval" \
+              -H "Content-Type: application/json" -H "x-cron-secret: ${CRON_SECRET}" -d "$BODY")"
+            echo "$RESP" | jq -c '.resultados[]' >> resultados.jsonl
+            echo "$RESP" | jq '{offset, procesadas, siguiente, fin, ms, resumenPagina}'
+            FIN="$(echo "$RESP" | jq -r '.fin')"
+            NEXT="$(echo "$RESP" | jq -r '.siguiente')"
+            if [ "$NEXT" = "$OFFSET" ]; then echo "::error::La página no avanzó"; exit 1; fi
+            OFFSET="$NEXT"
+          done
+
+      - name: Resumen
+        run: |
+          set -euo pipefail
+          jq -s '{
+            n: length,
+            conError: map(select(.error)) | length,
+            recuperacionHit: (map(select(.error|not)) as $ok | if ($ok|length)==0 then null else (($ok|map(select(.recuperacion.hit))|length) * 100 / ($ok|length) | floor) end),
+            citaPresente: (map(select(.respuesta)) as $r | if ($r|length)==0 then null else (($r|map(select(.respuesta.citaPresente))|length) * 100 / ($r|length) | floor) end),
+            inventaCitas: (map(select(.respuesta)) as $r | if ($r|length)==0 then null else (($r|map(select((.respuesta.citasFueraDeKB|length)>0))|length) * 100 / ($r|length) | floor) end),
+            fundamentoCorrecto: (map(select(.juez)) as $j | if ($j|length)==0 then null else (($j|map(select(.juez.fundamentoCorrecto))|length) * 100 / ($j|length) | floor) end),
+            noInventa: (map(select(.juez)) as $j | if ($j|length)==0 then null else (($j|map(select(.juez.noInventa))|length) * 100 / ($j|length) | floor) end),
+            respondeLoPreguntado: (map(select(.juez)) as $j | if ($j|length)==0 then null else (($j|map(select(.juez.respondeLoPreguntado))|length) * 100 / ($j|length) | floor) end)
+          }' resultados.jsonl | tee resumen.json
+          echo "## Eval del copiloto" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"; cat resumen.json >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| id | KB | cita | inventa | fund. | noInv. | resp. | error |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|---|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '"| \(.id) | \(if .recuperacion.hit then "✓" else "✗" end) | \(if .respuesta then (if .respuesta.citaPresente then "✓" else "✗" end) else "–" end) | \(if .respuesta then (.respuesta.citasFueraDeKB|join(", ")) else "–" end) | \(if .juez then (if .juez.fundamentoCorrecto then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.noInventa then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.respondeLoPreguntado then "✓" else "✗" end) else "–" end) | \(.error // "") |"' resultados.jsonl >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar resultados
+        uses: actions/upload-artifact@v4
+        with:
+          name: copiloto-eval-${{ github.run_id }}
+          path: |
+            resultados.jsonl
+            resumen.json

@@ -4997,6 +4997,16 @@ model ChatMessage {
   // Autor del mensaje (para conversaciones compartidas). Null = asistente (IA).
   authorId       String?
   createdAt      DateTime @default(now())
+  // Traza del turno (sólo assistant): modelo, rondas, tools llamadas y los
+  // fundamentos que la KB devolvió. Sin esto un fallo del copiloto no se
+  // puede depurar: no se sabe si no ENCONTRÓ el artículo o si lo IGNORÓ.
+  //   { modelo, rondas, tools: [{name, ms}], fundamentos: [{cita, similitud}] }
+  meta           Json?
+  // Feedback del contador sobre la respuesta ("up" | "down") y su corrección
+  // libre. Cada corrección es una fila candidata del eval del copiloto.
+  feedback       String?
+  correccion     String?   @db.Text
+  feedbackAt     DateTime?
 
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
