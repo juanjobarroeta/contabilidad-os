@@ -90,10 +90,18 @@ export function fileRefDe(tr: Record<string, unknown>): string | null {
   return null;
 }
 
+/** Avance parcial de una corrida (para mostrar progreso mientras corre). */
+export interface AvanceBackfill {
+  acusesParseados: number;
+  mesesCreados: number;
+  /** Último periodo tocado (YYYY-MM). */
+  ultimoPeriodo: string;
+}
+
 export async function backfillDeclaracionesMensuales(
   companyId: string,
   client = new SyntageClient(),
-  opts: { maxAcuses?: number } = {},
+  opts: { maxAcuses?: number; onAvance?: (a: AvanceBackfill) => void } = {},
 ): Promise<BackfillResult> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
@@ -124,6 +132,7 @@ export async function backfillDeclaracionesMensuales(
   let mesesCreados = 0;
   let acusesParseados = 0;
   let topeAlcanzado = false;
+  const avisar = (periodo: string) => opts.onAvance?.({ acusesParseados, mesesCreados, ultimoPeriodo: periodo });
 
   for (const trRaw of returns) {
     const tr = trRaw as Record<string, unknown>;
@@ -185,6 +194,7 @@ export async function backfillDeclaracionesMensuales(
       if (e instanceof SatParsePagadoError) {
         acusesParseados++;
         await crearMarcadores(pdf);
+        avisar(periodo);
       }
       continue; // red/API sin costo: se reintenta; un acuse ilegible no detiene el resto
     }
@@ -192,6 +202,7 @@ export async function backfillDeclaracionesMensuales(
       // Pagado y completado, pero el PDF no es un acuse mensual (transcript,
       // anexo…): marcar para no volver a pagarlo.
       await crearMarcadores(pdf);
+      avisar(periodo);
       continue;
     }
 
@@ -206,6 +217,7 @@ export async function backfillDeclaracionesMensuales(
     // marcar las filas necesitadas para no re-pagar el parseo cada corrida.
     if (!tieneDatosIva && !tieneDatosIsr && !tieneDatosIeps) {
       await crearMarcadores(pdf);
+      avisar(periodo);
       continue;
     }
 
@@ -247,6 +259,7 @@ export async function backfillDeclaracionesMensuales(
       have.add(`IEPS_MENSUAL:${periodo}`);
       mesesCreados++;
     }
+    avisar(periodo);
   }
 
   return { companyId, rfc: company.rfc, mesesCreados, acusesParseados, topeAlcanzado };

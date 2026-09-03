@@ -78,22 +78,71 @@ export default function OperadorPage() {
     }
   }
 
+  // El backfill corre EN SEGUNDO PLANO en el servidor: POST arranca y responde
+  // al instante; aquí se sondea GET hasta que termine. Así una corrida de 2–4
+  // min no depende de que el navegador (Safari móvil corta a ~2.5 min) aguante
+  // la conexión, y si el operador cambia de página la corrida sigue.
+  async function leerBackfill(cid: string): Promise<any | null> {
+    const res = await fetch(
+      `/api/operador/declaraciones-backfill?companyId=${encodeURIComponent(cid)}&year=${parseInt(periodo.slice(0, 4))}`,
+    );
+    if (res.status === 403) { setDenied(true); return null; }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setError(data?.error ?? "Error"); return null; }
+    return data;
+  }
+
+  async function sondearBackfill(cid: string) {
+    setBusy("backfill");
+    try {
+      for (;;) {
+        const data = await leerBackfill(cid);
+        if (!data) return;
+        setBackfill(data);
+        if (data.corrida?.estado !== "corriendo") return;
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Al elegir empresa, mostrar si ya hay una corrida en curso (p. ej. lanzada
+  // desde otro dispositivo) y seguirla.
+  useEffect(() => {
+    if (!companyId) return;
+    let cancelado = false;
+    leerBackfill(companyId).then((data) => {
+      if (cancelado || !data) return;
+      if (data.corrida) setBackfill(data);
+      if (data.corrida?.estado === "corriendo") void sondearBackfill(companyId);
+    }).catch(() => {});
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
+
   async function call(kind: "check" | "backfill") {
     if (!companyId) { setError("Selecciona una empresa"); return; }
     setBusy(kind); setError(""); setDenied(false);
     try {
-      const res =
-        kind === "check"
-          ? await fetch(`/api/operador/cross-check?companyId=${encodeURIComponent(companyId)}&periodo=${periodo}`)
-          : await fetch(`/api/operador/declaraciones-backfill`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ companyId, year: parseInt(periodo.slice(0, 4)) }),
-            });
+      if (kind === "backfill") {
+        const res = await fetch(`/api/operador/declaraciones-backfill`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId }),
+        });
+        if (res.status === 403) { setDenied(true); return; }
+        const data = await res.json();
+        if (!res.ok) { setError(data?.error ?? "Error"); return; }
+        setCheck(null);
+        await sondearBackfill(companyId);
+        return;
+      }
+      const res = await fetch(`/api/operador/cross-check?companyId=${encodeURIComponent(companyId)}&periodo=${periodo}`);
       if (res.status === 403) { setDenied(true); return; }
       const data = await res.json();
       if (!res.ok) { setError(data?.error ?? "Error"); return; }
-      if (kind === "check") setCheck(data); else { setBackfill(data); setCheck(null); }
+      setCheck(data);
     } catch {
       setError("No se pudo completar la solicitud");
     } finally {
@@ -231,9 +280,12 @@ export default function OperadorPage() {
           <p className="text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">
             Backfill · {backfill.company?.razonSocial}
           </p>
-          <p className="mt-2 text-[14px] text-cos-ink">
+          <p className="mt-2 flex items-center gap-2 text-[14px] text-cos-ink">
+            {backfill.corrida?.estado === "corriendo" && <Loader2 className="h-4 w-4 animate-spin text-cos-brand" />}
             {backfill.backfill?.mesesCreados} filas creadas · {backfill.backfill?.acusesParseados} acuses leídos
+            {backfill.corrida?.estado === "corriendo" ? " · en curso…" : ""}
             {backfill.backfill?.topeAlcanzado ? " · queda más (vuelve a correr)" : ""}
+            {backfill.corrida?.estado === "error" ? ` · error: ${backfill.backfill?.error}` : ""}
           </p>
           {backfill.nota && <p className="mt-1 text-[13px] text-cos-ink-soft">{backfill.nota}</p>}
 
