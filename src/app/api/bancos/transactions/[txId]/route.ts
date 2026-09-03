@@ -21,10 +21,13 @@ type Params = { params: Promise<{ txId: string }> };
 /**
  * DELETE /api/bancos/transactions/[txId]
  *
- * Borra UN movimiento — pensado para capturas manuales equivocadas (caja
- * chica / ingresos externos). Nunca destruye trabajo fiscal: se rechaza si el
- * movimiento está MATCHED o tiene cualquier vínculo (facturas múltiples,
- * declaración de impuestos, construcción, devolución vinculada) — primero
+ * Borra UN movimiento: capturas manuales equivocadas (caja chica / ingresos
+ * externos) y también renglones IMPORTADOS —duplicados de un pegado repetido,
+ * cargos de tarjeta que el banco cambió o quitó— que dejan lápida para que la
+ * siguiente importación no los reviva (?motivo=duplicado|banco, sólo para la
+ * bitácora). Nunca destruye trabajo fiscal: se rechaza si el movimiento está
+ * MATCHED o tiene cualquier vínculo (facturas múltiples, declaración de
+ * impuestos, construcción, devolución vinculada) — primero
  * desconciliar/desvincular, luego borrar. Queda en bitácora.
  */
 export async function DELETE(req: Request, { params }: Params) {
@@ -78,14 +81,33 @@ export async function DELETE(req: Request, { params }: Params) {
   // Los renglones importados del estado de cuenta no se borran uno a uno:
   // se corrigen deshaciendo el lote — y borrarlos aquí sólo haría que la
   // detección de duplicados los reviva en la siguiente importación.
-  if (!tx.externalRef) {
-    return NextResponse.json(
-      { error: "Sólo capturas manuales se pueden borrar. Un movimiento importado se corrige deshaciendo su lote." },
-      { status: 409 },
-    );
+  // Renglón IMPORTADO (sin externalRef): sí se borra, pero dejando una
+  // LÁPIDA con su clave de deduplicación. Sin ella la siguiente importación
+  // del mismo estado lo revivía (la regla F − D contaba un renglón menos), y
+  // por eso durante mucho tiempo se rechazó borrarlos. Casos reales: la
+  // misma línea pegada dos veces, o un cargo de tarjeta que el banco cambió
+  // de monto o quitó después de que ya estaba importado.
+  const motivo = new URL(req.url).searchParams.get("motivo")?.slice(0, 40) || null;
+  if (tx.externalRef) {
+    await prisma.bankTransaction.delete({ where: { id: txId } });
+  } else {
+    await prisma.$transaction([
+      prisma.bankTransactionTombstone.create({
+        data: {
+          companyId: tx.companyId,
+          bankAccountId: tx.bankAccountId,
+          txId: tx.id,
+          fecha: tx.fecha,
+          monto: tx.monto,
+          descripcion: tx.descripcion,
+          referencia: tx.referencia,
+          motivo,
+          userId: user.id,
+        },
+      }),
+      prisma.bankTransaction.delete({ where: { id: txId } }),
+    ]);
   }
-
-  await prisma.bankTransaction.delete({ where: { id: txId } });
   registrarBitacora({
     companyId: tx.companyId,
     userId: user.id,
@@ -99,6 +121,8 @@ export async function DELETE(req: Request, { params }: Params) {
       descripcion: tx.descripcion,
       statusPrevio: tx.status,
       externalRef: tx.externalRef ?? null,
+      importado: !tx.externalRef,
+      motivo,
     },
     req,
   });
