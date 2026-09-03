@@ -40,8 +40,8 @@ const EMPRESA_EVAL: Record<NonNullable<PreguntaEval["regimen"]>, Parameters<type
 
 // ── 1. Recuperación ───────────────────────────────────────────────────────────
 
-export async function medirRecuperacion(p: PreguntaEval): Promise<ResultadoPregunta["recuperacion"]> {
-  const r = await searchFiscalKnowledge(p.pregunta);
+export async function medirRecuperacion(p: PreguntaEval, busqueda: OpcionesBusquedaEval = {}): Promise<ResultadoPregunta["recuperacion"]> {
+  const r = await searchFiscalKnowledge(p.pregunta, { modo: busqueda.modo, rerank: busqueda.rerank });
   const citas = r.resultados.map((h) => h.cita);
   return { hit: algunaCoincide(p.fundamentos, citas), citas };
 }
@@ -141,11 +141,18 @@ ${respuesta.slice(0, 6000)}
 
 // ── Orquestación ──────────────────────────────────────────────────────────────
 
+/** Palancas de la búsqueda que el eval mide por separado (Fase 2). Vacío = defaults de producción. */
+export interface OpcionesBusquedaEval {
+  modo?: "vector" | "hibrido";
+  rerank?: boolean;
+}
+
 export interface OpcionesEval {
   /** Correr el agente (cuesta tokens). Default true. */
   agente?: boolean;
   /** Correr el juez (cuesta tokens; requiere agente). Default true. */
   juez?: boolean;
+  busqueda?: OpcionesBusquedaEval;
 }
 
 export async function evaluarPregunta(p: PreguntaEval, opts: OpcionesEval = {}, client = new Anthropic()): Promise<ResultadoPregunta> {
@@ -157,7 +164,7 @@ export async function evaluarPregunta(p: PreguntaEval, opts: OpcionesEval = {}, 
     recuperacion: { hit: false, citas: [] },
   };
   try {
-    base.recuperacion = await medirRecuperacion(p);
+    base.recuperacion = await medirRecuperacion(p, opts.busqueda ?? {});
     if (opts.agente === false) return base;
 
     const r = await responderComoAgente(client, p);

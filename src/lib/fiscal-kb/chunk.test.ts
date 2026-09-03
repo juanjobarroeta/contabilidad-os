@@ -57,3 +57,30 @@ describe("chunkLaw — artículos largos se parten por fracciones", () => {
     expect(a9[1].texto).not.toContain("(continúa)");
   });
 });
+
+describe("chunkLaw — la cola de la ley no se la traga el último artículo", () => {
+  it("«DISPOSICIONES TRANSITORIAS DE LA LEY…» corta igual que «TRANSITORIOS»", () => {
+    const cuerpo = [
+      "Artículo 214. Texto.",
+      "Artículo 215. Las personas morales aplicarán lo dispuesto en el artículo 12 cuando entren en liquidación.",
+      "DISPOSICIONES DE VIGENCIA TEMPORAL DE LA LEY DEL IMPUESTO SOBRE LA",
+      "RENTA",
+      "ARTÍCULO OCTAVO. Durante 2014 los intereses podrán estar sujetos a una tasa del 4.9 por ciento.",
+      "DISPOSICIONES TRANSITORIAS DE LA LEY DEL IMPUESTO SOBRE LA RENTA",
+      "ARTÍCULO NOVENO. En relación con la Ley se estará a lo siguiente:",
+      "I. La Ley entrará en vigor el 1 de enero de 2014.",
+      "TRANSITORIOS",
+      "Primero. El presente Decreto entrará en vigor el 1 de enero de 2014.",
+      "ARTÍCULOS TRANSITORIOS DE DECRETOS DE REFORMA",
+      "DECRETO por el que se reforman diversas disposiciones.",
+    ].join("\n");
+    const chunks = chunkLaw(ley(cuerpo));
+    const a215 = chunks.filter((c) => c.articulo === "215");
+    expect(a215).toHaveLength(1);
+    expect(a215[0].texto).not.toContain("VIGENCIA TEMPORAL");
+    const cola = chunks.filter((c) => c.articulo === "TRANSITORIOS");
+    expect(cola.length).toBeGreaterThanOrEqual(1);
+    expect(cola.map((c) => c.texto).join("\n")).toContain("ARTÍCULO OCTAVO");
+    expect(cola.map((c) => c.texto).join("\n")).toContain("DECRETO por el que se reforman");
+  });
+});

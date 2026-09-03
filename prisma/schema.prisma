@@ -3813,8 +3813,10 @@ model FiscalChunk {
   vigenciaDesde DateTime // denormalized from document → filtered vector search sin join extra
   vigenciaHasta DateTime?
   regimenes     String[]                    @default([])
+  tsv           Unsupported("tsvector")? // GENERADA en la migración: to_tsvector('spanish', articulo || texto)
 
   @@index([documentId])
+  @@index([tsv], type: Gin)
 }
 
 // Findings raised by the fiscal auditor (the "24/7 contador"). Deliberately

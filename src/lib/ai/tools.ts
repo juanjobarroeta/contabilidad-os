@@ -350,7 +350,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "search_fiscal_knowledge",
     description:
-      "Busca en la legislación y normatividad fiscal mexicana vigente (leyes: LISR/LIVA/CFF; RMF y sus reglas; guías de llenado del CFDI / Anexo 20, incluyendo complemento de pago, PUE/PPD, método de pago) y devuelve fragmentos con su cita (artículo/regla/guía, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento fiscal — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
+      "Busca en la legislación y normatividad fiscal mexicana vigente (leyes: LISR/LIVA/CFF/LIEPS y sus reglamentos RLISR/RLIVA/RCFF; nómina: LSS/LINFONAVIT/LFT; RMF y sus reglas; guías de llenado del CFDI / Anexo 20, incluyendo complemento de pago, PUE/PPD, método de pago) y devuelve fragmentos con su cita (artículo/regla/guía, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento fiscal — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -367,6 +367,24 @@ export const tools: Anthropic.Tool[] = [
         limit: { type: "number", description: "Máximo de fragmentos (default 6)" },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "get_articulo",
+    description:
+      "Trae COMPLETO un artículo de ley/reglamento o una regla de la RMF por su número (todas sus partes, vigentes a la fecha). Úsala para SEGUIR una referencia que apareció en otro fragmento — «para los efectos del artículo 27 de la Ley», «conforme a la regla 2.7.1.32» — o cuando el usuario pregunta por un artículo concreto. No sustituye a search_fiscal_knowledge para preguntas abiertas.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        ley: {
+          type: "string",
+          enum: ["LISR", "LIVA", "CFF", "LIEPS", "RLISR", "RLIVA", "RCFF", "LSS", "LINFONAVIT", "LFT", "RMF"],
+          description: "Clave del ordenamiento. RMF = Resolución Miscelánea Fiscal vigente.",
+        },
+        articulo: { type: "string", description: "Número tal como se cita: '27', '29-A', '113-E', '17-H Bis', o la regla '2.7.1.32'." },
+        fecha_vigencia: { type: "string", description: "Fecha ISO (YYYY-MM-DD) del periodo relevante. Default: hoy." },
+      },
+      required: ["ley", "articulo"],
     },
   },
   // ── Herramientas de PROPUESTA (acciones reversibles) ───────────────────────

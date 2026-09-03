@@ -11,7 +11,7 @@ import { previewTimbrar } from "@/lib/facturas/preview-timbrar";
 import { previewComplemento } from "@/lib/complementos-preview";
 import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
-import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
+import { searchFiscalKnowledge, getArticulo } from "@/lib/fiscal-kb/search";
 import { stageChatPendingAction } from "@/lib/ai/pending-action";
 import { contarSimilaresSinConciliar } from "@/lib/bancos/reglas-categorizacion";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
@@ -188,6 +188,23 @@ export async function executeToolCall(
           error: "Knowledge base fiscal no disponible en este momento.",
           instruccion: "Indica al usuario que no puedes citar fundamento legal ahora; NO inventes artículos.",
         });
+      }
+    case "get_articulo":
+      try {
+        const art = await getArticulo(
+          String(input.ley ?? ""),
+          String(input.articulo ?? ""),
+          typeof input.fecha_vigencia === "string" ? new Date(input.fecha_vigencia) : undefined
+        );
+        return JSON.stringify(
+          art ?? {
+            error: `No hay ${String(input.ley)} artículo/regla ${String(input.articulo)} vigente en el knowledge base.`,
+            instruccion: "Dilo al usuario; NO reconstruyas el artículo de memoria. Prueba search_fiscal_knowledge con la pregunta.",
+          }
+        );
+      } catch (err) {
+        console.error("[get_articulo]", err);
+        return JSON.stringify({ error: "Knowledge base fiscal no disponible en este momento.", instruccion: "NO inventes el texto del artículo." });
       }
     default:
       return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });

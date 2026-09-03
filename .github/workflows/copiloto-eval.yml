@@ -31,6 +31,11 @@ on:
         required: false
         default: ""
         type: string
+      busqueda:
+        description: 'Palancas de la búsqueda a medir, JSON: {"modo":"hibrido","rerank":true}. Vacío = defaults de producción.'
+        required: false
+        default: ""
+        type: string
       baseUrl:
         description: "URL del despliegue"
         required: false
@@ -50,6 +55,7 @@ jobs:
           JUEZ: ${{ inputs.juez }}
           PAGINA: ${{ inputs.pagina }}
           IDS: ${{ inputs.ids }}
+          BUSQUEDA: ${{ inputs.busqueda }}
         run: |
           set -euo pipefail
           URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
@@ -58,10 +64,13 @@ jobs:
           # reventaba. Con ids vacío la lista es [] explícita.
           IDS_LIMPIO="$(printf '%s' "${IDS}" | tr -d '[:space:]')"
           if [ -z "$IDS_LIMPIO" ]; then IDS_JSON='[]'; else IDS_JSON="$(printf '%s' "$IDS_LIMPIO" | jq -Rc 'split(",")')"; fi
+          BUSQUEDA_JSON="$(printf '%s' "${BUSQUEDA:-}" | tr -d '[:space:]')"; [ -z "$BUSQUEDA_JSON" ] && BUSQUEDA_JSON='{}'
+          echo "$BUSQUEDA_JSON" | jq -e 'type=="object"' >/dev/null || { echo "::error::busqueda no es un objeto JSON"; exit 1; }
+          echo "busqueda: $BUSQUEDA_JSON"
           OFFSET=0; FIN=false; : > resultados.jsonl
           while [ "$FIN" != "true" ]; do
-            BODY="$(jq -cn --argjson o "$OFFSET" --argjson l "${PAGINA:-6}" --argjson a "$AGENTE" --argjson j "$JUEZ" --argjson ids "$IDS_JSON" \
-              '{offset:$o, limit:$l, agente:$a, juez:$j, ids:$ids}')"
+            BODY="$(jq -cn --argjson o "$OFFSET" --argjson l "${PAGINA:-6}" --argjson a "$AGENTE" --argjson j "$JUEZ" --argjson ids "$IDS_JSON" --argjson b "$BUSQUEDA_JSON" \
+              '{offset:$o, limit:$l, agente:$a, juez:$j, ids:$ids, busqueda:$b}')"
             # Reintentos por página: un 502 puede ser un deploy de Railway
             # cambiando de instancia a media corrida — no tirar 40 minutos por eso.
             RESP=""; for intento in 1 2 3; do

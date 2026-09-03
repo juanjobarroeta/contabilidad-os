@@ -266,6 +266,28 @@ returns the source text, the assistant is grounded rather than recalling.
 
 ---
 
+### Modos de búsqueda (Fase 2 del copiloto)
+
+`searchFiscalKnowledge` tiene dos palancas, cada una medible por separado con
+el eval (`api/admin/copiloto-eval`, body `busqueda`):
+
+- `modo: "vector" | "hibrido"` — el híbrido suma un brazo léxico (`tsv`,
+  columna generada `to_tsvector('spanish', articulo || texto)` + GIN) y un
+  brazo *exacto* (si la pregunta nombra «artículo 27 de la LISR» o «regla
+  2.7.1.32», esos chunks entran primero). Fusión RRF (k = 60) en
+  `fusion.ts`; el piso `minSimilarity` sólo juzga lo que propuso únicamente el
+  vector.
+- `rerank: boolean` — un modelo barato (`AI_RERANK_MODEL`, default Haiku 4.5)
+  reordena los 20 fusionados; si falla, se usa el orden fusionado. Costo en
+  `CostEvent` con subtipo `ai.rerank`.
+
+Defaults de producción por env: `FISCAL_KB_MODO`, `FISCAL_KB_RERANK`. Se fijan
+con el número del eval — lo que no lo mueve, no se queda.
+
+`getArticulo(clave, numero)` trae un artículo completo (todas sus partes) y
+respalda la tool `get_articulo`, para que el agente SIGA referencias («para
+los efectos del artículo 27 de la Ley») en vez de adivinarlas.
+
 ## 9. Guardrails
 
 - **Citations mandatory** — no fundamento without a retrieved source. This is the core

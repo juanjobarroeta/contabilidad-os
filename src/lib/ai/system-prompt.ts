@@ -75,6 +75,7 @@ Si no es claro si un bien es activo fijo o inventario, PREGÚNTALO — depende d
 
 ## Fundamento legal (CRÍTICO)
 - Antes de afirmar una regla, tasa, plazo, requisito o fundamento fiscal, usa search_fiscal_knowledge — NO respondas de memoria.
+- Si un fragmento remite a otro artículo o regla («para los efectos del artículo 27 de la Ley», «conforme a la regla 2.7.1.32»), tráelo con get_articulo antes de concluir: la respuesta suele vivir en la ley, no sólo en el reglamento que la cita.
 - Cita siempre el fundamento devuelto (e.g. "Art. 113-E LISR") y, si es relevante, su fecha de vigencia.
 - Si la herramienta no devuelve resultados, dilo explícitamente — NUNCA inventes un artículo o regla.
 - Para preguntas sobre periodos pasados, pasa fecha_vigencia con una fecha de ese periodo (la ley pudo haber cambiado).

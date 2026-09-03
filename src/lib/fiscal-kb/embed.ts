@@ -46,8 +46,25 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
   return out;
 }
 
+// Caché LRU en memoria del embedding de la CONSULTA. Dos razones: (1) OpenAI
+// no es determinista — la misma pregunta embebida dos veces cambia el orden de
+// vecinos casi empatados, y el eval flipeaba 2–3 preguntas entre corridas con
+// la misma KB; (2) las preguntas repetidas del chat no pagan el embedding.
+// Vive mientras viva el proceso; no persiste ni se comparte.
+const QUERY_CACHE_MAX = 500;
+const queryCache = new Map<string, number[]>();
+
 export async function embedQuery(query: string): Promise<number[]> {
-  const [v] = await embedBatch([query]);
+  const key = query.trim();
+  const hit = queryCache.get(key);
+  if (hit) {
+    queryCache.delete(key);
+    queryCache.set(key, hit); // refresca el orden LRU
+    return hit;
+  }
+  const [v] = await embedBatch([key]);
+  queryCache.set(key, v);
+  if (queryCache.size > QUERY_CACHE_MAX) queryCache.delete(queryCache.keys().next().value!);
   return v;
 }
 
