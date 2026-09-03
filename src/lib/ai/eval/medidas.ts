@@ -47,6 +47,11 @@ export function normalizarCita(c: string): string {
       // lo cita la KB: «Art. 5o LIVA». El contador escribe «Art. 5 LIVA». Sin
       // esto, c16/j31 contaban como fallo teniendo el artículo correcto.
       .replace(/\b(\d+)O\.?(?=[\s-]|$)/g, "$1")
+      // El agente escribe «Art. 27-III LISR» (artículo 27, fracción III) y la
+      // KB cita «Art. 27 LISR»: la fracción no es otro artículo. Sólo se
+      // quitan romanos de 2+ letras o V/X sueltos — «17-L CFF», «18-I LIVA» y
+      // «113-E LISR» son artículos reales y se conservan.
+      .replace(/\b(\d+(?:-[A-Z]+)?)-(?:[IVXL]{2,}|V|X)(?=\s|$)/g, "$1")
       .replace(/\s+/g, " ")
       .trim()
   );

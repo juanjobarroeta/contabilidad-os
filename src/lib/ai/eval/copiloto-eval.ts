@@ -68,6 +68,11 @@ export async function responderComoAgente(
   const system = buildSystemPrompt(empresa);
   const kbTool = tools.find((t) => t.name === "search_fiscal_knowledge");
   if (!kbTool) throw new Error("search_fiscal_knowledge no está registrada");
+  // get_articulo (Fase 2): el agente puede SEGUIR una referencia («artículo 27
+  // de la Ley») en vez de citarla de memoria; lo que trae cuenta como
+  // fundamento de la KB. Ninguna otra tool: sin acceso a datos de empresa.
+  const artTool = tools.find((t) => t.name === "get_articulo");
+  const herramientas = artTool ? [kbTool, artTool] : [kbTool];
 
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: p.pregunta }];
   const citasKB: string[] = [];
@@ -75,7 +80,9 @@ export async function responderComoAgente(
   let rondas = 0;
 
   while (rondas <= MAX_ROUNDS) {
-    const res = await crear(client, { max_tokens: 2048, system, tools: [kbTool], messages });
+    // Fable 5 piensa siempre y sus tokens cuentan contra max_tokens: con 2048
+    // parte de las respuestas «sin cita» eran cortes.
+    const res = await crear(client, { max_tokens: 8192, system, tools: herramientas, messages });
     texto = res.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n");
     const usos = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
     if (usos.length === 0 || res.stop_reason !== "tool_use") break;
@@ -86,8 +93,9 @@ export async function responderComoAgente(
       // ninguna otra tool está expuesta, así que no hay acceso a datos reales.
       const out = await executeToolCall(u.name, u.input as Record<string, unknown>, "eval", { inApp: false });
       try {
-        const parsed = JSON.parse(out) as { resultados?: { cita: string }[] };
+        const parsed = JSON.parse(out) as { resultados?: { cita: string }[]; cita?: string };
         for (const h of parsed.resultados ?? []) citasKB.push(h.cita);
+        if (typeof parsed.cita === "string") citasKB.push(parsed.cita); // get_articulo
       } catch {
         /* sin fundamentos en este resultado */
       }
@@ -125,7 +133,17 @@ ${respuesta.slice(0, 6000)}
   const res = await meteredCreate(
     client,
     { companyId: null, subtipo: "ai.eval" },
-    { model: JUEZ_MODEL, max_tokens: 600, system: JUEZ_SYSTEM, messages: [{ role: "user", content: user }] }
+    // Opus 5 piensa por default y esos tokens cuentan contra max_tokens: con
+    // 600, 46 de 80 veredictos salieron cortados a mitad del JSON o vacíos.
+    // No se apaga el pensamiento (en Opus 5 filtra tags y mete tools en el
+    // texto): se baja el esfuerzo y se da aire.
+    {
+      model: JUEZ_MODEL,
+      max_tokens: 4000,
+      output_config: { effort: "low" },
+      system: JUEZ_SYSTEM,
+      messages: [{ role: "user", content: user }],
+    }
   );
   const texto = res.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
   const m = /\{[\s\S]*\}/.exec(texto);
