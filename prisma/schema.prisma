@@ -235,30 +235,30 @@ model Company {
   isActive Boolean @default(true)
 
   // Relations
-  members              CompanyMember[]
-  invoices             Invoice[]
-  customers            Customer[]
-  facturaBorradores    FacturaBorrador[]
-  facturasRecurrentes  FacturaRecurrente[]
+  members             CompanyMember[]
+  invoices            Invoice[]
+  customers           Customer[]
+  facturaBorradores   FacturaBorrador[]
+  facturasRecurrentes FacturaRecurrente[]
   recurrentesIgnoradas RecurrenteSugerenciaIgnorada[]
-  suppliers            Supplier[]
-  bankAccounts         BankAccount[]
-  bankTransactions     BankTransaction[]
-  employees            Employee[]
-  employeeDocumentos   EmployeeDocumento[]
-  payrollRuns          PayrollRun[]
-  taxDeclarations      TaxDeclaration[]
-  obligations          CompanyObligation[]
-  perdidasFiscales     PerdidaFiscal[]
-  costEvents           CostEvent[]
-  coeEnvios            CoeEnvio[]
-  accountingEntries    AccountingEntry[]
-  accounts             ChartAccount[]
-  ceBalanzas           CeBalanzaMes[]
-  postingOverrides     PostingCuentaOverride[]
-  accountingPeriods    AccountingPeriod[]
-  satSyncRequests      SatSyncRequest[]
-  cfdisFaltantes       CfdiFaltante[]
+  suppliers           Supplier[]
+  bankAccounts        BankAccount[]
+  bankTransactions    BankTransaction[]
+  employees           Employee[]
+  employeeDocumentos EmployeeDocumento[]
+  payrollRuns         PayrollRun[]
+  taxDeclarations     TaxDeclaration[]
+  obligations         CompanyObligation[]
+  perdidasFiscales    PerdidaFiscal[]
+  costEvents          CostEvent[]
+  coeEnvios           CoeEnvio[]
+  accountingEntries   AccountingEntry[]
+  accounts            ChartAccount[]
+  ceBalanzas          CeBalanzaMes[]
+  postingOverrides    PostingCuentaOverride[]
+  accountingPeriods   AccountingPeriod[]
+  satSyncRequests     SatSyncRequest[]
+  cfdisFaltantes      CfdiFaltante[]
 
   // Module gating (SaaS): which features this company has contracted
   modules CompanyModule[]
@@ -356,7 +356,7 @@ model Company {
   refacciones         Refaccion[]
   serviciosVenta      ServicioVenta[]
   ordenesServicio     OrdenServicio[]
-  citasServicio       CitaServicio[]
+  citasServicio    CitaServicio[]
   prospectos          Prospecto[]
   backfillProgreso    BackfillProgreso[]
   nominaCostos        NominaCosto[]
@@ -366,13 +366,13 @@ model Company {
   // esta empresa. Es el cursor del REPARTO JUSTO: cada corrida atiende a las
   // de barrido más antiguo, así la espera de una empresa depende del número de
   // EMPRESAS y no del tamaño total del portafolio de facturas.
-  vigenciaBarridoAt   DateTime?
-  tombstonesBancarias BankTransactionTombstone[]
-  inventarioConteos   InventarioConteo[]
+  vigenciaBarridoAt DateTime?
 
   // Orden de rotación del barrido de vigencia (nulls primero: las empresas
   // nunca barridas van al frente de la fila).
   @@index([vigenciaBarridoAt])
+  tombstonesBancarias BankTransactionTombstone[]
+  inventarioConteos   InventarioConteo[]
 }
 
 model CompanyMember {
@@ -726,7 +726,7 @@ model Customer {
   pedidosVehiculo   PedidoVehiculo[]
   serviciosVenta    ServicioVenta[]
   ordenesServicio   OrdenServicio[]
-  citasServicio     CitaServicio[]
+  citasServicio    CitaServicio[]
   prospectos        Prospecto[]
 
   @@unique([companyId, rfc])
@@ -824,10 +824,10 @@ model Invoice {
   cfdiRelacionadoUuid String?
   tipoRelacion        String?
   moneda              String  @default("MXN")
-  tipoCambio          Decimal @default(1.0) @db.Decimal(18, 6)
+  tipoCambio          Decimal @db.Decimal(18, 6)   @default(1.0)
   subtotal            Decimal @db.Decimal(18, 6)
-  descuento           Decimal @default(0) @db.Decimal(18, 6)
-  totalImpuestos      Decimal @default(0) @db.Decimal(18, 6)
+  descuento           Decimal @db.Decimal(18, 6)   @default(0)
+  totalImpuestos      Decimal @db.Decimal(18, 6)   @default(0)
   total               Decimal @db.Decimal(18, 6)
   notas               String?
 
@@ -998,13 +998,13 @@ model ActivoFijo {
 
   descripcion      String
   tipo             String // construccion|mobiliario|transporte|computo|herramental|comunicaciones|maquinaria|otro
-  moi              Decimal   @db.Decimal(18, 6) // Monto Original de la Inversión (sin IVA)
+  moi              Decimal @db.Decimal(18, 6) // Monto Original de la Inversión (sin IVA)
   fechaAdquisicion DateTime
   /**
    * Mes en que inicia su utilización, si difiere de la adquisición (Art. 31).
    */
   fechaInicioUso   DateTime?
-  tasaAnual        Decimal   @db.Decimal(18, 6) // por ciento máximo Art. 34 aplicado (puede sobreescribirse)
+  tasaAnual        Decimal @db.Decimal(18, 6) // por ciento máximo Art. 34 aplicado (puede sobreescribirse)
 
   // Automóviles: tope MOI deducible (Art. 36-II). Pickups de carga: esAutomovil=false.
   esAutomovil        Boolean @default(false)
@@ -1031,7 +1031,7 @@ model ActivoFijo {
 // emitidos and recibidos so we can tell, accurately, whether a PPD invoice's
 // payment has been complementado (vs. a fragile RFC+amount heuristic).
 model PagoDoctoRelacionado {
-  id               String   @id @default(cuid())
+  id               String @id @default(cuid())
   pagoInvoiceId    String // the tipo=PAGO Invoice that carries this node
   parentUuid       String // UUID of the invoice being paid (IdDocumento)
   impPagado        Decimal? @db.Decimal(18, 6)
@@ -1051,7 +1051,7 @@ model PagoDoctoRelacionado {
   // instead of reading a firm value.
   baseTraslado  Decimal? @db.Decimal(18, 6)
   ivaTrasladado Decimal? @db.Decimal(18, 6)
-  ivaDerivado   Boolean  @default(false)
+  ivaDerivado   Boolean @default(false)
 
   pagoInvoice Invoice @relation(fields: [pagoInvoiceId], references: [id], onDelete: Cascade)
 
@@ -1067,7 +1067,7 @@ model IvaPeriodNotice {
   id             String    @id @default(cuid())
   companyId      String
   periodo        String // "YYYY-MM"
-  ivaTrasladado  Decimal   @db.Decimal(18, 6) // value at last baseline/notification
+  ivaTrasladado  Decimal @db.Decimal(18, 6) // value at last baseline/notification
   lastNotifiedAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -1087,7 +1087,7 @@ model InvoiceItem {
   descripcion   String
   valorUnitario Decimal @db.Decimal(18, 6)
   importe       Decimal @db.Decimal(18, 6)
-  descuento     Decimal @default(0) @db.Decimal(18, 6)
+  descuento     Decimal @db.Decimal(18, 6)   @default(0)
 
   // Cuenta predial del inmueble arrendado (CFDI 4.0: nodo hijo CuentaPredial
   // del concepto, atributo Numero). Guarda UNA cuenta: es la que captura el
@@ -1109,12 +1109,12 @@ model InvoiceTax {
   invoiceId String
   tipo      TaxType // IVA, ISR, IEPS
   factor    TaxFactor // TASA, CUOTA, EXENTO
-  tasa      Decimal   @db.Decimal(18, 6)
+  tasa      Decimal @db.Decimal(18, 6)
   // Base del impuesto (atributo Base del nodo Traslado a nivel comprobante).
   // Para filas EXENTO es el valor de los actos exentos — el insumo de la
   // proporción de acreditamiento (Art. 5 LIVA). Null en filas legacy/retención.
-  base      Decimal?  @db.Decimal(18, 6)
-  importe   Decimal   @db.Decimal(18, 6)
+  base      Decimal? @db.Decimal(18, 6)
+  importe   Decimal @db.Decimal(18, 6)
   retencion Boolean   @default(false)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -1152,7 +1152,7 @@ model FacturaBorrador {
   /// StampInput serializado — el mismo cuerpo con el que se creó el draft;
   /// al timbrar se promueve ESE draft y se persiste el Invoice con esto.
   payload    Json
-  total      Decimal   @db.Decimal(18, 6)
+  total      Decimal @db.Decimal(18, 6)
   status     String    @default("PENDIENTE") // PENDIENTE | TIMBRADA | DESCARTADA
   /// Invoice creado al timbrar (para el enlace "ver factura").
   invoiceId  String?
@@ -1289,16 +1289,16 @@ model BankAccount {
   // saldo propio y los traspasos internos dejan de lavarse en una sola cuenta.
   chartAccountId String?
 
-  company        Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  chartAccount   ChartAccount?              @relation(fields: [chartAccountId], references: [id])
+  company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chartAccount   ChartAccount?          @relation(fields: [chartAccountId], references: [id])
   transactions   BankTransaction[]
   conciliaciones ConciliacionBancaria[]
   gastos         Gasto[]
   reembolsos     ReembolsoSemanal[]
   importBatches  ImportBatch[]
-  tombstones     BankTransactionTombstone[]
 
   @@unique([companyId, numeroCuenta])
+  tombstones          BankTransactionTombstone[]
 }
 
 enum BankAccountTipo {
@@ -1316,8 +1316,8 @@ model BankTransaction {
   fecha       DateTime
   descripcion String
   referencia  String?
-  monto       Decimal             @db.Decimal(18, 6) // positive = credit, negative = debit
-  saldo       Decimal?            @db.Decimal(18, 6)
+  monto       Decimal @db.Decimal(18, 6) // positive = credit, negative = debit
+  saldo       Decimal? @db.Decimal(18, 6)
   tipo        BankTransactionType
 
   // ── Contraparte, extraída de la descripción (ver bancos/spei-descripcion.ts)
@@ -1325,24 +1325,16 @@ model BankTransaction {
   // ahora se guardaban como una sola cadena y se les corrían reglas de keywords.
   // Desglosarlos es lo que convierte la conciliación de "adivinar por monto" a
   // "identificar por parte y confirmar por monto".
-  /**
-   * /** Llave primaria del CEP de Banxico: sin ella no se puede pedir el RFC.
-   */
+  /** Llave primaria del CEP de Banxico: sin ella no se puede pedir el RFC. */
   claveRastreo      String?
   contraparteNombre String?
-  /**
-   * El dato que cierra la conciliación. Gratis cuando el banco lo trae.
-   */
+  /** El dato que cierra la conciliación. Gratis cuando el banco lo trae. */
   contraparteRfc    String?
   contraparteClabe  String?
-  /**
-   * Institución de la contraparte: 3 dígitos (prefijo CLABE) + nombre.
-   */
+  /** Institución de la contraparte: 3 dígitos (prefijo CLABE) + nombre. */
   contraparteBanco  String?
   conceptoPago      String?
-  /**
-   * Pagos de impuestos: empata DIRECTO contra TaxDeclaration.lineaCaptura.
-   */
+  /** Pagos de impuestos: empata DIRECTO contra TaxDeclaration.lineaCaptura. */
   lineaCaptura      String?
   /**
    * MARCA DE INTENTO del backfill. Sin esto el barrido filtraría por
@@ -1531,7 +1523,7 @@ model ConciliacionBancaria {
   /// Saldo inicial declarado — sirve para explicar el arrastre del mes previo.
   saldoInicialEstado Decimal? @db.Decimal(18, 6)
   /// true cuando el saldo lo capturó una persona (no vino del import).
-  saldoManual        Boolean  @default(false)
+  saldoManual        Boolean @default(false)
 
   /// Firma: cuándo se dio por conciliado el mes y quién lo hizo.
   conciliadoAt       DateTime?
@@ -1602,7 +1594,7 @@ model ConciliacionDetalle {
   id                String   @id @default(cuid())
   bankTransactionId String
   invoiceId         String
-  montoAsignado     Decimal  @db.Decimal(18, 6) // porción (valor absoluto) del movimiento asignada a esta factura
+  montoAsignado     Decimal @db.Decimal(18, 6) // porción (valor absoluto) del movimiento asignada a esta factura
   createdAt         DateTime @default(now())
 
   bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
@@ -1641,15 +1633,15 @@ model Employee {
   // Contract
   tipoContrato           String // e.g. "01" = Indefinido
   tipoJornada            String // e.g. "01" = Diurna
-  tipoRegimen            String   @default("02") // "02" = Sueldos, "05" = Asimilados
-  salarioDiario          Decimal  @db.Decimal(18, 6) // SBC for IMSS
+  tipoRegimen            String  @default("02") // "02" = Sueldos, "05" = Asimilados
+  salarioDiario          Decimal @db.Decimal(18, 6) // SBC for IMSS
   salarioDiarioIntegrado Decimal? @db.Decimal(18, 6) // SDI
   periodicidadPago       String // "04" = Quincenal, "05" = Mensual
   numEmpleado            String? // Internal employee number; defaults to short id
   departamento           String?
   puesto                 String?
-  riesgoPuesto           String   @default("1") // 1=Class I, 2=II, 3=III, 4=IV, 5=V
-  claveEntFed            String   @default("PUE") // Estado SAT code (PUE, JAL, CMX, etc.)
+  riesgoPuesto           String  @default("1") // 1=Class I, 2=II, 3=III, 4=IV, 5=V
+  claveEntFed            String  @default("PUE") // Estado SAT code (PUE, JAL, CMX, etc.)
   /// Registro patronal IMSS del CENTRO DE TRABAJO del empleado. Una empresa
   /// con operaciones en varios estados tiene un registro por estado (caso
   /// Asturcar: Oaxaca/Puebla/Veracruz); null = usa el de la empresa. El CFDI
@@ -1679,7 +1671,7 @@ model Employee {
   pensionAlimenticiaTipo  String?
   pensionAlimenticiaValor Decimal? @db.Decimal(18, 6)
 
-  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   documentos        EmployeeDocumento[]
   payrollItems      PayrollItem[]
   imssMovimientos   ImssMovimiento[]
@@ -1687,10 +1679,10 @@ model Employee {
   cuadrillaMiembros CuadrillaMiembro[]
   // Automotriz: unidades vendidas por este empleado (comisiones)
   vehiculosVendidos Vehiculo[]
-  pedidosVehiculo   PedidoVehiculo[]    @relation("PedidoVehiculoVendedor")
-  ordenesAsesor     OrdenServicio[]     @relation("OrdenServicioAsesor")
-  ordenesTecnico    OrdenServicio[]     @relation("OrdenServicioTecnico")
-  prospectos        Prospecto[]         @relation("ProspectoVendedor")
+  pedidosVehiculo   PedidoVehiculo[]   @relation("PedidoVehiculoVendedor")
+  ordenesAsesor     OrdenServicio[]    @relation("OrdenServicioAsesor")
+  ordenesTecnico    OrdenServicio[]    @relation("OrdenServicioTecnico")
+  prospectos        Prospecto[]        @relation("ProspectoVendedor")
 
   @@unique([companyId, rfc])
 }
@@ -1705,15 +1697,15 @@ model Incidencia {
   tipo         IncidenciaTipo
   fecha        DateTime // Date of the incident
   fechaFin     DateTime? // End date for multi-day (incapacidad, vacaciones)
-  dias         Decimal        @default(1) @db.Decimal(18, 6) // Number of days affected
-  horas        Decimal?       @db.Decimal(18, 6) // For overtime: DOUBLE hours (dentro/fuera del límite LFT las separa el cálculo)
+  dias         Decimal @db.Decimal(18, 6)          @default(1) // Number of days affected
+  horas        Decimal? @db.Decimal(18, 6) // For overtime: DOUBLE hours (dentro/fuera del límite LFT las separa el cálculo)
   // Horas extra TRIPLES (las que exceden el límite de la jornada extraordinaria,
   // LFT Art. 68: se pagan al 200% adicional y son 100% gravadas). Columna
   // ADITIVA — prod usa `prisma db push`.
-  horasTriples Decimal?       @db.Decimal(18, 6)
+  horasTriples Decimal? @db.Decimal(18, 6)
   // Monto en pesos para incidencias económicas (BONO, COMISION, DESCUENTO).
   // Columna ADITIVA — prod usa `prisma db push`.
-  monto        Decimal?       @db.Decimal(18, 6)
+  monto        Decimal? @db.Decimal(18, 6)
 
   // Incapacidad-specific
   folioImss String? // IMSS disability folio number
@@ -1754,8 +1746,8 @@ model ImssMovimiento {
 
   tipo            ImssMovimientoTipo // ALTA, BAJA, MODIFICACION_SALARIO, REINGRESO
   fechaMovimiento DateTime // When the movement should be effective
-  sbcAnterior     Decimal?           @db.Decimal(18, 6) // Previous SBC (for modifications)
-  sbcNuevo        Decimal?           @db.Decimal(18, 6) // New SBC
+  sbcAnterior     Decimal? @db.Decimal(18, 6) // Previous SBC (for modifications)
+  sbcNuevo        Decimal? @db.Decimal(18, 6) // New SBC
   motivo          String? // Reason text
 
   // Filing status
@@ -1794,9 +1786,9 @@ model PayrollRun {
   tipo      PayrollRunType // ORDINARIA, EXTRAORDINARIA, FINIQUITO, AGUINALDO
   status    PayrollStatus  @default(DRAFT)
 
-  totalPercepciones Decimal @default(0) @db.Decimal(18, 6)
-  totalDeducciones  Decimal @default(0) @db.Decimal(18, 6)
-  totalNeto         Decimal @default(0) @db.Decimal(18, 6)
+  totalPercepciones Decimal @db.Decimal(18, 6) @default(0)
+  totalDeducciones  Decimal @db.Decimal(18, 6) @default(0)
+  totalNeto         Decimal @db.Decimal(18, 6) @default(0)
 
   // Type-specific data (e.g. { utilidadFiscalGravable } for PTU,
   // { diasAguinaldo, fechaCorte } for AGUINALDO)
@@ -1819,24 +1811,24 @@ model PayrollItem {
 
   // Percepciones
   sueldoBase        Decimal @db.Decimal(18, 6)
-  horasExtra        Decimal @default(0) @db.Decimal(18, 6)
-  bonosPagoFijo     Decimal @default(0) @db.Decimal(18, 6)
-  bonosPagoVar      Decimal @default(0) @db.Decimal(18, 6)
-  vales             Decimal @default(0) @db.Decimal(18, 6)
-  otrasPercepciones Decimal @default(0) @db.Decimal(18, 6)
+  horasExtra        Decimal @db.Decimal(18, 6) @default(0)
+  bonosPagoFijo     Decimal @db.Decimal(18, 6) @default(0)
+  bonosPagoVar      Decimal @db.Decimal(18, 6) @default(0)
+  vales             Decimal @db.Decimal(18, 6) @default(0)
+  otrasPercepciones Decimal @db.Decimal(18, 6) @default(0)
 
   // Deducciones
-  isrRetenido  Decimal @default(0) @db.Decimal(18, 6)
-  imssObrero   Decimal @default(0) @db.Decimal(18, 6)
-  imssPatronal Decimal @default(0) @db.Decimal(18, 6) // Informational (employer cost, not deducted from employee)
-  infonavit    Decimal @default(0) @db.Decimal(18, 6)
-  otrasDeducc  Decimal @default(0) @db.Decimal(18, 6)
+  isrRetenido  Decimal @db.Decimal(18, 6) @default(0)
+  imssObrero   Decimal @db.Decimal(18, 6) @default(0)
+  imssPatronal Decimal @db.Decimal(18, 6) @default(0) // Informational (employer cost, not deducted from employee)
+  infonavit    Decimal @db.Decimal(18, 6) @default(0)
+  otrasDeducc  Decimal @db.Decimal(18, 6) @default(0)
 
   // Extraordinary percepciones (aguinaldo, vacaciones, PTU)
-  aguinaldo       Decimal @default(0) @db.Decimal(18, 6)
-  primaVacacional Decimal @default(0) @db.Decimal(18, 6)
-  vacaciones      Decimal @default(0) @db.Decimal(18, 6)
-  ptu             Decimal @default(0) @db.Decimal(18, 6)
+  aguinaldo       Decimal @db.Decimal(18, 6) @default(0)
+  primaVacacional Decimal @db.Decimal(18, 6) @default(0)
+  vacaciones      Decimal @db.Decimal(18, 6) @default(0)
+  ptu             Decimal @db.Decimal(18, 6) @default(0)
 
   totalPercepciones Decimal @db.Decimal(18, 6)
   totalDeducciones  Decimal @db.Decimal(18, 6)
@@ -2011,9 +2003,9 @@ model PerdidaFiscal {
   id                      String   @id @default(cuid())
   companyId               String
   ejercicioOrigen         Int // año en que se generó la pérdida
-  montoOriginal           Decimal  @db.Decimal(18, 6) // pérdida nominal del ejercicio
+  montoOriginal           Decimal @db.Decimal(18, 6) // pérdida nominal del ejercicio
   // Saldo pendiente de amortizar, actualizado hasta `mesUltimaActualizacion`.
-  saldoActualizado        Decimal  @db.Decimal(18, 6)
+  saldoActualizado        Decimal @db.Decimal(18, 6)
   mesUltimaActualizacion  String // "YYYY-MM"
   agotada                 Boolean  @default(false)
   // Último ejercicio en que se aplicó (idempotencia del guardado de la anual).
@@ -2163,7 +2155,7 @@ model ChartAccount {
   company          Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   entries          AccountingEntry[]
   postingOverrides PostingCuentaOverride[]
-  bankAccounts     BankAccount[]
+  bankAccounts BankAccount[]
 
   @@unique([companyId, cuentaSAT, subcuenta])
   @@index([companyId, codAgrup])
@@ -2184,7 +2176,7 @@ model AccountingEntry {
   descripcion    String
   referencia     String? // e.g. UUID del CFDI, ESTIMACION id, etc.
   referenciaTipo String? // "CFDI" | "ESTIMACION" | "SOLICITUD_COMPRA" | "BANK_TX" | etc.
-  monto          Decimal     @db.Decimal(18, 6)
+  monto          Decimal @db.Decimal(18, 6)
   tipo           EntryType // CARGO, ABONO
   fuente         EntrySource // CFDI, NOMINA, BANCO, MANUAL, CONSTRUCCION, FLOTA
 
@@ -2209,8 +2201,8 @@ model AccountingPeriod {
   postedById   String?
   // Summary counts so the UI can show period health at a glance
   entriesCount Int                    @default(0)
-  totalCargos  Decimal                @default(0) @db.Decimal(18, 6)
-  totalAbonos  Decimal                @default(0) @db.Decimal(18, 6)
+  totalCargos  Decimal @db.Decimal(18, 6)                  @default(0)
+  totalAbonos  Decimal @db.Decimal(18, 6)                  @default(0)
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
 
@@ -2416,7 +2408,7 @@ model Proyecto {
   fechaInicio     DateTime?
   fechaFinPlan    DateTime?
   fechaFinReal    DateTime?
-  montoContratado Decimal?  @db.Decimal(18, 6)
+  montoContratado Decimal? @db.Decimal(18, 6)
   anticipoPorc    Float? // typical 30
   retencionPorc   Float? // typical 5
 
@@ -2447,9 +2439,9 @@ model Proyecto {
   weekCount         Int?
 
   // Anticipo tracking — filled when the customer pays the anticipo
-  anticipoMonto      Decimal?  @db.Decimal(18, 6) // actual $ received (montoContratado × anticipoPorc / 100)
+  anticipoMonto      Decimal? @db.Decimal(18, 6) // actual $ received (montoContratado × anticipoPorc / 100)
   anticipoFecha      DateTime? // date received
-  anticipoAmortizado Decimal   @default(0) @db.Decimal(18, 6) // running total amortized across estimaciones
+  anticipoAmortizado Decimal @db.Decimal(18, 6)     @default(0) // running total amortized across estimaciones
   anticipoBankTxId   String? // link to the BankTransaction that recorded the deposit
   anticipoInvoiceId  String? // link to the CFDI de anticipo (Invoice)
 
@@ -2522,12 +2514,12 @@ model APU {
 
   // Roll-up totals (computed from APUInsumo at write time, validated server-side)
   costoDirecto    Decimal @db.Decimal(18, 6) // sum of all insumos
-  indirectosPorc  Float   @default(0)
-  financierosPorc Float   @default(0)
-  utilidadPorc    Float   @default(0)
-  cargosAdicPorc  Float   @default(0)
+  indirectosPorc  Float @default(0)
+  financierosPorc Float @default(0)
+  utilidadPorc    Float @default(0)
+  cargosAdicPorc  Float @default(0)
   precioUnitario  Decimal @db.Decimal(18, 6) // final PU after all overhead
-  rendimiento     Float   @default(1) // qty produced per cuadrilla-day
+  rendimiento     Float @default(1) // qty produced per cuadrilla-day
 
   concepto           Concepto    @relation("ConceptoApus", fields: [conceptoId], references: [id], onDelete: Cascade)
   conceptoComoActual Concepto?   @relation("ConceptoApuActual")
@@ -2575,7 +2567,7 @@ model Insumo {
   descripcion String
   tipo        InsumoTipo
   unidad      String
-  costoActual Decimal    @db.Decimal(18, 6)
+  costoActual Decimal @db.Decimal(18, 6)
   monedaCosto String     @default("MXN")
 
   // For MANO_OBRA: link to IMSS factor calc inputs
@@ -2615,7 +2607,7 @@ model Presupuesto {
 
   version    Int               @default(1)
   estado     PresupuestoEstado @default(BORRADOR)
-  montoTotal Decimal           @default(0) @db.Decimal(18, 6)
+  montoTotal Decimal @db.Decimal(18, 6)             @default(0)
 
   // Contrato vs Ejecutado distinction.
   // CONTRATO = frozen, customer-signed. Revenue basis. Default for all existing rows.
@@ -2653,7 +2645,7 @@ enum PresupuestoEstado {
 // Used as the "planeado" baseline in the Explosión vs Real view when per-concepto
 // APU data is not available.
 model PresupuestoInsumo {
-  id            String  @id @default(cuid())
+  id            String @id @default(cuid())
   presupuestoId String
   insumoId      String
   cantidad      Decimal @db.Decimal(18, 6) // project-total quantity from the explosion sheet
@@ -2669,16 +2661,16 @@ model PresupuestoInsumo {
 }
 
 model PresupuestoPartida {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   presupuestoId  String
   // conceptoId is required for LEAF partidas (actual work items) and null
   // for BRANCH partidas (capítulo rollup rows). See esRollup.
   conceptoId     String?
-  apuVersion     Int      @default(1) // snapshot of which APU version was used (leaves only)
+  apuVersion     Int     @default(1) // snapshot of which APU version was used (leaves only)
   cantidad       Decimal? @db.Decimal(18, 6) // leaves only
-  precioUnitario Decimal  @default(0) @db.Decimal(18, 6) // leaves only; branches compute from children
-  importe        Decimal  @default(0) @db.Decimal(18, 6) // leaves: cantidad × PU; branches: sum of children
-  orden          Int      @default(0) // global display order within the presupuesto
+  precioUnitario Decimal @db.Decimal(18, 6)   @default(0) // leaves only; branches compute from children
+  importe        Decimal @db.Decimal(18, 6)   @default(0) // leaves: cantidad × PU; branches: sum of children
+  orden          Int     @default(0) // global display order within the presupuesto
 
   // Legacy flat grouping (kept nullable for backwards read-compat during
   // the tree migration). Superseded by parentPartidaId + codigo.
@@ -2735,16 +2727,16 @@ model Estimacion {
   estado        EstimacionEstado @default(BORRADOR)
 
   subtotal             Decimal @db.Decimal(18, 6)
-  retencionGarantia    Decimal @default(0) @db.Decimal(18, 6)
-  amortizacionAnticipo Decimal @default(0) @db.Decimal(18, 6)
+  retencionGarantia    Decimal @db.Decimal(18, 6) @default(0)
+  amortizacionAnticipo Decimal @db.Decimal(18, 6) @default(0)
   iva                  Decimal @db.Decimal(18, 6)
   total                Decimal @db.Decimal(18, 6)
 
   // Cumulative figures cached at the time this estimación is approved. Lets
   // us render the dashboard without recomputing every time.
-  importeAcumulado Decimal @default(0) @db.Decimal(18, 6)
-  pctPeriodo       Float   @default(0)
-  pctAcumulado     Float   @default(0)
+  importeAcumulado Decimal @db.Decimal(18, 6) @default(0)
+  pctPeriodo       Float @default(0)
+  pctAcumulado     Float @default(0)
 
   // Link to the actual stamped CFDI when timbrada
   invoiceId String?  @unique
@@ -2954,7 +2946,7 @@ model SolicitudCompra {
 
   folio  String
   estado SolicitudEstado @default(PENDIENTE)
-  total  Decimal         @db.Decimal(18, 6)
+  total  Decimal @db.Decimal(18, 6)
   notas  String?
 
   // Header metadata — matches the partner's "SOLICITUD DE COTIZACIÓN"
@@ -3043,7 +3035,7 @@ model SolicitudCompraCotizacion {
   supplierNombre  String // "RYSCO", "BARAMAT" — free-text when supplier row doesn't exist yet
   fechaCotizacion DateTime  @default(now())
   vigenciaHasta   DateTime?
-  total           Decimal   @default(0) @db.Decimal(18, 6)
+  total           Decimal @db.Decimal(18, 6)     @default(0)
   moneda          String    @default("MXN")
   notas           String?
   isSelected      Boolean   @default(false)
@@ -3088,7 +3080,7 @@ model SolicitudAdjudicacion {
   tieneCredito       Boolean   @default(false)
   diasCredito        Int? // días de crédito de la oferta ganadora → vencimiento
   diasEntrega        Int?
-  total              Decimal   @db.Decimal(18, 6) // Σ importe de las líneas adjudicadas a este proveedor
+  total              Decimal @db.Decimal(18, 6) // Σ importe de las líneas adjudicadas a este proveedor
   // POR_PAGAR → PARCIAL (pagos aplicados < total) → PAGADA (saldada) →
   // CONCILIADA (empatada con un movimiento bancario importado = pago real).
   // El pago vive en PagoProveedor (cuenta corriente del proveedor) y se
@@ -3134,7 +3126,7 @@ model PagoProveedor {
   supplierId      String? // null cuando el proveedor es texto libre
   supplierNombre  String // clave de agrupación cuando no hay Supplier row
   fecha           DateTime @default(now())
-  monto           Decimal  @db.Decimal(18, 6) // total del pago; lo no aplicado = anticipo/saldo a favor
+  monto           Decimal @db.Decimal(18, 6) // total del pago; lo no aplicado = anticipo/saldo a favor
   referencia      String? // folio SPEI / transferencia
   comprobanteData String?  @db.Text
   comprobanteMime String?
@@ -3158,7 +3150,7 @@ model PagoAplicacion {
   id             String   @id @default(cuid())
   pagoId         String
   adjudicacionId String
-  monto          Decimal  @db.Decimal(18, 6)
+  monto          Decimal @db.Decimal(18, 6)
   createdAt      DateTime @default(now())
 
   pago         PagoProveedor         @relation(fields: [pagoId], references: [id], onDelete: Cascade)
@@ -3192,7 +3184,7 @@ model PresupuestoVersion {
   version       Int
   createdAt     DateTime @default(now())
   descripcion   String? // "Engineer found stone walls", "Added waterproofing"
-  snapshotTotal Decimal  @db.Decimal(18, 6) // montoTotal at time of snapshot
+  snapshotTotal Decimal @db.Decimal(18, 6) // montoTotal at time of snapshot
 
   presupuesto Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
 
@@ -3238,7 +3230,7 @@ model Pago {
   createdAt  DateTime @default(now())
 
   tipo              PagoTipo
-  monto             Decimal  @db.Decimal(18, 6)
+  monto             Decimal @db.Decimal(18, 6)
   fecha             DateTime
   referencia        String?
   bankAccountId     String?
@@ -3322,7 +3314,7 @@ model RayaSemanal {
   semanaInicio DateTime // Monday 00:00 local
   semanaFin    DateTime // Sunday 23:59 local
   estado       RayaEstado @default(BORRADOR)
-  totalDestajo Decimal    @default(0) @db.Decimal(18, 6) // sum of RayaTrabajo.importeDestajo
+  totalDestajo Decimal @db.Decimal(18, 6)      @default(0) // sum of RayaTrabajo.importeDestajo
   notas        String?
 
   // Filled when marked PAGADA. Unique so we can't double-book a raya.
@@ -3349,14 +3341,14 @@ enum RayaEstado {
 
 // Line item inside a raya: "en el Depto 101, hicimos X de aplanados por $Y"
 model RayaTrabajo {
-  id                   String   @id @default(cuid())
+  id                   String  @id @default(cuid())
   rayaId               String
   presupuestoPartidaId String? // optional link to a leaf partida (drives avance)
   unidadProyectoId     String? // optional "en el Depto 101"
   descripcion          String
   cantidad             Decimal? @db.Decimal(18, 6)
   unidad               String?
-  importeDestajo       Decimal  @db.Decimal(18, 6)
+  importeDestajo       Decimal @db.Decimal(18, 6)
 
   raya               RayaSemanal         @relation(fields: [rayaId], references: [id], onDelete: Cascade)
   presupuestoPartida PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
@@ -3369,10 +3361,10 @@ model RayaTrabajo {
 // of detalles.importe should match the raya's totalDestajo, but we don't
 // enforce it at the DB level — the UI will show a diff if they disagree.
 model RayaDetalleMiembro {
-  id             String  @id @default(cuid())
+  id             String @id @default(cuid())
   rayaId         String
   miembroId      String
-  diasTrabajados Decimal @default(6) @db.Decimal(18, 6)
+  diasTrabajados Decimal @db.Decimal(18, 6)  @default(6)
   importe        Decimal @db.Decimal(18, 6)
 
   raya    RayaSemanal      @relation(fields: [rayaId], references: [id], onDelete: Cascade)
@@ -3552,12 +3544,12 @@ model ReembolsoSemanal {
   estado       ReembolsoEstado @default(SUBMITTED)
 
   // Running totals (denormalized for fast list views; recomputed on gasto add/remove)
-  totalGastos      Decimal @default(0) @db.Decimal(18, 6)
+  totalGastos      Decimal @db.Decimal(18, 6) @default(0)
   // Adelanto previo de caja chica que este reembolso justifica.
   // Ejemplo: Rosy recibió $5,000 el lunes para caja chica; gastó $7,500
   // en la semana; reembolso total a pagar = $7,500 - $5,000 = $2,500.
-  anticipoAplicado Decimal @default(0) @db.Decimal(18, 6)
-  totalReembolso   Decimal @default(0) @db.Decimal(18, 6) // totalGastos - anticipoAplicado
+  anticipoAplicado Decimal @db.Decimal(18, 6) @default(0)
+  totalReembolso   Decimal @db.Decimal(18, 6) @default(0) // totalGastos - anticipoAplicado
 
   // Pago
   bankTransactionId String?   @unique
@@ -3993,7 +3985,7 @@ model PadelClubConfig {
 
   // Default IVA rate applied to court rentals / academy fees (0.16 = 16%).
   // 0 when the activity is exempt or the club bills IVA-incluido elsewhere.
-  ivaRate Decimal @default(0.16) @db.Decimal(18, 6)
+  ivaRate Decimal @db.Decimal(18, 6) @default(0.16)
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
@@ -4077,7 +4069,7 @@ model Reservation {
 
   // Pricing + collection. precio is the total charged for the slot; subtotal/iva
   // are filled when the slot is charged (see postCourtRentalRevenue).
-  precio    Decimal               @default(0) @db.Decimal(18, 6)
+  precio    Decimal @db.Decimal(18, 6)                 @default(0)
   pagado    Boolean               @default(false)
   formaPago ReservationFormaPago?
   cobradoAt DateTime?
@@ -4149,7 +4141,7 @@ model RestauranteConfig {
 
   // IVA aplicado a la venta de alimentos y bebidas (0.16). Los precios del
   // menú son IVA-incluido (costumbre mexicana); al cobrar se desglosan.
-  ivaRate Decimal @default(0.16) @db.Decimal(18, 6)
+  ivaRate Decimal @db.Decimal(18, 6) @default(0.16)
 
   // Número de mesas del piso; alimenta el selector del POS (0 = texto libre).
   numMesas Int @default(0)
@@ -4179,9 +4171,9 @@ model RestInsumo {
   categoria String? // "Carnes", "Abarrotes", "Lácteos", …
   unidad    RestUnidad @default(PZA)
 
-  costoPromedio Decimal @default(0) @db.Decimal(18, 6) // por unidad, sin IVA
-  stock         Float   @default(0)
-  stockMinimo   Float   @default(0)
+  costoPromedio Decimal @db.Decimal(18, 6) @default(0) // por unidad, sin IVA
+  stock         Float @default(0)
+  stockMinimo   Float @default(0)
 
   activo Boolean @default(true)
 
@@ -4222,8 +4214,8 @@ model RestCompra {
   estado     RestCompraEstado @default(ORDENADA)
   fecha      DateTime         @default(now())
 
-  subtotal Decimal @default(0) @db.Decimal(18, 6) // Σ items.importe, sin IVA
-  iva      Decimal @default(0) @db.Decimal(18, 6) // capturado explícito (insumos tasa 0% abundan)
+  subtotal Decimal @db.Decimal(18, 6) @default(0) // Σ items.importe, sin IVA
+  iva      Decimal @db.Decimal(18, 6) @default(0) // capturado explícito (insumos tasa 0% abundan)
 
   notas String?
 
@@ -4319,7 +4311,7 @@ model RestMenuItem {
 
 /// Línea de receta: cuánto insumo consume UNA unidad del platillo.
 model RestReceta {
-  id         String  @id @default(cuid())
+  id         String @id @default(cuid())
   menuItemId String
   insumoId   String
   cantidad   Decimal @db.Decimal(18, 6) // en la unidad del insumo
@@ -4379,11 +4371,11 @@ model RestOrden {
 
   estado RestOrdenEstado @default(ABIERTA)
 
-  subtotal   Decimal @default(0) @db.Decimal(18, 6)
-  iva        Decimal @default(0) @db.Decimal(18, 6)
-  total      Decimal @default(0) @db.Decimal(18, 6) // subtotal + iva (sin propina)
-  propina    Decimal @default(0) @db.Decimal(18, 6)
-  costoTotal Decimal @default(0) @db.Decimal(18, 6) // costo teórico (recetas) congelado al cobrar
+  subtotal   Decimal @db.Decimal(18, 6) @default(0)
+  iva        Decimal @db.Decimal(18, 6) @default(0)
+  total      Decimal @db.Decimal(18, 6) @default(0) // subtotal + iva (sin propina)
+  propina    Decimal @db.Decimal(18, 6) @default(0)
+  costoTotal Decimal @db.Decimal(18, 6) @default(0) // costo teórico (recetas) congelado al cobrar
 
   formaPago         RestOrdenFormaPago?
   cobradaAt         DateTime?
@@ -4426,7 +4418,7 @@ model RestOrdenItem {
   estadoCocina RestItemEstado @default(PENDIENTE)
   listoAt      DateTime?
 
-  costoUnitario Decimal @default(0) @db.Decimal(18, 6) // costo teórico congelado al cobrar
+  costoUnitario Decimal @db.Decimal(18, 6) @default(0) // costo teórico congelado al cobrar
 
   orden    RestOrden    @relation(fields: [ordenId], references: [id], onDelete: Cascade)
   menuItem RestMenuItem @relation(fields: [menuItemId], references: [id])
@@ -4453,11 +4445,11 @@ model PurifConfig {
   nombreComercial String?
   // Precio de lista de la recarga de garrafón — el producto ancla del negocio.
   // Se puede sobreescribir por cliente en PurifClienteConfig.
-  precioGarrafon  Decimal @default(15) @db.Decimal(18, 6)
+  precioGarrafon  Decimal @db.Decimal(18, 6)   @default(15)
   // IVA default de las ventas. El agua no gaseosa ni compuesta en envases
   // mayores a 10 L tributa al 0% (Art. 2-A LIVA), por eso el default es 0.
   // Configurable por producto para presentaciones gravadas (botella chica, hielo).
-  ivaTasaDefault  Decimal @default(0) @db.Decimal(18, 6)
+  ivaTasaDefault  Decimal @db.Decimal(18, 6)   @default(0)
 
   // Datos CFDI para "facturar consumo del mes" desde el satélite.
   claveProdServ      String @default("50202306") // SAT c_ClaveProdServ: agua potable/purificada
@@ -4540,7 +4532,7 @@ model PurifCorte {
   estado PurifCorteEstado @default(BORRADOR)
 
   cortesiasGarrafones Int     @default(0)
-  cortesiasImporte    Decimal @default(0) @db.Decimal(18, 6) // valor de lo regalado (no es ingreso)
+  cortesiasImporte    Decimal @db.Decimal(18, 6)   @default(0) // valor de lo regalado (no es ingreso)
   notas               String?
 
   confirmadoAt DateTime?
@@ -4562,9 +4554,9 @@ model PurifCorteRuta {
   corteId String
   rutaId  String
 
-  efectivo      Decimal @default(0) @db.Decimal(18, 6)
-  transferencia Decimal @default(0) @db.Decimal(18, 6)
-  garrafones    Int     @default(0)
+  efectivo      Decimal @db.Decimal(18, 6) @default(0)
+  transferencia Decimal @db.Decimal(18, 6) @default(0)
+  garrafones    Int   @default(0)
 
   corte PurifCorte @relation(fields: [corteId], references: [id], onDelete: Cascade)
   ruta  PurifRuta  @relation(fields: [rutaId], references: [id])
@@ -4644,7 +4636,7 @@ model PurifCorteGasto {
 
   categoria   PurifGastoCategoria
   descripcion String
-  monto       Decimal             @db.Decimal(18, 6)
+  monto       Decimal @db.Decimal(18, 6)
   formaPago   PurifFormaPago      @default(EFECTIVO)
 
   corte PurifCorte @relation(fields: [corteId], references: [id], onDelete: Cascade)
@@ -4664,7 +4656,7 @@ model PurifProducto {
   // paquete de 5 = 5, botella PET = 0). Alimenta el contador de garrafones
   // vendidos por cliente sin depender del nombre del producto.
   garrafones   Int     @default(1)
-  ivaTasa      Decimal @default(0) @db.Decimal(18, 6)
+  ivaTasa      Decimal @db.Decimal(18, 6)   @default(0)
   activo       Boolean @default(true)
   // Aparece en el menú del POS de ventanilla. Permite productos activos para
   // ventas normales pero fuera del mostrador (p. ej. paquetes por volumen).
@@ -4704,10 +4696,10 @@ model PurifVenta {
   estado     PurifVentaEstado @default(COBRADA)
 
   subtotal   Decimal @db.Decimal(18, 6)
-  iva        Decimal @default(0) @db.Decimal(18, 6)
+  iva        Decimal @db.Decimal(18, 6) @default(0)
   total      Decimal @db.Decimal(18, 6)
   // Garrafones físicos que salieron en esta venta (suma de items × factor).
-  garrafones Int     @default(0)
+  garrafones Int   @default(0)
 
   // Liquidación de una venta a crédito (estado PENDIENTE → COBRADA).
   fechaCobro     DateTime?
@@ -4887,7 +4879,7 @@ model PurifEntrega {
   garrafones Int
   // CASAS: lo cobrado en el momento. EMPRESA: garrafones × precio pactado
   // (calculado en el servidor). CORTESIA: valor de referencia (no es ingreso).
-  importe    Decimal         @default(0) @db.Decimal(18, 6)
+  importe    Decimal @db.Decimal(18, 6)           @default(0)
   formaPago  PurifFormaPago? // CASAS: EFECTIVO/TRANSFERENCIA/TARJETA; EMPRESA: CREDITO; CORTESIA: null
 
   estado PurifEntregaEstado @default(REGISTRADO)
@@ -4953,7 +4945,7 @@ model PurifGasto {
   fecha             DateTime
   categoria         PurifGastoCategoria
   descripcion       String
-  monto             Decimal             @db.Decimal(18, 6)
+  monto             Decimal @db.Decimal(18, 6)
   // CREDITO = queda a deber al proveedor (se abona a 2104 Acreedores diversos).
   formaPago         PurifFormaPago      @default(EFECTIVO)
   supplierId        String?
@@ -5002,13 +4994,13 @@ model ChatConversation {
 }
 
 model ChatMessage {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   conversationId String
   role           String // "user" | "assistant"
-  content        String    @db.Text
+  content        String   @db.Text
   // Autor del mensaje (para conversaciones compartidas). Null = asistente (IA).
   authorId       String?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime @default(now())
   // Traza del turno (sólo assistant): modelo, rondas, tools llamadas y los
   // fundamentos que la KB devolvió. Sin esto un fallo del copiloto no se
   // puede depurar: no se sabe si no ENCONTRÓ el artículo o si lo IGNORÓ.
@@ -5082,16 +5074,16 @@ enum LegalDocumento {
 // Las versiones vigentes viven en src/lib/legal/documentos.ts; al cambiar un
 // documento se sube su versión ahí y la app vuelve a pedir la aceptación.
 model LegalAcceptance {
-  id        String         @id @default(cuid())
-  createdAt DateTime       @default(now())
-  userId    String
-  email     String? // copia al momento de aceptar
-  companyId String? // sólo MANDATO_EFIRMA: la empresa cuya e.firma se autoriza
-  documento LegalDocumento
-  version   String // versión del documento aceptada (fecha ISO, p. ej. "2026-09-03")
-  contexto  String // flujo en que se aceptó: "signup", "gate", "onboarding", "configuracion"
-  ip        String?
-  userAgent String?
+  id         String         @id @default(cuid())
+  createdAt  DateTime       @default(now())
+  userId     String
+  email      String? // copia al momento de aceptar
+  companyId  String? // sólo MANDATO_EFIRMA: la empresa cuya e.firma se autoriza
+  documento  LegalDocumento
+  version    String // versión del documento aceptada (fecha ISO, p. ej. "2026-09-03")
+  contexto   String // flujo en que se aceptó: "signup", "gate", "onboarding", "configuracion"
+  ip         String?
+  userAgent  String?
 
   @@index([userId, documento, createdAt])
   @@index([companyId, documento])
@@ -5188,7 +5180,7 @@ model Vehiculo {
   // Compra — CFDI del proveedor/planta cuando existe (seminuevos comprados a
   // persona física pueden no traer factura: queda el costo capturado y el
   // contrato fuera del sistema).
-  costoCompra     Decimal   @default(0) @db.Decimal(18, 6) // sin IVA
+  costoCompra     Decimal @db.Decimal(18, 6)     @default(0) // sin IVA
   fechaCompra     DateTime?
   compraInvoiceId String?
   supplierId      String?
@@ -5196,18 +5188,18 @@ model Vehiculo {
   // Plan piso (floor plan): tasa anual de la línea que financia esta unidad.
   // El cron de devengo diario usa estos campos para generar
   // VehiculoCosto(tipo=INTERES_PISO) + póliza de gasto financiero.
-  planPisoTasaAnual Decimal?  @db.Decimal(18, 6)
+  planPisoTasaAnual Decimal? @db.Decimal(18, 6)
   planPisoInicio    DateTime?
 
   // Venta
-  precioLista    Decimal?  @db.Decimal(18, 6)
-  precioVenta    Decimal?  @db.Decimal(18, 6) // sin IVA, al momento de vender
-  isan           Decimal   @default(0) @db.Decimal(18, 6) // calculado al vender unidades NUEVO
+  precioLista    Decimal? @db.Decimal(18, 6)
+  precioVenta    Decimal? @db.Decimal(18, 6) // sin IVA, al momento de vender
+  isan           Decimal @db.Decimal(18, 6)     @default(0) // calculado al vender unidades NUEVO
   fechaVenta     DateTime?
   ventaInvoiceId String?
   clienteId      String?
   vendedorId     String? // Employee que cierra la venta (comisiones)
-  comisionMonto  Decimal   @default(0) @db.Decimal(18, 6)
+  comisionMonto  Decimal @db.Decimal(18, 6)     @default(0)
 
   // Derivación automática desde CFDIs (onboarding con la e.firma). autoCreado
   // marca las unidades creadas por el sync a partir del complemento de venta de
@@ -5235,7 +5227,7 @@ model Vehiculo {
   expediente      VehiculoCfdi[]
   servicios       ServicioVenta[]
   ordenesServicio OrdenServicio[]
-  citasServicio   CitaServicio[]
+  citasServicio    CitaServicio[]
   prospectos      Prospecto[]
 
   // Ciclo de vida de ESTE VIN en la agencia: 1 = la primera vez que se compró
@@ -5282,7 +5274,7 @@ model VehiculoCosto {
 
   tipo       VehiculoCostoTipo
   concepto   String
-  monto      Decimal           @db.Decimal(18, 6) // sin IVA
+  monto      Decimal @db.Decimal(18, 6) // sin IVA
   fecha      DateTime
   invoiceId  String? // CFDI del gasto cuando existe
   /**
@@ -5346,7 +5338,7 @@ model Refaccion {
   /**
    * Último costo unitario de compra visto (sin IVA).
    */
-  ultimoCosto   Decimal  @default(0) @db.Decimal(18, 6)
+  ultimoCosto   Decimal @db.Decimal(18, 6)   @default(0)
   /**
    * Último precio unitario de venta visto (sin IVA).
    */
@@ -5366,16 +5358,18 @@ model Refaccion {
    * costo del tambo— multiplicado por los litros del kardex infla el costo
    * ~200 veces: en MARGOM eso convertía $3.5M de venta de refacciones en $85M
    * de costo y hundía la absorción de servicio a −768%.
+   *
    * Se guarda el FACTOR y no el costo ya normalizado porque el factor es un
    * hecho del producto —un tambo trae 208 litros— y no cambia; el costo cambia
    * con cada compra. Null = no se sabe, y entonces el costo NO es comparable y
    * la pieza queda fuera del margen en vez de afirmar una cifra falsa.
+   *
    * Lo puebla scripts/refacciones-factor-costo.ts leyendo el tamaño del envase
    * de la línea del CFDI de COMPRA («…5w-30*208lt (Tambo)»), que es donde está
    * —en `descripcion` no, porque ahí casi siempre gana la descripción de venta.
    */
   factorCosto   Decimal? @db.Decimal(18, 6)
-  autoCreado    Boolean  @default(true)
+  autoCreado    Boolean @default(true)
 
   company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   movimientos RefaccionMovimiento[]
@@ -5397,12 +5391,12 @@ model RefaccionMercado {
   consultadoAt DateTime
 
   /// Mejor título encontrado (el resultado más relevante).
-  titulo        String?
+  titulo String?
   /// Precio detectado en MXN (pagemap del resultado o $ en el snippet).
   precioMercado Float?
   urlPrincipal  String?
   /// Resultados resumidos: [{titulo, url, precio?}] (máx 5) — para la ficha.
-  resultados    Json?
+  resultados Json?
 
   refaccion Refaccion @relation(fields: [refaccionId], references: [id], onDelete: Cascade)
 
@@ -5423,9 +5417,9 @@ model VehiculoMercado {
   precioMin     Float?
   precioMax     Float?
   precioMediana Float?
-  listados      Int    @default(0) // cuántos resultados traían precio
+  listados      Int     @default(0) // cuántos resultados traían precio
   /// [{titulo, url, precio?}] (máx 8) — para la ficha.
-  resultados    Json?
+  resultados Json?
 
   vehiculo Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
 
@@ -5443,11 +5437,11 @@ model RefaccionMovimiento {
   /**
    * Positiva en entradas, negativa en salidas/ajustes a la baja.
    */
-  cantidad      Decimal          @db.Decimal(18, 6)
+  cantidad      Decimal @db.Decimal(18, 6)
   /**
    * Costo unitario (entradas) o precio unitario (salidas), sin IVA.
    */
-  montoUnitario Decimal?         @db.Decimal(18, 6)
+  montoUnitario Decimal? @db.Decimal(18, 6)
   fecha         DateTime
   createdAt     DateTime         @default(now())
 
@@ -5474,15 +5468,15 @@ model ServicioVenta {
   clienteId   String?
   vehiculoId  String?
   fecha       DateTime
-  total       Decimal  @db.Decimal(18, 6) // total del CFDI (con IVA)
+  total       Decimal @db.Decimal(18, 6) // total del CFDI (con IVA)
   /**
    * Suma de conceptos de servicio (mano de obra, lavado, mantenimiento), sin IVA.
    */
-  manoObra    Decimal  @default(0) @db.Decimal(18, 6)
+  manoObra    Decimal @db.Decimal(18, 6)    @default(0)
   /**
    * Suma de conceptos con número de parte (refacciones facturadas), sin IVA.
    */
-  refacciones Decimal  @default(0) @db.Decimal(18, 6)
+  refacciones Decimal @db.Decimal(18, 6)    @default(0)
   /**
    * Primer concepto de servicio — la descripción legible de la orden.
    */
@@ -5559,15 +5553,15 @@ model OrdenServicio {
   servicioVentaId String? @unique
 
   // ── Recepción física (citas+recepción R1) ──────────────────────────────────
-  torre               String? // torre/tarjeta que identifica la unidad en el patio
-  gasolinaOctavos     Int? // nivel de gasolina en octavos: 0..8 (lleno = 8)
+  torre           String? // torre/tarjeta que identifica la unidad en el patio
+  gasolinaOctavos Int? // nivel de gasolina en octavos: 0..8 (lleno = 8)
   /// { items: [{clave, etiqueta, ok}], pertenencias?, comentarios? } — el
   /// inventario/checkup capturado al recibir la unidad.
   inventarioRecepcion Json?
   garantiaDias        Int? // garantía ofrecida en el contrato de adhesión
   /// Se fija SOLO server-side al subir el CONTRATO_FIRMADO (misma transacción).
   /// Ningún PATCH lo acepta: una firma sin el contrato que la ampara no vale.
-  firmadoAt           DateTime?
+  firmadoAt DateTime?
 
   company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   cliente       Customer?            @relation(fields: [clienteId], references: [id], onDelete: SetNull)
@@ -5593,11 +5587,11 @@ model OrdenServicioLinea {
 
   tipo           OrdenServicioLineaTipo
   descripcion    String
-  cantidad       Decimal                @default(1) @db.Decimal(18, 6)
+  cantidad       Decimal @db.Decimal(18, 6)                  @default(1)
   /**
    * Precio unitario presupuestado, sin IVA.
    */
-  precioUnitario Decimal                @default(0) @db.Decimal(18, 6)
+  precioUnitario Decimal @db.Decimal(18, 6)                  @default(0)
   refaccionId    String?
 
   orden     OrdenServicio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
@@ -5749,14 +5743,14 @@ model PedidoVehiculo {
   estado PedidoVehiculoEstado @default(COTIZACION)
 
   // Negociación (montos sin IVA, como precioVenta).
-  precio           Decimal  @db.Decimal(18, 6)
-  enganche         Decimal  @default(0) @db.Decimal(18, 6)
-  anticipoRecibido Decimal  @default(0) @db.Decimal(18, 6)
+  precio           Decimal @db.Decimal(18, 6)
+  enganche         Decimal @db.Decimal(18, 6)   @default(0)
+  anticipoRecibido Decimal @db.Decimal(18, 6)   @default(0)
   // Toma a cuenta de seminuevo (descripción libre + valor acordado).
   tomaACuentaDesc  String?
   tomaACuentaMonto Decimal? @db.Decimal(18, 6)
   financiamiento   String? // texto libre: financiera, plazo, condiciones
-  notas            String?  @db.Text
+  notas            String? @db.Text
 
   apartadoAt  DateTime?
   facturadoAt DateTime?
@@ -5888,7 +5882,7 @@ model NominaCosto {
   /**
    * Percepciones del recibo (gravado + exento): el costo bruto del periodo.
    */
-  percepciones     Decimal      @db.Decimal(18, 6)
+  percepciones     Decimal @db.Decimal(18, 6)
   /**
    * Cuotas PATRONALES estimadas del periodo (IMSS + RCV + 5% INFONAVIT),
    * calculadas con el SBC y los días del propio recibo. El CFDI de nómina NO
@@ -5896,11 +5890,11 @@ model NominaCosto {
    * base (SalarioBaseCotApor), así que el costo real del patrón es
    * reconstruible en vez de quedar fuera del estado de resultados.
    */
-  cuotasPatronales Decimal      @default(0) @db.Decimal(18, 6)
+  cuotasPatronales Decimal @db.Decimal(18, 6)        @default(0)
   /**
    * Insumos de la estimación, para auditarla sin volver a abrir el XML.
    */
-  sbcDiario        Decimal?     @db.Decimal(18, 6)
+  sbcDiario        Decimal? @db.Decimal(18, 6)
   diasPagados      Int?
   riesgoPuesto     String?
   /**
@@ -6109,10 +6103,10 @@ model CeBalanzaMes {
   anio      Int
   mes       Int
   numCta    String
-  saldoIni  Decimal  @db.Decimal(18, 6)
-  debe      Decimal  @db.Decimal(18, 6)
-  haber     Decimal  @db.Decimal(18, 6)
-  saldoFin  Decimal  @db.Decimal(18, 6)
+  saldoIni  Decimal @db.Decimal(18, 6)
+  debe      Decimal @db.Decimal(18, 6)
+  haber     Decimal @db.Decimal(18, 6)
+  saldoFin  Decimal @db.Decimal(18, 6)
   /// true = cuenta de mayor cuyo saldo YA es la suma de sus hijas (padresDeBalanza):
   /// sumar padres e hijas duplica — los reportes filtran por esto.
   esPadre   Boolean  @default(false)
