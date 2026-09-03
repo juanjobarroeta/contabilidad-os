@@ -22,9 +22,9 @@ on:
         default: true
         type: boolean
       pagina:
-        description: "Preguntas por request (≤ 20; cada request tiene 300 s)"
+        description: "Preguntas por request (≤ 20). Con agente+juez usa 2: Fable 5 tarda 60–120 s por pregunta y Railway corta a los 300 s. Sólo-KB aguanta 20."
         required: false
-        default: "6"
+        default: "2"
         type: string
       ids:
         description: "Subconjunto de ids separados por coma (vacío = todas)"
