@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
+import { sembrarProveedoresDesdeCfdis } from "@/lib/proveedores/seed-desde-cfdis";
 
 /**
  * POST /api/proveedores/import-cfdis   { companyId }
@@ -36,58 +36,7 @@ export async function POST(req: Request) {
   const gate = await gateEscritura(userId);
   if (gate) return gate;
 
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { rfc: true },
-  });
+  const r = await sembrarProveedoresDesdeCfdis(companyId);
 
-  // Emisores de CFDIs recibidos (agrupados vía su fila de Customer).
-  const emisores = await prisma.customer.findMany({
-    where: {
-      companyId,
-      invoices: { some: { companyId, tipo: "EGRESO", status: { not: "CANCELLED" } } },
-    },
-    select: {
-      rfc: true,
-      razonSocial: true,
-      regimenFiscal: true,
-      email: true,
-      _count: {
-        select: { invoices: { where: { tipo: "EGRESO", status: { not: "CANCELLED" } } } },
-      },
-    },
-  });
-
-  const EXCLUIR = new Set(
-    [company?.rfc?.toUpperCase(), "XAXX010101000", "XEXX010101000"].filter(Boolean) as string[],
-  );
-
-  const existentes = await prisma.supplier.findMany({
-    where: { companyId },
-    select: { rfc: true },
-  });
-  const yaExiste = new Set(existentes.map((s) => s.rfc.toUpperCase()));
-
-  let creados = 0;
-  let omitidos = 0;
-  for (const e of emisores) {
-    const rfc = e.rfc.toUpperCase().trim();
-    if (!rfc || EXCLUIR.has(rfc) || yaExiste.has(rfc)) {
-      omitidos++;
-      continue;
-    }
-    await prisma.supplier.create({
-      data: {
-        companyId,
-        rfc,
-        razonSocial: e.razonSocial,
-        regimenFiscal: e.regimenFiscal || null,
-        email: e.email || null,
-      },
-    });
-    yaExiste.add(rfc);
-    creados++;
-  }
-
-  return NextResponse.json({ creados, omitidos, emisoresDetectados: emisores.length });
+  return NextResponse.json(r);
 }

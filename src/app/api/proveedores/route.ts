@@ -14,6 +14,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sembrarProveedoresDesdeCfdis } from "@/lib/proveedores/seed-desde-cfdis";
 import { situaciones69b } from "@/lib/fiscal/verificador/lista69b";
 import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
@@ -34,6 +35,19 @@ export async function GET(req: Request) {
 
   const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member) return NextResponse.json([], { status: 403 });
+
+  // Siembra perezosa: la primera vez que se abre la pestaña con el catálogo
+  // vacío y ya hay CFDIs recibidos, los emisores se dan de alta solos — la
+  // promesa literal del empty-state. Después de la primera siembra (count>0)
+  // nunca vuelve a correr; los nuevos se agregan con el botón.
+  const hayProveedores = await prisma.supplier.count({ where: { companyId } });
+  if (hayProveedores === 0) {
+    const hayEgresos = await prisma.invoice.count({
+      where: { companyId, tipo: "EGRESO", status: { not: "CANCELLED" } },
+      take: 1,
+    });
+    if (hayEgresos > 0) await sembrarProveedoresDesdeCfdis(companyId);
+  }
 
   const proveedores = await prisma.supplier.findMany({
     where: {
