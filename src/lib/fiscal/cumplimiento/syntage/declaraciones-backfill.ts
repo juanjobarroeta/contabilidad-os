@@ -27,6 +27,16 @@ export interface BackfillResult {
   acusesParseados: number;
   /** True si se cortó por el tope de acuses de esta corrida (queda más por hacer). */
   topeAlcanzado?: boolean;
+  /** Tax-returns mensuales que Syntage devolvió para la entidad. */
+  returnsMensuales?: number;
+  /** De esos, cuántos aún necesitaban alguna fila (candidatos a parsear). */
+  pendientes?: number;
+  /** Candidatos sin archivo descargable en `files[]`. */
+  sinArchivo?: number;
+  /** Fallos por acuse (descarga, Claude, BD) que NO detuvieron la corrida. */
+  errores?: number;
+  /** Primer fallo, para el operador y el log. */
+  primerError?: string | null;
   error?: string;
 }
 
@@ -132,7 +142,21 @@ export async function backfillDeclaracionesMensuales(
   let mesesCreados = 0;
   let acusesParseados = 0;
   let topeAlcanzado = false;
+  let pendientes = 0;
+  let sinArchivo = 0;
+  let errores = 0;
+  let primerError: string | null = null;
+  const etiqueta = `[declaraciones-backfill] ${company.rfc}`;
   const avisar = (periodo: string) => opts.onAvance?.({ acusesParseados, mesesCreados, ultimoPeriodo: periodo });
+  // Antes un fallo por acuse (descarga, Claude, BD) se tragaba con `continue`
+  // y una corrida de 4 min podía terminar con 0 filas y 0 líneas de log (FRC
+  // ABOGADOS, 3-sep-2026). Ahora cada fallo se loguea y se cuenta.
+  const fallo = (periodo: string, etapa: string, e: unknown) => {
+    const msg = `${periodo} ${etapa}: ${e instanceof Error ? e.message : String(e)}`;
+    errores++;
+    primerError ??= msg;
+    console.error(`${etiqueta}: ${msg}`);
+  };
 
   for (const trRaw of returns) {
     const tr = trRaw as Record<string, unknown>;
@@ -145,6 +169,7 @@ export async function backfillDeclaracionesMensuales(
     const needIsr = tieneISR && !have.has(`ISR_PROVISIONAL:${periodo}`);
     const needIeps = tieneIEPS && !have.has(`IEPS_MENSUAL:${periodo}`);
     if (!needIva && !needIsr && !needIeps) continue; // ya capturado → sin costo de parseo
+    pendientes++;
 
     // Tope por corrida: cada invocación procesa un chunk acotado (evita timeouts);
     // el resto queda para la siguiente corrida (gap-fill).
@@ -154,7 +179,11 @@ export async function backfillDeclaracionesMensuales(
     }
 
     const ref = fileRefDe(tr);
-    if (!ref) continue;
+    if (!ref) {
+      sinArchivo++;
+      console.warn(`${etiqueta}: ${periodo} sin archivo descargable en files[] (${JSON.stringify(tr.files ?? null).slice(0, 200)})`);
+      continue;
+    }
 
     // Un parseo PAGADO que no dejó fila se repetía cada corrida (6h) para
     // siempre — visto en prod: 42 parseos/48h y 0 filas para una empresa
@@ -184,20 +213,31 @@ export async function backfillDeclaracionesMensuales(
 
     let acuse: AcuseMensual | null = null;
     let pdf: Uint8Array<ArrayBuffer> | null = null;
+    let etapa = "descarga";
     try {
       const { data } = await client.downloadAcuse(ref);
       pdf = new Uint8Array(data); // conservar el PDF para descarga posterior
+      etapa = "parseo";
       const parsed = await parseSatDocument(Buffer.from(pdf).toString("base64"), { companyId, subtipo: "declaraciones.backfill" });
       acusesParseados++;
       if (parsed.type === "ACUSE_MENSUAL") acuse = parsed.acuseMensual;
     } catch (e) {
       if (e instanceof SatParsePagadoError) {
         acusesParseados++;
-        await crearMarcadores(pdf);
+        try {
+          await crearMarcadores(pdf);
+        } catch (e2) {
+          fallo(periodo, "marcador", e2);
+        }
         avisar(periodo);
+        continue;
       }
-      continue; // red/API sin costo: se reintenta; un acuse ilegible no detiene el resto
+      // red/API sin costo: se reintenta en la siguiente corrida; un acuse
+      // caído no detiene el resto — pero queda en el log y en el conteo.
+      fallo(periodo, etapa, e);
+      continue;
     }
+    try {
     if (!acuse) {
       // Pagado y completado, pero el PDF no es un acuse mensual (transcript,
       // anexo…): marcar para no volver a pagarlo.
@@ -260,9 +300,21 @@ export async function backfillDeclaracionesMensuales(
       mesesCreados++;
     }
     avisar(periodo);
+    } catch (e) {
+      // Escritura en BD (o marcador) caída: ya se pagó el parseo, así que
+      // queda en el log con el periodo exacto en vez de tumbar la corrida.
+      fallo(periodo, "escritura", e);
+    }
   }
 
-  return { companyId, rfc: company.rfc, mesesCreados, acusesParseados, topeAlcanzado };
+  console.log(
+    `${etiqueta}: returns=${returns.length} pendientes=${pendientes} acuses=${acusesParseados} meses=${mesesCreados}` +
+      ` sinArchivo=${sinArchivo} errores=${errores}${topeAlcanzado ? " tope" : ""}${primerError ? ` primerError=${primerError}` : ""}`,
+  );
+  return {
+    companyId, rfc: company.rfc, mesesCreados, acusesParseados, topeAlcanzado,
+    returnsMensuales: returns.length, pendientes, sinArchivo, errores, primerError,
+  };
 }
 
 export async function backfillAllDeclaracionesMensuales(opts: { maxAcuses?: number } = {}): Promise<{

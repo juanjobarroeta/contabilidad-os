@@ -286,7 +286,13 @@ export default function OperadorPage() {
             {backfill.corrida?.estado === "corriendo" ? " · en curso…" : ""}
             {backfill.backfill?.topeAlcanzado ? " · queda más (vuelve a correr)" : ""}
             {backfill.corrida?.estado === "error" ? ` · error: ${backfill.backfill?.error}` : ""}
+            {backfill.corrida?.errores > 0 ? ` · ${backfill.corrida.errores} fallo(s)` : ""}
           </p>
+          {backfill.corrida?.primerError && (
+            <p className="mt-1 flex items-start gap-1.5 text-[12.5px] text-cos-red-ink">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {backfill.corrida.primerError}
+            </p>
+          )}
           {backfill.nota && <p className="mt-1 text-[13px] text-cos-ink-soft">{backfill.nota}</p>}
 
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -59,14 +59,20 @@ async function handle(req: Request) {
     // Resumen en el log de Railway: antes una corrida exitosa no dejaba rastro
     // (el scheduler sólo loguea errores HTTP), así que no había forma de saber si
     // el job llegó a una empresa o se quedó sin presupuesto antes.
-    const conMovimiento = r.resultados.filter((x) => x.acusesParseados > 0 || x.mesesCreados > 0 || x.error);
+    const conMovimiento = r.resultados.filter(
+      (x) => x.acusesParseados > 0 || x.mesesCreados > 0 || x.error || (x.errores ?? 0) > 0,
+    );
     console.log(
       `[declaraciones-backfill] empresas=${r.empresas} acuses=${r.acusesParseados} meses=${r.mesesCreados}` +
         ` errores=${r.errores}${r.topeAlcanzado ? " tope" : ""}` +
         (conMovimiento.length
           ? " · " +
             conMovimiento
-              .map((x) => `${x.rfc ?? x.companyId}:${x.acusesParseados}/${x.mesesCreados}${x.error ? `!${x.error}` : ""}`)
+              .map(
+                (x) =>
+                  `${x.rfc ?? x.companyId}:${x.acusesParseados}/${x.mesesCreados}` +
+                  `${(x.errores ?? 0) > 0 ? `/${x.errores}fallos(${x.primerError})` : ""}${x.error ? `!${x.error}` : ""}`,
+              )
               .join(" ")
           : ""),
     );

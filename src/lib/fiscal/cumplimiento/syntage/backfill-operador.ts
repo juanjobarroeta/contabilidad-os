@@ -29,6 +29,12 @@ export interface CorridaBackfill {
   mesesCreados: number;
   ultimoPeriodo: string | null;
   topeAlcanzado: boolean;
+  /** Fallos por acuse que no detuvieron la corrida (ver primerError). */
+  errores: number;
+  primerError: string | null;
+  /** Tax-returns mensuales que Syntage tenía / cuántos aún faltaban. */
+  returnsMensuales: number | null;
+  pendientes: number | null;
   error: string | null;
 }
 
@@ -78,6 +84,10 @@ export function iniciarCorrida(
     mesesCreados: 0,
     ultimoPeriodo: null,
     topeAlcanzado: false,
+    errores: 0,
+    primerError: null,
+    returnsMensuales: null,
+    pendientes: null,
     error: null,
   };
   registro().set(companyId, corrida);
@@ -93,6 +103,10 @@ export function iniciarCorrida(
       corrida.acusesParseados = r.acusesParseados;
       corrida.mesesCreados = r.mesesCreados;
       corrida.topeAlcanzado = r.topeAlcanzado === true;
+      corrida.errores = r.errores ?? 0;
+      corrida.primerError = r.primerError ?? null;
+      corrida.returnsMensuales = r.returnsMensuales ?? null;
+      corrida.pendientes = r.pendientes ?? null;
       corrida.error = r.error ?? null;
       corrida.estado = r.error ? "error" : "terminado";
       corrida.fin = new Date().toISOString();

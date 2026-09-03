@@ -17,6 +17,10 @@ const base = (over: Partial<CorridaBackfill> = {}): CorridaBackfill => ({
   mesesCreados: 0,
   ultimoPeriodo: null,
   topeAlcanzado: false,
+  errores: 0,
+  primerError: null,
+  returnsMensuales: null,
+  pendientes: null,
   error: null,
   ...over,
 });
