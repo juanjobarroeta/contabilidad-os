@@ -81,7 +81,11 @@ export function ManifiestoBanner({ companyId }: { companyId: string }) {
   return (
     <div className="mt-4 flex flex-wrap items-start gap-3 rounded-card border border-cos-amber-ink/25 bg-cos-amber-tint px-4 py-3">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-cos-amber-ink" />
-      <div className="min-w-0 flex-1 text-sm text-cos-amber-ink">
+      {/* min-w-[16rem] y no min-w-0: con min-w-0 el texto se aplastaba a una
+          palabra por línea en móvil (flex-wrap nunca envolvía porque la
+          columna "cabía" encogida); con un mínimo real, los botones bajan de
+          renglón. */}
+      <div className="min-w-[16rem] flex-1 text-sm text-cos-amber-ink">
         <p className="font-semibold">Falta firmar la Carta Manifiesto de Facturapi.</p>
         <p className="mt-0.5 text-[13px]">
           Sin ella, tus facturas no se pueden timbrar ante el SAT. Se firma una sola vez con tu
