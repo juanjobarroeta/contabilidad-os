@@ -252,7 +252,8 @@ export async function PATCH(req: Request, { params }: Params) {
     // Con la firma recién guardada, el backfill de CFDIs arranca YA (primer
     // envío de solicitudes al SAT) en vez de esperar al siguiente tick.
     kickCron("sat-backfill");
-    kickCron("declaraciones-backfill", 90_000);
+    // Declaraciones/opinión/CSF: las cosecha el seguimiento de extracciones que
+    // arranca provisionCompany en cuanto Syntage termina (syntage/seguimiento.ts).
     // Cancelaciones: el XML del SAT no trae estatus, así que el historial que
     // acaba de entrar necesita la pasada de metadata y la de UUID. Ver el
     // mismo par en POST /api/companies (alta con e.firma).

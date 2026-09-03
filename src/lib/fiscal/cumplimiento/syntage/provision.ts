@@ -15,8 +15,9 @@ import { decryptSecret } from "@/lib/crypto";
 import { recordSyntageExtraction } from "@/lib/costos/record";
 import { planIncluyeSyntage } from "@/lib/planes";
 import { nivelPagoEmpresas, type NivelPago } from "@/lib/billing/pagadores";
-import { SyntageClient } from "./client";
+import { SyntageClient, type Extractor } from "./client";
 import { opcionesExtraccion } from "./periodos-extraccion";
+import { seguirExtracciones, type ExtraccionDisparada } from "./seguimiento";
 import {
   EXTRACTORES_PROVISION,
   debeArrancarCE,
@@ -34,6 +35,8 @@ export interface ProvisionResult {
   skipped?: boolean;
   /** Por qué se omitió (p.ej. "sin_pago_vigente") — no es un error. */
   motivo?: string;
+  /** Extractores disparados en esta corrida (los sigue syntage/seguimiento.ts). */
+  extracciones?: Extractor[];
   error?: string;
 }
 
@@ -209,31 +212,40 @@ async function provisionOne(
       }),
     ),
   );
+  const disparadas: ExtraccionDisparada[] = [];
   results.forEach((r, i) => {
-    if (r.status === "fulfilled") void recordSyntageExtraction(pendientes[i], { companyId: c.id });
+    if (r.status !== "fulfilled") return;
+    void recordSyntageExtraction(pendientes[i], { companyId: c.id });
+    disparadas.push({ extractor: pendientes[i], id: r.value.id });
   });
 
   // Arranque de CE (best-effort, una sola vez). El registro se lee/importa en el
   // sync; el costo se mide como CostEvent igual que las demás extracciones.
   if (arrancarCE) {
     try {
-      await client.createExtraction({
+      const ce = await client.createExtraction({
         extractor: "electronic_accounting",
         entity: entityId,
         options: opcionesExtraccion("electronic_accounting", new Date()),
       });
       void recordSyntageExtraction("electronic_accounting", { companyId: c.id });
+      disparadas.push({ extractor: "electronic_accounting", id: ce.id });
     } catch {
       // No rompemos el aprovisionamiento si el disparo de CE falla; el sync
       // reintentará en una corrida posterior (ceBootstrapAt sigue null).
     }
   }
 
+  // Cosecha en cuanto Syntage termine, sin esperar la cadencia de 6 h del sync
+  // ni la del backfill de mensuales. Fire-and-forget; la cadencia sigue de red.
+  seguirExtracciones(c.id, c.rfc, disparadas, client);
+
   return {
     companyId: c.id,
     rfc: c.rfc,
     entityId,
     credencial,
+    extracciones: disparadas.map((d) => d.extractor),
     // Observabilidad: en trial la extracción quedó acotada a la probadita.
     ...(nivelExtraccion === "TRIAL" ? { motivo: "trial_solo_basicos" } : {}),
   };

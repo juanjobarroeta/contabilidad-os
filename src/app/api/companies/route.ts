@@ -615,9 +615,10 @@ export async function POST(req: Request) {
     // solicitudes al SAT); los ticks del scheduler importan conforme el SAT
     // libere los paquetes. El cliente ve su historial entrar sin esperar.
     kickCron("sat-backfill");
-    // Acuses mensuales: espera a que el aprovisionamiento de Syntage asiente
-    // (la extracción de declaraciones es asíncrona) y arranca el backfill.
-    kickCron("declaraciones-backfill", 90_000);
+    // Acuses mensuales / opinión / CSF / anuales: los cosecha el seguimiento de
+    // extracciones que arranca provisionCompany (syntage/seguimiento.ts) en
+    // cuanto Syntage termina — antes un kick global a los 90 s llegaba antes
+    // que la extracción y gastaba el tope compartido en otras empresas.
     // Estatus de cancelación: los paquetes XML del SAT NO traen el estatus, así
     // que sin esto una empresa nueva carga como vigentes años de facturas
     // canceladas. Se disparan con retraso para que el backfill ya haya
