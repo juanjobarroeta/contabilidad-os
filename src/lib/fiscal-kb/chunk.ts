@@ -22,6 +22,15 @@ export interface LawChunk {
 const MAX_CHUNK_CHARS = 6000;
 /** Lines of overlap carried between sub-chunks of a long article. */
 const OVERLAP_LINES = 2;
+/**
+ * Tamaño objetivo de cada parte cuando un artículo largo se parte por
+ * FRACCIONES (ver splitArticulo). Más chico que MAX_CHUNK_CHARS a propósito:
+ * un embedding de 6 000 caracteres con seis fracciones distintas no se parece
+ * a ninguna pregunta concreta.
+ */
+const TARGET_PART_CHARS = 2500;
+/** Línea que arranca una fracción: «I. », «XXII. ». */
+const FRACCION_RE = /^\s*[IVXLC]+\.\s/;
 
 // Matches article headers across the notations used by Mexican leyes:
 //   LISR style:  "Artículo 5.", "Artículo 113-E.", "Artículo 32-Bis."
@@ -120,6 +129,60 @@ function subSplit(text: string): string[] {
 }
 
 /**
+ * Parte un artículo largo por FRACCIONES, repitiendo el encabezado del
+ * artículo en cada parte.
+ *
+ * Hallazgo del eval (Fase 1): «Art. 27 LISR» (requisitos de las deducciones,
+ * 29 000 caracteres) se partía en 5 ventanas de 6 000 cortadas a media
+ * oración; las partes 2–5 no decían «Artículo 27» ni «requisitos de las
+ * deducciones», así que su embedding no sabía de qué artículo era. Doce de las
+ * 80 preguntas del eval esperan ese artículo y casi todas fallaban.
+ *
+ * Ahora: cada parte empieza en una fracción, cabe en ~TARGET_PART_CHARS y
+ * lleva el primer renglón del artículo («Artículo 27. Las deducciones …
+ * requisitos:») como encabezado. Un artículo largo sin fracciones (o una
+ * fracción monstruosa) se parte por tamaño como antes.
+ */
+function splitArticulo(body: string): string[] {
+  if (body.length <= MAX_CHUNK_CHARS) return [body];
+  const lines = body.split("\n");
+  // Segmentos: el preámbulo (encabezado + texto antes de la 1ª fracción) y
+  // luego una fracción por segmento.
+  const segmentos: string[][] = [[]];
+  for (const line of lines) {
+    if (FRACCION_RE.test(line) && segmentos[segmentos.length - 1].length > 0) segmentos.push([]);
+    segmentos[segmentos.length - 1].push(line);
+  }
+  if (segmentos.length < 3) return subSplit(body);
+
+  const encabezado = lines[0].trim().slice(0, 300);
+  const parts: string[] = [];
+  let buf: string[] = [];
+  let size = 0;
+  const flush = () => {
+    if (buf.length > 0) parts.push(buf.join("\n"));
+    buf = [];
+    size = 0;
+  };
+  for (const [i, seg] of segmentos.entries()) {
+    const texto = seg.join("\n");
+    // El preámbulo (encabezado + texto antes de la fracción I) nunca va solo:
+    // un chunk de 200 caracteres con «…los siguientes requisitos:» no sirve.
+    const soloPreambulo = i === 1 && buf.length === 1;
+    if (size > 0 && !soloPreambulo && size + texto.length + 1 > TARGET_PART_CHARS) flush();
+    if (texto.length > MAX_CHUNK_CHARS) {
+      flush();
+      parts.push(...subSplit(texto));
+      continue;
+    }
+    buf.push(texto);
+    size += texto.length + 1;
+  }
+  flush();
+  return parts.map((p, i) => (i === 0 ? p : `${encabezado} (continúa)\n${p}`));
+}
+
+/**
  * Chunk a cleaned law text into citable units.
  *
  * - Everything before the first "Artículo 1." (decree boilerplate, índice) is
@@ -154,7 +217,7 @@ export function chunkLaw(cleanText: string): LawChunk[] {
   const pushUnit = (articulo: string, body: string, start: number) => {
     const contexto = trailAt(breadcrumbs, start);
     const prefix = contexto ? `[${contexto}]\n` : "";
-    const parts = subSplit(body.trim());
+    const parts = articulo === "TRANSITORIOS" ? subSplit(body.trim()) : splitArticulo(body.trim());
     for (let i = 0; i < parts.length; i++) {
       chunks.push({
         articulo,

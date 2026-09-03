@@ -21,3 +21,39 @@ describe("chunkLaw — encabezados de artículo", () => {
     expect(chunks.map((c) => c.articulo)).toEqual(["5", "6"]);
   });
 });
+
+describe("chunkLaw — artículos largos se parten por fracciones", () => {
+  const fraccion = (n: string) => `${n}. ${"Requisito de la fracción " + n + ". "}${"texto ".repeat(150)}`;
+  const romanos = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+
+  it("cada parte arranca en una fracción, cabe en el tamaño objetivo y repite el encabezado", () => {
+    const cuerpo = `Artículo 27. Las deducciones autorizadas deberán reunir los siguientes requisitos:\n${romanos.map(fraccion).join("\n")}\nArtículo 28. No serán deducibles:\nI. Corto.`;
+    const chunks = chunkLaw(ley(cuerpo));
+    const a27 = chunks.filter((c) => c.articulo === "27");
+    expect(a27.length).toBeGreaterThan(2);
+    expect(a27.map((c) => c.parte)).toEqual(a27.map((_, i) => i + 1));
+    for (const [i, c] of a27.entries()) {
+      const sinBreadcrumb = c.texto.replace(/^\[[^\]]*\]\n/, "");
+      const lineas = sinBreadcrumb.split("\n");
+      if (i === 0) {
+        expect(lineas[0]).toMatch(/^Artículo 27\. Las deducciones/);
+      } else {
+        expect(lineas[0]).toBe("Artículo 27. Las deducciones autorizadas deberán reunir los siguientes requisitos: (continúa)");
+        expect(lineas[1]).toMatch(/^[IVX]+\. /);
+      }
+      expect(sinBreadcrumb.length).toBeLessThanOrEqual(3200);
+    }
+    // Ninguna fracción se perdió ni se duplicó entre partes.
+    const arranques = a27.flatMap((c) => c.texto.split("\n").filter((l) => /^[IVX]+\. Requisito/.test(l)));
+    expect(arranques).toHaveLength(romanos.length);
+    expect(chunks.filter((c) => c.articulo === "28")).toHaveLength(1);
+  });
+
+  it("un artículo largo SIN fracciones se sigue partiendo por tamaño", () => {
+    const cuerpo = `Artículo 9. Prosa larga.\n${"Renglón de prosa sin fracciones, como un artículo narrativo largo.\n".repeat(200)}Artículo 10. Corto.`;
+    const chunks = chunkLaw(ley(cuerpo));
+    const a9 = chunks.filter((c) => c.articulo === "9");
+    expect(a9.length).toBeGreaterThan(1);
+    expect(a9[1].texto).not.toContain("(continúa)");
+  });
+});
