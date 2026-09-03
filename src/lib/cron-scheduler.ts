@@ -140,8 +140,12 @@ const JOBS: Job[] = [
   // Acuses MENSUALES desde Syntage (PDF + parse con Claude). Corría SÓLO en el
   // workflow de Actions del día 22 — con Actions caído, una empresa nueva se
   // quedaba sin sus mensuales para siempre y el checklist los pedía a mano.
-  // Gap-driven con tope de 10 acuses por corrida: sin faltantes es un no-op.
-  { name: "declaraciones-backfill", everyMs: 6 * HOUR, firstDelayMs: 20 * MIN, minMs: MIN_CARO },
+  // Gap-driven con tope de 10 acuses por corrida: sin faltantes es un no-op
+  // (dos GETs a Syntage por empresa). La vía RÁPIDA para una empresa nueva es el
+  // seguimiento de extracciones (syntage/seguimiento.ts), que corre el backfill
+  // acotado en cuanto Syntage termina; esta cadencia es la red de seguridad si
+  // un redeploy mató ese seguimiento — por eso 1 h y no 6.
+  { name: "declaraciones-backfill", everyMs: HOUR, firstDelayMs: 20 * MIN, minMs: MIN_CARO },
   // Inventario automotriz: deriva unidades de los CFDIs recién bajados (parse
   // local del rawXml, sin cuota SAT). Desfasado del rawxml-backfill para
   // procesar lo que ese ciclo acaba de traer; sin empresas AUTOMOTRIZ es no-op.
@@ -237,10 +241,20 @@ async function correrEnBucle(job: Job): Promise<void> {
  * con e.firma: el onboarding no espera al siguiente tick para arrancar el
  * backfill. Pequeño delay para que la transacción/aprovisionamiento asiente.
  */
-export function kickCron(name: string, delayMs = 5_000): void {
+export function kickCron(name: string, delayMs = 5_000, query?: string): void {
   if (!process.env.CRON_SECRET) return;
-  const t = setTimeout(() => void tick(name), delayMs);
+  const t = setTimeout(() => void tick(name, query), delayMs);
   if (typeof t.unref === "function") t.unref();
+}
+
+/**
+ * Corre un cron AHORA y devuelve su señal (status + cuerpo), para quien necesita
+ * leer el resultado — p. ej. el seguimiento de extracciones Syntage, que vuelve
+ * a llamar al backfill acotado mientras reporte `completado=false`. Sin
+ * CRON_SECRET devuelve status 0 (igual que tick).
+ */
+export function correrCron(name: string, query?: string): Promise<SeñalCorrida> {
+  return tick(name, query);
 }
 
 /** Arranca el scheduler (idempotente; una sola vez por proceso). */
