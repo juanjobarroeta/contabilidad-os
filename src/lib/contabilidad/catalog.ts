@@ -103,6 +103,9 @@ export const SAT_STARTER_CATALOG: CatalogAccount[] = [
   { cuentaSAT: "107", subcuenta: "107.05",     nombre: "Otros deudores diversos",             tipo: "ACTIVO",  nivel: 3 },
   { cuentaSAT: "113", subcuenta: null,         nombre: "Impuestos a favor",                   tipo: "ACTIVO",  nivel: 2 },
   { cuentaSAT: "113", subcuenta: "113.02",     nombre: "ISR a favor",                         tipo: "ACTIVO",  nivel: 3 },
+  // ── Inventarios (Fase 1 inventario periódico: G01 → almacén) ──
+  { cuentaSAT: "115", subcuenta: null,         nombre: "Inventario",                          tipo: "ACTIVO",  nivel: 2 },
+  { cuentaSAT: "115", subcuenta: "115.01",     nombre: "Inventario",                          tipo: "ACTIVO",  nivel: 3 },
   // ── Activo fijo (Fase 3: depreciación contable al libro) ──
   { cuentaSAT: "152", subcuenta: null,         nombre: "Edificios",                           tipo: "ACTIVO",  nivel: 2 },
   { cuentaSAT: "152", subcuenta: "152.01",     nombre: "Edificios",                           tipo: "ACTIVO",  nivel: 3 },
@@ -172,6 +175,9 @@ export const SAT_STARTER_CATALOG: CatalogAccount[] = [
 
   // ─── 600 GASTOS ──────────────────────────────────────────────────────────
   { cuentaSAT: "600", subcuenta: null,         nombre: "Gastos",                              tipo: "GASTO",   nivel: 1 },
+  // ── 500 COSTOS (costo de lo vendido — lo llena el inventario periódico) ──
+  { cuentaSAT: "501", subcuenta: null,         nombre: "Costo de venta y/o servicio",         tipo: "COSTO",   nivel: 2 },
+  { cuentaSAT: "501", subcuenta: "501.01",     nombre: "Costo de venta",                      tipo: "COSTO",   nivel: 3 },
   { cuentaSAT: "601", subcuenta: null,         nombre: "Gastos generales",                    tipo: "GASTO",   nivel: 2 },
   { cuentaSAT: "601", subcuenta: "601.01",     nombre: "Sueldos y salarios",                  tipo: "GASTO",   nivel: 3 },
   { cuentaSAT: "601", subcuenta: "601.26",     nombre: "Cuotas al IMSS",                      tipo: "GASTO",   nivel: 3 },

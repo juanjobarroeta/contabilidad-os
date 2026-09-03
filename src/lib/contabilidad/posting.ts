@@ -16,6 +16,7 @@ import { prisma } from "../prisma";
 import { resolveAccount } from "./seed-catalog";
 import { COE_CODES } from "./catalog";
 import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
+import { costoPeriodico } from "./inventario-periodico";
 import { classifyInvoice } from "./classify-egreso";
 import { esComprobanteDeEgreso, espejo, signoDeComprobante } from "./nota-credito";
 import { cargarContextoTaller, costoCompraRefacciones, piernasIngresoTaller } from "./taller";
@@ -60,7 +61,7 @@ type EntryDraft = {
 // re-postear un mes; el resto (APERTURA, MANUAL, CONSTRUCCION, FLOTA, PADEL,
 // CIERRE) se PRESERVA porque lo capturan a mano el contador u otros módulos
 // satélite y postMonth nunca lo vuelve a generar.
-export const REGENERATED_SOURCES: readonly EntrySource[] = ["CFDI", "NOMINA", "BANCO", "DEPRECIACION"];
+export const REGENERATED_SOURCES: readonly EntrySource[] = ["CFDI", "NOMINA", "BANCO", "DEPRECIACION", "INVENTARIO"];
 
 export type EntrySummary = { entriesCount: number; totalCargos: number; totalAbonos: number };
 
@@ -319,6 +320,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accAcreedoresDiv,
     accRentas,
     accOtrosIngresos,
+    accInventario,
+    accCostoVenta,
   ] = await Promise.all([
     resolveAccount(companyId, COE_CODES.BANCOS),
     resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
@@ -343,6 +346,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.ACREEDORES_DIVERSOS),
     resolveAccount(companyId, COE_CODES.RENTAS),
     resolveAccount(companyId, COE_CODES.OTROS_INGRESOS),
+    resolveAccount(companyId, COE_CODES.INVENTARIO),
+    resolveAccount(companyId, COE_CODES.COSTO_VENTA),
   ]);
 
   // ─── 1. CFDIs emitted (INGRESO) ────────────────────────────────────────
@@ -691,9 +696,17 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       ? { cuenta: inv.overrideCuenta, label: "manual" }
       : inv.naturaleza === "INVERSION"
         ? { cuenta: activosPorInvoice.get(inv.id) ?? "160.01", label: "activo fijo" }
-        : classifyInvoice(
-            inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe) }))
-          );
+        : inv.naturaleza === "INVENTARIO"
+          // G01 (adquisición de mercancías): a ALMACÉN, no a gasto — el costo
+          // se reconoce al vender (Art. 39), vía el ajuste periódico del
+          // conteo (ver bloque INVENTARIO PERIÓDICO abajo). Los fletes/otros
+          // conceptos del mismo comprobante capitalizan con la mercancía
+          // (costo de adquisición). El clasificador ya traía esta naturaleza
+          // desde el uso del CFDI; el motor por fin la obedece.
+          ? { cuenta: COE_CODES.INVENTARIO, label: "inventario" }
+          : classifyInvoice(
+              inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe) }))
+            );
     const gastoAccountId = ctaInvFam ? ctaInvFam.id : await resolveCached(classification.cuenta);
 
     // FASE 2f: la parte del CFDI que entró como refacción es COSTO; el resto
@@ -1167,6 +1180,77 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         `Movimiento ignorado con categoría desconocida ("${tag}"): ${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 40)} — NO contabilizado.`
       );
       continue;
+    }
+  }
+
+  // ─── INVENTARIO PERIÓDICO: costo de venta por diferencia ────────────────
+  // costo = saldo inicial de 115 + entradas del mes − conteo físico (Cierre).
+  // Sólo corre cuando la cuenta de inventario tiene vida; sin conteo capturado
+  // el mes NO se bloquea — se advierte que el costo quedó sin reconocer.
+  {
+    const draftsInv = drafts
+      .filter((d) => d.chartAccountId === accInventario.id)
+      .reduce((s, d) => s + (d.tipo === "CARGO" ? d.monto : -d.monto), 0);
+    // Asientos del mes que NO se regeneran (manuales/apertura) también son
+    // entradas; los regenerables viejos se excluyen porque este posteo los
+    // reemplaza con `drafts`.
+    const persistidosMes = await prisma.accountingEntry.findMany({
+      where: {
+        companyId, year, month,
+        chartAccountId: accInventario.id,
+        fuente: { notIn: REGENERATED_SOURCES as EntrySource[] },
+      },
+      select: { monto: true, tipo: true },
+    });
+    const manualesMes = persistidosMes.reduce(
+      (s, e) => s + (e.tipo === "CARGO" ? Number(e.monto) : -Number(e.monto)), 0);
+    const previos = await prisma.accountingEntry.findMany({
+      where: {
+        companyId,
+        chartAccountId: accInventario.id,
+        OR: [{ year: { lt: year } }, { year, month: { lt: month } }],
+      },
+      select: { monto: true, tipo: true },
+    });
+    const saldoInicial = previos.reduce(
+      (s, e) => s + (e.tipo === "CARGO" ? Number(e.monto) : -Number(e.monto)), 0);
+    const entradasNetas = draftsInv + manualesMes;
+
+    if (Math.abs(saldoInicial) > 0.005 || Math.abs(entradasNetas) > 0.005) {
+      const conteo = await prisma.inventarioConteo.findUnique({
+        where: { companyId_year_month: { companyId, year, month } },
+      });
+      if (!conteo) {
+        warnings.push(
+          "Inventario sin conteo del mes: el costo de venta quedó sin reconocer. " +
+          "Captura el valor del inventario físico en «Cierre del mes» y vuelve a contabilizar.",
+        );
+      } else {
+        const r = costoPeriodico({
+          saldoInicial,
+          entradasNetas,
+          valorFinal: Number(conteo.valorFinal),
+        });
+        if (r.advertencia) warnings.push(r.advertencia);
+        if (Math.abs(r.costo) > 0.005) {
+          const abs = Math.abs(r.costo);
+          const baseInv = {
+            // Último día del mes (mes 13 → 31-dic): Date.UTC(y, m, 0) = fin del mes m.
+            fecha: new Date(Date.UTC(year, Math.min(month, 12), 0)),
+            descripcion: `Costo de venta del período (inventario físico $${Number(conteo.valorFinal).toFixed(2)})`,
+            referencia: `conteo:${year}-${String(month).padStart(2, "0")}`,
+            referenciaTipo: "INVENTARIO" as const,
+            fuente: "INVENTARIO" as EntrySource,
+          };
+          if (r.costo > 0) {
+            drafts.push({ ...baseInv, chartAccountId: accCostoVenta.id, monto: abs, tipo: "CARGO" });
+            drafts.push({ ...baseInv, chartAccountId: accInventario.id, monto: abs, tipo: "ABONO" });
+          } else {
+            drafts.push({ ...baseInv, chartAccountId: accInventario.id, monto: abs, tipo: "CARGO" });
+            drafts.push({ ...baseInv, chartAccountId: accCostoVenta.id, monto: abs, tipo: "ABONO" });
+          }
+        }
+      }
     }
   }
 

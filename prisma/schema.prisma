@@ -372,6 +372,7 @@ model Company {
   // nunca barridas van al frente de la fila).
   @@index([vigenciaBarridoAt])
   tombstonesBancarias BankTransactionTombstone[]
+  inventarioConteos   InventarioConteo[]
 }
 
 model CompanyMember {
@@ -2356,6 +2357,28 @@ enum EntrySource {
   AUTOMOTRIZ
   JCPT // plataforma de coaching JCPT (satélite con backend propio)
   DEPRECIACION // depreciación contable mensual — REGENERABLE (postMonth la reconstruye del registro de activos)
+  INVENTARIO // costo de venta por inventario periódico — REGENERABLE (postMonth lo deriva del conteo capturado)
+}
+
+/// Conteo físico del inventario al cierre del mes (método PERIÓDICO, Art. 39
+/// y 41 LISR). Un valor por período: postMonth deriva el costo de venta como
+/// saldo inicial de 115 + entradas del mes − este valor, y lo postea (fuente
+/// INVENTARIO, regenerable). Capturarlo es opcional: sin conteo, el mes cierra
+/// con el costo sin reconocer y una advertencia en el posteo.
+model InventarioConteo {
+  id         String   @id @default(cuid())
+  companyId  String
+  year       Int
+  month      Int
+  /// Valor del inventario físico al cierre del período (a costo).
+  valorFinal Decimal  @db.Decimal(18, 2)
+  notas      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, year, month])
 }
 
 // ─── Module 6: Construction Project Management ───────────────────────────────
