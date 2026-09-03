@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "db-staging": {
+      "type": "http",
+      "url": "https://db-mcp-staging-staging.up.railway.app/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DBHUB_STAGING_TOKEN}"
+      }
+    }
+  }
+}

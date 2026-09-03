@@ -73,6 +73,45 @@ railway up                           # deploy current branch
 
 ---
 
+## Read-only SQL access for Claude (staging only)
+
+Claude Code web sessions can't open raw TCP to Postgres (only HTTPS leaves the
+container), so staging exposes a **read-only MCP server** over HTTPS instead.
+Production has no equivalent on purpose: see the restriction in
+`docs/HANDOFF-inventario-cfdis.md` ("no abrir la red ni crear un endpoint SQL
+genérico").
+
+What exists in the `staging` Railway environment:
+
+| Piece | Value |
+|---|---|
+| Service | `db-mcp-staging` — Docker image `bytebase/dbhub`, HTTP transport on port 8080 |
+| URL | `https://db-mcp-staging-staging.up.railway.app/mcp` |
+| DB role | `mcp_ro` — `LOGIN`, no superuser/createdb, `default_transaction_read_only=on`, `statement_timeout=30s`, `SELECT` on `public.*` (+ default privileges for new tables) |
+| Connection | Railway private network (`postgres.railway.internal`), never the public TCP proxy |
+| Auth | Bearer token in `DBHUB_AUTH_TOKEN` on the service; every path (incl. `/` and `/health`) answers 401 without it |
+| Hosts | `DBHUB_ALLOWED_HOSTS` pinned to the service domain |
+| Idle | App sleeping enabled; first request after idle takes a few seconds |
+
+Tools exposed: `execute_sql` (rejected server-side for anything that writes:
+`cannot execute ... in a read-only transaction`) and `search_objects`.
+
+**Wire it into Claude Code:** `.mcp.json` at the repo root declares the server as
+`db-staging` and reads the token from `DBHUB_STAGING_TOKEN`. Set that variable in
+the Claude Code cloud environment (Environment → variables) with the value of
+`DBHUB_AUTH_TOKEN` from the `db-mcp-staging` service in Railway. New sessions
+pick it up; existing ones need a restart.
+
+**Rotate the token:** set a new `DBHUB_AUTH_TOKEN` on the service (comma-separate
+old,new for a no-cut-over window), update `DBHUB_STAGING_TOKEN`, then drop the old
+value. **Rotate the DB password:** `ALTER ROLE mcp_ro WITH PASSWORD '...'` on the
+staging DB, then update `DSN` on the service.
+
+Not usable from claude.ai custom connectors: those send no custom headers (same
+reason `/api/mcp/[key]` puts its key in the path), and DBHub only accepts a header.
+
+---
+
 ## Testing this PR (automatic SAT sync) on staging
 
 After the branch is deployed to staging with `DATABASE_URL`, `CRON_SECRET`, and
