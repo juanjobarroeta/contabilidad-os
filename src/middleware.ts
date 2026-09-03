@@ -104,6 +104,9 @@ export const config = {
     "/api/purificadora/:path*",
     "/api/restaurante/:path*",
     "/api/automotriz/:path*",
+    // Hospital (satélite): expediente, cuenta del paciente, censo, agenda,
+    // farmacia y el directorio derivado de CFDIs. Ver docs/HOSPITAL.md.
+    "/api/hospital/:path*",
     // PurificadoraOS (satélite) administra clientes y concilia contra el
     // estado de cuenta desde su propio origen, así que las superficies
     // canónicas de clientes y bancos también necesitan CORS.
