@@ -23,11 +23,15 @@ const MAX_CHUNK_CHARS = 6000;
 /** Lines of overlap carried between sub-chunks of a long article. */
 const OVERLAP_LINES = 2;
 
-// Matches article headers across the two notations used by Mexican leyes:
+// Matches article headers across the notations used by Mexican leyes:
 //   LISR style:  "Artículo 5.", "Artículo 113-E.", "Artículo 32-Bis."
 //   LIVA/CFF:    "Artículo 5o.-", "Artículo 1o.-A.-" (ordinal o/º/° + ".-" intro)
-// Captures the number + optional "-Suffix" (drops the ordinal mark from the cite).
-const ARTICLE_RE = /^Artículo (\d+(?:-[A-Za-zÑ]+)?|\d+[oº°](?:-[A-Za-zÑ]+)?)\.-?(?=\s)/gm;
+//   LSS/LFT:     "Artículo 5 A.", "Artículo 15 B." (letra separada por espacio)
+// Captures the number + optional suffix (drops the ordinal mark from the cite).
+//   LIVA:        "Artículo 1o.-A.-" (ordinal, punto-guion, sufijo) → cita "1o-A"
+//   CFF:         "Artículo 17-H Bis." → cita "17-H Bis"
+// Captures the number + optional suffix (drops the ordinal mark from the cite).
+const ARTICLE_RE = /^Artículo (\d+[oº°]?(?:\.?-[A-Za-zÑ]+)?(?: Bis)?|\d+ [A-Z])\.-?(?=\s)/gm;
 const TRANSITORIOS_RE = /^\s*(?:ARTÍCULOS?\s+)?TRANSITORIOS?\s*$/m;
 const HEADING_RE = /^(TÍTULO|CAPÍTULO|SECCIÓN)\s+/;
 
@@ -138,7 +142,10 @@ export function chunkLaw(cleanText: string): LawChunk[] {
 
   type Unit = { articulo: string; start: number; end: number };
   const units: Unit[] = matches.map((m, i) => ({
-    articulo: m[1],
+    // «5 A» (LSS/LFT) se cita «5-A», como los sufijos de LISR («113-E»). El
+    // ordinal de LIVA/CFF («5o») se conserva tal cual: así lee la ley, y
+    // cambiarlo dejaría citas mixtas hasta re-ingerir todo con force.
+    articulo: m[1].replace(/^(\d+) ([A-Z])$/, "$1-$2").replace(".-", "-"),
     start: m.index!,
     end: matches[i + 1]?.index ?? cleanText.length,
   }));

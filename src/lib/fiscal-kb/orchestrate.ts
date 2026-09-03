@@ -20,20 +20,28 @@ export interface IngestResult {
 }
 
 /** Ingest a ley vigente (Cámara de Diputados) by catalog clave. */
-export async function ingestLey(clave: string, opts: { force?: boolean } = {}): Promise<IngestResult> {
+export async function ingestLey(
+  clave: string,
+  opts: { force?: boolean; vigencia?: string } = {}
+): Promise<IngestResult> {
   const ley = await fetchLey(clave);
-  if (!ley.ultimaReformaDof) {
-    throw new Error(`${clave}: no se detectó la fecha de última reforma — sin ella no hay versionado de vigencia.`);
+  // Un reglamento sin reformas no trae «Última reforma DOF» en el encabezado;
+  // el job puede mandar la vigencia a mano (misma opción que los docs).
+  const vigencia = ley.ultimaReformaDof ?? (opts.vigencia ? new Date(`${opts.vigencia}T00:00:00Z`) : null);
+  if (!vigencia) {
+    throw new Error(
+      `${clave}: no se detectó la fecha de última reforma — sin ella no hay versionado de vigencia. Manda {"vigencia":"YYYY-MM-DD"} en el job.`
+    );
   }
   const clean = cleanLawText(ley.rawText);
   const chunks = chunkLaw(clean);
   const r = await upsertFiscalDocument({
-    source: "LEY",
+    source: ley.descriptor.source ?? "LEY",
     clave: ley.descriptor.clave,
     titulo: ley.descriptor.titulo,
     url: ley.descriptor.url,
-    publicadoDof: ley.ultimaReformaDof,
-    vigenciaDesde: ley.ultimaReformaDof,
+    publicadoDof: vigencia,
+    vigenciaDesde: vigencia,
     cleanText: clean,
     chunks,
     force: opts.force,
@@ -44,7 +52,7 @@ export async function ingestLey(clave: string, opts: { force?: boolean } = {}): 
     chunkCount: r.chunkCount,
     unidades: new Set(chunks.map((c) => c.articulo)).size,
     closedPreviousVersion: r.closedPreviousVersion,
-    vigenciaDesde: ley.ultimaReformaDof.toISOString().slice(0, 10),
+    vigenciaDesde: vigencia.toISOString().slice(0, 10),
   };
 }
 

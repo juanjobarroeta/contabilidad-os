@@ -14,7 +14,13 @@ name: Fiscal KB refresh (weekly re-ingest)
 on:
   schedule:
     - cron: "0 6 * * 1" # Mondays ~00:00 CT (UTC-6)
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Re-chunk y re-embed aunque el texto no haya cambiado (úsalo cuando el chunker aprende algo; cuesta embeddings)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   refresh:
@@ -31,10 +37,20 @@ jobs:
           {"type":"ley","clave":"LIVA"}
           {"type":"ley","clave":"CFF"}
           {"type":"ley","clave":"LIEPS"}
+          {"type":"ley","clave":"RLISR"}
+          {"type":"ley","clave":"RLIVA"}
+          {"type":"ley","clave":"RCFF"}
+          {"type":"ley","clave":"LSS"}
+          {"type":"ley","clave":"LINFONAVIT"}
+          {"type":"ley","clave":"LFT"}
           {"type":"doc","clave":"GUIA-PAGOS"}
           {"type":"doc","clave":"GUIA-CFDI-GLOBAL"}'
+          # force=true (sólo manual): el hash-skip NO re-parte un texto sin cambios,
+          # así que una mejora del chunker sólo llega a la KB forzando una vez.
+          FORCE_FRAG=""; if [ "${FORCE:-false}" = "true" ]; then FORCE_FRAG=',"force":true'; fi
           echo "$JOBS" | while read -r job; do
             [ -z "$job" ] && continue
+            job="${job%\}}${FORCE_FRAG}}"
             echo "→ ingest ${job}"
             curl -fsS -X POST "${URL}/api/admin/fiscal-ingest" \
               -H "x-cron-secret: ${CRON_SECRET}" \
@@ -45,3 +61,4 @@ jobs:
         env:
           STAGING_URL: ${{ secrets.STAGING_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FORCE: ${{ inputs.force }}

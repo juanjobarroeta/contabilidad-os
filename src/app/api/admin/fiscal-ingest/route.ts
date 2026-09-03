@@ -16,7 +16,10 @@ import { ingestLey, ingestDoc, IngestResult } from "@/lib/fiscal-kb/orchestrate"
 //   { "type": "ley", "clave": "LISR" }
 //   { "jobs": [ {"type":"ley","clave":"LIVA"}, {"type":"doc","clave":"GUIA-PAGOS"} ] }
 //
-//   type "ley" → Cámara de Diputados (LISR | LIVA | CFF | LIEPS)
+//   type "ley" → Cámara de Diputados: leyes (LISR | LIVA | CFF | LIEPS | LSS |
+//                LINFONAVIT | LFT) y reglamentos (RLISR | RLIVA | RCFF). Ver
+//                LEYES en fiscal-kb/ingest-leyes.ts. `vigencia` opcional: la
+//                usa una fuente sin «Última reforma DOF» en su encabezado.
 //   type "doc" → SAT guías by URL (GUIA-PAGOS | GUIA-CFDI-GLOBAL); RMF needs a
 //                local file and therefore the CLI, not this route.
 //
@@ -74,7 +77,7 @@ export async function POST(req: Request) {
     try {
       const r =
         job.type === "ley"
-          ? await ingestLey(job.clave, { force: job.force })
+          ? await ingestLey(job.clave, { force: job.force, vigencia: job.vigencia })
           : await ingestDoc(job.clave, { vigencia: job.vigencia, force: job.force });
       results.push({ ...r, ok: true });
     } catch (err) {

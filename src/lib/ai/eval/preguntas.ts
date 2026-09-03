@@ -48,7 +48,7 @@ export const PREGUNTAS_EVAL: PreguntaEval[] = [
   // ── IVA ────────────────────────────────────────────────────────────────────
   { id: "c15", tema: "iva", pregunta: "¿El IVA se causa cuando facturo o cuando me pagan?", fundamentos: ["Art. 1-B LIVA", "Art. 11 LIVA"], nota: "Flujo: al cobro efectivo." },
   { id: "c16", tema: "iva", pregunta: "¿Qué requisitos debe cumplir el IVA de mis compras para poder acreditarlo?", fundamentos: ["Art. 5 LIVA"] },
-  { id: "c17", tema: "iva", pregunta: "Como persona moral, ¿cuánto IVA retengo a una persona física que me presta servicios profesionales?", fundamentos: ["Art. 1-A LIVA"], nota: "Dos terceras partes (RLIVA Art. 3, que aún no está en la KB)." },
+  { id: "c17", tema: "iva", pregunta: "Como persona moral, ¿cuánto IVA retengo a una persona física que me presta servicios profesionales?", fundamentos: ["Art. 1-A LIVA", "Art. 3 RLIVA"], nota: "Dos terceras partes (RLIVA 3)." },
   { id: "c18", tema: "iva", pregunta: "¿Qué actividades están exentas de IVA?", fundamentos: ["Art. 9 LIVA", "Art. 15 LIVA"] },
   { id: "c19", tema: "iva", pregunta: "¿Qué productos llevan IVA a tasa 0%?", fundamentos: ["Art. 2-A LIVA"] },
   { id: "c20", tema: "iva", pregunta: "¿Qué es la DIOT y estoy obligado a presentarla?", fundamentos: ["Art. 32 LIVA"], nota: "Fracción VIII." },
@@ -109,7 +109,7 @@ export const PREGUNTAS_EVAL: PreguntaEval[] = [
   { id: "j18", tema: "deducciones", pregunta: "¿Se pueden deducir los intereses de un préstamo bancario de la empresa?", fundamentos: ["Art. 25 LISR", "Art. 27 LISR"], nota: "Intereses devengados (25-VII), a tasa de mercado y para fines del negocio (27-VII)." },
   { id: "j19", tema: "deducciones", pregunta: "Un cliente no me pagó y ya pasó más de un año, ¿puedo deducir la pérdida?", fundamentos: ["Art. 27 LISR"], nota: "Créditos incobrables 27-XV: plazo de prescripción o notoria imposibilidad de cobro." },
   { id: "j20", tema: "deducciones", pregunta: "¿Puedo deducir los gastos que hice antes de constituir la empresa?", fundamentos: ["Art. 32 LISR", "Art. 33 LISR"], nota: "Gastos preoperativos = inversión (32), 10% anual (33)." },
-  { id: "j21", tema: "deducciones", pregunta: "Compré una camioneta pickup para el negocio, ¿aplica el tope de $175,000?", fundamentos: ["Art. 36 LISR"], nota: "El tope es para automóviles; la pickup de carga no es automóvil (RLISR 3-A, aún fuera de la KB)." },
+  { id: "j21", tema: "deducciones", pregunta: "Compré una camioneta pickup para el negocio, ¿aplica el tope de $175,000?", fundamentos: ["Art. 36 LISR", "Art. 3-A RLISR"], nota: "El tope es para automóviles; la pickup de carga no es automóvil (RLISR 3-A)." },
   { id: "j22", tema: "deducciones", pregunta: "Tengo pérdidas fiscales de años anteriores, ¿las puedo aplicar este año?", fundamentos: ["Art. 57 LISR"], nota: "Hasta 10 ejercicios, actualizadas." },
 
   // nómina e IMSS
@@ -117,8 +117,8 @@ export const PREGUNTAS_EVAL: PreguntaEval[] = [
   { id: "j24", tema: "nomina", pregunta: "¿Qué pasa si timbro la nómina tarde?", fundamentos: ["Art. 99 LISR", "Art. 27 LISR"], nota: "Obligación de expedir CFDI (99-III); RMF permite timbrar antes de la anual para no perder la deducción." },
   { id: "j25", tema: "nomina", pregunta: "¿Puedo deducir el seguro de gastos médicos que pago a mis empleados?", fundamentos: ["Art. 27 LISR"], nota: "Previsión social 27-XI, con generalidad." },
   { id: "j26", tema: "nomina", pregunta: "¿Los vales de despensa son deducibles?", fundamentos: ["Art. 27 LISR", "Art. 28 LISR"], nota: "Sí vía monedero electrónico autorizado (27-XI); la parte exenta para el trabajador se deduce al 53%/47% (28-XXX)." },
-  { id: "j27", tema: "nomina", pregunta: "¿Qué parte del aguinaldo está exenta de ISR para el trabajador?", fundamentos: ["Art. 93 LISR"], nota: "30 UMA (93-XIV)." },
-  { id: "j28", tema: "nomina", pregunta: "Un trabajador renunció, ¿qué parte de su finiquito está exenta de ISR?", fundamentos: ["Art. 93 LISR", "Art. 95 LISR"], nota: "90 UMA por año de servicio (93-XIII); cálculo de retención por separación (95)." },
+  { id: "j27", tema: "nomina", pregunta: "¿Qué parte del aguinaldo está exenta de ISR para el trabajador?", fundamentos: ["Art. 93 LISR", "Art. 87 LFT"], nota: "30 UMA exentas (93-XIV); 15 días mínimo (LFT 87)." },
+  { id: "j28", tema: "nomina", pregunta: "Un trabajador renunció, ¿qué parte de su finiquito está exenta de ISR?", fundamentos: ["Art. 93 LISR", "Art. 95 LISR", "Art. 162 LFT"], nota: "90 UMA por año de servicio (93-XIII); retención por separación (95); prima de antigüedad (LFT 162)." },
   { id: "j29", tema: "nomina", pregunta: "¿Le retengo ISR a un empleado que gana el salario mínimo?", fundamentos: ["Art. 96 LISR"], nota: "No se retiene a quien percibe salario mínimo." },
   { id: "j30", tema: "nomina", pregunta: "Contraté a un consultor que vive en el extranjero, ¿le retengo algo?", fundamentos: ["Art. 153 LISR"], nota: "Título V: depende de fuente de riqueza y tratado." },
 
