@@ -34,7 +34,7 @@ export interface FiscalSearchOptions {
   minSimilarity?: number;
   /** "vector" (default) | "hibrido". Default por env FISCAL_KB_MODO. */
   modo?: ModoBusqueda;
-  /** Reordenar los candidatos con un modelo barato antes de entregar. Default por env FISCAL_KB_RERANK=1. */
+  /** Reordenar los candidatos con un modelo barato antes de entregar. Default true (FISCAL_KB_RERANK=0 lo apaga). */
   rerank?: boolean;
   /** Atribución del costo (embedding de la consulta, rerank) a la empresa/usuario que consulta. */
   cost?: CostCtx;
@@ -70,8 +70,11 @@ const CANDIDATOS_RERANK = 20;
 function modoPorDefecto(): ModoBusqueda {
   return process.env.FISCAL_KB_MODO === "hibrido" ? "hibrido" : "vector";
 }
+// Medido el 2026-09-03 (eval sólo-KB, 80 preguntas): vector 48 % → vector +
+// rerank 65 %. El rerank es el default; FISCAL_KB_RERANK=0 lo apaga.
 function rerankPorDefecto(): boolean {
-  return process.env.FISCAL_KB_RERANK === "1" || process.env.FISCAL_KB_RERANK === "true";
+  const v = process.env.FISCAL_KB_RERANK;
+  return !(v === "0" || v === "false");
 }
 
 /** Source-aware citation label: leyes cite artículos, RMF cita reglas, guías su título. */
@@ -130,14 +133,29 @@ async function brazoVector(vec: string, fecha: Date, fuentes: string[] | undefin
     LIMIT ${n}`;
 }
 
-/** Brazo léxico: tsvector en español (columna generada + GIN, ver migración fiscal_chunk_tsv). */
+/**
+ * Brazo léxico: tsvector en español (columna mantenida por trigger + GIN, ver
+ * migración fiscal_chunk_tsv).
+ *
+ * La consulta se arma como OR de los lexemas de la pregunta, NO con
+ * websearch_to_tsquery: ésa exige TODOS los términos y una pregunta de 8
+ * palabras («¿qué requisitos deben cumplir las deducciones autorizadas…?»)
+ * casi nunca aparece completa en un artículo — el brazo devolvía cero y el
+ * híbrido medía igual que el vector. Con OR entra todo lo que comparte
+ * vocabulario y ts_rank_cd premia al que comparte más.
+ */
 async function brazoLexico(query: string, vec: string, fecha: Date, fuentes: string[] | undefined, n: number): Promise<Row[]> {
   return prisma.$queryRaw<Row[]>`
+    WITH q AS (
+      SELECT to_tsquery('spanish', string_agg('''' || replace(lexeme, '''', '') || '''', ' | ')) AS tsq
+      FROM unnest(to_tsvector('spanish', ${query}))
+    )
     SELECT ${COLUMNAS}, 1 - (c."embedding" <=> ${vec}::vector) AS "similitud",
-      ts_rank_cd(c."tsv", websearch_to_tsquery('spanish', ${query})) AS "rankLex"
+      ts_rank_cd(c."tsv", q.tsq) AS "rankLex"
     FROM "FiscalChunk" c
     JOIN "FiscalDocument" d ON d."id" = c."documentId"
-    WHERE c."tsv" @@ websearch_to_tsquery('spanish', ${query})
+    CROSS JOIN q
+    WHERE q.tsq IS NOT NULL AND c."tsv" @@ q.tsq
       AND ${filtroVigencia(fecha)}
       ${filtroFuentes(fuentes)}
     ORDER BY "rankLex" DESC

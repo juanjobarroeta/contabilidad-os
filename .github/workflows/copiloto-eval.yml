@@ -80,7 +80,7 @@ jobs:
             done
             if [ -z "$RESP" ]; then echo "::error::página offset=$OFFSET falló 3 veces"; exit 1; fi
             echo "$RESP" | jq -c '.resultados[]' >> resultados.jsonl
-            echo "$RESP" | jq '{offset, procesadas, siguiente, fin, ms, resumenPagina}'
+            echo "$RESP" | jq '{offset, procesadas, siguiente, fin, ms, resumenPagina, busqueda: .resultados[0].recuperacion.busqueda}'
             # Errores por pregunta AL MOMENTO (antes sólo se veían en el resumen,
             # que no corre si el job muere a medias).
             echo "$RESP" | jq -r '.resultados[] | select(.error) | "  ✗ \(.id): \(.error)"'
