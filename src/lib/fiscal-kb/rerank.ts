@@ -70,7 +70,7 @@ export async function rerankCandidatos<T extends CandidatoRerank>(
       { companyId: null, ...opts.cost, subtipo: "ai.rerank" },
       {
         model: RERANK_MODEL,
-        max_tokens: 200,
+        max_tokens: 300, // 40 números en JSON caben de sobra
         system: SYSTEM,
         messages: [{ role: "user", content: `Pregunta: ${pregunta}\n\nFragmentos:\n\n${lista}` }],
       }
