@@ -154,18 +154,26 @@ export default function CierrePage() {
   const [cierreLoading, setCierreLoading] = useState(false);
   const [aviso, setAviso] = useState("");
   const [error, setError] = useState("");
+  // Inventario periódico: el conteo físico del mes (sólo aparece cuando la
+  // cuenta de inventario tiene vida — en servicios puros sería ruido).
+  const [invAplica, setInvAplica] = useState(false);
+  const [invConteo, setInvConteo] = useState<{ valorFinal: number } | null>(null);
+  const [invValor, setInvValor] = useState("");
+  const [invGuardando, setInvGuardando] = useState(false);
+  const [invMsg, setInvMsg] = useState("");
 
   const cargar = useCallback(async () => {
     if (!activeCompany) return;
     const id = activeCompany.id;
     const q = `companyId=${id}&year=${year}&month=${month}`;
-    const [rPeriods, rReady, rConcil, rRep, rDiot, rCe] = await Promise.allSettled([
+    const [rPeriods, rReady, rConcil, rRep, rDiot, rCe, rInv] = await Promise.allSettled([
       fetch(`/api/contabilidad/periods?companyId=${id}`).then((r) => r.json()),
       fetch(`/api/contabilidad/ce-readiness?${q}`).then((r) => r.json()),
       fetch(`/api/bancos/conciliacion?${q}`).then((r) => r.json()),
       fetch(`/api/facturas/complemento-pagos?companyId=${id}`).then((r) => r.json()),
       fetch(`/api/impuestos/diot?companyId=${id}&year=${year}&month=${month}`).then((r) => r.json()),
       fetch(`/api/contabilidad/ce-serie?companyId=${id}&anio=${year}&mes=${month}`),
+      fetch(`/api/contabilidad/inventario-conteo?${q}`).then((r) => r.json()),
     ]);
     if (rPeriods.status === "fulfilled" && Array.isArray(rPeriods.value)) setPeriods(rPeriods.value);
     if (rReady.status === "fulfilled" && rReady.value?.checks) setReadiness(rReady.value);
@@ -173,6 +181,11 @@ export default function CierrePage() {
     if (rRep.status === "fulfilled" && rRep.value?.stats) setRep(rRep.value);
     if (rDiot.status === "fulfilled" && Array.isArray(rDiot.value?.rows)) setDiot(rDiot.value);
     if (rCe.status === "fulfilled") setPresentada(rCe.value.ok);
+    if (rInv.status === "fulfilled") {
+      setInvAplica(Boolean(rInv.value?.aplica));
+      setInvConteo(rInv.value?.conteo ?? null);
+      setInvValor(rInv.value?.conteo ? String(rInv.value.conteo.valorFinal) : "");
+    }
   }, [activeCompany, year, month]);
 
   useEffect(() => {
@@ -551,6 +564,53 @@ export default function CierrePage() {
           {/* 5 · Ajustes */}
           <Paso num={5} titulo="Ajustes" estado={e5}>
             <p>Pólizas manuales para el residuo — fuente MANUAL, volver a contabilizar nunca las pisa.</p>
+            {invAplica && (
+              <div className="mt-3 rounded-card border border-cos-line bg-cos-paper px-3 py-2.5">
+                <p className="text-[13px] font-semibold">Inventario del mes (método periódico)</p>
+                <p className="mt-0.5 text-[12px] text-cos-ink-soft">
+                  Captura el valor del inventario físico al cierre: al contabilizar, el motor reconoce
+                  el costo de venta por diferencia (inicial + compras − conteo) en la cuenta 501.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={invValor}
+                    onChange={(e) => setInvValor(e.target.value)}
+                    placeholder="Valor del inventario ($)"
+                    className="w-44 rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 font-mono text-[13px] focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
+                  />
+                  <button
+                    type="button"
+                    disabled={invGuardando || invValor.trim() === ""}
+                    onClick={async () => {
+                      if (!activeCompany) return;
+                      setInvGuardando(true); setInvMsg("");
+                      try {
+                        const res = await fetch("/api/contabilidad/inventario-conteo", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ companyId: activeCompany.id, year, month, valorFinal: Number(invValor) }),
+                        });
+                        const d = await res.json().catch(() => null);
+                        if (!res.ok) throw new Error(d?.error ?? "No se pudo guardar el conteo");
+                        setInvConteo(d.conteo);
+                        setInvMsg("Conteo guardado — contabiliza el mes para reconocer el costo de venta.");
+                      } catch (e) {
+                        setInvMsg(e instanceof Error ? e.message : "No se pudo guardar el conteo");
+                      } finally {
+                        setInvGuardando(false);
+                      }
+                    }}
+                    className="rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                  >
+                    {invGuardando ? "Guardando…" : invConteo ? "Actualizar conteo" : "Guardar conteo"}
+                  </button>
+                </div>
+                {invMsg && <p className="mt-1.5 text-[12px] text-cos-jade-ink">{invMsg}</p>}
+              </div>
+            )}
             <Link href="/contabilidad/ajustes" className={cn(liga, "mt-1")}>
               Capturar póliza <ArrowRight className="h-3.5 w-3.5" />
             </Link>
