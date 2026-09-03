@@ -8,6 +8,14 @@ describe("normalizarCita / algunaCoincide", () => {
     expect(algunaCoincide(["Art. 27 LISR"], ["Art. 5 LIVA", "ART 27 LISR"])).toBe(true);
     expect(algunaCoincide(["Art. 27 LISR"], ["Art. 28 LISR"])).toBe(false);
   });
+  it("el ordinal de LIVA/CFF («5o», «2o.-A») empata con la forma sin ordinal", () => {
+    expect(normalizarCita("Art. 5o LIVA")).toBe("ART. 5 LIVA");
+    expect(normalizarCita("Art. 2o.-A LIVA")).toBe("ART. 2-A LIVA");
+    expect(algunaCoincide(["Art. 5 LIVA"], ["Art. 5o LIVA"])).toBe(true);
+    expect(algunaCoincide(["Art. 2-A LIVA"], ["Art. 2o.-A LIVA"])).toBe(true);
+    // «10» no es «1o»: el ordinal sólo se quita cuando es la letra O.
+    expect(normalizarCita("Art. 10 LISR")).toBe("ART. 10 LISR");
+  });
   it("una regla empata sin el año de la RMF", () => {
     expect(algunaCoincide(["Regla 2.7.1.32 RMF-2026"], ["Regla 2.7.1.32 RMF"])).toBe(true);
   });

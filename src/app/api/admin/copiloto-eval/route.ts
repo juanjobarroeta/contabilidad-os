@@ -42,13 +42,31 @@ export async function POST(req: Request) {
   const limit = Math.min(Math.max(1, Number(body.limit ?? 8) || 8), 20);
   const pagina = universo.slice(offset, offset + limit);
 
+  // Railway corta la request a los 300 s (502). Con el agente real (Fable 5,
+  // razonamiento siempre activo) una pregunta con juez puede tardar 60–120 s,
+  // así que: (1) no se ARRANCA una pregunta nueva pasados 120 s, (2) ninguna
+  // pregunta corre más de 150 s — si se pasa, queda con error "timeout" y la
+  // página se devuelve igual. El workflow sigue desde `siguiente`.
+  const NO_ARRANCAR_DESPUES_MS = 120_000;
+  const TOPE_POR_PREGUNTA_MS = 150_000;
   const startedAt = Date.now();
   const resultados = [];
   for (const p of pagina) {
-    // Presupuesto de tiempo: si una página se alarga, se devuelve lo hecho y el
-    // caller continúa desde `siguiente`.
-    if (Date.now() - startedAt > 250_000) break;
-    resultados.push(await evaluarPregunta(p, { agente: body.agente !== false, juez: body.juez !== false }));
+    if (Date.now() - startedAt > NO_ARRANCAR_DESPUES_MS) break;
+    const conTope = await Promise.race([
+      evaluarPregunta(p, { agente: body.agente !== false, juez: body.juez !== false }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), TOPE_POR_PREGUNTA_MS)),
+    ]);
+    resultados.push(
+      conTope ?? {
+        id: p.id,
+        tema: p.tema,
+        pregunta: p.pregunta,
+        fundamentos: p.fundamentos,
+        recuperacion: { hit: false, citas: [] },
+        error: `timeout (> ${TOPE_POR_PREGUNTA_MS / 1000} s)`,
+      }
+    );
   }
   const siguiente = offset + resultados.length;
   return NextResponse.json({

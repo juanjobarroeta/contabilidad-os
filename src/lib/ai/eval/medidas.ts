@@ -32,13 +32,19 @@ export interface ResultadoPregunta {
 
 /** «Art. 17-H Bis CFF» / «ART 17-H BIS CFF» / «artículo 17-H bis del CFF» → «ART. 17-H BIS CFF». */
 export function normalizarCita(c: string): string {
-  return c
-    .toUpperCase()
-    .replace(/ART[ÍI]CULO/g, "ART.")
-    .replace(/\bART\b(?!\.)/g, "ART.")
-    .replace(/\s+(?:DE\s+LA|DEL)\s+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    c
+      .toUpperCase()
+      .replace(/ART[ÍI]CULO/g, "ART.")
+      .replace(/\bART\b(?!\.)/g, "ART.")
+      .replace(/\s+(?:DE\s+LA|DEL)\s+/g, " ")
+      // LIVA, CFF y LIEPS numeran con ordinal («Artículo 5o.», «2o.-A») y así
+      // lo cita la KB: «Art. 5o LIVA». El contador escribe «Art. 5 LIVA». Sin
+      // esto, c16/j31 contaban como fallo teniendo el artículo correcto.
+      .replace(/\b(\d+)O\.?(?=[\s-]|$)/g, "$1")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 const RE_ART = /\bart(?:[íi]culo|\.)?\s*(\d+(?:-[A-Z]+)?(?:\s+bis)?)\s*(?:,?\s*(?:fracci[óo]n\s+[IVXL]+\s*)?)?(?:de\s+la\s+|del\s+)?(LISR|LIVA|CFF|LIEPS)\b/gi;
