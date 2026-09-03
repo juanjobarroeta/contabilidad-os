@@ -32,6 +32,16 @@ export async function GET(req: Request) {
   const clientes = await prisma.customer.findMany({
     where: {
       companyId,
+      // Un proveedor PURO (sólo nos ha facturado; jamás le hemos emitido) no
+      // es un cliente — vive en la pestaña Proveedores. Se queda quien tenga
+      // al menos un comprobante no-EGRESO, o ninguno (alta manual para
+      // facturarle después). Quien es ambas cosas aparece en las dos.
+      NOT: {
+        AND: [
+          { invoices: { some: {} } },
+          { invoices: { none: { tipo: { not: "EGRESO" } } } },
+        ],
+      },
       ...(search
         ? {
             OR: [
