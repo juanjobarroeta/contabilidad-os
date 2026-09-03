@@ -2,12 +2,15 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-import { X, Send, Loader2, Sparkles, Wrench, Plus, MessagesSquare, Lock, Users, Trash2, ArrowLeft, CheckCircle2, ShieldCheck } from "lucide-react";
+import { X, Send, Loader2, Sparkles, Wrench, Plus, MessagesSquare, Lock, Users, Trash2, ArrowLeft, CheckCircle2, ShieldCheck, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Markdown } from "./Markdown";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  /** Id persistido (sólo llega para respuestas del asistente): cuelga el feedback. */
+  id?: string;
+  feedback?: "up" | "down" | null;
 }
 // Acción reversible PROPUESTA por el asistente, a la espera del tap de Confirmar.
 interface PendingAction {
@@ -43,6 +46,9 @@ export function ChatPanel() {
   // Acción reversible propuesta + estado del tap de confirmación.
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // Feedback: id del mensaje al que se le está escribiendo una corrección.
+  const [correccionPara, setCorreccionPara] = useState<string | null>(null);
+  const [correccionTexto, setCorreccionTexto] = useState("");
   // Conversación actual + historial.
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<Visibility>("PRIVATE");
@@ -77,7 +83,7 @@ export function ChatPanel() {
       const res = await fetch(`/api/ai/conversations/${id}`);
       if (!res.ok) return;
       const data = await res.json();
-      setMessages((data.messages ?? []).map((m: Message) => ({ role: m.role, content: m.content })));
+      setMessages((data.messages ?? []).map((m: Message) => ({ id: m.id, role: m.role, content: m.content, feedback: m.feedback ?? null })));
       setConversationId(data.id);
       setVisibility(data.visibility);
       setIsMine(!!data.mine);
@@ -198,7 +204,15 @@ export function ChatPanel() {
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages, companyId: activeCompany.id, conversationId }),
+        body: JSON.stringify({
+          messages: apiMessages,
+          companyId: activeCompany.id,
+          conversationId,
+          // Dónde está el usuario: «esto» / «aquí» significan algo distinto en
+          // /bancos que en /declaraciones. El servidor la acota y la usa en el
+          // system prompt.
+          contexto: { ruta: window.location.pathname + window.location.search },
+        }),
       });
 
       if (!response.ok) {
@@ -214,7 +228,7 @@ export function ChatPanel() {
       let buffer = "";
       let nuevaConv = false;
 
-      const handle = (data: { type: string; text?: string; tool?: string; error?: string; id?: string; nueva?: boolean; action?: PendingAction }) => {
+      const handle = (data: { type: string; text?: string; tool?: string; error?: string; id?: string; nueva?: boolean; action?: PendingAction; messageId?: string | null }) => {
         if (data.type === "conversation") {
           if (data.id) setConversationId(data.id);
           if (data.nueva) nuevaConv = true;
@@ -233,6 +247,16 @@ export function ChatPanel() {
           setActiveTool(data.tool ?? null);
         } else if (data.type === "done") {
           setActiveTool(null);
+          // El id persistido de la respuesta: sin él no hay a qué colgarle el pulgar.
+          if (data.messageId) {
+            const mid = data.messageId;
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastMsg = updated[updated.length - 1];
+              if (lastMsg?.role === "assistant") lastMsg.id = mid;
+              return updated;
+            });
+          }
         } else if (data.type === "error") {
           setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${data.error}` }]);
         }
@@ -301,6 +325,21 @@ export function ChatPanel() {
       setConfirming(false);
     }
   }, [pendingAction, conversationId, confirming]);
+
+  // Feedback del contador: pulgar arriba/abajo (+ corrección libre en el abajo).
+  // Cada corrección es una fila candidata del eval del copiloto.
+  const enviarFeedback = useCallback(async (id: string, feedback: "up" | "down" | null, correccion?: string) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, feedback } : m)));
+    try {
+      await fetch(`/api/ai/messages/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback, ...(correccion !== undefined ? { correccion } : {}) }),
+      });
+    } catch {
+      /* best-effort: el pulgar no debe romper el chat */
+    }
+  }, []);
 
   const cancelAction = useCallback(() => {
     // Sólo descartamos la tarjeta en el cliente; el staged caduca solo por TTL y
@@ -468,6 +507,48 @@ export function ChatPanel() {
                     }`}
                   >
                     {msg.role === "user" ? <div className="whitespace-pre-wrap">{msg.content}</div> : <Markdown>{msg.content}</Markdown>}
+                    {/* Feedback — sólo respuestas persistidas del asistente. El
+                        pulgar abajo abre una corrección: «¿qué debió responder?» */}
+                    {msg.role === "assistant" && msg.id && !(isLoading && i === messages.length - 1) && (
+                      <div className="mt-1.5 flex items-center gap-1">
+                        <button
+                          onClick={() => enviarFeedback(msg.id!, msg.feedback === "up" ? null : "up")}
+                          title="Respuesta útil"
+                          className={`rounded p-1 ${msg.feedback === "up" ? "text-cos-jade-ink" : "text-cos-ink-faint hover:text-cos-ink"}`}
+                        >
+                          <ThumbsUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (msg.feedback === "down") { enviarFeedback(msg.id!, null); setCorreccionPara(null); return; }
+                            enviarFeedback(msg.id!, "down");
+                            setCorreccionPara(msg.id!);
+                            setCorreccionTexto("");
+                          }}
+                          title="Respuesta incorrecta o incompleta"
+                          className={`rounded p-1 ${msg.feedback === "down" ? "text-cos-red-ink" : "text-cos-ink-faint hover:text-cos-ink"}`}
+                        >
+                          <ThumbsDown className="h-3.5 w-3.5" />
+                        </button>
+                        {correccionPara === msg.id && (
+                          <div className="ml-1 flex flex-1 items-end gap-1">
+                            <textarea
+                              value={correccionTexto}
+                              onChange={(e) => setCorreccionTexto(e.target.value)}
+                              placeholder="¿Qué debió responder? (opcional)"
+                              rows={1}
+                              className="min-w-0 flex-1 resize-none rounded-control border border-cos-line bg-cos-card px-2 py-1 text-[12px] focus:border-cos-brand focus:outline-none"
+                            />
+                            <button
+                              onClick={() => { enviarFeedback(msg.id!, "down", correccionTexto); setCorreccionPara(null); }}
+                              className="rounded-control bg-cos-brand px-2 py-1 text-[12px] font-medium text-white hover:bg-cos-brand-deep"
+                            >
+                              Enviar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

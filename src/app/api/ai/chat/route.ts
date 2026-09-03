@@ -39,11 +39,18 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { messages, companyId, conversationId } = body as {
+  const { messages, companyId, conversationId, contexto } = body as {
     messages: Anthropic.MessageParam[];
     companyId: string;
     conversationId?: string;
+    contexto?: { ruta?: unknown };
   };
+  // Ruta que el usuario tiene abierta (sólo rutas internas, acotada): va al
+  // system prompt para que «esto» / «aquí» signifiquen algo.
+  const rutaActual =
+    typeof contexto?.ruta === "string" && contexto.ruta.startsWith("/") && contexto.ruta.length <= 200
+      ? contexto.ruta
+      : undefined;
 
   if (!companyId || !messages?.length) {
     return NextResponse.json({ error: "companyId y messages son requeridos" }, { status: 400 });
@@ -135,7 +142,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
   }
 
-  const systemPrompt = buildSystemPrompt(company);
+  const systemPrompt = buildSystemPrompt(company, { ruta: rutaActual });
 
   // Stream response with tool-use loop
   const encoder = new TextEncoder();
@@ -161,6 +168,14 @@ export async function POST(req: Request) {
 
       // Acumula la respuesta del asistente para persistirla al final.
       let assistantText = "";
+      // Traza del turno: sin ella un fallo del copiloto no se puede depurar (¿no
+      // ENCONTRÓ el artículo o lo IGNORÓ?). Se guarda en ChatMessage.meta.
+      const traza: {
+        modelo: string;
+        rondas: number;
+        tools: { name: string; ms: number }[];
+        fundamentos: { cita: string; similitud: number }[];
+      } = { modelo: CHAT_MODEL, rondas: 0, tools: [], fundamentos: [] };
 
       try {
         let currentMessages = [...messages];
@@ -263,6 +278,7 @@ export async function POST(req: Request) {
           const toolResults: Anthropic.ToolResultBlockParam[] = [];
           for (const block of toolUseBlocks) {
             if (block.type === "tool_use") {
+              const t0 = Date.now();
               const result = await executeToolCall(
                 block.name,
                 block.input as Record<string, unknown>,
@@ -274,6 +290,15 @@ export async function POST(req: Request) {
                 // las empresas accesibles del propio usuario.
                 { conversationId: convId!, inApp: canWrite, userId }
               );
+              traza.tools.push({ name: block.name, ms: Date.now() - t0 });
+              if (block.name === "search_fiscal_knowledge") {
+                try {
+                  const r = JSON.parse(result) as { resultados?: { cita: string; similitud: number }[] };
+                  for (const h of r.resultados ?? []) traza.fundamentos.push({ cita: h.cita, similitud: h.similitud });
+                } catch {
+                  /* la traza es best-effort */
+                }
+              }
               toolResults.push({
                 type: "tool_result",
                 tool_use_id: block.id,
@@ -291,6 +316,8 @@ export async function POST(req: Request) {
 
           toolRounds++;
         }
+        traza.modelo = model;
+        traza.rondas = toolRounds;
 
         // Si el asistente STAGEÓ una acción reversible en este turno, avísale al
         // cliente para que pinte la tarjeta Confirmar / Cancelar (el tap ejecuta).
@@ -313,21 +340,26 @@ export async function POST(req: Request) {
         // Persistir el turno (mensaje del usuario + respuesta del asistente) y
         // subir la conversación al tope del historial. Best-effort: si falla, no
         // rompemos la respuesta que el usuario ya recibió.
+        // El id del mensaje del asistente viaja en `done` para que el cliente
+        // pueda colgarle el feedback (pulgar / corrección).
+        let assistantMessageId: string | null = null;
         try {
-          await prisma.chatMessage.createMany({
-            data: [
-              { conversationId: convId!, role: "user", content: nuevoMensajeUsuario, authorId: userId },
-              ...(assistantText.trim()
-                ? [{ conversationId: convId!, role: "assistant", content: assistantText, authorId: null }]
-                : []),
-            ],
+          await prisma.chatMessage.create({
+            data: { conversationId: convId!, role: "user", content: nuevoMensajeUsuario, authorId: userId },
           });
+          if (assistantText.trim()) {
+            const creado = await prisma.chatMessage.create({
+              data: { conversationId: convId!, role: "assistant", content: assistantText, authorId: null, meta: traza },
+              select: { id: true },
+            });
+            assistantMessageId = creado.id;
+          }
           await prisma.chatConversation.update({ where: { id: convId! }, data: { updatedAt: new Date() } });
         } catch (e) {
           console.error("[ai/chat] persistencia falló:", e);
         }
 
-        safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
+        safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", messageId: assistantMessageId })}\n\n`));
       } catch (error) {
         const message = error instanceof Error ? error.message : "Error interno";
         safeEnqueue(
