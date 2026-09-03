@@ -34,7 +34,7 @@ export interface FiscalSearchOptions {
   minSimilarity?: number;
   /** "vector" (default) | "hibrido". Default por env FISCAL_KB_MODO. */
   modo?: ModoBusqueda;
-  /** Reordenar los candidatos con un modelo barato antes de entregar. Default por env FISCAL_KB_RERANK=1. */
+  /** Reordenar los candidatos con un modelo barato antes de entregar. Default true (FISCAL_KB_RERANK=0 lo apaga). */
   rerank?: boolean;
   /** Atribución del costo (embedding de la consulta, rerank) a la empresa/usuario que consulta. */
   cost?: CostCtx;
@@ -70,8 +70,11 @@ const CANDIDATOS_RERANK = 20;
 function modoPorDefecto(): ModoBusqueda {
   return process.env.FISCAL_KB_MODO === "hibrido" ? "hibrido" : "vector";
 }
+// Medido el 2026-09-03 (eval sólo-KB, 80 preguntas): vector 48 % → vector +
+// rerank 65 %. El rerank es el default; FISCAL_KB_RERANK=0 lo apaga.
 function rerankPorDefecto(): boolean {
-  return process.env.FISCAL_KB_RERANK === "1" || process.env.FISCAL_KB_RERANK === "true";
+  const v = process.env.FISCAL_KB_RERANK;
+  return !(v === "0" || v === "false");
 }
 
 /** Source-aware citation label: leyes cite artículos, RMF cita reglas, guías su título. */

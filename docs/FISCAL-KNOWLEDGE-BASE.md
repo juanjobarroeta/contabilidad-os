@@ -279,7 +279,9 @@ el eval (`api/admin/copiloto-eval`, body `busqueda`):
   vector.
 - `rerank: boolean` — un modelo barato (`AI_RERANK_MODEL`, default Haiku 4.5)
   reordena los 20 fusionados; si falla, se usa el orden fusionado. Costo en
-  `CostEvent` con subtipo `ai.rerank`.
+  `CostEvent` con subtipo `ai.rerank`. **Default ON** desde 2026-09-03: el
+  eval sólo-KB pasó de 48 % (vector) a 65 % (vector + rerank); es la palanca
+  que resuelve «el reglamento le gana a la ley» y los vecinos cercanos.
 
 Defaults de producción por env: `FISCAL_KB_MODO`, `FISCAL_KB_RERANK`. Se fijan
 con el número del eval — lo que no lo mueve, no se queda.
