@@ -371,6 +371,7 @@ model Company {
   // Orden de rotación del barrido de vigencia (nulls primero: las empresas
   // nunca barridas van al frente de la fila).
   @@index([vigenciaBarridoAt])
+  tombstonesBancarias BankTransactionTombstone[]
 }
 
 model CompanyMember {
@@ -1296,6 +1297,7 @@ model BankAccount {
   importBatches  ImportBatch[]
 
   @@unique([companyId, numeroCuenta])
+  tombstones          BankTransactionTombstone[]
 }
 
 enum BankAccountTipo {
@@ -1470,6 +1472,32 @@ model ImportBatch {
 
   @@index([companyId, createdAt])
   @@index([bankAccountId])
+}
+
+/// Lápida de un movimiento IMPORTADO que se borró a mano (duplicado por un
+/// pegado repetido, cargo de tarjeta que el banco cambió o quitó). Guarda la
+/// clave de deduplicación para que la siguiente importación del mismo estado
+/// NO lo reviva: `persistTransactions` cuenta lápidas como si el renglón
+/// siguiera existiendo. Sin esto, borrar un renglón importado era inútil.
+model BankTransactionTombstone {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  companyId     String
+  bankAccountId String
+  /// Id del movimiento borrado (ya no existe; sólo para la bitácora).
+  txId          String
+  fecha         DateTime
+  monto         Decimal  @db.Decimal(18, 6)
+  descripcion   String
+  referencia    String?
+  /// duplicado | banco | (libre) — por qué se borró.
+  motivo        String?
+  userId        String?
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@index([bankAccountId, fecha])
 }
 
 // Conciliación bancaria de un mes — el papel de trabajo que el contador revisa

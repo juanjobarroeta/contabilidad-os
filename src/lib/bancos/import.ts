@@ -152,19 +152,26 @@ export async function persistTransactions(opts: {
       monto: tx.monto,
       descripcion: tx.descripcion,
     };
+    // Las LÁPIDAS (renglones importados que alguien borró a mano) cuentan
+    // como si siguieran existiendo: así un re-pegado no revive el duplicado
+    // ni el cargo que el banco ya quitó.
     if (!conteoEnBD.has(clave)) {
-      const d = await prisma.bankTransaction.count({
-        where: { ...whereBase, referencia: tx.referencia ?? null },
-      });
-      conteoEnBD.set(clave, d);
+      const where = { ...whereBase, referencia: tx.referencia ?? null };
+      const [d, l] = await Promise.all([
+        prisma.bankTransaction.count({ where }),
+        prisma.bankTransactionTombstone.count({ where }),
+      ]);
+      conteoEnBD.set(clave, d + l);
     }
     if (hora) {
       const kh = `${clave}|${hora}`;
       if (!conteoConHora.has(kh)) {
-        const d = await prisma.bankTransaction.count({
-          where: { ...whereBase, referencia: hora },
-        });
-        conteoConHora.set(kh, d);
+        const where = { ...whereBase, referencia: hora };
+        const [d, l] = await Promise.all([
+          prisma.bankTransaction.count({ where }),
+          prisma.bankTransactionTombstone.count({ where }),
+        ]);
+        conteoConHora.set(kh, d + l);
       }
     }
   }
