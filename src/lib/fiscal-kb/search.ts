@@ -234,7 +234,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
     const top = ordenados.slice(0, CANDIDATOS_RERANK);
     const reordenados = await rerankCandidatos(
       query,
-      top.map((r) => ({ ...r, cita: buildCita(r.source, r.clave, r.articulo, r.titulo) }),
+      top.map((r) => ({ ...r, cita: buildCita(r.source, r.clave, r.articulo, r.titulo) })),
       { cost: opts.cost }
     );
     if (reordenados) ordenados = [...reordenados, ...ordenados.slice(CANDIDATOS_RERANK)];
