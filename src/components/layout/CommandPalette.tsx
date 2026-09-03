@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, CornerDownLeft, Building2, ArrowRight } from "lucide-react";
+import { Search, CornerDownLeft, Building2, ArrowRight, FileText } from "lucide-react";
 import { useCompany } from "./CompanyProvider";
 import { cn } from "@/lib/utils";
 import { DESTINOS, buscarDestinos, normalizar, type Destino } from "@/lib/navigation";
@@ -23,7 +23,8 @@ import { DESTINOS, buscarDestinos, normalizar, type Destino } from "@/lib/naviga
 
 type Fila =
   | { kind: "destino"; d: Destino }
-  | { kind: "empresa"; id: string; razonSocial: string; rfc: string };
+  | { kind: "empresa"; id: string; razonSocial: string; rfc: string }
+  | { kind: "contraparte"; id: string; razonSocial: string; rfc: string; cfdis: number };
 
 export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
   const router = useRouter();
@@ -31,6 +32,11 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState(0);
+  // Contrapartes de la empresa ACTIVA (clientes y proveedores viven juntos en
+  // el padrón Customer). Con debounce: el paletón no debe metralletear el API.
+  const [contrapartes, setContrapartes] = useState<
+    { id: string; razonSocial: string; rfc: string; cfdis: number }[]
+  >([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -56,6 +62,22 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
     window.addEventListener("cos:abrir-buscador", abrir);
     return () => window.removeEventListener("cos:abrir-buscador", abrir);
   }, []);
+
+  useEffect(() => {
+    const term = q.trim();
+    if (!open || !activeCompany || term.length < 3) {
+      setContrapartes([]);
+      return;
+    }
+    let vivo = true;
+    const t = setTimeout(() => {
+      fetch(`/api/buscar?companyId=${activeCompany.id}&q=${encodeURIComponent(term)}`)
+        .then((r) => (r.ok ? r.json() : { contrapartes: [] }))
+        .then((d) => { if (vivo) setContrapartes(Array.isArray(d?.contrapartes) ? d.contrapartes : []); })
+        .catch(() => { if (vivo) setContrapartes([]); });
+    }, 250);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [q, open, activeCompany]);
 
   // Cada apertura empieza en blanco: reusar la búsqueda anterior obliga a
   // borrarla antes de teclear la nueva.
@@ -90,8 +112,10 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
             rfc: c.rfc,
           }));
 
-    return [...empresas, ...destinos];
-  }, [q, companies, esOperador]);
+    const partes: Fila[] = contrapartes.map((c) => ({ kind: "contraparte" as const, ...c }));
+
+    return [...empresas, ...destinos, ...partes];
+  }, [q, companies, esOperador, contrapartes]);
 
   // Si la lista se acorta al teclear, el cursor no puede quedar fuera de rango.
   useEffect(() => {
@@ -102,6 +126,10 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
     setOpen(false);
     if (fila.kind === "destino") {
       router.push(fila.d.href);
+    } else if (fila.kind === "contraparte") {
+      // /facturas?q= busca en TODO el historial (#848); el RFC es la llave
+      // menos ambigua para aterrizar en sus comprobantes.
+      router.push(`/facturas?q=${encodeURIComponent(fila.rfc)}`);
     } else {
       const c = companies.find((x) => x.id === fila.id);
       if (c) setActiveCompany(c);
@@ -131,7 +159,8 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
   if (!open) return null;
 
   // Encabezado de grupo antes del primer renglón de cada sección.
-  const grupoDe = (f: Fila) => (f.kind === "empresa" ? "Cambiar de empresa" : f.d.grupo);
+  const grupoDe = (f: Fila) =>
+    f.kind === "empresa" ? "Cambiar de empresa" : f.kind === "contraparte" ? "Contrapartes" : f.d.grupo;
 
   return (
     <div
@@ -185,7 +214,10 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
             const nuevoGrupo = i === 0 || grupoDe(filas[i - 1]) !== grupo;
             const activo = i === cursor;
             return (
-              <div key={f.kind === "empresa" ? `e-${f.id}` : `d-${f.d.href}`} role="presentation">
+              <div
+                key={f.kind === "empresa" ? `e-${f.id}` : f.kind === "contraparte" ? `c-${f.id}` : `d-${f.d.href}`}
+                role="presentation"
+              >
                 {nuevoGrupo && (
                   <p
                     role="presentation"
@@ -216,6 +248,17 @@ export function CommandPalette({ esOperador }: { esOperador?: boolean }) {
                       {activeCompany?.id === f.id && (
                         <span className="shrink-0 text-[11px] text-cos-ink-faint">activa</span>
                       )}
+                    </>
+                  ) : f.kind === "contraparte" ? (
+                    <>
+                      <FileText className="h-4 w-4 shrink-0 text-cos-ink-soft" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {f.razonSocial}
+                        <span className="ml-2 font-mono text-[11px] text-cos-ink-faint">{f.rfc}</span>
+                      </span>
+                      <span className="shrink-0 text-[11px] text-cos-ink-faint">
+                        {f.cfdis === 1 ? "1 CFDI" : `${f.cfdis} CFDIs`}
+                      </span>
                     </>
                   ) : (
                     <>
