@@ -245,6 +245,9 @@ function OnboardingPageInner() {
   }, []);
   // Acknowledgement that the user must sign Facturapi's Carta Manifiesto.
   const [manifiestoAck, setManifiestoAck] = useState(false);
+  // Autorización de uso de la e.firma (/legal/mandato-efirma): obligatoria si
+  // se carga la e.firma; el servidor la exige también.
+  const [mandatoEfirmaAck, setMandatoEfirmaAck] = useState(false);
 
   // Form state
   const [fiscal, setFiscal] = useState({
@@ -431,6 +434,10 @@ function OnboardingPageInner() {
       setError("Confirma la Carta Manifiesto de Facturapi para continuar (u Omitir para configurarlo después).");
       return;
     }
+    if (!omitirCredenciales && (fiel.cerFile || fiel.keyFile) && !mandatoEfirmaAck) {
+      setError("Acepta la Autorización de uso de la e.firma para continuar (u Omitir para configurarla después).");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -495,6 +502,7 @@ function OnboardingPageInner() {
           fielCer,
           fielKey,
           fielPassword: omitirCredenciales ? undefined : fiel.password || undefined,
+          aceptaMandatoEfirma: omitirCredenciales ? undefined : mandatoEfirmaAck,
           fechaInicioRegimen,
           regimenes,
           csfObligaciones,
@@ -1256,6 +1264,21 @@ function OnboardingPageInner() {
                   </button>
                 </div>
               </div>
+              <label className="flex items-start gap-2 rounded-md border border-cos-line px-3 py-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={mandatoEfirmaAck}
+                  onChange={(e) => setMandatoEfirmaAck(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span className="text-xs leading-relaxed text-cos-ink-soft">
+                  Declaro que estoy facultado para usar la e.firma de esta empresa y acepto la{" "}
+                  <a href="/legal/mandato-efirma" target="_blank" rel="noopener noreferrer" className="font-medium text-cos-brand-ink hover:underline">
+                    Autorización de uso de la e.firma
+                  </a>
+                  : ContabilidadOS la usará únicamente para autenticarse ante el SAT y descargar la información fiscal de esta empresa.
+                </span>
+              </label>
             </>
           )}
 

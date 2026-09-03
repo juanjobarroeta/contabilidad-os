@@ -5040,6 +5040,41 @@ model AuditLog {
   @@index([accion, createdAt])
 }
 
+// Documentos legales que el usuario acepta de forma expresa (clickwrap).
+enum LegalDocumento {
+  TERMINOS // Términos y Condiciones (/legal/terminos)
+  AVISO_PRIVACIDAD // Aviso de Privacidad (/legal/aviso-de-privacidad)
+  MANDATO_EFIRMA // Autorización de uso de la e.firma, por empresa (/legal/mandato-efirma)
+}
+
+// Evidencia de aceptación de documentos legales (append-only). Una fila por
+// aceptación: quién, qué documento, qué versión, cuándo, desde dónde y en qué
+// flujo. Es la prueba de que el usuario aceptó los Términos/Aviso al crear la
+// cuenta y de que autorizó el uso de la e.firma de cada empresa.
+//
+// DELIBERADAMENTE sin FK hacia User ni Company (mismo criterio que AuditLog):
+// la evidencia debe sobrevivir a la baja de la cuenta o de la empresa — es
+// justo entonces cuando se necesita. userId/companyId son columnas planas y
+// `email` es una copia al momento de aceptar.
+//
+// Las versiones vigentes viven en src/lib/legal/documentos.ts; al cambiar un
+// documento se sube su versión ahí y la app vuelve a pedir la aceptación.
+model LegalAcceptance {
+  id         String         @id @default(cuid())
+  createdAt  DateTime       @default(now())
+  userId     String
+  email      String? // copia al momento de aceptar
+  companyId  String? // sólo MANDATO_EFIRMA: la empresa cuya e.firma se autoriza
+  documento  LegalDocumento
+  version    String // versión del documento aceptada (fecha ISO, p. ej. "2026-09-03")
+  contexto   String // flujo en que se aceptó: "signup", "gate", "onboarding", "configuracion"
+  ip         String?
+  userAgent  String?
+
+  @@index([userId, documento, createdAt])
+  @@index([companyId, documento])
+}
+
 // Refresh tokens opacos para la API de satélites (flujo access corto + refresh
 // rotatorio). Se guarda SOLO el SHA-256 del secreto (nunca el secreto en claro).
 // La rotación encadena filas vía replacedById; presentar un token ya rotado o

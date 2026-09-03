@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { hashOnboardingToken, evaluarInvitacion } from "@/lib/onboarding-invite";
 import { registrarBitacora } from "@/lib/audit";
+import { registrarAceptaciones } from "@/lib/legal/aceptaciones";
+import { DOCUMENTOS_CUENTA } from "@/lib/legal/documentos";
 
 const signupSchema = z.object({
   name: z.string().trim().min(1, "Nombre requerido").max(120),
@@ -12,6 +14,11 @@ const signupSchema = z.object({
   password: z.string().min(8, "Mínimo 8 caracteres").max(200),
   // Token de invitación de onboarding (enlace ?invite= o código tecleado).
   inviteToken: z.string().trim().min(1).max(200).optional(),
+  // Aceptación EXPRESA de Términos y Aviso de Privacidad (clickwrap). Sin
+  // ella no se crea la cuenta; la evidencia queda en LegalAcceptance.
+  aceptaTerminos: z.literal(true, {
+    errorMap: () => ({ message: "Debes aceptar los Términos y Condiciones y el Aviso de Privacidad" }),
+  }),
 });
 
 const TRIAL_DAYS = 15;
@@ -107,6 +114,19 @@ export async function POST(req: Request) {
       data: { name, email, password: hashed, subscriptionStatus, trialEndsAt },
       select: { id: true, email: true, name: true, trialEndsAt: true },
     });
+
+    // Evidencia de aceptación en la MISMA transacción: no hay cuenta sin
+    // aceptación registrada, ni aceptación registrada sin cuenta.
+    await registrarAceptaciones(
+      {
+        userId: u.id,
+        email,
+        documentos: DOCUMENTOS_CUENTA.map((d) => d.documento),
+        contexto: "signup",
+        req,
+      },
+      tx
+    );
 
     if (invite) {
       const claimed = await tx.onboardingInvite.updateMany({

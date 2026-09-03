@@ -11,6 +11,7 @@ import { validarCredencialSat } from "@/lib/sat-fiel";
 import { borrarCredencialesEmpresa, borrarEmpresaDefinitivo } from "@/lib/empresas/baja";
 import { liberarSlotSyntage } from "@/lib/fiscal/cumplimiento/syntage/deprovision";
 import { registrarBitacora } from "@/lib/audit";
+import { registrarAceptaciones } from "@/lib/legal/aceptaciones";
 import { errorRegistroPatronal, normalizarRegistroPatronal } from "@/lib/nomina/registro-patronal";
 
 type Params = { params: Promise<{ id: string }> };
@@ -97,6 +98,9 @@ export async function PATCH(req: Request, { params }: Params) {
   const body = await req.json();
   const {
     fielCer, fielKey, fielPassword, csdCer, csdKey, csdPassword,
+    // Autorización expresa de uso de la e.firma (/legal/mandato-efirma):
+    // obligatoria al cargar/reemplazar la e.firma; se registra en LegalAcceptance.
+    aceptaMandatoEfirma,
     registroPatronal,
     plataformaActividad,
     grupoId,
@@ -117,6 +121,12 @@ export async function PATCH(req: Request, { params }: Params) {
       rfcEsperado: empresa?.rfc, esperado: "FIEL",
     });
     if (!v.ok) return NextResponse.json({ error: v.error }, { status: 422 });
+    if (aceptaMandatoEfirma !== true) {
+      return NextResponse.json(
+        { error: "Para guardar la e.firma debes aceptar la Autorización de uso de la e.firma.", codigo: "MANDATO_EFIRMA_REQUERIDO" },
+        { status: 400 },
+      );
+    }
   }
   if (csdCer && csdKey && csdPassword) {
     const empresa = await prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } });
@@ -176,7 +186,27 @@ export async function PATCH(req: Request, { params }: Params) {
     return NextResponse.json({ error: "No hay datos para actualizar" }, { status: 400 });
   }
 
-  await prisma.company.update({ where: { id: companyId }, data });
+  // El guardado y, si cambia la e.firma, la evidencia de autorización de uso
+  // van en la MISMA transacción: no queda e.firma guardada sin su autorización.
+  const cambiaEfirma = Boolean(fielCer && fielKey && fielPassword);
+  const actorId = session.user.id;
+  const actorEmail = session.user.email ?? null;
+  await prisma.$transaction(async (tx) => {
+    await tx.company.update({ where: { id: companyId }, data });
+    if (cambiaEfirma) {
+      await registrarAceptaciones(
+        {
+          userId: actorId,
+          email: actorEmail,
+          companyId,
+          documentos: ["MANDATO_EFIRMA"],
+          contexto: "configuracion",
+          req,
+        },
+        tx,
+      );
+    }
+  });
 
   // Bitácora de seguridad: cambio de credenciales fiscales. Se registra QUÉ
   // tipo cambió (fiel/csd), NUNCA los valores ni contraseñas.

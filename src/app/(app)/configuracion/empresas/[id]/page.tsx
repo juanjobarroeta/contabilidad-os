@@ -96,6 +96,9 @@ export default function EmpresaEditPage() {
   const [fielSaving, setFielSaving] = useState(false);
   const [fielError, setFielError] = useState("");
   const [fielSuccess, setFielSuccess] = useState("");
+  // Autorización de uso de la e.firma (/legal/mandato-efirma): se acepta en
+  // cada carga/reemplazo; el servidor la exige también.
+  const [mandatoEfirmaAck, setMandatoEfirmaAck] = useState(false);
 
   useEffect(() => {
     fetch(`/api/companies/${id}`)
@@ -201,6 +204,10 @@ export default function EmpresaEditPage() {
       setFielError("Sube el .cer, el .key y la contraseña de la e.firma");
       return;
     }
+    if (!mandatoEfirmaAck) {
+      setFielError("Acepta la Autorización de uso de la e.firma para guardarla.");
+      return;
+    }
     setFielSaving(true);
     setFielError("");
     setFielSuccess("");
@@ -210,11 +217,12 @@ export default function EmpresaEditPage() {
       const res = await fetch(`/api/companies/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fielCer, fielKey, fielPassword }),
+        body: JSON.stringify({ fielCer, fielKey, fielPassword, aceptaMandatoEfirma: mandatoEfirmaAck }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al guardar la e.firma");
       setFielSuccess("e.firma guardada correctamente.");
+      setMandatoEfirmaAck(false);
       setCompany((c) => c ? { ...c, fielCer: "[stored]", fielKey: "[stored]" } : c);
     } catch (e) {
       setFielError(e instanceof Error ? e.message : "Error inesperado");
@@ -464,11 +472,26 @@ export default function EmpresaEditPage() {
             </button>
           </div>
         </div>
+        <label className="mt-3 flex items-start gap-2 rounded-md border border-cos-line px-3 py-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={mandatoEfirmaAck}
+            onChange={(e) => setMandatoEfirmaAck(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="text-xs leading-relaxed text-cos-ink-soft">
+            Declaro que estoy facultado para usar la e.firma de esta empresa y acepto la{" "}
+            <a href="/legal/mandato-efirma" target="_blank" rel="noopener noreferrer" className="font-medium text-cos-brand-ink hover:underline">
+              Autorización de uso de la e.firma
+            </a>
+            : ContabilidadOS la usará únicamente para autenticarse ante el SAT y descargar la información fiscal de esta empresa.
+          </span>
+        </label>
         {fielError && <p className="text-xs text-cos-red-ink mt-2">{fielError}</p>}
         {fielSuccess && <p className="text-xs text-cos-jade-ink mt-2">{fielSuccess}</p>}
         <button
           onClick={handleFielUpload}
-          disabled={fielSaving || !fielCerFile || !fielKeyFile || !fielPassword}
+          disabled={fielSaving || !fielCerFile || !fielKeyFile || !fielPassword || !mandatoEfirmaAck}
           className="mt-3 flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50"
         >
           {fielSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
