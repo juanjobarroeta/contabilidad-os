@@ -193,6 +193,7 @@ async function brazoExacto(query: string, vec: string, fecha: Date, fuentes: str
         FROM "FiscalChunk" c
         JOIN "FiscalDocument" d ON d."id" = c."documentId"
         WHERE c."articulo" IN (${Prisma.join(variantesArticulo(r.articulo))})
+          AND (c."parte" IS NULL OR c."parte" > 0)
           ${filtroClave}
           AND ${filtroVigencia(fecha)}
           ${filtroFuentes(fuentes)}
@@ -201,6 +202,38 @@ async function brazoExacto(query: string, vec: string, fecha: Date, fuentes: str
     );
   }
   return { rows, refs: refs.map((r) => `${r.clave ?? "?"} ${r.articulo}`) };
+}
+
+/**
+ * Un chunk-resumen (parte = 0, ver resumenes.ts) sirve para ENCONTRAR la
+ * unidad, no para citarla: se sustituye por la mejor parte real del mismo
+ * artículo, conservando su lugar en el orden. Si esa parte ya estaba en la
+ * lista, el resumen simplemente se retira.
+ */
+async function sustituirResumenes(rows: Row[], vec: string, fecha: Date): Promise<Row[]> {
+  const resumenes = rows.filter((r) => r.parte === 0);
+  if (resumenes.length === 0) return rows;
+  const pares = [...new Map(resumenes.map((r) => [`${r.documentId}#${r.articulo}`, r])).values()];
+  const reales = await prisma.$queryRaw<Row[]>`
+    SELECT DISTINCT ON (c."documentId", c."articulo")
+      ${COLUMNAS}, 1 - (c."embedding" <=> ${vec}::vector) AS "similitud"
+    FROM "FiscalChunk" c
+    JOIN "FiscalDocument" d ON d."id" = c."documentId"
+    WHERE (c."documentId", c."articulo") IN (${Prisma.join(pares.map((p) => Prisma.sql`(${p.documentId}, ${p.articulo})`))})
+      AND (c."parte" IS NULL OR c."parte" > 0)
+      AND ${filtroVigencia(fecha)}
+    ORDER BY c."documentId", c."articulo", c."embedding" <=> ${vec}::vector`;
+  const porUnidad = new Map(reales.map((r) => [`${r.documentId}#${r.articulo}`, r]));
+  const vistos = new Set<string>();
+  const out: Row[] = [];
+  for (const r of rows) {
+    const real = r.parte === 0 ? porUnidad.get(`${r.documentId}#${r.articulo}`) : r;
+    if (!real || vistos.has(real.id)) continue;
+    vistos.add(real.id);
+    // El resumen entró por su similitud; la parte real hereda la mejor de las dos.
+    out.push(real === r ? r : { ...real, similitud: Math.max(real.similitud, r.similitud) });
+  }
+  return out;
 }
 
 function aHit(r: Row): FiscalSearchHit {
@@ -258,6 +291,8 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
     ordenados = (await brazoVector(vec, fecha, opts.fuentes, candidatos)).filter((r) => r.similitud >= minSim);
   }
 
+  ordenados = await sustituirResumenes(ordenados, vec, fecha);
+
   if (rerank && ordenados.length > 1) {
     const top = ordenados.slice(0, candidatosRerank);
     const reordenados = await rerankCandidatos(
@@ -314,6 +349,7 @@ export async function getArticulo(clave: string, articulo: string, fechaVigencia
     JOIN "FiscalDocument" d ON d."id" = c."documentId"
     WHERE ${filtroClave}
       AND c."articulo" IN (${Prisma.join(variantesArticulo(articulo.trim()))})
+      AND (c."parte" IS NULL OR c."parte" > 0)
       AND ${filtroVigencia(fecha)}
     ORDER BY c."parte" ASC NULLS FIRST`;
   if (rows.length === 0) return null;

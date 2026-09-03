@@ -1,0 +1,53 @@
+name: Fiscal KB resúmenes (por unidad legal)
+
+# Genera los chunks-resumen de los artículos/reglas vigentes que aún no lo
+# tienen (fiscal-kb/resumenes.ts). Incremental: cada request procesa ~100
+# unidades y devuelve `restantes`; el job repite hasta cero. Correr después de
+# un «Fiscal KB refresh» con force (que borra los chunks) o de ingerir una
+# fuente nueva. Costo: ~$0.001 por unidad con Haiku, una vez.
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Unidades por request (≤ 200)"
+        required: false
+        default: "100"
+        type: string
+      baseUrl:
+        description: "URL del despliegue"
+        required: false
+        default: "https://contabilidad-os-production.up.railway.app"
+        type: string
+
+jobs:
+  resumenes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Generar hasta que no queden
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+          TOTAL=0; VUELTA=0
+          while :; do
+            VUELTA=$((VUELTA+1))
+            RESP=""; for intento in 1 2 3; do
+              if RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/admin/fiscal-resumenes" \
+                -H "Content-Type: application/json" -H "x-cron-secret: ${CRON_SECRET}" \
+                -d "{\"limit\":${LIMIT:-100}}")"; then break; fi
+              echo "::warning::vuelta $VUELTA falló (intento $intento); reintento en 30 s"; RESP=""; sleep 30
+            done
+            if [ -z "$RESP" ]; then echo "::error::vuelta $VUELTA falló 3 veces"; exit 1; fi
+            echo "$RESP" | jq '{procesadas, insertadas, fallidas, restantes, ms}'
+            INS="$(echo "$RESP" | jq -r '.insertadas')"; REST="$(echo "$RESP" | jq -r '.restantes')"; PROC="$(echo "$RESP" | jq -r '.procesadas')"
+            TOTAL=$((TOTAL+INS))
+            if [ "$REST" = "0" ] || [ "$PROC" = "0" ]; then break; fi
+            if [ "$VUELTA" -ge 80 ]; then echo "::error::80 vueltas y siguen quedando $REST"; exit 1; fi
+          done
+          echo "Resúmenes insertados en esta corrida: $TOTAL"

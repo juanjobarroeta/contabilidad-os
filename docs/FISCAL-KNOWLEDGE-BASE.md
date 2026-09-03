@@ -290,6 +290,15 @@ Defaults de producción por env: `FISCAL_KB_MODO`, `FISCAL_KB_RERANK`,
 `FISCAL_KB_CANDIDATOS_RERANK`. Se fijan
 con el número del eval — lo que no lo mueve, no se queda.
 
+**Resúmenes por unidad** (`resumenes.ts`, `POST /api/admin/fiscal-resumenes`,
+workflow «Fiscal KB resúmenes»): por cada artículo/regla vigente, un chunk
+extra con `parte = 0` — 2–3 líneas de qué trata y qué preguntas cotidianas
+responde, generado una vez con Haiku — para que la pregunta del cliente
+encuentre el artículo aunque el texto legal no comparta su vocabulario. En la
+búsqueda un resumen que entra al top-k se sustituye por la mejor parte real
+del mismo artículo; el agente nunca ve el resumen. `getArticulo` y el brazo
+exacto excluyen `parte = 0`. El mismo llamado etiqueta `regimenes`.
+
 `getArticulo(clave, numero)` trae un artículo completo (todas sus partes) y
 respalda la tool `get_articulo`, para que el agente SIGA referencias («para
 los efectos del artículo 27 de la Ley») en vez de adivinarlas.
