@@ -3839,9 +3839,8 @@ model FiscalChunk {
   vigenciaDesde DateTime // denormalized from document → filtered vector search sin join extra
   vigenciaHasta DateTime?
   regimenes     String[]                    @default([])
-  // Columna GENERADA (migración fiscal_chunk_tsv). La expresión va tal como
-  // Postgres la normaliza: así la introspecta `prisma migrate diff` (job drift).
-  tsv           Unsupported("tsvector")?    @default(dbgenerated("to_tsvector('spanish'::regconfig, ((COALESCE(articulo, ''::text) || ' '::text) || texto))"))
+  // La mantiene un TRIGGER (migración fiscal_chunk_tsv): to_tsvector('spanish', articulo || texto).
+  tsv           Unsupported("tsvector")?
 
   @@index([documentId])
   @@index([tsv], type: Gin)

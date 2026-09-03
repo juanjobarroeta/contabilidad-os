@@ -272,7 +272,7 @@ returns the source text, the assistant is grounded rather than recalling.
 el eval (`api/admin/copiloto-eval`, body `busqueda`):
 
 - `modo: "vector" | "hibrido"` — el híbrido suma un brazo léxico (`tsv`,
-  columna generada `to_tsvector('spanish', articulo || texto)` + GIN) y un
+  columna mantenida por trigger `to_tsvector('spanish', articulo || texto)` + GIN) y un
   brazo *exacto* (si la pregunta nombra «artículo 27 de la LISR» o «regla
   2.7.1.32», esos chunks entran primero). Fusión RRF (k = 60) en
   `fusion.ts`; el piso `minSimilarity` sólo juzga lo que propuso únicamente el
