@@ -11,9 +11,24 @@ export interface LeyDescriptor {
   clave: string;
   titulo: string;
   url: string;
+  /** LEY (default) o REGLAMENTO — decide la cita: «Art. 3 RLIVA». */
+  source?: "LEY" | "REGLAMENTO";
 }
 
-/** Catálogo de leyes fiscales — texto vigente, Cámara de Diputados. */
+/**
+ * Catálogo de leyes y reglamentos — texto vigente, Cámara de Diputados.
+ *
+ * Fase 1 del plan del copiloto («alimentar con lo que se usa a diario»): los
+ * reglamentos son donde viven las respuestas que un contador da a diario y
+ * que la ley sola no contesta — RLIVA 3 (retención de 2/3 del IVA), RLISR 3-A
+ * (la pickup no es «automóvil»), RCFF (avisos, plazos). Y las leyes de nómina
+ * (LSS, LINFONAVIT, LFT) para todo lo que el patrón pregunta.
+ *
+ * Todas se refrescan solas (workflow fiscal-kb-refresh, ingesta idempotente
+ * por hash). Los nombres de archivo de los reglamentos llevan fecha
+ * (Reg_LISR_060516) — si Diputados los renombra, el refresco falla en voz
+ * alta y se corrige aquí.
+ */
 export const LEYES: Record<string, LeyDescriptor> = {
   LISR: {
     clave: "LISR",
@@ -34,6 +49,41 @@ export const LEYES: Record<string, LeyDescriptor> = {
     clave: "LIEPS",
     titulo: "Ley del Impuesto Especial sobre Producción y Servicios",
     url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIEPS.pdf",
+  },
+  // ── Reglamentos ──────────────────────────────────────────────────────────────
+  RLISR: {
+    clave: "RLISR",
+    titulo: "Reglamento de la Ley del Impuesto sobre la Renta",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LISR_060516.pdf",
+    source: "REGLAMENTO",
+  },
+  RLIVA: {
+    clave: "RLIVA",
+    titulo: "Reglamento de la Ley del Impuesto al Valor Agregado",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIVA_250914.pdf",
+    source: "REGLAMENTO",
+  },
+  RCFF: {
+    clave: "RCFF",
+    titulo: "Reglamento del Código Fiscal de la Federación",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_CFF.pdf",
+    source: "REGLAMENTO",
+  },
+  // ── Nómina ───────────────────────────────────────────────────────────────────
+  LSS: {
+    clave: "LSS",
+    titulo: "Ley del Seguro Social",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSS.pdf",
+  },
+  LINFONAVIT: {
+    clave: "LINFONAVIT",
+    titulo: "Ley del Instituto del Fondo Nacional de la Vivienda para los Trabajadores",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf_mov/Ley_del_Instituto_del_Fondo_Nacional_de_la_Vivienda.pdf",
+  },
+  LFT: {
+    clave: "LFT",
+    titulo: "Ley Federal del Trabajo",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf",
   },
 };
 

@@ -53,7 +53,7 @@ describe("PREGUNTAS_EVAL", () => {
     expect(ids.size).toBe(PREGUNTAS_EVAL.length);
     for (const p of PREGUNTAS_EVAL) {
       expect(p.fundamentos.length).toBeGreaterThan(0);
-      for (const f of p.fundamentos) expect(f).toMatch(/^(Art\. \S+( Bis)? (LISR|LIVA|CFF|LIEPS)|Regla \d+(\.\d+)+ RMF-\d{4})$/);
+      for (const f of p.fundamentos) expect(f).toMatch(/^(Art\. \S+( Bis)? (RLISR|RLIVA|RCFF|LISR|LIVA|CFF|LIEPS|LSS|LINFONAVIT|LFT)|Regla \d+(\.\d+)+ RMF-\d{4})$/);
     }
   });
 });

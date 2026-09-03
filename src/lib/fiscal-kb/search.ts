@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { embedQuery, toVectorLiteral } from "./embed";
+import { diversificarPorDocumento } from "./diversificar";
 
 export interface FiscalSearchOptions {
   /** Fecha del periodo fiscal relevante. Default: hoy. */
@@ -77,6 +78,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
 
   const rows = await prisma.$queryRaw<
     {
+      documentId: string;
       articulo: string | null;
       contexto: string | null;
       texto: string;
@@ -90,7 +92,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
     }[]
   >`
     SELECT
-      c."articulo", c."contexto", c."texto", c."vigenciaDesde",
+      c."documentId", c."articulo", c."contexto", c."texto", c."vigenciaDesde",
       d."source"::text AS "source", d."clave", d."titulo", d."url", d."publicadoDof",
       1 - (c."embedding" <=> ${vec}::vector) AS "similitud"
     FROM "FiscalChunk" c
@@ -101,10 +103,12 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
     ORDER BY c."embedding" <=> ${vec}::vector
     LIMIT ${candidatos}`;
 
-  const resultados = rows
-    .filter((r) => r.similitud >= minSim)
-    .slice(0, limit)
-    .map((r) => ({
+  // A lo más 2 chunks por documento: una guía larga no debe acaparar el top-6
+  // y dejar fuera al artículo que sí responde (ver diversificar.ts).
+  const resultados = diversificarPorDocumento(
+    rows.filter((r) => r.similitud >= minSim),
+    limit
+  ).map((r) => ({
       cita: buildCita(r.source, r.clave, r.articulo, r.titulo),
       texto: r.texto,
       fuente: r.source,
