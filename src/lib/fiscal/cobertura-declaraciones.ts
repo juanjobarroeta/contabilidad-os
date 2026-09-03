@@ -10,11 +10,16 @@
 //     favor de IVA pedimos el ÚLTIMO mes del año cerrado anterior (diciembre).
 //   • Año EN CURSO → pedimos los mensuales transcurridos (ISR provisional + IVA),
 //     que aún no están consolidados en ninguna anual.
+//   • SÓLO periodos ya VENCIDOS. Un mes cuya fecha límite (día 17 del mes
+//     siguiente, en hábil) aún no pasó no "falta": está pendiente de presentar.
+//     Caso real: el 3-sep el banner pedía el acuse de agosto, que vence el 17-sep.
+//     Lo mismo para la anual (31-mar PM / 30-abr PF) y el diciembre previo.
 //
 // Es un "nag" no destructivo: en el peor caso pide un acuse de más; nunca borra.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { calcularVencimiento } from "@/lib/obligaciones";
 import { esPersonaFisicaRfc, requiereDeclaracionAnual } from "@/lib/fiscal/regimen-anual";
 
 export type TipoAcuseFaltante = "DECLARACION_ANUAL" | "ISR_PROVISIONAL" | "IVA_MENSUAL" | "IEPS_MENSUAL";
@@ -43,6 +48,33 @@ const MESES = [
 
 /** Máximo histórico que pedimos hacia atrás (años). El SAT permite 5. */
 const MAX_ANIOS_ATRAS = 5;
+
+/** Sólo la fecha (sin horas), para comparar días calendario. */
+const soloFecha = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+/**
+ * ¿Ya venció la declaración mensual de `year-month`? Día 17 del mes siguiente
+ * recorrido a hábil (mismo cálculo que el checklist). El propio día límite aún
+ * NO está vencido. (PURA)
+ */
+export function mensualVencido(year: number, month: number, hoy: Date = new Date()): boolean {
+  const periodo = `${year}-${String(month).padStart(2, "0")}`;
+  const limite = calcularVencimiento(
+    { tipo: "FEDERAL", descripcion: "Declaración mensual", periodicidad: "MENSUAL", diaVencimiento: 17 },
+    periodo,
+  );
+  return soloFecha(hoy).getTime() > soloFecha(limite).getTime();
+}
+
+/**
+ * ¿Ya venció la declaración anual del `ejercicio`? Personas morales: 31 de
+ * marzo del año siguiente (Art. 76-V LISR); personas físicas: 30 de abril
+ * (Art. 150 LISR). El propio día límite aún NO está vencido. (PURA)
+ */
+export function anualVencida(ejercicio: number, esPersonaFisica: boolean, hoy: Date = new Date()): boolean {
+  const limite = esPersonaFisica ? new Date(ejercicio + 1, 3, 30) : new Date(ejercicio + 1, 2, 31);
+  return soloFecha(hoy).getTime() > limite.getTime();
+}
 
 /**
  * Acuses faltantes de UNA empresa. Considera obligaciones activas y la fecha de
@@ -85,6 +117,7 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
   const now = new Date();
   const curYear = now.getFullYear();
   const curMonth = now.getMonth() + 1; // 1-12
+  const esPF = esPersonaFisicaRfc(company.rfc);
 
   const startYear = company.fechaInicioOperaciones
     ? Math.max(company.fechaInicioOperaciones.getFullYear(), curYear - MAX_ANIOS_ATRAS)
@@ -106,6 +139,9 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
   // 1. Años cerrados → ANUAL (cubre ISR mensual del año).
   if (tieneAnual) {
     for (let y = startYear; y < curYear; y++) {
+      // La anual del ejercicio inmediato anterior no "falta" antes de su fecha
+      // límite (ene–mar PM / ene–abr PF): está por presentarse.
+      if (!anualVencida(y, esPF, now)) continue;
       if (!have.has(`DECLARACION_ANUAL:${y}`)) {
         out.push({
           companyId,
@@ -122,7 +158,10 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
   }
 
   // 2. IVA del cierre del año anterior (no hay anual de IVA → arrastre de saldo).
-  if (tieneIVA) {
+  // Diciembre previo vence el 17 de enero: en la primera quincena de enero
+  // todavía no falta.
+  const dicPrevioVencido = mensualVencido(curYear - 1, 12, now);
+  if (tieneIVA && dicPrevioVencido) {
     const prev = curYear - 1;
     if (prev >= startYear && !have.has(`IVA_MENSUAL:${prev}-12`)) {
       out.push({
@@ -137,7 +176,7 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
   }
   // 2b. Ídem IEPS: definitivo mensual sin anual — diciembre previo trae el
   // saldo a favor arrastrable (sólo compensable contra IEPS, Art. 5o LIEPS).
-  if (tieneIEPS) {
+  if (tieneIEPS && dicPrevioVencido) {
     const prev = curYear - 1;
     if (prev >= startYear && !have.has(`IEPS_MENSUAL:${prev}-12`)) {
       out.push({
@@ -151,9 +190,12 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
     }
   }
 
-  // 3. Año en curso → mensuales transcurridos (hasta el mes anterior).
+  // 3. Año en curso → mensuales transcurridos Y YA VENCIDOS. El mes anterior
+  //    sólo cuenta como faltante después del 17 del mes en curso (en hábil):
+  //    antes está pendiente de presentar, no perdido.
   const fromMonth = startYear === curYear ? startMonth : 1;
   for (let m = fromMonth; m < curMonth; m++) {
+    if (!mensualVencido(curYear, m, now)) continue;
     const per = `${curYear}-${String(m).padStart(2, "0")}`;
     if (tieneISR && !have.has(`ISR_PROVISIONAL:${per}`)) {
       out.push({
