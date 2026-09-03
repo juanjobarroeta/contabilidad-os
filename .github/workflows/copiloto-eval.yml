@@ -88,9 +88,17 @@ jobs:
           echo "## Eval del copiloto" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"; cat resumen.json >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| id | KB | cita | inventa | fund. | noInv. | resp. | error |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|---|---|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          jq -r '"| \(.id) | \(if .recuperacion.hit then "✓" else "✗" end) | \(if .respuesta then (if .respuesta.citaPresente then "✓" else "✗" end) else "–" end) | \(if .respuesta then (.respuesta.citasFueraDeKB|join(", ")) else "–" end) | \(if .juez then (if .juez.fundamentoCorrecto then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.noInventa then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.respondeLoPreguntado then "✓" else "✗" end) else "–" end) | \(.error // "") |"' resultados.jsonl >> "$GITHUB_STEP_SUMMARY"
+          # La tabla va al resumen del job Y al log: desde fuera (MCP, curl) sólo
+          # se leen los logs, y sin la tabla no se sabe QUÉ pregunta falló.
+          {
+            echo "| id | KB | cita | inventa | fund. | noInv. | resp. | error |"
+            echo "|---|---|---|---|---|---|---|---|"
+            jq -r '"| \(.id) | \(if .recuperacion.hit then "✓" else "✗" end) | \(if .respuesta then (if .respuesta.citaPresente then "✓" else "✗" end) else "–" end) | \(if .respuesta then (.respuesta.citasFueraDeKB|join(", ")) else "–" end) | \(if .juez then (if .juez.fundamentoCorrecto then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.noInventa then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.respondeLoPreguntado then "✓" else "✗" end) else "–" end) | \(.error // "") |"' resultados.jsonl
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "### Fallos de recuperación (esperado → lo que devolvió la KB)"
+          jq -r 'select(.recuperacion.hit|not) | "\(.id) esperaba [\(.fundamentos|join(" | "))] → KB: [\(.recuperacion.citas|join(" | "))]"' resultados.jsonl
+          echo "### Comentarios del juez (fallos)"
+          jq -r 'select(.juez and ((.juez.fundamentoCorrecto and .juez.noInventa and .juez.respondeLoPreguntado)|not)) | "\(.id): \(.juez.comentario)"' resultados.jsonl
 
       - name: Guardar resultados
         uses: actions/upload-artifact@v4
