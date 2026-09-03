@@ -792,3 +792,40 @@ export async function conteosDerivacion(db: Db, companyId: string) {
   ]);
   return { insumosDerivados, movimientosDerivados };
 }
+
+// ─── Derivación INLINE (sat-sync / import-cfdi) ───────────────────────────────
+
+// Cache del gate de módulo: el sync procesa miles de CFDIs por corrida y el
+// módulo de una empresa casi nunca cambia (mismo patrón que auto-vehiculo).
+const moduloCache = new Map<string, { habilitado: boolean; t: number }>();
+const MODULO_TTL_MS = 5 * 60_000;
+
+/**
+ * Derivación al importar: igual que derivarInsumosDesdeCfdi pero sólo si la
+ * empresa tiene el módulo HOSPITAL habilitado. Nunca revienta el import: un
+ * fallo aquí se registra y el cron hospital-insumos-backfill lo recoge después.
+ */
+export async function derivarInsumosInline(
+  db: Db,
+  args: DerivarInsumosArgs
+): Promise<DerivarInsumosResultado | null> {
+  if (args.tipo !== "INGRESO" && args.tipo !== "EGRESO") return null;
+  const cached = moduloCache.get(args.companyId);
+  let habilitado: boolean;
+  if (cached && Date.now() - cached.t < MODULO_TTL_MS) {
+    habilitado = cached.habilitado;
+  } else {
+    habilitado = !!(await db.companyModule.findFirst({
+      where: { companyId: args.companyId, modulo: "HOSPITAL", habilitado: true },
+      select: { id: true },
+    }));
+    moduloCache.set(args.companyId, { habilitado, t: Date.now() });
+  }
+  if (!habilitado) return null;
+  try {
+    return await derivarInsumosDesdeCfdi(db, args);
+  } catch (e) {
+    console.error(`[hospital] derivación inline de insumos falló para ${args.invoiceId}:`, e);
+    return null;
+  }
+}
