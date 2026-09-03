@@ -21,6 +21,7 @@ import {
 import { fileRefDe } from "./declaraciones-backfill";
 import { parseSatDocument, SatParsePagadoError } from "@/lib/fiscal/acuse/parse";
 import { leerEImportarContabilidadElectronicaSyntage } from "@/lib/contabilidad/ce-import-syntage";
+import { importarSerieBalanzasSyntage } from "@/lib/contabilidad/ce-serie";
 
 export interface SyncOptions {
   /**
@@ -58,6 +59,8 @@ export interface SyncResult {
    * Ausente (null) si la empresa ya estaba arrancada o no aplica.
    */
   ceBootstrap?: { importado: boolean } | null;
+  /** Balanzas presentadas importadas a CeBalanzaMes en esta corrida. */
+  cePresentadas?: { importados: number } | null;
   error?: string;
 }
 
@@ -365,6 +368,21 @@ export async function syncCompanyComplianceSyntage(
     }
   }
 
+  // Serie de balanzas PRESENTADAS (CeBalanzaMes — la pantalla «presentado» y
+  // la Divergencia leen de ahí). El importador existía sin UN SOLO caller:
+  // Syntage extraía la CE y la pantalla seguía en 0 para siempre. Idempotente
+  // (los períodos ya guardados se saltan sin descarga) y aislado: su fallo no
+  // rompe opinión/CSF.
+  let cePresentadas: { importados: number } | null = null;
+  if (planIncluyeSyntage(company.tier)) {
+    try {
+      const serie = await importarSerieBalanzasSyntage(companyId, {}, client);
+      if (serie.importados > 0) cePresentadas = { importados: serie.importados };
+    } catch (e) {
+      console.error(`[ce-serie] ${companyId} (${company.rfc}): ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   return {
     companyId,
     rfc: company.rfc,
@@ -372,6 +390,7 @@ export async function syncCompanyComplianceSyntage(
     csf: csf && { changed: csf.changed, hallazgos: csf.hallazgos },
     declaracionesAnuales,
     ceBootstrap,
+    cePresentadas,
   };
 }
 

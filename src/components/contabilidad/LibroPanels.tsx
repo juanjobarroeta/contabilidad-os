@@ -164,7 +164,7 @@ export function LibroDiarioPanel({ companyId, year, month }: { companyId: string
               </button>
               {abiertaEsta && (
                 <div className="px-11 pb-3">
-                  <table className="w-full text-xs">
+                  <div className="overflow-x-auto"><table className="w-full text-xs">
                     <thead>
                       <tr className="text-cos-ink-faint">
                         <th className="text-left py-1 font-medium">Cuenta</th>
@@ -183,7 +183,7 @@ export function LibroDiarioPanel({ companyId, year, month }: { companyId: string
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
                   <div className="mt-2 flex items-center gap-3 print:hidden">
                     {p.referenciaTipo === "CFDI" && p.referencia && invoiceIdPorUuid[p.referencia] && (
                       <button
@@ -329,7 +329,7 @@ function PolizaManualModal({
             </label>
           </div>
 
-          <table className="w-full text-xs">
+          <div className="overflow-x-auto"><table className="w-full text-xs">
             <thead>
               <tr className="text-cos-ink-faint border-b border-cos-line">
                 <th className="text-left py-1.5 font-medium w-[38%]">Cuenta</th>
@@ -385,7 +385,7 @@ function PolizaManualModal({
                 <td />
               </tr>
             </tbody>
-          </table>
+          </table></div>
 
           <div className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
             cuadra ? "border-cos-jade-ink/25 bg-cos-jade-tint text-cos-jade-ink" : "border-cos-amber-ink/25 bg-cos-amber-tint text-cos-amber-ink"
@@ -480,7 +480,7 @@ export function AuxiliarCuentaModal({
             <Loading />
           ) : (
             <>
-              <table className="w-full text-xs">
+              <div className="overflow-x-auto"><table className="w-full text-xs">
                 <thead>
                   <tr className="text-cos-ink-faint border-b border-cos-line">
                     <th className="text-left py-1.5 font-medium">Fecha</th>
@@ -519,7 +519,7 @@ export function AuxiliarCuentaModal({
                     <td className="py-1.5 text-right font-mono"><Money value={data.saldoFinal} /></td>
                   </tr>
                 </tbody>
-              </table>
+              </table></div>
               {data.movimientos.length === 0 && (
                 <p className="mt-3 text-xs text-cos-ink-soft">Sin movimientos en el periodo — el saldo viene de meses anteriores.</p>
               )}
@@ -627,7 +627,7 @@ function Seccion({ titulo, filas, total, icon }: {
       <div className="flex items-center gap-2 border-b border-cos-line bg-cos-paper px-4 py-2.5 text-xs font-semibold text-cos-ink">
         {icon} {titulo}
       </div>
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto"><table className="w-full text-sm">
         <tbody>
           {filas.map((f, i) => (
             <tr key={`${f.cuenta}-${i}`} className="border-b border-cos-line/60 last:border-0">
@@ -641,7 +641,7 @@ function Seccion({ titulo, filas, total, icon }: {
             <td className="px-4 py-2 text-right font-mono text-xs"><Money value={total} /></td>
           </tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }

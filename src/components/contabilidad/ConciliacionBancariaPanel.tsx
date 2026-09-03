@@ -372,7 +372,7 @@ function LadoDetalle({
           <p className="border-t border-cos-line-soft px-4 py-5 text-center text-[13px] text-cos-ink-soft">{vacio}</p>
         ) : (
           <div className="max-h-[420px] overflow-y-auto border-t border-cos-line-soft">
-            <table className="w-full text-[13px]">
+            <div className="overflow-x-auto"><table className="w-full text-[13px]">
               <tbody>
                 {filas.map((f) => (
                   <tr key={f.id} className={`border-t border-cos-line-soft first:border-t-0 ${f.alerta ? "bg-cos-amber-tint/40" : ""}`}>
@@ -392,7 +392,7 @@ function LadoDetalle({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         ))}
     </div>
@@ -430,7 +430,7 @@ function Partidas({
       {filas.length === 0 ? (
         <p className="px-4 py-5 text-center text-[13px] text-cos-ink-soft">Ninguna — nada pendiente por aquí.</p>
       ) : (
-        <table className="w-full text-[13px]">
+        <div className="overflow-x-auto"><table className="w-full text-[13px]">
           <tbody>
             {filas.map((f) => (
               <tr key={f.id} className="border-t border-cos-line-soft">
@@ -443,7 +443,7 @@ function Partidas({
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
     </div>
   );

@@ -286,9 +286,15 @@ export default function CierrePage() {
   const totalSinConciliar = movsSinConciliar.reduce((s, m) => s + Math.abs(m.monto), 0);
   // En un mes ya posteado los sin conciliar no «bloquean» nada que ya pasó:
   // quedaron fuera del posteo y piden conciliar + re-postear.
+  // Con CERO movimientos del mes, «todo conciliado» sería una verdad vacía
+  // (visto con una empresa recién activada sin estados de cuenta): pendiente,
+  // no listo.
+  const sinMovimientos = (concil?.movimientosBanco.length ?? 0) === 0;
   const e2: EstadoPaso = !concil
     ? "cargando"
-    : concil.sinCuentaBancos || sinConciliar === 0 ? "listo"
+    : concil.sinCuentaBancos ? "listo"
+    : sinMovimientos ? "pendiente"
+    : sinConciliar === 0 ? "listo"
     : posteado ? "pendiente" : "bloquea";
 
   const e3: EstadoPaso = !periods ? "cargando" : posteado ? "listo" : "pendiente";
@@ -432,6 +438,16 @@ export default function CierrePage() {
                     Ir a conciliación <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </>
+              ) : sinMovimientos ? (
+                <>
+                  <p>
+                    Sin movimientos bancarios este mes — conecta tu banco o sube el estado de
+                    cuenta para que la conciliación tenga contra qué trabajar.
+                  </p>
+                  <Link href="/bancos?tab=cuentas" className={cn(liga, "mt-2")}>
+                    Ir a Bancos <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </>
               ) : (
                 <p>{concil.resumen || "Todos los movimientos del mes están conciliados."}</p>
               )
@@ -484,7 +500,7 @@ export default function CierrePage() {
           </Paso>
 
           {/* 3 · Posteo */}
-          <Paso num={3} titulo="Posteo" estado={e3}>
+          <Paso num={3} titulo="Contabilización" estado={e3}>
             {periodo ? (
               <p>
                 <span className="font-mono font-semibold tabular-nums">{periodo.entriesCount.toLocaleString("es-MX")}</span>{" "}
