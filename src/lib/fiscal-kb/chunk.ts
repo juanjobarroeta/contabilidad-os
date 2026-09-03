@@ -41,7 +41,13 @@ const FRACCION_RE = /^\s*[IVXLC]+\.\s/;
 //   CFF:         "Artículo 17-H Bis." → cita "17-H Bis"
 // Captures the number + optional suffix (drops the ordinal mark from the cite).
 const ARTICLE_RE = /^Artículo (\d+[oº°]?(?:\.?-[A-Za-zÑ]+)?(?: Bis)?|\d+ [A-Z])\.-?(?=\s)/gm;
-const TRANSITORIOS_RE = /^\s*(?:ARTÍCULOS?\s+)?TRANSITORIOS?\s*$/m;
+// La cola de una ley después del último artículo: «TRANSITORIOS», «ARTÍCULOS
+// TRANSITORIOS DE DECRETOS DE REFORMA» y — lo que se tragaba el Art. 215 de
+// la LISR (30 partes, 79 000 caracteres) — «DISPOSICIONES TRANSITORIAS DE LA
+// LEY…» y «DISPOSICIONES DE VIGENCIA TEMPORAL…». Se corta en el PRIMER
+// encabezado de este tipo y todo lo que sigue se cita «CLAVE — TRANSITORIOS».
+const TRANSITORIOS_RE =
+  /^\s*(?:DISPOSICIONES\s+(?:TRANSITORIAS|DE\s+VIGENCIA\s+TEMPORAL)\b[^\n]*|ARTÍCULOS?\s+TRANSITORIOS?(?:\s+DE\s+DECRETOS\s+DE\s+REFORMA)?|TRANSITORIOS?)\s*$/m;
 const HEADING_RE = /^(TÍTULO|CAPÍTULO|SECCIÓN)\s+/;
 
 /**

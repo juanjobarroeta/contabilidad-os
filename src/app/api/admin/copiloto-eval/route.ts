@@ -34,6 +34,12 @@ export async function POST(req: Request) {
     ids?: string[];
     agente?: boolean;
     juez?: boolean;
+    /** Palancas de la búsqueda a medir: { modo?: "vector"|"hibrido", rerank?: boolean }. Vacío = defaults de producción. */
+    busqueda?: { modo?: "vector" | "hibrido"; rerank?: boolean };
+  };
+  const busqueda = {
+    modo: body.busqueda?.modo === "hibrido" ? ("hibrido" as const) : body.busqueda?.modo === "vector" ? ("vector" as const) : undefined,
+    rerank: typeof body.busqueda?.rerank === "boolean" ? body.busqueda.rerank : undefined,
   };
   const universo = Array.isArray(body.ids) && body.ids.length > 0
     ? PREGUNTAS_EVAL.filter((p) => body.ids!.includes(p.id))
@@ -54,7 +60,7 @@ export async function POST(req: Request) {
   for (const p of pagina) {
     if (Date.now() - startedAt > NO_ARRANCAR_DESPUES_MS) break;
     const conTope = await Promise.race([
-      evaluarPregunta(p, { agente: body.agente !== false, juez: body.juez !== false }),
+      evaluarPregunta(p, { agente: body.agente !== false, juez: body.juez !== false, busqueda }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), TOPE_POR_PREGUNTA_MS)),
     ]);
     resultados.push(
