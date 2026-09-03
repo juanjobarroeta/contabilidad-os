@@ -62,10 +62,19 @@ jobs:
           while [ "$FIN" != "true" ]; do
             BODY="$(jq -cn --argjson o "$OFFSET" --argjson l "${PAGINA:-6}" --argjson a "$AGENTE" --argjson j "$JUEZ" --argjson ids "$IDS_JSON" \
               '{offset:$o, limit:$l, agente:$a, juez:$j, ids:$ids}')"
-            RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/admin/copiloto-eval" \
-              -H "Content-Type: application/json" -H "x-cron-secret: ${CRON_SECRET}" -d "$BODY")"
+            # Reintentos por página: un 502 puede ser un deploy de Railway
+            # cambiando de instancia a media corrida — no tirar 40 minutos por eso.
+            RESP=""; for intento in 1 2 3; do
+              if RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/admin/copiloto-eval" \
+                -H "Content-Type: application/json" -H "x-cron-secret: ${CRON_SECRET}" -d "$BODY")"; then break; fi
+              echo "::warning::página offset=$OFFSET falló (intento $intento); reintento en 30 s"; RESP=""; sleep 30
+            done
+            if [ -z "$RESP" ]; then echo "::error::página offset=$OFFSET falló 3 veces"; exit 1; fi
             echo "$RESP" | jq -c '.resultados[]' >> resultados.jsonl
             echo "$RESP" | jq '{offset, procesadas, siguiente, fin, ms, resumenPagina}'
+            # Errores por pregunta AL MOMENTO (antes sólo se veían en el resumen,
+            # que no corre si el job muere a medias).
+            echo "$RESP" | jq -r '.resultados[] | select(.error) | "  ✗ \(.id): \(.error)"'
             FIN="$(echo "$RESP" | jq -r '.fin')"
             NEXT="$(echo "$RESP" | jq -r '.siguiente')"
             if [ "$NEXT" = "$OFFSET" ]; then echo "::error::La página no avanzó"; exit 1; fi
@@ -73,8 +82,10 @@ jobs:
           done
 
       - name: Resumen
+        if: always()
         run: |
           set -euo pipefail
+          [ -s resultados.jsonl ] || { echo "sin resultados"; exit 0; }
           jq -s '{
             n: length,
             conError: map(select(.error)) | length,
@@ -97,10 +108,13 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "### Fallos de recuperación (esperado → lo que devolvió la KB)"
           jq -r 'select(.recuperacion.hit|not) | "\(.id) esperaba [\(.fundamentos|join(" | "))] → KB: [\(.recuperacion.citas|join(" | "))]"' resultados.jsonl
+          echo "### Errores por pregunta"
+          jq -r 'select(.error) | "\(.id): \(.error)"' resultados.jsonl
           echo "### Comentarios del juez (fallos)"
           jq -r 'select(.juez and ((.juez.fundamentoCorrecto and .juez.noInventa and .juez.respondeLoPreguntado)|not)) | "\(.id): \(.juez.comentario)"' resultados.jsonl
 
       - name: Guardar resultados
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: copiloto-eval-${{ github.run_id }}
