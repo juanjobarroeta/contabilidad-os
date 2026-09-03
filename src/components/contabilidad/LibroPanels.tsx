@@ -20,6 +20,7 @@ const FUENTE_LABEL: Record<string, string> = {
   APERTURA: "Apertura", CIERRE: "Cierre", CONSTRUCCION: "Construcción",
   FLOTA: "Flota", PADEL: "Padel", PURIFICADORA: "Purificadora",
   RESTAURANTE: "Restaurante", AUTOMOTRIZ: "Automotriz", JCPT: "JCPT",
+  HOSPITAL: "Hospital",
 };
 
 interface PolizaVista {

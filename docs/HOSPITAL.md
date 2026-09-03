@@ -183,6 +183,14 @@ GET  /api/hospital/usuarios?companyId=  · POST · PATCH/DELETE /usuarios/[membe
 ```
 GET /api/hospital/contactos?companyId=                       → filas como automotriz/contactos + pagadorId
 GET /api/hospital/contactos/[customerId]/perfil?direccion=CLIENTE|PROVEEDOR
+GET /api/hospital/contactos/[customerId]/estado-cuenta?direccion=CLIENTE|PROVEEDOR&year=2026
+    → estado de cuenta DOCUMENTAL (mismo motor que AutomotrizPro): cargos = facturas
+      (INGRESO al cliente / EGRESO del proveedor), abonos = notas de crédito, REP con su
+      FechaPago legal, PUE liquidada en su emisión y cobro/pago conciliado en banco que
+      excede lo amparado; saldo anterior al ejercicio + saldo corrido; imprimible.
+      { contacto, direccion, year, saldoAnterior, movimientos: [{ fecha, tipo:
+        FACTURA|NOTA_CREDITO|PAGO_REP|PAGO_PUE|COBRO_BANCO, referencia, invoiceId,
+        concepto, cargo, abono, saldo }], resumen: { movimientos, cargos, abonos, saldoFinal } }
 GET /api/hospital/cartera?companyId=&lado=COBRAR|PAGAR       → { lado, filas[], totales, aging }
 GET /api/hospital/compras?companyId=&anio=&mes=[&q=]         → CFDIs EGRESO del mes con conceptos
 GET /api/hospital/empleados?companyId=                       → roster (nómina completa en /api/nomina/*)

@@ -1,0 +1,90 @@
+name: Hospital - farmacia desde CFDIs (backfill nocturno)
+
+# Drena el catálogo/kardex de farmacia desde el archivo de CFDIs de las
+# empresas con módulo HOSPITAL: /api/cron/hospital-insumos-backfill avanza por
+# cursor (BackfillProgreso, job hospital-insumos), primero las empresas que no
+# han terminado su carga inicial y después las que sólo tienen CFDIs nuevos.
+# Idempotente — repetirlo no duplica nada — así que corre todas las noches.
+#
+# Cada llamada tiene presupuesto de 4 minutos del lado del servidor; el job
+# encadena rondas mientras el endpoint reporte empresas `pendientes`.
+#
+# Manual (workflow_dispatch): acota a una empresa, reinicia el cursor o
+# recalcula (borra lo derivado sin lote y lo vuelve a barrer) tras cambiar las
+# reglas de clasificación en src/lib/hospital/insumos-cfdi.ts.
+#
+# Requiere los secretos del repo CRON_SECRET y STAGING_URL (igual que los
+# demás crons).
+#
+# NOTE: GitHub only runs `schedule:` triggers from the DEFAULT branch (main).
+# Use the "Run workflow" button (workflow_dispatch) to trigger a run manually.
+
+on:
+  schedule:
+    - cron: "30 9 * * *" # ~03:30 CT (UTC-6), diario, tras la sync SAT nocturna
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "Empresa (vacío = todas las que tienen HOSPITAL)"
+        required: false
+        default: ""
+        type: string
+      reiniciar:
+        description: "Volver a barrer desde el principio (requiere companyId)"
+        required: false
+        default: false
+        type: boolean
+      recalcular:
+        description: "Borrar lo derivado sin lote y rederivar (requiere companyId)"
+        required: false
+        default: false
+        type: boolean
+      maxRondas:
+        description: "Tope de rondas por corrida (cada una ~4 min)"
+        required: false
+        default: "12"
+        type: string
+
+concurrency:
+  group: cron:hospital-insumos-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Derivar farmacia desde CFDIs encadenando rondas
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          REINICIAR: ${{ inputs.reiniciar }}
+          RECALCULAR: ${{ inputs.recalcular }}
+          MAX_RONDAS: ${{ inputs.maxRondas || '12' }}
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
+
+          Q=""
+          if [ -n "${COMPANY_ID}" ]; then Q="companyId=${COMPANY_ID}"; fi
+          # reiniciar/recalcular sólo en la PRIMERA ronda: las siguientes
+          # continúan el cursor que la primera dejó.
+          EXTRA=""
+          if [ "${REINICIAR}" = "true" ]; then EXTRA="${EXTRA}&reiniciar=1"; fi
+          if [ "${RECALCULAR}" = "true" ]; then EXTRA="${EXTRA}&recalcular=1"; fi
+
+          for i in $(seq 1 "${MAX_RONDAS}"); do
+            echo "── ronda ${i} ─────────────────────────────────────────────"
+            RESP="$(curl -fsS --max-time 300 -X POST "${URL}/api/cron/hospital-insumos-backfill?${Q}${EXTRA}" \
+              -H "x-cron-secret: ${CRON_SECRET}")"
+            echo "$RESP" | jq '{procesados, insumos, movimientos, borrados, pendientes, completado, elapsedMs, empresas: [.empresas[] | {companyId, procesados, movimientos, completado}]}'
+            EXTRA=""
+            PEND="$(printf '%s' "$RESP" | jq -r '.pendientes // 0')"
+            if [ "$PEND" = "0" ]; then echo "Sin pendientes."; exit 0; fi
+          done
+
+          echo "::warning::Se alcanzó el tope de ${MAX_RONDAS} rondas con empresas pendientes."
+          echo "::warning::La corrida de mañana continúa donde quedó el cursor."
