@@ -8,7 +8,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { embedQuery, toVectorLiteral } from "./embed";
-import { diversificarPorDocumento } from "./diversificar";
+import { diversificarPorUnidad } from "./diversificar";
 
 export interface FiscalSearchOptions {
   /** Fecha del periodo fiscal relevante. Default: hoy. */
@@ -103,9 +103,10 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
     ORDER BY c."embedding" <=> ${vec}::vector
     LIMIT ${candidatos}`;
 
-  // A lo más 2 chunks por documento: una guía larga no debe acaparar el top-6
-  // y dejar fuera al artículo que sí responde (ver diversificar.ts).
-  const resultados = diversificarPorDocumento(
+  // A lo más 2 chunks por UNIDAD legal (artículo/regla; una guía entera es una
+  // unidad): una guía larga no debe acaparar el top-6, pero dos artículos de la
+  // misma ley nunca compiten entre sí (ver diversificar.ts).
+  const resultados = diversificarPorUnidad(
     rows.filter((r) => r.similitud >= minSim),
     limit
   ).map((r) => ({

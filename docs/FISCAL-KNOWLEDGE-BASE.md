@@ -177,7 +177,7 @@ Pipeline per document:
 1. **Fetch** the source (HTTP). Compute `hash`; if unchanged vs latest stored version, skip.
 2. **Parse** to plain text. `pdf-parse` is already a dependency. Strip headers/footers.
 3. **Chunk** — *article-aware*, not fixed-size. Split on `Artículo N.-` / `Regla N.N.N`
-   boundaries so each chunk is a citable unit. Long articles sub-split with overlap.
+   boundaries so each chunk is a citable unit. Long articles split at fracción boundaries (~2 500 chars, article header repeated on every part); articles without fracciones and TRANSITORIOS sub-split by size with overlap.
 4. **Embed** the chunks in batches.
 5. **Upsert with vigencia** — if a newer version of the same `clave` exists, close the
    prior version's `vigenciaHasta`; insert the new `FiscalDocument` + `FiscalChunk`s.
