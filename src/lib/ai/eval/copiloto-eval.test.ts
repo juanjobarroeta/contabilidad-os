@@ -57,3 +57,18 @@ describe("PREGUNTAS_EVAL", () => {
     }
   });
 });
+
+describe("normalizarCita — fracciones", () => {
+  it("quita la fracción romana pegada al número; conserva letras reales de artículo", () => {
+    expect(normalizarCita("Art. 27-III LISR")).toBe("ART. 27 LISR");
+    expect(normalizarCita("Art. 28-XXXII LISR")).toBe("ART. 28 LISR");
+    expect(normalizarCita("Art. 28-V LISR")).toBe("ART. 28 LISR");
+    expect(normalizarCita("Art. 162-III LFT")).toBe("ART. 162 LFT");
+    expect(normalizarCita("Art. 17-L CFF")).toBe("ART. 17-L CFF");
+    expect(normalizarCita("Art. 18-I LIVA")).toBe("ART. 18-I LIVA");
+    expect(normalizarCita("Art. 113-E LISR")).toBe("ART. 113-E LISR");
+  });
+  it("una cita con fracción ya no cuenta como fuera de la KB", () => {
+    expect(algunaCoincide(["Art. 27 LISR"], ["Art. 27-III LISR"])).toBe(true);
+  });
+});
