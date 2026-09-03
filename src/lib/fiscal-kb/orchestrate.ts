@@ -27,7 +27,8 @@ export async function ingestLey(
   const ley = await fetchLey(clave);
   // Un reglamento sin reformas no trae «Última reforma DOF» en el encabezado;
   // el job puede mandar la vigencia a mano (misma opción que los docs).
-  const vigencia = ley.ultimaReformaDof ?? (opts.vigencia ? new Date(`${opts.vigencia}T00:00:00Z`) : null);
+  const respaldo = opts.vigencia ?? ley.descriptor.vigenciaFallback;
+  const vigencia = ley.ultimaReformaDof ?? (respaldo ? new Date(`${respaldo}T00:00:00Z`) : null);
   if (!vigencia) {
     throw new Error(
       `${clave}: no se detectó la fecha de última reforma — sin ella no hay versionado de vigencia. Manda {"vigencia":"YYYY-MM-DD"} en el job.`

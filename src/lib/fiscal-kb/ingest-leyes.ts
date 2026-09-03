@@ -13,6 +13,13 @@ export interface LeyDescriptor {
   url: string;
   /** LEY (default) o REGLAMENTO — decide la cita: «Art. 3 RLIVA». */
   source?: "LEY" | "REGLAMENTO";
+  /**
+   * Vigencia de respaldo (YYYY-MM-DD) para una fuente cuyo encabezado NO trae
+   * «Última reforma DOF» — un texto que nunca ha sido reformado sólo dice
+   * «Nuevo Reglamento publicado en el DOF el …». Se usa únicamente cuando el
+   * encabezado no da fecha; si algún día lo reforman, la del encabezado gana.
+   */
+  vigenciaFallback?: string;
 }
 
 /**
@@ -68,6 +75,9 @@ export const LEYES: Record<string, LeyDescriptor> = {
     titulo: "Reglamento del Código Fiscal de la Federación",
     url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_CFF.pdf",
     source: "REGLAMENTO",
+    // Nuevo Reglamento publicado en el DOF el 2 de abril de 2014; sin reformas
+    // desde entonces, así que el encabezado no trae «Última reforma DOF».
+    vigenciaFallback: "2014-04-02",
   },
   // ── Nómina ───────────────────────────────────────────────────────────────────
   LSS: {
