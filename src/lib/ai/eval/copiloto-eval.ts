@@ -43,7 +43,7 @@ const EMPRESA_EVAL: Record<NonNullable<PreguntaEval["regimen"]>, Parameters<type
 export async function medirRecuperacion(p: PreguntaEval, busqueda: OpcionesBusquedaEval = {}): Promise<ResultadoPregunta["recuperacion"]> {
   const r = await searchFiscalKnowledge(p.pregunta, { modo: busqueda.modo, rerank: busqueda.rerank });
   const citas = r.resultados.map((h) => h.cita);
-  return { hit: algunaCoincide(p.fundamentos, citas), citas };
+  return { hit: algunaCoincide(p.fundamentos, citas), citas, busqueda: r.busqueda };
 }
 
 // ── 2. Respuesta del agente real ──────────────────────────────────────────────

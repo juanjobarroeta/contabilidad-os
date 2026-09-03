@@ -9,7 +9,12 @@ export interface ResultadoPregunta {
   tema: string;
   pregunta: string;
   fundamentos: string[];
-  recuperacion: { hit: boolean; citas: string[] };
+  recuperacion: {
+    hit: boolean;
+    citas: string[];
+    /** Qué modo/rerank corrió de verdad (prueba en el log de que la palanca se activó). */
+    busqueda?: { modo: string; rerank: boolean; referenciasExactas: string[] };
+  };
   respuesta?: {
     texto: string;
     citasEnTexto: string[];
