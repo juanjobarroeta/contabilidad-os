@@ -70,7 +70,7 @@ export async function runWhatsappAgent(opts: {
   while (rounds < MAX_TOOL_ROUNDS) {
     let response;
     try {
-      response = await meteredCreate(anthropic, { companyId, subtipo: "whatsapp.agent" }, {
+      response = await meteredCreate(anthropic, { companyId, userId: userId ?? null, subtipo: "whatsapp.agent" }, {
         model,
         max_tokens: MAX_TOKENS,
         system,
@@ -80,7 +80,7 @@ export async function runWhatsappAgent(opts: {
     } catch (err) {
       if (model !== MODEL_FALLBACK && err instanceof Anthropic.NotFoundError) {
         model = MODEL_FALLBACK;
-        response = await meteredCreate(anthropic, { companyId, subtipo: "whatsapp.agent" }, {
+        response = await meteredCreate(anthropic, { companyId, userId: userId ?? null, subtipo: "whatsapp.agent" }, {
           model,
           max_tokens: MAX_TOKENS,
           system,

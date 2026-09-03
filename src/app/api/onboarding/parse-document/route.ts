@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
 import {
   parseSatDocument,
   VALID_REGIMENES,
@@ -109,6 +110,11 @@ function buildWarnings(doc: ParsedSatDocument): string[] {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = session.user.id;
+
+  // Guardia de IA: aún no hay empresa, así que el gasto se acota por usuario.
+  const guardia = await asegurarUsoIA({ userId, companyId: null });
+  if (!guardia.ok) return respuestaTopeIA(guardia);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
@@ -145,7 +151,7 @@ export async function POST(req: Request) {
 
   let parsed: ParsedSatDocument;
   try {
-    parsed = await parseSatDocument(base64, { subtipo: "onboarding.parse_document" });
+    parsed = await parseSatDocument(base64, { subtipo: "onboarding.parse_document", userId });
   } catch (e) {
     console.error("[parse-document] parse error:", e);
     return NextResponse.json(

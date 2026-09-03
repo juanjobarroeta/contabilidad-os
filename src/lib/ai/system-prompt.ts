@@ -26,6 +26,26 @@ function navegacionBlock(ctx?: ContextoNavegacion): string {
 Tiene abierta la página \`${ruta}\` de la app. Úsala para resolver referencias como "esto", "aquí", "este mes" o "lo que ves": /dashboard es la portada de obligaciones, /bancos es conciliación bancaria (tabs: conciliacion, movimientos, cuentas, historico), /facturas son los CFDIs, /declaraciones son impuestos, /nomina es nómina, /contabilidad/* es el cierre contable y sus reportes, /cumplimiento es opinión de cumplimiento y CSF. Si la ruta no te dice nada, ignórala.`;
 }
 
+/**
+ * System prompt en BLOQUES para prompt caching. El primero es el prefijo
+ * estable (rol, reglas, empresa, fecha del día) y lleva `cache_control`: las
+ * hasta 5 rondas de un mismo turno y todos los turnos del día reutilizan la
+ * caché (tools + system), que es la mayor parte de los tokens de entrada del
+ * copiloto. El bloque de navegación (la página abierta cambia a cada rato) va
+ * DESPUÉS del breakpoint para no invalidarla.
+ */
+export function buildSystemBlocks(
+  company: CompanyContext,
+  contexto?: ContextoNavegacion,
+): Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }> {
+  const bloques: Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }> = [
+    { type: "text", text: buildSystemPrompt(company), cache_control: { type: "ephemeral" } },
+  ];
+  const nav = navegacionBlock(contexto).trim();
+  if (nav) bloques.push({ type: "text", text: nav });
+  return bloques;
+}
+
 export function buildSystemPrompt(company: CompanyContext, contexto?: ContextoNavegacion): string {
   const now = new Date();
   const hoyIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(now);
@@ -47,6 +67,9 @@ Hoy es ${hoyLargo} (${hoyIso}), zona horaria de México. Usa SIEMPRE esta fecha 
 - **RFC:** ${company.rfc}
 - **Régimen fiscal:** ${company.regimenFiscal}
 - **Código postal:** ${company.codigoPostal}${navegacionBlock(contexto)}
+
+## Alcance (CRÍTICO)
+Sólo atiendes temas de contabilidad, impuestos, nómina, facturación, bancos y operación de ESTA empresa dentro de Contabilidad OS. Si te piden algo fuera de eso (redactar textos ajenos, programar, tareas escolares, temas personales, otra empresa a la que el usuario no tiene acceso, o usar este chat como asistente general), declínalo en una frase amable y ofrece ayudar con la contabilidad de la empresa. No hagas la tarea "de paso" ni parcialmente.
 
 ## Tu rol
 Eres un contador virtual experto en fiscalidad mexicana. Ayudas con:

@@ -19,6 +19,17 @@ export interface BillingRepo {
   userIdByStripeCustomer(customerId: string): Promise<string | null>;
   /** id del User con ese stripeSubscriptionId, o null. */
   userIdBySubscription(subscriptionId: string): Promise<string | null>;
+  /**
+   * Suma uso extra de IA a una empresa para un mes (compra en Stripe). Debe ser
+   * IDEMPOTENTE por stripeSessionId: Stripe reintenta webhooks.
+   */
+  otorgarCreditoIA(input: {
+    companyId: string;
+    periodo: string;
+    usd: number;
+    stripeSessionId: string;
+    userId: string | null;
+  }): Promise<void>;
   /** Actualiza campos de facturación del User. */
   updateUserBilling(
     userId: string,
@@ -109,6 +120,30 @@ export async function applyStripeEvent(
 
   switch (event.type) {
     case "checkout.session.completed": {
+      const metadataCompra = (obj.metadata ?? {}) as Record<string, unknown>;
+      // Compra de uso extra de IA: pago único (mode=payment) marcado por la ruta
+      // /api/billing/ia-extra con metadata.tipo="ia_extra". Suma AiCreditGrant a
+      // la empresa para el mes indicado; idempotente por id de sesión.
+      if (str(metadataCompra.tipo) === "ia_extra") {
+        const companyId = str(metadataCompra.companyId);
+        const periodo = str(metadataCompra.periodo);
+        const usd = Number(metadataCompra.usd);
+        const sessionId = str(obj.id);
+        if (!companyId || !periodo || !Number.isFinite(usd) || usd <= 0 || !sessionId)
+          return { handled: false, detail: "compra ia_extra con metadata incompleta" };
+        const pagado = str(obj.payment_status);
+        if (pagado && pagado !== "paid")
+          return { handled: false, detail: `compra ia_extra sin pagar (payment_status=${pagado})` };
+        await repo.otorgarCreditoIA({
+          companyId,
+          periodo,
+          usd,
+          stripeSessionId: sessionId,
+          userId: str(metadataCompra.userId) ?? null,
+        });
+        return { handled: true, detail: `uso extra de IA: company=${companyId} periodo=${periodo} +${usd} USD` };
+      }
+
       // Sólo checkouts de suscripción (mode ausente en tests/fixtures = ok).
       if (str(obj.mode) && obj.mode !== "subscription")
         return { handled: false, detail: `checkout ignorado (mode=${obj.mode})` };

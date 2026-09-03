@@ -73,7 +73,7 @@ Reglas:
 export async function sugerirCategoriaConceptoLLM(
   concepto: string,
   signo: SignoMovimiento,
-  ctx: { companyId?: string | null } = {},
+  ctx: { companyId?: string | null; userId?: string | null } = {},
 ): Promise<SugerenciaCategoria | null> {
   if (!concepto || !concepto.trim()) return null;
 
@@ -89,7 +89,7 @@ export async function sugerirCategoriaConceptoLLM(
       messages: [{ role: "user", content: userText }],
     };
     try {
-      response = await meteredCreate(anthropic, { companyId: ctx.companyId, subtipo: "bancos.categorizar_concepto" }, params);
+      response = await meteredCreate(anthropic, { companyId: ctx.companyId, userId: ctx.userId, subtipo: "bancos.categorizar_concepto" }, params);
     } catch (err) {
       if (model !== MODEL_FALLBACK && err instanceof Anthropic.NotFoundError) {
         model = MODEL_FALLBACK;

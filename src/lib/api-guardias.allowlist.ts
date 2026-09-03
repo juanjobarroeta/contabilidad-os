@@ -66,6 +66,16 @@ export const RUTAS_PUBLICAS: EntradaAllowlist[] = [
  */
 export const RUTAS_CON_AUTH_PROPIA: EntradaAllowlist[] = [
   {
+    ruta: "api/onboarding/parse-csf/route.ts",
+    razon:
+      "No toca datos de ninguna empresa: lee un PDF subido ANTES de que exista la empresa. El único companyId es el `null` que se pasa a la guardia de IA (tope por usuario).",
+  },
+  {
+    ruta: "api/onboarding/parse-document/route.ts",
+    razon:
+      "Igual que parse-csf: documento del onboarding sin empresa aún; companyId sólo aparece como `null` en la guardia de IA.",
+  },
+  {
     ruta: "api/despacho/members/[userId]/companies/route.ts",
     razon:
       "Check inline de OWNER/ADMIN del despacho del caller; valida que el miembro objetivo y cada companyId pertenezcan a ESE despacho antes de tocar el scoping.",

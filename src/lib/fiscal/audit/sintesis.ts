@@ -88,7 +88,10 @@ Reglas estrictas:
  * corrida CAMBIÓ algo (nuevos > 0 o autoResueltos > 0) o no hay brief — el
  * gate vive en el llamador para que una corrida sin cambios no gaste tokens.
  */
-export async function generarSintesisAuditoria(companyId: string): Promise<{
+export async function generarSintesisAuditoria(
+  companyId: string,
+  opts: { userId?: string | null } = {},
+): Promise<{
   grupos: GrupoHallazgos[];
   resumen: string | null;
 }> {
@@ -148,6 +151,7 @@ export async function generarSintesisAuditoria(companyId: string): Promise<{
     });
     void recordLlmCost(response.model ?? model, response.usage, {
       companyId,
+      userId: opts.userId ?? null,
       subtipo: "llm.audit_sintesis",
     });
     const texto = response.content.find((b) => b.type === "text");

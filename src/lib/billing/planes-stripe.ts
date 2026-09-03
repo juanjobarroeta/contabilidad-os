@@ -135,3 +135,13 @@ export function priceIdForComplemento(
   const v = env[COMPLEMENTO_ENV_VAR[complemento]];
   return v && v.trim() !== "" ? v.trim() : null;
 }
+
+// ─── Uso extra de IA (pago único) ────────────────────────────────────────────
+// Paquete que amplía el tope mensual de IA de UNA empresa para el mes en curso
+// (ver IA_PAQUETE_EXTRA_USD en src/lib/planes.ts). Se cobra como pago único
+// (Checkout mode=payment) con el Price de STRIPE_PRICE_IA_EXTRA; el webhook lo
+// convierte en AiCreditGrant. Sin la variable, la compra responde 503.
+export function priceIdIaExtra(env: Record<string, string | undefined> = process.env): string | null {
+  const v = env.STRIPE_PRICE_IA_EXTRA;
+  return v && v.trim() !== "" ? v.trim() : null;
+}

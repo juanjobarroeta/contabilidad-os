@@ -6,6 +6,8 @@
 //
 // Design doc: docs/FISCAL-KNOWLEDGE-BASE.md §7.
 
+import { recordEmbeddingCost, type CostCtx } from "@/lib/costos/record";
+
 const EMBEDDING_MODEL = "text-embedding-3-small";
 /** Must match `vector(N)` on FiscalChunk.embedding in prisma/schema.prisma. */
 export const EMBEDDING_DIM = 1536;
@@ -13,9 +15,11 @@ export const EMBEDDING_DIM = 1536;
 const BATCH_SIZE = 64;
 const MAX_RETRIES = 3;
 
-async function embedBatch(texts: string[]): Promise<number[][]> {
+async function embedBatch(texts: string[], cost?: CostCtx): Promise<number[][]> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY no configurada — requerida para embeddings del knowledge base fiscal");
+  // Se mide con los tokens que reporta la API; si no vienen, ~4 caracteres/token.
+  const tokensEstimados = Math.ceil(texts.reduce((n, t) => n + t.length, 0) / 4);
 
   for (let attempt = 1; ; attempt++) {
     const res = await fetch("https://api.openai.com/v1/embeddings", {
@@ -24,7 +28,8 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
       body: JSON.stringify({ model: EMBEDDING_MODEL, input: texts }),
     });
     if (res.ok) {
-      const json = (await res.json()) as { data: { index: number; embedding: number[] }[] };
+      const json = (await res.json()) as { data: { index: number; embedding: number[] }[]; usage?: { total_tokens?: number } };
+      void recordEmbeddingCost(json.usage?.total_tokens ?? tokensEstimados, { ...cost, subtipo: cost?.subtipo ?? "openai.embedding" });
       // API preserves order, but sort by index defensively.
       return json.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
     }
@@ -38,16 +43,16 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
 }
 
 /** Embed many texts in batches. Order of the result matches the input. */
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+export async function embedTexts(texts: string[], cost?: CostCtx): Promise<number[][]> {
   const out: number[][] = [];
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    out.push(...(await embedBatch(texts.slice(i, i + BATCH_SIZE))));
+    out.push(...(await embedBatch(texts.slice(i, i + BATCH_SIZE), cost)));
   }
   return out;
 }
 
-export async function embedQuery(query: string): Promise<number[]> {
-  const [v] = await embedBatch([query]);
+export async function embedQuery(query: string, cost?: CostCtx): Promise<number[]> {
+  const [v] = await embedBatch([query], cost);
   return v;
 }
 

@@ -45,3 +45,14 @@ describe("microUsdACentavosMxn", () => {
     expect(microUsdACentavosMxn(0, 18.5)).toBe(0);
   });
 });
+
+describe("llmCostMicroUsd — prompt caching", () => {
+  it("cobra la escritura en caché a 1.25× y la lectura a 0.1× del precio de entrada", () => {
+    // Fable 5: $10/Mtok de entrada. 1M escritos = $12.5; 1M leídos = $1.
+    expect(llmCostMicroUsd("claude-fable-5", 0, 0, { cacheWriteTokens: 1_000_000 })).toBe(12_500_000);
+    expect(llmCostMicroUsd("claude-fable-5", 0, 0, { cacheReadTokens: 1_000_000 })).toBe(1_000_000);
+  });
+  it("sin tokens de caché el resultado es el de antes", () => {
+    expect(llmCostMicroUsd("claude-sonnet-4-5", 2000, 1000, {})).toBe(21_000);
+  });
+});

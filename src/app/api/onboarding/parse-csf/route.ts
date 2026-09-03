@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { AuthzError, requireUser } from "@/lib/authz";
 import { meteredCreate } from "@/lib/costos/anthropic";
+import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/onboarding/parse-csf
@@ -145,12 +146,17 @@ export async function POST(req: Request) {
   // Bearer-aware: el wizard de onboarding de los satélites sube la CSF con el
   // token de /api/auth/token; la web sigue entrando por cookie (requireUser
   // intenta ambos).
+  let userId: string;
   try {
-    await requireUser(req);
+    userId = (await requireUser(req)).id;
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
     throw e;
   }
+
+  // Guardia de IA: aún no hay empresa, así que el gasto se acota por usuario.
+  const guardia = await asegurarUsoIA({ userId, companyId: null });
+  if (!guardia.ok) return respuestaTopeIA(guardia);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
@@ -191,7 +197,7 @@ export async function POST(req: Request) {
   let responseText = "";
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await meteredCreate(anthropic, { subtipo: "onboarding.parse_csf" }, {
+    const response: any = await meteredCreate(anthropic, { subtipo: "onboarding.parse_csf", userId }, {
       model: "claude-sonnet-4-5",
       max_tokens: 2048,
       system: SYSTEM_PROMPT,
