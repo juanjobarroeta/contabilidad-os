@@ -57,8 +57,14 @@ async function estadoDe(company: { id: string; rfc: string; razonSocial: string 
       ? `Leyendo acuses en segundo plano${corrida.ultimoPeriodo ? ` (último: ${corrida.ultimoPeriodo})` : ""}… puedes cerrar esta página; la corrida sigue.`
       : corrida.error
         ? "Syntage no devolvió datos para esta empresa — captura los acuses manualmente en Impuestos/cierre."
-        : corrida.mesesCreados === 0
-          ? "No se creó ningún mes nuevo (ya capturados, o Syntage no tiene esos acuses). Si faltan, súbelos en Impuestos/cierre."
+        : corrida.errores > 0 && corrida.mesesCreados === 0
+          ? `Ningún acuse pudo procesarse (${corrida.errores} fallo(s)). Primer error: ${corrida.primerError}`
+          : corrida.mesesCreados === 0
+            ? corrida.returnsMensuales === 0
+              ? "Syntage no tiene declaraciones mensuales extraídas para esta empresa. Si ya las ves en Syntage, la extracción `monthly_tax_return` aún no ha corrido aquí."
+              : corrida.pendientes === 0
+                ? "Todo lo que Syntage tiene ya estaba capturado. Si el checklist sigue pidiendo acuses, son meses que Syntage no tiene: súbelos en Impuestos/cierre."
+                : "No se creó ningún mes nuevo. Si faltan, súbelos en Impuestos/cierre."
           : corrida.topeAlcanzado
             ? "Meses ingresados hasta el tope de esta corrida. Vuelve a pulsar para traer el resto."
             : "Meses ingresados. Vuelve a calcular el periodo: ISR pagado anterior y saldo a favor ya deberían reflejar lo presentado.";
