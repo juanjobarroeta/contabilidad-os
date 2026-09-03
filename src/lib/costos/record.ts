@@ -3,26 +3,41 @@
 // bloquea la petición que está midiendo (un fallo al medir no debe romper el
 // parseo de un acuse ni una extracción). Las funciones específicas calculan el
 // costo con la tabla de tarifas y persisten un CostEvent.
+//
+// Atribución: SIEMPRE que se conozca, pasar `companyId` y `userId`. Los topes de
+// IA (src/lib/ai/guardia.ts) suman CostEvent por empresa (mes) y por usuario
+// (día/mes); un evento sin atribución es gasto que ningún tope ve.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { llmCostMicroUsd, syntageExtractionMicroUsd, facturapiTimbreMicroUsd } from "./rates";
+import {
+  llmCostMicroUsd,
+  syntageExtractionMicroUsd,
+  facturapiTimbreMicroUsd,
+  whisperMicroUsd,
+  embeddingMicroUsd,
+} from "./rates";
 
 export interface CostCtx {
   companyId?: string | null;
   despachoId?: string | null;
+  /** Usuario que disparó la operación (topes por usuario y gasto pre-empresa). */
+  userId?: string | null;
   /** Etiqueta del origen, p.ej. "declaraciones.backfill" / "onboarding.parse_document". */
   subtipo?: string;
 }
 
+export type CostCategoria = "LLM" | "SYNTAGE" | "FACTURAPI" | "TWILIO" | "OPENAI";
+
 export async function recordCost(e: {
-  categoria: "LLM" | "SYNTAGE" | "FACTURAPI" | "TWILIO";
+  categoria: CostCategoria;
   subtipo: string;
   unidades: number;
   costoMicroUsd: number;
   companyId?: string | null;
   despachoId?: string | null;
+  userId?: string | null;
   meta?: Record<string, unknown>;
 }): Promise<void> {
   try {
@@ -34,6 +49,7 @@ export async function recordCost(e: {
         costoMicroUsd: e.costoMicroUsd,
         companyId: e.companyId ?? null,
         despachoId: e.despachoId ?? null,
+        userId: e.userId ?? null,
         meta: e.meta === undefined ? undefined : (e.meta as Prisma.InputJsonValue),
       },
     });
@@ -43,23 +59,57 @@ export async function recordCost(e: {
   }
 }
 
+/** `usage` de una respuesta de Anthropic, incluidos los tokens de prompt caching. */
+export type LlmUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+} | null | undefined;
+
 /** Registra el costo de una llamada LLM a partir del `usage` de la respuesta. */
-export async function recordLlmCost(
-  model: string,
-  usage: { input_tokens?: number; output_tokens?: number } | null | undefined,
-  ctx?: CostCtx,
-): Promise<void> {
+export async function recordLlmCost(model: string, usage: LlmUsage, ctx?: CostCtx): Promise<void> {
   const inTok = usage?.input_tokens ?? 0;
   const outTok = usage?.output_tokens ?? 0;
-  if (!inTok && !outTok) return;
+  const cacheWriteTokens = usage?.cache_creation_input_tokens ?? 0;
+  const cacheReadTokens = usage?.cache_read_input_tokens ?? 0;
+  if (!inTok && !outTok && !cacheWriteTokens && !cacheReadTokens) return;
   await recordCost({
     categoria: "LLM",
     subtipo: ctx?.subtipo ?? "llm.call",
-    unidades: inTok + outTok,
-    costoMicroUsd: llmCostMicroUsd(model, inTok, outTok),
+    unidades: inTok + outTok + cacheWriteTokens + cacheReadTokens,
+    costoMicroUsd: llmCostMicroUsd(model, inTok, outTok, { cacheWriteTokens, cacheReadTokens }),
     companyId: ctx?.companyId,
     despachoId: ctx?.despachoId,
-    meta: { model, inputTokens: inTok, outputTokens: outTok },
+    userId: ctx?.userId,
+    meta: { model, inputTokens: inTok, outputTokens: outTok, cacheWriteTokens, cacheReadTokens },
+  });
+}
+
+/** Registra una transcripción de Whisper (OpenAI), por segundos de audio. */
+export async function recordWhisperCost(segundos: number, ctx?: CostCtx): Promise<void> {
+  await recordCost({
+    categoria: "OPENAI",
+    subtipo: ctx?.subtipo ?? "openai.whisper",
+    unidades: segundos,
+    costoMicroUsd: whisperMicroUsd(segundos),
+    companyId: ctx?.companyId,
+    despachoId: ctx?.despachoId,
+    userId: ctx?.userId,
+  });
+}
+
+/** Registra una llamada de embeddings (OpenAI), por tokens facturados. */
+export async function recordEmbeddingCost(tokens: number, ctx?: CostCtx): Promise<void> {
+  if (tokens <= 0) return;
+  await recordCost({
+    categoria: "OPENAI",
+    subtipo: ctx?.subtipo ?? "openai.embedding",
+    unidades: tokens,
+    costoMicroUsd: embeddingMicroUsd(tokens),
+    companyId: ctx?.companyId,
+    despachoId: ctx?.despachoId,
+    userId: ctx?.userId,
   });
 }
 

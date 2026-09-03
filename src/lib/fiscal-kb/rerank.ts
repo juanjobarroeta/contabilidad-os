@@ -11,6 +11,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { meteredCreate } from "@/lib/costos/anthropic";
+import type { CostCtx } from "@/lib/costos/record";
 
 export const RERANK_MODEL = process.env.AI_RERANK_MODEL ?? "claude-haiku-4-5-20251001";
 /** Caracteres de cada candidato que ve el modelo (el encabezado del artículo va al principio). */
@@ -56,8 +57,9 @@ function extraerJson(texto: string): unknown {
 export async function rerankCandidatos<T extends CandidatoRerank>(
   pregunta: string,
   candidatos: T[],
-  client: Anthropic = new Anthropic()
+  opts: { cost?: CostCtx; client?: Anthropic } = {}
 ): Promise<T[] | null> {
+  const client = opts.client ?? new Anthropic();
   if (candidatos.length < 2) return candidatos;
   const lista = candidatos
     .map((c, i) => `[${i + 1}] ${c.cita}\n${c.texto.replace(/\s+/g, " ").slice(0, EXTRACTO_CHARS)}`)
@@ -65,7 +67,7 @@ export async function rerankCandidatos<T extends CandidatoRerank>(
   try {
     const msg = await meteredCreate(
       client,
-      { companyId: null, subtipo: "ai.rerank" },
+      { companyId: null, ...opts.cost, subtipo: "ai.rerank" },
       {
         model: RERANK_MODEL,
         max_tokens: 200,

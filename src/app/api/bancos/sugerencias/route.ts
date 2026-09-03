@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { asegurarUsoIA } from "@/lib/ai/guardia";
 import { sugerenciasPeriodo, aprobarSugerencia } from "@/lib/bancos/sugerencias-concepto";
 import type { FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 
@@ -42,7 +43,15 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const sugerencias = await sugerenciasPeriodo(companyId, year, month, { usarLLM });
+  // El modelo sólo lo dispara quien puede escribir (las sugerencias son para
+  // aprobar asientos) y sólo si la empresa tiene tope de IA disponible; las
+  // sugerencias por reglas siguen saliendo siempre.
+  let usarLLMEfectivo = usarLLM && member.role !== "VIEWER";
+  if (usarLLMEfectivo) {
+    const guardia = await asegurarUsoIA({ userId: session.user.id, companyId });
+    if (!guardia.ok) usarLLMEfectivo = false;
+  }
+  const sugerencias = await sugerenciasPeriodo(companyId, year, month, { usarLLM: usarLLMEfectivo, userId: session.user.id });
   return NextResponse.json({ year, month, sugerencias });
 }
 

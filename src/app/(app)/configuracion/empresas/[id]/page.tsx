@@ -184,7 +184,7 @@ export default function EmpresaEditPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al guardar el CSD");
       const fp = data.facturapi;
-      if (fp?.liveKeyGenerated) {
+      if (fp?.hasLiveKey) {
         setCsdSuccess("CSD guardado y clave live de Facturapi generada. Ya puedes timbrar CFDIs.");
       } else if (fp?.csdUploaded) {
         setCsdSuccess("CSD guardado y subido a Facturapi.");

@@ -17,6 +17,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { embedQuery, toVectorLiteral } from "./embed";
+import type { CostCtx } from "@/lib/costos/record";
 import { diversificarPorUnidad } from "./diversificar";
 import { fusionarRRF, referenciasExactas } from "./fusion";
 import { rerankCandidatos } from "./rerank";
@@ -35,6 +36,8 @@ export interface FiscalSearchOptions {
   modo?: ModoBusqueda;
   /** Reordenar los candidatos con un modelo barato antes de entregar. Default por env FISCAL_KB_RERANK=1. */
   rerank?: boolean;
+  /** Atribución del costo (embedding de la consulta, rerank) a la empresa/usuario que consulta. */
+  cost?: CostCtx;
 }
 
 export interface FiscalSearchHit {
@@ -203,7 +206,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
   // artículos buenos en la posición 7. Cortar a `limit` después del piso.
   const candidatos = Math.min(limit * 4, 40);
 
-  const vec = toVectorLiteral(await embedQuery(query));
+  const vec = toVectorLiteral(await embedQuery(query, opts.cost ? { ...opts.cost, subtipo: "kb.embed_query" } : undefined));
 
   let ordenados: Row[];
   let refs: string[] = [];
@@ -231,7 +234,8 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
     const top = ordenados.slice(0, CANDIDATOS_RERANK);
     const reordenados = await rerankCandidatos(
       query,
-      top.map((r) => ({ ...r, cita: buildCita(r.source, r.clave, r.articulo, r.titulo) }))
+      top.map((r) => ({ ...r, cita: buildCita(r.source, r.clave, r.articulo, r.titulo) }),
+      { cost: opts.cost }
     );
     if (reordenados) ordenados = [...reordenados, ...ordenados.slice(CANDIDATOS_RERANK)];
   }

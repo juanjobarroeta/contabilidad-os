@@ -58,7 +58,7 @@ export async function sugerenciasPeriodo(
   companyId: string,
   year: number,
   month: number,
-  opts: { usarLLM?: boolean } = {},
+  opts: { usarLLM?: boolean; maxLLM?: number; userId?: string | null } = {},
 ): Promise<MovimientoConSugerencia[]> {
   const { start, end } = monthRange(year, month);
 
@@ -73,6 +73,12 @@ export async function sugerenciasPeriodo(
     select: { id: true, fecha: true, descripcion: true, monto: true, bankAccountId: true },
   })).map((t) => ({ ...t, monto: Number(t.monto) }));
 
+  // Tope de llamadas al modelo POR PETICIÓN: antes era una por movimiento sin
+  // clasificar, sin límite (un mes con 400 movimientos = 400 llamadas por
+  // cada recarga de la página). Lo que no alcanza queda sin sugerencia LLM y
+  // se recoge en la siguiente petición.
+  const maxLLM = opts.maxLLM ?? 25;
+  let llamadasLLM = 0;
   const out: MovimientoConSugerencia[] = [];
   for (const tx of txs) {
     const signo = signoDeMonto(tx.monto);
@@ -81,8 +87,9 @@ export async function sugerenciasPeriodo(
     const porReglas = sugerirCategoriaConcepto(tx.descripcion, signo);
     if (porReglas) {
       sugerencia = { ...porReglas, fuenteSugerencia: "reglas" };
-    } else if (opts.usarLLM) {
-      const porLLM = await sugerirCategoriaConceptoLLM(tx.descripcion, signo, { companyId });
+    } else if (opts.usarLLM && llamadasLLM < maxLLM) {
+      llamadasLLM++;
+      const porLLM = await sugerirCategoriaConceptoLLM(tx.descripcion, signo, { companyId, userId: opts.userId });
       if (porLLM) sugerencia = { ...porLLM, fuenteSugerencia: "llm" };
     }
 

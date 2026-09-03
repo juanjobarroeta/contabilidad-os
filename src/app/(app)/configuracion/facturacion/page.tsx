@@ -7,6 +7,10 @@ import { stripeConfigured } from "@/lib/billing/stripe";
 import { PLAN_LABEL } from "@/lib/planes";
 import { ArrowLeft, CreditCard } from "lucide-react";
 import { SuscripcionAcciones } from "./suscripcion-acciones";
+import { UsoIA } from "./uso-ia";
+import { usoIAEmpresasDeUsuario } from "@/lib/ai/uso";
+import { priceIdIaExtra } from "@/lib/billing/planes-stripe";
+import { IA_PAQUETE_EXTRA_USD } from "@/lib/planes";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +57,8 @@ export default async function FacturacionPage() {
   const planesActuales = [...new Set(empresas.map((e) => PLAN_LABEL[e.tier]))];
 
   const configurado = stripeConfigured();
+  const usoIA = await usoIAEmpresasDeUsuario(session.user.id);
+  const iaExtraConfigurado = configurado && priceIdIaExtra() !== null;
 
   return (
     <div className="p-6 max-w-3xl">
@@ -110,6 +116,8 @@ export default async function FacturacionPage() {
           <SuscripcionAcciones configurado={configurado} tieneCliente={!!user.stripeCustomerId} />
         </div>
       </div>
+
+      <UsoIA empresas={usoIA} configurado={iaExtraConfigurado} paqueteUsd={IA_PAQUETE_EXTRA_USD} />
     </div>
   );
 }

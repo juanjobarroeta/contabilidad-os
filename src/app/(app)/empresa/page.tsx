@@ -171,6 +171,9 @@ export default function EmpresaPage() {
   const [fielSaving, setFielSaving] = useState(false);
   const [fielSuccess, setFielSuccess] = useState("");
   const [fielError, setFielError] = useState("");
+  // Autorización de uso de la e.firma (/legal/mandato-efirma): el servidor la
+  // exige al guardar (400 MANDATO_EFIRMA_REQUERIDO sin ella).
+  const [mandatoEfirmaAck, setMandatoEfirmaAck] = useState(false);
 
   // Import declarations
   const [importDocs, setImportDocs] = useState<ImportDoc[]>([]);
@@ -404,6 +407,10 @@ export default function EmpresaPage() {
       setFielError("Sube el .cer, el .key y la contraseña de tu e.firma");
       return;
     }
+    if (!mandatoEfirmaAck) {
+      setFielError("Acepta la Autorización de uso de la e.firma para guardarla.");
+      return;
+    }
     setFielSaving(true);
     setFielError("");
     setFielSuccess("");
@@ -413,7 +420,7 @@ export default function EmpresaPage() {
       const res = await fetch(`/api/companies/${activeCompany.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fielCer, fielKey, fielPassword }),
+        body: JSON.stringify({ fielCer, fielKey, fielPassword, aceptaMandatoEfirma: mandatoEfirmaAck }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -423,6 +430,7 @@ export default function EmpresaPage() {
       setFielCerFile(null);
       setFielKeyFile(null);
       setFielPassword("");
+      setMandatoEfirmaAck(false);
       fetchCompanyDetail();
     } catch (err) {
       setFielError(err instanceof Error ? err.message : "Error inesperado");
@@ -1310,6 +1318,22 @@ export default function EmpresaPage() {
               </div>
             </div>
 
+            <label className="flex items-start gap-2 rounded-md border border-cos-line px-3 py-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={mandatoEfirmaAck}
+                onChange={(e) => setMandatoEfirmaAck(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="text-xs leading-relaxed text-cos-ink-soft">
+                Declaro que estoy facultado para usar la e.firma de esta empresa y acepto la{" "}
+                <a href="/legal/mandato-efirma" target="_blank" rel="noopener noreferrer" className="font-medium text-cos-brand-ink hover:underline">
+                  Autorización de uso de la e.firma
+                </a>
+                : ContabilidadOS la usará únicamente para autenticarse ante el SAT y descargar la información fiscal de esta empresa.
+              </span>
+            </label>
+
             {fielSuccess && (
               <div className="flex items-start gap-2 bg-cos-jade-tint border border-cos-jade-ink/20 rounded-lg px-3 py-2 text-sm text-cos-jade-ink">
                 <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
@@ -1325,7 +1349,7 @@ export default function EmpresaPage() {
 
             <button
               onClick={handleFielUpload}
-              disabled={fielSaving || !fielCerFile || !fielKeyFile || !fielPassword}
+              disabled={fielSaving || !fielCerFile || !fielKeyFile || !fielPassword || !mandatoEfirmaAck}
               className="flex items-center gap-2 bg-cos-brand text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-brand-deep disabled:opacity-50 transition-colors"
             >
               {fielSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}

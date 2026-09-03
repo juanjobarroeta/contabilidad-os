@@ -178,6 +178,9 @@ export async function executeToolCall(
             fechaVigencia: typeof input.fecha_vigencia === "string" ? new Date(input.fecha_vigencia) : undefined,
             fuentes: Array.isArray(input.fuentes) ? input.fuentes.map(String) : undefined,
             limit: typeof input.limit === "number" ? input.limit : undefined,
+            // El embedding de la consulta se cobra a la empresa/usuario que
+            // preguntó (la ley es común, el gasto no).
+            cost: { companyId, userId: context.userId ?? null },
           })
         );
       } catch (err) {

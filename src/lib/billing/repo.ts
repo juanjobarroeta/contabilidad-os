@@ -34,6 +34,16 @@ export function prismaBillingRepo(): BillingRepo {
       await prisma.user.update({ where: { id: userId }, data });
     },
 
+    // Idempotente por stripeSessionId (@unique): un reintento del webhook no
+    // duplica el crédito.
+    async otorgarCreditoIA({ companyId, periodo, usd, stripeSessionId, userId }) {
+      await prisma.aiCreditGrant.upsert({
+        where: { stripeSessionId },
+        create: { companyId, periodo, usd, motivo: "compra", stripeSessionId, otorgadoPorUserId: userId },
+        update: {},
+      });
+    },
+
     // El plan comprado se aplica a las empresas del comprador: las que posee
     // con membresía OWNER y todas las del despacho al que pertenece (el
     // despacho es quien paga por su cartera). Ver mapeo en planes-stripe.ts.
