@@ -54,7 +54,10 @@ jobs:
           set -euo pipefail
           URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
           if [ -z "${CRON_SECRET:-}" ]; then echo "::error::CRON_SECRET vacío"; exit 1; fi
-          IDS_JSON="$(printf '%s' "${IDS}" | tr -d '[:space:]' | jq -R 'if . == "" then [] else split(",") end')"
+          # `jq -R` sobre entrada VACÍA no emite nada → --argjson recibía "" y
+          # reventaba. Con ids vacío la lista es [] explícita.
+          IDS_LIMPIO="$(printf '%s' "${IDS}" | tr -d '[:space:]')"
+          if [ -z "$IDS_LIMPIO" ]; then IDS_JSON='[]'; else IDS_JSON="$(printf '%s' "$IDS_LIMPIO" | jq -Rc 'split(",")')"; fi
           OFFSET=0; FIN=false; : > resultados.jsonl
           while [ "$FIN" != "true" ]; do
             BODY="$(jq -cn --argjson o "$OFFSET" --argjson l "${PAGINA:-6}" --argjson a "$AGENTE" --argjson j "$JUEZ" --argjson ids "$IDS_JSON" \
