@@ -251,6 +251,7 @@ model Company {
   obligations         CompanyObligation[]
   perdidasFiscales    PerdidaFiscal[]
   costEvents          CostEvent[]
+  aiCreditGrants      AiCreditGrant[]
   coeEnvios           CoeEnvio[]
   accountingEntries   AccountingEntry[]
   accounts            ChartAccount[]
@@ -2030,7 +2031,11 @@ model CostEvent {
   id            String   @id @default(cuid())
   despachoId    String?
   companyId     String?
-  categoria     String // "LLM" | "SYNTAGE"
+  // Quién disparó la operación (sin FK: el histórico sobrevive a la baja de la
+  // cuenta). Permite topes POR USUARIO y atribuir el gasto que ocurre antes de
+  // que exista la empresa (parseo de documentos en el onboarding).
+  userId        String?
+  categoria     String // "LLM" | "SYNTAGE" | "FACTURAPI" | "TWILIO" | "OPENAI"
   subtipo       String // "llm.parse_acuse" | "syntage.extraction.tax_status" | …
   unidades      Float // tokens (LLM) o conteo (extracciones)
   costoMicroUsd Int // costo estimado en micro-USD (USD × 1e6)
@@ -2043,7 +2048,28 @@ model CostEvent {
 
   @@index([companyId, occurredAt])
   @@index([despachoId, occurredAt])
+  @@index([userId, occurredAt])
   @@index([occurredAt])
+}
+
+// Uso EXTRA de IA para una empresa en un mes concreto (periodo "YYYY-MM", hora
+// de México): se suma al tope mensual de su plan. Nace de una compra (Stripe),
+// de una cortesía del operador o de un ajuste. Se consume dentro del mes al que
+// aplica; no rueda al siguiente.
+model AiCreditGrant {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  companyId         String
+  periodo           String // "YYYY-MM" al que aplica
+  usd               Float // monto en USD que se suma al tope del mes
+  motivo            String // "compra" | "cortesia" | "ajuste"
+  stripeSessionId   String?  @unique // idempotencia del webhook de Stripe
+  otorgadoPorUserId String? // operador que lo otorgó (cortesía/ajuste)
+  nota              String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, periodo])
 }
 
 // Envíos de Contabilidad Electrónica (COE) por periodo. Guarda el hash del

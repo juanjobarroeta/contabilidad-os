@@ -94,23 +94,6 @@ export function effectiveWhatsappPlan(company: {
   return company.despachoId ? "DESPACHO" : company.tier;
 }
 
-// ── Tope de COSTO-SEGURIDAD del asistente DENTRO de la app ────────────────────
-// El chat in-app está incluido en TODOS los tiers (la IA es parte del producto),
-// pero igual lo metemos en presupuesto mensual de LLM por empresa para acotar el
-// COGS ante un uso abusivo. Es un tope de COSTO, no de precio. Subtipo medido en
-// CostEvent: "ai.chat".
-const CHAT_LLM_USD_MENSUAL: Record<CompanyPlan, number> = {
-  ASISTENTE: 8,
-  AUTOMATIZADO: 15,
-  PRO: 30,
-  DESPACHO: 80,
-};
-
-/** Presupuesto mensual de LLM (USD) por empresa para el chat in-app, por tier. */
-export function chatLlmUsdMensual(plan: CompanyPlan): number {
-  return CHAT_LLM_USD_MENSUAL[plan];
-}
-
 // ── Tope diario de mensajes del chat in-app POR USUARIO ──────────────────────
 // El presupuesto mensual de LLM protege el COGS a nivel EMPRESA, pero un solo
 // usuario en una empresa con presupuesto amplio (p.ej. DESPACHO) puede vaciar
@@ -131,3 +114,46 @@ const CHAT_MSGS_DIARIOS_POR_USUARIO: Record<CompanyPlan, number> = {
 export function dailyChatMsgsPerUser(plan: CompanyPlan): number {
   return CHAT_MSGS_DIARIOS_POR_USUARIO[plan];
 }
+
+// ── Tope MENSUAL de IA por EMPRESA, TODAS las funciones ──────────────────────
+// Los topes anteriores acotan sólo el chat y sólo WhatsApp; todo lo demás que
+// gasta modelo (leer CSF, acuses, estados de cuenta, documentos de empleados,
+// categorizar movimientos, síntesis del auditor, análisis de crédito) no tenía
+// tope ni se sumaba a nada. Éste es el techo de COGS de IA de la empresa en el
+// mes, sumando TODOS los CostEvent de categoría LLM/OPENAI, y se aplica al tier
+// PROPIO de la empresa (sin heredar el de DESPACHO: un despacho con 20 empresas
+// ASISTENTE no debe tener 20 × tope DESPACHO). El uso extra se vende por
+// empresa y mes (AiCreditGrant) y se SUMA a este tope.
+//
+// Referencia de precio: Básico $499 MXN ≈ 27 USD/mes. Los números son una
+// decisión de producto: ajústalos a tu oferta y a tu margen.
+const IA_USD_MENSUAL_EMPRESA: Record<CompanyPlan, number> = {
+  ASISTENTE: 5,
+  AUTOMATIZADO: 10,
+  PRO: 20,
+  DESPACHO: 40,
+};
+
+/** Techo mensual de gasto en IA (USD) de una empresa, por su propio tier. */
+export function iaUsdMensualEmpresa(plan: CompanyPlan): number {
+  return IA_USD_MENSUAL_EMPRESA[plan];
+}
+
+/** Techo mensual de IA (USD) para una empresa cuyo dueño está en PRUEBA. */
+export const IA_USD_MENSUAL_PRUEBA = 3;
+
+/**
+ * Techo mensual de IA (USD) del gasto SIN empresa (documentos leídos en el
+ * onboarding antes de crear la empresa). Se acota por usuario.
+ */
+export const IA_USD_MENSUAL_SIN_EMPRESA = 2;
+
+/**
+ * Tope diario de OPERACIONES de IA por usuario, sumando todas las funciones
+ * (cada llamada al modelo cuenta una). Backstop contra bucles y scripts: el
+ * chat ya tiene su propio tope de mensajes; éste cubre el resto.
+ */
+export const IA_OPERACIONES_DIARIAS_USUARIO = 150;
+
+/** Paquete de uso extra que se vende: USD que suma al tope del mes en curso. */
+export const IA_PAQUETE_EXTRA_USD = 10;

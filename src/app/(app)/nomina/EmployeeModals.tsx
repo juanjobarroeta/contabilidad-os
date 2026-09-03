@@ -58,6 +58,9 @@ export function NewEmployeeModal({
       for (const file of Array.from(files)) {
         const fd = new FormData();
         fd.append("file", file);
+        // La empresa va en el form para que el gasto de IA se atribuya y se
+        // acote a la empresa (y no al tope genérico por usuario).
+        fd.append("companyId", companyId);
         const res = await fetch("/api/nomina/parse-employee-docs", {
           method: "POST", body: fd,
         });

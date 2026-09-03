@@ -33,13 +33,53 @@ export const ANTHROPIC_PRICES_USD_PER_MTOK: Record<string, { in: number; out: nu
 const DEFAULT_MODEL = "claude-sonnet-4-5";
 
 /**
+ * Multiplicadores de prompt caching sobre el precio de entrada (lista Anthropic):
+ * escribir en caché cuesta 1.25× la entrada; leer de caché 0.1×. Los tokens de
+ * caché vienen en `usage.cache_creation_input_tokens` / `cache_read_input_tokens`
+ * y NO están incluidos en `input_tokens`, así que se suman aparte.
+ */
+export const CACHE_WRITE_MULT = 1.25;
+export const CACHE_READ_MULT = 0.1;
+
+/** ¿El modelo tiene tarifa propia? Un id desconocido cae al default (Sonnet 4.5). */
+export function modeloConTarifa(model: string): boolean {
+  return model in ANTHROPIC_PRICES_USD_PER_MTOK;
+}
+
+/**
  * Costo de una llamada LLM en micro-USD: tokens × (USD por millón de tokens).
  * Como micro-USD = USD × 1e6 y el precio es por 1e6 tokens, el factor 1e6 se
- * cancela: micro-USD = inTok·in + outTok·out.
+ * cancela: micro-USD = inTok·in + outTok·out (+ caché escrita·1.25·in + caché
+ * leída·0.1·in).
  */
-export function llmCostMicroUsd(model: string, inputTokens: number, outputTokens: number): number {
+export function llmCostMicroUsd(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cache: { cacheWriteTokens?: number; cacheReadTokens?: number } = {},
+): number {
   const p = ANTHROPIC_PRICES_USD_PER_MTOK[model] ?? ANTHROPIC_PRICES_USD_PER_MTOK[DEFAULT_MODEL];
-  return Math.round(inputTokens * p.in + outputTokens * p.out);
+  const cw = cache.cacheWriteTokens ?? 0;
+  const cr = cache.cacheReadTokens ?? 0;
+  return Math.round(
+    inputTokens * p.in + outputTokens * p.out + cw * p.in * CACHE_WRITE_MULT + cr * p.in * CACHE_READ_MULT,
+  );
+}
+
+/**
+ * OpenAI (lista pública): Whisper $0.006 por minuto de audio; embeddings
+ * text-embedding-3-small $0.02 por millón de tokens. Antes no se medían: eran
+ * gasto invisible en /rentabilidad y fuera de todo tope.
+ */
+export const OPENAI_WHISPER_USD_PER_MIN = 0.006;
+export const OPENAI_EMBEDDING_USD_PER_MTOK = 0.02;
+
+export function whisperMicroUsd(segundos: number): number {
+  return Math.round((Math.max(0, segundos) / 60) * OPENAI_WHISPER_USD_PER_MIN * MICRO_USD);
+}
+
+export function embeddingMicroUsd(tokens: number): number {
+  return Math.round(Math.max(0, tokens) * OPENAI_EMBEDDING_USD_PER_MTOK);
 }
 
 /**

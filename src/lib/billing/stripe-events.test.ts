@@ -65,6 +65,7 @@ type UserRow = {
 
 function fakeRepo(users: UserRow[]) {
   const planesAplicados: Array<{ userId: string; plan: PlanFacturable; tier: CompanyPlan }> = [];
+  const creditosIA: Array<{ companyId: string; periodo: string; usd: number; stripeSessionId: string; userId: string | null }> = [];
   const repo: BillingRepo = {
     async userIdById(id) {
       return users.find((u) => u.id === id)?.id ?? null;
@@ -83,11 +84,50 @@ function fakeRepo(users: UserRow[]) {
     async setPlanEmpresas(userId, plan, tier) {
       planesAplicados.push({ userId, plan, tier });
     },
+    async otorgarCreditoIA(input) {
+      creditosIA.push(input);
+    },
   };
-  return { repo, users, planesAplicados };
+  return { repo, users, planesAplicados, creditosIA };
 }
 
 const evento = (type: string, object: Record<string, unknown>) => ({ type, data: { object } });
+
+describe("applyStripeEvent — compra de uso extra de IA (mode=payment)", () => {
+  it("otorga el crédito a la empresa del periodo, idempotente por sesión", async () => {
+    const { repo, creditosIA } = fakeRepo([{ id: "user_1" }]);
+    const r = await applyStripeEvent(
+      evento("checkout.session.completed", {
+        id: "cs_123",
+        mode: "payment",
+        payment_status: "paid",
+        customer: "cus_1",
+        metadata: { tipo: "ia_extra", userId: "user_1", companyId: "co_1", periodo: "2026-09", usd: "10" },
+      }),
+      repo,
+    );
+    expect(r.handled).toBe(true);
+    expect(creditosIA).toEqual([{ companyId: "co_1", periodo: "2026-09", usd: 10, stripeSessionId: "cs_123", userId: "user_1" }]);
+  });
+
+  it("ignora la compra si no está pagada o le falta metadata", async () => {
+    const { repo, creditosIA } = fakeRepo([{ id: "user_1" }]);
+    const sinPagar = await applyStripeEvent(
+      evento("checkout.session.completed", {
+        id: "cs_2", mode: "payment", payment_status: "unpaid",
+        metadata: { tipo: "ia_extra", companyId: "co_1", periodo: "2026-09", usd: "10" },
+      }),
+      repo,
+    );
+    const incompleta = await applyStripeEvent(
+      evento("checkout.session.completed", { id: "cs_3", mode: "payment", metadata: { tipo: "ia_extra", companyId: "co_1" } }),
+      repo,
+    );
+    expect(sinPagar.handled).toBe(false);
+    expect(incompleta.handled).toBe(false);
+    expect(creditosIA).toEqual([]);
+  });
+});
 
 describe("applyStripeEvent — checkout.session.completed", () => {
   it("activa la suscripción, guarda ids de Stripe y aplica el plan a las empresas", async () => {

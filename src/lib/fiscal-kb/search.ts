@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { embedQuery, toVectorLiteral } from "./embed";
+import type { CostCtx } from "@/lib/costos/record";
 import { diversificarPorUnidad } from "./diversificar";
 
 export interface FiscalSearchOptions {
@@ -18,6 +19,8 @@ export interface FiscalSearchOptions {
   limit?: number;
   /** Confidence floor — below this we report "sin fundamento" over weak matches. */
   minSimilarity?: number;
+  /** Atribución del costo del embedding (empresa/usuario que consulta). */
+  cost?: CostCtx;
 }
 
 export interface FiscalSearchHit {
@@ -69,7 +72,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
   // artículos buenos en la posición 7. Cortar a `limit` después del piso.
   const candidatos = Math.min(limit * 4, 40);
 
-  const vec = toVectorLiteral(await embedQuery(query));
+  const vec = toVectorLiteral(await embedQuery(query, opts.cost ? { ...opts.cost, subtipo: "kb.embed_query" } : undefined));
 
   const fuenteFilter =
     opts.fuentes && opts.fuentes.length > 0

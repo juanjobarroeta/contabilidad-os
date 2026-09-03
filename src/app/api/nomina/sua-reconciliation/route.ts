@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { meteredCreate } from "@/lib/costos/anthropic";
+import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
 import { calcularImss } from "@/lib/nomina/imss";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,7 +85,9 @@ export async function POST(req: Request) {
   if (file.size > 15 * 1024 * 1024) return NextResponse.json({ error: "Máximo 15 MB" }, { status: 413 });
 
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
-  if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+  if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  const guardia = await asegurarUsoIA({ userId: session.user.id, companyId });
+  if (!guardia.ok) return respuestaTopeIA(guardia);
 
   // Parse PDF with Claude
   const buf = Buffer.from(await file.arrayBuffer());
@@ -111,7 +114,7 @@ export async function POST(req: Request) {
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await meteredCreate(anthropic, { companyId, subtipo: "nomina.sua" }, {
+    const response: any = await meteredCreate(anthropic, { companyId, userId: session.user.id, subtipo: "nomina.sua" }, {
       model: "claude-sonnet-4-5",
       max_tokens: 4096,
       system: SYSTEM_PROMPT,

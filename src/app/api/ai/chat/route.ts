@@ -4,14 +4,15 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
-import { buildSystemPrompt } from "@/lib/ai/system-prompt";
+import { buildSystemBlocks } from "@/lib/ai/system-prompt";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { recordLlmCost } from "@/lib/costos/record";
-import { checkChatBudget } from "@/lib/ai/budget";
+import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
 import { checkChatUserDaily } from "@/lib/ai/rate-limit";
 import { effectiveWhatsappPlan } from "@/lib/planes";
 import { getChatPendingAction } from "@/lib/ai/pending-action";
+import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -38,13 +39,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
-  const { messages, companyId, conversationId, contexto } = body as {
-    messages: Anthropic.MessageParam[];
-    companyId: string;
-    conversationId?: string;
-    contexto?: { ruta?: unknown };
-  };
+  const rawBody = await req.text();
+  if (rawBody.length > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "La conversación es demasiado larga. Inicia una conversación nueva." }, { status: 413 });
+  }
+  let body: { messages?: unknown; companyId?: string; conversationId?: string; contexto?: { ruta?: unknown } };
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+  }
+  const { companyId, conversationId, contexto } = body;
   // Ruta que el usuario tiene abierta (sólo rutas internas, acotada): va al
   // system prompt para que «esto» / «aquí» signifiquen algo.
   const rutaActual =
@@ -52,8 +57,9 @@ export async function POST(req: Request) {
       ? contexto.ruta
       : undefined;
 
-  if (!companyId || !messages?.length) {
-    return NextResponse.json({ error: "companyId y messages son requeridos" }, { status: 400 });
+  const messages = sanearHistorial(body.messages);
+  if (!companyId || !messages || messages.length === 0) {
+    return NextResponse.json({ error: "companyId y messages (texto) son requeridos" }, { status: 400 });
   }
 
   // Verify company membership
@@ -67,8 +73,6 @@ export async function POST(req: Request) {
   const gate = await gateEscritura(session.user.id);
   if (gate) return gate;
 
-  // Cost gate: presupuesto mensual de LLM del chat in-app por empresa (mismo
-  // patrón que el agente de WhatsApp; subtipo "ai.chat" en CostEvent).
   const companyPlan = await prisma.company.findUnique({
     where: { id: companyId },
     select: { tier: true, despachoId: true },
@@ -76,21 +80,17 @@ export async function POST(req: Request) {
   if (!companyPlan) {
     return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
   }
-  const budget = await checkChatBudget({
-    companyId,
-    tier: companyPlan.tier,
-    despachoId: companyPlan.despachoId,
-  });
-  if (!budget.allowed) {
-    return NextResponse.json({ error: budget.mensaje }, { status: 429 });
-  }
 
-  // Backstop por USUARIO: el presupuesto anterior protege el COGS de la empresa,
-  // pero no impide que una sola persona monopolice el presupuesto compartido
-  // (cada POST corre hasta MAX_TOOL_ROUNDS rondas del modelo). Este tope diario
-  // acota los mensajes de un mismo usuario al día. Sólo aplica al POST (enviar
-  // mensaje); cargar el historial es un GET y no pasa por aquí. Una empresa de
-  // despacho hereda el tope del plan DESPACHO, igual que el presupuesto mensual.
+  // Guardia de IA: techo mensual de la empresa (todas las funciones, + extra
+  // comprado) y tope diario de operaciones del usuario. Se re-evalúa en cada
+  // ronda de herramientas más abajo, para que un turno no se pase del techo.
+  const guardia = await asegurarUsoIA({ userId: session.user.id, companyId });
+  if (!guardia.ok) return respuestaTopeIA(guardia);
+
+  // Backstop por USUARIO: el techo anterior protege el COGS de la empresa, pero
+  // no impide que una sola persona monopolice el presupuesto compartido. Este
+  // tope diario acota los mensajes de un mismo usuario al día. Una empresa de
+  // despacho hereda el tope del plan DESPACHO.
   const userDaily = await checkChatUserDaily({
     userId: session.user.id,
     companyId,
@@ -142,7 +142,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
   }
 
-  const systemPrompt = buildSystemPrompt(company, { ruta: rutaActual });
+  // System prompt en bloques: el estable lleva cache_control (junto con `tools`
+  // es casi toda la entrada del turno) y el de navegación va después.
+  const systemBlocks = buildSystemBlocks(company, { ruta: rutaActual });
 
   // Stream response with tool-use loop
   const encoder = new TextEncoder();
@@ -175,7 +177,8 @@ export async function POST(req: Request) {
         rondas: number;
         tools: { name: string; ms: number }[];
         fundamentos: { cita: string; similitud: number }[];
-      } = { modelo: CHAT_MODEL, rondas: 0, tools: [], fundamentos: [] };
+        cacheReadTokens: number;
+      } = { modelo: CHAT_MODEL, rondas: 0, tools: [], fundamentos: [], cacheReadTokens: 0 };
 
       try {
         let currentMessages = [...messages];
@@ -183,27 +186,34 @@ export async function POST(req: Request) {
         let model = CHAT_MODEL;
 
         while (toolRounds < MAX_TOOL_ROUNDS) {
+          // A partir de la segunda ronda, re-evaluar el techo: el gasto de las
+          // rondas anteriores ya está registrado. Si se alcanzó, cerramos el
+          // turno con un aviso en vez de seguir gastando.
+          if (toolRounds > 0) {
+            const g = await asegurarUsoIA({ userId, companyId });
+            if (!g.ok) {
+              const aviso = `\n\n_${g.mensaje}_`;
+              assistantText += aviso;
+              safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "text", text: aviso })}\n\n`));
+              break;
+            }
+          }
+
+          const params: Anthropic.MessageCreateParamsStreaming = {
+            model,
+            max_tokens: 4096,
+            system: systemBlocks,
+            tools: availableTools,
+            messages: currentMessages,
+            stream: true,
+          };
           let response;
           try {
-            response = await anthropic.messages.create({
-              model,
-              max_tokens: 4096,
-              system: systemPrompt,
-              tools: availableTools,
-              messages: currentMessages,
-              stream: true,
-            });
+            response = await anthropic.messages.create(params);
           } catch (err) {
             if (model !== CHAT_MODEL_FALLBACK && err instanceof Anthropic.NotFoundError) {
               model = CHAT_MODEL_FALLBACK;
-              response = await anthropic.messages.create({
-                model,
-                max_tokens: 4096,
-                system: systemPrompt,
-                tools: availableTools,
-                messages: currentMessages,
-                stream: true,
-              });
+              response = await anthropic.messages.create({ ...params, model });
             } else {
               throw err;
             }
@@ -212,13 +222,18 @@ export async function POST(req: Request) {
           let hasToolUse = false;
           const toolUseBlocks: Anthropic.ContentBlockParam[] = [];
           let currentToolUse: { id: string; name: string; input: string } | null = null;
-          // Métrica de costo: tokens de esta ronda (streaming → vienen en eventos).
+          // Métrica de costo: tokens de esta ronda (streaming → vienen en eventos),
+          // incluidos los de caché (message_start trae el usage de entrada).
           let roundInput = 0;
           let roundOutput = 0;
+          let roundCacheWrite = 0;
+          let roundCacheRead = 0;
 
           for await (const event of response) {
             if (event.type === "message_start") {
               roundInput = event.message.usage?.input_tokens ?? 0;
+              roundCacheWrite = event.message.usage?.cache_creation_input_tokens ?? 0;
+              roundCacheRead = event.message.usage?.cache_read_input_tokens ?? 0;
             } else if (event.type === "message_delta") {
               roundOutput = event.usage?.output_tokens ?? roundOutput;
             } else if (event.type === "content_block_start") {
@@ -266,11 +281,19 @@ export async function POST(req: Request) {
             }
           }
 
-          // Costo de la ronda (fire-and-forget; no rompe el stream).
-          void recordLlmCost(model, { input_tokens: roundInput, output_tokens: roundOutput }, {
-            companyId,
-            subtipo: "ai.chat",
-          });
+          traza.cacheReadTokens += roundCacheRead;
+          // Costo de la ronda. Se ESPERA (no fire-and-forget): la guardia de la
+          // siguiente ronda debe ver este gasto, y el insert es una fila.
+          await recordLlmCost(
+            model,
+            {
+              input_tokens: roundInput,
+              output_tokens: roundOutput,
+              cache_creation_input_tokens: roundCacheWrite,
+              cache_read_input_tokens: roundCacheRead,
+            },
+            { companyId, userId, subtipo: "ai.chat" },
+          );
 
           if (!hasToolUse) break;
 

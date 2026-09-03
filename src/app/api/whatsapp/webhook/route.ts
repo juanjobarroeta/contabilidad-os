@@ -27,6 +27,7 @@ import { registrarBitacora } from "@/lib/audit";
 import { tryConfirmPendingAction, getPendingAction, stagePendingDeshacerImport } from "@/lib/whatsapp/pending-action";
 import { findUltimoLoteImportado, esIntencionDeshacer } from "@/lib/bancos/undo-import";
 import { checkWhatsappRateLimit } from "@/lib/whatsapp/rate-limit";
+import { asegurarUsoIA } from "@/lib/ai/guardia";
 import { captureWhatsappInbound } from "@/lib/intake/ingest";
 import { effectiveWhatsappPlan } from "@/lib/planes";
 import { decideEscrituraUsuario } from "@/lib/subscription";
@@ -170,7 +171,7 @@ async function processMediaTurn(opts: {
     let transcript = "";
     try {
       const { buffer, contentType } = await downloadTwilioMedia(audio.url);
-      transcript = await transcribeAudio(buffer, contentType || audio.contentType);
+      transcript = await transcribeAudio(buffer, contentType || audio.contentType, { companyId, userId });
     } catch (e) {
       console.error("[whatsapp] transcription error", e);
     }
@@ -450,21 +451,24 @@ export async function POST(req: Request) {
   // like a normal question. (Caption + media → the media is the intent.)
   if (media.length > 0) {
     const isAudioOnly = media.every((m) => m.contentType.toLowerCase().startsWith("audio/"));
+    // Costo-seguridad ANTES de descargar/procesar CUALQUIER adjunto: la visión
+    // de un estado de cuenta es el paso caro, y una nota de voz corre Whisper +
+    // el agente completo (antes se saltaba el tope). Mismos topes que un turno
+    // normal (diario por usuario + mensual por empresa) más el techo de IA de la
+    // empresa. Respuesta estática, sin LLM.
+    const mediaLimit = await checkWhatsappRateLimit({
+      linkId: sender.linkId,
+      companyId: activeCompanyId,
+      plan: effectiveWhatsappPlan({ tier: company.tier, despachoId: company.despachoId }),
+    });
+    if (!mediaLimit.allowed) {
+      return reply(mediaLimit.mensaje ?? "Alcanzaste tu límite de uso del asistente.");
+    }
+    const guardiaMedia = await asegurarUsoIA({ userId: sender.userId, companyId: activeCompanyId });
+    if (!guardiaMedia.ok) return reply(guardiaMedia.mensaje);
     // For documents we record a placeholder user turn here; for audio the
     // transcript becomes the user turn inside processMediaTurn.
     if (!isAudioOnly) {
-      // Costo-seguridad ANTES de descargar/procesar el documento: la extracción
-      // por visión de un estado de cuenta es el paso caro, así que respeta los
-      // mismos topes (diario por usuario + presupuesto mensual por empresa)
-      // que un turno normal del agente. Respuesta estática, sin LLM.
-      const mediaLimit = await checkWhatsappRateLimit({
-        linkId: sender.linkId,
-        companyId: activeCompanyId,
-        plan: effectiveWhatsappPlan({ tier: company.tier, despachoId: company.despachoId }),
-      });
-      if (!mediaLimit.allowed) {
-        return reply(mediaLimit.mensaje ?? "Alcanzaste tu límite de uso del asistente.");
-      }
       await prisma.whatsappMessage.create({
         data: {
           conversationId: conversation.id,
@@ -521,6 +525,9 @@ export async function POST(req: Request) {
     if (!decision.allowed) {
       return reply(decision.mensaje ?? "Alcanzaste tu límite de uso del asistente.");
     }
+    // Techo mensual de IA de la empresa (todas las funciones, + extra comprado).
+    const guardia = await asegurarUsoIA({ userId: sender.userId, companyId: activeCompanyId });
+    if (!guardia.ok) return reply(guardia.mensaje);
   }
 
   // Persist the user message now (also dedups Twilio retries via providerSid).

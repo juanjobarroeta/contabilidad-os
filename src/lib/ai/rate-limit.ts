@@ -5,7 +5,7 @@ import { dailyChatMsgsPerUser } from "@/lib/planes";
 // ─────────────────────────────────────────────────────────────────────────────
 // Tope diario POR USUARIO del asistente DENTRO de la app.
 //
-// El presupuesto mensual de LLM (checkChatBudget) protege el COGS a nivel
+// El techo mensual de IA (src/lib/ai/guardia.ts) protege el COGS a nivel
 // EMPRESA, pero no impide que un solo usuario en una empresa con presupuesto
 // amplio (p.ej. DESPACHO) monopolice ese presupuesto compartido: cada POST del
 // chat puede correr hasta MAX_TOOL_ROUNDS rondas del modelo, así que un usuario

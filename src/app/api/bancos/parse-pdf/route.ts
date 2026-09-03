@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { meteredCreate } from "@/lib/costos/anthropic";
+import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
+import { getEffectiveCompanyMembership } from "@/lib/authz";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/bancos/parse-pdf
@@ -55,10 +57,13 @@ export async function POST(req: Request) {
   }
 
   let file: File | null = null;
+  let companyId: string | null = null;
   try {
     const form = await req.formData();
     const f = form.get("file");
     if (f instanceof File) file = f;
+    const c = form.get("companyId");
+    if (typeof c === "string" && c.trim()) companyId = c.trim();
   } catch {
     return NextResponse.json({ error: "Formato inválido" }, { status: 400 });
   }
@@ -66,13 +71,24 @@ export async function POST(req: Request) {
   if (!file) return NextResponse.json({ error: "Sube un archivo PDF" }, { status: 400 });
   if (file.size > 20 * 1024 * 1024) return NextResponse.json({ error: "Máximo 20 MB" }, { status: 413 });
 
+  // Con empresa: membresía con permiso de escritura y tope de la empresa; sin
+  // empresa: tope por usuario. Un estado de cuenta de 20 MB a visión es de las
+  // llamadas más caras de la app.
+  const userId = session.user.id;
+  if (companyId) {
+    const member = await getEffectiveCompanyMembership(userId, companyId);
+    if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+  const guardia = await asegurarUsoIA({ userId, companyId });
+  if (!guardia.ok) return respuestaTopeIA(guardia);
+
   const buf = Buffer.from(await file.arrayBuffer());
   const base64 = buf.toString("base64");
 
   let responseText = "";
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await meteredCreate(anthropic, { subtipo: "bancos.parse_pdf" }, {
+    const response: any = await meteredCreate(anthropic, { subtipo: "bancos.parse_pdf", companyId, userId }, {
       model: "claude-sonnet-4-5",
       max_tokens: 8192, // Bank statements can be long
       system: SYSTEM_PROMPT,
