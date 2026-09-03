@@ -36,6 +36,8 @@ export interface FiscalSearchOptions {
   modo?: ModoBusqueda;
   /** Reordenar los candidatos con un modelo barato antes de entregar. Default true (FISCAL_KB_RERANK=0 lo apaga). */
   rerank?: boolean;
+  /** Cuántos candidatos fusionados lee el rerank (default 20, tope 40; env FISCAL_KB_CANDIDATOS_RERANK). */
+  candidatosRerank?: number;
   /** Atribución del costo (embedding de la consulta, rerank) a la empresa/usuario que consulta. */
   cost?: CostCtx;
 }
@@ -58,20 +60,25 @@ export interface FiscalSearchResult {
   resultados: FiscalSearchHit[];
   fechaVigenciaConsultada: string;
   /** Qué brazos y ajustes produjeron el resultado (para la traza y el eval). */
-  busqueda: { modo: ModoBusqueda; rerank: boolean; referenciasExactas: string[] };
+  busqueda: { modo: ModoBusqueda; rerank: boolean; candidatos: number; referenciasExactas: string[] };
   aviso?: string;
 }
 
 const DEFAULT_LIMIT = 6;
 const DEFAULT_MIN_SIMILARITY = 0.25;
 /** Candidatos que ve el rerank. */
-const CANDIDATOS_RERANK = 20;
+const CANDIDATOS_RERANK_DEFAULT = 20;
+const CANDIDATOS_RERANK_MAX = 40;
 
 function modoPorDefecto(): ModoBusqueda {
   return process.env.FISCAL_KB_MODO === "hibrido" ? "hibrido" : "vector";
 }
 // Medido el 2026-09-03 (eval sólo-KB, 80 preguntas): vector 48 % → vector +
 // rerank 65 %. El rerank es el default; FISCAL_KB_RERANK=0 lo apaga.
+function candidatosRerankPorDefecto(): number {
+  const n = Number(process.env.FISCAL_KB_CANDIDATOS_RERANK);
+  return Number.isFinite(n) && n > 0 ? n : CANDIDATOS_RERANK_DEFAULT;
+}
 function rerankPorDefecto(): boolean {
   const v = process.env.FISCAL_KB_RERANK;
   return !(v === "0" || v === "false");
@@ -218,6 +225,9 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
   const minSim = opts.minSimilarity ?? DEFAULT_MIN_SIMILARITY;
   const modo = opts.modo ?? modoPorDefecto();
   const rerank = opts.rerank ?? rerankPorDefecto();
+  // El vector ya trae hasta 40 candidatos; el eval dijo que la mayoría de los
+  // fallos con rerank son «el artículo correcto no estaba entre los 20 que leyó».
+  const candidatosRerank = Math.min(Math.max(1, Math.floor(opts.candidatosRerank ?? candidatosRerankPorDefecto())), CANDIDATOS_RERANK_MAX);
   // Se piden MÁS filas de las que se entregan: el piso de similitud se aplica
   // en JS y antes se aplicaba sobre las `limit` primeras — una consulta cuyos
   // 6 vecinos más cercanos fueran débiles devolvía CERO aunque hubiera
@@ -249,13 +259,13 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
   }
 
   if (rerank && ordenados.length > 1) {
-    const top = ordenados.slice(0, CANDIDATOS_RERANK);
+    const top = ordenados.slice(0, candidatosRerank);
     const reordenados = await rerankCandidatos(
       query,
       top.map((r) => ({ ...r, cita: buildCita(r.source, r.clave, r.articulo, r.titulo) })),
       { cost: opts.cost }
     );
-    if (reordenados) ordenados = [...reordenados, ...ordenados.slice(CANDIDATOS_RERANK)];
+    if (reordenados) ordenados = [...reordenados, ...ordenados.slice(candidatosRerank)];
   }
 
   // A lo más 2 chunks por UNIDAD legal (artículo/regla; una guía entera es una
@@ -266,7 +276,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
   const result: FiscalSearchResult = {
     resultados,
     fechaVigenciaConsultada: fecha.toISOString().slice(0, 10),
-    busqueda: { modo, rerank, referenciasExactas: refs },
+    busqueda: { modo, rerank, candidatos: candidatosRerank, referenciasExactas: refs },
   };
   if (resultados.length === 0) {
     result.aviso =

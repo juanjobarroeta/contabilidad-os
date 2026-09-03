@@ -283,7 +283,11 @@ el eval (`api/admin/copiloto-eval`, body `busqueda`):
   eval sólo-KB pasó de 48 % (vector) a 65 % (vector + rerank); es la palanca
   que resuelve «el reglamento le gana a la ley» y los vecinos cercanos.
 
-Defaults de producción por env: `FISCAL_KB_MODO`, `FISCAL_KB_RERANK`. Se fijan
+- `candidatosRerank` (6–40, default 20) — cuántos candidatos fusionados lee el
+  rerank; env `FISCAL_KB_CANDIDATOS_RERANK`.
+
+Defaults de producción por env: `FISCAL_KB_MODO`, `FISCAL_KB_RERANK`,
+`FISCAL_KB_CANDIDATOS_RERANK`. Se fijan
 con el número del eval — lo que no lo mueve, no se queda.
 
 `getArticulo(clave, numero)` trae un artículo completo (todas sus partes) y

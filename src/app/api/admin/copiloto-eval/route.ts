@@ -35,11 +35,15 @@ export async function POST(req: Request) {
     agente?: boolean;
     juez?: boolean;
     /** Palancas de la búsqueda a medir: { modo?: "vector"|"hibrido", rerank?: boolean }. Vacío = defaults de producción. */
-    busqueda?: { modo?: "vector" | "hibrido"; rerank?: boolean };
+    busqueda?: { modo?: "vector" | "hibrido"; rerank?: boolean; candidatos?: number };
   };
   const busqueda = {
     modo: body.busqueda?.modo === "hibrido" ? ("hibrido" as const) : body.busqueda?.modo === "vector" ? ("vector" as const) : undefined,
     rerank: typeof body.busqueda?.rerank === "boolean" ? body.busqueda.rerank : undefined,
+    candidatos:
+      typeof body.busqueda?.candidatos === "number" && body.busqueda.candidatos >= 6 && body.busqueda.candidatos <= 40
+        ? Math.floor(body.busqueda.candidatos)
+        : undefined,
   };
   const universo = Array.isArray(body.ids) && body.ids.length > 0
     ? PREGUNTAS_EVAL.filter((p) => body.ids!.includes(p.id))

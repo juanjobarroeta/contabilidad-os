@@ -13,7 +13,7 @@ export interface ResultadoPregunta {
     hit: boolean;
     citas: string[];
     /** Qué modo/rerank corrió de verdad (prueba en el log de que la palanca se activó). */
-    busqueda?: { modo: string; rerank: boolean; referenciasExactas: string[] };
+    busqueda?: { modo: string; rerank: boolean; candidatos: number; referenciasExactas: string[] };
   };
   respuesta?: {
     texto: string;
