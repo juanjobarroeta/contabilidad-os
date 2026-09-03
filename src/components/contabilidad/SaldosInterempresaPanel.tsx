@@ -59,7 +59,7 @@ export function SaldosInterempresaPanel({ companyId }: { companyId: string }) {
         </div>
       ) : (
         <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead>
               <tr className="border-b border-cos-line bg-cos-paper">
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Empresa</th>
@@ -98,7 +98,7 @@ export function SaldosInterempresaPanel({ companyId }: { companyId: string }) {
                 </td>
               </tr>
             </tfoot>
-          </table>
+          </table></div>
         </div>
       )}
     </div>

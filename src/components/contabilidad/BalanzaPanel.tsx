@@ -92,7 +92,7 @@ export function BalanzaPanel({
         </div>
       ) : (
         <div className="bg-cos-card border border-cos-line rounded-xl overflow-hidden print:overflow-visible">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead>
               <tr className="border-b border-cos-line bg-cos-paper">
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Cuenta</th>
@@ -132,7 +132,7 @@ export function BalanzaPanel({
                 <td className="px-4 py-2.5" />
               </tr>
             </tfoot>
-          </table>
+          </table></div>
         </div>
       )}
 

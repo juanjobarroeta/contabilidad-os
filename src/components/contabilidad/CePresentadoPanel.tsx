@@ -209,7 +209,7 @@ function FilaCuenta({
                 <Loader2 className="h-3 w-3 animate-spin" /> Cargando serie…
               </span>
             ) : (
-              <table className="text-xs w-full max-w-2xl">
+              <div className="overflow-x-auto"><table className="text-xs w-full max-w-2xl">
                 <thead>
                   <tr className="text-cos-ink-soft">
                     <th className="text-left font-normal pb-1">período</th>
@@ -230,7 +230,7 @@ function FilaCuenta({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </td>
         </tr>
@@ -259,7 +259,7 @@ function Bloque({
   if (filas.length === 0) return null;
   return (
     <div className="mb-5">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto"><table className="w-full text-sm">
         <thead>
           <tr className="text-xs text-cos-ink-soft border-b border-cos-line">
             <th className="w-5" />
@@ -285,7 +285,7 @@ function Bloque({
             <td className="py-2 text-right tabular-nums">{formatCurrency(total)}</td>
           </tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }

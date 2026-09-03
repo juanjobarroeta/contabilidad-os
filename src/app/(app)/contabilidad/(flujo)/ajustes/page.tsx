@@ -329,7 +329,7 @@ export default function AjustesPage() {
 
       {/* ── Reja de captura ── */}
       <div className="rounded-card border border-cos-line bg-cos-card">
-        <table className="w-full">
+        <div className="overflow-x-auto"><table className="w-full">
           <thead>
             <tr className="border-b border-cos-line">
               <th className={cn(thCls, "w-10")}>#</th>
@@ -445,7 +445,7 @@ export default function AjustesPage() {
               );
             })}
           </tbody>
-        </table>
+        </table></div>
 
         {/* ── Barra de descuadre vivo ── */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-card border-t border-cos-line bg-cos-slate-tint px-5 py-3">
@@ -509,7 +509,7 @@ export default function AjustesPage() {
             sobreviven al re-posteo.
           </p>
         ) : (
-          <table className="w-full text-[13px]">
+          <div className="overflow-x-auto"><table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-cos-line">
                 <th className={cn(thCls, "w-32")}>Número</th>
@@ -547,7 +547,7 @@ export default function AjustesPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </section>
     </div>

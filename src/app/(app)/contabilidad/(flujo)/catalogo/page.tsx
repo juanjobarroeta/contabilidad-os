@@ -420,7 +420,7 @@ export default function CatalogoPage() {
               </div>
             </div>
             <div className="max-h-[440px] overflow-y-auto">
-              <table className="w-full text-[13px]">
+              <div className="overflow-x-auto"><table className="w-full text-[13px]">
                 <thead className="sticky top-0 bg-cos-card">
                   <tr className="border-b border-cos-line">
                     <th className={cn(th, "w-28")}>Cuenta</th>
@@ -457,7 +457,7 @@ export default function CatalogoPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </section>
         </>

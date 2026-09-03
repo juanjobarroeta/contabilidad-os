@@ -125,7 +125,7 @@ export function ActivoFijoView() {
           </div>
 
           <div className="mt-4 overflow-hidden rounded-card border border-cos-line bg-cos-card shadow-card">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead className="bg-cos-paper text-[12px] uppercase tracking-[0.02em] text-cos-ink-faint">
                 <tr>
                   <th className="px-4 py-2.5 text-left font-medium">Activo</th>
@@ -180,7 +180,7 @@ export function ActivoFijoView() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
 
           <div className="mt-3 flex items-start gap-2 rounded-card border border-cos-line bg-cos-card px-4 py-3 text-[12.5px] text-cos-ink-soft">
