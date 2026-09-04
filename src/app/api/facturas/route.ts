@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { whereBusquedaFacturas } from "@/lib/facturas/busqueda";
 import { recordTimbrado } from "@/lib/costos/record";
 import { ensureFacturapiCustomer, getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
@@ -123,19 +124,9 @@ export async function GET(req: Request) {
       ...(validTo ? { lte: validTo } : {}),
     };
   }
-  if (q) {
-    where.OR = [
-      { uuid: { contains: q, mode: "insensitive" } },
-      { folio: { contains: q, mode: "insensitive" } },
-      { notas: { contains: q, mode: "insensitive" } },
-      { customer: { razonSocial: { contains: q, mode: "insensitive" } } },
-      { customer: { rfc: { contains: q, mode: "insensitive" } } },
-      // Contraparte del comprobante: hace buscables por nombre los CFDIs a
-      // público en general, que no tienen Customer.
-      { contraparteNombre: { contains: q, mode: "insensitive" } },
-      { contraparteRfc: { contains: q, mode: "insensitive" } },
-    ];
-  }
+  // Por palabras, no por frase: «victor bilbao» encuentra a VICTOR JOSE BILBAO.
+  const busqueda = whereBusquedaFacturas(q);
+  if (busqueda) where.AND = busqueda.AND;
 
   // When unmatchedOnly, pull extra rows and filter in code since aggregating
   // against bankTransactions requires either raw SQL or a two-step query.
