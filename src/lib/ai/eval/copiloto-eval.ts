@@ -20,8 +20,11 @@ import { meteredCreate } from "@/lib/costos/anthropic";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
+import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
 import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
 import type { PreguntaEval } from "./preguntas";
+
+type VerificacionEval = NonNullable<ResultadoPregunta["respuesta"]>["verificacion"];
 import { algunaCoincide, extraerCitas, claveCita, type ResultadoPregunta } from "./medidas";
 
 export { normalizarCita, extraerCitas, algunaCoincide, resumir, type ResultadoPregunta, type ResumenEval } from "./medidas";
@@ -61,8 +64,9 @@ async function crear(client: Anthropic, params: Omit<Anthropic.MessageCreatePara
 
 export async function responderComoAgente(
   client: Anthropic,
-  p: PreguntaEval
-): Promise<{ texto: string; citasKB: string[]; rondas: number; ms: number }> {
+  p: PreguntaEval,
+  opts: { verificar?: boolean } = {}
+): Promise<{ texto: string; citasKB: string[]; rondas: number; ms: number; verificacion?: VerificacionEval }> {
   const t0 = Date.now();
   const empresa = EMPRESA_EVAL[p.regimen ?? "601"];
   const system = buildSystemPrompt(empresa);
@@ -76,6 +80,7 @@ export async function responderComoAgente(
 
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: p.pregunta }];
   const citasKB: string[] = [];
+  const fuentes: FuenteVerificacion[] = [];
   let texto = "";
   let rondas = 0;
 
@@ -92,6 +97,7 @@ export async function responderComoAgente(
       // companyId "eval": la tool de KB lo ignora (es ley, no datos de empresa);
       // ninguna otra tool está expuesta, así que no hay acceso a datos reales.
       const out = await executeToolCall(u.name, u.input as Record<string, unknown>, "eval", { inApp: false });
+      fuentes.push(...fuentesDesdeToolResult(u.name, out));
       try {
         const parsed = JSON.parse(out) as { resultados?: { cita: string }[]; cita?: string };
         for (const h of parsed.resultados ?? []) citasKB.push(h.cita);
@@ -104,7 +110,17 @@ export async function responderComoAgente(
     messages = [...messages, { role: "assistant", content: res.content }, { role: "user", content: results }];
     rondas++;
   }
-  return { texto, citasKB, rondas, ms: Date.now() - t0 };
+  if (!opts.verificar) return { texto, citasKB, rondas, ms: Date.now() - t0 };
+  // Fase 3: la misma verificación que corre en el chat; el juez califica la
+  // versión corregida, que es la que el usuario vería.
+  const v = await verificarRespuesta(client, { pregunta: p.pregunta, respuesta: texto, fuentes, cost: { companyId: null, subtipo: "ai.eval" } });
+  return {
+    texto: v.texto,
+    citasKB,
+    rondas,
+    ms: Date.now() - t0,
+    verificacion: { verificada: v.verificada, corregida: v.corregida, problemas: v.problemas, citasNoVerificables: v.citasNoVerificables, ms: v.ms },
+  };
 }
 
 // ── 3. Juez ───────────────────────────────────────────────────────────────────
@@ -165,6 +181,8 @@ export interface OpcionesBusquedaEval {
   rerank?: boolean;
   /** Candidatos que lee el rerank (6–40). */
   candidatos?: number;
+  /** Fase 3: correr el pase de verificación sobre la respuesta del agente. */
+  verificar?: boolean;
 }
 
 export interface OpcionesEval {
@@ -187,7 +205,7 @@ export async function evaluarPregunta(p: PreguntaEval, opts: OpcionesEval = {}, 
     base.recuperacion = await medirRecuperacion(p, opts.busqueda ?? {});
     if (opts.agente === false) return base;
 
-    const r = await responderComoAgente(client, p);
+    const r = await responderComoAgente(client, p, { verificar: opts.busqueda?.verificar === true });
     const citasEnTexto = extraerCitas(r.texto);
     const kb = new Set(r.citasKB.map(claveCita));
     base.respuesta = {
@@ -197,6 +215,7 @@ export async function evaluarPregunta(p: PreguntaEval, opts: OpcionesEval = {}, 
       citaPresente: citasEnTexto.length > 0,
       rondas: r.rondas,
       ms: r.ms,
+      verificacion: r.verificacion,
     };
     if (opts.juez === false) return base;
     base.juez = await juzgar(client, p, r.texto, r.citasKB);

@@ -22,6 +22,14 @@ export interface ResultadoPregunta {
     citasFueraDeKB: string[];
     citaPresente: boolean;
     rondas: number;
+    /** Fase 3: qué hizo el pase de verificación con esta respuesta. */
+    verificacion?: {
+      verificada: boolean;
+      corregida: boolean;
+      problemas: { afirmacion: string; cita: string; motivo: string }[];
+      citasNoVerificables: string[];
+      ms: number;
+    };
     ms: number;
   };
   juez?: {
