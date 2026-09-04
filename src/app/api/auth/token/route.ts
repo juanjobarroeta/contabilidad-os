@@ -46,7 +46,6 @@ import {
 } from "@/lib/api-refresh-token";
 import { registrarBitacora } from "@/lib/audit";
 import { effectiveModules } from "@/lib/module-access";
-import { isOperador } from "@/lib/authz";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
@@ -118,6 +117,9 @@ export async function POST(req: Request) {
       email: true,
       name: true,
       password: true,
+      // Operador de plataforma: decide si la lista de empresas se completa con
+      // todas las activas (ver abajo). Se lee aquí para no consultar dos veces.
+      esOperador: true,
       subscriptionStatus: true,
       trialEndsAt: true,
     },
@@ -303,11 +305,11 @@ export async function POST(req: Request) {
   }
 
   // 3. Operador de plataforma: adentro del hub ya opera TODAS las empresas
-  //    activas (requireMembership le da OWNER en cualquiera), pero esta lista
-  //    sólo traía sus membresías directas y las de su despacho, así que un
-  //    satélite le decía «ninguna de tus empresas tiene el módulo» para
+  //    activas (la guardia de membresía le da OWNER en cualquiera), pero esta
+  //    lista sólo traía sus membresías directas y las de su despacho, así que
+  //    un satélite le decía «ninguna de tus empresas tiene el módulo» para
   //    empresas que sí puede operar. Se completa con las que faltan.
-  if (await isOperador(user.id)) {
+  if (user.esOperador) {
     const todas = await prisma.company.findMany({
       where: { isActive: true },
       select: {
