@@ -40,6 +40,11 @@ describe("fuentesDesdeToolResult", () => {
     expect(fuentesDesdeToolResult("search_fiscal_knowledge", JSON.stringify({ resultados: [{ cita: "Art. 27 LISR", texto: "x" }] }))).toEqual([{ cita: "Art. 27 LISR", texto: "x" }]);
     expect(fuentesDesdeToolResult("get_articulo", JSON.stringify({ cita: "Art. 29-A CFF", partes: [{ texto: "a" }, { texto: "b" }] }))).toEqual([{ cita: "Art. 29-A CFF", texto: "a\nb" }]);
     expect(fuentesDesdeToolResult("get_articulo", "no json")).toEqual([]);
+    const v = fuentesDesdeToolResult("get_valor_fiscal", JSON.stringify({ tipo: "multa", cita: "Art. 82 CFF", filas: [{ minimo: 2050, maximo: 25360 }] }));
+    expect(v).toHaveLength(1);
+    expect(v[0].cita).toBe("Valores oficiales · multa");
+    expect(v[0].texto).toContain("25360");
+    expect(fuentesDesdeToolResult("get_valor_fiscal", JSON.stringify({ tipo: "multa", error: "no hay" }))).toEqual([]);
   });
 });
 
