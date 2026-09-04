@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { REGIMEN_MAP } from "@/lib/obligaciones";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Money, Alert, RetryButton } from "@/components/ui";
 import { Download, Loader2, FileText, AlertTriangle, CheckCircle2, Sparkles, Check } from "lucide-react";
@@ -601,9 +602,14 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
     <div className="space-y-5">
       <DownloadCsvButton href={`/api/papeles/isr?companyId=${companyId}&year=${year}&month=${month}&format=csv`} />
 
-      <div className="flex items-center gap-2 rounded-card border border-cos-brand bg-cos-brand-tint px-4 py-3 text-[14px] text-cos-brand-ink">
-        <FileText className="h-4 w-4 shrink-0" />
-        <span><strong>{data.regimen.label}</strong></span>
+      {/* Qué ISR es éste, dicho completo: no basta «Persona Moral Art. 14» para
+          saber si el papel es renta general, RESICO o una persona física. */}
+      <div className="flex items-start gap-2 rounded-card border border-cos-brand bg-cos-brand-tint px-4 py-3 text-[14px] text-cos-brand-ink">
+        <FileText className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0">
+          <div><strong>ISR · {data.regimen.label}</strong></div>
+          <div className="mt-0.5 text-[12.5px] leading-snug opacity-85">{identificacionIsr(data)}</div>
+        </div>
       </div>
 
       {data.calculo.tipo === "pf_plataformas" ? (
@@ -828,6 +834,38 @@ export function IsrPanel({ companyId, year, month, onCoefSaved }: { companyId: s
       )}
     </div>
   );
+}
+
+// Identificación completa del ISR del papel: régimen del SAT (código y nombre
+// del catálogo), el artículo que manda y cómo se calcula. La etiqueta corta del
+// encabezado dice «Persona Moral Art. 14» y eso no alcanza para saber si es
+// renta general, RESICO o una persona física con su propia mecánica.
+function identificacionIsr(data: IsrData): string {
+  const codigo = data.company?.regimenFiscal ?? "";
+  const nombre = codigo ? REGIMEN_MAP[codigo]?.nombre : undefined;
+  const regimen = codigo
+    ? `Régimen ${codigo}${nombre ? ` · ${nombre}` : ""}`
+    : "Régimen sin capturar en la empresa";
+  const coef =
+    data.base.coeficiente != null
+      ? `coeficiente de utilidad ${(data.base.coeficiente * 100).toFixed(4)} % (${fuenteCoeficienteLabel(data.base.coeficienteFuente, data.base.prevYear)})`
+      : "sin coeficiente de utilidad";
+  switch (data.regimen.kind) {
+    case "general_pm":
+      return `${regimen} · pago provisional Art. 14 LISR: ingresos nominales acumulados × ${coef}`;
+    case "resico_pm":
+      return `${regimen} · RESICO de personas morales: pago provisional con flujo de efectivo (Arts. 206-215 LISR), ${coef}`;
+    case "resico_pf":
+      return `${regimen} · RESICO de personas físicas: tarifa mensual Art. 113-E sobre ingresos cobrados, pago definitivo`;
+    case "pf_act_empresarial":
+      return `${regimen} · pago provisional Art. 106 LISR: utilidad acumulada del ejercicio a la tarifa del Art. 96`;
+    case "pf_arrendamiento":
+      return `${regimen} · pago provisional Arts. 114-116 LISR: ingresos cobrados menos deducción ciega del 35 %`;
+    case "pf_plataformas":
+      return `${regimen} · pago definitivo Art. 113-A LISR: tasa fija sobre ingresos cobrados`;
+    default:
+      return regimen;
+  }
 }
 
 // Etiqueta humana de la fuente del coeficiente (aplicado o sugerido). Deja claro
