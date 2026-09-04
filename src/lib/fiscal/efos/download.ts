@@ -14,7 +14,9 @@ export const EFOS_URL_DEFAULT =
 export async function descargarListaEfos(
   url: string = process.env.EFOS_LIST_URL ?? EFOS_URL_DEFAULT,
 ): Promise<ListaEfos> {
-  const res = await fetch(url, { redirect: "follow" });
+  // Con tope: el SAT a veces tarda minutos, y quien espera esta lista es un
+  // request de usuario (Directorio, Verificador). Mejor sin badge que colgado.
+  const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
   if (!res.ok) {
     throw new Error(`No se pudo descargar la lista 69-B (HTTP ${res.status}).`);
   }

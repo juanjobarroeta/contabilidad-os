@@ -994,6 +994,10 @@ model Invoice {
   // Barrido de vigencia: elegir las pendientes de UNA empresa sin recorrer su
   // archivo completo (ver src/lib/fiscal/vigencia-plan.ts).
   @@index([companyId, vigenciaCheckedAt])
+  // Filtros por cliente (estado de cuenta, "¿tiene facturas?", saldos):
+  // sin este índice cada subconsulta correlacionada por Customer barre la
+  // tabla entera — con 13k CFDIs, GET /api/clientes tardaba 7–25 s.
+  @@index([customerId])
 }
 
 // Vínculo operativo de un CFDI con su requisición / gasto / estimación, más el
