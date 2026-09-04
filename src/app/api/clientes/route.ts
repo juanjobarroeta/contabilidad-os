@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { saldosPorCliente } from "@/lib/clientes/estado-cuenta";
+import { idsProveedoresPuros } from "@/lib/clientes/proveedores-puros";
 import { situaciones69b } from "@/lib/fiscal/verificador/lista69b";
 import { getEffectiveCompanyMembership, requireScope, requireUser, AuthzError } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
@@ -29,19 +30,18 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(user.id, companyId);
   if (!member) return NextResponse.json([], { status: 403 });
 
+  // Un proveedor PURO (sólo nos ha facturado; jamás le hemos emitido) no es
+  // un cliente — vive en la pestaña Proveedores. Se queda quien tenga al
+  // menos un comprobante no-EGRESO, o ninguno (alta manual para facturarle
+  // después). Quien es ambas cosas aparece en las dos. Se calcula con dos
+  // GROUP BY indexados, no con `some`/`none` por cliente: esa versión
+  // tardaba 7–25 s con 13k CFDIs.
+  const puros = await idsProveedoresPuros(companyId);
+
   const clientes = await prisma.customer.findMany({
     where: {
       companyId,
-      // Un proveedor PURO (sólo nos ha facturado; jamás le hemos emitido) no
-      // es un cliente — vive en la pestaña Proveedores. Se queda quien tenga
-      // al menos un comprobante no-EGRESO, o ninguno (alta manual para
-      // facturarle después). Quien es ambas cosas aparece en las dos.
-      NOT: {
-        AND: [
-          { invoices: { some: {} } },
-          { invoices: { none: { tipo: { not: "EGRESO" } } } },
-        ],
-      },
+      ...(puros.size ? { id: { notIn: [...puros] } } : {}),
       ...(search
         ? {
             OR: [
