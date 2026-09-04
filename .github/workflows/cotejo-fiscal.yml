@@ -1,8 +1,10 @@
 name: Cotejo de datos fiscales (semanal)
 
-# Coteja el INPC cargado contra Banxico SIE (serie SP1) y marca el dataset
-# verificado cuando empata — sube "sin cotejar" → "al día" en la cobertura.
-# Requiere BANXICO_TOKEN en el entorno de la app (Railway); sin él se omite solo.
+# Coteja los datos fiscales versionados contra su fuente oficial y marca cada
+# dataset verificado cuando empata — sube "sin cotejar" → "al día" en la
+# cobertura: INPC vs Banxico SIE (requiere BANXICO_TOKEN; sin él se omite),
+# multas vs Anexo 5 RMF, tarifas vs Anexo 8 RMF, recargos vs LIF, UMA vs INEGI
+# (requiere INEGI_TOKEN + INEGI_UMA_INDICADORES).
 #
 # Requiere repo secrets CRON_SECRET y STAGING_URL (igual que los demás crons).
 # NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main).
@@ -16,7 +18,7 @@ jobs:
   cotejo:
     runs-on: ubuntu-latest
     steps:
-      - name: Disparar cotejo fiscal (INPC vs INEGI)
+      - name: Disparar cotejo fiscal (INPC, multas, tarifas, recargos, UMA)
         run: |
           set -euo pipefail
           URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"

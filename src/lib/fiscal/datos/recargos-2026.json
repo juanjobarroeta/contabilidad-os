@@ -1,0 +1,25 @@
+{
+  "ejercicio": 2026,
+  "vigenciaDesde": "2026-01-01",
+  "vigenciaHasta": null,
+  "fuente": "Art. 11 LIF 2026 (prórroga); Art. 21 CFF (mora = prórroga × 1.5)",
+  "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf",
+  "verificado": true,
+  "articulo": "11",
+  "prorroga": 0.0138,
+  "mora": 0.0207,
+  "parcialidades": [
+    {
+      "hastaMeses": 12,
+      "tasa": 0.0142
+    },
+    {
+      "hastaMeses": 24,
+      "tasa": 0.0163
+    },
+    {
+      "hastaMeses": null,
+      "tasa": 0.0197
+    }
+  ]
+}

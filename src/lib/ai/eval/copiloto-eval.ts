@@ -25,7 +25,7 @@ import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
 import type { PreguntaEval } from "./preguntas";
 
 type VerificacionEval = NonNullable<ResultadoPregunta["respuesta"]>["verificacion"];
-import { algunaCoincide, extraerCitas, claveCita, type ResultadoPregunta } from "./medidas";
+import { algunaCoincide, extraerCitas, claveCita, valoresPresentes, type ResultadoPregunta } from "./medidas";
 
 export { normalizarCita, extraerCitas, algunaCoincide, resumir, type ResultadoPregunta, type ResumenEval } from "./medidas";
 
@@ -76,7 +76,9 @@ export async function responderComoAgente(
   // de la Ley») en vez de citarla de memoria; lo que trae cuenta como
   // fundamento de la KB. Ninguna otra tool: sin acceso a datos de empresa.
   const artTool = tools.find((t) => t.name === "get_articulo");
-  const herramientas = artTool ? [kbTool, artTool] : [kbTool];
+  // get_valor_fiscal (tablas vigentes): puro sobre el repo, sin datos de empresa.
+  const valorTool = tools.find((t) => t.name === "get_valor_fiscal");
+  const herramientas = [kbTool, artTool, valorTool].filter((t): t is NonNullable<typeof t> => !!t);
 
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: p.pregunta }];
   const citasKB: string[] = [];
@@ -101,7 +103,7 @@ export async function responderComoAgente(
       try {
         const parsed = JSON.parse(out) as { resultados?: { cita: string }[]; cita?: string };
         for (const h of parsed.resultados ?? []) citasKB.push(h.cita);
-        if (typeof parsed.cita === "string") citasKB.push(parsed.cita); // get_articulo
+        if (typeof parsed.cita === "string") citasKB.push(parsed.cita); // get_articulo / get_valor_fiscal
       } catch {
         /* sin fundamentos en este resultado */
       }
@@ -213,6 +215,7 @@ export async function evaluarPregunta(p: PreguntaEval, opts: OpcionesEval = {}, 
       citasEnTexto,
       citasFueraDeKB: citasEnTexto.filter((c) => !kb.has(claveCita(c))),
       citaPresente: citasEnTexto.length > 0,
+      ...(p.valoresEsperados?.length ? { valorCorrecto: valoresPresentes(r.texto, p.valoresEsperados) } : {}),
       rondas: r.rondas,
       ms: r.ms,
       verificacion: r.verificacion,

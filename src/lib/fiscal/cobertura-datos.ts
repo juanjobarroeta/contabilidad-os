@@ -23,6 +23,8 @@ import {
   coberturaSubsidioEmpleo,
 } from "./tarifas";
 import { UMA_EJERCICIO, SALARIO_MINIMO_EJERCICIO } from "../nomina/constants";
+import { coberturaMultasCFF } from "./multas";
+import { coberturaRecargos } from "./recargos";
 
 export type EstadoCobertura = "al_dia" | "por_publicar" | "faltante" | "sin_cotejar";
 
@@ -153,12 +155,16 @@ export function evaluarCoberturaFiscal(asOf: Date = new Date()): {
   const tAnual = coberturaTarifaAnualPF();
   const tMensual = coberturaTarifaMensualSueldos();
   const subsidio = coberturaSubsidioEmpleo();
+  const multas = coberturaMultasCFF();
+  const recargos = coberturaRecargos();
 
   // Tarifa/UMA/SM efectivas el ejercicio Y se publican en dic Y-1 / ene–feb Y.
   const TARIFA: CadenciaAnual = { mes: 12, dia: 28, delAnioAnterior: true }; // Anexo 8 RMF, DOF ~28-dic
   const SUBSIDIO: CadenciaAnual = { mes: 12, dia: 31, delAnioAnterior: true }; // decreto, fin de año
   const UMA: CadenciaAnual = { mes: 2, dia: 1, delAnioAnterior: false }; // INEGI, vigente 1-feb
   const SM: CadenciaAnual = { mes: 1, dia: 1, delAnioAnterior: false }; // CONASAMI, vigente 1-ene
+  const MULTAS: CadenciaAnual = { mes: 12, dia: 28, delAnioAnterior: true }; // Anexo 5 RMF, DOF ~28-dic
+  const RECARGOS: CadenciaAnual = { mes: 12, dia: 31, delAnioAnterior: true }; // LIF, DOF nov-dic
 
   const datasets: CoberturaDataset[] = [
     evaluarMensual("INPC", "INPC (actualización de inversiones, Art. 31)", asOf, INPC_DIA_PUBLICACION, inpc, INPC_VERIFICADO),
@@ -167,6 +173,8 @@ export function evaluarCoberturaFiscal(asOf: Date = new Date()): {
     evaluarAnual("SUBSIDIO_EMPLEO", "Subsidio para el empleo (decreto)", asOf, SUBSIDIO, subsidio?.ejercicio ?? null, subsidio?.verificado ?? false),
     evaluarAnual("UMA", "UMA (INEGI)", asOf, UMA, UMA_EJERCICIO, true),
     evaluarAnual("SALARIO_MINIMO", "Salario mínimo (CONASAMI)", asOf, SM, SALARIO_MINIMO_EJERCICIO, true),
+    evaluarAnual("MULTAS_CFF", "Multas y cantidades del CFF (Anexo 5 RMF)", asOf, MULTAS, multas?.ejercicio ?? null, multas?.verificado ?? false),
+    evaluarAnual("RECARGOS", "Tasa de recargos (LIF / Art. 21 CFF)", asOf, RECARGOS, recargos?.ejercicio ?? null, recargos?.verificado ?? false),
   ];
 
   const resumen = {
