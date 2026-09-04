@@ -12,6 +12,7 @@ import { previewComplemento } from "@/lib/complementos-preview";
 import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
 import { searchFiscalKnowledge, getArticulo } from "@/lib/fiscal-kb/search";
+import { consultarValorFiscal, type ConsultaValorFiscal } from "@/lib/fiscal/valores";
 import { stageChatPendingAction } from "@/lib/ai/pending-action";
 import { contarSimilaresSinConciliar } from "@/lib/bancos/reglas-categorizacion";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
@@ -209,6 +210,22 @@ export async function executeToolCall(
         console.error("[get_articulo]", err);
         return JSON.stringify({ error: "Knowledge base fiscal no disponible en este momento.", instruccion: "NO inventes el texto del artículo." });
       }
+    case "get_valor_fiscal": {
+      const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : undefined);
+      const str = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v.trim() : undefined);
+      return JSON.stringify(
+        consultarValorFiscal({
+          tipo: String(input.tipo ?? "") as ConsultaValorFiscal["tipo"],
+          articulo: str(input.articulo),
+          fraccion: str(input.fraccion),
+          inciso: str(input.inciso),
+          periodo: input.periodo === "anual" ? "anual" : input.periodo === "mensual" ? "mensual" : undefined,
+          base: num(input.base),
+          meses: num(input.meses),
+          fecha: str(input.fecha),
+        })
+      );
+    }
     default:
       return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });
   }

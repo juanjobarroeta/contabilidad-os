@@ -351,7 +351,9 @@ export async function POST(req: Request) {
         // Pase de verificación (Fase 3): sólo cuando la respuesta cita algo.
         // Si encuentra afirmaciones que los artículos no sostienen, manda la
         // versión corregida con `replace` y esa es la que se persiste.
-        if (process.env.AI_VERIFICACION !== "0" && assistantText.trim()) {
+        // Opt-in (AI_VERIFICACION=1) hasta que el eval diga que mejora: la
+        // primera medición (run 25) lo dejó peor que sin él.
+        if (process.env.AI_VERIFICACION === "1" && assistantText.trim()) {
           const v = await verificarRespuesta(anthropic, {
             pregunta: nuevoMensajeUsuario,
             respuesta: assistantText,

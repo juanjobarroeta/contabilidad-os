@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
-import { cotejarInpc } from "@/lib/fiscal/cotejo";
+import { cotejarTodo } from "@/lib/fiscal/cotejo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/cotejo-fiscal
 //
-// Coteja los datos fiscales versionados contra su fuente oficial. Por ahora:
-// INPC vs Banxico SIE (serie SP1). Marca el dataset verificado cuando los valores
-// cargados empatan, lo que sube "sin cotejar" → "al día" en la cobertura. Sin
-// BANXICO_TOKEN se omite (no rompe nada).
+// Coteja los datos fiscales versionados contra su fuente oficial y marca cada
+// dataset verificado cuando empata (sube "sin cotejar" → "al día" en la
+// cobertura). INPC vs Banxico (requiere BANXICO_TOKEN; sin él se omite),
+// multas vs Anexo 5, tarifas vs Anexo 8, recargos vs LIF, UMA vs el boletín
+// anual del INEGI (sin token). `?ejercicio=2027` fuerza el ejercicio a cotejar.
 //
 // Auth: CRON_SECRET (Bearer o x-cron-secret), igual que los otros crons.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -27,12 +28,12 @@ async function handle(req: Request) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!process.env.BANXICO_TOKEN) {
-    return NextResponse.json({ ok: true, skipped: "BANXICO_TOKEN no configurado" });
-  }
+  const ejParam = new URL(req.url).searchParams.get("ejercicio");
+  const ejercicio = ejParam && /^\d{4}$/.test(ejParam) ? Number(ejParam) : undefined;
 
-  const inpc = await cotejarInpc();
-  const summary = { ok: inpc.ok, inpc };
+  const r = await cotejarTodo(ejercicio);
+  const ok = !("error" in r.inpc && r.inpc.error) && r.anuales.every((a) => a.ok);
+  const summary = { ok, ...r };
   console.log("[cron/cotejo-fiscal] done:", JSON.stringify(summary));
   return NextResponse.json(summary);
 }
@@ -40,6 +41,7 @@ async function handle(req: Request) {
 export async function POST(req: Request) {
   return handle(req);
 }
+
 export async function GET(req: Request) {
   return handle(req);
 }

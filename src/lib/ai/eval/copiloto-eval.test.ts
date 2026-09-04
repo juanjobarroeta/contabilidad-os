@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { algunaCoincide, extraerCitas, normalizarCita, resumir, type ResultadoPregunta } from "./medidas";
+import { algunaCoincide, extraerCitas, normalizarCita, resumir, valoresPresentes, type ResultadoPregunta } from "./medidas";
 import { PREGUNTAS_EVAL } from "./preguntas";
 
 describe("normalizarCita / algunaCoincide", () => {
@@ -70,5 +70,15 @@ describe("normalizarCita — fracciones", () => {
   });
   it("una cita con fracción ya no cuenta como fuera de la KB", () => {
     expect(algunaCoincide(["Art. 27 LISR"], ["Art. 27-III LISR"])).toBe(true);
+  });
+});
+
+describe("valoresPresentes", () => {
+  it("tolera $ , espacios, decimales y porcentajes; exige TODOS los esperados", () => {
+    expect(valoresPresentes("La multa va de $2,050.00 a $25,360.00 (Art. 82 CFF).", [2050, 25360])).toBe(true);
+    expect(valoresPresentes("UMA diaria 117.31 y mensual 3 566.22 pesos", [117.31, 3566.22])).toBe(true);
+    expect(valoresPresentes("la tasa de recargos es 2.07% mensual", [2.07])).toBe(true);
+    expect(valoresPresentes("la tasa de recargos es 1.47 % mensual", [2.07])).toBe(false);
+    expect(valoresPresentes("de $2,050 a $25,000", [2050, 25360])).toBe(false);
   });
 });

@@ -24,6 +24,13 @@ export interface PreguntaEval {
   /** Régimen del contribuyente sintético: "601" (PM general) | "626" (RESICO PF) | "612" (PF act. empresarial). */
   regimen?: "601" | "626" | "612";
   nota?: string;
+  /**
+   * Números que una respuesta correcta DEBE mencionar (montos, tasas, UMA…).
+   * Se comparan mecánicamente contra el texto (medidas.valoresPresentes) —
+   * miden si el agente consultó las tablas (get_valor_fiscal) en vez de
+   * responder de memoria. Basta con que aparezcan todos.
+   */
+  valoresEsperados?: number[];
 }
 
 export const PREGUNTAS_EVAL: PreguntaEval[] = [
@@ -135,4 +142,16 @@ export const PREGUNTAS_EVAL: PreguntaEval[] = [
   { id: "j38", tema: "socios", pregunta: "Me depositaron una cantidad grande en efectivo, ¿el SAT lo va a ver?", fundamentos: ["Art. 55 LISR", "Art. 59 CFF"], nota: "Bancos informan efectivo > $15,000/mes (55-IV); presunción de ingresos por depósitos (59-III)." },
   { id: "j39", tema: "socios", pregunta: "¿Qué es la CUFIN y por qué importa para repartir utilidades?", fundamentos: ["Art. 77 LISR", "Art. 10 LISR"], nota: "Dividendos sin CUFIN pagan ISR corporativo piramidado (10)." },
   { id: "j40", tema: "socios", pregunta: "¿Cada cuánto debo hacer el ajuste anual por inflación si tengo préstamos con socios?", fundamentos: ["Art. 44 LISR", "Art. 45 LISR"], nota: "Anual, sobre créditos y deudas (44–46)." },
+
+  // ── Valores vigentes (Fase 1 «tablas vigentes»): el agente debe consultar
+  // get_valor_fiscal, nunca recordar montos. Los números son los de 2026
+  // (Anexo 5 y 8 RMF 2026, LIF 2026, INEGI, CONASAMI) cargados en el repo.
+  { id: "v01", tema: "valores", pregunta: "¿De cuánto es la multa por no presentar una declaración mensual cuando el SAT me la requiere?", fundamentos: ["Art. 82 CFF", "Art. 81 CFF"], valoresEsperados: [2050, 25360], nota: "82-I-a: $2,050 a $25,360 (Anexo 5 RMF 2026)." },
+  { id: "v02", tema: "valores", pregunta: "¿Cuál es el valor de la UMA diaria y mensual vigente hoy?", fundamentos: ["Art. 82 CFF"], valoresEsperados: [117.31, 3566.22], nota: "UMA 2026 (vigente 1-feb-2026): $117.31 diaria, $3,566.22 mensual. No hay artículo esperado real: la LUMA no está en la KB; el fundamento es un comodín para el medidor." },
+  { id: "v03", tema: "valores", pregunta: "¿Cuánto es el salario mínimo general diario este año?", fundamentos: ["Art. 96 LISR"], valoresEsperados: [315.04], nota: "CONASAMI 2026: $315.04 general, $440.87 ZLFN. Fundamento comodín." },
+  { id: "v04", tema: "valores", pregunta: "¿Qué tasa mensual de recargos por mora aplica en 2026 si pago tarde el IVA?", fundamentos: ["Art. 21 CFF"], valoresEsperados: [2.07], nota: "LIF 2026 Art. 11: prórroga 1.38 % → mora 2.07 % (Art. 21 CFF). El modelo «recuerda» 1.47 %: ése es el fallo que se mide." },
+  { id: "v05", tema: "valores", pregunta: "Debo $10,000 de ISR ya actualizados con tres meses de atraso, ¿cuánto pago de recargos?", fundamentos: ["Art. 21 CFF"], valoresEsperados: [621], nota: "10,000 × 2.07 % × 3 = $621." },
+  { id: "v06", tema: "nomina", pregunta: "Un empleado gana $20,000 al mes, ¿cuánto ISR le retengo con la tarifa mensual vigente?", fundamentos: ["Art. 96 LISR"], valoresEsperados: [2383.65], nota: "Tarifa mensual 2026 (Anexo 8): 1,856.84 + (20,000 − 17,533.65) × 21.36 % = $2,383.65, antes de subsidio." },
+  { id: "v07", tema: "valores", pregunta: "¿Cuál es la multa por no expedir CFDI cuando estoy obligado?", fundamentos: ["Art. 84 CFF", "Art. 83 CFF"], valoresEsperados: [22300, 127530], nota: "83-VII → 84-IV-a: $22,300 a $127,530 (Anexo 5 RMF 2026)." },
+  { id: "v08", tema: "nomina", pregunta: "¿Cuánto es el subsidio para el empleo mensual en 2026 y hasta qué ingreso aplica?", fundamentos: ["Art. 96 LISR"], valoresEsperados: [11492.66], nota: "15.02 % de la UMA mensual (≈ $535.65) con tope de ingreso $11,492.66 (decreto DOF 31-dic-2025). Fundamento comodín." },
 ];

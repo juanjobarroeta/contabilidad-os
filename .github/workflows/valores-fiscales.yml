@@ -1,0 +1,112 @@
+name: Valores fiscales (Anexo 5, Anexo 8, LIF → PR)
+
+# «Retrieval automático como PR, no como escritura»: descarga las fuentes
+# oficiales (Anexo 5 y 8 de la RMF en el minisitio del SAT; LIF en la Cámara
+# de Diputados), regenera las tablas versionadas en src/lib/fiscal/datos/ y,
+# si algo cambió, abre un PR draft con el diff para revisión. Los números
+# nunca llegan a producción sin un merge humano (docs/fiscal-update-cadence.md).
+#
+# También coteja las tarifas ISR del Anexo 8 contra src/lib/fiscal/tarifas.ts:
+# si difieren, el job falla y abre un issue (tarifas.ts se corrige por PR a mano).
+#
+# Semanal; diario del 15-dic al 15-feb (temporada de publicación). `workflow_dispatch`
+# acepta el ejercicio y URLs explícitas (modificaciones a mitad de año).
+# NOTA: GitHub sólo corre `schedule:` desde la rama por defecto (main). Para que
+# el job pueda abrir PRs, en Settings → Actions debe estar activo «Allow GitHub
+# Actions to create and approve pull requests».
+
+on:
+  schedule:
+    - cron: "0 15 * * 1" # lunes ~09:00 CT
+    - cron: "0 15 15-31 12 *" # diario, 15–31 dic
+    - cron: "0 15 * 1 *" # diario, enero
+    - cron: "0 15 1-15 2 *" # diario, 1–15 feb
+  workflow_dispatch:
+    inputs:
+      ejercicio:
+        description: "Ejercicio a cargar (default: el que toca según la fecha)"
+        required: false
+        default: ""
+      anexo5:
+        description: "URL explícita del Anexo 5 (opcional)"
+        required: false
+        default: ""
+      anexo8:
+        description: "URL explícita del Anexo 8 (opcional)"
+        required: false
+        default: ""
+      lif:
+        description: "URL explícita de la LIF (opcional)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  valores:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Ejercicio objetivo
+        id: ej
+        run: |
+          set -euo pipefail
+          EJ="$(printf '%s' "${{ github.event.inputs.ejercicio }}" | tr -d '[:space:]')"
+          if [ -z "$EJ" ]; then
+            Y=$(date -u +%Y); M=$(date -u +%m); D=$(date -u +%d)
+            if [ "$M" = "12" ] && [ "$D" -ge 15 ]; then EJ=$((Y+1)); else EJ=$Y; fi
+          fi
+          echo "ejercicio=$EJ" >> "$GITHUB_OUTPUT"
+          echo "Ejercicio: $EJ"
+      - name: Generar tablas y cotejar tarifas
+        id: gen
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ARGS="--ejercicio ${{ steps.ej.outputs.ejercicio }} --strict"
+          [ -n "${{ github.event.inputs.anexo5 }}" ] && ARGS="$ARGS --anexo5 ${{ github.event.inputs.anexo5 }}"
+          [ -n "${{ github.event.inputs.anexo8 }}" ] && ARGS="$ARGS --anexo8 ${{ github.event.inputs.anexo8 }}"
+          [ -n "${{ github.event.inputs.lif }}" ] && ARGS="$ARGS --lif ${{ github.event.inputs.lif }}"
+          npm run fiscal:valores -- $ARGS 2>&1 | tee salida.txt
+      - name: Pruebas de las tablas generadas
+        run: npx vitest run src/lib/fiscal/multas.test.ts src/lib/fiscal/recargos.test.ts src/lib/fiscal/valores.test.ts src/lib/fiscal/fuentes
+      - name: Abrir PR si cambió algo
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: bot/valores-fiscales-${{ steps.ej.outputs.ejercicio }}
+          delete-branch: true
+          draft: true
+          title: "Valores fiscales ${{ steps.ej.outputs.ejercicio }}: multas (Anexo 5) y recargos (LIF) desde la fuente oficial"
+          commit-message: |
+            Valores fiscales ${{ steps.ej.outputs.ejercicio }}: tablas regeneradas desde la fuente oficial
+
+            Generado por .github/workflows/valores-fiscales.yml (npm run fiscal:valores).
+          body: |
+            Tablas regeneradas por `npm run fiscal:valores -- --ejercicio ${{ steps.ej.outputs.ejercicio }}` a partir de las fuentes oficiales (Anexo 5 RMF en el minisitio del SAT; LIF en la Cámara de Diputados). Revisar el diff fila por fila antes de mergear: **estos montos llegan al copiloto (get_valor_fiscal) y a la cobertura fiscal**.
+
+            Salida del generador:
+            ```
+            $(cat salida.txt 2>/dev/null || true)
+            ```
+          add-paths: |
+            src/lib/fiscal/datos/**
+      - name: Issue si las tarifas del Anexo 8 no coinciden con tarifas.ts
+        if: steps.gen.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          T="Tarifas ISR: el Anexo 8 RMF ${{ steps.ej.outputs.ejercicio }} no coincide con tarifas.ts"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$T\" in:title" --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$T" --body "$(printf 'El generador de valores fiscales falló en modo estricto (tarifas o descarga). Salida:\n\n```\n%s\n```\n\nCorrige src/lib/fiscal/tarifas.ts por PR contra el Anexo 8 (o pasa la URL explícita al workflow).' "$(cat salida.txt 2>/dev/null | tail -40)")"
+          fi
+          exit 1

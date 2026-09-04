@@ -105,7 +105,8 @@ jobs:
             noInventa: (map(select(.juez)) as $j | if ($j|length)==0 then null else (($j|map(select(.juez.noInventa))|length) * 100 / ($j|length) | floor) end),
             respondeLoPreguntado: (map(select(.juez)) as $j | if ($j|length)==0 then null else (($j|map(select(.juez.respondeLoPreguntado))|length) * 100 / ($j|length) | floor) end),
             verificadas: (map(select(.respuesta.verificacion.verificada)) | length),
-            corregidas: (map(select(.respuesta.verificacion.corregida)) | length)
+            corregidas: (map(select(.respuesta.verificacion.corregida)) | length),
+            valorCorrecto: (map(select(.respuesta.valorCorrecto != null)) as $v | if ($v|length)==0 then null else (($v|map(select(.respuesta.valorCorrecto))|length) * 100 / ($v|length) | floor) end)
           }' resultados.jsonl | tee resumen.json
           echo "## Eval del copiloto" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"; cat resumen.json >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -113,9 +114,9 @@ jobs:
           # La tabla va al resumen del job Y al log: desde fuera (MCP, curl) sólo
           # se leen los logs, y sin la tabla no se sabe QUÉ pregunta falló.
           {
-            echo "| id | KB | cita | inventa | fund. | noInv. | resp. | error |"
-            echo "|---|---|---|---|---|---|---|---|"
-            jq -r '"| \(.id) | \(if .recuperacion.hit then "✓" else "✗" end) | \(if .respuesta then (if .respuesta.citaPresente then "✓" else "✗" end) else "–" end) | \(if .respuesta then (.respuesta.citasFueraDeKB|join(", ")) else "–" end) | \(if .juez then (if .juez.fundamentoCorrecto then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.noInventa then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.respondeLoPreguntado then "✓" else "✗" end) else "–" end) | \(.error // "") |"' resultados.jsonl
+            echo "| id | KB | cita | inventa | fund. | noInv. | resp. | valor | error |"
+            echo "|---|---|---|---|---|---|---|---|---|"
+            jq -r '"| \(.id) | \(if .recuperacion.hit then "✓" else "✗" end) | \(if .respuesta then (if .respuesta.citaPresente then "✓" else "✗" end) else "–" end) | \(if .respuesta then (.respuesta.citasFueraDeKB|join(", ")) else "–" end) | \(if .juez then (if .juez.fundamentoCorrecto then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.noInventa then "✓" else "✗" end) else "–" end) | \(if .juez then (if .juez.respondeLoPreguntado then "✓" else "✗" end) else "–" end) | \(if .respuesta.valorCorrecto == null then "–" elif .respuesta.valorCorrecto then "✓" else "✗" end) | \(.error // "") |"' resultados.jsonl
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "### Fallos de recuperación (esperado → lo que devolvió la KB)"
           jq -r 'select(.recuperacion.hit|not) | "\(.id) esperaba [\(.fundamentos|join(" | "))] → KB: [\(.recuperacion.citas|join(" | "))]"' resultados.jsonl

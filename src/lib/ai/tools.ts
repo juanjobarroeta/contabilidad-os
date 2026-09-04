@@ -387,6 +387,25 @@ export const tools: Anthropic.Tool[] = [
       required: ["ley", "articulo"],
     },
   },
+  {
+    name: "get_valor_fiscal",
+    description:
+      "Devuelve VALORES fiscales vigentes desde las tablas oficiales cargadas en el sistema (con vigencia, fuente y si están verificados): montos de multas del CFF (Anexo 5 RMF), tarifas del ISR mensual/anual (Anexo 8), UMA, salario mínimo, tasa de recargos (LIF / Art. 21 CFF) y subsidio para el empleo. ÚSALA SIEMPRE antes de mencionar un monto, tarifa, UMA, salario mínimo o tasa de recargos: nunca los digas de memoria. Puede calcular: ISR de una base con la tarifa, recargos de un monto por meses de mora.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        tipo: { type: "string", enum: ["multa", "tarifa_isr", "uma", "salario_minimo", "recargos", "subsidio_empleo"] },
+        articulo: { type: "string", description: "multa: artículo del CFF que fija la sanción ('82', '84', '84-B'). La infracción (81, 83) remite a él." },
+        fraccion: { type: "string", description: "multa: fracción en romano ('I', 'XXVI'); opcional." },
+        inciso: { type: "string", description: "multa: inciso ('a'); opcional." },
+        periodo: { type: "string", enum: ["mensual", "anual"], description: "tarifa_isr: mensual (Art. 96/116) o anual (Art. 152). Default mensual." },
+        base: { type: "number", description: "tarifa_isr: base gravable para calcular el ISR; recargos: monto ya actualizado." },
+        meses: { type: "number", description: "recargos: meses (o fracción) de mora." },
+        fecha: { type: "string", description: "Fecha ISO (YYYY-MM-DD) del periodo relevante. Default: hoy." },
+      },
+      required: ["tipo"],
+    },
+  },
   // ── Herramientas de PROPUESTA (acciones reversibles) ───────────────────────
   // Estas herramientas NO ejecutan nada: STAGEAN una propuesta sobre la
   // conversación y devuelven un resumen legible + un token. El usuario debe tocar

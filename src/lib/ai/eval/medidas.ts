@@ -21,6 +21,8 @@ export interface ResultadoPregunta {
     /** Citas que el texto afirma y la KB NO devolvió en este turno. */
     citasFueraDeKB: string[];
     citaPresente: boolean;
+    /** Sólo en preguntas con valoresEsperados: ¿la respuesta trae todos los números esperados? */
+    valorCorrecto?: boolean;
     rondas: number;
     /** Fase 3: qué hizo el pase de verificación con esta respuesta. */
     verificacion?: {
@@ -81,6 +83,24 @@ export function claveCita(c: string): string {
   return normalizarCita(c).replace(/\bRMF-\d{4}\b/, "RMF");
 }
 
+/**
+ * ¿La respuesta menciona TODOS los números esperados? Tolera formato: «$2,050.00»,
+ * «2 050», «2,050», «2.07 %», «2.07%». Un entero esperado también acepta la
+ * forma con «.00». Puro.
+ */
+export function valoresPresentes(texto: string, esperados: number[]): boolean {
+  const plano = texto.replace(/[\u00a0\s]+/g, " ");
+  const numeros = new Set<string>();
+  for (const m of plano.matchAll(/\d[\d,. ]*\d|\d/g)) {
+    const limpio = m[0].replace(/[ ,]/g, "");
+    const n = Number(limpio);
+    if (Number.isFinite(n)) numeros.add(n.toFixed(2));
+    // «2,050» pudo venir como «2.050» (separador europeo) — sólo si tiene 3 decimales exactos.
+    if (/^\d{1,3}(\.\d{3})+$/.test(limpio)) numeros.add(Number(limpio.replace(/\./g, "")).toFixed(2));
+  }
+  return esperados.every((e) => numeros.has(e.toFixed(2)));
+}
+
 export function algunaCoincide(esperadas: string[], obtenidas: string[]): boolean {
   const set = new Set(obtenidas.map(claveCita));
   return esperadas.some((e) => set.has(claveCita(e)));
@@ -97,6 +117,8 @@ export interface ResumenEval {
   fundamentoCorrecto: number | null;
   noInventa: number | null;
   respondeLoPreguntado: number | null;
+  /** Sobre las preguntas con valoresEsperados que tuvieron respuesta; null si no hubo. */
+  valorCorrecto: number | null;
 }
 
 /** Porcentajes (0–100) sobre las preguntas SIN error; null si esa capa no corrió. */
@@ -106,6 +128,7 @@ export function resumir(rs: ResultadoPregunta[]): ResumenEval {
     xs.length === 0 ? null : Math.round((xs.filter(f).length / xs.length) * 1000) / 10;
   const conResp = ok.filter((r) => r.respuesta);
   const conJuez = ok.filter((r) => r.juez);
+  const conValor = conResp.filter((r) => r.respuesta?.valorCorrecto !== undefined);
   return {
     n: rs.length,
     conError: rs.length - ok.length,
@@ -115,5 +138,6 @@ export function resumir(rs: ResultadoPregunta[]): ResumenEval {
     fundamentoCorrecto: pct(conJuez, (r) => !!r.juez?.fundamentoCorrecto),
     noInventa: pct(conJuez, (r) => !!r.juez?.noInventa),
     respondeLoPreguntado: pct(conJuez, (r) => !!r.juez?.respondeLoPreguntado),
+    valorCorrecto: pct(conValor, (r) => !!r.respuesta?.valorCorrecto),
   };
 }
