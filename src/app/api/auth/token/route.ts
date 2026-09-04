@@ -46,6 +46,7 @@ import {
 } from "@/lib/api-refresh-token";
 import { registrarBitacora } from "@/lib/audit";
 import { effectiveModules } from "@/lib/module-access";
+import { isOperador } from "@/lib/authz";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
@@ -297,6 +298,40 @@ export async function POST(req: Request) {
         construccionPaginas: [], // acceso vía despacho: ve todas las páginas
         automotrizPaginas: [], // acceso vía despacho: ve todas las páginas
         hospitalPaginas: [], // acceso vía despacho: ve todas las páginas
+      });
+    }
+  }
+
+  // 3. Operador de plataforma: adentro del hub ya opera TODAS las empresas
+  //    activas (requireMembership le da OWNER en cualquiera), pero esta lista
+  //    sólo traía sus membresías directas y las de su despacho, así que un
+  //    satélite le decía «ninguna de tus empresas tiene el módulo» para
+  //    empresas que sí puede operar. Se completa con las que faltan.
+  if (await isOperador(user.id)) {
+    const todas = await prisma.company.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        rfc: true,
+        razonSocial: true,
+        modules: { where: { habilitado: true }, select: { modulo: true } },
+      },
+    });
+    for (const c of todas) {
+      if (byId.has(c.id)) continue;
+      const modulos = c.modules.map((x) => x.modulo);
+      if (modulos.length === 0) continue;
+      byId.set(c.id, {
+        id: c.id,
+        rfc: c.rfc,
+        razonSocial: c.razonSocial,
+        role: "OWNER",
+        modulos,
+        purifPuesto: null,
+        construccionRol: null,
+        construccionPaginas: [],
+        automotrizPaginas: [],
+        hospitalPaginas: [],
       });
     }
   }
