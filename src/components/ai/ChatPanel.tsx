@@ -243,6 +243,16 @@ export function ChatPanel() {
             else updated.push({ role: "assistant", content: assistantText });
             return [...updated];
           });
+        } else if (data.type === "replace") {
+          // Pase de verificación (Fase 3): la respuesta corregida sustituye a la
+          // que ya se pintó; lo que se guardó en el servidor es esta versión.
+          assistantText = data.text ?? assistantText;
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastMsg = updated[updated.length - 1];
+            if (lastMsg?.role === "assistant") lastMsg.content = assistantText;
+            return [...updated];
+          });
         } else if (data.type === "tool_start") {
           setActiveTool(data.tool ?? null);
         } else if (data.type === "done") {

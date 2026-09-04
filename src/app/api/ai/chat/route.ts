@@ -13,6 +13,7 @@ import { checkChatUserDaily } from "@/lib/ai/rate-limit";
 import { effectiveWhatsappPlan } from "@/lib/planes";
 import { getChatPendingAction } from "@/lib/ai/pending-action";
 import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
+import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -178,7 +179,11 @@ export async function POST(req: Request) {
         tools: { name: string; ms: number }[];
         fundamentos: { cita: string; similitud: number }[];
         cacheReadTokens: number;
+        verificacion?: { verificada: boolean; corregida: boolean; problemas: number; citasNoVerificables: string[]; ms: number };
       } = { modelo: CHAT_MODEL, rondas: 0, tools: [], fundamentos: [], cacheReadTokens: 0 };
+      // Textos que la KB devolvió en el turno: son las fuentes contra las que
+      // se verifica la respuesta (Fase 3).
+      const fuentesTurno: FuenteVerificacion[] = [];
 
       try {
         let currentMessages = [...messages];
@@ -314,6 +319,7 @@ export async function POST(req: Request) {
                 { conversationId: convId!, inApp: canWrite, userId }
               );
               traza.tools.push({ name: block.name, ms: Date.now() - t0 });
+              fuentesTurno.push(...fuentesDesdeToolResult(block.name, result));
               if (block.name === "search_fiscal_knowledge") {
                 try {
                   const r = JSON.parse(result) as { resultados?: { cita: string; similitud: number }[] };
@@ -341,6 +347,29 @@ export async function POST(req: Request) {
         }
         traza.modelo = model;
         traza.rondas = toolRounds;
+
+        // Pase de verificación (Fase 3): sólo cuando la respuesta cita algo.
+        // Si encuentra afirmaciones que los artículos no sostienen, manda la
+        // versión corregida con `replace` y esa es la que se persiste.
+        if (process.env.AI_VERIFICACION !== "0" && assistantText.trim()) {
+          const v = await verificarRespuesta(anthropic, {
+            pregunta: nuevoMensajeUsuario,
+            respuesta: assistantText,
+            fuentes: fuentesTurno,
+            cost: { companyId, userId },
+          });
+          traza.verificacion = {
+            verificada: v.verificada,
+            corregida: v.corregida,
+            problemas: v.problemas.length,
+            citasNoVerificables: v.citasNoVerificables,
+            ms: v.ms,
+          };
+          if (v.corregida) {
+            assistantText = v.texto;
+            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "replace", text: assistantText })}\n\n`));
+          }
+        }
 
         // Si el asistente STAGEÓ una acción reversible en este turno, avísale al
         // cliente para que pinte la tarjeta Confirmar / Cancelar (el tap ejecuta).

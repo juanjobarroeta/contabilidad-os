@@ -103,7 +103,9 @@ jobs:
             inventaCitas: (map(select(.respuesta)) as $r | if ($r|length)==0 then null else (($r|map(select((.respuesta.citasFueraDeKB|length)>0))|length) * 100 / ($r|length) | floor) end),
             fundamentoCorrecto: (map(select(.juez)) as $j | if ($j|length)==0 then null else (($j|map(select(.juez.fundamentoCorrecto))|length) * 100 / ($j|length) | floor) end),
             noInventa: (map(select(.juez)) as $j | if ($j|length)==0 then null else (($j|map(select(.juez.noInventa))|length) * 100 / ($j|length) | floor) end),
-            respondeLoPreguntado: (map(select(.juez)) as $j | if ($j|length)==0 then null else (($j|map(select(.juez.respondeLoPreguntado))|length) * 100 / ($j|length) | floor) end)
+            respondeLoPreguntado: (map(select(.juez)) as $j | if ($j|length)==0 then null else (($j|map(select(.juez.respondeLoPreguntado))|length) * 100 / ($j|length) | floor) end),
+            verificadas: (map(select(.respuesta.verificacion.verificada)) | length),
+            corregidas: (map(select(.respuesta.verificacion.corregida)) | length)
           }' resultados.jsonl | tee resumen.json
           echo "## Eval del copiloto" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"; cat resumen.json >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
