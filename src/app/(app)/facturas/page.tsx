@@ -473,7 +473,8 @@ export default function FacturasPage() {
       ? `en ${periodo}`
       : `en ${etiquetaPeriodo(periodo)}`;
 
-  // Excel: se lleva la misma ventana y el mismo tipo que estás viendo.
+  // Excel: se lleva la misma ventana, el mismo tipo Y la misma búsqueda que
+  // estás viendo. Antes ignoraba la búsqueda y bajaba todo el periodo.
   const exportUrl = (() => {
     const p = new URLSearchParams({ companyId: activeCompany?.id ?? "" });
     const r = rangoPeriodo(periodo);
@@ -483,6 +484,7 @@ export default function FacturasPage() {
     }
     if (filter === "cancelada") p.set("tipo", "CANCELLED");
     else if (filter !== "todas") p.set("tipo", filter.toUpperCase());
+    if (qBuscado) p.set("q", qBuscado);
     return `/api/facturas/export?${p.toString()}`;
   })();
 
@@ -506,7 +508,7 @@ export default function FacturasPage() {
             {checkingCancel ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
             {checkingCancel ? "Verificando…" : "Verificar cancelaciones"}
           </Button>
-          <a href={exportUrl} title="Exporta lo que estás viendo: el periodo y el filtro seleccionados">
+          <a href={exportUrl} title="Exporta lo que estás viendo: el periodo, el filtro y la búsqueda">
             <Button variant="soft" size="md"><Download className="h-4 w-4" /> Excel</Button>
           </a>
           <Link href="/facturas/nueva">

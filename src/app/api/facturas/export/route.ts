@@ -3,8 +3,9 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
+import { whereBusquedaFacturas } from "@/lib/facturas/busqueda";
 
-// GET /api/facturas/export?companyId=xxx&tipo=&from=&to=
+// GET /api/facturas/export?companyId=xxx&tipo=&from=&to=&q=
 //
 // Returns a CSV file with one row per factura, matching the columns a
 // contador uses when they download from SAT + paste into Excel. Contador
@@ -28,6 +29,9 @@ export async function GET(req: Request) {
   const tipo = searchParams.get("tipo"); // INGRESO | EGRESO | NOMINA | PAGO | CANCELLED
   const fromStr = searchParams.get("from"); // ISO date
   const toStr = searchParams.get("to");
+  // La misma búsqueda que la lista: el Excel exporta lo que se está viendo,
+  // no todas las facturas del periodo (antes ignoraba `q`).
+  const q = searchParams.get("q")?.trim() ?? "";
 
   const where: import("@prisma/client").Prisma.InvoiceWhereInput = { companyId };
 
@@ -47,6 +51,8 @@ export async function GET(req: Request) {
     if (fromStr) where.fecha.gte = new Date(fromStr);
     if (toStr) where.fecha.lte = new Date(toStr);
   }
+  const busqueda = whereBusquedaFacturas(q);
+  if (busqueda) where.AND = busqueda.AND;
 
   const [invoices, company] = await Promise.all([
     prisma.invoice.findMany({
@@ -156,6 +162,7 @@ export async function GET(req: Request) {
   if (tipo) filenameParts.push(tipo.toLowerCase());
   if (fromStr) filenameParts.push(fromStr);
   if (toStr) filenameParts.push(toStr);
+  if (q) filenameParts.push(q.replace(/[^\w.-]+/g, "-").slice(0, 40));
   const filename =
     filenameParts.filter(Boolean).join("_") + ".csv";
 
