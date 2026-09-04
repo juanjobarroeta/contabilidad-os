@@ -374,6 +374,20 @@ model Company {
   @@index([vigenciaBarridoAt])
   tombstonesBancarias BankTransactionTombstone[]
   inventarioConteos   InventarioConteo[]
+
+  // Hospital
+  hospConfig       HospConfig?
+  hospRecursos     HospRecurso[]
+  hospPacientes    HospPaciente[]
+  hospPagadores    HospPagador[]
+  hospServicios    HospServicio[]
+  hospMedicos      HospMedico[]
+  hospEpisodios    HospEpisodio[]
+  hospCargos       HospCargo[]
+  hospCitas        HospCita[]
+  hospCotizaciones HospCotizacion[]
+  hospInsumos      HospInsumo[]
+  hospTickets      HospTicket[]
 }
 
 model CompanyMember {
@@ -433,6 +447,10 @@ model CompanyMember {
   /// encajonamiento server-side por página puede añadirse después al estilo
   /// construccion/rol.ts.
   automotrizPaginas String[] @default([])
+
+  /// Páginas visibles del satélite Hospital (rejilla de Usuarios); mismo
+  /// contrato que automotrizPaginas: [] = ve todas.
+  hospitalPaginas String[] @default([])
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -686,6 +704,7 @@ enum ModuloApp {
   RESTAURANTE
   AUTOMOTRIZ
   JCPT
+  HOSPITAL
 }
 
 // ─── Module 3: Invoicing / CFDI ───────────────────────────────────────────────
@@ -730,6 +749,11 @@ model Customer {
   citasServicio    CitaServicio[]
   prospectos        Prospecto[]
 
+  // Hospital
+  hospPacientes HospPaciente[]
+  hospPagadores HospPagador[]
+  hospEpisodios HospEpisodio[]
+
   @@unique([companyId, rfc])
 }
 
@@ -767,6 +791,10 @@ model Supplier {
 
   // Automotriz
   vehiculos Vehiculo[]
+
+  // Hospital
+  hospMedicos HospMedico[]
+  hospLotes   HospLote[]
 
   @@unique([companyId, rfc])
 }
@@ -946,6 +974,9 @@ model Invoice {
   vehiculosVendidos    Vehiculo[]            @relation("VehiculoVentaCfdi")
   vehiculoMenciones    VehiculoCfdi[]
   refaccionMovimientos RefaccionMovimiento[]
+  hospCargos            HospCargo[]
+  hospLotes             HospLote[]
+  hospMovimientosInsumo HospMovimientoInsumo[]
   servicioVenta        ServicioVenta?
   nominaCosto          NominaCosto?
   vehiculoCostos       VehiculoCosto[]
@@ -1685,6 +1716,9 @@ model Employee {
   ordenesTecnico    OrdenServicio[]    @relation("OrdenServicioTecnico")
   prospectos        Prospecto[]        @relation("ProspectoVendedor")
 
+  // Hospital
+  hospMedicos HospMedico[]
+
   @@unique([companyId, rfc])
 }
 
@@ -2384,6 +2418,7 @@ enum EntrySource {
   JCPT // plataforma de coaching JCPT (satélite con backend propio)
   DEPRECIACION // depreciación contable mensual — REGENERABLE (postMonth la reconstruye del registro de activos)
   INVENTARIO // costo de venta por inventario periódico — REGENERABLE (postMonth lo deriva del conteo capturado)
+  HOSPITAL // vertical hospitalario (satélite Hospital)
 }
 
 /// Conteo físico del inventario al cierre del mes (método PERIÓDICO, Art. 39
@@ -6304,4 +6339,837 @@ model IntakeScoreSnapshot {
 
   @@unique([weekOf, issueNodeId])
   @@index([weekOf, rank])
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Module: HOSPITAL — hospital privado (primer cliente: Haltus Hope; sustituye
+// a Virtus). Diseño en docs/HOSPITAL.md. Todo va gateado por
+// CompanyModule(modulo = HOSPITAL) y expuesto en /api/hospital/* para el
+// satélite `Hospital` (SPA React/Vite, sin base ni auth propias).
+//
+// La cadena del producto: EXPEDIENTE (lo que ocurrió) → CUENTA (lo que se
+// consumió) → FACTURA (Invoice, ya del hub) → BANCO (conciliación, ya del hub)
+// → CONTABILIDAD (mayor, ya del hub). Aquí viven sólo los dos primeros
+// eslabones más lo que los alimenta: pacientes, camas, agenda, convenios,
+// tarifario, médicos y farmacia con lotes. Clientes, proveedores, empleados,
+// CFDIs, bancos y el mayor siguen siendo canónicos del hub.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// Configuración del vertical por empresa (1:1). Series de folio y umbrales
+/// que el resto del módulo aplica cuando el registro no trae los suyos.
+model HospConfig {
+  id        String  @id @default(cuid())
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// Nombre comercial que enseña el satélite (default: Company.nombreComercial).
+  nombreHospital String?
+  /// Prefijos de folio: HOSP-2026-0418, COT-2026-0311, MANT-2026-0007.
+  serieEpisodio   String @default("HOSP")
+  serieCotizacion String @default("COT")
+  serieTicket     String @default("MANT")
+  /// Ventana de alerta de caducidad de lotes (farmacia): días.
+  diasAlertaCaducidad Int @default(90)
+  /// Tope arriba del cual una cuenta pide autorización previa del pagador
+  /// cuando el convenio no fija el suyo.
+  topeAutorizacion Decimal? @db.Decimal(18, 6)
+  /// IVA default de los servicios hospitalarios (Art. 15-XIV LIVA: los
+  /// servicios médicos por profesionista son exentos; la hospitalización y
+  /// el quirófano gravan al 16 %). Se aplica al crear servicios sin tasa.
+  ivaServicios Decimal @default(0.16) @db.Decimal(18, 6)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum HospRecursoTipo {
+  CAMA
+  QUIROFANO
+  CONSULTORIO
+  SALA
+}
+
+enum HospArea {
+  HOSPITALIZACION
+  URGENCIAS
+  RECUPERACION
+  TERAPIA
+  QUIROFANO
+  CONSULTA_EXTERNA
+  ENDOSCOPIA
+  IMAGEN
+  LABORATORIO
+  OTRA
+}
+
+enum HospRecursoEstado {
+  LIBRE
+  OCUPADA
+  LIMPIEZA
+  FUERA_DE_SERVICIO
+}
+
+/// Camas, quirófanos, consultorios y salas: lo que se OCUPA. Las camas
+/// alimentan el censo; quirófanos/consultorios/salas alimentan la agenda.
+/// `servicioId` es la tarifa que se carga sola por noche (cama) o por hora
+/// (quirófano) con el precio del pagador del episodio.
+model HospRecurso {
+  id        String            @id @default(cuid())
+  companyId String
+  tipo      HospRecursoTipo
+  area      HospArea
+  nombre    String // "204", "Quirófano 2", "Consultorio A"
+  estado    HospRecursoEstado @default(LIBRE)
+  servicioId String?
+  activo    Boolean           @default(true)
+  orden     Int               @default(0)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  servicio HospServicio? @relation(fields: [servicioId], references: [id])
+
+  episodios HospEpisodio[]
+  citas     HospCita[]
+
+  @@unique([companyId, tipo, nombre])
+  @@index([companyId, area])
+}
+
+enum HospSexo {
+  FEMENINO
+  MASCULINO
+  OTRO
+}
+
+/// El paciente: datos de identificación y clínicos de base. NO es el receptor
+/// fiscal: `customerId` es a quién se le factura por default (puede ser otra
+/// persona — «Receptor fiscal: su esposo»), y cada episodio puede cambiarlo.
+model HospPaciente {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombre          String
+  apellidoPaterno String
+  apellidoMaterno String?
+  fechaNacimiento DateTime?
+  sexo            HospSexo?
+  curp            String?
+  telefono        String?
+  email           String?
+  domicilio       String?
+  tipoSangre      String?
+  alergias        String?
+  antecedentes    String? @db.Text
+
+  contactoEmergenciaNombre     String?
+  contactoEmergenciaTelefono   String?
+  contactoEmergenciaParentesco String?
+
+  /// Receptor fiscal por default (Customer canónico del hub).
+  customerId String?
+  /// Convenio (pagador) por default.
+  pagadorId String?
+
+  activo Boolean @default(true)
+  notas  String? @db.Text
+
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer?    @relation(fields: [customerId], references: [id])
+  pagador  HospPagador? @relation(fields: [pagadorId], references: [id])
+
+  episodios    HospEpisodio[]
+  citas        HospCita[]
+  cotizaciones HospCotizacion[]
+
+  @@index([companyId, apellidoPaterno, nombre])
+  @@index([companyId, curp])
+}
+
+enum HospPagadorTipo {
+  ASEGURADORA
+  EMPRESA
+  PARTICULAR
+  GOBIERNO
+}
+
+/// Convenio con un pagador (aseguradora, empresa, gobierno) o el «particular»
+/// sin convenio. El convenio calcula el reparto de la cuenta —deducible,
+/// coaseguro, plazo, tope de autorización— y dice a qué RFC se factura
+/// (`customerId`). Vigencia para avisar «convenio por vencer».
+model HospPagador {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombre     String
+  tipo       HospPagadorTipo
+  /// RFC al que se factura la parte del pagador (Customer del hub).
+  customerId String?
+  /// Nombre del tabulador de precios ("GNP 2026", "AXA red", "Lista").
+  tabulador String?
+  /// Deducible fijo que absorbe el paciente antes de que pague el convenio.
+  deducible Decimal? @db.Decimal(18, 6)
+  /// Coaseguro: fracción del resto que paga el paciente (0.10 = 10 %).
+  coaseguroPct Decimal? @db.Decimal(18, 6)
+  /// Plazo de pago del convenio en días (0 = contado).
+  plazoDias Int @default(0)
+  /// Arriba de este monto la cuenta exige autorización previa.
+  topeAutorizacion Decimal? @db.Decimal(18, 6)
+  vigenciaInicio   DateTime?
+  vigenciaFin      DateTime?
+  activo           Boolean   @default(true)
+  notas            String?
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  pacientes    HospPaciente[]
+  episodios    HospEpisodio[]
+  tarifas      HospTarifa[]
+  cotizaciones HospCotizacion[]
+
+  @@index([companyId, activo])
+}
+
+/// Categoría de un cargo en la cuenta del paciente. Es también la categoría
+/// del catálogo de servicios y la que agrupa la cuenta y la factura.
+enum HospCargoCategoria {
+  HABITACION
+  QUIROFANO
+  URGENCIAS
+  ESTUDIO
+  PROCEDIMIENTO
+  HONORARIO
+  FARMACIA
+  MATERIAL
+  EQUIPO
+  OTRO
+}
+
+/// Catálogo de servicios y tarifario base. El precio por pagador vive en
+/// HospTarifa; sin tarifa específica manda `precioLista`.
+model HospServicio {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clave     String
+  nombre    String
+  categoria HospCargoCategoria
+  /// Unidad de cobro: noche, hora, pieza, estudio, servicio.
+  unidad      String  @default("servicio")
+  precioLista Decimal @db.Decimal(18, 6)
+  /// null = exento (honorarios médicos, Art. 15-XIV LIVA); 0 = tasa 0 %
+  /// (medicinas de patente, Art. 2-A LIVA); 0.16 = gravado.
+  ivaTasa       Decimal? @db.Decimal(18, 6)
+  claveProdServ String?
+  claveUnidad   String?
+  activo        Boolean  @default(true)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  tarifas            HospTarifa[]
+  cargos             HospCargo[]
+  recursos           HospRecurso[]
+  cotizacionPartidas HospCotizacionPartida[]
+
+  @@unique([companyId, clave])
+  @@index([companyId, categoria])
+}
+
+/// Precio de un servicio para un pagador concreto (tabulador del convenio).
+model HospTarifa {
+  id         String   @id @default(cuid())
+  servicioId String
+  pagadorId  String
+  precio     Decimal  @db.Decimal(18, 6)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  servicio HospServicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  pagador  HospPagador  @relation(fields: [pagadorId], references: [id], onDelete: Cascade)
+
+  @@unique([servicioId, pagadorId])
+}
+
+/// Médico tratante. Sus honorarios pasan por la cuenta del paciente SIN ser
+/// ingreso del hospital: `supplierId` liga al proveedor que factura al
+/// hospital (dispersión); `employeeId` si además está en nómina.
+model HospMedico {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombre       String
+  especialidad String?
+  cedula       String?
+  rfc          String?
+  telefono     String?
+  email        String?
+  supplierId   String?
+  employeeId   String?
+  activo       Boolean @default(true)
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
+  employee Employee? @relation(fields: [employeeId], references: [id])
+
+  episodios HospEpisodio[]
+  citas     HospCita[]
+  cargos    HospCargo[]
+  notas     HospNota[]
+
+  @@index([companyId, activo])
+}
+
+enum HospEpisodioTipo {
+  HOSPITALIZACION
+  AMBULATORIO
+  URGENCIAS
+  CONSULTA
+}
+
+enum HospEpisodioEstado {
+  PROGRAMADO
+  EN_VALORACION
+  PREOPERATORIO
+  EN_QUIROFANO
+  POSTOPERATORIO
+  HOSPITALIZADO
+  ALTA
+  CANCELADO
+}
+
+/// El episodio (ingreso): la unidad del expediente y de la cuenta. Un
+/// paciente tiene muchos episodios; cada uno tiene su folio, su cama, su
+/// médico tratante, su pagador y su receptor fiscal.
+model HospEpisodio {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio      String
+  pacienteId String
+  tipo       HospEpisodioTipo
+  estado     HospEpisodioEstado @default(PROGRAMADO)
+
+  fechaIngreso DateTime
+  fechaAlta    DateTime?
+
+  /// Cama (o consultorio/sala) que ocupa ahora. null = ambulatorio o ya salió.
+  recursoId String?
+  medicoId  String?
+  pagadorId String?
+  /// Receptor fiscal de la factura al paciente (puede no ser el paciente).
+  customerId String?
+
+  diagnosticoCie10 String?
+  diagnostico      String?
+  procedimiento    String?
+  motivo           String?
+  /// Autorización previa del pagador (folio/número que dio la aseguradora).
+  autorizacionPagador String?
+
+  cotizacionId    String? @unique
+  notasAdmin      String? @db.Text
+  creadoPorUserId String?
+
+  company    Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  paciente   HospPaciente    @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  recurso    HospRecurso?    @relation(fields: [recursoId], references: [id])
+  medico     HospMedico?     @relation(fields: [medicoId], references: [id])
+  pagador    HospPagador?    @relation(fields: [pagadorId], references: [id])
+  customer   Customer?       @relation(fields: [customerId], references: [id])
+  cotizacion HospCotizacion? @relation(fields: [cotizacionId], references: [id])
+
+  notas             HospNota[]
+  signos            HospSignos[]
+  documentos        HospDocumento[]
+  cargos            HospCargo[]
+  citas             HospCita[]
+  traslados         HospTraslado[]
+  movimientosInsumo HospMovimientoInsumo[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, estado])
+  @@index([companyId, fechaIngreso])
+  @@index([pacienteId])
+  @@index([recursoId])
+}
+
+enum HospTrasladoTipo {
+  INGRESO
+  TRASLADO
+  ALTA
+}
+
+/// Bitácora de camas del episodio (censo → «Movimientos del día»). Los
+/// nombres se congelan como texto: si la cama se renombra, la historia no.
+model HospTraslado {
+  id         String           @id @default(cuid())
+  episodioId String
+  fecha      DateTime         @default(now())
+  tipo       HospTrasladoTipo
+  deRecursoId     String?
+  deRecursoNombre String?
+  aRecursoId      String?
+  aRecursoNombre  String?
+  nota            String?
+  usuarioId       String?
+  usuarioNombre   String?
+
+  episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+
+  @@index([episodioId, fecha])
+}
+
+enum HospNotaTipo {
+  INGRESO
+  EVOLUCION
+  PREOPERATORIA
+  POSTOPERATORIA
+  ENFERMERIA
+  INDICACION
+  INTERCONSULTA
+  PROCEDIMIENTO
+  MEDICAMENTO_APLICADO
+  EGRESO
+}
+
+/// Nota del expediente (NOM-004-SSA3-2012). Es INMUTABLE: nunca se edita ni
+/// se borra. Una corrección es una nota nueva con `reemplazaId` apuntando a
+/// la anterior, que queda visible como versión superada. `cargoId` liga la
+/// nota al cargo que generó (medicamento aplicado → cargo en la cuenta).
+model HospNota {
+  id         String       @id @default(cuid())
+  episodioId String
+  createdAt  DateTime     @default(now())
+  tipo       HospNotaTipo
+  fecha      DateTime     @default(now())
+  texto      String       @db.Text
+  autorUserId String?
+  autorNombre String
+  medicoId    String?
+  cargoId     String? @unique
+  reemplazaId String? @unique
+
+  episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+  medico   HospMedico?  @relation(fields: [medicoId], references: [id])
+  cargo    HospCargo?   @relation(fields: [cargoId], references: [id])
+
+  reemplaza      HospNota? @relation("HospNotaVersion", fields: [reemplazaId], references: [id])
+  reemplazadaPor HospNota? @relation("HospNotaVersion")
+
+  @@index([episodioId, fecha])
+}
+
+/// Signos vitales a pie de cama. Un renglón por toma.
+model HospSignos {
+  id         String   @id @default(cuid())
+  episodioId String
+  fecha      DateTime @default(now())
+
+  taSistolica  Int?
+  taDiastolica Int?
+  fc           Int?
+  fr           Int?
+  temperatura  Decimal? @db.Decimal(5, 2)
+  spo2         Int?
+  glucosa      Int?
+  peso         Decimal? @db.Decimal(6, 2)
+  talla        Decimal? @db.Decimal(5, 2)
+  /// Escala de dolor 0–10.
+  dolor Int?
+  nota  String?
+
+  registradoPorUserId String?
+  registradoPor       String
+
+  episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+
+  @@index([episodioId, fecha])
+}
+
+enum HospDocumentoTipo {
+  CONSENTIMIENTO_CIRUGIA
+  CONSENTIMIENTO_ANESTESIA
+  IDENTIFICACION
+  POLIZA
+  CARTA_AUTORIZACION
+  ESTUDIO
+  RESULTADO
+  RECETA
+  NOTA_EGRESO
+  OTRO
+}
+
+enum HospDocumentoEstado {
+  PENDIENTE
+  RECIBIDO
+  FIRMADO
+}
+
+/// Documentos del episodio: la lista de «Pendientes» del expediente nace de
+/// los requeridos en PENDIENTE. El archivo es opcional (v1 registra el hecho;
+/// el resguardo del PDF firmado viene después, mismo patrón que
+/// OrdenDocumento/EmployeeDocumento).
+model HospDocumento {
+  id         String              @id @default(cuid())
+  companyId  String
+  episodioId String
+  createdAt  DateTime            @default(now())
+  tipo       HospDocumentoTipo
+  nombre     String
+  estado     HospDocumentoEstado @default(PENDIENTE)
+  requerido  Boolean             @default(true)
+  firmadoAt  DateTime?
+  mime       String?
+  bytes      Int?
+  archivo    Bytes?
+  subidoPorUserId String?
+
+  episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+
+  @@index([episodioId])
+  @@index([companyId])
+}
+
+enum HospCargoOrigen {
+  EXPEDIENTE
+  ESTANCIA
+  FARMACIA
+  COTIZACION
+  MANUAL
+}
+
+/// Un renglón de la cuenta del paciente. «Cada cargo viene del expediente»:
+/// `origen` dice quién lo generó y `notaId`/`loteId` lo amarran al hecho.
+/// `importe` es cantidad × precio SIN IVA; el IVA se calcula con `ivaTasa`
+/// (null = exento). `invoiceId` se llena cuando el cargo ya está en un CFDI.
+model HospCargo {
+  id         String   @id @default(cuid())
+  companyId  String
+  episodioId String
+  createdAt  DateTime @default(now())
+  fecha      DateTime @default(now())
+
+  categoria      HospCargoCategoria
+  descripcion    String
+  cantidad       Decimal            @default(1) @db.Decimal(18, 6)
+  precioUnitario Decimal            @db.Decimal(18, 6)
+  ivaTasa        Decimal?           @db.Decimal(18, 6)
+  importe        Decimal            @db.Decimal(18, 6)
+  origen         HospCargoOrigen    @default(MANUAL)
+
+  servicioId String?
+  loteId     String?
+  medicoId   String?
+  invoiceId  String?
+
+  cancelado         Boolean   @default(false)
+  canceladoAt       DateTime?
+  motivoCancelacion String?
+  creadoPorUserId   String?
+
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  episodio HospEpisodio  @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+  servicio HospServicio? @relation(fields: [servicioId], references: [id])
+  lote     HospLote?     @relation(fields: [loteId], references: [id])
+  medico   HospMedico?   @relation(fields: [medicoId], references: [id])
+  invoice  Invoice?      @relation(fields: [invoiceId], references: [id])
+
+  nota              HospNota?
+  movimientoInsumo  HospMovimientoInsumo?
+
+  @@index([episodioId, fecha])
+  @@index([companyId, categoria, fecha])
+  @@index([invoiceId])
+}
+
+enum HospCitaTipo {
+  CIRUGIA
+  CONSULTA
+  PROCEDIMIENTO
+  ESTUDIO
+  OTRO
+}
+
+enum HospCitaEstado {
+  PROGRAMADA
+  CONFIRMADA
+  EN_CURSO
+  TERMINADA
+  CANCELADA
+  NO_ASISTIO
+}
+
+/// Agenda por recurso (quirófano, consultorio, sala). Sin empalmes: el hub
+/// rechaza una cita que se cruce con otra viva en el mismo recurso.
+model HospCita {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recursoId      String
+  pacienteId     String?
+  pacienteNombre String?
+  medicoId       String?
+  episodioId     String?
+  cotizacionId   String?
+
+  tipo   HospCitaTipo
+  titulo String
+  inicio DateTime
+  fin    DateTime
+  estado HospCitaEstado @default(PROGRAMADA)
+  notas  String?
+
+  company    Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  recurso    HospRecurso     @relation(fields: [recursoId], references: [id])
+  paciente   HospPaciente?   @relation(fields: [pacienteId], references: [id])
+  medico     HospMedico?     @relation(fields: [medicoId], references: [id])
+  episodio   HospEpisodio?   @relation(fields: [episodioId], references: [id])
+  cotizacion HospCotizacion? @relation(fields: [cotizacionId], references: [id])
+
+  @@index([companyId, inicio])
+  @@index([recursoId, inicio])
+}
+
+enum HospCotizacionEstado {
+  BORRADOR
+  ENVIADA
+  ACEPTADA
+  CONVERTIDA
+  VENCIDA
+  CANCELADA
+}
+
+/// Cotización con el tarifario del pagador. «Una captura, tres documentos»:
+/// al ingresar se convierte en la cuenta del episodio (cargos con origen
+/// COTIZACION) y de la cuenta sale la factura.
+model HospCotizacion {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio          String
+  pacienteId     String?
+  pacienteNombre String
+  pagadorId      String?
+  procedimiento  String
+  estado         HospCotizacionEstado @default(BORRADOR)
+  vigenciaHasta  DateTime?
+
+  subtotal Decimal @default(0) @db.Decimal(18, 6)
+  iva      Decimal @default(0) @db.Decimal(18, 6)
+  total    Decimal @default(0) @db.Decimal(18, 6)
+
+  notas           String? @db.Text
+  creadoPorUserId String?
+
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  paciente HospPaciente? @relation(fields: [pacienteId], references: [id])
+  pagador  HospPagador?  @relation(fields: [pagadorId], references: [id])
+
+  partidas HospCotizacionPartida[]
+  episodio HospEpisodio?
+  citas    HospCita[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, estado])
+}
+
+model HospCotizacionPartida {
+  id           String @id @default(cuid())
+  cotizacionId String
+  orden        Int    @default(0)
+
+  servicioId     String?
+  categoria      HospCargoCategoria
+  descripcion    String
+  cantidad       Decimal            @default(1) @db.Decimal(18, 6)
+  precioUnitario Decimal            @db.Decimal(18, 6)
+  ivaTasa        Decimal?           @db.Decimal(18, 6)
+  importe        Decimal            @db.Decimal(18, 6)
+
+  cotizacion HospCotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  servicio   HospServicio?  @relation(fields: [servicioId], references: [id])
+
+  @@index([cotizacionId])
+}
+
+// ─── Farmacia y almacén ───────────────────────────────────────────────────────
+
+enum HospInsumoCategoria {
+  MEDICAMENTO
+  MATERIAL_CURACION
+  SOLUCION
+  EQUIPO
+  REACTIVO
+  OTRO
+}
+
+/// Insumo de farmacia/almacén. Puede nacer capturado o DERIVADO de los CFDIs
+/// de compra (claves 51xx medicamentos, 42xx material/equipo médico, 41xx
+/// laboratorio): `derivadoDeCfdi` lo distingue para que el catálogo se
+/// depure sin perder lo capturado a mano.
+model HospInsumo {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clave        String
+  nombre       String
+  presentacion String?
+  unidad       String              @default("pieza")
+  categoria    HospInsumoCategoria @default(MEDICAMENTO)
+  /// Medicamento controlado (Grupo I–III): exige receta y registro aparte.
+  controlado Boolean @default(false)
+  /// Mínimo en existencia; debajo dispara «bajo mínimo».
+  minimo      Decimal  @default(0) @db.Decimal(18, 6)
+  precioVenta Decimal? @db.Decimal(18, 6)
+  ultimoCosto Decimal? @db.Decimal(18, 6)
+  /// Medicinas de patente: tasa 0 % (Art. 2-A LIVA). Material: 16 %.
+  ivaTasa        Decimal? @default(0) @db.Decimal(18, 6)
+  claveProdServ  String?
+  derivadoDeCfdi Boolean  @default(false)
+  activo         Boolean  @default(true)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  lotes       HospLote[]
+  movimientos HospMovimientoInsumo[]
+
+  @@unique([companyId, clave])
+  @@index([companyId, categoria])
+}
+
+/// Una fila por LOTE, no por producto: la caducidad y la existencia viven
+/// aquí. `existencia` es el saldo materializado del kardex del lote.
+model HospLote {
+  id        String   @id @default(cuid())
+  companyId String
+  insumoId  String
+  createdAt DateTime @default(now())
+
+  lote          String
+  caducidad     DateTime?
+  existencia    Decimal   @default(0) @db.Decimal(18, 6)
+  costoUnitario Decimal   @default(0) @db.Decimal(18, 6)
+  recibidoAt    DateTime  @default(now())
+  /// CFDI de compra que lo amparó y proveedor que lo surtió.
+  invoiceId  String?
+  supplierId String?
+
+  insumo   HospInsumo @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+  invoice  Invoice?   @relation(fields: [invoiceId], references: [id])
+  supplier Supplier?  @relation(fields: [supplierId], references: [id])
+
+  movimientos HospMovimientoInsumo[]
+  cargos      HospCargo[]
+
+  @@unique([insumoId, lote])
+  @@index([companyId, caducidad])
+}
+
+enum HospMovimientoTipo {
+  ENTRADA_COMPRA
+  SALIDA_APLICACION
+  SALIDA_VENTA
+  AJUSTE
+  MERMA
+  CADUCIDAD
+  DEVOLUCION
+}
+
+/// Kardex del insumo. `cantidad` con signo (+ entra, − sale). Los que nacen
+/// de un CFDI son idempotentes por (insumo, CFDI, tipo) — igual que el kardex
+/// de refacciones; los de piso llevan `loteId` y, si cargaron a la cuenta,
+/// `cargoId` y `episodioId`.
+model HospMovimientoInsumo {
+  id        String   @id @default(cuid())
+  companyId String
+  insumoId  String
+  loteId    String?
+  createdAt DateTime @default(now())
+
+  tipo          HospMovimientoTipo
+  cantidad      Decimal            @db.Decimal(18, 6)
+  costoUnitario Decimal?           @db.Decimal(18, 6)
+  fecha         DateTime
+
+  episodioId    String?
+  cargoId       String? @unique
+  invoiceId     String?
+  referencia    String?
+  usuarioId     String?
+  usuarioNombre String?
+
+  insumo   HospInsumo    @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+  lote     HospLote?     @relation(fields: [loteId], references: [id])
+  episodio HospEpisodio? @relation(fields: [episodioId], references: [id])
+  cargo    HospCargo?    @relation(fields: [cargoId], references: [id])
+  invoice  Invoice?      @relation(fields: [invoiceId], references: [id])
+
+  @@unique([insumoId, invoiceId, tipo])
+  @@index([companyId, fecha])
+  @@index([loteId])
+}
+
+// ─── Mantenimiento ────────────────────────────────────────────────────────────
+
+enum HospTicketPrioridad {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum HospTicketEstado {
+  ABIERTO
+  ASIGNADO
+  EN_PROCESO
+  CERRADO
+  CANCELADO
+}
+
+/// Ticket de mantenimiento del inmueble y del equipo: desde el celular, con
+/// responsable y fecha; `preventivo` + `programadoPara` para el calendario.
+model HospTicket {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio       String
+  titulo      String
+  descripcion String?             @db.Text
+  area        HospArea?
+  equipo      String?
+  prioridad   HospTicketPrioridad @default(MEDIA)
+  estado      HospTicketEstado    @default(ABIERTO)
+
+  reportadoPorUserId String?
+  reportadoPor       String
+  asignadoEmployeeId String?
+  asignadoA          String?
+  preventivo         Boolean   @default(false)
+  programadoPara     DateTime?
+  cerradoAt          DateTime?
+  resolucion         String?   @db.Text
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, folio])
+  @@index([companyId, estado])
 }

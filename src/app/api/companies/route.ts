@@ -219,6 +219,7 @@ export async function POST(req: Request) {
   // explícita — CONTABILIDAD siempre se habilita de base más abajo.
   const MODULOS_AUTOHABILITABLES = new Set([
     "AUTOMOTRIZ", "CONSTRUCCION", "PADEL", "PURIFICADORA", "RESTAURANTE", "FLOTA", "JCPT",
+    "HOSPITAL",
   ]);
   const modulosExtra = [...new Set(modulos ?? [])].filter((m) =>
     MODULOS_AUTOHABILITABLES.has(m)

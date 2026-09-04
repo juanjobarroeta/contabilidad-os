@@ -1,0 +1,26 @@
+name: Hospital — cargos de estancia (diario)
+
+# Carga a la cuenta de cada paciente hospitalizado la noche que acaba de
+# transcurrir, con la tarifa de su pagador (idempotente por episodio y noche).
+# Corre a las 06:30 de la Ciudad de México (UTC−6 fijo, sin horario de verano).
+# Requiere los secrets STAGING_URL y CRON_SECRET.
+
+on:
+  schedule:
+    - cron: "30 12 * * *" # 06:30 America/Mexico_City
+  workflow_dispatch: {}
+
+jobs:
+  estancia:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger hospital estancia
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          curl -fsS --max-time 290 -X POST "${URL}/api/cron/hospital-estancia" \
+            -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

@@ -5,6 +5,7 @@ import { parchearClienteDesdeCfdi } from "./facturas/cliente-fiscal-repo";
 import { identidadDesdeCfdi, regimenParaAlta } from "./facturas/identidad-receptor";
 import { crearActivoDesdeCfdiSiAplica } from "./fiscal/auto-activo";
 import { derivarVehiculoInline } from "./automotriz/auto-vehiculo";
+import { derivarInsumosInline } from "./hospital/insumos-cfdi";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Importar UN CFDI a partir de su XML — sin importar de dónde vino.
@@ -315,6 +316,27 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
     clienteId: invoiceType === "INGRESO" ? customerId : null,
     total: cfdi.total,
     subtotal: cfdi.subtotal,
+  });
+
+  // Farmacia hospitalaria inline: los conceptos de medicamento/material de un
+  // CFDI de compra dan de alta el insumo y su entrada al kardex; los de venta
+  // descuentan lo que ya existe. Sólo empresas con el módulo HOSPITAL; el
+  // cron hospital-insumos-backfill es la red de seguridad.
+  await derivarInsumosInline(prisma, {
+    companyId,
+    invoiceId: createdInvoice.id,
+    tipo: invoiceType,
+    tipoSat: cfdi.tipo ?? null,
+    fecha: new Date(cfdi.fecha),
+    items: (cfdi.items ?? []).map((it) => ({
+      descripcion: it.descripcion,
+      cantidad: it.cantidad,
+      claveUnidad: it.claveUnidad,
+      claveProdServ: it.claveProdServ,
+      valorUnitario: it.valorUnitario,
+      importe: it.importe,
+    })),
+    rawXml: xmlContent,
   });
 
   // Persist complemento de pago links (DoctoRelacionado parent UUIDs).
