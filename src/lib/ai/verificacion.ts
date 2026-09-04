@@ -51,6 +51,9 @@ export interface FuenteVerificacion {
   texto: string;
 }
 
+/** Prefijo de las fuentes que vienen de get_valor_fiscal (tablas vigentes del sistema). */
+export const PREFIJO_VALORES = "Valores oficiales";
+
 export interface ProblemaVerificacion {
   afirmacion: string;
   cita: string;
@@ -196,6 +199,7 @@ const SYSTEM = `Eres un contador fiscalista senior mexicano que REVISA la respue
 Reglas:
 - Cada texto viene marcado como [COMPLETO] o [RECORTADO]. En un texto RECORTADO, que algo NO aparezca NO es problema (puede estar en la parte que no ves). Sólo en un texto COMPLETO cuenta como problema que la respuesta atribuya al artículo una fracción, monto, fecha o plazo que no está en él.
 - Sólo son problema las afirmaciones ATRIBUIDAS a una cita cuyo texto tienes. Lo que no se atribuye a ninguna cita, o se atribuye a una cita marcada como NO VERIFICABLE, no lo juzgues: sólo asegúrate de que en la versión corregida quede señalado como «no verificado en la base».
+- Los bloques «Valores oficiales» son las tablas vigentes del sistema (Anexo 5 y 8 de la RMF, LIF, INEGI): montos de multas, tarifas, UMA, salario mínimo, recargos o subsidio que coincidan con ellos están SOSTENIDOS aunque el artículo citado traiga otra cifra (la ley trae montos nominales; el Anexo los actualiza) y aunque tu memoria diga otra cosa. Nunca uses tus propios valores para juzgar cifras.
 - Interpretaciones razonables, cálculos derivados y resúmenes fieles NO son problema. Ante la duda, NO es problema. Espera que la mayoría de las respuestas estén bien: {"ok": true}.
 - No opines sobre estilo ni completes la respuesta. No agregues fundamentos ni citas nuevas: la versión corregida sólo puede citar lo que la respuesta original ya citaba.
 - Si todo se sostiene: {"ok": true, "problemas": [], "respuestaCorregida": null}.
@@ -218,6 +222,7 @@ export async function verificarRespuesta(
     // respaldo cuando la unidad completa no se puede traer.
     const respaldo = new Map<string, FuenteVerificacion>();
     for (const f of input.fuentes) {
+      if (f.cita.startsWith(PREFIJO_VALORES)) continue;
       const k = claveCita(f.cita);
       const prev = respaldo.get(k);
       respaldo.set(k, prev ? { cita: prev.cita, texto: `${prev.texto}\n${f.texto}` } : f);
@@ -231,6 +236,11 @@ export async function verificarRespuesta(
       total += sel.texto.length;
       bloques.push(`### ${cita} ${sel.completo ? "[COMPLETO]" : "[RECORTADO]"}\n${sel.texto}`);
     };
+    // Las tablas de valores (get_valor_fiscal) entran siempre, completas: son
+    // la fuente de los montos y no se citan como artículo.
+    for (const f of input.fuentes) {
+      if (f.cita.startsWith(PREFIJO_VALORES)) agregar(f.cita, [f.texto]);
+    }
     for (const c of [...sostenidas, ...faltantes]) {
       const ref = parsearCita(c);
       const art = ref ? await getArticulo(ref.clave, ref.articulo, input.fechaVigencia) : null;
@@ -278,9 +288,12 @@ export async function verificarRespuesta(
 /** Fuentes de un turno a partir de los JSON que devolvieron las tools de la KB. */
 export function fuentesDesdeToolResult(toolName: string, out: string): FuenteVerificacion[] {
   try {
-    const parsed = JSON.parse(out) as { resultados?: { cita: string; texto: string }[]; cita?: string; partes?: { texto: string }[] };
+    const parsed = JSON.parse(out) as { resultados?: { cita: string; texto: string }[]; cita?: string; partes?: { texto: string }[]; tipo?: string; error?: string };
     if (toolName === "search_fiscal_knowledge") return (parsed.resultados ?? []).map((h) => ({ cita: h.cita, texto: h.texto }));
     if (toolName === "get_articulo" && typeof parsed.cita === "string") return [{ cita: parsed.cita, texto: (parsed.partes ?? []).map((p) => p.texto).join("\n") }];
+    if (toolName === "get_valor_fiscal" && typeof parsed.tipo === "string" && !parsed.error) {
+      return [{ cita: `${PREFIJO_VALORES} · ${parsed.tipo}`, texto: JSON.stringify(parsed, null, 1) }];
+    }
   } catch {
     /* sin fuentes en este resultado */
   }

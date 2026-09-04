@@ -66,7 +66,7 @@ export async function responderComoAgente(
   client: Anthropic,
   p: PreguntaEval,
   opts: { verificar?: boolean } = {}
-): Promise<{ texto: string; citasKB: string[]; rondas: number; ms: number; verificacion?: VerificacionEval }> {
+): Promise<{ texto: string; citasKB: string[]; valores: string[]; rondas: number; ms: number; verificacion?: VerificacionEval }> {
   const t0 = Date.now();
   const empresa = EMPRESA_EVAL[p.regimen ?? "601"];
   const system = buildSystemPrompt(empresa);
@@ -83,6 +83,9 @@ export async function responderComoAgente(
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: p.pregunta }];
   const citasKB: string[] = [];
   const fuentes: FuenteVerificacion[] = [];
+  // Salidas de get_valor_fiscal: el juez las recibe como «valores oficiales»
+  // (si no, califica como inventado un monto correcto de las tablas).
+  const valores: string[] = [];
   let texto = "";
   let rondas = 0;
 
@@ -100,6 +103,7 @@ export async function responderComoAgente(
       // ninguna otra tool está expuesta, así que no hay acceso a datos reales.
       const out = await executeToolCall(u.name, u.input as Record<string, unknown>, "eval", { inApp: false });
       fuentes.push(...fuentesDesdeToolResult(u.name, out));
+      if (u.name === "get_valor_fiscal" && !out.includes('"error"')) valores.push(out.slice(0, 2500));
       try {
         const parsed = JSON.parse(out) as { resultados?: { cita: string }[]; cita?: string };
         for (const h of parsed.resultados ?? []) citasKB.push(h.cita);
@@ -112,13 +116,14 @@ export async function responderComoAgente(
     messages = [...messages, { role: "assistant", content: res.content }, { role: "user", content: results }];
     rondas++;
   }
-  if (!opts.verificar) return { texto, citasKB, rondas, ms: Date.now() - t0 };
+  if (!opts.verificar) return { texto, citasKB, valores, rondas, ms: Date.now() - t0 };
   // Fase 3: la misma verificación que corre en el chat; el juez califica la
   // versión corregida, que es la que el usuario vería.
   const v = await verificarRespuesta(client, { pregunta: p.pregunta, respuesta: texto, fuentes, cost: { companyId: null, subtipo: "ai.eval" } });
   return {
     texto: v.texto,
     citasKB,
+    valores,
     rondas,
     ms: Date.now() - t0,
     verificacion: { verificada: v.verificada, corregida: v.corregida, problemas: v.problemas, citasNoVerificables: v.citasNoVerificables, ms: v.ms },
@@ -130,7 +135,8 @@ export async function responderComoAgente(
 const JUEZ_SYSTEM = `Eres un contador fiscalista senior mexicano que califica respuestas de un asistente fiscal. Recibes la pregunta, los fundamentos que un contador experto citaría, los fundamentos que la base de conocimiento devolvió y la respuesta. Responde SOLO un JSON con esta forma exacta:
 {"fundamentoCorrecto": bool, "noInventa": bool, "respondeLoPreguntado": bool, "comentario": "una línea"}
 - fundamentoCorrecto: la respuesta se apoya en el fundamento correcto (alguno de los esperados o uno equivalente igual de válido) y lo interpreta bien.
-- noInventa: no afirma artículos, tasas, plazos o requisitos que no estén sostenidos por los fundamentos devueltos. Decir «no encontré fundamento» cuenta como no inventar.
+- noInventa: no afirma artículos, tasas, plazos o requisitos que no estén sostenidos por los fundamentos devueltos o por los «valores oficiales consultados». Decir «no encontré fundamento» cuenta como no inventar.
+- Los «valores oficiales consultados» son las tablas vigentes del sistema (Anexo 5 y 8 de la RMF, LIF, INEGI, CONASAMI): los montos de multas, tarifas, UMA, salario mínimo, recargos y subsidio que coincidan con ellos están SOSTENIDOS. NUNCA califiques una cifra con tu memoria: tus valores pueden estar desactualizados (p.ej. la tasa de recargos cambia cada año con la LIF).
 - respondeLoPreguntado: contesta la pregunta concreta, no una vecina.
 Sé estricto: un contador que cita el artículo equivocado con seguridad es peor que uno que dice que no sabe.`;
 
@@ -138,11 +144,13 @@ export async function juzgar(
   client: Anthropic,
   p: PreguntaEval,
   respuesta: string,
-  citasKB: string[]
+  citasKB: string[],
+  valores: string[] = []
 ): Promise<ResultadoPregunta["juez"]> {
   const user = `Pregunta: ${p.pregunta}
 Fundamentos esperados: ${p.fundamentos.join(" | ")}${p.nota ? `\nNota del revisor: ${p.nota}` : ""}
 Fundamentos que la KB devolvió: ${citasKB.length ? [...new Set(citasKB)].join(" | ") : "(ninguno)"}
+Valores oficiales consultados (tablas vigentes del sistema): ${valores.length ? `\n${valores.join("\n")}` : "(ninguno)"}
 
 Respuesta a calificar:
 """
@@ -221,7 +229,7 @@ export async function evaluarPregunta(p: PreguntaEval, opts: OpcionesEval = {}, 
       verificacion: r.verificacion,
     };
     if (opts.juez === false) return base;
-    base.juez = await juzgar(client, p, r.texto, r.citasKB);
+    base.juez = await juzgar(client, p, r.texto, r.citasKB, r.valores);
   } catch (err) {
     base.error = err instanceof Error ? err.message : String(err);
   }
