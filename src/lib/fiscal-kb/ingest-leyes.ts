@@ -95,6 +95,73 @@ export const LEYES: Record<string, LeyDescriptor> = {
     titulo: "Ley Federal del Trabajo",
     url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf",
   },
+  // ── Periferia de nómina (reglamentos IMSS / INFONAVIT) ──────────────────────
+  RACERF: {
+    clave: "RACERF",
+    titulo: "Reglamento de la Ley del Seguro Social en Materia de Afiliación, Clasificación de Empresas, Recaudación y Fiscalización",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSS_MACERF.pdf",
+    source: "REGLAMENTO",
+  },
+  RIPAEDI: {
+    clave: "RIPAEDI",
+    titulo: "Reglamento de Inscripción, Pago de Aportaciones y Entero de Descuentos al INFONAVIT",
+    // Diputados sirve el facsímil del DOF (encabezados «ARTÍCULO 1.» en mayúsculas).
+    url: "https://www.diputados.gob.mx/LeyesBiblio/regla/n327.pdf",
+    source: "REGLAMENTO",
+    vigenciaFallback: "2012-02-10",
+  },
+  // ── Lo que un contador cita fuera de lo fiscal ───────────────────────────────
+  CCOM: {
+    clave: "CCOM",
+    titulo: "Código de Comercio",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/CCom.pdf",
+  },
+  LGSM: {
+    clave: "LGSM",
+    titulo: "Ley General de Sociedades Mercantiles",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGSM.pdf",
+  },
+  LFPIORPI: {
+    clave: "LFPIORPI",
+    titulo: "Ley Federal para la Prevención e Identificación de Operaciones con Recursos de Procedencia Ilícita",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPIORPI.pdf",
+  },
+  RLFPIORPI: {
+    clave: "RLFPIORPI",
+    titulo: "Reglamento de la Ley Federal para la Prevención e Identificación de Operaciones con Recursos de Procedencia Ilícita",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFPIORPI.pdf",
+    source: "REGLAMENTO",
+    vigenciaFallback: "2013-08-16",
+  },
+  LFDC: {
+    clave: "LFDC",
+    titulo: "Ley Federal de los Derechos del Contribuyente",
+    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFDC.pdf",
+    vigenciaFallback: "2005-06-23",
+  },
+  // ── Estatal (impuesto sobre nómina y demás contribuciones locales) ───────────
+  // Puebla: Orden Jurídico Poblano (texto vigente con tabla de reformas).
+  LHPUE: {
+    clave: "LHPUE",
+    titulo: "Ley de Hacienda para el Estado Libre y Soberano de Puebla",
+    url: "https://ojp.puebla.gob.mx/legislacion-del-estado/item/download/7789_d874b176dd9ccf4b0a3233bb2f183cd4",
+    vigenciaFallback: "2024-08-05",
+  },
+  CFPUE: {
+    clave: "CFPUE",
+    titulo: "Código Fiscal del Estado de Puebla",
+    url: "https://ojp.puebla.gob.mx/media/k2/attachments/Codigo_Fiscal_del_Estado_de_Puebla_T6_31072025.pdf",
+    vigenciaFallback: "2025-07-31",
+  },
+  // CDMX: la Consejería Jurídica publica el texto vigente (reformado cada
+  // diciembre; el ISN subió a 4 % — el PDF del Congreso es de 2021 y dice 3 %,
+  // por eso NO se usa). El sitio de la Consejería a veces no responde; la
+  // ingesta falla en voz alta y el refresco semanal reintenta.
+  CFCDMX: {
+    clave: "CFCDMX",
+    titulo: "Código Fiscal de la Ciudad de México",
+    url: "https://data.consejeria.cdmx.gob.mx/images/leyes/codigos/CODIGO_FISCAL_DE_LA_CDMX_6.2.pdf",
+  },
 };
 
 export interface FetchedLey {
@@ -104,13 +171,42 @@ export interface FetchedLey {
   ultimaReformaDof: Date | null;
 }
 
+const MESES: Record<string, number> = {
+  enero: 1, ene: 1, febrero: 2, feb: 2, marzo: 3, mar: 3, abril: 4, abr: 4, mayo: 5, may: 5, junio: 6, jun: 6,
+  julio: 7, jul: 7, agosto: 8, ago: 8, septiembre: 9, sep: 9, set: 9, octubre: 10, oct: 10, noviembre: 11, nov: 11, diciembre: 12, dic: 12,
+};
+const utc = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
+
+/**
+ * Fecha de la última reforma según el formato de cada editor. Puro.
+ *  - Diputados: «Última reforma publicada DOF 01-04-2024» / «Última Reforma DOF …».
+ *  - Consejería / Congreso CDMX: «Última reforma publicada en la G.O.C.D.M.X. el 19 de diciembre de 2025».
+ *  - Orden Jurídico Poblano: tabla «REFORMAS» con fechas «5/ago/2024» — se toma la mayor.
+ *  - Facsímil del DOF (reglamentos viejos): «(Primera Sección) DIARIO OFICIAL Viernes 10 de febrero de 2012».
+ */
+export function parseFechaVigencia(text: string): Date | null {
+  const dof = text.match(/Última reforma(?: publicada)? DOF (\d{2})-(\d{2})-(\d{4})/i);
+  if (dof) return utc(Number(dof[3]), Number(dof[2]), Number(dof[1]));
+  const go = text.match(/Última reforma publicada en la G\.?\s?O\.?\s?C\.?\s?D\.?\s?M\.?\s?X\.?\s+el\s+(\d{1,2})\s+de\s+([a-záéíóú]+)\s+(?:de\s+)?(\d{4})/i);
+  if (go && MESES[go[2].toLowerCase()]) return utc(Number(go[3]), MESES[go[2].toLowerCase()], Number(go[1]));
+  if (/Orden Jurídico Poblano/.test(text.slice(0, 2000))) {
+    let mejor: Date | null = null;
+    for (const m of text.slice(0, 40_000).matchAll(/\b(\d{1,2})\/([a-z]{3})\/(\d{4})\b/gi)) {
+      const mes = MESES[m[2].toLowerCase()];
+      if (!mes) continue;
+      const d = utc(Number(m[3]), mes, Number(m[1]));
+      if (!mejor || d > mejor) mejor = d;
+    }
+    if (mejor) return mejor;
+  }
+  const print = text.slice(0, 800).match(/DIARIO OFICIAL\s+(?:Lunes|Martes|Miércoles|Jueves|Viernes|Sábado|Domingo)\s+(\d{1,2})\s+de\s+([a-záéíóú]+)\s+de\s+(\d{4})/i);
+  if (print && MESES[print[2].toLowerCase()]) return utc(Number(print[3]), MESES[print[2].toLowerCase()], Number(print[1]));
+  return null;
+}
+
+/** @deprecated usa parseFechaVigencia (mismo comportamiento para Diputados). */
 function parseDofDate(text: string): Date | null {
-  // "Última reforma publicada DOF 01-04-2024" (body) /
-  // "Última Reforma DOF 01-04-2024" (page header) — dd-mm-yyyy.
-  const m = text.match(/Última reforma(?: publicada)? DOF (\d{2})-(\d{2})-(\d{4})/i);
-  if (!m) return null;
-  const [, dd, mm, yyyy] = m;
-  return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
+  return parseFechaVigencia(text);
 }
 
 export async function fetchLey(clave: string): Promise<FetchedLey> {
@@ -118,7 +214,7 @@ export async function fetchLey(clave: string): Promise<FetchedLey> {
   if (!descriptor) {
     throw new Error(`Ley desconocida: ${clave}. Disponibles: ${Object.keys(LEYES).join(", ")}`);
   }
-  const res = await fetch(descriptor.url);
+  const res = await fetch(descriptor.url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; contabilidad-os/fiscal-kb)", Accept: "application/pdf,*/*" } });
   if (!res.ok) throw new Error(`Descarga falló (${res.status}) — ${descriptor.url}`);
   const buffer = new Uint8Array(await res.arrayBuffer());
 

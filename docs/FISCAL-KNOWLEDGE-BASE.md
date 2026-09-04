@@ -79,6 +79,9 @@ This slots into infrastructure that already exists:
 | **Criterios SAT** | Normativos (vinculativos) y no vinculativos (Anexo 3) | SAT portal | **P1** |
 | **DOF** | Daily — filter to **SHCP/SAT** publications only | DOF daily index / open-data | **P2** (high noise) |
 | **Reglamentos** (RLISR, RLIVA, RCFF) | Reglamentos de las leyes | Cámara de Diputados | **P2** |
+| **Periferia de nómina** — RACERF (IMSS), RIPAEDI (INFONAVIT) | Reglamentos que responden lo que LSS/LINFONAVIT no detallan (SBC, prima de riesgo, descuentos) | Cámara de Diputados (RIPAEDI como facsímil del DOF, encabezados en mayúsculas) | **P1** (cargado) |
+| **Mercantil y cumplimiento** — CCOM, LGSM, LFPIORPI + reglamento, LFDC | Lo que un contador cita fuera de lo fiscal (conservación de libros, dividendos, actividades vulnerables, derechos en auditorías) | Cámara de Diputados | **P1** (cargado) |
+| **Estatal** — LHPUE, CFPUE (Puebla), CFCDMX (CDMX) | Impuesto sobre nómina y contribuciones locales; la tasa vive en el catálogo `isn.tasa` | Orden Jurídico Poblano; Consejería Jurídica CDMX (el PDF del Congreso es de 2021: no usar) | **P1** (Puebla cargado; CDMX cuando la Consejería responda) |
 | **Jurisprudencia / tesis** (TFJA, SCJN) | Precedent | Respective portals | **P3** (later, heavier) |
 
 **Legality:** all of the above are official government publications (dominio público).

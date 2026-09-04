@@ -67,7 +67,7 @@ export function normalizarCita(c: string): string {
   );
 }
 
-const RE_ART = /\bart(?:[íi]culo|\.)?\s*(\d+(?:-[A-Z]+)?(?:\s+bis)?)\s*(?:,?\s*(?:fracci[óo]n\s+[IVXL]+\s*)?)?(?:de\s+la\s+|del\s+)?(RLISR|RLIVA|RCFF|LISR|LIVA|CFF|LIEPS|LSS|LINFONAVIT|LFT)\b/gi;
+const RE_ART = /\bart(?:[íi]culo|\.)?\s*(\d+(?:-[A-Z]+)?(?:\s+bis)?)\s*(?:,?\s*(?:fracci[óo]n\s+[IVXL]+\s*)?)?(?:de\s+la\s+|del\s+)?(RLISR|RLIVA|RCFF|CCOM|LGSM|RLFPIORPI|LFPIORPI|LFDC|RACERF|RIPAEDI|LHPUE|CFPUE|CFCDMX|LISR|LIVA|CFF|LIEPS|LSS|LINFONAVIT|LFT)\b/gi;
 const RE_REGLA = /\bregla\s+(\d+(?:\.\d+){2,3})\b(?:\s*(?:de\s+la\s+)?(RMF(?:-\d{4})?))?/gi;
 
 /** Citas a leyes/reglas que la RESPUESTA afirma (para detectar inventadas). */

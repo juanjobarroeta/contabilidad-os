@@ -219,6 +219,7 @@ export async function executeToolCall(
           articulo: str(input.articulo),
           fraccion: str(input.fraccion),
           inciso: str(input.inciso),
+          entidad: str(input.entidad),
           periodo: input.periodo === "anual" ? "anual" : input.periodo === "mensual" ? "mensual" : undefined,
           base: num(input.base),
           meses: num(input.meses),

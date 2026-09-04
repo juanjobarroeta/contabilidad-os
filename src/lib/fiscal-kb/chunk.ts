@@ -40,7 +40,22 @@ const FRACCION_RE = /^\s*[IVXLC]+\.\s/;
 //   LIVA:        "Artículo 1o.-A.-" (ordinal, punto-guion, sufijo) → cita "1o-A"
 //   CFF:         "Artículo 17-H Bis." → cita "17-H Bis"
 // Captures the number + optional suffix (drops the ordinal mark from the cite).
-const ARTICLE_RE = /^Artículo (\d+[oº°]?(?:\.?-[A-Za-zÑ]+)?(?: Bis)?|\d+ [A-Z])\.-?(?=\s)/gm;
+// Leyes y códigos estatales / reglamentos impresos del DOF escriben el
+// encabezado en mayúsculas — «ARTÍCULO 1.», «ARTICULO 158.-» (CDMX),
+// «ARTÍCULO 11» a fin de línea (Orden Jurídico Poblano), «ARTÍCULO 30 BIS».
+// En mayúsculas se acepta sin punto SÓLO a fin de línea: «Artículo 27 de la
+// Ley» en prosa nunca es encabezado (test «no confunde una referencia»).
+const NUM_ART = String.raw`\d+[oº°]?(?:\.?-[A-Za-zÑ]+)?(?: (?:Bis|BIS|Ter|TER))?|\d+ [A-Z]`;
+// El Orden Jurídico Poblano también escribe «Artículo 129» solo en su renglón
+// (sin punto): se acepta a fin de línea, como la forma en mayúsculas.
+const ARTICLE_RE = new RegExp(String.raw`^(?:Artículo (${NUM_ART})(?:\.-?(?=\s)|[ \t]*$)|ART[ÍI]CULO (${NUM_ART})(?:\.-?(?=\s)|[ \t]*$))`, "gm");
+/** Número tal como se cita: «5 A» → «5-A», «1o.-A» → «1o-A», «30 BIS» → «30 Bis». */
+export function normalizarArticulo(n: string): string {
+  return n
+    .replace(/^(\d+) ([A-Z])$/, "$1-$2")
+    .replace(".-", "-")
+    .replace(/ (BIS|TER)$/i, (_, w: string) => ` ${w[0].toUpperCase()}${w.slice(1).toLowerCase()}`);
+}
 // La cola de una ley después del último artículo: «TRANSITORIOS», «ARTÍCULOS
 // TRANSITORIOS DE DECRETOS DE REFORMA» y — lo que se tragaba el Art. 215 de
 // la LISR (30 partes, 79 000 caracteres) — «DISPOSICIONES TRANSITORIAS DE LA
@@ -64,6 +79,23 @@ export function cleanLawText(raw: string): string {
     /^Secretaría de Servicios Parlamentarios$/,
     /^Última Reforma DOF \d{2}-\d{2}-\d{4}$/,
     /^\d+ de \d+$/, // page marker
+    // pdf-parse (v2) marca cada salto de página; los PDF estatales lo traen.
+    /^-- \d+ of \d+ --$/,
+    // Orden Jurídico Poblano: encabezado de página de tres líneas + folio.
+    /^Gobierno del Estado de Puebla$/,
+    /^Secretaría de Gobernación$/,
+    /^Secretaría de Servicios Legales y[^\n]*$/,
+    /^Orden Jurídico Poblano$/,
+    // Congreso / Consejería de la CDMX.
+    /^CONGRESO DE LA CIUDAD DE MÉXICO$/,
+    /^INSTITUTO DE INVESTIGACIONES LEGISLATIVAS$/,
+    /^_{8,}$/,
+    // Impresión del DOF (reglamentos que Diputados sirve como facsímil).
+    /^\d+\s+\(\w+ Sección\)\s+DIARIO OFICIAL/,
+    /DIARIO OFICIAL\s+(?:Lunes|Martes|Miércoles|Jueves|Viernes|Sábado|Domingo)\s+\d/,
+    // Índice con puntos guía («ARTÍCULO 11 ............ 11») y folios sueltos.
+    /^.{0,120}\.{5,}\s*\d{0,3}$/,
+    /^\d{1,3}$/,
   ];
   let seenTitle = false;
   const kept = lines.filter((line) => {
@@ -94,7 +126,7 @@ function buildBreadcrumbIndex(text: string): { offset: number; trail: string }[]
       // Heading subtitle usually follows on the next line in uppercase
       // (e.g. "SECCIÓN IV" / "DEL RÉGIMEN SIMPLIFICADO DE CONFIANZA").
       const next = lines[i + 1]?.trim() ?? "";
-      const subtitle = next && next === next.toUpperCase() && !HEADING_RE.test(next) && !/^Artículo/.test(next) ? ` ${next}` : "";
+      const subtitle = next && next === next.toUpperCase() && !HEADING_RE.test(next) && !/^Art[íi]culo/i.test(next) ? ` ${next}` : "";
       trail[level] = `${t}${subtitle}`;
       // A new TÍTULO resets CAPÍTULO/SECCIÓN; a new CAPÍTULO resets SECCIÓN.
       for (const lower of order.slice(order.indexOf(level) + 1)) delete trail[lower];
@@ -189,6 +221,90 @@ function splitArticulo(body: string): string[] {
 }
 
 /**
+ * Quita el ÍNDICE de los códigos estatales: una corrida de ≥ 8 «artículos»
+ * seguidos cuyo cuerpo es sólo el encabezado («ARTÍCULO 11» + folio) son entradas de
+ * índice, no artículos; sin esto cada artículo saldría dos veces (la entrada
+ * vacía primero) y el número de página pegado («ARTÍCULO 25129») se citaría
+ * como artículo. Los artículos derogados («Artículo 8. (Se deroga).») también
+ * son cortos pero no forman corridas de 8 sin decirlo. Puro.
+ */
+export function sinIndice<U extends { start: number; end: number; articulo?: string }>(units: U[], texto: string, minCorrida = 8, maxResto = 40): U[] {
+  const folioPegado = units.map((u) => /^\s*(?:Artículo|ART[ÍI]CULO)\s+\d{5,}/i.test(texto.slice(u.start, u.end)));
+  const esIndice = units.map((u, i) => {
+    if (folioPegado[i]) return true;
+    const cuerpo = texto.slice(u.start, u.end);
+    // Una entrada de índice es SÓLO el encabezado (y a lo más un folio): tras
+    // quitar «ARTÍCULO 11», los renglones de título en mayúsculas (CAPÍTULO…,
+    // DE LOS RECURSOS…) y los puntos guía, no queda prosa. Un artículo real
+    // siempre trae texto.
+    const resto = cuerpo
+      .replace(/^\s*(?:Artículo|ART[ÍI]CULO)\s+\S+(?:\s+(?:Bis|BIS|Ter|TER))?\.?-?/, "")
+      .split("\n")
+      .filter((l) => l.trim() && l.trim() !== l.trim().toUpperCase() && !/\.{5,}/.test(l))
+      .join(" ")
+      .replace(/\b\d{1,3}\b/g, "")
+      .replace(/[\s.]+/g, " ")
+      .trim();
+    return resto.length < maxResto && !/derog/i.test(cuerpo);
+  });
+  const quitar = new Array<boolean>(units.length).fill(false);
+  // 1) Un folio pegado al número («Artículo 139608» = artículo 139, página 608)
+  //    sólo ocurre en índices: ninguna ley numera con 5 dígitos.
+  folioPegado.forEach((f, i) => {
+    if (f) quitar[i] = true;
+  });
+  // 2) Corridas de entradas vacías.
+  let i = 0;
+  while (i < units.length) {
+    if (!esIndice[i]) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < units.length && esIndice[j]) j++;
+    if (j - i >= minCorrida) for (let k = i; k < j; k++) quitar[k] = true;
+    i = j;
+  }
+  // 3) Una entrada vacía suelta cuyo número también aparece con texto real
+  //    («Artículo 27» pegado de «Artículo 2 … 7» junto al 27 verdadero).
+  const conTexto = new Set(units.filter((u, k) => !esIndice[k] && u.articulo).map((u) => u.articulo));
+  units.forEach((u, k) => {
+    if (esIndice[k] && u.articulo && conTexto.has(u.articulo)) quitar[k] = true;
+  });
+  return units.filter((_, k) => !quitar[k]);
+}
+
+/**
+ * Corrige los números con nota al pie pegada del Orden Jurídico Poblano: el
+ * PDF imprime «Artículo 2» + la llamada «7» de la reforma como «Artículo 27»,
+ * «Artículo 5» + «15» como «Artículo 515», «Artículo 139» + «608» como
+ * «Artículo 139608». Los artículos van en secuencia, así que si el número leído
+ * empieza con el que toca (anterior + 1) y trae dígitos de más, es ese. Un
+ * salto real (artículo derogado o «14» tras «12») no empieza con el esperado
+ * y se respeta. Puro.
+ */
+export function corregirNotasPegadas<U extends { articulo: string }>(units: U[]): U[] {
+  let prev: number | null = null;
+  return units.map((u) => {
+    if (!/^\d+$/.test(u.articulo)) {
+      const m = /^(\d+)/.exec(u.articulo);
+      if (m) prev = Number(m[1]);
+      return u;
+    }
+    const n = Number(u.articulo);
+    if (prev !== null) {
+      const esperado = String(prev + 1);
+      if (u.articulo.length > esperado.length && u.articulo.startsWith(esperado)) {
+        prev = prev + 1;
+        return { ...u, articulo: esperado };
+      }
+    }
+    prev = n;
+    return u;
+  });
+}
+
+/**
  * Chunk a cleaned law text into citable units.
  *
  * - Everything before the first "Artículo 1." (decree boilerplate, índice) is
@@ -210,14 +326,15 @@ export function chunkLaw(cleanText: string): LawChunk[] {
   }
 
   type Unit = { articulo: string; start: number; end: number };
-  const units: Unit[] = matches.map((m, i) => ({
+  const todas: Unit[] = matches.map((m, i) => ({
     // «5 A» (LSS/LFT) se cita «5-A», como los sufijos de LISR («113-E»). El
     // ordinal de LIVA/CFF («5o») se conserva tal cual: así lee la ley, y
     // cambiarlo dejaría citas mixtas hasta re-ingerir todo con force.
-    articulo: m[1].replace(/^(\d+) ([A-Z])$/, "$1-$2").replace(".-", "-"),
+    articulo: normalizarArticulo(m[1] ?? m[2]),
     start: m.index!,
     end: matches[i + 1]?.index ?? cleanText.length,
   }));
+  const units = corregirNotasPegadas(sinIndice(todas, cleanText));
 
   const chunks: LawChunk[] = [];
   const pushUnit = (articulo: string, body: string, start: number) => {
