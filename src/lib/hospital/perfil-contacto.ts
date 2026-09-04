@@ -101,6 +101,9 @@ export interface PagadorPerfil {
   id: string;
   nombre: string;
   tipo: string;
+  tabulador: string | null;
+  deducible: number | null;
+  coaseguroPct: number | null;
   plazoDias: number;
   topeAutorizacion: number | null;
   vigenciaFin: Date | null;
@@ -207,8 +210,8 @@ export async function perfilContactoHospital(
     db.hospPagador.findMany({
       where: { companyId, customerId },
       select: {
-        id: true, nombre: true, tipo: true, plazoDias: true, topeAutorizacion: true,
-        vigenciaFin: true, activo: true,
+        id: true, nombre: true, tipo: true, tabulador: true, deducible: true, coaseguroPct: true,
+        plazoDias: true, topeAutorizacion: true, vigenciaFin: true, activo: true,
       },
       orderBy: { createdAt: "asc" },
     }),
@@ -238,6 +241,9 @@ export async function perfilContactoHospital(
     id: p.id,
     nombre: p.nombre,
     tipo: p.tipo,
+    tabulador: p.tabulador,
+    deducible: p.deducible == null ? null : Number(p.deducible),
+    coaseguroPct: p.coaseguroPct == null ? null : Number(p.coaseguroPct),
     plazoDias: p.plazoDias,
     topeAutorizacion: p.topeAutorizacion == null ? null : Number(p.topeAutorizacion),
     vigenciaFin: p.vigenciaFin,

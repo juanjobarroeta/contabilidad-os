@@ -28,7 +28,10 @@ export async function GET(req: Request) {
     if (!companyId || !Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
       return NextResponse.json({ error: "companyId, year y month (1-12) requeridos" }, { status: 400 });
     }
-    await requireMembership(companyId);
+    // `req` para que el bearer de los satélites (HospitalOS lee la conciliación
+    // del mes en su pestaña Bancos) también resuelva; sin él sólo entra la cookie
+    // y el satélite recibe 401 — que su apiFetch interpreta como sesión vencida.
+    await requireMembership(companyId, undefined, req);
     return NextResponse.json(await conciliacionDelMes(companyId, year, month));
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
