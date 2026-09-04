@@ -2,13 +2,14 @@
 //   - multas y cantidades del CFF  ← Anexo 5 RMF (SAT)      → src/lib/fiscal/datos/multas-cff-<Y>.json
 //   - recargos (prórroga, plazos)  ← LIF (Cámara de Diputados) → src/lib/fiscal/datos/recargos-<Y>.json
 //   - tarifas ISR                  ← Anexo 8 RMF (SAT)      → sólo COTEJA contra src/lib/fiscal/tarifas.ts
+//   - UMA                          ← boletín anual del INEGI → sólo COTEJA contra rules/catalog.ts
 // y reescribe src/lib/fiscal/datos/index.ts con los JSON presentes.
 //
 // Los números nunca entran solos a producción: el workflow valores-fiscales.yml
 // corre esto y abre un PR con el diff para revisión.
 //
 // Uso: npm run fiscal:valores -- --ejercicio 2026 [--anexo5 <url|archivo.pdf|.txt>]
-//      [--anexo8 <…>] [--lif <…>] [--solo multas,recargos,tarifas] [--strict]
+//      [--anexo8 <…>] [--lif <…>] [--solo multas,recargos,tarifas,uma] [--strict]
 
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -17,6 +18,8 @@ import { parseAnexo8, tarifasCoinciden } from "../src/lib/fiscal/fuentes/anexo8"
 import { parseRecargosLif, tasaMoraDesdeProrroga, urlLif } from "../src/lib/fiscal/fuentes/lif";
 import { descargarAnexo } from "../src/lib/fiscal/fuentes/sat-anexos";
 import { descargarBinario, textoDePdf } from "../src/lib/fiscal/fuentes/texto";
+import { fetchUmaBoletin } from "../src/lib/fiscal/fuentes/inegi";
+import { getRule } from "../src/lib/fiscal/rules";
 import { tarifaAnualPF, tarifaMensualSueldos } from "../src/lib/fiscal/tarifas";
 
 const args = process.argv.slice(2);
@@ -25,7 +28,7 @@ const opt = (name: string): string | undefined => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const ejercicio = Number(opt("ejercicio") ?? new Date().getFullYear() + (new Date().getMonth() >= 11 ? 1 : 0));
-const solo = (opt("solo") ?? "multas,recargos,tarifas").split(",").map((s) => s.trim());
+const solo = (opt("solo") ?? "multas,recargos,tarifas,uma").split(",").map((s) => s.trim());
 const strict = args.includes("--strict");
 const DATOS = join(__dirname, "..", "src", "lib", "fiscal", "datos");
 
@@ -167,14 +170,30 @@ async function tarifas(): Promise<boolean> {
   return ok;
 }
 
+/** UMA: el catálogo se edita a mano (catalog.ts); aquí sólo se coteja contra el boletín del INEGI. */
+async function uma(): Promise<boolean> {
+  console.log(`INEGI — boletín UMA ${ejercicio} (cotejo contra rules/catalog.ts)`);
+  const of = await fetchUmaBoletin(ejercicio);
+  const cod = getRule<{ diaria: number; mensual: number; anual: number }>("uma.valor", { regimen: "601", actividades: [], tipoPersona: "PM", fecha: `${ejercicio}-02-15` });
+  if (!cod) {
+    console.log(`  ✗ catalog.ts no tiene uma.valor para ${ejercicio}; INEGI: diaria ${of.diaria}, mensual ${of.mensual}, anual ${of.anual} — agrégala por PR`);
+    return false;
+  }
+  const ok = Math.abs(cod.valor.diaria - of.diaria) < 0.005 && (of.mensual == null || Math.abs(cod.valor.mensual - of.mensual) < 0.005);
+  console.log(`  ${ok ? "✓" : "✗"} UMA ${ejercicio}: catálogo ${cod.valor.diaria} / ${cod.valor.mensual} vs INEGI ${of.diaria} / ${of.mensual}`);
+  return ok;
+}
+
 (async () => {
   let tarifasOk = true;
+  let umaOk = true;
   if (solo.includes("multas")) await multas();
   if (solo.includes("recargos")) await recargos();
   reescribirIndice();
   if (solo.includes("tarifas")) tarifasOk = await tarifas();
-  if (strict && !tarifasOk) {
-    console.error("Tarifas: el Anexo 8 no coincide con tarifas.ts (o falta el ejercicio).");
+  if (solo.includes("uma")) umaOk = await uma();
+  if (strict && (!tarifasOk || !umaOk)) {
+    console.error(`${!tarifasOk ? "Tarifas: el Anexo 8 no coincide con tarifas.ts (o falta el ejercicio). " : ""}${!umaOk ? "UMA: el catálogo no coincide con el INEGI (o falta el ejercicio)." : ""}`);
     process.exit(1);
   }
 })().catch((e) => {

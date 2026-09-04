@@ -61,7 +61,7 @@ Los VALORES que el copiloto y los cálculos usan viven en código versionado:
 | Recargos (prórroga, mora, plazos) | `src/lib/fiscal/datos/recargos-<Y>.json` | LIF del ejercicio (Cámara de Diputados); mora = prórroga × 1.5 (Art. 21 CFF) | ídem | ídem |
 | Tarifas ISR mensual / anual | `src/lib/fiscal/tarifas.ts` (a mano) | Anexo 8 RMF | PR a mano | `fiscal:valores --strict` y `cotejo-fiscal` fila por fila |
 | Subsidio al empleo | `tarifas.ts` | Decreto (DOF) | PR a mano | — |
-| UMA | `rules/catalog.ts` (`uma.valor`) | INEGI (API de indicadores, `INEGI_TOKEN`) | PR a mano | `cotejo-fiscal` (si hay token) |
+| UMA | `rules/catalog.ts` (`uma.valor`) | Boletín anual del INEGI (PDF, sin token); API de indicadores opcional (`INEGI_TOKEN`) | PR a mano | `cotejo-fiscal` y `fiscal:valores --strict` |
 | Salario mínimo | `rules/catalog.ts` | CONASAMI (gob.mx bloquea bots) | PR a mano | — |
 
 El copiloto los consulta con la tool `get_valor_fiscal` (`src/lib/fiscal/valores.ts`)

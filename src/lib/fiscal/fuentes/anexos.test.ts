@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseAnexo5 } from "./anexo5";
 import { clasificarTitulo, parseAnexo8, tarifasCoinciden } from "./anexo8";
+import { parseBoletinUma, urlBoletinUma } from "./inegi";
 import { parseRecargosLif, urlLif } from "./lif";
 import { urlsCandidatasAnexo } from "./sat-anexos";
 import { limpiarLineasDof, montoNumero, primeraFecha } from "./texto";
@@ -127,5 +128,18 @@ describe("sat-anexos", () => {
     const u = urlsCandidatasAnexo(5, 2026);
     expect(u[0]).toMatch(/Anexo-5-RMF-2026_DOF-31122025\.pdf$/);
     expect(u).toContain("https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/anexos/Anexo-5-RMF-2026_DOF-28122025.pdf");
+  });
+});
+
+describe("INEGI — boletín anual de la UMA (fixtures reales)", () => {
+  it("2026: diaria 117.31, mensual 3 566.22, anual 42 794.64, vigente 1-feb", () => {
+    expect(parseBoletinUma(fixture("inegi-uma-2026.txt"))).toEqual({ anio: 2026, diaria: 117.31, mensual: 3566.22, anual: 42794.64, vigenciaDesde: "2026-02-01" });
+  });
+  it("2024 (formato con «$» y cuadro)", () => {
+    expect(parseBoletinUma(fixture("inegi-uma-2024.txt"))).toMatchObject({ anio: 2024, diaria: 108.57, mensual: 3300.53, anual: 39606.36 });
+  });
+  it("texto ajeno → null; URL predecible", () => {
+    expect(parseBoletinUma("Comunicado sobre el PIB trimestral.")).toBeNull();
+    expect(urlBoletinUma(2027)).toBe("https://www.inegi.org.mx/contenidos/saladeprensa/boletines/2027/uma/uma2027.pdf");
   });
 });

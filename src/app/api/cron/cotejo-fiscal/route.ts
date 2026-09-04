@@ -7,8 +7,8 @@ import { cotejarTodo } from "@/lib/fiscal/cotejo";
 // Coteja los datos fiscales versionados contra su fuente oficial y marca cada
 // dataset verificado cuando empata (sube "sin cotejar" → "al día" en la
 // cobertura). INPC vs Banxico (requiere BANXICO_TOKEN; sin él se omite),
-// multas vs Anexo 5, tarifas vs Anexo 8, recargos vs LIF, UMA vs INEGI
-// (requiere INEGI_TOKEN). `?ejercicio=2027` fuerza el ejercicio a cotejar.
+// multas vs Anexo 5, tarifas vs Anexo 8, recargos vs LIF, UMA vs el boletín
+// anual del INEGI (sin token). `?ejercicio=2027` fuerza el ejercicio a cotejar.
 //
 // Auth: CRON_SECRET (Bearer o x-cron-secret), igual que los otros crons.
 // ─────────────────────────────────────────────────────────────────────────────

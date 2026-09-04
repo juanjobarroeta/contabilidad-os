@@ -3,7 +3,7 @@ import { inpcCargados } from "./inpc";
 import { fetchInpcBanxico, BANXICO_INPC_SERIE } from "./banxico";
 import { parseAnexo5 } from "./fuentes/anexo5";
 import { parseAnexo8, tarifasCoinciden } from "./fuentes/anexo8";
-import { configuracionInegi, fetchUmaInegi } from "./fuentes/inegi";
+import { fetchUma } from "./fuentes/inegi";
 import { parseRecargosLif, urlLif } from "./fuentes/lif";
 import { descargarAnexo } from "./fuentes/sat-anexos";
 import { descargarBinario, textoDePdf } from "./fuentes/texto";
@@ -25,7 +25,7 @@ import { tarifaAnualPF, tarifaMensualSueldos } from "./tarifas";
 //   TARIFA_ISR_ANUAL    → Anexo 8 RMF, tarifa Art. 152 del ejercicio
 //   MULTAS_CFF          → Anexo 5 RMF (PDF), fila por fila
 //   RECARGOS            → LIF del ejercicio (Cámara de Diputados), Art. de recargos
-//   UMA                 → API de indicadores del INEGI (requiere INEGI_TOKEN)
+//   UMA                 → boletín anual del INEGI (PDF, sin token); API si hay INEGI_TOKEN
 //
 // Los valores NUNCA se escriben desde aquí: el cotejo sólo confirma o avisa.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,17 +186,18 @@ export function cotejarRecargos(ejercicio = ejercicioObjetivo(), url?: string): 
   });
 }
 
-/** UMA del catálogo vs INEGI (se omite sin INEGI_TOKEN / ids). */
+/** UMA del catálogo vs el boletín anual del INEGI (y la API si hay token). */
 export function cotejarUma(ejercicio = ejercicioObjetivo()): Promise<CotejoAnual> {
   return correr("UMA", async () => {
-    if (!configuracionInegi()) return { verificado: false, ejercicio, fuente: null, diferencias: [], skipped: "INEGI_TOKEN / INEGI_UMA_INDICADORES no configurados" };
-    const serie = await fetchUmaInegi();
-    const of = serie.find((u) => u.anio === ejercicio);
-    if (!of) return { verificado: false, ejercicio, fuente: "INEGI (API de indicadores)", diferencias: [`INEGI aún no publica la UMA ${ejercicio}`] };
-    const cod = getRule<{ diaria: number }>("uma.valor", { regimen: "601", actividades: [], tipoPersona: "PM", fecha: `${ejercicio}-02-15` });
-    if (!cod) return { verificado: false, ejercicio, fuente: "INEGI (API de indicadores)", diferencias: [`falta uma.valor ${ejercicio} en catalog.ts (INEGI: ${of.diaria})`], falta: true };
-    const diferencias = Math.abs(cod.valor.diaria - of.diaria) > 0.005 ? [`diaria ${cod.valor.diaria} vs ${of.diaria}`] : [];
-    return { verificado: diferencias.length === 0, ejercicio, fuente: "INEGI (API de indicadores)", diferencias };
+    const of = await fetchUma(ejercicio);
+    const fuente = of.fuente ?? "INEGI";
+    const cod = getRule<{ diaria: number; mensual: number; anual: number }>("uma.valor", { regimen: "601", actividades: [], tipoPersona: "PM", fecha: `${ejercicio}-02-15` });
+    if (!cod) return { verificado: false, ejercicio, fuente, diferencias: [`falta uma.valor ${ejercicio} en catalog.ts (INEGI: ${of.diaria})`], falta: true };
+    const diferencias: string[] = [];
+    if (Math.abs(cod.valor.diaria - of.diaria) > 0.005) diferencias.push(`diaria ${cod.valor.diaria} vs ${of.diaria}`);
+    if (of.mensual != null && Math.abs(cod.valor.mensual - of.mensual) > 0.005) diferencias.push(`mensual ${cod.valor.mensual} vs ${of.mensual}`);
+    if (of.anual != null && Math.abs(cod.valor.anual - of.anual) > 0.005) diferencias.push(`anual ${cod.valor.anual} vs ${of.anual}`);
+    return { verificado: diferencias.length === 0, ejercicio, fuente, diferencias };
   });
 }
 
