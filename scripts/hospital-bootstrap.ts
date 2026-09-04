@@ -21,7 +21,7 @@
  *
  * Uso:
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/hospital-bootstrap.ts \
- *     --rfc CPM2307076Z9 [--nombre "Haltus Hope"] [--admin correo] [--dry-run] [--sin-farmacia]
+ *     --rfc CPM2307076Z9 [--nombre "Haltus Hope"] [--admin correo] [--dry-run] [--sin-farmacia] [--solo-farmacia]
  */
 import { PrismaClient, type HospCargoCategoria, type HospPagadorTipo } from "@prisma/client";
 import { clasificarInsumo, derivarInsumosBackfill, normalizarDescripcion } from "../src/lib/hospital/insumos-cfdi";
@@ -33,6 +33,23 @@ function arg(nombre: string): string | null {
   return i >= 0 ? (process.argv[i + 1] ?? null) : null;
 }
 const flag = (nombre: string) => process.argv.includes(nombre);
+
+// El proxy público de Postgres corta conexiones largas (P1017). Cada fase es
+// idempotente, así que ante un corte se reconecta y la fase se repite entera.
+const CORTES = new Set(["P1017", "P1001", "P2024"]);
+async function conReintento<T>(nombre: string, fn: () => Promise<T>, intentos = 6): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (!code || !CORTES.has(code) || i >= intentos) throw e;
+      console.log(`\n  · conexión cortada en ${nombre} (${code}); reconectando (${i}/${intentos})…`);
+      await prisma.$disconnect().catch(() => {});
+      await new Promise((res) => setTimeout(res, 3000));
+    }
+  }
+}
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 const MINUSCULAS = new Set(["DE", "DEL", "LA", "LAS", "LOS", "Y", "E", "DA", "DI", "VON", "VAN"]);
@@ -115,7 +132,8 @@ function partirNombre(completo: string): { nombre: string; apellidoPaterno: stri
 
 async function main() {
   const rfc = arg("--rfc");
-  if (!rfc) throw new Error("Uso: --rfc <RFC> [--nombre ...] [--admin correo] [--dry-run] [--sin-farmacia]");
+  if (!rfc) throw new Error("Uso: --rfc <RFC> [--nombre ...] [--admin correo] [--dry-run] [--sin-farmacia] [--solo-farmacia]");
+  const soloFarmacia = flag("--solo-farmacia");
   const dry = flag("--dry-run");
   const company = await prisma.company.findUnique({ where: { rfc }, select: { id: true, razonSocial: true, nombreComercial: true } });
   if (!company) throw new Error(`No existe empresa con RFC ${rfc}`);
@@ -123,7 +141,7 @@ async function main() {
   console.log(`\n${dry ? "[DRY-RUN] " : ""}${company.razonSocial} (${rfc}) · ${cid}`);
 
   // ── 1. Módulo, configuración y (opcional) un administrador ────────────────
-  if (!dry) {
+  if (!dry && !soloFarmacia) await conReintento("módulo", async () => {
     await prisma.companyModule.upsert({
       where: { companyId_modulo: { companyId: cid, modulo: "HOSPITAL" } },
       create: { companyId: cid, modulo: "HOSPITAL" },
@@ -148,10 +166,11 @@ async function main() {
       }
     }
     console.log("  ✓ módulo HOSPITAL habilitado");
-  }
+  });
 
 
   // ── 3. Pagadores: aseguradoras y empresas entre los receptores ────────────
+  if (!soloFarmacia) await conReintento("pagadores", async () => {
   const receptores = await prisma.$queryRaw<Array<{ id: string; rfc: string; razon: string; facturas: number; total: number; ultima: Date }>>`
     SELECT c.id, c.rfc, c."razonSocial" AS razon, COUNT(*)::int AS facturas, SUM(i.total)::float8 AS total, MAX(i.fecha) AS ultima
     FROM "Invoice" i JOIN "Customer" c ON c.id = i."customerId"
@@ -177,8 +196,10 @@ async function main() {
     await prisma.hospPagador.create({ data: { companyId: cid, customerId: p.customerId, nombre: p.nombre, tipo: p.tipo, plazoDias: p.plazoDias, notas: p.notas } });
   }
   console.log(`  ✓ pagadores: ${pagadores.length} candidatos · ${pagadoresNuevos} nuevos`);
+  });
 
   // ── 4. Médicos: personas físicas que facturan honorarios ──────────────────
+  if (!soloFarmacia) await conReintento("médicos", async () => {
   const pf = await prisma.$queryRaw<Array<{ rfc: string; razon: string; facturas: number; total: number; isr: number; medico: boolean }>>`
     SELECT c.rfc, c."razonSocial" AS razon, COUNT(DISTINCT i.id)::int AS facturas, SUM(i.total)::float8 AS total,
            COALESCE((SELECT SUM(t.importe) FROM "InvoiceTax" t WHERE t."invoiceId" = ANY(ARRAY_AGG(i.id)) AND t.tipo = 'ISR' AND t.retencion), 0)::float8 AS isr,
@@ -206,8 +227,10 @@ async function main() {
     await prisma.hospMedico.create({ data: { companyId: cid, nombre, rfc: m.rfc, supplierId: supplier.id } });
   }
   console.log(`  ✓ médicos: ${medicos.length} candidatos · ${medicosNuevos} nuevos (${pf.length} personas físicas facturan)`);
+  });
 
   // ── 5. Tarifario: conceptos de ingreso recurrentes ────────────────────────
+  if (!soloFarmacia) await conReintento("tarifario", async () => {
   const conceptos = await prisma.$queryRaw<Array<{ descripcion: string; clave: string | null; n: number; pu: number[]; fechas: Date[] }>>`
     SELECT it.descripcion, MODE() WITHIN GROUP (ORDER BY it."claveProdServ") AS clave, COUNT(*)::int AS n,
            ARRAY_AGG(it."valorUnitario"::float8 ORDER BY i.fecha DESC) AS pu, ARRAY_AGG(i.fecha ORDER BY i.fecha DESC) AS fechas
@@ -243,8 +266,10 @@ async function main() {
     });
   }
   console.log(`  ✓ tarifario: ${conceptos.length} conceptos recurrentes · ${serviciosNuevos} servicios nuevos`);
+  });
 
   // ── 6. Pacientes: nombres en los conceptos de ingreso ─────────────────────
+  if (!soloFarmacia) await conReintento("pacientes", async () => {
   const lineasPx = await prisma.$queryRaw<Array<{ descripcion: string; fecha: Date; customerId: string | null; crfc: string | null }>>`
     SELECT it.descripcion, i.fecha, i."customerId", c.rfc AS crfc
     FROM "InvoiceItem" it JOIN "Invoice" i ON i.id = it."invoiceId" LEFT JOIN "Customer" c ON c.id = i."customerId"
@@ -277,6 +302,7 @@ async function main() {
     });
   }
   console.log(`  ✓ pacientes: ${porNombre.size} nombres en conceptos · ${pacientesNuevos} nuevos`);
+  });
 
   // ── 7. Farmacia: catálogo y kardex desde compras y ventas ─────────────────
   if (!dry && !flag("--sin-farmacia")) {
@@ -307,7 +333,7 @@ async function main() {
     console.log(`\n  ✓ farmacia: ${procesados} CFDIs barridos · ${insumos} insumos · ${movimientos} movimientos`);
   }
 
-  const [nP, nM, nS, nPx, nI, nL, nMov] = await Promise.all([
+  const [nP, nM, nS, nPx, nI, nL, nMov] = await conReintento("resumen", () => Promise.all([
     prisma.hospPagador.count({ where: { companyId: cid } }),
     prisma.hospMedico.count({ where: { companyId: cid } }),
     prisma.hospServicio.count({ where: { companyId: cid } }),
@@ -315,7 +341,7 @@ async function main() {
     prisma.hospInsumo.count({ where: { companyId: cid } }),
     prisma.hospLote.count({ where: { companyId: cid } }),
     prisma.hospMovimientoInsumo.count({ where: { companyId: cid } }),
-  ]);
+  ]));
   console.log(`\n✔ ${company.razonSocial}: ${nP} pagadores · ${nM} médicos · ${nS} servicios · ${nPx} pacientes · ${nI} insumos · ${nL} lotes · ${nMov} movimientos de kardex`);
   console.log("  Falta capturar en pantalla: camas/quirófanos (Censo → Agregar recurso), tabuladores por convenio, especialidades de los médicos y lotes/caducidades al recibir.");
 }
