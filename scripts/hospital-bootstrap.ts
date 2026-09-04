@@ -280,13 +280,29 @@ async function main() {
 
   // ── 7. Farmacia: catálogo y kardex desde compras y ventas ─────────────────
   if (!dry && !flag("--sin-farmacia")) {
-    let rondas = 0, insumos = 0, movimientos = 0, procesados = 0;
+    let rondas = 0, insumos = 0, movimientos = 0, procesados = 0, fallos = 0;
     for (;;) {
-      const r = await derivarInsumosBackfill(prisma, cid, { budgetMs: 90_000, page: 200 });
+      // El proxy público de Postgres corta conexiones largas (P1017). El
+      // barrido es idempotente y guarda su cursor por ronda: se reconecta y
+      // sigue; sólo se rinde tras varios cortes seguidos.
+      let r: Awaited<ReturnType<typeof derivarInsumosBackfill>>;
+      try {
+        r = await derivarInsumosBackfill(prisma, cid, { budgetMs: 45_000, page: 100 });
+        fallos = 0;
+      } catch (e) {
+        const code = (e as { code?: string }).code;
+        if ((code === "P1017" || code === "P1001" || code === "P2024") && ++fallos <= 8) {
+          console.log(`\n  · conexión cortada (${code}); reconectando (${fallos}/8)…`);
+          await prisma.$disconnect().catch(() => {});
+          await new Promise((res) => setTimeout(res, 3000));
+          continue;
+        }
+        throw e;
+      }
       rondas++; insumos += r.insumos; movimientos += r.movimientos; procesados += r.procesados;
       process.stdout.write(`  · farmacia ronda ${rondas}: ${procesados} CFDIs · ${insumos} insumos · ${movimientos} movimientos\r`);
       if (r.completado || r.procesados === 0) break;
-      if (rondas > 400) { console.log("\n  ! tope de rondas; sigue con el cron"); break; }
+      if (rondas > 600) { console.log("\n  ! tope de rondas; sigue con el cron"); break; }
     }
     console.log(`\n  ✓ farmacia: ${procesados} CFDIs barridos · ${insumos} insumos · ${movimientos} movimientos`);
   }
