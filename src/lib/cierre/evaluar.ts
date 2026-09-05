@@ -404,6 +404,14 @@ async function decidir(
     }),
   ]);
 
+  if (accion !== "reabrir") {
+    // El aviso del pase diario sobre este paso queda accionado (precisión).
+    await prisma.cierreAviso.updateMany({
+      where: { companyId: a.companyId, periodo: cierre.periodo, paso: a.clave, accionadoAt: null },
+      data: { accionadoAt: ahora },
+    });
+  }
+
   registrarBitacora({
     companyId: a.companyId,
     userId: a.userId,
