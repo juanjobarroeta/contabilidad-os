@@ -5,6 +5,8 @@ import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
 import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
 import { repIvaAcreditableDe } from "@/lib/impuestos";
+import { repIvaRetenidoDe, revisarRetencionIva } from "@/lib/fiscal/iva-retenciones";
+import { ivaRetenidoAProveedoresEnPeriodo } from "@/lib/fiscal/iva-retenciones-db";
 import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import { esConceptoExcluido, UMBRAL_MONTO } from "@/lib/fiscal/audit/ingreso-no-facturado";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
@@ -198,6 +200,15 @@ export async function GET(req: Request) {
     pagoParcial?: boolean;
     /** Renglón de ingreso PPD armado desde el complemento de pago (REP) cobrado. */
     esComplemento?: boolean;
+    /**
+     * IVA retenido a este proveedor en el CFDI: NO acreditable este mes
+     * (Art. 5-IV LIVA), se acredita el mes siguiente al de su entero. `importe`
+     * del renglón acreditable ya viene neto de esto.
+     */
+    ivaRetenidoDiferido?: number;
+    /** La retención es anómala (mayor al IVA trasladado o al 16% de la base): revisar el XML. */
+    revisar?: boolean;
+    motivoRevisar?: string;
   };
 
   const trasladado: Row[] = [];
@@ -328,18 +339,25 @@ export async function GET(req: Request) {
 
   for (const inv of egresos) {
     const { trasladado: t, retenido: r } = extractIva(inv);
+    const esPPD = inv.metodoPago === "PPD";
+    const links = inv.uuid ? repLinksPorParent.get(normalizarUuid(inv.uuid)) : undefined;
+    const parentLike = { taxes: inv.taxes, totalImpuestos: inv.totalImpuestos, total: inv.total };
+    // Retención en flujo (Art. 1-A): PUE completa al emitirse; PPD la parte de
+    // cada pago del REP. Sin REP aún no se retiene (ni se entera).
+    const retenidoPPD = esPPD && links ? links.reduce((s, l) => s + repIvaRetenidoDe(l, parentLike), 0) : 0;
     if (t > 0.005) {
       // PPD sólo es acreditable cuando llega su complemento de pago (REP), y por
       // el monto pagado (prorrateado) — exactamente como el motor. Sin REP en el
-      // mes: aún no acreditable. PUE: el IVA completo del CFDI.
-      const esPPD = inv.metodoPago === "PPD";
-      const links = inv.uuid ? repLinksPorParent.get(normalizarUuid(inv.uuid)) : undefined;
+      // mes: aún no acreditable. PUE: el IVA del CFDI.
       const acreditadoPPD = esPPD && links
-        ? links.reduce((s, l) => s + repIvaAcreditableDe(l, { taxes: inv.taxes, totalImpuestos: inv.totalImpuestos, total: inv.total }), 0)
+        ? links.reduce((s, l) => s + repIvaAcreditableDe(l, parentLike), 0)
         : 0;
-      // Con pago: el IVA prorrateado acreditable. Sin pago: mostramos el IVA
-      // completo (tachado, fuera del total) para que se vea lo pendiente.
-      const importe = esPPD ? (acreditadoPPD > 0.005 ? acreditadoPPD : t) : t;
+      // El IVA acreditable del mes va NETO de lo retenido (Art. 5-IV LIVA): la
+      // parte retenida se acredita el mes siguiente al de su entero. Sin pago
+      // (PPD sin REP) mostramos el neto completo, tenue y fuera del total.
+      const importe = esPPD
+        ? (acreditadoPPD > 0.005 ? Math.max(0, acreditadoPPD - retenidoPPD) : Math.max(0, t - r))
+        : Math.max(0, t - r);
       acreditable.push({
         id: inv.id,
         fecha: inv.fecha.toISOString().slice(0, 10),
@@ -356,9 +374,14 @@ export async function GET(req: Request) {
         emisorEnLista69B: bloqueado69B(rfcContraparte(inv)),
         sinComplementoPago: esPPD && acreditadoPPD <= 0.005,
         pagoParcial: esPPD && acreditadoPPD > 0.005 && acreditadoPPD + 0.5 < t,
+        ivaRetenidoDiferido: r > 0.005 ? (esPPD && acreditadoPPD > 0.005 ? retenidoPPD : r) : undefined,
       });
     }
     if (r > 0.005) {
+      // Lo que se RETIENE (y se entera) este mes: PUE completo; PPD la parte
+      // pagada por REP. Un PPD sin REP se muestra tenue y fuera del total.
+      const retenidoMes = esPPD ? retenidoPPD : r;
+      const revision = revisarRetencionIva({ subtotal: inv.subtotal, trasladado: t, retenido: r });
       retenidoAProveedores.push({
         id: inv.id,
         fecha: inv.fecha.toISOString().slice(0, 10),
@@ -369,11 +392,21 @@ export async function GET(req: Request) {
         rfc: rfcContraparte(inv),
         subtotal: inv.subtotal,
         tasa: inv.subtotal > 0 ? +(r / inv.subtotal).toFixed(4) : null,
-        importe: r,
+        importe: esPPD && retenidoMes <= 0.005 ? r : retenidoMes,
         metodoPago: inv.metodoPago,
+        sinComplementoPago: esPPD && retenidoMes <= 0.005,
+        pagoParcial: esPPD && retenidoMes > 0.005 && retenidoMes + 0.005 < r,
+        revisar: revision.revisar || undefined,
+        motivoRevisar: revision.revisar ? revision.motivo : undefined,
       });
     }
   }
+
+  // IVA retenido a proveedores el MES ANTERIOR (y enterado con aquella
+  // declaración): acreditable en ésta (Art. 5-IV LIVA). Mismo criterio de flujo
+  // que el motor mensual.
+  const prevFrom = new Date(Date.UTC(year, month - 2, 1));
+  const retenidoMesAnteriorAcreditable = await ivaRetenidoAProveedoresEnPeriodo(companyId, prevFrom, from);
 
   const sum = (rs: Row[]) => rs.reduce((s, r) => s + r.importe, 0);
   // Lo marcado como no cobrado (ivaNoCausado) no causa IVA aún — fuera del total.
@@ -386,9 +419,12 @@ export async function GET(req: Request) {
   // Mismos tres motivos que el motor: lo excluido por el contador, el PPD sin
   // complemento y el emisor en la lista 69-B. Si este total no cuadra con
   // `computeTaxPosition`, el papel deja de justificar la declaración.
-  const totalAcreditable = sum(
+  // Acreditable del mes (neto de retenciones) + lo retenido el mes anterior,
+  // ya enterado (Art. 5-IV). Ambos pasan por la proporción del Art. 5-V.
+  const totalAcreditableMes = sum(
     acreditable.filter((r) => !r.excluidoAcreditamiento && !r.sinComplementoPago && !r.emisorEnLista69B)
   );
+  const totalAcreditable = totalAcreditableMes + retenidoMesAnteriorAcreditable;
   const rows69B = acreditable.filter((r) => r.emisorEnLista69B);
   const excluido69B = {
     count: rows69B.length,
@@ -399,7 +435,10 @@ export async function GET(req: Request) {
   const ppdRows = acreditable.filter((r) => r.sinComplementoPago);
   const ppdSinComplemento = { count: ppdRows.length, iva: +sum(ppdRows).toFixed(2) };
   const totalRetenidoClientes = sum(retenidoPorClientes);
-  const totalRetenidoProv = sum(retenidoAProveedores);
+  // Retenciones a ENTERAR este mes (flujo): PPD sin REP fuera del total.
+  const totalRetenidoProv = sum(retenidoAProveedores.filter((r) => !r.sinComplementoPago));
+  const rowsRevisar = retenidoAProveedores.filter((r) => r.revisar && !r.sinComplementoPago);
+  const retencionesRevisar = { count: rowsRevisar.length, importe: +sum(rowsRevisar).toFixed(2) };
 
   // Proporción de acreditamiento (Art. 5-V LIVA): con actos exentos en el mes,
   // el IVA acreditable sólo procede en gravados/(gravados+exentos). Mismo
@@ -419,6 +458,9 @@ export async function GET(req: Request) {
   const cargoFinal = ivaCargo - saldoFavorAnterior;
   const ivaPagar = cargoFinal > 0 ? cargoFinal : 0;
   const saldoFavorMes = cargoFinal < 0 ? -cargoFinal : 0;
+  // Lo que realmente sale hacia el SAT por IVA este mes: el IVA propio más las
+  // retenciones a enterar (Art. 1-A). El saldo a favor NO compensa retenciones.
+  const totalAPagarSat = +(ivaPagar + totalRetenidoProv).toFixed(2);
 
   // PUE acreditado sin pago conciliado (cash-basis, Art. 5-I LIVA). El motor
   // asume el PUE pagado al emitirse; sólo si la empresa concilia banco podemos
@@ -490,6 +532,11 @@ export async function GET(req: Request) {
       acreditableProcedente,
       retenidoPorClientes: totalRetenidoClientes,
       retenidoAProveedores: totalRetenidoProv,
+      acreditableMes: totalAcreditableMes,
+      retenidoMesAnteriorAcreditable,
+      retenidoMesAnteriorPeriodo: prevPeriodo,
+      retencionesRevisar,
+      totalAPagarSat,
       ivaCargo,
       saldoFavorAnterior,
       // Valor automático arrastrado del mes anterior y override manual capturado
@@ -564,6 +611,9 @@ export async function GET(req: Request) {
       ["IVA a cargo (antes de saldo a favor)", "", "", "", "", "", "", "", "", ivaCargo.toFixed(2), ""],
       ["Saldo a favor anterior", "", "", "", "", "", "", "", "", saldoFavorAnterior.toFixed(2), ""],
       ["IVA A PAGAR", "", "", "", "", "", "", "", "", ivaPagar.toFixed(2), ""],
+      [`IVA retenido en ${prevPeriodo}, enterado, acreditable este mes (incluido en acreditable)`, "", "", "", "", "", "", "", "", retenidoMesAnteriorAcreditable.toFixed(2), ""],
+      ["Retenciones de IVA a enterar", "", "", "", "", "", "", "", "", totalRetenidoProv.toFixed(2), ""],
+      ["TOTAL A PAGAR AL SAT (IVA + retenciones)", "", "", "", "", "", "", "", "", totalAPagarSat.toFixed(2), ""],
       ["Saldo a favor del mes", "", "", "", "", "", "", "", "", saldoFavorMes.toFixed(2), ""],
     ];
 

@@ -30,6 +30,11 @@ interface IvaRow {
   sinComplementoPago?: boolean;
   pagoParcial?: boolean;
   esComplemento?: boolean;
+  /** IVA retenido al proveedor en este CFDI: no acreditable este mes (Art. 5-IV); `importe` ya viene neto. */
+  ivaRetenidoDiferido?: number;
+  /** Retención anómala (mayor al IVA trasladado o al 16% de la base): revisar el XML. */
+  revisar?: boolean;
+  motivoRevisar?: string;
 }
 interface IvaData {
   periodo: string;
@@ -42,6 +47,15 @@ interface IvaData {
     trasladado: number; acreditable: number; retenidoPorClientes: number; retenidoAProveedores: number;
     proporcionAcreditamiento: number; actosGravados: number; actosExentos: number; acreditableProcedente: number;
     ivaCargo: number; saldoFavorAnterior: number; ivaPagar: number; saldoFavorMes: number;
+    /** Acreditable del mes (neto de retenciones), sin lo retenido el mes anterior. */
+    acreditableMes: number;
+    /** IVA retenido a proveedores el mes anterior, enterado → acreditable en éste (Art. 5-IV). Incluido en `acreditable`. */
+    retenidoMesAnteriorAcreditable: number;
+    retenidoMesAnteriorPeriodo: string;
+    /** Retenciones marcadas para revisar (anómalas) — cuentan en el total; decide el contador. */
+    retencionesRevisar: { count: number; importe: number };
+    /** IVA a pagar + retenciones a enterar. */
+    totalAPagarSat: number;
     saldoFavorAnteriorAuto: number;
     saldoFavorAnteriorOverride: number | null;
     saldoFavorAnteriorPeriodo: string | null;
@@ -160,7 +174,7 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
       )}
       <IvaSection
         title="IVA acreditable (pagado)"
-        subtitle="IVA que pagaste a tus proveedores, acreditable contra el trasladado"
+        subtitle="IVA que pagaste a tus proveedores, acreditable contra el trasladado. Si le retuviste IVA a un proveedor, esa parte NO se acredita este mes (Art. 5-IV LIVA): se acredita el mes siguiente al de su entero."
         rows={data.acreditable}
         totalLabel="Total acreditable"
         excluidoLabel="no acreditado"
@@ -199,10 +213,23 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
       {data.retenidoAProveedores.length > 0 && (
         <IvaSection
           title="IVA retenido a proveedores"
-          subtitle="IVA que tú retuviste (pasivo a pagar al SAT en otra declaración)"
+          subtitle="IVA que tú retuviste al pagar (Art. 1-A LIVA). Se ENTERA al SAT junto con esta declaración: no reduce tu IVA a cargo, pero sí lo pagas. Se vuelve acreditable el mes siguiente."
           rows={data.retenidoAProveedores}
-          totalLabel="Total retenido"
+          totalLabel="Total retenido a enterar"
         />
+      )}
+      {data.totales.retencionesRevisar && data.totales.retencionesRevisar.count > 0 && (
+        <div className="flex items-start gap-2.5 rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-[13px] text-cos-amber-ink">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+          <span>
+            <b>{data.totales.retencionesRevisar.count} retención(es)</b> por{" "}
+            <b>{formatCurrency(data.totales.retencionesRevisar.importe)}</b> marcada(s) <b>revisar</b>: el CFDI trae una
+            retención de IVA mayor a su propio IVA trasladado o mayor al 16% de la base, algo que ninguna retención del
+            Art. 1-A LIVA produce (las usuales son 2/3 del IVA y 4%). Suele ser un redondeo o un XML mal armado por el
+            emisor. Están incluidas en el total a enterar; revisa el XML y, si es un error del emisor, pide la
+            corrección del CFDI.
+          </span>
+        </div>
       )}
 
       <div className={`${CARD} p-5 text-[14px]`}>
@@ -210,9 +237,15 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
         <dl className="space-y-1.5">
           <Line label="IVA trasladado (+)" value={data.totales.trasladado} />
           <Line label="IVA retenido por clientes (−)" value={-data.totales.retenidoPorClientes} />
+          {data.totales.retenidoMesAnteriorAcreditable > 0 && (
+            <Line
+              label={`IVA retenido a proveedores en ${periodoLargo(data.totales.retenidoMesAnteriorPeriodo)}, enterado — acreditable este mes (Art. 5-IV) (−)`}
+              value={-data.totales.retenidoMesAnteriorAcreditable}
+            />
+          )}
           {data.totales.proporcionAcreditamiento < 1 ? (
             <>
-              <Line label="IVA acreditable bruto" value={data.totales.acreditable} />
+              <Line label="IVA acreditable bruto (incluye lo retenido el mes anterior)" value={data.totales.acreditable} />
               <Line
                 label={`× Proporción de acreditamiento Art. 5-V (gravados ${formatCurrency(data.totales.actosGravados)} / exentos ${formatCurrency(data.totales.actosExentos)})`}
                 value={null}
@@ -220,7 +253,7 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
               <Line label={`= IVA acreditable procedente (${(data.totales.proporcionAcreditamiento * 100).toFixed(2)}%) (−)`} value={-data.totales.acreditableProcedente} />
             </>
           ) : (
-            <Line label="IVA acreditable (−)" value={-data.totales.acreditable} />
+            <Line label={data.totales.retenidoMesAnteriorAcreditable > 0 ? "IVA acreditable del mes (neto de retenciones) (−)" : "IVA acreditable (−)"} value={-(data.totales.acreditableMes ?? data.totales.acreditable)} />
           )}
           <Line label="= IVA a cargo" value={data.totales.ivaCargo} strong />
           <SaldoFavorAnteriorLine
@@ -236,6 +269,16 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
               <Line label="= Saldo a favor del mes" value={data.totales.saldoFavorMes} strong big colorClass="text-cos-jade-ink" />
             )}
           </div>
+          {data.totales.retenidoAProveedores > 0 && (
+            <div className="border-t border-cos-line-soft pt-2 space-y-1.5">
+              <Line label="Retenciones de IVA a proveedores a enterar (+)" value={data.totales.retenidoAProveedores} />
+              <Line label="= TOTAL A PAGAR AL SAT (IVA + retenciones)" value={data.totales.totalAPagarSat} strong big colorClass="text-cos-red-ink" />
+              <p className="text-[11.5px] text-cos-ink-faint">
+                Las retenciones se enteran junto con la declaración del mes (Art. 1-A LIVA) y no se compensan con el saldo a favor.
+                Lo enterado se acredita en la declaración del mes siguiente.
+              </p>
+            </div>
+          )}
         </dl>
       </div>
     </div>
@@ -428,6 +471,16 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
                 ) : r.pagadaConciliada && (
                   <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cos-jade-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-jade-ink" title="PUE con pago conciliado en banco — respaldado por un movimiento bancario">
                     <CheckCircle2 className="h-3 w-3" /> pagada
+                  </span>
+                )}
+                {r.revisar && (
+                  <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-amber-ink" title={r.motivoRevisar ?? "Retención anómala: revisa el XML del CFDI"}>
+                    <AlertTriangle className="h-3 w-3" /> revisar
+                  </span>
+                )}
+                {r.ivaRetenidoDiferido != null && r.ivaRetenidoDiferido > 0 && (
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-slate-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-ink-soft" title={`Se retuvieron ${formatCurrency(r.ivaRetenidoDiferido)} de IVA a este proveedor: esa parte se acredita el mes siguiente al de su entero (Art. 5-IV LIVA). El importe mostrado ya es neto.`}>
+                    −{formatCurrency(r.ivaRetenidoDiferido)} retenido
                   </span>
                 )}
               </td>

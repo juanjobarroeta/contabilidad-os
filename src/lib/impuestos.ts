@@ -9,6 +9,8 @@ import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
 import { efosRfcsBloqueados } from "./fiscal/efos/service";
 import { perdidasDisponibles } from "./fiscal/perdidas";
 import { ivaTrasladadoDe, repIvaTrasladadoDe } from "./fiscal/iva-flujo";
+import { ivaAcreditableNetoDe, ivaRetenidoDe, isrRetenidoDe, repIsrRetenidoDe, repIvaRetenidoDe } from "./fiscal/iva-retenciones";
+import { ivaRetenidoAProveedoresEnPeriodo } from "./fiscal/iva-retenciones-db";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
 
 /**
@@ -184,8 +186,20 @@ export interface TaxPosition {
   iva: {
     trasladado: number;
     retenidoPorClientes: number;
-    /** IVA que retuvimos a proveedores — pasivo a enterar (no reduce nuestro IVA). */
+    /**
+     * IVA que retuvimos a proveedores en el mes (flujo: PUE al emitirse, PPD con
+     * cada REP) — pasivo a ENTERAR junto con la declaración (Art. 1-A LIVA). No
+     * reduce nuestro IVA a cargo, pero sí es dinero que sale: ver totalConRetenciones.
+     */
     retenidoAProveedores: number;
+    /**
+     * IVA que retuvimos el MES ANTERIOR y (se asume) enteramos con esa
+     * declaración: es acreditable en ésta (Art. 5-IV LIVA). Ya está incluido en
+     * `acreditableBruto`/`acreditable`; se expone para mostrarlo como línea.
+     */
+    retenidoMesAnteriorAcreditable: number;
+    /** IVA a pagar + retenciones a enterar: lo que realmente sale hacia el SAT por IVA este mes. */
+    totalConRetenciones: number;
     /** IVA acreditable PROCEDENTE (ya aplicada la proporción Art. 5-V) — la cifra que entra al cálculo. */
     acreditable: number;
     /** IVA acreditable antes de proporción (suma de los gastos del periodo). */
@@ -235,6 +249,13 @@ export interface TaxPosition {
     isrPagar: number | null;
     /** ISR retenido (Art. 106, 10% por PM) acreditado contra el provisional. 0 si no aplica al régimen. */
     retencionesAcreditadas: number;
+    /**
+     * ISR que NOSOTROS retuvimos a proveedores personas físicas en el mes
+     * (honorarios 10% Art. 106, arrendamiento Art. 116; flujo: PUE al emitirse,
+     * PPD con cada REP) — pasivo a ENTERAR con la declaración. No afecta el
+     * provisional propio. Se rellena al final para todos los regímenes.
+     */
+    retenidoAProveedoresEnterar: number;
     /** Saldo a favor de ISR arrastrado del periodo anterior (RESICO: retención 1.25% que excedió el causado). 0 si no aplica. */
     saldoFavorAnterior: number;
     /** Saldo a favor de ISR generado este periodo — se arrastra al siguiente al guardar la declaración. 0 si no aplica. */
@@ -669,14 +690,24 @@ export async function computeTaxPosition(
 
   let ivaTrasladadoPPD = 0;
   let ivaAcreditablePPD = 0;
+  let ivaRetenidoProvPPD = 0;
+  let isrRetenidoProvPPD = 0;
   for (const link of repCobrosDelMes) {
     const parent = repParentByUuid.get(normalizarUuid(link.parentUuid));
     if (!parent) continue; // REP references a non-PPD or unknown invoice — skip
-    const iva = signoTipoSat(parent.tipoSat) * repIvaTrasladado(link, parent);
+    const signo = signoTipoSat(parent.tipoSat);
+    const iva = signo * repIvaTrasladado(link, parent);
     if (parent.tipo === "INGRESO" && !parent.ivaNoCausado) ivaTrasladadoPPD += iva;
-    // EGRESO de proveedor 69-B definitivo → IVA no acreditable (Art. 69-B).
-    // Igual si el contador lo excluyó del acreditamiento (p. ej. no pagado).
-    else if (parent.tipo === "EGRESO" && !esEfosBloqueado(parent.customer?.rfc) && !parent.ivaNoAcreditable) ivaAcreditablePPD += iva;
+    else if (parent.tipo === "EGRESO") {
+      // La retención se hace al PAGAR (Art. 1-A): cada REP retiene su parte.
+      const retenido = signo * repIvaRetenidoDe(link, parent);
+      ivaRetenidoProvPPD += retenido;
+      isrRetenidoProvPPD += signo * repIsrRetenidoDe(link, parent);
+      // EGRESO de proveedor 69-B definitivo → IVA no acreditable (Art. 69-B).
+      // Igual si el contador lo excluyó del acreditamiento (p. ej. no pagado).
+      // Lo retenido NO es acreditable este mes (Art. 5-IV): se descuenta.
+      if (!esEfosBloqueado(parent.customer?.rfc) && !parent.ivaNoAcreditable) ivaAcreditablePPD += Math.max(0, iva - retenido);
+    }
   }
 
   // ── IVA (flujo de efectivo) ──────────────────────────────────────────────
@@ -690,17 +721,29 @@ export async function computeTaxPosition(
     (sum, inv) => sum + inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion).reduce((s, t) => s + t.importe, 0),
     0
   );
-  // IVA que NOSOTROS retuvimos a proveedores (egresos): es un pasivo a ENTERAR
-  // al SAT, no reduce nuestro IVA — va como línea propia en la declaración.
-  const ivaRetenidoAProveedores = facturasEgresos.reduce(
-    (sum, inv) => sum + inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion).reduce((s, t) => s + t.importe, 0),
-    0
-  );
+  // IVA que NOSOTROS retuvimos a proveedores en el mes, en FLUJO (Art. 1-A: la
+  // retención nace al pagar → PUE al emitirse, PPD con cada REP). Es un pasivo
+  // a ENTERAR al SAT junto con esta declaración; no reduce nuestro IVA a cargo.
+  const ivaRetenidoProvPUE = facturasEgresos
+    .filter((inv) => inv.metodoPago === "PUE")
+    .reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaRetenidoDe(inv), 0);
+  const ivaRetenidoAProveedores = ivaRetenidoProvPUE + ivaRetenidoProvPPD;
+  // ISR retenido a proveedores PF (mismo criterio de flujo): también se entera.
+  const isrRetenidoAProveedores =
+    facturasEgresos
+      .filter((inv) => inv.metodoPago === "PUE")
+      .reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * isrRetenidoDe(inv), 0) + isrRetenidoProvPPD;
 
+  // Acreditable del mes NETO de lo retenido (Art. 5-IV LIVA): la parte retenida
+  // sólo se acredita en el mes siguiente al de su entero.
   const ivaAcreditablePUE = facturasEgresos
     .filter((inv) => inv.metodoPago === "PUE" && !inv.ivaNoAcreditable)
-    .reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
-  const ivaAcreditableBruto = ivaAcreditablePUE + ivaAcreditablePPD;
+    .reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaAcreditableNetoDe(inv), 0);
+  // Lo retenido el MES ANTERIOR (enterado con aquella declaración) se acredita
+  // en ésta. Se calcula con el mismo criterio de flujo para el periodo previo.
+  const prevFrom = new Date(year, month - 2, 1);
+  const ivaRetenidoMesAnteriorAcreditable = await ivaRetenidoAProveedoresEnPeriodo(companyId, prevFrom, from);
+  const ivaAcreditableBruto = ivaAcreditablePUE + ivaAcreditablePPD + ivaRetenidoMesAnteriorAcreditable;
   const ivaAcreditableDevengado = facturasEgresos.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
 
   // Proporción de acreditamiento (Art. 5-V LIVA): con actos exentos en el mes,
@@ -757,6 +800,7 @@ export async function computeTaxPosition(
       isrDelEjercicio: r.isrCausado, // causado del mes (tasa × ingresos)
       isrPagar: r.isrPagar,
       retencionesAcreditadas: r.retenciones,
+      retenidoAProveedoresEnterar: 0, // se rellena al final (flujo, todos los regímenes)
       saldoFavorAnterior: 0,
       saldoAFavor: 0,
       tarifaVerificada: true, // tasas fijas Art. 113-A (sin actualización anual)
@@ -799,6 +843,7 @@ export async function computeTaxPosition(
       isrDelEjercicio: res.isr, // causado mensual definitivo (antes de retención)
       isrPagar: Math.max(0, round2(res.isr - acreditableIsr)),
       retencionesAcreditadas: isrRetenidoMes, // 1.25% retenido por clientes PM (Art. 113-J)
+      retenidoAProveedoresEnterar: 0, // se rellena al final (flujo, todos los regímenes)
       saldoFavorAnterior: saldoFavorIsrAnterior,
       saldoAFavor: Math.max(0, round2(acreditableIsr - res.isr)),
       tarifaVerificada: true,
@@ -845,6 +890,7 @@ export async function computeTaxPosition(
       isrDelEjercicio: r ? r.isrCausado : null, // causado del mes (provisional standalone)
       isrPagar: r ? r.isrPagar : null,
       retencionesAcreditadas: r ? r.retenciones : 0,
+      retenidoAProveedoresEnterar: 0, // se rellena al final (flujo, todos los regímenes)
       saldoFavorAnterior: 0,
       saldoAFavor: 0,
       tarifaVerificada: r ? r.tarifaVerificada : false,
@@ -905,6 +951,7 @@ export async function computeTaxPosition(
       isrPagar: r ? r.isrPagar : null,
       retencionesAcreditadas: r ? r.retencionesAcum : 0,
       // Art. 106 es acumulativo: una retención que excede el causado de un mes
+      retenidoAProveedoresEnterar: 0, // se rellena al final (flujo, todos los regímenes)
       // se auto-corrige en el cálculo acumulado — no necesita arrastre explícito.
       saldoFavorAnterior: 0,
       saldoAFavor: 0,
@@ -1065,6 +1112,7 @@ export async function computeTaxPosition(
       isrDelEjercicio,
       isrPagar,
       retencionesAcreditadas: 0, // PM Art. 14 no acredita retención 10% PF
+      retenidoAProveedoresEnterar: 0, // se rellena al final (flujo, todos los regímenes)
       saldoFavorAnterior: 0,
       saldoAFavor: 0,
       tarifaVerificada: true,
@@ -1124,6 +1172,8 @@ export async function computeTaxPosition(
   if (prevDeclaracion || prevIsrDeclaracion) mesesConDeclaracion.add(prevPeriodo);
   const advertencias = advertenciasCadenaDeclaraciones({ year, month, mesesConActividad, mesesConDeclaracion });
 
+  isr.retenidoAProveedoresEnterar = round2(Math.max(0, isrRetenidoAProveedores));
+
   return {
     periodo,
     month,
@@ -1134,6 +1184,8 @@ export async function computeTaxPosition(
       trasladado: round2(ivaTrasladadoTotal),
       retenidoPorClientes: round2(ivaRetenidoPorClientes),
       retenidoAProveedores: round2(ivaRetenidoAProveedores),
+      retenidoMesAnteriorAcreditable: round2(ivaRetenidoMesAnteriorAcreditable),
+      totalConRetenciones: round2(ivaPagar + Math.max(0, ivaRetenidoAProveedores)),
       acreditable: round2(ivaAcreditable),
       acreditableBruto: round2(ivaAcreditableBruto),
       proporcionAcreditamiento: actos.proporcion,
