@@ -9,6 +9,9 @@ bancos, conciliación, mayor, impuestos) y el frontend vive en el repo
 **`Hospital`** (SPA React/Vite, sin base de datos ni auth propias). Módulo:
 `CompanyModule(modulo = HOSPITAL)`; API: `/api/hospital/*` (bearer + CORS).
 
+Normativa y datos que entran/salen (NOM-004, NOM-024, NOM-026, controlados,
+SINBA, LFPDPPP, IVA hospitalario): [HOSPITAL-NORMATIVA.md](./HOSPITAL-NORMATIVA.md).
+
 ## La cadena del producto
 
 ```
