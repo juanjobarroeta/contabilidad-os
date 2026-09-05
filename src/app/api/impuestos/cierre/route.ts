@@ -129,6 +129,16 @@ export async function GET(req: Request) {
       tipoMonto: "enterar",
     });
   }
+  // ISR que retuvimos a proveedores personas físicas (honorarios 10%,
+  // arrendamiento): se entera en la misma declaración. Sólo si retuvimos.
+  if (pos.isr.retenidoAProveedoresEnterar > 0.005) {
+    federalLineas.push({
+      tipo: "RETENCIONES_ISR",
+      descripcion: "ISR retenido a proveedores (honorarios / arrendamiento)",
+      monto: pos.isr.retenidoAProveedoresEnterar,
+      tipoMonto: "enterar",
+    });
+  }
   // IVA que retuvimos a proveedores (servicios, arrendamiento, fletes): se entera
   // en la misma declaración mensual. Sólo aparece si efectivamente retuvimos.
   if (pos.iva.retenidoAProveedores > 0.005) {

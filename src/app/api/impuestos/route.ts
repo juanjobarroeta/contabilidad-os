@@ -165,6 +165,9 @@ export async function GET(req: Request) {
       // Flujo de efectivo, base-REP (what SAT actually expects) — from the engine.
       trasladado: pos.iva.trasladado,
       retenidoPorClientes: pos.iva.retenidoPorClientes,
+      retenidoAProveedores: pos.iva.retenidoAProveedores,
+      retenidoMesAnteriorAcreditable: pos.iva.retenidoMesAnteriorAcreditable,
+      totalConRetenciones: pos.iva.totalConRetenciones,
       acreditable: pos.iva.acreditable,
       acreditableBruto: pos.iva.acreditableBruto,
       proporcionAcreditamiento: pos.iva.proporcionAcreditamiento,
