@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { effectiveCierrePlan, planIncluyeCierreGuiado } from "@/lib/planes";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -46,12 +47,17 @@ export async function GET(req: Request) {
         // El operador ve empresas de varios despachos: incluimos el nombre del
         // despacho para que el selector las agrupe en vez de mezclarlas.
         despachoId: true,
-        despacho: { select: { name: true } },
+        tier: true,
+        despacho: { select: { name: true, defaultTier: true } },
       },
       orderBy: [{ despacho: { name: "asc" } }, { razonSocial: "asc" }],
     });
     return NextResponse.json(
-      all.map(({ despacho, ...c }) => ({ ...c, despachoNombre: despacho?.name ?? null }))
+      all.map(({ despacho, tier, ...c }) => ({
+        ...c,
+        despachoNombre: despacho?.name ?? null,
+        cierreGuiado: planIncluyeCierreGuiado(effectiveCierrePlan({ tier, despacho })),
+      }))
     );
   }
 
@@ -70,6 +76,8 @@ export async function GET(req: Request) {
             regimenFiscal: true,
             codigoPostal: true,
             isActive: true,
+            tier: true,
+            despacho: { select: { defaultTier: true } },
           },
         },
       },
@@ -101,6 +109,8 @@ export async function GET(req: Request) {
         regimenFiscal: true,
         codigoPostal: true,
         isActive: true,
+        tier: true,
+        despacho: { select: { defaultTier: true } },
       },
     });
   }
@@ -114,7 +124,13 @@ export async function GET(req: Request) {
     if (c.isActive) byId.set(c.id, c);
   }
 
-  return NextResponse.json(Array.from(byId.values()));
+  return NextResponse.json(
+    Array.from(byId.values()).map(({ tier, despacho, ...c }) => ({
+      ...c,
+      // Cierre guiado (PRO): la UI decide con esto si muestra «Hoy» y /cierre.
+      cierreGuiado: planIncluyeCierreGuiado(effectiveCierrePlan({ tier, despacho })),
+    }))
+  );
 }
 
 export async function POST(req: Request) {

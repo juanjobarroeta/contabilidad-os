@@ -23,20 +23,9 @@
 import type { ReadinessResult } from "../contabilidad/ce-readiness";
 import type { ChecklistDeclaracion, ChecklistItem } from "../fiscal/checklist-declaracion";
 import { hashEvidencia } from "./evidencia";
+import { ORDEN_PASOS, esClavePaso, type ClavePasoCierre } from "./claves";
 
-export type ClavePasoCierre =
-  | "apertura"
-  | "sat"
-  | "nomina"
-  | "imss"
-  | "banco"
-  | "complementos"
-  | "impuestos"
-  | "diot"
-  | "contabilidad"
-  | "revision"
-  | "declaracion"
-  | "entregables";
+export { ORDEN_PASOS, esClavePaso, type ClavePasoCierre };
 
 /**
  * `listo` nada que hacer · `atencion` hay trabajo pero no impide avanzar ·
@@ -232,16 +221,14 @@ export const PASOS: DefinicionPaso[] = [
   },
 ];
 
-export const ORDEN_PASOS: ClavePasoCierre[] = PASOS.map((p) => p.clave);
+if (PASOS.map((p) => p.clave).join(",") !== ORDEN_PASOS.join(",")) {
+  throw new Error("cierre/workflow: PASOS y ORDEN_PASOS (claves.ts) no coinciden");
+}
 
 export function definicionPaso(clave: ClavePasoCierre): DefinicionPaso {
   const d = PASOS.find((p) => p.clave === clave);
   if (!d) throw new Error(`Paso de cierre desconocido: ${clave}`);
   return d;
-}
-
-export function esClavePaso(v: unknown): v is ClavePasoCierre {
-  return typeof v === "string" && (ORDEN_PASOS as string[]).includes(v);
 }
 
 // ── Hechos: lo que los motores ya calcularon ─────────────────────────────────

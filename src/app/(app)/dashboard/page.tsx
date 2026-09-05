@@ -19,6 +19,7 @@ import { Building2, Rows3 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { PilotoDelCierre } from "@/components/inicio/PilotoDelCierre";
 import { ColaDeTrabajo } from "@/components/inicio/ColaDeTrabajo";
+import { HoyPendientes } from "@/components/inicio/HoyPendientes";
 import { Loading } from "@/components/ui/feedback";
 import { cn } from "@/lib/utils";
 
@@ -53,13 +54,16 @@ export default function InicioPage() {
   const hoy = new Date();
   const multiEmpresa = companies.length > 1;
   const enCola = lente === "cola" && multiEmpresa;
+  // Cierre guiado (PRO): «Hoy» — lo que el copiloto propone hacer hoy en los
+  // RFCs con plan — va arriba de cualquiera de los dos lentes.
+  const conCierre = companies.some((c) => c.cierreGuiado);
 
   return (
     <div className="mx-auto max-w-[1000px] px-6 py-7">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[13px] text-cos-ink-soft">
-            {enCola ? "Así va el mes de tu despacho" : "Hola, esto es lo importante de"}
+            {conCierre ? "Hoy" : enCola ? "Así va el mes de tu despacho" : "Hola, esto es lo importante de"}
           </p>
           <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-cos-ink">
             {enCola ? `${companies.length} empresas` : activeCompany.razonSocial}
@@ -96,6 +100,11 @@ export default function InicioPage() {
         )}
       </div>
 
+      {conCierre && (
+        <div className="mb-6">
+          <HoyPendientes />
+        </div>
+      )}
       {enCola ? <ColaDeTrabajo /> : <PilotoDelCierre />}
     </div>
   );

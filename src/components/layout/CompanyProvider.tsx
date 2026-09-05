@@ -13,6 +13,8 @@ interface Company {
   // permite agrupar el selector por despacho.
   despachoId?: string | null;
   despachoNombre?: string | null;
+  /** Cierre guiado (PRO) incluido en el plan (propio o heredado del despacho). */
+  cierreGuiado?: boolean;
 }
 
 interface CompanyContextValue {
