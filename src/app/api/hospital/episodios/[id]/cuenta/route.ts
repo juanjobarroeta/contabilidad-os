@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
+import { registrarAcceso } from "@/lib/hospital/accesos";
 import { asegurarCargosEstancia } from "@/lib/hospital/estancia";
 import { calcularCuenta } from "@/lib/hospital/cuenta";
 import { cargoParaCuenta, customerResumen, pacienteResumen, pagadorResumen } from "@/lib/hospital/serializar";
@@ -18,11 +19,12 @@ import { r2 } from "@/lib/hospital/util";
 
 export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
-  const base = await prisma.hospEpisodio.findUnique({ where: { id }, select: { id: true, companyId: true } });
+  const base = await prisma.hospEpisodio.findUnique({ where: { id }, select: { id: true, companyId: true, folio: true, pacienteId: true } });
   if (!base) throw new AuthzError(404, "Episodio no encontrado");
 
-  await requireMembership(base.companyId, undefined, req);
+  const { user } = await requireMembership(base.companyId, undefined, req);
   await requireModule(base.companyId, "HOSPITAL", req);
+  registrarAcceso({ companyId: base.companyId, accion: "LECTURA_CUENTA", episodioId: base.id, pacienteId: base.pacienteId, detalle: `Cuenta ${base.folio}`, user, req });
 
   await asegurarCargosEstancia(prisma, id, new Date());
 

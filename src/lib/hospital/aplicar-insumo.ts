@@ -32,6 +32,7 @@ import { HospitalError } from "./errores";
 import { esActivo, r2 } from "./util";
 import { exigeLibroControl, nombreReceta } from "./controlados";
 import { ivaContextoPorEpisodio, ivaTasaPorContexto } from "./cuenta";
+import { hashNota } from "./notas";
 
 export interface AplicarInsumoArgs {
   companyId: string;
@@ -198,16 +199,30 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
       : "";
     const texto =
       `${etiqueta} — descontado de farmacia y cargado a la cuenta.${amparo}` + (args.nota?.trim() ? ` ${args.nota.trim()}` : "");
+    // La nota nace sellada como las demás (NOM-004): mismo hash canónico que crearNota.
+    const firmable = {
+      episodioId: episodio.id,
+      tipo: "MEDICAMENTO_APLICADO" as const,
+      fecha,
+      texto,
+      secciones: null,
+      autorNombre: args.usuarioNombre,
+      autorCedula: null,
+      medicoId: args.medicoId ?? null,
+      reemplazaId: null,
+    };
     const nota = await tx.hospNota.create({
       data: {
-        episodioId: episodio.id,
-        tipo: "MEDICAMENTO_APLICADO",
-        fecha,
-        texto,
+        episodioId: firmable.episodioId,
+        tipo: firmable.tipo,
+        fecha: firmable.fecha,
+        texto: firmable.texto,
+        autorNombre: firmable.autorNombre,
+        medicoId: firmable.medicoId,
         autorUserId: args.usuarioId ?? null,
-        autorNombre: args.usuarioNombre,
-        medicoId: args.medicoId ?? null,
         cargoId: cargo.id,
+        hash: hashNota(firmable),
+        selloAt: new Date(),
       },
     });
 

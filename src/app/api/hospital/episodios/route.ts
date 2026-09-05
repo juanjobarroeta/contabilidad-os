@@ -4,6 +4,10 @@
  *
  * ACTIVOS = todo lo que no es ALTA ni CANCELADO (incluye PROGRAMADO: la cama
  * ya está reservada y la lista de «Pacientes de hoy» los enseña).
+ *
+ * P1: diagnóstico de ingreso (CIE-10) y procedimiento (CIE-9-MC) por
+ * catálogo; triage obligatorio en URGENCIAS; ASA; AMBULATORIO nace con
+ * limiteAmbulatorioAt = ingreso + 12 h. Paciente sin CURP ni motivo → 409.
  */
 
 import { NextResponse } from "next/server";
@@ -96,6 +100,11 @@ const createSchema = z.object({
   notasAdmin: z.string().max(4000).nullable().optional(),
   cotizacionId: z.string().nullable().optional(),
   fechaIngreso: fechaSchema.nullable().optional(),
+  diagnosticoIngresoCie10: z.string().max(10).nullable().optional(),
+  procedimientoCie9: z.string().max(10).nullable().optional(),
+  triageNivel: z.number().int().min(1).max(5).nullable().optional(),
+  triageAt: fechaSchema.nullable().optional(),
+  asa: z.string().max(5).nullable().optional(),
 });
 
 export const POST = withHospital(async (req: Request) => {
@@ -110,6 +119,7 @@ export const POST = withHospital(async (req: Request) => {
   const episodio = await crearEpisodio(prisma, {
     ...d,
     fechaIngreso: aFecha(d.fechaIngreso),
+    triageAt: aFecha(d.triageAt),
     usuario: usuarioDe(user),
   });
 
@@ -125,6 +135,9 @@ export const POST = withHospital(async (req: Request) => {
       cama: episodio.recurso?.nombre ?? null,
       cotizacionId: episodio.cotizacionId,
       cargosCopiados: episodio.cargos.length,
+      diagnosticoIngresoCie10: episodio.diagnosticoIngresoCie10,
+      procedimientoCie9: episodio.procedimientoCie9,
+      triageNivel: episodio.triageNivel,
     },
   });
 

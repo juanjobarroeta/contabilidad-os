@@ -5,6 +5,11 @@
  * El padrón de pacientes. Cada fila trae lo que la lista enseña sin abrir la
  * ficha: nombre completo, edad, convenio, receptor fiscal, cuántos episodios
  * y el último, y el saldo (Σ de la cuenta de sus episodios abiertos).
+ *
+ * Alta (P1, NOM-024 / LFPDPPP): CURP obligatoria y validada —o `sinCurp` con
+ * motivo—, única por empresa; fecha de nacimiento, sexo y entidad se cruzan
+ * con la CURP (y se toman de ella si faltan); `expedienteNumero` se asigna
+ * (EXP-AAAA-NNNN) y no se edita; el aviso de privacidad deja versión y fecha.
  */
 
 import { NextResponse } from "next/server";
@@ -12,10 +17,19 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
-import { aFecha, bitacora, error, errorZod } from "@/lib/hospital/http";
+import { bitacora, error, errorZod } from "@/lib/hospital/http";
+import { conFolioUnico, siguienteFolio } from "@/lib/hospital/folio";
 import { customerResumen, pacienteResumen, pagadorResumen, totalesCargos } from "@/lib/hospital/serializar";
 import { ESTADOS_ACTIVOS } from "@/lib/hospital/util";
-import { pacienteSchema, validarVinculosPaciente } from "@/lib/hospital/paciente-schema";
+import {
+  avisoPrivacidadDe,
+  fechaNacimientoDe,
+  mensajeCurpDuplicada,
+  pacienteConCurp,
+  pacienteSchema,
+  resolverIdentidadCurp,
+  validarVinculosPaciente,
+} from "@/lib/hospital/paciente-schema";
 
 export const GET = withHospital(async (req: Request) => {
   const { searchParams } = new URL(req.url);
@@ -39,6 +53,7 @@ export const GET = withHospital(async (req: Request) => {
               { apellidoPaterno: { contains: q, mode: "insensitive" } },
               { apellidoMaterno: { contains: q, mode: "insensitive" } },
               { curp: { contains: q, mode: "insensitive" } },
+              { expedienteNumero: { contains: q, mode: "insensitive" } },
               { telefono: { contains: q } },
             ],
           }
@@ -94,7 +109,7 @@ export const POST = withHospital(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return errorZod(parsed.error);
-  const { companyId, fechaNacimiento, curp, ...data } = parsed.data;
+  const { companyId, fechaNacimiento, curp, sinCurp, sinCurpMotivo, sexo, entidadNacimiento, avisoPrivacidadAceptado, avisoPrivacidadAceptadoAt, avisoPrivacidadVersion, ...data } = parsed.data;
 
   const { user } = await requireWriter(companyId, req);
   await requireModule(companyId, "HOSPITAL", req);
@@ -102,25 +117,42 @@ export const POST = withHospital(async (req: Request) => {
   const invalido = await validarVinculosPaciente(companyId, data);
   if (invalido) return error(invalido);
 
-  const paciente = await prisma.hospPaciente.create({
-    data: {
-      companyId,
-      ...data,
-      curp: curp?.trim().toUpperCase() || null,
-      fechaNacimiento: aFecha(fechaNacimiento),
-    },
-    include: {
-      pagador: { select: { id: true, nombre: true, tipo: true, tabulador: true, deducible: true, coaseguroPct: true, plazoDias: true, topeAutorizacion: true } },
-      customer: { select: { id: true, razonSocial: true, rfc: true } },
-    },
+  const identidad = resolverIdentidadCurp({
+    curp,
+    sinCurp,
+    sinCurpMotivo,
+    sexo,
+    fechaNacimiento: fechaNacimientoDe(fechaNacimiento),
+    entidadNacimiento,
+    exigirCurp: true,
   });
+  if (!identidad.ok) return error(identidad.error, identidad.status);
+  if (identidad.datos.curp) {
+    const dup = await pacienteConCurp(companyId, identidad.datos.curp);
+    if (dup) return error(mensajeCurpDuplicada(dup, identidad.datos.curp), 409);
+  }
+  const hoy = new Date();
+  const aviso = await avisoPrivacidadDe(companyId, { avisoPrivacidadAceptado, avisoPrivacidadAceptadoAt, avisoPrivacidadVersion }, hoy);
+
+  const paciente = await conFolioUnico(() =>
+    prisma.$transaction(async (tx) => {
+      const expedienteNumero = await siguienteFolio(tx, companyId, "expediente", hoy);
+      return tx.hospPaciente.create({
+        data: { companyId, ...data, ...identidad.datos, ...aviso, expedienteNumero },
+        include: {
+          pagador: { select: { id: true, nombre: true, tipo: true, tabulador: true, deducible: true, coaseguroPct: true, plazoDias: true, topeAutorizacion: true } },
+          customer: { select: { id: true, razonSocial: true, rfc: true } },
+        },
+      });
+    })
+  );
 
   bitacora(user, req, {
     companyId,
     accion: "hospital.paciente.crear",
     entidad: "HospPaciente",
     entidadId: paciente.id,
-    detalle: { nombre: `${paciente.nombre} ${paciente.apellidoPaterno}`, curp: paciente.curp },
+    detalle: { nombre: `${paciente.nombre} ${paciente.apellidoPaterno}`, curp: paciente.curp, sinCurp: paciente.sinCurp, expedienteNumero: paciente.expedienteNumero },
   });
 
   return NextResponse.json(

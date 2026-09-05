@@ -18,12 +18,14 @@ import { partesLocales } from "./tz";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-export type SerieFolio = "episodio" | "cotizacion" | "ticket";
+export type SerieFolio = "episodio" | "cotizacion" | "ticket" | "expediente";
 
+/** El número de expediente del paciente (NOM-004) usa la misma serie anual: EXP-2026-0001. */
 export const PREFIJO_DEFAULT: Record<SerieFolio, string> = {
   episodio: "HOSP",
   cotizacion: "COT",
   ticket: "MANT",
+  expediente: "EXP",
 };
 
 export function formatearFolio(prefijo: string, anio: number, n: number): string {
@@ -50,6 +52,9 @@ export function siguienteConsecutivo(folios: string[], prefijo: string, anio: nu
 }
 
 export async function prefijoDeSerie(db: Db, companyId: string, serie: SerieFolio): Promise<string> {
+  // El expediente no es configurable: un solo prefijo para que el número sea
+  // reconocible en cualquier establecimiento que use el módulo.
+  if (serie === "expediente") return PREFIJO_DEFAULT.expediente;
   const cfg = await db.hospConfig.findUnique({
     where: { companyId },
     select: { serieEpisodio: true, serieCotizacion: true, serieTicket: true },
@@ -70,7 +75,16 @@ export async function siguienteFolio(
 
   const prefijo = await prefijoDeSerie(db, companyId, serie);
   const anio = partesLocales(fecha).y;
-  const where = { companyId, folio: { startsWith: `${prefijo}-${anio}-` } };
+  const inicio = `${prefijo}-${anio}-`;
+  if (serie === "expediente") {
+    const pacientes = await db.hospPaciente.findMany({
+      where: { companyId, expedienteNumero: { startsWith: inicio } },
+      select: { expedienteNumero: true },
+    });
+    const emitidos = pacientes.map((p) => p.expedienteNumero).filter((n): n is string => !!n);
+    return formatearFolio(prefijo, anio, siguienteConsecutivo(emitidos, prefijo, anio));
+  }
+  const where = { companyId, folio: { startsWith: inicio } };
   const select = { folio: true } as const;
   const filas =
     serie === "episodio"
@@ -81,13 +95,11 @@ export async function siguienteFolio(
   return formatearFolio(prefijo, anio, siguienteConsecutivo(filas.map((f) => f.folio), prefijo, anio));
 }
 
-/** True si el error es el choque del @@unique([companyId, folio]). */
+/** True si el error es el choque del @@unique([companyId, folio]) o del número de expediente. */
 export function esChoqueDeFolio(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    e.code === "P2002" &&
-    JSON.stringify(e.meta?.target ?? "").includes("folio")
-  );
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") return false;
+  const target = JSON.stringify(e.meta?.target ?? "");
+  return target.includes("folio") || target.includes("expedienteNumero");
 }
 
 /**
