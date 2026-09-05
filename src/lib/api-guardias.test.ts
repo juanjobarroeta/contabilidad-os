@@ -29,6 +29,8 @@ const API_DIR = path.join(APP_DIR, "api");
 const AUTENTICADORES: RegExp[] = [
   // Membresía / tenant (src/lib/authz.ts)
   /\brequireMembership\b/,
+  // Cierre guiado (src/lib/cierre/gate.ts): membresía + plan PRO
+  /\brequireCierreGuiado\b/,
   /\brequireWriter\b/,
   /\brequireOwner\b/,
   /\brequireModule\b/,
@@ -74,6 +76,7 @@ const AUTENTICADORES: RegExp[] = [
  */
 const ESCOPADORES: RegExp[] = [
   /\brequireMembership\b/,
+  /\brequireCierreGuiado\b/,
   /\brequireWriter\b/,
   /\brequireOwner\b/,
   /\brequireModule\b/,

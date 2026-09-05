@@ -309,6 +309,7 @@ model Company {
 
   // Conversaciones del asistente IA (chat persistente, por empresa)
   chatConversations ChatConversation[]
+  cierres           CierrePeriodo[]
 
   // All SAT régimenes this taxpayer is registered under. `regimenFiscal` above
   // remains the single "primary" (operative) régimen used by most flows; this
@@ -5049,12 +5050,22 @@ model ChatConversation {
   // src/lib/ai/pending-action.ts. null = sin acción pendiente.
   pendingAction Json?
 
+  // Cierre guiado (PRO): la conversación del periodo. `modo = "cierre"` +
+  // `periodo = "YYYY-MM"` la identifican; `pasoActivo` es el paso del
+  // workflow en el que va el contador (ver src/lib/cierre/workflow.ts).
+  // null en las conversaciones normales.
+  modo       String?
+  periodo    String?
+  pasoActivo String?
+
   company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages ChatMessage[]
+  cierre   CierrePeriodo?
 
   @@index([companyId, visibility, updatedAt])
   @@index([userId, updatedAt])
+  @@index([companyId, modo, periodo])
 }
 
 model ChatMessage {
@@ -5079,6 +5090,116 @@ model ChatMessage {
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CIERRE GUIADO (feature PRO). Un registro por empresa y periodo con el estado
+// de cada paso del workflow de cierre (src/lib/cierre/workflow.ts). Las
+// verificaciones se RECALCULAN siempre desde los motores (ce-readiness,
+// checklist-declaracion, IMSS, bancos…); aquí sólo se persiste el resultado
+// (para «Hoy» y la matriz del despacho, sin motores en abanico) y lo que el
+// humano decidió: confirmar / omitir, con el hash de la evidencia sobre la que
+// decidió. Si los datos cambian después, el paso vuelve a REVISAR — nunca se
+// queda verde por inercia.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EstadoPasoCierre {
+  PENDIENTE
+  CONFIRMADO
+  OMITIDO
+  REVISAR
+}
+
+model CierrePeriodo {
+  id        String @id @default(cuid())
+  companyId String
+  year      Int
+  month     Int // 1-12
+
+  /// Contador dueño del cierre: recibe los avisos del pase diario y es el
+  /// dueño de la conversación del periodo. null = aún nadie lo tomó.
+  responsableUserId String?
+  /// Conversación del periodo (ChatConversation modo="cierre").
+  conversationId String? @unique
+
+  /// Última evaluación completa (PasoEvaluado[]), para leer sin recalcular.
+  snapshot       Json?
+  /// Baseline del último pase diario: contra esto se calcula el delta que
+  /// se avisa. null = nunca ha corrido el pase.
+  snapshotAvance Json?
+  ultimoAvanceAt DateTime?
+
+  /// Fase 3: candado mensual (papeles archivados + periodo contable CLOSED).
+  cerradoAt       DateTime?
+  cerradoByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  conversation ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  pasos        PasoCierre[]
+
+  @@unique([companyId, year, month])
+  @@index([companyId, cerradoAt])
+}
+
+model PasoCierre {
+  id       String @id @default(cuid())
+  cierreId String
+  /// ClavePasoCierre (apertura | sat | nomina | imss | banco | complementos |
+  /// impuestos | diot | contabilidad | revision | declaracion | entregables).
+  clave    String
+
+  /// Lo que dicen los motores hoy: listo | atencion | bloquea | espera |
+  /// no_aplica | sin_datos.
+  estadoCalculado String
+  /// El número que importa, ya redactado («43 movimientos sin clasificar»).
+  detalle         String?
+  /// Insumos del paso (señales con su cifra) — es lo que se hashea.
+  hechos          Json
+  hashEvidencia   String
+
+  /// Lo que decidió el humano.
+  estado             EstadoPasoCierre @default(PENDIENTE)
+  confirmadoAt       DateTime?
+  confirmadoByUserId String?
+  /// Hash de la evidencia al confirmar/omitir; si difiere del actual → REVISAR.
+  hashConfirmado     String?
+  nota               String?
+
+  updatedAt DateTime @updatedAt
+
+  cierre CierrePeriodo @relation(fields: [cierreId], references: [id], onDelete: Cascade)
+
+  @@unique([cierreId, clave])
+  @@index([clave, estado])
+}
+
+/// Ledger del pase diario: cada aviso que salió, por qué canal y si el
+/// contador lo accionó. Es lo que hace MEDIBLE la precisión del pase (avisos
+/// accionados / avisos enviados) — NotificationItem es por usuario y ni el chat
+/// ni WhatsApp tienen estado.
+model CierreAviso {
+  id        String @id @default(cuid())
+  companyId String
+  periodo   String // "YYYY-MM"
+  paso      String
+  /// Identidad del delta: "banco.sin_clasificar.subio", "declaracion.vencio"…
+  deltaKey  String
+  /// inbox | chat | push | whatsapp
+  canales   String[]
+  /// true = texto de plantilla (sin modelo); false = lo redactó el modelo.
+  plantilla Boolean @default(true)
+  titulo    String
+  cuerpo    String @db.Text
+
+  enviadoAt   DateTime  @default(now())
+  /// Se marca cuando el paso avisado mejora o se confirma, o el aviso pasa a HECHO.
+  accionadoAt DateTime?
+
+  @@index([companyId, periodo, paso])
+  @@index([enviadoAt])
 }
 
 // Plan/tier comercial de una empresa. El gating de COGS (Syntage, banco,

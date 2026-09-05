@@ -157,3 +157,26 @@ export const IA_OPERACIONES_DIARIAS_USUARIO = 150;
 
 /** Paquete de uso extra que se vende: USD que suma al tope del mes en curso. */
 export const IA_PAQUETE_EXTRA_USD = 10;
+
+// ── Cierre guiado (feature PRO) ──────────────────────────────────────────────
+// El workspace de cierre conducido por el copiloto (src/lib/cierre) necesita
+// banco conciliado y avisos diarios: vive en los tiers que ya incluyen banco.
+export function planIncluyeCierreGuiado(plan: CompanyPlan): boolean {
+  return plan === "PRO" || plan === "DESPACHO";
+}
+
+/**
+ * Plan EFECTIVO para el cierre guiado. Una empresa administrada por un despacho
+ * hereda el tier con el que el despacho da de alta a sus empresas
+ * (`Despacho.defaultTier`): el despacho es quien paga y quien opera el cierre,
+ * así que sus RFCs deben poder cerrarse aunque cada uno esté en un tier menor.
+ * El tope mensual de IA sigue siendo por empresa y tier propio (sin cambio).
+ */
+export function effectiveCierrePlan(company: {
+  tier: CompanyPlan;
+  despacho?: { defaultTier: CompanyPlan | null } | null;
+}): CompanyPlan {
+  const heredado = company.despacho?.defaultTier ?? null;
+  if (heredado && planIncluyeCierreGuiado(heredado)) return heredado;
+  return company.tier;
+}
