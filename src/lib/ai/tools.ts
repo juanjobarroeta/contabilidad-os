@@ -350,7 +350,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "search_fiscal_knowledge",
     description:
-      "Busca en la legislación y normatividad fiscal mexicana vigente (leyes: LISR/LIVA/CFF/LIEPS y sus reglamentos RLISR/RLIVA/RCFF; nómina: LSS/LINFONAVIT/LFT; RMF y sus reglas; guías de llenado del CFDI / Anexo 20, incluyendo complemento de pago, PUE/PPD, método de pago) y devuelve fragmentos con su cita (artículo/regla/guía, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento fiscal — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
+      "Busca en la legislación y normatividad fiscal mexicana vigente (leyes: LISR/LIVA/CFF/LIEPS y sus reglamentos RLISR/RLIVA/RCFF; nómina: LSS/LINFONAVIT/LFT y los reglamentos RACERF (IMSS: afiliación, SBC, prima de riesgo) y RIPAEDI (INFONAVIT: aportaciones y descuentos); mercantil y cumplimiento: Código de Comercio (CCOM), LGSM, LFPIORPI y su reglamento (actividades vulnerables), LFDC (derechos del contribuyente); estatal: Ley de Hacienda (LHPUE) y Código Fiscal (CFPUE) de Puebla, Código Fiscal de la CDMX (CFCDMX) para impuesto sobre nómina y contribuciones locales; RMF y sus reglas; guías de llenado del CFDI / Anexo 20, incluyendo complemento de pago, PUE/PPD, método de pago) y devuelve fragmentos con su cita (artículo/regla/guía, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento fiscal — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -378,10 +378,10 @@ export const tools: Anthropic.Tool[] = [
       properties: {
         ley: {
           type: "string",
-          enum: ["LISR", "LIVA", "CFF", "LIEPS", "RLISR", "RLIVA", "RCFF", "LSS", "LINFONAVIT", "LFT", "RMF"],
+          enum: ["LISR", "LIVA", "CFF", "LIEPS", "RLISR", "RLIVA", "RCFF", "LSS", "LINFONAVIT", "LFT", "RACERF", "RIPAEDI", "CCOM", "LGSM", "LFPIORPI", "RLFPIORPI", "LFDC", "LHPUE", "CFPUE", "CFCDMX", "RMF"],
           description: "Clave del ordenamiento. RMF = Resolución Miscelánea Fiscal vigente.",
         },
-        articulo: { type: "string", description: "Número tal como se cita: '27', '29-A', '113-E', '17-H Bis', o la regla '2.7.1.32'." },
+        articulo: { type: "string", description: "Número tal como se cita: '27', '29-A', '113-E', '17-H Bis', '30 Bis', o la regla '2.7.1.32'." },
         fecha_vigencia: { type: "string", description: "Fecha ISO (YYYY-MM-DD) del periodo relevante. Default: hoy." },
       },
       required: ["ley", "articulo"],
@@ -390,11 +390,12 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "get_valor_fiscal",
     description:
-      "Devuelve VALORES fiscales vigentes desde las tablas oficiales cargadas en el sistema (con vigencia, fuente y si están verificados): montos de multas del CFF (Anexo 5 RMF), tarifas del ISR mensual/anual (Anexo 8), UMA, salario mínimo, tasa de recargos (LIF / Art. 21 CFF) y subsidio para el empleo. ÚSALA SIEMPRE antes de mencionar un monto, tarifa, UMA, salario mínimo o tasa de recargos: nunca los digas de memoria. Puede calcular: ISR de una base con la tarifa, recargos de un monto por meses de mora.",
+      "Devuelve VALORES fiscales vigentes desde las tablas oficiales cargadas en el sistema (con vigencia, fuente y si están verificados): montos de multas del CFF (Anexo 5 RMF), tarifas del ISR mensual/anual (Anexo 8), UMA, salario mínimo, tasa de recargos (LIF / Art. 21 CFF), subsidio para el empleo y tasa del impuesto sobre nómina (ISN) por estado. ÚSALA SIEMPRE antes de mencionar un monto, tarifa, UMA, salario mínimo o tasa de recargos: nunca los digas de memoria. Puede calcular: ISR de una base con la tarifa, recargos de un monto por meses de mora.",
     input_schema: {
       type: "object" as const,
       properties: {
-        tipo: { type: "string", enum: ["multa", "tarifa_isr", "uma", "salario_minimo", "recargos", "subsidio_empleo"] },
+        tipo: { type: "string", enum: ["multa", "tarifa_isr", "uma", "salario_minimo", "recargos", "subsidio_empleo", "isn"] },
+        entidad: { type: "string", description: "isn: entidad federativa (código de 3 letras del SAT: CMX, PUE, JAL, NLE, MEX…). Tasa del impuesto sobre nómina del estado." },
         articulo: { type: "string", description: "multa: artículo del CFF que fija la sanción ('82', '84', '84-B'). La infracción (81, 83) remite a él." },
         fraccion: { type: "string", description: "multa: fracción en romano ('I', 'XXVI'); opcional." },
         inciso: { type: "string", description: "multa: inciso ('a'); opcional." },

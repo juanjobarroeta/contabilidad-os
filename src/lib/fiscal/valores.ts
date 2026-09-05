@@ -7,11 +7,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { getRule } from "./rules";
+import type { Entidad } from "./rules/types";
 import { buscarMulta } from "./multas";
 import { recargosPorMora, tasasRecargos } from "./recargos";
 import { aplicarTarifa, subsidioEmpleo, tarifaAnualPF, tarifaMensualSueldos } from "./tarifas";
 
-export type TipoValorFiscal = "multa" | "tarifa_isr" | "uma" | "salario_minimo" | "recargos" | "subsidio_empleo";
+export type TipoValorFiscal = "multa" | "tarifa_isr" | "uma" | "salario_minimo" | "recargos" | "subsidio_empleo" | "isn";
 
 export interface ConsultaValorFiscal {
   tipo: TipoValorFiscal;
@@ -25,6 +26,8 @@ export interface ConsultaValorFiscal {
   base?: number;
   /** recargos: meses (o fracción) de mora. */
   meses?: number;
+  /** isn: entidad federativa (código SAT de 3 letras: CMX, PUE, JAL…). */
+  entidad?: string;
   /** ISO YYYY-MM-DD; default hoy. */
   fecha?: string;
 }
@@ -175,6 +178,22 @@ export function consultarValorFiscal(q: ConsultaValorFiscal): Record<string, unk
         topeIngresoMensual: s.topeIngresoMensual,
         ...(uma ? { montoMensualAprox: Math.round(uma.valor.mensual * s.pctUmaMensual * 100) / 100 } : {}),
         nota: "Monto único mensual = pct × UMA mensual, sólo si el ingreso mensual no excede el tope; reduce el ISR hasta cero, no se devuelve.",
+      };
+    }
+    case "isn": {
+      const entidad = (q.entidad ?? "").trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(entidad)) return { tipo: q.tipo, error: "Falta `entidad` (código SAT de 3 letras, p.ej. CMX, PUE, JAL)." };
+      const r = getRule<number>("isn.tasa", { ...ctxPara(fecha), entidad: entidad as Entidad });
+      if (!r) return noHay(`tasa de ISN para ${entidad}`);
+      return {
+        tipo: q.tipo,
+        entidad,
+        fecha,
+        fuente: `${r.fundamento.ley}${r.fundamento.articulo && r.fundamento.articulo !== "—" ? `, Art. ${r.fundamento.articulo}` : ""}`,
+        verificado: r.verificado,
+        tasa: r.valor,
+        tasaPorcentaje: Math.round(r.valor * 10000) / 100,
+        nota: `${r.nota ? `${r.nota}. ` : ""}Se fija por ejercicio en la ley estatal / Ley de Ingresos; ${r.verificado ? "cotejada" : "NO cotejada aún contra el texto estatal: dilo al usuario"}.`,
       };
     }
     default:

@@ -38,4 +38,12 @@ describe("consultarValorFiscal", () => {
     expect(r.pctUmaMensual).toBe(0.1502);
     expect(r.topeIngresoMensual).toBe(11492.66);
   });
+  it("ISN por entidad: CDMX 4 %, Puebla 3 %; sin entidad → error", () => {
+    const cmx = consultarValorFiscal({ tipo: "isn", entidad: "cmx", fecha: "2026-03-01" });
+    expect(cmx.tasa).toBe(0.04);
+    expect(cmx.tasaPorcentaje).toBe(4);
+    expect(String(cmx.fuente)).toMatch(/Código Fiscal de la Ciudad de México/);
+    expect(consultarValorFiscal({ tipo: "isn", entidad: "PUE", fecha: "2026-03-01" }).tasa).toBe(0.03);
+    expect(String(consultarValorFiscal({ tipo: "isn" }).error)).toMatch(/entidad/);
+  });
 });

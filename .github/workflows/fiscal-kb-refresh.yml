@@ -43,6 +43,16 @@ jobs:
           {"type":"ley","clave":"LSS"}
           {"type":"ley","clave":"LINFONAVIT"}
           {"type":"ley","clave":"LFT"}
+          {"type":"ley","clave":"RACERF"}
+          {"type":"ley","clave":"RIPAEDI"}
+          {"type":"ley","clave":"CCOM"}
+          {"type":"ley","clave":"LGSM"}
+          {"type":"ley","clave":"LFPIORPI"}
+          {"type":"ley","clave":"RLFPIORPI"}
+          {"type":"ley","clave":"LFDC"}
+          {"type":"ley","clave":"LHPUE"}
+          {"type":"ley","clave":"CFPUE"}
+          {"type":"ley","clave":"CFCDMX"}
           {"type":"doc","clave":"GUIA-PAGOS"}
           {"type":"doc","clave":"GUIA-CFDI-GLOBAL"}'
           # force=true (sólo manual): el hash-skip NO re-parte un texto sin cambios,
