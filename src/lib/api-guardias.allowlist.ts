@@ -31,6 +31,11 @@ export const RUTAS_PUBLICAS: EntradaAllowlist[] = [
     razon: "Alta pública de cuenta; rate limit por IP y por email en el propio handler.",
   },
   {
+    ruta: "api/auth/token/route.ts",
+    razon:
+      "Canje de credenciales por bearer para satélites; las credenciales SON la autenticación, con rate limit propio.",
+  },
+  {
     ruta: "api/auth/token/refresh/route.ts",
     razon:
       "Canje de refresh token rotatorio (hash en BD, detección de reuso con revocación en cadena); el token ES la autenticación.",
