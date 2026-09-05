@@ -40,8 +40,8 @@ batcheado al estilo despacho/cockpit — jamás computeTaxPosition ni balanza
 en abanico; sin clasificar = UNMATCHED + IGNORED sin tag, el criterio que
 bloquea el cierre). La banda del «$0.00 vencido» MURIÓ: el paso Declara
 distingue importe calculado / por calcular / informativa. El ranking de la
-cola es puro y testeado (armarCola). PendientesDelCierre queda sin consumo
-(el Piloto lo reemplaza) — borrar en limpieza futura.
+cola es puro y testeado (armarCola). PendientesDelCierre quedó sin consumo
+(el Piloto lo reemplazó) y se borró con el cierre guiado (2026-09-05).
 
 ## Fase 3 — Empresa demo: HECHA (2026-08-28)
 
