@@ -10,11 +10,14 @@ import { conteosDerivacion, leerProgresoInsumos } from "@/lib/hospital/insumos-c
 //
 // Configuración del vertical por empresa: nombre comercial que enseña el
 // satélite, series de folio (HOSP/COT/MANT), ventana de alerta de caducidad de
-// farmacia, tope de autorización default y el IVA default de los servicios.
-// GET contesta los defaults cuando la empresa aún no guardó nada, y trae el
-// estado de la DERIVACIÓN de farmacia desde CFDIs (para la pantalla de
-// Configuración: cuántos insumos/movimientos nacieron del archivo y dónde va
-// el cursor).
+// farmacia, tope de autorización default, el IVA default de los servicios y
+// el de las medicinas suministradas en hospitalización (criterio 9/IVA/N), y
+// la identidad sanitaria del establecimiento (P1): CLUES, licencia sanitaria,
+// responsable sanitario con cédula y la versión/URL del aviso de privacidad
+// que aceptan los pacientes (LFPDPPP). GET contesta los defaults cuando la
+// empresa aún no guardó nada, y trae el estado de la DERIVACIÓN de farmacia
+// desde CFDIs (para la pantalla de Configuración: cuántos insumos/movimientos
+// nacieron del archivo y dónde va el cursor).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULTS = {
@@ -24,6 +27,13 @@ const DEFAULTS = {
   diasAlertaCaducidad: 90,
   topeAutorizacion: null as number | null,
   ivaServicios: 0.16,
+  ivaMedicinasHospitalizacion: 0.16,
+  clues: null as string | null,
+  licenciaSanitaria: null as string | null,
+  responsableSanitario: null as string | null,
+  responsableSanitarioCedula: null as string | null,
+  avisoPrivacidadVersion: null as string | null,
+  avisoPrivacidadUrl: null as string | null,
 };
 
 export const GET = withAuthz(async (req: Request) => {
@@ -53,6 +63,13 @@ export const GET = withAuthz(async (req: Request) => {
         diasAlertaCaducidad: config.diasAlertaCaducidad,
         topeAutorizacion: config.topeAutorizacion == null ? null : Number(config.topeAutorizacion),
         ivaServicios: Number(config.ivaServicios),
+        ivaMedicinasHospitalizacion: Number(config.ivaMedicinasHospitalizacion),
+        clues: config.clues,
+        licenciaSanitaria: config.licenciaSanitaria,
+        responsableSanitario: config.responsableSanitario,
+        responsableSanitarioCedula: config.responsableSanitarioCedula,
+        avisoPrivacidadVersion: config.avisoPrivacidadVersion,
+        avisoPrivacidadUrl: config.avisoPrivacidadUrl,
         guardada: true,
         updatedAt: config.updatedAt,
       }
@@ -64,6 +81,8 @@ export const GET = withAuthz(async (req: Request) => {
   });
 });
 
+const textoOpcional = (max: number) => z.string().trim().max(max).nullable().optional();
+
 const putSchema = z.object({
   companyId: z.string().min(1),
   nombreHospital: z.string().trim().max(120).nullable().optional(),
@@ -73,6 +92,20 @@ const putSchema = z.object({
   diasAlertaCaducidad: z.number().int().min(1).max(730).optional(),
   topeAutorizacion: z.number().min(0).nullable().optional(),
   ivaServicios: z.number().min(0).max(1).optional(),
+  ivaMedicinasHospitalizacion: z.number().min(0).max(1).optional(),
+  /** CLUES: entidad (2 letras) + institución (3 letras) + 6 dígitos, p. ej. PLSMP001234. */
+  clues: z
+    .string()
+    .trim()
+    .max(11)
+    .regex(/^([A-Z]{5}\d{6})?$/i, "La CLUES son 5 letras y 6 dígitos (p. ej. PLSMP001234)")
+    .nullable()
+    .optional(),
+  licenciaSanitaria: textoOpcional(60),
+  responsableSanitario: textoOpcional(160),
+  responsableSanitarioCedula: textoOpcional(20),
+  avisoPrivacidadVersion: textoOpcional(40),
+  avisoPrivacidadUrl: z.string().trim().max(300).url("URL inválida").nullable().optional().or(z.literal("")),
 });
 
 export const PUT = withAuthz(async (req: Request) => {
@@ -87,12 +120,21 @@ export const PUT = withAuthz(async (req: Request) => {
   const { user } = await requireWriter(companyId, req);
   await requireModule(companyId, "HOSPITAL", req);
 
+  const vacioANull = <K extends keyof typeof datos>(campo: K) =>
+    datos[campo] !== undefined ? { [campo]: (datos[campo] as string | null) || null } : {};
+
   const limpio = {
     ...datos,
     ...(datos.serieEpisodio ? { serieEpisodio: datos.serieEpisodio.toUpperCase() } : {}),
     ...(datos.serieCotizacion ? { serieCotizacion: datos.serieCotizacion.toUpperCase() } : {}),
     ...(datos.serieTicket ? { serieTicket: datos.serieTicket.toUpperCase() } : {}),
     ...(datos.nombreHospital !== undefined ? { nombreHospital: datos.nombreHospital || null } : {}),
+    ...(datos.clues !== undefined ? { clues: datos.clues ? datos.clues.toUpperCase() : null } : {}),
+    ...vacioANull("licenciaSanitaria"),
+    ...vacioANull("responsableSanitario"),
+    ...vacioANull("responsableSanitarioCedula"),
+    ...vacioANull("avisoPrivacidadVersion"),
+    ...vacioANull("avisoPrivacidadUrl"),
   };
   const config = await prisma.hospConfig.upsert({
     where: { companyId },
@@ -115,6 +157,7 @@ export const PUT = withAuthz(async (req: Request) => {
     ...config,
     topeAutorizacion: config.topeAutorizacion == null ? null : Number(config.topeAutorizacion),
     ivaServicios: Number(config.ivaServicios),
+    ivaMedicinasHospitalizacion: Number(config.ivaMedicinasHospitalizacion),
     guardada: true,
   });
 });

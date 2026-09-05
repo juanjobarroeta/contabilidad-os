@@ -7,6 +7,11 @@
  * ANTERIOR (el que se declara el 17), los movimientos del día con el total
  * de su cuenta y el feed «Requiere atención». Todo derivado de datos que el
  * hub o el módulo ya poseen; sólo lectura. Forma de respuesta: docs/HOSPITAL.md.
+ *
+ * P1 normativa en «Requiere atención»: ambulatorios que llegan a las 12 h
+ * (NOM-026), urgencias sin triage (NOM-027), altas sin CIE/motivo de egreso
+ * (SAEH), ambulatorios sin llamada de seguimiento, pacientes con episodio
+ * abierto sin CURP o sin aviso de privacidad aceptado (NOM-024 / LFPDPPP).
  */
 
 import { NextResponse } from "next/server";
@@ -31,13 +36,31 @@ import {
   nombrePaciente,
   totalCargo,
 } from "@/lib/hospital/formato";
+import { identidadCompleta } from "@/lib/hospital/episodio";
+import { horaLocal } from "@/lib/hospital/tz";
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 const MAX_MOVIMIENTOS = 8;
 const MAX_POR_ALERTA = 10;
 
+/** Ventana en la que un ambulatorio avisa que se acerca a las 12 h (NOM-026). */
+const MINUTOS_AVISO_AMBULATORIO = 120;
+/** Ventana de revisión de las altas para los pendientes normativos. */
+const DIAS_ALTAS_P1 = 7;
+
 type Atencion = {
-  tipo: "LOTE_CADUCA" | "BAJO_MINIMO" | "EGRESO_PENDIENTE" | "CONVENIO_VENCE" | "AUTORIZACION";
+  tipo:
+    | "LOTE_CADUCA"
+    | "BAJO_MINIMO"
+    | "EGRESO_PENDIENTE"
+    | "CONVENIO_VENCE"
+    | "AUTORIZACION"
+    | "AMBULATORIO_12H"
+    | "TRIAGE_PENDIENTE"
+    | "ALTA_SIN_CIE"
+    | "SEGUIMIENTO_PENDIENTE"
+    | "IDENTIDAD_PENDIENTE"
+    | "AVISO_PRIVACIDAD_PENDIENTE";
   titulo: string;
   detalle: string;
   href: string;
@@ -57,6 +80,7 @@ export const GET = withAuthz(async (req: Request) => {
   const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
   const finHoy = new Date(inicioHoy.getTime() + DIA_MS);
   const inicioAyer = new Date(inicioHoy.getTime() - DIA_MS);
+  const hace7dias = new Date(inicioHoy.getTime() - DIAS_ALTAS_P1 * DIA_MS);
   const en30dias = new Date(inicioHoy.getTime() + 30 * DIA_MS);
   // Los lotes se piden con un año de ventana y se acotan después con la
   // ventana de la empresa (HospConfig), que viene en el mismo Promise.all.
@@ -85,7 +109,7 @@ export const GET = withAuthz(async (req: Request) => {
   const [
     config, camas, cirugias, porCobrarDb, porPagarDb, saldosBanco,
     fiscal, retenciones, medicos, activos, altasRecientes, lotesDb,
-    insumosConMinimo, existencias, pagadoresPorVencer,
+    insumosConMinimo, existencias, pagadoresPorVencer, altasP1,
   ] = await Promise.all([
     prisma.hospConfig.findUnique({
       where: { companyId },
@@ -125,8 +149,8 @@ export const GET = withAuthz(async (req: Request) => {
       },
       select: {
         id: true, folio: true, estado: true, tipo: true, fechaIngreso: true, fechaAlta: true,
-        autorizacionPagador: true,
-        paciente: { select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true } },
+        autorizacionPagador: true, limiteAmbulatorioAt: true, triageNivel: true, pacienteId: true,
+        paciente: { select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true, curp: true, sinCurp: true, sinCurpMotivo: true, avisoPrivacidadAceptadoAt: true } },
         recurso: { select: { id: true, nombre: true, tipo: true, area: true } },
         medico: { select: { id: true, nombre: true } },
         pagador: { select: { id: true, nombre: true, topeAutorizacion: true } },
@@ -164,6 +188,15 @@ export const GET = withAuthz(async (req: Request) => {
       where: { companyId, activo: true, vigenciaFin: { lte: en30dias } },
       select: { id: true, nombre: true, vigenciaFin: true },
       orderBy: { vigenciaFin: "asc" },
+    }),
+    // Altas de la última semana: lo que SAEH y la NOM-026 piden cerrado.
+    prisma.hospEpisodio.findMany({
+      where: { companyId, estado: "ALTA", fechaAlta: { gte: hace7dias } },
+      select: {
+        id: true, folio: true, tipo: true, fechaAlta: true, motivoEgreso: true, diagnosticoEgresoCie10: true, seguimientoAt: true,
+        paciente: { select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true } },
+      },
+      orderBy: { fechaAlta: "desc" },
     }),
   ]);
 
@@ -306,6 +339,95 @@ export const GET = withAuthz(async (req: Request) => {
     });
   }
 
+  // ── P1 normativa ──
+  // Ambulatorio a punto de (o pasado de) las 12 h desde el ingreso (NOM-026).
+  const ambulatorios12h = activos
+    .filter((e) => e.estado !== "ALTA" && e.tipo === "AMBULATORIO" && e.limiteAmbulatorioAt)
+    .map((e) => ({ ...e, minutos: Math.round((e.limiteAmbulatorioAt!.getTime() - hoy.getTime()) / 60_000) }))
+    .filter((e) => e.minutos <= MINUTOS_AVISO_AMBULATORIO)
+    .sort((a, b) => a.minutos - b.minutos);
+  for (const e of ambulatorios12h.slice(0, MAX_POR_ALERTA)) {
+    const horas = Math.round(((hoy.getTime() - e.fechaIngreso.getTime()) / 3_600_000) * 10) / 10;
+    atencion.push({
+      tipo: "AMBULATORIO_12H",
+      titulo:
+        e.minutos < 0
+          ? `Ambulatorio ${nombrePaciente(e.paciente)} supera las 12 h (${horas} h desde el ingreso)`
+          : `Ambulatorio ${nombrePaciente(e.paciente)} llega a las 12 h en ${e.minutos} min`,
+      detalle: `${e.folio} · ingreso ${horaLocal(e.fechaIngreso)} · límite ${horaLocal(e.limiteAmbulatorioAt!)} · NOM-026`,
+      href: `/episodios/${e.id}`,
+      refId: e.id,
+    });
+  }
+
+  // Urgencias sin nivel de triage (NOM-027).
+  for (const e of activos.filter((x) => x.estado !== "ALTA" && x.tipo === "URGENCIAS" && x.triageNivel == null).slice(0, MAX_POR_ALERTA)) {
+    atencion.push({
+      tipo: "TRIAGE_PENDIENTE",
+      titulo: `Urgencias sin triage · ${nombrePaciente(e.paciente)}`,
+      detalle: `${e.folio} · ingreso ${horaLocal(e.fechaIngreso)} · NOM-027`,
+      href: `/episodios/${e.id}`,
+      refId: e.id,
+    });
+  }
+
+  // Paciente con episodio abierto sin identidad completa o sin aviso aceptado
+  // (una alerta por paciente aunque tenga dos episodios).
+  const sinIdentidad = new Set<string>();
+  const sinAviso = new Set<string>();
+  for (const e of activos) {
+    if (e.estado === "ALTA") continue;
+    if (!identidadCompleta(e.paciente) && !sinIdentidad.has(e.pacienteId)) {
+      sinIdentidad.add(e.pacienteId);
+      if (sinIdentidad.size <= MAX_POR_ALERTA) {
+        atencion.push({
+          tipo: "IDENTIDAD_PENDIENTE",
+          titulo: `${nombrePaciente(e.paciente)} sin CURP en la ficha`,
+          detalle: `${e.folio} · captura la CURP o el motivo para no tenerla · NOM-024`,
+          href: `/pacientes/${e.pacienteId}`,
+          refId: e.pacienteId,
+        });
+      }
+    }
+    if (!e.paciente.avisoPrivacidadAceptadoAt && !sinAviso.has(e.pacienteId)) {
+      sinAviso.add(e.pacienteId);
+      if (sinAviso.size <= MAX_POR_ALERTA) {
+        atencion.push({
+          tipo: "AVISO_PRIVACIDAD_PENDIENTE",
+          titulo: `${nombrePaciente(e.paciente)} sin aviso de privacidad aceptado`,
+          detalle: `${e.folio} · registra la aceptación (versión y fecha) · LFPDPPP`,
+          href: `/pacientes/${e.pacienteId}`,
+          refId: e.pacienteId,
+        });
+      }
+    }
+  }
+
+  // Altas sin motivo de egreso o sin CIE-10 de egreso (SAEH / NOM-004).
+  const altasSinCie = altasP1.filter((e) => !e.motivoEgreso || !e.diagnosticoEgresoCie10);
+  for (const e of altasSinCie.slice(0, MAX_POR_ALERTA)) {
+    const falta = [!e.motivoEgreso ? "motivo de egreso" : null, !e.diagnosticoEgresoCie10 ? "CIE-10 de egreso" : null].filter(Boolean).join(" y ");
+    atencion.push({
+      tipo: "ALTA_SIN_CIE",
+      titulo: `Alta sin ${falta} · ${e.folio}`,
+      detalle: `${nombrePaciente(e.paciente)} · alta ${e.fechaAlta ? fechaIso(e.fechaAlta) : "—"} · SAEH`,
+      href: `/episodios/${e.id}`,
+      refId: e.id,
+    });
+  }
+
+  // Ambulatorio egresado hace más de un día sin llamada de seguimiento (NOM-026).
+  const sinSeguimiento = altasP1.filter((e) => e.tipo === "AMBULATORIO" && !e.seguimientoAt && e.fechaAlta && hoy.getTime() - e.fechaAlta.getTime() >= DIA_MS);
+  for (const e of sinSeguimiento.slice(0, MAX_POR_ALERTA)) {
+    atencion.push({
+      tipo: "SEGUIMIENTO_PENDIENTE",
+      titulo: `Seguimiento pendiente · ${nombrePaciente(e.paciente)}`,
+      detalle: `${e.folio} · alta ${e.fechaAlta ? fechaIso(e.fechaAlta) : "—"} · registra la llamada de seguimiento · NOM-026`,
+      href: `/episodios/${e.id}`,
+      refId: e.id,
+    });
+  }
+
   const totalSat = r2(
     Math.max(fiscal.iva.pagar, 0) + Math.max(fiscal.isr.isrPagar ?? 0, 0) + retenciones.aEnterar
   );
@@ -356,6 +478,12 @@ export const GET = withAuthz(async (req: Request) => {
       lotesPorCaducar: lotes.length,
       bajoMinimo: bajoMinimo.length,
       episodiosActivos: activos.filter((e) => e.estado !== "ALTA").length,
+      ambulatorios12h: ambulatorios12h.length,
+      urgenciasSinTriage: activos.filter((e) => e.estado !== "ALTA" && e.tipo === "URGENCIAS" && e.triageNivel == null).length,
+      altasSinCie: altasSinCie.length,
+      seguimientosPendientes: sinSeguimiento.length,
+      pacientesSinCurp: sinIdentidad.size,
+      pacientesSinAviso: sinAviso.size,
     },
   });
 });

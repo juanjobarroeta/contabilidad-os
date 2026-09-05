@@ -9,12 +9,12 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { HospCargoCategoria } from "@prisma/client";
+import type { HospCargoCategoria, HospIvaContexto } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, dinero, error, errorZod, fechaSchema, tasaIva } from "@/lib/hospital/http";
-import { calcularRenglon } from "@/lib/hospital/cuenta";
+import { calcularRenglon, ivaContextoPorEpisodio, ivaTasaPorContexto } from "@/lib/hospital/cuenta";
 import { ivaDefault, r2 } from "@/lib/hospital/util";
 
 const CATEGORIAS = ["HABITACION", "QUIROFANO", "URGENCIAS", "ESTUDIO", "PROCEDIMIENTO", "HONORARIO", "FARMACIA", "MATERIAL", "EQUIPO", "OTRO"] as const;
@@ -25,6 +25,8 @@ const schema = z.object({
   cantidad: z.number().positive().max(100000).default(1),
   precioUnitario: dinero.optional(),
   ivaTasa: tasaIva.optional(),
+  /** Criterio 9/IVA/N (sólo FARMACIA/MATERIAL): sin él lo decide el tipo de episodio. */
+  ivaContexto: z.enum(["SUMINISTRO_HOSPITALARIO", "VENTA_DIRECTA"]).nullable().optional(),
   servicioId: z.string().nullable().optional(),
   medicoId: z.string().nullable().optional(),
   loteId: z.string().nullable().optional(),
@@ -38,7 +40,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
   if (!parsed.success) return errorZod(parsed.error);
   const d = parsed.data;
 
-  const ep = await prisma.hospEpisodio.findUnique({ where: { id }, select: { id: true, companyId: true, estado: true, folio: true, pagadorId: true, medicoId: true } });
+  const ep = await prisma.hospEpisodio.findUnique({ where: { id }, select: { id: true, companyId: true, estado: true, folio: true, tipo: true, pagadorId: true, medicoId: true } });
   if (!ep) throw new AuthzError(404, "Episodio no encontrado");
 
   const { user } = await requireWriter(ep.companyId, req);
@@ -65,9 +67,17 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
   if (!categoria || !descripcion || precioUnitario == null) {
     return error("Sin servicioId hay que capturar categoria, descripcion y precioUnitario");
   }
+  // Farmacia/material: el contexto de IVA (criterio 9/IVA/N). Sin contexto
+  // en el body lo decide el tipo de episodio; sin tasa en el body, la tasa
+  // sale del contexto (suministro → config.ivaMedicinasHospitalizacion).
+  const ivaContexto: HospIvaContexto | null =
+    categoria === "FARMACIA" || categoria === "MATERIAL" ? (d.ivaContexto ?? ivaContextoPorEpisodio(ep.tipo)) : null;
   if (ivaTasa === undefined) {
-    const cfg = await prisma.hospConfig.findUnique({ where: { companyId: ep.companyId }, select: { ivaServicios: true } });
-    ivaTasa = ivaDefault(categoria, cfg ? Number(cfg.ivaServicios) : null);
+    const cfg = await prisma.hospConfig.findUnique({ where: { companyId: ep.companyId }, select: { ivaServicios: true, ivaMedicinasHospitalizacion: true } });
+    const base = ivaDefault(categoria, cfg ? Number(cfg.ivaServicios) : null);
+    ivaTasa = ivaContexto
+      ? ivaTasaPorContexto({ contexto: ivaContexto, categoria, ivaTasaInsumo: base, ivaMedicinasHospitalizacion: cfg ? Number(cfg.ivaMedicinasHospitalizacion) : null })
+      : base;
   }
 
   const medicoId = d.medicoId === undefined ? (categoria === "HONORARIO" ? ep.medicoId : null) : d.medicoId;
@@ -92,6 +102,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
       ivaTasa,
       importe: r2(d.cantidad * precioUnitario),
       origen: "MANUAL",
+      ivaContexto,
       servicioId: d.servicioId ?? null,
       medicoId,
       loteId: d.loteId ?? null,

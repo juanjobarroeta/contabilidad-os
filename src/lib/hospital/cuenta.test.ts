@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calcularCuenta, calcularReparto, type CargoCuenta, type PagadorCuenta } from "./cuenta";
+import { calcularCuenta, calcularReparto, ivaContextoPorEpisodio, ivaTasaPorContexto, type CargoCuenta, type PagadorCuenta } from "./cuenta";
 
 const cargo = (o: Partial<CargoCuenta> & Pick<CargoCuenta, "id" | "categoria" | "cantidad" | "precioUnitario" | "ivaTasa">): CargoCuenta => ({
   fecha: "2026-09-02T14:20:00.000Z",
@@ -149,5 +149,50 @@ describe("calcularCuenta — casos del reparto", () => {
     });
     expect(c.grupos[2].cargos.map((r) => r.importe)).toEqual([250, 300]);
     expect(c.totales.iva).toBe(88);
+  });
+});
+
+describe("IVA de farmacia por contexto (criterio 9/IVA/N)", () => {
+  it("suministro hospitalario: la medicina toma la tasa de la config; venta directa: la del insumo", () => {
+    expect(ivaTasaPorContexto({ contexto: "SUMINISTRO_HOSPITALARIO", categoria: "FARMACIA", ivaTasaInsumo: 0, ivaMedicinasHospitalizacion: 0.16 })).toBe(0.16);
+    expect(ivaTasaPorContexto({ contexto: "VENTA_DIRECTA", categoria: "FARMACIA", ivaTasaInsumo: 0, ivaMedicinasHospitalizacion: 0.16 })).toBe(0);
+    // Sin config: 16 %. El contador que sigue a PRODECON fija 0 y se respeta.
+    expect(ivaTasaPorContexto({ contexto: "SUMINISTRO_HOSPITALARIO", categoria: "FARMACIA", ivaTasaInsumo: 0 })).toBe(0.16);
+    expect(ivaTasaPorContexto({ contexto: "SUMINISTRO_HOSPITALARIO", categoria: "FARMACIA", ivaTasaInsumo: 0, ivaMedicinasHospitalizacion: 0 })).toBe(0);
+  });
+
+  it("el material de curación grava igual en los dos contextos", () => {
+    expect(ivaTasaPorContexto({ contexto: "SUMINISTRO_HOSPITALARIO", categoria: "MATERIAL", ivaTasaInsumo: 0.16, ivaMedicinasHospitalizacion: 0 })).toBe(0.16);
+    expect(ivaTasaPorContexto({ contexto: "VENTA_DIRECTA", categoria: "MATERIAL", ivaTasaInsumo: 0.16, ivaMedicinasHospitalizacion: 0.16 })).toBe(0.16);
+  });
+
+  it("el contexto nace del tipo de episodio: consulta vende, lo demás suministra", () => {
+    expect(ivaContextoPorEpisodio("HOSPITALIZACION")).toBe("SUMINISTRO_HOSPITALARIO");
+    expect(ivaContextoPorEpisodio("AMBULATORIO")).toBe("SUMINISTRO_HOSPITALARIO");
+    expect(ivaContextoPorEpisodio("URGENCIAS")).toBe("SUMINISTRO_HOSPITALARIO");
+    expect(ivaContextoPorEpisodio("CONSULTA")).toBe("VENTA_DIRECTA");
+  });
+
+  it("la cuenta enseña el contexto por renglón y parte farmacia como se factura (16 / 0)", () => {
+    const c = calcularCuenta({
+      cargos: [
+        cargo({ id: "a", categoria: "FARMACIA", cantidad: 2, precioUnitario: 100, ivaTasa: 0.16, origen: "FARMACIA", ivaContexto: "SUMINISTRO_HOSPITALARIO" }),
+        cargo({ id: "b", categoria: "FARMACIA", cantidad: 1, precioUnitario: 50, ivaTasa: 0, origen: "FARMACIA", ivaContexto: "VENTA_DIRECTA" }),
+        cargo({ id: "c", categoria: "MATERIAL", cantidad: 1, precioUnitario: 30, ivaTasa: 0.16, origen: "FARMACIA" }),
+        cargo({ id: "d", categoria: "FARMACIA", cantidad: 1, precioUnitario: 999, ivaTasa: 0.16, origen: "FARMACIA", ivaContexto: "SUMINISTRO_HOSPITALARIO", cancelado: true }),
+        cargo({ id: "e", categoria: "QUIROFANO", cantidad: 1, precioUnitario: 1000, ivaTasa: 0.16 }),
+      ],
+    });
+    const farmacia = c.grupos[1];
+    expect(farmacia.cargos.map((r) => r.ivaContexto)).toEqual(["SUMINISTRO_HOSPITALARIO", "VENTA_DIRECTA", null, "SUMINISTRO_HOSPITALARIO"]);
+    expect(farmacia.porIvaContexto).toEqual({
+      SUMINISTRO_HOSPITALARIO: { subtotal: 200, iva: 32, total: 232 },
+      VENTA_DIRECTA: { subtotal: 50, iva: 0, total: 50 },
+      SIN_CONTEXTO: { subtotal: 30, iva: 4.8, total: 34.8 },
+    });
+    expect(farmacia).toMatchObject({ subtotal: 280, iva: 36.8, total: 316.8 });
+    // Los otros grupos no llevan el corte.
+    expect(c.grupos[0].porIvaContexto).toBeUndefined();
+    expect(c.grupos[2].porIvaContexto).toBeUndefined();
   });
 });
