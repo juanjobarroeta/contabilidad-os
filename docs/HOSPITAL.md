@@ -243,6 +243,39 @@ GET  /api/hospital/mantenimiento?companyId=[&estado=] · POST · PATCH /mantenim
 }
 ```
 
+### P1 normativa (NOM-004 / NOM-024 / NOM-026 / NOM-027 / controlados / LFPDPPP)
+```
+GET  /api/hospital/catalogos?companyId=&tipo=CIE10|CIE9MC&q=&limit=20
+     → [{ codigo, nombre, nivel, capitulo, capituloNombre, subtipo, sexo, edadMin, edadMax }]
+       (sólo activos; `q` empata prefijo de código o palabras del nombre)
+GET  /api/hospital/pacientes/validar-curp?companyId=&curp=   → ResultadoCurp (valida, motivo, fechaNacimiento, sexo, entidad)
+POST /api/hospital/pacientes   { …, curp | sinCurp + sinCurpMotivo, nacionalidad, entidadNacimiento, domicilio…,
+                                 avisoPrivacidadVersion, avisoPrivacidadAceptadoAt }
+     · CURP inválida → 400 con el motivo; sin CURP y sin motivo → 400; `expedienteNumero` se asigna (EXP-AAAA-NNNN)
+POST /api/hospital/episodios   { …, diagnosticoIngresoCie10, procedimientoCie9, triageNivel (obligatorio en URGENCIAS), asa }
+     · paciente sin CURP ni motivo → 409; AMBULATORIO fija limiteAmbulatorioAt = ingreso + 12 h
+PATCH /api/hospital/episodios/[id] { action: "alta", motivoEgreso, diagnosticoEgresoCie10, aldreteEgreso?, fechaAlta?, nota? }
+     · motivo y CIE de egreso obligatorios; AMBULATORIO exige aldreteEgreso ≥ 9
+PATCH /api/hospital/episodios/[id] { action: "seguimiento", seguimientoAt?, seguimientoNota }
+POST /api/hospital/episodios/[id]/notas { tipo, texto, secciones?, medicoId?, autorCedula? }
+     · tipos nuevos: HISTORIA_CLINICA, PREANESTESICA, POSTANESTESICA, HOJA_URGENCIAS, REFERENCIA
+     · `secciones` se valida por tipo (ver lib/hospital/notas-secciones.ts); con medicoId la cédula es
+       obligatoria (409 si el médico no la tiene); el hub calcula `hash` y `selloAt`
+POST /api/hospital/episodios/[id]/documentos { tipo, nombre, requerido?, contenido?, firmadoPor?, firmadoParentesco?,
+                                               testigo1?, testigo2?, medicoNombre?, medicoCedula? }
+POST /api/hospital/episodios/[id]/documentos/[docId]/archivo   multipart (pdf/jpg/png ≤ 10 MB) → guarda el archivo
+GET  /api/hospital/episodios/[id]/documentos/[docId]/archivo   → descarga (registra acceso)
+GET  /api/hospital/episodios/[id]/accesos                        → [{ at, userEmail, accion, detalle }] (últimos 200)
+     · GET episodio / cuenta / paciente registran HospAcceso (LECTURA_*) sin bloquear la respuesta
+GET  /api/hospital/farmacia/libro-control?companyId=&desde=&hasta=&grupo=I|II|III[&format=csv]
+     → { filas: [{ fecha, insumo, grupoControl, lote, entrada, salida, saldo, recetaRef, prescriptor, episodio, cfdi }] }
+POST /api/hospital/episodios/[id]/aplicar-insumo { …, recetaRef (obligatoria si grupoControl I-III), contexto?: VENTA_DIRECTA }
+     · IVA por contexto (criterio 9/IVA/N): suministro en HOSPITALIZACION/AMBULATORIO/URGENCIAS →
+       config.ivaMedicinasHospitalizacion (16 %); VENTA_DIRECTA → insumo.ivaTasa (0 %); el cargo guarda ivaContexto
+GET/PUT /api/hospital/config   + clues, licenciaSanitaria, responsableSanitario(+Cedula), avisoPrivacidadVersion/Url,
+                                 ivaMedicinasHospitalizacion
+```
+
 ### Farmacia
 ```
 GET  /api/hospital/farmacia/insumos?companyId=[&q=&tab=TODOS|BAJO_MINIMO|POR_CADUCAR|CONTROLADOS|SIN_EXISTENCIA]

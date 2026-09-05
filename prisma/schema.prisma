@@ -388,6 +388,7 @@ model Company {
   hospCotizaciones HospCotizacion[]
   hospInsumos      HospInsumo[]
   hospTickets      HospTicket[]
+  hospAccesos      HospAcceso[]
 }
 
 model CompanyMember {
@@ -6381,6 +6382,20 @@ model HospConfig {
   /// servicios médicos por profesionista son exentos; la hospitalización y
   /// el quirófano gravan al 16 %). Se aplica al crear servicios sin tasa.
   ivaServicios Decimal @default(0.16) @db.Decimal(18, 6)
+  /// Criterio normativo 9/IVA/N: las medicinas SUMINISTRADAS en hospitalización
+  /// gravan como parte del servicio; sólo la venta directa va al 0 %. El
+  /// contador puede cambiarlo si su criterio difiere (PRODECON lo disputa).
+  ivaMedicinasHospitalizacion Decimal @default(0.16) @db.Decimal(18, 6)
+
+  /// Identidad sanitaria del establecimiento (NOM-024, NOM-035, COFEPRIS):
+  /// va en el encabezado de reportes, CDA y libro de control.
+  clues                      String?
+  licenciaSanitaria          String?
+  responsableSanitario       String?
+  responsableSanitarioCedula String?
+  /// LFPDPPP: versión vigente del aviso de privacidad que aceptan los pacientes.
+  avisoPrivacidadVersion String?
+  avisoPrivacidadUrl     String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -6468,6 +6483,27 @@ model HospPaciente {
   alergias        String?
   antecedentes    String? @db.Text
 
+  /// NOM-024: identificación mínima. La CURP es la llave del paciente; sólo
+  /// se admite sin ella con motivo (extranjero sin CURP, recién nacido).
+  sinCurp           Boolean @default(false)
+  sinCurpMotivo     String?
+  /// Formato y dígito verificador validados por el hub (RENAPO queda para v2).
+  curpValidada      Boolean @default(false)
+  nacionalidad      String? @default("MEX")
+  entidadNacimiento String?
+  calle             String?
+  numeroExterior    String?
+  numeroInterior    String?
+  colonia           String?
+  municipio         String?
+  estado            String?
+  codigoPostal      String?
+  /// Número de expediente único por establecimiento (NOM-004).
+  expedienteNumero  String?
+  /// LFPDPPP: qué versión del aviso de privacidad aceptó y cuándo.
+  avisoPrivacidadVersion    String?
+  avisoPrivacidadAceptadoAt DateTime?
+
   contactoEmergenciaNombre     String?
   contactoEmergenciaTelefono   String?
   contactoEmergenciaParentesco String?
@@ -6488,6 +6524,7 @@ model HospPaciente {
   citas        HospCita[]
   cotizaciones HospCotizacion[]
 
+  @@unique([companyId, expedienteNumero])
   @@index([companyId, apellidoPaterno, nombre])
   @@index([companyId, curp])
 }
@@ -6681,6 +6718,24 @@ model HospEpisodio {
   /// Autorización previa del pagador (folio/número que dio la aseguradora).
   autorizacionPagador String?
 
+  /// Diagnósticos y procedimiento POR CATÁLOGO (NOM-024, SAEH): códigos
+  /// CIE-10 con punto («K80.20») y CIE-9-MC («51.23»). Los campos de texto
+  /// de arriba se conservan como glosa.
+  diagnosticoIngresoCie10 String?
+  diagnosticoEgresoCie10  String?
+  procedimientoCie9       String?
+  motivoEgreso            HospMotivoEgreso?
+  /// Urgencias (NOM-027): nivel de triage 1-5 y hora de clasificación.
+  triageNivel Int?
+  triageAt    DateTime?
+  /// Cirugía ambulatoria (NOM-026): ASA de la valoración, Aldrete al egreso,
+  /// límite de 12 h desde el ingreso y el seguimiento posterior.
+  asa                 String?
+  aldreteEgreso       Int?
+  limiteAmbulatorioAt DateTime?
+  seguimientoAt       DateTime?
+  seguimientoNota     String?
+
   cotizacionId    String? @unique
   notasAdmin      String? @db.Text
   creadoPorUserId String?
@@ -6714,6 +6769,17 @@ enum HospTrasladoTipo {
   ALTA
 }
 
+/// Motivo de egreso con las categorías que pide el reporte de egresos (SAEH).
+enum HospMotivoEgreso {
+  CURACION
+  MEJORIA
+  TRASLADO
+  DEFUNCION
+  VOLUNTARIA
+  FUGA
+  OTRO
+}
+
 /// Bitácora de camas del episodio (censo → «Movimientos del día»). Los
 /// nombres se congelan como texto: si la cama se renombra, la historia no.
 model HospTraslado {
@@ -6735,13 +6801,18 @@ model HospTraslado {
 }
 
 enum HospNotaTipo {
+  HISTORIA_CLINICA
   INGRESO
   EVOLUCION
   PREOPERATORIA
+  PREANESTESICA
   POSTOPERATORIA
+  POSTANESTESICA
   ENFERMERIA
+  HOJA_URGENCIAS
   INDICACION
   INTERCONSULTA
+  REFERENCIA
   PROCEDIMIENTO
   MEDICAMENTO_APLICADO
   EGRESO
@@ -6760,9 +6831,18 @@ model HospNota {
   texto      String       @db.Text
   autorUserId String?
   autorNombre String
+  /// NOM-004: cédula profesional de quien firma (obligatoria para médicos).
+  autorCedula String?
   medicoId    String?
   cargoId     String? @unique
   reemplazaId String? @unique
+  /// Contenido estructurado por tipo (historia clínica por secciones, hoja de
+  /// urgencias, egreso con instrucciones): JSON validado en el hub.
+  secciones Json?
+  /// Firma del sistema (NOM-024): SHA-256 de (episodio, tipo, texto, secciones,
+  /// autor, fecha) y sello de tiempo; la e.firma llega en v2.
+  hash    String?
+  selloAt DateTime?
 
   episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
   medico   HospMedico?  @relation(fields: [medicoId], references: [id])
@@ -6804,13 +6884,18 @@ model HospSignos {
 enum HospDocumentoTipo {
   CONSENTIMIENTO_CIRUGIA
   CONSENTIMIENTO_ANESTESIA
+  CONSENTIMIENTO_TRANSFUSION
+  CONSENTIMIENTO_HOSPITALIZACION
   IDENTIFICACION
   POLIZA
   CARTA_AUTORIZACION
   ESTUDIO
   RESULTADO
   RECETA
+  REGISTRO_ANESTESICO
+  HOJA_EGRESO
   NOTA_EGRESO
+  AVISO_PRIVACIDAD
   OTRO
 }
 
@@ -6838,6 +6923,18 @@ model HospDocumento {
   bytes      Int?
   archivo    Bytes?
   subidoPorUserId String?
+  /// NOM-004 §10: contenido mínimo del consentimiento (acto autorizado,
+  /// riesgos, beneficios, alternativas) o del registro anestésico / hoja de
+  /// egreso, como JSON validado en el hub.
+  contenido         Json?
+  /// Quién firmó (paciente o representante y su parentesco), testigos y el
+  /// médico que informó, con su cédula.
+  firmadoPor        String?
+  firmadoParentesco String?
+  testigo1          String?
+  testigo2          String?
+  medicoNombre      String?
+  medicoCedula      String?
 
   episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
 
@@ -6851,6 +6948,13 @@ enum HospCargoOrigen {
   FARMACIA
   COTIZACION
   MANUAL
+}
+
+/// Criterio 9/IVA/N: un medicamento SUMINISTRADO en hospitalización grava como
+/// parte del servicio (16 %); el mismo medicamento VENDIDO va al 0 %.
+enum HospIvaContexto {
+  SUMINISTRO_HOSPITALARIO
+  VENTA_DIRECTA
 }
 
 /// Un renglón de la cuenta del paciente. «Cada cargo viene del expediente»:
@@ -6871,6 +6975,8 @@ model HospCargo {
   ivaTasa        Decimal?           @db.Decimal(18, 6)
   importe        Decimal            @db.Decimal(18, 6)
   origen         HospCargoOrigen    @default(MANUAL)
+  /// Sólo en cargos de farmacia/material: por qué lleva la tasa que lleva.
+  ivaContexto    HospIvaContexto?
 
   servicioId String?
   loteId     String?
@@ -7022,6 +7128,18 @@ enum HospInsumoCategoria {
   OTRO
 }
 
+/// Fracciones de la Ley General de Salud (arts. 234 y 245): I y II exigen
+/// receta especial con código de barras y libro de control; III receta
+/// ordinaria retenida y libro; IV-VI sólo receta.
+enum HospGrupoControl {
+  I
+  II
+  III
+  IV
+  V
+  VI
+}
+
 /// Insumo de farmacia/almacén. Puede nacer capturado o DERIVADO de los CFDIs
 /// de compra (claves 51xx medicamentos, 42xx material/equipo médico, 41xx
 /// laboratorio): `derivadoDeCfdi` lo distingue para que el catálogo se
@@ -7039,6 +7157,14 @@ model HospInsumo {
   categoria    HospInsumoCategoria @default(MEDICAMENTO)
   /// Medicamento controlado (Grupo I–III): exige receta y registro aparte.
   controlado Boolean @default(false)
+  /// Fracción de la LGS; propuesta por nombre al derivar, confirmada por el
+  /// responsable sanitario.
+  grupoControl HospGrupoControl?
+  /// Registro sanitario COFEPRIS y sustancia activa (FEUM, farmacovigilancia).
+  registroSanitario String?
+  sustanciaActiva   String?
+  /// Cadena de frío: exige registro de temperatura en almacén.
+  requiereRefrigeracion Boolean @default(false)
   /// Mínimo en existencia; debajo dispara «bajo mínimo».
   minimo      Decimal  @default(0) @db.Decimal(18, 6)
   precioVenta Decimal? @db.Decimal(18, 6)
@@ -7118,6 +7244,12 @@ model HospMovimientoInsumo {
   referencia    String?
   usuarioId     String?
   usuarioNombre String?
+  /// Libro de control: la receta o indicación que ampara la salida de un
+  /// controlado (folio de receta especial o de la indicación del expediente)
+  /// y quién la prescribió.
+  recetaRef        String?
+  prescriptorNombre String?
+  prescriptorCedula String?
 
   insumo   HospInsumo    @relation(fields: [insumoId], references: [id], onDelete: Cascade)
   lote     HospLote?     @relation(fields: [loteId], references: [id])
@@ -7176,4 +7308,73 @@ model HospTicket {
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
+}
+
+// ─── Bitácora de accesos (NOM-024 / LFPDPPP) ──────────────────────────────────
+
+enum HospAccesoAccion {
+  LECTURA_EXPEDIENTE
+  LECTURA_CUENTA
+  LECTURA_FICHA
+  EXPORTACION
+  IMPRESION
+}
+
+/// Quién abrió qué expediente y cuándo. La bitácora de ESCRITURAS ya la lleva
+/// AuditLog; ésta registra las LECTURAS, que la NOM-024 y la ley de datos
+/// personales también exigen. Nunca se borra.
+model HospAcceso {
+  id         String           @id @default(cuid())
+  companyId  String
+  episodioId String?
+  pacienteId String?
+  userId     String?
+  userEmail  String?
+  accion     HospAccesoAccion
+  detalle    String?
+  ip         String?
+  at         DateTime         @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, at])
+  @@index([episodioId, at])
+  @@index([pacienteId, at])
+}
+
+// ─── Catálogos oficiales (globales, sin empresa) ─────────────────────────────
+
+enum HospCatalogoTipo {
+  CIE10
+  CIE9MC
+}
+
+/// Catálogos maestros de la DGIS: diagnósticos (CIE-10) y procedimientos
+/// (CIE-9-MC). Se cargan con scripts/hospital-catalogos.ts desde los archivos
+/// oficiales; `clave` es la llave de la DGIS sin punto («A000», «0001») y
+/// `codigo` la forma clínica («A00.0», «00.01»).
+model HospCatalogo {
+  id             String           @id @default(cuid())
+  tipo           HospCatalogoTipo
+  clave          String
+  codigo         String
+  nombre         String
+  /// Caracteres de la clave: 3 = categoría, 4 = subcategoría (CIE-10);
+  /// 2/3/4 en CIE-9-MC.
+  nivel          Int
+  capitulo       String?
+  capituloNombre String?
+  /// CIE-9-MC: Q quirúrgico · D diagnóstico · T terapéutico.
+  subtipo        String?
+  /// null = ambos sexos; "M" / "F" cuando el catálogo lo restringe.
+  sexo           String?
+  /// Límites de edad en DÍAS (la DGIS los da en horas/días/meses/años).
+  edadMin        Int?
+  edadMax        Int?
+  /// CIE-10: la DGIS marca claves no válidas para codificar o erradicadas.
+  activo         Boolean          @default(true)
+  version        String?
+
+  @@unique([tipo, clave])
+  @@index([tipo, codigo])
 }
