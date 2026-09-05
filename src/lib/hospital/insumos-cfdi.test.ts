@@ -4,6 +4,7 @@ import {
   claveDeInsumo,
   derivarInsumosBackfill,
   derivarInsumosDesdeCfdi,
+  etiquetarControlados,
   extraerConceptosCfdi,
   ivaTasaDeCategoria,
   normalizarDescripcion,
@@ -158,6 +159,12 @@ function fakeDb() {
         return i ? conMovimientos(i, select) : null;
       },
       findMany: async ({ where, select }: any) => {
+        if (!where.OR) {
+          // Filtro plano por igualdad (etiquetarControlados): companyId, derivadoDeCfdi, grupoControl null…
+          return insumos
+            .filter((x) => Object.entries(where).every(([k, v]) => (x[k] ?? null) === v))
+            .map((i) => conMovimientos(i, select));
+        }
         const claves: string[] = where.OR?.find((o: any) => o.clave)?.clave.in ?? [];
         const nombres: string[] = (where.OR?.find((o: any) => o.nombre)?.nombre.in ?? []).map((n: string) => n.toLowerCase());
         return insumos
@@ -381,5 +388,60 @@ describe("derivarInsumosBackfill()", () => {
     const r = await derivarInsumosBackfill(db as never, "c1", { page: 1, budgetMs: 0 });
     expect(r).toMatchObject({ procesados: 0, completado: false, nextAfterId: null });
     expect(db._progreso[0].completadoAt).toBeNull();
+  });
+});
+
+// ─── Controlados (LGS 234/245) ───────────────────────────────────────────────
+
+describe("controlados al derivar", () => {
+  const compraControlados = (invoiceId: string, fecha: string) => ({
+    ...base,
+    invoiceId,
+    tipo: "EGRESO",
+    fecha: new Date(fecha),
+    items: [
+      { descripcion: "MIDAZOLAM 5 MG/5 ML SOL. INY. AMPOLLETA", cantidad: 10, claveUnidad: "H87", claveProdServ: "51101500", valorUnitario: 40, importe: 400 },
+      { descripcion: "FENTANILO CITRATO 0.5 MG/10 ML", cantidad: 5, claveUnidad: "H87", claveProdServ: "51101500", valorUnitario: 90, importe: 450 },
+      { descripcion: "KETOROLACO 30 MG AMPOLLETA", cantidad: 10, claveUnidad: "H87", claveProdServ: "51101700", valorUnitario: 12.5, importe: 125 },
+    ],
+  });
+
+  it("el insumo nuevo nace con grupo, sustancia activa y la bandera de controlado", async () => {
+    const db = fakeDb();
+    await derivarInsumosDesdeCfdi(db as never, compraControlados("inv-c1", "2026-03-01"));
+    const mida = db._insumos.find((i) => i.nombre.startsWith("MIDAZOLAM"))!;
+    const fenta = db._insumos.find((i) => i.nombre.startsWith("FENTANILO"))!;
+    const keto = db._insumos.find((i) => i.nombre.startsWith("KETOROLACO"))!;
+    expect(mida).toMatchObject({ grupoControl: "III", sustanciaActiva: "Midazolam", controlado: true });
+    expect(fenta).toMatchObject({ grupoControl: "I", sustanciaActiva: "Fentanilo", controlado: true });
+    expect(keto).toMatchObject({ grupoControl: null, sustanciaActiva: null, controlado: false });
+  });
+
+  it("una compra posterior no pisa el grupo que corrigió el responsable sanitario", async () => {
+    const db = fakeDb();
+    await derivarInsumosDesdeCfdi(db as never, compraControlados("inv-c1", "2026-03-01"));
+    const mida = db._insumos.find((i) => i.nombre.startsWith("MIDAZOLAM"))!;
+    mida.grupoControl = "II";
+    mida.sustanciaActiva = "Midazolam (revisado)";
+    const r = await derivarInsumosDesdeCfdi(db as never, compraControlados("inv-c2", "2026-04-01"));
+    expect(r).toEqual({ insumos: 0, movimientos: 3 });
+    expect(mida).toMatchObject({ grupoControl: "II", sustanciaActiva: "Midazolam (revisado)" });
+  });
+
+  it("etiquetarControlados sólo toca los derivados sin grupo ni sustancia", async () => {
+    const db = fakeDb();
+    const fila = (id: string, nombre: string, extra: Row) => ({ id, companyId: "c1", clave: id, nombre, controlado: false, grupoControl: null, sustanciaActiva: null, ...extra });
+    db._insumos.push(
+      fila("i1", "DIAZEPAM 10 MG TABLETA", { derivadoDeCfdi: true }),
+      fila("i2", "MORFINA 10 MG/ML", { derivadoDeCfdi: false }), // capturado a mano: no se toca
+      fila("i3", "MIDAZOLAM 5 MG", { derivadoDeCfdi: true, sustanciaActiva: "Midazolam" }), // ya revisado: no se toca
+      fila("i4", "PROPOFOL 200 MG", { derivadoDeCfdi: true }) // no es controlado
+    );
+    const r = await etiquetarControlados(db as never, "c1");
+    expect(r).toEqual({ revisados: 2, etiquetados: 1 });
+    expect(db._insumos[0]).toMatchObject({ grupoControl: "III", sustanciaActiva: "Diazepam", controlado: true });
+    expect(db._insumos[1]).toMatchObject({ grupoControl: null, controlado: false });
+    expect(db._insumos[2]).toMatchObject({ grupoControl: null, sustanciaActiva: "Midazolam" });
+    expect(db._insumos[3]).toMatchObject({ grupoControl: null, controlado: false });
   });
 });

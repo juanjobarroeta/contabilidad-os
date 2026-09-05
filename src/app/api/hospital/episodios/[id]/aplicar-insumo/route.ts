@@ -1,8 +1,13 @@
 /**
  * POST /api/hospital/episodios/[id]/aplicar-insumo
- *   { insumoId, loteId?, cantidad, nota?, fecha?, medicoId? }
+ *   { insumoId, loteId?, cantidad, nota?, fecha?, medicoId?,
+ *     recetaRef?, prescriptorNombre?, prescriptorCedula?, contexto?: SUMINISTRO_HOSPITALARIO|VENTA_DIRECTA }
  *
  * Kardex + cargo + nota en una transacción (ver lib/hospital/aplicar-insumo).
+ * Controlados I-III: `recetaRef` obligatoria y prescriptor con cédula (del
+ * médico o explícito) — 400/409 con el motivo. El cargo nace con su
+ * `ivaContexto` (criterio 9/IVA/N): suministro salvo en CONSULTA o cuando se
+ * pide VENTA_DIRECTA.
  */
 
 import { NextResponse } from "next/server";
@@ -20,6 +25,10 @@ const schema = z.object({
   nota: z.string().max(2000).nullable().optional(),
   fecha: fechaSchema.nullable().optional(),
   medicoId: z.string().nullable().optional(),
+  recetaRef: z.string().trim().max(60).nullable().optional(),
+  prescriptorNombre: z.string().trim().max(160).nullable().optional(),
+  prescriptorCedula: z.string().trim().max(20).nullable().optional(),
+  contexto: z.enum(["SUMINISTRO_HOSPITALARIO", "VENTA_DIRECTA"]).nullable().optional(),
 });
 
 export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -47,6 +56,10 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
     nota: d.nota ?? null,
     fecha: aFecha(d.fecha) ?? undefined,
     medicoId: d.medicoId ?? null,
+    recetaRef: d.recetaRef ?? null,
+    prescriptorNombre: d.prescriptorNombre ?? null,
+    prescriptorCedula: d.prescriptorCedula ?? null,
+    contexto: d.contexto ?? null,
   });
 
   bitacora(user, req, {
@@ -60,6 +73,10 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
       lote: resultado.lote.lote,
       cantidad: d.cantidad,
       importe: Number(resultado.cargo.importe),
+      ivaTasa: resultado.cargo.ivaTasa == null ? null : Number(resultado.cargo.ivaTasa),
+      ivaContexto: resultado.cargo.ivaContexto,
+      recetaRef: resultado.movimiento.recetaRef,
+      prescriptorCedula: resultado.movimiento.prescriptorCedula,
       existenciaLote: Number(resultado.lote.existencia),
     },
   });

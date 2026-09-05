@@ -27,7 +27,8 @@
 // — se escribe con createMany+skipDuplicates y el conteo dice si era nuevo.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { HospInsumoCategoria, Prisma, PrismaClient } from "@prisma/client";
+import type { HospGrupoControl, HospInsumoCategoria, Prisma, PrismaClient } from "@prisma/client";
+import { exigeLibroControl, sustanciaControladaPorNombre } from "./controlados";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -150,6 +151,25 @@ export function clasificarInsumo(c: ConceptoInsumo): ClasificacionInsumo {
  *  el equipo y los reactivos gravan al 16 %. Farmacia lo puede corregir. */
 export function ivaTasaDeCategoria(categoria: HospInsumoCategoria): number {
   return categoria === "MEDICAMENTO" || categoria === "SOLUCION" ? 0 : 0.16;
+}
+
+/**
+ * Grupo de control (LGS 234/245) y sustancia activa con los que NACE un
+ * insumo derivado: propuesta por nombre (lib/hospital/controlados) que el
+ * responsable sanitario confirma en Farmacia. Sólo al crear — lo que ya
+ * existe conserva lo que un humano dejó, aunque sea null.
+ */
+export function etiquetaControlAlNacer(nombre: string): {
+  grupoControl: HospGrupoControl | null;
+  sustanciaActiva: string | null;
+  controlado: boolean;
+} {
+  const control = sustanciaControladaPorNombre(nombre);
+  return {
+    grupoControl: control?.grupo ?? null,
+    sustanciaActiva: control?.sustancia ?? null,
+    controlado: exigeLibroControl(control?.grupo),
+  };
 }
 
 // ─── Clave estable ───────────────────────────────────────────────────────────
@@ -420,6 +440,7 @@ async function derivarCompra(
             ivaTasa: ivaTasaDeCategoria(a.categoria),
             claveProdServ: a.claveProdServ,
             derivadoDeCfdi: true,
+            ...etiquetaControlAlNacer(nombre),
           },
           select: { id: true },
         });
@@ -780,6 +801,34 @@ export async function derivarInsumosBackfill(
     completado,
     elapsedMs: Date.now() - startedAt,
   };
+}
+
+/**
+ * Propuesta de grupo de control para los insumos DERIVADOS que nadie ha
+ * etiquetado (sin grupo ni sustancia): los que nacieron antes de esta regla.
+ * Nunca toca un insumo capturado a mano ni uno que ya tenga grupo o
+ * sustancia — eso lo puso (o lo dejó) el responsable sanitario. Idempotente.
+ */
+export async function etiquetarControlados(db: Db, companyId: string): Promise<{ revisados: number; etiquetados: number }> {
+  const candidatos = await db.hospInsumo.findMany({
+    where: { companyId, derivadoDeCfdi: true, grupoControl: null, sustanciaActiva: null },
+    select: { id: true, nombre: true },
+  });
+  let etiquetados = 0;
+  for (const c of candidatos) {
+    const control = sustanciaControladaPorNombre(c.nombre);
+    if (!control) continue;
+    await db.hospInsumo.update({
+      where: { id: c.id },
+      data: {
+        grupoControl: control.grupo,
+        sustanciaActiva: control.sustancia,
+        ...(exigeLibroControl(control.grupo) ? { controlado: true } : {}),
+      },
+    });
+    etiquetados++;
+  }
+  return { revisados: candidatos.length, etiquetados };
 }
 
 /** Conteos de lo derivado, para Configuración y GET /farmacia/derivar. */

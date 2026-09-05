@@ -3,8 +3,10 @@
  *
  * El kardex de un insumo: existencia (Σ movimientos), sus lotes y los últimos
  * 200 movimientos con lo que los explica — el lote, el episodio/paciente al
- * que se aplicó, el CFDI de compra o venta que lo derivó, el motivo y quién
- * lo capturó. Sólo lectura.
+ * que se aplicó, el CFDI de compra o venta que lo derivó, el motivo, quién
+ * lo capturó y, en controlados, la receta y el prescriptor que amparan cada
+ * salida. El insumo trae `exigeLibroControl` / `exigeRecetaEspecial` por su
+ * grupo y `requiereRefrigeracion` / `registroSanitario` tal cual. Sólo lectura.
  */
 
 import { NextResponse } from "next/server";
@@ -12,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule, withAuthz } from "@/lib/authz";
 import { diasDesde, r2 } from "@/lib/hospital/cobranza";
 import { nombrePaciente } from "@/lib/hospital/formato";
+import { banderasControl } from "@/lib/hospital/controlados";
 
 const MAX_MOVIMIENTOS = 200;
 
@@ -44,6 +47,7 @@ export const GET = withAuthz(async (req: Request) => {
       select: {
         id: true, fecha: true, tipo: true, cantidad: true, costoUnitario: true, referencia: true,
         usuarioNombre: true, createdAt: true, cargoId: true,
+        recetaRef: true, prescriptorNombre: true, prescriptorCedula: true,
         lote: { select: { id: true, lote: true, caducidad: true } },
         episodio: {
           select: { id: true, folio: true, paciente: { select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true } } },
@@ -60,6 +64,7 @@ export const GET = withAuthz(async (req: Request) => {
   return NextResponse.json({
     insumo: {
       ...insumo,
+      ...banderasControl(insumo.grupoControl),
       minimo: Number(insumo.minimo),
       precioVenta: insumo.precioVenta == null ? null : Number(insumo.precioVenta),
       ultimoCosto: insumo.ultimoCosto == null ? null : Number(insumo.ultimoCosto),
@@ -96,6 +101,9 @@ export const GET = withAuthz(async (req: Request) => {
           }
         : null,
       cargoId: m.cargoId,
+      recetaRef: m.recetaRef,
+      prescriptorNombre: m.prescriptorNombre,
+      prescriptorCedula: m.prescriptorCedula,
       referencia: m.referencia,
       usuarioNombre: m.usuarioNombre,
       createdAt: m.createdAt,

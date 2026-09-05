@@ -13,11 +13,25 @@
 // FEFO: sin `loteId` se toma el lote que caduca primero con existencia; los
 // sin caducidad al final. v1 NO parte una aplicación entre lotes: si el lote
 // no cubre la cantidad, 409 y que el piso aplique en dos movimientos.
+//
+// Controlados (LGS arts. 234/245): si el grupo del insumo lleva libro de
+// control (I-III), la salida sólo se registra con la receta que la ampara
+// (`recetaRef`: folio de la receta especial en I-II, de la ordinaria retenida
+// en III) y con el prescriptor —nombre y cédula— que sale del médico
+// (`medicoId`) o llega explícito. Queda en el movimiento del kardex, que es
+// de donde se imprime el libro (GET /farmacia/libro-control).
+//
+// IVA por contexto (criterio 9/IVA/N): el cargo nace con `ivaContexto` —
+// SUMINISTRO_HOSPITALARIO en hospitalización, ambulatorio y urgencias (tasa
+// de HospConfig.ivaMedicinasHospitalizacion), VENTA_DIRECTA en consulta o
+// cuando se pide (tasa del insumo)— y con la tasa ya resuelta (ver cuenta.ts).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { PrismaClient } from "@prisma/client";
+import type { HospIvaContexto, PrismaClient } from "@prisma/client";
 import { HospitalError } from "./errores";
 import { esActivo, r2 } from "./util";
+import { exigeLibroControl, nombreReceta } from "./controlados";
+import { ivaContextoPorEpisodio, ivaTasaPorContexto } from "./cuenta";
 
 export interface AplicarInsumoArgs {
   companyId: string;
@@ -30,9 +44,23 @@ export interface AplicarInsumoArgs {
   nota?: string | null;
   fecha?: Date;
   medicoId?: string | null;
+  /** Receta o indicación que ampara la salida. Obligatoria si el insumo es controlado I-III. */
+  recetaRef?: string | null;
+  /** Prescriptor; si falta se toma del médico (`medicoId`). Obligatorios en controlados I-III. */
+  prescriptorNombre?: string | null;
+  prescriptorCedula?: string | null;
+  /** Contexto de IVA del cargo; sin él lo decide el tipo de episodio. */
+  contexto?: HospIvaContexto | null;
 }
 
+/** Un folio de receta con menos de esto no identifica nada. */
+const RECETA_MIN = 3;
+
 const formatearCantidad = (n: number) => (Number.isInteger(n) ? String(n) : String(r2(n)));
+const limpiar = (s: string | null | undefined): string | null => {
+  const t = (s ?? "").trim();
+  return t ? t : null;
+};
 
 export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
   const cantidad = Number(args.cantidad);
@@ -40,12 +68,16 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
   const fecha = args.fecha ?? new Date();
 
   return db.$transaction(async (tx) => {
-    const [episodio, insumo] = await Promise.all([
-      tx.hospEpisodio.findUnique({ where: { id: args.episodioId }, select: { id: true, companyId: true, estado: true, folio: true } }),
+    const [episodio, insumo, config, medico] = await Promise.all([
+      tx.hospEpisodio.findUnique({ where: { id: args.episodioId }, select: { id: true, companyId: true, estado: true, folio: true, tipo: true } }),
       tx.hospInsumo.findUnique({
         where: { id: args.insumoId },
-        select: { id: true, companyId: true, nombre: true, unidad: true, categoria: true, precioVenta: true, ivaTasa: true, activo: true },
+        select: { id: true, companyId: true, nombre: true, unidad: true, categoria: true, precioVenta: true, ivaTasa: true, activo: true, grupoControl: true },
       }),
+      tx.hospConfig.findUnique({ where: { companyId: args.companyId }, select: { ivaMedicinasHospitalizacion: true } }),
+      args.medicoId
+        ? tx.hospMedico.findUnique({ where: { id: args.medicoId }, select: { id: true, companyId: true, nombre: true, cedula: true } })
+        : Promise.resolve(null),
     ]);
     if (!episodio || episodio.companyId !== args.companyId) throw new HospitalError(404, "Episodio no encontrado");
     if (!esActivo(episodio.estado)) {
@@ -53,6 +85,29 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
     }
     if (!insumo || insumo.companyId !== args.companyId) throw new HospitalError(404, "Insumo no encontrado");
     if (!insumo.activo) throw new HospitalError(409, `El insumo ${insumo.nombre} está dado de baja`);
+    if (args.medicoId && (!medico || medico.companyId !== args.companyId)) throw new HospitalError(404, "Médico no encontrado");
+
+    // Controlados: la salida se ampara con receta y prescriptor identificado.
+    const grupo = insumo.grupoControl;
+    const recetaRef = limpiar(args.recetaRef);
+    const prescriptorNombre = limpiar(args.prescriptorNombre) ?? limpiar(medico?.nombre);
+    const prescriptorCedula = limpiar(args.prescriptorCedula) ?? limpiar(medico?.cedula);
+    if (exigeLibroControl(grupo)) {
+      const quien = `${insumo.nombre} es controlado (grupo ${grupo})`;
+      if (!recetaRef) {
+        throw new HospitalError(400, `${quien}: indica el folio de la ${nombreReceta(grupo)} que ampara la salida (recetaRef)`);
+      }
+      if (recetaRef.length < RECETA_MIN) throw new HospitalError(400, `${quien}: el folio de la receta es demasiado corto`);
+      if (!prescriptorNombre) throw new HospitalError(400, `${quien}: indica el médico que prescribe (medicoId o prescriptorNombre)`);
+      if (!prescriptorCedula) {
+        throw new HospitalError(
+          medico ? 409 : 400,
+          medico
+            ? `${quien}: el médico ${medico.nombre} no tiene cédula profesional registrada; captúrala en Médicos o indica prescriptorCedula`
+            : `${quien}: falta la cédula profesional del prescriptor (prescriptorCedula)`
+        );
+      }
+    }
 
     // El lote: el indicado, o el primero en caducar (FEFO) con existencia.
     const lote = args.loteId
@@ -91,6 +146,15 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
     const categoria = insumo.categoria === "MEDICAMENTO" || insumo.categoria === "SOLUCION" ? "FARMACIA" : "MATERIAL";
     const etiqueta = `${insumo.nombre} · lote ${lote.lote} · ${formatearCantidad(cantidad)} ${insumo.unidad}`;
 
+    // IVA por contexto: suministro (tasa de la config) o venta directa (tasa del insumo).
+    const ivaContexto: HospIvaContexto = args.contexto ?? ivaContextoPorEpisodio(episodio.tipo);
+    const ivaTasa = ivaTasaPorContexto({
+      contexto: ivaContexto,
+      categoria,
+      ivaTasaInsumo: insumo.ivaTasa == null ? null : Number(insumo.ivaTasa),
+      ivaMedicinasHospitalizacion: config?.ivaMedicinasHospitalizacion == null ? null : Number(config.ivaMedicinasHospitalizacion),
+    });
+
     const cargo = await tx.hospCargo.create({
       data: {
         companyId: args.companyId,
@@ -100,7 +164,8 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
         descripcion: etiqueta,
         cantidad,
         precioUnitario,
-        ivaTasa: insumo.ivaTasa == null ? null : Number(insumo.ivaTasa),
+        ivaTasa,
+        ivaContexto,
         importe: r2(cantidad * precioUnitario),
         origen: "FARMACIA",
         loteId: lote.id,
@@ -122,11 +187,17 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
         cargoId: cargo.id,
         usuarioId: args.usuarioId ?? null,
         usuarioNombre: args.usuarioNombre,
+        recetaRef,
+        prescriptorNombre,
+        prescriptorCedula,
       },
     });
 
+    const amparo = recetaRef
+      ? ` Receta ${recetaRef}${prescriptorNombre ? ` · prescribe ${prescriptorNombre}${prescriptorCedula ? ` (céd. ${prescriptorCedula})` : ""}` : ""}.`
+      : "";
     const texto =
-      `${etiqueta} — descontado de farmacia y cargado a la cuenta.` + (args.nota?.trim() ? ` ${args.nota.trim()}` : "");
+      `${etiqueta} — descontado de farmacia y cargado a la cuenta.${amparo}` + (args.nota?.trim() ? ` ${args.nota.trim()}` : "");
     const nota = await tx.hospNota.create({
       data: {
         episodioId: episodio.id,

@@ -1,28 +1,42 @@
 /**
- * GET  /api/hospital/farmacia/insumos?companyId=…[&q=&tab=TODOS|BAJO_MINIMO|POR_CADUCAR|CONTROLADOS|SIN_EXISTENCIA]
- * POST /api/hospital/farmacia/insumos   { companyId, nombre, clave?, … }
+ * GET  /api/hospital/farmacia/insumos?companyId=…[&q=&tab=TODOS|BAJO_MINIMO|POR_CADUCAR|CONTROLADOS|SIN_EXISTENCIA
+ *                                                  &controlados=1&refrigeracion=1&grupo=I|II|III|IV|V|VI&incluirInactivos=1]
+ * POST /api/hospital/farmacia/insumos   { companyId, nombre, clave?, …, grupoControl?, registroSanitario?, sustanciaActiva?, requiereRefrigeracion? }
  *
  * Farmacia y almacén como lo lee el jefe de farmacia: una fila por insumo con
  * sus LOTES (caducidad y existencia por lote), el estado (en nivel / bajo
  * mínimo / sin existencia) y el valor a último costo. La verdad de la
  * existencia es el KARDEX (Σ HospMovimientoInsumo.cantidad, una consulta
  * agrupada para todo el catálogo); HospLote.existencia es el saldo
- * materializado por lote. Los KPIs y `porTab` respetan la búsqueda.
+ * materializado por lote. Los KPIs y `porTab` respetan la búsqueda y los
+ * filtros.
+ *
+ * Controlados (LGS arts. 234/245): `grupoControl` I-VI, `sustanciaActiva` y
+ * `registroSanitario` COFEPRIS; `exigeLibroControl` / `exigeRecetaEspecial`
+ * salen del grupo para que el satélite lo etiquete. Cadena de frío:
+ * `requiereRefrigeracion`. `controlados=1` = grupo I-III o bandera
+ * `controlado`; `refrigeracion=1` = cadena de frío; `grupo=` un grupo exacto.
  *
  * POST da de alta un insumo capturado a mano (derivadoDeCfdi = false); los
- * derivados del archivo de CFDIs nacen en insumos-cfdi.ts.
+ * derivados del archivo de CFDIs nacen en insumos-cfdi.ts. Sin `grupoControl`
+ * explícito se PROPONE por nombre (lib/hospital/controlados) —la respuesta lo
+ * avisa con `grupoControlPropuesto`— y el responsable sanitario lo confirma.
  */
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { HospGrupoControl, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
 import { diasDesde, r2 } from "@/lib/hospital/cobranza";
 import { claveDeInsumo } from "@/lib/hospital/insumos-cfdi";
+import { banderasControl, exigeLibroControl, GRUPOS_LIBRO_CONTROL, sustanciaControladaPorNombre } from "@/lib/hospital/controlados";
 
 const TABS = ["TODOS", "BAJO_MINIMO", "POR_CADUCAR", "CONTROLADOS", "SIN_EXISTENCIA"] as const;
 type Tab = (typeof TABS)[number];
+
+const GRUPOS = ["I", "II", "III", "IV", "V", "VI"] as const;
 
 type EstadoLote = "EN_NIVEL" | "CADUCA" | "CADUCADO";
 type EstadoInsumo = "EN_NIVEL" | "BAJO_MINIMO" | "SIN_EXISTENCIA";
@@ -39,20 +53,28 @@ export const GET = withAuthz(async (req: Request) => {
   const tabParam = (searchParams.get("tab") ?? "TODOS").toUpperCase();
   const tab: Tab = (TABS as readonly string[]).includes(tabParam) ? (tabParam as Tab) : "TODOS";
   const incluirInactivos = searchParams.get("incluirInactivos") === "1";
+  const soloControlados = searchParams.get("controlados") === "1";
+  const soloRefrigeracion = searchParams.get("refrigeracion") === "1";
+  const grupoParam = (searchParams.get("grupo") ?? "").toUpperCase();
+  const grupo = (GRUPOS as readonly string[]).includes(grupoParam) ? (grupoParam as HospGrupoControl) : null;
   const como = { contains: q, mode: "insensitive" as const };
   const hoy = new Date();
+
+  const condiciones: Prisma.HospInsumoWhereInput[] = [];
+  if (!incluirInactivos) condiciones.push({ activo: true });
+  if (q) condiciones.push({ OR: [{ clave: como }, { nombre: como }, { presentacion: como }, { sustanciaActiva: como }, { registroSanitario: como }] });
+  if (soloControlados) condiciones.push({ OR: [{ controlado: true }, { grupoControl: { in: [...GRUPOS_LIBRO_CONTROL] } }] });
+  if (soloRefrigeracion) condiciones.push({ requiereRefrigeracion: true });
+  if (grupo) condiciones.push({ grupoControl: grupo });
 
   const [config, insumosDb, existencias] = await Promise.all([
     prisma.hospConfig.findUnique({ where: { companyId }, select: { diasAlertaCaducidad: true } }),
     prisma.hospInsumo.findMany({
-      where: {
-        companyId,
-        ...(incluirInactivos ? {} : { activo: true }),
-        ...(q ? { OR: [{ clave: como }, { nombre: como }, { presentacion: como }] } : {}),
-      },
+      where: { companyId, AND: condiciones },
       select: {
         id: true, clave: true, nombre: true, presentacion: true, unidad: true, categoria: true,
-        controlado: true, minimo: true, ultimoCosto: true, precioVenta: true, ivaTasa: true,
+        controlado: true, grupoControl: true, registroSanitario: true, sustanciaActiva: true, requiereRefrigeracion: true,
+        minimo: true, ultimoCosto: true, precioVenta: true, ivaTasa: true,
         claveProdServ: true, derivadoDeCfdi: true, activo: true, updatedAt: true,
         lotes: {
           where: { existencia: { gt: 0 } },
@@ -103,6 +125,7 @@ export const GET = withAuthz(async (req: Request) => {
         estado: estadoL,
       };
     });
+    const banderas = banderasControl(i.grupoControl);
     return {
       id: i.id,
       clave: i.clave,
@@ -111,6 +134,11 @@ export const GET = withAuthz(async (req: Request) => {
       unidad: i.unidad,
       categoria: i.categoria,
       controlado: i.controlado,
+      grupoControl: i.grupoControl,
+      sustanciaActiva: i.sustanciaActiva,
+      registroSanitario: i.registroSanitario,
+      requiereRefrigeracion: i.requiereRefrigeracion,
+      ...banderas,
       minimo,
       existencia,
       ultimoCosto,
@@ -132,7 +160,7 @@ export const GET = withAuthz(async (req: Request) => {
     TODOS: () => true,
     BAJO_MINIMO: (i) => i.bajoMinimo,
     POR_CADUCAR: (i) => i.lotesPorCaducar > 0,
-    CONTROLADOS: (i) => i.controlado,
+    CONTROLADOS: (i) => i.controlado || i.exigeLibroControl,
     SIN_EXISTENCIA: (i) => i.estado === "SIN_EXISTENCIA",
   };
   const porTab = Object.fromEntries(TABS.map((t) => [t, insumos.filter(cumple[t]).length])) as Record<Tab, number>;
@@ -144,11 +172,14 @@ export const GET = withAuthz(async (req: Request) => {
     hoy: hoy.toISOString(),
     tab,
     q: q || null,
+    filtros: { controlados: soloControlados, refrigeracion: soloRefrigeracion, grupo },
     kpis: {
       valorInventario: r2(insumos.reduce((s, i) => s + i.valor, 0)),
       claves: insumos.length,
       clavesBajoMinimo: porTab.BAJO_MINIMO,
       clavesSinExistencia: porTab.SIN_EXISTENCIA,
+      clavesControladas: porTab.CONTROLADOS,
+      clavesRefrigeracion: insumos.filter((i) => i.requiereRefrigeracion).length,
       lotesPorCaducar: lotesCaduca.length,
       valorEnRiesgo: r2(lotesCaduca.reduce((s, l) => s + l.valor, 0)),
       lotesCaducados: lotesCaducados.length,
@@ -169,7 +200,11 @@ const createSchema = z.object({
   presentacion: z.string().trim().max(120).nullable().optional(),
   unidad: z.string().trim().min(1).max(30).default("pieza"),
   categoria: z.enum(CATEGORIAS).default("MEDICAMENTO"),
-  controlado: z.boolean().default(false),
+  controlado: z.boolean().optional(),
+  grupoControl: z.enum(GRUPOS).nullable().optional(),
+  registroSanitario: z.string().trim().max(60).nullable().optional(),
+  sustanciaActiva: z.string().trim().max(120).nullable().optional(),
+  requiereRefrigeracion: z.boolean().default(false),
   minimo: z.number().min(0).max(1_000_000).default(0),
   precioVenta: z.number().min(0).nullable().optional(),
   ultimoCosto: z.number().min(0).nullable().optional(),
@@ -205,6 +240,13 @@ export const POST = withAuthz(async (req: Request) => {
     );
   }
 
+  // Grupo de control: el que venga; si no viene, la propuesta por nombre (el
+  // responsable sanitario la confirma). Un grupo I-III marca `controlado`.
+  const propuesta = datos.grupoControl === undefined ? sustanciaControladaPorNombre(datos.nombre) : null;
+  const grupoControl = datos.grupoControl !== undefined ? datos.grupoControl : (propuesta?.grupo ?? null);
+  const sustanciaActiva = datos.sustanciaActiva !== undefined ? datos.sustanciaActiva : (propuesta?.sustancia ?? null);
+  const controlado = datos.controlado ?? exigeLibroControl(grupoControl);
+
   const insumo = await prisma.hospInsumo.create({
     data: {
       companyId,
@@ -213,7 +255,11 @@ export const POST = withAuthz(async (req: Request) => {
       presentacion: datos.presentacion ?? null,
       unidad: datos.unidad,
       categoria: datos.categoria,
-      controlado: datos.controlado,
+      controlado,
+      grupoControl,
+      sustanciaActiva,
+      registroSanitario: datos.registroSanitario ?? null,
+      requiereRefrigeracion: datos.requiereRefrigeracion,
       minimo: datos.minimo,
       precioVenta: datos.precioVenta ?? null,
       ultimoCosto: datos.ultimoCosto ?? null,
@@ -236,13 +282,15 @@ export const POST = withAuthz(async (req: Request) => {
     accion: "hospital.insumo.crear",
     entidad: "HospInsumo",
     entidadId: insumo.id,
-    detalle: { clave, nombre: datos.nombre, categoria: datos.categoria, controlado: datos.controlado },
+    detalle: { clave, nombre: datos.nombre, categoria: datos.categoria, controlado, grupoControl, grupoControlPropuesto: propuesta != null },
     req,
   });
 
   return NextResponse.json(
     {
       ...insumo,
+      ...banderasControl(insumo.grupoControl),
+      grupoControlPropuesto: propuesta != null,
       minimo: Number(insumo.minimo),
       precioVenta: insumo.precioVenta == null ? null : Number(insumo.precioVenta),
       ultimoCosto: insumo.ultimoCosto == null ? null : Number(insumo.ultimoCosto),

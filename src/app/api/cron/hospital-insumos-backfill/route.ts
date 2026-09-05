@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import {
   derivarInsumosBackfill,
   empresasHospitalParaBackfill,
+  etiquetarControlados,
   reiniciarProgresoInsumos,
   type BackfillInsumosResultado,
 } from "@/lib/hospital/insumos-cfdi";
@@ -26,6 +27,9 @@ import {
 //                   lote) antes de rederivarlos. Los que farmacia ya amarró a
 //                   un lote son recepción física y no se tocan; los AJUSTE,
 //                   MERMA, etc. tampoco. Exige companyId explícito.
+//   etiquetar=1   → tras derivar, propone grupo de control y sustancia activa
+//                   a los insumos derivados que nadie ha etiquetado (los
+//                   nuevos ya nacen etiquetados). No toca lo capturado a mano.
 //
 // Auth: CRON_SECRET (Bearer o x-cron-secret), igual que los demás crons.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,6 +58,7 @@ async function handle(req: Request) {
   const afterId = url.searchParams.get("afterId");
   const reiniciar = url.searchParams.get("reiniciar") === "1";
   const recalcular = url.searchParams.get("recalcular") === "1";
+  const etiquetar = url.searchParams.get("etiquetar") === "1";
   if (recalcular && !onlyCompanyId) {
     return NextResponse.json(
       { error: "recalcular=1 requiere companyId explícito (borra los movimientos derivados del kardex)" },
@@ -71,6 +76,7 @@ async function handle(req: Request) {
   }
 
   let borrados = 0;
+  let etiquetados = 0;
   const empresas: Array<{ companyId: string } & BackfillInsumosResultado> = [];
   for (const companyId of objetivos) {
     const restante = TIME_BUDGET_MS - (Date.now() - startedAt);
@@ -96,6 +102,7 @@ async function handle(req: Request) {
         : undefined,
     });
     empresas.push({ companyId, ...r });
+    if (etiquetar) etiquetados += (await etiquetarControlados(prisma, companyId)).etiquetados;
   }
 
   const summary = {
@@ -106,6 +113,7 @@ async function handle(req: Request) {
     insumos: empresas.reduce((s, e) => s + e.insumos, 0),
     movimientos: empresas.reduce((s, e) => s + e.movimientos, 0),
     ...(recalcular ? { borrados } : {}),
+    ...(etiquetar ? { etiquetados } : {}),
     // Compatibilidad con el encadenado por cursor de una sola empresa.
     nextAfterId: onlyCompanyId ? (empresas[0]?.nextAfterId ?? null) : null,
     completado: empresas.every((e) => e.completado),

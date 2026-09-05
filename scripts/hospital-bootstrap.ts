@@ -24,7 +24,7 @@
  *     --rfc CPM2307076Z9 [--nombre "Haltus Hope"] [--admin correo] [--dry-run] [--sin-farmacia] [--solo-farmacia]
  */
 import { PrismaClient, type HospCargoCategoria, type HospPagadorTipo } from "@prisma/client";
-import { clasificarInsumo, derivarInsumosBackfill, normalizarDescripcion } from "../src/lib/hospital/insumos-cfdi";
+import { clasificarInsumo, derivarInsumosBackfill, etiquetarControlados, normalizarDescripcion } from "../src/lib/hospital/insumos-cfdi";
 
 const prisma = new PrismaClient();
 
@@ -331,6 +331,12 @@ async function main() {
       if (rondas > 600) { console.log("\n  ! tope de rondas; sigue con el cron"); break; }
     }
     console.log(`\n  ✓ farmacia: ${procesados} CFDIs barridos · ${insumos} insumos · ${movimientos} movimientos`);
+
+    // Controlados (LGS 234/245): los insumos nuevos ya nacen con su grupo
+    // propuesto; esto alcanza a los derivados de antes que nadie etiquetó.
+    // No toca lo capturado a mano ni lo que ya tiene grupo o sustancia.
+    const control = await conReintento("controlados", () => etiquetarControlados(prisma, cid));
+    console.log(`  ✓ controlados: ${control.etiquetados} insumos etiquetados por sustancia (${control.revisados} revisados) — confirmar el grupo en Farmacia`);
   }
 
   const [nP, nM, nS, nPx, nI, nL, nMov] = await conReintento("resumen", () => Promise.all([

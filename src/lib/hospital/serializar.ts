@@ -2,7 +2,7 @@
 // médico, pagador, receptor y cama en listados, expediente, censo y cuenta,
 // con los Decimal ya como número.
 
-import type { HospCargoCategoria, HospPagadorTipo, HospRecursoEstado, HospRecursoTipo, HospArea, HospSexo } from "@prisma/client";
+import type { HospCargoCategoria, HospIvaContexto, HospPagadorTipo, HospRecursoEstado, HospRecursoTipo, HospArea, HospSexo } from "@prisma/client";
 import type { CargoCuenta } from "./cuenta";
 import { edad, nombreCompleto, r2 } from "./util";
 
@@ -94,6 +94,7 @@ export function cargoParaCuenta(c: {
   medicoId?: string | null;
   lote?: { lote: string } | null;
   medico?: { id: string; nombre: string } | null;
+  ivaContexto?: HospIvaContexto | null;
 }): CargoCuenta {
   return {
     id: c.id,
@@ -113,6 +114,7 @@ export function cargoParaCuenta(c: {
     medicoId: c.medicoId ?? null,
     lote: c.lote ?? null,
     medico: c.medico ?? null,
+    ivaContexto: c.ivaContexto ?? null,
   };
 }
 
