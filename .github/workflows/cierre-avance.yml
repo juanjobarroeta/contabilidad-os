@@ -1,0 +1,42 @@
+name: Cierre guiado — pase diario (manual, por empresa)
+
+# Dispara el pase diario del cierre guiado fuera de su horario: evalúa los
+# periodos en juego de una empresa PRO (o de todas), avisa lo que empeoró
+# (inbox «Cierre», conversación del periodo, push si urge) y deja el snapshot
+# para mañana. Sin modelo (costo 0). El cron in-process ya lo corre solo una
+# vez al día desde las 06:00 MX; este workflow existe para probarlo o repetirlo
+# a mano, y porque el endpoint se autentica con CRON_SECRET y el secreto ya
+# vive en el repo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      companyId:
+        description: "ID de la empresa (vacío = todas las empresas con plan)"
+        required: false
+        type: string
+      force:
+        description: "Repetir aunque ya haya corrido hoy"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  avance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Correr el pase diario
+        run: |
+          set -euo pipefail
+          URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "::error::STAGING_URL secret is empty"; exit 1; fi
+          Q="force=$([ "${FORCE}" = "true" ] && echo 1 || echo 0)"
+          if [ -n "${COMPANY_ID}" ]; then Q="${Q}&companyId=${COMPANY_ID}"; fi
+          curl -fsS -X POST "${URL}/api/cron/cierre-avance?${Q}" -H "x-cron-secret: ${CRON_SECRET}" | tee response.json
+          echo
+          jq '{ok, empresas, procesadas, omitidasHoy, avisos, errores, resultados}' response.json
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          COMPANY_ID: ${{ inputs.companyId }}
+          FORCE: ${{ inputs.force }}
