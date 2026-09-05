@@ -28,6 +28,7 @@ import {
   Wrench,
   Banknote,
   LayoutGrid,
+  ClipboardCheck,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -41,7 +42,7 @@ type NavSection = { label: string | null; items: NavItem[] };
 const SECTIONS: NavSection[] = [
   {
     label: null,
-    items: [{ href: "/dashboard", label: "Inicio", icon: LayoutDashboard }],
+    items: [{ href: "/dashboard", label: "Hoy", icon: LayoutDashboard }],
   },
   {
     label: "Operación",
@@ -97,6 +98,10 @@ function nominaTabActiva(pathname: string, tabParam: string | null): string | nu
 // usuario opera más de una empresa.
 const CARTERA: NavItem = { href: "/despacho", label: "Cartera", icon: Briefcase };
 
+// Cierre guiado (PRO): el workspace donde el copiloto conduce el cierre del
+// mes. Sólo aparece cuando el plan de la empresa activa lo incluye.
+const CIERRE: NavItem = { href: "/cierre", label: "Cierre", icon: ClipboardCheck };
+
 const BOTTOM_NAV_ITEMS: NavItem[] = [
   { href: "/empresa", label: "Mi Empresa", icon: Building2 },
   { href: "/configuracion", label: "Configuración", icon: Settings },
@@ -139,6 +144,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
 
   // Cartera sólo para despachos (más de una empresa).
   const showCartera = companies.length > 1;
+  const showCierre = activeCompany?.cierreGuiado === true;
 
   // Close the mobile drawer on navigation.
   useEffect(() => {
@@ -151,6 +157,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
   const allHrefs = [
     ...SECTIONS.flatMap((s) => s.items.map((i) => i.href)),
     CARTERA.href,
+    CIERRE.href,
     "/rentabilidad",
     "/operador",
     ...BOTTOM_NAV_ITEMS.map((i) => i.href),
@@ -331,6 +338,15 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
               <span className="flex-1">{CARTERA.label}</span>
               <span className="rounded-full bg-cos-brand-tint px-2 py-0.5 font-mono text-[10px] font-semibold text-cos-brand-ink">
                 {companies.length} RFC
+              </span>
+            </Link>
+          )}
+          {showCierre && (
+            <Link href={CIERRE.href} className={navLinkClass(CIERRE.href === activeNavHref)}>
+              <CIERRE.icon className="h-4 w-4 shrink-0" />
+              <span className="flex-1">{CIERRE.label}</span>
+              <span className="rounded-full bg-cos-jade-tint px-2 py-0.5 font-mono text-[10px] font-semibold text-cos-jade-ink">
+                PRO
               </span>
             </Link>
           )}

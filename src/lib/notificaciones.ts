@@ -21,6 +21,7 @@ export type CategoriaPendiente =
   | "nomina"
   | "proyeccion"
   | "ce"
+  | "cierre"
   | "otro";
 
 export type SeveridadPendiente = "info" | "warn" | "error";
@@ -34,6 +35,12 @@ const TZ_MX = "America/Mexico_City";
  */
 export function fechaLocalMx(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TZ_MX }).format(now);
+}
+
+/** Hora local de México (0–23), para ventanas horarias de los crons. */
+export function horaLocalMx(now: Date = new Date()): number {
+  const h = new Intl.DateTimeFormat("en-US", { timeZone: TZ_MX, hour: "numeric", hour12: false }).format(now);
+  return Number(h) % 24;
 }
 
 /**
@@ -196,6 +203,12 @@ export interface RegistrarYNotificarInput {
    * (`...:<YYYY-MM-DD>`) da "a lo más un push al día". Ver `decidirNotificacion`.
    */
   pushSoloAlCrear?: boolean;
+  /**
+   * Nunca empujar: sólo registrar en el inbox. Para avisos que no merecen
+   * interrumpir (el pase diario del cierre reserva el push a vencimientos y
+   * bloqueos).
+   */
+  sinPush?: boolean;
 }
 
 export interface RegistrarYNotificarResult {
@@ -233,6 +246,7 @@ export async function registrarYNotificar(
     categoriaPush,
     abrirChat = true,
     pushSoloAlCrear = false,
+    sinPush = false,
   } = input;
 
   // El puntero `?ask=<dedupeKey>` viaja en la MISMA URL del item y del push, de
@@ -282,7 +296,7 @@ export async function registrarYNotificar(
     }
   }
 
-  if (!decision.push) return { itemId, pushSent: false };
+  if (!decision.push || sinPush) return { itemId, pushSent: false };
 
   const push = await sendPushToUser(
     recipientUserId,

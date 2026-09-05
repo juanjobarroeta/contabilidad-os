@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { marcarAvisoCierreAccionado } from "@/lib/cierre/pase-diario";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -38,7 +39,7 @@ export async function PATCH(req: Request, { params }: Params) {
   // El item debe existir y pertenecer al usuario.
   const item = await prisma.notificationItem.findUnique({
     where: { id },
-    select: { id: true, recipientUserId: true },
+    select: { id: true, recipientUserId: true, dedupeKey: true },
   });
   if (!item || item.recipientUserId !== userId) {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 });
@@ -66,6 +67,9 @@ export async function PATCH(req: Request, { params }: Params) {
     } else if (body.estado === "HECHO") {
       data.hechoAt = now;
       data.posponerHasta = null;
+      // Aviso del cierre guiado marcado como hecho → accionado en su ledger
+      // (la dedupeKey «cierre:…» identifica empresa, periodo y paso).
+      void marcarAvisoCierreAccionado(item.dedupeKey, now);
     } else if (body.estado === "POSPUESTO") {
       const hasta = body.posponerHasta ? new Date(body.posponerHasta) : null;
       if (!hasta || isNaN(hasta.getTime())) {
@@ -91,3 +95,4 @@ export async function PATCH(req: Request, { params }: Params) {
     hechoAt: updated.hechoAt?.toISOString() ?? null,
   });
 }
+

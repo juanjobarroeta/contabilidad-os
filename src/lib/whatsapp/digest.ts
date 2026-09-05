@@ -19,6 +19,7 @@
 import { prisma } from "@/lib/prisma";
 import { listAccessibleCompanies } from "./identity";
 import { sendWhatsappMessage, sendWhatsappTemplate } from "./twilio";
+import { lineasCierreParaDigest } from "../cierre/pase-diario";
 
 /** Resumen por empresa para el formateador (puro). */
 export interface EmpresaResumen {
@@ -36,8 +37,21 @@ const MAX_LISTADAS = 8;
  * pendientes, devuelve un mensaje de "todo al corriente" (es un resumen DIARIO
  * que el usuario pidió; el verde también es señal).
  */
-export function formatCarteraDigest(empresas: ReadonlyArray<EmpresaResumen>): string | null {
+/** Aviso del cierre guiado de hoy (una línea por aviso, ya redactada). */
+export interface LineaCierre {
+  empresa: string;
+  linea: string;
+}
+
+export function formatCarteraDigest(
+  empresas: ReadonlyArray<EmpresaResumen>,
+  cierre: ReadonlyArray<LineaCierre> = []
+): string | null {
   if (empresas.length === 0) return null;
+  const bloqueCierre =
+    cierre.length > 0
+      ? ["", "Cierre guiado hoy:", ...cierre.map((c) => `- ${c.linea}`)]
+      : [];
 
   const conPendientes = empresas
     .filter((e) => e.hallazgos > 0)
@@ -48,7 +62,11 @@ export function formatCarteraDigest(empresas: ReadonlyArray<EmpresaResumen>): st
   const cabecera = `Buenos días. Resumen de tu cartera (${n} empresa${n === 1 ? "" : "s"}).`;
 
   if (conPendientes.length === 0) {
-    return `${cabecera}\nTodas al corriente. Sin hallazgos abiertos.\n\nEscríbeme el nombre de una empresa si quieres revisar algo.`;
+    return [
+      `${cabecera}\nTodas al corriente. Sin hallazgos abiertos.`,
+      ...bloqueCierre,
+      "\nEscríbeme el nombre de una empresa si quieres revisar algo.",
+    ].join("\n");
   }
 
   const listadas = conPendientes.slice(0, MAX_LISTADAS);
@@ -65,6 +83,7 @@ export function formatCarteraDigest(empresas: ReadonlyArray<EmpresaResumen>): st
   ];
   if (restantes > 0) partes.push(`y ${restantes} empresa${restantes === 1 ? "" : "s"} más con pendientes.`);
   if (alCorriente > 0) partes.push(`${alCorriente} al corriente.`);
+  partes.push(...bloqueCierre);
   partes.push("\nEscríbeme el nombre de una empresa para ver el detalle.");
 
   return partes.join("\n");
@@ -179,7 +198,10 @@ export async function runWhatsappCarteraDigest(): Promise<DigestRunResult> {
   for (const link of links) {
     try {
       const resumen = await computeCarteraResumen(link.userId);
-      const texto = formatCarteraDigest(resumen);
+      const cierre = await lineasCierreParaDigest(
+        (await listAccessibleCompanies(link.userId)).map((c) => c.id)
+      ).catch(() => []);
+      const texto = formatCarteraDigest(resumen, cierre);
       const linea = formatCarteraDigestSummaryLine(resumen);
       if (!texto || !linea) {
         omitidos++;

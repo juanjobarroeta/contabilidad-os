@@ -24,7 +24,8 @@ export type Destino = {
 
 export const DESTINOS: Destino[] = [
   // ── Diario ────────────────────────────────────────────────────────────────
-  { href: "/dashboard", label: "Inicio", grupo: "General", keywords: ["tablero", "dashboard", "resumen"] },
+  { href: "/dashboard", label: "Hoy", grupo: "General", keywords: ["inicio", "tablero", "dashboard", "resumen", "pendientes de hoy"] },
+  { href: "/cierre", label: "Cierre guiado", grupo: "General", keywords: ["cierre", "cierre mensual", "checklist", "pasos", "copiloto"] },
   { href: "/avisos", label: "Avisos", grupo: "General", keywords: ["bandeja", "notificaciones", "inbox", "pendientes"] },
   { href: "/despacho", label: "Cartera", grupo: "General", keywords: ["despacho", "clientes del despacho", "multi rfc"] },
 

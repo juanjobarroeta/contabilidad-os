@@ -42,6 +42,7 @@ const CATEGORIA_LABEL: Record<string, string> = {
   nomina: "Nómina",
   proyeccion: "Declaración",
   ce: "Contabilidad electrónica",
+  cierre: "Cierre",
   otro: "Otro",
 };
 

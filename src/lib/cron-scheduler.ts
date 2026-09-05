@@ -135,6 +135,11 @@ const JOBS: Job[] = [
   // "616" y sin CP. Sin esto, facturarle a un cliente importado exigía capturar
   // sus datos fiscales a mano. Gap-driven: converge y se apaga solo.
   { name: "cliente-fiscal-backfill", everyMs: 6 * HOUR, firstDelayMs: 45 * MIN, minMs: MIN_LOCAL },
+  // Cierre guiado (PRO): pase diario que avanza el cierre y avisa lo que
+  // empeoró. El handler se auto-gatea a una corrida por empresa y día (a
+  // partir de las 06:00 MX); la cadencia sólo decide cuánto tarda en
+  // enterarse de que ya es «hoy».
+  { name: "cierre-avance", everyMs: 30 * MIN, firstDelayMs: 12 * MIN, minMs: MIN_CARO },
   { name: "compliance-provision", everyMs: 24 * HOUR, firstDelayMs: 3 * MIN, minMs: MIN_CARO },
   { name: "compliance-sync", everyMs: 6 * HOUR, firstDelayMs: 8 * MIN, minMs: MIN_CARO },
   // Acuses MENSUALES desde Syntage (PDF + parse con Claude). Corría SÓLO en el
