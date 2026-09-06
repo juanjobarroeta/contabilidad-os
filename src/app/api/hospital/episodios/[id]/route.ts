@@ -27,6 +27,8 @@ import { diaDeEstancia } from "@/lib/hospital/censo";
 import { nombresCie, resolverCie } from "@/lib/hospital/cie";
 import { describirRecursoNoLibre, validarTriage } from "@/lib/hospital/episodio";
 import { crearNota, normalizarAsa, verificarHashNota } from "@/lib/hospital/notas";
+import { cancelarPlanDeEpisodio, cerrarPlanDeEpisodio } from "@/lib/hospital/plan";
+import { asentarHonorarios } from "@/lib/hospital/asientos";
 import { customerResumen, medicoResumen, pacienteResumen, pagadorResumen, recursoResumen, totalesCargos } from "@/lib/hospital/serializar";
 import { esActivo, r2 } from "@/lib/hospital/util";
 
@@ -291,6 +293,8 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
     const actualizado = await prisma.$transaction(async (tx) => {
       // Las noches hasta el alta se cobran ANTES de soltar la cama.
       await asegurarCargosEstancia(tx, id, fechaAlta);
+      // P3: el plan de tratamiento del episodio se cierra con el alta.
+      await cerrarPlanDeEpisodio(tx, id);
       if (ep.recursoId) {
         await tx.hospRecurso.update({ where: { id: ep.recursoId }, data: { estado: "LIMPIEZA" } });
       }
@@ -326,6 +330,10 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
           ahora,
         });
       }
+      // ── Contabilidad (P3c): honorarios devengados por médico → retenciones ISR/IVA
+      // contra el pasivo con el médico (fuente HOSPITAL; sólo con contabilidadActiva). ──
+      await asentarHonorarios(tx, { id, companyId: ep.companyId, folio: ep.folio, fechaAlta });
+      // ── fin contabilidad ──
       return tx.hospEpisodio.update({
         where: { id },
         data: {
@@ -450,6 +458,8 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
         data: { cancelado: true, canceladoAt: ahora, motivoCancelacion: `Episodio cancelado: ${d.motivo}` },
       });
     }
+    // P3: el plan que seguía a este episodio se cancela con él.
+    await cancelarPlanDeEpisodio(tx, id);
     return tx.hospEpisodio.update({ where: { id }, data: { estado: "CANCELADO", recursoId: null } });
   });
   registrar("hospital.episodio.cancelar", { motivo: d.motivo, cargosCancelados: vivos.length, cama: ep.recurso?.nombre ?? null });

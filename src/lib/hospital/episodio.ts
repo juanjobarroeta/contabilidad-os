@@ -11,6 +11,9 @@
 // Una cama asignada a un ingreso PROGRAMADO se reserva desde ya (queda
 // OCUPADA): es la forma más simple de que dos programaciones no se pisen.
 //
+// P2: cada documento es del PACIENTE (pacienteId obligatorio) y, cuando nace
+// en una atención, también del episodio.
+//
 // P1 normativa: el paciente debe traer CURP (o motivo para no tenerla,
 // NOM-024); diagnóstico de ingreso y procedimiento van por catálogo CIE-10 /
 // CIE-9-MC y se cruzan con sexo y edad; URGENCIAS exige triage con hora
@@ -259,7 +262,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
               procedimiento: args.procedimiento ?? cotizacion?.procedimiento,
               conCitaQuirofano,
               pagadorTipo: pagador?.tipo,
-            }).map((d) => ({ companyId: args.companyId, tipo: d.tipo, nombre: d.nombre, requerido: true })),
+            }).map((d) => ({ companyId: args.companyId, pacienteId: paciente.id, tipo: d.tipo, nombre: d.nombre, requerido: true })),
           },
           ...(recurso
             ? {
@@ -316,6 +319,19 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
           where: { id: cotizacion.id },
           data: { estado: "CONVERTIDA", pacienteId: cotizacion.pacienteId ?? paciente.id },
         });
+        // P3: si la cotización nació de un plan de tratamiento, el plan sigue
+        // al episodio (EN_CURSO) y le presta su autorización del pagador.
+        const plan = await tx.hospPlanTratamiento.findUnique({
+          where: { cotizacionId: cotizacion.id },
+          select: { id: true, estado: true, episodioId: true, autorizacionPagador: true },
+        });
+        if (plan && !plan.episodioId && (plan.estado === "PROPUESTO" || plan.estado === "AUTORIZADO")) {
+          await tx.hospPlanTratamiento.update({ where: { id: plan.id }, data: { episodioId: episodio.id, estado: "EN_CURSO" } });
+          if (!episodio.autorizacionPagador && plan.autorizacionPagador) {
+            await tx.hospEpisodio.update({ where: { id: episodio.id }, data: { autorizacionPagador: plan.autorizacionPagador } });
+            episodio.autorizacionPagador = plan.autorizacionPagador;
+          }
+        }
       }
       return episodio;
     })

@@ -9,14 +9,29 @@
 // paciente sin CURP con `sinCurp` + `sinCurpMotivo` (extranjero sin CURP,
 // recién nacido sin registro). El número de expediente se asigna al crear y
 // nunca se edita; el aviso de privacidad (LFPDPPP) deja versión y fecha.
+//
+// P2: de dónde salió la CURP (`curpOrigen`; RENAPO sólo lo pone
+// /verificar-curp), si es una CURP calculada (`curpProbable`), el RFC
+// validado estructuralmente con su fuente, la identificación oficial con
+// vigencia, y los sociodemográficos SAEH (GIIS-B002) con claves que deben
+// existir en HospCatalogo: país, entidad, municipio (hijo de la entidad),
+// localidad (hija de entidad+municipio), lengua indígena y afiliación.
 
 import { z } from "zod";
-import type { HospSexo } from "@prisma/client";
+import type { HospCurpOrigen, HospSexo } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { validarRfc } from "@/lib/fiscal/verificador/estructura";
 import { fechaSchema } from "./http";
 import { validarCurp } from "./curp";
+import { ENTIDAD_DGIS_POR_CURP, RFC_GENERICOS, identidadDePaciente, type PacienteIdentidadEntrada } from "./identidad";
 import { fechaLocal, partesLocales } from "./tz";
 import { nombreCompleto } from "./util";
+
+const claveCatalogo = (max: number) => z.string().trim().regex(/^\d+$/, "Clave numérica del catálogo DGIS").max(max).nullable().optional();
+const bandera = z.boolean().nullable().optional();
+
+/** Orígenes que puede declarar la captura; RENAPO sólo lo fija /verificar-curp. */
+export const CURP_ORIGENES_CAPTURA = ["CAPTURA", "DOCUMENTO", "CALCULADA"] as const;
 
 export const pacienteSchema = z.object({
   nombre: z.string().min(1).max(120),
@@ -53,9 +68,51 @@ export const pacienteSchema = z.object({
   pagadorId: z.string().nullable().optional(),
   notas: z.string().max(4000).nullable().optional(),
   activo: z.boolean().optional(),
+
+  // ── P2 identidad ──
+  /** De dónde salió la CURP capturada (RENAPO lo pone el hub al verificar). */
+  curpOrigen: z.enum(CURP_ORIGENES_CAPTURA).nullable().optional(),
+  /** CURP calculada con homoclave supuesta, pendiente de confirmar. */
+  curpProbable: z.boolean().optional(),
+  /** Obligatorio para cambiar una CURP ya verificada en RENAPO. */
+  motivoCambio: z.string().trim().min(5).max(300).optional(),
+  rfc: z.string().trim().max(13).nullable().optional(),
+  rfcFuente: z.enum(["CAPTURA", "CSF", "CALCULADO"]).nullable().optional(),
+  identificacionTipo: z.enum(["INE", "PASAPORTE", "LICENCIA", "CEDULA_PROFESIONAL", "CARTILLA", "CSF", "OTRO"]).nullable().optional(),
+  identificacionNumero: z.string().trim().max(40).nullable().optional(),
+  identificacionVigencia: fechaSchema.nullable().optional(),
+
+  // ── SAEH (GIIS-B002-05-09) ──
+  paisNacimientoClave: claveCatalogo(3),
+  entidadNacimientoClave: claveCatalogo(2),
+  estadoConyugal: z.number().int().min(1).max(99).nullable().optional(),
+  seConsideraIndigena: bandera,
+  hablaLenguaIndigena: bandera,
+  lenguaIndigenaClave: claveCatalogo(4),
+  seConsideraAfromexicano: bandera,
+  esMigranteRetornado: bandera,
+  /** 1 sí · 2 no · 3 prefiere no responder. */
+  seIdentificaLgbti: z.number().int().min(1).max(3).nullable().optional(),
+  genero: z.number().int().min(1).max(99).nullable().optional(),
+  paisResidenciaClave: claveCatalogo(3),
+  entidadResidenciaClave: claveCatalogo(2),
+  /** 3 dígitos del municipio dentro de la entidad («114»); también se acepta la clave completa («21114»). */
+  municipioResidenciaClave: claveCatalogo(5),
+  /** 4 dígitos de la localidad dentro del municipio («0001»); también la clave completa («211140001»). */
+  localidadResidenciaClave: claveCatalogo(9),
+  otraLocalidad: z.string().trim().max(120).nullable().optional(),
+  derechohabienciaClave: claveCatalogo(3),
 });
 
 export type PacienteEntrada = z.infer<typeof pacienteSchema>;
+
+/** Campos del body que NO se guardan tal cual (los resuelven las reglas de identidad). */
+export const CAMPOS_IDENTIDAD_P1 = ["fechaNacimiento", "curp", "sinCurp", "sinCurpMotivo", "sexo", "entidadNacimiento", "avisoPrivacidadAceptado", "avisoPrivacidadAceptadoAt", "avisoPrivacidadVersion"] as const;
+export const CAMPOS_IDENTIDAD_P2 = ["curpOrigen", "curpProbable", "motivoCambio", "rfc", "rfcFuente", "identificacionTipo", "identificacionNumero", "identificacionVigencia"] as const;
+export const CAMPOS_SAEH = [
+  "paisNacimientoClave", "entidadNacimientoClave", "estadoConyugal", "seConsideraIndigena", "hablaLenguaIndigena", "lenguaIndigenaClave", "seConsideraAfromexicano",
+  "esMigranteRetornado", "seIdentificaLgbti", "genero", "paisResidenciaClave", "entidadResidenciaClave", "municipioResidenciaClave", "localidadResidenciaClave", "otraLocalidad", "derechohabienciaClave",
+] as const;
 
 /**
  * Fecha de nacimiento del body: «1992-03-14» a secas es el DÍA local (se
@@ -219,4 +276,198 @@ export async function validarVinculosPaciente(
     if (!p || p.companyId !== companyId) return "pagadorId inválido";
   }
   return null;
+}
+
+// ── P2: RFC, identificación y origen de la CURP ──────────────────────────────
+
+export interface DatosIdentidadP2 {
+  rfc?: string | null;
+  rfcFuente?: "CAPTURA" | "CSF" | "CALCULADO" | null;
+  identificacionTipo?: PacienteEntrada["identificacionTipo"];
+  identificacionNumero?: string | null;
+  identificacionVigencia?: Date | null;
+}
+
+/**
+ * RFC con estructura válida (o genérico XEXX010101000 / XAXX010101000) y su
+ * fuente (CAPTURA cuando no se dice); identificación oficial con vigencia
+ * como día local. Devuelve sólo lo que el body trajo.
+ */
+export function resolverDatosIdentidadP2(
+  d: Pick<PacienteEntrada, "rfc" | "rfcFuente" | "identificacionTipo" | "identificacionNumero" | "identificacionVigencia">,
+  actual: { rfc: string | null } | null
+): { ok: true; datos: DatosIdentidadP2 } | { ok: false; status: number; error: string } {
+  const datos: DatosIdentidadP2 = {};
+  if (d.rfc !== undefined) {
+    const rfc = d.rfc?.trim().toUpperCase() || null;
+    if (rfc && !RFC_GENERICOS.has(rfc)) {
+      const v = validarRfc(rfc);
+      if (!v.formatoValido || v.digitoVerificador !== "valido") return { ok: false, status: 400, error: `RFC inválido: ${v.detalle ?? "revisa la clave"}` };
+    }
+    datos.rfc = rfc;
+    datos.rfcFuente = rfc ? (d.rfcFuente ?? "CAPTURA") : null;
+  } else if (d.rfcFuente !== undefined) {
+    datos.rfcFuente = actual?.rfc ? d.rfcFuente : null;
+  }
+  if (d.identificacionTipo !== undefined) datos.identificacionTipo = d.identificacionTipo;
+  if (d.identificacionNumero !== undefined) datos.identificacionNumero = d.identificacionNumero?.trim().toUpperCase() || null;
+  if (d.identificacionVigencia !== undefined) {
+    const f = fechaNacimientoDe(d.identificacionVigencia);
+    if (d.identificacionVigencia && !f) return { ok: false, status: 400, error: "identificacionVigencia inválida (AAAA-MM-DD)" };
+    datos.identificacionVigencia = f;
+  }
+  return { ok: true, datos };
+}
+
+/** Origen y «probable» de una CURP que entra por captura (nunca RENAPO desde el body). */
+export function origenCurpDe(d: { curpOrigen?: HospCurpOrigen | null; curpProbable?: boolean }, hayCurp: boolean): { curpOrigen: HospCurpOrigen | null; curpProbable: boolean } {
+  if (!hayCurp) return { curpOrigen: null, curpProbable: false };
+  const curpOrigen = d.curpOrigen ?? "CAPTURA";
+  return { curpOrigen, curpProbable: d.curpProbable ?? curpOrigen === "CALCULADA" };
+}
+
+/** Al cambiar la CURP se borra lo que RENAPO dijo de la anterior. */
+export const REINICIO_VERIFICACION = {
+  curpEstatus: null,
+  curpVerificadaAt: null,
+  curpVerificadaFuente: null,
+  curpVerificadaRef: null,
+  renapoNombres: null,
+  renapoPrimerApellido: null,
+  renapoSegundoApellido: null,
+  renapoCoincide: null,
+} as const;
+
+// ── SAEH: claves de catálogo ─────────────────────────────────────────────────
+
+const pad = (v: string, n: number) => v.padStart(n, "0");
+
+export interface ClavesSaehNormalizadas {
+  paisNacimientoClave?: string | null;
+  entidadNacimientoClave?: string | null;
+  lenguaIndigenaClave?: string | null;
+  paisResidenciaClave?: string | null;
+  entidadResidenciaClave?: string | null;
+  municipioResidenciaClave?: string | null;
+  localidadResidenciaClave?: string | null;
+  derechohabienciaClave?: string | null;
+}
+
+async function existeClave(tipo: "PAIS" | "ENTIDAD" | "MUNICIPIO" | "LOCALIDAD" | "LENGUA" | "AFILIACION", clave: string): Promise<{ existe: boolean; datos: unknown }> {
+  const fila = await prisma.hospCatalogo.findUnique({ where: { tipo_clave: { tipo, clave } }, select: { id: true, datos: true } });
+  return { existe: !!fila, datos: fila?.datos ?? null };
+}
+
+const NOMBRE_CATALOGO_SAEH = { PAIS: "PAIS (países)", ENTIDAD: "ENTIDAD (entidades federativas)", MUNICIPIO: "MUNICIPIO", LOCALIDAD: "LOCALIDAD", LENGUA: "LENGUA (lenguas indígenas)", AFILIACION: "AFILIACION (derechohabiencia)" } as const;
+
+/**
+ * Normaliza y valida las claves sociodemográficas SAEH contra HospCatalogo:
+ * país a 3 dígitos, entidad a 2, municipio a 3 (hijo de la entidad) y
+ * localidad a 4 (hija de entidad+municipio). `entidadNacimientoClave` debe
+ * ser coherente con la entidad de la CURP. Devuelve sólo lo que cambia.
+ */
+export async function validarClavesSaeh(
+  d: Partial<PacienteEntrada>,
+  actual: { entidadResidenciaClave: string | null; municipioResidenciaClave: string | null } | null,
+  curp: string | null
+): Promise<{ ok: true; datos: ClavesSaehNormalizadas } | { ok: false; status: number; error: string }> {
+  const datos: ClavesSaehNormalizadas = {};
+  const noExiste = (tipo: keyof typeof NOMBRE_CATALOGO_SAEH, campo: string, clave: string) => ({
+    ok: false as const,
+    status: 400,
+    error: `${campo}: la clave ${clave} no existe en el catálogo ${NOMBRE_CATALOGO_SAEH[tipo]} de la DGIS`,
+  });
+
+  for (const campo of ["paisNacimientoClave", "paisResidenciaClave"] as const) {
+    if (d[campo] === undefined) continue;
+    const v = d[campo] ? pad(d[campo]!, 3) : null;
+    if (v && !(await existeClave("PAIS", v)).existe) return noExiste("PAIS", campo, v);
+    datos[campo] = v;
+  }
+  if (d.entidadNacimientoClave !== undefined) {
+    const v = d.entidadNacimientoClave ? pad(d.entidadNacimientoClave, 2) : null;
+    if (v) {
+      const fila = await existeClave("ENTIDAD", v);
+      if (!fila.existe) return noExiste("ENTIDAD", "entidadNacimientoClave", v);
+      const abreviatura = (fila.datos as { abreviatura?: string } | null)?.abreviatura;
+      const entidadCurp = curp && curp.length === 18 ? curp.slice(11, 13) : null;
+      if (abreviatura && entidadCurp && abreviatura !== entidadCurp) {
+        return { ok: false, status: 400, error: `La entidad de nacimiento ${v} (${abreviatura}) no coincide con la de la CURP (${entidadCurp})` };
+      }
+    }
+    datos.entidadNacimientoClave = v;
+  }
+  if (d.lenguaIndigenaClave !== undefined) {
+    const v = d.lenguaIndigenaClave ? pad(d.lenguaIndigenaClave, 4) : null;
+    if (v && !(await existeClave("LENGUA", v)).existe) return noExiste("LENGUA", "lenguaIndigenaClave", v);
+    datos.lenguaIndigenaClave = v;
+  }
+  if (d.derechohabienciaClave !== undefined) {
+    const v = d.derechohabienciaClave ? String(Number(d.derechohabienciaClave)) : null;
+    if (v && !(await existeClave("AFILIACION", v)).existe) return noExiste("AFILIACION", "derechohabienciaClave", v);
+    datos.derechohabienciaClave = v;
+  }
+
+  // Residencia: la jerarquía entidad → municipio → localidad.
+  let entidad = actual?.entidadResidenciaClave ?? null;
+  if (d.entidadResidenciaClave !== undefined) {
+    entidad = d.entidadResidenciaClave ? pad(d.entidadResidenciaClave, 2) : null;
+    if (entidad && !(await existeClave("ENTIDAD", entidad)).existe) return noExiste("ENTIDAD", "entidadResidenciaClave", entidad);
+    datos.entidadResidenciaClave = entidad;
+  }
+  let municipio = actual?.municipioResidenciaClave ?? null;
+  if (d.municipioResidenciaClave !== undefined) {
+    let v = d.municipioResidenciaClave || null;
+    if (v) {
+      if (v.length === 5 && entidad && v.startsWith(entidad)) v = v.slice(2);
+      if (v.length > 3) return { ok: false, status: 400, error: "municipioResidenciaClave: usa los 3 dígitos del municipio dentro de la entidad (p. ej. 114)" };
+      v = pad(v, 3);
+      if (!entidad) return { ok: false, status: 400, error: "municipioResidenciaClave requiere entidadResidenciaClave" };
+      if (!(await existeClave("MUNICIPIO", entidad + v)).existe) return noExiste("MUNICIPIO", "municipioResidenciaClave", `${entidad}${v}`);
+    }
+    municipio = v;
+    datos.municipioResidenciaClave = v;
+  } else if (d.entidadResidenciaClave !== undefined && entidad && municipio) {
+    // Cambió la entidad y se quedó el municipio anterior: debe seguir existiendo bajo la nueva.
+    if (!(await existeClave("MUNICIPIO", entidad + municipio)).existe) return noExiste("MUNICIPIO", "municipioResidenciaClave", `${entidad}${municipio}`);
+  }
+  if (d.localidadResidenciaClave !== undefined) {
+    let v = d.localidadResidenciaClave || null;
+    if (v) {
+      if (v.length === 9 && entidad && municipio && v.startsWith(entidad + municipio)) v = v.slice(5);
+      if (v.length > 4) return { ok: false, status: 400, error: "localidadResidenciaClave: usa los 4 dígitos de la localidad dentro del municipio (p. ej. 0001)" };
+      v = pad(v, 4);
+      if (!entidad || !municipio) return { ok: false, status: 400, error: "localidadResidenciaClave requiere entidadResidenciaClave y municipioResidenciaClave" };
+      if (!(await existeClave("LOCALIDAD", entidad + municipio + v)).existe) return noExiste("LOCALIDAD", "localidadResidenciaClave", `${entidad}${municipio}${v}`);
+    }
+    datos.localidadResidenciaClave = v;
+  }
+  return { ok: true, datos };
+}
+
+/** Entidad y país de nacimiento que la CURP implica, cuando la captura no los trae. */
+export function nacimientoDesdeCurp(curp: string | null): { entidadNacimientoClave: string | null; paisNacimientoClave: string | null } {
+  if (!curp || curp.length !== 18) return { entidadNacimientoClave: null, paisNacimientoClave: null };
+  const entidad = curp.slice(11, 13);
+  const clave = ENTIDAD_DGIS_POR_CURP[entidad] ?? null;
+  return { entidadNacimientoClave: clave, paisNacimientoClave: entidad === "NE" ? null : clave ? "142" : null };
+}
+
+// ── Utilería de las rutas ────────────────────────────────────────────────────
+
+/** Separa un objeto en (las claves pedidas, el resto), sin mutar el original. */
+export function partir<T extends object, K extends keyof T>(obj: T, claves: readonly K[]): [Pick<T, K>, Omit<T, K>] {
+  const tomado = {} as Pick<T, K>;
+  const resto = { ...obj } as T;
+  for (const k of claves) {
+    if (k in obj) tomado[k] = obj[k];
+    delete (resto as Record<string, unknown>)[k as string];
+  }
+  return [tomado, resto as Omit<T, K>];
+}
+
+/** El bloque `identidad` de la ficha con la versión vigente del aviso de privacidad. */
+export async function identidadDeFicha(p: PacienteIdentidadEntrada & { companyId: string }, hoy: Date = new Date()) {
+  const cfg = await prisma.hospConfig.findUnique({ where: { companyId: p.companyId }, select: { avisoPrivacidadVersion: true } });
+  return identidadDePaciente(p, cfg, hoy);
 }

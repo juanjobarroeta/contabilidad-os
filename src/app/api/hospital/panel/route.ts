@@ -37,6 +37,7 @@ import {
   totalCargo,
 } from "@/lib/hospital/formato";
 import { identidadCompleta } from "@/lib/hospital/episodio";
+import { DESVIACION_ALERTA_PCT, desviacionPct } from "@/lib/hospital/plan";
 import { horaLocal } from "@/lib/hospital/tz";
 
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -60,7 +61,9 @@ type Atencion = {
     | "ALTA_SIN_CIE"
     | "SEGUIMIENTO_PENDIENTE"
     | "IDENTIDAD_PENDIENTE"
-    | "AVISO_PRIVACIDAD_PENDIENTE";
+    | "AVISO_PRIVACIDAD_PENDIENTE"
+    | "PLAN_SIN_AUTORIZACION"
+    | "CUENTA_FUERA_DE_PLAN";
   titulo: string;
   detalle: string;
   href: string;
@@ -109,7 +112,7 @@ export const GET = withAuthz(async (req: Request) => {
   const [
     config, camas, cirugias, porCobrarDb, porPagarDb, saldosBanco,
     fiscal, retenciones, medicos, activos, altasRecientes, lotesDb,
-    insumosConMinimo, existencias, pagadoresPorVencer, altasP1,
+    insumosConMinimo, existencias, pagadoresPorVencer, altasP1, planesPendientes,
   ] = await Promise.all([
     prisma.hospConfig.findUnique({
       where: { companyId },
@@ -155,6 +158,7 @@ export const GET = withAuthz(async (req: Request) => {
         medico: { select: { id: true, nombre: true } },
         pagador: { select: { id: true, nombre: true, topeAutorizacion: true } },
         cargos: { where: { cancelado: false }, select: { importe: true, ivaTasa: true } },
+        plan: { select: { id: true, nombre: true, estado: true, total: true } },
       },
       orderBy: { fechaIngreso: "desc" },
     }),
@@ -197,6 +201,17 @@ export const GET = withAuthz(async (req: Request) => {
         paciente: { select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true } },
       },
       orderBy: { fechaAlta: "desc" },
+    }),
+    // P3: planes programados para aseguradora/empresa; los que no traen
+    // número de autorización se filtran abajo.
+    prisma.hospPlanTratamiento.findMany({
+      where: { companyId, estado: { in: ["PROPUESTO", "EN_CURSO"] }, fechaProgramada: { not: null }, pagador: { tipo: { in: ["ASEGURADORA", "EMPRESA"] } } },
+      select: {
+        id: true, nombre: true, fechaProgramada: true, autorizacionPagador: true, episodioId: true,
+        paciente: { select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true } },
+        pagador: { select: { nombre: true } },
+      },
+      orderBy: { fechaProgramada: "asc" },
     }),
   ]);
 
@@ -334,6 +349,37 @@ export const GET = withAuthz(async (req: Request) => {
       tipo: "AUTORIZACION",
       titulo: `Cuenta de ${nombrePaciente(e.paciente)} requiere autorización de ${e.pagador.nombre}`,
       detalle: `$${total.toLocaleString("es-MX", { minimumFractionDigits: 2 })} supera el tope de $${tope.toLocaleString("es-MX", { minimumFractionDigits: 2 })} · ${e.folio}`,
+      href: `/episodios/${e.id}/cuenta`,
+      refId: e.id,
+    });
+  }
+
+  // ── P3 plan de tratamiento ──
+  // Plan con pagador asegurador/empresa y fecha programada sin número de autorización.
+  const planesSinAutorizacion = planesPendientes.filter((p) => !p.autorizacionPagador?.trim());
+  for (const p of planesSinAutorizacion.slice(0, MAX_POR_ALERTA)) {
+    atencion.push({
+      tipo: "PLAN_SIN_AUTORIZACION",
+      titulo: `Plan de ${nombrePaciente(p.paciente)} sin autorización de ${p.pagador?.nombre ?? "su convenio"}`,
+      detalle: `${p.nombre} · programado ${p.fechaProgramada ? fechaIso(p.fechaProgramada) : "—"} · captura el número de autorización`,
+      href: p.episodioId ? `/episodios/${p.episodioId}` : `/planes/${p.id}`,
+      refId: p.id,
+    });
+  }
+  // Cuenta que se salió del plan: más del 15 % arriba de lo planeado.
+  const cuentasFueraDePlan = activos
+    .filter((e) => e.estado !== "ALTA" && e.plan?.estado === "EN_CURSO")
+    .map((e) => {
+      const cuentaTotal = cuentaDe(e);
+      return { ...e, planTotal: Number(e.plan!.total), cuentaTotal, pct: desviacionPct(Number(e.plan!.total), cuentaTotal) };
+    })
+    .filter((e) => e.pct != null && e.pct > DESVIACION_ALERTA_PCT)
+    .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
+  for (const e of cuentasFueraDePlan.slice(0, MAX_POR_ALERTA)) {
+    atencion.push({
+      tipo: "CUENTA_FUERA_DE_PLAN",
+      titulo: `Cuenta de ${nombrePaciente(e.paciente)} ${e.pct} % arriba del plan`,
+      detalle: `$${e.cuentaTotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })} contra $${e.planTotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })} planeados · ${e.folio}`,
       href: `/episodios/${e.id}/cuenta`,
       refId: e.id,
     });
@@ -484,6 +530,8 @@ export const GET = withAuthz(async (req: Request) => {
       seguimientosPendientes: sinSeguimiento.length,
       pacientesSinCurp: sinIdentidad.size,
       pacientesSinAviso: sinAviso.size,
+      planesSinAutorizacion: planesSinAutorizacion.length,
+      cuentasFueraDePlan: cuentasFueraDePlan.length,
     },
   });
 });

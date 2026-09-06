@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
 import { conteosDerivacion, leerProgresoInsumos } from "@/lib/hospital/insumos-cfdi";
+import { validarPlantillasConfig, versionesVigentes, type PlantillasConfig } from "@/lib/hospital/plantillas-legales";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET/PUT /api/hospital/config?companyId=…
@@ -14,10 +16,17 @@ import { conteosDerivacion, leerProgresoInsumos } from "@/lib/hospital/insumos-c
 // el de las medicinas suministradas en hospitalización (criterio 9/IVA/N), y
 // la identidad sanitaria del establecimiento (P1): CLUES, licencia sanitaria,
 // responsable sanitario con cédula y la versión/URL del aviso de privacidad
-// que aceptan los pacientes (LFPDPPP). GET contesta los defaults cuando la
-// empresa aún no guardó nada, y trae el estado de la DERIVACIÓN de farmacia
-// desde CFDIs (para la pantalla de Configuración: cuántos insumos/movimientos
-// nacieron del archivo y dónde va el cursor).
+// que aceptan los pacientes (LFPDPPP). P2: el OID raíz registrado ante la DGIS
+// (GIIS-A003) para los CDA, la institución CLUES para SAEH (SMP) y las
+// plantillas legales del paquete de admisión por tipo { version, texto } —
+// GET trae además `plantillasVigentes` (versión y si es propia o la default).
+// GET contesta los defaults cuando la empresa aún no guardó nada, y trae el
+// estado de la DERIVACIÓN de farmacia desde CFDIs (para la pantalla de
+// Configuración: cuántos insumos/movimientos nacieron del archivo y dónde va
+// el cursor). P3: captura asistida — `iaAsistencia` (apaga los endpoints
+// /asistente/*) y `sttProveedor` ("navegador" = Web Speech API sin costo,
+// "openai" = transcripción en el hub; `sttServidorDisponible` dice si el
+// servidor tiene la llave para ofrecerla).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULTS = {
@@ -34,6 +43,11 @@ const DEFAULTS = {
   responsableSanitarioCedula: null as string | null,
   avisoPrivacidadVersion: null as string | null,
   avisoPrivacidadUrl: null as string | null,
+  oidRaiz: null as string | null,
+  saehInstitucion: "SMP",
+  plantillasDocumentos: null as PlantillasConfig | null,
+  iaAsistencia: true,
+  sttProveedor: "navegador" as string | null,
 };
 
 export const GET = withAuthz(async (req: Request) => {
@@ -52,6 +66,7 @@ export const GET = withAuthz(async (req: Request) => {
   ]);
 
   const nombreDefault = company?.nombreComercial ?? company?.razonSocial ?? null;
+  const plantillas = (config?.plantillasDocumentos ?? null) as PlantillasConfig | null;
   const cuerpo = config
     ? {
         id: config.id,
@@ -70,6 +85,11 @@ export const GET = withAuthz(async (req: Request) => {
         responsableSanitarioCedula: config.responsableSanitarioCedula,
         avisoPrivacidadVersion: config.avisoPrivacidadVersion,
         avisoPrivacidadUrl: config.avisoPrivacidadUrl,
+        oidRaiz: config.oidRaiz,
+        saehInstitucion: config.saehInstitucion ?? "SMP",
+        plantillasDocumentos: plantillas,
+        iaAsistencia: config.iaAsistencia,
+        sttProveedor: config.sttProveedor ?? "navegador",
         guardada: true,
         updatedAt: config.updatedAt,
       }
@@ -77,6 +97,8 @@ export const GET = withAuthz(async (req: Request) => {
 
   return NextResponse.json({
     ...cuerpo,
+    plantillasVigentes: versionesVigentes(plantillas),
+    sttServidorDisponible: Boolean(process.env.OPENAI_API_KEY),
     derivacion: { ...conteos, progreso },
   });
 });
@@ -106,6 +128,22 @@ const putSchema = z.object({
   responsableSanitarioCedula: textoOpcional(20),
   avisoPrivacidadVersion: textoOpcional(40),
   avisoPrivacidadUrl: z.string().trim().max(300).url("URL inválida").nullable().optional().or(z.literal("")),
+  /** OID registrado ante la DGIS (GIIS-A003): arcos numéricos separados por punto, p. ej. 2.16.840.1.113883.3.215.x. */
+  oidRaiz: z
+    .string()
+    .trim()
+    .max(120)
+    .regex(/^([0-2](\.(0|[1-9]\d*))+)?$/, "El OID son arcos numéricos separados por punto (p. ej. 2.16.840.1.113883.3.215.1)")
+    .nullable()
+    .optional(),
+  /** Institución CLUES para SAEH: tres letras (SMP = Servicios Médicos Privados). */
+  saehInstitucion: z.string().trim().length(3).regex(/^[A-Z]{3}$/i, "Tres letras, p. ej. SMP").nullable().optional(),
+  /** { TIPO: { version, texto } | null }: se mezcla con lo guardado; null borra la plantilla propia (vuelve a la default). */
+  plantillasDocumentos: z.record(z.string(), z.unknown()).nullable().optional(),
+  /** Captura asistida: false apaga /asistente/* (409). */
+  iaAsistencia: z.boolean().optional(),
+  /** "navegador" (Web Speech API) u "openai" (transcripción en el hub); null vuelve a navegador. */
+  sttProveedor: z.enum(["navegador", "openai"]).nullable().optional(),
 });
 
 export const PUT = withAuthz(async (req: Request) => {
@@ -115,13 +153,24 @@ export const PUT = withAuthz(async (req: Request) => {
     const first = parsed.error.issues[0]?.message ?? "Datos inválidos";
     return NextResponse.json({ error: first }, { status: 400 });
   }
-  const { companyId, ...datos } = parsed.data;
+  const { companyId, plantillasDocumentos, ...datos } = parsed.data;
 
   const { user } = await requireWriter(companyId, req);
   await requireModule(companyId, "HOSPITAL", req);
 
   const vacioANull = <K extends keyof typeof datos>(campo: K) =>
     datos[campo] !== undefined ? { [campo]: (datos[campo] as string | null) || null } : {};
+
+  // Plantillas: mezcla con lo guardado; `null` en un tipo quita la propia.
+  let plantillas: Record<string, { version: string; texto: string }> | null | undefined;
+  if (plantillasDocumentos !== undefined) {
+    const v = validarPlantillasConfig(plantillasDocumentos);
+    if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
+    const actual = plantillasDocumentos === null ? {} : (((await prisma.hospConfig.findUnique({ where: { companyId }, select: { plantillasDocumentos: true } }))?.plantillasDocumentos ?? {}) as Record<string, { version: string; texto: string }>);
+    const mezcla: Record<string, { version: string; texto: string }> = { ...actual, ...v.valor };
+    for (const [tipo, p] of Object.entries(plantillasDocumentos ?? {})) if (p === null) delete mezcla[tipo];
+    plantillas = Object.keys(mezcla).length ? mezcla : null;
+  }
 
   const limpio = {
     ...datos,
@@ -130,11 +179,15 @@ export const PUT = withAuthz(async (req: Request) => {
     ...(datos.serieTicket ? { serieTicket: datos.serieTicket.toUpperCase() } : {}),
     ...(datos.nombreHospital !== undefined ? { nombreHospital: datos.nombreHospital || null } : {}),
     ...(datos.clues !== undefined ? { clues: datos.clues ? datos.clues.toUpperCase() : null } : {}),
+    ...(datos.saehInstitucion !== undefined ? { saehInstitucion: datos.saehInstitucion ? datos.saehInstitucion.toUpperCase() : "SMP" } : {}),
     ...vacioANull("licenciaSanitaria"),
     ...vacioANull("responsableSanitario"),
     ...vacioANull("responsableSanitarioCedula"),
     ...vacioANull("avisoPrivacidadVersion"),
     ...vacioANull("avisoPrivacidadUrl"),
+    ...vacioANull("oidRaiz"),
+    ...(datos.sttProveedor !== undefined ? { sttProveedor: datos.sttProveedor ?? "navegador" } : {}),
+    ...(plantillas !== undefined ? { plantillasDocumentos: plantillas === null ? Prisma.DbNull : (plantillas as Prisma.InputJsonValue) } : {}),
   };
   const config = await prisma.hospConfig.upsert({
     where: { companyId },
@@ -149,7 +202,7 @@ export const PUT = withAuthz(async (req: Request) => {
     accion: "hospital.config.guardar",
     entidad: "HospConfig",
     entidadId: config.id,
-    detalle: { campos: Object.keys(limpio) },
+    detalle: { campos: Object.keys(limpio), plantillas: plantillasDocumentos !== undefined ? Object.keys(plantillasDocumentos ?? {}) : undefined },
     req,
   });
 
@@ -158,6 +211,7 @@ export const PUT = withAuthz(async (req: Request) => {
     topeAutorizacion: config.topeAutorizacion == null ? null : Number(config.topeAutorizacion),
     ivaServicios: Number(config.ivaServicios),
     ivaMedicinasHospitalizacion: Number(config.ivaMedicinasHospitalizacion),
+    plantillasVigentes: versionesVigentes((config.plantillasDocumentos ?? null) as PlantillasConfig | null),
     guardada: true,
   });
 });

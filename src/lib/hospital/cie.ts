@@ -16,7 +16,18 @@ import { HospitalError } from "./errores";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-export const NOMBRE_CATALOGO: Record<HospCatalogoTipo, string> = { CIE10: "CIE-10", CIE9MC: "CIE-9-MC" };
+export const NOMBRE_CATALOGO: Record<HospCatalogoTipo, string> = {
+  CIE10: "CIE-10",
+  CIE9MC: "CIE-9-MC",
+  SERVICIO: "SERVICIOS_ESPECIALIDADES",
+  AFILIACION: "AFILIACION",
+  PAIS: "PAIS",
+  ENTIDAD: "ENTIDAD FEDERATIVA",
+  MUNICIPIO: "MUNICIPIO",
+  LOCALIDAD: "LOCALIDAD",
+  LENGUA: "LENGUA_INDIGENA",
+  CLUES: "ESTABLECIMIENTO DE SALUD",
+};
 
 /** Código como lo capturó el piso → forma normalizada («k80.2 » → «K80.2»). */
 export function normalizarCodigoCie(entrada: string): string {
@@ -99,21 +110,37 @@ export async function resolverCie(
     const pista = tipo === "CIE10" ? "usa una subcategoría (con decimal)" : "usa un procedimiento específico del catálogo";
     throw new HospitalError(400, `${opciones.etiqueta} «${fila.codigo} ${fila.nombre}» no es válido para codificar en ${nombreCatalogo}: ${pista}`);
   }
-  const p = opciones.paciente;
+  const restriccion = motivoRestriccionCie(fila, opciones.paciente, { etiqueta: opciones.etiqueta, hoy: opciones.hoy });
+  if (restriccion) throw new HospitalError(400, restriccion);
+  return fila;
+}
+
+/**
+ * Cruce de sexo y edad de una fila contra el paciente, sin lanzar: el motivo
+ * en español o null si aplica. `edadDias` permite pasar la edad ya calculada
+ * (SAEH la cuenta al egreso, o al ingreso en menores de un año).
+ */
+export function motivoRestriccionCie(
+  fila: Pick<FilaCie, "codigo" | "nombre" | "sexo" | "edadMin" | "edadMax">,
+  paciente: PacienteParaCie | null | undefined,
+  opciones: { etiqueta?: string; hoy?: Date; edadDias?: number | null } = {}
+): string | null {
+  const etiqueta = opciones.etiqueta ?? "El código";
+  const p = paciente;
   if (p?.sexo && fila.sexo && (p.sexo === "FEMENINO" || p.sexo === "MASCULINO")) {
     const esperado = fila.sexo.toUpperCase().startsWith("F") ? "FEMENINO" : fila.sexo.toUpperCase().startsWith("M") ? "MASCULINO" : null;
     if (esperado && esperado !== p.sexo) {
-      throw new HospitalError(400, `${opciones.etiqueta} «${fila.codigo} ${fila.nombre}» es exclusivo de sexo ${esperado === "FEMENINO" ? "femenino" : "masculino"} y el paciente es ${p.sexo.toLowerCase()}`);
+      return `${etiqueta} «${fila.codigo} ${fila.nombre}» es exclusivo de sexo ${esperado === "FEMENINO" ? "femenino" : "masculino"} y el paciente es ${p.sexo.toLowerCase()}`;
     }
   }
-  if (p?.fechaNacimiento && (fila.edadMin != null || fila.edadMax != null)) {
-    const dias = edadEnDias(p.fechaNacimiento, opciones.hoy ?? new Date());
+  const dias = opciones.edadDias ?? (p?.fechaNacimiento ? edadEnDias(p.fechaNacimiento, opciones.hoy ?? new Date()) : null);
+  if (dias != null && (fila.edadMin != null || fila.edadMax != null)) {
     if ((fila.edadMin != null && dias < fila.edadMin) || (fila.edadMax != null && dias > fila.edadMax)) {
       const rango = `${fila.edadMin != null ? edadTexto(fila.edadMin) : "0"} a ${fila.edadMax != null ? edadTexto(fila.edadMax) : "sin límite"}`;
-      throw new HospitalError(400, `${opciones.etiqueta} «${fila.codigo} ${fila.nombre}» no aplica a la edad del paciente (${edadTexto(dias)}; el catálogo lo acota a ${rango})`);
+      return `${etiqueta} «${fila.codigo} ${fila.nombre}» no aplica a la edad del paciente (${edadTexto(dias)}; el catálogo lo acota a ${rango})`;
     }
   }
-  return fila;
+  return null;
 }
 
 export interface NombresCie {

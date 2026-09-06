@@ -26,7 +26,25 @@ export const TIPOS_DOCUMENTO = [
   "HOJA_EGRESO",
   "NOTA_EGRESO",
   "AVISO_PRIVACIDAD",
+  "CONTRATO_SERVICIOS",
+  "COMPROMISO_PAGO",
+  "CESION_DERECHOS",
+  "CONSENTIMIENTO_DATOS",
+  "CONSTANCIA_CURP",
+  "RESUMEN_CLINICO",
   "OTRO",
+] as const satisfies readonly HospDocumentoTipo[];
+
+/** El paquete de admisión (P2): se firma electrónicamente con textoFirmado + HospFirma. */
+export const TIPOS_ADMISION = [
+  "AVISO_PRIVACIDAD",
+  "CONSENTIMIENTO_DATOS",
+  "CONTRATO_SERVICIOS",
+  "COMPROMISO_PAGO",
+  "CESION_DERECHOS",
+  "CONSENTIMIENTO_HOSPITALIZACION",
+  "IDENTIFICACION",
+  "CONSTANCIA_CURP",
 ] as const satisfies readonly HospDocumentoTipo[];
 
 export const TIPOS_CONSENTIMIENTO: readonly HospDocumentoTipo[] = [
@@ -90,6 +108,38 @@ export const PLANTILLAS_DOCUMENTO: Record<HospDocumentoTipo, PlantillaDocumento>
     opcionales: ["url", "finalidades", "transferencias", "medioDeAceptacion"],
     firma: { firmante: true, testigos: false, medico: false },
   },
+  // Paquete de admisión (P2): el texto legal va en textoFirmado (plantillas-legales.ts) y
+  // las firmas en HospFirma; `contenido` sólo lleva datos variables del acto.
+  CONTRATO_SERVICIOS: {
+    titulo: "Contrato de prestación de servicios hospitalarios",
+    fundamento: "Código Civil Federal · LFPC · LFPDPPP",
+    obligatorias: [],
+    opcionales: ["deposito", "cotizacionFolio", "tarifario", "observaciones"],
+    firma: { firmante: true, testigos: false, medico: false },
+  },
+  COMPROMISO_PAGO: {
+    titulo: "Compromiso de pago (responsable solidario)",
+    fundamento: "Código Civil Federal arts. 1987-1991",
+    obligatorias: [],
+    opcionales: ["responsablePago", "parentescoResponsable", "deposito", "observaciones"],
+    firma: { firmante: true, testigos: false, medico: false },
+  },
+  CESION_DERECHOS: {
+    titulo: "Cesión de derechos y asignación de beneficios",
+    fundamento: "Ley sobre el Contrato de Seguro · convenio con la aseguradora",
+    obligatorias: [],
+    opcionales: ["aseguradora", "poliza", "numeroSiniestro", "observaciones"],
+    firma: { firmante: true, testigos: false, medico: false },
+  },
+  CONSENTIMIENTO_DATOS: {
+    titulo: "Consentimiento para el tratamiento de datos personales sensibles",
+    fundamento: "LFPDPPP 2025 arts. 8, 9 y 36",
+    obligatorias: [],
+    opcionales: ["finalidades", "transferencias", "observaciones"],
+    firma: { firmante: true, testigos: false, medico: false },
+  },
+  CONSTANCIA_CURP: { titulo: "Constancia de la CURP (RENAPO)", fundamento: "NOM-024-SSA3-2012 6.5.1", obligatorias: [], opcionales: ["curp", "estatus", "fechaConsulta"], firma: SIN_FIRMA },
+  RESUMEN_CLINICO: { titulo: "Resumen clínico (CDA R2)", fundamento: "GIIS-A001-01-05 · NOM-024-SSA3-2012 6.1.3.1", obligatorias: [], opcionales: ["tipo", "oid"], firma: SIN_FIRMA },
   IDENTIFICACION: { titulo: "Identificación oficial", fundamento: "NOM-004-SSA3-2012 §5.2", obligatorias: [], opcionales: ["tipo", "numero", "vigencia"], firma: SIN_FIRMA },
   POLIZA: { titulo: "Póliza / carnet de asegurado", fundamento: "Convenio con el pagador", obligatorias: [], opcionales: ["aseguradora", "poliza", "vigencia"], firma: SIN_FIRMA },
   CARTA_AUTORIZACION: { titulo: "Carta de autorización del pagador", fundamento: "Convenio con el pagador", obligatorias: [], opcionales: ["folio", "monto", "vigencia"], firma: SIN_FIRMA },
@@ -150,6 +200,16 @@ export const ETIQUETA_CONTENIDO: Record<string, string> = {
   laboratorio: "Laboratorio / gabinete",
   prescriptor: "Médico prescriptor",
   cedula: "Cédula del prescriptor",
+  deposito: "Depósito recibido en la admisión",
+  cotizacionFolio: "Folio de la cotización",
+  tarifario: "Tarifario / convenio aplicado",
+  responsablePago: "Responsable de pago",
+  parentescoResponsable: "Parentesco del responsable de pago",
+  numeroSiniestro: "Número de siniestro",
+  curp: "CURP",
+  estatus: "Estatus en RENAPO",
+  fechaConsulta: "Fecha de consulta a RENAPO",
+  oid: "OID del documento",
 };
 
 const MAX_CLAVES = 60;

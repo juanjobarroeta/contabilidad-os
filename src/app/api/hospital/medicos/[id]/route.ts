@@ -1,5 +1,9 @@
 /**
  * PATCH /api/hospital/medicos/[id]
+ *
+ * P2: `curp` validada; `nombres` / `apellidoPaterno` / `apellidoMaterno`
+ * explícitos mandan; si el médico no tiene partes guardadas y cambia `nombre`,
+ * se parten por heurística. Nunca se pisa una captura manual con la heurística.
  */
 
 import { NextResponse } from "next/server";
@@ -7,16 +11,16 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error, errorZod } from "@/lib/hospital/http";
-import { medicoSchema } from "@/lib/hospital/medico-schema";
+import { medicoSchema, partesNombreMedico, resolverCurpMedico } from "@/lib/hospital/medico-schema";
 
 export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
   const body = await req.json().catch(() => null);
   const parsed = medicoSchema.partial().safeParse(body);
   if (!parsed.success) return errorZod(parsed.error);
-  const d = parsed.data;
+  const { curp, nombres, apellidoPaterno, apellidoMaterno, ...d } = parsed.data;
 
-  const medico = await prisma.hospMedico.findUnique({ where: { id }, select: { id: true, companyId: true, nombre: true } });
+  const medico = await prisma.hospMedico.findUnique({ where: { id }, select: { id: true, companyId: true, nombre: true, nombres: true, apellidoPaterno: true, apellidoMaterno: true } });
   if (!medico) throw new AuthzError(404, "Médico no encontrado");
 
   const { user } = await requireWriter(medico.companyId, req);
@@ -30,12 +34,28 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
     const e = await prisma.employee.findUnique({ where: { id: d.employeeId }, select: { companyId: true } });
     if (!e || e.companyId !== medico.companyId) return error("employeeId inválido");
   }
+  let curpDatos: { curp: string | null } | Record<string, never> = {};
+  if (curp !== undefined) {
+    const r = resolverCurpMedico(curp);
+    if (!r.ok) return error(r.error);
+    curpDatos = { curp: r.curp };
+  }
+  const tocaPartes = nombres !== undefined || apellidoPaterno !== undefined || apellidoMaterno !== undefined;
+  const sinPartes = !medico.nombres && !medico.apellidoPaterno && !medico.apellidoMaterno;
+  const partes = tocaPartes || (d.nombre && sinPartes) ? partesNombreMedico({ nombre: d.nombre ?? medico.nombre, nombres, apellidoPaterno, apellidoMaterno }, medico) : {};
 
   const actualizado = await prisma.hospMedico.update({
     where: { id },
-    data: { ...d, ...(d.nombre ? { nombre: d.nombre.trim() } : {}), ...(d.rfc !== undefined ? { rfc: d.rfc?.trim().toUpperCase() || null } : {}) },
+    data: {
+      ...d,
+      ...(d.nombre ? { nombre: d.nombre.trim() } : {}),
+      ...(d.rfc !== undefined ? { rfc: d.rfc?.trim().toUpperCase() || null } : {}),
+      ...(d.paisNacimientoClave !== undefined ? { paisNacimientoClave: d.paisNacimientoClave ? d.paisNacimientoClave.padStart(3, "0") : null } : {}),
+      ...curpDatos,
+      ...partes,
+    },
     include: { supplier: { select: { id: true, razonSocial: true, rfc: true } }, employee: { select: { id: true, nombre: true, apellidoPaterno: true } } },
   });
-  bitacora(user, req, { companyId: medico.companyId, accion: "hospital.medico.editar", entidad: "HospMedico", entidadId: id, detalle: { nombre: medico.nombre, cambios: Object.keys(d) } });
-  return NextResponse.json(actualizado);
+  bitacora(user, req, { companyId: medico.companyId, accion: "hospital.medico.editar", entidad: "HospMedico", entidadId: id, detalle: { nombre: medico.nombre, cambios: Object.keys(parsed.data) } });
+  return NextResponse.json({ ...actualizado, saehCompleto: !!(actualizado.curp && actualizado.nombres && actualizado.apellidoPaterno && actualizado.cedula) });
 });

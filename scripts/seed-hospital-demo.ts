@@ -32,19 +32,49 @@
  * del sistema (crearNota); los consentimientos con su contenido y firmantes;
  * la farmacia con grupo de control, registro sanitario y cadena de frío, y
  * la salida de un controlado amparada por receta.
+ *
+ * P2 identidad + admisión firmada: cuatro pacientes con CURP verificada en
+ * RENAPO (curpOrigen RENAPO, estatus AN/RCN, renapo* y coincidencia), una
+ * CURP calculada (probable), RFC de la CSF que cruza con la CURP, una
+ * extranjera con pasaporte y RFC genérico, identificación oficial con
+ * vigencia (una vencida) y los sociodemográficos SAEH con claves DGIS reales
+ * (México 142, Puebla 21/114/0001…). Los médicos llevan CURP, nombres y
+ * apellidos separados. El paquete de admisión de Ortega (HOSP-2026-0418)
+ * queda firmado con HospFirma y evidencia; el de Peña (HOSP-2026-0411)
+ * pendiente. La hoja SAEH del egreso ambulatorio HOSP-2026-0405 va COMPLETA.
+ *
+ * P3 tratamientos: dos protocolos (COLE-LAP y HERNIA-ING, con partidas del
+ * tarifario, insumos de farmacia y honorarios sugeridos) y cuatro planes que
+ * cuentan el ciclo consulta → plan → cotización → cirugía → cuenta: el de
+ * Castillo PROPUESTO y con quirófano la próxima semana sin folio de GNP
+ * (alerta PLAN_SIN_AUTORIZACION), el de Mendoza AUTORIZADO, cotizado y
+ * programado, el de Ortega EN_CURSO detrás de HOSP-2026-0418 —la cuenta
+ * rebasa el plan en más del 15 % (alerta CUENTA_FUERA_DE_PLAN)— y el de la
+ * panendoscopía de Zamora (HOSP-2026-0405) CERRADO por el alta.
  */
 
 import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
-import type { HospArea, HospCargoCategoria, HospEpisodioEstado, HospEpisodioTipo, HospGrupoControl, HospInsumoCategoria, HospMotivoEgreso, HospNotaTipo, HospRecursoTipo } from "@prisma/client";
-import { prisma } from "../src/lib/prisma";
+import type { HospArea, HospCargoCategoria, HospDocumentoTipo, HospEpisodioEstado, HospEpisodioTipo, HospFirmanteRol, HospGrupoControl, HospInsumoCategoria, HospMotivoEgreso, HospNotaTipo, HospRecursoTipo } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
+
+// Cliente propio: el seed corre también contra prod por el proxy público de
+// Railway, donde una transacción interactiva o en lote tarda más de los 5 s
+// que Prisma da por defecto.
+const prisma = new PrismaClient({ transactionOptions: { timeout: 180_000, maxWait: 30_000 } });
 import { seedChartOfAccounts } from "../src/lib/contabilidad/seed-catalog";
 import { crearEpisodio } from "../src/lib/hospital/episodio";
 import { aplicarInsumo } from "../src/lib/hospital/aplicar-insumo";
 import { asegurarCargosEstancia } from "../src/lib/hospital/estancia";
 import { siguienteFolio } from "../src/lib/hospital/folio";
 import { crearNota } from "../src/lib/hospital/notas";
-import { digitoVerificadorCurp, validarCurp } from "../src/lib/hospital/curp";
+import { validarCurp } from "../src/lib/hospital/curp";
+import { buscarCie } from "../src/lib/hospital/cie";
+import { ENTIDAD_DGIS_POR_CURP, calcularCurp, calcularRfc, normalizarNombre } from "../src/lib/hospital/identidad";
+import { paqueteAdmision } from "../src/lib/hospital/admision";
+import { firmarDocumento } from "../src/lib/hospital/firmas";
+import { armarInsumosProtocolo, armarPartidasProtocolo, resolverCiesProtocolo } from "../src/lib/hospital/protocolo";
+import { DESVIACION_ALERTA_PCT, PLAN_ESTADOS, actualizarPlan, compararPlanConCuenta, cotizarPlan, crearPlan, faltaAutorizacion, programarPlan } from "../src/lib/hospital/plan";
 import { claveDia, fechaLocal, partesLocales } from "../src/lib/hospital/tz";
 import { r2 } from "../src/lib/hospital/util";
 
@@ -74,38 +104,28 @@ const uuidDemo = (tag: string): string => {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 };
 
-// ── CURP de demo con el algoritmo de RENAPO (persona ficticia, dígito real) ──
-const sinAcentos = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
-const VOCALES = "AEIOU";
-const primeraVocalInterna = (p: string) => [...p.slice(1)].find((c) => VOCALES.includes(c)) ?? "X";
-const primeraConsonanteInterna = (p: string) => {
-  const c = [...p.slice(1)].find((x) => /[B-DF-HJ-NP-TV-ZÑ]/.test(x)) ?? "X";
-  return c === "Ñ" ? "X" : c;
-};
-/** Nombre de pila que usa RENAPO: el segundo si el primero es María/José. */
-function nombreParaCurp(nombre: string): string {
-  const partes = sinAcentos(nombre).split(/\s+/).filter(Boolean);
-  const primero = partes[0]?.replace(/\./g, "") ?? "";
-  if (partes.length > 1 && ["MARIA", "MA", "JOSE", "J"].includes(primero)) return partes[1];
-  return partes[0] ?? "X";
+// ── CURP y RFC de demo con los algoritmos reales (RENAPO / SAT): personas ficticias, dígitos reales ──
+type DatosPersona = { nombre: string; apellidoPaterno: string; apellidoMaterno: string | null; sexo: "FEMENINO" | "MASCULINO"; nacimiento: [number, number, number]; entidad: string };
+const isoDe = ([y, m, d]: [number, number, number]) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+function curpDe(p: DatosPersona): string {
+  const r = calcularCurp({ nombres: p.nombre, primerApellido: p.apellidoPaterno, segundoApellido: p.apellidoMaterno, fechaNacimiento: isoDe(p.nacimiento), sexo: p.sexo, entidadClave: p.entidad });
+  if (!r.ok) throw new Error(`CURP de demo inválida para ${p.nombre} ${p.apellidoPaterno}: ${r.error}`);
+  return r.curp;
 }
-function curpDe(p: { nombre: string; apellidoPaterno: string; apellidoMaterno: string | null; sexo: "FEMENINO" | "MASCULINO"; nacimiento: [number, number, number]; entidad: string }): string {
-  const pat = sinAcentos(p.apellidoPaterno).replace(/\s+/g, "");
-  const mat = sinAcentos(p.apellidoMaterno ?? "").replace(/\s+/g, "");
-  const nom = nombreParaCurp(p.nombre);
-  const letra = (c: string) => (c === "Ñ" ? "X" : c);
+function rfcDe(p: DatosPersona): string {
+  const r = calcularRfc({ nombres: p.nombre, primerApellido: p.apellidoPaterno, segundoApellido: p.apellidoMaterno, fechaNacimiento: isoDe(p.nacimiento) });
+  if (!r.ok) throw new Error(`RFC de demo inválido para ${p.nombre} ${p.apellidoPaterno}: ${r.error}`);
+  return r.rfc;
+}
+/** Clave de elector ficticia con la forma de la INE: 6 letras, AAMMDD, entidad, sexo y 3 dígitos. */
+function claveElectorDe(p: DatosPersona): string {
+  const cons = (t: string, n: number) => (normalizarNombre(t).replace(/[^B-DF-HJ-NP-TV-Z]/g, "") + "XXXXXX").slice(0, n);
   const [y, m, d] = p.nacimiento;
-  const base =
-    letra(pat[0]) + primeraVocalInterna(pat) + letra(mat[0] ?? "X") + letra(nom[0]) +
-    String(y % 100).padStart(2, "0") + String(m).padStart(2, "0") + String(d).padStart(2, "0") +
-    (p.sexo === "MASCULINO" ? "H" : "M") + p.entidad +
-    primeraConsonanteInterna(pat) + primeraConsonanteInterna(mat || "XX") + primeraConsonanteInterna(nom) +
-    (y >= 2000 ? "A" : "0");
-  const curp = base + digitoVerificadorCurp(base);
-  const r = validarCurp(curp);
-  if (!r.valida) throw new Error(`CURP de demo inválida para ${p.nombre} ${p.apellidoPaterno}: ${curp} (${r.motivo})`);
-  return curp;
+  return `${cons(p.apellidoPaterno, 2)}${cons(p.apellidoMaterno ?? "XX", 2)}${cons(p.nombre, 2)}${String(y % 100).padStart(2, "0")}${String(m).padStart(2, "0")}${String(d).padStart(2, "0")}${ENTIDAD_DGIS_POR_CURP[p.entidad] ?? "00"}${p.sexo === "MASCULINO" ? "H" : "M"}100`;
 }
+/** PNG de 1×1 px: el trazo de las firmas de demo. */
+const PNG_FIRMA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const EVIDENCIA_FIRMA = { ip: "187.190.12.34", userAgent: "Haltus Admisión/1.0 (iPad; Safari)" };
 
 function arg(nombre: string): string | null {
   const args = process.argv.slice(2);
@@ -182,11 +202,18 @@ async function resolverEmpresa(): Promise<{ companyId: string; email: string | n
 /** Borra SOLO las filas del módulo (Hosp*) de la empresa, en orden de dependencias. */
 async function borrarHospital(companyId: string) {
   await prisma.hospAcceso.deleteMany({ where: { companyId } });
+  // P3: el plan cuelga de episodio, cotización, protocolo y médicos; el
+  // protocolo, del tarifario y de farmacia (sus partidas e insumos caen en cascada).
+  await prisma.hospPlanTratamiento.deleteMany({ where: { companyId } });
+  await prisma.hospProtocolo.deleteMany({ where: { companyId } });
+  await prisma.hospDeposito.deleteMany({ where: { companyId } });
   await prisma.hospMovimientoInsumo.deleteMany({ where: { companyId } });
   await prisma.hospNota.deleteMany({ where: { episodio: { companyId } } });
   await prisma.hospCargo.deleteMany({ where: { companyId } });
   await prisma.hospSignos.deleteMany({ where: { episodio: { companyId } } });
+  await prisma.hospFirma.deleteMany({ where: { companyId } });
   await prisma.hospDocumento.deleteMany({ where: { companyId } });
+  await prisma.hospEgresoSaeh.deleteMany({ where: { companyId } });
   await prisma.hospTraslado.deleteMany({ where: { episodio: { companyId } } });
   await prisma.hospCita.deleteMany({ where: { companyId } });
   await prisma.hospEpisodio.deleteMany({ where: { companyId } });
@@ -260,13 +287,14 @@ const PAGADORES = [
   { key: "PART", nombre: "Particular", tipo: "PARTICULAR", tabulador: "Lista", deducible: null, coaseguroPct: null, plazoDias: 0, topeAutorizacion: null, vigenciaInicio: null, vigenciaFin: null, rfc: null, razon: null, cp: null },
 ] as const;
 
+/** Médicos: SAEH exige CURP, nombres y apellidos separados y cédula del responsable. */
 const MEDICOS = [
-  { key: "VEGA", nombre: "Dr. Alonso Vega", especialidad: "Cirugía general", cedula: "5583201", rfc: "VEAA750312HN5", razon: "ALONSO VEGA ARRIAGA", clabe: "012180012345678901" },
-  { key: "RENTERIA", nombre: "Dra. Claudia Rentería", especialidad: "Anestesiología", cedula: "6120944", rfc: "REAC800521MP2", razon: "CLAUDIA RENTERIA AGUIRRE", clabe: "012180012345678902" },
-  { key: "SANDOVAL", nombre: "Dr. Ernesto Sandoval", especialidad: "Cirugía general", cedula: "4471180", rfc: "SAEE701105KQ8", razon: "ERNESTO SANDOVAL ESCOBEDO", clabe: "012180012345678903" },
-  { key: "IBARRA", nombre: "Dra. Mónica Ibarra", especialidad: "Angiología", cedula: "6893310", rfc: "IAMM830914RT4", razon: "MONICA IBARRA MORALES", clabe: "012180012345678904" },
-  { key: "LEDESMA", nombre: "Dra. Patricia Ledesma", especialidad: "Medicina interna", cedula: "5217736", rfc: "LEPP770228JW6", razon: null, clabe: null },
-  { key: "FUENTES", nombre: "Dr. Javier Fuentes", especialidad: "Ortopedia y traumatología", cedula: "5804412", rfc: "FUJJ790610GC1", razon: null, clabe: null },
+  { key: "VEGA", nombre: "Dr. Alonso Vega", nombres: "Alonso", apellidoPaterno: "Vega", apellidoMaterno: "Arriaga", sexo: "MASCULINO", nacimiento: [1975, 3, 12], entidad: "PL", especialidad: "Cirugía general", cedula: "5583201", rfc: "VEAA750312HN5", razon: "ALONSO VEGA ARRIAGA", clabe: "012180012345678901" },
+  { key: "RENTERIA", nombre: "Dra. Claudia Rentería", nombres: "Claudia", apellidoPaterno: "Rentería", apellidoMaterno: "Aguirre", sexo: "FEMENINO", nacimiento: [1980, 5, 21], entidad: "DF", especialidad: "Anestesiología", cedula: "6120944", rfc: "REAC800521MP2", razon: "CLAUDIA RENTERIA AGUIRRE", clabe: "012180012345678902" },
+  { key: "SANDOVAL", nombre: "Dr. Ernesto Sandoval", nombres: "Ernesto", apellidoPaterno: "Sandoval", apellidoMaterno: "Escobedo", sexo: "MASCULINO", nacimiento: [1970, 11, 5], entidad: "PL", especialidad: "Cirugía general", cedula: "4471180", rfc: "SAEE701105KQ8", razon: "ERNESTO SANDOVAL ESCOBEDO", clabe: "012180012345678903" },
+  { key: "IBARRA", nombre: "Dra. Mónica Ibarra", nombres: "Mónica", apellidoPaterno: "Ibarra", apellidoMaterno: "Morales", sexo: "FEMENINO", nacimiento: [1983, 9, 14], entidad: "VZ", especialidad: "Angiología", cedula: "6893310", rfc: "IAMM830914RT4", razon: "MONICA IBARRA MORALES", clabe: "012180012345678904" },
+  { key: "LEDESMA", nombre: "Dra. Patricia Ledesma", nombres: "Patricia", apellidoPaterno: "Ledesma", apellidoMaterno: "Prieto", sexo: "FEMENINO", nacimiento: [1977, 2, 28], entidad: "PL", especialidad: "Medicina interna", cedula: "5217736", rfc: "LEPP770228JW6", razon: null, clabe: null },
+  { key: "FUENTES", nombre: "Dr. Javier Fuentes", nombres: "Javier", apellidoPaterno: "Fuentes", apellidoMaterno: "Jiménez", sexo: "MASCULINO", nacimiento: [1979, 6, 10], entidad: "MC", especialidad: "Ortopedia y traumatología", cedula: "5804412", rfc: "FUJJ790610GC1", razon: null, clabe: null },
 ] as const;
 
 const CAMAS: Array<{ nombre: string; area: HospArea; estado?: "LIBRE" | "LIMPIEZA"; servicio: string | null; orden: number }> = [
@@ -336,29 +364,55 @@ type Pac = {
   domicilio: { calle: string; numeroExterior: string; numeroInterior?: string; colonia: string; municipio: string; estado: string; codigoPostal: string };
   /** false = todavía no acepta el aviso de privacidad (alerta en el panel). */
   aviso?: boolean;
+  /** Extranjero: sin CURP (con motivo), pasaporte y RFC genérico XEXX010101000. */
+  extranjero?: { motivo: string; nacionalidad: string; paisClave: string };
+  identidad?: {
+    /** CURP verificada en RENAPO (curpOrigen RENAPO, renapo* llenos, coincide). */
+    verificada?: { estatus: "AN" | "AH" | "RCN"; fuente: "tlaloc" | "nubarium" };
+    /** CURP calculada con homoclave supuesta, pendiente de confirmar. */
+    probable?: boolean;
+    /** RFC calculado con el algoritmo del SAT y su fuente (cruza con la CURP). */
+    rfc?: "CSF" | "CAPTURA";
+    identificacion?: { tipo: "INE" | "PASAPORTE" | "LICENCIA"; numero?: string; vigencia: [number, number, number] };
+  };
+  /** Sociodemográficos SAEH que se apartan del default. */
+  saeh?: { estadoConyugal?: number; indigena?: { lengua: string }; migranteRetornado?: boolean; lgbti?: number; derechohabiencia?: string };
 };
+
+/** Municipios de residencia de la demo → clave INEGI dentro de Puebla (21). */
+const MUNICIPIO_CLAVE: Record<string, string> = { Puebla: "114", "San Pedro Cholula": "140", Atlixco: "019" };
+const DERECHOHABIENCIA_POR_PAGADOR: Record<string, string> = { GNP: "8", AXA: "8", TEXTIL: "2", PART: "1" };
 
 const PUEBLA = { municipio: "Puebla", estado: "Puebla" };
 const PACIENTES: Pac[] = [
-  { key: "ORTEGA", nombre: "María Fernanda", apellidoPaterno: "Ortega", apellidoMaterno: "Ruiz", sexo: "FEMENINO", nacimiento: [1992, 3, 14], entidad: "PL", pagador: "GNP", telefono: "222 431 8890", tipoSangre: "O+", alergias: "Sin alergias conocidas", domicilio: { calle: "Av. Juárez", numeroExterior: "2915", numeroInterior: "4B", colonia: "La Paz", ...PUEBLA, codigoPostal: "72160" } },
-  { key: "PENA", nombre: "Jorge Luis", apellidoPaterno: "Peña", apellidoMaterno: "Cárdenas", sexo: "MASCULINO", nacimiento: [1968, 6, 2], entidad: "PL", pagador: "AXA", telefono: "222 118 4471", domicilio: { calle: "16 de Septiembre", numeroExterior: "1408", colonia: "Centro", ...PUEBLA, codigoPostal: "72000" } },
-  { key: "MARQUEZ", nombre: "Silvia", apellidoPaterno: "Márquez", apellidoMaterno: "Toledo", sexo: "FEMENINO", nacimiento: [1985, 1, 22], entidad: "TL", pagador: "TEXTIL", telefono: "222 905 3312", domicilio: { calle: "Calle 5 Sur", numeroExterior: "312", colonia: "San Pedro", municipio: "San Pedro Cholula", estado: "Puebla", codigoPostal: "72760" } },
-  { key: "AGUILAR", nombre: "Ramón", apellidoPaterno: "Aguilar", apellidoMaterno: "Ceballos", sexo: "MASCULINO", nacimiento: [1960, 4, 9], entidad: "VZ", pagador: "AXA", telefono: "222 660 2098", domicilio: { calle: "Priv. Los Pinos", numeroExterior: "7", colonia: "Las Ánimas", ...PUEBLA, codigoPostal: "72400" }, aviso: false },
-  { key: "VILLALOBOS", nombre: "Carmen", apellidoPaterno: "Villalobos", apellidoMaterno: "Sanz", sexo: "FEMENINO", nacimiento: [1979, 8, 30], entidad: "PL", pagador: "PART", domicilio: { calle: "Blvd. Atlixco", numeroExterior: "2301", colonia: "Zona Esmeralda", ...PUEBLA, codigoPostal: "72190" } },
-  { key: "NIETO", nombre: "Andrea", apellidoPaterno: "Nieto", apellidoMaterno: "Camargo", sexo: "FEMENINO", nacimiento: [1997, 5, 11], entidad: "PL", pagador: "PART", domicilio: { calle: "Calle 27 Poniente", numeroExterior: "1102", colonia: "Chulavista", ...PUEBLA, codigoPostal: "72420" } },
+  // CURP verificada en RENAPO, RFC de la CSF (cruza con la CURP) e INE vigente.
+  { key: "ORTEGA", nombre: "María Fernanda", apellidoPaterno: "Ortega", apellidoMaterno: "Ruiz", sexo: "FEMENINO", nacimiento: [1992, 3, 14], entidad: "PL", pagador: "GNP", telefono: "222 431 8890", tipoSangre: "O+", alergias: "Sin alergias conocidas", domicilio: { calle: "Av. Juárez", numeroExterior: "2915", numeroInterior: "4B", colonia: "La Paz", ...PUEBLA, codigoPostal: "72160" }, identidad: { verificada: { estatus: "AN", fuente: "tlaloc" }, rfc: "CSF", identificacion: { tipo: "INE", vigencia: [2031, 12, 31] } }, saeh: { estadoConyugal: 2 } },
+  { key: "PENA", nombre: "Jorge Luis", apellidoPaterno: "Peña", apellidoMaterno: "Cárdenas", sexo: "MASCULINO", nacimiento: [1968, 6, 2], entidad: "PL", pagador: "AXA", telefono: "222 118 4471", domicilio: { calle: "16 de Septiembre", numeroExterior: "1408", colonia: "Centro", ...PUEBLA, codigoPostal: "72000" }, identidad: { verificada: { estatus: "AN", fuente: "tlaloc" }, rfc: "CAPTURA", identificacion: { tipo: "INE", vigencia: [2029, 12, 31] } }, saeh: { estadoConyugal: 2 } },
+  { key: "MARQUEZ", nombre: "Silvia", apellidoPaterno: "Márquez", apellidoMaterno: "Toledo", sexo: "FEMENINO", nacimiento: [1985, 1, 22], entidad: "TL", pagador: "TEXTIL", telefono: "222 905 3312", domicilio: { calle: "Calle 5 Sur", numeroExterior: "312", colonia: "San Pedro", municipio: "San Pedro Cholula", estado: "Puebla", codigoPostal: "72760" }, identidad: { verificada: { estatus: "RCN", fuente: "nubarium" }, identificacion: { tipo: "INE", vigencia: [2028, 12, 31] } }, saeh: { estadoConyugal: 3 } },
+  // INE vencida y aviso de privacidad sin firmar: dos pendientes en la ficha.
+  { key: "AGUILAR", nombre: "Ramón", apellidoPaterno: "Aguilar", apellidoMaterno: "Ceballos", sexo: "MASCULINO", nacimiento: [1960, 4, 9], entidad: "VZ", pagador: "AXA", telefono: "222 660 2098", domicilio: { calle: "Priv. Los Pinos", numeroExterior: "7", colonia: "Las Ánimas", ...PUEBLA, codigoPostal: "72400" }, aviso: false, identidad: { identificacion: { tipo: "INE", vigencia: [2025, 12, 31] } }, saeh: { estadoConyugal: 5 } },
+  { key: "VILLALOBOS", nombre: "Carmen", apellidoPaterno: "Villalobos", apellidoMaterno: "Sanz", sexo: "FEMENINO", nacimiento: [1979, 8, 30], entidad: "PL", pagador: "PART", domicilio: { calle: "Blvd. Atlixco", numeroExterior: "2301", colonia: "Zona Esmeralda", ...PUEBLA, codigoPostal: "72190" }, identidad: { identificacion: { tipo: "LICENCIA", numero: "PUE-04471182", vigencia: [2027, 8, 30] } } },
+  // CURP calculada (homoclave supuesta): pendiente de confirmar con RENAPO o documento.
+  { key: "NIETO", nombre: "Andrea", apellidoPaterno: "Nieto", apellidoMaterno: "Camargo", sexo: "FEMENINO", nacimiento: [1997, 5, 11], entidad: "PL", pagador: "PART", domicilio: { calle: "Calle 27 Poniente", numeroExterior: "1102", colonia: "Chulavista", ...PUEBLA, codigoPostal: "72420" }, identidad: { probable: true }, saeh: { lgbti: 3 } },
   { key: "TAPIA", nombre: "Gerardo", apellidoPaterno: "Tapia", apellidoMaterno: "Rendón", sexo: "MASCULINO", nacimiento: [1963, 10, 3], entidad: "MC", pagador: "GNP", domicilio: { calle: "Av. Reforma", numeroExterior: "504", colonia: "Centro", ...PUEBLA, codigoPostal: "72000" } },
   { key: "BERMUDEZ", nombre: "Ana Sofía", apellidoPaterno: "Bermúdez", apellidoMaterno: "Lara", sexo: "FEMENINO", nacimiento: [1990, 2, 17], entidad: "PL", pagador: "TEXTIL", domicilio: { calle: "Calle 9 Norte", numeroExterior: "805", colonia: "Santa María", ...PUEBLA, codigoPostal: "72080" } },
   { key: "CIFUENTES", nombre: "Norma Elena", apellidoPaterno: "Cifuentes", apellidoMaterno: "Robles", sexo: "FEMENINO", nacimiento: [1974, 7, 8], entidad: "DF", pagador: "GNP", domicilio: { calle: "Circuito Juan Pablo II", numeroExterior: "1420", colonia: "Las Ánimas", ...PUEBLA, codigoPostal: "72400" } },
   { key: "RUVALCABA", nombre: "Héctor Manuel", apellidoPaterno: "Ruvalcaba", apellidoMaterno: "Ortiz", sexo: "MASCULINO", nacimiento: [1981, 11, 25], entidad: "PL", pagador: "PART", domicilio: { calle: "Av. 31 Poniente", numeroExterior: "3703", colonia: "Belisario Domínguez", ...PUEBLA, codigoPostal: "72180" } },
   { key: "ESPARZA", nombre: "Lucía", apellidoPaterno: "Esparza", apellidoMaterno: "Medina", sexo: "FEMENINO", nacimiento: [1988, 9, 19], entidad: "OC", pagador: "AXA", domicilio: { calle: "Calle 11 Sur", numeroExterior: "5110", colonia: "Prados Agua Azul", ...PUEBLA, codigoPostal: "72430" } },
-  { key: "HERRERA", nombre: "Tomás", apellidoPaterno: "Herrera", apellidoMaterno: "Quintero", sexo: "MASCULINO", nacimiento: [1955, 3, 2], entidad: "PL", pagador: "GNP", domicilio: { calle: "Av. Hidalgo", numeroExterior: "210", colonia: "Centro", municipio: "Atlixco", estado: "Puebla", codigoPostal: "74200" } },
+  { key: "HERRERA", nombre: "Tomás", apellidoPaterno: "Herrera", apellidoMaterno: "Quintero", sexo: "MASCULINO", nacimiento: [1955, 3, 2], entidad: "PL", pagador: "GNP", domicilio: { calle: "Av. Hidalgo", numeroExterior: "210", colonia: "Centro", municipio: "Atlixco", estado: "Puebla", codigoPostal: "74200" }, identidad: { identificacion: { tipo: "INE", vigencia: [2030, 12, 31] } }, saeh: { estadoConyugal: 2, indigena: { lengua: "1041" } } },
   { key: "OLVERA", nombre: "Patricia", apellidoPaterno: "Olvera", apellidoMaterno: "Sánchez", sexo: "FEMENINO", nacimiento: [1971, 6, 27], entidad: "PL", pagador: "GNP", domicilio: { calle: "Calle 43 Oriente", numeroExterior: "1618", colonia: "Huexotitla", ...PUEBLA, codigoPostal: "72534" } },
   { key: "CORDERO", nombre: "Miguel Ángel", apellidoPaterno: "Cordero", apellidoMaterno: "Ruiz", sexo: "MASCULINO", nacimiento: [1977, 1, 9], entidad: "PL", pagador: "TEXTIL", domicilio: { calle: "Priv. Volcanes", numeroExterior: "18", colonia: "Volcanes", ...PUEBLA, codigoPostal: "72410" } },
   { key: "DELGADO", nombre: "Rosa María", apellidoPaterno: "Delgado", apellidoMaterno: "Paz", sexo: "FEMENINO", nacimiento: [1966, 12, 12], entidad: "PL", pagador: "AXA", domicilio: { calle: "Av. Forjadores", numeroExterior: "1009", colonia: "Momoxpan", municipio: "San Pedro Cholula", estado: "Puebla", codigoPostal: "72754" } },
-  { key: "ALCANTARA", nombre: "Fernando", apellidoPaterno: "Alcántara", apellidoMaterno: "Ríos", sexo: "MASCULINO", nacimiento: [1982, 4, 4], entidad: "MC", pagador: "AXA", domicilio: { calle: "Calle 2 Oriente", numeroExterior: "1213", colonia: "Centro", ...PUEBLA, codigoPostal: "72000" } },
-  { key: "ZAMORA", nombre: "Beatriz", apellidoPaterno: "Zamora", apellidoMaterno: "Luna", sexo: "FEMENINO", nacimiento: [1993, 8, 21], entidad: "PL", pagador: "PART", domicilio: { calle: "Av. Zavaleta", numeroExterior: "3922", colonia: "Santa Cruz Buenavista", ...PUEBLA, codigoPostal: "72150" } },
+  { key: "ALCANTARA", nombre: "Fernando", apellidoPaterno: "Alcántara", apellidoMaterno: "Ríos", sexo: "MASCULINO", nacimiento: [1982, 4, 4], entidad: "MC", pagador: "AXA", domicilio: { calle: "Calle 2 Oriente", numeroExterior: "1213", colonia: "Centro", ...PUEBLA, codigoPostal: "72000" }, saeh: { migranteRetornado: true } },
+  // CURP verificada: su egreso ambulatorio HOSP-2026-0405 lleva la hoja SAEH completa.
+  { key: "ZAMORA", nombre: "Beatriz", apellidoPaterno: "Zamora", apellidoMaterno: "Luna", sexo: "FEMENINO", nacimiento: [1993, 8, 21], entidad: "PL", pagador: "PART", domicilio: { calle: "Av. Zavaleta", numeroExterior: "3922", colonia: "Santa Cruz Buenavista", ...PUEBLA, codigoPostal: "72150" }, identidad: { verificada: { estatus: "AN", fuente: "tlaloc" }, identificacion: { tipo: "INE", vigencia: [2032, 12, 31] } } },
   { key: "MONTES", nombre: "Alejandro", apellidoPaterno: "Montes", apellidoMaterno: "Pineda", sexo: "MASCULINO", nacimiento: [1976, 2, 28], entidad: "PL", pagador: "AXA", domicilio: { calle: "Calle 25 Sur", numeroExterior: "3105", colonia: "Anzures", ...PUEBLA, codigoPostal: "72530" } },
   { key: "AVILA", nombre: "Verónica", apellidoPaterno: "Ávila", apellidoMaterno: "Serrano", sexo: "FEMENINO", nacimiento: [1980, 5, 5], entidad: "PL", pagador: "TEXTIL", domicilio: { calle: "Blvd. 5 de Mayo", numeroExterior: "2802", colonia: "Rincón Arboledas", ...PUEBLA, codigoPostal: "72470" } },
+  // Extranjera: sin CURP con motivo, pasaporte y RFC genérico XEXX010101000 (NOM-024 / SAT).
+  { key: "CARTER", nombre: "Emily", apellidoPaterno: "Carter", apellidoMaterno: null, sexo: "FEMENINO", nacimiento: [1988, 11, 2], entidad: "NE", pagador: "PART", telefono: "+1 512 555 0134", domicilio: { calle: "Calle 3 Sur", numeroExterior: "1105", numeroInterior: "PH", colonia: "Centro", ...PUEBLA, codigoPostal: "72000" }, extranjero: { motivo: "Extranjera sin CURP (pasaporte estadounidense)", nacionalidad: "USA", paisClave: "228" }, identidad: { rfc: "CAPTURA", identificacion: { tipo: "PASAPORTE", numero: "5X1234567", vigencia: [2031, 5, 1] } } },
+  // P3: valorados en consulta externa; su tratamiento vive todavía en un plan (sin episodio).
+  { key: "CASTILLO", nombre: "Lorena", apellidoPaterno: "Castillo", apellidoMaterno: "Jiménez", sexo: "FEMENINO", nacimiento: [1987, 7, 19], entidad: "PL", pagador: "GNP", telefono: "222 274 6610", domicilio: { calle: "Av. Las Torres", numeroExterior: "1810", colonia: "Bosques de San Sebastián", ...PUEBLA, codigoPostal: "72310" }, identidad: { identificacion: { tipo: "INE", vigencia: [2030, 12, 31] } }, saeh: { estadoConyugal: 2 } },
+  { key: "MENDOZA", nombre: "Raúl", apellidoPaterno: "Mendoza", apellidoMaterno: "Trejo", sexo: "MASCULINO", nacimiento: [1974, 11, 8], entidad: "PL", pagador: "GNP", telefono: "222 519 0027", domicilio: { calle: "Calle 14 Oriente", numeroExterior: "2409", colonia: "Azcárate", ...PUEBLA, codigoPostal: "72501" }, identidad: { identificacion: { tipo: "INE", vigencia: [2029, 12, 31] } }, saeh: { estadoConyugal: 2 } },
 ];
 
 type Ep = {
@@ -427,6 +481,48 @@ const EPISODIOS: Ep[] = [
   // Consulta externa de hoy: sin cama; lo que se surte de farmacia es VENTA (0 % IVA).
   { folio: "HOSP-2026-0426", paciente: "MONTES", cama: null, tipo: "CONSULTA", estado: "EN_VALORACION", ingreso: [0, 9, 30], medico: "LEDESMA", dx: "Control postoperatorio de hernioplastía", cie10: "Z09.0", cargos: [{ servicio: "CONS-EXT", cantidad: 1 }] },
 ];
+
+/**
+ * P3: la receta reutilizable de cada procedimiento. No lleva precios: se
+ * precia con el convenio del pagador al simularla o al abrir el plan. Una
+ * partida sin servicio del tarifario queda SIN_TARIFA (precio 0) hasta que el
+ * piso la capture en el plan (PRECIO_CAPTURADO).
+ */
+const PROTOCOLOS: Array<{
+  clave: string;
+  nombre: string;
+  descripcion: string;
+  tipoEpisodio: HospEpisodioTipo;
+  /** CIE-9-MC del procedimiento y CIE-10 del diagnóstico, en su forma clínica. */
+  cie9: string;
+  cie10: string;
+  especialidad: string;
+  estanciaNoches: number;
+  quirofanoMinutos: number;
+  /** Tipo de anestesia SAEH: 1 general · 2 regional · 4 sedación. */
+  tipoAnestesia: number;
+  honorarios: { cirujano: number; anestesiologo: number };
+  partidas: Array<{ servicio: string; cantidad: number; opcional?: boolean } | { descripcion: string; categoria: HospCargoCategoria; cantidad: number; opcional?: boolean }>;
+  insumos: Array<{ insumo: string; cantidad: number; opcional?: boolean }>;
+}> = [
+  {
+    clave: "COLE-LAP", nombre: "Colecistectomía laparoscópica", descripcion: "Cuatro puertos con anestesia general balanceada; una noche de observación, profilaxis con cefalotina y analgesia con ketorolaco.",
+    tipoEpisodio: "AMBULATORIO", cie9: "51.23", cie10: "K80.2", especialidad: "Cirugía general", estanciaNoches: 1, quirofanoMinutos: 90, tipoAnestesia: 1,
+    honorarios: { cirujano: 25000, anestesiologo: 8000 },
+    partidas: [{ servicio: "QX-HORA", cantidad: 1.5 }, { servicio: "REC-HORA", cantidad: 2 }, { servicio: "HAB-STD", cantidad: 1, opcional: true }, { servicio: "EST-LABPRE", cantidad: 1 }, { descripcion: "Material de curación", categoria: "MATERIAL", cantidad: 1 }],
+    insumos: [{ insumo: "MED-CEFA1G", cantidad: 6 }, { insumo: "MED-KETO30", cantidad: 3 }, { insumo: "MED-MIDA5", cantidad: 1 }, { insumo: "SOL-HART1000", cantidad: 4 }],
+  },
+  {
+    clave: "HERNIA-ING", nombre: "Hernioplastía inguinal", descripcion: "Técnica de Lichtenstein con malla bajo bloqueo regional; egreso el mismo día.",
+    tipoEpisodio: "AMBULATORIO", cie9: "53.05", cie10: "K40.9", especialidad: "Cirugía general", estanciaNoches: 0, quirofanoMinutos: 60, tipoAnestesia: 2,
+    honorarios: { cirujano: 18000, anestesiologo: 6000 },
+    partidas: [{ servicio: "QX-HORA", cantidad: 1 }, { servicio: "REC-HORA", cantidad: 2 }, { servicio: "EST-LABPRE", cantidad: 1 }, { descripcion: "Malla de polipropileno 15 × 15 cm", categoria: "MATERIAL", cantidad: 1 }, { descripcion: "Material de curación", categoria: "MATERIAL", cantidad: 1 }],
+    insumos: [{ insumo: "MED-CEFA1G", cantidad: 1 }, { insumo: "MED-KETO30", cantidad: 2 }, { insumo: "SOL-HART1000", cantidad: 2 }, { insumo: "MAT-GASA10", cantidad: 2 }],
+  },
+];
+
+/** Lo que el piso captura en el plan para las partidas del protocolo que no están en el tarifario (SIN_TARIFA en la simulación). */
+const PRECIO_CAPTURADO: Record<string, number> = { "Material de curación": 950, "Malla de polipropileno 15 × 15 cm": 2400 };
 
 /** Contenido mínimo del consentimiento (NOM-004 §10.1) según el procedimiento. */
 function contenidoConsentimiento(tipo: "CONSENTIMIENTO_CIRUGIA" | "CONSENTIMIENTO_ANESTESIA" | "CONSENTIMIENTO_HOSPITALIZACION", procedimiento: string | null) {
@@ -622,13 +718,20 @@ async function main() {
   // ── Médicos ──
   const medicoPorKey = new Map<string, { id: string; nombre: string }>();
   for (const m of MEDICOS) {
-    const existente = await prisma.hospMedico.findFirst({ where: { companyId: cid, nombre: m.nombre }, select: { id: true, nombre: true } });
-    const row =
-      existente ??
-      (await prisma.hospMedico.create({
-        data: { companyId: cid, nombre: m.nombre, especialidad: m.especialidad, cedula: m.cedula, rfc: m.rfc, supplierId: supplierPorKey.get(m.key)?.id ?? null },
+    const persona: DatosPersona = { nombre: m.nombres, apellidoPaterno: m.apellidoPaterno, apellidoMaterno: m.apellidoMaterno, sexo: m.sexo, nacimiento: [...m.nacimiento], entidad: m.entidad };
+    const identidad = { curp: curpDe(persona), nombres: m.nombres, apellidoPaterno: m.apellidoPaterno, apellidoMaterno: m.apellidoMaterno, paisNacimientoClave: "142" };
+    const existente = await prisma.hospMedico.findFirst({ where: { companyId: cid, nombre: m.nombre }, select: { id: true, nombre: true, curp: true } });
+    let row: { id: string; nombre: string };
+    if (existente) {
+      row = existente;
+      // Demo previa a P2: se completan CURP y apellidos sin tocar el resto.
+      if (!existente.curp) await prisma.hospMedico.update({ where: { id: existente.id }, data: identidad });
+    } else {
+      row = await prisma.hospMedico.create({
+        data: { companyId: cid, nombre: m.nombre, especialidad: m.especialidad, cedula: m.cedula, rfc: m.rfc, supplierId: supplierPorKey.get(m.key)?.id ?? null, ...identidad },
         select: { id: true, nombre: true },
-      }));
+      });
+    }
     medicoPorKey.set(m.key, row);
   }
   const medico = (key: string) => medicoPorKey.get(key)!;
@@ -679,14 +782,53 @@ async function main() {
   const pacientePorKey = new Map<string, { id: string }>();
   let expedientesAsignados = 0;
   for (const p of PACIENTES) {
-    const curp = curpDe(p);
-    const identidad = validarCurp(curp);
+    const curp = p.extranjero ? null : curpDe(p);
+    const identidad = curp ? validarCurp(curp) : null;
+    const idn = p.identidad ?? {};
+    const verificada = curp ? idn.verificada : undefined;
+    const rfc = idn.rfc ? (p.extranjero ? "XEXX010101000" : rfcDe(p)) : null;
+    const edad = HOY.y - p.nacimiento[0];
+    const datosP2 = {
+      curpOrigen: curp ? (verificada ? ("RENAPO" as const) : idn.probable ? ("CALCULADA" as const) : ("DOCUMENTO" as const)) : null,
+      curpProbable: !!curp && !!idn.probable,
+      curpEstatus: verificada?.estatus ?? null,
+      curpVerificadaAt: verificada ? dia(-30, 10, 5) : null,
+      curpVerificadaFuente: verificada?.fuente ?? null,
+      curpVerificadaRef: verificada ? `demo-${p.key.toLowerCase()}-${createHash("md5").update(curp ?? p.key).digest("hex").slice(0, 8)}` : null,
+      renapoNombres: verificada ? normalizarNombre(p.nombre) : null,
+      renapoPrimerApellido: verificada ? normalizarNombre(p.apellidoPaterno) : null,
+      renapoSegundoApellido: verificada ? normalizarNombre(p.apellidoMaterno) || null : null,
+      renapoCoincide: verificada ? true : null,
+      rfc,
+      rfcFuente: rfc ? idn.rfc! : null,
+      identificacionTipo: idn.identificacion?.tipo ?? null,
+      identificacionNumero: idn.identificacion ? (idn.identificacion.numero ?? claveElectorDe(p)) : null,
+      identificacionVigencia: idn.identificacion ? fechaLocal(...idn.identificacion.vigencia, 12) : null,
+      // SAEH (GIIS-B002): claves DGIS/INEGI que existen en HospCatalogo.
+      paisNacimientoClave: p.extranjero?.paisClave ?? "142",
+      entidadNacimientoClave: curp ? (ENTIDAD_DGIS_POR_CURP[curp.slice(11, 13)] ?? null) : null,
+      estadoConyugal: p.saeh?.estadoConyugal ?? (edad >= 45 ? 2 : 1),
+      seConsideraIndigena: !!p.saeh?.indigena,
+      hablaLenguaIndigena: !!p.saeh?.indigena,
+      lenguaIndigenaClave: p.saeh?.indigena?.lengua ?? null,
+      seConsideraAfromexicano: false,
+      esMigranteRetornado: p.saeh?.migranteRetornado ?? false,
+      seIdentificaLgbti: p.saeh?.lgbti ?? 2,
+      genero: p.sexo === "FEMENINO" ? 1 : 2,
+      paisResidenciaClave: "142",
+      entidadResidenciaClave: "21",
+      municipioResidenciaClave: MUNICIPIO_CLAVE[p.domicilio.municipio] ?? "114",
+      localidadResidenciaClave: "0001",
+      otraLocalidad: null,
+      derechohabienciaClave: p.saeh?.derechohabiencia ?? DERECHOHABIENCIA_POR_PAGADOR[p.pagador] ?? "1",
+    };
     const datosP1 = {
       curp,
-      curpValidada: true,
-      sinCurp: false,
-      nacionalidad: "MEX",
-      entidadNacimiento: identidad.entidad ?? null,
+      curpValidada: !!curp,
+      sinCurp: !curp,
+      sinCurpMotivo: p.extranjero?.motivo ?? null,
+      nacionalidad: p.extranjero?.nacionalidad ?? "MEX",
+      entidadNacimiento: identidad?.entidad ?? null,
       calle: p.domicilio.calle,
       numeroExterior: p.domicilio.numeroExterior,
       numeroInterior: p.domicilio.numeroInterior ?? null,
@@ -697,19 +839,21 @@ async function main() {
       domicilio: `${p.domicilio.calle} ${p.domicilio.numeroExterior}${p.domicilio.numeroInterior ? ` int. ${p.domicilio.numeroInterior}` : ""}, ${p.domicilio.colonia}, ${p.domicilio.municipio}, ${p.domicilio.estado}, C.P. ${p.domicilio.codigoPostal}`,
       avisoPrivacidadVersion: p.aviso === false ? null : AVISO_VERSION,
       avisoPrivacidadAceptadoAt: p.aviso === false ? null : dia(-30, 10, 0),
+      ...datosP2,
     };
     const existente = await prisma.hospPaciente.findFirst({
       where: { companyId: cid, nombre: p.nombre, apellidoPaterno: p.apellidoPaterno, apellidoMaterno: p.apellidoMaterno },
-      select: { id: true, curp: true, expedienteNumero: true },
+      select: { id: true, curp: true, expedienteNumero: true, paisNacimientoClave: true },
     });
     let row: { id: string };
     if (existente) {
       row = existente;
-      if (!existente.curp || !existente.expedienteNumero) {
+      // Demo previa a P1/P2: se completan identidad, expediente y sociodemográficos.
+      if ((!existente.curp && !p.extranjero) || !existente.expedienteNumero || !existente.paisNacimientoClave) {
         await prisma.$transaction(async (tx) => {
           const expedienteNumero = existente.expedienteNumero ?? (await siguienteFolio(tx, cid, "expediente", ahora));
           await tx.hospPaciente.update({ where: { id: existente.id }, data: { ...datosP1, expedienteNumero } });
-        });
+        }, { timeout: 180_000, maxWait: 30_000 });
         expedientesAsignados++;
       }
     } else {
@@ -730,7 +874,7 @@ async function main() {
           },
           select: { id: true },
         });
-      });
+      }, { timeout: 180_000, maxWait: 30_000 });
       expedientesAsignados++;
     }
     pacientePorKey.set(p.key, row);
@@ -766,8 +910,10 @@ async function main() {
    * en anestesia).
    */
   const firmarConsentimientos = async (episodioId: string, e: Ep, fecha: Date) => {
+    // El consentimiento de ingreso de Ortega se firma electrónicamente con el paquete de admisión (P2).
+    const tipos: HospDocumentoTipo[] = e.folio === "HOSP-2026-0418" ? ["CONSENTIMIENTO_CIRUGIA", "CONSENTIMIENTO_ANESTESIA"] : ["CONSENTIMIENTO_CIRUGIA", "CONSENTIMIENTO_ANESTESIA", "CONSENTIMIENTO_HOSPITALIZACION"];
     const docs = await prisma.hospDocumento.findMany({
-      where: { episodioId, tipo: { in: ["CONSENTIMIENTO_CIRUGIA", "CONSENTIMIENTO_ANESTESIA", "CONSENTIMIENTO_HOSPITALIZACION"] } },
+      where: { episodioId, tipo: { in: tipos } },
       select: { id: true, tipo: true },
     });
     const cirujano = MEDICOS.find((m) => m.key === e.medico)!;
@@ -1050,6 +1196,85 @@ async function main() {
     await prisma.hospDocumento.updateMany({ where: { episodioId: epId, estado: "FIRMADO" }, data: { firmadoAt: ayer(7, 45) } });
     await prisma.hospDocumento.updateMany({ where: { episodioId: epId, tipo: { in: ["IDENTIFICACION", "POLIZA"] } }, data: { estado: "RECIBIDO" } });
     await prisma.hospEpisodio.update({ where: { id: epId }, data: { autorizacionPagador: "GNP-A-2026-118240", customerId: esposoOrtega.id } });
+
+    // Paquete de admisión (P2) firmado electrónicamente en la admisión de ayer:
+    // aviso de privacidad, consentimiento de datos, contrato, compromiso de
+    // pago (el esposo como responsable solidario), cesión de derechos a GNP y
+    // consentimiento de ingreso con dos testigos y el cirujano. Cada firma deja
+    // hash, IP y user agent; el documento pasa a FIRMADO con la última.
+    const paquete = await paqueteAdmision(prisma, { episodioId: epId, ahora: ayer(7, 30) });
+    const FIRMANTES: Record<HospFirmanteRol, { nombre: string; identificacion?: string; parentesco?: string }> = {
+      PACIENTE: { nombre: nombrePaciente("ORTEGA"), identificacion: curpDe(PACIENTES.find((x) => x.key === "ORTEGA")!) },
+      REPRESENTANTE: { nombre: "Rodrigo Salazar Mendoza", parentesco: "Esposo" },
+      RESPONSABLE_PAGO: { nombre: "Rodrigo Salazar Mendoza", identificacion: "SAMR840512QT7", parentesco: "Esposo" },
+      HOSPITAL: { nombre: "Lic. Adriana Mora (Admisión)" },
+      TESTIGO1: { nombre: "Rodrigo Salazar Mendoza" },
+      TESTIGO2: { nombre: "Enf. Laura Méndez" },
+      MEDICO: { nombre: "Dr. Alonso Vega", identificacion: "5583201" },
+    };
+    let minuto = 32;
+    for (const doc of paquete.documentos) {
+      if (!doc.tieneTexto || doc.estado === "FIRMADO") continue;
+      for (const grupo of doc.firmasFaltantes) {
+        const rol = grupo.split("|")[0] as HospFirmanteRol;
+        const f = FIRMANTES[rol];
+        await firmarDocumento(prisma, { documentoId: doc.id, rol, ...f, imagen: PNG_FIRMA, ...EVIDENCIA_FIRMA, ahora: ayer(7, minuto++) });
+      }
+    }
+  }
+
+  // ── Paquete de admisión pendiente de firma: Peña (HOSP-2026-0411, hospitalizado) ──
+  const pena = episodioPorFolio.get("HOSP-2026-0411")!;
+  if (pena.creado) await paqueteAdmision(prisma, { episodioId: pena.id, ahora: dia(-2, 7, 20) });
+
+  // ── Hoja SAEH del egreso ambulatorio de Zamora (HOSP-2026-0405): completa, lista para exportar ──
+  const zamora = episodioPorFolio.get("HOSP-2026-0405")!;
+  if (!(await prisma.hospEgresoSaeh.findUnique({ where: { episodioId: zamora.id }, select: { id: true } }))) {
+    const epZamora = EPISODIOS.find((e) => e.folio === "HOSP-2026-0405")!;
+    const dxEgreso = (await buscarCie(prisma, "CIE10", epZamora.alta!.cie10 ?? epZamora.cie10))!;
+    const proc = (await buscarCie(prisma, "CIE9MC", epZamora.cie9!))!;
+    const anestesiologa = MEDICOS.find((m) => m.key === "RENTERIA")!;
+    await prisma.hospEgresoSaeh.create({
+      data: {
+        companyId: cid,
+        episodioId: zamora.id,
+        estado: "COMPLETO",
+        validacion: { errores: [], advertencias: [], validadoAt: dia(-8, 9, 0).toISOString() },
+        nacioHospital: 2,
+        peso: 58.4,
+        talla: 162,
+        gratuidad: 2,
+        tipoServicioIngreso: 2,
+        claveServicioIngreso: "-1",
+        serviciosAdicionales: [],
+        claveServicioEgreso: "201",
+        procedencia: 1,
+        mujerFertil: 3,
+        descripcionAfeccionPrincipal: dxEgreso.nombre,
+        codigoAfeccionPrincipal: dxEgreso.clave,
+        comorbilidades: [],
+        tipoAtencion: 1,
+        afeccionReseleccionada: dxEgreso.clave,
+        infeccionIntrahospitalaria: 2,
+        procedimientos: [{ codigo: proc.clave, descripcion: proc.nombre, tipoAnestesia: 1, quirofano: 1, tiempoQuirofano: "01:30", cedula: anestesiologa.cedula }],
+        gestas: 0,
+        partos: 0,
+        abortos: 0,
+        cesareas: 0,
+        extraccionExpulsion: -1,
+        edadGestacional: -1,
+        tipoAtencionObstetrica: -1,
+        tipoParto: -1,
+        tipoProcAborto: -1,
+        productoEmbarazo: -1,
+        totalProductos: 0,
+        planificacionFamiliar: -1,
+        productos: [],
+        tipoUnidadPsiq: -1,
+        tipoServicioPsiq: -1,
+        medicoResponsableId: medico("RENTERIA").id,
+      },
+    });
   }
 
   // ── Agenda de hoy (lámina 7) ──
@@ -1112,6 +1337,129 @@ async function main() {
         subtotal, iva, total: r2(subtotal + iva), partidas: { create: partidas },
       },
     });
+  }
+
+  // ── P3 tratamientos: protocolos (la receta) y planes (lo prometido a cada paciente) ──
+  // La misma maquinaria que las rutas: resolverCiesProtocolo + armarPartidasProtocolo
+  // (POST /protocolos) y crearPlan / actualizarPlan / cotizarPlan / programarPlan.
+  const incluirPartidasProtocolo = { partidas: { orderBy: { orden: "asc" as const } } };
+  const protocoloPorClave = new Map<string, { id: string; partidas: Array<{ servicioId: string | null; categoria: HospCargoCategoria; descripcion: string; cantidad: unknown; opcional: boolean }> }>();
+  for (const p of PROTOCOLOS) {
+    const existente = await prisma.hospProtocolo.findUnique({ where: { companyId_clave: { companyId: cid, clave: p.clave } }, include: incluirPartidasProtocolo });
+    if (existente) {
+      protocoloPorClave.set(p.clave, existente);
+      continue;
+    }
+    const cies = await resolverCiesProtocolo(prisma, { procedimientoCie9: p.cie9, diagnosticoCie10: p.cie10 });
+    const partidas = await armarPartidasProtocolo(
+      prisma,
+      cid,
+      p.partidas.map((x, i) =>
+        "servicio" in x
+          ? { orden: i, servicioId: srv(x.servicio).id, cantidad: x.cantidad, opcional: x.opcional ?? false }
+          : { orden: i, categoria: x.categoria, descripcion: x.descripcion, cantidad: x.cantidad, opcional: x.opcional ?? false }
+      )
+    );
+    const insumos = await armarInsumosProtocolo(prisma, cid, p.insumos.map((x) => ({ insumoId: insumoPorClave.get(x.insumo)!.id, cantidad: x.cantidad, opcional: x.opcional ?? false })));
+    const row = await prisma.hospProtocolo.create({
+      data: {
+        companyId: cid, clave: p.clave, nombre: p.nombre, descripcion: p.descripcion, tipoEpisodio: p.tipoEpisodio,
+        procedimientoCie9: cies.procedimientoCie9 ?? null, diagnosticoCie10: cies.diagnosticoCie10 ?? null, especialidad: p.especialidad,
+        estanciaNoches: p.estanciaNoches, quirofanoMinutos: p.quirofanoMinutos, tipoAnestesia: p.tipoAnestesia, requiereAnestesiologo: true,
+        honorarioCirujano: p.honorarios.cirujano, honorarioAnestesiologo: p.honorarios.anestesiologo,
+        partidas: { create: partidas }, insumos: { create: insumos },
+      },
+      include: incluirPartidasProtocolo,
+    });
+    protocoloPorClave.set(p.clave, row);
+  }
+  const protocolo = (clave: string) => {
+    const p = protocoloPorClave.get(clave);
+    if (!p) throw new Error(`Protocolo ${clave} no cargado`);
+    return p;
+  };
+  /** Las partidas del protocolo como las captura el piso en el plan: las del tarifario se precian con el convenio; las SIN_TARIFA llevan su precio capturado. */
+  const partidasCapturadas = (clave: string) =>
+    protocolo(clave).partidas.map((p) => ({
+      servicioId: p.servicioId, categoria: p.categoria, descripcion: p.descripcion, cantidad: Number(p.cantidad), opcional: p.opcional,
+      ...(p.servicioId ? {} : { precioUnitario: PRECIO_CAPTURADO[p.descripcion] ?? 0 }),
+    }));
+  const usuarioSeed = { nombre: USUARIO_SEED };
+  const planDe = (pacienteKey: string, nombre: string) =>
+    prisma.hospPlanTratamiento.findFirst({ where: { companyId: cid, pacienteId: paciente(pacienteKey).id, nombre }, select: { id: true } });
+  let planesCreados = 0;
+
+  // (a) Castillo: colecistectomía PROPUESTA con quirófano la próxima semana; GNP
+  // todavía no da el folio → el panel dispara PLAN_SIN_AUTORIZACION.
+  if (!(await planDe("CASTILLO", "Colecistectomía laparoscópica"))) {
+    const plan = await crearPlan(prisma, {
+      companyId: cid, pacienteId: paciente("CASTILLO").id, protocoloId: protocolo("COLE-LAP").id,
+      medicoId: medico("VEGA").id, anestesiologoId: medico("RENTERIA").id, partidas: partidasCapturadas("COLE-LAP"),
+      notas: "Consulta externa: cólico biliar de repetición, USG con litiasis vesicular múltiple sin colecistitis. Carta de autorización solicitada a GNP.",
+      usuario: usuarioSeed,
+    });
+    await programarPlan(prisma, { planId: plan.id, fechaProgramada: dia(7, 8, 30), recursoId: recurso("Quirófano 2").id, usuario: usuarioSeed });
+    await prisma.hospPlanTratamiento.update({ where: { id: plan.id }, data: { createdAt: dia(-2, 12, 0) } });
+    planesCreados++;
+  }
+
+  // (b) Mendoza: hernioplastía AUTORIZADA por GNP con folio, cotizada desde el
+  // plan (folio COT siguiente) y programada en Quirófano 1 dentro de tres días.
+  if (!(await planDe("MENDOZA", "Hernioplastía inguinal"))) {
+    const plan = await crearPlan(prisma, {
+      companyId: cid, pacienteId: paciente("MENDOZA").id, protocoloId: protocolo("HERNIA-ING").id,
+      medicoId: medico("SANDOVAL").id, anestesiologoId: medico("RENTERIA").id, partidas: partidasCapturadas("HERNIA-ING"),
+      notas: "Hernia inguinal derecha reductible, sin datos de complicación. Laboratorio preoperatorio y ayuno indicados.",
+      usuario: usuarioSeed,
+    });
+    await actualizarPlan(prisma, { planId: plan.id, cambios: { estado: "AUTORIZADO", autorizacionPagador: "GNP-2026-77812" }, usuario: usuarioSeed, hoy: dia(-3, 16, 0) });
+    const cot = await cotizarPlan(prisma, { planId: plan.id, usuario: usuarioSeed, hoy: dia(-3, 16, 30) });
+    // El POST la deja en BORRADOR; GNP ya autorizó, así que queda aceptada.
+    await prisma.hospCotizacion.update({ where: { id: cot.id }, data: { estado: "ACEPTADA", createdAt: dia(-3, 16, 30), vigenciaHasta: dia(27, 23, 59) } });
+    await programarPlan(prisma, { planId: plan.id, fechaProgramada: dia(3, 8, 0), recursoId: recurso("Quirófano 1").id, usuario: usuarioSeed });
+    await prisma.hospPlanTratamiento.update({ where: { id: plan.id }, data: { createdAt: dia(-4, 10, 0) } });
+    planesCreados++;
+  }
+
+  // (c) Ortega: el plan detrás de HOSP-2026-0418, preciado con GNP y con los
+  // honorarios de la cotización aceptada (COT-2026-0311: 18 000 + 8 500). La
+  // cirugía duró 2.5 h y no 1.5, se quedó dos noches y hubo histopatología y
+  // medicamentos fuera de plan: la cuenta rebasa el plan en más del 15 % y el
+  // panel dispara CUENTA_FUERA_DE_PLAN. Se liga a la cotización de la lámina
+  // 7 si sigue ahí; si no, el plan cotiza por su cuenta.
+  if (!(await prisma.hospPlanTratamiento.findUnique({ where: { episodioId: ortega.id }, select: { id: true } }))) {
+    const cot311 = await prisma.hospCotizacion.findUnique({ where: { companyId_folio: { companyId: cid, folio: "COT-2026-0311" } }, select: { id: true, plan: { select: { id: true } } } });
+    const plan = await crearPlan(prisma, {
+      companyId: cid, pacienteId: paciente("ORTEGA").id, protocoloId: protocolo("COLE-LAP").id, tipoEpisodio: "HOSPITALIZACION",
+      medicoId: medico("VEGA").id, anestesiologoId: medico("RENTERIA").id, recursoId: recurso("Quirófano 2").id, fechaProgramada: dia(-1, 8, 30).toISOString(),
+      partidas: partidasCapturadas("COLE-LAP"),
+      honorarios: [{ medicoId: medico("VEGA").id, rol: "CIRUJANO", monto: 18000 }, { medicoId: medico("RENTERIA").id, rol: "ANESTESIOLOGO", monto: 8500 }],
+      autorizacionPagador: "GNP-A-2026-118240",
+      notas: "Colecistectomía laparoscópica electiva; honorarios según tabulador GNP 2026 (COT-2026-0311).",
+      usuario: usuarioSeed,
+    });
+    await actualizarPlan(prisma, { planId: plan.id, cambios: { estado: "AUTORIZADO" }, usuario: usuarioSeed, hoy: dia(-5, 12, 0) });
+    if (!cot311 || cot311.plan) await cotizarPlan(prisma, { planId: plan.id, usuario: usuarioSeed, hoy: dia(-6, 11, 0) });
+    // Ligar el episodio abierto lo pone EN_CURSO (mismo camino que convertir la cotización).
+    await actualizarPlan(prisma, { planId: plan.id, cambios: { episodioId: ortega.id }, usuario: usuarioSeed });
+    await prisma.hospPlanTratamiento.update({ where: { id: plan.id }, data: { createdAt: dia(-6, 11, 0), ...(cot311 && !cot311.plan ? { cotizacionId: cot311.id } : {}) } });
+    planesCreados++;
+  }
+
+  // (d) Zamora: plan ad hoc (sin protocolo) de la panendoscopía ambulatoria
+  // HOSP-2026-0405; el episodio ya está en ALTA, así que al ligarlo queda CERRADO.
+  if (!(await prisma.hospPlanTratamiento.findUnique({ where: { episodioId: zamora.id }, select: { id: true } }))) {
+    const plan = await crearPlan(prisma, {
+      companyId: cid, pacienteId: paciente("ZAMORA").id, nombre: "Panendoscopía", tipoEpisodio: "AMBULATORIO", procedimientoCie9: "45.13", diagnosticoCie10: "K21.9",
+      medicoId: medico("RENTERIA").id, recursoId: recurso("Endoscopía").id, quirofanoMinutos: 60, tipoAnestesia: 4, fechaProgramada: dia(-9, 9, 0).toISOString(),
+      partidas: [{ servicioId: srv("PROC-PANEN").id, cantidad: 1, opcional: false }],
+      honorarios: [{ medicoId: medico("RENTERIA").id, rol: "ANESTESIOLOGO", monto: 4200 }],
+      notas: "Panendoscopía diagnóstica con sedación por ERGE; plan sin protocolo.",
+      usuario: usuarioSeed,
+    });
+    await actualizarPlan(prisma, { planId: plan.id, cambios: { episodioId: zamora.id }, usuario: usuarioSeed });
+    await prisma.hospPlanTratamiento.update({ where: { id: plan.id }, data: { createdAt: dia(-12, 10, 0) } });
+    planesCreados++;
   }
 
   // ── Mantenimiento ──
@@ -1203,7 +1551,7 @@ async function main() {
   }
 
   // ── Resumen ──
-  const [camas, ocupadas, episodiosActivos, pacientes, insumos, lotes, citas, cotizaciones, tickets, cargosOrtega, notasSelladas, controlados, consentimientos] = await Promise.all([
+  const [camas, ocupadas, episodiosActivos, pacientes, insumos, lotes, citas, cotizaciones, tickets, cargosOrtega, notasSelladas, controlados, consentimientos, curpsVerificadas, firmas, docsFirmadosP2, saehCompletas] = await Promise.all([
     prisma.hospRecurso.count({ where: { companyId: cid, tipo: "CAMA", activo: true } }),
     prisma.hospEpisodio.count({ where: { companyId: cid, recursoId: { not: null }, estado: { notIn: ["ALTA", "CANCELADO"] }, recurso: { tipo: "CAMA" } } }),
     prisma.hospEpisodio.count({ where: { companyId: cid, estado: { notIn: ["ALTA", "CANCELADO"] } } }),
@@ -1217,9 +1565,35 @@ async function main() {
     prisma.hospNota.count({ where: { episodio: { companyId: cid }, hash: { not: null } } }),
     prisma.hospInsumo.count({ where: { companyId: cid, grupoControl: { in: ["I", "II", "III"] } } }),
     prisma.hospDocumento.count({ where: { companyId: cid, estado: "FIRMADO", medicoCedula: { not: null }, tipo: { in: ["CONSENTIMIENTO_CIRUGIA", "CONSENTIMIENTO_ANESTESIA", "CONSENTIMIENTO_TRANSFUSION", "CONSENTIMIENTO_HOSPITALIZACION"] } } }),
+    prisma.hospPaciente.count({ where: { companyId: cid, curpOrigen: "RENAPO" } }),
+    prisma.hospFirma.count({ where: { companyId: cid } }),
+    prisma.hospDocumento.count({ where: { companyId: cid, estado: "FIRMADO", hashContenido: { not: null } } }),
+    prisma.hospEgresoSaeh.count({ where: { companyId: cid, estado: "COMPLETO" } }),
   ]);
   const subtotalOrtega = r2(cargosOrtega.reduce((s, c) => s + Number(c.importe), 0));
   const ivaOrtega = r2(cargosOrtega.reduce((s, c) => s + (c.ivaTasa == null ? 0 : r2(Number(c.importe) * Number(c.ivaTasa))), 0));
+
+  // P3: protocolos, planes por estado y las dos alertas del panel (mismos criterios que /api/hospital/panel).
+  const [protocolos, planes, comparativoOrtega] = await Promise.all([
+    prisma.hospProtocolo.findMany({ where: { companyId: cid, activo: true }, select: { clave: true }, orderBy: { clave: "asc" } }),
+    prisma.hospPlanTratamiento.findMany({
+      where: { companyId: cid },
+      select: {
+        estado: true, nombre: true, fechaProgramada: true, autorizacionPagador: true,
+        paciente: { select: { apellidoPaterno: true } }, pagador: { select: { tipo: true, nombre: true } },
+        cotizacion: { select: { folio: true } }, episodio: { select: { folio: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    compararPlanConCuenta(prisma, ortega.id),
+  ]);
+  const planesPorEstado = PLAN_ESTADOS.map((e) => [e, planes.filter((p) => p.estado === e)] as const)
+    .filter(([, xs]) => xs.length)
+    .map(([e, xs]) => `${xs.length} ${e}${xs.some((p) => p.episodio || p.cotizacion) ? ` (${xs.map((p) => p.episodio?.folio ?? p.cotizacion?.folio).filter(Boolean).join(", ")})` : ""}`)
+    .join(" · ");
+  const planesSinAutorizacion = planes.filter((p) => (p.estado === "PROPUESTO" || p.estado === "EN_CURSO") && p.fechaProgramada && faltaAutorizacion(p.pagador?.tipo, p.autorizacionPagador));
+  const desvio = comparativoOrtega?.comparativo.resumen;
+  const pesos = (n: number) => `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
 
   console.log(`
 ✔ HOSPITAL demo lista: ${company.razonSocial} (${company.rfc}) · companyId ${cid}
@@ -1229,6 +1603,10 @@ async function main() {
   · Agenda de hoy: ${citas} citas (${citasCreadas} nuevas) · ${cotizaciones} cotizaciones · ${tickets} tickets
   · P1 normativa: ${expedientesAsignados} expedientes asignados/completados · ${notasSelladas} notas con firma del sistema · ${consentimientos} consentimientos con contenido NOM-004
     CLUES ${ESTABLECIMIENTO.clues} · ${ESTABLECIMIENTO.licenciaSanitaria} · responsable ${ESTABLECIMIENTO.responsableSanitario} · aviso de privacidad v${AVISO_VERSION}
+  · P2 identidad: ${curpsVerificadas} CURP verificadas en RENAPO · 1 CURP probable (Nieto) · 1 extranjera con pasaporte (Carter) · RFC de CSF cruzado (Ortega)
+    Admisión firmada: ${docsFirmadosP2} documentos con texto legal FIRMADOS · ${firmas} firmas con evidencia (HOSP-2026-0418) · paquete pendiente HOSP-2026-0411 · ${saehCompletas} hoja SAEH completa (HOSP-2026-0405)
+  · P3 tratamientos: ${protocolos.length} protocolos (${protocolos.map((p) => p.clave).join(", ")}) · ${planes.length} planes (${planesCreados} nuevos): ${planesPorEstado}
+    Alertas del panel: PLAN_SIN_AUTORIZACION ×${planesSinAutorizacion.length}${planesSinAutorizacion.length ? ` (${planesSinAutorizacion.map((p) => `${p.paciente.apellidoPaterno} · ${p.nombre} · ${claveDia(p.fechaProgramada!)} sin folio de ${p.pagador?.nombre}`).join("; ")})` : ""} · CUENTA_FUERA_DE_PLAN ${desvio ? `HOSP-2026-0418: ${pesos(desvio.realTotal)} contra ${pesos(desvio.planTotal)} planeados (${desvio.desviacionPct != null && desvio.desviacionPct > 0 ? "+" : ""}${desvio.desviacionPct} %${desvio.desviacionPct != null && desvio.desviacionPct > DESVIACION_ALERTA_PCT ? "" : " — NO dispara"})` : "sin plan en HOSP-2026-0418"}
 ${email ? `  Entra como ${email} y selecciona la empresa.` : ""}`);
 }
 

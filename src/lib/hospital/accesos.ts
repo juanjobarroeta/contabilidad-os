@@ -12,7 +12,7 @@ import type { HospAccesoAccion } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ipDeRequest } from "@/lib/audit";
 
-export const ACCIONES_ACCESO: readonly HospAccesoAccion[] = ["LECTURA_EXPEDIENTE", "LECTURA_CUENTA", "LECTURA_FICHA", "EXPORTACION", "IMPRESION"];
+export const ACCIONES_ACCESO: readonly HospAccesoAccion[] = ["LECTURA_EXPEDIENTE", "LECTURA_CUENTA", "LECTURA_FICHA", "EXPORTACION", "IMPRESION", "CONSULTA_RENAPO"];
 
 export interface RegistrarAccesoArgs {
   companyId: string;
