@@ -47,7 +47,12 @@
 import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { HospArea, HospCargoCategoria, HospDocumentoTipo, HospEpisodioEstado, HospEpisodioTipo, HospFirmanteRol, HospGrupoControl, HospInsumoCategoria, HospMotivoEgreso, HospNotaTipo, HospRecursoTipo } from "@prisma/client";
-import { prisma } from "../src/lib/prisma";
+import { PrismaClient } from "@prisma/client";
+
+// Cliente propio: el seed corre también contra prod por el proxy público de
+// Railway, donde una transacción interactiva o en lote tarda más de los 5 s
+// que Prisma da por defecto.
+const prisma = new PrismaClient({ transactionOptions: { timeout: 180_000, maxWait: 30_000 } });
 import { seedChartOfAccounts } from "../src/lib/contabilidad/seed-catalog";
 import { crearEpisodio } from "../src/lib/hospital/episodio";
 import { aplicarInsumo } from "../src/lib/hospital/aplicar-insumo";
