@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui";
+import { PlanesPanel } from "@/components/operador/PlanesPanel";
 import { Loader2, Wrench, Lock, AlertTriangle, Search, DownloadCloud, Upload } from "lucide-react";
 
 // Operador-only tools: reconcile the system's figures against the SAT filed
@@ -238,6 +239,8 @@ export default function OperadorPage() {
           {uploadMsg && <pre className="mt-2 whitespace-pre-wrap text-[12px] text-cos-ink-soft">{uploadMsg}</pre>}
         </div>
       </Card>
+
+      <PlanesPanel />
 
       {/* Cross-check result */}
       {check && (
