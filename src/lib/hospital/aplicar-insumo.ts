@@ -33,6 +33,7 @@ import { esActivo, r2 } from "./util";
 import { exigeLibroControl, nombreReceta } from "./controlados";
 import { ivaContextoPorEpisodio, ivaTasaPorContexto } from "./cuenta";
 import { hashNota } from "./notas";
+import { asentarSalidaFarmacia } from "./asientos";
 
 export interface AplicarInsumoArgs {
   companyId: string;
@@ -193,6 +194,12 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
         prescriptorCedula,
       },
     });
+
+    // ── Contabilidad (P3c): la salida al paciente es costo de farmacia al costo
+    // del lote (COSTO_FARMACIA / INVENTARIO_FARMACIA, fuente HOSPITAL). Sólo con
+    // HospConfig.contabilidadActiva; ver lib/hospital/asientos.ts. ──
+    await asentarSalidaFarmacia(tx, { ...movimiento, descripcion: etiqueta });
+    // ── fin contabilidad ──
 
     const amparo = recetaRef
       ? ` Receta ${recetaRef}${prescriptorNombre ? ` · prescribe ${prescriptorNombre}${prescriptorCedula ? ` (céd. ${prescriptorCedula})` : ""}` : ""}.`

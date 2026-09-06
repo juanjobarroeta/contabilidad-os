@@ -5,6 +5,9 @@
  *     anestesia y cédula, servicios por especialidad, procedencia por tipo),
  *     los sociodemográficos del paciente, la validación del diccionario y las
  *     etiquetas de catálogo. Registra el acceso (LECTURA_EXPEDIENTE).
+ *     `?sugerencias=1` (rol de escritura) agrega `sugerencias`: la propuesta del
+ *     asistente (lib/hospital/asistente/egreso.ts) para aceptar campo por campo;
+ *     si el asistente no puede, `sugerencias: null` y `sugerenciasError`.
  * PUT /api/hospital/episodios/[id]/saeh { …campos de la hoja…, paciente?: { …sociodemográficos… } }[?reabrir=1]
  *     Guarda sólo lo que viene en el body (undefined = no tocar), recalcula la
  *     validación y deja estado COMPLETO sin errores o PENDIENTE. Una hoja ya
@@ -25,6 +28,8 @@ import { datosHojaParaGuardar, datosPacienteParaGuardar, hojaEntradaSchema, paci
 import { prepararContexto } from "@/lib/hospital/saeh/prellenar";
 import { armarRespuestaHoja } from "@/lib/hospital/saeh/respuesta";
 import { estadoPorValidacion, validarSaeh } from "@/lib/hospital/saeh/validar";
+import { HospitalError } from "@/lib/hospital/errores";
+import { proponerEgreso } from "@/lib/hospital/asistente/egreso";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -44,7 +49,20 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   const catalogo = catalogoPrisma(prisma);
   const contexto = await prepararContexto(fuente, catalogo);
   const validacion = await validarSaeh(contexto, catalogo);
-  return NextResponse.json(await armarRespuestaHoja(contexto, validacion, catalogo));
+  const respuesta = await armarRespuestaHoja(contexto, validacion, catalogo);
+
+  // Captura asistida: la misma propuesta que POST /asistente/egreso, para aceptarla campo por campo.
+  if (new URL(req.url).searchParams.get("sugerencias") === "1") {
+    await requireWriter(base.companyId, req);
+    try {
+      const propuesta = await proponerEgreso(prisma, { companyId: base.companyId, episodioId: base.id, userId: user.id });
+      return NextResponse.json({ ...respuesta, sugerencias: propuesta.saeh, propuestaEgreso: propuesta });
+    } catch (e) {
+      if (e instanceof HospitalError) return NextResponse.json({ ...respuesta, sugerencias: null, sugerenciasError: e.message });
+      throw e;
+    }
+  }
+  return NextResponse.json(respuesta);
 });
 
 const putSchema = hojaEntradaSchema.extend({

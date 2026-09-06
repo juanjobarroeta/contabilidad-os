@@ -6,7 +6,9 @@
  * El autor es el usuario autenticado, nunca un nombre que mande el cliente.
  * `secciones` se valida contra la plantilla del tipo (lib/hospital/notas.ts);
  * las notas médicas llevan cédula (del HospMedico o `autorCedula`); el hub
- * calcula `hash` y `selloAt` (firma del sistema, NOM-024).
+ * calcula `hash` y `selloAt` (firma del sistema, NOM-024). P3: `asistencia`
+ * { origen: DICTADO|ESTRUCTURADO|SUGERIDO, transcripcion?, modelo?, sttProveedor?, at }
+ * deja constancia de la captura asistida (HospNota.asistencia; no entra al hash).
  */
 
 import { NextResponse } from "next/server";
@@ -15,7 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, error, errorZod, fechaSchema, usuarioDe } from "@/lib/hospital/http";
-import { TIPOS_NOTA, crearNota } from "@/lib/hospital/notas";
+import { ORIGENES_ASISTENCIA, TIPOS_NOTA, crearNota, normalizarAsistencia } from "@/lib/hospital/notas";
 
 const schema = z.object({
   tipo: z.enum(TIPOS_NOTA),
@@ -25,6 +27,16 @@ const schema = z.object({
   medicoId: z.string().nullable().optional(),
   autorCedula: z.string().max(20).nullable().optional(),
   reemplazaId: z.string().nullable().optional(),
+  asistencia: z
+    .object({
+      origen: z.enum(ORIGENES_ASISTENCIA),
+      transcripcion: z.string().max(60000).nullable().optional(),
+      modelo: z.string().max(80).nullable().optional(),
+      sttProveedor: z.string().max(40).nullable().optional(),
+      at: fechaSchema.nullable().optional(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -51,6 +63,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
     medicoId: d.medicoId ?? null,
     autorCedula: d.autorCedula ?? null,
     reemplazaId: d.reemplazaId ?? null,
+    asistencia: normalizarAsistencia(d.asistencia ?? null),
     usuario: usuarioDe(user),
   });
 
@@ -59,7 +72,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
     accion: "hospital.nota.crear",
     entidad: "HospNota",
     entidadId: nota.id,
-    detalle: { folio: ep.folio, tipo: d.tipo, reemplazaId: d.reemplazaId ?? null, hash: nota.hash },
+    detalle: { folio: ep.folio, tipo: d.tipo, reemplazaId: d.reemplazaId ?? null, hash: nota.hash, asistencia: d.asistencia?.origen ?? null },
   });
 
   return NextResponse.json({ ...nota, reemplazadaPor: null, hashVerificado: true }, { status: 201 });

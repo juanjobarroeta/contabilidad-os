@@ -20,6 +20,7 @@ import { costoPeriodico } from "./inventario-periodico";
 import { classifyInvoice } from "./classify-egreso";
 import { esComprobanteDeEgreso, espejo, signoDeComprobante } from "./nota-credito";
 import { cargarContextoTaller, costoCompraRefacciones, piernasIngresoTaller } from "./taller";
+import { cargarContextoHospital, piernasIngresoHospital, piernasResultadosHospital } from "./hospital";
 import { esVentaAlCosto } from "./intercambio";
 import { cargarReglasSerie, reglaDeSerie } from "./serie-cuenta";
 import {
@@ -379,6 +380,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // FASE 2d: lo que no es unidad puede ser taller — mano de obra a 4301 y
   // refacciones a 4401, partidas con el corte del DMS. Ver taller.ts.
   const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
+  // P3c HOSPITAL: el CFDI ligado a cargos del paciente se parte por categoría
+  // (los honorarios al pasivo). Vacío salvo HospConfig.contabilidadActiva. Ver hospital.ts.
+  const hospital = await cargarContextoHospital(companyId, ingresos.map((i) => i.id));
   // La mezcla de venta de refacciones del período reparte después el costo de
   // las compras (fase 2f): la factura del proveedor no dice a qué mostrador va.
   const mezclaRefa = { taller: 0, mostrador: 0 };
@@ -423,11 +427,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       monto: inv.total,
       tipo: espejo("CARGO", esEgreso),
     });
-    // La unidad manda; después el taller; al final la cuenta de ingresos de
-    // siempre. Las piernas del taller suman el subtotal exacto.
+    // La unidad manda; después el taller; luego el hospital; al final la cuenta
+    // de ingresos de siempre. Las piernas del taller y del hospital suman el
+    // subtotal exacto.
     const piernasVenta = ctaVentaFam
       ? [{ id: ctaVentaFam.id, monto: inv.subtotal }]
-      : (piernasIngresoTaller(inv.id, inv.subtotal, taller)?.map((p) => ({
+      : ((piernasIngresoTaller(inv.id, inv.subtotal, taller) ?? piernasIngresoHospital(inv.id, inv.subtotal, hospital))?.map((p) => ({
           id: p.cuenta.id,
           monto: p.monto,
         })) ?? [
@@ -1566,6 +1571,8 @@ export async function balanzaPreview(
   const cuentasCxc = await cargarCuentasCxc(companyId);
   const modulosIngreso = await conjuntosModulo(companyId, ingresos.map((i) => i.id));
   const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
+  // P3c HOSPITAL: mismas piernas que postMonth (vacío salvo contabilidadActiva).
+  const hospital = await cargarContextoHospital(companyId, ingresos.map((i) => i.id));
   // La mezcla de venta de refacciones del período reparte después el costo de
   // las compras (fase 2f): la factura del proveedor no dice a qué mostrador va.
   const mezclaRefa = { taller: 0, mostrador: 0 };
@@ -1585,7 +1592,7 @@ export async function balanzaPreview(
     addMov(((moduloCxc ? cuentasCxc[moduloCxc] : null) ?? accClientes).id, espejo("CARGO", esEgreso), inv.total);
     const piernasVenta = ctaVentaFam
       ? [{ id: ctaVentaFam.id, monto: inv.subtotal }]
-      : (piernasIngresoTaller(inv.id, inv.subtotal, taller)?.map((p) => ({
+      : ((piernasIngresoTaller(inv.id, inv.subtotal, taller) ?? piernasIngresoHospital(inv.id, inv.subtotal, hospital))?.map((p) => ({
           id: p.cuenta.id,
           monto: p.monto,
         })) ?? [
@@ -1934,6 +1941,8 @@ export async function estadoResultadosPreview(
   const idxFamilia = await cargarIndiceFamilia(companyId);
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
   const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
+  // P3c HOSPITAL: sólo las piernas de resultados (el honorario es pasivo, no aporta).
+  const hospital = await cargarContextoHospital(companyId, ingresos.map((i) => i.id));
   // FASE 2h: la serie del folio como decisión del contador — sólo llena el
   // fallback, nunca desvía lo que la unidad o el taller ya resolvieron.
   const reglasSerie = await cargarReglasSerie(companyId);
@@ -1950,7 +1959,7 @@ export async function estadoResultadosPreview(
     const ctaVenta = ctaVentaFam ?? reglaDeSerie(inv.serie, reglasSerie)?.cuenta ?? accVentas;
     const piernasVenta = ctaVentaFam
       ? null
-      : piernasIngresoTaller(inv.id, inv.subtotal, taller);
+      : (piernasIngresoTaller(inv.id, inv.subtotal, taller) ?? piernasResultadosHospital(inv.id, inv.subtotal, hospital));
     for (const pierna of piernasVenta ?? [{ cuenta: ctaVenta, monto: inv.subtotal }]) {
       contributions.push({
         tipo: pierna.cuenta.tipo ?? ctaVenta.tipo ?? accVentas.tipo,

@@ -23,7 +23,10 @@ import { validarPlantillasConfig, versionesVigentes, type PlantillasConfig } fro
 // GET contesta los defaults cuando la empresa aún no guardó nada, y trae el
 // estado de la DERIVACIÓN de farmacia desde CFDIs (para la pantalla de
 // Configuración: cuántos insumos/movimientos nacieron del archivo y dónde va
-// el cursor).
+// el cursor). P3: captura asistida — `iaAsistencia` (apaga los endpoints
+// /asistente/*) y `sttProveedor` ("navegador" = Web Speech API sin costo,
+// "openai" = transcripción en el hub; `sttServidorDisponible` dice si el
+// servidor tiene la llave para ofrecerla).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULTS = {
@@ -43,6 +46,8 @@ const DEFAULTS = {
   oidRaiz: null as string | null,
   saehInstitucion: "SMP",
   plantillasDocumentos: null as PlantillasConfig | null,
+  iaAsistencia: true,
+  sttProveedor: "navegador" as string | null,
 };
 
 export const GET = withAuthz(async (req: Request) => {
@@ -83,6 +88,8 @@ export const GET = withAuthz(async (req: Request) => {
         oidRaiz: config.oidRaiz,
         saehInstitucion: config.saehInstitucion ?? "SMP",
         plantillasDocumentos: plantillas,
+        iaAsistencia: config.iaAsistencia,
+        sttProveedor: config.sttProveedor ?? "navegador",
         guardada: true,
         updatedAt: config.updatedAt,
       }
@@ -91,6 +98,7 @@ export const GET = withAuthz(async (req: Request) => {
   return NextResponse.json({
     ...cuerpo,
     plantillasVigentes: versionesVigentes(plantillas),
+    sttServidorDisponible: Boolean(process.env.OPENAI_API_KEY),
     derivacion: { ...conteos, progreso },
   });
 });
@@ -132,6 +140,10 @@ const putSchema = z.object({
   saehInstitucion: z.string().trim().length(3).regex(/^[A-Z]{3}$/i, "Tres letras, p. ej. SMP").nullable().optional(),
   /** { TIPO: { version, texto } | null }: se mezcla con lo guardado; null borra la plantilla propia (vuelve a la default). */
   plantillasDocumentos: z.record(z.string(), z.unknown()).nullable().optional(),
+  /** Captura asistida: false apaga /asistente/* (409). */
+  iaAsistencia: z.boolean().optional(),
+  /** "navegador" (Web Speech API) u "openai" (transcripción en el hub); null vuelve a navegador. */
+  sttProveedor: z.enum(["navegador", "openai"]).nullable().optional(),
 });
 
 export const PUT = withAuthz(async (req: Request) => {
@@ -174,6 +186,7 @@ export const PUT = withAuthz(async (req: Request) => {
     ...vacioANull("avisoPrivacidadVersion"),
     ...vacioANull("avisoPrivacidadUrl"),
     ...vacioANull("oidRaiz"),
+    ...(datos.sttProveedor !== undefined ? { sttProveedor: datos.sttProveedor ?? "navegador" } : {}),
     ...(plantillas !== undefined ? { plantillasDocumentos: plantillas === null ? Prisma.DbNull : (plantillas as Prisma.InputJsonValue) } : {}),
   };
   const config = await prisma.hospConfig.upsert({

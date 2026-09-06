@@ -63,16 +63,21 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
     usuario: usuarioDe(user),
   });
 
+  // P3: si la cotización nació de un plan de tratamiento, crearEpisodio ya lo
+  // enganchó (plan.episodioId, EN_CURSO); aquí sólo se enseña.
+  const planDb = await prisma.hospPlanTratamiento.findUnique({ where: { episodioId: episodio.id }, select: { id: true, nombre: true, estado: true, total: true } });
+  const plan = planDb ? { ...planDb, total: Number(planDb.total) } : null;
+
   bitacora(user, req, {
     companyId: c.companyId,
     accion: "hospital.cotizacion.convertir",
     entidad: "HospCotizacion",
     entidadId: id,
-    detalle: { folio: c.folio, episodioId: episodio.id, episodioFolio: episodio.folio, cargos: episodio.cargos.length },
+    detalle: { folio: c.folio, episodioId: episodio.id, episodioFolio: episodio.folio, cargos: episodio.cargos.length, planId: plan?.id ?? null },
   });
 
   return NextResponse.json(
-    { ...episodio, paciente: pacienteResumen(episodio.paciente), medico: medicoResumen(episodio.medico), customer: customerResumen(episodio.customer) },
+    { ...episodio, paciente: pacienteResumen(episodio.paciente), medico: medicoResumen(episodio.medico), customer: customerResumen(episodio.customer), plan },
     { status: 201 }
   );
 });
