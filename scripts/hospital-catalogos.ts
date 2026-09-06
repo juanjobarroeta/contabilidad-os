@@ -44,7 +44,7 @@ function parseCsv(texto: string): string[][] {
 
 const num = (v: string) => (v === "" ? null : Number(v));
 
-async function cargar(tipo: HospCatalogoTipo, archivo: string) {
+async function cargar(tipo: keyof typeof VERSION, archivo: string) {
   const [encabezado, ...filas] = parseCsv(fs.readFileSync(path.join(__dirname, "..", "prisma", "catalogos", archivo), "utf8"));
   const col = (fila: string[], nombre: string) => fila[encabezado.indexOf(nombre)] ?? "";
   let nuevos = 0, actualizados = 0;
