@@ -71,7 +71,23 @@ export function referenciaCfdi(f: { serie: string | null; folio: string | null; 
 const RE_FARMACIA_HOSPITALARIA = /FARMACIA HOSPITALARIA/g;
 const RE_HOSPITALIZACION = /HOSPITALIZACION|HOSPITALARI|HABITACION|ESTANCIA|CUARTO|TERAPIA INTENSIVA|CUIDADOS INTENSIVOS|CUNERO/;
 const RE_URGENCIAS = /URGENCIA/;
-const RE_AMBULATORIO = /QUIROFANO|ENDOSCOPIA|COLONOSCOPIA|CISTOSCOPIA|CIRUGIA|QUIRURGIC|BIOPSIA|PAQUETE|PROCEDIMIENTO/;
+const RE_AMBULATORIO = /QUIROFANO|ENDOSCOPIA|COLONOSCOPIA|CISTOSCOPIA|CIRUGIA|QUIRURGIC|BIOPSIA|PAQUETE|PROCEDIMIENTO|ONCOLOG|QUIMIOTERAP|INFUSION|SESION|HEMODIALISIS|DIALISIS/;
+/** Lo que ancla una ESTANCIA: sólo con esto se encadenan facturas de días distintos. */
+const RE_ESTANCIA = /HOSPITALIZACION|HOSPITALARI|HABITACION|ESTANCIA|CUARTO|TERAPIA INTENSIVA|CUIDADOS INTENSIVOS|CUNERO|URGENCIA|QUIROFANO|RECUPERACION/;
+/** Conceptos que no son una atención: una factura hecha SÓLO de esto no genera episodio. */
+const RE_NO_CLINICO = /^(VENTA|VENTAS|ANTICIPO|APLICACION DE ANTICIPO|INTERESES|RENTA|ARRENDAMIENTO|SERVICIOS ADMINISTRATIVOS|COMPRAS|PAGO|NC )/;
+
+/** ¿Alguna descripción ancla una estancia (hospitalización, urgencias, quirófano, recuperación)? */
+export function esEstanciaPorConceptos(descripciones: Array<string | null | undefined>): boolean {
+  const texto = descripciones.map((d) => normalizarDescripcion(d)).join(" | ").replace(RE_FARMACIA_HOSPITALARIA, "FARMACIA");
+  return RE_ESTANCIA.test(texto);
+}
+
+/** ¿Todos los conceptos son no clínicos (venta, anticipo, intereses, renta…)? */
+export function sinConceptosClinicos(descripciones: Array<string | null | undefined>): boolean {
+  const limpias = descripciones.map((d) => normalizarDescripcion(d)).filter(Boolean);
+  return limpias.length > 0 && limpias.every((d) => RE_NO_CLINICO.test(d));
+}
 
 /**
  * Qué tipo de atención cuentan los conceptos del CFDI, de lo más específico a
@@ -98,9 +114,12 @@ export function tipoEpisodioPorConceptos(descripciones: Array<string | null | un
  */
 export function agruparFacturasEnEpisodios<T extends { fecha: Date; pacienteKey: string }>(
   facturas: T[],
-  opts: { diasVentana?: number } = {}
+  opts: { diasVentana?: number; esEstancia?: (f: T) => boolean } = {}
 ): T[][] {
   const diasVentana = opts.diasVentana ?? 7;
+  // Sin ancla de estancia (oncología de día, estudios, farmacia) sólo se juntan
+  // facturas del MISMO día: la quimio semanal son sesiones, no una estancia.
+  const esEstancia = opts.esEstancia ?? (() => true);
   const porPaciente = new Map<string, T[]>();
   for (const f of facturas) {
     const lista = porPaciente.get(f.pacienteKey) ?? [];
@@ -113,7 +132,8 @@ export function agruparFacturasEnEpisodios<T extends { fecha: Date; pacienteKey:
     let actual: T[] = [];
     for (const f of lista) {
       const ultima = actual[actual.length - 1];
-      if (ultima && diasEntre(ultima.fecha, f.fecha) > diasVentana) {
+      const ventana = esEstancia(f) || actual.some(esEstancia) ? diasVentana : 0;
+      if (ultima && diasEntre(ultima.fecha, f.fecha) > ventana) {
         grupos.push(actual);
         actual = [];
       }
@@ -528,6 +548,16 @@ export async function derivarEpisodiosDeCfdi(
   type Resuelta = { fecha: Date; pacienteKey: string; f: FacturaCfdi; nombre: string };
   const resueltas: Resuelta[] = [];
   for (const f of facturas) {
+    // Una factura hecha sólo de VENTA / ANTICIPO / INTERESES / RENTA no es una atención.
+    if (sinConceptosClinicos(f.items.map((it) => it.descripcion))) {
+      reporte.sinPaciente.push({
+        invoiceId: f.id,
+        uuid: f.uuid,
+        receptor: f.receptorNombre ?? f.receptorRfc ?? "—",
+        motivo: "sólo conceptos no clínicos (venta, anticipo, intereses, renta…): no es una atención",
+      });
+      continue;
+    }
     const ident = resolverPacienteDeFactura(f);
     if (ident.modo === "SIN_NOMBRE") {
       reporte.sinPaciente.push({
@@ -556,7 +586,10 @@ export async function derivarEpisodiosDeCfdi(
     });
   }
 
-  const grupos = agruparFacturasEnEpisodios(resueltas, { diasVentana: opts.diasVentana });
+  const grupos = agruparFacturasEnEpisodios(resueltas, {
+    diasVentana: opts.diasVentana,
+    esEstancia: (r) => esEstanciaPorConceptos(r.f.items.map((it) => it.descripcion)),
+  });
 
   // ── 5. Un episodio (y sus cargos) por grupo, una transacción cada uno ──────
   const pagadorPorPaciente = new Map<string, Set<string | null>>();
