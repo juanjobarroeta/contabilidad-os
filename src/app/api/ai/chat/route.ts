@@ -10,7 +10,6 @@ import { evaluarCierre } from "@/lib/cierre/evaluar";
 import { empresaTieneCierreGuiado } from "@/lib/cierre/gate";
 import { esClavePaso } from "@/lib/cierre/claves";
 import { etiquetaPeriodo } from "@/lib/cierre/plantillas";
-import { TOOLS_SIEMPRE_CIERRE, toolsDelPaso } from "@/lib/cierre/workflow";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { recordLlmCost } from "@/lib/costos/record";
@@ -131,7 +130,7 @@ export async function POST(req: Request) {
   // Sólo roles con permiso de escritura pueden STAGEAR acciones reversibles. A un
   // VIEWER ni siquiera le exponemos las herramientas "proponer_*".
   const canWrite = member.role !== "VIEWER";
-  let availableTools = canWrite ? tools : tools.filter((t) => !t.name.startsWith("proponer_"));
+  const availableTools = canWrite ? tools : tools.filter((t) => !t.name.startsWith("proponer_"));
 
   // ── Contexto del cierre guiado ─────────────────────────────────────────────
   // Se evalúa SIN persistir (el pase diario es quien escribe) y se redacta como
@@ -143,14 +142,12 @@ export async function POST(req: Request) {
       if (await empresaTieneCierreGuiado(companyId)) {
         const cierre = await evaluarCierre(companyId, cierreCtx.year, cierreCtx.month);
         const activo = cierreCtx.paso ? (cierre.pasos.find((p) => p.clave === cierreCtx.paso) ?? null) : null;
+        // El paso dice QUÉ REVISAR, no qué puede ver: el copiloto conserva
+        // TODAS sus herramientas dentro del cierre. Acotarlas por paso lo
+        // dejaba ciego (en «punto de partida» no podía mirar facturas ni
+        // bancos) y encima invalidaba la caché del prompt en cada cambio de
+        // paso, porque las tools van en el prefijo cacheado.
         bloqueDelCierre = bloqueCierre(cierre, activo, etiquetaPeriodo(cierreCtx.year, cierreCtx.month));
-        // Las tools del paso activo + las que siempre puede usar. Menos ruido y
-        // menos tokens que exponer las 37 en cada turno del cierre.
-        if (activo) {
-          const permitidas = new Set([...toolsDelPaso(activo.clave), ...TOOLS_SIEMPRE_CIERRE]);
-          const acotadas = availableTools.filter((t) => permitidas.has(t.name));
-          if (acotadas.length > 0) availableTools = acotadas;
-        }
       }
     } catch (e) {
       console.error("[ai/chat] contexto del cierre falló:", e instanceof Error ? e.message : e);

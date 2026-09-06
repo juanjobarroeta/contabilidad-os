@@ -55,8 +55,14 @@ export interface DefinicionPaso {
   aplica: (ctx: ContextoEmpresa) => boolean;
   checks: string[];
   dependeDe: ClavePasoCierre[];
-  /** Tools del copiloto permitidas en este paso (fase 2). */
+  /**
+   * Por dónde se empieza a revisar este paso. NO es una reja: el copiloto
+   * conserva todas sus herramientas dentro del cierre (acotarlas lo dejaba
+   * ciego y rompía la caché del prompt). Es una pista de arranque.
+   */
   tools: string[];
+  /** Qué comprueba un contador en este paso, para que el copiloto lo diga y lo revise. */
+  revisar: string[];
   /** A dónde se va a trabajar el paso. */
   href: (ctx: ContextoEmpresa) => string;
   requiereConfirmacion: boolean;
@@ -72,7 +78,7 @@ export const PASOS: DefinicionPaso[] = [
     titulo: "Punto de partida",
     descripcion: "Saldo a favor inicial, pérdidas por amortizar, coeficiente y obligaciones confirmados.",
     aplica: () => true,
-    checks: ["fx:apertura", "x:coeficiente"],
+    checks: ["fx:apertura", "x:coeficiente", "x:datos_apertura"],
     dependeDe: [],
     tools: [
       "query_obligations",
@@ -82,6 +88,12 @@ export const PASOS: DefinicionPaso[] = [
       "proponer_confirmar_apertura",
     ],
     href: () => "/empresa/apertura",
+    revisar: [
+      "Que el saldo a favor de IVA inicial, las pérdidas y el coeficiente estén CAPTURADOS (no supuestos en cero)",
+      "Que el coeficiente coincida con el que sale de la última anual",
+      "Que las obligaciones registradas coincidan con la constancia de situación fiscal",
+      "Que los pagos provisionales ya presentados del ejercicio estén cargados: alimentan el arrastre",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: false,
   },
@@ -94,6 +106,11 @@ export const PASOS: DefinicionPaso[] = [
     dependeDe: [],
     tools: ["query_sat_sync_status", "query_invoices", "query_cancelaciones", "get_invoice_detail"],
     href: () => "/facturas",
+    revisar: [
+      "Que la descarga de emitidos y recibidos del periodo esté completa",
+      "CFDI del censo del SAT sin XML (faltantes)",
+      "Cancelaciones del periodo y si afectan un mes ya declarado",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: true,
   },
@@ -106,6 +123,11 @@ export const PASOS: DefinicionPaso[] = [
     dependeDe: ["sat"],
     tools: ["query_employees", "get_valor_fiscal"],
     href: () => "/nomina?tab=corridas",
+    revisar: [
+      "Que cada empleado activo tenga su recibo timbrado del periodo",
+      "Que el ISR retenido del timbrado cuadre con la tarifa del Art. 96 y el subsidio",
+      "Cuotas obrero-patronales y el ISN de cada entidad donde hay empleados",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: false,
   },
@@ -118,6 +140,10 @@ export const PASOS: DefinicionPaso[] = [
     dependeDe: ["nomina"],
     tools: ["query_employees", "query_obligations"],
     href: () => "/nomina?tab=cumplimiento",
+    revisar: [
+      "Cuotas del mes (y del bimestre cuando cierra) pagadas con su línea SIPARE",
+      "Movimientos afiliatorios pendientes en IDSE",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: false,
   },
@@ -138,6 +164,11 @@ export const PASOS: DefinicionPaso[] = [
       "proponer_categorizacion_lote",
     ],
     href: () => "/bancos",
+    revisar: [
+      "Que cada cuenta tenga su estado de cuenta del mes y el saldo inicial empate con el final del mes anterior",
+      "Movimientos sin conciliar ni categorizar",
+      "Que la conciliación del mes esté firmada en cada cuenta",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: true,
   },
@@ -150,6 +181,10 @@ export const PASOS: DefinicionPaso[] = [
     dependeDe: ["banco"],
     tools: ["query_complementos_pendientes", "query_complementos_recibidos_pendientes", "query_ppd_cartera", "preview_complemento"],
     href: (ctx) => `/impuestos?tab=presentar&${mes(ctx)}`,
+    revisar: [
+      "REP por emitir de los cobros PPD del mes y su plazo legal (día 5 del mes siguiente)",
+      "REP que deben los proveedores: sin ellos la deducción y el IVA acreditable están en riesgo",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: false,
   },
@@ -168,6 +203,12 @@ export const PASOS: DefinicionPaso[] = [
       "proponer_fijar_coeficiente",
     ],
     href: (ctx) => `/impuestos?tab=papeles&${mes(ctx)}`,
+    revisar: [
+      "IVA de flujo: trasladado cobrado, acreditable pagado y la proporción del Art. 5-V",
+      "Cadena de arrastre: que los meses anteriores con actividad tengan su declaración guardada",
+      "ISR provisional con su coeficiente, pérdidas amortizadas y pagos anteriores",
+      "Retenciones de ISR e IVA a enterar",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: false,
   },
@@ -180,6 +221,9 @@ export const PASOS: DefinicionPaso[] = [
     dependeDe: ["impuestos"],
     tools: ["query_tax_declarations"],
     href: (ctx) => `/impuestos?tab=presentar&${mes(ctx)}`,
+    revisar: [
+      "Que el archivo esté generado y presentado, y que los terceros y montos cuadren con el IVA acreditable",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: false,
   },
@@ -192,6 +236,11 @@ export const PASOS: DefinicionPaso[] = [
     dependeDe: ["banco"],
     tools: ["query_dashboard_kpis", "analyze_anomalies"],
     href: () => "/contabilidad/cierre",
+    revisar: [
+      "Que el mes esté contabilizado y la balanza cuadre",
+      "Cuentas sin código agrupador del SAT",
+      "El amarre: CFDI = pólizas = papel de IVA = banco = declaración",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: true,
   },
@@ -204,6 +253,11 @@ export const PASOS: DefinicionPaso[] = [
     dependeDe: ["sat"],
     tools: ["analyze_anomalies", "proponer_resolver_hallazgo", "proponer_posponer_hallazgo", "search_fiscal_knowledge"],
     href: () => "/hallazgos",
+    revisar: [
+      "Hallazgos críticos abiertos del auditor",
+      "Coincidencias en la lista 69-B, propias y de contrapartes",
+      "Vigencia de CSD y e.firma",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: false,
   },
@@ -216,6 +270,11 @@ export const PASOS: DefinicionPaso[] = [
     dependeDe: ["impuestos", "diot"],
     tools: ["query_tax_position", "query_tax_declarations", "query_obligations"],
     href: (ctx) => `/impuestos?tab=presentar&${mes(ctx)}`,
+    revisar: [
+      "Que la declaración esté presentada y el acuse capturado",
+      "Que lo declarado coincida con lo calculado (diferencias del acuse)",
+      "Que el pago esté conciliado con su línea de captura en banco",
+    ],
     requiereConfirmacion: true,
     bloqueaSiError: false,
   },
@@ -228,6 +287,9 @@ export const PASOS: DefinicionPaso[] = [
     dependeDe: ["contabilidad", "declaracion"],
     tools: [],
     href: () => "/contabilidad/entregables",
+    revisar: [
+      "Que el paquete del mes (XML de la CE y reportes) esté completo para el cliente",
+    ],
     requiereConfirmacion: false,
     bloqueaSiError: false,
   },
@@ -286,6 +348,38 @@ export interface ExtrasCierre {
   /** La declaración federal del periodo tiene su pago ligado a un movimiento bancario o está PAID. */
   pagoConciliado: boolean;
   declaracionPagada: boolean;
+  /**
+   * El punto de partida con la PROCEDENCIA de cada dato (estadoApertura). Es
+   * la diferencia entre «saldo a favor inicial $0» y «no hay dato: hay que
+   * capturarlo» — decir lo primero cuando es lo segundo es mentir con un cero.
+   */
+  apertura: ResumenApertura | null;
+}
+
+/** Un dato del punto de partida con de dónde salió. */
+export interface DatoApertura {
+  valor: number | null;
+  /** acuse | manual | calculado | regimen | csf | nomina | sin-dato */
+  fuente: string;
+  /** Etiqueta lista para leer («del acuse de mayo de 2026»). */
+  etiqueta: string;
+  referencia?: string;
+}
+
+export interface ResumenApertura {
+  confirmada: boolean;
+  confirmadaAt: string | null;
+  primerPeriodo: string;
+  periodoAnterior: string;
+  ivaSaldoFavor: DatoApertura;
+  coeficiente: DatoApertura & { aplica: boolean; anio: number | null };
+  perdidaPendiente: DatoApertura & { aplica: boolean; ejercicio: number | null };
+  /** Ejercicios en el ledger de pérdidas (Art. 57). */
+  perdidasPorAmortizar: number;
+  /** Pagos provisionales del ejercicio ya conocidos, y cuántos vienen de un acuse. */
+  pagosProvisionales: { total: number; conAcuse: number };
+  /** Cobertura de la descarga del SAT desde el arranque. */
+  sincronizacion: { periodosCubiertos: number; periodosTotales: number; faltantes: number };
 }
 
 export interface HechosCierre {
@@ -383,6 +477,35 @@ function senalCoeficiente(h: HechosCierre): SenalPaso | null {
   };
 }
 
+/**
+ * Qué datos del punto de partida están SIN CAPTURAR. Un cero capturado y un
+ * cero por falta de dato se ven igual en la cifra y son cosas distintas: esta
+ * señal los separa para que el copiloto no afirme saldos que nadie revisó.
+ */
+function senalDatosApertura(x: ExtrasCierre): SenalPaso | null {
+  const a = x.apertura;
+  if (!a) return null;
+  const clave = "x:datos_apertura";
+  const faltan: string[] = [];
+  if (a.ivaSaldoFavor.fuente === "sin-dato") faltan.push("saldo a favor de IVA inicial");
+  if (a.coeficiente.aplica && a.coeficiente.fuente === "sin-dato") faltan.push("coeficiente de utilidad");
+  if (a.perdidaPendiente.aplica && a.perdidaPendiente.fuente === "sin-dato") faltan.push("pérdidas por amortizar");
+  if (faltan.length > 0) {
+    return {
+      clave,
+      estado: "warn",
+      resumen: `Sin capturar en el punto de partida: ${faltan.join(", ")} — hoy se toman como cero`,
+      cta: { label: "Capturar el punto de partida", href: "/empresa/apertura" },
+    };
+  }
+  const origenes = [
+    `saldo a favor de IVA ${a.ivaSaldoFavor.etiqueta}`,
+    ...(a.coeficiente.aplica ? [`coeficiente ${a.coeficiente.etiqueta}`] : []),
+    ...(a.perdidaPendiente.aplica ? [`pérdidas ${a.perdidaPendiente.etiqueta}`] : []),
+  ];
+  return { clave, estado: "ok", resumen: `Punto de partida con origen conocido: ${origenes.join("; ")}` };
+}
+
 function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): SenalPaso | null {
   switch (clave) {
     case "x:cfdi_faltantes":
@@ -473,6 +596,9 @@ function senalesDelPaso(def: DefinicionPaso, h: HechosCierre): SenalPaso[] {
     } else if (ref === "x:coeficiente") {
       const s = senalCoeficiente(h);
       if (s) out.push(s);
+    } else if (ref === "x:datos_apertura") {
+      const s = senalDatosApertura(h.extras);
+      if (s) out.push(s);
     } else {
       const s = senalExtra(ref, h.extras, h.ctx);
       if (s) out.push(s);
@@ -493,6 +619,21 @@ function cifrasDelPaso(clave: ClavePasoCierre, h: HechosCierre): Record<string, 
   switch (clave) {
     case "apertura":
       return {
+        ...(h.extras.apertura
+          ? {
+              // De dónde sale cada número del arranque. Un `sin-dato` significa
+              // que NADIE lo capturó: no es un cero verificado.
+              puntoDePartida: {
+                confirmada: h.extras.apertura.confirmada,
+                primerPeriodoComputado: h.extras.apertura.primerPeriodo,
+                saldoFavorIvaInicial: h.extras.apertura.ivaSaldoFavor,
+                perdidasPorAmortizarLedger: h.extras.apertura.perdidasPorAmortizar,
+                perdidaPendiente: h.extras.apertura.perdidaPendiente,
+                pagosProvisionalesConocidos: h.extras.apertura.pagosProvisionales,
+                descargaSat: h.extras.apertura.sincronizacion,
+              },
+            }
+          : {}),
         coeficiente: pos.isr.coeficiente,
         coeficienteFuente: pos.isr.coeficienteFuente,
         coeficienteSugerido: pos.isr.coeficienteSugerido,
@@ -586,8 +727,13 @@ export function decidirPasos(h: HechosCierre): PasoEvaluado[] {
           : "espera";
     } else if (bloqueadoPorDependencia) {
       estado = "espera";
+    } else if (sinMotores) {
+      // Los dos motores caídos: no hay verde posible. Las señales de los
+      // extras (que sí respondieron) se muestran, pero el estado dice la
+      // verdad — un paso en verde aquí sería un verde inventado.
+      estado = "sin_datos";
     } else if (!grave) {
-      estado = sinMotores ? "sin_datos" : senales.length === 0 ? "sin_datos" : "listo";
+      estado = senales.length === 0 ? "sin_datos" : "listo";
     } else if (grave.estado === "error") {
       estado = def.bloqueaSiError ? "bloquea" : "atencion";
     } else if (grave.estado === "warn") {
