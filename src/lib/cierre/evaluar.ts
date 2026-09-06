@@ -20,6 +20,7 @@ import { prisma } from "../prisma";
 import { registrarBitacora } from "../audit";
 import { evaluarReadinessCE, regimenRequiereBalance } from "../contabilidad/ce-readiness";
 import { checklistDeclaracion } from "../fiscal/checklist-declaracion";
+import { estadoApertura } from "../fiscal/apertura";
 import {
   decidirPasos,
   definicionPaso,
@@ -86,6 +87,7 @@ export async function cargarHechosCierre(
     hallazgosEfos,
     federal,
     diotObligacion,
+    apertura,
   ] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { regimenFiscal: true } }),
     evaluarReadinessCE(companyId, year, month, hoy).catch((e) => {
@@ -136,6 +138,13 @@ export async function cargarHechosCierre(
       select: { status: true, _count: { select: { bankTransactions: true } } },
     }),
     prisma.companyObligation.count({ where: { companyId, activa: true, tipo: "DIOT" } }),
+    // El punto de partida CON la procedencia de cada dato: distingue un cero
+    // capturado de un «no hay dato». Sin esto el copiloto afirmaba «saldo a
+    // favor inicial $0» sin saber si alguien lo había revisado.
+    estadoApertura(companyId, hoy).catch((e) => {
+      console.error("[cierre] apertura falló:", companyId, e instanceof Error ? e.message : e);
+      return null;
+    }),
   ]);
 
   const conMovimientos = new Set(movimientosPorCuenta.map((m) => m.bankAccountId));
@@ -173,6 +182,46 @@ export async function cargarHechosCierre(
     hallazgosEfos,
     pagoConciliado: (federal?._count.bankTransactions ?? 0) > 0,
     declaracionPagada: federal?.status === "PAID",
+    apertura: apertura
+      ? {
+          confirmada: apertura.confirmada,
+          confirmadaAt: apertura.confirmadaAt,
+          primerPeriodo: apertura.primerPeriodo,
+          periodoAnterior: apertura.periodoAnterior,
+          ivaSaldoFavor: {
+            valor: apertura.ivaSaldoFavor.valor,
+            fuente: apertura.ivaSaldoFavor.fuente.tipo,
+            etiqueta: apertura.ivaSaldoFavor.fuente.etiqueta,
+            referencia: apertura.ivaSaldoFavor.fuente.referencia,
+          },
+          coeficiente: {
+            aplica: apertura.coeficiente.aplica,
+            valor: apertura.coeficiente.valor,
+            anio: apertura.coeficiente.anio,
+            fuente: apertura.coeficiente.fuente.tipo,
+            etiqueta: apertura.coeficiente.fuente.etiqueta,
+            referencia: apertura.coeficiente.fuente.referencia,
+          },
+          perdidaPendiente: {
+            aplica: apertura.perdidaPendiente.aplica,
+            valor: apertura.perdidaPendiente.valor,
+            ejercicio: apertura.perdidaPendiente.ejercicio,
+            fuente: apertura.perdidaPendiente.fuente.tipo,
+            etiqueta: apertura.perdidaPendiente.fuente.etiqueta,
+            referencia: apertura.perdidaPendiente.fuente.referencia,
+          },
+          perdidasPorAmortizar: apertura.perdidasPorAmortizar.length,
+          pagosProvisionales: {
+            total: apertura.pagosProvisionalesEjercicio.length,
+            conAcuse: apertura.pagosProvisionalesEjercicio.filter((p) => p.fuente.tipo === "acuse").length,
+          },
+          sincronizacion: {
+            periodosCubiertos: apertura.sincronizacion.periodosCubiertos,
+            periodosTotales: apertura.sincronizacion.periodosTotales,
+            faltantes: apertura.sincronizacion.faltantes.length,
+          },
+        }
+      : null,
   };
 
   return { ctx, hoy, readiness, checklist, extras };

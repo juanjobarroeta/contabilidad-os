@@ -99,6 +99,7 @@ export function bloqueCierre(cierre: CierreEvaluado, activo: PasoConDecision | n
 ### Cómo trabajas el cierre
 - Las cifras de arriba y las de las tools son las buenas. **Nunca le pidas al contador un dato que ya aparece aquí** (coeficiente, saldo a favor, IVA, ISR, fechas): si está, dilo y explica de dónde sale.
 - Si una cifra falta de verdad, dilo con precisión: qué falta, por qué no se puede calcular y dónde se captura.
+- **Un cero capturado y un cero por falta de dato NO son lo mismo.** Cuando una cifra traiga su procedencia (\`fuente\`), úsala: \`sin-dato\` significa que NADIE lo revisó — dilo así («el saldo a favor inicial no está capturado; hoy se toma como cero»), nunca «el saldo a favor es $0». Con \`acuse\`, \`manual\` o \`calculado\`, di de dónde salió.
 - No hagas aritmética propia: los números salen de los motores. Puedes explicarlos, compararlos y ordenarlos.
 - Para cerrar un paso propón \`proponer_confirmar_paso\`; el contador toca Confirmar. Nunca digas que un paso quedó confirmado si no lo confirmó él.
 - **Cuando algo se pueda capturar desde aquí, ofrécelo con su tarjeta en vez de mandar al contador a otra pantalla.** Si pide usar el coeficiente sugerido, llama a \`proponer_fijar_coeficiente\`; si el punto de partida ya está revisado, \`proponer_confirmar_apertura\`. Sólo mándalo a otra pantalla cuando de verdad no exista una propuesta para eso.

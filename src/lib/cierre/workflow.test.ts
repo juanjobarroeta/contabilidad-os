@@ -9,6 +9,7 @@ import {
   esClavePaso,
   type ContextoEmpresa,
   type ExtrasCierre,
+  type ResumenApertura,
   type HechosCierre,
   TOOLS_SIEMPRE_CIERRE,
   toolsDelPaso,
@@ -112,8 +113,26 @@ function checklist(over: Record<string, Partial<ChecklistItem>> = {}, pos = posi
   };
 }
 
+/** Punto de partida con todo capturado y con origen conocido. */
+function apertura(over: Partial<ResumenApertura> = {}): ResumenApertura {
+  return {
+    confirmada: false,
+    confirmadaAt: null,
+    primerPeriodo: "2026-01",
+    periodoAnterior: "2025-12",
+    ivaSaldoFavor: { valor: 0, fuente: "manual", etiqueta: "capturado por el contador" },
+    coeficiente: { aplica: true, valor: 0.0842, anio: 2026, fuente: "calculado", etiqueta: "de la anual 2025" },
+    perdidaPendiente: { aplica: true, valor: 0, ejercicio: null, fuente: "manual", etiqueta: "capturado por el contador" },
+    perdidasPorAmortizar: 0,
+    pagosProvisionales: { total: 7, conAcuse: 7 },
+    sincronizacion: { periodosCubiertos: 8, periodosTotales: 8, faltantes: 0 },
+    ...over,
+  };
+}
+
 function extras(over: Partial<ExtrasCierre> = {}): ExtrasCierre {
   return {
+    apertura: apertura(),
     cfdiFaltantes: 0,
     cuentasBanco: 2,
     cuentasSinEstado: 0,
@@ -368,5 +387,53 @@ describe("tools por paso", () => {
     expect(TOOLS_SIEMPRE_CIERRE).toEqual(
       expect.arrayContaining(["query_cierre_estado", "query_cierre_paso", "search_fiscal_knowledge", "get_valor_fiscal"])
     );
+  });
+});
+
+// Juan preguntó «¿no tienes las declaraciones anteriores para revisar los
+// saldos?» después de que el copiloto afirmara «saldo a favor inicial $0, sin
+// pérdidas». Un cero capturado y un cero por falta de dato NO son lo mismo.
+describe("decidirPasos — el punto de partida dice de dónde salió cada cifra", () => {
+  const pasoApert = (a: ResumenApertura | null) =>
+    decidirPasos(hechos({ extras: extras({ apertura: a }) })).find((p) => p.clave === "apertura")!;
+
+  it("todo capturado: la señal va en verde y dice el origen de cada dato", () => {
+    const p = pasoApert(apertura());
+    const s = p.senales.find((x) => x.clave === "x:datos_apertura")!;
+    expect(s.estado).toBe("ok");
+    expect(s.resumen).toContain("saldo a favor de IVA capturado por el contador");
+  });
+
+  it("sin dato: lo dice y advierte que hoy se toma como cero", () => {
+    const p = pasoApert(
+      apertura({
+        ivaSaldoFavor: { valor: null, fuente: "sin-dato", etiqueta: "sin dato" },
+        perdidaPendiente: { aplica: true, valor: null, ejercicio: null, fuente: "sin-dato", etiqueta: "sin dato" },
+      })
+    );
+    const s = p.senales.find((x) => x.clave === "x:datos_apertura")!;
+    expect(s.estado).toBe("warn");
+    expect(s.resumen).toContain("saldo a favor de IVA inicial");
+    expect(s.resumen).toContain("pérdidas por amortizar");
+    expect(s.resumen).toContain("se toman como cero");
+  });
+
+  it("la procedencia viaja en las cifras del paso, no sólo en el texto", () => {
+    const p = pasoApert(apertura());
+    const pp = p.cifras.puntoDePartida as Record<string, unknown>;
+    expect(pp.saldoFavorIvaInicial).toMatchObject({ fuente: "manual" });
+    expect(pp.pagosProvisionalesConocidos).toMatchObject({ total: 7, conAcuse: 7 });
+    expect(pp.descargaSat).toMatchObject({ faltantes: 0 });
+  });
+
+  it("un régimen sin coeficiente ni pérdidas no reclama esos datos", () => {
+    const p = pasoApert(
+      apertura({
+        ivaSaldoFavor: { valor: 0, fuente: "manual", etiqueta: "capturado por el contador" },
+        coeficiente: { aplica: false, valor: null, anio: null, fuente: "sin-dato", etiqueta: "sin dato" },
+        perdidaPendiente: { aplica: false, valor: null, ejercicio: null, fuente: "sin-dato", etiqueta: "sin dato" },
+      })
+    );
+    expect(p.senales.find((x) => x.clave === "x:datos_apertura")!.estado).toBe("ok");
   });
 });

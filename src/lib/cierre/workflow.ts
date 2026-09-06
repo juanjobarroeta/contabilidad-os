@@ -72,7 +72,7 @@ export const PASOS: DefinicionPaso[] = [
     titulo: "Punto de partida",
     descripcion: "Saldo a favor inicial, pérdidas por amortizar, coeficiente y obligaciones confirmados.",
     aplica: () => true,
-    checks: ["fx:apertura", "x:coeficiente"],
+    checks: ["fx:apertura", "x:coeficiente", "x:datos_apertura"],
     dependeDe: [],
     tools: [
       "query_obligations",
@@ -286,6 +286,38 @@ export interface ExtrasCierre {
   /** La declaración federal del periodo tiene su pago ligado a un movimiento bancario o está PAID. */
   pagoConciliado: boolean;
   declaracionPagada: boolean;
+  /**
+   * El punto de partida con la PROCEDENCIA de cada dato (estadoApertura). Es
+   * la diferencia entre «saldo a favor inicial $0» y «no hay dato: hay que
+   * capturarlo» — decir lo primero cuando es lo segundo es mentir con un cero.
+   */
+  apertura: ResumenApertura | null;
+}
+
+/** Un dato del punto de partida con de dónde salió. */
+export interface DatoApertura {
+  valor: number | null;
+  /** acuse | manual | calculado | regimen | csf | nomina | sin-dato */
+  fuente: string;
+  /** Etiqueta lista para leer («del acuse de mayo de 2026»). */
+  etiqueta: string;
+  referencia?: string;
+}
+
+export interface ResumenApertura {
+  confirmada: boolean;
+  confirmadaAt: string | null;
+  primerPeriodo: string;
+  periodoAnterior: string;
+  ivaSaldoFavor: DatoApertura;
+  coeficiente: DatoApertura & { aplica: boolean; anio: number | null };
+  perdidaPendiente: DatoApertura & { aplica: boolean; ejercicio: number | null };
+  /** Ejercicios en el ledger de pérdidas (Art. 57). */
+  perdidasPorAmortizar: number;
+  /** Pagos provisionales del ejercicio ya conocidos, y cuántos vienen de un acuse. */
+  pagosProvisionales: { total: number; conAcuse: number };
+  /** Cobertura de la descarga del SAT desde el arranque. */
+  sincronizacion: { periodosCubiertos: number; periodosTotales: number; faltantes: number };
 }
 
 export interface HechosCierre {
@@ -383,6 +415,35 @@ function senalCoeficiente(h: HechosCierre): SenalPaso | null {
   };
 }
 
+/**
+ * Qué datos del punto de partida están SIN CAPTURAR. Un cero capturado y un
+ * cero por falta de dato se ven igual en la cifra y son cosas distintas: esta
+ * señal los separa para que el copiloto no afirme saldos que nadie revisó.
+ */
+function senalDatosApertura(x: ExtrasCierre): SenalPaso | null {
+  const a = x.apertura;
+  if (!a) return null;
+  const clave = "x:datos_apertura";
+  const faltan: string[] = [];
+  if (a.ivaSaldoFavor.fuente === "sin-dato") faltan.push("saldo a favor de IVA inicial");
+  if (a.coeficiente.aplica && a.coeficiente.fuente === "sin-dato") faltan.push("coeficiente de utilidad");
+  if (a.perdidaPendiente.aplica && a.perdidaPendiente.fuente === "sin-dato") faltan.push("pérdidas por amortizar");
+  if (faltan.length > 0) {
+    return {
+      clave,
+      estado: "warn",
+      resumen: `Sin capturar en el punto de partida: ${faltan.join(", ")} — hoy se toman como cero`,
+      cta: { label: "Capturar el punto de partida", href: "/empresa/apertura" },
+    };
+  }
+  const origenes = [
+    `saldo a favor de IVA ${a.ivaSaldoFavor.etiqueta}`,
+    ...(a.coeficiente.aplica ? [`coeficiente ${a.coeficiente.etiqueta}`] : []),
+    ...(a.perdidaPendiente.aplica ? [`pérdidas ${a.perdidaPendiente.etiqueta}`] : []),
+  ];
+  return { clave, estado: "ok", resumen: `Punto de partida con origen conocido: ${origenes.join("; ")}` };
+}
+
 function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): SenalPaso | null {
   switch (clave) {
     case "x:cfdi_faltantes":
@@ -473,6 +534,9 @@ function senalesDelPaso(def: DefinicionPaso, h: HechosCierre): SenalPaso[] {
     } else if (ref === "x:coeficiente") {
       const s = senalCoeficiente(h);
       if (s) out.push(s);
+    } else if (ref === "x:datos_apertura") {
+      const s = senalDatosApertura(h.extras);
+      if (s) out.push(s);
     } else {
       const s = senalExtra(ref, h.extras, h.ctx);
       if (s) out.push(s);
@@ -493,6 +557,21 @@ function cifrasDelPaso(clave: ClavePasoCierre, h: HechosCierre): Record<string, 
   switch (clave) {
     case "apertura":
       return {
+        ...(h.extras.apertura
+          ? {
+              // De dónde sale cada número del arranque. Un `sin-dato` significa
+              // que NADIE lo capturó: no es un cero verificado.
+              puntoDePartida: {
+                confirmada: h.extras.apertura.confirmada,
+                primerPeriodoComputado: h.extras.apertura.primerPeriodo,
+                saldoFavorIvaInicial: h.extras.apertura.ivaSaldoFavor,
+                perdidasPorAmortizarLedger: h.extras.apertura.perdidasPorAmortizar,
+                perdidaPendiente: h.extras.apertura.perdidaPendiente,
+                pagosProvisionalesConocidos: h.extras.apertura.pagosProvisionales,
+                descargaSat: h.extras.apertura.sincronizacion,
+              },
+            }
+          : {}),
         coeficiente: pos.isr.coeficiente,
         coeficienteFuente: pos.isr.coeficienteFuente,
         coeficienteSugerido: pos.isr.coeficienteSugerido,
@@ -586,8 +665,13 @@ export function decidirPasos(h: HechosCierre): PasoEvaluado[] {
           : "espera";
     } else if (bloqueadoPorDependencia) {
       estado = "espera";
+    } else if (sinMotores) {
+      // Los dos motores caídos: no hay verde posible. Las señales de los
+      // extras (que sí respondieron) se muestran, pero el estado dice la
+      // verdad — un paso en verde aquí sería un verde inventado.
+      estado = "sin_datos";
     } else if (!grave) {
-      estado = sinMotores ? "sin_datos" : senales.length === 0 ? "sin_datos" : "listo";
+      estado = senales.length === 0 ? "sin_datos" : "listo";
     } else if (grave.estado === "error") {
       estado = def.bloqueaSiError ? "bloquea" : "atencion";
     } else if (grave.estado === "warn") {
