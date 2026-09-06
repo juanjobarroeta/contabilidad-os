@@ -4,6 +4,10 @@
  *
  * Médicos tratantes con sus episodios activos y los honorarios cargados en
  * el mes en curso (Σ cargos HONORARIO vivos).
+ *
+ * P2 (SAEH): `curp` validada y `nombres` / `apellidoPaterno` /
+ * `apellidoMaterno`; cuando el alta sólo trae `nombre` («Dr. Alonso Vega»)
+ * el hub los parte por heurística (sin pisar valores explícitos).
  */
 
 import { NextResponse } from "next/server";
@@ -14,7 +18,7 @@ import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error, errorZod } from "@/lib/hospital/http";
 import { partesLocales, rangoMesLocal } from "@/lib/hospital/tz";
 import { ESTADOS_ACTIVOS, r2 } from "@/lib/hospital/util";
-import { medicoSchema } from "@/lib/hospital/medico-schema";
+import { medicoSchema, partesNombreMedico, resolverCurpMedico } from "@/lib/hospital/medico-schema";
 
 export const GET = withHospital(async (req: Request) => {
   const { searchParams } = new URL(req.url);
@@ -52,6 +56,8 @@ export const GET = withHospital(async (req: Request) => {
       ...m,
       episodiosActivos: _count.episodios,
       honorariosMes: r2(porMedico.get(m.id) ?? 0),
+      // SAEH exige CURP, apellidos separados y cédula del médico responsable.
+      saehCompleto: !!(m.curp && m.nombres && m.apellidoPaterno && m.cedula),
     }))
   );
 });
@@ -62,7 +68,7 @@ export const POST = withHospital(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return errorZod(parsed.error);
-  const { companyId, ...d } = parsed.data;
+  const { companyId, curp, nombres, apellidoPaterno, apellidoMaterno, ...d } = parsed.data;
 
   const { user } = await requireWriter(companyId, req);
   await requireModule(companyId, "HOSPITAL", req);
@@ -75,8 +81,13 @@ export const POST = withHospital(async (req: Request) => {
     const e = await prisma.employee.findUnique({ where: { id: d.employeeId }, select: { companyId: true } });
     if (!e || e.companyId !== companyId) return error("employeeId inválido");
   }
+  const curpR = resolverCurpMedico(curp);
+  if (!curpR.ok) return error(curpR.error);
+  const partes = partesNombreMedico({ nombre: d.nombre, nombres, apellidoPaterno, apellidoMaterno }, null);
 
-  const medico = await prisma.hospMedico.create({ data: { companyId, ...d, nombre: d.nombre.trim(), rfc: d.rfc?.trim().toUpperCase() || null } });
-  bitacora(user, req, { companyId, accion: "hospital.medico.crear", entidad: "HospMedico", entidadId: medico.id, detalle: { nombre: medico.nombre, especialidad: medico.especialidad } });
-  return NextResponse.json({ ...medico, episodiosActivos: 0, honorariosMes: 0 }, { status: 201 });
+  const medico = await prisma.hospMedico.create({
+    data: { companyId, ...d, nombre: d.nombre.trim(), rfc: d.rfc?.trim().toUpperCase() || null, curp: curpR.curp, ...partes, paisNacimientoClave: d.paisNacimientoClave ? d.paisNacimientoClave.padStart(3, "0") : "142" },
+  });
+  bitacora(user, req, { companyId, accion: "hospital.medico.crear", entidad: "HospMedico", entidadId: medico.id, detalle: { nombre: medico.nombre, especialidad: medico.especialidad, curp: medico.curp } });
+  return NextResponse.json({ ...medico, episodiosActivos: 0, honorariosMes: 0, saehCompleto: !!(medico.curp && medico.nombres && medico.apellidoPaterno && medico.cedula) }, { status: 201 });
 });

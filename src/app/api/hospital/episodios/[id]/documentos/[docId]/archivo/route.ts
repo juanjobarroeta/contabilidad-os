@@ -4,9 +4,14 @@
  *      la identificación…): multipart con el campo `archivo`, o JSON
  *      { base64, mime, nombre? } para el cliente del satélite (apiFetch habla
  *      JSON). PDF/JPG/PNG/WebP, ≤ 10 MB. Un documento PENDIENTE pasa a
- *      RECIBIDO; el estado FIRMADO se sigue marcando con PATCH.
+ *      RECIBIDO; el estado FIRMADO se sigue marcando con PATCH (o con las
+ *      firmas electrónicas del paquete de admisión).
  * GET  …/archivo — descarga (siempre attachment) y registra el acceso como
  *      EXPORTACION (NOM-024 / LFPDPPP).
+ *
+ * P2: también sirve para los documentos del PACIENTE (episodioId null, p. ej.
+ * la identificación del paquete de admisión) cuando el paciente es el del
+ * episodio de la URL.
  *
  * Los bytes viven en la BD (bytea), mismo patrón que el expediente del
  * empleado (EmployeeDocumento) y los acuses de declaración.
@@ -28,10 +33,15 @@ const EXTENSION: Record<string, string> = { "application/pdf": "pdf", "image/jpe
 async function documentoDe(id: string, docId: string) {
   const doc = await prisma.hospDocumento.findUnique({
     where: { id: docId },
-    select: { id: true, episodioId: true, companyId: true, tipo: true, nombre: true, estado: true, mime: true, bytes: true, episodio: { select: { folio: true, pacienteId: true } } },
+    select: { id: true, episodioId: true, pacienteId: true, companyId: true, tipo: true, nombre: true, estado: true, mime: true, bytes: true, episodio: { select: { folio: true } } },
   });
-  if (!doc || doc.episodioId !== id) throw new AuthzError(404, "Documento no encontrado");
-  return doc;
+  if (!doc) throw new AuthzError(404, "Documento no encontrado");
+  if (doc.episodioId !== id) {
+    const ep = doc.episodioId === null ? await prisma.hospEpisodio.findUnique({ where: { id }, select: { pacienteId: true, companyId: true, folio: true } }) : null;
+    if (!ep || ep.pacienteId !== doc.pacienteId || ep.companyId !== doc.companyId) throw new AuthzError(404, "Documento no encontrado");
+    return { ...doc, folio: ep.folio, episodioIdAcceso: id };
+  }
+  return { ...doc, folio: doc.episodio?.folio ?? null, episodioIdAcceso: doc.episodioId };
 }
 
 /** Lee el archivo del body: multipart (`archivo`) o JSON { base64, mime, nombre }. */
@@ -73,7 +83,7 @@ export const POST = withHospital(async (req: Request, ctx: Ctx) => {
       subidoPorUserId: user.id,
       ...(doc.estado === "PENDIENTE" ? { estado: "RECIBIDO" } : {}),
     },
-    select: { id: true, tipo: true, nombre: true, estado: true, mime: true, bytes: true, firmadoAt: true },
+    select: { id: true, tipo: true, nombre: true, estado: true, mime: true, bytes: true, firmadoAt: true, pacienteId: true, episodioId: true },
   });
 
   bitacora(user, req, {
@@ -81,7 +91,7 @@ export const POST = withHospital(async (req: Request, ctx: Ctx) => {
     accion: "hospital.documento.archivo",
     entidad: "HospDocumento",
     entidadId: doc.id,
-    detalle: { folio: doc.episodio.folio, tipo: doc.tipo, nombre: doc.nombre, mime: archivo.mime, bytes: archivo.buffer.length, archivoNombre: archivo.nombre },
+    detalle: { folio: doc.folio, tipo: doc.tipo, nombre: doc.nombre, mime: archivo.mime, bytes: archivo.buffer.length, archivoNombre: archivo.nombre },
   });
 
   return NextResponse.json(actualizado, { status: 201 });
@@ -100,9 +110,9 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   registrarAcceso({
     companyId: doc.companyId,
     accion: "EXPORTACION",
-    episodioId: doc.episodioId,
-    pacienteId: doc.episodio.pacienteId,
-    detalle: `Descarga de «${doc.nombre}» (${doc.tipo}) · ${doc.episodio.folio}`,
+    episodioId: doc.episodioIdAcceso,
+    pacienteId: doc.pacienteId,
+    detalle: `Descarga de «${doc.nombre}» (${doc.tipo})${doc.folio ? ` · ${doc.folio}` : ""}`,
     user,
     req,
   });

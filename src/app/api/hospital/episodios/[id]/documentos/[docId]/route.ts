@@ -7,6 +7,12 @@
  * las firmas del tipo (lib/hospital/documentos.ts). Volver a PENDIENTE borra
  * la fecha. Un documento ya FIRMADO no cambia de contenido ni de firmantes
  * (409): se registra otro documento.
+ *
+ * P2: un documento con texto legal (textoFirmado) o con firmas electrónicas
+ * (HospFirma) tampoco cambia de contenido —el hash lo cubre— y su estado
+ * FIRMADO lo pone POST /api/hospital/documentos/[docId]/firmas, no este PATCH.
+ * Alcanza también a los documentos del PACIENTE (episodioId null) cuando el
+ * paciente es el del episodio de la URL.
  */
 
 import { NextResponse } from "next/server";
@@ -42,23 +48,32 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   const doc = await prisma.hospDocumento.findUnique({
     where: { id: docId },
     omit: { archivo: true },
-    include: { episodio: { select: { id: true, companyId: true, folio: true } } },
+    include: { episodio: { select: { id: true, companyId: true, folio: true } }, _count: { select: { firmas: true } } },
   });
-  if (!doc || doc.episodioId !== id) throw new AuthzError(404, "Documento no encontrado");
+  if (!doc) throw new AuthzError(404, "Documento no encontrado");
+  if (doc.episodioId !== id) {
+    // Documento del paciente (episodioId null): vale si el episodio de la URL es suyo.
+    const ep = doc.episodioId === null ? await prisma.hospEpisodio.findUnique({ where: { id }, select: { pacienteId: true, companyId: true } }) : null;
+    if (!ep || ep.pacienteId !== doc.pacienteId || ep.companyId !== doc.companyId) throw new AuthzError(404, "Documento no encontrado");
+  }
+  const folio = doc.episodio?.folio ?? null;
 
-  const { user } = await requireWriter(doc.episodio.companyId, req);
-  await requireModule(doc.episodio.companyId, "HOSPITAL", req);
+  const { user } = await requireWriter(doc.companyId, req);
+  await requireModule(doc.companyId, "HOSPITAL", req);
 
   const tocaFirma = CAMPOS_CONGELADOS_AL_FIRMAR.some((c) => c in d) || "medicoId" in d;
   if (doc.estado === "FIRMADO" && tocaFirma) {
     return error(`El documento «${doc.nombre}» ya está firmado: su contenido y sus firmantes no se modifican; registra otro documento`, 409);
+  }
+  if ((doc.textoFirmado || doc._count.firmas > 0) && ("contenido" in d || d.estado === "FIRMADO")) {
+    return error(`El documento «${doc.nombre}» lleva texto legal con hash${doc._count.firmas ? ` y ${doc._count.firmas} firma(s)` : ""}: su contenido no cambia y se firma con POST /api/hospital/documentos/${doc.id}/firmas`, 409);
   }
 
   let medicoNombre = d.medicoNombre === undefined ? doc.medicoNombre : d.medicoNombre?.trim() || null;
   let medicoCedula = d.medicoCedula === undefined ? doc.medicoCedula : d.medicoCedula?.trim() || null;
   if (d.medicoId) {
     const m = await prisma.hospMedico.findUnique({ where: { id: d.medicoId }, select: { companyId: true, nombre: true, cedula: true } });
-    if (!m || m.companyId !== doc.episodio.companyId) return error("medicoId inválido");
+    if (!m || m.companyId !== doc.companyId) return error("medicoId inválido");
     medicoNombre = d.medicoNombre?.trim() || m.nombre;
     medicoCedula = d.medicoCedula?.trim() || m.cedula?.trim() || null;
   }
@@ -100,11 +115,11 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
 
   if (doc.estado !== estado || tocaFirma) {
     bitacora(user, req, {
-      companyId: doc.episodio.companyId,
+      companyId: doc.companyId,
       accion: doc.estado !== estado ? "hospital.documento.estado" : "hospital.documento.editar",
       entidad: "HospDocumento",
       entidadId: docId,
-      detalle: { folio: doc.episodio.folio, tipo: doc.tipo, de: doc.estado, a: estado, campos: Object.keys(d) },
+      detalle: { folio, tipo: doc.tipo, de: doc.estado, a: estado, campos: Object.keys(d) },
     });
   }
 
