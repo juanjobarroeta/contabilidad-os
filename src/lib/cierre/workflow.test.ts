@@ -10,6 +10,8 @@ import {
   type ContextoEmpresa,
   type ExtrasCierre,
   type HechosCierre,
+  TOOLS_SIEMPRE_CIERRE,
+  toolsDelPaso,
 } from "./workflow";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -345,5 +347,26 @@ describe("decidirPasos — el coeficiente nunca se le pregunta al contador", () 
     const p = decidirPasos(hechos()).find((x) => x.clave === "impuestos")!;
     expect(p.cifras.iva).toMatchObject({ pagar: 2652.8, trasladado: 12000 });
     expect(p.cifras.isr).toMatchObject({ coeficiente: 0.0842, isrPagar: 20208 });
+  });
+});
+
+// El copiloto sólo puede ofrecer una tarjeta si el paso expone la tool. Juan
+// pidió el coeficiente desde el chat y el modelo contestó «no puedo, es una
+// captura de otra pantalla»: era verdad, no tenía con qué.
+describe("tools por paso", () => {
+  it("«punto de partida» puede proponer el coeficiente y confirmar la apertura", () => {
+    const t = toolsDelPaso("apertura");
+    expect(t).toContain("proponer_fijar_coeficiente");
+    expect(t).toContain("proponer_confirmar_apertura");
+  });
+
+  it("«IVA, ISR y retenciones» también puede fijar el coeficiente (ahí se nota que falta)", () => {
+    expect(toolsDelPaso("impuestos")).toContain("proponer_fijar_coeficiente");
+  });
+
+  it("las de siempre incluyen el estado del cierre y la ley", () => {
+    expect(TOOLS_SIEMPRE_CIERRE).toEqual(
+      expect.arrayContaining(["query_cierre_estado", "query_cierre_paso", "search_fiscal_knowledge", "get_valor_fiscal"])
+    );
   });
 });

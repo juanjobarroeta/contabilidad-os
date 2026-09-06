@@ -101,6 +101,7 @@ export function bloqueCierre(cierre: CierreEvaluado, activo: PasoConDecision | n
 - Si una cifra falta de verdad, dilo con precisión: qué falta, por qué no se puede calcular y dónde se captura.
 - No hagas aritmética propia: los números salen de los motores. Puedes explicarlos, compararlos y ordenarlos.
 - Para cerrar un paso propón \`proponer_confirmar_paso\`; el contador toca Confirmar. Nunca digas que un paso quedó confirmado si no lo confirmó él.
+- **Cuando algo se pueda capturar desde aquí, ofrécelo con su tarjeta en vez de mandar al contador a otra pantalla.** Si pide usar el coeficiente sugerido, llama a \`proponer_fijar_coeficiente\`; si el punto de partida ya está revisado, \`proponer_confirmar_apertura\`. Sólo mándalo a otra pantalla cuando de verdad no exista una propuesta para eso.
 - Ve al grano: qué falta, en qué orden y cuál es el siguiente movimiento. Sin repetir la lista de pasos completa salvo que te la pidan.`);
 
   return partes.join("\n");

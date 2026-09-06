@@ -546,6 +546,28 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "proponer_fijar_coeficiente",
+    description:
+      "Propone FIJAR el coeficiente de utilidad del ejercicio (el override que usa el motor en los pagos provisionales, Art. 14 LISR) y lo deja pendiente de confirmación: el usuario toca Confirmar en la tarjeta y queda guardado, sin salir del chat. Sin `valor` usa el que el sistema deduce de la declaración anual. Úsala cuando el usuario diga que quiere usar el sugerido o dictar un coeficiente. NO lo fija por su cuenta.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        valor: {
+          type: "number",
+          description: "Coeficiente a fijar (0-5). Omítelo para usar el sugerido por el motor.",
+        },
+        anio: { type: "number", description: "Ejercicio al que aplica. Default: el del cierre abierto." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "proponer_confirmar_apertura",
+    description:
+      "Propone estampar la confirmación del PUNTO DE PARTIDA fiscal de la empresa (saldo a favor inicial, pérdidas, coeficiente y obligaciones revisados), pendiente del tap del usuario. Es lo que apaga la señal «el punto de partida aún no está confirmado». No confirma el paso del cierre: eso es proponer_confirmar_paso.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
     name: "proponer_resolver_hallazgo",
     description:
       "Propone marcar un hallazgo del auditor fiscal como RESUELTO, y lo deja PENDIENTE de confirmación. NO lo resuelve: stagea la propuesta y devuelve un resumen + token; el usuario debe tocar Confirmar. Úsala cuando el usuario diga que ya atendió un hallazgo. Necesitas el hallazgo_id.",

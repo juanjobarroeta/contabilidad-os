@@ -88,6 +88,10 @@ export async function executeToolCall(
       return proponerDecisionPaso("confirmar", input, companyId, context);
     case "proponer_omitir_paso":
       return proponerDecisionPaso("omitir", input, companyId, context);
+    case "proponer_fijar_coeficiente":
+      return proponerFijarCoeficiente(input, companyId, context);
+    case "proponer_confirmar_apertura":
+      return proponerConfirmarApertura(companyId, context);
     case "proponer_resolver_hallazgo":
       return proponerResolverHallazgo(input, companyId, context);
     case "proponer_posponer_hallazgo":
@@ -505,6 +509,73 @@ async function proponerDecisionPaso(
           type: "omitir_paso",
           payload: { year, month, clave, hashEsperado: paso.hashEvidencia, motivo },
         });
+  return propuestaStaged(summary, pa.token);
+}
+
+async function proponerFijarCoeficiente(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const { year, month } = periodoCierre(input, context);
+  const anio = typeof input.anio === "number" ? input.anio : year;
+
+  const { checklistDeclaracion } = await import("../fiscal/checklist-declaracion");
+  const checklist = await checklistDeclaracion(companyId, year, month);
+  const isr = checklist.posicion.isr;
+
+  const valor = typeof input.valor === "number" ? input.valor : (isr.coeficienteSugerido ?? null);
+  if (valor == null) {
+    return JSON.stringify({
+      error:
+        "No hay coeficiente sugerido: el sistema no tiene una declaración anual de la cual deducirlo. " +
+        "Dile al usuario que capture la anual (o que te dicte el coeficiente) y vuelve a proponer.",
+    });
+  }
+  if (!Number.isFinite(valor) || valor < 0 || valor > 5) {
+    return JSON.stringify({ error: "El coeficiente está fuera de rango (0-5)." });
+  }
+  const redondeado = Math.round(valor * 10000) / 10000;
+  const anterior = isr.coeficiente;
+  if (anterior != null && Math.abs(anterior - redondeado) < 0.00005) {
+    return JSON.stringify({ error: `El coeficiente del ejercicio ya está en ${redondeado}: no hay nada que cambiar.` });
+  }
+
+  const origen =
+    typeof input.valor === "number"
+      ? "dictado por el usuario"
+      : isr.coeficienteBase
+        ? `de la declaración anual ${isr.coeficienteBase.year}`
+        : `sugerido por el sistema (${isr.coeficienteSugeridoFuente ?? "origen no identificado"})`;
+  const summary =
+    `Fijar el coeficiente de utilidad del ejercicio ${anio} en ${redondeado} (${origen})` +
+    (anterior != null ? `. Ahora está en ${anterior}.` : ". Hoy no hay ninguno fijado.") +
+    " Con él, el ISR provisional del periodo se puede calcular.";
+
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "fijar_coeficiente",
+    payload: { valor: redondeado, anio, anterior },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+async function proponerConfirmarApertura(companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const c = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { aperturaConfirmadaAt: true, aperturaConfirmadaPor: true },
+  });
+  if (c?.aperturaConfirmadaAt) {
+    return JSON.stringify({
+      error: `El punto de partida ya está confirmado (${c.aperturaConfirmadaAt.toISOString().slice(0, 10)}${c.aperturaConfirmadaPor ? ` por ${c.aperturaConfirmadaPor}` : ""}).`,
+    });
+  }
+  const summary =
+    "Confirmar el punto de partida fiscal de la empresa: saldo a favor inicial, pérdidas por amortizar, " +
+    "coeficiente de utilidad y obligaciones quedan asentados como revisados, con tu nombre y la fecha en la bitácora.";
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "confirmar_apertura",
+    payload: {},
+  });
   return propuestaStaged(summary, pa.token);
 }
 
