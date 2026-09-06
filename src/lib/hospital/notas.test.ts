@@ -5,9 +5,11 @@ import {
   TIPOS_NOTA,
   canonico,
   contenidoCanonicoNota,
+  crearNota,
   errorSecciones,
   hashNota,
   normalizarAsa,
+  normalizarAsistencia,
   verificarHashNota,
 } from "./notas";
 
@@ -115,5 +117,47 @@ describe("firma del sistema", () => {
     expect(verificarHashNota({ ...base, hash })).toBe(true);
     expect(verificarHashNota({ ...base, hash, texto: "otro" })).toBe(false);
     expect(verificarHashNota({ ...base, hash: null })).toBeNull();
+  });
+});
+
+describe("captura asistida (asistencia)", () => {
+  it("normalizarAsistencia valida el origen y limpia lo demás", () => {
+    expect(normalizarAsistencia(null)).toBeNull();
+    expect(normalizarAsistencia(undefined)).toBeNull();
+    const a = normalizarAsistencia({ origen: "estructurado", transcripcion: "  dictado  ", modelo: " claude-sonnet-4-5 ", sttProveedor: "OpenAI", at: "2026-09-05T15:00:00Z" });
+    expect(a).toEqual({ origen: "ESTRUCTURADO", transcripcion: "dictado", modelo: "claude-sonnet-4-5", sttProveedor: "openai", at: "2026-09-05T15:00:00.000Z" });
+    const ahora = new Date("2026-09-05T16:00:00.000Z");
+    expect(normalizarAsistencia({ origen: "DICTADO" }, ahora)).toEqual({ origen: "DICTADO", transcripcion: null, modelo: null, sttProveedor: null, at: ahora.toISOString() });
+    expect(() => normalizarAsistencia({ origen: "MAGIA" })).toThrow(/asistencia.origen debe ser DICTADO, ESTRUCTURADO, SUGERIDO/);
+    expect(() => normalizarAsistencia("DICTADO")).toThrow(/objeto/);
+  });
+
+  it("crearNota guarda asistencia sin meterla al hash (la firma cubre lo clínico)", async () => {
+    const creados: Array<Record<string, unknown>> = [];
+    const db = {
+      hospMedico: { findUnique: async () => ({ companyId: "c1", nombre: "Dr. Alonso Vega", cedula: "5583201" }) },
+      hospNota: {
+        findUnique: async () => null,
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          creados.push(data);
+          return { id: "n1", ...data, medico: null };
+        },
+      },
+    };
+    const ahora = new Date("2026-09-05T15:00:00.000Z");
+    const asistencia = normalizarAsistencia({ origen: "ESTRUCTURADO", transcripcion: "tolera dieta líquida sin dolor plan alta mañana", modelo: "claude-sonnet-4-5", at: ahora.toISOString() })!;
+    const secciones = { subjetivo: "Sin dolor", objetivo: "Herida limpia", analisis: "Favorable", plan: "Alta mañana" };
+    const nota = await crearNota(db as never, {
+      companyId: "c1", episodioId: "ep1", tipo: "EVOLUCION", texto: "Tolera dieta líquida.", secciones, medicoId: "m1", usuario: { id: "u1", nombre: "Dr. Alonso Vega" }, ahora, asistencia,
+    });
+    expect(creados[0].asistencia).toEqual(asistencia);
+    const esperado = hashNota({ episodioId: "ep1", tipo: "EVOLUCION", fecha: ahora, texto: "Tolera dieta líquida.", secciones: canonico(secciones), autorNombre: "Dr. Alonso Vega", autorCedula: "5583201", medicoId: "m1", reemplazaId: null });
+    expect(nota.hash).toBe(esperado);
+    // Sin asistencia el hash es el mismo: la trazabilidad no altera la firma.
+    const sin = await crearNota(db as never, {
+      companyId: "c1", episodioId: "ep1", tipo: "EVOLUCION", texto: "Tolera dieta líquida.", secciones, medicoId: "m1", usuario: { id: "u1", nombre: "Dr. Alonso Vega" }, ahora,
+    });
+    expect(sin.hash).toBe(esperado);
+    expect(creados[1].asistencia).toBeUndefined();
   });
 });

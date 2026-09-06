@@ -14,6 +14,12 @@
 // tiempo al crear. La nota es inmutable; `verificarHashNota` detecta cualquier
 // alteración posterior en la base. La e.firma llega en v2.
 //
+// Captura asistida (P3): `asistencia` deja constancia de cómo nació la nota
+// (DICTADO con reconocimiento de voz, ESTRUCTURADO por el modelo, SUGERIDO
+// como egreso) con la transcripción y el modelo. Es trazabilidad, no
+// contenido clínico: NO entra al hash, que sigue cubriendo lo que firma el
+// médico; el autor sigue siendo el médico.
+//
 // Sin imports del hub (`@/…`): el seed y los scripts la cargan con ts-node.
 // El satélite espeja PLANTILLAS_NOTA y ETIQUETA_SECCION (docs/HOSPITAL.md).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -409,6 +415,49 @@ export function verificarHashNota(n: ContenidoFirmable & { hash?: string | null 
   return hashNota(n) === n.hash;
 }
 
+// ── Captura asistida ─────────────────────────────────────────────────────────
+
+export const ORIGENES_ASISTENCIA = ["DICTADO", "ESTRUCTURADO", "SUGERIDO"] as const;
+export type OrigenAsistencia = (typeof ORIGENES_ASISTENCIA)[number];
+
+/** Cómo nació la nota cuando la ayudó el asistente. Se guarda en HospNota.asistencia. */
+export interface AsistenciaNota {
+  origen: OrigenAsistencia;
+  /** Lo que el médico dictó (o el texto que se mandó a estructurar). */
+  transcripcion?: string | null;
+  /** Modelo que estructuró o sugirió (p. ej. claude-sonnet-4-5). */
+  modelo?: string | null;
+  /** "navegador" (Web Speech API) u "openai" cuando hubo dictado. */
+  sttProveedor?: string | null;
+  /** Cuándo se generó la propuesta (ISO). */
+  at: string;
+}
+
+const MAX_TRANSCRIPCION = 60_000;
+
+/**
+ * Valida y limpia lo que manda el piso en `asistencia`. null si no viene;
+ * lanza 400 si el origen no es uno de ORIGENES_ASISTENCIA.
+ */
+export function normalizarAsistencia(entrada: unknown, ahora: Date = new Date()): AsistenciaNota | null {
+  if (entrada == null) return null;
+  if (typeof entrada !== "object" || Array.isArray(entrada)) throw new HospitalError(400, "asistencia debe ser un objeto { origen, transcripcion?, modelo?, sttProveedor?, at }");
+  const o = entrada as Record<string, unknown>;
+  const origen = typeof o.origen === "string" ? o.origen.trim().toUpperCase() : "";
+  if (!(ORIGENES_ASISTENCIA as readonly string[]).includes(origen)) {
+    throw new HospitalError(400, `asistencia.origen debe ser ${ORIGENES_ASISTENCIA.join(", ")}`);
+  }
+  const texto = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+  const at = typeof o.at === "string" && !Number.isNaN(Date.parse(o.at)) ? new Date(o.at).toISOString() : ahora.toISOString();
+  return {
+    origen: origen as OrigenAsistencia,
+    transcripcion: texto(o.transcripcion, MAX_TRANSCRIPCION),
+    modelo: texto(o.modelo, 80),
+    sttProveedor: texto(o.sttProveedor, 40)?.toLowerCase() ?? null,
+    at,
+  };
+}
+
 // ── Crear (la única forma de escribir una nota) ──────────────────────────────
 
 export interface CrearNotaArgs {
@@ -423,6 +472,8 @@ export interface CrearNotaArgs {
   autorCedula?: string | null;
   reemplazaId?: string | null;
   cargoId?: string | null;
+  /** Captura asistida: cómo nació la nota (no entra al hash). */
+  asistencia?: AsistenciaNota | null;
   usuario: { id?: string | null; nombre: string };
   ahora?: Date;
 }
@@ -465,6 +516,7 @@ export async function crearNota(db: Db, args: CrearNotaArgs) {
   const ahora = args.ahora ?? new Date();
   const fecha = args.fecha ?? ahora;
   const secciones = args.secciones == null ? null : (canonico(args.secciones) as Prisma.InputJsonValue);
+  const asistencia = args.asistencia == null ? null : (canonico(args.asistencia) as Prisma.InputJsonValue);
   const firmable: ContenidoFirmable = {
     episodioId: args.episodioId,
     tipo: args.tipo,
@@ -490,6 +542,7 @@ export async function crearNota(db: Db, args: CrearNotaArgs) {
       medicoId: args.medicoId ?? null,
       reemplazaId: args.reemplazaId ?? null,
       cargoId: args.cargoId ?? null,
+      asistencia: asistencia ?? undefined,
       hash: hashNota(firmable),
       selloAt: ahora,
     },
