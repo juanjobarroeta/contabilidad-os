@@ -1,3 +1,4 @@
+import { esEstanciaPorConceptos, sinConceptosClinicos } from "./episodios-cfdi";
 import { describe, expect, it } from "vitest";
 import {
   agruparFacturasEnEpisodios,
@@ -582,5 +583,32 @@ describe("derivarEpisodiosDeCfdi()", () => {
     const db = conDatos();
     await derivarEpisodiosDeCfdi(db as never, CID, { esperaMs: 0 });
     expect(db._episodios.map((e) => e.folio)).toEqual(["HOSP-2026-0001", "HOSP-2026-0002"]);
+  });
+});
+
+
+describe("oncología de día, ventana por estancia y conceptos no clínicos", () => {
+  it("los servicios oncológicos son ambulatorios, no consulta", () => {
+    expect(tipoEpisodioPorConceptos(["Servicios oncológicos, paciente Juan Bernardino Ramirez Nava"])).toBe("AMBULATORIO");
+    expect(tipoEpisodioPorConceptos(["Servicio de oncología: Paciente Gabriel Gaytán Toledo"])).toBe("AMBULATORIO");
+    expect(tipoEpisodioPorConceptos(["LABORATORIO CLINICO", "TOMOGRAFIA"])).toBe("CONSULTA");
+  });
+
+  it("sólo una estancia encadena facturas de días distintos; las sesiones semanales quedan separadas", () => {
+    const d = (s: string) => new Date(s + "T12:00:00-06:00");
+    const sesion = (fecha: string) => ({ fecha: d(fecha), pacienteKey: "p1", items: [{ descripcion: "Servicios oncológicos, paciente X" }] });
+    const estancia = (fecha: string, desc: string) => ({ fecha: d(fecha), pacienteKey: "p2", items: [{ descripcion: desc }] });
+    const facturas = [sesion("2026-03-02"), sesion("2026-03-09"), sesion("2026-03-16"), estancia("2026-08-29", "QUIROFANO"), estancia("2026-08-31", "HOSPITALIZACION")];
+    const grupos = agruparFacturasEnEpisodios(facturas, { esEstancia: (f) => esEstanciaPorConceptos(f.items.map((i) => i.descripcion)) });
+    const porPaciente = (k: string) => grupos.filter((g) => g[0].pacienteKey === k).map((g) => g.length);
+    expect(porPaciente("p1")).toEqual([1, 1, 1]);
+    expect(porPaciente("p2")).toEqual([2]);
+  });
+
+  it("una factura sólo de VENTA o ANTICIPO no es una atención", () => {
+    expect(sinConceptosClinicos(["VENTA"])).toBe(true);
+    expect(sinConceptosClinicos(["ANTICIPO DEL BIEN O SERVICIO", "APLICACIÓN DE ANTICIPO"])).toBe(true);
+    expect(sinConceptosClinicos(["VENTA", "FARMACIA HOSPITALARIA 16"])).toBe(false);
+    expect(sinConceptosClinicos([])).toBe(false);
   });
 });
