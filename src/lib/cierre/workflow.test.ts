@@ -67,7 +67,28 @@ const ITEMS: Array<[string, string]> = [
   ["fecha-limite", "Presentada. La fecha límite del periodo era el 17 de septiembre de 2026."],
 ];
 
-function checklist(over: Record<string, Partial<ChecklistItem>> = {}): ChecklistDeclaracion {
+/** Posición del motor (cifras ya calculadas) — PM con coeficiente fijado. */
+function posicion(over: Partial<ChecklistDeclaracion["posicion"]> = {}): ChecklistDeclaracion["posicion"] {
+  return {
+    iva: { trasladado: 12000, acreditable: 9347.2, saldoFavorAnterior: 0, pagar: 2652.8, saldoAFavor: 0 },
+    isr: {
+      metodo: "PM_ART14",
+      coeficiente: 0.0842,
+      coeficienteFuente: "declaracion_anual",
+      coeficienteSugerido: 0.0842,
+      coeficienteSugeridoFuente: "declaracion_anual",
+      coeficienteBase: { year: 2025, ingresos: 1000000, utilidad: 84200 },
+      ingresosAcumulados: 800000,
+      baseGravable: 67360,
+      isrPagar: 20208,
+      perdidaFiscalPendiente: null,
+    },
+    advertencias: [],
+    ...over,
+  };
+}
+
+function checklist(over: Record<string, Partial<ChecklistItem>> = {}, pos = posicion()): ChecklistDeclaracion {
   const items: ChecklistItem[] = ITEMS.map(([clave, detalle]) => ({
     clave,
     titulo: clave,
@@ -85,6 +106,7 @@ function checklist(over: Record<string, Partial<ChecklistItem>> = {}): Checklist
     vencida: false,
     items,
     resumen: { listos: items.length, pendientes: 0, atencion: 0, noAplica: 0, total: items.length },
+    posicion: pos,
   };
 }
 
@@ -264,5 +286,64 @@ describe("periodosEnJuego", () => {
       { year: 2026, month: 8 },
       { year: 2026, month: 9 },
     ]);
+  });
+});
+
+// El fallo que Juan vio en producción: el copiloto le pidió el coeficiente de
+// utilidad "de tu declaración anual" cuando el motor YA lo deduce de la anual
+// que tenemos guardada. La cifra tiene que viajar en el paso.
+describe("decidirPasos — el coeficiente nunca se le pregunta al contador", () => {
+  const pasoApertura = (pos: ReturnType<typeof posicion>) =>
+    decidirPasos(hechos({ checklist: checklist({ apertura: { estado: "atencion" } }, pos) })).find((p) => p.clave === "apertura")!;
+
+  it("con coeficiente fijado: la señal va en verde y la cifra viaja en el paso", () => {
+    const p = pasoApertura(posicion());
+    expect(p.senales.find((s) => s.clave === "x:coeficiente")).toMatchObject({ estado: "ok" });
+    expect(p.cifras.coeficiente).toBe(0.0842);
+    expect(p.hechos).toHaveProperty("cifras");
+  });
+
+  it("sin fijar pero deducible de la anual: lo dice con el valor y el ejercicio, no lo pide", () => {
+    const p = pasoApertura(
+      posicion({
+        isr: { ...posicion().isr, coeficiente: null, coeficienteFuente: "ninguno", isrPagar: null },
+      })
+    );
+    const s = p.senales.find((x) => x.clave === "x:coeficiente")!;
+    expect(s.estado).toBe("warn");
+    expect(s.resumen).toContain("0.0842");
+    expect(s.resumen).toContain("anual 2025");
+    expect(p.cifras.coeficienteSugerido).toBe(0.0842);
+    expect(p.cifras.coeficienteBase).toMatchObject({ year: 2025 });
+  });
+
+  it("sin coeficiente y sin anual: lo dice honestamente y manda a capturarla", () => {
+    const p = pasoApertura(
+      posicion({
+        isr: {
+          ...posicion().isr,
+          coeficiente: null,
+          coeficienteFuente: "ninguno",
+          coeficienteSugerido: null,
+          coeficienteSugeridoFuente: null,
+          coeficienteBase: null,
+          isrPagar: null,
+        },
+      })
+    );
+    const s = p.senales.find((x) => x.clave === "x:coeficiente")!;
+    expect(s.resumen).toContain("sin anual de la cual deducirlo");
+    expect(s.cta?.href).toBe("/declaraciones/historial");
+  });
+
+  it("régimen sin coeficiente (RESICO PF): la señal no aplica", () => {
+    const p = pasoApertura(posicion({ isr: { ...posicion().isr, metodo: "RESICO_PF" } }));
+    expect(p.senales.find((s) => s.clave === "x:coeficiente")).toBeUndefined();
+  });
+
+  it("el paso de impuestos lleva IVA e ISR desglosados, no sólo el texto", () => {
+    const p = decidirPasos(hechos()).find((x) => x.clave === "impuestos")!;
+    expect(p.cifras.iva).toMatchObject({ pagar: 2652.8, trasladado: 12000 });
+    expect(p.cifras.isr).toMatchObject({ coeficiente: 0.0842, isrPagar: 20208 });
   });
 });

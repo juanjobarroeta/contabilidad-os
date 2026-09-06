@@ -13,6 +13,7 @@ function paso(clave: PasoEvaluado["clave"], senales: SenalPaso[], extra: Partial
     estadoCalculado: senales.some((s) => s.estado === "error") ? "bloquea" : senales.some((s) => s.estado === "warn") ? "atencion" : "listo",
     detalle: senales[0]?.resumen ?? null,
     senales,
+    cifras: {},
     hechos: {},
     hashEvidencia: "h",
     cta: { label: clave, href: `/${clave}` },

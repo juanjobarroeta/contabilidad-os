@@ -39,7 +39,13 @@ type ToolInput = Record<string, unknown>;
  *    deriva del propio userId (misma fuente que la app), así que la herramienta
  *    nunca expone datos de empresas que el usuario no administra.
  */
-export type ToolContext = { conversationId?: string; inApp?: boolean; userId?: string };
+export type ToolContext = {
+  conversationId?: string;
+  inApp?: boolean;
+  userId?: string;
+  /** Periodo y paso del cierre guiado abierto en pantalla (default de las tools de cierre). */
+  cierre?: { year: number; month: number; paso?: string };
+};
 
 const MXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
@@ -74,6 +80,14 @@ export async function executeToolCall(
       return proponerCategorizacion(input, companyId, context);
     case "proponer_categorizacion_lote":
       return proponerCategorizacionLote(input, companyId, context);
+    case "query_cierre_estado":
+      return queryCierreEstado(input, companyId, context);
+    case "query_cierre_paso":
+      return queryCierrePaso(input, companyId, context);
+    case "proponer_confirmar_paso":
+      return proponerDecisionPaso("confirmar", input, companyId, context);
+    case "proponer_omitir_paso":
+      return proponerDecisionPaso("omitir", input, companyId, context);
     case "proponer_resolver_hallazgo":
       return proponerResolverHallazgo(input, companyId, context);
     case "proponer_posponer_hallazgo":
@@ -377,6 +391,120 @@ async function proponerCategorizacionLote(input: ToolInput, companyId: string, c
     type: "categorizacion_lote",
     payload: { patron, familia, signo: signoRaw, crearRegla: true },
   });
+  return propuestaStaged(summary, pa.token);
+}
+
+// ── Cierre guiado ───────────────────────────────────────────────────────────
+// El periodo sale del contexto de la pantalla; el modelo puede pedir otro.
+// Ninguna de estas tools calcula: leen lo que los motores dejaron evaluado.
+
+function periodoCierre(input: ToolInput, context: ToolContext): { year: number; month: number } {
+  if (typeof input.year === "number" && typeof input.month === "number") {
+    return { year: input.year, month: input.month };
+  }
+  if (context.cierre) return { year: context.cierre.year, month: context.cierre.month };
+  const prev = new Date();
+  prev.setDate(1);
+  prev.setMonth(prev.getMonth() - 1);
+  return { year: prev.getFullYear(), month: prev.getMonth() + 1 };
+}
+
+async function queryCierreEstado(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const { year, month } = periodoCierre(input, context);
+  const { evaluarCierre } = await import("../cierre/evaluar");
+  const cierre = await evaluarCierre(companyId, year, month);
+  return JSON.stringify({
+    periodo: cierre.periodo,
+    resumen: cierre.resumen,
+    pasos: cierre.pasos
+      .filter((p) => p.estadoCalculado !== "no_aplica")
+      .map((p) => ({
+        clave: p.clave,
+        titulo: p.titulo,
+        estado_del_sistema: p.estadoCalculado,
+        decision_del_contador: p.estado,
+        detalle: p.detalle,
+        ...(p.fechaLimite ? { fechaLimite: p.fechaLimite, diasRestantes: p.diasRestantes } : {}),
+      })),
+    instruccion_para_el_asistente:
+      "Presenta primero lo que BLOQUEA, luego lo que necesita atención, y di cuál es el siguiente movimiento. " +
+      "Un paso en REVISAR es uno que ya estaba confirmado y cuya evidencia cambió.",
+  });
+}
+
+async function queryCierrePaso(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const { year, month } = periodoCierre(input, context);
+  const clave = String(input.clave ?? context.cierre?.paso ?? "");
+  const { esClavePaso } = await import("../cierre/claves");
+  if (!esClavePaso(clave)) return JSON.stringify({ error: "Paso de cierre desconocido." });
+  const { evaluarCierre } = await import("../cierre/evaluar");
+  const cierre = await evaluarCierre(companyId, year, month);
+  const paso = cierre.pasos.find((p) => p.clave === clave);
+  if (!paso) return JSON.stringify({ error: "El paso no existe en este periodo." });
+  return JSON.stringify({
+    periodo: cierre.periodo,
+    clave: paso.clave,
+    titulo: paso.titulo,
+    descripcion: paso.descripcion,
+    estado_del_sistema: paso.estadoCalculado,
+    decision_del_contador: paso.estado,
+    senales: paso.senales.map((s) => ({ estado: s.estado, resumen: s.resumen, ir_a: s.cta?.href })),
+    cifras_ya_calculadas: paso.cifras,
+    ...(paso.fechaLimite ? { fechaLimite: paso.fechaLimite, diasRestantes: paso.diasRestantes } : {}),
+    instruccion_para_el_asistente:
+      "Las cifras de 'cifras_ya_calculadas' son las buenas: cítalas y explica de dónde salen. " +
+      "NUNCA le pidas al usuario un dato que aparezca ahí (coeficiente, saldo a favor, IVA, ISR). " +
+      "Si una cifra viene en null, di con precisión qué falta para poder calcularla y dónde se captura.",
+  });
+}
+
+async function proponerDecisionPaso(
+  accion: "confirmar" | "omitir",
+  input: ToolInput,
+  companyId: string,
+  context: ToolContext
+): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const { year, month } = periodoCierre(input, context);
+  const clave = String(input.clave ?? "");
+  const motivo = String(input.motivo ?? "").trim();
+  const { esClavePaso } = await import("../cierre/claves");
+  if (!esClavePaso(clave)) return JSON.stringify({ error: "Paso de cierre desconocido." });
+  if (accion === "omitir" && !motivo) return JSON.stringify({ error: "Para omitir un paso hace falta el motivo." });
+
+  const { evaluarCierre } = await import("../cierre/evaluar");
+  const cierre = await evaluarCierre(companyId, year, month);
+  const paso = cierre.pasos.find((p) => p.clave === clave);
+  if (!paso) return JSON.stringify({ error: "El paso no existe en este periodo." });
+  if (paso.estadoCalculado === "no_aplica") return JSON.stringify({ error: "Ese paso no aplica a esta empresa este periodo." });
+  if (accion === "confirmar" && (paso.estadoCalculado === "bloquea" || paso.estadoCalculado === "espera")) {
+    return JSON.stringify({
+      error:
+        paso.estadoCalculado === "espera"
+          ? "Un paso anterior bloquea éste; no se puede confirmar todavía."
+          : "El paso tiene un bloqueo activo; hay que resolverlo antes de confirmar.",
+      detalle: paso.detalle,
+    });
+  }
+
+  const summary =
+    accion === "confirmar"
+      ? `Dar por confirmado el paso «${paso.titulo}» del cierre de ${cierre.periodo}` +
+        (paso.detalle ? ` (${paso.detalle})` : "") +
+        ". Se guarda la evidencia de este momento; si los datos cambian después, el paso vuelve a «revisar»."
+      : `Omitir el paso «${paso.titulo}» del cierre de ${cierre.periodo}. Motivo: ${motivo}. Queda en la bitácora.`;
+
+  const pa =
+    accion === "confirmar"
+      ? await stageChatPendingAction(context.conversationId!, companyId, summary, {
+          type: "confirmar_paso",
+          payload: { year, month, clave, hashEsperado: paso.hashEvidencia },
+        })
+      : await stageChatPendingAction(context.conversationId!, companyId, summary, {
+          type: "omitir_paso",
+          payload: { year, month, clave, hashEsperado: paso.hashEvidencia, motivo },
+        });
   return propuestaStaged(summary, pa.token);
 }
 

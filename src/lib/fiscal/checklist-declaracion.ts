@@ -39,6 +39,38 @@ export interface ChecklistItem {
   accionUrl?: string;
 }
 
+/**
+ * Las cifras que `computeTaxPosition` ya calculó para armar el checklist,
+ * expuestas para quien las necesite sin recalcular (el cierre guiado y el
+ * copiloto). Sin esto, quien quiera el coeficiente o el IVA del periodo tiene
+ * que volver a correr el motor completo — o, peor, preguntárselo al usuario.
+ */
+export interface PosicionResumen {
+  iva: {
+    trasladado: number;
+    acreditable: number;
+    saldoFavorAnterior: number;
+    pagar: number;
+    saldoAFavor: number;
+  };
+  isr: {
+    metodo: string;
+    /** Coeficiente en uso (manual o derivado); null = no hay y el ISR no se puede calcular. */
+    coeficiente: number | null;
+    coeficienteFuente: string;
+    /** El que el motor deduce de la anual/provisionales aunque no esté fijado. */
+    coeficienteSugerido: number | null;
+    coeficienteSugeridoFuente: string | null;
+    /** De qué ejercicio y cifras salió el sugerido. */
+    coeficienteBase: { year: number; ingresos: number; utilidad: number } | null;
+    ingresosAcumulados: number;
+    baseGravable: number | null;
+    isrPagar: number | null;
+    perdidaFiscalPendiente: number | null;
+  };
+  advertencias: string[];
+}
+
 export interface ChecklistDeclaracion {
   periodo: string; // "YYYY-MM"
   year: number;
@@ -50,6 +82,8 @@ export interface ChecklistDeclaracion {
   vencida: boolean;
   items: ChecklistItem[];
   resumen: { listos: number; pendientes: number; atencion: number; noAplica: number; total: number };
+  /** Cifras del periodo ya calculadas (ver PosicionResumen). */
+  posicion: PosicionResumen;
 }
 
 /** Insumos ya consultados sobre los que se decide cada punto (sin DB). */
@@ -547,6 +581,34 @@ export async function checklistDeclaracion(
     diasRestantes,
     vencida: diasRestantes < 0,
     items,
+    posicion: {
+      iva: {
+        trasladado: pos.iva.trasladado,
+        acreditable: pos.iva.acreditable,
+        saldoFavorAnterior: pos.iva.saldoFavorAnterior,
+        pagar: pos.iva.pagar,
+        saldoAFavor: pos.iva.saldoAFavor,
+      },
+      isr: {
+        metodo: pos.isr.metodo,
+        coeficiente: pos.isr.coeficiente,
+        coeficienteFuente: pos.isr.coeficienteFuente,
+        coeficienteSugerido: pos.isr.coeficienteSugerido ?? null,
+        coeficienteSugeridoFuente: pos.isr.coeficienteSugeridoFuente ?? null,
+        coeficienteBase: pos.isr.coeficienteBase
+          ? {
+              year: pos.isr.coeficienteBase.year,
+              ingresos: pos.isr.coeficienteBase.ingresos,
+              utilidad: pos.isr.coeficienteBase.utilidad,
+            }
+          : null,
+        ingresosAcumulados: pos.isr.ingresosAcumulados,
+        baseGravable: pos.isr.baseGravable,
+        isrPagar: pos.isr.isrPagar,
+        perdidaFiscalPendiente: pos.isr.perdidaFiscalPendiente ?? null,
+      },
+      advertencias: pos.advertencias,
+    },
     resumen: {
       listos: items.filter((it) => it.estado === "listo").length,
       pendientes: items.filter((it) => it.estado === "pendiente").length,

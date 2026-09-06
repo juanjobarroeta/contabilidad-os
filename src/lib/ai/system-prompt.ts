@@ -9,6 +9,12 @@ interface CompanyContext {
 export interface ContextoNavegacion {
   /** Ruta de la app (pathname + query), p.ej. "/bancos?tab=historico". */
   ruta?: string;
+  /**
+   * Bloque del cierre guiado ya redactado (src/lib/cierre/contexto.ts). Va
+   * DESPUÉS del breakpoint de caché junto a la navegación: cambia con cada
+   * paso. Se recibe hecho para que este módulo no dependa del cierre.
+   */
+  bloqueCierre?: string;
 }
 
 /**
@@ -43,6 +49,8 @@ export function buildSystemBlocks(
   ];
   const nav = navegacionBlock(contexto).trim();
   if (nav) bloques.push({ type: "text", text: nav });
+  const cierre = contexto?.bloqueCierre?.trim();
+  if (cierre) bloques.push({ type: "text", text: cierre });
   return bloques;
 }
 

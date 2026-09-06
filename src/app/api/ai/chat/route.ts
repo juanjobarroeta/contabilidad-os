@@ -5,6 +5,12 @@ import { prisma } from "@/lib/prisma";
 import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import { buildSystemBlocks } from "@/lib/ai/system-prompt";
+import { bloqueCierre } from "@/lib/cierre/contexto";
+import { evaluarCierre } from "@/lib/cierre/evaluar";
+import { empresaTieneCierreGuiado } from "@/lib/cierre/gate";
+import { esClavePaso } from "@/lib/cierre/claves";
+import { etiquetaPeriodo } from "@/lib/cierre/plantillas";
+import { TOOLS_SIEMPRE_CIERRE, toolsDelPaso } from "@/lib/cierre/workflow";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { recordLlmCost } from "@/lib/costos/record";
@@ -44,7 +50,12 @@ export async function POST(req: Request) {
   if (rawBody.length > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "La conversación es demasiado larga. Inicia una conversación nueva." }, { status: 413 });
   }
-  let body: { messages?: unknown; companyId?: string; conversationId?: string; contexto?: { ruta?: unknown } };
+  let body: {
+    messages?: unknown;
+    companyId?: string;
+    conversationId?: string;
+    contexto?: { ruta?: unknown; cierre?: { year?: unknown; month?: unknown; paso?: unknown } };
+  };
   try {
     body = JSON.parse(rawBody);
   } catch {
@@ -56,6 +67,22 @@ export async function POST(req: Request) {
   const rutaActual =
     typeof contexto?.ruta === "string" && contexto.ruta.startsWith("/") && contexto.ruta.length <= 200
       ? contexto.ruta
+      : undefined;
+
+  // Cierre guiado: si el usuario está en /cierre, el periodo y el paso viajan
+  // en el contexto. Con ellos el copiloto recibe el estado de los doce pasos y
+  // las CIFRAS ya calculadas del paso activo — sin esto contestaba de memoria y
+  // llegó a pedir datos que el sistema ya tenía.
+  const cierreCtx =
+    typeof contexto?.cierre?.year === "number" &&
+    typeof contexto.cierre.month === "number" &&
+    contexto.cierre.month >= 1 &&
+    contexto.cierre.month <= 12
+      ? {
+          year: contexto.cierre.year,
+          month: contexto.cierre.month,
+          paso: esClavePaso(contexto.cierre.paso) ? contexto.cierre.paso : undefined,
+        }
       : undefined;
 
   const messages = sanearHistorial(body.messages);
@@ -104,7 +131,31 @@ export async function POST(req: Request) {
   // Sólo roles con permiso de escritura pueden STAGEAR acciones reversibles. A un
   // VIEWER ni siquiera le exponemos las herramientas "proponer_*".
   const canWrite = member.role !== "VIEWER";
-  const availableTools = canWrite ? tools : tools.filter((t) => !t.name.startsWith("proponer_"));
+  let availableTools = canWrite ? tools : tools.filter((t) => !t.name.startsWith("proponer_"));
+
+  // ── Contexto del cierre guiado ─────────────────────────────────────────────
+  // Se evalúa SIN persistir (el pase diario es quien escribe) y se redacta como
+  // bloque de sistema. Si la empresa no tiene el plan, se ignora en silencio:
+  // el chat normal sigue funcionando.
+  let bloqueDelCierre: string | undefined;
+  if (cierreCtx) {
+    try {
+      if (await empresaTieneCierreGuiado(companyId)) {
+        const cierre = await evaluarCierre(companyId, cierreCtx.year, cierreCtx.month);
+        const activo = cierreCtx.paso ? (cierre.pasos.find((p) => p.clave === cierreCtx.paso) ?? null) : null;
+        bloqueDelCierre = bloqueCierre(cierre, activo, etiquetaPeriodo(cierreCtx.year, cierreCtx.month));
+        // Las tools del paso activo + las que siempre puede usar. Menos ruido y
+        // menos tokens que exponer las 37 en cada turno del cierre.
+        if (activo) {
+          const permitidas = new Set([...toolsDelPaso(activo.clave), ...TOOLS_SIEMPRE_CIERRE]);
+          const acotadas = availableTools.filter((t) => permitidas.has(t.name));
+          if (acotadas.length > 0) availableTools = acotadas;
+        }
+      }
+    } catch (e) {
+      console.error("[ai/chat] contexto del cierre falló:", e instanceof Error ? e.message : e);
+    }
+  }
 
   // ── Persistencia de la conversación ─────────────────────────────────────────
   // El último mensaje del cliente es el nuevo turno del usuario. Resolvemos (o
@@ -145,7 +196,7 @@ export async function POST(req: Request) {
 
   // System prompt en bloques: el estable lleva cache_control (junto con `tools`
   // es casi toda la entrada del turno) y el de navegación va después.
-  const systemBlocks = buildSystemBlocks(company, { ruta: rutaActual });
+  const systemBlocks = buildSystemBlocks(company, { ruta: rutaActual, bloqueCierre: bloqueDelCierre });
 
   // Stream response with tool-use loop
   const encoder = new TextEncoder();
@@ -297,7 +348,9 @@ export async function POST(req: Request) {
               cache_creation_input_tokens: roundCacheWrite,
               cache_read_input_tokens: roundCacheRead,
             },
-            { companyId, userId, subtipo: "ai.chat" },
+            // El cierre guiado se mide aparte: es una feature de plan y su
+            // gasto tiene que poder separarse del chat general.
+            { companyId, userId, subtipo: cierreCtx ? "ai.cierre" : "ai.chat" },
           );
 
           if (!hasToolUse) break;
@@ -316,7 +369,7 @@ export async function POST(req: Request) {
                 // el confirm endpoint re-valida igualmente. userId habilita las
                 // herramientas de cartera (query_despacho_panorama), acotadas a
                 // las empresas accesibles del propio usuario.
-                { conversationId: convId!, inApp: canWrite, userId }
+                { conversationId: convId!, inApp: canWrite, userId, cierre: cierreCtx }
               );
               traza.tools.push({ name: block.name, ms: Date.now() - t0 });
               fuentesTurno.push(...fuentesDesdeToolResult(block.name, result));

@@ -485,6 +485,66 @@ export const tools: Anthropic.Tool[] = [
       required: ["patron", "familia"],
     },
   },
+  // ── Cierre guiado (PRO) ───────────────────────────────────────────────────
+  {
+    name: "query_cierre_estado",
+    description:
+      "Estado del CIERRE GUIADO del periodo: los doce pasos (punto de partida, SAT, nómina, IMSS, bancos, complementos, IVA/ISR, DIOT, contabilidad, riesgos, declaración, entregables) con lo que dice cada motor hoy, si el contador ya lo confirmó y cuáles bloquean. Úsala cuando pregunten «¿cómo va el cierre?», «¿qué falta?» o «¿qué hago hoy?». Devuelve también las cifras del periodo ya calculadas.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        year: { type: "number", description: "Año del periodo. Default: el del cierre abierto en pantalla." },
+        month: { type: "number", description: "Mes 1-12. Default: el del cierre abierto en pantalla." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "query_cierre_paso",
+    description:
+      "Detalle de UN paso del cierre guiado: sus señales (cada una calculada por un motor) y las CIFRAS ya calculadas que le corresponden — coeficiente de utilidad y su origen, saldo a favor, IVA/ISR del periodo, fecha límite. Úsala antes de explicar un paso: nunca le pidas al contador un dato que esta tool devuelve.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        clave: {
+          type: "string",
+          enum: [
+            "apertura", "sat", "nomina", "imss", "banco", "complementos",
+            "impuestos", "diot", "contabilidad", "revision", "declaracion", "entregables",
+          ],
+          description: "Clave del paso",
+        },
+        year: { type: "number" },
+        month: { type: "number" },
+      },
+      required: ["clave"],
+    },
+  },
+  {
+    name: "proponer_confirmar_paso",
+    description:
+      "Propone dar por CONFIRMADO un paso del cierre, y lo deja PENDIENTE de confirmación humana. NO lo confirma: stagea la propuesta con la evidencia de este momento y el usuario debe tocar Confirmar. Úsala sólo cuando el paso esté listo o su atención ya esté explicada y aceptada. Nunca digas que un paso quedó confirmado si el usuario no tocó Confirmar.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        clave: { type: "string", description: "Clave del paso a confirmar" },
+      },
+      required: ["clave"],
+    },
+  },
+  {
+    name: "proponer_omitir_paso",
+    description:
+      "Propone OMITIR un paso del cierre (no aplica a esta empresa este mes), con un motivo que queda en la bitácora. Deja la propuesta pendiente de confirmación humana.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        clave: { type: "string", description: "Clave del paso a omitir" },
+        motivo: { type: "string", description: "Por qué se omite (queda en bitácora)" },
+      },
+      required: ["clave", "motivo"],
+    },
+  },
   {
     name: "proponer_resolver_hallazgo",
     description:
