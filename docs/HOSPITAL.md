@@ -538,16 +538,21 @@ GET  /api/hospital/protocolos?companyId=[&q=&activo=1] → [{ id, clave, nombre,
        partidas: [{ orden, servicioId, categoria, descripcion, cantidad, opcional }], insumos: [{ insumoId, nombre, cantidad, opcional }], usos }]
 POST /api/hospital/protocolos { clave, nombre, tipoEpisodio, procedimientoCie9?, diagnosticoCie10?, …, partidas, insumos } · PATCH /protocolos/[id] (sube version) · DELETE = activo:false
 POST /api/hospital/protocolos/[id]/simular { pagadorId? } → partidas con precio del convenio (HospTarifa) o lista, subtotal/iva/total, costo estimado de insumos (ultimoCosto), honorarios
-GET  /api/hospital/planes?companyId=[&pacienteId=&estado=&desde=&hasta=] → planes con paciente, protocolo, médico, pagador, cotización, episodio
+GET  /api/hospital/planes?companyId=[&pacienteId=&estado=&protocoloId=&q=&desde=&hasta=] → planes con paciente, protocolo, médico, anestesiólogo, pagador,
+       recurso, cotización { id, folio, estado, total }, episodio { id, folio, estado, fechaIngreso, fechaAlta }, partidas (con iva/total por renglón), insumos, honorarios
+     · GET /planes/[id] agrega `cita` (la cita de quirófano viva)
 POST /api/hospital/planes { pacienteId, protocoloId?, pagadorId?, medicoId?, anestesiologoId?, recursoId?, fechaProgramada?, partidas?, insumos?, honorarios?, notas }
      · sin partidas → las del protocolo preciadas con el convenio del pagador (o el del paciente); partidas explícitas mandan
-PATCH /api/hospital/planes/[id] { …campos…, estado?, autorizacionPagador? } · AUTORIZADO exige autorizacionPagador cuando el pagador es ASEGURADORA/EMPRESA
+PATCH /api/hospital/planes/[id] { …campos…, estado?: PROPUESTO|AUTORIZADO|CANCELADO, autorizacionPagador?, episodioId? } · AUTORIZADO exige autorizacionPagador
+       cuando el pagador es ASEGURADORA/EMPRESA · con cotización viva no cambian partidas, honorarios, insumos ni pagador (409: edita la cotización)
 POST /api/hospital/planes/[id]/cotizar → crea la HospCotizacion (partidas del plan, folio COT) y la liga; 409 si ya tiene
-POST /api/hospital/planes/[id]/programar { fechaProgramada, recursoId, medicoId } → cita de quirófano (HospCita) + plan EN_CURSO al convertir
-     · POST /cotizaciones/[id]/convertir (existente) engancha plan.episodioId cuando la cotización tiene plan
+POST /api/hospital/planes/[id]/programar { fechaProgramada, recursoId, medicoId?, duracionMinutos? } → cita CIRUGIA en quirófano (409 si se empalma; reprogramar cancela la anterior)
+     · POST /cotizaciones/[id]/convertir (existente) engancha plan.episodioId → EN_CURSO y devuelve `plan`; cancelar el episodio cancela el plan; el alta lo CIERRA
 GET  /api/hospital/episodios/[id]/plan → { plan, comparativo: { partidas: [{ descripcion, categoria, planCantidad, planImporte, realCantidad, realImporte, desviacion }],
-       fueraDePlan: [cargos sin partida planeada], resumen: { planTotal, realTotal, desviacion, desviacionPct }, insumos: { planeados, aplicados } } }
-     · la cuenta (GET /episodios/[id]/cuenta) incluye `plan: { total, desviacionPct, autorizacion }` cuando existe
+       fueraDePlan: [cargos sin partida planeada], porCategoria: [...], resumen: { planSubtotal, planTotal, realSubtotal, realTotal, desviacion, desviacionPct, fueraDePlan, sinAplicar, cargos },
+       insumos: { planeados, aplicados, resumen: { costoPlaneado, costoAplicado, noPlaneados } } } }
+     · la cuenta (GET /episodios/[id]/cuenta) incluye `plan: { id, nombre, estado, total, desviacionPct, autorizacionPagador }` cuando existe
+     · simular devuelve `origenPrecio` por partida (CONVENIO|LISTA|MANUAL|SIN_TARIFA); una partida sin servicio se precia en 0
 ```
 Reglas: un plan por episodio y por cotización; el plan CERRADO no se edita; cancelar un plan cancela su cotización si sigue en BORRADOR/ENVIADA;
 alerta en panel `PLAN_SIN_AUTORIZACION` (plan con pagador asegurador y fecha programada sin autorización) y `CUENTA_FUERA_DE_PLAN` (desviación > 15 %).
@@ -562,14 +567,18 @@ POST /api/hospital/episodios/[id]/asistente/estructurar { tipo: HospNotaTipo, te
        codigos: { diagnosticos: [{ codigo, nombre, confianza, fragmento }], procedimientos: [...] }, advertencias, asistencia: { origen: "ESTRUCTURADO", modelo, at } }
      · el modelo recibe la plantilla (claves + etiquetas + obligatorias), el tipo de episodio, sexo/edad y los signos vitales; responde JSON estricto
      · cada código propuesto se valida con resolverCie (existe, activo, coherente con sexo/edad); los que no pasan se descartan con advertencia
+     · las respuestas traen `uso` (intentos, tokens); cada código trae clave, capitulo, confianza, fragmento y principal
 POST /api/hospital/episodios/[id]/asistente/codificar { texto?: string } → { diagnosticos: [...], procedimientos: [...] } a partir de las notas del episodio (o del texto dado)
 POST /api/hospital/episodios/[id]/asistente/egreso → { secciones de EGRESO: diagnosticoEgreso, motivoEgreso, evolucion, planManejo, instrucciones, pronostico,
-       aldrete? , codigos, saeh: { comorbilidades: [...], procedimientos: [...], causaExterna? } } armado de TODAS las notas del episodio
-     · la hoja SAEH (GET /episodios/[id]/saeh) expone `sugerencias` con lo mismo para aceptar campo por campo
+       motivoEgresoClave, aldrete (de la última POSTANESTESICA), diasEstancia, codigos, saeh: { afeccionPrincipal, comorbilidades, procedimientos (con tipoAnestesia, quirofano, cedula),
+       causaExterna }, notas: { incluidas, omitidas } } armado de TODAS las notas del episodio (409 sin notas)
+     · la hoja SAEH (GET /episodios/[id]/saeh?sugerencias=1, rol de escritura) expone `sugerencias` y `propuestaEgreso` (o sugerencias: null + sugerenciasError)
 POST /api/hospital/episodios/[id]/notas (existente) acepta `asistencia: { origen, transcripcion?, modelo, sttProveedor?, at }` y lo guarda en HospNota.asistencia
 ```
-Costo y control: todas las llamadas van por `meteredCreate` con companyId/userId (topes de IA de la empresa); `HospConfig.iaAsistencia=false` apaga
-los endpoints (409). Modelo: `AI_HOSPITAL_MODEL` (default claude-sonnet-4-5). Nunca se manda al modelo más que el episodio en cuestión.
+Costo y control: todas las llamadas van por `meteredCreate` con companyId/userId (topes de IA de la empresa, 429 al tope); `HospConfig.iaAsistencia=false`
+apaga los endpoints (409); bitácora `hospital.asistente.<accion>`. Modelo: `AI_HOSPITAL_MODEL` (default claude-sonnet-4-5) con `AI_HOSPITAL_MODEL_FALLBACK`;
+503 sin `ANTHROPIC_API_KEY`. STT en el hub sólo con `OPENAI_API_KEY` (config expone `sttServidorDisponible`). Al modelo va sólo el episodio: tipo, fechas, sexo/edad,
+signos y notas (sin nombre ni CURP).
 
 **Contabilidad** (el módulo asienta cuando el contador activa `contabilidadActiva`; antes, sólo previsualiza)
 ```
