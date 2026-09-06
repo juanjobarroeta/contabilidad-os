@@ -12,6 +12,7 @@
 
 import type { CierreEvaluado, PasoConDecision } from "./evaluar";
 import type { ClavePasoCierre } from "./claves";
+import { PASOS } from "./workflow";
 
 export interface ContextoCierre {
   year: number;
@@ -88,6 +89,15 @@ export function bloqueCierre(cierre: CierreEvaluado, activo: PasoConDecision | n
         partes.push(`- [${s.estado.toUpperCase()}] ${s.resumen}`);
       }
     }
+    const def = PASOS.find((p) => p.clave === activo.clave);
+    if (def && def.revisar.length > 0) {
+      partes.push("\nQué se revisa en este paso (compruébalo tú, no lo des por hecho):");
+      for (const r of def.revisar) partes.push(`- ${r}`);
+      partes.push(
+        `Suele empezarse por: ${def.tools.filter((t) => !t.startsWith("proponer_")).join(", ")}. ` +
+          "Es una pista, no un límite: tienes TODAS tus herramientas y datos de la empresa (facturas, bancos, nómina, declaraciones, hallazgos, la ley) — si algo del paso se aclara mirando otra cosa, míralo."
+      );
+    }
     const cifras = activo.cifras ?? {};
     if (Object.keys(cifras).length > 0) {
       partes.push("\nCifras YA CALCULADAS para este paso — úsalas tal cual, NUNCA las pidas ni las recalcules:");
@@ -104,7 +114,8 @@ export function bloqueCierre(cierre: CierreEvaluado, activo: PasoConDecision | n
 - Para cerrar un paso propón \`proponer_confirmar_paso\`; el contador toca Confirmar. Nunca digas que un paso quedó confirmado si no lo confirmó él.
 - **No pidas permiso para proponer.** Si de tu análisis sale que el paso está listo o que un dato debe fijarse, llama la herramienta en ese mismo turno y deja la tarjeta puesta; el contador decide en el botón Confirmar. Nada de «¿te dejo la tarjeta?» o «¿la preparo?» — eso es un viaje de ida y vuelta para nada.
 - **Cuando algo se pueda capturar desde aquí, ofrécelo con su tarjeta en vez de mandar al contador a otra pantalla.** Si pide usar el coeficiente sugerido, llama a \`proponer_fijar_coeficiente\`; si el punto de partida ya está revisado, \`proponer_confirmar_apertura\`. Sólo mándalo a otra pantalla cuando de verdad no exista una propuesta para eso.
-- Ve al grano: qué falta, en qué orden y cuál es el siguiente movimiento. Sin repetir la lista de pasos completa salvo que te la pidan.`);
+- Ve al grano: qué falta, en qué orden y cuál es el siguiente movimiento. Sin repetir la lista de pasos completa salvo que te la pidan.
+- **Nunca digas que no tienes acceso a algo sin haberlo intentado.** Dentro del cierre conservas todas tus herramientas: declaraciones presentadas y sus acuses, facturas, movimientos bancarios, nómina, complementos, hallazgos y la ley. Si el contador pregunta por un saldo, un mes anterior o un dato de otra área, ve a buscarlo.`);
 
   return partes.join("\n");
 }

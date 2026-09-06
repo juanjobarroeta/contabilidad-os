@@ -437,3 +437,30 @@ describe("decidirPasos — el punto de partida dice de dónde salió cada cifra"
     expect(p.senales.find((x) => x.clave === "x:datos_apertura")!.estado).toBe("ok");
   });
 });
+
+// Acotar las tools por paso dejaba al copiloto ciego: en «punto de partida» no
+// podía mirar facturas ni bancos, y Juan lo notó («debería tener acceso a
+// declaraciones y todo»). El paso dice QUÉ REVISAR, no qué puede ver.
+describe("cada paso dice qué revisar", () => {
+  it("todos los pasos que aplican traen su lista de revisión", () => {
+    for (const p of PASOS) {
+      expect(p.revisar.length, `el paso ${p.clave} no dice qué revisar`).toBeGreaterThan(0);
+    }
+  });
+
+  it("«punto de partida» exige que las cifras estén capturadas, no supuestas en cero", () => {
+    const r = PASOS.find((p) => p.clave === "apertura")!.revisar.join(" ");
+    expect(r).toContain("CAPTURADOS");
+    expect(r).toContain("anual");
+  });
+
+  it("«bancos» revisa el arrastre del saldo y la firma de la conciliación", () => {
+    const r = PASOS.find((p) => p.clave === "banco")!.revisar.join(" ");
+    expect(r).toContain("saldo inicial");
+    expect(r).toContain("firmada");
+  });
+
+  it("«contabilidad» exige el amarre CFDI = pólizas = IVA = banco = declaración", () => {
+    expect(PASOS.find((p) => p.clave === "contabilidad")!.revisar.join(" ")).toContain("amarre");
+  });
+});
