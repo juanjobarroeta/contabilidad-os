@@ -38,7 +38,13 @@ function etiquetaEstado(f: FilaHoy): { texto: string; clase: string } {
   return { texto: "atención", clase: "text-cos-ink-soft" };
 }
 
-export function HoyPendientes() {
+/**
+ * `companyId`: sólo esa empresa (lente «Empresa» del Inicio: lo que el contador
+ * ve es lo de la empresa que tiene seleccionada); null = toda la cartera
+ * (lente «Cartera»). El servidor siempre devuelve lo accesible al usuario; el
+ * filtro es de presentación, no de acceso.
+ */
+export function HoyPendientes({ companyId = null }: { companyId?: string | null } = {}) {
   const router = useRouter();
   const { companies, setActiveCompany } = useCompany();
   const [data, setData] = useState<HoyResponse | null>(null);
@@ -80,15 +86,17 @@ export function HoyPendientes() {
   }
   if (loading || !data) return <Loading label="Revisando el cierre de tus empresas…" />;
 
-  const bloquean = data.filas.filter((f) => f.estadoCalculado === "bloquea").length;
-  const revisar = data.filas.filter((f) => f.estado === "REVISAR").length;
+  const filas = companyId ? data.filas.filter((f) => f.companyId === companyId) : data.filas;
+  const empresas = companyId ? data.empresas.filter((e) => e.companyId === companyId) : data.empresas;
+  const bloquean = filas.filter((f) => f.estadoCalculado === "bloquea").length;
+  const revisar = filas.filter((f) => f.estado === "REVISAR").length;
 
   return (
     <div className="space-y-5">
       <div className="rounded-card border border-cos-line bg-cos-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cos-line px-4 py-3">
           <p className="text-[14px] font-semibold text-cos-ink">
-            Lo de hoy <span className="text-cos-ink-faint">{data.filas.length}</span>
+            Lo de hoy <span className="text-cos-ink-faint">{filas.length}</span>
           </p>
           <p className="text-[12px] text-cos-ink-soft">
             {bloquean > 0 && <span className="text-cos-red-ink">{bloquean} bloquea{bloquean === 1 ? "" : "n"}</span>}
@@ -96,15 +104,15 @@ export function HoyPendientes() {
             {revisar > 0 && <span className="text-cos-amber-ink">{revisar} por revisar</span>}
           </p>
         </div>
-        {data.filas.length === 0 ? (
+        {filas.length === 0 ? (
           <p className="px-4 py-8 text-center text-[13.5px] text-cos-jade-ink">
-            {data.empresas.length === 0
+            {empresas.length === 0
               ? "El copiloto aún no ha revisado el cierre: el pase diario corre cada mañana."
               : "Nada pendiente hoy — los cierres van al corriente."}
           </p>
         ) : (
           <ul className="divide-y divide-cos-line-soft">
-            {data.filas.map((f) => {
+            {filas.map((f) => {
               const et = etiquetaEstado(f);
               return (
                 <li key={`${f.companyId}-${f.year}-${f.month}-${f.paso}`} className="flex items-center gap-3 px-4 py-3">
@@ -134,13 +142,13 @@ export function HoyPendientes() {
         )}
       </div>
 
-      {data.empresas.length > 0 && (
+      {empresas.length > 0 && (
         <div className="rounded-card border border-cos-line bg-cos-card px-4 py-4">
           <p className="mb-3 flex items-center gap-2 text-[13.5px] font-semibold text-cos-ink">
             <ClipboardCheck className="h-4 w-4 text-cos-brand" /> Cierres abiertos
           </p>
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {data.empresas.map((e) => {
+            {empresas.map((e) => {
               const pct = e.aplican > 0 ? Math.round((e.confirmados / e.aplican) * 100) : 0;
               return (
                 <li key={`${e.companyId}-${e.year}-${e.month}`}>

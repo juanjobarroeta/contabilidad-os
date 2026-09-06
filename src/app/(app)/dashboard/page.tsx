@@ -54,9 +54,11 @@ export default function InicioPage() {
   const hoy = new Date();
   const multiEmpresa = companies.length > 1;
   const enCola = lente === "cola" && multiEmpresa;
-  // Cierre guiado (PRO): «Hoy» — lo que el copiloto propone hacer hoy en los
-  // RFCs con plan — va arriba de cualquiera de los dos lentes.
-  const conCierre = companies.some((c) => c.cierreGuiado);
+  // Cierre guiado (PRO): «Hoy» — lo que el copiloto propone hacer hoy — va
+  // arriba del lente. En «Empresa» muestra SÓLO la empresa activa (ver otra
+  // empresa ahí parecía una fuga de datos, aunque no lo fuera); en «Cartera»,
+  // todos los RFCs con plan.
+  const conCierre = enCola ? companies.some((c) => c.cierreGuiado) : activeCompany.cierreGuiado === true;
 
   return (
     <div className="mx-auto max-w-[1000px] px-6 py-7">
@@ -102,7 +104,7 @@ export default function InicioPage() {
 
       {conCierre && (
         <div className="mb-6">
-          <HoyPendientes />
+          <HoyPendientes companyId={enCola ? null : activeCompany.id} />
         </div>
       )}
       {enCola ? <ColaDeTrabajo /> : <PilotoDelCierre />}
