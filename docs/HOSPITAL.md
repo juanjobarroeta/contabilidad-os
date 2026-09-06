@@ -529,6 +529,71 @@ GET  /api/hospital/episodios/[id]/cda?companyId=&tipo=EPISODIO|EGRESO|REFERENCIA
 Constantes en `src/lib/hospital/cda/oids.ts`; el XML sale de `src/lib/hospital/xml.ts`. El esquema CDA.xsd de HL7 vive en
 `src/lib/hospital/cda/xsd/` y la prueba lo valida con xmllint cuando está instalado.
 
+### P3 tratamientos, captura asistida y contabilidad
+
+**Protocolos y plan de tratamiento** (cierra el ciclo consulta → plan → cotización → cirugía → cuenta)
+```
+GET  /api/hospital/protocolos?companyId=[&q=&activo=1] → [{ id, clave, nombre, tipoEpisodio, procedimientoCie9, diagnosticoCie10, especialidad,
+       estanciaNoches, quirofanoMinutos, tipoAnestesia, requiereAnestesiologo, honorarioCirujano, honorarioAnestesiologo, version, activo,
+       partidas: [{ orden, servicioId, categoria, descripcion, cantidad, opcional }], insumos: [{ insumoId, nombre, cantidad, opcional }], usos }]
+POST /api/hospital/protocolos { clave, nombre, tipoEpisodio, procedimientoCie9?, diagnosticoCie10?, …, partidas, insumos } · PATCH /protocolos/[id] (sube version) · DELETE = activo:false
+POST /api/hospital/protocolos/[id]/simular { pagadorId? } → partidas con precio del convenio (HospTarifa) o lista, subtotal/iva/total, costo estimado de insumos (ultimoCosto), honorarios
+GET  /api/hospital/planes?companyId=[&pacienteId=&estado=&desde=&hasta=] → planes con paciente, protocolo, médico, pagador, cotización, episodio
+POST /api/hospital/planes { pacienteId, protocoloId?, pagadorId?, medicoId?, anestesiologoId?, recursoId?, fechaProgramada?, partidas?, insumos?, honorarios?, notas }
+     · sin partidas → las del protocolo preciadas con el convenio del pagador (o el del paciente); partidas explícitas mandan
+PATCH /api/hospital/planes/[id] { …campos…, estado?, autorizacionPagador? } · AUTORIZADO exige autorizacionPagador cuando el pagador es ASEGURADORA/EMPRESA
+POST /api/hospital/planes/[id]/cotizar → crea la HospCotizacion (partidas del plan, folio COT) y la liga; 409 si ya tiene
+POST /api/hospital/planes/[id]/programar { fechaProgramada, recursoId, medicoId } → cita de quirófano (HospCita) + plan EN_CURSO al convertir
+     · POST /cotizaciones/[id]/convertir (existente) engancha plan.episodioId cuando la cotización tiene plan
+GET  /api/hospital/episodios/[id]/plan → { plan, comparativo: { partidas: [{ descripcion, categoria, planCantidad, planImporte, realCantidad, realImporte, desviacion }],
+       fueraDePlan: [cargos sin partida planeada], resumen: { planTotal, realTotal, desviacion, desviacionPct }, insumos: { planeados, aplicados } } }
+     · la cuenta (GET /episodios/[id]/cuenta) incluye `plan: { total, desviacionPct, autorizacion }` cuando existe
+```
+Reglas: un plan por episodio y por cotización; el plan CERRADO no se edita; cancelar un plan cancela su cotización si sigue en BORRADOR/ENVIADA;
+alerta en panel `PLAN_SIN_AUTORIZACION` (plan con pagador asegurador y fecha programada sin autorización) y `CUENTA_FUERA_DE_PLAN` (desviación > 15 %).
+
+**Captura asistida del expediente** (todo es PROPUESTA: el médico revisa, edita y firma; nada se guarda solo)
+```
+POST /api/hospital/episodios/[id]/asistente/transcribir  multipart { audio (webm/ogg/m4a ≤ 25 MB), idioma?: es-MX }
+     → { texto, duracionSeg, proveedor: "openai", modelo }  · sólo con HospConfig.sttProveedor = "openai" y OPENAI_API_KEY; si no, 409 con
+       mensaje: el satélite dicta con el reconocimiento del navegador (Web Speech API) y manda el texto
+POST /api/hospital/episodios/[id]/asistente/estructurar { tipo: HospNotaTipo, texto (transcripción o dictado), contexto?: { signos?: bool } }
+     → { secciones: { <clave de PLANTILLAS_NOTA[tipo]>: texto }, faltantes: [claves obligatorias sin contenido], texto (resumen para HospNota.texto),
+       codigos: { diagnosticos: [{ codigo, nombre, confianza, fragmento }], procedimientos: [...] }, advertencias, asistencia: { origen: "ESTRUCTURADO", modelo, at } }
+     · el modelo recibe la plantilla (claves + etiquetas + obligatorias), el tipo de episodio, sexo/edad y los signos vitales; responde JSON estricto
+     · cada código propuesto se valida con resolverCie (existe, activo, coherente con sexo/edad); los que no pasan se descartan con advertencia
+POST /api/hospital/episodios/[id]/asistente/codificar { texto?: string } → { diagnosticos: [...], procedimientos: [...] } a partir de las notas del episodio (o del texto dado)
+POST /api/hospital/episodios/[id]/asistente/egreso → { secciones de EGRESO: diagnosticoEgreso, motivoEgreso, evolucion, planManejo, instrucciones, pronostico,
+       aldrete? , codigos, saeh: { comorbilidades: [...], procedimientos: [...], causaExterna? } } armado de TODAS las notas del episodio
+     · la hoja SAEH (GET /episodios/[id]/saeh) expone `sugerencias` con lo mismo para aceptar campo por campo
+POST /api/hospital/episodios/[id]/notas (existente) acepta `asistencia: { origen, transcripcion?, modelo, sttProveedor?, at }` y lo guarda en HospNota.asistencia
+```
+Costo y control: todas las llamadas van por `meteredCreate` con companyId/userId (topes de IA de la empresa); `HospConfig.iaAsistencia=false` apaga
+los endpoints (409). Modelo: `AI_HOSPITAL_MODEL` (default claude-sonnet-4-5). Nunca se manda al modelo más que el episodio en cuestión.
+
+**Contabilidad** (el módulo asienta cuando el contador activa `contabilidadActiva`; antes, sólo previsualiza)
+```
+GET  /api/hospital/contabilidad/mapa?companyId= → { claves: [{ clave, descripcion, cuentaSAT, subcuenta?, origen: "DEFAULT"|"CONFIG"|"OVERRIDE" }], activa }
+     · claves del motor: INGRESO_HOSPITALIZACION (401.01), INGRESO_QUIROFANO (401.01), INGRESO_URGENCIAS, INGRESO_ESTUDIOS, INGRESO_FARMACIA_16, INGRESO_FARMACIA_0 (401.02),
+       INGRESO_MATERIAL, INGRESO_OTROS, HONORARIOS_POR_CUENTA_DE_TERCEROS (205.06 acreedores diversos: médicos), RETENCION_ISR_HONORARIOS (216.04),
+       RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA (501.01), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), BANCOS (102.01), CLIENTES (105.01)
+PUT  /api/hospital/contabilidad/mapa { cuentas: { <clave>: { cuentaSAT, subcuenta? } } } → guarda en HospConfig.cuentasContables (y PostingCuentaOverride cuando aplica)
+GET  /api/hospital/contabilidad/preview?companyId=&anio=&mes= → { piernasCfdi: [{ invoiceId, uuid, total, piernas: [{ clave, cuenta, monto }] }],
+       asientosHospital: [{ fecha, descripcion, cargo, abono, monto, referenciaTipo, asentado }], totales }
+POST /api/hospital/contabilidad/asentar { companyId, anio, mes } → asienta lo pendiente del mes con fuente HOSPITAL (idempotente por referencia+tipo) y marca asientoAt
+POST /api/hospital/episodios/[id]/depositos { fecha, monto, formaPago, referencia?, notas? } · PATCH /depositos/[id] { estado: APLICADO|DEVUELTO|CANCELADO }
+GET  /api/hospital/episodios/[id]/depositos → [...] · la cuenta muestra depósitos y saldo neto
+GET  /api/hospital/contabilidad/apertura?companyId= → estado (fecha, cuentas, total) o null
+POST /api/hospital/contabilidad/apertura/leer-balanza  multipart { archivo xlsx/csv } → { lineas: [{ codigo, nombre, saldoDeudor, saldoAcreedor, cuentaSugerida, confianza }], sinMapear, totales }
+POST /api/hospital/contabilidad/apertura { fecha, lineas: [{ codigo, saldo }] } → postApertura del hub (asiento APERTURA)
+```
+Motor: `src/lib/contabilidad/hospital.ts` (patrón taller.ts) parte el ingreso de cada CFDI ligado a cargos (HospCargo.invoiceId) en piernas por categoría e
+`ivaContexto`; los honorarios facturados por el hospital van a HONORARIOS_POR_CUENTA_DE_TERCEROS (pasivo), no a ingreso. Fuente HOSPITAL
+(`src/lib/accounting/postings.ts`, postBalancedEntry): salida de farmacia a un episodio = COSTO_FARMACIA / INVENTARIO_FARMACIA al costo del lote;
+alta del episodio = honorarios devengados por médico (HONORARIOS_POR_CUENTA_DE_TERCEROS contra retenciones ISR 10 % e IVA 2/3 cuando el médico es
+PF con RFC, ver isr-medicos.ts); depósito RECIBIDO = CAJA/BANCOS contra ANTICIPOS_PACIENTES; APLICADO = ANTICIPOS_PACIENTES contra CLIENTES;
+DEVUELTO = al revés. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
+
 ### Farmacia
 ```
 GET  /api/hospital/farmacia/insumos?companyId=[&q=&tab=TODOS|BAJO_MINIMO|POR_CADUCAR|CONTROLADOS|SIN_EXISTENCIA&controlados=1&refrigeracion=1&grupo=I..VI]
