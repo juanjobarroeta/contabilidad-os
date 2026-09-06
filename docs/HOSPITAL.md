@@ -471,7 +471,7 @@ RFC sólo se pide si habrá factura; extranjero = pasaporte + sinCurp con motivo
 
 **Paquete de admisión con firma**
 ```
-GET  /api/hospital/pacientes/[id]/documentos[?episodioId=] → documentos del paciente (episodioId null) y del episodio, con firmas (sin imagen)
+GET  /api/hospital/pacientes/[id]/documentos[?episodioId=] → [documentos] del paciente (episodioId null) y del episodio, cada uno con firmas (sin imagen) y firmasRequeridas
 POST /api/hospital/pacientes/[id]/documentos { tipo, episodioId?, contenido?, plantillaVersion? }
      · tipos de admisión: AVISO_PRIVACIDAD, CONSENTIMIENTO_DATOS, CONTRATO_SERVICIOS, COMPROMISO_PAGO, CESION_DERECHOS,
        CONSENTIMIENTO_HOSPITALIZACION, IDENTIFICACION, CONSTANCIA_CURP
@@ -489,16 +489,20 @@ GET  /api/hospital/documentos/[docId][?firmas=1] → documento + firmas (con ima
 
 **SAEH (egresos hospitalarios, GIIS-B002-05-09)**
 ```
-GET  /api/hospital/episodios/[id]/saeh → { hoja: HospEgresoSaeh con prellenado (peso/talla de signos, procedimiento CIE-9 del episodio,
-       anestesia de la nota preanestésica, cédula del médico, afección principal = CIE de egreso, procedencia por tipo, servicios por área),
-       paciente: { sociodemográficos SAEH }, validacion: { errores: [{ campo, mensaje }], advertencias: [...] }, catalogos: etiquetas }
+GET  /api/hospital/episodios/[id]/saeh → { hoja (guardada), prellenado (lo que el hub propone: peso/talla de signos, CIE-9 del episodio,
+       anestesia de la nota preanestésica, cédula del médico, afección principal = CIE de egreso, procedencia y tipo de servicio por tipo de episodio,
+       servicio por especialidad), paciente, pacientePrellenado, episodio, medicoResponsable, establecimiento (CLUES, institución, entidad),
+       edad, registro (los 82 campos como saldrían), validacion: { errores: [{ campo, mensaje }], advertencias }, catalogos: etiquetas por campo }
 PUT  /api/hospital/episodios/[id]/saeh { …campos de la hoja…, paciente?: { …sociodemográficos… } } → recalcula validación; estado COMPLETO sin errores
-GET  /api/hospital/saeh/egresos?companyId=&anio=&mes= → { egresos: [{ episodioId, folio, folioSaeh, paciente, fechaEgreso, estado, errores }], resumen }
+GET  /api/hospital/saeh/egresos?companyId=&anio=&mes= → { anio, mes, establecimiento, vencimiento: { fecha, hora, limiteAt, diasRestantes, vencido, texto,
+       aproximado } (último día verde del calendario SEUL, estimado), resumen: { total, completos, pendientes, exportados, sinHoja, conErrores },
+       egresos: [{ episodioId, folio, folioSaeh, paciente, fechaEgreso, estado, errores }] }
      · cuentan HOSPITALIZACION y AMBULATORIO con fechaAlta en el mes (URGENCIAS y CONSULTA no son egreso hospitalario)
 GET  /api/hospital/saeh/egresos/exportar?companyId=&anio=&mes=[&formato=txt|json&incluirIncompletos=1]
      → EGR-{EE}{III}-{AA}{MM}.TXT: ANSI (latin1), encabezado exacto del archivo muestra de la DGIS (82 campos, con sus dos erratas),
        '|' entre campos, '&' entre repeticiones, '#' dentro de compuestas, '||' vacío; asigna folioSaeh AAMM#### al exportar,
-       marca EXPORTADO y registra HospAcceso EXPORTACION. El cifrado 3DES (.CIF) lo hace la herramienta de la DGIS.
+       marca EXPORTADO y registra HospAcceso EXPORTACION; 409 si ningún egreso del mes está COMPLETO (salvo incluirIncompletos=1).
+       El cifrado 3DES (.CIF) lo hace la herramienta de la DGIS.
 ```
 Reglas de validación en `src/lib/hospital/saeh/validar.ts` (las del diccionario GIIS: obligatorios, catálogos, CIE-10 a 4
 caracteres codificable y coherente con sexo/edad, causa externa sólo Cap. XX, comorbilidades ≤6 sin repetir, procedimientos
@@ -506,15 +510,20 @@ caracteres codificable y coherente con sexo/edad, causa externa sólo Cap. XX, c
 
 **CDA R2 (GIIS-A001-01-05, NOM-024 6.1.3.1)**
 ```
-GET  /api/hospital/episodios/[id]/cda?companyId=&tipo=EPISODIO|EGRESO|REFERENCIA[&guardar=1] → application/xml
+GET  /api/hospital/episodios/[id]/cda?companyId=&tipo=EPISODIO|EGRESO|REFERENCIA[&guardar=1][&destinatarioNombre=&destinatarioCedula=&destinatarioClues=&destinatarioOrganizacion=&motivo=]
+     → application/xml; encabezados X-CDA-Id (UUID), X-CDA-Root, X-CDA-Intercambiable (false sin OID registrado o sin CLUES), X-CDA-Hash, X-CDA-Documento-Id
+     · EGRESO sólo con estado ALTA (409); episodio CANCELADO 409; REFERENCIA exige destinatario (400) y motivo (o una nota REFERENCIA)
+     · guardar=1 pide rol de escritura y guarda el documento con requerido=false; su contenido lleva advertencias (sin OID, sin CLUES, sin licencia, paciente sin CURP, médico sin cédula)
      · code LOINC 34133-9 / 18842-5 / 11488-4; realmCode MX; templateId 2.16.840.1.113883.3.215.11.1.1; languageCode es-MX
      · id root = HospConfig.oidRaiz + ".1" o, sin OID registrado, 2.25.<uuid> (arco UUID, sin registro) y cabecera X-CDA-Intercambiable: false
      · paciente id root 2.16.840.1.113883.4.629 (CURP) · custodian/encounter location 2.16.840.1.113883.4.631 (CLUES) ·
        cédula 2.16.840.1.113883.3.215.12.18 · licencia sanitaria 2.16.840.1.113883.3.215.1.1 · CIE-10 2.16.840.1.113883.6.3 ·
        CIE-9-MC 2.16.840.1.113883.6.104 · encounter code IMP|AMB|EMER|SS · dischargeDispositionCode 1-6 por motivoEgreso
-     · secciones con sus LOINC (42349-1 motivo de referencia, 48765-2 alergias, 10157-6 heredofamiliares, 29762-2 no patológicos,
-       11348-0 patológicos, 11450-4 diagnósticos, 47519-4 procedimientos, 29549-3 medicamentos, 8648-8 evolución, 8716-3 signos vitales,
-       18776-5 plan, 47420-5 pronóstico); texto narrativo siempre, entradas codificadas cuando hay clave
+     · secciones con sus LOINC (42349-1 motivo de referencia, 48768-6 afiliaciones, 48765-2 alergias, 10157-6 heredofamiliares, 29762-2 no patológicos,
+       11348-0 patológicos, 10154-3 manifestaciones iniciales, 51848-0 impresión diagnóstica, 11450-4 diagnósticos, 47519-4 procedimientos,
+       29549-3 medicamentos, 8648-8 evolución, 8716-3 signos vitales, 18776-5 plan, 47420-5 pronóstico); texto narrativo siempre, entradas
+       codificadas cuando hay clave. Claves CIE como las publica la DGIS (sin punto). Signos: 8302-2 talla, 3141-9 peso, 8480-6/8462-4 TA,
+       8867-4 FC, 9279-1 FR, 8310-5 temperatura; 59408-5 SpO2, 2339-0 glucosa y 72514-3 dolor van más allá de la guía
      · guardar=1 lo deja como HospDocumento RESUMEN_CLINICO (archivo = xml) · siempre registra HospAcceso EXPORTACION
 ```
 Constantes en `src/lib/hospital/cda/oids.ts`; el XML sale de `src/lib/hospital/xml.ts`. El esquema CDA.xsd de HL7 vive en
