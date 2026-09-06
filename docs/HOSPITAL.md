@@ -585,22 +585,27 @@ signos y notas (sin nombre ni CURP).
 GET  /api/hospital/contabilidad/mapa?companyId= → { claves: [{ clave, descripcion, cuentaSAT, subcuenta?, origen: "DEFAULT"|"CONFIG"|"OVERRIDE" }], activa }
      · claves del motor: INGRESO_HOSPITALIZACION (401.01), INGRESO_QUIROFANO (401.01), INGRESO_URGENCIAS, INGRESO_ESTUDIOS, INGRESO_FARMACIA_16, INGRESO_FARMACIA_0 (401.02),
        INGRESO_MATERIAL, INGRESO_OTROS, HONORARIOS_POR_CUENTA_DE_TERCEROS (205.06 acreedores diversos: médicos), RETENCION_ISR_HONORARIOS (216.04),
+       (INGRESO_FARMACIA_0 usa 401.04 «gravados al 0 %»; 401.02 es «tasa general de contado»)
        RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA (501.01), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), BANCOS (102.01), CLIENTES (105.01)
-PUT  /api/hospital/contabilidad/mapa { cuentas: { <clave>: { cuentaSAT, subcuenta? } } } → guarda en HospConfig.cuentasContables (y PostingCuentaOverride cuando aplica)
+PUT  /api/hospital/contabilidad/mapa { cuentas: { <clave>: { cuentaSAT?, subcuenta? } | null }, activa? } → guarda en HospConfig.cuentasContables (subcuenta = cuenta concreta
+       del plan → también PostingCuentaOverride hospital:<clave>); `activa` enciende/apaga contabilidadActiva
 GET  /api/hospital/contabilidad/preview?companyId=&anio=&mes= → { piernasCfdi: [{ invoiceId, uuid, total, piernas: [{ clave, cuenta, monto }] }],
        asientosHospital: [{ fecha, descripcion, cargo, abono, monto, referenciaTipo, asentado }], totales }
-POST /api/hospital/contabilidad/asentar { companyId, anio, mes } → asienta lo pendiente del mes con fuente HOSPITAL (idempotente por referencia+tipo) y marca asientoAt
+POST /api/hospital/contabilidad/asentar { companyId, anio, mes } → { ok, asentados, revisados } asienta lo pendiente del mes (UTC, como los periodos del libro) con fuente
+       HOSPITAL (idempotente por referencia+tipo) y marca asientoAt; 409 si la contabilidad está apagada o el ejercicio cerrado
 POST /api/hospital/episodios/[id]/depositos { fecha, monto, formaPago, referencia?, notas? } · PATCH /depositos/[id] { estado: APLICADO|DEVUELTO|CANCELADO }
 GET  /api/hospital/episodios/[id]/depositos → [...] · la cuenta muestra depósitos y saldo neto
-GET  /api/hospital/contabilidad/apertura?companyId= → estado (fecha, cuentas, total) o null
-POST /api/hospital/contabilidad/apertura/leer-balanza  multipart { archivo xlsx/csv } → { lineas: [{ codigo, nombre, saldoDeudor, saldoAcreedor, cuentaSugerida, confianza }], sinMapear, totales }
+GET  /api/hospital/contabilidad/apertura?companyId= → { apertura: { fecha, cuentas: [{ codigo, nombre, tipo, naturaleza, saldo }], total } | null, catalogo }
+POST /api/hospital/contabilidad/apertura/leer-balanza  multipart { archivo xlsx/csv } (o JSON { base64, nombre }) → { columnas, lineas: [{ fila, codigo, nombre, saldoDeudor,
+       saldoAcreedor, saldo (signo natural, listo para POST apertura), agrupadora, cuentaSugerida, confianza: EXACTA|PREFIJO|NOMBRE|null }], sinMapear,
+       totales: { cuentas, deudor, acreedor, diferencia, tolerancia, cuadra }, advertencia } · las agrupadoras (101 cuando existe 101.01) no suman
 POST /api/hospital/contabilidad/apertura { fecha, lineas: [{ codigo, saldo }] } → postApertura del hub (asiento APERTURA)
 ```
 Motor: `src/lib/contabilidad/hospital.ts` (patrón taller.ts) parte el ingreso de cada CFDI ligado a cargos (HospCargo.invoiceId) en piernas por categoría e
 `ivaContexto`; los honorarios facturados por el hospital van a HONORARIOS_POR_CUENTA_DE_TERCEROS (pasivo), no a ingreso. Fuente HOSPITAL
 (`src/lib/accounting/postings.ts`, postBalancedEntry): salida de farmacia a un episodio = COSTO_FARMACIA / INVENTARIO_FARMACIA al costo del lote;
-alta del episodio = honorarios devengados por médico (HONORARIOS_POR_CUENTA_DE_TERCEROS contra retenciones ISR 10 % e IVA 2/3 cuando el médico es
-PF con RFC, ver isr-medicos.ts); depósito RECIBIDO = CAJA/BANCOS contra ANTICIPOS_PACIENTES; APLICADO = ANTICIPOS_PACIENTES contra CLIENTES;
+alta del episodio = retenciones de ISR 10 % e IVA 2/3 de los honorarios de cada médico persona física con RFC, sólo cuando el hospital es persona moral
+(HONORARIOS_POR_CUENTA_DE_TERCEROS contra 216.04/216.10; el saldo del pasivo es lo neto a pagar); depósito RECIBIDO = CAJA/BANCOS contra ANTICIPOS_PACIENTES; APLICADO = ANTICIPOS_PACIENTES contra CLIENTES;
 DEVUELTO = al revés. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
 
 ### Farmacia
