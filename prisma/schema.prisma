@@ -390,6 +390,8 @@ model Company {
   hospInsumos      HospInsumo[]
   hospTickets      HospTicket[]
   hospAccesos      HospAcceso[]
+  hospFirmas       HospFirma[]
+  hospEgresosSaeh  HospEgresoSaeh[]
 }
 
 model CompanyMember {
@@ -6517,6 +6519,15 @@ model HospConfig {
   /// LFPDPPP: versión vigente del aviso de privacidad que aceptan los pacientes.
   avisoPrivacidadVersion String?
   avisoPrivacidadUrl     String?
+  /// OID del establecimiento/SIRES registrado ante la DGIS (GIIS-A003, oid@salud.gob.mx);
+  /// raíz de los identificadores de documentos CDA. Sin él, los CDA salen con
+  /// un OID temporal y quedan marcados como no intercambiables.
+  oidRaiz String?
+  /// Textos legales del paquete de admisión por tipo de documento, con versión:
+  /// { CONTRATO_SERVICIOS: { version, texto }, COMPROMISO_PAGO: …, … }.
+  plantillasDocumentos Json?
+  /// Institución CLUES para SAEH (SMP = Servicios Médicos Privados).
+  saehInstitucion String? @default("SMP")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -6634,6 +6645,48 @@ model HospPaciente {
   /// Convenio (pagador) por default.
   pagadorId String?
 
+  /// Identidad verificada (NOM-024 6.5.1: la CURP VALIDADA es la llave y el
+  /// SIRES no la autogenera). De dónde salió la CURP y qué dijo RENAPO.
+  curpOrigen            HospCurpOrigen?
+  /// Estatus oficial RENAPO: AN AH RCC RCN (activas) · BD BSU BAP BDM BDP BJD (bajas).
+  curpEstatus           String?
+  curpVerificadaAt      DateTime?
+  curpVerificadaFuente  String?
+  curpVerificadaRef     String?
+  renapoNombres         String?
+  renapoPrimerApellido  String?
+  renapoSegundoApellido String?
+  /// Los datos capturados coinciden con los de RENAPO.
+  renapoCoincide        Boolean?
+  /// CURP calculada localmente (homoclave supuesta): pendiente de confirmar.
+  curpProbable          Boolean @default(false)
+  /// Receptor fiscal del paciente; se cruza con la CURP (10 primeros caracteres) y con la CSF.
+  rfc                   String?
+  rfcFuente             HospRfcFuente?
+  identificacionTipo     HospIdentificacionTipo?
+  identificacionNumero   String?
+  identificacionVigencia DateTime?
+
+  /// SAEH (GIIS-B002-05-09): sociodemográficos con claves DGIS/INEGI.
+  paisNacimientoClave      String?
+  entidadNacimientoClave   String?
+  estadoConyugal           Int?
+  seConsideraIndigena      Boolean?
+  hablaLenguaIndigena      Boolean?
+  lenguaIndigenaClave      String?
+  seConsideraAfromexicano  Boolean?
+  esMigranteRetornado      Boolean?
+  /// 1 sí · 2 no · 3 prefiere no responder (mayores de 10 años).
+  seIdentificaLgbti        Int?
+  genero                   Int?
+  paisResidenciaClave      String?
+  entidadResidenciaClave   String?
+  municipioResidenciaClave String?
+  localidadResidenciaClave String?
+  otraLocalidad            String?
+  /// Catálogo AFILIACION de la DGIS (1 ninguna, 2 IMSS… 8 otra).
+  derechohabienciaClave    String?
+
   activo Boolean @default(true)
   notas  String? @db.Text
 
@@ -6644,6 +6697,7 @@ model HospPaciente {
   episodios    HospEpisodio[]
   citas        HospCita[]
   cotizaciones HospCotizacion[]
+  documentos   HospDocumento[]
 
   @@unique([companyId, expedienteNumero])
   @@index([companyId, apellidoPaterno, nombre])
@@ -6777,6 +6831,12 @@ model HospMedico {
   supplierId   String?
   employeeId   String?
   activo       Boolean @default(true)
+  /// SAEH exige CURP, nombre y apellidos separados y cédula del médico responsable.
+  curp             String?
+  nombres          String?
+  apellidoPaterno  String?
+  apellidoMaterno  String?
+  paisNacimientoClave String? @default("142")
 
   company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   supplier Supplier? @relation(fields: [supplierId], references: [id])
@@ -6786,6 +6846,7 @@ model HospMedico {
   citas     HospCita[]
   cargos    HospCargo[]
   notas     HospNota[]
+  egresosSaeh HospEgresoSaeh[]
 
   @@index([companyId, activo])
 }
@@ -6876,6 +6937,7 @@ model HospEpisodio {
   citas             HospCita[]
   traslados         HospTraslado[]
   movimientosInsumo HospMovimientoInsumo[]
+  egresoSaeh        HospEgresoSaeh?
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
@@ -7017,6 +7079,14 @@ enum HospDocumentoTipo {
   HOJA_EGRESO
   NOTA_EGRESO
   AVISO_PRIVACIDAD
+  /// Paquete de admisión (paciente): contrato, pago, cesión a la aseguradora y datos sensibles.
+  CONTRATO_SERVICIOS
+  COMPROMISO_PAGO
+  CESION_DERECHOS
+  CONSENTIMIENTO_DATOS
+  CONSTANCIA_CURP
+  /// CDA R2 emitido (GIIS-A001): queda en el expediente tal como salió.
+  RESUMEN_CLINICO
   OTRO
 }
 
@@ -7033,7 +7103,10 @@ enum HospDocumentoEstado {
 model HospDocumento {
   id         String              @id @default(cuid())
   companyId  String
-  episodioId String
+  /// El documento es del PACIENTE (identificación, aviso, contrato) y, cuando
+  /// nace en una atención, también del episodio (consentimientos, egreso).
+  pacienteId String
+  episodioId String?
   createdAt  DateTime            @default(now())
   tipo       HospDocumentoTipo
   nombre     String
@@ -7056,9 +7129,19 @@ model HospDocumento {
   testigo2          String?
   medicoNombre      String?
   medicoCedula      String?
+  /// Firma electrónica simple (Código de Comercio 89 / LFPDPPP): el texto que
+  /// se firmó tal cual (versión de la plantilla), su hash y las firmas con
+  /// evidencia en HospFirma. FIRMADO sólo cuando todas las requeridas están.
+  plantillaVersion  String?
+  textoFirmado      String? @db.Text
+  hashContenido     String?
+  firmasRequeridas  Json?
 
-  episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+  paciente HospPaciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  episodio HospEpisodio? @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+  firmas   HospFirma[]
 
+  @@index([pacienteId])
   @@index([episodioId])
   @@index([companyId])
 }
@@ -7439,6 +7522,7 @@ enum HospAccesoAccion {
   LECTURA_FICHA
   EXPORTACION
   IMPRESION
+  CONSULTA_RENAPO
 }
 
 /// Quién abrió qué expediente y cuándo. La bitácora de ESCRITURAS ya la lleva
@@ -7468,6 +7552,15 @@ model HospAcceso {
 enum HospCatalogoTipo {
   CIE10
   CIE9MC
+  /// SAEH (GIIS-B002) y CDA: catálogos maestros de la DGIS/INEGI.
+  SERVICIO
+  AFILIACION
+  PAIS
+  ENTIDAD
+  MUNICIPIO
+  LOCALIDAD
+  LENGUA
+  CLUES
 }
 
 /// Catálogos maestros de la DGIS: diagnósticos (CIE-10) y procedimientos
@@ -7495,7 +7588,175 @@ model HospCatalogo {
   /// CIE-10: la DGIS marca claves no válidas para codificar o erradicadas.
   activo         Boolean          @default(true)
   version        String?
+  /// Jerarquía: municipio → entidad ("21"), localidad → municipio ("21114").
+  padre          String?
+  /// Columnas extra del catálogo (CLUES: institución, tipo, tipología, estatus…).
+  datos          Json?
 
   @@unique([tipo, clave])
   @@index([tipo, codigo])
+  @@index([tipo, padre])
+}
+
+// ── P2: identidad, admisión firmada y egreso SAEH ────────────────────────────
+
+enum HospCurpOrigen {
+  CAPTURA
+  DOCUMENTO
+  RENAPO
+  CALCULADA
+}
+
+enum HospRfcFuente {
+  CAPTURA
+  CSF
+  CALCULADO
+}
+
+enum HospIdentificacionTipo {
+  INE
+  PASAPORTE
+  LICENCIA
+  CEDULA_PROFESIONAL
+  CARTILLA
+  CSF
+  OTRO
+}
+
+enum HospFirmanteRol {
+  PACIENTE
+  REPRESENTANTE
+  TESTIGO1
+  TESTIGO2
+  MEDICO
+  RESPONSABLE_PAGO
+  HOSPITAL
+}
+
+enum HospFirmaMetodo {
+  AUTOGRAFA_DIGITAL
+  OTP
+  PSC
+}
+
+/// Una firma sobre un HospDocumento con su cadena de evidencia: qué se firmó
+/// (hash del texto), quién, cuándo, desde dónde y el trazo. Inmutable.
+model HospFirma {
+  id            String          @id @default(cuid())
+  companyId     String
+  documentoId   String
+  rol           HospFirmanteRol
+  nombre        String
+  /// CURP o clave de elector del firmante.
+  identificacion String?
+  parentesco    String?
+  metodo        HospFirmaMetodo @default(AUTOGRAFA_DIGITAL)
+  /// Trazo como data URL PNG.
+  imagen        String?         @db.Text
+  hashDocumento String
+  hashFirma     String
+  otpVerificado Boolean         @default(false)
+  otpDestino    String?
+  ip            String?
+  userAgent     String?
+  geolocalizacion String?
+  userId        String?
+  userEmail     String?
+  at            DateTime        @default(now())
+
+  documento HospDocumento @relation(fields: [documentoId], references: [id], onDelete: Cascade)
+  company   Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([documentoId])
+  @@index([companyId, at])
+}
+
+enum HospSaehEstado {
+  PENDIENTE
+  COMPLETO
+  EXPORTADO
+}
+
+/// Hoja de hospitalización SINBA-SEUL-14-P / registro GIIS-B002-05-09 de un
+/// egreso. Los códigos son los de la DGIS tal cual (enteros y claves), para
+/// que el exportador no traduzca. Lo que ya vive en el episodio o el paciente
+/// (fechas, CIE de egreso, motivo, CURP, domicilio) no se duplica aquí.
+model HospEgresoSaeh {
+  id         String   @id @default(cuid())
+  companyId  String
+  episodioId String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  /// 8 dígitos AAMM####, único por CLUES y fecha de egreso.
+  folioSaeh        String?
+  estado           HospSaehEstado @default(PENDIENTE)
+  validacion       Json?
+  exportadoAt      DateTime?
+  exportadoArchivo String?
+
+  nacioHospital Int?
+  peso          Decimal? @db.Decimal(6, 3)
+  talla         Int?
+  gratuidad     Int?
+
+  tipoServicioIngreso    Int?
+  claveServicioIngreso   String?
+  serviciosAdicionales   String[]
+  claveServicioEgreso    String?
+  terapiaIntensivaDias   Int?
+  terapiaIntensivaHoras  Int?
+  terapiaIntermediaDias  Int?
+  terapiaIntermediaHoras Int?
+
+  procedencia            Int?
+  especifiqueProcedencia String?
+  cluesProcedencia       String?
+  cluesReferido          String?
+  mujerFertil            Int?
+
+  descripcionAfeccionPrincipal String?
+  codigoAfeccionPrincipal      String?
+  /// [{ codigo, descripcion }] hasta 6.
+  comorbilidades               Json?
+  tipoAtencion                 Int?
+  afeccionReseleccionada       String?
+  causaExterna                 String?
+  codigoCausaExterna           String?
+  morfologia                   String?
+  infeccionIntrahospitalaria   Int?
+  /// [{ codigo, descripcion, tipoAnestesia, quirofano, tiempoQuirofano, cedula }] hasta 8.
+  procedimientos               Json?
+
+  folioLesion               String?
+  ministerioPublico         Int?
+  folioCertificadoDefuncion String?
+
+  gestas                 Int?
+  partos                 Int?
+  abortos                Int?
+  cesareas               Int?
+  extraccionExpulsion    Int?
+  edadGestacional        Int?
+  tipoAtencionObstetrica Int?
+  tipoParto              Int?
+  tipoProcAborto         Int?
+  productoEmbarazo       Int?
+  totalProductos         Int?
+  planificacionFamiliar  Int?
+  otroMetodo             String?
+  /// [{ condicionNacimiento, condicionNacidoVivo, folioCertificado, apgar5, reanimacion, alojamientoConjunto, lactanciaExclusiva }] hasta 6.
+  productos              Json?
+
+  tipoUnidadPsiq   Int?
+  tipoServicioPsiq Int?
+
+  medicoResponsableId String?
+
+  company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  episodio          HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+  medicoResponsable HospMedico?  @relation(fields: [medicoResponsableId], references: [id])
+
+  @@unique([companyId, folioSaeh])
+  @@index([companyId, estado])
 }

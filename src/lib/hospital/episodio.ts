@@ -11,6 +11,9 @@
 // Una cama asignada a un ingreso PROGRAMADO se reserva desde ya (queda
 // OCUPADA): es la forma más simple de que dos programaciones no se pisen.
 //
+// P2: cada documento es del PACIENTE (pacienteId obligatorio) y, cuando nace
+// en una atención, también del episodio.
+//
 // P1 normativa: el paciente debe traer CURP (o motivo para no tenerla,
 // NOM-024); diagnóstico de ingreso y procedimiento van por catálogo CIE-10 /
 // CIE-9-MC y se cruzan con sexo y edad; URGENCIAS exige triage con hora
@@ -259,7 +262,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
               procedimiento: args.procedimiento ?? cotizacion?.procedimiento,
               conCitaQuirofano,
               pagadorTipo: pagador?.tipo,
-            }).map((d) => ({ companyId: args.companyId, tipo: d.tipo, nombre: d.nombre, requerido: true })),
+            }).map((d) => ({ companyId: args.companyId, pacienteId: paciente.id, tipo: d.tipo, nombre: d.nombre, requerido: true })),
           },
           ...(recurso
             ? {

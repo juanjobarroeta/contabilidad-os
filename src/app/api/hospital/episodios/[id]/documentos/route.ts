@@ -9,6 +9,11 @@
  * parentesco, dos testigos, médico que informa con cédula (`medicoId` los
  * llena desde HospMedico). Se pueden dejar para después mientras está
  * PENDIENTE; para nacer o pasar a FIRMADO tienen que estar completos.
+ *
+ * P2: el documento también es del PACIENTE (pacienteId del episodio). Los
+ * documentos del paquete de admisión con texto legal y firma electrónica se
+ * registran por POST /api/hospital/pacientes/[id]/documentos o
+ * POST /api/hospital/episodios/[id]/admision.
  */
 
 import { NextResponse } from "next/server";
@@ -18,6 +23,7 @@ import { AuthzError, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, error, errorZod, fechaSchema } from "@/lib/hospital/http";
 import { TIPOS_DOCUMENTO, errorContenido, errorFirma } from "@/lib/hospital/documentos";
+import { firmasRequeridasPara } from "@/lib/hospital/plantillas-legales";
 
 const schema = z.object({
   tipo: z.enum(TIPOS_DOCUMENTO),
@@ -42,7 +48,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
   if (!parsed.success) return errorZod(parsed.error);
   const d = parsed.data;
 
-  const ep = await prisma.hospEpisodio.findUnique({ where: { id }, select: { id: true, companyId: true, estado: true, folio: true } });
+  const ep = await prisma.hospEpisodio.findUnique({ where: { id }, select: { id: true, companyId: true, pacienteId: true, estado: true, folio: true } });
   if (!ep) throw new AuthzError(404, "Episodio no encontrado");
 
   const { user } = await requireWriter(ep.companyId, req);
@@ -75,6 +81,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
   const doc = await prisma.hospDocumento.create({
     data: {
       companyId: ep.companyId,
+      pacienteId: ep.pacienteId,
       episodioId: ep.id,
       tipo: d.tipo,
       nombre: d.nombre.trim(),
@@ -89,6 +96,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
       testigo2: firma.testigo2,
       medicoNombre,
       medicoCedula,
+      firmasRequeridas: firmasRequeridasPara(d.tipo),
     },
     omit: { archivo: true },
   });

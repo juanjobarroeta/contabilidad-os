@@ -438,6 +438,97 @@ del límite o pasado de él), `TRIAGE_PENDIENTE` (urgencias sin triage),
 seguimiento), `IDENTIDAD_PENDIENTE` (paciente con episodio abierto sin CURP ni
 motivo) y `AVISO_PRIVACIDAD_PENDIENTE`; `resumenAtencion` trae sus conteos.
 
+### P2 identidad, admisión firmada, SAEH y CDA
+
+Fuentes: RENAPO (Anexo Técnico wsCurp 2022; estatus AN/AH/RCC/RCN activas, BD/BSU/BAP/BDM/BDP/BJD bajas),
+GIIS-B002-05-09 v5.9 (egresos hospitalarios, DGIS 1-jun-2026), GIIS-A001-01-05 (CDA R2 Resumen Clínico) y
+GIIS-A003 (OID). Catálogos en `HospCatalogo` (tipos SERVICIO, AFILIACION, PAIS, ENTIDAD, MUNICIPIO, LOCALIDAD,
+LENGUA, CLUES; `padre` = entidad del municipio / entidad+municipio de la localidad / entidad de la CLUES;
+`datos` con institución, tipo, tipología y estatus de la CLUES). Se cargan con `scripts/hospital-catalogos.ts`.
+
+**Identidad (alta de paciente)**
+```
+GET  /api/hospital/catalogos?companyId=&tipo=MUNICIPIO&padre=21[&q=&codigo=&limit=] → filas con padre y datos (CLUES: sólo estatus 1 salvo &todos=1)
+POST /api/hospital/pacientes/identificacion/leer { companyId, archivoBase64, mime, tipo?: INE|PASAPORTE|LICENCIA|CSF }
+     → { tipo, campos: { nombres, apellidoPaterno, apellidoMaterno, curp, rfc, fechaNacimiento, sexo, entidadNacimientoClave,
+       nacionalidad, identificacionNumero, identificacionVigencia, domicilio: { calle, numeroExterior, numeroInterior, colonia,
+       municipio, estado, codigoPostal } }, confianza: 0-1, advertencias[] }
+     · imagen → extracción con el modelo de visión del hub; PDF de CSF → el parser de onboarding. Cada CURP extraída pasa por validarCurp.
+POST /api/hospital/pacientes/curp/consultar { companyId, curp }
+     → { disponible, encontrada, estatus, activa, datos: { curp, nombres, primerApellido, segundoApellido, sexo: H|M|X,
+       fechaNacimiento, entidadClave, nacionalidad, docProbatorio }, proveedor, referencia }  · registra HospAcceso CONSULTA_RENAPO
+POST /api/hospital/pacientes/curp/buscar { companyId, nombres, primerApellido, segundoApellido?, fechaNacimiento, sexo: H|M|X, entidadClave }
+     → { disponible, registros: [datos…], multiple, curpProbable }  · sin proveedor: disponible=false y curpProbable calculada localmente
+POST /api/hospital/pacientes/[id]/verificar-curp → ficha; guarda curpEstatus, curpVerificadaAt/Fuente/Ref, renapo*, renapoCoincide, curpOrigen=RENAPO
+GET  /api/hospital/pacientes/[id] → …, identidad: { curp: { origen, estatus, activa, verificadaAt, coincide }, rfc: { valor, fuente, cruceCurp: COINCIDE|DIFIERE|SIN_RFC },
+       identificacion: { tipo, numero, vigencia, vencida }, pendientes: [...] }
+```
+Proveedor por variables de entorno del hub: `RENAPO_PROVEEDOR=tlaloc|nubarium`, `TLALOC_API_KEY`, `NUBARIUM_USUARIO`,
+`NUBARIUM_PASSWORD`. `src/lib/hospital/renapo/` normaliza al vocabulario de RENAPO; `src/lib/hospital/identidad.ts`
+calcula CURP (16 posiciones + homoclave supuesta 0/A + dígito) y RFC de persona física (SAT: 10 posiciones + homoclave
++ dígito) y cruza CURP↔RFC (10 primeros caracteres) y captura↔RENAPO. Reglas: CURP verificada NO se edita sin motivo;
+RFC sólo se pide si habrá factura; extranjero = pasaporte + sinCurp con motivo + RFC genérico XEXX010101000.
+
+**Paquete de admisión con firma**
+```
+GET  /api/hospital/pacientes/[id]/documentos[?episodioId=] → [documentos] del paciente (episodioId null) y del episodio, cada uno con firmas (sin imagen) y firmasRequeridas
+POST /api/hospital/pacientes/[id]/documentos { tipo, episodioId?, contenido?, plantillaVersion? }
+     · tipos de admisión: AVISO_PRIVACIDAD, CONSENTIMIENTO_DATOS, CONTRATO_SERVICIOS, COMPROMISO_PAGO, CESION_DERECHOS,
+       CONSENTIMIENTO_HOSPITALIZACION, IDENTIFICACION, CONSTANCIA_CURP
+     · textoFirmado = plantilla de HospConfig.plantillasDocumentos[tipo] (o la default de src/lib/hospital/plantillas-legales.ts)
+       con {{paciente.*}}, {{hospital.*}}, {{episodio.*}}, {{pagador.*}}, {{fecha}} resueltos; hashContenido = sha256(textoFirmado + contenido)
+     · firmasRequeridas por tipo: CONTRATO_SERVICIOS [PACIENTE|REPRESENTANTE, HOSPITAL] · COMPROMISO_PAGO [RESPONSABLE_PAGO] ·
+       CESION_DERECHOS [PACIENTE|REPRESENTANTE] · AVISO_PRIVACIDAD y CONSENTIMIENTO_DATOS [PACIENTE|REPRESENTANTE] ·
+       CONSENTIMIENTO_* [PACIENTE|REPRESENTANTE, TESTIGO1, TESTIGO2, MEDICO]
+POST /api/hospital/episodios/[id]/admision → crea el paquete estándar que falte según tipo de episodio y pagador y lo devuelve
+POST /api/hospital/documentos/[docId]/firmas { rol, nombre, identificacion?, parentesco?, imagen (data URL PNG), geolocalizacion? }
+     → firma; hashDocumento = documento.hashContenido; hashFirma = sha256(imagen|hashDocumento|rol|nombre|at); ip y userAgent del request;
+       con todas las requeridas → estado FIRMADO y firmadoAt. Las firmas no se editan ni se borran; el texto firmado tampoco.
+GET  /api/hospital/documentos/[docId][?firmas=1] → documento + firmas (con imagen si firmas=1) + evidencia { hashContenido, firmas: [{ rol, nombre, at, ip, hashFirma }] }
+```
+
+**SAEH (egresos hospitalarios, GIIS-B002-05-09)**
+```
+GET  /api/hospital/episodios/[id]/saeh → { hoja (guardada), prellenado (lo que el hub propone: peso/talla de signos, CIE-9 del episodio,
+       anestesia de la nota preanestésica, cédula del médico, afección principal = CIE de egreso, procedencia y tipo de servicio por tipo de episodio,
+       servicio por especialidad), paciente, pacientePrellenado, episodio, medicoResponsable, establecimiento (CLUES, institución, entidad),
+       edad, registro (los 82 campos como saldrían), validacion: { errores: [{ campo, mensaje }], advertencias }, catalogos: etiquetas por campo }
+PUT  /api/hospital/episodios/[id]/saeh { …campos de la hoja…, paciente?: { …sociodemográficos… } } → recalcula validación; estado COMPLETO sin errores
+GET  /api/hospital/saeh/egresos?companyId=&anio=&mes= → { anio, mes, establecimiento, vencimiento: { fecha, hora, limiteAt, diasRestantes, vencido, texto,
+       aproximado } (último día verde del calendario SEUL, estimado), resumen: { total, completos, pendientes, exportados, sinHoja, conErrores },
+       egresos: [{ episodioId, folio, folioSaeh, paciente, fechaEgreso, estado, errores }] }
+     · cuentan HOSPITALIZACION y AMBULATORIO con fechaAlta en el mes (URGENCIAS y CONSULTA no son egreso hospitalario)
+GET  /api/hospital/saeh/egresos/exportar?companyId=&anio=&mes=[&formato=txt|json&incluirIncompletos=1]
+     → EGR-{EE}{III}-{AA}{MM}.TXT: ANSI (latin1), encabezado exacto del archivo muestra de la DGIS (82 campos, con sus dos erratas),
+       '|' entre campos, '&' entre repeticiones, '#' dentro de compuestas, '||' vacío; asigna folioSaeh AAMM#### al exportar,
+       marca EXPORTADO y registra HospAcceso EXPORTACION; 409 si ningún egreso del mes está COMPLETO (salvo incluirIncompletos=1).
+       El cifrado 3DES (.CIF) lo hace la herramienta de la DGIS.
+```
+Reglas de validación en `src/lib/hospital/saeh/validar.ts` (las del diccionario GIIS: obligatorios, catálogos, CIE-10 a 4
+caracteres codificable y coherente con sexo/edad, causa externa sólo Cap. XX, comorbilidades ≤6 sin repetir, procedimientos
+≤8 con cédula si quirófano dentro, bloque obstétrico sólo con diagnóstico O, defunción con ministerio público/certificado).
+
+**CDA R2 (GIIS-A001-01-05, NOM-024 6.1.3.1)**
+```
+GET  /api/hospital/episodios/[id]/cda?companyId=&tipo=EPISODIO|EGRESO|REFERENCIA[&guardar=1][&destinatarioNombre=&destinatarioCedula=&destinatarioClues=&destinatarioOrganizacion=&motivo=]
+     → application/xml; encabezados X-CDA-Id (UUID), X-CDA-Root, X-CDA-Intercambiable (false sin OID registrado o sin CLUES), X-CDA-Hash, X-CDA-Documento-Id
+     · EGRESO sólo con estado ALTA (409); episodio CANCELADO 409; REFERENCIA exige destinatario (400) y motivo (o una nota REFERENCIA)
+     · guardar=1 pide rol de escritura y guarda el documento con requerido=false; su contenido lleva advertencias (sin OID, sin CLUES, sin licencia, paciente sin CURP, médico sin cédula)
+     · code LOINC 34133-9 / 18842-5 / 11488-4; realmCode MX; templateId 2.16.840.1.113883.3.215.11.1.1; languageCode es-MX
+     · id root = HospConfig.oidRaiz + ".1" o, sin OID registrado, 2.25.<uuid> (arco UUID, sin registro) y cabecera X-CDA-Intercambiable: false
+     · paciente id root 2.16.840.1.113883.4.629 (CURP) · custodian/encounter location 2.16.840.1.113883.4.631 (CLUES) ·
+       cédula 2.16.840.1.113883.3.215.12.18 · licencia sanitaria 2.16.840.1.113883.3.215.1.1 · CIE-10 2.16.840.1.113883.6.3 ·
+       CIE-9-MC 2.16.840.1.113883.6.104 · encounter code IMP|AMB|EMER|SS · dischargeDispositionCode 1-6 por motivoEgreso
+     · secciones con sus LOINC (42349-1 motivo de referencia, 48768-6 afiliaciones, 48765-2 alergias, 10157-6 heredofamiliares, 29762-2 no patológicos,
+       11348-0 patológicos, 10154-3 manifestaciones iniciales, 51848-0 impresión diagnóstica, 11450-4 diagnósticos, 47519-4 procedimientos,
+       29549-3 medicamentos, 8648-8 evolución, 8716-3 signos vitales, 18776-5 plan, 47420-5 pronóstico); texto narrativo siempre, entradas
+       codificadas cuando hay clave. Claves CIE como las publica la DGIS (sin punto). Signos: 8302-2 talla, 3141-9 peso, 8480-6/8462-4 TA,
+       8867-4 FC, 9279-1 FR, 8310-5 temperatura; 59408-5 SpO2, 2339-0 glucosa y 72514-3 dolor van más allá de la guía
+     · guardar=1 lo deja como HospDocumento RESUMEN_CLINICO (archivo = xml) · siempre registra HospAcceso EXPORTACION
+```
+Constantes en `src/lib/hospital/cda/oids.ts`; el XML sale de `src/lib/hospital/xml.ts`. El esquema CDA.xsd de HL7 vive en
+`src/lib/hospital/cda/xsd/` y la prueba lo valida con xmllint cuando está instalado.
+
 ### Farmacia
 ```
 GET  /api/hospital/farmacia/insumos?companyId=[&q=&tab=TODOS|BAJO_MINIMO|POR_CADUCAR|CONTROLADOS|SIN_EXISTENCIA&controlados=1&refrigeracion=1&grupo=I..VI]
