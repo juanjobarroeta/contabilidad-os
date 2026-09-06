@@ -15,7 +15,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Ban, Check, Loader2, Send, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import { Ban, Check, ChevronDown, Loader2, Send, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { PeriodSelector, usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { EspinaPasos } from "@/components/cierre/EspinaPasos";
@@ -40,6 +40,7 @@ function CierrePageInner() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [omitiendo, setOmitiendo] = useState(false);
+  const [espinaAbierta, setEspinaAbierta] = useState(false);
   const [motivo, setMotivo] = useState("");
   const finRef = useRef<HTMLDivElement>(null);
 
@@ -206,11 +207,13 @@ function CierrePageInner() {
   const puedeConfirmar = pasoActivo?.requiereConfirmacion && !bloqueado && pasoActivo?.estadoCalculado !== "no_aplica";
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-var(--cos-topbar,0px))] max-w-[1180px] flex-col px-4 py-5 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="mx-auto flex h-full max-w-[1180px] flex-col px-3 py-3 sm:px-6 sm:py-5">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2 sm:mb-4 sm:gap-3">
         <div>
-          <p className="text-[12.5px] text-cos-ink-soft">Cierre guiado</p>
-          <h1 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-cos-ink">{activeCompany.razonSocial}</h1>
+          <p className="text-[12px] text-cos-ink-soft sm:text-[12.5px]">Cierre guiado</p>
+          <h1 className="line-clamp-2 text-[18px] font-semibold leading-tight tracking-[-0.02em] text-cos-ink sm:text-[22px]">
+            {activeCompany.razonSocial}
+          </h1>
           <p className="mt-0.5 text-[12px] text-cos-ink-soft">
             {activeCompany.rfc}
             {cierre && (
@@ -247,12 +250,43 @@ function CierrePageInner() {
       ) : loading || !cierre || !pasoActivo ? (
         <Loading label="Revisando el cierre del periodo…" />
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[228px_minmax(0,1fr)]">
-          <aside className="rounded-card border border-cos-line bg-cos-card p-2 lg:overflow-y-auto">
-            <EspinaPasos pasos={cierre.pasos} activo={pasoActivo.clave} onSelect={seleccionar} />
-          </aside>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[228px_minmax(0,1fr)] lg:gap-4">
+          {/* La espina es un MAPA, no la pantalla: en móvil se colapsa a un
+              renglón para que la conversación se quede con el alto. */}
+          <div className="lg:contents">
+            <button
+              type="button"
+              onClick={() => setEspinaAbierta((o) => !o)}
+              className="flex w-full items-center gap-2 rounded-card border border-cos-line bg-cos-card px-3 py-2 text-left lg:hidden"
+              aria-expanded={espinaAbierta}
+            >
+              <span className="font-mono text-[10px] text-cos-ink-faint">
+                {String(pasoActivo.orden + 1).padStart(2, "0")}/12
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-cos-ink">{pasoActivo.titulo}</span>
+              <span className="shrink-0 font-mono text-[10.5px] text-cos-ink-soft">
+                {cierre.resumen.confirmados}/{cierre.resumen.aplican}
+              </span>
+              <ChevronDown className={cn("h-4 w-4 shrink-0 text-cos-ink-faint transition-transform", espinaAbierta && "rotate-180")} />
+            </button>
+            <aside
+              className={cn(
+                "rounded-card border border-cos-line bg-cos-card p-2 lg:block lg:overflow-y-auto",
+                espinaAbierta ? "block max-h-[52vh] overflow-y-auto" : "hidden"
+              )}
+            >
+              <EspinaPasos
+                pasos={cierre.pasos}
+                activo={pasoActivo.clave}
+                onSelect={(c) => {
+                  seleccionar(c);
+                  setEspinaAbierta(false);
+                }}
+              />
+            </aside>
+          </div>
 
-          <section className="flex min-h-0 flex-col rounded-card border border-cos-line bg-cos-card">
+          <section className="flex min-h-[60vh] flex-col rounded-card border border-cos-line bg-cos-card lg:min-h-0">
             <div className="flex items-center justify-between gap-3 border-b border-cos-line px-4 py-2.5">
               <div className="min-w-0">
                 <p className="truncate text-[14px] font-semibold text-cos-ink">{pasoActivo.titulo}</p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { X, Send, Loader2, Sparkles, Wrench, Plus, MessagesSquare, Lock, Users, Trash2, ArrowLeft, CheckCircle2, ShieldCheck, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Markdown } from "./Markdown";
@@ -27,6 +28,8 @@ export function ChatPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState<"chat" | "history">("chat");
   const [input, setInput] = useState("");
+  const pathname = usePathname();
+  const enCierre = pathname?.startsWith("/cierre") ?? false;
   // Acción reversible propuesta + estado del tap de confirmación.
   // Feedback: id del mensaje al que se le está escribiendo una corrección.
   const [correccionPara, setCorreccionPara] = useState<string | null>(null);
@@ -228,8 +231,9 @@ export function ChatPanel() {
 
   return (
     <>
-      {/* Floating toggle button */}
-      {!isOpen && (
+      {/* Botón flotante. En /cierre la conversación ES la pantalla: el botón
+          sobra y encima tapaba el compositor en móvil. */}
+      {!isOpen && !enCierre && (
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-cos-brand text-white shadow-lg transition-transform hover:scale-105 hover:bg-cos-brand-deep active:scale-95 xl:hidden"
