@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { registrarBitacora } from "@/lib/audit";
 import { reconcileTransaction } from "@/lib/conciliacion";
 import { aprobarSugerencia } from "@/lib/bancos/sugerencias-concepto";
 import { aplicarReglaRetroactiva, upsertReglaCategorizacion } from "@/lib/bancos/reglas-categorizacion";
@@ -40,7 +41,9 @@ export type PendingActionType =
   | "posponer_hallazgo"
   | "marcar_pendiente"
   | "confirmar_paso"
-  | "omitir_paso";
+  | "omitir_paso"
+  | "fijar_coeficiente"
+  | "confirmar_apertura";
 
 /** Acciones irreversibles — JAMÁS stageables. Se documentan para los tests. */
 export const IRREVERSIBLE_TYPES = ["timbrar", "dispersar", "pagar", "presentar"] as const;
@@ -80,7 +83,12 @@ export type ChatPendingAction =
   | (BasePending & {
       type: "omitir_paso";
       payload: { year: number; month: number; clave: string; hashEsperado: string; motivo: string };
-    });
+    })
+  // Punto de partida: capturar el coeficiente de utilidad del ejercicio y
+  // estampar la confirmación de la apertura. Reversibles (se vuelven a fijar);
+  // la bitácora guarda el valor anterior para poder deshacer a mano.
+  | (BasePending & { type: "fijar_coeficiente"; payload: { valor: number; anio: number; anterior: number | null } })
+  | (BasePending & { type: "confirmar_apertura"; payload: Record<string, never> });
 
 /** True si el tipo es una acción reversible permitida (lista blanca estricta). */
 export function isReversibleType(type: string): type is PendingActionType {
@@ -92,7 +100,9 @@ export function isReversibleType(type: string): type is PendingActionType {
     type === "posponer_hallazgo" ||
     type === "marcar_pendiente" ||
     type === "confirmar_paso" ||
-    type === "omitir_paso"
+    type === "omitir_paso" ||
+    type === "fijar_coeficiente" ||
+    type === "confirmar_apertura"
   );
 }
 
@@ -168,7 +178,9 @@ type StagePayload =
   | {
       type: "omitir_paso";
       payload: { year: number; month: number; clave: string; hashEsperado: string; motivo: string };
-    };
+    }
+  | { type: "fijar_coeficiente"; payload: { valor: number; anio: number; anterior: number | null } }
+  | { type: "confirmar_apertura"; payload: Record<string, never> };
 
 /**
  * STAGEA una acción reversible sobre la conversación. NO ejecuta. Devuelve la
@@ -280,6 +292,53 @@ export async function executeChatPendingAction(
           `${res.errores > 0 ? ` (${res.errores} no se pudieron)` : ""}` +
           `${crearRegla !== false ? " y la regla quedó guardada para futuros estados de cuenta." : "."}`,
       };
+    }
+
+    case "fijar_coeficiente": {
+      // Mismo update que el botón «usar sugerido» de la pantalla de apertura
+      // (/api/impuestos/coeficiente): fija el override del ejercicio. El valor
+      // anterior queda en la bitácora para poder volver atrás a mano.
+      const { valor, anio, anterior } = pa.payload;
+      if (!Number.isFinite(valor) || valor < 0 || valor > 5) {
+        return { ok: false, error: "El coeficiente está fuera de rango." };
+      }
+      const redondeado = Math.round(valor * 10000) / 10000;
+      await prisma.company.update({
+        where: { id: pa.companyId },
+        data: { coeficienteUtilidad: redondeado, coeficienteAnio: anio },
+      });
+      registrarBitacora({
+        companyId: pa.companyId,
+        userId: confirmingUserId,
+        accion: "apertura.coeficiente.fijar",
+        entidad: "Company",
+        entidadId: pa.companyId,
+        detalle: { anio, antes: anterior, despues: redondeado, via: "copiloto" },
+      });
+      return {
+        ok: true,
+        message: `Coeficiente de utilidad del ejercicio ${anio} fijado en ${redondeado}. El ISR provisional ya se puede calcular con él.`,
+      };
+    }
+
+    case "confirmar_apertura": {
+      // Estampa la confirmación del punto de partida (quién y cuándo), igual
+      // que POST /api/companies/[id]/apertura/confirmar.
+      const user = await prisma.user.findUnique({ where: { id: confirmingUserId }, select: { email: true } });
+      await prisma.company.update({
+        where: { id: pa.companyId },
+        data: { aperturaConfirmadaAt: new Date(), aperturaConfirmadaPor: user?.email ?? confirmingUserId },
+      });
+      registrarBitacora({
+        companyId: pa.companyId,
+        userId: confirmingUserId,
+        actorEmail: user?.email ?? null,
+        accion: "apertura.confirmar",
+        entidad: "Company",
+        entidadId: pa.companyId,
+        detalle: { via: "copiloto" },
+      });
+      return { ok: true, message: "Punto de partida fiscal confirmado." };
     }
 
     case "confirmar_paso":

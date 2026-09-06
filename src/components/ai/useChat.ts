@@ -279,6 +279,8 @@ export const TOOL_LABELS: Record<string, string> = {
   query_cierre_estado: "Revisando el cierre",
   query_cierre_paso: "Revisando el paso",
   proponer_confirmar_paso: "Preparando la confirmación",
+  proponer_fijar_coeficiente: "Preparando el coeficiente",
+  proponer_confirmar_apertura: "Preparando la confirmación del punto de partida",
   proponer_omitir_paso: "Preparando la omisión",
   proponer_conciliacion: "Preparando la conciliación",
   proponer_categorizacion: "Preparando la categorización",
