@@ -42,6 +42,15 @@
  * apellidos separados. El paquete de admisión de Ortega (HOSP-2026-0418)
  * queda firmado con HospFirma y evidencia; el de Peña (HOSP-2026-0411)
  * pendiente. La hoja SAEH del egreso ambulatorio HOSP-2026-0405 va COMPLETA.
+ *
+ * P3 tratamientos: dos protocolos (COLE-LAP y HERNIA-ING, con partidas del
+ * tarifario, insumos de farmacia y honorarios sugeridos) y cuatro planes que
+ * cuentan el ciclo consulta → plan → cotización → cirugía → cuenta: el de
+ * Castillo PROPUESTO y con quirófano la próxima semana sin folio de GNP
+ * (alerta PLAN_SIN_AUTORIZACION), el de Mendoza AUTORIZADO, cotizado y
+ * programado, el de Ortega EN_CURSO detrás de HOSP-2026-0418 —la cuenta
+ * rebasa el plan en más del 15 % (alerta CUENTA_FUERA_DE_PLAN)— y el de la
+ * panendoscopía de Zamora (HOSP-2026-0405) CERRADO por el alta.
  */
 
 import { createHash } from "node:crypto";
@@ -64,6 +73,8 @@ import { buscarCie } from "../src/lib/hospital/cie";
 import { ENTIDAD_DGIS_POR_CURP, calcularCurp, calcularRfc, normalizarNombre } from "../src/lib/hospital/identidad";
 import { paqueteAdmision } from "../src/lib/hospital/admision";
 import { firmarDocumento } from "../src/lib/hospital/firmas";
+import { armarInsumosProtocolo, armarPartidasProtocolo, resolverCiesProtocolo } from "../src/lib/hospital/protocolo";
+import { DESVIACION_ALERTA_PCT, PLAN_ESTADOS, actualizarPlan, compararPlanConCuenta, cotizarPlan, crearPlan, faltaAutorizacion, programarPlan } from "../src/lib/hospital/plan";
 import { claveDia, fechaLocal, partesLocales } from "../src/lib/hospital/tz";
 import { r2 } from "../src/lib/hospital/util";
 
@@ -191,6 +202,11 @@ async function resolverEmpresa(): Promise<{ companyId: string; email: string | n
 /** Borra SOLO las filas del módulo (Hosp*) de la empresa, en orden de dependencias. */
 async function borrarHospital(companyId: string) {
   await prisma.hospAcceso.deleteMany({ where: { companyId } });
+  // P3: el plan cuelga de episodio, cotización, protocolo y médicos; el
+  // protocolo, del tarifario y de farmacia (sus partidas e insumos caen en cascada).
+  await prisma.hospPlanTratamiento.deleteMany({ where: { companyId } });
+  await prisma.hospProtocolo.deleteMany({ where: { companyId } });
+  await prisma.hospDeposito.deleteMany({ where: { companyId } });
   await prisma.hospMovimientoInsumo.deleteMany({ where: { companyId } });
   await prisma.hospNota.deleteMany({ where: { episodio: { companyId } } });
   await prisma.hospCargo.deleteMany({ where: { companyId } });
@@ -394,6 +410,9 @@ const PACIENTES: Pac[] = [
   { key: "AVILA", nombre: "Verónica", apellidoPaterno: "Ávila", apellidoMaterno: "Serrano", sexo: "FEMENINO", nacimiento: [1980, 5, 5], entidad: "PL", pagador: "TEXTIL", domicilio: { calle: "Blvd. 5 de Mayo", numeroExterior: "2802", colonia: "Rincón Arboledas", ...PUEBLA, codigoPostal: "72470" } },
   // Extranjera: sin CURP con motivo, pasaporte y RFC genérico XEXX010101000 (NOM-024 / SAT).
   { key: "CARTER", nombre: "Emily", apellidoPaterno: "Carter", apellidoMaterno: null, sexo: "FEMENINO", nacimiento: [1988, 11, 2], entidad: "NE", pagador: "PART", telefono: "+1 512 555 0134", domicilio: { calle: "Calle 3 Sur", numeroExterior: "1105", numeroInterior: "PH", colonia: "Centro", ...PUEBLA, codigoPostal: "72000" }, extranjero: { motivo: "Extranjera sin CURP (pasaporte estadounidense)", nacionalidad: "USA", paisClave: "228" }, identidad: { rfc: "CAPTURA", identificacion: { tipo: "PASAPORTE", numero: "5X1234567", vigencia: [2031, 5, 1] } } },
+  // P3: valorados en consulta externa; su tratamiento vive todavía en un plan (sin episodio).
+  { key: "CASTILLO", nombre: "Lorena", apellidoPaterno: "Castillo", apellidoMaterno: "Jiménez", sexo: "FEMENINO", nacimiento: [1987, 7, 19], entidad: "PL", pagador: "GNP", telefono: "222 274 6610", domicilio: { calle: "Av. Las Torres", numeroExterior: "1810", colonia: "Bosques de San Sebastián", ...PUEBLA, codigoPostal: "72310" }, identidad: { identificacion: { tipo: "INE", vigencia: [2030, 12, 31] } }, saeh: { estadoConyugal: 2 } },
+  { key: "MENDOZA", nombre: "Raúl", apellidoPaterno: "Mendoza", apellidoMaterno: "Trejo", sexo: "MASCULINO", nacimiento: [1974, 11, 8], entidad: "PL", pagador: "GNP", telefono: "222 519 0027", domicilio: { calle: "Calle 14 Oriente", numeroExterior: "2409", colonia: "Azcárate", ...PUEBLA, codigoPostal: "72501" }, identidad: { identificacion: { tipo: "INE", vigencia: [2029, 12, 31] } }, saeh: { estadoConyugal: 2 } },
 ];
 
 type Ep = {
@@ -462,6 +481,48 @@ const EPISODIOS: Ep[] = [
   // Consulta externa de hoy: sin cama; lo que se surte de farmacia es VENTA (0 % IVA).
   { folio: "HOSP-2026-0426", paciente: "MONTES", cama: null, tipo: "CONSULTA", estado: "EN_VALORACION", ingreso: [0, 9, 30], medico: "LEDESMA", dx: "Control postoperatorio de hernioplastía", cie10: "Z09.0", cargos: [{ servicio: "CONS-EXT", cantidad: 1 }] },
 ];
+
+/**
+ * P3: la receta reutilizable de cada procedimiento. No lleva precios: se
+ * precia con el convenio del pagador al simularla o al abrir el plan. Una
+ * partida sin servicio del tarifario queda SIN_TARIFA (precio 0) hasta que el
+ * piso la capture en el plan (PRECIO_CAPTURADO).
+ */
+const PROTOCOLOS: Array<{
+  clave: string;
+  nombre: string;
+  descripcion: string;
+  tipoEpisodio: HospEpisodioTipo;
+  /** CIE-9-MC del procedimiento y CIE-10 del diagnóstico, en su forma clínica. */
+  cie9: string;
+  cie10: string;
+  especialidad: string;
+  estanciaNoches: number;
+  quirofanoMinutos: number;
+  /** Tipo de anestesia SAEH: 1 general · 2 regional · 4 sedación. */
+  tipoAnestesia: number;
+  honorarios: { cirujano: number; anestesiologo: number };
+  partidas: Array<{ servicio: string; cantidad: number; opcional?: boolean } | { descripcion: string; categoria: HospCargoCategoria; cantidad: number; opcional?: boolean }>;
+  insumos: Array<{ insumo: string; cantidad: number; opcional?: boolean }>;
+}> = [
+  {
+    clave: "COLE-LAP", nombre: "Colecistectomía laparoscópica", descripcion: "Cuatro puertos con anestesia general balanceada; una noche de observación, profilaxis con cefalotina y analgesia con ketorolaco.",
+    tipoEpisodio: "AMBULATORIO", cie9: "51.23", cie10: "K80.2", especialidad: "Cirugía general", estanciaNoches: 1, quirofanoMinutos: 90, tipoAnestesia: 1,
+    honorarios: { cirujano: 25000, anestesiologo: 8000 },
+    partidas: [{ servicio: "QX-HORA", cantidad: 1.5 }, { servicio: "REC-HORA", cantidad: 2 }, { servicio: "HAB-STD", cantidad: 1, opcional: true }, { servicio: "EST-LABPRE", cantidad: 1 }, { descripcion: "Material de curación", categoria: "MATERIAL", cantidad: 1 }],
+    insumos: [{ insumo: "MED-CEFA1G", cantidad: 6 }, { insumo: "MED-KETO30", cantidad: 3 }, { insumo: "MED-MIDA5", cantidad: 1 }, { insumo: "SOL-HART1000", cantidad: 4 }],
+  },
+  {
+    clave: "HERNIA-ING", nombre: "Hernioplastía inguinal", descripcion: "Técnica de Lichtenstein con malla bajo bloqueo regional; egreso el mismo día.",
+    tipoEpisodio: "AMBULATORIO", cie9: "53.05", cie10: "K40.9", especialidad: "Cirugía general", estanciaNoches: 0, quirofanoMinutos: 60, tipoAnestesia: 2,
+    honorarios: { cirujano: 18000, anestesiologo: 6000 },
+    partidas: [{ servicio: "QX-HORA", cantidad: 1 }, { servicio: "REC-HORA", cantidad: 2 }, { servicio: "EST-LABPRE", cantidad: 1 }, { descripcion: "Malla de polipropileno 15 × 15 cm", categoria: "MATERIAL", cantidad: 1 }, { descripcion: "Material de curación", categoria: "MATERIAL", cantidad: 1 }],
+    insumos: [{ insumo: "MED-CEFA1G", cantidad: 1 }, { insumo: "MED-KETO30", cantidad: 2 }, { insumo: "SOL-HART1000", cantidad: 2 }, { insumo: "MAT-GASA10", cantidad: 2 }],
+  },
+];
+
+/** Lo que el piso captura en el plan para las partidas del protocolo que no están en el tarifario (SIN_TARIFA en la simulación). */
+const PRECIO_CAPTURADO: Record<string, number> = { "Material de curación": 950, "Malla de polipropileno 15 × 15 cm": 2400 };
 
 /** Contenido mínimo del consentimiento (NOM-004 §10.1) según el procedimiento. */
 function contenidoConsentimiento(tipo: "CONSENTIMIENTO_CIRUGIA" | "CONSENTIMIENTO_ANESTESIA" | "CONSENTIMIENTO_HOSPITALIZACION", procedimiento: string | null) {
@@ -1278,6 +1339,129 @@ async function main() {
     });
   }
 
+  // ── P3 tratamientos: protocolos (la receta) y planes (lo prometido a cada paciente) ──
+  // La misma maquinaria que las rutas: resolverCiesProtocolo + armarPartidasProtocolo
+  // (POST /protocolos) y crearPlan / actualizarPlan / cotizarPlan / programarPlan.
+  const incluirPartidasProtocolo = { partidas: { orderBy: { orden: "asc" as const } } };
+  const protocoloPorClave = new Map<string, { id: string; partidas: Array<{ servicioId: string | null; categoria: HospCargoCategoria; descripcion: string; cantidad: unknown; opcional: boolean }> }>();
+  for (const p of PROTOCOLOS) {
+    const existente = await prisma.hospProtocolo.findUnique({ where: { companyId_clave: { companyId: cid, clave: p.clave } }, include: incluirPartidasProtocolo });
+    if (existente) {
+      protocoloPorClave.set(p.clave, existente);
+      continue;
+    }
+    const cies = await resolverCiesProtocolo(prisma, { procedimientoCie9: p.cie9, diagnosticoCie10: p.cie10 });
+    const partidas = await armarPartidasProtocolo(
+      prisma,
+      cid,
+      p.partidas.map((x, i) =>
+        "servicio" in x
+          ? { orden: i, servicioId: srv(x.servicio).id, cantidad: x.cantidad, opcional: x.opcional ?? false }
+          : { orden: i, categoria: x.categoria, descripcion: x.descripcion, cantidad: x.cantidad, opcional: x.opcional ?? false }
+      )
+    );
+    const insumos = await armarInsumosProtocolo(prisma, cid, p.insumos.map((x) => ({ insumoId: insumoPorClave.get(x.insumo)!.id, cantidad: x.cantidad, opcional: x.opcional ?? false })));
+    const row = await prisma.hospProtocolo.create({
+      data: {
+        companyId: cid, clave: p.clave, nombre: p.nombre, descripcion: p.descripcion, tipoEpisodio: p.tipoEpisodio,
+        procedimientoCie9: cies.procedimientoCie9 ?? null, diagnosticoCie10: cies.diagnosticoCie10 ?? null, especialidad: p.especialidad,
+        estanciaNoches: p.estanciaNoches, quirofanoMinutos: p.quirofanoMinutos, tipoAnestesia: p.tipoAnestesia, requiereAnestesiologo: true,
+        honorarioCirujano: p.honorarios.cirujano, honorarioAnestesiologo: p.honorarios.anestesiologo,
+        partidas: { create: partidas }, insumos: { create: insumos },
+      },
+      include: incluirPartidasProtocolo,
+    });
+    protocoloPorClave.set(p.clave, row);
+  }
+  const protocolo = (clave: string) => {
+    const p = protocoloPorClave.get(clave);
+    if (!p) throw new Error(`Protocolo ${clave} no cargado`);
+    return p;
+  };
+  /** Las partidas del protocolo como las captura el piso en el plan: las del tarifario se precian con el convenio; las SIN_TARIFA llevan su precio capturado. */
+  const partidasCapturadas = (clave: string) =>
+    protocolo(clave).partidas.map((p) => ({
+      servicioId: p.servicioId, categoria: p.categoria, descripcion: p.descripcion, cantidad: Number(p.cantidad), opcional: p.opcional,
+      ...(p.servicioId ? {} : { precioUnitario: PRECIO_CAPTURADO[p.descripcion] ?? 0 }),
+    }));
+  const usuarioSeed = { nombre: USUARIO_SEED };
+  const planDe = (pacienteKey: string, nombre: string) =>
+    prisma.hospPlanTratamiento.findFirst({ where: { companyId: cid, pacienteId: paciente(pacienteKey).id, nombre }, select: { id: true } });
+  let planesCreados = 0;
+
+  // (a) Castillo: colecistectomía PROPUESTA con quirófano la próxima semana; GNP
+  // todavía no da el folio → el panel dispara PLAN_SIN_AUTORIZACION.
+  if (!(await planDe("CASTILLO", "Colecistectomía laparoscópica"))) {
+    const plan = await crearPlan(prisma, {
+      companyId: cid, pacienteId: paciente("CASTILLO").id, protocoloId: protocolo("COLE-LAP").id,
+      medicoId: medico("VEGA").id, anestesiologoId: medico("RENTERIA").id, partidas: partidasCapturadas("COLE-LAP"),
+      notas: "Consulta externa: cólico biliar de repetición, USG con litiasis vesicular múltiple sin colecistitis. Carta de autorización solicitada a GNP.",
+      usuario: usuarioSeed,
+    });
+    await programarPlan(prisma, { planId: plan.id, fechaProgramada: dia(7, 8, 30), recursoId: recurso("Quirófano 2").id, usuario: usuarioSeed });
+    await prisma.hospPlanTratamiento.update({ where: { id: plan.id }, data: { createdAt: dia(-2, 12, 0) } });
+    planesCreados++;
+  }
+
+  // (b) Mendoza: hernioplastía AUTORIZADA por GNP con folio, cotizada desde el
+  // plan (folio COT siguiente) y programada en Quirófano 1 dentro de tres días.
+  if (!(await planDe("MENDOZA", "Hernioplastía inguinal"))) {
+    const plan = await crearPlan(prisma, {
+      companyId: cid, pacienteId: paciente("MENDOZA").id, protocoloId: protocolo("HERNIA-ING").id,
+      medicoId: medico("SANDOVAL").id, anestesiologoId: medico("RENTERIA").id, partidas: partidasCapturadas("HERNIA-ING"),
+      notas: "Hernia inguinal derecha reductible, sin datos de complicación. Laboratorio preoperatorio y ayuno indicados.",
+      usuario: usuarioSeed,
+    });
+    await actualizarPlan(prisma, { planId: plan.id, cambios: { estado: "AUTORIZADO", autorizacionPagador: "GNP-2026-77812" }, usuario: usuarioSeed, hoy: dia(-3, 16, 0) });
+    const cot = await cotizarPlan(prisma, { planId: plan.id, usuario: usuarioSeed, hoy: dia(-3, 16, 30) });
+    // El POST la deja en BORRADOR; GNP ya autorizó, así que queda aceptada.
+    await prisma.hospCotizacion.update({ where: { id: cot.id }, data: { estado: "ACEPTADA", createdAt: dia(-3, 16, 30), vigenciaHasta: dia(27, 23, 59) } });
+    await programarPlan(prisma, { planId: plan.id, fechaProgramada: dia(3, 8, 0), recursoId: recurso("Quirófano 1").id, usuario: usuarioSeed });
+    await prisma.hospPlanTratamiento.update({ where: { id: plan.id }, data: { createdAt: dia(-4, 10, 0) } });
+    planesCreados++;
+  }
+
+  // (c) Ortega: el plan detrás de HOSP-2026-0418, preciado con GNP y con los
+  // honorarios de la cotización aceptada (COT-2026-0311: 18 000 + 8 500). La
+  // cirugía duró 2.5 h y no 1.5, se quedó dos noches y hubo histopatología y
+  // medicamentos fuera de plan: la cuenta rebasa el plan en más del 15 % y el
+  // panel dispara CUENTA_FUERA_DE_PLAN. Se liga a la cotización de la lámina
+  // 7 si sigue ahí; si no, el plan cotiza por su cuenta.
+  if (!(await prisma.hospPlanTratamiento.findUnique({ where: { episodioId: ortega.id }, select: { id: true } }))) {
+    const cot311 = await prisma.hospCotizacion.findUnique({ where: { companyId_folio: { companyId: cid, folio: "COT-2026-0311" } }, select: { id: true, plan: { select: { id: true } } } });
+    const plan = await crearPlan(prisma, {
+      companyId: cid, pacienteId: paciente("ORTEGA").id, protocoloId: protocolo("COLE-LAP").id, tipoEpisodio: "HOSPITALIZACION",
+      medicoId: medico("VEGA").id, anestesiologoId: medico("RENTERIA").id, recursoId: recurso("Quirófano 2").id, fechaProgramada: dia(-1, 8, 30).toISOString(),
+      partidas: partidasCapturadas("COLE-LAP"),
+      honorarios: [{ medicoId: medico("VEGA").id, rol: "CIRUJANO", monto: 18000 }, { medicoId: medico("RENTERIA").id, rol: "ANESTESIOLOGO", monto: 8500 }],
+      autorizacionPagador: "GNP-A-2026-118240",
+      notas: "Colecistectomía laparoscópica electiva; honorarios según tabulador GNP 2026 (COT-2026-0311).",
+      usuario: usuarioSeed,
+    });
+    await actualizarPlan(prisma, { planId: plan.id, cambios: { estado: "AUTORIZADO" }, usuario: usuarioSeed, hoy: dia(-5, 12, 0) });
+    if (!cot311 || cot311.plan) await cotizarPlan(prisma, { planId: plan.id, usuario: usuarioSeed, hoy: dia(-6, 11, 0) });
+    // Ligar el episodio abierto lo pone EN_CURSO (mismo camino que convertir la cotización).
+    await actualizarPlan(prisma, { planId: plan.id, cambios: { episodioId: ortega.id }, usuario: usuarioSeed });
+    await prisma.hospPlanTratamiento.update({ where: { id: plan.id }, data: { createdAt: dia(-6, 11, 0), ...(cot311 && !cot311.plan ? { cotizacionId: cot311.id } : {}) } });
+    planesCreados++;
+  }
+
+  // (d) Zamora: plan ad hoc (sin protocolo) de la panendoscopía ambulatoria
+  // HOSP-2026-0405; el episodio ya está en ALTA, así que al ligarlo queda CERRADO.
+  if (!(await prisma.hospPlanTratamiento.findUnique({ where: { episodioId: zamora.id }, select: { id: true } }))) {
+    const plan = await crearPlan(prisma, {
+      companyId: cid, pacienteId: paciente("ZAMORA").id, nombre: "Panendoscopía", tipoEpisodio: "AMBULATORIO", procedimientoCie9: "45.13", diagnosticoCie10: "K21.9",
+      medicoId: medico("RENTERIA").id, recursoId: recurso("Endoscopía").id, quirofanoMinutos: 60, tipoAnestesia: 4, fechaProgramada: dia(-9, 9, 0).toISOString(),
+      partidas: [{ servicioId: srv("PROC-PANEN").id, cantidad: 1, opcional: false }],
+      honorarios: [{ medicoId: medico("RENTERIA").id, rol: "ANESTESIOLOGO", monto: 4200 }],
+      notas: "Panendoscopía diagnóstica con sedación por ERGE; plan sin protocolo.",
+      usuario: usuarioSeed,
+    });
+    await actualizarPlan(prisma, { planId: plan.id, cambios: { episodioId: zamora.id }, usuario: usuarioSeed });
+    await prisma.hospPlanTratamiento.update({ where: { id: plan.id }, data: { createdAt: dia(-12, 10, 0) } });
+    planesCreados++;
+  }
+
   // ── Mantenimiento ──
   const TICKETS = [
     { folio: "MANT-2026-0001", titulo: "Aire acondicionado de Quirófano 1 · preventivo", descripcion: "Mantenimiento preventivo semestral de la manejadora de aire. Cotización del proveedor: $12,900.00 (incluye filtros HEPA).", area: "QUIROFANO", equipo: "Manejadora de aire Q1", prioridad: "MEDIA", estado: "ASIGNADO", preventivo: true, programadoPara: dia(5, 10, 0), asignado: true, creado: dia(-3, 9, 0) },
@@ -1389,6 +1573,28 @@ async function main() {
   const subtotalOrtega = r2(cargosOrtega.reduce((s, c) => s + Number(c.importe), 0));
   const ivaOrtega = r2(cargosOrtega.reduce((s, c) => s + (c.ivaTasa == null ? 0 : r2(Number(c.importe) * Number(c.ivaTasa))), 0));
 
+  // P3: protocolos, planes por estado y las dos alertas del panel (mismos criterios que /api/hospital/panel).
+  const [protocolos, planes, comparativoOrtega] = await Promise.all([
+    prisma.hospProtocolo.findMany({ where: { companyId: cid, activo: true }, select: { clave: true }, orderBy: { clave: "asc" } }),
+    prisma.hospPlanTratamiento.findMany({
+      where: { companyId: cid },
+      select: {
+        estado: true, nombre: true, fechaProgramada: true, autorizacionPagador: true,
+        paciente: { select: { apellidoPaterno: true } }, pagador: { select: { tipo: true, nombre: true } },
+        cotizacion: { select: { folio: true } }, episodio: { select: { folio: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    compararPlanConCuenta(prisma, ortega.id),
+  ]);
+  const planesPorEstado = PLAN_ESTADOS.map((e) => [e, planes.filter((p) => p.estado === e)] as const)
+    .filter(([, xs]) => xs.length)
+    .map(([e, xs]) => `${xs.length} ${e}${xs.some((p) => p.episodio || p.cotizacion) ? ` (${xs.map((p) => p.episodio?.folio ?? p.cotizacion?.folio).filter(Boolean).join(", ")})` : ""}`)
+    .join(" · ");
+  const planesSinAutorizacion = planes.filter((p) => (p.estado === "PROPUESTO" || p.estado === "EN_CURSO") && p.fechaProgramada && faltaAutorizacion(p.pagador?.tipo, p.autorizacionPagador));
+  const desvio = comparativoOrtega?.comparativo.resumen;
+  const pesos = (n: number) => `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
+
   console.log(`
 ✔ HOSPITAL demo lista: ${company.razonSocial} (${company.rfc}) · companyId ${cid}
   · Censo: ${ocupadas} / ${camas} camas ocupadas · ${episodiosActivos} episodios activos · ${pacientes} pacientes
@@ -1399,6 +1605,8 @@ async function main() {
     CLUES ${ESTABLECIMIENTO.clues} · ${ESTABLECIMIENTO.licenciaSanitaria} · responsable ${ESTABLECIMIENTO.responsableSanitario} · aviso de privacidad v${AVISO_VERSION}
   · P2 identidad: ${curpsVerificadas} CURP verificadas en RENAPO · 1 CURP probable (Nieto) · 1 extranjera con pasaporte (Carter) · RFC de CSF cruzado (Ortega)
     Admisión firmada: ${docsFirmadosP2} documentos con texto legal FIRMADOS · ${firmas} firmas con evidencia (HOSP-2026-0418) · paquete pendiente HOSP-2026-0411 · ${saehCompletas} hoja SAEH completa (HOSP-2026-0405)
+  · P3 tratamientos: ${protocolos.length} protocolos (${protocolos.map((p) => p.clave).join(", ")}) · ${planes.length} planes (${planesCreados} nuevos): ${planesPorEstado}
+    Alertas del panel: PLAN_SIN_AUTORIZACION ×${planesSinAutorizacion.length}${planesSinAutorizacion.length ? ` (${planesSinAutorizacion.map((p) => `${p.paciente.apellidoPaterno} · ${p.nombre} · ${claveDia(p.fechaProgramada!)} sin folio de ${p.pagador?.nombre}`).join("; ")})` : ""} · CUENTA_FUERA_DE_PLAN ${desvio ? `HOSP-2026-0418: ${pesos(desvio.realTotal)} contra ${pesos(desvio.planTotal)} planeados (${desvio.desviacionPct != null && desvio.desviacionPct > 0 ? "+" : ""}${desvio.desviacionPct} %${desvio.desviacionPct != null && desvio.desviacionPct > DESVIACION_ALERTA_PCT ? "" : " — NO dispara"})` : "sin plan en HOSP-2026-0418"}
 ${email ? `  Entra como ${email} y selecciona la empresa.` : ""}`);
 }
 
