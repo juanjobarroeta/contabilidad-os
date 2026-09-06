@@ -787,7 +787,7 @@ async function main() {
         await prisma.$transaction(async (tx) => {
           const expedienteNumero = existente.expedienteNumero ?? (await siguienteFolio(tx, cid, "expediente", ahora));
           await tx.hospPaciente.update({ where: { id: existente.id }, data: { ...datosP1, expedienteNumero } });
-        });
+        }, { timeout: 180_000, maxWait: 30_000 });
         expedientesAsignados++;
       }
     } else {
@@ -808,7 +808,7 @@ async function main() {
           },
           select: { id: true },
         });
-      });
+      }, { timeout: 180_000, maxWait: 30_000 });
       expedientesAsignados++;
     }
     pacientePorKey.set(p.key, row);

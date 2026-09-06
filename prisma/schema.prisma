@@ -392,6 +392,9 @@ model Company {
   hospAccesos      HospAcceso[]
   hospFirmas       HospFirma[]
   hospEgresosSaeh  HospEgresoSaeh[]
+  hospProtocolos   HospProtocolo[]
+  hospPlanes       HospPlanTratamiento[]
+  hospDepositos    HospDeposito[]
 }
 
 model CompanyMember {
@@ -6528,6 +6531,14 @@ model HospConfig {
   plantillasDocumentos Json?
   /// Institución CLUES para SAEH (SMP = Servicios Médicos Privados).
   saehInstitucion String? @default("SMP")
+  /// Captura asistida (dictado, estructuración y codificación propuestas por IA; nunca escribe sola).
+  iaAsistencia Boolean @default(true)
+  /// Reconocimiento de voz: "navegador" (Web Speech API, sin costo) u "openai" (Whisper en el hub).
+  sttProveedor String? @default("navegador")
+  /// Contabilidad: el módulo asienta en el libro (fuente HOSPITAL y piernas del CFDI) sólo cuando el contador lo activa
+  /// tras la apertura; `cuentasContables` sobreescribe cuentas por clave del motor (INGRESO_HOSPITALIZACION → "401.01"…).
+  contabilidadActiva Boolean @default(false)
+  cuentasContables   Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -6582,6 +6593,7 @@ model HospRecurso {
 
   episodios HospEpisodio[]
   citas     HospCita[]
+  planes HospPlanTratamiento[]
 
   @@unique([companyId, tipo, nombre])
   @@index([companyId, area])
@@ -6698,6 +6710,7 @@ model HospPaciente {
   citas        HospCita[]
   cotizaciones HospCotizacion[]
   documentos   HospDocumento[]
+  planes       HospPlanTratamiento[]
 
   @@unique([companyId, expedienteNumero])
   @@index([companyId, apellidoPaterno, nombre])
@@ -6747,6 +6760,7 @@ model HospPagador {
   episodios    HospEpisodio[]
   tarifas      HospTarifa[]
   cotizaciones HospCotizacion[]
+  planes HospPlanTratamiento[]
 
   @@index([companyId, activo])
 }
@@ -6793,6 +6807,7 @@ model HospServicio {
   cargos             HospCargo[]
   recursos           HospRecurso[]
   cotizacionPartidas HospCotizacionPartida[]
+  protocoloPartidas  HospProtocoloPartida[]
 
   @@unique([companyId, clave])
   @@index([companyId, categoria])
@@ -6847,6 +6862,8 @@ model HospMedico {
   cargos    HospCargo[]
   notas     HospNota[]
   egresosSaeh HospEgresoSaeh[]
+  planesCirujano       HospPlanTratamiento[] @relation("PlanMedico")
+  planesAnestesiologo  HospPlanTratamiento[] @relation("PlanAnestesiologo")
 
   @@index([companyId, activo])
 }
@@ -6938,6 +6955,8 @@ model HospEpisodio {
   traslados         HospTraslado[]
   movimientosInsumo HospMovimientoInsumo[]
   egresoSaeh        HospEgresoSaeh?
+  plan              HospPlanTratamiento?
+  depositos         HospDeposito[]
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
@@ -7022,6 +7041,8 @@ model HospNota {
   /// Contenido estructurado por tipo (historia clínica por secciones, hoja de
   /// urgencias, egreso con instrucciones): JSON validado en el hub.
   secciones Json?
+  /// Captura asistida: { origen: DICTADO|ESTRUCTURADO|SUGERIDO, transcripcion, modelo, sttProveedor, at }. El médico sigue siendo el autor.
+  asistencia Json?
   /// Firma del sistema (NOM-024): SHA-256 de (episodio, tipo, texto, secciones,
   /// autor, fecha) y sello de tiempo; la e.firma llega en v2.
   hash    String?
@@ -7186,6 +7207,8 @@ model HospCargo {
   loteId     String?
   medicoId   String?
   invoiceId  String?
+  /// Fecha en que el módulo asentó este cargo en el libro (honorarios por pagar). Null = sin asentar.
+  asientoAt DateTime?
 
   cancelado         Boolean   @default(false)
   canceladoAt       DateTime?
@@ -7296,6 +7319,7 @@ model HospCotizacion {
 
   partidas HospCotizacionPartida[]
   episodio HospEpisodio?
+  plan HospPlanTratamiento?
   citas    HospCita[]
 
   @@unique([companyId, folio])
@@ -7383,6 +7407,7 @@ model HospInsumo {
 
   lotes       HospLote[]
   movimientos HospMovimientoInsumo[]
+  protocoloInsumos HospProtocoloInsumo[]
 
   @@unique([companyId, clave])
   @@index([companyId, categoria])
@@ -7452,6 +7477,8 @@ model HospMovimientoInsumo {
   /// controlado (folio de receta especial o de la indicación del expediente)
   /// y quién la prescribió.
   recetaRef        String?
+  /// Fecha en que la salida se asentó como costo de farmacia. Null = sin asentar.
+  asientoAt DateTime?
   prescriptorNombre String?
   prescriptorCedula String?
 
@@ -7759,4 +7786,177 @@ model HospEgresoSaeh {
 
   @@unique([companyId, folioSaeh])
   @@index([companyId, estado])
+}
+
+// ── P3: protocolos y plan de tratamiento, depósitos ──────────────────────────
+
+enum HospPlanEstado {
+  PROPUESTO
+  AUTORIZADO
+  EN_CURSO
+  CERRADO
+  CANCELADO
+}
+
+/// Protocolo clínico-comercial: lo que un procedimiento suele llevar
+/// (partidas del tarifario, insumos, estancia, anestesia, honorarios). De él
+/// nace el plan de tratamiento de un paciente y su cotización.
+model HospProtocolo {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clave              String
+  nombre             String
+  descripcion        String?
+  tipoEpisodio       HospEpisodioTipo @default(AMBULATORIO)
+  procedimientoCie9  String?
+  diagnosticoCie10   String?
+  especialidad       String?
+  estanciaNoches     Int              @default(0)
+  quirofanoMinutos   Int?
+  /// Tipo de anestesia SAEH (1 general … 6 no usó).
+  tipoAnestesia      Int?
+  requiereAnestesiologo Boolean       @default(false)
+  honorarioCirujano       Decimal?    @db.Decimal(18, 2)
+  honorarioAnestesiologo  Decimal?    @db.Decimal(18, 2)
+  version            Int              @default(1)
+  activo             Boolean          @default(true)
+
+  company  Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  partidas HospProtocoloPartida[]
+  insumos  HospProtocoloInsumo[]
+  planes   HospPlanTratamiento[]
+
+  @@unique([companyId, clave])
+  @@index([companyId, activo])
+}
+
+model HospProtocoloPartida {
+  id          String             @id @default(cuid())
+  protocoloId String
+  orden       Int
+  servicioId  String?
+  categoria   HospCargoCategoria
+  descripcion String
+  cantidad    Decimal            @db.Decimal(18, 4)
+  opcional    Boolean            @default(false)
+
+  protocolo HospProtocolo @relation(fields: [protocoloId], references: [id], onDelete: Cascade)
+  servicio  HospServicio? @relation(fields: [servicioId], references: [id])
+
+  @@index([protocoloId])
+}
+
+model HospProtocoloInsumo {
+  id          String  @id @default(cuid())
+  protocoloId String
+  insumoId    String
+  cantidad    Decimal @db.Decimal(18, 4)
+  opcional    Boolean @default(false)
+
+  protocolo HospProtocolo @relation(fields: [protocoloId], references: [id], onDelete: Cascade)
+  insumo    HospInsumo    @relation(fields: [insumoId], references: [id])
+
+  @@index([protocoloId])
+}
+
+/// Plan de tratamiento de un paciente: el protocolo aterrizado con precios
+/// del convenio, médico, fecha y autorización del pagador. Puede existir antes
+/// del episodio (consulta → plan → cotización → cirugía programada) y se
+/// engancha al episodio al convertir la cotización. La cuenta compara lo
+/// planeado con lo real.
+model HospPlanTratamiento {
+  id           String   @id @default(cuid())
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  pacienteId      String
+  episodioId      String?  @unique
+  protocoloId     String?
+  cotizacionId    String?  @unique
+  pagadorId       String?
+  medicoId        String?
+  anestesiologoId String?
+  recursoId       String?
+
+  nombre            String
+  procedimientoCie9 String?
+  diagnosticoCie10  String?
+  tipoEpisodio      HospEpisodioTipo
+  estanciaNoches    Int              @default(0)
+  quirofanoMinutos  Int?
+  tipoAnestesia     Int?
+  fechaProgramada   DateTime?
+  estado            HospPlanEstado   @default(PROPUESTO)
+  autorizacionPagador String?
+  autorizadoAt        DateTime?
+
+  /// [{ servicioId, categoria, descripcion, cantidad, precioUnitario, ivaTasa, importe, opcional }]
+  partidas   Json
+  /// [{ insumoId, nombre, cantidad, costoUnitario }]
+  insumos    Json?
+  /// [{ medicoId, nombre, rol: CIRUJANO|ANESTESIOLOGO|AYUDANTE, monto }]
+  honorarios Json?
+  subtotal   Decimal @db.Decimal(18, 2)
+  iva        Decimal @db.Decimal(18, 2)
+  total      Decimal @db.Decimal(18, 2)
+  notas      String?
+  creadoPorUserId String?
+
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  paciente      HospPaciente    @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  episodio      HospEpisodio?   @relation(fields: [episodioId], references: [id])
+  protocolo     HospProtocolo?  @relation(fields: [protocoloId], references: [id])
+  cotizacion    HospCotizacion? @relation(fields: [cotizacionId], references: [id])
+  pagador       HospPagador?    @relation(fields: [pagadorId], references: [id])
+  medico        HospMedico?     @relation("PlanMedico", fields: [medicoId], references: [id])
+  anestesiologo HospMedico?     @relation("PlanAnestesiologo", fields: [anestesiologoId], references: [id])
+  recurso       HospRecurso?    @relation(fields: [recursoId], references: [id])
+
+  @@index([companyId, estado])
+  @@index([pacienteId])
+}
+
+enum HospFormaPago {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+  CHEQUE
+}
+
+enum HospDepositoEstado {
+  RECIBIDO
+  APLICADO
+  DEVUELTO
+  CANCELADO
+}
+
+/// Depósito de garantía / anticipo del paciente al ingreso. Se asienta como
+/// anticipo de clientes (fuente HOSPITAL) y se aplica o devuelve al cerrar la
+/// cuenta.
+model HospDeposito {
+  id         String   @id @default(cuid())
+  companyId  String
+  episodioId String
+  createdAt  DateTime @default(now())
+
+  fecha      DateTime
+  monto      Decimal            @db.Decimal(18, 2)
+  formaPago  HospFormaPago
+  referencia String?
+  estado     HospDepositoEstado @default(RECIBIDO)
+  aplicadoAt DateTime?
+  devueltoAt DateTime?
+  asientoAt  DateTime?
+  recibidoPorUserId String?
+  notas      String?
+
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, fecha])
+  @@index([episodioId])
 }
