@@ -5174,6 +5174,13 @@ model PasoCierre {
   hashConfirmado     String?
   nota               String?
 
+  /// Apertura del paso escrita por el copiloto (lo primero que el contador lee
+  /// al abrirlo) y el hash de la evidencia con la que se escribió: se regenera
+  /// SÓLO cuando los datos cambian, no en cada visita. Sin esto, abrir un paso
+  /// costaría una llamada al modelo cada vez.
+  resumenCopiloto String? @db.Text
+  resumenHash     String?
+
   updatedAt DateTime @updatedAt
 
   cierre CierrePeriodo @relation(fields: [cierreId], references: [id], onDelete: Cascade)

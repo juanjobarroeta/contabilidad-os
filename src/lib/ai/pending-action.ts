@@ -38,7 +38,9 @@ export type PendingActionType =
   | "categorizacion_lote"
   | "resolver_hallazgo"
   | "posponer_hallazgo"
-  | "marcar_pendiente";
+  | "marcar_pendiente"
+  | "confirmar_paso"
+  | "omitir_paso";
 
 /** Acciones irreversibles — JAMÁS stageables. Se documentan para los tests. */
 export const IRREVERSIBLE_TYPES = ["timbrar", "dispersar", "pagar", "presentar"] as const;
@@ -67,6 +69,17 @@ export type ChatPendingAction =
   | (BasePending & {
       type: "marcar_pendiente";
       payload: { itemId: string; accion: "hecho" | "posponer" };
+    })
+  // Cierre guiado: confirmar/omitir un paso desde la conversación. Reversible
+  // (el paso se reabre) y re-valida el hash de la evidencia al ejecutar: si
+  // los datos cambiaron entre la propuesta y el tap, se rechaza.
+  | (BasePending & {
+      type: "confirmar_paso";
+      payload: { year: number; month: number; clave: string; hashEsperado: string };
+    })
+  | (BasePending & {
+      type: "omitir_paso";
+      payload: { year: number; month: number; clave: string; hashEsperado: string; motivo: string };
     });
 
 /** True si el tipo es una acción reversible permitida (lista blanca estricta). */
@@ -77,7 +90,9 @@ export function isReversibleType(type: string): type is PendingActionType {
     type === "categorizacion_lote" ||
     type === "resolver_hallazgo" ||
     type === "posponer_hallazgo" ||
-    type === "marcar_pendiente"
+    type === "marcar_pendiente" ||
+    type === "confirmar_paso" ||
+    type === "omitir_paso"
   );
 }
 
@@ -148,7 +163,12 @@ type StagePayload =
     }
   | { type: "resolver_hallazgo"; payload: { hallazgoId: string } }
   | { type: "posponer_hallazgo"; payload: { hallazgoId: string; token: "7d" | "30d" | "fin_de_mes" } }
-  | { type: "marcar_pendiente"; payload: { itemId: string; accion: "hecho" | "posponer" } };
+  | { type: "marcar_pendiente"; payload: { itemId: string; accion: "hecho" | "posponer" } }
+  | { type: "confirmar_paso"; payload: { year: number; month: number; clave: string; hashEsperado: string } }
+  | {
+      type: "omitir_paso";
+      payload: { year: number; month: number; clave: string; hashEsperado: string; motivo: string };
+    };
 
 /**
  * STAGEA una acción reversible sobre la conversación. NO ejecuta. Devuelve la
@@ -259,6 +279,35 @@ export async function executeChatPendingAction(
           `${res.aprobados} movimiento(s) categorizados` +
           `${res.errores > 0 ? ` (${res.errores} no se pudieron)` : ""}` +
           `${crearRegla !== false ? " y la regla quedó guardada para futuros estados de cuenta." : "."}`,
+      };
+    }
+
+    case "confirmar_paso":
+    case "omitir_paso": {
+      // Misma función que el botón de la pantalla: una sola vía para cerrar un
+      // paso. Re-evalúa la evidencia y rechaza si cambió desde la propuesta.
+      const { confirmarPaso, omitirPaso } = await import("../cierre/evaluar");
+      const { esClavePaso } = await import("../cierre/claves");
+      const { year, month, clave, hashEsperado } = pa.payload;
+      if (!esClavePaso(clave)) return { ok: false, error: "Paso de cierre desconocido." };
+      const args = {
+        companyId: pa.companyId,
+        year,
+        month,
+        clave,
+        userId: confirmingUserId,
+        hashEsperado,
+        nota: pa.type === "omitir_paso" ? pa.payload.motivo : null,
+      };
+      const r = pa.type === "confirmar_paso" ? await confirmarPaso(args) : await omitirPaso(args);
+      if (!r.ok) return { ok: false, error: r.error };
+      const paso = r.cierre.pasos.find((x) => x.clave === clave);
+      return {
+        ok: true,
+        message:
+          pa.type === "confirmar_paso"
+            ? `Paso «${paso?.titulo ?? clave}» confirmado. Van ${r.cierre.resumen.confirmados} de ${r.cierre.resumen.aplican}.`
+            : `Paso «${paso?.titulo ?? clave}» omitido con motivo. Queda en la bitácora.`,
       };
     }
 

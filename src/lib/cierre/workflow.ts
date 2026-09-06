@@ -72,7 +72,7 @@ export const PASOS: DefinicionPaso[] = [
     titulo: "Punto de partida",
     descripcion: "Saldo a favor inicial, pérdidas por amortizar, coeficiente y obligaciones confirmados.",
     aplica: () => true,
-    checks: ["fx:apertura"],
+    checks: ["fx:apertura", "x:coeficiente"],
     dependeDe: [],
     tools: ["query_obligations", "query_tax_declarations"],
     href: () => "/empresa/apertura",
@@ -225,6 +225,26 @@ if (PASOS.map((p) => p.clave).join(",") !== ORDEN_PASOS.join(",")) {
   throw new Error("cierre/workflow: PASOS y ORDEN_PASOS (claves.ts) no coinciden");
 }
 
+/**
+ * Tools que el copiloto puede usar SIEMPRE dentro del cierre, además de las del
+ * paso activo: el estado del propio cierre, sus dos propuestas, y la ley (que
+ * no depende del paso).
+ */
+export const TOOLS_SIEMPRE_CIERRE = [
+  "query_cierre_estado",
+  "query_cierre_paso",
+  "proponer_confirmar_paso",
+  "proponer_omitir_paso",
+  "search_fiscal_knowledge",
+  "get_articulo",
+  "get_valor_fiscal",
+];
+
+/** Tools declaradas por un paso (subset que el chat expone en ese paso). */
+export function toolsDelPaso(clave: ClavePasoCierre): string[] {
+  return PASOS.find((p) => p.clave === clave)?.tools ?? [];
+}
+
 export function definicionPaso(clave: ClavePasoCierre): DefinicionPaso {
   const d = PASOS.find((p) => p.clave === clave);
   if (!d) throw new Error(`Paso de cierre desconocido: ${clave}`);
@@ -282,6 +302,12 @@ export interface PasoEvaluado {
   /** El número que importa (de la señal más grave), o null si no hay señales. */
   detalle: string | null;
   senales: SenalPaso[];
+  /**
+   * Cifras del motor que este paso necesita (coeficiente, IVA, ISR…), ya
+   * calculadas. Van dentro de `hechos` (y por tanto del hash) para que el
+   * copiloto NUNCA tenga que pedirle al contador un dato que el sistema tiene.
+   */
+  cifras: Record<string, unknown>;
   /** Lo que se hashea: las señales con su cifra. */
   hechos: Record<string, unknown>;
   hashEvidencia: string;
@@ -316,6 +342,35 @@ function plural(n: number, uno: string, varios: string): string {
 }
 
 /** Señales de los extras (conteos), redactadas aquí porque ningún motor las redacta. */
+function senalCoeficiente(h: HechosCierre): SenalPaso | null {
+  const isr = h.checklist?.posicion.isr;
+  if (!isr) return null;
+  // Sólo los regímenes que usan coeficiente (PM Art. 14) lo necesitan.
+  if (isr.metodo !== "PM_ART14") return null;
+  const clave = "x:coeficiente";
+  if (isr.coeficiente != null) {
+    return { clave, estado: "ok", resumen: `Coeficiente de utilidad ${isr.coeficiente} (${isr.coeficienteFuente})` };
+  }
+  if (isr.coeficienteSugerido != null) {
+    const base = isr.coeficienteBase;
+    return {
+      clave,
+      estado: "warn",
+      resumen:
+        `Sin coeficiente fijado; el sistema deduce ${isr.coeficienteSugerido}` +
+        (base ? ` de la anual ${base.year}` : "") +
+        " — confírmalo para que el ISR provisional se calcule",
+      cta: { label: "Fijar coeficiente", href: "/empresa/apertura" },
+    };
+  }
+  return {
+    clave,
+    estado: "warn",
+    resumen: "Sin coeficiente de utilidad y sin anual de la cual deducirlo: el ISR provisional no se puede calcular",
+    cta: { label: "Capturar la anual", href: "/declaraciones/historial" },
+  };
+}
+
 function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): SenalPaso | null {
   switch (clave) {
     case "x:cfdi_faltantes":
@@ -403,12 +458,62 @@ function senalesDelPaso(def: DefinicionPaso, h: HechosCierre): SenalPaso[] {
     } else if (ref.startsWith("fx:")) {
       const it = h.checklist?.items.find((x) => x.clave === ref.slice(3));
       if (it) out.push(senalDeChecklist(it));
+    } else if (ref === "x:coeficiente") {
+      const s = senalCoeficiente(h);
+      if (s) out.push(s);
     } else {
       const s = senalExtra(ref, h.extras, h.ctx);
       if (s) out.push(s);
     }
   }
   return out;
+}
+
+/**
+ * Las cifras que cada paso necesita, tomadas de lo que los motores YA
+ * calcularon. Es la diferencia entre un copiloto que dice «tu coeficiente sale
+ * en 0.0842 de la anual 2025, confírmalo» y uno que le pregunta al contador
+ * por un dato que está en la base.
+ */
+function cifrasDelPaso(clave: ClavePasoCierre, h: HechosCierre): Record<string, unknown> {
+  const pos = h.checklist?.posicion;
+  if (!pos) return {};
+  switch (clave) {
+    case "apertura":
+      return {
+        coeficiente: pos.isr.coeficiente,
+        coeficienteFuente: pos.isr.coeficienteFuente,
+        coeficienteSugerido: pos.isr.coeficienteSugerido,
+        coeficienteSugeridoFuente: pos.isr.coeficienteSugeridoFuente,
+        coeficienteBase: pos.isr.coeficienteBase,
+        perdidaFiscalPendiente: pos.isr.perdidaFiscalPendiente,
+        saldoFavorIvaAnterior: pos.iva.saldoFavorAnterior,
+        metodoIsr: pos.isr.metodo,
+      };
+    case "impuestos":
+      return {
+        iva: pos.iva,
+        isr: {
+          metodo: pos.isr.metodo,
+          coeficiente: pos.isr.coeficiente,
+          ingresosAcumulados: pos.isr.ingresosAcumulados,
+          baseGravable: pos.isr.baseGravable,
+          isrPagar: pos.isr.isrPagar,
+          perdidaFiscalPendiente: pos.isr.perdidaFiscalPendiente,
+        },
+        advertencias: pos.advertencias,
+      };
+    case "declaracion":
+      return {
+        ivaPagar: pos.iva.pagar,
+        ivaSaldoAFavor: pos.iva.saldoAFavor,
+        isrPagar: pos.isr.isrPagar,
+        fechaLimite: h.checklist?.fechaLimite,
+        diasRestantes: h.checklist?.diasRestantes,
+      };
+    default:
+      return {};
+  }
 }
 
 function peor(senales: SenalPaso[]): SenalPaso | null {
@@ -443,13 +548,15 @@ export function decidirPasos(h: HechosCierre): PasoEvaluado[] {
     if (!def.aplica(h.ctx)) {
       const hechos = { aplica: false };
       estados.set(def.clave, "no_aplica");
-      out.push({ ...base, estadoCalculado: "no_aplica", detalle: null, senales: [], hechos, hashEvidencia: hashEvidencia(hechos) });
+      out.push({ ...base, estadoCalculado: "no_aplica", detalle: null, senales: [], cifras: {}, hechos, hashEvidencia: hashEvidencia(hechos) });
       return;
     }
 
     const senales = senalesDelPaso(def, h);
+    const cifras = cifrasDelPaso(def.clave, h);
     const hechos: Record<string, unknown> = {
       senales: senales.map((s) => ({ clave: s.clave, estado: s.estado, resumen: s.resumen })),
+      ...(Object.keys(cifras).length > 0 ? { cifras } : {}),
     };
     const grave = peor(senales);
     const bloqueadoPorDependencia = def.dependeDe.some((d) => {
@@ -488,6 +595,7 @@ export function decidirPasos(h: HechosCierre): PasoEvaluado[] {
             : "Se generan al contabilizar y declarar el mes"
           : (grave?.resumen ?? null),
       senales,
+      cifras,
       hechos,
       hashEvidencia: hashEvidencia(hechos),
       cta: grave?.cta ?? cta,

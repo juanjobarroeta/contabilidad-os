@@ -4,21 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { X, Send, Loader2, Sparkles, Wrench, Plus, MessagesSquare, Lock, Users, Trash2, ArrowLeft, CheckCircle2, ShieldCheck, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Markdown } from "./Markdown";
+import { TOOL_LABELS, useChat, type ChatContexto, type Message } from "./useChat";
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  /** Id persistido (sólo llega para respuestas del asistente): cuelga el feedback. */
-  id?: string;
-  feedback?: "up" | "down" | null;
-}
-// Acción reversible PROPUESTA por el asistente, a la espera del tap de Confirmar.
-interface PendingAction {
-  type: string;
-  summary: string;
-  token: string;
-  expiresAt: number;
-}
 type Visibility = "PRIVATE" | "COMPANY";
 interface ConvSummary {
   id: string;
@@ -39,24 +26,56 @@ export function ChatPanel() {
   const { activeCompany } = useCompany();
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState<"chat" | "history">("chat");
-  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeTool, setActiveTool] = useState<string | null>(null);
   // Acción reversible propuesta + estado del tap de confirmación.
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
-  const [confirming, setConfirming] = useState(false);
   // Feedback: id del mensaje al que se le está escribiendo una corrección.
   const [correccionPara, setCorreccionPara] = useState<string | null>(null);
   const [correccionTexto, setCorreccionTexto] = useState("");
   // Conversación actual + historial.
-  const [conversationId, setConversationId] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<Visibility>("PRIVATE");
   const [isMine, setIsMine] = useState(true);
   const [conversations, setConversations] = useState<ConvSummary[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const prevCompanyRef = useRef<string | null>(null);
+
+  // El motor del chat es compartido con la pantalla del cierre (useChat): un
+  // solo turno, un solo protocolo SSE, un solo contrato de confirmación.
+  const leerContexto = useCallback((): ChatContexto => {
+    const ruta = window.location.pathname + window.location.search;
+    const ctx: ChatContexto = { ruta };
+    // En /cierre el periodo y el paso van en la URL: con ellos el copiloto
+    // recibe el estado de los doce pasos y las cifras ya calculadas.
+    if (window.location.pathname.startsWith("/cierre")) {
+      const q = new URLSearchParams(window.location.search);
+      const year = Number(q.get("y"));
+      const month = Number(q.get("m"));
+      if (year >= 2000 && month >= 1 && month <= 12) {
+        ctx.cierre = { year, month, paso: q.get("paso") ?? undefined };
+      }
+    }
+    return ctx;
+  }, []);
+
+  const {
+    messages,
+    setMessages,
+    isLoading,
+    activeTool,
+    pendingAction,
+    confirming,
+    conversationId,
+    fijarConversacion,
+    enviar,
+    confirmar: confirmAction,
+    cancelar: cancelAction,
+    enviarFeedback,
+    reset: resetChat,
+  } = useChat({
+    companyId: activeCompany?.id ?? null,
+    contexto: leerContexto,
+    onTurnoTerminado: () => loadConversationsRef.current?.(),
+  });
 
   const loadConversations = useCallback(async () => {
     if (!activeCompany) return;
@@ -66,31 +85,31 @@ export function ChatPanel() {
     } catch { /* offline — el historial puede esperar */ }
   }, [activeCompany]);
 
+  // Ref para que el hook pueda refrescar el historial sin depender del orden
+  // de declaración (loadConversations se define después).
+  const loadConversationsRef = useRef<(() => void) | null>(null);
+  loadConversationsRef.current = loadConversations;
+
   const newChat = useCallback(() => {
-    setMessages([]);
-    setConversationId(null);
+    resetChat();
     setVisibility("PRIVATE");
     setIsMine(true);
-    setPendingAction(null);
     setView("chat");
     setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
+  }, [resetChat]);
 
   async function openConversation(id: string) {
     setView("chat");
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/ai/conversations/${id}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setMessages((data.messages ?? []).map((m: Message) => ({ id: m.id, role: m.role, content: m.content, feedback: m.feedback ?? null })));
-      setConversationId(data.id);
-      setVisibility(data.visibility);
-      setIsMine(!!data.mine);
-      setPendingAction(null);
-    } finally {
-      setIsLoading(false);
-    }
+    const res = await fetch(`/api/ai/conversations/${id}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setMessages(
+      (data.messages ?? []).map((m: Message) => ({ id: m.id, role: m.role, content: m.content, feedback: m.feedback ?? null }))
+    );
+    fijarConversacion(data.id);
+    setVisibility(data.visibility);
+    setIsMine(!!data.mine);
+    cancelAction();
   }
 
   async function deleteConversation(id: string) {
@@ -116,8 +135,7 @@ export function ChatPanel() {
   useEffect(() => {
     if (activeCompany?.id && prevCompanyRef.current !== activeCompany.id) {
       if (prevCompanyRef.current !== null) {
-        setMessages([]);
-        setConversationId(null);
+        resetChat();
         setView("chat");
       }
       prevCompanyRef.current = activeCompany.id;
@@ -187,116 +205,13 @@ export function ChatPanel() {
     return () => window.removeEventListener("cos:ask-ai", open);
   }, [newChat]);
 
-  const sendMessage = useCallback(async () => {
-    if (!input.trim() || isLoading || !activeCompany) return;
-
-    const userMessage: Message = { role: "user", content: input.trim() };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
+  // El turno lo maneja useChat; aquí sólo vaciamos el compositor.
+  const sendMessage = useCallback(() => {
+    const texto = input.trim();
+    if (!texto || isLoading) return;
     setInput("");
-    setIsLoading(true);
-    setActiveTool(null);
-    // Un nuevo turno invalida cualquier propuesta anterior aún en pantalla.
-    setPendingAction(null);
-
-    try {
-      const apiMessages = newMessages.map((m) => ({ role: m.role, content: m.content }));
-      const response = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: apiMessages,
-          companyId: activeCompany.id,
-          conversationId,
-          // Dónde está el usuario: «esto» / «aquí» significan algo distinto en
-          // /bancos que en /declaraciones. El servidor la acota y la usa en el
-          // system prompt.
-          contexto: { ruta: window.location.pathname + window.location.search },
-        }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Error del servidor");
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No se pudo leer la respuesta");
-
-      const decoder = new TextDecoder();
-      let assistantText = "";
-      let buffer = "";
-      let nuevaConv = false;
-
-      const handle = (data: { type: string; text?: string; tool?: string; error?: string; id?: string; nueva?: boolean; action?: PendingAction; messageId?: string | null }) => {
-        if (data.type === "conversation") {
-          if (data.id) setConversationId(data.id);
-          if (data.nueva) nuevaConv = true;
-        } else if (data.type === "pending_action") {
-          if (data.action) setPendingAction(data.action);
-        } else if (data.type === "text") {
-          assistantText += data.text ?? "";
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastMsg = updated[updated.length - 1];
-            if (lastMsg?.role === "assistant") lastMsg.content = assistantText;
-            else updated.push({ role: "assistant", content: assistantText });
-            return [...updated];
-          });
-        } else if (data.type === "replace") {
-          // Pase de verificación (Fase 3): la respuesta corregida sustituye a la
-          // que ya se pintó; lo que se guardó en el servidor es esta versión.
-          assistantText = data.text ?? assistantText;
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastMsg = updated[updated.length - 1];
-            if (lastMsg?.role === "assistant") lastMsg.content = assistantText;
-            return [...updated];
-          });
-        } else if (data.type === "tool_start") {
-          setActiveTool(data.tool ?? null);
-        } else if (data.type === "done") {
-          setActiveTool(null);
-          // El id persistido de la respuesta: sin él no hay a qué colgarle el pulgar.
-          if (data.messageId) {
-            const mid = data.messageId;
-            setMessages((prev) => {
-              const updated = [...prev];
-              const lastMsg = updated[updated.length - 1];
-              if (lastMsg?.role === "assistant") lastMsg.id = mid;
-              return updated;
-            });
-          }
-        } else if (data.type === "error") {
-          setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${data.error}` }]);
-        }
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\n\n");
-        buffer = events.pop() ?? "";
-        for (const evt of events) {
-          for (const line of evt.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            try { handle(JSON.parse(line.slice(6))); } catch { /* partial */ }
-          }
-        }
-      }
-      // Refresca el historial (título nuevo / orden) tras el turno.
-      if (nuevaConv || conversationId) loadConversations();
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Error: ${error instanceof Error ? error.message : "Error desconocido"}` },
-      ]);
-    } finally {
-      setIsLoading(false);
-      setActiveTool(null);
-    }
-  }, [input, isLoading, activeCompany, messages, conversationId, loadConversations]);
+    void enviar(texto);
+  }, [input, isLoading, enviar]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -308,72 +223,6 @@ export function ChatPanel() {
   // El TAP de Confirmar: ejecuta la acción reversible staged (POST /api/ai/confirm).
   // El backend re-valida sesión, membresía (rechaza VIEWER), TTL, token e
   // idempotencia. El asistente NUNCA llega aquí: el tap es la confirmación.
-  const confirmAction = useCallback(async () => {
-    if (!pendingAction || !conversationId || confirming) return;
-    setConfirming(true);
-    try {
-      const res = await fetch("/api/ai/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId, token: pendingAction.token }),
-      });
-      const data = await res.json().catch(() => ({}));
-      const ok = res.ok && data.ok;
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: ok
-            ? `Listo. ${data.message ?? "Acción realizada."}`
-            : `No se pudo completar: ${data.error ?? "Inténtalo de nuevo."}`,
-        },
-      ]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "No se pudo completar la acción. Inténtalo de nuevo." }]);
-    } finally {
-      setPendingAction(null);
-      setConfirming(false);
-    }
-  }, [pendingAction, conversationId, confirming]);
-
-  // Feedback del contador: pulgar arriba/abajo (+ corrección libre en el abajo).
-  // Cada corrección es una fila candidata del eval del copiloto.
-  const enviarFeedback = useCallback(async (id: string, feedback: "up" | "down" | null, correccion?: string) => {
-    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, feedback } : m)));
-    try {
-      await fetch(`/api/ai/messages/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feedback, ...(correccion !== undefined ? { correccion } : {}) }),
-      });
-    } catch {
-      /* best-effort: el pulgar no debe romper el chat */
-    }
-  }, []);
-
-  const cancelAction = useCallback(() => {
-    // Sólo descartamos la tarjeta en el cliente; el staged caduca solo por TTL y
-    // un nuevo turno lo invalida. No ejecuta nada.
-    setPendingAction(null);
-  }, []);
-
-  const TOOL_LABELS: Record<string, string> = {
-    query_invoices: "Consultando facturas",
-    query_bank_transactions: "Revisando transacciones",
-    query_tax_declarations: "Consultando declaraciones",
-    query_dashboard_kpis: "Obteniendo KPIs",
-    query_customers: "Buscando clientes",
-    query_employees: "Buscando empleados",
-    query_obligations: "Revisando obligaciones",
-    categorize_transaction: "Clasificando transacción",
-    suggest_reconciliation_match: "Buscando coincidencias",
-    analyze_anomalies: "Analizando anomalías",
-    proponer_conciliacion: "Preparando conciliación",
-    proponer_categorizacion: "Preparando categorización",
-    proponer_resolver_hallazgo: "Preparando resolución",
-    proponer_posponer_hallazgo: "Preparando posposición",
-    proponer_marcar_pendiente: "Preparando cambio",
-  };
 
   if (!activeCompany) return null;
 
