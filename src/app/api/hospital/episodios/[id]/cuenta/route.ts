@@ -15,6 +15,8 @@ import { registrarAcceso } from "@/lib/hospital/accesos";
 import { asegurarCargosEstancia } from "@/lib/hospital/estancia";
 import { calcularCuenta } from "@/lib/hospital/cuenta";
 import { cargoParaCuenta, customerResumen, pacienteResumen, pagadorResumen } from "@/lib/hospital/serializar";
+import { desviacionPct } from "@/lib/hospital/plan";
+import { resumenDepositos } from "@/lib/hospital/depositos";
 import { r2 } from "@/lib/hospital/util";
 
 export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -62,6 +64,29 @@ export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id
     config: { topeAutorizacion: config?.topeAutorizacion == null ? null : Number(config.topeAutorizacion) },
   });
 
+  // ── P3a · Plan de tratamiento: total planeado y desviación de la cuenta (un solo bloque) ──
+  const planDb = await prisma.hospPlanTratamiento.findUnique({
+    where: { episodioId: id },
+    select: { id: true, nombre: true, estado: true, total: true, autorizacionPagador: true },
+  });
+  const plan = planDb
+    ? {
+        id: planDb.id,
+        nombre: planDb.nombre,
+        estado: planDb.estado,
+        total: Number(planDb.total),
+        desviacionPct: desviacionPct(Number(planDb.total), cuenta.totales.total),
+        autorizacionPagador: planDb.autorizacionPagador,
+      }
+    : null;
+  // ── fin P3a ──
+
+  // ── P3c · Depósitos del paciente y saldo neto (total − recibidos/aplicados), un solo bloque ──
+  const depositosDb = await prisma.hospDeposito.findMany({ where: { episodioId: id }, orderBy: [{ fecha: "asc" }, { createdAt: "asc" }] });
+  const depositos = depositosDb.map((d) => ({ id: d.id, fecha: d.fecha, monto: r2(Number(d.monto)), formaPago: d.formaPago, estado: d.estado }));
+  const saldoNeto = r2(cuenta.totales.total - resumenDepositos(depositosDb).vigentes);
+  // ── fin P3c ──
+
   // Facturación: cada CFDI una vez aunque ampare varios renglones.
   const facturas = new Map<string, { id: string; uuid: string | null; serie: string | null; folio: string | null; total: number; receptor: string | null; status: string; fecha: Date; metodoPago: string; cargos: number }>();
   for (const c of ep.cargos) {
@@ -108,6 +133,9 @@ export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id
     grupos: cuenta.grupos,
     totales: cuenta.totales,
     reparto: cuenta.reparto,
+    plan, // P3a
+    depositos, // P3c
+    saldoNeto, // P3c
     facturacion: {
       facturado,
       porFacturar: r2(Math.max(0, cuenta.totales.total - facturado)),
