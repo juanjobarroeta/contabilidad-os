@@ -1,6 +1,8 @@
 /**
  * GET   /api/hospital/pacientes/[id] — la ficha: datos, episodios con su
- *       cuenta (total, facturado, saldo), cotizaciones, citas y el bloque
+ *       cuenta (total, facturado, saldo), sus CFDIs (los que amparan cargos
+ *       de sus episodios y los emitidos a su RFC que todavía no cuelgan de
+ *       ninguno), cotizaciones, citas y el bloque
  *       `identidad` (CURP: origen/estatus RENAPO; RFC y su cruce con la CURP;
  *       identificación y vigencia; aviso de privacidad; pendientes). Registra
  *       el acceso (LECTURA_FICHA) sin bloquear la respuesta.
@@ -56,7 +58,12 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
           recurso: { select: { id: true, tipo: true, area: true, nombre: true, estado: true } },
           pagador: { select: { id: true, nombre: true, tipo: true } },
           cargos: {
-            select: { importe: true, ivaTasa: true, cancelado: true, invoice: { select: { id: true, total: true, status: true } } },
+            select: {
+              importe: true,
+              ivaTasa: true,
+              cancelado: true,
+              invoice: { select: { id: true, uuid: true, serie: true, folio: true, fecha: true, total: true, status: true } },
+            },
           },
         },
       },
@@ -97,6 +104,33 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
 
   const hoy = new Date();
   const { episodios, cotizaciones, citas, pagador, customer, documentos, ...datos } = paciente;
+
+  // Los CFDIs del paciente: por los cargos que amparan (cada factura una vez,
+  // con el episodio en el que quedó) y, además, los emitidos a su receptor
+  // fiscal que todavía no cuelgan de ningún expediente — el histórico derivado
+  // de CFDIs deja ver ambos lados.
+  type FilaFactura = { id: string; uuid: string | null; serie: string | null; folio: string | null; fecha: Date; total: number; status: string; episodioId: string | null };
+  const facturas = new Map<string, FilaFactura>();
+  for (const e of episodios) {
+    for (const c of e.cargos) {
+      const f = c.invoice;
+      if (!f || facturas.has(f.id)) continue;
+      facturas.set(f.id, { id: f.id, uuid: f.uuid, serie: f.serie, folio: f.folio, fecha: f.fecha, total: r2(Number(f.total)), status: f.status, episodioId: e.id });
+    }
+  }
+  if (paciente.customerId) {
+    const propias = await prisma.invoice.findMany({
+      where: { companyId: paciente.companyId, customerId: paciente.customerId, tipo: "INGRESO", status: { not: "CANCELLED" } },
+      select: { id: true, uuid: true, serie: true, folio: true, fecha: true, total: true, status: true },
+      orderBy: { fecha: "desc" },
+      take: 500,
+    });
+    for (const f of propias) {
+      if (facturas.has(f.id)) continue;
+      facturas.set(f.id, { id: f.id, uuid: f.uuid, serie: f.serie, folio: f.folio, fecha: f.fecha, total: r2(Number(f.total)), status: f.status, episodioId: null });
+    }
+  }
+
   return NextResponse.json({
     ...datos,
     ...pacienteResumen(paciente, hoy),
@@ -109,9 +143,9 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
       const totales = totalesCargos(cargos);
       // Facturado = total de los CFDIs (no cancelados) que amparan cargos del
       // episodio, cada CFDI una vez aunque cubra varios renglones.
-      const facturas = new Map<string, number>();
-      for (const c of cargos) if (c.invoice && c.invoice.status !== "CANCELLED") facturas.set(c.invoice.id, Number(c.invoice.total));
-      const facturado = r2([...facturas.values()].reduce((s, t) => s + t, 0));
+      const suyas = new Map<string, number>();
+      for (const c of cargos) if (c.invoice && c.invoice.status !== "CANCELLED") suyas.set(c.invoice.id, Number(c.invoice.total));
+      const facturado = r2([...suyas.values()].reduce((s, t) => s + t, 0));
       return {
         ...ep,
         medico: medicoResumen(medico),
@@ -125,6 +159,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
     }),
     cotizaciones: cotizaciones.map((c) => ({ ...c, total: Number(c.total) })),
     citas,
+    facturas: [...facturas.values()].sort((a, b) => +b.fecha - +a.fecha),
   });
 });
 

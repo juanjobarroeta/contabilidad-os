@@ -14,6 +14,9 @@
  *   · Pacientes  — nombres que vienen en los conceptos («paciente X», «px X»),
  *                  ligados al receptor fiscal de esa factura.
  *   · Farmacia   — catálogo y kardex desde las compras/ventas (insumos-cfdi).
+ *   · Expedientes — episodios históricos y sus cargos desde los CFDIs de
+ *                  ingreso: quién fue atendido, cuándo, de qué y quién pagó
+ *                  (episodios-cfdi). El paciente deja de ser un nombre suelto.
  *
  * Nada de esto es la verdad clínica: es el punto de partida para que el
  * hospital corrija en pantalla en vez de capturar de cero. Idempotente: se
@@ -21,11 +24,16 @@
  *
  * Uso:
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/hospital-bootstrap.ts \
- *     --rfc CPM2307076Z9 [--nombre "Haltus Hope"] [--admin correo] [--dry-run] [--sin-farmacia] [--solo-farmacia]
+ *     --rfc CPM2307076Z9 [--nombre "Haltus Hope"] [--admin correo] [--dry-run] [--sin-farmacia]
+ *     [--solo-farmacia] [--solo-expedientes] [--desde 2026-01-01] [--hasta 2026-12-31]
  */
 import { clasificarProveedorMedico, type ClasificacionProveedor } from "../src/lib/hospital/medicos-cfdi";
-import { PrismaClient, type HospCargoCategoria, type HospPagadorTipo } from "@prisma/client";
-import { clasificarInsumo, derivarInsumosBackfill, etiquetarControlados, normalizarDescripcion } from "../src/lib/hospital/insumos-cfdi";
+import { PrismaClient, type HospPagadorTipo } from "@prisma/client";
+import { clasificarInsumo, derivarInsumosBackfill, etiquetarControlados } from "../src/lib/hospital/insumos-cfdi";
+// El texto de los CFDIs (categoría, nombre del paciente) es lib compartida:
+// la misma regla en el script y en la derivación de expedientes.
+import { categoriaDe, nombreDePaciente, nombrePropio, normalizarDescripcion, partirNombre } from "../src/lib/hospital/cfdi-texto";
+import { derivarEpisodiosDeCfdi, type ReporteEpisodiosCfdi } from "../src/lib/hospital/episodios-cfdi";
 
 const prisma = new PrismaClient();
 
@@ -53,38 +61,9 @@ async function conReintento<T>(nombre: string, fn: () => Promise<T>, intentos = 
 }
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-const MINUSCULAS = new Set(["DE", "DEL", "LA", "LAS", "LOS", "Y", "E", "DA", "DI", "VON", "VAN"]);
-const SIGLAS = new Set(["SA", "CV", "SAPI", "SC", "AC", "SRL", "RL", "SAS", "SCP", "IAP", "SNC", "SPR", "SOFOM", "ENR", "ER", "II", "III", "IV"]);
-function nombrePropio(s: string): string {
-  return s
-    .trim()
-    .split(/\s+/)
-    .map((w, i) => {
-      const u = w.toUpperCase();
-      if (i > 0 && MINUSCULAS.has(u)) return u.toLowerCase();
-      if (SIGLAS.has(u.replace(/\./g, ""))) return u;
-      return u.charAt(0) + u.slice(1).toLowerCase();
-    })
-    .join(" ");
-}
-
 const ASEGURADORA_RE =
   /SEGUROS|ASEGURADORA|\bGNP\b|\bAXA\b|METLIFE|MAPFRE|ALLIANZ|BUPA|PLAN SEGURO|INBURSA|CHUBB|ZURICH|\bSURA\b|ATLAS|\bHDI\b|QUALITAS|MONTERREY NEW YORK|GENERAL DE SALUD|MEDICA INTEGRAL|PREVEM|BANORTE|THONA|PAN-AMERICAN|PANAMERICAN|ARGOS/i;
 const CONCEPTO_MEDICO_RE = /HONORARIO|MEDIC|CIRUG|ANESTES|CONSULTA|QUIRURG|PROCEDIMIENTO|INTERCONSULTA|VALORACION/i;
-
-function categoriaDe(desc: string): HospCargoCategoria {
-  const d = normalizarDescripcion(desc);
-  if (/HONORARIO/.test(d)) return "HONORARIO";
-  if (/FARMACIA|MEDICAMENTO/.test(d)) return "FARMACIA";
-  if (/CENTRAL DE EQUIPOS|ESTERILIZACION|MATERIAL|INSUMO/.test(d)) return "MATERIAL";
-  if (/QUIROFANO|SALA DE OPERACION/.test(d)) return "QUIROFANO";
-  if (/URGENCIA/.test(d)) return "URGENCIAS";
-  if (/HOSPITALIZACION|HABITACION|RECUPERACION|ESTANCIA|TERAPIA INTENSIVA|CUIDADOS INTENSIVOS|CUNERO/.test(d)) return "HABITACION";
-  if (/LABORATORIO|PATOLOGIA|TOMOGRAFIA|RAYOS X|ULTRASONIDO|RESONANCIA|ESTUDIO|IMAGEN|ELECTROCARDIOGRAMA|MASTOGRAFIA|DENSITOMETRIA/.test(d)) return "ESTUDIO";
-  if (/ENDOSCOPIA|COLONOSCOPIA|PAQUETE|CIRUGIA|PROCEDIMIENTO|BIOPSIA|QUIMIOTERAPIA|ONCOLOG|INFUSION|SESION|INHALOTERAPIA|TERAPIA|BANCO DE SANGRE|TRANSFUSION/.test(d)) return "PROCEDIMIENTO";
-  if (/EQUIPO|RENTA/.test(d)) return "EQUIPO";
-  return "OTRO";
-}
 
 function claveDe(desc: string, usadas: Set<string>): string {
   const base = normalizarDescripcion(desc).replace(/\s+/g, "-").slice(0, 24).replace(/-+$/, "") || "SERV";
@@ -102,39 +81,49 @@ function mediana(xs: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-// «Servicio de hospitalización PX Viridiana Marquez Palacios» → «Viridiana Marquez Palacios»
-const PACIENTE_RE = /(?:\bPACIENTE|\bPX)\b\.?\s*[:\-]?\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ]+(?:\s+(?:DE|DEL|LA|LAS|LOS|Y|[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ]+)){1,6})/;
-function nombreDePaciente(desc: string): string | null {
-  const m = desc
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .match(PACIENTE_RE);
-  if (!m) return null;
-  const tokens = m[1].split(/\s+/).filter((t) => !/^(SERVICIO|SERVICIOS|HOSPITALIZACION|CON|POR|EL|EN|UN|UNA)$/.test(t));
-  while (tokens.length && MINUSCULAS.has(tokens[tokens.length - 1])) tokens.pop();
-  if (tokens.length < 2 || tokens.length > 7) return null;
-  return tokens.join(" ");
+/** «2026-01-01» → Date; null si no vino. */
+function aFecha(s: string | null): Date | null {
+  if (!s) return null;
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00` : s);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
-function partirNombre(completo: string): { nombre: string; apellidoPaterno: string; apellidoMaterno: string | null } {
-  const t = completo.split(/\s+/);
-  // Los apellidos van al final: «DE LA TORRE» se pega a su apellido.
-  const apellidos: string[] = [];
-  while (t.length > 1 && apellidos.length < 2) {
-    let ap = t.pop()!;
-    while (t.length > 1 && MINUSCULAS.has(t[t.length - 1])) ap = `${t.pop()} ${ap}`;
-    apellidos.unshift(ap);
+
+const dinero = (n: number) => `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fechaCorta = (d: Date) => d.toISOString().slice(0, 10);
+
+/** El reporte de la derivación, legible: qué haría y qué no pudo. */
+function imprimirExpedientes(r: ReporteEpisodiosCfdi, dry: boolean) {
+  const verbo = dry ? "se crearían" : "creados";
+  console.log(
+    `  ✓ expedientes: ${r.facturas} CFDIs candidatos · ${r.episodios} episodios ${verbo} · ${r.cargos} cargos · ` +
+      `${r.pacientesNuevos} pacientes nuevos · ${r.pagadoresNuevos} convenios nuevos · ${r.pacientesConPagador} pacientes heredan convenio`
+  );
+  if (r.muestra.length) {
+    console.log(`  Primeros ${r.muestra.length} episodios:`);
+    for (const e of r.muestra) {
+      const rango = fechaCorta(e.fechaIngreso) === fechaCorta(e.fechaAlta) ? fechaCorta(e.fechaIngreso) : `${fechaCorta(e.fechaIngreso)} → ${fechaCorta(e.fechaAlta)}`;
+      console.log(
+        `    · ${e.tipo.padEnd(15)} ${e.paciente} · ${rango} · ${e.facturas.join(", ")} · ${e.cargos} cargo${e.cargos === 1 ? "" : "s"} · ${dinero(e.total)}` +
+          (e.pagador ? ` · ${e.pagador}` : "")
+      );
+    }
   }
-  return {
-    nombre: nombrePropio(t.join(" ")),
-    apellidoPaterno: nombrePropio(apellidos[0] ?? ""),
-    apellidoMaterno: apellidos[1] ? nombrePropio(apellidos[1]) : null,
-  };
+  if (r.sinPaciente.length) {
+    console.log(`  CFDIs sin paciente identificable (${r.sinPaciente.length}):`);
+    for (const f of r.sinPaciente.slice(0, 20)) {
+      console.log(`    · ${f.uuid?.slice(0, 8) ?? f.invoiceId} [${f.receptor}] — ${f.motivo}`);
+    }
+    if (r.sinPaciente.length > 20) console.log(`    … y ${r.sinPaciente.length - 20} más`);
+  }
 }
 
 async function main() {
   const rfc = arg("--rfc");
-  if (!rfc) throw new Error("Uso: --rfc <RFC> [--nombre ...] [--admin correo] [--dry-run] [--sin-farmacia] [--solo-farmacia]");
+  if (!rfc) throw new Error("Uso: --rfc <RFC> [--nombre ...] [--admin correo] [--dry-run] [--sin-farmacia] [--solo-farmacia] [--solo-expedientes]");
   const soloFarmacia = flag("--solo-farmacia");
+  const soloExpedientes = flag("--solo-expedientes");
+  // Con «--solo-…» sólo corre esa fase: el resto del bootstrap ya se hizo.
+  const soloAlgo = soloFarmacia || soloExpedientes;
   const dry = flag("--dry-run");
   const company = await prisma.company.findUnique({ where: { rfc }, select: { id: true, razonSocial: true, nombreComercial: true } });
   if (!company) throw new Error(`No existe empresa con RFC ${rfc}`);
@@ -142,7 +131,7 @@ async function main() {
   console.log(`\n${dry ? "[DRY-RUN] " : ""}${company.razonSocial} (${rfc}) · ${cid}`);
 
   // ── 1. Módulo, configuración y (opcional) un administrador ────────────────
-  if (!dry && !soloFarmacia) await conReintento("módulo", async () => {
+  if (!dry && !soloAlgo) await conReintento("módulo", async () => {
     await prisma.companyModule.upsert({
       where: { companyId_modulo: { companyId: cid, modulo: "HOSPITAL" } },
       create: { companyId: cid, modulo: "HOSPITAL" },
@@ -171,7 +160,7 @@ async function main() {
 
 
   // ── 3. Pagadores: aseguradoras y empresas entre los receptores ────────────
-  if (!soloFarmacia) await conReintento("pagadores", async () => {
+  if (!soloAlgo) await conReintento("pagadores", async () => {
   const receptores = await prisma.$queryRaw<Array<{ id: string; rfc: string; razon: string; facturas: number; total: number; ultima: Date }>>`
     SELECT c.id, c.rfc, c."razonSocial" AS razon, COUNT(*)::int AS facturas, SUM(i.total)::float8 AS total, MAX(i.fecha) AS ultima
     FROM "Invoice" i JOIN "Customer" c ON c.id = i."customerId"
@@ -202,7 +191,7 @@ async function main() {
   // ── 4. Médicos: personas físicas que facturan SERVICIOS MÉDICOS ──────────
   // Se decide por los conceptos de sus CFDIs (medicos-cfdi.ts), no por la
   // retención de ISR: el arrendador y la imprenta también retienen.
-  if (!soloFarmacia) await conReintento("médicos", async () => {
+  if (!soloAlgo) await conReintento("médicos", async () => {
   const pf = await prisma.$queryRaw<Array<{ rfc: string; razon: string; facturas: number }>>`
     SELECT c.rfc, c."razonSocial" AS razon, COUNT(DISTINCT i.id)::int AS facturas
     FROM "Invoice" i JOIN "Customer" c ON c.id = i."customerId"
@@ -241,7 +230,7 @@ async function main() {
   });
 
   // ── 5. Tarifario: conceptos de ingreso recurrentes ────────────────────────
-  if (!soloFarmacia) await conReintento("tarifario", async () => {
+  if (!soloAlgo) await conReintento("tarifario", async () => {
   const conceptos = await prisma.$queryRaw<Array<{ descripcion: string; clave: string | null; n: number; pu: number[]; fechas: Date[] }>>`
     SELECT it.descripcion, MODE() WITHIN GROUP (ORDER BY it."claveProdServ") AS clave, COUNT(*)::int AS n,
            ARRAY_AGG(it."valorUnitario"::float8 ORDER BY i.fecha DESC) AS pu, ARRAY_AGG(i.fecha ORDER BY i.fecha DESC) AS fechas
@@ -280,7 +269,7 @@ async function main() {
   });
 
   // ── 6. Pacientes: nombres en los conceptos de ingreso ─────────────────────
-  if (!soloFarmacia) await conReintento("pacientes", async () => {
+  if (!soloAlgo) await conReintento("pacientes", async () => {
   const lineasPx = await prisma.$queryRaw<Array<{ descripcion: string; fecha: Date; customerId: string | null; crfc: string | null }>>`
     SELECT it.descripcion, i.fecha, i."customerId", c.rfc AS crfc
     FROM "InvoiceItem" it JOIN "Invoice" i ON i.id = it."invoiceId" LEFT JOIN "Customer" c ON c.id = i."customerId"
@@ -315,8 +304,23 @@ async function main() {
   console.log(`  ✓ pacientes: ${porNombre.size} nombres en conceptos · ${pacientesNuevos} nuevos`);
   });
 
-  // ── 7. Farmacia: catálogo y kardex desde compras y ventas ─────────────────
-  if (!dry && !flag("--sin-farmacia")) {
+  // ── 7. Expedientes históricos: episodios y cargos desde los CFDIs ─────────
+  // Lo hace la lib (episodios-cfdi.ts): lee por páginas, escribe una
+  // transacción por episodio y se reconecta sola si el proxy corta.
+  if (!soloFarmacia) {
+    const expedientes = await derivarEpisodiosDeCfdi(prisma, cid, {
+      dry,
+      desde: aFecha(arg("--desde")),
+      hasta: aFecha(arg("--hasta")),
+      muestra: 10,
+      log: (linea) => console.log(linea),
+      alReconectar: async () => { await prisma.$disconnect().catch(() => {}); },
+    });
+    imprimirExpedientes(expedientes, dry);
+  }
+
+  // ── 8. Farmacia: catálogo y kardex desde compras y ventas ─────────────────
+  if (!dry && !soloExpedientes && !flag("--sin-farmacia")) {
     let rondas = 0, insumos = 0, movimientos = 0, procesados = 0, fallos = 0;
     for (;;) {
       // El proxy público de Postgres corta conexiones largas (P1017). El
@@ -350,7 +354,7 @@ async function main() {
     console.log(`  ✓ controlados: ${control.etiquetados} insumos etiquetados por sustancia (${control.revisados} revisados) — confirmar el grupo en Farmacia`);
   }
 
-  const [nP, nM, nS, nPx, nI, nL, nMov] = await conReintento("resumen", () => Promise.all([
+  const [nP, nM, nS, nPx, nI, nL, nMov, nEp, nEpCfdi] = await conReintento("resumen", () => Promise.all([
     prisma.hospPagador.count({ where: { companyId: cid } }),
     prisma.hospMedico.count({ where: { companyId: cid } }),
     prisma.hospServicio.count({ where: { companyId: cid } }),
@@ -358,8 +362,10 @@ async function main() {
     prisma.hospInsumo.count({ where: { companyId: cid } }),
     prisma.hospLote.count({ where: { companyId: cid } }),
     prisma.hospMovimientoInsumo.count({ where: { companyId: cid } }),
+    prisma.hospEpisodio.count({ where: { companyId: cid } }),
+    prisma.hospEpisodio.count({ where: { companyId: cid, origen: "CFDI" } }),
   ]));
-  console.log(`\n✔ ${company.razonSocial}: ${nP} pagadores · ${nM} médicos · ${nS} servicios · ${nPx} pacientes · ${nI} insumos · ${nL} lotes · ${nMov} movimientos de kardex`);
+  console.log(`\n✔ ${company.razonSocial}: ${nP} pagadores · ${nM} médicos · ${nS} servicios · ${nPx} pacientes · ${nEp} episodios (${nEpCfdi} reconstruidos de CFDI) · ${nI} insumos · ${nL} lotes · ${nMov} movimientos de kardex`);
   console.log("  Falta capturar en pantalla: camas/quirófanos (Censo → Agregar recurso), tabuladores por convenio, especialidades de los médicos y lotes/caducidades al recibir.");
 }
 

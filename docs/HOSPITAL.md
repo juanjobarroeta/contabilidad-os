@@ -193,6 +193,15 @@ hecho contable, hasta que se factura.
   controlados I-III sólo con `recetaRef` y prescriptor con cédula). Los
   derivados nacen con grupo/sustancia propuestos; `etiquetarControlados`
   alcanza a los viejos (cron `etiquetar=1`, bootstrap).
+- `cfdi-texto.ts` — el texto del CFDI como dato: `normalizarDescripcion`,
+  `nombreDePaciente` («… px Rafael Jiménez Torres»), `partirNombre`,
+  `nombrePropio` y `categoriaDe`. Lo comparten el bootstrap y la derivación.
+- `episodios-cfdi.ts` — expedientes históricos (P4): `tipoEpisodioPorConceptos`,
+  `agruparFacturasEnEpisodios` (ventana de 7 días), `resolverPacienteDeFactura`
+  (RECEPTOR / CONCEPTO / SIN_NOMBRE), `cargosDeFactura` (IVA por sufijo de la
+  descripción, si no por la proporción del CFDI, si no por categoría) y
+  `derivarEpisodiosDeCfdi(db, companyId, { dry, desde, hasta, log })`,
+  idempotente por `HospCargo.invoiceId` y con una transacción por episodio.
 - `perfil-contacto.ts` — perfil del cliente/proveedor: facturas con evidencia
   de pago, REPs, saldo, antigüedad, más episodios/pacientes ligados.
 - `censo.ts` — KPIs puros (ocupación, ingresos/altas del día, estancia
@@ -630,6 +639,8 @@ Derivación (scripts/hospital-bootstrap.ts fase 7 «expedientes históricos», -
 GET  /api/hospital/pagadores/[id]/resumen?companyId= → { pagador, resumen: { pacientes, episodios, facturado, cobrado, saldo, aging },
        pacientes: [{ id, nombre, episodios, ultimaAtencion, saldo }], episodios: [{ id, folio, paciente, tipo, fechaIngreso, fechaAlta, total,
        facturado, origen }], facturas: [{ id, uuid, serie, folio, fecha, total, status, episodioId, pagado }] }
+       `facturado`/`cobrado`/`aging` son de las facturas LIGADAS por cargos; lo emitido a su RFC que aún no cuelga de un
+       expediente sale en `facturas` con `episodioId: null` y sumado en `resumen.facturadoSinEpisodio`.
 GET  /api/hospital/pacientes/[id] → …, facturas: [{ id, uuid, serie, folio, fecha, total, status, episodioId }] (por cargos ligados o por su customerId)
 GET  /api/hospital/episodios?origen=CFDI (filtro) · el episodio serializa `origen`
 ```

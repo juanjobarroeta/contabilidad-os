@@ -1,9 +1,13 @@
 /**
- * GET  /api/hospital/episodios?companyId=…[&estado=ACTIVOS|ALTA|TODOS&q=]
+ * GET  /api/hospital/episodios?companyId=…[&estado=ACTIVOS|ALTA|TODOS&q=&origen=CAPTURA|COTIZACION|CFDI]
  * POST /api/hospital/episodios — abre un episodio (ingreso) vía crearEpisodio.
  *
  * ACTIVOS = todo lo que no es ALTA ni CANCELADO (incluye PROGRAMADO: la cama
  * ya está reservada y la lista de «Pacientes de hoy» los enseña).
+ *
+ * `origen` dice de dónde nació el episodio (captura en piso, conversión de
+ * cotización o expediente reconstruido de un CFDI histórico) y se puede
+ * filtrar por él: la lista separa lo derivado de lo capturado.
  *
  * P1: diagnóstico de ingreso (CIE-10) y procedimiento (CIE-9-MC) por
  * catálogo; triage obligatorio en URGENCIAS; ASA; AMBULATORIO nace con
@@ -12,7 +16,7 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
+import type { HospEpisodioOrigen, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
@@ -21,6 +25,8 @@ import { crearEpisodio } from "@/lib/hospital/episodio";
 import { diaDeEstancia } from "@/lib/hospital/censo";
 import { customerResumen, medicoResumen, pacienteResumen, recursoResumen, totalesCargos } from "@/lib/hospital/serializar";
 import { ESTADOS_ACTIVOS } from "@/lib/hospital/util";
+
+const ORIGENES: HospEpisodioOrigen[] = ["CAPTURA", "COTIZACION", "CFDI"];
 
 export const GET = withHospital(async (req: Request) => {
   const { searchParams } = new URL(req.url);
@@ -32,10 +38,13 @@ export const GET = withHospital(async (req: Request) => {
 
   const estado = (searchParams.get("estado") ?? "ACTIVOS").toUpperCase();
   const q = searchParams.get("q")?.trim();
+  const origenParam = searchParams.get("origen")?.toUpperCase();
+  const origen = ORIGENES.includes(origenParam as HospEpisodioOrigen) ? (origenParam as HospEpisodioOrigen) : null;
 
   const where: Prisma.HospEpisodioWhereInput = {
     companyId,
     ...(estado === "ACTIVOS" ? { estado: { in: ESTADOS_ACTIVOS } } : estado === "ALTA" ? { estado: "ALTA" } : {}),
+    ...(origen ? { origen } : {}),
     ...(q
       ? {
           OR: [
