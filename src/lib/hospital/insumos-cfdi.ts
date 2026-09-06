@@ -29,6 +29,7 @@
 
 import type { HospGrupoControl, HospInsumoCategoria, Prisma, PrismaClient } from "@prisma/client";
 import { exigeLibroControl, sustanciaControladaPorNombre } from "./controlados";
+import { normalizarDescripcion } from "./cfdi-texto";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -181,15 +182,10 @@ const NO_IDENT_RUIDO = new Set([
   "SERVICIO", "MO", "NULL", "NONE", "X", CLAVE_GENERICA,
 ]);
 
-/** MAYÚSCULAS, sin acentos, sólo alfanuméricos separados por un espacio. */
-export function normalizarDescripcion(s: string | null | undefined): string {
-  return (s ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, " ")
-    .trim();
-}
+/** MAYÚSCULAS, sin acentos, sólo alfanuméricos separados por un espacio.
+ *  Vive en `cfdi-texto.ts` —la comparten farmacia, el bootstrap y los
+ *  expedientes históricos derivados— y se reexporta para quien la importa de aquí. */
+export { normalizarDescripcion };
 
 /**
  * Llave estable del insumo dentro de la empresa: el NoIdentificacion del
