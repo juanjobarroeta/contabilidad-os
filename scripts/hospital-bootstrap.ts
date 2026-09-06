@@ -23,6 +23,7 @@
  *   ts-node --compiler-options '{"module":"CommonJS"}' scripts/hospital-bootstrap.ts \
  *     --rfc CPM2307076Z9 [--nombre "Haltus Hope"] [--admin correo] [--dry-run] [--sin-farmacia] [--solo-farmacia]
  */
+import { clasificarProveedorMedico, type ClasificacionProveedor } from "../src/lib/hospital/medicos-cfdi";
 import { PrismaClient, type HospCargoCategoria, type HospPagadorTipo } from "@prisma/client";
 import { clasificarInsumo, derivarInsumosBackfill, etiquetarControlados, normalizarDescripcion } from "../src/lib/hospital/insumos-cfdi";
 
@@ -198,24 +199,34 @@ async function main() {
   console.log(`  ✓ pagadores: ${pagadores.length} candidatos · ${pagadoresNuevos} nuevos`);
   });
 
-  // ── 4. Médicos: personas físicas que facturan honorarios ──────────────────
+  // ── 4. Médicos: personas físicas que facturan SERVICIOS MÉDICOS ──────────
+  // Se decide por los conceptos de sus CFDIs (medicos-cfdi.ts), no por la
+  // retención de ISR: el arrendador y la imprenta también retienen.
   if (!soloFarmacia) await conReintento("médicos", async () => {
-  const pf = await prisma.$queryRaw<Array<{ rfc: string; razon: string; facturas: number; total: number; isr: number; medico: boolean }>>`
-    SELECT c.rfc, c."razonSocial" AS razon, COUNT(DISTINCT i.id)::int AS facturas, SUM(i.total)::float8 AS total,
-           COALESCE((SELECT SUM(t.importe) FROM "InvoiceTax" t WHERE t."invoiceId" = ANY(ARRAY_AGG(i.id)) AND t.tipo = 'ISR' AND t.retencion), 0)::float8 AS isr,
-           BOOL_OR(it.descripcion ~* 'HONORARIO|MEDIC|CIRUG|ANESTES|CONSULTA|QUIRURG|PROCEDIMIENTO|INTERCONSULTA|VALORACION') AS medico
+  const pf = await prisma.$queryRaw<Array<{ rfc: string; razon: string; facturas: number }>>`
+    SELECT c.rfc, c."razonSocial" AS razon, COUNT(DISTINCT i.id)::int AS facturas
     FROM "Invoice" i JOIN "Customer" c ON c.id = i."customerId"
-    LEFT JOIN "InvoiceItem" it ON it."invoiceId" = i.id
     WHERE i."companyId" = ${cid} AND i.tipo = 'EGRESO' AND i.status <> 'CANCELLED' AND LENGTH(c.rfc) = 13
     GROUP BY c.rfc, c."razonSocial"`;
-  const medicos = pf.filter((p) => p.isr >= 100 || (p.medico && p.facturas <= 60));
+  const candidatos: Array<{ rfc: string; razon: string; facturas: number; clasificacion: ClasificacionProveedor; proporcion: number; motivos: string[] }> = [];
+  for (const p of pf) {
+    const conceptos = await prisma.invoiceItem.findMany({
+      where: { invoice: { companyId: cid, tipo: "EGRESO", status: { not: "CANCELLED" }, customer: { rfc: p.rfc } } },
+      select: { claveProdServ: true, descripcion: true, importe: true, cuentaPredial: true },
+    });
+    const r = clasificarProveedorMedico(conceptos.map((c) => ({ ...c, importe: Number(c.importe) })));
+    if (r.clasificacion === "NO_MEDICO") continue;
+    candidatos.push({ rfc: p.rfc, razon: p.razon, facturas: p.facturas, clasificacion: r.clasificacion, proporcion: r.proporcionMedica, motivos: r.motivos });
+  }
   let medicosNuevos = 0;
-  for (const m of medicos) {
+  for (const m of candidatos) {
     const existe = await prisma.hospMedico.findFirst({ where: { companyId: cid, rfc: m.rfc }, select: { id: true } });
     if (existe) continue;
     medicosNuevos++;
     const nombre = nombrePropio(m.razon);
-    if (dry) { console.log(`  médico: ${nombre} [${m.rfc}] · ${m.facturas} fact · ISR $${r2(m.isr)}`); continue; }
+    const revisar = m.clasificacion === "MIXTO" ? ` · MIXTO ${Math.round(m.proporcion * 100)} % médico (${m.motivos.join(", ")}): confirmar` : "";
+    if (dry) { console.log(`  médico: ${nombre} [${m.rfc}] · ${m.facturas} fact${revisar}`); continue; }
+    if (revisar) console.log(`  ⚠ ${nombre} [${m.rfc}]${revisar}`);
     // El médico factura al hospital: su Supplier canónico (CLABE, pagos) nace
     // aquí si el sync todavía no lo dio de alta.
     const supplier = await prisma.supplier.upsert({
@@ -226,7 +237,7 @@ async function main() {
     });
     await prisma.hospMedico.create({ data: { companyId: cid, nombre, rfc: m.rfc, supplierId: supplier.id } });
   }
-  console.log(`  ✓ médicos: ${medicos.length} candidatos · ${medicosNuevos} nuevos (${pf.length} personas físicas facturan)`);
+  console.log(`  ✓ médicos: ${candidatos.length} candidatos · ${medicosNuevos} nuevos (${pf.length} personas físicas facturan; ${candidatos.filter((c) => c.clasificacion === "MIXTO").length} por confirmar)`);
   });
 
   // ── 5. Tarifario: conceptos de ingreso recurrentes ────────────────────────
