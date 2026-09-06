@@ -6943,6 +6943,9 @@ model HospEpisodio {
   seguimientoNota     String?
 
   cotizacionId    String? @unique
+  /// De dónde nació el episodio: captura en piso, conversión de cotización o
+  /// derivado de un CFDI histórico (expediente reconstruido desde la factura).
+  origen HospEpisodioOrigen @default(CAPTURA)
   notasAdmin      String? @db.Text
   creadoPorUserId String?
 
@@ -7180,6 +7183,8 @@ enum HospCargoOrigen {
   FARMACIA
   COTIZACION
   MANUAL
+  /// Cargo reconstruido desde un CFDI histórico (expediente derivado).
+  CFDI
 }
 
 /// Criterio 9/IVA/N: un medicamento SUMINISTRADO en hospitalización grava como
@@ -7966,4 +7971,10 @@ model HospDeposito {
 
   @@index([companyId, fecha])
   @@index([episodioId])
+}
+
+enum HospEpisodioOrigen {
+  CAPTURA
+  COTIZACION
+  CFDI
 }

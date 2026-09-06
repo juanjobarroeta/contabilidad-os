@@ -608,6 +608,32 @@ alta del episodio = retenciones de ISR 10 % e IVA 2/3 de los honorarios de cada 
 (HONORARIOS_POR_CUENTA_DE_TERCEROS contra 216.04/216.10; el saldo del pasivo es lo neto a pagar); depósito RECIBIDO = CAJA/BANCOS contra ANTICIPOS_PACIENTES; APLICADO = ANTICIPOS_PACIENTES contra CLIENTES;
 DEVUELTO = al revés. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
 
+### P4 expedientes históricos desde CFDIs y convenio 360
+
+Tres entidades que no se confunden: **Customer** es el receptor fiscal del CFDI (puede ser el paciente, una aseguradora o
+una empresa); **HospPaciente** es la persona atendida; **HospPagador** es quien paga (convenio) y apunta a su Customer.
+En un hospital que ya facturaba antes del módulo, el historial clínico-comercial vive en los CFDIs: de ahí se reconstruye.
+
+```
+Derivación (scripts/hospital-bootstrap.ts fase 7 «expedientes históricos», --solo-expedientes, --dry-run; lib src/lib/hospital/episodios-cfdi.ts)
+ · Fuente: CFDIs INGRESO tipoSat I no cancelados de la empresa, sin cargos ligados todavía (idempotente por HospCargo.invoiceId).
+ · Paciente: receptor persona física (RFC 13) → HospPaciente por customerId o nombre (se crea si falta, con customerId);
+   receptor moral → nombre en los conceptos («px …», «paciente …») → HospPaciente por nombre (se crea si falta, sinCurp
+   con motivo «derivado de CFDI»); sin nombre identificable → no se crea episodio y la factura queda en el reporte.
+ · Episodio: los CFDIs del mismo paciente a ≤ 7 días forman UNO; fechaIngreso = primera factura, fechaAlta = última,
+   estado ALTA, origen CFDI; tipo por conceptos: HOSPITALIZACION (hospitalización/habitación/estancia) > URGENCIAS >
+   AMBULATORIO (quirófano/endoscopia/cirugía/biopsia/paquete) > CONSULTA; pagador = HospPagador del receptor moral
+   (se crea si falta: ASEGURADORA si el nombre dice seguros/aseguradora, si no EMPRESA); customerId = receptor.
+ · Cargos: un HospCargo por concepto con origen CFDI, categoría por descripción (categoriaDe), cantidad, precio, importe,
+   ivaTasa del renglón e invoiceId: la cuenta muestra la factura y la cobranza (evidencia de pago) funciona igual.
+ · Al final, el paciente sin convenio hereda el pagador cuando todos sus episodios derivados son del mismo.
+GET  /api/hospital/pagadores/[id]/resumen?companyId= → { pagador, resumen: { pacientes, episodios, facturado, cobrado, saldo, aging },
+       pacientes: [{ id, nombre, episodios, ultimaAtencion, saldo }], episodios: [{ id, folio, paciente, tipo, fechaIngreso, fechaAlta, total,
+       facturado, origen }], facturas: [{ id, uuid, serie, folio, fecha, total, status, episodioId, pagado }] }
+GET  /api/hospital/pacientes/[id] → …, facturas: [{ id, uuid, serie, folio, fecha, total, status, episodioId }] (por cargos ligados o por su customerId)
+GET  /api/hospital/episodios?origen=CFDI (filtro) · el episodio serializa `origen`
+```
+
 ### Farmacia
 ```
 GET  /api/hospital/farmacia/insumos?companyId=[&q=&tab=TODOS|BAJO_MINIMO|POR_CADUCAR|CONTROLADOS|SIN_EXISTENCIA&controlados=1&refrigeracion=1&grupo=I..VI]
