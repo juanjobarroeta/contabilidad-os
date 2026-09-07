@@ -26,6 +26,12 @@ export const DESTINOS: Destino[] = [
   // ── Diario ────────────────────────────────────────────────────────────────
   { href: "/dashboard", label: "Hoy", grupo: "General", keywords: ["inicio", "tablero", "dashboard", "resumen", "pendientes de hoy"] },
   { href: "/cierre", label: "Cierre guiado", grupo: "General", keywords: ["cierre", "cierre mensual", "checklist", "pasos", "copiloto"] },
+  {
+    href: "/cierre/negocio",
+    label: "Cómo va mi mes",
+    grupo: "General",
+    keywords: ["mi mes", "dueño", "negocio", "cuánto voy a pagar", "resumen", "cierre"],
+  },
   { href: "/avisos", label: "Avisos", grupo: "General", keywords: ["bandeja", "notificaciones", "inbox", "pendientes"] },
   { href: "/despacho", label: "Cartera", grupo: "General", keywords: ["despacho", "clientes del despacho", "multi rfc"] },
 

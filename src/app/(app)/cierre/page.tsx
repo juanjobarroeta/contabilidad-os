@@ -1,22 +1,36 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EL CIERRE GUIADO — una sola pantalla conducida por el copiloto.
+// EL CIERRE GUIADO — una acción a la vez.
 //
-// Antes eran tres columnas con el centro vacío hasta que tocabas un botón: la
-// evidencia se repetía en un panel y el asistente vivía aparte, sin saber en
-// qué paso estabas. Ahora el copiloto ABRE cada paso con sus cifras ya
-// calculadas (apertura cacheada por el hash de la evidencia) y la conversación
-// ES la pantalla; la espina de la izquierda sólo dice dónde estás.
+// Antes esta pantalla era la conversación con doce pasos alrededor, y había que
+// ser contador (y adivinar qué preguntar) para sacarle algo: encabezado de un
+// paso sobre un hilo que hablaba de otro, tres fracciones distintas y ningún
+// movimiento obvio.
 //
-// La decisión sigue siendo humana: Confirmar/Omitir viven en la barra de
-// acción y en la tarjeta de propuesta del copiloto — nunca los ejecuta él.
+// Ahora abre con LO ÚNICO que toca hacer, dicho como se lo dirías a alguien que
+// no es contador, con el botón que lo hace y un «¿por qué?» que despliega el
+// detalle del copiloto y las cifras. Lo demás —lo que sigue, la conversación y
+// los doce pasos— va debajo, plegado.
+//
+// La decisión sigue siendo humana: nada se ejecuta sin un tap.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Ban, Check, ChevronDown, ExternalLink, Loader2, Send, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Ban,
+  Check,
+  ChevronDown,
+  ExternalLink,
+  Loader2,
+  MessageCircle,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Wrench,
+} from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { PeriodSelector, usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { EspinaPasos } from "@/components/cierre/EspinaPasos";
@@ -24,6 +38,8 @@ import { Markdown } from "@/components/ai/Markdown";
 import { TOOL_LABELS, useChat, type ChatContexto } from "@/components/ai/useChat";
 import { Alert, Loading, RetryButton } from "@/components/ui/feedback";
 import { cn } from "@/lib/utils";
+import { accionesDelCierre, avanceDelCierre, type AccionCierre } from "@/lib/cierre/acciones";
+import { PASO_LLANO } from "@/lib/cierre/lenguaje";
 import type { CierreEvaluado, PasoConDecision } from "@/lib/cierre/evaluar";
 import { esClavePaso, type ClavePasoCierre } from "@/lib/cierre/claves";
 
@@ -41,12 +57,18 @@ function CierrePageInner() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [omitiendo, setOmitiendo] = useState(false);
-  const [espinaAbierta, setEspinaAbierta] = useState(false);
   const [motivo, setMotivo] = useState("");
+  const [porque, setPorque] = useState(false);
+  const [verSigue, setVerSigue] = useState(false);
+  const [verPasos, setVerPasos] = useState(false);
+  const [verChat, setVerChat] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
 
+  // La acción elegida a mano (desde «lo que sigue» o desde los doce pasos).
+  const claveParam = searchParams.get("accion");
+  const [elegida, setElegida] = useState<string | null>(claveParam);
   const pasoParam = searchParams.get("paso");
-  const [activo, setActivo] = useState<ClavePasoCierre | null>(esClavePaso(pasoParam) ? pasoParam : null);
+  const [pasoElegido, setPasoElegido] = useState<ClavePasoCierre | null>(esClavePaso(pasoParam) ? pasoParam : null);
 
   useEffect(() => {
     const y = Number(searchParams.get("y"));
@@ -84,20 +106,26 @@ function CierrePageInner() {
     void cargar();
   }, [cargar]);
 
+  // ── Qué toca ahora ─────────────────────────────────────────────────────────
+  const acciones = useMemo(() => (cierre ? accionesDelCierre(cierre) : []), [cierre]);
+  const avance = useMemo(() => (cierre ? avanceDelCierre(cierre) : { listos: 0, total: 0 }), [cierre]);
+  const accion: AccionCierre | null = useMemo(() => {
+    if (acciones.length === 0) return null;
+    return acciones.find((a) => a.clave === elegida) ?? acciones.find((a) => a.paso === pasoElegido) ?? acciones[0];
+  }, [acciones, elegida, pasoElegido]);
+
+  // El paso activo es el de la acción; sin acciones, el primero sin decidir.
   const pasoActivo: PasoConDecision | null = useMemo(() => {
     if (!cierre) return null;
-    const elegido = cierre.pasos.find((p) => p.clave === activo);
-    if (elegido) return elegido;
-    // Sin elección: el primero que necesita trabajo.
+    const clave = accion?.paso ?? pasoElegido;
     return (
-      cierre.pasos.find((p) => p.estadoCalculado === "bloquea" || p.estadoCalculado === "atencion" || p.estado === "REVISAR") ??
+      cierre.pasos.find((p) => p.clave === clave) ??
       cierre.pasos.find((p) => p.estadoCalculado !== "no_aplica" && p.estado === "PENDIENTE") ??
       cierre.pasos[0] ??
       null
     );
-  }, [cierre, activo]);
+  }, [cierre, accion, pasoElegido]);
 
-  // El chat es el mismo motor del cajón; aquí el contexto lleva periodo y paso.
   const leerContexto = useCallback(
     (): ChatContexto => ({
       ruta: `/cierre?y=${year}&m=${month}${pasoActivo ? `&paso=${pasoActivo.clave}` : ""}`,
@@ -109,7 +137,6 @@ function CierrePageInner() {
   const chat = useChat({
     companyId: companyId ?? null,
     contexto: leerContexto,
-    // Confirmar desde la tarjeta del copiloto cambia el estado del cierre.
     onAccionConfirmada: () => void cargar(),
   });
   const {
@@ -127,9 +154,8 @@ function CierrePageInner() {
   } = chat;
 
   // ── El hilo del periodo ────────────────────────────────────────────────────
-  // El cierre lo trabaja el equipo a lo largo del mes: la conversación vive en
-  // la base (la misma en la que escribe el pase diario), no en la memoria de la
-  // pestaña. Antes cambiabas de sección y había que empezar de cero.
+  // La conversación vive en la base (la misma en la que escribe el pase diario),
+  // no en la memoria de la pestaña.
   const [hiloListo, setHiloListo] = useState(false);
   useEffect(() => {
     if (!companyId) return;
@@ -169,15 +195,16 @@ function CierrePageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, year, month]);
 
-  // La apertura del paso: la escribe el copiloto con las cifras ya calculadas y
-  // viene cacheada por el hash de la evidencia (sólo cuesta cuando cambia).
+  // ── El detalle del paso: el «¿por qué?» y la tarjeta que el paso propone ────
   const claveActiva = pasoActivo?.clave;
   const hashActivo = pasoActivo?.hashEvidencia;
+  const [detalle, setDetalle] = useState<string | null>(null);
   const [abriendo, setAbriendo] = useState(false);
   useEffect(() => {
     if (!companyId || !claveActiva || !hiloListo) return;
     let cancelado = false;
     setAbriendo(true);
+    setDetalle(null);
     (async () => {
       try {
         const res = await fetch(
@@ -193,8 +220,7 @@ function CierrePageInner() {
         // que haya que pedírselo. Nada se ejecuta hasta que el humano confirma.
         if (j?.pendingAction) setPendingAction(j.pendingAction);
         if (!j?.texto) return;
-        // La apertura queda anclada en el hilo (una por paso y evidencia): si ya
-        // está cargada no se repite, y si es nueva se agrega al final.
+        setDetalle(j.texto);
         const texto = j.texto;
         const mensajeId = j.mensajeId ?? undefined;
         setMessages((prev) => {
@@ -202,7 +228,7 @@ function CierrePageInner() {
           return [...prev, { role: "assistant", content: texto, id: mensajeId, paso: claveActiva }];
         });
       } catch {
-        /* la barra de acción y la espina siguen sirviendo sin apertura */
+        /* la tarjeta y los enlaces siguen sirviendo sin el detalle */
       } finally {
         if (!cancelado) setAbriendo(false);
       }
@@ -210,39 +236,44 @@ function CierrePageInner() {
     return () => {
       cancelado = true;
     };
-    // hashActivo entra a propósito: si la evidencia cambió, la apertura se rehace.
+    // hashActivo entra a propósito: si la evidencia cambió, el detalle se rehace.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, claveActiva, hashActivo, year, month, hiloListo]);
 
   useEffect(() => {
-    finRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, pendingAction]);
+    if (verChat) finRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, pendingAction, verChat]);
 
-  /** Señales sin resolver del paso activo que sí tienen a dónde ir. */
-  const pendientesDelPaso = useMemo(
-    () => (pasoActivo?.senales ?? []).filter((s) => s.estado !== "ok" && s.estado !== "na" && s.cta),
-    [pasoActivo]
-  );
-
-  /** clave → título, para etiquetar de qué paso habla cada apertura del hilo. */
   const tituloDePaso = useMemo(() => {
     const m = new Map<string, string>();
-    for (const p of cierre?.pasos ?? []) m.set(p.clave, `${String(p.orden + 1).padStart(2, "0")} · ${p.titulo}`);
+    for (const p of cierre?.pasos ?? []) m.set(p.clave, PASO_LLANO[p.clave] ?? p.titulo);
     return m;
   }, [cierre]);
 
-  function seleccionar(clave: ClavePasoCierre) {
-    setActivo(clave);
+  function elegir(a: AccionCierre) {
+    setElegida(a.clave);
+    setPasoElegido(a.paso);
+    setPorque(false);
     setAviso(null);
-    setOmitiendo(false);
+    setVerSigue(false);
     const params = new URLSearchParams(searchParams.toString());
-    params.set("paso", clave);
+    params.set("accion", a.clave);
+    params.set("paso", a.paso);
     params.set("y", String(year));
     params.set("m", String(month));
     router.replace(`/cierre?${params.toString()}`);
   }
 
-  async function decidir(accion: "confirmar" | "omitir" | "reabrir", nota: string | null) {
+  function elegirPaso(clave: ClavePasoCierre) {
+    const dePaso = acciones.find((a) => a.paso === clave);
+    if (dePaso) return elegir(dePaso);
+    setElegida(null);
+    setPasoElegido(clave);
+    setPorque(false);
+    setVerPasos(false);
+  }
+
+  async function decidir(accionPaso: "confirmar" | "omitir" | "reabrir", nota: string | null) {
     if (!pasoActivo || !companyId) return;
     setOcupado(true);
     setAviso(null);
@@ -255,7 +286,7 @@ function CierrePageInner() {
           year,
           month,
           clave: pasoActivo.clave,
-          accion,
+          accion: accionPaso,
           hashEsperado: pasoActivo.hashEvidencia,
           nota,
         }),
@@ -266,6 +297,7 @@ function CierrePageInner() {
       else {
         setOmitiendo(false);
         setMotivo("");
+        setElegida(null);
       }
     } catch {
       setAviso("No se pudo registrar la decisión.");
@@ -278,6 +310,7 @@ function CierrePageInner() {
     const texto = input.trim();
     if (!texto || isLoading) return;
     setInput("");
+    setVerChat(true);
     void enviar(texto);
   }
 
@@ -288,31 +321,17 @@ function CierrePageInner() {
   const decidido = pasoActivo?.estado === "CONFIRMADO" || pasoActivo?.estado === "OMITIDO";
   const bloqueado = pasoActivo?.estadoCalculado === "bloquea" || pasoActivo?.estadoCalculado === "espera";
   const puedeConfirmar = pasoActivo?.requiereConfirmacion && !bloqueado && pasoActivo?.estadoCalculado !== "no_aplica";
+  const pct = avance.total > 0 ? Math.round((avance.listos / avance.total) * 100) : 0;
+  const siguen = acciones.filter((a) => a.clave !== accion?.clave);
 
   return (
-    <div className="mx-auto flex h-full max-w-[1180px] flex-col px-3 py-3 sm:px-6 sm:py-5">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2 sm:mb-4 sm:gap-3">
-        <div>
-          <p className="text-[12px] text-cos-ink-soft sm:text-[12.5px]">Cierre guiado</p>
+    <div className="mx-auto flex h-full max-w-[860px] flex-col gap-3 overflow-y-auto px-3 py-3 sm:px-6 sm:py-5">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[12px] text-cos-ink-soft">Cierre del mes</p>
           <h1 className="line-clamp-2 text-[18px] font-semibold leading-tight tracking-[-0.02em] text-cos-ink sm:text-[22px]">
             {activeCompany.razonSocial}
           </h1>
-          <p className="mt-0.5 text-[12px] text-cos-ink-soft">
-            {activeCompany.rfc}
-            {cierre && (
-              <>
-                {" · "}
-                {cierre.resumen.confirmados}/{cierre.resumen.aplican} confirmados
-                {cierre.resumen.bloquean > 0 && (
-                  <span className="text-cos-red-ink">
-                    {" · "}
-                    {cierre.resumen.bloquean} bloquea{cierre.resumen.bloquean === 1 ? "" : "n"}
-                  </span>
-                )}
-                {cierre.resumen.completo && <span className="text-cos-jade-ink"> · listo para cerrar</span>}
-              </>
-            )}
-          </p>
         </div>
         <PeriodSelector />
       </div>
@@ -323,262 +342,343 @@ function CierrePageInner() {
             <Sparkles className="h-4 w-4 text-cos-brand" /> El cierre guiado es parte del plan Pro
           </p>
           <p className="mt-1 text-[13px] text-cos-ink-soft">
-            El copiloto revisa cada día los doce pasos del cierre de esta empresa, te avisa lo que cambió y te acompaña hasta declarar.
+            El copiloto revisa cada día lo que falta para cerrar el mes de esta empresa, te avisa lo que cambió y te acompaña hasta declarar.
           </p>
         </div>
       ) : error ? (
         <Alert tone="danger" action={<RetryButton onClick={cargar} />}>
           {error}
         </Alert>
-      ) : loading || !cierre || !pasoActivo ? (
+      ) : loading || !cierre ? (
         <Loading label="Revisando el cierre del periodo…" />
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[228px_minmax(0,1fr)] lg:gap-4">
-          {/* La espina es un MAPA, no la pantalla: en móvil se colapsa a un
-              renglón para que la conversación se quede con el alto. */}
-          <div className="lg:contents">
-            <button
-              type="button"
-              onClick={() => setEspinaAbierta((o) => !o)}
-              className="flex w-full items-center gap-2 rounded-card border border-cos-line bg-cos-card px-3 py-2 text-left lg:hidden"
-              aria-expanded={espinaAbierta}
-            >
-              <span className="font-mono text-[10px] text-cos-ink-faint">
-                {String(pasoActivo.orden + 1).padStart(2, "0")}/12
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-cos-ink">{pasoActivo.titulo}</span>
-              <span className="shrink-0 font-mono text-[10.5px] text-cos-ink-soft">
-                {cierre.resumen.confirmados}/{cierre.resumen.aplican}
-              </span>
-              <ChevronDown className={cn("h-4 w-4 shrink-0 text-cos-ink-faint transition-transform", espinaAbierta && "rotate-180")} />
-            </button>
-            <aside
-              className={cn(
-                "rounded-card border border-cos-line bg-cos-card p-2 lg:block lg:overflow-y-auto",
-                espinaAbierta ? "block max-h-[52vh] overflow-y-auto" : "hidden"
-              )}
-            >
-              <EspinaPasos
-                pasos={cierre.pasos}
-                activo={pasoActivo.clave}
-                onSelect={(c) => {
-                  seleccionar(c);
-                  setEspinaAbierta(false);
-                }}
-              />
-            </aside>
+        <>
+          {/* Avance: UNA fracción, y que se entienda. */}
+          <div className="rounded-card border border-cos-line bg-cos-card px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[13px] text-cos-ink">
+                <span className="font-semibold">{avance.listos} de {avance.total}</span> partes del mes listas
+              </p>
+              <p className="font-mono text-[12px] text-cos-ink-soft">
+                {acciones.length === 0 ? "sin pendientes" : `${acciones.length} por resolver`}
+              </p>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-cos-paper">
+              <div className="h-full rounded-full bg-cos-jade-ink transition-all" style={{ width: `${pct}%` }} />
+            </div>
           </div>
 
-          <section className="flex min-h-[60vh] flex-col rounded-card border border-cos-line bg-cos-card lg:min-h-0">
-            <div className="flex items-center justify-between gap-3 border-b border-cos-line px-4 py-2.5">
-              <div className="min-w-0">
-                <p className="truncate text-[14px] font-semibold text-cos-ink">{pasoActivo.titulo}</p>
-                <p className="truncate text-[12px] text-cos-ink-soft">{pasoActivo.detalle ?? pasoActivo.descripcion}</p>
-              </div>
-              {pasoActivo.fechaLimite && (
-                <span
-                  className={cn(
-                    "shrink-0 rounded-full px-2 py-0.5 font-mono text-[10.5px] font-semibold",
-                    (pasoActivo.diasRestantes ?? 0) < 0 ? "bg-cos-red-tint text-cos-red-ink" : "bg-cos-amber-tint text-cos-amber-ink"
+          {/* AHORA: lo único que toca. */}
+          <section className="rounded-card border border-cos-line bg-cos-card p-4 sm:p-5">
+            {accion ? (
+              <>
+                <p className="font-mono text-[10.5px] uppercase tracking-wide text-cos-ink-faint">
+                  {tituloDePaso.get(accion.paso) ?? accion.pasoTitulo}
+                  {accion.urgencia === "bloquea" && <span className="ml-2 text-cos-red-ink">detiene el cierre</span>}
+                  {accion.diasRestantes != null && (
+                    <span className={cn("ml-2", accion.diasRestantes < 0 ? "text-cos-red-ink" : "text-cos-amber-ink")}>
+                      {accion.diasRestantes < 0
+                        ? `venció hace ${Math.abs(accion.diasRestantes)} d`
+                        : `vence en ${accion.diasRestantes} d`}
+                    </span>
                   )}
-                >
-                  {(pasoActivo.diasRestantes ?? 0) < 0
-                    ? `venció hace ${Math.abs(pasoActivo.diasRestantes ?? 0)} d`
-                    : `vence en ${pasoActivo.diasRestantes} d`}
-                </span>
-              )}
-            </div>
-
-            {/* Lo que falta en este paso, con el enlace REAL de cada pendiente.
-                Antes sólo vivía en la prosa de la apertura, y el copiloto llegó
-                a inventar la ubicación de un botón que además se llama distinto. */}
-            {pendientesDelPaso.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 border-b border-cos-line bg-cos-paper/60 px-4 py-2">
-                {pendientesDelPaso.map((s) => (
-                  <Link
-                    key={s.clave}
-                    href={s.cta!.href}
-                    title={s.resumen}
-                    className={cn(
-                      "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px]",
-                      s.estado === "error"
-                        ? "border-cos-red-ink/30 bg-cos-red-tint text-cos-red-ink"
-                        : "border-cos-amber-ink/30 bg-cos-amber-tint text-cos-amber-ink"
-                    )}
-                  >
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{s.cta!.label}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
-              {!hiloListo && (
-                <p className="flex items-center gap-2 text-[13px] text-cos-ink-soft">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Abriendo el hilo del cierre…
                 </p>
-              )}
-              {messages.map((m, i) => (
-                <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-                  <div
-                    className={cn(
-                      "max-w-[85%] rounded-card px-3.5 py-2.5 text-[13.5px]",
-                      m.role === "user" ? "bg-cos-brand text-white" : "bg-cos-paper text-cos-ink"
-                    )}
-                  >
-                    {/* El hilo es del periodo entero: sin decir de qué paso
-                        habla cada apertura, se leía como si hablara del paso
-                        abierto. */}
-                    {m.paso && (
-                      <p className="mb-1 font-mono text-[10.5px] uppercase tracking-wide text-cos-ink-faint">
-                        {tituloDePaso.get(m.paso) ?? m.paso}
-                      </p>
-                    )}
-                    {m.role === "user" ? m.content : <Markdown>{m.content}</Markdown>}
+                <h2 className="mt-1 text-[17px] font-semibold leading-snug tracking-[-0.01em] text-cos-ink sm:text-[19px]">
+                  {accion.hacer}
+                </h2>
+                {accion.que && <p className="mt-1.5 text-[13.5px] leading-relaxed text-cos-ink-soft">{accion.que}</p>}
+                <p className="mt-2 text-[12.5px] text-cos-ink">{accion.dato}</p>
+
+                {/* La propuesta del copiloto: el tap ES la autorización. */}
+                {pendingAction && (
+                  <div className="mt-3 rounded-card border border-cos-brand/40 bg-cos-brand-tint p-3">
+                    <p className="flex items-center gap-1.5 text-[12px] font-semibold text-cos-brand-ink">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Se puede hacer desde aquí
+                    </p>
+                    <p className="mt-1 text-[12.5px] text-cos-ink">{pendingAction.summary}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={confirming}
+                        onClick={() => void confirmar()}
+                        className="rounded-control bg-cos-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                      >
+                        {confirming ? "Haciéndolo…" : "Hacerlo"}
+                      </button>
+                      <button type="button" onClick={cancelar} className="text-[12.5px] text-cos-ink-soft">
+                        Ahora no
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )}
 
-              {abriendo && (
-                <p className="flex items-center gap-2 text-[13px] text-cos-ink-soft">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Revisando el paso…
-                </p>
-              )}
-
-              {activeTool && (
-                <p className="flex items-center gap-2 text-[12.5px] text-cos-amber-ink">
-                  <Wrench className="h-3.5 w-3.5 animate-spin" /> {TOOL_LABELS[activeTool] ?? activeTool}…
-                </p>
-              )}
-
-              {pendingAction && (
-                <div className="rounded-card border border-cos-brand/40 bg-cos-brand-tint p-3">
-                  <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-cos-brand-ink">
-                    <ShieldCheck className="h-3.5 w-3.5" /> Confirmación requerida
-                  </p>
-                  <p className="mt-1 text-[12.5px] text-cos-ink">{pendingAction.summary}</p>
-                  <p className="mt-1 text-[11px] text-cos-ink-soft">Nada se ejecuta hasta que toques Confirmar.</p>
-                  <div className="mt-2 flex gap-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {accion.cta && (
+                    <Link
+                      href={accion.cta.href}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-control px-3.5 py-2 text-[13px] font-semibold",
+                        pendingAction
+                          ? "border border-cos-line text-cos-ink hover:bg-cos-paper"
+                          : "bg-cos-brand text-white hover:bg-cos-brand-deep"
+                      )}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      {accion.cta.label}
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPorque((v) => !v)}
+                    className="inline-flex items-center gap-1 rounded-control border border-cos-line px-3 py-2 text-[12.5px] text-cos-ink hover:bg-cos-paper"
+                  >
+                    ¿Por qué? <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", porque && "rotate-180")} />
+                  </button>
+                  {pasoActivo?.requiereConfirmacion && !decidido && (
                     <button
                       type="button"
-                      disabled={confirming}
-                      onClick={() => void confirmar()}
-                      className="rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                      disabled={ocupado}
+                      onClick={() => setOmitiendo(true)}
+                      className="text-[12.5px] text-cos-ink-soft hover:text-cos-ink disabled:opacity-50"
                     >
-                      {confirming ? "Confirmando…" : "Confirmar"}
+                      No aplica
                     </button>
-                    <button type="button" onClick={cancelar} className="text-[12.5px] text-cos-ink-soft">
-                      Cancelar
-                    </button>
-                  </div>
+                  )}
                 </div>
-              )}
-              {aviso && <p className="text-[12.5px] text-cos-red-ink">{aviso}</p>}
-              <div ref={finRef} />
-            </div>
-
-            {/* Barra de acción: la decisión humana del paso, siempre a la vista. */}
-            <div className="border-t border-cos-line px-4 py-2.5">
-              {omitiendo ? (
-                <div className="mb-2 space-y-2">
-                  <input
-                    value={motivo}
-                    onChange={(e) => setMotivo(e.target.value)}
-                    placeholder="Motivo para omitir este paso (queda en bitácora)"
-                    className="w-full rounded-control border border-cos-line bg-cos-paper px-2.5 py-1.5 text-[12.5px]"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={ocupado || motivo.trim().length === 0}
-                      onClick={() => void decidir("omitir", motivo.trim())}
-                      className="rounded-control bg-cos-ink px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
-                    >
-                      Omitir con motivo
-                    </button>
-                    <button type="button" onClick={() => setOmitiendo(false)} className="text-[12.5px] text-cos-ink-soft">
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="mb-2 flex flex-wrap items-center gap-2">
+              </>
+            ) : (
+              <>
+                <p className="font-mono text-[10.5px] uppercase tracking-wide text-cos-ink-faint">
+                  {pasoActivo ? (tituloDePaso.get(pasoActivo.clave) ?? pasoActivo.titulo) : "Cierre"}
+                </p>
+                <h2 className="mt-1 text-[17px] font-semibold leading-snug text-cos-ink sm:text-[19px]">
+                  {cierre.resumen.completo
+                    ? "El mes está cerrado: nada pendiente."
+                    : decidido
+                      ? "Esta parte ya quedó revisada."
+                      : "Nada pendiente aquí: dalo por revisado."}
+                </h2>
+                <p className="mt-1.5 text-[13.5px] leading-relaxed text-cos-ink-soft">
+                  {decidido
+                    ? "Si vuelves a tocar los datos de este mes, esta parte se marca sola para revisarla otra vez."
+                    : "Los datos de esta parte están completos. Al darla por revisada queda firmada con tu nombre y la fecha."}
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {decidido ? (
                     <>
                       <span className="inline-flex items-center gap-1.5 text-[12.5px] text-cos-jade-ink">
-                        {pasoActivo.estado === "CONFIRMADO" ? <Check className="h-3.5 w-3.5" /> : <Ban className="h-3.5 w-3.5" />}
-                        {pasoActivo.estado === "CONFIRMADO" ? "Paso confirmado" : "Paso omitido"}
+                        {pasoActivo?.estado === "CONFIRMADO" ? <Check className="h-3.5 w-3.5" /> : <Ban className="h-3.5 w-3.5" />}
+                        {pasoActivo?.estado === "CONFIRMADO" ? "Revisado" : "Marcado como no aplica"}
                       </span>
                       <button
                         type="button"
                         disabled={ocupado}
                         onClick={() => void decidir("reabrir", null)}
-                        className="rounded-control border border-cos-line px-2.5 py-1 text-[12px] text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+                        className="rounded-control border border-cos-line px-3 py-1.5 text-[12.5px] text-cos-ink hover:bg-cos-paper disabled:opacity-50"
                       >
-                        Reabrir
+                        Volver a abrir
                       </button>
                     </>
                   ) : (
-                    <>
+                    <button
+                      type="button"
+                      disabled={ocupado || !puedeConfirmar}
+                      onClick={() => void decidir("confirmar", null)}
+                      className="rounded-control bg-cos-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                    >
+                      Darlo por revisado
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPorque((v) => !v)}
+                    className="inline-flex items-center gap-1 rounded-control border border-cos-line px-3 py-2 text-[12.5px] text-cos-ink hover:bg-cos-paper"
+                  >
+                    ¿Por qué? <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", porque && "rotate-180")} />
+                  </button>
+                </div>
+              </>
+            )}
+
+            {omitiendo && (
+              <div className="mt-3 space-y-2 rounded-card border border-cos-line bg-cos-paper p-3">
+                <input
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  placeholder="¿Por qué no aplica? (queda en la bitácora)"
+                  className="w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[12.5px]"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={ocupado || motivo.trim().length === 0}
+                    onClick={() => void decidir("omitir", motivo.trim())}
+                    className="rounded-control bg-cos-ink px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                  >
+                    Marcar como no aplica
+                  </button>
+                  <button type="button" onClick={() => setOmitiendo(false)} className="text-[12.5px] text-cos-ink-soft">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* El «¿por qué?»: el detalle del copiloto con las cifras. */}
+            {porque && (
+              <div className="mt-3 rounded-card border border-cos-line bg-cos-paper p-3 text-[13px] text-cos-ink">
+                {abriendo && !detalle ? (
+                  <p className="flex items-center gap-2 text-cos-ink-soft">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Revisando…
+                  </p>
+                ) : detalle ? (
+                  <Markdown>{detalle}</Markdown>
+                ) : (
+                  <p className="text-cos-ink-soft">{pasoActivo?.detalle ?? pasoActivo?.descripcion}</p>
+                )}
+              </div>
+            )}
+
+            {aviso && <p className="mt-2 text-[12.5px] text-cos-red-ink">{aviso}</p>}
+          </section>
+
+          {/* Lo que sigue. */}
+          {siguen.length > 0 && (
+            <section className="rounded-card border border-cos-line bg-cos-card">
+              <button
+                type="button"
+                onClick={() => setVerSigue((v) => !v)}
+                className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+                aria-expanded={verSigue}
+              >
+                <span className="text-[13px] font-medium text-cos-ink">Lo que sigue ({siguen.length})</span>
+                <ChevronDown className={cn("h-4 w-4 text-cos-ink-faint transition-transform", verSigue && "rotate-180")} />
+              </button>
+              {verSigue && (
+                <ul className="border-t border-cos-line">
+                  {siguen.map((a) => (
+                    <li key={a.clave}>
                       <button
                         type="button"
-                        disabled={ocupado || !puedeConfirmar}
-                        onClick={() => void decidir("confirmar", null)}
-                        className="rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                        onClick={() => elegir(a)}
+                        className="flex w-full items-start gap-2 border-b border-cos-line-soft px-4 py-2.5 text-left last:border-b-0 hover:bg-cos-paper"
                       >
-                        Confirmar paso
-                      </button>
-                      {pasoActivo.requiereConfirmacion && !bloqueado && (
-                        <button
-                          type="button"
-                          disabled={ocupado}
-                          onClick={() => setOmitiendo(true)}
-                          className="rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] text-cos-ink hover:bg-cos-paper disabled:opacity-50"
-                        >
-                          Omitir
-                        </button>
-                      )}
-                      {pasoActivo.estado === "REVISAR" && (
-                        <span className="text-[12px] text-cos-amber-ink">La evidencia cambió: revísala antes de confirmar.</span>
-                      )}
-                      {bloqueado && (
-                        <span className="text-[12px] text-cos-ink-soft">
-                          {pasoActivo.estadoCalculado === "espera" ? "Un paso anterior bloquea éste." : "Hay un bloqueo activo."}
+                        <span
+                          className={cn(
+                            "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
+                            a.urgencia === "bloquea" ? "bg-cos-red-ink" : "bg-cos-amber-ink"
+                          )}
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-[13px] text-cos-ink">{a.hacer}</span>
+                          <span className="block text-[12px] text-cos-ink-soft">{a.dato}</span>
                         </span>
-                      )}
-                    </>
-                  )}
-                </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
+            </section>
+          )}
 
-              <div className="flex items-end gap-2">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      mandar();
-                    }
-                  }}
-                  rows={1}
-                  placeholder={`Pregunta sobre ${pasoActivo.titulo.toLowerCase()}…`}
-                  className="max-h-28 flex-1 resize-none rounded-control border border-cos-line bg-cos-paper px-3 py-2 text-[13.5px] focus:border-cos-brand focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={mandar}
-                  disabled={isLoading || !input.trim()}
-                  className="rounded-control bg-cos-brand p-2 text-white disabled:opacity-40"
-                  aria-label="Enviar"
-                >
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </button>
+          {/* La conversación: apoyo, no pantalla. */}
+          <section className="rounded-card border border-cos-line bg-cos-card">
+            <button
+              type="button"
+              onClick={() => setVerChat((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+              aria-expanded={verChat}
+            >
+              <span className="flex items-center gap-2 text-[13px] font-medium text-cos-ink">
+                <MessageCircle className="h-4 w-4 text-cos-ink-faint" /> Preguntar al copiloto
+              </span>
+              <ChevronDown className={cn("h-4 w-4 text-cos-ink-faint transition-transform", verChat && "rotate-180")} />
+            </button>
+            {verChat && (
+              <div className="border-t border-cos-line">
+                <div className="max-h-[46vh] space-y-3 overflow-y-auto px-4 py-3">
+                  {!hiloListo && (
+                    <p className="flex items-center gap-2 text-[13px] text-cos-ink-soft">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Abriendo el hilo…
+                    </p>
+                  )}
+                  {messages.map((m, i) => (
+                    <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+                      <div
+                        className={cn(
+                          "max-w-[88%] rounded-card px-3.5 py-2.5 text-[13.5px]",
+                          m.role === "user" ? "bg-cos-brand text-white" : "bg-cos-paper text-cos-ink"
+                        )}
+                      >
+                        {m.paso && (
+                          <p className="mb-1 font-mono text-[10.5px] uppercase tracking-wide text-cos-ink-faint">
+                            {tituloDePaso.get(m.paso) ?? m.paso}
+                          </p>
+                        )}
+                        {m.role === "user" ? m.content : <Markdown>{m.content}</Markdown>}
+                      </div>
+                    </div>
+                  ))}
+                  {activeTool && (
+                    <p className="flex items-center gap-2 text-[12.5px] text-cos-amber-ink">
+                      <Wrench className="h-3.5 w-3.5 animate-spin" /> {TOOL_LABELS[activeTool] ?? activeTool}…
+                    </p>
+                  )}
+                  <div ref={finRef} />
+                </div>
+                <div className="flex items-end gap-2 border-t border-cos-line px-4 py-2.5">
+                  <textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        mandar();
+                      }
+                    }}
+                    rows={1}
+                    placeholder="Pregunta lo que quieras de este mes…"
+                    className="max-h-28 flex-1 resize-none rounded-control border border-cos-line bg-cos-paper px-3 py-2 text-[13.5px] focus:border-cos-brand focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={mandar}
+                    disabled={isLoading || !input.trim()}
+                    className="rounded-control bg-cos-brand p-2 text-white disabled:opacity-40"
+                    aria-label="Enviar"
+                  >
+                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </section>
-        </div>
+
+          <Link
+            href={`/cierre/negocio?y=${year}&m=${month}`}
+            className="inline-flex items-center gap-1.5 self-start text-[12.5px] text-cos-ink-soft hover:text-cos-ink"
+          >
+            Ver cómo se lo cuento al dueño del negocio <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+
+          {/* Los doce pasos: mapa, para quien lo quiera. */}
+          <section className="rounded-card border border-cos-line bg-cos-card">
+            <button
+              type="button"
+              onClick={() => setVerPasos((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+              aria-expanded={verPasos}
+            >
+              <span className="text-[13px] font-medium text-cos-ink">Ver las doce partes del cierre</span>
+              <ChevronDown className={cn("h-4 w-4 text-cos-ink-faint transition-transform", verPasos && "rotate-180")} />
+            </button>
+            {verPasos && (
+              <div className="border-t border-cos-line p-2">
+                <EspinaPasos pasos={cierre.pasos} activo={pasoActivo?.clave ?? cierre.pasos[0]?.clave} onSelect={elegirPaso} />
+              </div>
+            )}
+          </section>
+        </>
       )}
     </div>
   );

@@ -15,7 +15,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ClavePasoCierre } from "./claves";
-import type { PasoConDecision } from "./evaluar";
+import type { CierreEvaluado, PasoConDecision } from "./evaluar";
+import { LLANO } from "./lenguaje";
 
 /** Herramientas candidatas por paso, en orden de preferencia. */
 const CANDIDATAS: Partial<Record<ClavePasoCierre, { senal: string; tools: string[] }[]>> = {
@@ -64,4 +65,85 @@ export function quedoStaged(resultadoJson: string): boolean {
   } catch {
     return false;
   }
+}
+
+// ── La cola de acciones: qué toca AHORA ──────────────────────────────────────
+//
+// La pantalla mostraba doce pasos, cada uno con su prosa, y el contador tenía
+// que deducir cuál era el siguiente movimiento. Esto aplana el cierre a una
+// LISTA DE ACCIONES en orden: la primera es la de la pantalla, el resto es «lo
+// que sigue». Pura: se calcula igual en el servidor y en el navegador.
+
+export interface AccionCierre {
+  /** Clave de la señal que la genera (única dentro del periodo). */
+  clave: string;
+  paso: ClavePasoCierre;
+  pasoTitulo: string;
+  pasoOrden: number;
+  /** Qué hacer, en llano. */
+  hacer: string;
+  /** Qué es y por qué importa, en llano. */
+  que: string;
+  /** El dato exacto del motor (con su número). */
+  dato: string;
+  urgencia: "bloquea" | "atencion";
+  cta?: { label: string; href: string };
+  /** Herramienta `proponer_*` que puede resolverla desde el chat, si existe. */
+  tool?: string;
+  fechaLimite?: string;
+  diasRestantes?: number;
+}
+
+/** Qué herramienta resuelve cada señal (la tabla de arriba, del revés). */
+function toolDeSenal(paso: PasoConDecision, senal: string): string | undefined {
+  const reglas = CANDIDATAS[paso.clave];
+  return reglas?.find((r) => r.senal === senal)?.tools[0];
+}
+
+/**
+ * Todo lo que falta en el periodo, en el orden en que conviene atacarlo:
+ * por paso (el flujo ya está ordenado por dependencias) y, dentro del paso,
+ * lo que bloquea antes de lo que sólo pide atención.
+ *
+ * Se excluyen los pasos que NO APLICAN, los que ya decidió el humano y los que
+ * están EN ESPERA (su bloqueo vive en un paso anterior: pedir acción ahí sería
+ * mandar a empujar una puerta cerrada).
+ */
+export function accionesDelCierre(cierre: CierreEvaluado): AccionCierre[] {
+  const out: AccionCierre[] = [];
+  for (const paso of cierre.pasos) {
+    if (paso.estadoCalculado === "no_aplica" || paso.estadoCalculado === "espera") continue;
+    if (paso.estado === "CONFIRMADO" || paso.estado === "OMITIDO") continue;
+    const vivas = paso.senales.filter((s) => s.estado === "error" || s.estado === "warn");
+    for (const s of vivas.sort((a, b) => (a.estado === b.estado ? 0 : a.estado === "error" ? -1 : 1))) {
+      const llano = LLANO[s.clave];
+      out.push({
+        clave: s.clave,
+        paso: paso.clave,
+        pasoTitulo: paso.titulo,
+        pasoOrden: paso.orden,
+        hacer: llano?.hacer ?? s.resumen,
+        que: llano?.que ?? "",
+        dato: s.resumen,
+        urgencia: s.estado === "error" ? "bloquea" : "atencion",
+        cta: s.cta,
+        tool: toolDeSenal(paso, s.clave),
+        fechaLimite: paso.fechaLimite,
+        diasRestantes: paso.diasRestantes,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Pasos que aplican y ya no piden nada: sirven para el avance honesto («3 de 9
+ * listos») sin contar los que no aplican a la empresa.
+ */
+export function avanceDelCierre(cierre: CierreEvaluado): { listos: number; total: number } {
+  const aplican = cierre.pasos.filter((p) => p.estadoCalculado !== "no_aplica");
+  const listos = aplican.filter(
+    (p) => p.estado === "CONFIRMADO" || p.estado === "OMITIDO" || p.estadoCalculado === "listo"
+  );
+  return { listos: listos.length, total: aplican.length };
 }
