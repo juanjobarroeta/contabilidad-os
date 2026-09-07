@@ -18,7 +18,7 @@ import { fechaLocalMx, registrarYNotificar } from "../notificaciones";
 import { usuariosConAccesoACompany } from "../push";
 import { effectiveCierrePlan, planIncluyeCierreGuiado } from "../planes";
 import { diffCierre, meritaPush, rankDeltas, type Delta } from "./avance";
-import { cargarHechosCierre, sincronizarCierre } from "./evaluar";
+import { cargarHechosCierre, invalidarCierre, sincronizarCierre } from "./evaluar";
 import { etiquetaPeriodo, redactarAviso } from "./plantillas";
 import { decidirPasos, periodoStr, periodosEnJuego, type PasoEvaluado } from "./workflow";
 
@@ -122,6 +122,8 @@ export async function avanzarCierreEmpresa(
     const hechos = await cargarHechosCierre(company.id, year, month, hoy);
     const evaluados = decidirPasos(hechos);
     const cierre = await sincronizarCierre(company.id, year, month, evaluados);
+    // El pase evalúa con evidencia fresca: lo memoizado por la pantalla ya no vale.
+    invalidarCierre(company.id, year, month);
     const fila = await prisma.cierrePeriodo.findUniqueOrThrow({
       where: { companyId_year_month: { companyId: company.id, year, month } },
       select: { id: true, snapshotAvance: true, responsableUserId: true, cerradoAt: true },

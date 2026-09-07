@@ -221,6 +221,21 @@ export async function executeChatPendingAction(
   pa: ChatPendingAction,
   confirmingUserId: string,
 ): Promise<ExecuteResult> {
+  const r = await ejecutar(pa, confirmingUserId);
+  // Cualquier acción confirmada puede mover la evidencia del cierre (conciliar
+  // un movimiento, fijar el coeficiente…): la memo del motor se olvida para que
+  // la siguiente lectura ya vea el cambio.
+  if (r.ok) {
+    const { invalidarCierre } = await import("../cierre/evaluar");
+    invalidarCierre(pa.companyId);
+  }
+  return r;
+}
+
+async function ejecutar(
+  pa: ChatPendingAction,
+  confirmingUserId: string,
+): Promise<ExecuteResult> {
   switch (pa.type) {
     case "conciliar": {
       // Reusa reconcileTransaction (mismo apply que stagePendingConciliar/preview).
