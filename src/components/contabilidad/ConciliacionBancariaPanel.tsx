@@ -31,6 +31,8 @@ interface CuentaConciliada {
   saldoManual: boolean;
   saldoPropuesto: boolean;
   conciliadoAt: string | null;
+  fuenteInicial?: { valor: number | null; fuente: string; etiqueta: string };
+  fuenteFinal?: { valor: number | null; fuente: string; etiqueta: string };
   movimientos: number;
   sinRegistrar: number;
 }
@@ -208,7 +210,8 @@ export function ConciliacionBancariaPanel({
             <Landmark className="h-4 w-4 text-cos-ink-soft" /> Saldos por cuenta
           </h3>
           <p className="mt-0.5 text-[12px] text-cos-ink-soft">
-            El saldo se toma del estado de cuenta importado. Captúralo a mano si la cuenta no tiene PDF.
+            El saldo se encadena solo: con un saldo capturado alguna vez —o el de un estado de cuenta importado— los
+            meses siguientes se calculan con los movimientos. Sólo hay que capturarlo cuando no hay ninguno.
           </p>
         </div>
         {data.cuentas.length === 0 ? (
@@ -229,7 +232,7 @@ export function ConciliacionBancariaPanel({
                     <p className="text-[12px] text-cos-ink-soft">
                       {c.movimientos} {c.movimientos === 1 ? "movimiento" : "movimientos"}
                       {c.sinRegistrar > 0 ? ` · ${c.sinRegistrar} sin registrar` : ""}
-                      {c.saldoPropuesto ? " · saldo tomado del estado importado" : ""}
+                      {c.fuenteFinal && c.fuenteFinal.fuente !== "capturado" ? ` · saldo ${c.fuenteFinal.etiqueta}` : ""}
                       {c.saldoManual ? " · saldo capturado a mano" : ""}
                     </p>
                   </div>

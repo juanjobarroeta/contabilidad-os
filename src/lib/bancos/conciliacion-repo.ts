@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { resolverSaldos, type SaldoConFuente } from "./saldos";
 import { COE_CODES } from "@/lib/contabilidad/catalog";
 import { clavePoliza, numerarPolizas } from "@/lib/contabilidad/coe-polizas";
 import {
@@ -40,6 +41,9 @@ export interface CuentaConciliada {
   saldoManual: boolean;
   /** El saldo se propuso desde el ImportBatch del periodo y aún nadie lo confirmó. */
   saldoPropuesto: boolean;
+  /** De dónde salió cada saldo (capturado, del estado, arrastrado, calculado). */
+  fuenteInicial: SaldoConFuente;
+  fuenteFinal: SaldoConFuente;
   conciliadoAt: string | null;
   notas: string | null;
   movimientos: number;
@@ -224,15 +228,28 @@ export async function conciliacionDelMes(
   const propuestos = new Map<string, { saldoInicial: number | null; saldoFinal: number | null }>();
   for (const l of lotes) if (!propuestos.has(l.bankAccountId)) propuestos.set(l.bankAccountId, l);
 
+  // El ancla de cada cuenta: el último saldo CONOCIDO en o antes de este mes
+  // (capturado o del estado importado). Con él ya no hay que teclear el saldo
+  // de cada mes — se arrastra. Ver saldos.ts.
+  const anclas = await anclasDeSaldo(companyId, cuentasBancarias.map((c) => c.id), year, month, inicio);
+
   const saldos: SaldoEstadoCuenta[] = [];
   const cuentas: CuentaConciliada[] = [];
   for (const cta of cuentasBancarias) {
     const etiqueta = `${cta.banco} · ${cta.nombre}`.trim();
     const guardada = porCuenta.get(cta.id);
     const propuesto = propuestos.get(cta.id);
-    const saldoFinal = guardada?.saldoFinalEstado ?? propuesto?.saldoFinal ?? null;
-    const saldoInicial = guardada?.saldoInicialEstado ?? propuesto?.saldoInicial ?? null;
     const delMes = movimientos.filter((m) => m.cuentaBancariaId === cta.id);
+    const resueltos = resolverSaldos({
+      capturadoInicial: guardada?.saldoInicialEstado ?? null,
+      capturadoFinal: guardada?.saldoFinalEstado ?? null,
+      estadoInicial: propuesto?.saldoInicial ?? null,
+      estadoFinal: propuesto?.saldoFinal ?? null,
+      ancla: anclas.get(cta.id) ?? null,
+      netoDelMes: delMes.reduce((acc, m) => acc + m.monto, 0),
+    });
+    const saldoInicial = resueltos.inicial.valor;
+    const saldoFinal = resueltos.final.valor;
 
     saldos.push({ cuentaBancariaId: cta.id, etiqueta, saldoInicial, saldoFinal });
     cuentas.push({
@@ -242,6 +259,8 @@ export async function conciliacionDelMes(
       saldoFinalEstado: saldoFinal,
       saldoManual: guardada?.saldoManual ?? false,
       saldoPropuesto: guardada?.saldoFinalEstado == null && propuesto?.saldoFinal != null,
+      fuenteInicial: resueltos.inicial,
+      fuenteFinal: resueltos.final,
       conciliadoAt: guardada?.conciliadoAt?.toISOString() ?? null,
       notas: guardada?.notas ?? null,
       movimientos: delMes.length,
@@ -353,4 +372,100 @@ export async function firmarConciliacion(args: {
       conciliadoByUserId: args.conciliado ? args.userId : null,
     },
   });
+}
+
+
+// ── El ancla del saldo ───────────────────────────────────────────────────────
+
+const MESES_ES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/**
+ * Para cada cuenta, el último saldo CONOCIDO en o antes del mes pedido y el
+ * neto de los movimientos entre ese punto y el primer día del mes.
+ *
+ * «Conocido» = capturado por alguien (ConciliacionBancaria.saldoFinalEstado) o
+ * declarado por un estado de cuenta importado (ImportBatch.saldoFinal). Se toma
+ * el más reciente de los dos; empatados, gana el capturado.
+ *
+ * Con esto el saldo se pide UNA vez por cuenta en toda su historia: los meses
+ * siguientes se encadenan. No hay recursión — el neto sale de UNA agregación
+ * por rango de fechas, así que da igual si el ancla es de hace tres años.
+ */
+async function anclasDeSaldo(
+  companyId: string,
+  bankAccountIds: string[],
+  year: number,
+  month: number,
+  inicioDelMes: Date
+): Promise<Map<string, { saldo: number; etiqueta: string; netoHastaInicioDelMes: number }>> {
+  const out = new Map<string, { saldo: number; etiqueta: string; netoHastaInicioDelMes: number }>();
+  if (bankAccountIds.length === 0) return out;
+  const periodoActual = year * 100 + month;
+
+  const [capturados, lotes] = await Promise.all([
+    prisma.conciliacionBancaria.findMany({
+      where: { companyId, bankAccountId: { in: bankAccountIds }, saldoFinalEstado: { not: null } },
+      select: { bankAccountId: true, year: true, month: true, saldoFinalEstado: true },
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+    }),
+    prisma.importBatch.findMany({
+      where: { companyId, bankAccountId: { in: bankAccountIds }, undoneAt: null, saldoFinal: { not: null }, periodo: { not: null } },
+      select: { bankAccountId: true, periodo: true, saldoFinal: true },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  // Candidato por cuenta: el más reciente que NO sea posterior al mes pedido.
+  // El mes pedido se excluye a propósito: ése lo resuelve resolverSaldos con lo
+  // capturado / el estado del propio periodo, sin arrastre.
+  type Cand = { periodo: number; saldo: number; etiqueta: string; duro: boolean };
+  const mejor = new Map<string, Cand>();
+  const proponer = (id: string, c: Cand) => {
+    if (c.periodo >= periodoActual) return;
+    const previo = mejor.get(id);
+    if (!previo || c.periodo > previo.periodo || (c.periodo === previo.periodo && c.duro && !previo.duro)) {
+      mejor.set(id, c);
+    }
+  };
+  for (const c of capturados) {
+    proponer(c.bankAccountId, {
+      periodo: c.year * 100 + c.month,
+      saldo: Number(c.saldoFinalEstado),
+      etiqueta: `${MESES_ES[c.month - 1]} ${c.year}`,
+      duro: true,
+    });
+  }
+  for (const l of lotes) {
+    const [y, m] = (l.periodo ?? "").split("-").map(Number);
+    if (!y || !m || m < 1 || m > 12) continue;
+    proponer(l.bankAccountId, {
+      periodo: y * 100 + m,
+      saldo: Number(l.saldoFinal),
+      etiqueta: `el estado de cuenta de ${MESES_ES[m - 1]} ${y}`,
+      duro: false,
+    });
+  }
+  if (mejor.size === 0) return out;
+
+  // Neto de los movimientos entre el fin del mes del ancla y el inicio de éste.
+  const netos = await Promise.all(
+    [...mejor.entries()].map(async ([id, c]) => {
+      const y = Math.floor(c.periodo / 100);
+      const m = c.periodo % 100;
+      const desde = new Date(y, m, 1); // primer día del mes SIGUIENTE al ancla
+      if (desde >= inicioDelMes) return [id, c, 0] as const;
+      const agg = await prisma.bankTransaction.aggregate({
+        where: { companyId, bankAccountId: id, fecha: { gte: desde, lt: inicioDelMes } },
+        _sum: { monto: true },
+      });
+      return [id, c, Number(agg._sum.monto ?? 0)] as const;
+    })
+  );
+  for (const [id, c, neto] of netos) {
+    out.set(id, { saldo: c.saldo, etiqueta: c.etiqueta, netoHastaInicioDelMes: neto });
+  }
+  return out;
 }
