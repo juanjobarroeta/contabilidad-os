@@ -95,23 +95,41 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sin acceso a esta empresa" }, { status: 403 });
   }
 
-  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED): con la
-  // prueba vencida el chat responde 402 con mensaje en español para la UI.
-  const gate = await gateEscritura(session.user.id);
+  // Todo lo que sigue a la membresía va EN PARALELO: eran cuatro viajes a la
+  // base en serie (suscripción, empresa, techo de IA) más la evaluación del
+  // cierre, y el usuario no veía la primera letra hasta que terminaban.
+  // La empresa se pide UNA vez (antes se consultaba dos: plan y datos).
+  const [gate, empresa, guardia, cierreEvaluado] = await Promise.all([
+    // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED): con la
+    // prueba vencida el chat responde 402 con mensaje en español para la UI.
+    gateEscritura(session.user.id),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { rfc: true, razonSocial: true, regimenFiscal: true, codigoPostal: true, tier: true, despachoId: true },
+    }),
+    // Guardia de IA: techo mensual de la empresa (todas las funciones, + extra
+    // comprado) y tope diario de operaciones del usuario. Se re-evalúa en cada
+    // ronda de herramientas más abajo, para que un turno no se pase del techo.
+    asegurarUsoIA({ userId: session.user.id, companyId }),
+    // Cierre guiado: si el usuario está en /cierre, el periodo y el paso viajan
+    // en el contexto. Con ellos el copiloto recibe el estado de los doce pasos
+    // y las CIFRAS ya calculadas del paso activo. La evaluación se memoiza por
+    // proceso (ver evaluar.ts): la pantalla acaba de pedirla, así que casi
+    // siempre es un acierto y no cuesta nada.
+    cierreCtx
+      ? (async () => {
+          if (!(await empresaTieneCierreGuiado(companyId))) return null;
+          return evaluarCierre(companyId, cierreCtx.year, cierreCtx.month);
+        })().catch((e) => {
+          console.error("[ai/chat] contexto del cierre falló:", e instanceof Error ? e.message : e);
+          return null;
+        })
+      : Promise.resolve(null),
+  ]);
   if (gate) return gate;
-
-  const companyPlan = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { tier: true, despachoId: true },
-  });
-  if (!companyPlan) {
+  if (!empresa) {
     return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
   }
-
-  // Guardia de IA: techo mensual de la empresa (todas las funciones, + extra
-  // comprado) y tope diario de operaciones del usuario. Se re-evalúa en cada
-  // ronda de herramientas más abajo, para que un turno no se pase del techo.
-  const guardia = await asegurarUsoIA({ userId: session.user.id, companyId });
   if (!guardia.ok) return respuestaTopeIA(guardia);
 
   // Backstop por USUARIO: el techo anterior protege el COGS de la empresa, pero
@@ -121,7 +139,7 @@ export async function POST(req: Request) {
   const userDaily = await checkChatUserDaily({
     userId: session.user.id,
     companyId,
-    plan: effectiveWhatsappPlan({ tier: companyPlan.tier, despachoId: companyPlan.despachoId }),
+    plan: effectiveWhatsappPlan({ tier: empresa.tier, despachoId: empresa.despachoId }),
   });
   if (!userDaily.allowed) {
     return NextResponse.json({ error: userDaily.mensaje }, { status: 429 });
@@ -132,27 +150,19 @@ export async function POST(req: Request) {
   const canWrite = member.role !== "VIEWER";
   const availableTools = canWrite ? tools : tools.filter((t) => !t.name.startsWith("proponer_"));
 
-  // ── Contexto del cierre guiado ─────────────────────────────────────────────
-  // Se evalúa SIN persistir (el pase diario es quien escribe) y se redacta como
-  // bloque de sistema. Si la empresa no tiene el plan, se ignora en silencio:
-  // el chat normal sigue funcionando.
-  let bloqueDelCierre: string | undefined;
-  if (cierreCtx) {
-    try {
-      if (await empresaTieneCierreGuiado(companyId)) {
-        const cierre = await evaluarCierre(companyId, cierreCtx.year, cierreCtx.month);
-        const activo = cierreCtx.paso ? (cierre.pasos.find((p) => p.clave === cierreCtx.paso) ?? null) : null;
-        // El paso dice QUÉ REVISAR, no qué puede ver: el copiloto conserva
-        // TODAS sus herramientas dentro del cierre. Acotarlas por paso lo
-        // dejaba ciego (en «punto de partida» no podía mirar facturas ni
-        // bancos) y encima invalidaba la caché del prompt en cada cambio de
-        // paso, porque las tools van en el prefijo cacheado.
-        bloqueDelCierre = bloqueCierre(cierre, activo, etiquetaPeriodo(cierreCtx.year, cierreCtx.month));
-      }
-    } catch (e) {
-      console.error("[ai/chat] contexto del cierre falló:", e instanceof Error ? e.message : e);
-    }
-  }
+  // El bloque del cierre para el prompt. El paso dice QUÉ REVISAR, no qué puede
+  // ver: el copiloto conserva TODAS sus herramientas dentro del cierre.
+  // Acotarlas por paso lo dejaba ciego (en «punto de partida» no podía mirar
+  // facturas ni bancos) y encima invalidaba la caché del prompt en cada cambio
+  // de paso, porque las tools van en el prefijo cacheado.
+  const bloqueDelCierre =
+    cierreEvaluado && cierreCtx
+      ? bloqueCierre(
+          cierreEvaluado,
+          cierreCtx.paso ? (cierreEvaluado.pasos.find((p) => p.clave === cierreCtx.paso) ?? null) : null,
+          etiquetaPeriodo(cierreCtx.year, cierreCtx.month)
+        )
+      : undefined;
 
   // ── Persistencia de la conversación ─────────────────────────────────────────
   // El último mensaje del cliente es el nuevo turno del usuario. Resolvemos (o
@@ -182,18 +192,9 @@ export async function POST(req: Request) {
     convCreada = true;
   }
 
-  // Fetch company context for system prompt
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { rfc: true, razonSocial: true, regimenFiscal: true, codigoPostal: true },
-  });
-  if (!company) {
-    return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
-  }
-
   // System prompt en bloques: el estable lleva cache_control (junto con `tools`
   // es casi toda la entrada del turno) y el de navegación va después.
-  const systemBlocks = buildSystemBlocks(company, { ruta: rutaActual, bloqueCierre: bloqueDelCierre });
+  const systemBlocks = buildSystemBlocks(empresa, { ruta: rutaActual, bloqueCierre: bloqueDelCierre });
 
   // Stream response with tool-use loop
   const encoder = new TextEncoder();
@@ -352,38 +353,53 @@ export async function POST(req: Request) {
 
           if (!hasToolUse) break;
 
-          // Execute all tool calls and build tool results
+          // Las herramientas de LECTURA de una misma ronda corren en paralelo:
+          // cuando el copiloto pide declaraciones + posición + checklist, en
+          // serie eran tres esperas encadenadas antes de volver al modelo. Las
+          // "proponer_*" siguen en serie y en orden: stagean sobre la misma
+          // conversación y la última propuesta es la que queda.
+          const llamadas = toolUseBlocks.filter((b): b is Anthropic.ToolUseBlockParam => b.type === "tool_use");
+          const correr = async (block: Anthropic.ToolUseBlockParam) => {
+            const t0 = Date.now();
+            const result = await executeToolCall(
+              block.name,
+              block.input as Record<string, unknown>,
+              companyId,
+              // inApp habilita las herramientas "proponer_*" (tarjeta Confirmar).
+              // Sólo roles con permiso de escritura pueden STAGEAR (VIEWER no);
+              // el confirm endpoint re-valida igualmente. userId habilita las
+              // herramientas de cartera (query_despacho_panorama), acotadas a
+              // las empresas accesibles del propio usuario.
+              { conversationId: convId!, inApp: canWrite, userId, cierre: cierreCtx }
+            );
+            return { block, result, ms: Date.now() - t0 };
+          };
+          const salidas = new Map<string, { result: string; ms: number }>();
+          const lecturas = llamadas.filter((b) => !b.name.startsWith("proponer_"));
+          for (const r of await Promise.all(lecturas.map(correr))) {
+            salidas.set(r.block.id, { result: r.result, ms: r.ms });
+          }
+          for (const block of llamadas.filter((b) => b.name.startsWith("proponer_"))) {
+            const r = await correr(block);
+            salidas.set(block.id, { result: r.result, ms: r.ms });
+          }
+
+          // El orden que ve el modelo es el orden en que pidió las herramientas.
           const toolResults: Anthropic.ToolResultBlockParam[] = [];
-          for (const block of toolUseBlocks) {
-            if (block.type === "tool_use") {
-              const t0 = Date.now();
-              const result = await executeToolCall(
-                block.name,
-                block.input as Record<string, unknown>,
-                companyId,
-                // inApp habilita las herramientas "proponer_*" (tarjeta Confirmar).
-                // Sólo roles con permiso de escritura pueden STAGEAR (VIEWER no);
-                // el confirm endpoint re-valida igualmente. userId habilita las
-                // herramientas de cartera (query_despacho_panorama), acotadas a
-                // las empresas accesibles del propio usuario.
-                { conversationId: convId!, inApp: canWrite, userId, cierre: cierreCtx }
-              );
-              traza.tools.push({ name: block.name, ms: Date.now() - t0 });
-              fuentesTurno.push(...fuentesDesdeToolResult(block.name, result));
-              if (block.name === "search_fiscal_knowledge") {
-                try {
-                  const r = JSON.parse(result) as { resultados?: { cita: string; similitud: number }[] };
-                  for (const h of r.resultados ?? []) traza.fundamentos.push({ cita: h.cita, similitud: h.similitud });
-                } catch {
-                  /* la traza es best-effort */
-                }
+          for (const block of llamadas) {
+            const salida = salidas.get(block.id);
+            if (!salida) continue;
+            traza.tools.push({ name: block.name, ms: salida.ms });
+            fuentesTurno.push(...fuentesDesdeToolResult(block.name, salida.result));
+            if (block.name === "search_fiscal_knowledge") {
+              try {
+                const r = JSON.parse(salida.result) as { resultados?: { cita: string; similitud: number }[] };
+                for (const h of r.resultados ?? []) traza.fundamentos.push({ cita: h.cita, similitud: h.similitud });
+              } catch {
+                /* la traza es best-effort */
               }
-              toolResults.push({
-                type: "tool_result",
-                tool_use_id: block.id,
-                content: result,
-              });
             }
+            toolResults.push({ type: "tool_result", tool_use_id: block.id, content: salida.result });
           }
 
           // Append assistant message with tool use + user message with tool results

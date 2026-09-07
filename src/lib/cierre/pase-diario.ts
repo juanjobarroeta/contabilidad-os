@@ -18,7 +18,7 @@ import { fechaLocalMx, registrarYNotificar } from "../notificaciones";
 import { usuariosConAccesoACompany } from "../push";
 import { effectiveCierrePlan, planIncluyeCierreGuiado } from "../planes";
 import { diffCierre, meritaPush, rankDeltas, type Delta } from "./avance";
-import { cargarHechosCierre, sincronizarCierre } from "./evaluar";
+import { cargarHechosCierre, invalidarCierre, sincronizarCierre } from "./evaluar";
 import { etiquetaPeriodo, redactarAviso } from "./plantillas";
 import { decidirPasos, periodoStr, periodosEnJuego, type PasoEvaluado } from "./workflow";
 
@@ -65,11 +65,15 @@ export async function conversacionDelPeriodo(
   responsableUserId: string | null
 ): Promise<string | null> {
   const periodo = periodoStr(year, month);
-  const cierre = await prisma.cierrePeriodo.findUnique({
+  // Upsert, no findUnique: sin la fila del periodo la conversación quedaba sin
+  // dueño y la siguiente llamada creaba OTRA — el hilo del cierre se perdía.
+  const cierre = await prisma.cierrePeriodo.upsert({
     where: { companyId_year_month: { companyId, year, month } },
+    create: { companyId, year, month },
+    update: {},
     select: { id: true, conversationId: true },
   });
-  if (cierre?.conversationId) return cierre.conversationId;
+  if (cierre.conversationId) return cierre.conversationId;
   const userId = await duenoConversacion(companyId, responsableUserId);
   if (!userId) return null;
   const conv = await prisma.chatConversation.create({
@@ -83,9 +87,7 @@ export async function conversacionDelPeriodo(
     },
     select: { id: true },
   });
-  if (cierre) {
-    await prisma.cierrePeriodo.update({ where: { id: cierre.id }, data: { conversationId: conv.id } });
-  }
+  await prisma.cierrePeriodo.update({ where: { id: cierre.id }, data: { conversationId: conv.id } });
   return conv.id;
 }
 
@@ -122,6 +124,8 @@ export async function avanzarCierreEmpresa(
     const hechos = await cargarHechosCierre(company.id, year, month, hoy);
     const evaluados = decidirPasos(hechos);
     const cierre = await sincronizarCierre(company.id, year, month, evaluados);
+    // El pase evalúa con evidencia fresca: lo memoizado por la pantalla ya no vale.
+    invalidarCierre(company.id, year, month);
     const fila = await prisma.cierrePeriodo.findUniqueOrThrow({
       where: { companyId_year_month: { companyId: company.id, year, month } },
       select: { id: true, snapshotAvance: true, responsableUserId: true, cerradoAt: true },

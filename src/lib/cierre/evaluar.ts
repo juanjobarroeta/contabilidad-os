@@ -32,6 +32,58 @@ import {
   type PasoEvaluado,
 } from "./workflow";
 
+// ── Memo del motor, por proceso ──────────────────────────────────────────────
+// Abrir un paso disparaba la MISMA evaluación cuatro veces: /api/cierre/estado
+// al cargar la pantalla, /api/cierre/paso/resumen al abrir el paso, otra en
+// cada turno del chat (el bloque del cierre viaja en el prompt) y una más por
+// cada query_cierre_* que el copiloto llamara. Cada una son tres motores
+// (readiness, checklist, apertura) y decenas de consultas: por eso «va lento».
+//
+// Se memoiza SÓLO la salida del motor (estados y cifras calculadas). La
+// decisión humana (PasoCierre) se lee siempre de la base, así que confirmar un
+// paso se ve al instante. Quien necesita evidencia fresca —la decisión del
+// humano, el pase diario— pide `fresco: true` y no acepta memo.
+const VENTANA_MEMO_MS = 45_000;
+const MAX_MEMO = 300;
+const memoMotor = new Map<string, { at: number; pasos: PasoEvaluado[] }>();
+
+function claveMemo(companyId: string, year: number, month: number): string {
+  return `${companyId}|${year}|${month}`;
+}
+
+/** Olvida lo memoizado (un dato del cierre cambió). Sin periodo, toda la empresa. */
+export function invalidarCierre(companyId: string, year?: number, month?: number): void {
+  if (year && month) {
+    memoMotor.delete(claveMemo(companyId, year, month));
+    return;
+  }
+  for (const k of [...memoMotor.keys()]) if (k.startsWith(`${companyId}|`)) memoMotor.delete(k);
+}
+
+async function motorDelPeriodo(
+  companyId: string,
+  year: number,
+  month: number,
+  opts: { hoy?: Date; fresco?: boolean }
+): Promise<PasoEvaluado[]> {
+  // Con `hoy` explícito (fixtures, una corrida con otra fecha) no se memoiza:
+  // la memo es para «ahora».
+  const memoizable = !opts.hoy;
+  const clave = claveMemo(companyId, year, month);
+  if (memoizable && !opts.fresco) {
+    const hit = memoMotor.get(clave);
+    if (hit && Date.now() - hit.at < VENTANA_MEMO_MS) return hit.pasos;
+  }
+  const hechos = await cargarHechosCierre(companyId, year, month, opts.hoy ?? new Date());
+  const pasos = decidirPasos(hechos);
+  if (memoizable) {
+    // Sin LRU: al llenarse se vacía entera. Es una caché de latencia, no de verdad.
+    if (memoMotor.size >= MAX_MEMO) memoMotor.clear();
+    memoMotor.set(clave, { at: Date.now(), pasos });
+  }
+  return pasos;
+}
+
 export interface PasoConDecision extends PasoEvaluado {
   estado: EstadoPasoCierre;
   confirmadoAt: string | null;
@@ -80,7 +132,7 @@ export async function cargarHechosCierre(
     cuentas,
     movimientosPorCuenta,
     firmas,
-    empleadosActivos,
+    activos,
     empleadosConRecibo,
     idsePendientes,
     hallazgosCriticos,
@@ -106,7 +158,7 @@ export async function cargarHechosCierre(
       _count: { _all: true },
     }),
     prisma.conciliacionBancaria.count({ where: { companyId, year, month, conciliadoAt: { not: null } } }),
-    prisma.employee.count({ where: { companyId, isActive: true } }),
+    prisma.employee.findMany({ where: { companyId, isActive: true }, select: { id: true } }),
     prisma.payrollItem.findMany({
       where: {
         payrollRun: { companyId, status: { in: ["STAMPED", "PAID"] }, fechaPago: { gte: from, lt: to } },
@@ -152,10 +204,9 @@ export async function cargarHechosCierre(
   const conRecibo = new Set(empleadosConRecibo.map((p) => p.employeeId));
   // Empleados activos sin recibo: se cuenta sobre los activos de hoy; si un
   // empleado entró después del mes, el checklist de nómina ya lo contempla.
-  const activos = await prisma.employee.findMany({
-    where: { companyId, isActive: true },
-    select: { id: true },
-  });
+  // (La lista de activos ya viene de la pasada paralela: antes se pedía dos
+  // veces, una para contar y otra para restar, y la segunda iba en serie.)
+  const empleadosActivos = activos.length;
   const empleadosSinRecibo =
     empleadosActivos === 0 ? 0 : activos.filter((e) => !conRecibo.has(e.id)).length;
 
@@ -220,6 +271,17 @@ export async function cargarHechosCierre(
             periodosTotales: apertura.sincronizacion.periodosTotales,
             faltantes: apertura.sincronizacion.faltantes.length,
           },
+          anualAnterior: apertura.anualAnterior
+            ? {
+                ejercicio: apertura.anualAnterior.ejercicio,
+                presentadaEl: apertura.anualAnterior.presentadaEl,
+                isrIngresos: apertura.anualAnterior.isrIngresos,
+                isrDeducciones: apertura.anualAnterior.isrDeducciones,
+                isrBaseGravable: apertura.anualAnterior.isrBaseGravable,
+                isrCoeficienteUtilidad: apertura.anualAnterior.isrCoeficienteUtilidad,
+                isrPerdidaPendiente: apertura.anualAnterior.isrPerdidaPendiente,
+              }
+            : null,
         }
       : null,
   };
@@ -227,16 +289,17 @@ export async function cargarHechosCierre(
   return { ctx, hoy, readiness, checklist, extras };
 }
 
-/** Evalúa el periodo; con `persistir` sincroniza CierrePeriodo/PasoCierre. */
+/**
+ * Evalúa el periodo; con `persistir` sincroniza CierrePeriodo/PasoCierre.
+ * Usa la memo del motor salvo que se pida `fresco` (decisión humana, pase diario).
+ */
 export async function evaluarCierre(
   companyId: string,
   year: number,
   month: number,
-  opts: { hoy?: Date; persistir?: boolean } = {}
+  opts: { hoy?: Date; persistir?: boolean; fresco?: boolean } = {}
 ): Promise<CierreEvaluado> {
-  const hoy = opts.hoy ?? new Date();
-  const hechos = await cargarHechosCierre(companyId, year, month, hoy);
-  const evaluados = decidirPasos(hechos);
+  const evaluados = await motorDelPeriodo(companyId, year, month, opts);
   if (opts.persistir) {
     return sincronizarCierre(companyId, year, month, evaluados);
   }
@@ -315,20 +378,22 @@ export async function sincronizarCierre(
   });
   const porClave = new Map(cierre.pasos.map((p) => [p.clave, p]));
   const revisados: string[] = [];
+  // Los doce pasos se escribían uno por uno, en serie: doce viajes a la base en
+  // cada carga de la pantalla. Se juntan en un createMany y una transacción.
+  const nuevos: Prisma.PasoCierreCreateManyInput[] = [];
+  const cambios: Prisma.PrismaPromise<unknown>[] = [];
 
   for (const ev of evaluados) {
     const row = porClave.get(ev.clave);
     const hechos = ev.hechos as Prisma.InputJsonValue;
     if (!row) {
-      await prisma.pasoCierre.create({
-        data: {
-          cierreId: cierre.id,
-          clave: ev.clave,
-          estadoCalculado: ev.estadoCalculado,
-          detalle: ev.detalle,
-          hechos,
-          hashEvidencia: ev.hashEvidencia,
-        },
+      nuevos.push({
+        cierreId: cierre.id,
+        clave: ev.clave,
+        estadoCalculado: ev.estadoCalculado,
+        detalle: ev.detalle,
+        hechos,
+        hashEvidencia: ev.hashEvidencia,
       });
       continue;
     }
@@ -343,17 +408,22 @@ export async function sincronizarCierre(
     ) {
       continue;
     }
-    await prisma.pasoCierre.update({
-      where: { id: row.id },
-      data: {
-        estadoCalculado: ev.estadoCalculado,
-        detalle: ev.detalle,
-        hechos,
-        hashEvidencia: ev.hashEvidencia,
-        ...(cambio ? { estado: "REVISAR" as const } : {}),
-      },
-    });
+    cambios.push(
+      prisma.pasoCierre.update({
+        where: { id: row.id },
+        data: {
+          estadoCalculado: ev.estadoCalculado,
+          detalle: ev.detalle,
+          hechos,
+          hashEvidencia: ev.hashEvidencia,
+          ...(cambio ? { estado: "REVISAR" as const } : {}),
+        },
+      })
+    );
   }
+
+  if (nuevos.length > 0) await prisma.pasoCierre.createMany({ data: nuevos, skipDuplicates: true });
+  if (cambios.length > 0) await prisma.$transaction(cambios);
 
   if (revisados.length > 0) {
     registrarBitacora({
@@ -365,11 +435,10 @@ export async function sincronizarCierre(
     });
   }
 
-  const fresco = await prisma.cierrePeriodo.findUniqueOrThrow({
-    where: { id: cierre.id },
-    include: { pasos: true },
-  });
-  return armarResultado(companyId, year, month, evaluados, fresco);
+  // Sin re-lectura: armarResultado sólo mira la DECISIÓN humana (estado, quién,
+  // cuándo, nota y hashConfirmado) y esta función no toca ninguno de esos
+  // campos — el paso a REVISAR lo deriva ella misma del hash.
+  return armarResultado(companyId, year, month, evaluados, cierre);
 }
 
 // ── La decisión humana ───────────────────────────────────────────────────────
@@ -396,8 +465,9 @@ async function decidir(
   accion: "confirmar" | "omitir" | "reabrir",
   a: ArgsDecision
 ): Promise<ResultadoDecision> {
-  // Siempre sobre evidencia FRESCA: se re-evalúa antes de aceptar.
-  const cierre = await evaluarCierre(a.companyId, a.year, a.month, { persistir: true });
+  // Siempre sobre evidencia FRESCA: se re-evalúa antes de aceptar, sin memo
+  // (el hash es la garantía de que el humano decide sobre lo que vio).
+  const cierre = await evaluarCierre(a.companyId, a.year, a.month, { persistir: true, fresco: true });
   const paso = cierre.pasos.find((p) => p.clave === a.clave);
   if (!paso || !cierre.cierreId) {
     return { ok: false, motivo: "no_existe", error: "El paso no existe en este periodo.", cierre };

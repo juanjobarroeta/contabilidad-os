@@ -43,6 +43,8 @@ export type PendingActionType =
   | "confirmar_paso"
   | "omitir_paso"
   | "fijar_coeficiente"
+  | "fijar_perdida"
+  | "fijar_saldo_favor_iva"
   | "confirmar_apertura";
 
 /** Acciones irreversibles — JAMÁS stageables. Se documentan para los tests. */
@@ -88,6 +90,14 @@ export type ChatPendingAction =
   // estampar la confirmación de la apertura. Reversibles (se vuelven a fijar);
   // la bitácora guarda el valor anterior para poder deshacer a mano.
   | (BasePending & { type: "fijar_coeficiente"; payload: { valor: number; anio: number; anterior: number | null } })
+  | (BasePending & {
+      type: "fijar_perdida";
+      payload: { valor: number; anio: number | null; anterior: number | null; origen: string };
+    })
+  | (BasePending & {
+      type: "fijar_saldo_favor_iva";
+      payload: { valor: number; anterior: number | null; origen: string };
+    })
   | (BasePending & { type: "confirmar_apertura"; payload: Record<string, never> });
 
 /** True si el tipo es una acción reversible permitida (lista blanca estricta). */
@@ -102,6 +112,8 @@ export function isReversibleType(type: string): type is PendingActionType {
     type === "confirmar_paso" ||
     type === "omitir_paso" ||
     type === "fijar_coeficiente" ||
+    type === "fijar_perdida" ||
+    type === "fijar_saldo_favor_iva" ||
     type === "confirmar_apertura"
   );
 }
@@ -180,6 +192,8 @@ type StagePayload =
       payload: { year: number; month: number; clave: string; hashEsperado: string; motivo: string };
     }
   | { type: "fijar_coeficiente"; payload: { valor: number; anio: number; anterior: number | null } }
+  | { type: "fijar_perdida"; payload: { valor: number; anio: number | null; anterior: number | null; origen: string } }
+  | { type: "fijar_saldo_favor_iva"; payload: { valor: number; anterior: number | null; origen: string } }
   | { type: "confirmar_apertura"; payload: Record<string, never> };
 
 /**
@@ -218,6 +232,21 @@ export type ExecuteResult = { ok: true; message: string } | { ok: false; error: 
  * empresa — así no se puede marcar el pendiente de otro usuario de la misma empresa.
  */
 export async function executeChatPendingAction(
+  pa: ChatPendingAction,
+  confirmingUserId: string,
+): Promise<ExecuteResult> {
+  const r = await ejecutar(pa, confirmingUserId);
+  // Cualquier acción confirmada puede mover la evidencia del cierre (conciliar
+  // un movimiento, fijar el coeficiente…): la memo del motor se olvida para que
+  // la siguiente lectura ya vea el cambio.
+  if (r.ok) {
+    const { invalidarCierre } = await import("../cierre/evaluar");
+    invalidarCierre(pa.companyId);
+  }
+  return r;
+}
+
+async function ejecutar(
   pa: ChatPendingAction,
   confirmingUserId: string,
 ): Promise<ExecuteResult> {
@@ -318,6 +347,65 @@ export async function executeChatPendingAction(
       return {
         ok: true,
         message: `Coeficiente de utilidad del ejercicio ${anio} fijado en ${redondeado}. El ISR provisional ya se puede calcular con él.`,
+      };
+    }
+
+    case "fijar_perdida": {
+      // Mismo update que PATCH /api/companies/[id]/apertura (perdidaPendiente):
+      // el remanente de pérdidas PM del Art. 14 que amortiza el provisional.
+      // Un CERO es una captura válida y deliberada: dice «revisé la anual y no
+      // hay pérdidas por amortizar», que no es lo mismo que no tener dato.
+      const { valor, anio, anterior, origen } = pa.payload;
+      if (!Number.isFinite(valor) || valor < 0) {
+        return { ok: false, error: "El remanente de pérdidas debe ser un monto positivo (o cero)." };
+      }
+      const redondeado = Math.round(valor * 100) / 100;
+      await prisma.company.update({
+        where: { id: pa.companyId },
+        data: { perdidaFiscalPendiente: redondeado, perdidaFiscalAnio: anio ?? null },
+      });
+      registrarBitacora({
+        companyId: pa.companyId,
+        userId: confirmingUserId,
+        accion: "apertura.perdida.fijar",
+        entidad: "Company",
+        entidadId: pa.companyId,
+        detalle: { anio, antes: anterior, despues: redondeado, origen, via: "copiloto" },
+      });
+      return {
+        ok: true,
+        message:
+          redondeado === 0
+            ? "Pérdidas por amortizar capturadas en $0 (revisado, no supuesto). El punto de partida deja de pedirlo."
+            : `Pérdidas por amortizar del punto de partida fijadas en ${redondeado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}${anio ? ` (ejercicio ${anio})` : ""}.`,
+      };
+    }
+
+    case "fijar_saldo_favor_iva": {
+      // Mismo update que PATCH /api/companies/[id]/apertura
+      // (ivaSaldoFavorInicial): escribe la fila IVA_MENSUAL del mes anterior al
+      // primero computado — la MISMA que lee el arrastre del Art. 6 LIVA.
+      const { valor, anterior, origen } = pa.payload;
+      if (!Number.isFinite(valor) || valor < 0) {
+        return { ok: false, error: "El saldo a favor inicial debe ser un monto positivo (o cero)." };
+      }
+      const redondeado = Math.round(valor * 100) / 100;
+      const { guardarSaldoFavorInicial } = await import("@/lib/fiscal/apertura");
+      const r = await guardarSaldoFavorInicial(pa.companyId, redondeado);
+      registrarBitacora({
+        companyId: pa.companyId,
+        userId: confirmingUserId,
+        accion: "apertura.saldo_favor_iva.fijar",
+        entidad: "Company",
+        entidadId: pa.companyId,
+        detalle: { periodo: r.periodo, antes: anterior ?? r.anterior, despues: redondeado, origen, via: "copiloto" },
+      });
+      return {
+        ok: true,
+        message:
+          redondeado === 0
+            ? `Saldo a favor de IVA inicial capturado en $0 (revisado, no supuesto) en ${r.periodo}.`
+            : `Saldo a favor de IVA inicial fijado en ${redondeado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} en ${r.periodo}.`,
       };
     }
 

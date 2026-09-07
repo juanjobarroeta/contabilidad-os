@@ -126,6 +126,15 @@ function apertura(over: Partial<ResumenApertura> = {}): ResumenApertura {
     perdidasPorAmortizar: 0,
     pagosProvisionales: { total: 7, conAcuse: 7 },
     sincronizacion: { periodosCubiertos: 8, periodosTotales: 8, faltantes: 0 },
+    anualAnterior: {
+      ejercicio: 2025,
+      presentadaEl: "2026-03-30",
+      isrIngresos: 1_000_000,
+      isrDeducciones: 900_000,
+      isrBaseGravable: 100_000,
+      isrCoeficienteUtilidad: 0.0842,
+      isrPerdidaPendiente: null,
+    },
     ...over,
   };
 }
