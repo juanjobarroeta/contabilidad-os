@@ -111,7 +111,42 @@ function CierrePageInner() {
     // Confirmar desde la tarjeta del copiloto cambia el estado del cierre.
     onAccionConfirmada: () => void cargar(),
   });
-  const { messages, setMessages, isLoading, activeTool, pendingAction, confirming, enviar, confirmar, cancelar, reset } = chat;
+  const { messages, setMessages, isLoading, activeTool, pendingAction, confirming, enviar, confirmar, cancelar, fijarConversacion } =
+    chat;
+
+  // ── El hilo del periodo ────────────────────────────────────────────────────
+  // El cierre lo trabaja el equipo a lo largo del mes: la conversación vive en
+  // la base (la misma en la que escribe el pase diario), no en la memoria de la
+  // pestaña. Antes cambiabas de sección y había que empezar de cero.
+  const [hiloListo, setHiloListo] = useState(false);
+  useEffect(() => {
+    if (!companyId) return;
+    let cancelado = false;
+    setHiloListo(false);
+    (async () => {
+      try {
+        const res = await fetch(`/api/cierre/conversacion?companyId=${companyId}&year=${year}&month=${month}`);
+        const j = (await res.json().catch(() => null)) as
+          | { conversationId?: string | null; messages?: { id: string; role: string; content: string; feedback?: "up" | "down" | null }[] }
+          | null;
+        if (cancelado) return;
+        fijarConversacion(j?.conversationId ?? null);
+        setMessages(
+          (j?.messages ?? [])
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({ id: m.id, role: m.role as "user" | "assistant", content: m.content, feedback: m.feedback ?? null }))
+        );
+      } catch {
+        /* sin hilo previo se sigue pudiendo conversar; el turno lo crea */
+      } finally {
+        if (!cancelado) setHiloListo(true);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, year, month]);
 
   // La apertura del paso: la escribe el copiloto con las cifras ya calculadas y
   // viene cacheada por el hash de la evidencia (sólo cuesta cuando cambia).
@@ -119,18 +154,24 @@ function CierrePageInner() {
   const hashActivo = pasoActivo?.hashEvidencia;
   const [abriendo, setAbriendo] = useState(false);
   useEffect(() => {
-    if (!companyId || !claveActiva) return;
+    if (!companyId || !claveActiva || !hiloListo) return;
     let cancelado = false;
     setAbriendo(true);
-    reset();
     (async () => {
       try {
         const res = await fetch(
           `/api/cierre/paso/resumen?companyId=${companyId}&year=${year}&month=${month}&clave=${claveActiva}`
         );
-        const j = (await res.json().catch(() => null)) as { texto?: string } | null;
-        if (cancelado) return;
-        if (j?.texto) setMessages([{ role: "assistant", content: j.texto }]);
+        const j = (await res.json().catch(() => null)) as { texto?: string; mensajeId?: string | null } | null;
+        if (cancelado || !j?.texto) return;
+        // La apertura queda anclada en el hilo (una por paso y evidencia): si ya
+        // está cargada no se repite, y si es nueva se agrega al final.
+        const texto = j.texto;
+        const mensajeId = j.mensajeId ?? undefined;
+        setMessages((prev) => {
+          if (mensajeId ? prev.some((m) => m.id === mensajeId) : prev.some((m) => m.content === texto)) return prev;
+          return [...prev, { role: "assistant", content: texto, id: mensajeId }];
+        });
       } catch {
         /* la barra de acción y la espina siguen sirviendo sin apertura */
       } finally {
@@ -142,7 +183,7 @@ function CierrePageInner() {
     };
     // hashActivo entra a propósito: si la evidencia cambió, la apertura se rehace.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId, claveActiva, hashActivo, year, month]);
+  }, [companyId, claveActiva, hashActivo, year, month, hiloListo]);
 
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -307,9 +348,9 @@ function CierrePageInner() {
             </div>
 
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
-              {abriendo && messages.length === 0 && (
+              {!hiloListo && (
                 <p className="flex items-center gap-2 text-[13px] text-cos-ink-soft">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Revisando el paso…
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Abriendo el hilo del cierre…
                 </p>
               )}
               {messages.map((m, i) => (
@@ -324,6 +365,12 @@ function CierrePageInner() {
                   </div>
                 </div>
               ))}
+
+              {abriendo && (
+                <p className="flex items-center gap-2 text-[13px] text-cos-ink-soft">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Revisando el paso…
+                </p>
+              )}
 
               {activeTool && (
                 <p className="flex items-center gap-2 text-[12.5px] text-cos-amber-ink">
