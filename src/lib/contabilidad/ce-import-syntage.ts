@@ -26,7 +26,7 @@ import { SyntageClient } from "@/lib/fiscal/cumplimiento/syntage/client";
 import { descargarXmlDeRef } from "@/lib/fiscal/cumplimiento/syntage/descarga-xml";
 import { importarCatalogo, importarBalanza } from "./ce-import-apply";
 import { parseCatalogoCuentas } from "./ce-import";
-import { CODIGO_AGRUPADOR_OFICIAL } from "./codigo-agrupador";
+import { codigoDeCuenta, esAgrupadorOficial, sinAgrupadorValido } from "./agrupador";
 
 type Json = Record<string, unknown>;
 
@@ -216,6 +216,7 @@ export interface RellenoNombresResult {
   agrupadasValidas: number;
   /** Las que siguen sin agrupador: no aparecen en ningún catálogo presentado. */
   siguenSinAgrupador: string[];
+  siguenSinAgrupadorCuentas: number;
   /** Catálogos leídos, del más nuevo al más viejo. */
   catalogosLeidos: Array<{ periodo: string; cuentasConDesc: number; nombro: number; agrupo: number }>;
   error?: string;
@@ -229,6 +230,7 @@ const VACIO = {
   agrupadas: 0,
   agrupadasValidas: 0,
   siguenSinAgrupador: [] as string[],
+  siguenSinAgrupadorCuentas: 0,
   catalogosLeidos: [] as RellenoNombresResult["catalogosLeidos"],
 };
 
@@ -293,17 +295,22 @@ export async function rellenarNombresDeCuentas(
   //     agrupador. Se sustituye SÓLO si el catálogo presentado trae uno
   //     válido — cambiar basura por basura no arregla nada, y pisar un código
   //     bueno sería peor.
-  const sinAgrupador = new Map<string, { id: string; codigo: string; tenia: boolean }>();
+  // Por CÓDIGO, pero con TODAS las cuentas que lo comparten: antes el Map
+  // guardaba una sola y las demás se quedaban sin rellenar (y sin contarse, lo
+  // que hacía que este barrido reportara 4 donde el cierre veía 350).
+  const sinAgrupador = new Map<string, { id: string; tenia: boolean }[]>();
+  let sinAgrupadorAntes = 0;
   for (const c of cuentas) {
-    const codigo = (c.subcuenta ?? c.cuentaSAT).trim();
+    const codigo = codigoDeCuenta(c);
     if (c.nombre.trim() === codigo) pendientes.set(codigo, { id: c.id, codigo });
-    const emitido = (c.codAgrup ?? codigo).trim();
-    if (!(emitido in CODIGO_AGRUPADOR_OFICIAL)) {
-      sinAgrupador.set(codigo, { id: c.id, codigo, tenia: c.codAgrup != null });
+    if (sinAgrupadorValido(c)) {
+      const lista = sinAgrupador.get(codigo) ?? [];
+      lista.push({ id: c.id, tenia: (c.codAgrup ?? "").trim() !== "" });
+      sinAgrupador.set(codigo, lista);
+      sinAgrupadorAntes++;
     }
   }
   const sinNombreAntes = pendientes.size;
-  const sinAgrupadorAntes = sinAgrupador.size;
   if (sinNombreAntes === 0 && sinAgrupadorAntes === 0) {
     return { ...base, ...VACIO };
   }
@@ -337,19 +344,26 @@ export async function rellenarNombresDeCuentas(
       const desc = c.desc.trim();
       const codAgrup = c.codAgrup.trim();
       const pendNombre = desc ? pendientes.get(codigo) : undefined;
-      const candidato = codAgrup ? sinAgrupador.get(codigo) : undefined;
       // A una cuenta que ya trae un código guardado sólo se le pisa con uno
       // que de verdad exista en el Anexo 24.
-      const pendAgrup =
-        candidato && (!candidato.tenia || codAgrup in CODIGO_AGRUPADOR_OFICIAL) ? candidato : undefined;
+      const candidatos = (codAgrup ? sinAgrupador.get(codigo) : undefined)?.filter(
+        (x) => !x.tenia || esAgrupadorOficial(codAgrup),
+      );
+      const pendAgrup = candidatos && candidatos.length > 0 ? candidatos : undefined;
       if (!pendNombre && !pendAgrup) continue;
-      await prisma.chartAccount.update({
-        where: { id: (pendNombre ?? pendAgrup)!.id },
-        data: {
-          ...(pendNombre ? { nombre: desc } : {}),
-          ...(pendAgrup ? { codAgrup } : {}),
-        },
-      });
+      const ids = new Set<string>([
+        ...(pendNombre ? [pendNombre.id] : []),
+        ...(pendAgrup ? pendAgrup.map((x) => x.id) : []),
+      ]);
+      for (const id of ids) {
+        await prisma.chartAccount.update({
+          where: { id },
+          data: {
+            ...(pendNombre && id === pendNombre.id ? { nombre: desc } : {}),
+            ...(pendAgrup && pendAgrup.some((x) => x.id === id) ? { codAgrup } : {}),
+          },
+        });
+      }
       if (pendNombre) {
         pendientes.delete(codigo);
         nombroAqui++;
@@ -357,9 +371,9 @@ export async function rellenarNombresDeCuentas(
       }
       if (pendAgrup) {
         sinAgrupador.delete(codigo);
-        agrupoAqui++;
-        agrupadas++;
-        if (codAgrup in CODIGO_AGRUPADOR_OFICIAL) agrupadasValidas++;
+        agrupoAqui += pendAgrup.length;
+        agrupadas += pendAgrup.length;
+        if (esAgrupadorOficial(codAgrup)) agrupadasValidas += pendAgrup.length;
       }
     }
     const p = periodoDe(rec as Json);
@@ -385,6 +399,9 @@ export async function rellenarNombresDeCuentas(
     // resuelto: la CE lo seguiría rechazando y decir lo contrario sería mentir.
     agrupadasValidas,
     siguenSinAgrupador: [...sinAgrupador.keys()].sort(),
+    // Cuentas (no códigos) que siguen sin agrupador válido: es el número que
+    // el paso «Contabilidad» del cierre muestra, para poder compararlos.
+    siguenSinAgrupadorCuentas: [...sinAgrupador.values()].reduce((n, l) => n + l.length, 0),
     catalogosLeidos,
   };
 }

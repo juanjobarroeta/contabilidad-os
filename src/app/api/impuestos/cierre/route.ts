@@ -8,6 +8,7 @@ import { detectComplementosPendientes } from "@/lib/complementos";
 import { formatCurrency } from "@/lib/utils";
 import { calcularVencimiento, type ObligacionConfig } from "@/lib/obligaciones";
 import { Prisma, type TaxDeclarationType } from "@prisma/client";
+import { evidenciaPresentacion } from "@/lib/fiscal/presentacion";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cierre mensual — the "ready to file" workspace for a single period.
@@ -171,6 +172,7 @@ export async function GET(req: Request) {
         estado: estadoFor(diotDecl?.status ?? null, calcularVencimiento(DIOT_CONFIG, periodo)),
         acuseUrl: diotDecl?.acuseUrl ?? null,
         fechaPresentacion: diotDecl?.fechaPresentacion ?? null,
+        evidencia: evidenciaPresentacion(diotDecl ?? null),
       }
     : null;
 
@@ -240,6 +242,9 @@ export async function GET(req: Request) {
       // guardan juntos, así que el nombre es señal fiable de que el PDF existe.
       declaracionId: federalDecl?.id ?? null,
       acusePdfDisponible: !!federalDecl?.acusePdfNombre,
+      // Qué prueba la presentación: acuse del SAT, registro del SAT, o la
+      // palabra de alguien. La pantalla lo dice en vez de un «Presentada» pelón.
+      evidencia: evidenciaPresentacion(federalDecl ?? null),
       // True once the figures have been persisted (so "marcar presentada" is safe).
       calculado: !!declOf("IVA_MENSUAL") || !!declOf("ISR_PROVISIONAL"),
     },
@@ -300,6 +305,32 @@ export async function POST(req: Request) {
     fechaPresentacion: fechaPresentacion ? new Date(fechaPresentacion) : new Date(),
     fechaLimitePago: fechaLimitePago ? new Date(fechaLimitePago) : null,
   };
+
+  // Revertir borra los rastros del acuse (`clearAcuse`). Si la presentación la
+  // trajo el SAT —acuse PDF guardado por el backfill de Syntage— revertirla
+  // destruiría evidencia que no volvemos a pedir (el sync no re-crea filas que
+  // ya existen) y dejaría el periodo mintiendo. No se puede des-presentar lo
+  // que el SAT ya nos dijo que se presentó.
+  if (action === "unfile-federal" || action === "unfile-diot") {
+    const tipos =
+      action === "unfile-diot"
+        ? (["DIOT"] as const)
+        : (["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR"] as const);
+    const conAcuse = await prisma.taxDeclaration.findFirst({
+      where: { companyId, periodo, tipo: { in: [...tipos] }, acusePdfNombre: { not: null } },
+      select: { acusePdfNombre: true },
+    });
+    if (conAcuse) {
+      return NextResponse.json(
+        {
+          error:
+            "Esta declaración tiene el acuse del SAT guardado: no se puede marcar como no presentada. " +
+            "Si el acuse está mal, sube el correcto.",
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   if (action === "file-federal" || action === "unfile-federal") {
     const filing = action === "file-federal";

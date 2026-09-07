@@ -20,7 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "../prisma";
-import { CODIGO_AGRUPADOR_OFICIAL } from "./codigo-agrupador";
+import { sinAgrupadorValido } from "./agrupador";
 import { balanza, balanzaPreview } from "./posting";
 
 // Tolerancia de cuadre (cargos vs abonos). Coincide con el balance check de
@@ -375,12 +375,10 @@ export async function evaluarReadinessCE(
   // afirmamos su ausencia (undefined) para no inventar el check.
   const esEmpresaNueva = company.createdAt.getUTCFullYear() === year;
 
-  // El MISMO CodAgrup que emitiría el XML del catálogo (coe-xml: codAgrup ??
-  // código de la cuenta), cotejado contra la lista oficial del Anexo 24.
-  const cuentasSinAgrupador = cuentasActivas.filter((a) => {
-    const emitido = a.codAgrup ?? a.subcuenta ?? a.cuentaSAT;
-    return !emitido || !(emitido in CODIGO_AGRUPADOR_OFICIAL);
-  }).length;
+  // El MISMO CodAgrup que emitiría el XML del catálogo, cotejado contra el
+  // Anexo 24 — con la MISMA función que usa el barrido que los rellena, para
+  // que las dos pantallas no puedan dar números distintos.
+  const cuentasSinAgrupador = cuentasActivas.filter(sinAgrupadorValido).length;
 
   return evaluarChecks({
     cfdiCount,

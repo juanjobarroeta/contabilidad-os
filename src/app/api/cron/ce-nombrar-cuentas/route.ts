@@ -92,6 +92,7 @@ async function handle(req: Request) {
       agrupadas: r.agrupadas,
       agrupadasValidas: r.agrupadasValidas,
       siguenSinAgrupador: r.siguenSinAgrupador.length,
+      siguenSinAgrupadorCuentas: r.siguenSinAgrupadorCuentas,
       catalogos: r.catalogosLeidos.length,
     }),
   );

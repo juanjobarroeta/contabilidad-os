@@ -8,6 +8,7 @@ import { sumIsrPagar } from "@/lib/isr-provisional";
 import { calcularDepreciacionRegistro } from "@/lib/fiscal/activos-registro";
 import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 import { perdidasDisponibles, aplicarPerdidas, primeraActualizacion } from "@/lib/fiscal/perdidas";
+import { evidenciaPresentacion } from "@/lib/fiscal/presentacion";
 
 // GET /api/declaracion-anual?companyId=xxx&ejercicio=2025
 // Aggregates all data for the annual declaration and calculates the result.
@@ -96,8 +97,22 @@ export async function GET(req: Request) {
       select: { isrPagar: true, tipo: true, periodo: true },
     }).then((rows) => rows.map((d) => ({ ...d, isrPagar: d.isrPagar === null ? null : Number(d.isrPagar) }))),
     // Check for existing saved annual declaration
+    // Select explícito: `acusePdf` son los bytes del PDF y no se usan aquí
+    // (se descargan por /api/declaraciones/acuse/[id]); traerlos encarecía cada
+    // carga de la pantalla. Los rastros de presentación sí viajan: con ellos la
+    // pantalla SABE si ya está presentada en vez de ofrecer marcarla a mano.
     prisma.taxDeclaration.findFirst({
       where: { companyId, tipo: "DECLARACION_ANUAL", periodo: String(ejercicio) },
+      select: {
+        id: true,
+        status: true,
+        isHistorical: true,
+        acusePdfNombre: true,
+        acuseUrl: true,
+        lineaCaptura: true,
+        acuseData: true,
+        fechaPresentacion: true,
+      },
     }),
     // Depreciación del registro de activo fijo (deducción de inversiones).
     calcularDepreciacionRegistro(companyId, ejercicio),
@@ -227,6 +242,11 @@ export async function GET(req: Request) {
       id: existingAnual.id,
       status: existingAnual.status,
       isHistorical: existingAnual.isHistorical,
+      // Qué sabemos y de dónde: si hay acuse del SAT, la pantalla no vuelve a
+      // preguntar si ya se presentó.
+      evidencia: evidenciaPresentacion(existingAnual),
+      acuseUrl: existingAnual.acuseUrl,
+      lineaCaptura: existingAnual.lineaCaptura,
     } : null,
     // Amortización de pérdidas fiscales (Art. 57): pendientes actualizadas a
     // junio del ejercicio. `algunaIncompleta` = faltó algún INPC (cae a nominal).
