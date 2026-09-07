@@ -287,7 +287,10 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
         : i.diot.generada
           ? "La DIOT del periodo está generada; falta presentarla al SAT."
           : "La DIOT del periodo está pendiente: genera el archivo y preséntala.",
-    accionUrl: i.diot.aplica ? linkMes : undefined,
+    // Al ancla de la DIOT, no al principio de la pestaña: la de «Presentar»
+    // abre con la sincronización del SAT y quien viene por la DIOT aterrizaba
+    // en un historial de solicitudes que no tiene nada que ver.
+    accionUrl: i.diot.aplica ? `${linkMes}#diot` : undefined,
   });
 
   // 8. Nómina del mes timbrada (sólo si hay empleados activos).
