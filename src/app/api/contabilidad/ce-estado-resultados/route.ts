@@ -31,7 +31,7 @@ export const GET = withAuthz(async (req: Request) => {
   const ytd = searchParams.get("ytd") === "1";
   const desdeMes = ytd ? 1 : mes;
 
-  const [declaradoRaw, derivadoRaw, nombres] = await Promise.all([
+  const [declaradoRaw, derivadoRaw, nombres, ceTotal] = await Promise.all([
     prisma.ceBalanzaMes.findMany({
       where: { companyId, anio, mes: { gte: desdeMes, lte: mes }, esPadre: false },
       select: { numCta: true, debe: true, haber: true },
@@ -54,7 +54,13 @@ export const GET = withAuthz(async (req: Request) => {
       where: { companyId },
       select: { cuentaSAT: true, subcuenta: true, nombre: true },
     }),
-  ]);
+      // ¿La empresa tiene CE en CUALQUIER período? Con cero, la columna
+    // «declarado» no está pendiente: no va a existir nunca (p. ej. RESICO, que
+    // no presenta Contabilidad Electrónica). Enseñar una comparación contra una
+    // columna estructuralmente vacía convierte todo el derivado en una
+    // «diferencia por explicar» que no hay que explicar.
+    prisma.ceBalanzaMes.count({ where: { companyId } }),
+]);
 
   const nombreDe = new Map(nombres.map((n) => [n.subcuenta ?? n.cuentaSAT, n.nombre]));
 
@@ -80,6 +86,8 @@ export const GET = withAuthz(async (req: Request) => {
   return NextResponse.json({
     anio,
     mes,
+    /** false = la empresa NUNCA ha presentado CE; la comparación no aplica. */
+    tieneCe: ceTotal > 0,
     ytd,
     ...construirEstadoResultados(declarado, derivado, { presentado }),
   });
