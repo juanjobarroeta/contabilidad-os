@@ -5,8 +5,10 @@
 // tablas salían como asteriscos y guiones crudos. Mapeamos cada elemento a algo
 // legible y discreto, pensado para burbujas de chat (no documento largo).
 
+import Link from "next/link";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { esEnlaceInterno } from "@/lib/ui/enlace";
 
 const components: Components = {
   p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
@@ -18,9 +20,19 @@ const components: Components = {
   h1: ({ children }) => <h1 className="mb-1.5 mt-1 text-[15px] font-semibold text-cos-ink">{children}</h1>,
   h2: ({ children }) => <h2 className="mb-1.5 mt-1 text-[14px] font-semibold text-cos-ink">{children}</h2>,
   h3: ({ children }) => <h3 className="mb-1 mt-1 text-[13.5px] font-semibold text-cos-ink">{children}</h3>,
-  a: ({ children, href }) => (
-    <a href={href} target="_blank" rel="noreferrer" className="text-cos-brand-ink underline underline-offset-2 hover:opacity-80">{children}</a>
-  ),
+  // Una ruta de la app navega DENTRO de la ventana; sólo lo que sale a otro
+  // sitio abre pestaña. Antes todo abría pestaña nueva, así que tocar «Mapear
+  // cuentas» arrancaba una segunda copia de la aplicación en vez de llevarte
+  // a la pantalla.
+  a: ({ children, href }) => {
+    const clases = "text-cos-brand-ink underline underline-offset-2 hover:opacity-80";
+    if (esEnlaceInterno(href)) {
+      return <Link href={href!} className={clases}>{children}</Link>;
+    }
+    return (
+      <a href={href} target="_blank" rel="noreferrer" className={clases}>{children}</a>
+    );
+  },
   code: ({ children }) => (
     <code className="rounded bg-cos-paper px-1 py-0.5 font-mono text-[12px] text-cos-ink">{children}</code>
   ),
