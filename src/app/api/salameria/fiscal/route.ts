@@ -3,6 +3,8 @@ import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { checklistDeclaracion } from "@/lib/fiscal/checklist-declaracion";
 import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
+import { iepsDelPeriodo } from "@/lib/salameria/ieps";
+import { prisma } from "@/lib/prisma";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/salameria/fiscal?companyId=…&year=2026&month=8
@@ -47,15 +49,23 @@ export const GET = withAuthz(async (req: Request) => {
 
   // El checklist ya corre el motor por dentro para sus banderas; la corrida
   // extra trae el desglose completo. Paralelo para no sumar latencia.
-  const [pos, checklist, retenciones] = await Promise.all([
+  const [pos, checklist, retenciones, ieps] = await Promise.all([
     computeTaxPosition(companyId, year, month),
     checklistDeclaracion(companyId, year, month, hoy),
     retencionesDelPeriodo(companyId, year, month),
+    // El motor del hub no calcula IEPS todavía; esto suma lo que los CFDIs ya
+    // dicen para que la pantalla no lo omita en silencio. Ver lib/salameria/ieps.ts.
+    iepsDelPeriodo(prisma, companyId, year, month),
   ]);
 
   // Lo que realmente sale del banco el día 17: impuesto propio (IVA + ISR
   // provisional) MÁS las retenciones, que no son de la empresa pero las entera
   // ella.
+  //
+  // OJO: el IEPS NO se suma aquí. Se conoce el trasladado y el pagado, pero no
+  // cuánto es acreditable (Art. 4 LIEPS limita el acreditamiento por inciso), y
+  // meter un neto sin esa regla daría un total con aire de exacto que puede
+  // estar equivocado por decenas de miles. Va aparte y etiquetado.
   const totalSat =
     Math.round(
       (Math.max(pos.iva.pagar, 0) +
@@ -75,6 +85,9 @@ export const GET = withAuthz(async (req: Request) => {
     isr: pos.isr,
     retenciones,
     totalSat,
+    /** Derivado de CFDIs, NO posición fiscal. `totalSat` no lo incluye. */
+    ieps,
+    iepsEnTotal: false,
     efos: pos.efos ?? null,
     advertencias: pos.advertencias,
     checklist: { items: checklist.items, resumen: checklist.resumen },
