@@ -19,6 +19,7 @@
 import type {
   CfdiInput,
   OrgProvisionResult,
+  PacCancelacion,
   PacErrorKind,
   PacOutcome,
   PacProvider,
@@ -167,7 +168,7 @@ export const swSapienPacProvider: PacProvider = {
     // No-op: el borrador de SW es local (no consume recursos del PAC).
   },
 
-  async cancelCfdi(_apiKey, pacId, motivo, sustituyeUuid): Promise<PacOutcome<void>> {
+  async cancelCfdi(_apiKey, pacId, motivo, sustituyeUuid): Promise<PacOutcome<PacCancelacion>> {
     if (!swConfigured()) return noConfigurado();
     const token = await getToken();
     if (!token) return fail(401, "No se pudo autenticar con SW sapien.", "auth");
@@ -183,7 +184,10 @@ export const swSapienPacProvider: PacProvider = {
       if (!res.ok || json?.status === "error") {
         return fail(res.status || 422, json?.message ?? "Error de SW al cancelar.", res.status === 401 ? "auth" : "validation");
       }
-      return { ok: true, data: undefined };
+      // SW acusa recibo de la SOLICITUD; no dice si el receptor ya aceptó. Se
+      // queda en proceso y lo confirma la consulta pública del SAT (el cron de
+      // vigencia): dar por cancelado lo que sigue vigente le quita ingresos al mes.
+      return { ok: true, data: { estado: "desconocido", detalle: json?.status ?? null } };
     } catch (e) {
       return fail(503, e instanceof Error ? e.message : "SW no disponible.", "server");
     }

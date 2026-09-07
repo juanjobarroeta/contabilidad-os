@@ -47,6 +47,7 @@ export type PendingActionType =
   | "fijar_saldo_favor_iva"
   | "firmar_conciliacion"
   | "marcar_diot_presentada"
+  | "fijar_agrupador"
   | "confirmar_apertura";
 
 /** Acciones irreversibles — JAMÁS stageables. Se documentan para los tests. */
@@ -108,6 +109,12 @@ export type ChatPendingAction =
       type: "marcar_diot_presentada";
       payload: { year: number; month: number; acuseUrl: string | null };
     })
+  // El código agrupador del Anexo 24 de UNA cuenta del catálogo. `anterior`
+  // queda en la bitácora para poder deshacerlo a mano.
+  | (BasePending & {
+      type: "fijar_agrupador";
+      payload: { chartAccountId: string; cuenta: string; codAgrup: string; anterior: string | null };
+    })
   | (BasePending & { type: "confirmar_apertura"; payload: Record<string, never> });
 
 /** True si el tipo es una acción reversible permitida (lista blanca estricta). */
@@ -126,6 +133,7 @@ export function isReversibleType(type: string): type is PendingActionType {
     type === "fijar_saldo_favor_iva" ||
     type === "firmar_conciliacion" ||
     type === "marcar_diot_presentada" ||
+    type === "fijar_agrupador" ||
     type === "confirmar_apertura"
   );
 }
@@ -208,6 +216,10 @@ type StagePayload =
   | { type: "fijar_saldo_favor_iva"; payload: { valor: number; anterior: number | null; origen: string } }
   | { type: "firmar_conciliacion"; payload: { bankAccountId: string; year: number; month: number; etiqueta: string } }
   | { type: "marcar_diot_presentada"; payload: { year: number; month: number; acuseUrl: string | null } }
+  | {
+      type: "fijar_agrupador";
+      payload: { chartAccountId: string; cuenta: string; codAgrup: string; anterior: string | null };
+    }
   | { type: "confirmar_apertura"; payload: Record<string, never> };
 
 /**
@@ -486,6 +498,39 @@ async function ejecutar(
       return {
         ok: true,
         message: `DIOT de ${periodo} marcada como presentada. Si te equivocaste, se revierte en Impuestos → Presentar.`,
+      };
+    }
+
+    case "fijar_agrupador": {
+      // Sin el agrupador correcto el XML de contabilidad electrónica emite el
+      // número propio de la cuenta y el SAT lo rechaza. Se re-valida contra el
+      // Anexo 24 aquí: entre proponer y confirmar pudo cambiar el catálogo.
+      const { esAgrupadorOficial } = await import("@/lib/contabilidad/agrupador");
+      if (!esAgrupadorOficial(pa.payload.codAgrup)) {
+        return { ok: false, error: `«${pa.payload.codAgrup}» no existe en el Anexo 24.` };
+      }
+      const cuenta = await prisma.chartAccount.findFirst({
+        where: { id: pa.payload.chartAccountId, companyId: pa.companyId },
+        select: { id: true, codAgrup: true, nombre: true },
+      });
+      if (!cuenta) return { ok: false, error: "Esa cuenta ya no existe en el catálogo." };
+      await prisma.chartAccount.update({
+        where: { id: cuenta.id },
+        data: { codAgrup: pa.payload.codAgrup },
+      });
+      registrarBitacora({
+        companyId: pa.companyId,
+        userId: confirmingUserId,
+        accion: "contabilidad.cuenta.agrupador",
+        entidad: "ChartAccount",
+        entidadId: cuenta.id,
+        detalle: { cuenta: pa.payload.cuenta, codAgrup: pa.payload.codAgrup, anterior: pa.payload.anterior, via: "copiloto" },
+      });
+      return {
+        ok: true,
+        message:
+          `Cuenta ${pa.payload.cuenta} agrupada como ${pa.payload.codAgrup}. ` +
+          "Se cambia en Contabilidad → Catálogo de cuentas.",
       };
     }
 

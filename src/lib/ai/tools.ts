@@ -590,6 +590,35 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "query_cuentas_sin_agrupador",
+    description:
+      "Lista LAS CUENTAS concretas del catálogo de la empresa cuyo código agrupador NO existe en el Anexo 24 — exactamente las que cuenta la señal «N cuentas sin código agrupador del SAT» del paso Contabilidad del cierre. Para cada una devuelve su número, su nombre, su tipo, si nació de la balanza (nombre = su propio número, señal de que NUNCA vino de un catálogo presentado) y una BARAJA de códigos oficiales del Anexo 24 que podrían aplicarle, ordenada por parecido. Úsala SIEMPRE antes de mandar al usuario a otra pantalla: la señal dice cuántas son, esto dice cuáles y con qué se arreglan. Los códigos que propongas TIENEN que salir de esa baraja: el Anexo 24 es una lista cerrada y un código inventado hace que el SAT rechace la contabilidad electrónica.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        limit: { type: "number", description: "Máximo de cuentas a devolver (default 20)." },
+        candidatos_por_cuenta: {
+          type: "number",
+          description: "Cuántos códigos del Anexo 24 proponer por cuenta (default 8, máx 25).",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "proponer_fijar_agrupador",
+    description:
+      "Propone ASIGNAR el código agrupador del Anexo 24 a UNA cuenta del catálogo, pendiente del tap del usuario. `cuenta` es el número de la cuenta tal como lo devuelve query_cuentas_sin_agrupador. `cod_agrup` DEBE ser uno de los códigos de la baraja de esa cuenta: se rechaza cualquier código que no esté en el Anexo 24, y también uno de otra clase (un gasto no puede llevar código de activo). Di siempre POR QUÉ ese código y no otro. Reversible: se cambia en Contabilidad → Catálogo de cuentas.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        cuenta: { type: "string", description: "Número de la cuenta en el catálogo de la empresa (p.ej. «1301-0028-0000»)." },
+        cod_agrup: { type: "string", description: "Código del Anexo 24 a asignar (p.ej. «102.01»)." },
+      },
+      required: ["cuenta", "cod_agrup"],
+    },
+  },
+  {
     name: "proponer_firmar_conciliacion",
     description:
       "Propone FIRMAR («dar por conciliada») la conciliación bancaria de una cuenta y mes, pendiente del tap del usuario. Es lo que apaga la señal «0 de 1 cuenta con la conciliación del mes firmada» del paso Bancos. Sin `bank_account_id` firma la única cuenta con movimientos del mes que falte. Se rechaza si quedan movimientos sin registrar: primero se concilian. Reversible (la firma se quita en Contabilidad → Conciliación).",

@@ -286,6 +286,8 @@ export const TOOL_LABELS: Record<string, string> = {
   proponer_fijar_coeficiente: "Preparando el coeficiente",
   proponer_fijar_perdida: "Preparando las pérdidas por amortizar",
   proponer_firmar_conciliacion: "Preparando la firma de la conciliación",
+  query_cuentas_sin_agrupador: "Revisando el catálogo de cuentas",
+  proponer_fijar_agrupador: "Preparando el código agrupador",
   proponer_marcar_diot_presentada: "Preparando el registro de la DIOT",
   proponer_fijar_saldo_favor_iva: "Preparando el saldo a favor inicial",
   proponer_confirmar_apertura: "Preparando la confirmación del punto de partida",

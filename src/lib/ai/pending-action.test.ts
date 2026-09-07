@@ -33,6 +33,7 @@ describe("isReversibleType — lista blanca estricta", () => {
       "fijar_coeficiente",
       "fijar_perdida",
       "fijar_saldo_favor_iva",
+      "fijar_agrupador",
       "confirmar_apertura",
     ]) {
       expect(isReversibleType(t)).toBe(true);
