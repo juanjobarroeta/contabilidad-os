@@ -144,6 +144,7 @@ async function handle(req: Request) {
     tipo: true,
     status: true,
     cancelSolicitadaAt: true,
+    cancelEstadoSat: true,
     rawXml: true,
     company: { select: { rfc: true } },
     customer: { select: { rfc: true } },
@@ -186,6 +187,39 @@ async function handle(req: Request) {
     }
   }
 
+  // ── EL ARCHIVO YA CANCELADO, UNA VEZ ─────────────────────────────────────
+  // `cancelSolicitadaAt` es columna nueva: TODO lo cancelado antes de este
+  // cambio la tiene vacía, así que el barrido de arriba no encontraría ni una
+  // sola de las facturas ya dañadas. Y el barrido normal nunca las mira (sólo
+  // STAMPED). Sin esto, una factura marcada cancelada por error —el caso que
+  // originó todo: $2.6M de un mes de $3.2M— seguiría invisible para siempre.
+  //
+  // Se pregunta UNA vez por factura y se apunta la respuesta en
+  // `cancelEstadoSat`; con eso el backlog es finito, se drena solo y después no
+  // cuesta nada. Un comprobante que el SAT ya dio por cancelado no vuelve a
+  // estar vigente, así que no hay nada que re-preguntar.
+  const cupoArchivo = Math.max(10, Math.floor(limit / 5));
+  const canceladasSinVerificar = await prisma.invoice.findMany({
+    where: {
+      ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
+      uuid: { not: null },
+      status: "CANCELLED",
+      cancelEstadoSat: null,
+      tipo: { in: ["INGRESO", "EGRESO", "PAGO"] },
+    },
+    select: SELECT_CANDIDATA,
+    // Las de mayor monto primero: son las que más distorsionan un mes, y así el
+    // daño grande sale en las primeras corridas y no dentro de dos semanas.
+    orderBy: [{ total: "desc" }],
+    take: cupoArchivo,
+  });
+  for (const c of canceladasSinVerificar) {
+    if (!vistas.has(c.id)) {
+      vistas.add(c.id);
+      invoices.push(c);
+    }
+  }
+
   let checked = 0;
   let skipped = 0;
   const cancelados: { id: string; uuid: string; companyId: string }[] = [];
@@ -215,6 +249,15 @@ async function handle(req: Request) {
           ? { re: inv.company.rfc, rr: inv.customer.rfc, tt: inv.total.toFixed(2), id: inv.uuid! }
           : null;
       if (!datos) {
+        // Una cancelada sin XML ni RFC receptor no se puede consultar: se marca
+        // para que salga del backlog del archivo en vez de re-intentarse en
+        // cada corrida. `sinDatos` no es un veredicto sobre la factura.
+        if (inv.status === "CANCELLED" && !inv.cancelEstadoSat) {
+          await prisma.invoice.update({
+            where: { id: inv.id },
+            data: { cancelEstadoSat: "No consultable" },
+          });
+        }
         // Sin datos para consultar (p. ej. recibida legacy sin XML). También
         // avanza el cursor: si no, estas facturas se quedan clavadas al frente
         // del orden (vigenciaCheckedAt null) y cada pasada las re-evalúa,
@@ -233,7 +276,11 @@ async function handle(req: Request) {
         const estado = await consultarEstadoCfdi(construirExpresion(datos));
         checked++;
         const cual = estado ? estadoDeCancelacion(estado) : "desconocido";
-        if (cual === "cancelado") {
+        // Sólo las que TODAVÍA no tenemos canceladas. Ahora que el barrido
+        // incluye el archivo ya cancelado, sin esta guarda cada corrida volvería
+        // a disparar la reversión de operación (unidades, costos, kardex) sobre
+        // facturas canceladas hace meses: trabajo inútil y riesgo gratis.
+        if (cual === "cancelado" && inv.status !== "CANCELLED") {
           cancelados.push({ id: inv.id, uuid: inv.uuid!, companyId: inv.companyId });
         }
         // Lo que el SAT dice del TRÁMITE, guardado tal cual. Con esto la
@@ -320,6 +367,17 @@ async function handle(req: Request) {
 
   // Cuánto falta DE VERDAD, para no confundir «sigue corriendo» con «avanza».
   const pendientes = await prisma.invoice.count({ where });
+  // El backlog del archivo ya cancelado: finito y se drena solo. Cuando llegue
+  // a 0, cada factura que tenemos por cancelada fue cotejada con el SAT una vez.
+  const archivoPendiente = await prisma.invoice.count({
+    where: {
+      ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
+      uuid: { not: null },
+      status: "CANCELLED",
+      cancelEstadoSat: null,
+      tipo: { in: ["INGRESO", "EGRESO", "PAGO"] },
+    },
+  });
   const empresasTotales = onlyCompanyId
     ? 1
     : await prisma.company.count({ where: { isActive: true } });
@@ -349,6 +407,8 @@ async function handle(req: Request) {
     // filas de operación que restaurar el estatus no deshace— pero salen aquí y
     // salen en la pantalla de facturas, en rojo.
     contradicciones,
+    // Facturas canceladas que todavía no se han cotejado con el SAT ni una vez.
+    archivoPendiente,
     // Lo que se deshizo en la capa de operación, para poder cuadrar el antes
     // con el después: sin esto una reversión es invisible.
     reversiones,
