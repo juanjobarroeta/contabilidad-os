@@ -31,6 +31,7 @@ type Mov = {
   referencia: string | null;
   invoiceId: string | null;
   uuid: string | null;
+  facturapiId: string | null;
   concepto: string;
   cargo: number;
   abono: number;
@@ -86,6 +87,9 @@ export const GET = withAuthz(
           total: true,
           metodoPago: true,
           tipoSat: true,
+          // Sólo los timbrados desde la app tienen PDF del PAC; para los de
+          // descarga masiva el satélite arma la representación desde el XML.
+          facturapiId: true,
           conciliacionDetalles: { select: { montoAsignado: true } },
         },
         orderBy: { fecha: "asc" },
@@ -132,6 +136,7 @@ export const GET = withAuthz(
         referencia: padre?.ref ?? null,
         invoiceId: r.pagoInvoiceId,
         uuid: padre?.uuid ?? null,
+        facturapiId: null,
         concepto: `Pago (REP${r.numParcialidad ? ` parcialidad ${r.numParcialidad}` : ""}) de ${padre?.ref ?? "factura"}`,
         cargo: 0,
         abono: Number(r.impPagado ?? 0),
@@ -146,6 +151,7 @@ export const GET = withAuthz(
           referencia: ref(f),
           invoiceId: f.id,
           uuid: f.uuid,
+          facturapiId: f.facturapiId,
           concepto: `Nota de crédito ${ref(f) ?? ""}`.trim(),
           cargo: 0,
           abono: f.total,
@@ -158,6 +164,7 @@ export const GET = withAuthz(
         referencia: ref(f),
         invoiceId: f.id,
         uuid: f.uuid,
+        facturapiId: f.facturapiId,
         concepto: `Factura ${ref(f) ?? ""}`.trim(),
         cargo: f.total,
         abono: 0,
@@ -177,6 +184,7 @@ export const GET = withAuthz(
             referencia: ref(f),
             invoiceId: f.id,
             uuid: f.uuid,
+            facturapiId: f.facturapiId,
             concepto: `${verboBanco} conciliado en banco de ${ref(f) ?? "factura"} (sin REP)`,
             cargo: 0,
             abono: excedente,
@@ -190,6 +198,7 @@ export const GET = withAuthz(
           referencia: ref(f),
           invoiceId: f.id,
           uuid: f.uuid,
+          facturapiId: f.facturapiId,
           concepto: `Pago de ${ref(f) ?? "factura"} (PUE — una sola exhibición)`,
           cargo: 0,
           abono: f.total,

@@ -46,7 +46,18 @@ export const GET = withAuthz(
         envios: true,
         cuenta: { select: { id: true, email: true, nombre: true, telefono: true } },
         customer: { select: { id: true, razonSocial: true, rfc: true } },
-        invoice: { select: { id: true, uuid: true, serie: true, folio: true, total: true } },
+        invoice: {
+          select: {
+            id: true,
+            uuid: true,
+            serie: true,
+            folio: true,
+            total: true,
+            // Decide si hay PDF del PAC que ofrecer, o sólo la
+            // representación que arma el satélite desde el XML.
+            facturapiId: true,
+          },
+        },
       },
     });
     if (!pedido) throw new AuthzError(404, "Pedido no encontrado");
