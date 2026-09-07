@@ -46,13 +46,38 @@ export default function OperadorPage() {
       .then((list) => { if (Array.isArray(list)) setCompanies(list); })
       .catch(() => {});
   }, []);
-  const [busy, setBusy] = useState<null | "check" | "backfill">(null);
+  const [busy, setBusy] = useState<null | "check" | "backfill" | "agrupadores">(null);
   const [check, setCheck] = useState<any>(null);
   const [backfill, setBackfill] = useState<any>(null);
+  const [agrupadores, setAgrupadores] = useState<any>(null);
   const [error, setError] = useState("");
   const [denied, setDenied] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
+
+  // Rellenar nombres y códigos agrupadores desde los catálogos ya presentados
+  // al SAT. Antes esto sólo se podía disparar con el CRON_SECRET, o sea
+  // pegando un secreto de máquina en la consola del navegador para una tarea
+  // de mantenimiento rutinaria.
+  async function rellenarAgrupadores() {
+    if (!companyId) { setError("Selecciona una empresa"); return; }
+    setBusy("agrupadores"); setError(""); setAgrupadores(null);
+    try {
+      const res = await fetch("/api/operador/agrupadores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId }),
+      });
+      const j = await res.json().catch(() => null);
+      if (res.status === 403) { setDenied(true); return; }
+      if (!res.ok) { setError(j?.error ?? "No se pudo leer los catálogos"); return; }
+      setAgrupadores(j);
+    } catch {
+      setError("No se pudo leer los catálogos");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function uploadAcuses(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -216,7 +241,40 @@ export default function OperadorPage() {
             {busy === "backfill" ? <Loader2 className="h-4 w-4 animate-spin" /> : <DownloadCloud className="h-4 w-4" />}
             Ingresar declaraciones previas
           </button>
+          <button
+            onClick={rellenarAgrupadores}
+            disabled={busy != null}
+            title="Lee los catálogos de contabilidad electrónica ya presentados al SAT y rellena el nombre y el código agrupador de las cuentas que no lo tienen"
+            className="inline-flex items-center gap-2 rounded-control border border-cos-line px-4 py-2 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+          >
+            {busy === "agrupadores" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+            Rellenar catálogo desde el SAT
+          </button>
         </div>
+
+        {agrupadores && (
+          <div className="mt-3 rounded-[12px] border border-cos-line bg-cos-paper p-3.5 text-[13px] text-cos-ink">
+            <p className="font-medium">
+              {agrupadores.empresa?.razonSocial} · {agrupadores.catalogosLeidos} catálogo(s) leído(s)
+            </p>
+            <p className="mt-1">
+              Agrupadores: {agrupadores.agrupadas} de {agrupadores.sinAgrupadorAntes} rellenados
+              {agrupadores.agrupadas > 0 && ` · ${agrupadores.agrupadasValidas} con código válido del Anexo 24`}
+              {agrupadores.siguenSinAgrupador > 0 && ` · ${agrupadores.siguenSinAgrupador} sin declarar en ningún catálogo`}
+            </p>
+            <p className="mt-0.5">
+              Nombres: {agrupadores.nombradas} de {agrupadores.sinNombreAntes} rellenados
+              {agrupadores.siguenSinNombre > 0 && ` · ${agrupadores.siguenSinNombre} siguen sin nombre real`}
+            </p>
+            {agrupadores.agrupadas > agrupadores.agrupadasValidas && (
+              <p className="mt-1 flex items-start gap-1.5 text-[12.5px] text-cos-amber-ink">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {agrupadores.agrupadas - agrupadores.agrupadasValidas} traen un código que ya no está en el Anexo 24
+                vigente: se guardó lo que se presentó, pero la contabilidad electrónica lo seguiría rechazando.
+              </p>
+            )}
+          </div>
+        )}
 
         {error && (
           <p className="mt-3 flex items-center gap-1.5 text-[13px] text-cos-red-ink">
