@@ -75,7 +75,7 @@ const FIEL_SELECT = {
 } as const;
 
 /** Última extracción exitosa de cada fuente Syntage (del ledger de costos). */
-async function ultimasExtracciones(companyId: string): Promise<{
+export async function ultimasExtracciones(companyId: string): Promise<{
   porExtractor: Partial<Record<ExtractorProvision, Date | null>>;
   /** Último disparo del bootstrap de CE (para su piso de reintento). */
   ultimoIntentoCE: Date | null;
@@ -108,7 +108,7 @@ async function ultimasExtracciones(companyId: string): Promise<{
  *   annual_tax_return → TaxDeclaration DECLARACION_ANUAL
  *   monthly_tax_return→ TaxDeclaration IVA_MENSUAL | ISR_PROVISIONAL
  */
-async function datosPresentes(
+export async function datosPresentes(
   companyId: string,
 ): Promise<Partial<Record<ExtractorProvision, boolean>>> {
   const [opinion, csf, anual, mensual] = await Promise.all([

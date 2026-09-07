@@ -46,10 +46,11 @@ export default function OperadorPage() {
       .then((list) => { if (Array.isArray(list)) setCompanies(list); })
       .catch(() => {});
   }, []);
-  const [busy, setBusy] = useState<null | "check" | "backfill" | "agrupadores">(null);
+  const [busy, setBusy] = useState<null | "check" | "backfill" | "agrupadores" | "syntage">(null);
   const [check, setCheck] = useState<any>(null);
   const [backfill, setBackfill] = useState<any>(null);
   const [agrupadores, setAgrupadores] = useState<any>(null);
+  const [syntage, setSyntage] = useState<any>(null);
   const [error, setError] = useState("");
   const [denied, setDenied] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -74,6 +75,24 @@ export default function OperadorPage() {
       setAgrupadores(j);
     } catch {
       setError("No se pudo leer los catálogos");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // «¿Por qué esta empresa no se sincroniza sola?» Sólo lee: corre la misma
+  // cadencia del cron con y sin `force` y enseña cuál candado la frena.
+  async function diagnosticarSyntage() {
+    if (!companyId) { setError("Selecciona una empresa"); return; }
+    setBusy("syntage"); setError(""); setSyntage(null);
+    try {
+      const res = await fetch(`/api/operador/syntage-diagnostico?companyId=${companyId}`);
+      const j = await res.json().catch(() => null);
+      if (res.status === 403) { setDenied(true); return; }
+      if (!res.ok) { setError(j?.error ?? "No se pudo diagnosticar"); return; }
+      setSyntage(j);
+    } catch {
+      setError("No se pudo diagnosticar");
     } finally {
       setBusy(null);
     }
@@ -250,7 +269,44 @@ export default function OperadorPage() {
             {busy === "agrupadores" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
             Rellenar catálogo desde el SAT
           </button>
+          <button
+            onClick={diagnosticarSyntage}
+            disabled={busy != null}
+            title="No extrae ni escribe nada: dice qué dispararía el cron y qué dispararía el botón para esta empresa, y cuál candado la frena"
+            className="inline-flex items-center gap-2 rounded-control border border-cos-line px-4 py-2 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+          >
+            {busy === "syntage" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            ¿Por qué no se sincroniza sola?
+          </button>
         </div>
+
+        {syntage && (
+          <div className="mt-3 rounded-[12px] border border-cos-line bg-cos-paper p-3.5 text-[13px] text-cos-ink">
+            <p className="font-medium">
+              {syntage.empresa?.razonSocial} · plan {syntage.empresa?.tier} · pago {syntage.nivelPago}
+            </p>
+            <p className="mt-1 font-medium text-cos-brand-ink">{syntage.veredicto}</p>
+            <ul className="mt-2 space-y-0.5">
+              {(syntage.candados ?? []).map((c: { clave: string; ok: boolean; dice: string }) => (
+                <li key={c.clave} className="flex items-start gap-1.5 text-[12.5px]">
+                  <span className={c.ok ? "text-cos-jade-ink" : "text-cos-amber-ink"}>{c.ok ? "✓" : "✕"}</span>
+                  <span>{c.dice}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[12.5px]">
+              Ahora mismo dispararía — cron: {(syntage.dispararia?.cron?.extractores ?? []).join(", ") || "nada"}
+              {syntage.dispararia?.cron?.contabilidadElectronica ? " + contabilidad electrónica" : ""}
+              {" · "}botón: {(syntage.dispararia?.boton?.extractores ?? []).join(", ") || "nada"}
+              {syntage.dispararia?.boton?.contabilidadElectronica ? " + contabilidad electrónica" : ""}
+            </p>
+            <p className="mt-0.5 text-[12.5px] text-cos-ink-soft">
+              Ya tiene: {syntage.tiene?.declaraciones} declaración(es) · {syntage.tiene?.mesesDeBalanzaCE} mes(es) de
+              balanza CE · {syntage.tiene?.snapshotsDeCumplimiento} foto(s) de cumplimiento
+              {syntage.ceBootstrapAt ? ` · CE arrancada` : " · CE sin arrancar"}
+            </p>
+          </div>
+        )}
 
         {agrupadores && (
           <div className="mt-3 rounded-[12px] border border-cos-line bg-cos-paper p-3.5 text-[13px] text-cos-ink">
