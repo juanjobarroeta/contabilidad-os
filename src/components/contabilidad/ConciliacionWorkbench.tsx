@@ -407,8 +407,16 @@ export function ConciliacionWorkbench({
   // casi cero, y el tile diría «$92 por conciliar» con 12 movimientos por
   // casar. El neto es del motor (la ecuación del cuadre lo necesita firmado);
   // este tile mide cuánto trabajo hay sobre la mesa.
-  const abonos = pendientes.reduce((s, m) => s + (m.monto > 0 ? m.monto : 0), 0);
-  const cargos = pendientes.reduce((s, m) => s + (m.monto < 0 ? -m.monto : 0), 0);
+  // …y SÓLO sobre lo que de verdad falta conciliar. Sumar también los ya
+  // conciliados que esperan posteo hacía que el tile dijera «$20,207.20 por
+  // conciliar» junto a «sin conciliar: 0» — dos cifras que se contradicen a la
+  // vista. Lo que espera el posteo se cuenta aparte, con su nombre.
+  const porConciliar = pendientes.filter((m) => !m.conciliado);
+  const abonos = porConciliar.reduce((s, m) => s + (m.monto > 0 ? m.monto : 0), 0);
+  const cargos = porConciliar.reduce((s, m) => s + (m.monto < 0 ? -m.monto : 0), 0);
+  const montoPorContabilizar = pendientes
+    .filter((m) => m.conciliado)
+    .reduce((s, m) => s + Math.abs(m.monto), 0);
   const pct = total > 0 ? ((total - sinConciliar) / total) * 100 : 100;
 
   return (
@@ -428,13 +436,17 @@ export function ConciliacionWorkbench({
         />
         <StatTile
           label="Por conciliar"
-          tone={sin === 0 ? "jade" : "ink"}
+          tone={sinConciliar === 0 ? "jade" : "ink"}
           value={<Money value={abonos + cargos} size={20} />}
           sub={
             abonos > 0 && cargos > 0 ? (
               <>
                 abonos <Money value={abonos} className="text-[12px]" muted /> · cargos{" "}
                 <Money value={cargos} className="text-[12px]" muted />
+              </>
+            ) : montoPorContabilizar > 0 ? (
+              <>
+                <Money value={montoPorContabilizar} className="text-[12px]" muted /> ya conciliados, esperan el posteo
               </>
             ) : undefined
           }
