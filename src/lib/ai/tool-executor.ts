@@ -24,6 +24,7 @@ import {
 } from "@/lib/briefing/matutino";
 import { DIAS_DEADLINE_AVISO } from "@/lib/briefing/matutino-format";
 import type { FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
+import type { TipoCuenta } from "@/lib/contabilidad/agrupador-candidatos";
 
 type ToolInput = Record<string, unknown>;
 
@@ -96,6 +97,10 @@ export async function executeToolCall(
       return proponerFijarSaldoFavorIva(input, companyId, context);
     case "proponer_firmar_conciliacion":
       return proponerFirmarConciliacion(input, companyId, context);
+    case "query_cuentas_sin_agrupador":
+      return queryCuentasSinAgrupador(input, companyId);
+    case "proponer_fijar_agrupador":
+      return proponerFijarAgrupador(input, companyId, context);
     case "proponer_marcar_diot_presentada":
       return proponerMarcarDiotPresentada(input, companyId, context);
     case "proponer_confirmar_apertura":
@@ -617,6 +622,123 @@ async function proponerFijarPerdida(input: ToolInput, companyId: string, context
   const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
     type: "fijar_perdida",
     payload: { valor: redondeado, anio, anterior, origen },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+// ── Catálogo de cuentas: qué cuenta le falta el agrupador, y con qué se arregla ──
+// Antes el copiloto sólo veía el CONTEO («4 cuentas sin código agrupador») y no
+// tenía forma de saber cuáles eran, así que su única salida honesta era mandar
+// al contador a otra pantalla a copiar los nombres a mano. Eso no es ayudar.
+
+async function queryCuentasSinAgrupador(input: ToolInput, companyId: string): Promise<string> {
+  const { sinAgrupadorValido, codigoDeCuenta, agrupadorEmitido } = await import(
+    "../contabilidad/agrupador"
+  );
+  const { candidatosAgrupador } = await import("../contabilidad/agrupador-candidatos");
+  const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 100);
+  const porCuenta = Math.min(Math.max(Number(input.candidatos_por_cuenta) || 8, 1), 25);
+
+  const cuentas = await prisma.chartAccount.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true, tipo: true, codAgrup: true },
+    orderBy: [{ cuentaSAT: "asc" }, { subcuenta: "asc" }],
+  });
+  const rotas = cuentas.filter(sinAgrupadorValido);
+
+  return JSON.stringify({
+    totalCuentasActivas: cuentas.length,
+    sinAgrupadorValido: rotas.length,
+    mostradas: Math.min(rotas.length, limit),
+    cuentas: rotas.slice(0, limit).map((c) => {
+      const codigo = codigoDeCuenta(c);
+      return {
+        cuenta: codigo,
+        nombre: c.nombre,
+        tipo: c.tipo,
+        // Lo que el XML emitiría hoy: si es el número propio de la cuenta, es
+        // que no hay agrupador declarado; si es otra cosa, alguien guardó un
+        // código que el Anexo 24 no reconoce.
+        agrupadorEmitidoHoy: agrupadorEmitido(c),
+        codAgrupGuardado: c.codAgrup,
+        // Una cuenta cuyo nombre ES su número nació de la balanza del SAT, no
+        // de un catálogo presentado: por eso no trae agrupador y por eso el
+        // barrido de catálogos no la encuentra.
+        naceDeLaBalanza: c.nombre.trim() === codigo,
+        candidatosAnexo24: candidatosAgrupador(
+          { nombre: c.nombre, tipo: c.tipo as TipoCuenta },
+          { max: porCuenta },
+        ),
+      };
+    }),
+    nota:
+      "Los códigos de `candidatosAnexo24` son los ÚNICOS que puedes proponer para esa cuenta. " +
+      "Para asignar uno usa proponer_fijar_agrupador y explica por qué ése.",
+  });
+}
+
+/** Asigna el código agrupador del Anexo 24 a una cuenta del catálogo. */
+async function proponerFijarAgrupador(
+  input: ToolInput,
+  companyId: string,
+  context: ToolContext,
+): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+
+  const numero = typeof input.cuenta === "string" ? input.cuenta.trim() : "";
+  const codAgrup = typeof input.cod_agrup === "string" ? input.cod_agrup.trim() : "";
+  if (!numero || !codAgrup) {
+    return JSON.stringify({ error: "Faltan `cuenta` y/o `cod_agrup`." });
+  }
+
+  const { esAgrupadorOficial, codigoDeCuenta } = await import("../contabilidad/agrupador");
+  const { CODIGO_AGRUPADOR_OFICIAL } = await import("../contabilidad/codigo-agrupador");
+  const { PREFIJOS_POR_TIPO } = await import("../contabilidad/agrupador-candidatos");
+
+  if (!esAgrupadorOficial(codAgrup)) {
+    return JSON.stringify({
+      error:
+        `«${codAgrup}» no existe en el Anexo 24. Escoge uno de los que devuelve ` +
+        "query_cuentas_sin_agrupador para esa cuenta — un código inventado hace que el SAT rechace la contabilidad electrónica.",
+    });
+  }
+
+  const cuentas = await prisma.chartAccount.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true, tipo: true, codAgrup: true },
+  });
+  const cuenta = cuentas.find((c) => codigoDeCuenta(c) === numero);
+  if (!cuenta) {
+    return JSON.stringify({ error: `No hay una cuenta activa «${numero}» en el catálogo de esta empresa.` });
+  }
+  if ((cuenta.codAgrup ?? "").trim() === codAgrup) {
+    return JSON.stringify({ error: `La cuenta ${numero} ya tiene ese agrupador: no hay nada que cambiar.` });
+  }
+
+  // Un gasto no lleva código de activo por mucho que el nombre se parezca: la
+  // clase la fija el primer dígito del Anexo 24 y el SAT la valida.
+  const prefijos = PREFIJOS_POR_TIPO[cuenta.tipo as keyof typeof PREFIJOS_POR_TIPO] ?? [];
+  if (prefijos.length > 0 && !prefijos.some((p) => codAgrup.startsWith(p))) {
+    return JSON.stringify({
+      error:
+        `«${codAgrup}» (${CODIGO_AGRUPADOR_OFICIAL[codAgrup]}) es de otra clase: la cuenta ${numero} es ${cuenta.tipo}, ` +
+        `así que su agrupador empieza con ${prefijos.join(" o ")}.`,
+    });
+  }
+
+  const anterior = (cuenta.codAgrup ?? "").trim() || null;
+  const summary =
+    `Asignar el código agrupador ${codAgrup} («${CODIGO_AGRUPADOR_OFICIAL[codAgrup]}») ` +
+    `a la cuenta ${numero} «${cuenta.nombre}»` +
+    (anterior
+      ? `. Hoy tiene ${anterior}, que el Anexo 24 no reconoce.`
+      : ". Hoy no tiene ninguno, así que el XML emite su propio número y el SAT lo rechaza.") +
+    " Reversible desde Contabilidad → Catálogo de cuentas.";
+
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "fijar_agrupador",
+    payload: { chartAccountId: cuenta.id, cuenta: numero, codAgrup, anterior },
   });
   return propuestaStaged(summary, pa.token);
 }
