@@ -164,6 +164,7 @@ export const PASOS: DefinicionPaso[] = [
       "proponer_conciliacion",
       "proponer_categorizacion",
       "proponer_categorizacion_lote",
+      "proponer_firmar_conciliacion",
     ],
     href: () => "/bancos",
     revisar: [
@@ -569,7 +570,9 @@ function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): Senal
             clave,
             estado: "warn",
             resumen: `${x.cuentasFirmadas} de ${plural(x.cuentasBanco, "cuenta con la conciliación del mes firmada", "cuentas con la conciliación del mes firmada")}`,
-            cta: { label: "Firmar conciliación", href: "/contabilidad/conciliacion" },
+            // El botón se llama «Dar por conciliada» y vive en Contabilidad →
+            // Conciliación, no en Bancos: decirlo mal es mandar a buscar a ciegas.
+            cta: { label: "Dar por conciliada (Contabilidad → Conciliación)", href: "/contabilidad/conciliacion" },
           }
         : { clave, estado: "ok", resumen: "Conciliación del mes firmada en todas las cuentas" };
     case "x:hallazgos_criticos":

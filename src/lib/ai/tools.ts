@@ -590,6 +590,20 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "proponer_firmar_conciliacion",
+    description:
+      "Propone FIRMAR («dar por conciliada») la conciliación bancaria de una cuenta y mes, pendiente del tap del usuario. Es lo que apaga la señal «0 de 1 cuenta con la conciliación del mes firmada» del paso Bancos. Sin `bank_account_id` firma la única cuenta con movimientos del mes que falte. Se rechaza si quedan movimientos sin registrar: primero se concilian. Reversible (la firma se quita en Contabilidad → Conciliación).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        bank_account_id: { type: "string", description: "Cuenta a firmar. Omítelo si sólo hay una pendiente." },
+        year: { type: "number", description: "Ejercicio. Default: el del cierre abierto." },
+        month: { type: "number", description: "Mes 1-12. Default: el del cierre abierto." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "proponer_confirmar_apertura",
     description:
       "Propone estampar la confirmación del PUNTO DE PARTIDA fiscal de la empresa (saldo a favor inicial, pérdidas, coeficiente y obligaciones revisados), pendiente del tap del usuario. Es lo que apaga la señal «el punto de partida aún no está confirmado». No confirma el paso del cierre: eso es proponer_confirmar_paso.",

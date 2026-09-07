@@ -15,7 +15,8 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Ban, Check, ChevronDown, Loader2, Send, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import Link from "next/link";
+import { Ban, Check, ChevronDown, ExternalLink, Loader2, Send, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { PeriodSelector, usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { EspinaPasos } from "@/components/cierre/EspinaPasos";
@@ -111,8 +112,19 @@ function CierrePageInner() {
     // Confirmar desde la tarjeta del copiloto cambia el estado del cierre.
     onAccionConfirmada: () => void cargar(),
   });
-  const { messages, setMessages, isLoading, activeTool, pendingAction, confirming, enviar, confirmar, cancelar, fijarConversacion } =
-    chat;
+  const {
+    messages,
+    setMessages,
+    isLoading,
+    activeTool,
+    pendingAction,
+    setPendingAction,
+    confirming,
+    enviar,
+    confirmar,
+    cancelar,
+    fijarConversacion,
+  } = chat;
 
   // ── El hilo del periodo ────────────────────────────────────────────────────
   // El cierre lo trabaja el equipo a lo largo del mes: la conversación vive en
@@ -127,14 +139,23 @@ function CierrePageInner() {
       try {
         const res = await fetch(`/api/cierre/conversacion?companyId=${companyId}&year=${year}&month=${month}`);
         const j = (await res.json().catch(() => null)) as
-          | { conversationId?: string | null; messages?: { id: string; role: string; content: string; feedback?: "up" | "down" | null }[] }
+          | {
+              conversationId?: string | null;
+              messages?: { id: string; role: string; content: string; feedback?: "up" | "down" | null; paso?: string | null }[];
+            }
           | null;
         if (cancelado) return;
         fijarConversacion(j?.conversationId ?? null);
         setMessages(
           (j?.messages ?? [])
             .filter((m) => m.role === "user" || m.role === "assistant")
-            .map((m) => ({ id: m.id, role: m.role as "user" | "assistant", content: m.content, feedback: m.feedback ?? null }))
+            .map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              feedback: m.feedback ?? null,
+              paso: m.paso ?? null,
+            }))
         );
       } catch {
         /* sin hilo previo se sigue pudiendo conversar; el turno lo crea */
@@ -162,15 +183,23 @@ function CierrePageInner() {
         const res = await fetch(
           `/api/cierre/paso/resumen?companyId=${companyId}&year=${year}&month=${month}&clave=${claveActiva}`
         );
-        const j = (await res.json().catch(() => null)) as { texto?: string; mensajeId?: string | null } | null;
-        if (cancelado || !j?.texto) return;
+        const j = (await res.json().catch(() => null)) as {
+          texto?: string;
+          mensajeId?: string | null;
+          pendingAction?: { type: string; summary: string; token: string; expiresAt: number } | null;
+        } | null;
+        if (cancelado) return;
+        // La tarjeta que el paso deja puesta: el copiloto propone al abrir, sin
+        // que haya que pedírselo. Nada se ejecuta hasta que el humano confirma.
+        if (j?.pendingAction) setPendingAction(j.pendingAction);
+        if (!j?.texto) return;
         // La apertura queda anclada en el hilo (una por paso y evidencia): si ya
         // está cargada no se repite, y si es nueva se agrega al final.
         const texto = j.texto;
         const mensajeId = j.mensajeId ?? undefined;
         setMessages((prev) => {
           if (mensajeId ? prev.some((m) => m.id === mensajeId) : prev.some((m) => m.content === texto)) return prev;
-          return [...prev, { role: "assistant", content: texto, id: mensajeId }];
+          return [...prev, { role: "assistant", content: texto, id: mensajeId, paso: claveActiva }];
         });
       } catch {
         /* la barra de acción y la espina siguen sirviendo sin apertura */
@@ -188,6 +217,19 @@ function CierrePageInner() {
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, pendingAction]);
+
+  /** Señales sin resolver del paso activo que sí tienen a dónde ir. */
+  const pendientesDelPaso = useMemo(
+    () => (pasoActivo?.senales ?? []).filter((s) => s.estado !== "ok" && s.estado !== "na" && s.cta),
+    [pasoActivo]
+  );
+
+  /** clave → título, para etiquetar de qué paso habla cada apertura del hilo. */
+  const tituloDePaso = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of cierre?.pasos ?? []) m.set(p.clave, `${String(p.orden + 1).padStart(2, "0")} · ${p.titulo}`);
+    return m;
+  }, [cierre]);
 
   function seleccionar(clave: ClavePasoCierre) {
     setActivo(clave);
@@ -347,6 +389,30 @@ function CierrePageInner() {
               )}
             </div>
 
+            {/* Lo que falta en este paso, con el enlace REAL de cada pendiente.
+                Antes sólo vivía en la prosa de la apertura, y el copiloto llegó
+                a inventar la ubicación de un botón que además se llama distinto. */}
+            {pendientesDelPaso.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-cos-line bg-cos-paper/60 px-4 py-2">
+                {pendientesDelPaso.map((s) => (
+                  <Link
+                    key={s.clave}
+                    href={s.cta!.href}
+                    title={s.resumen}
+                    className={cn(
+                      "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px]",
+                      s.estado === "error"
+                        ? "border-cos-red-ink/30 bg-cos-red-tint text-cos-red-ink"
+                        : "border-cos-amber-ink/30 bg-cos-amber-tint text-cos-amber-ink"
+                    )}
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{s.cta!.label}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
               {!hiloListo && (
                 <p className="flex items-center gap-2 text-[13px] text-cos-ink-soft">
@@ -361,6 +427,14 @@ function CierrePageInner() {
                       m.role === "user" ? "bg-cos-brand text-white" : "bg-cos-paper text-cos-ink"
                     )}
                   >
+                    {/* El hilo es del periodo entero: sin decir de qué paso
+                        habla cada apertura, se leía como si hablara del paso
+                        abierto. */}
+                    {m.paso && (
+                      <p className="mb-1 font-mono text-[10.5px] uppercase tracking-wide text-cos-ink-faint">
+                        {tituloDePaso.get(m.paso) ?? m.paso}
+                      </p>
+                    )}
                     {m.role === "user" ? m.content : <Markdown>{m.content}</Markdown>}
                   </div>
                 </div>

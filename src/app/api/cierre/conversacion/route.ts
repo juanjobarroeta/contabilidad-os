@@ -19,6 +19,11 @@ export const dynamic = "force-dynamic";
 /** Últimos mensajes que se pintan y se mandan como contexto (el turno recorta a 40). */
 const MAX_MENSAJES = 40;
 
+function pasoDeMeta(meta: unknown): string | null {
+  const cierre = (meta as { cierre?: { paso?: unknown } } | null)?.cierre;
+  return typeof cierre?.paso === "string" ? cierre.paso : null;
+}
+
 export const GET = withAuthz(async (req: Request) => {
   const p = parsePeriodoQuery(new URL(req.url).searchParams);
   if (!p) return NextResponse.json({ error: "companyId, year y month son requeridos" }, { status: 400 });
@@ -35,7 +40,14 @@ export const GET = withAuthz(async (req: Request) => {
     where: { conversationId },
     orderBy: { createdAt: "desc" },
     take: MAX_MENSAJES,
-    select: { id: true, role: true, content: true, feedback: true },
+    select: { id: true, role: true, content: true, feedback: true, meta: true },
   });
-  return NextResponse.json({ conversationId, messages: filas.reverse() });
+  // `paso` viaja con cada mensaje: el hilo es del periodo entero y sin esa
+  // etiqueta la apertura de Bancos se leía debajo del encabezado de Punto de
+  // partida, como si hablara del paso abierto.
+  const messages = filas.reverse().map(({ meta, ...m }) => ({
+    ...m,
+    paso: pasoDeMeta(meta),
+  }));
+  return NextResponse.json({ conversationId, messages });
 });

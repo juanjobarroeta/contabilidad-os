@@ -94,6 +94,8 @@ export async function executeToolCall(
       return proponerFijarPerdida(input, companyId, context);
     case "proponer_fijar_saldo_favor_iva":
       return proponerFijarSaldoFavorIva(input, companyId, context);
+    case "proponer_firmar_conciliacion":
+      return proponerFirmarConciliacion(input, companyId, context);
     case "proponer_confirmar_apertura":
       return proponerConfirmarApertura(companyId, context);
     case "proponer_resolver_hallazgo":
@@ -650,6 +652,57 @@ async function proponerFijarSaldoFavorIva(input: ToolInput, companyId: string, c
   const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
     type: "fijar_saldo_favor_iva",
     payload: { valor: redondeado, anterior, origen },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+/**
+ * Firmar la conciliación del mes. Sin esto, el paso Bancos se quedaba bloqueado
+ * con «0 de 1 cuenta firmada» y lo único que el copiloto podía hacer era
+ * mandar al contador a buscar un botón que además se llama «Dar por conciliada».
+ */
+async function proponerFirmarConciliacion(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const { year, month } = periodoCierre(input, context);
+
+  const { conciliacionDelMes } = await import("../bancos/conciliacion-repo");
+  const mes = await conciliacionDelMes(companyId, year, month);
+  const conMovimientos = mes.cuentas.filter((c) => c.movimientos > 0);
+  if (conMovimientos.length === 0) {
+    return JSON.stringify({ error: "Ninguna cuenta bancaria tiene movimientos en este mes: no hay conciliación que firmar." });
+  }
+
+  const pedida = typeof input.bank_account_id === "string" ? String(input.bank_account_id) : null;
+  const pendientes = conMovimientos.filter((c) => !c.conciliadoAt);
+  let cuenta = pedida ? conMovimientos.find((c) => c.bankAccountId === pedida) : pendientes.length === 1 ? pendientes[0] : null;
+  if (!cuenta) {
+    if (pedida) return JSON.stringify({ error: "Esa cuenta no tiene movimientos en el mes o no existe." });
+    if (pendientes.length === 0) {
+      return JSON.stringify({ error: "Todas las cuentas con movimientos ya tienen firmada la conciliación del mes." });
+    }
+    return JSON.stringify({
+      error: "Hay más de una cuenta sin firmar: dile al usuario cuál y vuelve a llamarme con bank_account_id.",
+      cuentas: pendientes.map((c) => ({ bank_account_id: c.bankAccountId, cuenta: c.etiqueta, movimientos: c.movimientos, sinRegistrar: c.sinRegistrar })),
+    });
+  }
+  if (cuenta.conciliadoAt) {
+    return JSON.stringify({ error: `La conciliación de ${cuenta.etiqueta} ya está firmada (${cuenta.conciliadoAt.slice(0, 10)}).` });
+  }
+  if (cuenta.sinRegistrar > 0) {
+    return JSON.stringify({
+      error: `No se puede firmar todavía: ${cuenta.etiqueta} tiene ${cuenta.sinRegistrar} movimiento(s) del banco sin registrar en contabilidad. Firmar así daría por buena una conciliación incompleta.`,
+      donde: "/contabilidad/conciliacion",
+    });
+  }
+
+  const summary =
+    `Dar por conciliada la cuenta ${cuenta.etiqueta} en ${String(month).padStart(2, "0")}/${year}: ` +
+    `${cuenta.movimientos} movimiento(s) del mes, ninguno sin registrar. ` +
+    "Queda firmada con tu nombre y la fecha; la firma se puede quitar en Contabilidad → Conciliación.";
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "firmar_conciliacion",
+    payload: { bankAccountId: cuenta.bankAccountId, year, month, etiqueta: cuenta.etiqueta },
   });
   return propuestaStaged(summary, pa.token);
 }

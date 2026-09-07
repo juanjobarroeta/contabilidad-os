@@ -19,6 +19,8 @@ export interface Message {
   /** Id persistido (sólo respuestas del asistente): cuelga el feedback. */
   id?: string;
   feedback?: "up" | "down" | null;
+  /** Cierre guiado: paso al que pertenece el mensaje (aperturas de paso). */
+  paso?: string | null;
 }
 
 export interface PendingAction {
@@ -242,6 +244,8 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     confirming,
     conversationId,
     fijarConversacion,
+    /** La pantalla del cierre pinta la tarjeta que el paso deja puesta al abrirse. */
+    setPendingAction,
     enviar,
     confirmar,
     cancelar,
@@ -281,6 +285,7 @@ export const TOOL_LABELS: Record<string, string> = {
   proponer_confirmar_paso: "Preparando la confirmación",
   proponer_fijar_coeficiente: "Preparando el coeficiente",
   proponer_fijar_perdida: "Preparando las pérdidas por amortizar",
+  proponer_firmar_conciliacion: "Preparando la firma de la conciliación",
   proponer_fijar_saldo_favor_iva: "Preparando el saldo a favor inicial",
   proponer_confirmar_apertura: "Preparando la confirmación del punto de partida",
   proponer_omitir_paso: "Preparando la omisión",
