@@ -127,7 +127,9 @@ export function accionesDelCierre(cierre: CierreEvaluado): AccionCierre[] {
         que: llano?.que ?? "",
         dato: s.resumen,
         urgencia: s.estado === "error" ? "bloquea" : "atencion",
-        cta: s.cta,
+        // El botón dice a dónde va, no cómo se llama el check del motor
+        // («DIOT», «Fecha límite» — nombres que como botón no dicen nada).
+        cta: s.cta ? { href: s.cta.href, label: llano?.ir ?? s.cta.label } : undefined,
         tool: toolDeSenal(paso, s.clave),
         fechaLimite: paso.fechaLimite,
         diasRestantes: paso.diasRestantes,

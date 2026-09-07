@@ -1,8 +1,9 @@
 "use client";
 
 import { descargarUrl } from "@/lib/descargar";
+import { haceCuanto } from "@/lib/tiempo-relativo";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Loading, Alert, RetryButton } from "@/components/ui";
 import {
@@ -128,6 +129,16 @@ export function DeclaracionWorkspace() {
     const t = sp.get("tab");
     if (t === "resumen" || t === "papeles" || t === "revision" || t === "presentar") setTab(t);
   }, []);
+
+  // Llegar con #diot debe DEJARTE en la DIOT, no al principio de una pestaña
+  // que empieza con la sincronización del SAT. Se espera a que la pestaña
+  // pinte su contenido (el ancla no existe antes).
+  useEffect(() => {
+    if (tab !== "presentar" || loading || !window.location.hash) return;
+    const id = window.location.hash.slice(1);
+    const t = setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    return () => clearTimeout(t);
+  }, [tab, loading]);
 
   const load = useCallback(async () => {
     if (!activeCompany) return;
@@ -422,7 +433,7 @@ function Resumen({ data, year, companyId, month }: { data: CierreData; year: num
       </Card>
 
       {data.diot?.aplica && (
-        <Card className="rounded-card border-cos-line p-5 shadow-card">
+        <Card id="diot" className="scroll-mt-24 rounded-card border-cos-line p-5 shadow-card">
           <div className="flex items-center justify-between">
             <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">DIOT</span>
             <EstadoBadge estado={data.diot.estado} />
@@ -847,6 +858,23 @@ const SAT_STATUS_COLORS: Record<string, string> = {
   EXPIRED: "bg-cos-slate-tint text-cos-ink-soft",
 };
 
+function FilaSolicitud({ r }: { r: SatRequestRow }) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 text-[12px]">
+      <span className="w-20 font-medium text-cos-ink-soft">{r.tipo === "EMITIDOS" ? "Emitidos" : "Recibidos"}</span>
+      <span className={`rounded px-2 py-0.5 font-medium ${SAT_STATUS_COLORS[r.status] ?? "bg-cos-slate-tint"}`}>
+        {SAT_STATUS_LABELS[r.status] ?? r.status}
+      </span>
+      <span className="flex-1 truncate text-cos-ink-soft">
+        {r.cfdisFound > 0 && `${r.cfdisFound} CFDIs`}
+        {r.imported > 0 && ` · ${r.imported} importados`}
+        {r.errorMessage && ` · ${r.errorMessage}`}
+      </span>
+      {r.lastVerifiedAt && <span className="shrink-0 text-[10px] text-cos-ink-soft">{haceCuanto(r.lastVerifiedAt)}</span>}
+    </div>
+  );
+}
+
 function SatSyncCard({ companyId, month, year }: { companyId: string; month: number; year: number }) {
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState("");
@@ -863,6 +891,16 @@ function SatSyncCard({ companyId, month, year }: { companyId: string; month: num
   }, [companyId, year, month]);
 
   useEffect(() => { loadRequests(); }, [loadRequests]);
+
+  const [verHistorial, setVerHistorial] = useState(false);
+  // La última solicitud de cada tipo (vienen ordenadas de más nueva a más
+  // vieja): es el estado real de la descarga. El resto es historia.
+  const ultimas = useMemo(() => {
+    const vistos = new Set<string>();
+    return requests.filter((r) => (vistos.has(r.tipo) ? false : (vistos.add(r.tipo), true)));
+  }, [requests]);
+  const previas = useMemo(() => requests.filter((r) => !ultimas.includes(r)), [requests, ultimas]);
+  const fallidas = useMemo(() => previas.filter((r) => r.status === "FAILED").length, [previas]);
 
   async function sync(force = false) {
     setSyncing(true); setSyncDone(false);
@@ -942,31 +980,41 @@ function SatSyncCard({ companyId, month, year }: { companyId: string; month: num
         </div>
       )}
 
+      {/* Lo que importa es CÓMO QUEDÓ la última descarga de cada tipo, no el
+          diario de las veinte solicitudes anteriores. Ese historial tapaba la
+          pantalla —y lo que uno viene a hacer aquí— con renglones idénticos de
+          «1 CFDIs · hace 6038 min». Ahora: el estado actual arriba, el resto
+          detrás de un desplegable. */}
       {requests.length > 0 && (
         <div className="mt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-ink-soft">
-            Solicitudes con SAT (este período)
-          </p>
           <div className="divide-y divide-cos-line overflow-hidden rounded-control border border-cos-line">
-            {requests.map((r) => {
-              const lv = r.lastVerifiedAt ? new Date(r.lastVerifiedAt) : null;
-              const lvStr = lv ? `${Math.max(0, Math.round((Date.now() - lv.getTime()) / 60000))} min` : null;
-              return (
-                <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-[12px]">
-                  <span className="w-20 font-medium text-cos-ink-soft">{r.tipo === "EMITIDOS" ? "Emitidos" : "Recibidos"}</span>
-                  <span className={`rounded px-2 py-0.5 font-medium ${SAT_STATUS_COLORS[r.status] ?? "bg-cos-slate-tint"}`}>
-                    {SAT_STATUS_LABELS[r.status] ?? r.status}
-                  </span>
-                  <span className="flex-1 truncate text-cos-ink-soft">
-                    {r.cfdisFound > 0 && `${r.cfdisFound} CFDIs`}
-                    {r.imported > 0 && ` · ${r.imported} importados`}
-                    {r.errorMessage && ` · ${r.errorMessage}`}
-                  </span>
-                  {lvStr && <span className="text-[10px] text-cos-ink-soft">hace {lvStr}</span>}
-                </div>
-              );
-            })}
+            {ultimas.map((r) => (
+              <FilaSolicitud key={r.id} r={r} />
+            ))}
           </div>
+          {fallidas > 0 && (
+            <p className="mt-1.5 text-[11px] text-cos-red-ink">
+              {fallidas} {fallidas === 1 ? "solicitud falló" : "solicitudes fallaron"} antes; vuelve a sincronizar.
+            </p>
+          )}
+          {previas.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setVerHistorial((v) => !v)}
+                className="mt-2 text-[11.5px] text-cos-ink-soft underline-offset-2 hover:underline"
+              >
+                {verHistorial ? "Ocultar" : `Ver las ${previas.length} solicitudes anteriores`}
+              </button>
+              {verHistorial && (
+                <div className="mt-2 divide-y divide-cos-line overflow-hidden rounded-control border border-cos-line opacity-70">
+                  {previas.map((r) => (
+                    <FilaSolicitud key={r.id} r={r} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
           <p className="mt-1.5 text-[10px] text-cos-ink-soft">
             Las solicitudes pendientes se reusan automáticamente. Si el SAT te dio el código 5002, espera a que las solicitudes vencidas se procesen (1-3 hrs) — no necesitas hacer nada.
           </p>

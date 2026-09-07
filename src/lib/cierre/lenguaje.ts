@@ -18,6 +18,12 @@ export interface TextoLlano {
   hacer: string;
   /** Qué es y por qué importa, una línea. */
   que: string;
+  /**
+   * Texto del botón que lleva a resolverlo. Los motores etiquetan sus enlaces
+   * con el NOMBRE del check («DIOT», «Fecha límite»), que como botón no dice a
+   * dónde vas ni qué vas a hacer allí.
+   */
+  ir?: string;
 }
 
 /** Por clave de señal. Lo que no esté aquí cae al resumen del motor. */
@@ -32,6 +38,7 @@ export const LLANO: Record<string, TextoLlano> = {
     que: "Sin el estado de cuenta del mes no se puede comprobar que lo facturado sea lo que de verdad entró y salió.",
   },
   "ce:sin_clasificar": {
+    ir: "Ir a clasificar",
     hacer: "Clasificar los movimientos que faltan",
     que: "Cada movimiento del banco tiene que decir qué fue (una venta, un gasto, un pago de impuestos) para que la contabilidad lo registre bien.",
   },
@@ -40,10 +47,12 @@ export const LLANO: Record<string, TextoLlano> = {
     que: "Lo que entra y lo que sale tiene que sumar igual. Si no cuadra, hay un registro mal hecho.",
   },
   "ce:agrupadores": {
+    ir: "Ir al catálogo de cuentas",
     hacer: "Etiquetar las cuentas que faltan",
     que: "Cada cuenta contable lleva la etiqueta que pide el SAT; sin ella la contabilidad electrónica se rechaza.",
   },
   "ce:posteo": {
+    ir: "Ir a generar las pólizas",
     hacer: "Generar las pólizas del mes",
     que: "Las pólizas son el registro contable formal de lo que pasó en el mes.",
   },
@@ -70,6 +79,7 @@ export const LLANO: Record<string, TextoLlano> = {
     que: "Cada depósito y cada pago debe quedar ligado a su factura, para saber qué está cobrado y qué no.",
   },
   "fx:complementos-por-emitir": {
+    ir: "Ir a complementos",
     hacer: "Timbrar los complementos de pago que debes",
     que: "Cuando te pagan una factura a crédito, el SAT exige un comprobante extra por el pago. Sin él, tu cliente no puede deducir.",
   },
@@ -82,10 +92,12 @@ export const LLANO: Record<string, TextoLlano> = {
     que: "Cuánto sale a pagar de IVA e ISR con lo que ya está registrado.",
   },
   "fx:diot": {
+    ir: "Ir a la DIOT",
     hacer: "Preparar la DIOT",
     que: "Es el informe mensual de con qué proveedores gastaste; se presenta aparte de la declaración.",
   },
   "fx:nomina": {
+    ir: "Ir a nómina",
     hacer: "Timbrar la nómina del mes",
     que: "Cada pago a un empleado necesita su recibo timbrado; si falta, no es deducible y el empleado queda sin comprobante.",
   },
@@ -98,10 +110,12 @@ export const LLANO: Record<string, TextoLlano> = {
     que: "Las cuotas del mes se pagan aunque no haya cambios; el recargo corre solo.",
   },
   "fx:declaracion-periodo": {
+    ir: "Ir a la declaración",
     hacer: "Presentar la declaración del mes",
     que: "Es el trámite en el portal del SAT con el que se cierra el mes.",
   },
   "fx:fecha-limite": {
+    ir: "Ir a la declaración",
     hacer: "Presentar antes de la fecha límite",
     que: "Pasada la fecha corren recargos y multas, aunque no salga nada a pagar.",
   },
@@ -112,10 +126,12 @@ export const LLANO: Record<string, TextoLlano> = {
     que: "El SAT las tiene registradas a tu nombre; si no las tenemos, faltan en la contabilidad.",
   },
   "x:coeficiente": {
+    ir: "Ir al punto de partida",
     hacer: "Fijar el coeficiente de utilidad",
     que: "Es el porcentaje —salido de tu declaración anual— con el que se calcula el pago provisional de ISR de cada mes.",
   },
   "x:datos_apertura": {
+    ir: "Ir al punto de partida",
     hacer: "Capturar los datos con los que arranca la empresa",
     que: "Saldos a favor, pérdidas de años anteriores y coeficiente. Sin capturarlos se toman como cero, y un cero que nadie revisó puede inflar el impuesto.",
   },
@@ -124,6 +140,7 @@ export const LLANO: Record<string, TextoLlano> = {
     que: "Sin el estado de cuenta no hay contra qué comparar lo registrado.",
   },
   "x:firmas_conciliacion": {
+    ir: "Ir a la conciliación",
     hacer: "Dar por conciliada la cuenta del banco",
     que: "Es la firma que deja constancia de que alguien revisó el mes y el banco cuadra con la contabilidad.",
   },
@@ -136,6 +153,7 @@ export const LLANO: Record<string, TextoLlano> = {
     que: "Altas, bajas y cambios de sueldo se avisan al IMSS; si no, las cuotas salen mal.",
   },
   "x:hallazgos_criticos": {
+    ir: "Ver las alertas",
     hacer: "Resolver las alertas graves",
     que: "El revisor automático encontró cosas que pueden costarte dinero o una multa.",
   },
