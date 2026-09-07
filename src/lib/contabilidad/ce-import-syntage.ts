@@ -284,16 +284,22 @@ export async function rellenarNombresDeCuentas(
     select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true, codAgrup: true },
   });
   const pendientes = new Map<string, { id: string; codigo: string }>();
-  // Sin agrupador PROPIO: el fallback del XML (subcuenta/cuentaSAT) sólo vale
-  // si de casualidad es un código del Anexo 24; con numeración propia
-  // (1301-0000-0000) no lo es, y la CE se rechaza.
-  const sinAgrupador = new Map<string, { id: string; codigo: string }>();
+  // Cuentas cuyo agrupador EMITIDO no es un código del Anexo 24 — que es
+  // exactamente lo que cuenta el chequeo del cierre. Son dos casos y no dan
+  // igual:
+  //   · `codAgrup` vacío: el XML emite el número propio (1301-0000-0000), que
+  //     no es un agrupador, y la CE se rechaza.
+  //   · `codAgrup` con un valor que no existe en el Anexo 24: tampoco es un
+  //     agrupador. Se sustituye SÓLO si el catálogo presentado trae uno
+  //     válido — cambiar basura por basura no arregla nada, y pisar un código
+  //     bueno sería peor.
+  const sinAgrupador = new Map<string, { id: string; codigo: string; tenia: boolean }>();
   for (const c of cuentas) {
     const codigo = (c.subcuenta ?? c.cuentaSAT).trim();
     if (c.nombre.trim() === codigo) pendientes.set(codigo, { id: c.id, codigo });
-    const emitido = c.codAgrup ?? codigo;
-    if (!c.codAgrup && !(emitido in CODIGO_AGRUPADOR_OFICIAL)) {
-      sinAgrupador.set(codigo, { id: c.id, codigo });
+    const emitido = (c.codAgrup ?? codigo).trim();
+    if (!(emitido in CODIGO_AGRUPADOR_OFICIAL)) {
+      sinAgrupador.set(codigo, { id: c.id, codigo, tenia: c.codAgrup != null });
     }
   }
   const sinNombreAntes = pendientes.size;
@@ -331,7 +337,11 @@ export async function rellenarNombresDeCuentas(
       const desc = c.desc.trim();
       const codAgrup = c.codAgrup.trim();
       const pendNombre = desc ? pendientes.get(codigo) : undefined;
-      const pendAgrup = codAgrup ? sinAgrupador.get(codigo) : undefined;
+      const candidato = codAgrup ? sinAgrupador.get(codigo) : undefined;
+      // A una cuenta que ya trae un código guardado sólo se le pisa con uno
+      // que de verdad exista en el Anexo 24.
+      const pendAgrup =
+        candidato && (!candidato.tenia || codAgrup in CODIGO_AGRUPADOR_OFICIAL) ? candidato : undefined;
       if (!pendNombre && !pendAgrup) continue;
       await prisma.chartAccount.update({
         where: { id: (pendNombre ?? pendAgrup)!.id },
