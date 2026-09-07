@@ -604,6 +604,20 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "proponer_marcar_diot_presentada",
+    description:
+      "Propone dejar registrada la DIOT del periodo como PRESENTADA ante el SAT, pendiente del tap del usuario. Es lo que apaga la señal «La DIOT del periodo está pendiente». Ojo: la DIOT NO se sincroniza sola —no viene de la descarga del SAT— así que su estado depende de que alguien lo registre aquí. Úsala sólo cuando el usuario diga que ya la presentó; nunca la des por presentada tú. Reversible en Impuestos → Presentar.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        year: { type: "number", description: "Ejercicio. Default: el del cierre abierto." },
+        month: { type: "number", description: "Mes 1-12. Default: el del cierre abierto." },
+        acuse_url: { type: "string", description: "URL del acuse, si el usuario la da." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "proponer_confirmar_apertura",
     description:
       "Propone estampar la confirmación del PUNTO DE PARTIDA fiscal de la empresa (saldo a favor inicial, pérdidas, coeficiente y obligaciones revisados), pendiente del tap del usuario. Es lo que apaga la señal «el punto de partida aún no está confirmado». No confirma el paso del cierre: eso es proponer_confirmar_paso.",
