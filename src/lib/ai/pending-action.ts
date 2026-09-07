@@ -45,6 +45,7 @@ export type PendingActionType =
   | "fijar_coeficiente"
   | "fijar_perdida"
   | "fijar_saldo_favor_iva"
+  | "firmar_conciliacion"
   | "confirmar_apertura";
 
 /** Acciones irreversibles — JAMÁS stageables. Se documentan para los tests. */
@@ -98,6 +99,10 @@ export type ChatPendingAction =
       type: "fijar_saldo_favor_iva";
       payload: { valor: number; anterior: number | null; origen: string };
     })
+  | (BasePending & {
+      type: "firmar_conciliacion";
+      payload: { bankAccountId: string; year: number; month: number; etiqueta: string };
+    })
   | (BasePending & { type: "confirmar_apertura"; payload: Record<string, never> });
 
 /** True si el tipo es una acción reversible permitida (lista blanca estricta). */
@@ -114,6 +119,7 @@ export function isReversibleType(type: string): type is PendingActionType {
     type === "fijar_coeficiente" ||
     type === "fijar_perdida" ||
     type === "fijar_saldo_favor_iva" ||
+    type === "firmar_conciliacion" ||
     type === "confirmar_apertura"
   );
 }
@@ -194,6 +200,7 @@ type StagePayload =
   | { type: "fijar_coeficiente"; payload: { valor: number; anio: number; anterior: number | null } }
   | { type: "fijar_perdida"; payload: { valor: number; anio: number | null; anterior: number | null; origen: string } }
   | { type: "fijar_saldo_favor_iva"; payload: { valor: number; anterior: number | null; origen: string } }
+  | { type: "firmar_conciliacion"; payload: { bankAccountId: string; year: number; month: number; etiqueta: string } }
   | { type: "confirmar_apertura"; payload: Record<string, never> };
 
 /**
@@ -406,6 +413,38 @@ async function ejecutar(
           redondeado === 0
             ? `Saldo a favor de IVA inicial capturado en $0 (revisado, no supuesto) en ${r.periodo}.`
             : `Saldo a favor de IVA inicial fijado en ${redondeado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} en ${r.periodo}.`,
+      };
+    }
+
+    case "firmar_conciliacion": {
+      // La MISMA firma que el botón «Dar por conciliada» de
+      // /contabilidad/conciliacion. Reversible: ahí mismo se quita.
+      const { bankAccountId, year, month, etiqueta } = pa.payload;
+      const cuenta = await prisma.bankAccount.findFirst({
+        where: { id: bankAccountId, companyId: pa.companyId },
+        select: { id: true },
+      });
+      if (!cuenta) return { ok: false, error: "La cuenta bancaria ya no existe." };
+      const { firmarConciliacion } = await import("@/lib/bancos/conciliacion-repo");
+      await firmarConciliacion({
+        companyId: pa.companyId,
+        bankAccountId,
+        year,
+        month,
+        userId: confirmingUserId,
+        conciliado: true,
+      });
+      registrarBitacora({
+        companyId: pa.companyId,
+        userId: confirmingUserId,
+        accion: "conciliacion.firmar",
+        entidad: "ConciliacionBancaria",
+        entidadId: bankAccountId,
+        detalle: { year, month, cuenta: etiqueta, via: "copiloto" },
+      });
+      return {
+        ok: true,
+        message: `Conciliación de ${etiqueta} firmada para ${String(month).padStart(2, "0")}/${year}. Se puede quitar la firma en Contabilidad → Conciliación.`,
       };
     }
 

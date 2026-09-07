@@ -19,6 +19,7 @@ import { asegurarUsoIA } from "../ai/guardia";
 import { evaluarCierre, type PasoConDecision } from "./evaluar";
 import { conversacionDelPeriodo } from "./pase-diario";
 import { etiquetaPeriodo } from "./plantillas";
+import { toolsDelPaso } from "./workflow";
 import type { ClavePasoCierre } from "./claves";
 
 const anthropic = new Anthropic(); // ANTHROPIC_API_KEY del entorno
@@ -79,10 +80,36 @@ async function anclarEnElHilo(args: {
   }
 }
 
-function prompt(paso: PasoConDecision, periodoLabel: string, empresa: string): string {
+/** Nombre legible de las propuestas que el paso puede ofrecer. */
+const NOMBRE_PROPUESTA: Record<string, string> = {
+  proponer_fijar_coeficiente: "fijar el coeficiente de utilidad",
+  proponer_fijar_perdida: "capturar las pérdidas por amortizar",
+  proponer_fijar_saldo_favor_iva: "capturar el saldo a favor de IVA inicial",
+  proponer_confirmar_apertura: "confirmar el punto de partida",
+  proponer_firmar_conciliacion: "firmar la conciliación del mes",
+  proponer_conciliacion: "conciliar un movimiento con su factura",
+  proponer_categorizacion: "clasificar un movimiento",
+  proponer_categorizacion_lote: "clasificar movimientos en lote",
+  proponer_resolver_hallazgo: "dar por resuelto un hallazgo",
+};
+
+function propuestasDelPaso(clave: ClavePasoCierre): string[] {
+  return toolsDelPaso(clave)
+    .map((t) => NOMBRE_PROPUESTA[t])
+    .filter((n): n is string => !!n);
+}
+
+function prompt(paso: PasoConDecision, periodoLabel: string, empresa: string, propuestas: string[]): string {
   const senales = paso.senales
     .filter((s) => s.estado !== "na")
     .map((s) => `- [${s.estado}] ${s.resumen}`)
+    .join("\n");
+  // Dónde se hace cada cosa, con el enlace REAL de la señal. Sin esto el
+  // modelo inventaba ubicaciones («dentro del paso Bancos») y el contador se
+  // quedaba buscando un botón que estaba en otra pantalla y con otro nombre.
+  const donde = paso.senales
+    .filter((s) => s.estado !== "na" && s.estado !== "ok" && s.cta)
+    .map((s) => `- ${s.resumen} → [${s.cta!.label}](${s.cta!.href})`)
     .join("\n");
   const cifras = Object.entries(paso.cifras ?? {})
     .map(([k, v]) => `- ${k}: ${v == null ? "no disponible" : JSON.stringify(v)}`)
@@ -96,6 +123,8 @@ ${senales || "- (sin señales)"}
 
 Cifras YA CALCULADAS para este paso:
 ${cifras || "- (este paso no tiene cifras)"}
+${donde ? `\nDónde se resuelve cada pendiente (enlaces REALES, úsalos tal cual):\n${donde}` : ""}
+${propuestas.length > 0 ? `\nLo que TÚ puedes dejar listo con una tarjeta si el contador te lo pide: ${propuestas.join(", ")}.` : ""}
 ${paso.fechaLimite ? `\nFecha límite: ${paso.fechaLimite} (${paso.diasRestantes} días).` : ""}
 
 Escribe la apertura de este paso para el contador, en español de México:
@@ -108,6 +137,8 @@ ejemplo lo que reporta la declaración anual del ejercicio anterior), DILO con e
 valor y ofrécelo — no mandes a capturar a ciegas algo que el sistema ya puede
 leer. Si la anual existe y no reporta ese dato, dilo también: eso es una
 respuesta, no un pendiente del contador.
+
+Cuando digas dónde se hace algo, usa EXACTAMENTE el enlace de la lista de arriba, con su nombre tal cual (el botón puede llamarse distinto de lo que esperas): nunca inventes una ubicación. Y si tienes una tarjeta para eso, ofrécela en la misma frase («dímelo y te la dejo lista») en vez de mandar sólo a la pantalla.
 
 Reglas: no inventes cifras ni las recalcules; usa sólo las de arriba. NUNCA le pidas al contador un dato que aparezca en las cifras. Si una cifra viene "no disponible", di qué falta para tenerla. No saludes, no te presentes, no ofrezcas ayuda genérica. Máximo 130 palabras. Markdown mínimo (negritas y lista).`;
 }
@@ -166,7 +197,12 @@ export async function aperturaDelPaso(args: {
       {
         model: MODELO,
         max_tokens: 700,
-        messages: [{ role: "user", content: prompt(paso, etiquetaPeriodo(year, month), empresa) }],
+        messages: [
+          {
+            role: "user",
+            content: prompt(paso, etiquetaPeriodo(year, month), empresa, propuestasDelPaso(clave)),
+          },
+        ],
       }
     );
     const texto = msg.content
